@@ -374,7 +374,7 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 **Ratchet (director 11-13):** the ignore lists only shrink. `test:structure` fails if a rule's ignores gain a file not in the baseline or grow past it. Not yet migrated (update when a file comes off):
 | Rule | Files left | Baseline 11-13 |
 | --- | --- | --- |
-| `error-code-compared-as-text` | 4: fe-ops 3 (auth 2, resolutions 1), + apps/hostBridge kept (fe-setup): it compares plugin-sdk's HostBridgeError.code, not an ApiError. Done 11-13: contacts, commands, mobile, now (fe-ops), dashboards 5 | 29 |
+| `error-code-compared-as-text` | 2: fe-ops resolutions 1, + apps/hostBridge kept (fe-setup): it compares plugin-sdk's HostBridgeError.code, not an ApiError. Done 11-13: contacts, commands, mobile, now, auth (fe-ops), dashboards 5 | 29 |
 | `vocabulary-field-decoded-as-text` | 1: fe-ops resolutions 1. Done 11-13: dashboards 2, lead's, fe-setup's own, contacts 5, commands 6 and now 4 (fe-ops), and fe-ops' investigate 6, timeline, telemetry, fleet, alarms 2 (fe-setup, e3eaeedff..3dc518802) | 59 |
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |

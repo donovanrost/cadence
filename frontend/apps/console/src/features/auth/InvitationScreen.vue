@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from "vue";
 import { useRoute } from "vue-router";
-import { decoders as d, decode, describeApiError, type ApiError } from "@/api";
+import { describeApiError, detailsOf, fieldErrors, isError, type ApiError } from "@/api";
 import { ApButton, ApCallout, ApField } from "@/ui";
 import {
   acceptInvitation,
@@ -56,23 +56,15 @@ const declined = ref(false);
 const retry = useRetryAfter();
 
 /** 422 invalid_params `details.name` / `details.password`: the server's sentences, joined. */
-const paramsReader = d.object({
-  name: d.optional(d.array(d.string, 10)),
-  password: d.optional(d.array(d.string, 10)),
-});
-function paramsWords(details: unknown): string | null {
-  const r = decode(paramsReader, details);
-  if (!r.ok) return null;
-  const all = [...(r.value.name ?? []), ...(r.value.password ?? [])];
-  return all.length ? all.join(" ") : null;
+function paramsWords(e: ApiError): string | null {
+  const f = fieldErrors(e);
+  return [f.name, f.password].filter(Boolean).join(" ") || null;
 }
 
 /** `invitation_unavailable {case, …}`: the screen for why, from what the server says. */
 function fromUnavailable(e: ApiError): Invitation | null {
-  if (!("code" in e) || e.code !== "invitation_unavailable" || !("details" in e)) return null;
-  const r = decode(unavailableReader, e.details);
-  if (!r.ok) return null;
-  const v = r.value;
+  const v = isError(e, "invitation_unavailable") ? detailsOf(e, unavailableReader) : null;
+  if (!v) return null;
   return {
     case: v.case,
     organization: v.organization ?? null,
@@ -130,20 +122,18 @@ async function accept() {
   const wait = retryAfterOf(r.error);
   if (wait !== null) return retry.block(wait);
   const e = r.error;
-  if (e.kind === "invalid" && e.code === "credentials_incorrect")
-    error.value = { tone: "crit", text: WRONG_CREDENTIALS };
-  else if (e.kind === "invalid" && e.code === "invalid_params")
-    error.value = { tone: "caution", text: paramsWords(e.details) ?? describeApiError(e) };
+  if (isError(e, "credentials_incorrect")) error.value = { tone: "crit", text: WRONG_CREDENTIALS };
+  else if (isError(e, "invalid_params"))
+    error.value = { tone: "caution", text: paramsWords(e) ?? describeApiError(e) };
   else if (e.kind === "forbidden")
     error.value = {
       tone: "crit",
       text: "This account is disabled. Ask an organization admin for help.",
     };
   else if (
-    "code" in e &&
-    (e.code === "invitation_unavailable" ||
-      e.code === "invitation_for_another_account" ||
-      e.code === "invitation_case_changed")
+    isError(e, "invitation_unavailable") ||
+    isError(e, "invitation_for_another_account") ||
+    isError(e, "invitation_case_changed")
   )
     // Someone signed in or out meanwhile, or it's gone: the server's case picks the form again.
     await load();

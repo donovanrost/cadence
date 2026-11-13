@@ -2,8 +2,6 @@
   "_comment": "Typing plan \u00a712B ratchet (director 11-13): each rule's ignores may only shrink. When you migrate a file, delete it from the rule's ignores AND from this list.",
   "error-code-compared-as-text": [
     "apps/console/src/features/apps/hostBridge.ts",
-    "apps/console/src/features/auth/InvitationScreen.vue",
-    "apps/console/src/features/auth/SignInScreen.vue",
     "apps/console/src/features/resolutions/api.ts"
   ],
   "vocabulary-field-decoded-as-text": [

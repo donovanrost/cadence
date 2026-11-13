@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { describeApiError } from "@/api";
+import { describeApiError, isError } from "@/api";
 import { ApButton, ApCallout, ApField } from "@/ui";
 import { goTo, optionalSession, safeReturn, signIn } from "./api.ts";
 import { retryAfterOf, useRetryAfter } from "./retry-after.ts";
@@ -34,16 +34,15 @@ async function submit() {
   if (r.ok) return goTo(r.value.redirect_to);
   const wait = retryAfterOf(r.error);
   if (wait !== null) return retry.block(wait);
-  error.value =
-    r.error.kind === "invalid" && r.error.code === "credentials_incorrect"
-      ? { tone: "crit", text: WRONG_CREDENTIALS }
-      : {
-          tone: "caution",
-          text:
-            r.error.kind === "unavailable" && r.error.message
-              ? `${UNREACHABLE} (${describeApiError(r.error)})`
-              : UNREACHABLE,
-        };
+  error.value = isError(r.error, "credentials_incorrect")
+    ? { tone: "crit", text: WRONG_CREDENTIALS }
+    : {
+        tone: "caution",
+        text:
+          r.error.kind === "unavailable" && r.error.message
+            ? `${UNREACHABLE} (${describeApiError(r.error)})`
+            : UNREACHABLE,
+      };
 }
 const reason = computed(() => retry.text.value ?? (busy.value ? "Signing in…" : null));
 </script>
