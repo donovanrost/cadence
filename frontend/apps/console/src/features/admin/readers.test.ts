@@ -46,6 +46,8 @@ describe("platform admin readers", () => {
     expect(tokenFailure(malformed, "issue")).toBe(
       "Issued, but the token couldn't be shown. Rotate it to get a new one.",
     );
-    expect(tokenFailure(malformed, "rotate")).toContain("Rotated, but the new token");
+    expect(tokenFailure(malformed, "rotate")).toBe(
+      "Rotated, but the new token couldn't be shown. The old token no longer works. Rotate it again to get one.",
+    );
   });
 });

@@ -164,7 +164,8 @@ export function tokenFailure(error: ApiError, verb: "issue" | "rotate"): string 
   if (error.kind !== "malformed") return failureOutcome(error, "changed").sentence;
   return verb === "issue"
     ? "Issued, but the token couldn't be shown. Rotate it to get a new one."
-    : "Rotated, but the new token couldn't be shown. Rotate it again to get one.";
+    : // api: any 2xx has already replaced the digest, so the old token is rejected.
+      "Rotated, but the new token couldn't be shown. The old token no longer works. Rotate it again to get one.";
 }
 
 export function issueServiceIdentity(
