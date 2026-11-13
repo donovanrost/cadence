@@ -1,9 +1,7 @@
 import {
-  actor,
   decoders as d,
   detailsOf,
   isError,
-  orNull,
   request,
   type ApiError,
   type ApiResult,
@@ -11,12 +9,12 @@ import {
 } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { formatShort } from "@/ui";
-import { importStatuses } from "./api.ts";
+import { importRunRow } from "./api.ts";
 import { formatBytes } from "./importRun.ts";
 
 /**
- * L18 (plans/catalog-artifacts.md): one source file, the revisions made from it, its import runs,
- * Import again (K2) and Download (K3). Against fixtures until api lands K1–K3.
+ * L18 (api setup.md "Source files", 05aa7e399): one source file, the revisions made from it, its
+ * import runs, Import again (K2) and Download (K3).
  */
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/catalog`;
 
@@ -34,7 +32,8 @@ const artifactReader = d.object({
     size_bytes: d.nullable(d.integer),
     sha256: d.string,
     uploaded_at: d.timestamp,
-    uploaded_by: orNull(actor),
+    // The artifact stores who uploaded it by name (an email), with no user id (api).
+    uploaded_by: d.nullable(d.object({ name: d.string })),
     database: d.object({ id: d.token, name: d.string }),
     download_url: d.string,
   }),
@@ -47,18 +46,7 @@ const artifactReader = d.object({
     }),
     200,
   ),
-  import_runs: d.array(
-    d.object({
-      id: d.token,
-      file_name: d.string,
-      status: d.oneOf(importStatuses),
-      diagnostic_counts: d.object({ error: d.integer, warning: d.integer, info: d.integer }),
-      revision_number: d.nullable(d.integer),
-      started_at: d.timestamp,
-      completed_at: d.nullable(d.timestamp),
-    }),
-    50,
-  ),
+  import_runs: d.array(importRunRow, 50),
   permissions: d.array(d.known(["catalog.import"] as const), 10),
 });
 export type ArtifactPage = Decoded<typeof artifactReader>;

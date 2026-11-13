@@ -5,7 +5,7 @@ import { formatCount } from "@/ui";
  * Catalog index. Requested shape: docs/apogee/plans/setup-shapes.md §C1; the final contract
  * lands in docs/apogee/api/setup.md.
  */
-const { array, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
+const { array, integer, nullable, object, oneOf, optional, string, timestamp, token } = decoders;
 
 const count: Reader<number> = (value, path = "") => {
   const n = integer(value, path);
@@ -33,6 +33,8 @@ const revision = object({
     file_name: string,
     format_label: string,
     size_bytes: nullable(count),
+    /** L18 K3 (api 05aa7e399): the stored file's download link (a plain link; the session is enough). */
+    download_url: optional(string),
   }),
   declaration_count: count,
   spacecraft_count: count,
@@ -44,7 +46,8 @@ const revision = object({
 export const importStatuses = ["running", "succeeded", "failed"] as const;
 export type ImportStatus = (typeof importStatuses)[number];
 
-const importRun = object({
+/** One import run row (the index's; the artifact page lists the same rows, api L18). */
+export const importRunRow = object({
   id: token,
   file_name: string,
   status: oneOf(importStatuses),
@@ -58,7 +61,7 @@ const database = object({
   id: token,
   current_revision: nullable(currentRevision),
   revisions: array(revision, 50),
-  import_runs: array(importRun, 20),
+  import_runs: array(importRunRow, 20),
 });
 
 export const catalogIndexReader = object({
@@ -68,7 +71,7 @@ export const catalogIndexReader = object({
 
 export type CatalogIndex = Decoded<typeof catalogIndexReader>;
 export type CatalogRevision = Decoded<typeof revision>;
-export type ImportRun = Decoded<typeof importRun>;
+export type ImportRun = Decoded<typeof importRunRow>;
 export type CurrentRevision = Decoded<typeof currentRevision>;
 
 export type CatalogKey = Readonly<{ missionId: string; databaseId: string | null }>;

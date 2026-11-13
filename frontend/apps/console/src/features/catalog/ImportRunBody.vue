@@ -6,6 +6,8 @@ import DiffPanel from "./DiffPanel.vue";
 import DiffStrip from "./DiffStrip.vue";
 import ImportVerdict from "./ImportVerdict.vue";
 import RolloutPanel from "./RolloutPanel.vue";
+import { ARTIFACT_LIVE } from "./artifact.ts";
+import ImportRunFile from "./ImportRunFile.vue";
 import { formatBytes, type ImportRunDetail } from "./importRun.ts";
 
 /** File line, verdict, stats, diff (when available) and diagnostics for one import run. */
@@ -28,6 +30,7 @@ const fileLine = computed(() =>
 <template>
   <p class="m-0 text-md text-text-3">
     <span class="font-mono text-readout">{{ fileLine }}</span>
+    <ImportRunFile v-if="ARTIFACT_LIVE && run.file.artifact" :artifact="run.file.artifact" />
   </p>
   <ImportVerdict :run="run" />
   <DiffStrip v-if="run.status === 'succeeded'" :run="run" />

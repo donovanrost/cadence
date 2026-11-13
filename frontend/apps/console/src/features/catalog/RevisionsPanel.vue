@@ -34,6 +34,12 @@ const columns: readonly ApColumn[] = [
           >{{ row.artifact.file_name }}</RouterLink
         >
         <span v-else class="text-text-2">{{ row.artifact.file_name }}</span>
+        <a
+          v-if="ARTIFACT_LIVE && row.artifact.download_url"
+          :href="row.artifact.download_url"
+          class="ml-2 text-xs text-primary no-underline hover:underline"
+          >Download</a
+        >
         <span class="block font-sans text-xs text-text-4">{{ row.artifact.format_label }}</span>
       </template>
       <template #cell-declarations="{ row }">{{ formatCount(row.declaration_count) }}</template>

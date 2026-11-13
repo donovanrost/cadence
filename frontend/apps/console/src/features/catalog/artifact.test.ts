@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { ApiError } from "@/api";
 import { artifactLine, reimportFailure, runningRun, type ArtifactPage } from "./artifact.ts";
 
-/** Fixtures: plans/catalog-artifacts.md K1/K2 (proposed 11-13). */
+/** Fixtures: api setup.md "Source files" (05aa7e399). */
 const artifact: ArtifactPage["artifact"] = {
   id: "art_1",
   file_name: "earendil.xtce.xml",
@@ -12,7 +12,7 @@ const artifact: ArtifactPage["artifact"] = {
   size_bytes: 2_400_000,
   sha256: "ab".repeat(32),
   uploaded_at: "2026-11-12T14:03:00Z",
-  uploaded_by: { kind: "user", id: "u1", name: "Mira K." },
+  uploaded_by: { name: "Mira K." },
   database: { id: "db1", name: "Flight" },
   download_url: "/api/console/v1/missions/m/catalog/artifacts/art_1/download",
 };
