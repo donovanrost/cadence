@@ -54,8 +54,10 @@ const detailReader = d.object({
     credential: d.object({
       // free-text: a masked secret reference, shown as is; never the secret.
       ref: d.string,
-      version: d.integer,
-      status: d.known(["active", "revoked"] as const),
+      /** null only when status is 'missing' (api-ops drift sweep). */
+      version: d.nullable(d.integer),
+      // 'missing': no credential is registered under the reference (accounts made unvalidated).
+      status: d.known(["active", "revoked", "missing"] as const),
     }),
     /** null = no restriction on the account (api-ops 74ad20816). */
     guardrails: d.object({

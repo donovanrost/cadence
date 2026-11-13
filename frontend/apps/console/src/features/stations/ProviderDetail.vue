@@ -43,7 +43,11 @@ function archived(n: { tone: "nominal" | "crit"; text: string }) {
   if (n.tone === "nominal") emit("changed");
 }
 const facts = (p: MissionProvider) => [
-  { key: "account", label: "Account", value: p.account.name ?? "Org admins only" },
+  {
+    key: "account",
+    label: "Account",
+    value: p.account ? (p.account.name ?? "Org admins only") : "None: set up before account grants",
+  },
   { key: "type", label: "Type", value: p.provider_type, mono: true },
   { key: "stations", label: "Stations", value: String(p.station_count) },
   { key: "validate", label: "Validated", value: healthLine(p.health.validate).text },
@@ -69,7 +73,7 @@ const facts = (p: MissionProvider) => [
       </template>
     </ApKeyValue>
     <ApCallout v-if="provider.grant?.state === 'revoked'" tone="crit">{{
-      revokedSentence(provider.account.name)
+      revokedSentence(provider.account?.name ?? null)
     }}</ApCallout>
     <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
     <div

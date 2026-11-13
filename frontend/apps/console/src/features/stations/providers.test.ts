@@ -41,12 +41,14 @@ async function decoded(body: unknown) {
 describe("mission providers (L12)", () => {
   it("reads {providers, permissions}; a direct binding has no grant", async () => {
     const r = await decoded({
-      providers: [row, { ...row, id: "prov_2", grant: null }],
+      providers: [row, { ...row, id: "prov_2", grant: null, account: null }],
       permissions: [],
     });
     expect(r.ok && r.value.providers[0]?.name).toBe("Northlight");
     expect(r.ok && r.value.canManage).toBe(false);
     expect(r.ok && r.value.providers[1]?.grant).toBeNull();
+    // api-ops drift sweep: a direct binding has no account either.
+    expect(r.ok && r.value.providers[1]?.account).toBeNull();
     const withL12 = await decoded({ providers: [row], permissions: ["providers.manage"] });
     expect(withL12.ok && withL12.value.canManage).toBe(true);
   });

@@ -49,7 +49,8 @@ const provider = object({
   name: string,
   // free-text: an open vocabulary (provider adapter keys).
   provider_type: token,
-  account: object({ id: token, name: nullable(string) }),
+  /** null exactly when grant is null: an older direct binding (api-ops drift sweep). */
+  account: nullable(object({ id: token, name: nullable(string) })),
   status: object({
     lifecycle_state: known(["active", "archived"] as const),
     last_validated_at: nullable(decoders.timestamp),

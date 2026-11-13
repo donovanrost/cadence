@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ApButton } from "@/ui";
+import { ApButton, ApCallout } from "@/ui";
 import ReasonSheet from "./ReasonSheet.vue";
 import { accountFailure, revokeCredential, type AccountDetail, type AccountKey } from "./grants.ts";
 
@@ -8,12 +8,16 @@ import { accountFailure, revokeCredential, type AccountDetail, type AccountKey }
 const props = defineProps<{ accountKey: AccountKey; detail: AccountDetail; canManage: boolean }>();
 const emit = defineEmits<{ done: [text: string] }>();
 const sheet = ref<InstanceType<typeof ReasonSheet> | null>(null);
+const statusWord: Readonly<Record<AccountDetail["account"]["credential"]["status"], string>> = {
+  active: "active",
+  revoked: "revoked",
+  missing: "missing",
+  unrecognized: "unknown",
+};
 async function revoke(reason: string) {
-  const r = await revokeCredential(
-    props.accountKey,
-    props.detail.account.credential.version,
-    reason,
-  );
+  const version = props.detail.account.credential.version;
+  if (version === null) return;
+  const r = await revokeCredential(props.accountKey, version, reason);
   sheet.value?.settle(r.ok ? null : accountFailure(r.error));
   if (r.ok)
     emit("done", "Credential revoked. Point the account at a new reference to use it again.");
@@ -23,7 +27,7 @@ async function revoke(reason: string) {
 <template>
   <p class="m-0 flex flex-wrap items-center gap-2 text-sm text-text-2">
     Credential <span class="font-mono">{{ detail.account.credential.ref }}</span> ·
-    {{ detail.account.credential.status === "active" ? "active" : "revoked" }}
+    {{ statusWord[detail.account.credential.status] }}
     <ApButton
       v-if="canManage && detail.account.credential.status === 'active'"
       size="compact"
@@ -32,6 +36,10 @@ async function revoke(reason: string) {
       >Revoke credential…</ApButton
     >
   </p>
+  <ApCallout v-if="detail.account.credential.status === 'missing'" tone="caution"
+    >No credential is registered under this reference. Point the account at a registered
+    one.</ApCallout
+  >
   <ReasonSheet
     ref="sheet"
     title="Revoke credential"

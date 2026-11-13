@@ -28,7 +28,9 @@ const when = (at: string | null) => (at ? formatShort(new Date(at)) : "never");
         · Account grant {{ grantLine(row.grant).text }}</span
       >
     </template>
-    <template #cell-account="{ row }">{{ row.account.name ?? "Org admins only" }}</template>
+    <template #cell-account="{ row }">{{
+      row.account ? (row.account.name ?? "Org admins only") : "—"
+    }}</template>
     <template #cell-stations="{ row }">{{ row.station_count }}</template>
     <template #cell-health="{ row }"
       ><span class="inline-flex items-center gap-2"
