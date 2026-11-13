@@ -663,6 +663,7 @@ more than 24 h old.
     - Several spacecraft: "12 spacecraft will decode different APIDs after this is applied." The list is in the
       HOLD's detail (spacecraft, with added and removed APIDs).
     - Ack placeholder: "Why this change is intended". At most 5 APIDs per list, then "and N more".
+    - Effects tag on the change row: `DECODED APIDS CHANGE` (caution), beside any `RUNTIME` tag.
 - **Handled APIDs** (profile field next to the catalog revision, overridable like P3): label `Handled APIDs`, with
   the default value `All of the catalog's APIDs`. An override is a mono chip list in the catalog's notation:
   `Only 0x101, 0x102, 0x1A0`. Help: "Packets with other APIDs aren't decoded." (domain to confirm the effect).
