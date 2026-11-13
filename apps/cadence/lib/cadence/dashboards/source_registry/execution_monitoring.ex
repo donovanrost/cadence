@@ -13,6 +13,35 @@ defmodule Cadence.Dashboards.SourceRegistry.ExecutionMonitoring do
 
   alias Cadence.Projections.DataSources.Health, as: SourceHealth
 
+  # Sources whose storage is Cadence's own Postgres: a database failure there is the source.
+  @postgres_backed_kinds ["postgres", "projection"]
+
+  @doc """
+  The failure an exception raised while resolving a source stands for. Cadence's own Postgres
+  failing (a pool or connection error) under a source that isn't Postgres-backed is
+  `{:platform_store, exception}`: the platform under load, not the source down, so it neither
+  trips the source circuit nor records source health. Anything else is `{:exception, exception}`.
+  """
+  @spec exception_reason(Exception.t(), ResolvedSourceBinding.t()) ::
+          {:platform_store | :exception, Exception.t()}
+  def exception_reason(exception, %ResolvedSourceBinding{data_source: data_source}) do
+    if platform_store_exception?(exception) and
+         to_string(data_source.kind) not in @postgres_backed_kinds,
+       do: {:platform_store, exception},
+       else: {:exception, exception}
+  end
+
+  @doc "Marks a source-unavailable warning's details with the platform-store cause."
+  @spec put_cause(map(), term()) :: map()
+  def put_cause(details, {:platform_store, _exception}),
+    do: Map.put(details, :cause, :platform_store)
+
+  def put_cause(details, _reason), do: details
+
+  defp platform_store_exception?(%DBConnection.ConnectionError{}), do: true
+  defp platform_store_exception?(%Postgrex.Error{}), do: true
+  defp platform_store_exception?(_exception), do: false
+
   @spec allow(
           PlannedSourceRequest.t(),
           ResolvedSourceBinding.t(),
@@ -52,8 +81,18 @@ defmodule Cadence.Dashboards.SourceRegistry.ExecutionMonitoring do
         opts
       )
       when is_list(opts) do
+    case source_failure_reason(result) do
+      # Cadence's own Postgres failed, not the source: neither the circuit nor health hears of it.
+      :platform_store ->
+        :ok
+
+      failure_reason ->
+        record(request, resolved_binding, result, failure_reason, source_policy, opts)
+    end
+  end
+
+  defp record(request, resolved_binding, result, failure_reason, source_policy, opts) do
     source_key = SourceCircuitBreaker.source_key(request, resolved_binding)
-    failure_reason = source_failure_reason(result)
 
     circuit_status =
       case source_circuit_breaker(opts) do
@@ -194,6 +233,7 @@ defmodule Cadence.Dashboards.SourceRegistry.ExecutionMonitoring do
     |> Enum.find(&(&1.severity == :error))
     |> case do
       nil -> nil
+      %{details: %{cause: :platform_store}} -> :platform_store
       warning -> warning.code
     end
   end

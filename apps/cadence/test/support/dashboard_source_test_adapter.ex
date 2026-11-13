@@ -133,6 +133,10 @@ defmodule Cadence.Support.DashboardSourceTestAdapter do
         :raise ->
           raise "test source failure"
 
+        :platform_store ->
+          raise DBConnection.ConnectionError,
+                "connection not available and request was dropped from queue after 100ms"
+
         :exit ->
           exit(:test_source_exit)
 

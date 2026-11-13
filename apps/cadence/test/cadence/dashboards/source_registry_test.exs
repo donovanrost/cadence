@@ -711,6 +711,50 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
     refute_received {:dashboard_source_test_adapter_resolve, "flight-questdb"}
   end
 
+  test "Cadence's own Postgres failing under a TSDB source never trips its circuit" do
+    breaker = start_supervised!({SourceCircuitBreaker, name: nil})
+
+    opts =
+      breaker
+      |> source_circuit_opts(mode: :platform_store, now_ms: 1_000)
+      |> Keyword.put(:source_circuit_failure_threshold, 1)
+
+    for _attempt <- 1..3 do
+      result = SourceRegistry.resolve(source_request(), opts)
+
+      assert [%{code: :source_unavailable, details: %{cause: :platform_store}}] =
+               result.warnings
+
+      assert_received {:dashboard_source_test_adapter_resolve, "flight-questdb"}
+    end
+
+    assert %{state: :closed, failure_count: 0} =
+             SourceCircuitBreaker.status(
+               breaker,
+               {"org-1", "mission-1", :telemetry, "flight-questdb", :flight, "flight"},
+               failure_threshold: 1
+             )
+  end
+
+  test "a Postgres-backed source's database failure is the source failing" do
+    breaker = start_supervised!({SourceCircuitBreaker, name: nil})
+
+    opts =
+      breaker
+      |> source_circuit_opts(mode: :platform_store, now_ms: 1_000)
+      |> Keyword.put(:source_circuit_failure_threshold, 1)
+      |> Keyword.update!(:data_sources, fn sources ->
+        Enum.map(sources, &%{&1 | kind: :projection})
+      end)
+
+    first = SourceRegistry.resolve(source_request(), opts)
+    second = SourceRegistry.resolve(source_request(), opts)
+
+    assert [%{code: :source_unavailable, details: details}] = first.warnings
+    refute Map.has_key?(details, :cause)
+    assert [%{code: :source_degraded}] = second.warnings
+  end
+
   test "command queue depth reader exceptions become source-unavailable warnings" do
     request =
       source_request(
