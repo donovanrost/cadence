@@ -3,11 +3,17 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
 import { TakeoverHeader, useMissionScope } from "@/shell";
 import { useConnection } from "@/live";
-import { ApCallout, ApEmptyState, ApRemote } from "@/ui";
+import { ApCallout } from "@/ui";
 import type { Runtime } from "../api.ts";
-import { selectionFromQuery, selectionParams, type TimeSelection } from "../model/time-range.ts";
-import DashboardGrid from "./DashboardGrid.vue";
-import InspectSheet from "./InspectSheet.vue";
+import {
+  selectionFromQuery,
+  selectionLabel,
+  selectionParams,
+  type TimeSelection,
+} from "../model/time-range.ts";
+import KioskLine from "./KioskLine.vue";
+import MoreMenu from "./MoreMenu.vue";
+import ViewerBody from "./ViewerBody.vue";
 import ViewerControls from "./ViewerControls.vue";
 import CockpitStatus from "./CockpitStatus.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
@@ -44,7 +50,12 @@ const view = computed(() =>
   query.state.value.status === "ready" ? query.state.value.value : null,
 );
 const connection = useConnection();
-const inspect = ref<InstanceType<typeof InspectSheet> | null>(null);
+/** Kiosk (ux): `?kiosk=1` or ⋯ › Kiosk; the header collapses to a status line. */
+const kiosk = computed(() => one(route.query.kiosk) === "1");
+const menu = [{ id: "kiosk", label: "Kiosk" }] as const;
+function onMenu(id: (typeof menu)[number]["id"]) {
+  if (id === "kiosk") setQuery({ kiosk: "1" });
+}
 
 function setQuery(changes: Record<string, string | null>) {
   const next = { ...route.query };
@@ -59,7 +70,14 @@ const onRange = (s: TimeSelection) =>
 </script>
 
 <template>
+  <KioskLine
+    v-if="kiosk"
+    :title="view?.dashboard.name ?? 'Dashboard'"
+    :range="selectionLabel(selection)"
+    @exit="setQuery({ kiosk: null })"
+  />
   <TakeoverHeader
+    v-else
     :title="view?.dashboard.name ?? 'Dashboard'"
     context="DASHBOARD"
     :close="{ name: 'ops.dashboards' }"
@@ -67,39 +85,23 @@ const onRange = (s: TimeSelection) =>
     title-as="h1"
   >
     <template #actions>
-      <ViewerControls
-        :scope-options="view?.scope_options ?? []"
-        :spacecraft="runtime.spacecraftId"
-        :selection="selection"
-        :refresh="refresh"
-        @spacecraft="setQuery({ spacecraft: $event })"
-        @range="onRange"
-        @refresh="setQuery({ refresh: $event === '2s' ? null : $event })"
-      />
+      <span class="flex items-center gap-2">
+        <ViewerControls
+          :scope-options="view?.scope_options ?? []"
+          :spacecraft="runtime.spacecraftId"
+          :selection="selection"
+          :refresh="refresh"
+          @spacecraft="setQuery({ spacecraft: $event })"
+          @range="onRange"
+          @refresh="setQuery({ refresh: $event === '2s' ? null : $event })"
+        />
+        <MoreMenu :items="menu" @select="onMenu" />
+      </span>
     </template>
     <template #clocks><CockpitStatus /></template>
   </TakeoverHeader>
   <ApCallout v-if="connection !== 'live'" tone="stale">
     Live connection lost. Values may be out of date; they'll refresh when it's back.
   </ApCallout>
-  <ApRemote :state="query.state.value" @retry="query.refetch">
-    <template #default="{ value }">
-      <ApEmptyState
-        v-if="value.snapshot === null"
-        headline="This dashboard has no saved version yet."
-        sentence="Its author needs to save it before others can view it."
-        state="off"
-      />
-      <ApCallout v-else-if="value.snapshot.placements.length === 0" tone="info">
-        This dashboard has no widgets yet.
-      </ApCallout>
-      <DashboardGrid
-        v-else
-        :class="{ 'opacity-60': connection !== 'live' }"
-        :snapshot="value.snapshot"
-        @inspect="inspect?.open($event)"
-      />
-    </template>
-  </ApRemote>
-  <InspectSheet ref="inspect" />
+  <ViewerBody :state="query.state.value" :stale="connection !== 'live'" @retry="query.refetch" />
 </template>
