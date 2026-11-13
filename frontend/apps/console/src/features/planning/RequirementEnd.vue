@@ -29,12 +29,14 @@ const busy = ref(false);
 const what: Readonly<Record<EndAction, { title: string; sentence: string; confirm: string }>> = {
   close: {
     title: "Close requirement",
-    sentence: "Cadence stops planning for it. Passes already booked stay booked.",
+    sentence:
+      "Use this when it's done or no longer needed. Cadence stops planning for it. Passes already booked stay booked.",
     confirm: "Close it",
   },
   cancel: {
     title: "Cancel requirement",
-    sentence: "Withdraws it: nothing more is planned for it. Passes already booked stay booked.",
+    sentence:
+      "Use this when it was a mistake. Withdraws it: nothing more is planned for it. Passes already booked stay booked.",
     confirm: "Cancel it",
   },
 };
