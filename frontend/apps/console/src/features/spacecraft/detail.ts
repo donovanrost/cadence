@@ -4,6 +4,7 @@ import {
   scid as scidReader,
   spacecraftId as spacecraftIdReader,
   type ApiResult,
+  type Decoded,
   type Reader,
   type SpacecraftId,
 } from "@/api";
@@ -38,43 +39,35 @@ const rule = object({
 });
 const check = object({ key: token, status: oneOf(checkStatuses), title: string, body: string });
 
-export const detailReader = (value: unknown, path = "") => {
-  const raw = object({
-    spacecraft: object({
-      id: spacecraftIdReader,
-      name: string,
-      scid: nullable(scidReader),
-      norad_id: nullable(integer),
-      plane: nullable(integer),
-      slot: nullable(integer),
-      last_received_at: nullable(timestamp),
+/** `ready` is the server's (no blocker in identity, profile, routing); a disagreement isn't a failed read (qa 11-13). */
+export const detailReader = object({
+  spacecraft: object({
+    id: spacecraftIdReader,
+    name: string,
+    scid: nullable(scidReader),
+    norad_id: nullable(integer),
+    plane: nullable(integer),
+    slot: nullable(integer),
+    last_received_at: nullable(timestamp),
+  }),
+  profile: nullable(
+    object({
+      id: token,
+      name: nullable(string),
+      version: integer,
+      latest_version: nullable(integer),
     }),
-    profile: nullable(
-      object({
-        id: token,
-        name: nullable(string),
-        version: integer,
-        latest_version: nullable(integer),
-      }),
-    ),
-    configuration: nullOnly,
-    /** L22 (api 8243895f1): the running switches from the active configuration; null = unknown. */
-    commanding_enabled: decoders.optional(nullable(boolean)),
-    telemetry_enabled: decoders.optional(nullable(boolean)),
-    telemetry: telemetryFreshness,
-    routing_rules: array(rule, 1000),
-    readiness: object({ ready: boolean, checks: array(check, 20) }),
-  })(value, path);
-  const gating = raw.readiness.checks.filter((c) => c.key !== "telemetry");
-  if (raw.readiness.ready !== gating.every((c) => c.status !== "blocker"))
-    throw new decoders.DecodeError(
-      `${path ? `${path}.` : ""}readiness.ready`,
-      "agreement with checks",
-    );
-  return raw;
-};
+  ),
+  configuration: nullOnly,
+  /** L22 (api 8243895f1): the running switches from the active configuration; null = unknown. */
+  commanding_enabled: decoders.optional(nullable(boolean)),
+  telemetry_enabled: decoders.optional(nullable(boolean)),
+  telemetry: telemetryFreshness,
+  routing_rules: array(rule, 1000),
+  readiness: object({ ready: boolean, checks: array(check, 20) }),
+});
 
-export type SpacecraftDetail = ReturnType<typeof detailReader>;
+export type SpacecraftDetail = Decoded<typeof detailReader>;
 export type RoutingRule = SpacecraftDetail["routing_rules"][number];
 export type ReadinessCheck = SpacecraftDetail["readiness"]["checks"][number];
 

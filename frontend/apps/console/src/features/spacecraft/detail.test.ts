@@ -41,17 +41,19 @@ describe("detailReader", () => {
     expect(decode(detailReader, body()).ok).toBe(true);
   });
 
-  it("rejects ready=true alongside a gating blocker", () => {
+  it("takes the server's ready as is; a disagreement with the checks is not a failed read (qa 11-13)", () => {
     const result = decode(
       detailReader,
       body({
         readiness: {
-          ready: true,
-          checks: [{ key: "routing", status: "blocker", title: "No rule", body: "." }],
+          ready: false,
+          checks: [
+            { key: "profile", status: "caution", title: "Block 1 v1", body: "v6 is latest." },
+          ],
         },
       }),
     );
-    expect(result.ok).toBe(false);
+    expect(result.ok && result.value.readiness.ready).toBe(false);
   });
 
   it("rejects a configuration value until change sets define it", () => {
