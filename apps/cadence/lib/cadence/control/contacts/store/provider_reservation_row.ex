@@ -170,10 +170,29 @@ defmodule Cadence.Control.Contacts.Store.ProviderReservationRow do
     ])
     |> validate_number(:provider_revision, greater_than: 0)
     |> validate_number(:attempt_count, greater_than_or_equal_to: 0)
+    |> put_accepted_window()
+    |> validate_time_range()
     |> unique_constraint([:mission_id, :provider_contact_ref],
       name: :provider_reservations_provider_ref_idx
     )
   end
+
+  # The window columns are the pass Cadence accepted: they follow the accepted snapshot whenever it
+  # changes (approve, policy accept, observed or acknowledged, the first provider confirmation), so
+  # occupancy and the pass reads see a provider's move. A change pending approval doesn't move them.
+  defp put_accepted_window(changeset) do
+    with {:ok, document} <- fetch_change(changeset, :cadence_accepted_snapshot_document),
+         %{} = snapshot <- JsonDocument.unwrap_value(document),
+         {:ok, starts_at} <- snapshot_time(snapshot["starts_at"]),
+         {:ok, ends_at} <- snapshot_time(snapshot["ends_at"]) do
+      change(changeset, starts_at: starts_at, ends_at: ends_at)
+    else
+      _no_window -> changeset
+    end
+  end
+
+  defp snapshot_time(nil), do: :error
+  defp snapshot_time(value), do: Ecto.Type.cast(:utc_datetime_usec, value)
 
   @spec to_domain(struct()) :: ProviderReservation.t()
   def to_domain(%__MODULE__{} = row) do
