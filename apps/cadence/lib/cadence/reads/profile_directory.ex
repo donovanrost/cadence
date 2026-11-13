@@ -2,11 +2,15 @@ defmodule Cadence.Reads.ProfileDirectory do
   @moduledoc """
   The Setup profiles list: each active spacecraft profile at its latest
   version, with how many spacecraft pin it and how many of those pin an older
-  version. Callers authorize first.
+  version, how many per-spacecraft overrides it has (as the detail's `override_count`) and its
+  `last_change` (as the detail's). Callers authorize first.
   """
 
   alias Cadence.Reads.CatalogRollout
+  alias Cadence.SpacecraftStore
+  alias Cadence.SpacecraftStore.Overrides
   alias Cadence.SpacecraftType
+  alias Cadence.SpacecraftTypeStore
 
   @protocol_labels %{
     tm: "CCSDS TM",
@@ -29,21 +33,30 @@ defmodule Cadence.Reads.ProfileDirectory do
 
   @spec load(binary(), binary()) :: [map()]
   def load(organization_id, mission_id) do
+    profiles = SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
+
     build(
-      Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id),
-      Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
+      profiles,
+      SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
       organization_id
       |> Cadence.Catalog.list_revisions(mission_id)
-      |> Map.new(&{&1.catalog_revision_id, &1.revision_number})
+      |> Map.new(&{&1.catalog_revision_id, &1.revision_number}),
+      %{
+        override_counts: override_counts(organization_id, mission_id),
+        version_times: version_times(organization_id, mission_id, profiles)
+      }
     )
   end
 
   @doc """
-  Pure builder over latest profile versions, per-(profile, version) spacecraft counts and catalog
-  revision numbers (id => number).
+  Pure builder over latest profile versions, per-(profile, version) spacecraft counts, catalog
+  revision numbers (id => number) and `extras`: `override_counts` (profile id => count) and
+  `version_times` (`{profile id, version}` => when that version was made).
   """
-  @spec build([SpacecraftType.t()], [map()], %{binary() => pos_integer()}) :: [map()]
-  def build(profiles, version_counts, revision_numbers \\ %{}) do
+  @spec build([SpacecraftType.t()], [map()], %{binary() => pos_integer()}, map()) :: [map()]
+  def build(profiles, version_counts, revision_numbers \\ %{}, extras \\ %{}) do
+    override_counts = Map.get(extras, :override_counts, %{})
+    version_times = Map.get(extras, :version_times, %{})
     counts = Enum.group_by(version_counts, & &1.spacecraft_type_id)
 
     Enum.map(profiles, fn %SpacecraftType{} = profile ->
@@ -62,9 +75,52 @@ defmodule Cadence.Reads.ProfileDirectory do
           pinned
           |> Enum.filter(&(&1.spacecraft_type_version < profile.version))
           |> Enum.map(& &1.count)
-          |> Enum.sum()
+          |> Enum.sum(),
+        override_count: Map.get(override_counts, profile.spacecraft_type_id, 0),
+        last_change:
+          last_change(
+            profile,
+            Map.get(version_times, {profile.spacecraft_type_id, profile.version})
+          )
       }
     end)
+  end
+
+  # The detail's shape (ProfileDetail): which version and when; no revision or actor yet.
+  defp last_change(_profile, nil), do: nil
+
+  defp last_change(profile, at),
+    do: %{version: profile.version, revision: nil, at: at, actor: nil}
+
+  # Override entries (spacecraft × path) per profile, as the detail counts them, in bounded
+  # batches over the fleet.
+  defp override_counts(organization_id, mission_id) do
+    profile_of =
+      organization_id
+      |> SpacecraftStore.list_spacecraft(mission_id)
+      |> Enum.reject(&is_nil(&1.spacecraft_type_id))
+      |> Map.new(&{&1.spacecraft_id, &1.spacecraft_type_id})
+
+    profile_of
+    |> Map.keys()
+    |> Enum.chunk_every(SpacecraftStore.max_batch_size())
+    |> Enum.flat_map(&Overrides.list(organization_id, mission_id, &1))
+    |> Enum.reduce(%{}, fn {spacecraft_id, paths}, acc ->
+      Map.update(acc, profile_of[spacecraft_id], map_size(paths), &(&1 + map_size(paths)))
+    end)
+  end
+
+  defp version_times(organization_id, mission_id, profiles) do
+    for profile <- profiles,
+        row <-
+          SpacecraftTypeStore.list_spacecraft_type_version_history(
+            organization_id,
+            mission_id,
+            profile.spacecraft_type_id
+          ),
+        row.version == profile.version,
+        into: %{},
+        do: {{profile.spacecraft_type_id, row.version}, row.created_at}
   end
 
   defp enum(nil), do: nil

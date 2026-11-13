@@ -159,6 +159,10 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert row["downlink_protocol"] == %{"value" => "tm", "label" => "CCSDS TM"}
     assert row["spacecraft_count"] == 0
     assert row["catalog_revision"] == nil
+    # As the detail reads them (fe-setup, Profile.md list).
+    assert row["override_count"] == 0
+    assert %{"version" => 1, "at" => at, "revision" => nil, "actor" => nil} = row["last_change"]
+    assert is_binary(at)
   end
 
   test "readiness for an empty mission blocks on spacecraft and catalog", c do

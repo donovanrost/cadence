@@ -71,7 +71,8 @@ with `spacecraft`.
    "uplink_protocol": {"value": "tc", "label": "CCSDS TC"},
    "packet_protocol": {"value": "space_packet", "label": "CCSDS Space Packet"},
    "catalog_revision": {"id": "catalog_revision_…", "number": 4, "label": "rev 4"},
-   "spacecraft_count": 500, "spacecraft_on_older_versions": 3}
+   "spacecraft_count": 500, "spacecraft_on_older_versions": 3, "override_count": 12,
+   "last_change": {"version": 4, "revision": null, "at": "2026-11-12T10:00:00Z", "actor": null}}
 ]}}
 ```
 
@@ -80,8 +81,10 @@ with `spacecraft`.
 - `catalog_revision`: the catalog the profile's latest version sets (`SpacecraftType.catalog_revision_id`),
   `{id, number, label}` with `label` "rev N" ("rN" is a change-set revision), or `null` when the
   profile sets none. `number`/`label` are `null` if the revision can't be found.
-- **Not in v1:** `updated_at`. The profile model has no update timestamp; the History view gets
-  version timestamps from PD.
+- `override_count`: per-spacecraft override entries (spacecraft × path) across the spacecraft
+  pinned to the profile, as the detail's `override_count`. `last_change`: the detail's
+  `profile.last_change` (`{version, revision: null, at, actor: null}`: when the latest version was
+  made), or `null` if its history row is missing.
 
 ## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id`
 
