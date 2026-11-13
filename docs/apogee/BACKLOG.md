@@ -103,7 +103,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | Fleet: ~~"in contact" filter, Next contact column~~ done (3ebcc9f8); past 200 rows: no virtualization (fe-ops measured, 11-13); the 1 s clock in Last TLM / Next contact moves to a 10 s tick | fe-ops | — |
-| ~~Alarms: group identical point+condition across spacecraft~~ done (784726fc), ~~Next contact~~ done (3ebcc9f8), ~~"Last cleared…" empty state~~ done (784726fc); Cleared tab re-check (investigate review #20) | fe-ops | — |
+| ~~Alarms: group identical point+condition across spacecraft~~ done (784726fc), ~~Next contact~~ done (3ebcc9f8), ~~"Last cleared…" empty state~~ done (784726fc); ~~#20 Source column clipped~~ fixed (ApTable scrolls in its panel); Cleared tab visual re-check once something clears on :4011 | ux (browser pass) | — |
 | ~~Telemetry `Dashboards ↗` → existing pages (#11)~~ done (718fd269); empty state's three suggested points | fe-ops | — |
 | Timeline: ~~sc scope~~ done (cb5767c9); ~~plane filter~~ done (97e12555); ~~custom range, E1 brush~~ done (6c123796); ~~live prepend + "N new events ↑"~~ done (0521f407) | fe-ops | — |
 
