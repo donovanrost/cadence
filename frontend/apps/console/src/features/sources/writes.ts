@@ -1,5 +1,5 @@
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
-import { healthReader, sourceReader, storages, isolationLevels, sourceKinds } from "./api.ts";
+import { healthReader, sourceReader, storages, isolationLevels, registerKinds } from "./api.ts";
 
 /**
  * L11 data-source writes (api-ops' proposal, fe-setup's 8 changes accepted 11-13). They wrap the
@@ -14,7 +14,7 @@ const option = <T extends readonly string[]>(keys: T) =>
 const optionsReader = d.object({
   logical_sources: d.array(d.object({ key: d.token, label: d.string }), 200),
   kinds: d.array(
-    d.object({ key: d.known(sourceKinds), label: d.string, requires_credentials: d.boolean }),
+    d.object({ key: d.known(registerKinds), label: d.string, requires_credentials: d.boolean }),
     10,
   ),
   isolation_levels: d.object({
@@ -81,7 +81,7 @@ const unwrap = async <T>(p: Promise<ApiResult<{ source: T }>>): Promise<ApiResul
 export type RegisterBody = Readonly<{
   display_name: string;
   logical_source: string;
-  kind: (typeof sourceKinds)[number];
+  kind: (typeof registerKinds)[number];
   isolation_level: string;
   storage: string | null;
   credentials_ref?: string;

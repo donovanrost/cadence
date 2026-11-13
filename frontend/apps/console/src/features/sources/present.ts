@@ -11,6 +11,12 @@ export function kindText(kind: DataSource["kind"]): string {
       return "Managed by Cadence";
     case "byo_tsdb":
       return "Your TSDB";
+    case "postgres":
+      return "Postgres";
+    case "object_archive":
+      return "Object archive";
+    case "projection":
+      return "Projection";
     case "unrecognized":
       return "Other";
   }

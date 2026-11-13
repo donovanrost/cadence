@@ -15,8 +15,16 @@ const {
   token,
 } = decoders;
 
-/** api-ops L11: a closed enum. */
-export const sourceKinds = ["byo_tsdb", "managed_tsdb"] as const;
+/** api-ops L11 (corrected 11-13): D1's kind, a closed set. */
+export const sourceKinds = [
+  "managed_tsdb",
+  "byo_tsdb",
+  "postgres",
+  "object_archive",
+  "projection",
+] as const;
+/** Registration (R1/W1) only offers these two. */
+export const registerKinds = ["byo_tsdb", "managed_tsdb"] as const;
 export const isolationLevels = [
   "shared",
   "customer_owned",

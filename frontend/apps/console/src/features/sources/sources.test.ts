@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { ApiError } from "@/api";
 import type { DataSource } from "./api.ts";
-import { access, runsActive, sourceFacts, sourceFailure, SHARED_LINE } from "./present.ts";
+import {
+  access,
+  kindText,
+  runsActive,
+  sourceFacts,
+  sourceFailure,
+  SHARED_LINE,
+} from "./present.ts";
 import { blankDraft, blockedReason, registerBody } from "./register.ts";
 import type { SourceDetail, SourceOptions } from "./writes.ts";
 
@@ -70,6 +77,11 @@ describe("register source (W1)", () => {
 });
 
 describe("source page", () => {
+  it("words every D1 kind, including the ones Register doesn't offer", () => {
+    expect(kindText("managed_tsdb")).toBe("Managed by Cadence");
+    expect(kindText("object_archive")).toBe("Object archive");
+    expect(kindText("projection")).toBe("Projection");
+  });
   it("keeps shared sources read-only and says why on 403 platform_source", () => {
     expect(access(source, true, false)).toEqual({ editable: true, line: null });
     expect(access({ ...source, shared: true }, true, false)).toEqual({
