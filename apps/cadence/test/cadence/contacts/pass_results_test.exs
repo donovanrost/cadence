@@ -26,7 +26,7 @@ defmodule Cadence.Contacts.PassResultsTest do
   end
 
   setup do
-    c = ProviderChangeFixtures.setup_contact()
+    c = ProviderChangeFixtures.setup_contact(%{}, starts_at: ~U[2026-07-20 12:00:00.000000Z])
     %{c: c, alice: member_scope(c.organization_id, :member, "Alice")}
   end
 

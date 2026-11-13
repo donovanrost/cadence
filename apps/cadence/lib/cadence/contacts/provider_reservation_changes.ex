@@ -129,6 +129,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
            :ok <- require_hash(change_row, expected_hash),
            :ok <- maybe_require_decision_deadline(change_row, opts),
            {:ok, reservation_row} <- lock_reservation(change_row),
+           :ok <- maybe_require_pass_open(reservation_row, now, opts),
            :ok <- require_current_revision(change_row, reservation_row),
            :ok <- require_current_policy(change_row, reservation_row),
            :ok <- require_active_grant(reservation_row),
@@ -179,10 +180,11 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
       with {:ok, row} <- lock_change(organization_id, change_id),
            :ok <- require_hash(row, Keyword.get(opts, :proposal_hash)),
            :ok <- require_state(row, Keyword.fetch!(opts, :allowed_states)),
+           {:ok, reservation} <- lock_reservation(row),
+           :ok <- maybe_require_pass_open(reservation, now, opts),
            :ok <- maybe_require_actionable(row, opts),
            {:ok, _approval_row} <- maybe_insert_approval(Keyword.get(opts, :approval)),
            {:ok, updated} <- decide_change(row, state, actor, now, decision_patch),
-           {:ok, reservation} <- lock_reservation(updated),
            {:ok, _audit} <- append_audit(updated, reservation, actor, now) do
         ProviderReservationChangeRow.to_domain(updated)
       else
@@ -545,6 +547,20 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # L14 (lead, ux U44): a change pending approval can't be decided once its pass has ended; it
+  # expired. Acknowledging what a provider already did stays possible.
+  defp maybe_require_pass_open(reservation_row, now, opts) do
+    if Keyword.get(opts, :refuse_after_pass_end?, false) and pass_ended?(reservation_row, now),
+      do: {:error, :provider_change_expired},
+      else: :ok
+  end
+
+  @doc "Whether a reservation's pass has ended at `now` (L14's expiry rule: its ends_at)."
+  def pass_ended?(%{ends_at: %DateTime{} = ends_at}, %DateTime{} = now),
+    do: DateTime.compare(ends_at, now) != :gt
+
+  def pass_ended?(_reservation, _now), do: false
 
   defp require_pre_realization(%ScheduledContactRow{
          lifecycle_state: "scheduled",

@@ -9,12 +9,16 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
 
   Nothing to acknowledge in the attention sense: an item is open until its change is decided or
   superseded, then resolves (`resolved_by` the decider, or `system` when superseded).
+
+  A change whose pass has ended (its reservation's `ends_at`) leaves Now but stays on the pass
+  (`pass_items/2`, `pass_history/3`). A pending one there is `expired`: it can't be decided any more
+  (lead, ux U44; nothing is stored, it's read off the pass's end).
   """
 
   import Ecto.Query
 
   alias Cadence.Accounts
-  alias Cadence.Contacts.ProviderChangeApprovals
+  alias Cadence.Contacts.{ProviderChangeApprovals, ProviderReservationChanges}
   alias Cadence.Control.Contacts.Store.{ProviderReservationChangeRow, ProviderReservationRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
@@ -43,15 +47,58 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
 
   def source, do: @source
 
+  @doc "Now's items: open changes whose pass hasn't ended."
   @spec items(binary(), binary()) :: [map()]
   def items(org, mission) do
+    now = DateTime.utc_now()
+    org |> open_items(mission, now) |> Enum.reject(&ended?(&1, now))
+  end
+
+  @doc "The pass rows' items: every open change, ended passes included (pending ones `expired`)."
+  @spec pass_items(binary(), binary()) :: [map()]
+  def pass_items(org, mission), do: open_items(org, mission, DateTime.utc_now())
+
+  @doc """
+  One pass's provider changes for its history (ux U44), newest first, at most 50: open ones
+  (`resolution` nil, a pending one `expired` once the pass has ended) and decided ones with
+  `resolution: %{action, by, at, reason}`.
+  """
+  @spec pass_history(binary(), binary(), binary()) :: [map()]
+  def pass_history(org, mission, reservation_id) do
+    now = DateTime.utc_now()
+
+    rows =
+      ProviderReservationChangeRow
+      |> where(
+        [c],
+        c.organization_id == ^org and c.mission_id == ^mission and
+          c.provider_reservation_id == ^reservation_id
+      )
+      |> order_by([c], desc: c.inserted_at, desc: c.provider_reservation_change_id)
+      |> limit(50)
+      |> Repo.all()
+
+    reservation = Map.get(reservations(org, mission, rows), reservation_id)
+    names = names(Enum.map(rows, & &1.decided_by))
+
+    Enum.map(rows, fn row ->
+      row
+      |> change_view(reservation, now)
+      |> Map.merge(%{raised_at: row.inserted_at, resolution: resolution(org, row, names)})
+    end)
+  end
+
+  defp open_items(org, mission, now) do
     changes = changes(org, mission, Map.keys(@open))
     reservations = reservations(org, mission, changes)
 
     changes
-    |> Enum.map(&item(&1, Map.get(reservations, &1.provider_reservation_id)))
+    |> Enum.map(&open_item(&1, Map.get(reservations, &1.provider_reservation_id), now))
     |> Enum.sort_by(&(&1.deadline_at || &1.raised_at), DateTime)
   end
+
+  defp ended?(%{ends_at: ends_at}, now),
+    do: ProviderReservationChanges.pass_ended?(%{ends_at: ends_at}, now)
 
   @spec resolved_since(binary(), binary(), DateTime.t()) :: [map()]
   def resolved_since(org, mission, %DateTime{} = since) do
@@ -81,22 +128,31 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
 
   @spec counts(binary(), binary()) :: %{open: non_neg_integer(), acknowledged: 0}
   def counts(org, mission) do
+    now = DateTime.utc_now()
+
+    # As Now: a change whose pass has ended isn't counted.
     open =
-      ProviderReservationChangeRow
-      |> where(
-        [c],
-        c.organization_id == ^org and c.mission_id == ^mission and
-          c.lifecycle_state in ^Map.keys(@open)
+      from(c in ProviderReservationChangeRow,
+        left_join: r in ProviderReservationRow,
+        on:
+          r.organization_id == c.organization_id and
+            r.provider_reservation_id == c.provider_reservation_id,
+        where:
+          c.organization_id == ^org and c.mission_id == ^mission and
+            c.lifecycle_state in ^Map.keys(@open) and (is_nil(r.ends_at) or r.ends_at > ^now)
       )
       |> Repo.aggregate(:count)
 
     %{open: open, acknowledged: 0}
   end
 
-  @doc "One open item by change id (the decision endpoints' answer), or nil."
+  @doc """
+  One open item by change id (the decision endpoints' answer), or nil. Ended passes included, so
+  an acknowledgement can still be made from the pass.
+  """
   @spec item(binary(), binary(), binary()) :: map() | nil
   def item(org, mission, change_id) do
-    org |> items(mission) |> Enum.find(&(&1.id == change_id))
+    org |> pass_items(mission) |> Enum.find(&(&1.id == change_id))
   end
 
   defp changes(org, mission, states) do
@@ -122,7 +178,7 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
     |> Map.new(&{&1.provider_reservation_id, ProviderReservationRow.to_domain(&1)})
   end
 
-  defp item(change, reservation) do
+  defp open_item(change, reservation, now) do
     %{
       id: change.provider_reservation_change_id,
       source: @source,
@@ -137,18 +193,38 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
       ends_at: reservation && reservation.ends_at,
       raised_at: change.inserted_at,
       deadline_at: change.deadline_at,
-      provider_change: %{
-        id: change.provider_reservation_change_id,
-        classification: change.classification,
-        state: change.lifecycle_state,
-        deadline_at: change.deadline_at,
-        provider_revision: change.provider_revision,
-        proposal_hash: change.proposal_hash,
-        already_effective: change.already_effective,
-        fields: fields(change.changed_fields_document)
-      }
+      provider_change: change_view(change, reservation, now)
     }
   end
+
+  defp change_view(change, reservation, now) do
+    %{
+      id: change.provider_reservation_change_id,
+      classification: change.classification,
+      state: change.lifecycle_state,
+      deadline_at: change.deadline_at,
+      provider_revision: change.provider_revision,
+      proposal_hash: change.proposal_hash,
+      already_effective: change.already_effective,
+      # ux U44: pending when the pass ended, so it can't be decided any more.
+      expired:
+        change.lifecycle_state == "pending_approval" and
+          ProviderReservationChanges.pass_ended?(reservation || %{}, now),
+      fields: fields(change.changed_fields_document)
+    }
+  end
+
+  defp resolution(_org, %{lifecycle_state: state}, _names)
+       when state in ~w(pending_approval acknowledgment_required configuration_failure),
+       do: nil
+
+  defp resolution(org, row, names),
+    do: %{
+      action: row.lifecycle_state,
+      by: resolver(row, names),
+      at: row.decided_at || row.updated_at,
+      reason: note(org, row)
+    }
 
   defp note(_org, %{lifecycle_state: "superseded"}), do: nil
 

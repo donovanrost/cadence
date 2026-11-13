@@ -9,7 +9,11 @@ defmodule Cadence.ProviderChangeFixtures do
   alias Cadence.Contacts.{PathTemplate, ProviderReservations}
   alias Cadence.GroundNetworks.{MissionProvider, MissionProviders}
 
-  def setup_contact(policy_document \\ %{}) do
+  @doc """
+  A booked pass with a provider reservation. The pass starts a day from now by default (L14: a
+  change for a pass that has ended can't be decided); `starts_at:` pins it.
+  """
+  def setup_contact(policy_document \\ %{}, opts \\ []) do
     suffix = System.unique_integer([:positive])
     organization_id = "org-provider-change-#{suffix}"
     mission_id = "mission-provider-change-#{suffix}"
@@ -60,7 +64,7 @@ defmodule Cadence.ProviderChangeFixtures do
         })
       )
 
-    starts_at = ~U[2026-07-20 12:00:00.000000Z]
+    starts_at = Keyword.get_lazy(opts, :starts_at, &tomorrow/0)
     ends_at = DateTime.add(starts_at, 600)
 
     {:ok, reservation} =
@@ -243,5 +247,12 @@ defmodule Cadence.ProviderChangeFixtures do
       organization_id: organization.organization_id,
       organization_membership: membership
     })
+  end
+
+  defp tomorrow do
+    DateTime.utc_now()
+    |> DateTime.add(1, :day)
+    |> DateTime.truncate(:second)
+    |> Map.put(:microsecond, {0, 6})
   end
 end
