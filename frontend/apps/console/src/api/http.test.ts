@@ -41,6 +41,17 @@ describe("request", () => {
     expect(result).toEqual({ ok: true, value: null });
   });
 
+  it("reads 429 as a refusal with its details (api-ops: too_many_attempts)", async () => {
+    stubFetch(429, {
+      error: { code: "too_many_attempts", message: "Wait.", details: { retry_after: 40 } },
+    });
+    const result = await request("/x", ok, { method: "PUT", body: {} });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: "invalid", code: "too_many_attempts", details: { retry_after: 40 } },
+    });
+  });
+
   it("keeps the server code on 422", async () => {
     stubFetch(422, { error: { code: "reason_required", message: "Give a reason." } });
     const result = await request("/x", ok, { method: "POST", body: {} });

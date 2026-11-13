@@ -76,6 +76,8 @@ function toError(status: number, body: unknown): ApiError {
       };
     case 400:
     case 422:
+    // A refusal before anything ran (api-ops: password `too_many_attempts`, details.retry_after).
+    case 429:
       return { kind: "invalid", code, message, details };
     default:
       return parsed.ok
