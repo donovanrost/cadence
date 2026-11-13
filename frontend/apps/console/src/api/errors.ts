@@ -62,6 +62,8 @@ export const errorCodes = [
   "catalog_command_in_flight",
   "import_run_not_found",
   "unsupported_format",
+  "artifact_not_found",
+  "import_running",
   // Data sources (L11, api-ops)
   "data_source_not_found",
   "binding_not_found",

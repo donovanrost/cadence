@@ -63,6 +63,13 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "catalog", title: "Import catalog", board: "Catalog (S3)" },
   },
   {
+    path: "setup/catalog/artifacts/:artifactId",
+    name: "setup.catalog.artifact",
+    component: () => import("@/features/catalog/ArtifactScreen.vue"),
+    props: (to) => ({ artifactId: paramText(to.params, "artifactId") }),
+    meta: { mode: "setup", nav: "catalog", title: "Source file" },
+  },
+  {
     // ux §7 #8: one Catalog page with a database picker; the old path opens it on that database.
     path: "setup/catalog/:databaseId",
     name: "setup.catalog.database",

@@ -226,6 +226,12 @@ export interface ConsoleRoutes {
     { profileId: string; section?: string }
   >;
   "setup.catalog": InMission<"setup.catalog", "/setup/catalog">;
+  "setup.catalog.artifact": InMission<
+    "setup.catalog.artifact",
+    "/setup/catalog/artifacts/:artifactId",
+    { artifactId: Raw },
+    { artifactId: string }
+  >;
   "setup.catalog.import": InMission<
     "setup.catalog.import",
     "/setup/catalog/import/:importId?",
@@ -376,6 +382,7 @@ export const consoleRouteNames: Readonly<Record<ConsoleRouteName, true>> = {
   "setup.catalog": true,
   "setup.catalog.import": true,
   "setup.catalog.database": true,
+  "setup.catalog.artifact": true,
   "setup.changes": true,
   "setup.revisions": true,
   "setup.revisions.compare": true,

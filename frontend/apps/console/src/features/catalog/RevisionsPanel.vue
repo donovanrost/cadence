@@ -26,7 +26,11 @@ const columns: readonly ApColumn[] = [
       <template #cell-number="{ row }">rev {{ row.number }}</template>
       <template #cell-label="{ row }">{{ row.label ?? "—" }}</template>
       <template #cell-file="{ row }">
-        <span class="text-text-2">{{ row.artifact.file_name }}</span>
+        <RouterLink
+          :to="{ name: 'setup.catalog.artifact', params: { artifactId: row.artifact.id } }"
+          class="text-primary no-underline hover:underline"
+          >{{ row.artifact.file_name }}</RouterLink
+        >
         <span class="block font-sans text-xs text-text-4">{{ row.artifact.format_label }}</span>
       </template>
       <template #cell-declarations="{ row }">{{ formatCount(row.declaration_count) }}</template>
