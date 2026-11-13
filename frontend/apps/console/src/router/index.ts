@@ -7,6 +7,25 @@ export type { NavKey, ShellMode } from "./meta.ts";
 
 const routes: RouteRecordRaw[] = [
   { path: "/", name: "home", component: () => import("@/shell/ConsoleHome.vue") },
+  // L5 public auth screens (lead; ux Auth.md); api-ops 302s the old /sign-in and /invitations here.
+  {
+    path: "/sign-in",
+    name: "auth.sign-in",
+    component: () => import("@/features/auth/SignInScreen.vue"),
+    meta: { public: true, title: "Sign in" },
+  },
+  {
+    path: "/invitations/:token",
+    name: "auth.invitation",
+    component: () => import("@/features/auth/InvitationScreen.vue"),
+    meta: { public: true, title: "Invitation" },
+  },
+  {
+    path: "/no-organization",
+    name: "auth.no-org",
+    component: () => import("@/features/auth/NoOrganizationScreen.vue"),
+    meta: { public: true, title: "No organization" },
+  },
   {
     path: "/account",
     name: "account",

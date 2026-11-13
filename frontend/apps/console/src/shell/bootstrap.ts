@@ -7,7 +7,10 @@ export type BootState =
   | { status: "ready"; session: Readonly<Session> }
   | { status: "failed"; error: ApiError };
 
-/** Loads the session bootstrap once for the app's lifetime. 401 leaves for /sign-in. */
+/**
+ * Loads the session bootstrap once for the app's lifetime. 401 leaves for the console sign-in
+ * (L5) with return_to; App sends a session with no organizations to auth.no-org.
+ */
 export function useBootstrap() {
   const state = shallowRef<BootState>({ status: "loading" });
   const controller = new AbortController();
@@ -22,7 +25,7 @@ export function useBootstrap() {
         state.value = { status: "ready", session: result.value };
       } else if (result.error.kind === "unauthenticated") {
         const back = window.location.pathname + window.location.search;
-        window.location.assign(`/sign-in?return_to=${encodeURIComponent(back)}`);
+        window.location.assign(`/console/sign-in?return_to=${encodeURIComponent(back)}`);
       } else {
         state.value = { status: "failed", error: result.error };
       }

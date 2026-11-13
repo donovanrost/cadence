@@ -34,5 +34,10 @@ declare module "vue-router" {
     title?: string;
     /** Canvas board this screen implements, shown on pending screens. */
     board?: string;
+    /**
+     * L5 auth screens: rendered in the AuthLayout without SessionProvider/AppShell; a 401 from
+     * /session means anonymous there, never a redirect.
+     */
+    public?: boolean;
   }
 }
