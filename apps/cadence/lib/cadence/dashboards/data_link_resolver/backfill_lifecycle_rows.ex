@@ -279,7 +279,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.BackfillLifecycleRows do
       item_key = BackfillLifecycleGroup.item_key(requested_event)
       latest_event = Map.get(latest_event_by_item, item_key, requested_event)
       run_id = latest_event.backfill_run_id || requested_event.backfill_run_id
-      job = group_job(run_id)
+      job = group_job(latest_event.mission_id, run_id)
 
       %{
         item_label: group_item_label(latest_event, requested_event),
@@ -335,11 +335,13 @@ defmodule Cadence.Dashboards.DataLinkResolver.BackfillLifecycleRows do
   defp job_text_token(_label, ""), do: nil
   defp job_text_token(label, value) when is_binary(value), do: "#{label}=#{value}"
 
-  defp group_job(run_id) when is_binary(run_id) and run_id != "" do
-    Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, run_id)
+  # Only this mission's job: run ids are unique per job type across every tenant.
+  defp group_job(mission_id, run_id)
+       when is_binary(mission_id) and is_binary(run_id) and run_id != "" do
+    Jobs.fetch_mission_job_for_run(:telemetry_historical_data_workflow, mission_id, run_id)
   end
 
-  defp group_job(_run_id), do: {:error, :missing_run_id}
+  defp group_job(_mission_id, _run_id), do: {:error, :missing_run_id}
 
   defp group_job_status_order("queued"), do: {0, "queued"}
   defp group_job_status_order("running"), do: {1, "running"}

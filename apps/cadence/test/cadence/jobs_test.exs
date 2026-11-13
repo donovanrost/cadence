@@ -43,6 +43,30 @@ defmodule Cadence.JobsTest do
              Cadence.Jobs.fetch_job_for_run(:contact_schedule_operation, "intent")
   end
 
+  test "a mission's run lookup doesn't see another mission's job with the same run id" do
+    assert {:ok, _} =
+             Cadence.Repo.transaction(fn ->
+               Cadence.Jobs.enqueue_in_transaction(
+                 :contact_schedule_operation,
+                 "mission-alpha",
+                 "run-scoped",
+                 %{}
+               )
+             end)
+
+    assert {:ok, %Job{mission_id: "mission-alpha"}} =
+             Cadence.Jobs.fetch_mission_job_for_run(
+               :contact_schedule_operation,
+               "mission-alpha",
+               "run-scoped"
+             )
+
+    for {mission, run} <- [{"mission-beta", "run-scoped"}, {"mission-alpha", "run-other"}] do
+      assert {:error, :job_not_found} =
+               Cadence.Jobs.fetch_mission_job_for_run(:contact_schedule_operation, mission, run)
+    end
+  end
+
   test "requeues running jobs for recovery" do
     assert {:ok, job} =
              Cadence.Jobs.enqueue(
