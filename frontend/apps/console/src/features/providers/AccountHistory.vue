@@ -17,9 +17,7 @@ const who = (a: { name: string | null } | null) => (a?.name ? ` · by ${a.name}`
     <!-- ux: renames make no version; provider account changes are in the audit log (api a52b6fbe). -->
     <p class="m-0 px-4 pt-2.5 text-sm text-text-3">
       Renames aren't versioned, so they don't appear here; the
-      <RouterLink :to="{ name: 'org.audit' }" class="text-readout hover:underline"
-        >Audit log</RouterLink
-      >
+      <RouterLink :to="{ name: 'org.audit' }" class="text-readout underline">Audit log</RouterLink>
       has them.
     </p>
     <ApRemote :state="state" loading-label="Loading history…" @retry="refetch">

@@ -18,6 +18,7 @@ defineEmits<{ retry: [] }>();
       sentence="This server doesn't serve provider accounts to the console yet."
     />
     <ApRemote
+      forbidden-text="Org admins see this."
       v-else
       :state="state"
       loading-label="Loading provider accounts…"

@@ -30,7 +30,12 @@ const columns: readonly ApColumn[] = [
         >New</RouterLink
       >
     </template>
-    <ApRemote :state="state" loading-label="Loading service identities…" @retry="refetch">
+    <ApRemote
+      forbidden-text="Org admins see this."
+      :state="state"
+      loading-label="Loading service identities…"
+      @retry="refetch"
+    >
       <template #default="{ value }">
         <ApEmptyState
           v-if="value.service_identities.length === 0"

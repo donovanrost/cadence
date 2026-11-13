@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useRoute } from "vue-router";
 import RailLink from "./RailLink.vue";
 
 /** `mission` is null on org pages reached without a mission in the URL. */
-defineProps<{ org: string; mission: string | null; canAdminOrg: boolean }>();
+const props = defineProps<{ org: string; mission: string | null; canAdminOrg: boolean }>();
 const route = useRoute();
 
 const missionItems = [
@@ -20,12 +21,18 @@ const missionItems = [
 ] as const;
 
 const orgItems = [
-  { nav: "people", to: "org.people", label: "People & access" },
-  { nav: "missions", to: "org.missions", label: "Missions" },
-  { nav: "provider-accounts", to: "org.provider-accounts", label: "Provider accounts" },
-  { nav: "org-settings", to: "org.settings", label: "Settings" },
-  { nav: "audit", to: "org.audit", label: "Audit log" },
+  { nav: "people", to: "org.people", label: "People & access", adminOnly: false },
+  { nav: "missions", to: "org.missions", label: "Missions", adminOnly: false },
+  {
+    nav: "provider-accounts",
+    to: "org.provider-accounts",
+    label: "Provider accounts",
+    adminOnly: true,
+  },
+  { nav: "org-settings", to: "org.settings", label: "Settings", adminOnly: true },
+  { nav: "audit", to: "org.audit", label: "Audit log", adminOnly: true },
 ] as const;
+const shownOrgItems = computed(() => orgItems.filter((i) => props.canAdminOrg || !i.adminOnly));
 const groupClass =
   "max-console:sr-only font-display text-xs font-semibold tracking-[.22em] text-text-4 uppercase px-3.5 pt-3.5 pb-1.5 m-0";
 </script>
@@ -46,11 +53,12 @@ const groupClass =
         :active="route.meta.nav === item.nav"
       />
     </template>
-    <!-- Organization administration needs organization_admin (decision 2; server enforces). -->
-    <template v-if="canAdminOrg">
+    <!-- Members see People and Missions; the admin-only items need organization_admin (decision 2;
+         server enforces). A member who opens one by URL still has this rail (qa §6). -->
+    <template v-if="shownOrgItems.length > 0">
       <p :class="groupClass">Organization</p>
       <RailLink
-        v-for="item in orgItems"
+        v-for="item in shownOrgItems"
         :key="item.nav"
         :to="{ name: item.to, params: { org } }"
         index="··"

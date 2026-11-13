@@ -50,7 +50,12 @@ const warning = computed(() =>
         { label: identity?.name ?? 'Service identity', literal: true },
       ]"
     />
-    <ApRemote :state="state" loading-label="Loading service identity…" @retry="refetch">
+    <ApRemote
+      forbidden-text="Org admins see this."
+      :state="state"
+      loading-label="Loading service identity…"
+      @retry="refetch"
+    >
       <ApEmptyState
         v-if="!identity"
         state="off"

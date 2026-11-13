@@ -103,6 +103,7 @@ const missionOptions = computed(() => [
       />
     </ApPanel>
     <ApRemote
+      forbidden-text="Org admins see this."
       v-else
       :state="log.state.value"
       loading-label="Loading audit log…"

@@ -59,8 +59,9 @@ const crumbs = computed((): readonly ApCrumb[] => [
           </template>
         </ApPageHeader>
         <PersonAccess :capabilities="member.capabilities" />
+        <!-- The person's activity is the org audit log: org admins only (qa §6). -->
         <PersonActivity
-          v-if="org"
+          v-if="org && canManage"
           :org-id="org.id"
           :user-id="member.user_id"
           :name="member.display_name ?? member.email"

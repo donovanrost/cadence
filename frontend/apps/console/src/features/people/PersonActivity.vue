@@ -30,7 +30,12 @@ const { state, refetch } = useRemoteQuery(key, fetchAudit);
         >
       </span>
     </template>
-    <ApRemote :state="state" loading-label="Loading activity…" @retry="refetch">
+    <ApRemote
+      forbidden-text="Org admins see this."
+      :state="state"
+      loading-label="Loading activity…"
+      @retry="refetch"
+    >
       <template #default="{ value }">
         <ApEmptyState
           v-if="value.events.length === 0"

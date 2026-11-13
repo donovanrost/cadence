@@ -35,13 +35,13 @@ const subline = (p: People) =>
     plural(p.members.length, "person", "people"),
     plural(p.invitations.filter((i) => i.status === "pending").length, "pending invite"),
   ].join(" · ");
+/** Org admins only (O3 is 403 for members), even when ?tab=services is in the URL (qa §6). */
+const admins = (p: People) => p.permissions.includes("org.manage_members");
 const tabs = (p: People) => [
   { value: "people" as const, label: "People", count: p.members.length },
   { value: "invitations" as const, label: "Invitations", count: p.invitations.length },
   // Org admins only (O3 is 403 for members): gate on the caller's org permissions.
-  ...(p.permissions.includes("org.manage_members")
-    ? [{ value: "services" as const, label: "Service identities" }]
-    : []),
+  ...(admins(p) ? [{ value: "services" as const, label: "Service identities" }] : []),
   { value: "policies" as const, label: "Command policies" },
 ];
 /** U2 Invite beside People and Invitations only (ux §7 #9), with org.invite. */
@@ -78,7 +78,7 @@ const canInvite = (p: People) =>
               :organization="organization"
             />
             <ServiceIdentitiesPanel
-              v-else-if="tab === 'services' && organization"
+              v-else-if="tab === 'services' && organization && admins(value)"
               :organization-id="organization.id"
             />
             <ApPanel v-else index="U1" title="Invitations" flush>
