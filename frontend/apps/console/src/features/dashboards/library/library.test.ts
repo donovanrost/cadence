@@ -142,7 +142,7 @@ describe("dashboards library (slice 8)", () => {
       kind: "Value tile",
       title: "VBAT",
       // qa 13:36Z: a context-scoped binding is bound, to the dashboard's spacecraft.
-      reads: ["EPS.VBAT for the dashboard's spacecraft"],
+      reads: [{ point: "EPS.VBAT", on: "on the dashboard's spacecraft" }],
       settings: ["precision: 2", "sampling: latest"],
     });
     const scoped = (mode: string) =>
@@ -152,9 +152,16 @@ describe("dashboards library (slice 8)", () => {
           binding: { observables: ["EPS.VBAT"], scope_mode: mode },
         }),
       )?.reads;
-    expect(scoped("override")).toEqual(["EPS.VBAT on the spacecraft chosen where it's placed"]);
-    expect(scoped("repeat")).toEqual(["EPS.VBAT for each spacecraft or resource it repeats over"]);
-    expect(scoped("brand_new")).toEqual(["EPS.VBAT"]);
+    expect(scoped("override")).toEqual([
+      { point: "EPS.VBAT", on: "on one spacecraft, chosen where it's placed" },
+    ]);
+    expect(scoped("repeat")).toEqual([
+      {
+        point: "EPS.VBAT",
+        on: "on each spacecraft or resource it repeats over, chosen where it's placed",
+      },
+    ]);
+    expect(scoped("brand_new")).toEqual([{ point: "EPS.VBAT", on: null }]);
     expect(previewOf("not json")).toBeNull();
   });
 

@@ -99,16 +99,23 @@ function retired() {
                       label: 'Title',
                       value: previewOf(value.version.definition_json)?.title ?? 'Untitled',
                     },
-                    {
-                      key: 'reads',
-                      label: 'Reads',
-                      value:
-                        previewOf(value.version.definition_json)?.reads.join(', ') ||
-                        'Nothing bound',
-                      mono: true,
-                    },
+                    { key: 'reads', label: 'Reads', value: 'Nothing bound' },
                   ]"
-                />
+                >
+                  <!-- ux Dashboards.md › Library: the point in mono, then where it's read. -->
+                  <template
+                    v-if="previewOf(value.version.definition_json)?.reads.length"
+                    #value-reads
+                  >
+                    <span
+                      v-for="r in previewOf(value.version.definition_json)?.reads"
+                      :key="r.point"
+                      class="block"
+                      ><span class="font-mono text-readout">{{ r.point }}</span
+                      ><template v-if="r.on"> {{ r.on }}</template></span
+                    >
+                  </template>
+                </ApKeyValue>
                 <details
                   v-if="previewOf(value.version.definition_json)?.settings.length"
                   class="text-sm text-text-3"

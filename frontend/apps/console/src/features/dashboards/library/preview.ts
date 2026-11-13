@@ -12,7 +12,8 @@ import { widgetTypeWord } from "./api.ts";
 export type DefinitionPreview = Readonly<{
   kind: string;
   title: string | null;
-  reads: readonly string[];
+  /** Each point (mono) and where it's read, `on …` (ux Dashboards.md › Library). */
+  reads: readonly Readonly<{ point: string; on: string | null }>[];
   /** Other scalar settings, as `key: value`, for Technical details. */
   settings: readonly string[];
 }>;
@@ -27,14 +28,14 @@ const lines = (o: Readonly<Record<string, unknown>> | null, skip: readonly strin
     .map(([k, v]) => `${k.replaceAll("_", " ")}: ${String(v)}`);
 
 /**
- * Widgets.WidgetDef scope_mode, as a clause after each point (lead; dashboards' editor calls them
- * Follow dashboard / One spacecraft / Repeat). A library definition doesn't carry the spacecraft or
- * what it repeats over (the placement does), so those clauses can't name it.
+ * WidgetDef scope_mode as the `on …` clause after each point (ux Dashboards.md › Library; the
+ * editor's Follow dashboard / One spacecraft / Repeat). A library definition doesn't carry the
+ * spacecraft or what it repeats over (the placement does), so the clauses can't name it.
  */
 const SCOPE_WORDS: ReadonlyMap<string, string> = new Map([
-  ["context", " for the dashboard's spacecraft"],
-  ["override", " on the spacecraft chosen where it's placed"],
-  ["repeat", " for each spacecraft or resource it repeats over"],
+  ["context", "on the dashboard's spacecraft"],
+  ["override", "on one spacecraft, chosen where it's placed"],
+  ["repeat", "on each spacecraft or resource it repeats over, chosen where it's placed"],
 ]);
 
 function pointNames(observables: unknown): string[] {
@@ -61,8 +62,8 @@ export function previewOf(definitionJson: string): DefinitionPreview | null {
   const title = typeof def.title === "string" && def.title.trim() ? def.title : null;
   const binding = recordOf(def.binding);
   const mode = binding?.scope_mode;
-  const scope = typeof mode === "string" ? (SCOPE_WORDS.get(mode) ?? "") : "";
-  const reads = pointNames(binding?.observables).map((name) => `${name}${scope}`);
+  const on = typeof mode === "string" ? (SCOPE_WORDS.get(mode) ?? null) : null;
+  const reads = pointNames(binding?.observables).map((point) => ({ point, on }));
   const settings = [
     ...lines(recordOf(def.options), []),
     ...lines(binding, ["observables", "scope_mode"]),
