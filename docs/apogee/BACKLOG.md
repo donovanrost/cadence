@@ -148,7 +148,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~Step 03 routing summary from the profile's rules~~ done (a935be0b) | fe-setup | — |
-| ~~NORAD id on the profile path~~ done (a935be0b); `New profile` link in the picker | fe-setup | — |
+| ~~NORAD id on the profile path~~ done (a935be0b); ~~`New profile` link in the picker~~ done (ce12d02d) | fe-setup | — |
 
 ### Catalog (`Catalog.md`, S3): partial
 | Item | Owner | Blocked on |
@@ -171,7 +171,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | ~~Compare revisions (`r4...r6`)~~ done (8b58f513) | fe-setup | — |
 | ~~`Keep mine` / `Take live` on conflicts~~ done (3ced6cea, 433bcd0f) | fe-setup | — |
-| Top bar `CONFIG r6 · CONVERGING` / `RUNTIME DEGRADED` (title = the U38 sentence) and the runtime line in the Changes outcome, on `useRuntimeStatus()` (7404a079). ~~Staged bar 'APPLYING · N OF 5 STEPS' / 'Apply failed · nothing changed'~~ no source: submit is synchronous and change sets have no applying state (fe-setup 11-13) | fe-setup | domain: an invalidation when the runtime's applied generation changes (asked) |
+| ~~Top bar runtime state and the Changes outcome's runtime line~~ done (ba5ad77a, ux words: `CONFIG r6 · APPLYING` / `NOT APPLIED`, outcome 'r6 is active and the runtime has applied it'). ~~Staged bar 'APPLYING · N OF 5 STEPS' / 'Apply failed'~~ no source | fe-setup | domain: an invalidation when the runtime's applied generation changes (asked) |
 | ~~qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now"~~ copy done (c16546c4; domain 33529f29) | qa closes | — |
 | Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | api: §8 8d |
 
