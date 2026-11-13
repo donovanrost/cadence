@@ -1,6 +1,7 @@
 /** Public API of the alarms feature: the M9 read, shared by Investigate and the Alarms list. */
 export {
   alarmSeverities,
+  sourceStates,
   conditionWords,
   crossedCondition,
   crossedLimit,

@@ -21,6 +21,26 @@ export const thresholdsReader = d.object({
 });
 export type Thresholds = Decoded<typeof thresholdsReader>;
 
+/** The limit evaluator's states (Cadence.Limits.Evaluator); an alarm row's `condition`. */
+export const limitConditions = [
+  "green",
+  "yellow_low",
+  "yellow_high",
+  "red_low",
+  "red_high",
+  "blue",
+] as const;
+/** An episode's `source_state`: a ground limit's condition or a catalog monitoring level. */
+export const sourceStates = [
+  ...limitConditions,
+  "normal",
+  "watch",
+  "warning",
+  "distress",
+  "critical",
+  "severe",
+] as const;
+
 const alarm = d.object({
   id: d.token,
   spacecraft_id: d.nullable(d.token),
@@ -33,7 +53,7 @@ const alarm = d.object({
   }),
   severity: d.oneOf(alarmSeverities),
   active: d.boolean,
-  condition: d.nullable(d.token),
+  condition: d.nullable(d.known(limitConditions)),
   value: d.nullable(engineeringValue),
   limit_set_name: d.nullable(d.string),
   thresholds: d.nullable(thresholdsReader),

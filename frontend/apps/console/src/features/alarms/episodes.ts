@@ -1,15 +1,17 @@
 import {
+  actor as sharedActor,
   decoders as d,
   request,
   type ApiError,
   type ApiResult,
   type Decoded,
 } from "@/api/index.ts";
-import { engineeringValue, thresholdsReader } from "./api.ts";
+import { engineeringValue, sourceStates, thresholdsReader } from "./api.ts";
 
 /** Contract: docs/apogee/api/alarms-console.md (alarm episodes, DECISIONS #6/#17/#22). */
 
-const actor = d.object({ kind: d.token, id: d.nullable(d.token), name: d.nullable(d.string) });
+/** The shared entity (typing §12 A5). */
+const actor = sharedActor;
 
 const episodeFields = {
   id: d.token,
@@ -18,7 +20,7 @@ const episodeFields = {
   cleared_unacknowledged: d.boolean,
   severity: d.oneOf(["critical", "caution"] as const),
   peak_severity: d.oneOf(["critical", "caution"] as const),
-  source_state: d.nullable(d.string),
+  source_state: d.nullable(d.known(sourceStates)),
   spacecraft_id: d.nullable(d.token),
   spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.integer })),
   point: d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) }),
