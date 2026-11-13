@@ -47,6 +47,6 @@ host then gains the staged bar, and the surface doesn't change.
 - **The surface failed to load:** a crit callout "This app's page couldn't load: <reason>." with `Try again`, and
   the app version in text-3.
 - **Not installed:** an off callout "Limits & Alarming isn't installed on Earendil." plus `Install` (admins), which
-  goes through a change set.
+  follows the app's own install flow (#77) until app config is a change-set kind.
 - **Read-only (no capability):** the body renders read-only, plus the notice.
 - **Phone:** Setup's rule applies: "Setup is designed for a larger screen." with read-only content.
