@@ -1140,7 +1140,9 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp managed_runtime_source_endpoint?(%SourceEndpoint{} = endpoint) do
+  @doc false
+  # Also Readiness's rule for which endpoint carries a spacecraft's telemetry (L22).
+  def managed_runtime_source_endpoint?(%SourceEndpoint{} = endpoint) do
     endpoint.source_endpoint_id == runtime_source_endpoint_id(endpoint.spacecraft_id) or
       Map.get(endpoint.metadata, "managed_by") in [
         "spacecraft_application_binding",

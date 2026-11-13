@@ -12,6 +12,7 @@ defmodule Cadence.Reads.Readiness do
   alias Cadence.Applications.ApplicationDefinition
   alias Cadence.Applications.ApplicationInstallations
   alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts}
+  alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.Comms.{
@@ -26,6 +27,7 @@ defmodule Cadence.Reads.Readiness do
   alias Cadence.Projections.DataSources.Health
   alias Cadence.Reads.PlanningSetup
   alias Cadence.Reads.Readiness.Rules
+  alias Cadence.SourceEndpoints
 
   @spec mission(Scope.t(), binary()) :: {:ok, map()} | {:error, term()}
   def mission(%Scope{organization_id: organization_id} = scope, mission_id)
@@ -64,7 +66,10 @@ defmodule Cadence.Reads.Readiness do
       stations: %{
         count: length(GroundStationStore.list_ground_stations(organization_id, mission_id))
       },
-      data_sources: %{statuses: data_source_statuses(organization_id, mission_id)},
+      data_sources: %{
+        statuses: data_source_statuses(organization_id, mission_id),
+        ambiguous_endpoints: ambiguous_endpoints(organization_id, mission_id)
+      },
       apps: apps(organization_id, mission_id),
       planning: PlanningSetup.setup(organization_id, mission_id)
     }
@@ -120,6 +125,34 @@ defmodule Cadence.Reads.Readiness do
       |> Enum.count(&(&1.catalog_revision_id == id))
 
     if used_by > 0, do: "rev #{n} · used by #{used_by} spacecraft", else: "rev #{n}"
+  end
+
+  # L22: a spacecraft's telemetry source endpoint is derived (its only one, or its managed
+  # runtime one) unless its decode configuration names one. Several endpoints, none managed and
+  # none named: Cadence can't tell which carries its telemetry.
+  defp ambiguous_endpoints(organization_id, mission_id) do
+    organization_id
+    |> SourceEndpoints.list_source_endpoints(mission_id)
+    |> Enum.group_by(& &1.spacecraft_id)
+    |> Enum.filter(fn {spacecraft_id, endpoints} ->
+      is_binary(spacecraft_id) and length(endpoints) > 1 and
+        not Enum.any?(endpoints, &TelemetryDecom.managed_runtime_source_endpoint?/1) and
+        not named_endpoint?(organization_id, mission_id, spacecraft_id)
+    end)
+    |> Enum.map(fn {spacecraft_id, endpoints} ->
+      %{
+        spacecraft_id: spacecraft_id,
+        source_endpoint_ids: Enum.map(endpoints, & &1.source_endpoint_id)
+      }
+    end)
+    |> Enum.sort_by(& &1.spacecraft_id)
+  end
+
+  defp named_endpoint?(organization_id, mission_id, spacecraft_id) do
+    case TelemetryDecom.fetch_config(organization_id, mission_id, spacecraft_id) do
+      {:ok, %{source_endpoint_id: id}} when is_binary(id) -> true
+      _not_named -> false
+    end
   end
 
   defp data_source_statuses(organization_id, mission_id) do

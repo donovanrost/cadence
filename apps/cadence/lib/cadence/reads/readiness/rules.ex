@@ -20,6 +20,7 @@ defmodule Cadence.Reads.Readiness.Rules do
         comms_findings(facts),
         station_findings(facts),
         data_source_findings(facts),
+        endpoint_findings(facts),
         app_findings(facts),
         planning_findings(facts)
       ]
@@ -223,6 +224,30 @@ defmodule Cadence.Reads.Readiness.Rules do
   end
 
   defp data_source_findings(_facts), do: []
+
+  # L22: which source endpoint carries a spacecraft's telemetry is derived; this is the one case
+  # where it can't be.
+  defp endpoint_findings(%{data_sources: %{ambiguous_endpoints: [_ | _] = ambiguous}}) do
+    count = length(ambiguous)
+
+    [
+      Map.put(
+        finding(
+          :data_sources,
+          :caution,
+          :source_endpoint_ambiguous,
+          "#{count} #{plural(count, "spacecraft has", "spacecraft have")} several source endpoints and none is their own",
+          "Cadence can't tell which one carries their telemetry. Retire the extra endpoints in Data sources.",
+          count,
+          fix(:data_source)
+        ),
+        :affected,
+        ambiguous
+      )
+    ]
+  end
+
+  defp endpoint_findings(_facts), do: []
 
   # Apps whose absence turns off a safety function are `not_set_up`; the rest
   # are optional (domain decision, Setup.md).

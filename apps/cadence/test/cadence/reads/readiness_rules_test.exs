@@ -206,4 +206,28 @@ defmodule Cadence.Reads.Readiness.RulesTest do
              }
            ] = Enum.filter(result.findings, &(&1.area == :catalog))
   end
+
+  test "a spacecraft whose telemetry endpoint can't be derived is a caution pointing to Data sources (L22)" do
+    ambiguous = %{spacecraft_id: "spacecraft-007", source_endpoint_ids: ["ep-a", "ep-b"]}
+
+    result =
+      Rules.build(
+        facts(%{
+          data_sources: %{
+            statuses: [%{data_source_id: "qdb", health: :healthy}],
+            ambiguous_endpoints: [ambiguous]
+          }
+        })
+      )
+
+    assert [
+             %{
+               id: "data_sources.source_endpoint_ambiguous",
+               severity: :caution,
+               affected_count: 1,
+               affected: [^ambiguous],
+               fix: %{kind: :data_source, id: nil}
+             }
+           ] = Enum.filter(result.findings, &(&1.area == :data_sources))
+  end
 end
