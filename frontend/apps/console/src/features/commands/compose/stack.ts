@@ -94,7 +94,11 @@ export function secondGoReasons(
  */
 export function verifierLine(
   command: Readonly<{
-    verifiers: readonly Readonly<{ name: string; phase: string; timeout_ms: number | null }>[];
+    verifiers: readonly Readonly<{
+      name: string;
+      phase: CommandDetail["verifiers"][number]["phase"];
+      timeout_ms: number | null;
+    }>[];
   }>,
 ): Readonly<{ text: string; verifiable: boolean }> {
   const all = command.verifiers;

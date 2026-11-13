@@ -17,10 +17,12 @@ const seriesReader = d.object({
       id: d.token,
       name: d.string,
       unit: d.nullable(d.string),
-      type: d.nullable(d.token),
+      type: d.nullable(d.known(["numeric", "enum", "text"] as const)),
     }),
   ),
-  reason: d.optional(d.nullable(d.token)),
+  reason: d.optional(
+    d.nullable(d.known(["verified_by_uplink_acknowledgement", "no_verifier"] as const)),
+  ),
   commanded: d.nullable(d.object({ value_json: d.string, comparison: d.nullable(d.string) })),
   band: d.nullable(d.object({ min_json: d.nullable(d.string), max_json: d.nullable(d.string) })),
   window: d.nullable(d.object({ from: d.timestamp, to: d.timestamp })),
@@ -28,7 +30,7 @@ const seriesReader = d.object({
     d.object({
       spacecraft_id: d.token,
       name: d.nullable(d.string),
-      verifier_state: d.nullable(d.token),
+      verifier_state: d.nullable(d.known(["pending", "satisfied", "failed", "timed_out"] as const)),
       samples: d.array(d.object({ t: d.timestamp, value_json: d.nullable(d.string) }), 1_000),
     }),
     100,

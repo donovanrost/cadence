@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue";
-import { describeApiError } from "@/api/index.ts";
+import { describeApiError, isError } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApDecision, ApPanel } from "@/ui";
 import type { Preflight } from "../groups/api.ts";
@@ -79,16 +79,15 @@ async function commit({ value, note }: { value: DecisionKind; note: string }) {
       emit("decided");
     } else if (result.status === "rejected") {
       const e = result.error;
-      const code = "code" in e ? e.code : e.kind;
       outcome.value = {
         tone: "crit",
-        text: `Not recorded. Nothing changed: ${decisionErrorWords(code, describeApiError(e))}`,
+        text: `Not recorded. Nothing changed: ${decisionErrorWords(e)}`,
         reload: false,
       };
       if (
-        code === "command_group_review_stale" ||
-        code === "command_group_not_pending" ||
-        code === "holds_unacknowledged"
+        isError(e, "command_group_review_stale") ||
+        isError(e, "command_group_not_pending") ||
+        isError(e, "holds_unacknowledged")
       )
         emit("decided");
     } else

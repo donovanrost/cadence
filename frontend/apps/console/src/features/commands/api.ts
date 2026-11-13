@@ -63,7 +63,13 @@ const commandDetail = d.object({
   release_policy_hint: d.nullable(d.string),
   arguments: d.array(argument, 200),
   verifiers: d.array(
-    d.object({ id: d.token, name: d.string, phase: d.token, timeout_ms: d.nullable(d.integer) }),
+    d.object({
+      id: d.token,
+      name: d.string,
+      // commanding.md: acceptance | start | completion | custom
+      phase: d.knownText(["acceptance", "start", "completion", "custom"] as const),
+      timeout_ms: d.nullable(d.integer),
+    }),
     100,
   ),
 });

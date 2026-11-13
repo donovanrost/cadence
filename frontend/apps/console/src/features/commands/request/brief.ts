@@ -1,4 +1,4 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import { formatDayTime } from "@/ui";
 
 /**
@@ -19,10 +19,10 @@ const briefReader = d.object({
           point: d.nullable(d.string),
           value_json: d.nullable(d.string),
           at: d.nullable(d.timestamp),
-          reason: d.nullable(d.token),
+          reason: d.nullable(d.knownText(["no_sample", "no_target_spacecraft"] as const)),
         }),
       ),
-      current_basis: d.token,
+      current_basis: d.knownText(["state_effect", "none", "unavailable"] as const),
     }),
     200,
   ),
@@ -31,11 +31,20 @@ const briefReader = d.object({
       command_request_id: d.token,
       command_group_id: d.nullable(d.token),
       arguments_json: d.string,
-      state: d.token,
+      // Request lifecycle as release / verify report it; any other value keeps the server's word.
+      state: d.knownText([
+        "requested",
+        "queued",
+        "released",
+        "executed",
+        "verified",
+        "failed",
+        "canceled",
+        "rejected",
+        "expired",
+      ] as const),
       requested_at: d.timestamp,
-      requested_by: d.nullable(
-        d.object({ kind: d.token, id: d.nullable(d.token), name: d.nullable(d.string) }),
-      ),
+      requested_by: d.nullable(actor),
       /** 488f867e: true = its latest release went over a contact serving only this target. */
       reached_target: d.optional(d.nullable(d.boolean)),
     }),

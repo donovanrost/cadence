@@ -74,10 +74,9 @@ async function sign(kind: "go" | "no_go") {
       outcome.value = { tone: "info", text: kind === "go" ? "GO signed." : "NO-GO signed." };
     else if (r.status === "rejected") {
       const e = r.error;
-      const code = "code" in e ? e.code : e.kind;
       outcome.value = {
         tone: "crit",
-        text: `Not recorded. Nothing changed: ${decisionErrorWords(code, describeApiError(e))}`,
+        text: `Not recorded. Nothing changed: ${decisionErrorWords(e)}`,
       };
     } else
       outcome.value = {

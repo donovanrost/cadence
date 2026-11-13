@@ -25,6 +25,33 @@ import {
 
 export { memberStages, type MemberStage } from "./api.ts";
 
+export const decisionKinds = ["go", "go_excluding", "send_back", "no_go"] as const;
+/** commanding.md: why a member ended without radiating (or null). */
+export const endReasons = [
+  "aborted",
+  "release_basis_changed",
+  "earlier_command_failed",
+  "expired",
+  "catalog_changed",
+  "excluded_at_review",
+  "canceled",
+  "rejected",
+] as const;
+/** Group request-log event kinds the log words; an unknown kind keeps the server's word. */
+export const eventKinds = [
+  "submitted",
+  "approved",
+  "approved_with_exclusions",
+  "sent_back",
+  "rejected",
+  "note",
+  "aborted",
+  "hold_acknowledged",
+  "member_canceled",
+  "member_failed",
+  "completed",
+] as const;
+
 const member = d.object({
   position: d.integer,
   target_index: d.integer,
@@ -32,7 +59,7 @@ const member = d.object({
   command_id: d.token,
   command_name: d.nullable(d.string),
   stage,
-  end_reason: d.nullable(d.token),
+  end_reason: d.nullable(d.knownText(endReasons)),
   verify_by: d.nullable(d.timestamp),
   occurred_at: d.nullable(d.timestamp),
 });
@@ -47,7 +74,12 @@ const target = d.object({
   last_event_at: d.nullable(d.timestamp),
   /** Waiting on its contact behind a release whose outcome is unknown: "Needs you" shows it. */
   blocked: d.optional(
-    d.nullable(d.object({ reason: d.token, command_request_id: d.optional(d.token) })),
+    d.nullable(
+      d.object({
+        reason: d.knownText(["lane_release_uncertain"] as const),
+        command_request_id: d.optional(d.token),
+      }),
+    ),
   ),
 });
 export type GroupTarget = Decoded<typeof target>;
@@ -94,12 +126,15 @@ const eventActor = d.variant("actor_kind", {
 
 const event = d.object({
   id: d.token,
-  kind: d.token,
+  kind: d.knownText(eventKinds),
   actor: d.nullable(eventActor),
   at: d.timestamp,
   payload: d.nullable(
     d.object({
       note: d.optional(d.nullable(d.string)),
+      // One field, two meanings as the log sends it: member_failed's reason key (worded in
+      // words.ts, with a fallback) or an operator's abort / cancel sentence.
+      // free-text: see above
       reason: d.optional(d.nullable(d.string)),
       members: d.optional(eventMembers),
       approved: d.optional(d.integer),
@@ -152,7 +187,7 @@ export const groupReader = d.object({
   ),
   decision: d.nullable(
     d.object({
-      kind: d.token,
+      kind: d.knownText(decisionKinds),
       excluded: d.optional(d.array(d.token, 1_000)),
       note: d.nullable(d.string),
     }),
@@ -161,6 +196,7 @@ export const groupReader = d.object({
   decided_at: d.nullable(d.timestamp),
   aborted_by: d.nullable(actor),
   aborted_at: d.nullable(d.timestamp),
+  // free-text: the operator's own sentence
   abort_reason: d.nullable(d.string),
   targets: d.array(target, 1_000),
   progress,
@@ -189,7 +225,7 @@ export function fetchReview(
   return request(`${one(missionId, id)}/preflight`, preflightReader, signal ? { signal } : {});
 }
 
-export type DecisionKind = "go" | "go_excluding" | "send_back" | "no_go";
+export type DecisionKind = (typeof decisionKinds)[number];
 export type Decision = Readonly<{
   kind: DecisionKind;
   excluded: readonly string[];

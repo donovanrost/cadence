@@ -1,3 +1,4 @@
+import { describeApiError, knownErrorCode, type ApiError, type ErrorCode } from "@/api/index.ts";
 import { plural } from "@/ui";
 import type { Preflight } from "../groups/api.ts";
 import { checkLabel } from "../groups/checks.ts";
@@ -108,7 +109,7 @@ export function cannotDecide(
   return null;
 }
 
-const ERROR_WORDS: Readonly<Record<string, string>> = {
+const ERROR_WORDS: Readonly<Partial<Record<ErrorCode, string>>> = {
   command_group_review_stale: "It changed while you reviewed it. It's been reloaded; review again.",
   command_group_basis_changed:
     "The active catalog changed since it was submitted. The author has to resubmit.",
@@ -118,7 +119,11 @@ const ERROR_WORDS: Readonly<Record<string, string>> = {
   holds_unacknowledged:
     "A HOLD isn't acknowledged against the latest checks. They've been re-run; read them and acknowledge again.",
 };
-export const decisionErrorWords = (code: string, message: string) => ERROR_WORDS[code] ?? message;
+/** A refused decision in words: the code's sentence when the console has one, else the server's. */
+export function decisionErrorWords(e: ApiError): string {
+  const code = knownErrorCode(e);
+  return (code && ERROR_WORDS[code]) ?? describeApiError(e);
+}
 
 /** §4 short: `03:10Z` today, `11-10 03:10Z` otherwise. */
 function at(iso: string | null, now: Date): string {

@@ -1,4 +1,11 @@
-import { decode, decoders as d, describeApiError, request, type Decoded } from "@/api/index.ts";
+import {
+  detailsOf,
+  isError,
+  decoders as d,
+  describeApiError,
+  request,
+  type Decoded,
+} from "@/api/index.ts";
 
 /**
  * M24 encode preview for Approve A3 (commanding.md §encoding): the command payload bytes release
@@ -25,7 +32,11 @@ const REASONS: Readonly<Record<string, string>> = {
   basis_unavailable: "its encoding basis isn't available",
   encode_failed: "encoding failed",
 };
-const unavailable = d.object({ reason: d.token, detail: d.optional(d.nullable(d.string)) });
+const unavailable = d.object({
+  // free-text: the encoder's reason key, worded by REASONS above with a fallback
+  reason: d.token,
+  detail: d.optional(d.nullable(d.string)),
+});
 
 export async function fetchEncoding(
   missionId: string,
@@ -39,12 +50,12 @@ export async function fetchEncoding(
   );
   if (r.ok) return { ok: true, encoding: r.value };
   const e = r.error;
-  if ("code" in e && e.code === "encode_unavailable" && "details" in e) {
-    const why = decode(unavailable, e.details);
-    if (why.ok) {
-      const words = REASONS[why.value.reason] ?? why.value.reason.replaceAll("_", " ");
+  const why = isError(e, "encode_unavailable") ? detailsOf(e, unavailable) : null;
+  if (why) {
+    {
+      const words = REASONS[why.reason] ?? why.reason.replaceAll("_", " ");
       // Only an encoder failure's detail is words; the others carry a revision id.
-      const detail = why.value.reason === "encode_failed" ? why.value.detail : null;
+      const detail = why.reason === "encode_failed" ? why.detail : null;
       return { ok: false, reason: `${words}${detail ? ` (${detail})` : ""}` };
     }
   }

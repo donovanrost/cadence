@@ -555,7 +555,7 @@ describe("A1 value changes (brief)", () => {
   const brief = (
     sc: string,
     current: string | null,
-    basis = "state_effect",
+    basis: "state_effect" | "none" | "unavailable" = "state_effect",
     prior: string | null = null,
   ) => ({
     command_request_id: `r-${sc}`,
@@ -566,7 +566,7 @@ describe("A1 value changes (brief)", () => {
         value_json: "3",
         current:
           current === null
-            ? { point: "/HK/sc_mode", value_json: null, at: null, reason: "no_sample" }
+            ? { point: "/HK/sc_mode", value_json: null, at: null, reason: "no_sample" as const }
             : { point: "/HK/sc_mode", value_json: current, at: null, reason: null },
         current_basis: basis,
       },
@@ -577,9 +577,9 @@ describe("A1 value changes (brief)", () => {
             command_request_id: "p",
             command_group_id: null,
             arguments_json: prior,
-            state: "verified",
+            state: "verified" as const,
             requested_at: "2026-09-14T10:02:00Z",
-            requested_by: { kind: "user", id: "u", name: "Mira K." },
+            requested_by: { kind: "user" as const, id: "u", name: "Mira K." },
             reached_target: sc !== "sc-elsewhere",
           },
         ]

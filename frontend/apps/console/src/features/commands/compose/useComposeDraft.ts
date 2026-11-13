@@ -1,5 +1,5 @@
 import { computed, nextTick, onBeforeUnmount, shallowRef, watch, type Ref } from "vue";
-import { describeApiError, type ApiError } from "@/api/index.ts";
+import { codeOf, describeApiError, isError, type ApiError } from "@/api/index.ts";
 import { formatClock, formatShort } from "@/ui";
 import {
   changedBy,
@@ -36,7 +36,7 @@ export type DraftNotice = Readonly<{ tone: "info" | "caution"; text: string }>;
 
 /** The server's reason for a refused save, or null when it gave none (network, 5xx page). */
 function serverReason(e: ApiError): string | null {
-  if ("code" in e) return e.message;
+  if (codeOf(e) !== null && "message" in e) return e.message;
   return e.kind === "unavailable" && e.serverCode ? e.message : null;
 }
 
@@ -138,8 +138,11 @@ export function useComposeDraft(
       baseline.value = text;
       status.value = { kind: "saved", at: r.value.saved_at };
       if (dirty.value) schedule();
-    } else if (r.error.kind === "conflict" && r.error.code === "command_draft_changed") {
-      status.value = { kind: "conflict", theirs: changedBy(r.error.details) };
+    } else if (isError(r.error, "command_draft_changed")) {
+      status.value = {
+        kind: "conflict",
+        theirs: changedBy("details" in r.error ? r.error.details : null),
+      };
     } else {
       status.value = { kind: "failed", reason: serverReason(r.error), lastSaved: savedAt.value };
     }

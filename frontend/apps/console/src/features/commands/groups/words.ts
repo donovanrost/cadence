@@ -1,7 +1,8 @@
+import { isKnown } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import type { GroupState, MemberStage } from "./api.ts";
 import { checkLabel } from "./checks.ts";
-import type { GroupEvent } from "./show.ts";
+import type { GroupEvent, GroupMember } from "./show.ts";
 
 /**
  * Words for command groups (CommandFlow: "sent is not done"; only Verify turns green). Progress
@@ -41,7 +42,7 @@ export const STAGE_STATE: Readonly<Record<MemberStage, OpState>> = {
 export function memberStageWord(
   stage: MemberStage,
   group: GroupState,
-  endReason: string | null = null,
+  endReason: GroupMember["end_reason"] = null,
 ): string {
   // #65: a catalog change set canceled it before release.
   if (stage === "canceled" && endReason === "catalog_changed")
@@ -189,6 +190,6 @@ export function eventText(e: GroupEvent, nameOf: PersonName, targets: EventTarge
       return [`${who} closed the run`, ...tally].join(" · ");
     }
     default:
-      return `${who} · ${e.kind.replaceAll("_", " ")}`;
+      return `${who} · ${(isKnown(e.kind) ? e.kind : e.kind.unrecognized).replaceAll("_", " ")}`;
   }
 }

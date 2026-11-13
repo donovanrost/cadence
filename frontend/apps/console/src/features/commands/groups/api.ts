@@ -39,13 +39,19 @@ export const checkResults = ["go", "second_go", "hold", "no_go"] as const;
 export type CheckResult = (typeof checkResults)[number];
 const result = d.oneOf(checkResults);
 
-const memberFailure = d.object({ position: d.integer, command_id: d.token, reason: d.token });
+const memberFailure = d.object({
+  position: d.integer,
+  command_id: d.token,
+  // free-text: preflight's catalog failure key, worded in checks.ts with a fallback
+  reason: d.token,
+});
 export type MemberFailure = Decoded<typeof memberFailure>;
 /** Identity failures are one code per target; catalog failures list the failing commands. */
 const failureReason: Reader<string | readonly MemberFailure[]> = (value, path = "") =>
   typeof value === "string" ? d.token(value, path) : d.array(memberFailure, 16)(value, path);
 
 const nextContact = d.object({
+  // free-text: a station call sign, not a vocabulary
   station_code: d.string,
   /** f57e5fff: the station's ref, to name its provider from the stations index. */
   ground_station_ref: d.optional(d.nullable(d.token)),
@@ -160,7 +166,11 @@ export const groupStates = [
   "aborted",
 ] as const;
 export type GroupState = (typeof groupStates)[number];
-export const actor = d.object({ actor_kind: d.token, user_id: d.nullable(d.token) });
+/** commanding's own actor shape (`actor_kind` + `user_id`, not the shared entity actor). */
+export const actor = d.object({
+  actor_kind: d.knownText(["user", "system", "service"] as const),
+  user_id: d.nullable(d.token),
+});
 export const groupRow = d.object({
   id: d.token,
   state: d.oneOf(groupStates),

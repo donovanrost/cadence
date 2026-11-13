@@ -1,3 +1,4 @@
+import { isKnown } from "@/api/index.ts";
 import { formatHourMinute, plural, type OpState } from "@/ui";
 import { formatValue } from "@/features/alarms/index.ts";
 import { pointName, type VerifierSeries } from "./series.ts";
@@ -110,7 +111,7 @@ function card(group: Group, series: VerifierSeries | null, t: GroupTarget): Need
     explanation:
       t.blocked.reason === "lane_release_uncertain"
         ? "Waiting: an earlier release on its uplink has an unknown outcome, so nothing behind it goes until that's resolved."
-        : `Waiting: ${t.blocked.reason.replaceAll("_", " ")}.`,
+        : `Waiting: ${(isKnown(t.blocked.reason) ? t.blocked.reason : t.blocked.reason.unrecognized).replaceAll("_", " ")}.`,
     resend: false,
   };
 }

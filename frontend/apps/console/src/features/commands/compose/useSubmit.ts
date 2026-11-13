@@ -1,5 +1,12 @@
 import { shallowRef, type Ref } from "vue";
-import { describeApiError, decoders as d, decode } from "@/api/index.ts";
+import {
+  codeOf,
+  describeApiError,
+  decoders as d,
+  decode,
+  detailsOf,
+  isError,
+} from "@/api/index.ts";
 import { fetchGroups, submitGroup, type Draft, type HoldAck } from "../groups/api.ts";
 import { checkLabel } from "../groups/checks.ts";
 
@@ -57,22 +64,19 @@ export function useSubmit(missionId: Ref<string>, onStale: () => void) {
       return;
     }
     const e = outcome.error;
-    const code = "code" in e ? e.code : e.kind;
-    if (code === "duplicate_operation" && "details" in e) {
-      const prior = decode(duplicate, e.details);
-      if (prior.ok) {
-        state.value = { status: "done", groupId: prior.value.command_group_id };
-        return;
-      }
+    const prior = isError(e, "duplicate_operation") ? detailsOf(e, duplicate) : null;
+    if (prior) {
+      state.value = { status: "done", groupId: prior.command_group_id };
+      return;
     }
     // Definitely not created: the next attempt is a new operation.
     operationId = null;
-    if (code === "preflight_stale" || code === "holds_unacknowledged") onStale();
+    if (isError(e, "preflight_stale") || isError(e, "holds_unacknowledged")) onStale();
     const message =
-      code === "holds_unacknowledged" && "details" in e
+      isError(e, "holds_unacknowledged") && "details" in e
         ? unackedWords(e.details)
         : describeApiError(e);
-    state.value = { status: "rejected", code, message };
+    state.value = { status: "rejected", code: codeOf(e) ?? e.kind, message };
   }
 
   /** Resolve an unclear submit: did the server create the group? */
