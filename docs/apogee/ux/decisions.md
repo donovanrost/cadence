@@ -800,21 +800,28 @@ configuration failure P3. The amendments to fe-ops' drafts:
   - Labels come from the server's `label` when it isn't null, else from a console word map of known field keys,
     else the key in sentence case. Never show raw JSON quoting.
   - Times use the §4 format. A value that's absent or null reads `none`.
-  - Approval adds "Decide by 02:40Z." Say what happens at the deadline only once api says (U20).
+  - Approval adds "Decide by 02:40Z. After that, Northlight decides." At the deadline Cadence does nothing by
+    itself (api 84f58b73d).
   - Acknowledgement adds "Northlight already made this change."
 - **Drawer block:** a Before → After table with the same labels and formats. Every action needs a reason, and
   'Say why.' stays the validation message. Placeholders:
   - Approve (primary): "Why the pass can take this change".
-  - Reject: "Why the pass can't take this change". Reject is hidden after the deadline.
+  - Reject: "Why the pass can't take this change".
+  - **After the deadline**, both Approve and Reject are refused, so both go. The block reads "The deadline passed
+    at 02:40Z. Northlight decides now. This closes when they send their next change." The row drops to P3,
+    because there's nothing left to do here.
   - Acknowledge: "What you checked".
   - Members see the block without buttons and the line "Org admins decide provider changes."
 - **Refusals:**
   - 409 stale with an item: "Northlight changed it again. Here's the current change." The block reloads.
   - 409 stale with a null item: "This change was already decided or replaced." The row resolves.
-  - 409 deadline passed: "The deadline passed at 02:40Z, so it can't be rejected any more." Reject goes, and
-    Approve stays.
+  - 409 deadline passed: "The deadline passed at 02:40Z, so it can't be decided here any more." The block then
+    shows its after-deadline state.
   - 403: "Org admins decide provider changes."
 - **Resolved** (U29, actor and time): "Approved by Mira K. at 02:31Z: <reason>." / "Rejected by …" /
   "Acknowledged by …" / "Replaced by a newer change." The last matches U41's "Replaced by a newer request."
-- **Asked of api:** field labels (or the field-key list for the console's map), and what happens to a pending
-  change at its deadline if nobody decides.
+- **Field labels** (server-side, api 84f58b73d): `AOS` · `LOS` · `Station` · `Antenna` · `Service profile` ·
+  `Delivery profile` · `Spacecraft` · `Pass phase` · `Status`. AOS and LOS match how Contacts names pass times.
+  A field the server can't label (null) isn't hidden, because hiding it would understate the change (U20). In
+  Now it counts toward "and N more". In the drawer it's a row labelled `Other`, with its key and raw values in
+  Technical details.
