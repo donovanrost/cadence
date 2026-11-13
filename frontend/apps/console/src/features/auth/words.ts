@@ -70,7 +70,13 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
     case "used":
       return { h1: null, callout: { tone: "off", text: "This invitation was already accepted." } };
     case "declined":
-      return { h1: null, callout: { tone: "off", text: "This invitation was declined." } };
+      return {
+        h1: null,
+        callout: {
+          tone: "off",
+          text: "This invitation was declined. Ask for a new one if you want to join.",
+        },
+      };
     case "unavailable":
       return {
         h1: null,

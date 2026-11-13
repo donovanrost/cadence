@@ -50,7 +50,7 @@ describe("auth words (ux Auth.md)", () => {
       "This invitation was already accepted.",
     );
     expect(invitationView(inv({ case: "declined" }), null).callout?.text).toBe(
-      "This invitation was declined.",
+      "This invitation was declined. Ask for a new one if you want to join.",
     );
   });
   it("only honours a same-origin return_to", () => {

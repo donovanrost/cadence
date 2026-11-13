@@ -126,7 +126,7 @@ async function accept() {
   else if (e.kind === "forbidden")
     error.value = {
       tone: "crit",
-      text: "This account is disabled. Ask an organization admin to turn it back on.",
+      text: "This account is disabled. Ask an organization admin for help.",
     };
   else if (
     "code" in e &&
@@ -257,7 +257,7 @@ const reason = computed(
         >Sign out and continue</ApButton
       >
       <ApButton
-        v-else-if="invitation.case === 'accepted'"
+        v-else-if="['accepted', 'used', 'unrecognized'].includes(invitation.case)"
         variant="primary"
         class="w-full"
         :to="{ name: 'auth.sign-in' }"
