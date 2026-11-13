@@ -1,4 +1,4 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
+import { actor, decoders as d, orNull, request, type ApiResult, type Decoded } from "@/api";
 
 /** PA1 history (api c06a70c0): versions newest first, each with its changes against the one before. */
 export const versionsReader = d.object({
@@ -9,9 +9,7 @@ export const versionsReader = d.object({
     d.object({
       version: d.integer,
       created_at: d.timestamp,
-      actor: d.nullable(
-        d.object({ kind: d.string, id: d.nullable(d.string), name: d.nullable(d.string) }),
-      ),
+      actor: orNull(actor),
       changes: d.array(
         d.object({
           field: d.string,

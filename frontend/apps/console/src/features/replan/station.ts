@@ -1,11 +1,18 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import {
+  actor as sharedActor,
+  decoders,
+  orNull,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api";
 import type { OpState } from "@/ui";
 
 /** Contract: docs/apogee/api/contacts.md "Station availability (S7)". */
 const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
 
-// Provider/simulator reports may carry an actor without a name.
-const actor = nullable(object({ name: decoders.optional(nullable(string)) }));
+// The shared entity (typing §12 A5); provider/simulator reports may carry an actor without a name.
+const actor = orNull(sharedActor);
 const window = object({
   id: token,
   ground_station_id: token,
