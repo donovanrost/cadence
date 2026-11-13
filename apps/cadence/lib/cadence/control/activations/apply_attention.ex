@@ -16,6 +16,7 @@ defmodule Cadence.Control.Activations.ApplyAttention do
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
+  alias Cadence.SpacecraftStore
 
   @source "activation_apply"
   @resolved_window_s 60
@@ -113,7 +114,9 @@ defmodule Cadence.Control.Activations.ApplyAttention do
       conflict: if(row.status == :failed, do: "apply_failed", else: "apply_stalled"),
       state: "open",
       error_code: code,
-      error: error_sentence(row.status, code),
+      error: error_sentence(row.status, code, row, ids),
+      # Retry apply can succeed; otherwise the next step is a new request (ux U41).
+      retryable: row.status == :in_progress or Resume.retryable_code?(code),
       activation_request_id: row.activation_request_id,
       summary: description.summary,
       kind: description.kind,
@@ -133,19 +136,31 @@ defmodule Cadence.Control.Activations.ApplyAttention do
     end
   end
 
-  # Placeholder sentences until ux words them (asked 2026-11-13); never the raw reason.
-  defp error_sentence(:in_progress, _code), do: "Applying stopped partway and didn't finish."
+  # ux U41 (decisions.md): standalone sentences, never the raw reason.
+  defp error_sentence(:in_progress, _code, _row, _ids),
+    do: "Applying didn't finish, and nothing is working on it now."
 
-  defp error_sentence(:failed, "activation_execution_interrupted"),
-    do: "The database connection dropped while applying."
+  defp error_sentence(:failed, "activation_execution_interrupted", _row, _ids),
+    do: "Applying was cut off: Cadence lost its database connection partway."
 
-  defp error_sentence(:failed, "spacecraft_configuration_review_stale"),
-    do: "A reviewed spacecraft changed after the review."
+  defp error_sentence(:failed, "spacecraft_configuration_review_stale", row, ids),
+    do:
+      "#{whose_configuration(row, ids)} changed after it was reviewed, so the reviewed version " <>
+        "can't be applied."
 
-  defp error_sentence(:failed, "approved_activation_content_mismatch"),
-    do: "What was approved no longer matches what would be applied."
+  defp error_sentence(:failed, "approved_activation_content_mismatch", _row, _ids),
+    do: "What would be applied now differs from what was approved, so it wasn't applied."
 
-  defp error_sentence(:failed, _code), do: "Applying failed."
+  defp error_sentence(:failed, _code, _row, _ids), do: "Applying failed."
+
+  defp whose_configuration(row, [id]) do
+    case SpacecraftStore.fetch_spacecraft(row.organization_id, row.mission_id, id) do
+      {:ok, %{display_name: name}} when is_binary(name) -> "#{name}'s configuration"
+      _unknown -> "A spacecraft's configuration"
+    end
+  end
+
+  defp whose_configuration(_row, _several), do: "A spacecraft's configuration"
 
   defp unwrap(document), do: JsonDocument.unwrap_value(document)
 end
