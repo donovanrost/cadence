@@ -1,16 +1,25 @@
 import type { ApiError } from "@/api";
 import { formatShort, type OpState } from "@/ui";
-import type { ActivityEvent, Share, Snapshot, WidgetDiagnostics } from "./api.ts";
+import type { ActivityEvent, ActivityKind, Share, Snapshot, WidgetDiagnostics } from "./api.ts";
 
 /** ux Dashboards.md § Settings: the words each tab shows (no codes in the main text). */
 
 const day = (iso: string) => formatShort(new Date(iso)).slice(0, 5);
 
-export const visibilityWord = (v: Share["data_visibility"]) =>
-  v === "with_data" ? "With data" : "Definition only";
+export function visibilityWord(v: Share["data_visibility"]): string {
+  switch (v) {
+    case "with_data":
+      return "With data";
+    case "definition_only":
+      return "Definition only";
+    case "unrecognized":
+      return "Not known";
+  }
+}
 
 /** `Expires 11-20` / `No expiry` / `Expired 11-12` / `Revoked`. */
 export function shareStateText(s: Pick<Share, "state" | "expires_at">): string {
+  if (s.state === "unrecognized") return "Not known";
   if (s.state === "revoked") return "Revoked";
   if (s.state === "expired") return s.expires_at ? `Expired ${day(s.expires_at)}` : "Expired";
   return s.expires_at ? `Expires ${day(s.expires_at)}` : "No expiry";
@@ -28,7 +37,7 @@ export function snapshotWindow(s: Pick<Snapshot, "window">): string {
 export const byLine = (who: { name: string | null } | null, at: string) =>
   `${who?.name ?? "Not recorded"} · ${formatShort(new Date(at))}`;
 
-const activityWords: Readonly<Record<string, string>> = {
+const activityWords: Readonly<Record<ActivityKind | "unrecognized", string>> = {
   saved: "Saved",
   restored: "Restored",
   published: "Published",
@@ -38,12 +47,12 @@ const activityWords: Readonly<Record<string, string>> = {
   share_revoked: "Revoked a share link",
   snapshot_taken: "Took a snapshot",
   exported: "Exported",
+  unrecognized: "Changed it",
 };
 
 /** `Saved v8 · Updated dashboard settings`; an unknown kind reads as words, never dropped. */
 export function activityText(e: Pick<ActivityEvent, "kind" | "version" | "detail">): string {
-  const word =
-    activityWords[e.kind] ?? e.kind.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+  const word = activityWords[e.kind];
   const version =
     e.version !== null && ["saved", "restored", "published"].includes(e.kind)
       ? ` v${e.version}`
@@ -53,6 +62,7 @@ export function activityText(e: Pick<ActivityEvent, "kind" | "version" | "detail
 
 const statusRank: Readonly<Record<WidgetDiagnostics["status"], number>> = {
   failed: 0,
+  unrecognized: 1,
   degraded: 1,
   planned: 2,
   ok: 3,
@@ -69,6 +79,7 @@ export const statusMark: Readonly<
   degraded: { state: "caution", word: "DEGRADED" },
   planned: { state: "neutral", word: "NOT RUN YET" },
   ok: { state: "nominal", word: "OK" },
+  unrecognized: { state: "stale", word: "NOT KNOWN" },
 };
 
 /** `Fresh` / `From cache` (asked of api as `cache: fresh | cached`); mixed shows both; unknown null. */

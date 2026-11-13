@@ -13,6 +13,12 @@ const columns: readonly ApColumn[] = [
   { key: "source", label: "Source" },
   { key: "updated", label: "Updated", mono: true },
 ];
+const stateWord: Readonly<Record<RequirementRow["state"], string>> = {
+  active: "Active",
+  closed: "Closed",
+  canceled: "Canceled",
+  unrecognized: "Not known",
+};
 const templateName = (id: string) => props.templates.find((t) => t.id === id)?.name ?? "Template";
 </script>
 
@@ -31,7 +37,7 @@ const templateName = (id: string) => props.templates.find((t) => t.id === id)?.n
     }}</template>
     <template #cell-state="{ row }">
       <ApTag v-if="row.state === 'active'" state="nominal" label="Active" />
-      <ApTag v-else state="off" :label="row.state === 'closed' ? 'Closed' : 'Canceled'" />
+      <ApTag v-else state="off" :label="stateWord[row.state]" />
     </template>
     <template #cell-source="{ row }">
       <RouterLink

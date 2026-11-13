@@ -20,7 +20,7 @@ const stateChanged = nullable(object({ at: timestamp, by: actor, reason: nullabl
 export const requirementStates = ["active", "closed", "canceled"] as const;
 const requirementRowShape = {
   id: token,
-  state: decoders.oneOf(requirementStates),
+  state: decoders.known(requirementStates),
   version: integer,
   spacecraft: object({ id: token, name: nullable(string) }),
   template_id: nullable(token),
@@ -116,7 +116,11 @@ export function windowText(content: Readonly<Record<string, unknown>>): string {
   return `${at(content["earliest_start"])} → ${at(content["latest_end"])}`;
 }
 
-const endedWord = { closed: "Closed", canceled: "Canceled" } as const;
+const endedWord: Readonly<Record<"closed" | "canceled" | "unrecognized", string>> = {
+  closed: "Closed",
+  canceled: "Canceled",
+  unrecognized: "Ended",
+};
 
 /** `Closed by Mira K. on 11-12: <reason>` (ux P4); null while active. */
 export function endedLine(r: Pick<RequirementRow, "state" | "state_changed">): string | null {
@@ -204,11 +208,20 @@ export function requirementFacts(
   return facts;
 }
 
+export const templateStates = ["active", "paused", "closed"] as const;
+const templateStateWord: Readonly<
+  Record<(typeof templateStates)[number] | "unrecognized", string>
+> = {
+  active: "",
+  paused: " · paused",
+  closed: " · closed",
+  unrecognized: " · state not known",
+};
 const byTemplateReader = object({
   day: string,
   templates: array(
     object({
-      template: object({ id: token, name: string, state: token }),
+      template: object({ id: token, name: string, state: decoders.known(templateStates) }),
       count: integer,
       active_count: integer,
     }),
@@ -231,13 +244,12 @@ export function fetchByTemplate(
   );
 }
 
-/** ux P4: `Block 1 daily · 1,500 for 11-14 · 1,480 active` (+ `· retired` for a template no longer active). */
+/** ux P4: `Block 1 daily · 1,500 for 11-14 · 1,480 active` (+ `· paused` / `· closed` for a template no longer active). */
 export function templateCountLine(
   row: TemplateDayCounts["templates"][number],
   day: string,
 ): string {
   const active = row.active_count === row.count ? "" : ` · ${formatCount(row.active_count)} active`;
-  const retired =
-    row.template.state === "active" ? "" : ` · ${row.template.state.replaceAll("_", " ")}`;
+  const retired = templateStateWord[row.template.state];
   return `${formatCount(row.count)} for ${day.slice(5)}${active}${retired}`;
 }

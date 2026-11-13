@@ -32,9 +32,7 @@ describe("dashboard settings (slice 5, proposed D14)", () => {
     expect(activityText({ kind: "saved", version: 8, detail: "Updated dashboard settings" })).toBe(
       "Saved v8 · Updated dashboard settings",
     );
-    expect(activityText({ kind: "health_checked", version: null, detail: null })).toBe(
-      "Health checked",
-    );
+    expect(activityText({ kind: "unrecognized", version: null, detail: null })).toBe("Changed it");
   });
 
   it("orders diagnostics worst first, with cache and warnings in words", async () => {

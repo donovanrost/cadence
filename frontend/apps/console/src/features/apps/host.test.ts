@@ -24,7 +24,7 @@ describe("L9 host frame helpers", () => {
     surface_id,
     label: surface_id,
     order,
-    purpose: "configuration",
+    purpose: "configuration" as const,
     area,
     scope: "mission" as const,
   });

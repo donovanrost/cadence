@@ -12,17 +12,21 @@ const actor = d.nullable(
   d.object({ id: d.optional(d.nullable(d.token)), name: d.nullable(d.string) }),
 );
 
-/** The domain says `authorized_runtime_data`; the proposal says `with_data`. Read both. */
-const visibility: Reader<"with_data" | "definition_only"> = (value, path = "") => {
-  const v = d.token(value, path);
-  if (v === "with_data" || v === "authorized_runtime_data") return "with_data";
-  if (v === "definition_only") return "definition_only";
-  throw new d.DecodeError(path, "with_data | definition_only");
+/** api sends `with_data | definition_only`; the domain's `authorized_runtime_data` reads as `with_data`. */
+const visibilityWire = d.known([
+  "with_data",
+  "definition_only",
+  "authorized_runtime_data",
+] as const);
+const visibility: Reader<DataVisibility | "unrecognized"> = (value, path = "") => {
+  const v = visibilityWire(value, path);
+  return v === "authorized_runtime_data" ? "with_data" : v;
 };
 export type DataVisibility = "with_data" | "definition_only";
 
 const timeDefault = d.nullable(
   d.object({
+    // oneOf, not known: an unknown default can't be edited safely, so the read should fail loudly.
     mode: d.oneOf(["relative", "absolute"] as const),
     range: d.optional(d.nullable(d.string)),
     from: d.optional(d.nullable(d.timestamp)),
@@ -43,7 +47,7 @@ export const shareRow = d.object({
   id: d.token,
   url: d.string,
   data_visibility: visibility,
-  state: d.oneOf(["active", "expired", "revoked"] as const),
+  state: d.known(["active", "expired", "revoked"] as const),
   expires_at: d.nullable(d.timestamp),
   created_at: d.timestamp,
   created_by: actor,
@@ -68,7 +72,7 @@ export const settingsReader = d.object({
     name: d.string,
     description: d.string,
     tags: d.array(d.string, 64),
-    lifecycle: d.oneOf(["active", "archived"] as const),
+    lifecycle: d.known(["active", "archived"] as const),
     current_version: d.integer,
     published_version: d.nullable(d.integer),
     updated_at: d.nullable(d.timestamp),
@@ -164,7 +168,7 @@ const activityReader = d.object({
   events: d.array(
     d.object({
       id: d.token,
-      kind: d.token,
+      kind: d.known(activityKinds),
       at: d.timestamp,
       actor,
       version: d.nullable(d.integer),
@@ -175,6 +179,7 @@ const activityReader = d.object({
   next: d.nullable(d.string),
 });
 export type ActivityPage = Decoded<typeof activityReader>;
+export type ActivityKind = (typeof activityKinds)[number];
 export type ActivityEvent = ActivityPage["events"][number];
 
 export function fetchActivity(
@@ -185,19 +190,23 @@ export function fetchActivity(
   return request(`${base(k.missionId, k.dashboardId)}/activity${q}`, activityReader, { signal });
 }
 
+export const severities = ["info", "warning", "error"] as const;
 const source = d.object({
   logical_source: d.string,
-  status: d.token,
-  cache_status: d.nullable(d.token),
+  // Open: the domain's execution words (planned, executed, …), shown only in Technical details.
+  status: d.string,
+  // Open: the raw cache result, shown only in Technical details; `cache` is the verdict the tab reads.
+  cache_status: d.nullable(d.string),
   /** Asked of api: the cache verdict in two words; null when unknown. */
-  cache: d.nullable(d.oneOf(["fresh", "cached"] as const)),
-  severity: d.nullable(d.token),
+  cache: d.nullable(d.known(["fresh", "cached"] as const)),
+  severity: d.nullable(d.known(severities)),
   retryable: d.nullable(d.boolean),
   operator_action: d.nullable(d.string),
-  warning_codes: d.array(d.token, 50),
+  // Open: domain warning codes, shown only in Technical details (the words come from `message`).
+  warning_codes: d.array(d.string, 50),
   // Not recorded yet (gap 5): stay null; the console shows no numbers (ux, U20).
   duration_ms: d.nullable(d.integer),
-  outcome: d.nullable(d.token),
+  outcome: d.nullable(d.known(["ok", "timed_out", "failed"] as const)),
   error: d.nullable(d.string),
 });
 const diagnosticsReader = d.object({
@@ -207,12 +216,13 @@ const diagnosticsReader = d.object({
     d.object({
       placement_id: d.token,
       title: d.string,
-      status: d.oneOf(["ok", "degraded", "failed", "planned"] as const),
+      status: d.known(["ok", "degraded", "failed", "planned"] as const),
       sources: d.array(source, 50),
       warnings: d.array(
         d.object({
-          code: d.token,
-          severity: d.token,
+          // Open: domain warning codes; the tab shows `message` and keeps the code for details.
+          code: d.string,
+          severity: d.known(severities),
           field_name: d.nullable(d.string),
           /** Asked of api: the warning in words. */
           message: d.nullable(d.string),
@@ -225,7 +235,8 @@ const diagnosticsReader = d.object({
   refresh: d.nullable(
     d.object({
       observed_at: d.timestamp,
-      decision_status: d.token,
+      // Open: the refresh decision's domain word, for Technical details only.
+      decision_status: d.string,
       context_reason: d.nullable(d.string),
     }),
   ),

@@ -18,6 +18,7 @@ export type SaveAdapter = (actionId: string, receipt: HostActionReceipt) => Save
 const savesNow: SaveAdapter = (actionId) =>
   actionId.startsWith("save") ? { kind: "saved", text: "Saved. It applies now." } : null;
 
+// Keyed by application key: an open vocabulary (apps are installed per mission); unknown apps get null.
 const adapters: Readonly<Record<string, SaveAdapter>> = {
   limits: savesNow,
   derived_telemetry: savesNow,
@@ -44,6 +45,7 @@ export function saveOutcome(
  * `SAVES IMMEDIATELY`; `activation` waits for an approval (L10). Unknown apps show nothing.
  */
 export type SaveMode = "immediate" | "activation";
+// Keyed by application key (open vocabulary, as above).
 const modes: Readonly<Record<string, SaveMode>> = {
   limits: "immediate",
   derived_telemetry: "immediate",
