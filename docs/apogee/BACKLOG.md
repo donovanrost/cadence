@@ -373,7 +373,7 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 | Rule | Files left | Baseline 11-13 |
 | --- | --- | --- |
 | `error-code-compared-as-text` | 20: fe-ops 15 (auth 2, commands 4, contacts 5, mobile 1, now 1, resolutions 1, + apps/hostBridge kept: it compares plugin-sdk's HostBridgeError.code, not an ApiError), dashboards 5 | 29 |
-| `vocabulary-field-decoded-as-text` | 29: fe-ops 27 (alarms 2, commands 6, contacts 5, fleet 1, investigate 6, now 4, resolutions 1, telemetry 1, timeline 1), dashboards 2. lead and fe-setup are done (11-13) | 59 |
+| `vocabulary-field-decoded-as-text` | 29: split 11-13: fe-setup takes fe-ops' investigate 6, timeline, telemetry, fleet, alarms 2 (11); fe-ops 16 (alarms 2, commands 6, contacts 5, fleet 1, investigate 6, now 4, resolutions 1, telemetry 1, timeline 1), dashboards 2. lead and fe-setup are done (11-13) | 59 |
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |
 | 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |
