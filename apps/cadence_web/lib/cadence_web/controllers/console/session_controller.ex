@@ -1,12 +1,14 @@
 defmodule CadenceWeb.Console.SessionController do
   @moduledoc """
-  Console bootstrap (`GET /api/console/v1/session`) and default-organization
-  selection (`PUT /api/console/v1/session/organization`).
+  Console bootstrap (`GET /api/console/v1/session`), default-organization
+  selection (`PUT /api/console/v1/session/organization`) and admin mode (L6:
+  `POST` / `DELETE /api/console/v1/session/admin-mode`). Contract: docs/apogee/api/session.md.
   """
 
   use CadenceWeb, :controller
 
   alias Cadence.Auth.Scope
+  alias CadenceWeb.AdminMode
   alias CadenceWeb.Console.Access
   alias CadenceWeb.Console.Capabilities
   alias CadenceWeb.Console.Problem
@@ -52,12 +54,52 @@ defmodule CadenceWeb.Console.SessionController do
     })
   end
 
+  @doc """
+  Enters admin mode for an eligible platform admin: the password is checked through the attempt
+  limit like sign-in, and admin mode lasts `AdminMode.expires_at/0` (1 h). Entering while on
+  starts a fresh hour.
+  """
+  def enter_admin_mode(conn, %{"password" => password}) when is_binary(password) do
+    scope = conn.assigns.current_scope
+
+    with true <- Scope.platform_admin_eligible?(scope),
+         :ok <- Cadence.Auth.verify_user_password(scope.user, password, ip: conn.remote_ip) do
+      expires_at = AdminMode.expires_at()
+
+      conn
+      |> put_session(:admin_mode_expires_at, expires_at)
+      |> json(%{data: %{expires_at: iso(expires_at)}})
+    else
+      false ->
+        Problem.respond(conn, :forbidden)
+
+      {:error, :invalid_credentials} ->
+        Problem.respond(conn, :password_incorrect)
+
+      {:error, {:too_many_attempts, retry_after}} ->
+        conn
+        |> put_resp_header("retry-after", Integer.to_string(retry_after))
+        |> Problem.respond(:too_many_attempts, %{retry_after: retry_after})
+    end
+  end
+
+  def enter_admin_mode(conn, _params),
+    do: Problem.respond(conn, :invalid_params, %{password: "is required"})
+
+  @doc "Leaves admin mode (idempotent)."
+  def leave_admin_mode(conn, _params) do
+    conn
+    |> delete_session(:admin_mode_expires_at)
+    |> send_resp(:no_content, "")
+  end
+
   defp render_session(conn, %Scope{} = scope) do
     session =
       SessionJSON.session(%{
         scope: scope,
         organizations: organizations(scope),
-        csrf_token: get_csrf_token()
+        csrf_token: get_csrf_token(),
+        admin_mode_expires_at: admin_mode_expires_at(conn)
       })
 
     # L21: the org switcher footer and /no-organization show it on every page.
@@ -121,4 +163,13 @@ defmodule CadenceWeb.Console.SessionController do
       {:error, _reason} -> {:error, :organization_not_found}
     end
   end
+
+  defp admin_mode_expires_at(conn) do
+    case get_session(conn, :admin_mode_expires_at) do
+      expires_at when is_integer(expires_at) -> iso(expires_at)
+      _none -> nil
+    end
+  end
+
+  defp iso(unix_seconds), do: unix_seconds |> DateTime.from_unix!() |> DateTime.to_iso8601()
 end

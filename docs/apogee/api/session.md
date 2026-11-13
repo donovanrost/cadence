@@ -76,6 +76,21 @@ The bootstrap payload.
 
 Errors: `401 unauthenticated`.
 
+## Admin mode (L6, api-ops)
+
+- `GET /session` carries `admin_mode_expires_at`: ISO time admin mode ends, or `null` when it's
+  off. It drives the 'ADMIN MODE · 52:10' chip.
+- `POST /api/console/v1/session/admin-mode {password}` → `200 {expires_at}`: enters admin mode for
+  one hour (the server's TTL). Entering while on starts a fresh hour. The password is checked
+  through the attempt limit, like sign-in (§Attempt limit). Errors:
+  - `422 password_incorrect` ("That password isn't right.");
+  - `429 too_many_attempts` with `details.retry_after` and a `Retry-After` header;
+  - `403 forbidden` for someone who isn't an eligible platform admin, before any password check;
+  - `422 invalid_params` (`details.password`) when the password is missing.
+- `DELETE /api/console/v1/session/admin-mode` → `204`. Leaves admin mode; idempotent.
+- Both need `x-csrf-token`. After either one, refetch `GET /session`: capabilities and
+  organizations change with admin mode.
+
 ## `PUT /api/console/v1/session/organization`
 
 Sets the session's default organization (the org switcher). Body `{"organization_id": "org_…"}` or

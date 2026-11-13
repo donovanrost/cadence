@@ -9,7 +9,9 @@ defmodule CadenceWeb.Console.SessionJSON do
   @socket_path "/socket/console"
 
   @spec session(%{scope: Scope.t(), organizations: [map()], csrf_token: binary()}) :: map()
-  def session(%{scope: %Scope{} = scope, organizations: organizations, csrf_token: csrf_token}) do
+  def session(
+        %{scope: %Scope{} = scope, organizations: organizations, csrf_token: csrf_token} = assigns
+      ) do
     %{
       user: %{
         id: scope.user.user_id,
@@ -18,6 +20,9 @@ defmodule CadenceWeb.Console.SessionJSON do
       },
       current_organization_id: scope.organization_id,
       admin_mode: Scope.admin_mode?(scope),
+      # L6: the 'ADMIN MODE · 52:10' chip counts down to this.
+      admin_mode_expires_at:
+        if(Scope.admin_mode?(scope), do: Map.get(assigns, :admin_mode_expires_at)),
       platform_admin_eligible: Scope.platform_admin_eligible?(scope),
       capabilities: capabilities(Capabilities.organization(scope)),
       organizations: Enum.map(organizations, &organization/1),

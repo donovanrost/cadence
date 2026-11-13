@@ -85,7 +85,8 @@ defmodule CadenceWeb.Console.SessionAPITest do
                # approve and abort there.
                {"Another Org", "organization_admin",
                 ~w(org.invite org.manage_members organization_admin)},
-               {"Reflect Orbital", "member", ~w(command.abort command.approve command.request)}
+               {"Reflect Orbital", "member",
+                ~w(command.abort command.approve command.request dashboard.author)}
              ]
     end
   end
@@ -236,5 +237,63 @@ defmodule CadenceWeb.Console.SessionAPITest do
     conn = c.user |> TestFixtures.member_conn() |> get("/api/console/v1/nope")
 
     assert %{"error" => %{"code" => "not_found"}} = json_response(conn, 404)
+  end
+
+  describe "L6 admin mode" do
+    setup do
+      %{admin: TestFixtures.persist_user!(capabilities: [:platform_admin])}
+    end
+
+    defp enter(conn, password),
+      do: post(conn, "/api/console/v1/session/admin-mode", %{"password" => password})
+
+    test "the right password enters for an hour; the session shows when it ends; leave ends it",
+         c do
+      conn = c.admin |> TestFixtures.member_conn() |> enter(TestFixtures.default_password())
+      assert %{"data" => %{"expires_at" => expires_at}} = json_response(conn, 200)
+      {:ok, expires, 0} = DateTime.from_iso8601(expires_at)
+      assert_in_delta DateTime.diff(expires, DateTime.utc_now()), 3600, 5
+
+      session = conn |> recycle() |> get("/api/console/v1/session") |> json_response(200)
+      assert session["data"]["admin_mode"] == true
+      assert session["data"]["admin_mode_expires_at"] == expires_at
+
+      left = conn |> recycle() |> delete("/api/console/v1/session/admin-mode")
+      assert response(left, 204)
+
+      after_leave = left |> recycle() |> get("/api/console/v1/session") |> json_response(200)
+      assert after_leave["data"]["admin_mode"] == false
+      assert after_leave["data"]["admin_mode_expires_at"] == nil
+    end
+
+    test "a wrong password is one stable code, and repeated ones are held back", c do
+      conn = TestFixtures.member_conn(c.admin)
+
+      for _ <- 1..6 do
+        assert %{"error" => %{"code" => "password_incorrect"}} =
+                 conn |> enter("wrong-password-1") |> json_response(422)
+      end
+
+      held = enter(conn, TestFixtures.default_password())
+
+      assert %{"error" => %{"code" => "too_many_attempts", "details" => %{"retry_after" => _}}} =
+               json_response(held, 429)
+
+      assert [_seconds] = get_resp_header(held, "retry-after")
+    end
+
+    test "someone who isn't a platform admin is refused before any password check", c do
+      assert %{"error" => %{"code" => "forbidden"}} =
+               c.user
+               |> TestFixtures.member_conn()
+               |> enter(TestFixtures.default_password())
+               |> json_response(403)
+
+      assert c.user
+             |> TestFixtures.member_conn()
+             |> get("/api/console/v1/session")
+             |> json_response(200)
+             |> get_in(["data", "admin_mode_expires_at"]) == nil
+    end
   end
 end

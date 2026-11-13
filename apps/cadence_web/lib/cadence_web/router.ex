@@ -755,6 +755,9 @@ defmodule CadenceWeb.Router do
 
     get("/session", SessionController, :show)
     put("/session/organization", SessionController, :update_organization)
+    # L6 admin mode step-up (owner: api-ops). Contract: docs/apogee/api/session.md
+    post("/session/admin-mode", SessionController, :enter_admin_mode)
+    delete("/session/admin-mode", SessionController, :leave_admin_mode)
 
     # -- Account (owner: api): the signed-in user's own password and sessions.
     put("/account/password", AccountController, :change_password)

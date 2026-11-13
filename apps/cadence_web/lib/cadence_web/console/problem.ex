@@ -97,6 +97,7 @@ defmodule CadenceWeb.Console.Problem do
       {409, "That invitation was already answered, revoked or has expired."},
     service_identity_not_found: {404, "That service identity isn't active in this organization."},
     current_password_incorrect: {422, "The current password isn't right."},
+    password_incorrect: {422, "That password isn't right."},
     too_many_attempts: {429, "Too many wrong passwords. Wait, then try again."},
     password_managed_externally:
       {409, "This account's password is set by the environment and can't be changed here."},
