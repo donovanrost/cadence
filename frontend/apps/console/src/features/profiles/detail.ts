@@ -10,7 +10,8 @@ const enumValue = object({ value: token, label: string });
 const field = object({
   path: string,
   label: string,
-  type: oneOf(["integer", "boolean", "enum", "string", "reference"]),
+  // known, not oneOf: a new field type (handled_apids brought `list`, domain 9251b745) never fails the page.
+  type: decoders.known(["integer", "boolean", "enum", "string", "reference", "list"] as const),
   unit: nullable(string),
   enum: nullable(array(object({ value: raw, label: string }), 200)),
   range: nullable(object({ min: nullable(decoders.number), max: nullable(decoders.number) })),
@@ -107,6 +108,8 @@ export function fetchProfileDetail(
 
 /** A field's value as text: enum label, yes/no, number + unit, or "Not set". */
 export function fieldText(f: ProfileField): string {
+  // domain 9251b745: a null APID list means every APID the catalog defines.
+  if (f.path === "handled_apids" && f.value === null) return "All of the catalog's APIDs";
   if (f.value === null)
     return f.default === null
       ? "Not set"
@@ -117,6 +120,7 @@ export function fieldText(f: ProfileField): string {
     if (option) return option.label;
   }
   if (f.type === "boolean") return f.value === true ? "Yes" : "No";
+  if (Array.isArray(f.value)) return f.value.map((v) => String(v)).join(", ");
   const text =
     typeof f.value === "number"
       ? formatCount(f.value)

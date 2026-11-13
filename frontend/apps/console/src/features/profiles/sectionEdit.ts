@@ -18,7 +18,8 @@ export const editableSection = (key: string) => key !== "limits";
 export const schemaFieldOf = (f: ProfileField): SchemaField => ({
   path: f.path,
   label: f.label,
-  type: f.type,
+  // A type the console doesn't know yet reads as text.
+  type: f.type === "unrecognized" ? "string" : f.type,
   unit: f.unit,
   enum: f.enum,
   range: f.range,
