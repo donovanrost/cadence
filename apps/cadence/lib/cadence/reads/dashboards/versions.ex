@@ -7,7 +7,6 @@ defmodule Cadence.Reads.Dashboards.Versions do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Dashboards.{Document, Documents, Version, VersionDiff}
 
-
   @spec compare(Scope.t(), binary(), binary(), pos_integer(), pos_integer()) ::
           {:ok, map()} | {:error, :unavailable}
   def compare(%Scope{} = scope, mission, dashboard, from, to)

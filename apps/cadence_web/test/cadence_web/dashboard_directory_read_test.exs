@@ -163,5 +163,4 @@ defmodule CadenceWeb.DashboardDirectoryReadTest do
 
   defp org(c), do: c.org.organization_id
   defp mission(c), do: c.mission.mission_id
-
 end
