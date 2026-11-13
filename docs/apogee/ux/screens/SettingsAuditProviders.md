@@ -47,6 +47,13 @@ with Profile/People.
       the organization's value. Where the migration kept one that matches, the entry adds: "Approval settings
       stay set for this mission, even where they match the organization." They show `SET FOR THIS MISSION`
       afterwards, as any override does.
+- **Percent fields** (unit `ratio`, shown as %; qa typed 0.9 meaning 90%). The console catches the
+  fraction-for-percent slip inline, with no dialog and no server floor (nobody knows a real one):
+  - When the typed value is above 0 and at most 1, a caution hint shows under the field as the user types: "That's
+    0.9%. Did you mean 90%?" with the compact button `Use 90%`.
+  - Save stays enabled, so a real 0.9% can still be saved. It applies to every ratio field from the schema, not
+    a list.
+  - The hint goes once the value is above 1, or once `Use 90%` is pressed.
 - **Saving:** settings that are change-set kinds (when domain adds them) stage (`Stage change`);
   everything else saves immediately with a version line (`v4 · 01:12Z by Donovan R.`). Governance
   changes that need approval follow the server's policy (ApDecision, reviewer ≠ author). Errors follow U20.
