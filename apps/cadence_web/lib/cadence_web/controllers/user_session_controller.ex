@@ -8,9 +8,15 @@ defmodule CadenceWeb.UserSessionController do
 
   def create(conn, %{"user" => credentials}) when is_map(credentials) do
     with {:ok, {email, password}} <- IdentityParams.durable_session(credentials),
-         {:ok, issued_session} <- Cadence.Auth.sign_in(email, password) do
+         {:ok, issued_session} <- Cadence.Auth.sign_in(email, password, ip: conn.remote_ip) do
       finalize_sign_in(conn, issued_session)
     else
+      {:error, {:too_many_attempts, retry_after}} ->
+        conn
+        |> put_resp_header("retry-after", Integer.to_string(retry_after))
+        |> put_flash(:error, too_many_attempts(retry_after))
+        |> redirect(to: ~p"/sign-in")
+
       {:error, reason} ->
         conn
         |> put_flash(:error, human_message(reason))
@@ -132,4 +138,13 @@ defmodule CadenceWeb.UserSessionController do
     do: "Enter both email and password."
 
   defp human_message(_reason), do: "Cadence could not establish a browser session."
+
+  @doc "The sign-in and admin-mode words for a held-back password check."
+  def too_many_attempts(retry_after),
+    do: "Too many wrong passwords. Try again in #{wait(retry_after)}."
+
+  defp wait(1), do: "1 second"
+  defp wait(seconds) when seconds < 60, do: "#{seconds} seconds"
+  defp wait(seconds) when seconds < 120, do: "a minute"
+  defp wait(seconds), do: "#{div(seconds + 59, 60)} minutes"
 end

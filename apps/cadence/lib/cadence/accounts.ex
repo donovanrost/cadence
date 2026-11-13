@@ -57,8 +57,8 @@ defmodule Cadence.Accounts do
           {:ok, User.t() | nil} | {:error, term()}
   defdelegate reconcile_environment_admin(policy), to: Authentication
 
-  @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
-  defdelegate sign_in(email, password), to: Authentication
+  @spec sign_in(binary(), binary(), keyword()) :: {:ok, issued_user_session()} | {:error, term()}
+  defdelegate sign_in(email, password, opts \\ []), to: Authentication
 
   @spec login_environment_admin(binary(), binary()) ::
           {:ok, issued_user_session()} | {:error, term()}
@@ -67,8 +67,9 @@ defmodule Cadence.Accounts do
   @spec login_user(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   defdelegate login_user(email, password), to: Authentication
 
-  @spec verify_user_password(User.t(), binary()) :: :ok | {:error, :invalid_credentials}
-  defdelegate verify_user_password(user, password), to: Authentication
+  @spec verify_user_password(User.t(), binary(), keyword()) ::
+          :ok | {:error, :invalid_credentials | {:too_many_attempts, pos_integer()}}
+  defdelegate verify_user_password(user, password, opts \\ []), to: Authentication
 
   @spec authenticate_user_session(binary()) ::
           {:ok, %{user: User.t(), session_context: user_session_context()}} | {:error, term()}
