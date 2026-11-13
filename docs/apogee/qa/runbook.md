@@ -101,7 +101,9 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127
 #      rpc Cadence.Runtime.MissionCoordinator.active_spec("mission-earendil-demo")
 #        -> {:ok, spec} with spec.generation == the live config generation (GET …/config head)
 #      grep -c "mission_runtime_reconciler.*terminating" in the new part of var/qa-server.log -> 0
-#    :code.modified_modules() == [] does NOT catch this: on 11-11 the 22:14Z restart came up clean,
+#    Also :code.modified_modules() == [] (no half-rebuilt _build/dev), the journal enabled
+#    (Cadence.Ingress journal config: enabled? true, 2 GB) and any armed group still queued_for_contact.
+#    :code.modified_modules() == [] alone does NOT catch this: on 11-11 the 22:14Z restart came up clean,
 #    but the reconciler crash-looped (binary_to_existing_atom "criteria", then a binding-set hash
 #    mismatch for r9's v3), so every spacecraft's TM failed ingress with no_active_binding_set.
 
@@ -164,9 +166,27 @@ Notes:
 
 ## Migrations
 
-New migrations (from domain/api) only need: stop qa-server → `mix ecto.migrate -r Cadence.Repo`
-with the env var → restart. Tell qa and I'll do it. `cadence_dev` is left alone (it is 8 upstream
-migrations behind and belongs to the main checkout).
+**No dev-env mix tasks in the shared tree while :4011 runs** (lead, 2026-11-13). `_build/dev` *is*
+the live server's code. A dev `mix compile`, `credo` or `cadence.architecture.check` rebuilt it at
+03:42–03:54Z on 11-13. The node's reloader then purged `Cadence.Repo` under its running processes, and
+`Application cadence exited: shutdown` at 03:45:59Z took the API down until qa restarted at 04:11Z.
+Every Elixir check runs as `MIX_ENV=test scripts/check-slot.sh mix …`; check-slot refuses mix
+otherwise. The live node picks up lib saves through its own reloader.
+
+New dev-DB migrations (domain, api, api-ops) come to qa. qa runs them through the live node, one
+version at a time, so nothing compiles into `_build/dev`:
+
+```
+# on cadence_apogee (rpc / Code.eval_string); the .exs is compiled in-node, not into _build
+path = Application.app_dir(:cadence, "priv/repo/migrations")   # or the source dir if not copied
+Ecto.Migrator.run(Cadence.Repo, path, :up, to: 20261113040000, log: :info)
+Ecto.Migrator.migrations(Cadence.Repo, path)   # status before and after
+```
+
+Or qa folds them into a planned restart. Then the schema save follows seconds later, and qa runs the
+post-restart checks above. Never during the freeze. Big tables: CREATE INDEX CONCURRENTLY and a
+`lock_timeout` on ALTERs of hot tables (`mission_spacecraft`, `provider_audit_entries`).
+`cadence_dev` is left alone (it belongs to the main checkout).
 
 ## Known limits
 
