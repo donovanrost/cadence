@@ -64,6 +64,19 @@ The rendering engine differs, but the look is the same.
   - Hover or selection brings the series to `readout`. The only colours on a chart are operational states
     (design-language §2).
 
+### Overlays (snapshot `limits` and `events` frames; dashboards asked)
+- **Thresholds:** dashed 1px, caution yellow and crit red, with `--apogee-wash-crit` beyond red only (no caution
+  wash). They step where a definition changes mid-window, with a 1px vertical tick at the change and the change
+  shown in the tooltip ("Limits changed 02:10Z").
+- **Limit events:** ApStatusMark shapes (crit diamond, caution triangle) on the series at the sample time, never
+  colour alone. Mark only the entry into a state, not every violating sample. When marks would sit closer than
+  6px, they merge into one mark with a count in the tooltip ("4 crit entries 02:10Z–02:14Z").
+- **Contact intervals:** labelled bands behind the plot, as ApTimeSeries' TimeBand: `raised` fill, station code in
+  mono 11 at the top-left. Booked passes are a dashed outline, realized passes are filled. Status other than
+  booked or realized (missed, partial) goes in the tooltip in words, not as a colour.
+- **Point events:** a thin `text-4` vertical line, with the label in the tooltip.
+- **No glows or box-shadows** anywhere in the chart. Remove the engine's.
+
 ## Chart tokens (K2): Apogee values for the 29 base `--chart-color-*`
 Alpha variants derive from these, so only the bases change. They're RGB triplets.
 | Token | Apogee | RGB |
