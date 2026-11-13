@@ -55,6 +55,7 @@ jobs:
         uses: ./.github/actions/setup-cadence
         with:
           node: "false"
+          xmllint: "false"
 
       # Each check runs even when an earlier one fails, so one run reports every problem.
       - name: Compile every project (warnings as errors)
@@ -167,8 +168,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Install xmllint (XTCE schema validator)
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libxml2-utils
       - name: Tune Postgres for throwaway test data
         run: scripts/ci/tune_postgres.sh
       - id: setup
@@ -187,8 +186,14 @@ jobs:
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         working-directory: packages/cadence_catalog
         run: mix test
-      - name: cadence_simulator
+      # The simulator suite uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
+      - name: Create and migrate the cadence test database
+        id: db
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      - name: cadence_simulator
+        if: ${{ !cancelled() && steps.db.outcome == 'success' }}
         working-directory: apps/cadence_simulator
         run: mix test
       - name: Plane tests

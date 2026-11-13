@@ -8,6 +8,9 @@ inputs:
   node:
     description: Install Node 24.16.0 and the frontend pnpm workspace
     default: "true"
+  xmllint:
+    description: Install xmllint (XTCE schema validation in xtce, cadence and its importers)
+    default: "true"
 outputs:
   build-cache-hit:
     description: '"true" when _build was restored from an exact key'
@@ -15,6 +18,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - if: inputs.xmllint == 'true'
+      name: Install xmllint
+      shell: bash
+      run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libxml2-utils
+
     - id: beam
       uses: ./.github/actions/setup-beam
 
