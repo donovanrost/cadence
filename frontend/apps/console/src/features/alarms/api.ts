@@ -1,4 +1,10 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  spacecraftId as spacecraftIdReader,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /api/console/v1/missions/:mission_id/alarms` (M9). */
 
@@ -43,7 +49,7 @@ export const sourceStates = [
 
 const alarm = d.object({
   id: d.token,
-  spacecraft_id: d.nullable(d.token),
+  spacecraft_id: d.nullable(spacecraftIdReader),
   point: d.object({
     id: d.token,
     name: d.string,

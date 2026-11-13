@@ -1,4 +1,6 @@
 import {
+  spacecraftId as spacecraftIdReader,
+  type SpacecraftId,
   scid as scidReader,
   actor as sharedActor,
   decoders as d,
@@ -22,8 +24,8 @@ const episodeFields = {
   severity: d.oneOf(["critical", "caution"] as const),
   peak_severity: d.oneOf(["critical", "caution"] as const),
   source_state: d.nullable(d.known(sourceStates)),
-  spacecraft_id: d.nullable(d.token),
-  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: scidReader })),
+  spacecraft_id: d.nullable(spacecraftIdReader),
+  spacecraft: d.nullable(d.object({ id: spacecraftIdReader, name: d.string, scid: scidReader })),
   point: d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) }),
   thresholds: d.nullable(thresholdsReader),
   opened_at: d.timestamp,
@@ -173,7 +175,11 @@ export function fetchPeople(organizationId: string, signal?: AbortSignal) {
 }
 
 /** The active episode behind a limit alarm row: same spacecraft and point. */
-export function episodeFor(episodes: readonly Episode[], spacecraftId: string, pointId: string) {
+export function episodeFor(
+  episodes: readonly Episode[],
+  spacecraftId: SpacecraftId,
+  pointId: string,
+) {
   return (
     episodes.find(
       (e) => e.status !== "cleared" && e.spacecraft_id === spacecraftId && e.point.id === pointId,

@@ -72,7 +72,8 @@ const stateModel = computed({
 });
 const ids = computed(() => new Set(props.targets.map((sc) => sc.id)));
 const words = computed(() => chipWords(props.query, (id) => profiles.value.get(id) ?? id));
-const byId = computed(() => new Map(props.fleet.map((sc) => [sc.id, sc])));
+// Target ids come from the draft and the URL as text, so the lookup is by text.
+const byId = computed(() => new Map<string, FleetSpacecraft>(props.fleet.map((sc) => [sc.id, sc])));
 /** The keyboard path to one craft (the matrix is aria-hidden; qa note on #25). */
 const addOptions = computed(() => [
   { value: "", label: "Add spacecraft…" },

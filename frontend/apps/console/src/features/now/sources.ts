@@ -1,5 +1,12 @@
 import type { RouteLocationRaw } from "vue-router";
-import { decoders as d, isKnown, vocabularyText, type Decoded, type Scid } from "@/api/index.ts";
+import {
+  decoders as d,
+  isKnown,
+  vocabularyText,
+  type Decoded,
+  type Scid,
+  type SpacecraftId,
+} from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 
@@ -84,7 +91,7 @@ export type MissedItem = Readonly<{
   priority: 1 | 2 | 3;
   state: OpState;
   scName: string;
-  scId: string;
+  spacecraftId: SpacecraftId;
   scid: Scid;
   missed: readonly MissedPass[];
   next: NextContact | null;
@@ -114,7 +121,7 @@ function oneRow(m: MissedItem, horizonH: number): QueueItem {
     meta: null,
     ...(m.next ? { due: { label: "AOS", at: m.next.aos } } : {}),
     action: { label: "Review", to: reviewTo(last?.planned_aos ?? new Date().toISOString()) },
-    spacecraftIds: [m.scId],
+    spacecraftIds: [m.spacecraftId],
   } satisfies QueueItem;
 }
 
@@ -156,7 +163,7 @@ export function missedPassRows(items: readonly MissedItem[], horizonS: number): 
         sentence: `${shown}${more}${uncovered ? ` · ${uncovered} ${uncovered === 1 ? "has" : "have"} no contact in the next ${horizonH} h` : ""}`,
         meta: null,
         action: { label: "Review", to: reviewTo(last?.planned_aos ?? new Date().toISOString()) },
-        spacecraftIds: g.map((m) => m.scId),
+        spacecraftIds: g.map((m) => m.spacecraftId),
       } satisfies QueueItem,
     ];
   });

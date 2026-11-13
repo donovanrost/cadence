@@ -1,4 +1,4 @@
-import { scid as scidReader } from "@/api/index.ts";
+import { scid as scidReader, spacecraftId as spacecraftIdReader } from "@/api/index.ts";
 import type { Fleet, FleetSpacecraft } from "./api.ts";
 
 /** Typed test builders (code standard: fixtures through typed values, not assertions). */
@@ -9,7 +9,7 @@ export function spacecraftRow(
 ): FleetSpacecraft {
   const name = `EARENDIL-${String(scid).padStart(3, "0")}`;
   return {
-    id: `spacecraft-${name.toLowerCase()}`,
+    id: spacecraftIdReader(`spacecraft-${name.toLowerCase()}`),
     name,
     scid: scidReader(scid),
     profile: { id: "profile-earendil-block-1", name: "Earendil Block 1", version: 1 },

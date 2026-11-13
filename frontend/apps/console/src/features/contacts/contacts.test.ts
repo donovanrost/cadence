@@ -4,7 +4,7 @@ import { duration, findingRows } from "./findingRows.ts";
 import type { Availability, AvailabilityWindow } from "@/features/scheduling/index.ts";
 import { releaseErrorWords } from "./release.ts";
 import { describe, expect, it } from "vite-plus/test";
-import { scid as scidReader, decode } from "@/api/index.ts";
+import { spacecraftId as spacecraftIdReader, scid as scidReader, decode } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
 import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
 import type { Attention } from "@/features/now/index.ts";
@@ -38,7 +38,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   state: "confirmed",
   pass_phase: "scheduled",
   delivery_state: "pending",
-  spacecraft_id: "sc-312",
+  spacecraft_id: spacecraftIdReader("sc-312"),
   spacecraft: { id: "sc-312", name: "EARENDIL-312", scid: scidReader(312) },
   station: { ref: "SVL", id: "gs-svl", code: "SVB", name: "Svalbard" },
   antenna: null,

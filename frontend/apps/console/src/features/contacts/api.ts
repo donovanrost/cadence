@@ -1,4 +1,5 @@
 import {
+  spacecraftId as spacecraftIdReader,
   scid as scidReader,
   actor,
   decoders as d,
@@ -55,7 +56,7 @@ const pass = d.object({
   // The provider's progress (domain KnownAtom); an unknown value reads "unrecognized".
   pass_phase: d.nullable(d.known(passPhases)),
   delivery_state: d.nullable(d.known(deliveryStates)),
-  spacecraft_id: d.nullable(d.token),
+  spacecraft_id: d.nullable(spacecraftIdReader),
   /** Identity on the row (5f02fd3d), so names never depend on a client join. */
   spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.nullable(scidReader) })),
   station: d.object({

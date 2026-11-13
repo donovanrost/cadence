@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { scid as scidReader, decode } from "@/api/index.ts";
+import { spacecraftId as spacecraftIdReader, scid as scidReader, decode } from "@/api/index.ts";
 import { latestMark, pointsReader } from "./api.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { History } from "@/features/investigate/index.ts";
@@ -48,7 +48,7 @@ const history = (buckets: [string, number][]): History => ({
   point_id: "EPS.VBAT",
   unit: "V",
   description: null,
-  spacecraft_id: "sc",
+  spacecraft_id: spacecraftIdReader("sc"),
   from: "2026-11-08T00:00:00Z",
   to: "2026-11-08T06:00:00Z",
   bucket_width_ms: 60_000,

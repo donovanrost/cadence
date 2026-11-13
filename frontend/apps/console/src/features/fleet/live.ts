@@ -1,4 +1,8 @@
-import { decoders as d } from "@/api/index.ts";
+import {
+  decoders as d,
+  spacecraftId as spacecraftIdReader,
+  spacecraftIdParam,
+} from "@/api/index.ts";
 import { countsPartition, fleetFields, type Fleet, type FleetSpacecraft } from "./api.ts";
 
 /**
@@ -21,7 +25,7 @@ export const fleetPushReader = d.object({
   seq: d.integer,
   full: d.boolean,
   heard: heardMap,
-  removed: d.array(d.token, 20_000),
+  removed: d.array(spacecraftIdReader, 20_000),
 });
 export type FleetPush = d.Decoded<typeof fleetPushReader>;
 
@@ -68,9 +72,10 @@ export function applyFleetPush(
   const rows = new Map(current.spacecraft.map((sc) => [sc.id, sc]));
   for (const id of push.removed) rows.delete(id);
   for (const row of push.spacecraft) rows.set(row.id, row);
-  for (const [id, at] of Object.entries(push.heard)) {
-    const row = rows.get(id);
-    if (row) rows.set(id, { ...row, last_received_at: at });
+  for (const [key, at] of Object.entries(push.heard)) {
+    const id = spacecraftIdParam(key);
+    const row = id ? rows.get(id) : undefined;
+    if (row) rows.set(row.id, { ...row, last_received_at: at });
   }
   const fleet = fleetOf(push, [...rows.values()].sort(order));
   return countsPartition(fleet)

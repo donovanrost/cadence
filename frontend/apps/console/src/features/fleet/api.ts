@@ -1,4 +1,5 @@
 import {
+  spacecraftId as spacecraftIdReader,
   scid as scidReader,
   decoders as d,
   request,
@@ -40,7 +41,7 @@ const profile = d.object({
 });
 
 const spacecraft = d.object({
-  id: d.token,
+  id: spacecraftIdReader,
   name: d.string,
   scid: scidReader,
   profile: d.nullable(profile),

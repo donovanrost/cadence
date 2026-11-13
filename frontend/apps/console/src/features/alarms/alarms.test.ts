@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { scid as scidReader } from "@/api/index.ts";
+import { spacecraftId as spacecraftIdReader, scid as scidReader } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import { bandFor, conditionWords } from "./api.ts";
 import type { Episode } from "./episodes.ts";
@@ -22,8 +22,12 @@ function ep(id: string, overrides: Partial<Episode> = {}): Episode {
     severity: "critical",
     peak_severity: "critical",
     source_state: "red_low",
-    spacecraft_id: "spacecraft-earendil-001",
-    spacecraft: { id: "spacecraft-earendil-001", name: "EARENDIL-001", scid: scidReader(1) },
+    spacecraft_id: spacecraftIdReader("spacecraft-earendil-001"),
+    spacecraft: {
+      id: spacecraftIdReader("spacecraft-earendil-001"),
+      name: "EARENDIL-001",
+      scid: scidReader(1),
+    },
     point: { id: "EPS.VBAT", name: "VBAT", unit: "V" },
     thresholds: { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 },
     opened_at: "2026-11-09T01:00:00Z",
@@ -101,8 +105,12 @@ describe("alarm list on episodes", () => {
 
 describe("alarm grouping and the empty state (OpsLists §Alarms)", () => {
   const at = (n: number) => ({
-    spacecraft_id: `spacecraft-earendil-00${n}`,
-    spacecraft: { id: `spacecraft-earendil-00${n}`, name: `EARENDIL-00${n}`, scid: scidReader(n) },
+    spacecraft_id: spacecraftIdReader(`spacecraft-earendil-00${n}`),
+    spacecraft: {
+      id: spacecraftIdReader(`spacecraft-earendil-00${n}`),
+      name: `EARENDIL-00${n}`,
+      scid: scidReader(n),
+    },
   });
   const fleet = [1, 2, 3, 4].map((n) => spacecraftRow(n, { plane: 7 }));
   const eps = [

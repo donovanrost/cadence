@@ -1,4 +1,4 @@
-import type { Scid } from "@/api/index.ts";
+import type { Scid, SpacecraftId } from "@/api/index.ts";
 import { readinessTag } from "./readiness.ts";
 import type { GanttBand, GanttBar, GanttRow } from "@/ui";
 import type { Availability } from "@/features/scheduling/index.ts";
@@ -46,7 +46,7 @@ export type GanttAxis = "station" | "spacecraft";
 
 export function passGantt(
   passes: readonly Pass[],
-  nameOf: (spacecraftId: string) => { name: string; scid: Scid | null } | null,
+  nameOf: (spacecraftId: SpacecraftId) => { name: string; scid: Scid | null } | null,
   now: number,
   selected: string | null = null,
   axis: GanttAxis = "station",

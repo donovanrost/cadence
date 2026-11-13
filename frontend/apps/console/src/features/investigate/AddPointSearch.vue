@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SpacecraftId } from "@/api/index.ts";
 import { computed, nextTick, onScopeDispose, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { ApButton, ApField, ApRemote } from "@/ui";
@@ -10,7 +11,7 @@ import { fetchPoints, type TelemetryPoint } from "@/features/telemetry/index.ts"
  */
 const props = defineProps<{
   missionId: string;
-  spacecraftId: string;
+  spacecraftId: SpacecraftId;
   /** Already plotted (the alarm's point and the added ones). */
   exclude: readonly string[];
   full: boolean;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { spacecraftId as spacecraftIdReader } from "@/api/index.ts";
 import type { Alarm } from "@/features/alarms/index.ts";
 import type { GroupRow } from "@/features/commands/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
@@ -11,7 +12,7 @@ const byId = new Map(fleet.map((sc) => [sc.id, sc]));
 
 const alarm = (id: string, sc: string, point: string, extra: Partial<Alarm> = {}): Alarm => ({
   id,
-  spacecraft_id: sc,
+  spacecraft_id: spacecraftIdReader(sc),
   point: { id: `pt-${point}`, name: point, subsystem: null, unit: "V", description: null },
   severity: "critical",
   active: true,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { spacecraftId as spacecraftIdReader, decode } from "@/api/index.ts";
 import { fleetOf, spacecraftRow } from "./fixtures.ts";
 import { applyFleetPush, fleetPushReader, type FleetPush } from "./live.ts";
 
@@ -53,7 +53,7 @@ describe("fleet push", () => {
       1,
       push(2, {
         counts,
-        removed: ["spacecraft-earendil-002"],
+        removed: [spacecraftIdReader("spacecraft-earendil-002")],
         spacecraft: [spacecraftRow(26)],
       }),
     );
@@ -63,7 +63,11 @@ describe("fleet push", () => {
   it("asks to resubscribe on a seq gap or inconsistent counts", () => {
     expect(applyFleetPush(snapshot, 1, push(3))).toEqual({ ok: false, reason: "gap" });
     expect(applyFleetPush(null, 0, push(2))).toEqual({ ok: false, reason: "gap" });
-    const wrong = applyFleetPush(snapshot, 1, push(2, { removed: ["spacecraft-earendil-001"] }));
+    const wrong = applyFleetPush(
+      snapshot,
+      1,
+      push(2, { removed: [spacecraftIdReader("spacecraft-earendil-001")] }),
+    );
     expect(wrong).toEqual({ ok: false, reason: "inconsistent" });
   });
 });

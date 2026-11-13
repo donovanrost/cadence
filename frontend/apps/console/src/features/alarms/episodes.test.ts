@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { scid as scidReader, decode } from "@/api/index.ts";
+import { spacecraftId as spacecraftIdReader, scid as scidReader, decode } from "@/api/index.ts";
 import {
   episodeFor,
   episodesReader,
@@ -17,8 +17,8 @@ const episode = (overrides: Partial<Episode> = {}): Episode => ({
   severity: "critical",
   peak_severity: "critical",
   source_state: "red_low",
-  spacecraft_id: "sc-312",
-  spacecraft: { id: "sc-312", name: "EARENDIL-312", scid: scidReader(312) },
+  spacecraft_id: spacecraftIdReader("sc-312"),
+  spacecraft: { id: spacecraftIdReader("sc-312"), name: "EARENDIL-312", scid: scidReader(312) },
   point: { id: "EPS.VBAT", name: "VBAT", unit: "V" },
   thresholds: { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 },
   opened_at: "2026-11-08T02:35:02Z",
@@ -45,9 +45,15 @@ describe("alarm episodes", () => {
     const result = decode(episodesReader, body);
     expect(result.ok).toBe(true);
     expect(
-      episodeFor([episode(), episode({ id: "x", status: "cleared" })], "sc-312", "EPS.VBAT")?.id,
+      episodeFor(
+        [episode(), episode({ id: "x", status: "cleared" })],
+        spacecraftIdReader("sc-312"),
+        "EPS.VBAT",
+      )?.id,
     ).toBe("alarm_episode_1");
-    expect(episodeFor([episode({ status: "cleared" })], "sc-312", "EPS.VBAT")).toBeNull();
+    expect(
+      episodeFor([episode({ status: "cleared" })], spacecraftIdReader("sc-312"), "EPS.VBAT"),
+    ).toBeNull();
   });
 
   it("never implies ground limits are live (U16)", () => {

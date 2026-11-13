@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { spacecraftIdParam } from "@/api/index.ts";
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from "vue";
 import { RouterLink } from "vue-router";
 import { formatDuration, plural, useNow, ApStatusMark } from "@/ui";
@@ -91,7 +92,7 @@ function cellClass(sc: FleetSpacecraft | null): readonly string[] {
 
 function target(event: Event): FleetSpacecraft | null {
   const el = event.target instanceof Element ? event.target.closest("[data-sc]") : null;
-  const id = el?.getAttribute("data-sc");
+  const id = spacecraftIdParam(el?.getAttribute("data-sc") ?? undefined);
   return id ? (byId.value.get(id) ?? null) : null;
 }
 

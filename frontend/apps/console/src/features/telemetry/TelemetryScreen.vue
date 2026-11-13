@@ -7,7 +7,7 @@ import { ApPageHeader, ApRemote, type TimeRange } from "@/ui";
 import { TelemetryTabs } from "@/features/dashboards/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
 import { fetchLimitIntervals } from "@/features/investigate/index.ts";
-import { resolveWindow, windowFromRange, windowLabel, type WindowSel } from "./window.ts";
+import { resolveWindow, windowFromRange, windowLabel } from "./window.ts";
 import PlotPanel from "./PlotPanel.vue";
 import PointsPanel from "./PointsPanel.vue";
 import ValuesTable from "./ValuesTable.vue";
@@ -62,15 +62,20 @@ const data = useSeries(
 const single = computed(() => {
   const only = picked.value.series.length === 1 ? picked.value.series[0] : undefined;
   const sc = only ? fleetRows.value.find((row) => row.scid === only.scid) : undefined;
+  // A typed key: useRemoteQuery compares keys by value (typing §12 A4).
   return only && sc
-    ? JSON.stringify({ m: missionId.value, p: only.pointId, sc: sc.id, w: selection.value.window })
+    ? { m: missionId.value, p: only.pointId, sc: sc.id, w: selection.value.window }
     : null;
 });
 const intervals = useRemoteQuery(single, (k, signal) => {
-  // Sound: produced by JSON.stringify above.
-  const { m, p, sc, w } = JSON.parse(k) as { m: string; p: string; sc: string; w: WindowSel };
-  const r = resolveWindow(w, new Date());
-  return fetchLimitIntervals(m, p, sc, { from: new Date(r.from), to: new Date(r.to) }, signal);
+  const r = resolveWindow(k.w, new Date());
+  return fetchLimitIntervals(
+    k.m,
+    k.p,
+    k.sc,
+    { from: new Date(r.from), to: new Date(r.to) },
+    signal,
+  );
 });
 
 const view = computed(() => {

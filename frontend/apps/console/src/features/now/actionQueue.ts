@@ -1,5 +1,6 @@
 import type { RouteLocationRaw } from "vue-router";
 import {
+  spacecraftId as spacecraftIdReader,
   scid as scidReader,
   actor,
   decoders as d,
@@ -61,7 +62,7 @@ const lenient =
   };
 
 const member = d.object({
-  id: d.token,
+  id: spacecraftIdReader,
   name: d.string,
   scid: scidReader,
   plane: d.nullable(d.integer),
@@ -439,7 +440,7 @@ const missedOf = (item: ServerItem): MissedItem | null => {
         priority: item.priority,
         state: STATE[item.state],
         scName: sc.name,
-        scId: sc.id,
+        spacecraftId: sc.id,
         scid: sc.scid,
         missed: item.missed_passes ?? [],
         next: item.next_contact ?? null,

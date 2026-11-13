@@ -1,4 +1,11 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  spacecraftId as spacecraftIdReader,
+  type SpacecraftId,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 import { thresholdsReader } from "@/features/alarms/index.ts";
 
 /** Contracts: docs/apogee/api/ops.md, M10 (history) and M11 (limit intervals). */
@@ -18,7 +25,7 @@ const historyShape = d.object({
   point_id: d.token,
   unit: d.nullable(d.string),
   description: d.nullable(d.string),
-  spacecraft_id: d.nullable(d.token),
+  spacecraft_id: d.nullable(spacecraftIdReader),
   from: d.timestamp,
   to: d.timestamp,
   bucket_width_ms: d.integer,
@@ -57,7 +64,7 @@ const interval = d.object({
 
 export const intervalsReader = d.object({
   point_id: d.token,
-  spacecraft_id: d.nullable(d.token),
+  spacecraft_id: d.nullable(spacecraftIdReader),
   from: d.timestamp,
   to: d.timestamp,
   intervals: d.array(interval, 1_000),
@@ -67,7 +74,11 @@ export type LimitIntervals = Decoded<typeof intervalsReader>;
 const pointPath = (missionId: string, prefix: string, pointId: string) =>
   `/missions/${encodeURIComponent(missionId)}/${prefix}/points/${encodeURIComponent(pointId)}`;
 
-function windowQuery(window: HistoryWindow, spacecraftId: string, extra: Record<string, string>) {
+function windowQuery(
+  window: HistoryWindow,
+  spacecraftId: SpacecraftId,
+  extra: Record<string, string>,
+) {
   return new URLSearchParams({
     spacecraft_id: spacecraftId,
     from: window.from.toISOString(),
@@ -79,7 +90,7 @@ function windowQuery(window: HistoryWindow, spacecraftId: string, extra: Record<
 export function fetchHistory(
   missionId: string,
   pointId: string,
-  spacecraftId: string,
+  spacecraftId: SpacecraftId,
   window: HistoryWindow,
   signal?: AbortSignal,
 ): Promise<ApiResult<History>> {
@@ -94,7 +105,7 @@ export function fetchHistory(
 export function fetchLimitIntervals(
   missionId: string,
   pointId: string,
-  spacecraftId: string,
+  spacecraftId: SpacecraftId,
   window: HistoryWindow,
   signal?: AbortSignal,
 ): Promise<ApiResult<LimitIntervals>> {

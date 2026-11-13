@@ -1,5 +1,5 @@
 import { computed, onScopeDispose, type Ref } from "vue";
-import { useRemoteQuery } from "@/api/index.ts";
+import { useRemoteQuery, type SpacecraftId } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { fetchAlarms, fetchEpisode, fetchEpisodes } from "@/features/alarms/index.ts";
 import { FLEET_REFETCH_GAP_MS, throttle } from "@/features/fleet/index.ts";
@@ -43,25 +43,22 @@ export function usePointAlarms(missionId: Ref<string>, pointId: Ref<string | nul
  */
 export function usePointTrend(
   missionId: Ref<string>,
-  spacecraftId: Ref<string | null>,
+  spacecraftId: Ref<SpacecraftId | null>,
   pointId: Ref<string | null>,
   range: Ref<RangeKey>,
 ) {
-  const key = computed(() =>
-    keyOf(
-      spacecraftId.value && pointId.value
-        ? { m: missionId.value, sc: spacecraftId.value, p: pointId.value, r: range.value }
-        : null,
-    ),
+  type TrendKey = Readonly<{ m: string; sc: SpacecraftId; p: string; r: RangeKey }>;
+  const key = computed((): TrendKey | null =>
+    spacecraftId.value && pointId.value
+      ? { m: missionId.value, sc: spacecraftId.value, p: pointId.value, r: range.value }
+      : null,
   );
-  const history = useRemoteQuery(key, (k, signal) => {
-    const { m = "", sc = "", p = "", r = "6h" } = k;
-    return fetchHistory(m, p, sc, toWindow(r), signal);
-  });
-  const intervals = useRemoteQuery(key, (k, signal) => {
-    const { m = "", sc = "", p = "", r = "6h" } = k;
-    return fetchLimitIntervals(m, p, sc, toWindow(r), signal);
-  });
+  const history = useRemoteQuery(key, (k, signal) =>
+    fetchHistory(k.m, k.p, k.sc, toWindow(k.r), signal),
+  );
+  const intervals = useRemoteQuery(key, (k, signal) =>
+    fetchLimitIntervals(k.m, k.p, k.sc, toWindow(k.r), signal),
+  );
   const throttled = throttle(history.refetch, FLEET_REFETCH_GAP_MS);
   useMissionInvalidation(missionId, ["telemetry"], throttled.call);
   useMissionInvalidation(missionId, ["limits"], intervals.refetch);
@@ -69,8 +66,8 @@ export function usePointTrend(
   return { history, intervals };
 }
 
-function toWindow(range: string) {
-  const window = rangeWindow(range === "1h" || range === "24h" ? range : "6h", new Date());
+function toWindow(range: RangeKey) {
+  const window = rangeWindow(range, new Date());
   return { from: new Date(window.from), to: new Date(window.to) };
 }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SpacecraftId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -16,7 +17,7 @@ import type { TimeBand } from "@/ui";
  */
 const props = defineProps<{
   missionId: string;
-  spacecraftId: string;
+  spacecraftId: SpacecraftId;
   point: TelemetryPoint;
   range: RangeKey;
   rangeLabel: string;

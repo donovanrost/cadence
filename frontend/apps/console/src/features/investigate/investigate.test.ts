@@ -12,7 +12,7 @@ import { byDay, bytesWords, causeWithOwner, rebooked, recentTag, ruleWords } fro
 import { catalogCaution, jsonWords, routingWords } from "./configuration/api.ts";
 import { filterCounts, pointMark, pointsFrom, toCsv, visiblePoints } from "./telemetry/model.ts";
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { spacecraftId as spacecraftIdReader, decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
 import { spacecraftRow, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import { aosShort, ringDots, sparkPoints } from "./sisters.ts";
@@ -34,7 +34,7 @@ const thresholds = { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 
 function alarmRow(id: string, spacecraftId: string, overrides: Partial<Alarm> = {}): Alarm {
   return {
     id,
-    spacecraft_id: spacecraftId,
+    spacecraft_id: spacecraftIdReader(spacecraftId),
     point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS", unit: "V", description: null },
     severity: "critical",
     active: true,
@@ -504,7 +504,7 @@ describe("B1 no active alarm (§B1)", () => {
 describe("B4 drawing (§B4)", () => {
   const sc = (id: string, over: Partial<FleetSpacecraft> = {}): FleetSpacecraft => ({
     ...spacecraftRow(1),
-    id,
+    id: spacecraftIdReader(id),
     name: id.toUpperCase(),
     plane: 7,
     ...over,
