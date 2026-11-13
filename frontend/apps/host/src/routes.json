@@ -566,20 +566,6 @@
     }
   },
   {
-    "path": "/missions/:mission_id/ops/dashboards/new",
-    "kind": "ops_module",
-    "contribution": "dashboards.creation",
-    "scope": "mission",
-    "mountId": "ops-dashboard-new-component",
-    "queryKeys": ["mode", "source_dashboard_id"],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "New Dashboard",
-      "ops_nav_item": "dashboards"
-    }
-  },
-  {
     "path": "/missions/:mission_id/ops/dashboards/library",
     "kind": "ops_module",
     "contribution": "dashboards.library",

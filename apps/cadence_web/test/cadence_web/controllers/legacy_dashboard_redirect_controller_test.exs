@@ -1,5 +1,5 @@
 defmodule CadenceWeb.LegacyDashboardRedirectControllerTest do
-  @moduledoc "L8 cutover: the legacy dashboards directory, viewer and editor go to the console."
+  @moduledoc "L8 cutover: the legacy dashboards directory, viewer, editor and New go to the console."
   use CadenceWeb.ConnCase, async: true
 
   alias CadenceWeb.TestFixtures
@@ -45,10 +45,14 @@ defmodule CadenceWeb.LegacyDashboardRedirectControllerTest do
              c.console <> "/dash-1?edit=1&from=now-1h&to=now"
   end
 
+  test "New goes to the console's New (L8a)", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/new")) == c.console <> "/new"
+  end
+
   test "another organization's mission goes to /console; signed out goes to sign in", c do
     other = TestFixtures.persist_mission!(TestFixtures.persist_org!())
 
-    for path <- ["", "/dash-1", "/dash-1/edit"] do
+    for path <- ["", "/new", "/dash-1", "/dash-1/edit"] do
       assert redirected_to(get(c.conn, "/missions/#{other.mission_id}/ops/dashboards" <> path)) ==
                "/console"
     end
@@ -57,7 +61,7 @@ defmodule CadenceWeb.LegacyDashboardRedirectControllerTest do
   end
 
   test "the pages the console doesn't have yet stay on the legacy routes", c do
-    for path <- ["/new", "/library", "/playlists", "/dash-1/settings", "/dash-1/activity"] do
+    for path <- ["/library", "/playlists", "/dash-1/settings", "/dash-1/activity"] do
       assert get(c.conn, c.legacy <> path).status == 200
     end
   end

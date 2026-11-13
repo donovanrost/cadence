@@ -1,11 +1,12 @@
 defmodule CadenceWeb.LegacyDashboardRedirectController do
   @moduledoc """
-  L8 cutover (owner: api-ops): the legacy dashboards directory, viewer and editor send the browser
+  L8 cutover (owner: api-ops): the legacy dashboards directory, viewer, editor and New send the browser
   to the console in one hop, so bookmarks and shared links keep working.
 
   - `/missions/:id/ops/dashboards` → `/console/<org>/<mission>/telemetry/dashboards`
   - `/missions/:id/ops/dashboards/:dashboard_id` → `…/telemetry/dashboards/:dashboard_id`
   - `/missions/:id/ops/dashboards/:dashboard_id/edit` → the same with `?edit=1`
+  - `/missions/:id/ops/dashboards/new` → `…/telemetry/dashboards/new` (L8a)
 
   Console URLs carry slugs, legacy ones ids: the slugs come from the signed-in organization's
   mission. A mission that isn't the organization's (or doesn't exist) falls back to `/console`.
@@ -25,6 +26,8 @@ defmodule CadenceWeb.LegacyDashboardRedirectController do
 
   def directory(conn, %{"mission_id" => mission_id} = params),
     do: go(conn, mission_id, "", directory_query(params))
+
+  def new(conn, %{"mission_id" => mission_id}), do: go(conn, mission_id, "/new", %{})
 
   def viewer(conn, %{"mission_id" => mission_id, "dashboard_id" => dashboard_id} = params),
     do: go(conn, mission_id, "/" <> segment(dashboard_id), viewer_query(params))

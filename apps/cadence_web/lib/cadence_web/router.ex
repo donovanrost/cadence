@@ -382,10 +382,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/ops", HostPageLive, :index, metadata: %{host_policy: :ops})
 
-      live("/missions/:mission_id/ops/dashboards/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops_dashboard_author}
-      )
-
       live("/missions/:mission_id/ops/dashboards/library", HostPageLive, :index,
         metadata: %{host_policy: :ops_dashboard_author}
       )
@@ -742,6 +738,9 @@ defmodule CadenceWeb.Router do
     # L8 cutover (owner: api-ops): the legacy directory, viewer and editor go to the console.
     # After the live sessions, so the literal /new, /library, /playlists routes match first.
     get("/missions/:mission_id/ops/dashboards", LegacyDashboardRedirectController, :directory)
+
+    # L8a: New went too; before /:dashboard_id so "new" isn't read as an id.
+    get("/missions/:mission_id/ops/dashboards/new", LegacyDashboardRedirectController, :new)
 
     get(
       "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",

@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsActivityPage do
   Host placement and page-instance admission for dashboard history.
 
   History is read-only: every save is the current version, and comparing or
-  restoring versions happens on the dashboard page (`CadenceWeb.OpsDashboardPage`).
+  restoring versions happens on the console's dashboard page.
   """
   alias Cadence.Reads.Dashboards.Activity
   alias Phoenix.Component

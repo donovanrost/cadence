@@ -2,8 +2,7 @@ defmodule CadenceWeb.Console.DashboardDefaults do
   @moduledoc """
   D9 "save the current range and scope as the default": the `runtime_defaults` command built from
   the staged document's defaults and the viewer's admitted runtime. Ported from the legacy page's
-  save (`CadenceWeb.OpsDashboardPage.Actions` `stage_defaults/4`, `defaults_from/3`), which goes
-  away with the legacy pages (DECISIONS #75).
+  save, which went with the legacy pages (L8a, DECISIONS #79).
   """
 
   alias Cadence.Dashboards.{AuthoringDefaults, Document}

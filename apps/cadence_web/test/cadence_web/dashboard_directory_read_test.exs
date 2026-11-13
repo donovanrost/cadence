@@ -1,8 +1,8 @@
-defmodule CadenceWeb.OpsDirectoryPageTest do
+defmodule CadenceWeb.DashboardDirectoryReadTest do
   @moduledoc """
-  The dashboards directory read model (`Reads.Dashboards.Directory`). The legacy page tests went with
-  the L8 cutover; their cross-organization and revoked-session checks moved to
-  `Console.DashboardDirectoryAPITest`.
+  The dashboards directory read model (`Reads.Dashboards.Directory`), which the console's directory
+  API serves. The legacy page and its frontend contract check went with L8a; the cross-organization
+  and revoked-session checks are in `Console.DashboardDirectoryAPITest`.
   """
   use CadenceWeb.ConnCase, async: false
   alias Cadence.Auth.Scope
@@ -15,11 +15,6 @@ defmodule CadenceWeb.OpsDirectoryPageTest do
              "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
              __DIR__
            )
-
-  @renderer Path.expand(
-              "../../../../frontend/modules/dashboards-and-exploration/src/features/directory/producer-render-check.mjs",
-              __DIR__
-            )
 
   setup do
     org = TestFixtures.persist_org!()
@@ -89,10 +84,6 @@ defmodule CadenceWeb.OpsDirectoryPageTest do
     # Bookmarks from the earlier directory still resolve.
     assert names(c, %{"lifecycle" => "all", "tag" => "old", "sort" => "widgets"}) ==
              ["Archived board"]
-
-    {:ok, all} = Directory.load(c.scope, mission(c), %{"archived" => "true"})
-    {:ok, empty} = Directory.load(c.scope, mission(c), %{"query" => "nothing-matches"})
-    render_check([model, all, empty])
 
     other = member_scope(c)
 
@@ -168,16 +159,6 @@ defmodule CadenceWeb.OpsDirectoryPageTest do
     user = TestFixtures.persist_user!()
     membership = TestFixtures.grant_membership!(user, c.org)
     Scope.new(%{user: user, organization_id: org(c), organization_membership: membership})
-  end
-
-  defp render_check(models) do
-    node = System.find_executable("node") || flunk("Node is required for the directory contract")
-    pages = Enum.map(models, &%{model: &1, sequence: 0})
-
-    {output, status} =
-      System.cmd(node, ["--no-warnings", @renderer, Jason.encode!(pages)], stderr_to_stdout: true)
-
-    assert status == 0, output
   end
 
   defp org(c), do: c.org.organization_id
