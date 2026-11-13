@@ -32,9 +32,9 @@ Commit 4d92b1f5e.
 | Item | Direction | State |
 | --- | --- | --- |
 | Pass review `by_station[]` had no `failed`; the console's lenient count read 0 | server→doc | **fixed** 67187baea, exact-shape test |
-| `POST /attention/:source/:id/resolve` answers `state: "resolved"` (doc and server agree); the console's `attentionReader` accepts only `open \| acknowledged`, so a successful resolve shows as unclear | console | fe-ops |
-| `/passes` `spacecraft.name` null for a deleted spacecraft (doc and server agree); the console reads `d.string`, so the whole list fails | console | fe-ops |
-| Pass review `freshness[].cursor_healthy` null without a cursor; `freshness[].provider` can be null; rows `station.ref` null without a ground station ref. The console reads all three as non-null | console + doc | fe-ops; doc after their reader |
+| `POST /attention/:source/:id/resolve` answers `state: "resolved"` (doc and server agree); the console's `attentionReader` accepts only `open \| acknowledged`, so a successful resolve shows as unclear | console | **fixed** fe-ops 3aec78162 |
+| `/passes` `spacecraft.name` null for a deleted spacecraft (doc and server agree); the console reads `d.string`, so the whole list fails | console | **fixed** fe-ops 3aec78162 ("Deleted spacecraft") |
+| Pass review `freshness[].cursor_healthy` null without a cursor; `freshness[].provider` can be null; rows `station.ref` null without a ground station ref. The console read all three as non-null | console + doc | **fixed** fe-ops 3aec78162 (decode test on the nulls); doc 85f793df0 |
 | contacts.md:198 says row `attention` carries only `pass_resolution`; it also carries `pass_release` and `provider_change` (as :148-150, :293 say) | doc→server | doc fix below |
 | `cost` is `{amount, currency} \| null`; `pass_phase`, `delivery_state`, `source.provider_name`, `source.synthetic` can be null | doc→server | doc fix below |
 | L14 `provider_change.expired` (boolean) undocumented; history `resolution.action` can also be `observed`, `apply_failed` | doc→server | doc fix below |
@@ -72,11 +72,12 @@ Commit 4d92b1f5e.
 | Item | Owner | Direction | State |
 | --- | --- | --- | --- |
 | Routing groups `transport.name` null for a rule on an archived transport; the console's groups read fails | api | server→doc | **fixed** 6956b31e5 (falls back to the id), test |
-| PA2 `credential.version` / `status` null when the credential record is missing; the console's PA2 decode fails | api-ops (L13) | server→doc | sent to api-ops |
-| PA2 `grants[].mission.name` can be null; the console reads a string | api-ops | server→doc | sent to api-ops |
-| Mission providers `account.id` / `account.name` null for a direct provider; `policy_mode` null without `mode`; the console's list decode fails | api-ops (L12) | server→doc | sent to api-ops |
-| Mission providers `grant.version` is the bound version, not the grant's current one | api-ops | doc→server | sent to api-ops |
-| PA1 create: a bad `base_url` answers `422 invalid_provider_account_base_url` with no details; a blank name answers `invalid_params {settings}`. The doc says `invalid_params` naming the field; the console maps `settings.base_url` and `name` | api | server→doc | fe-setup OK'd (their form maps both) |
-| Revoke grant / credential: a missing expected version answers 422 naming it (undocumented) | api-ops | doc→server | sent to api-ops |
-| `display_name` limit is 120 bytes (doc: characters); `bounded.minimum_retained_duration_seconds` optional | api-ops | doc→server | sent to api-ops |
-| No exact-shape test in this area | api / api-ops | tests | routing groups done; PA1 with the create fix |
+| PA2 `credential.version` / `status` null when the credential record is missing; the console's PA2 decode fails | api-ops (L13) | shape change | proposed by api-ops to fe-setup: `status: "missing"`, `version: null`; ships with their reader |
+| PA2 `grants[].mission.name` can be null; the console reads a string | api-ops | server→doc | **fixed** api-ops 4b203c504 (falls back to the id) |
+| Mission providers `policy_mode` null without `mode` | api-ops (L12) | server→doc | **fixed** api-ops 4b203c504 (`approval_required`) |
+| Mission providers `account.id` / `account.name` null for a direct provider; the console's list decode fails | api-ops (L12) | shape change | proposed by api-ops to fe-setup: `account: null`; ships with their reader |
+| Mission providers `grant.version` is the bound version, not the grant's current one | api-ops | doc→server | **fixed** api-ops (setup.md) |
+| PA1 create: a bad `base_url` answers `422 invalid_provider_account_base_url` with no details; a blank name answers `invalid_params {settings}`. The doc says `invalid_params` naming the field; the console maps `settings.base_url` and `name` | api | server→doc | **fixed** df82d460b (fe-setup OK'd; checked before the credential is registered), exact-shape test |
+| Revoke grant / credential: a missing expected version answers 422 naming it (undocumented) | api-ops | doc→server | **fixed** api-ops (setup.md) |
+| `display_name` limit is 120 bytes (doc: characters); `bounded.minimum_retained_duration_seconds` optional | api-ops | doc→server | **fixed** api-ops (setup.md) |
+| No exact-shape test in this area | api / api-ops | tests | routing groups and PA1 create done |
