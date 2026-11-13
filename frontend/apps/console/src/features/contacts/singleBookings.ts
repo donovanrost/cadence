@@ -13,10 +13,10 @@ import { passReader } from "./api.ts";
 /**
  * §11 L15 single bookings outside a plan (proposal plans/single-bookings.md; ux Contacts.md § Book a
  * pass). Search over the spacecraft's ready routes, reserve one offer by its signed token
- * (idempotent), release through the pass's usual Release. Built against fixtures: the entries stay
- * off until the endpoints exist.
+ * (idempotent), release through the pass's usual Release. Live since api 1ef9e85ef (qa's live
+ * check 11-13); flip back to false to hide the entries.
  */
-export const SINGLE_BOOKINGS_LIVE = false;
+export const SINGLE_BOOKINGS_LIVE = true;
 
 /** The provider's own cost, passed through (search.ex); anything but a number reads as unknown. */
 const costReader: Reader<number | null> = (value) => (typeof value === "number" ? value : null);
