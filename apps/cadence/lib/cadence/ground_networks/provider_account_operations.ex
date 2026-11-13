@@ -32,7 +32,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
     end
   end
 
-  defp provider_account_action(scope, "revoke_provider_credential", account_id, _params) do
+  defp provider_account_action(scope, "revoke_provider_credential", account_id, params) do
     with {:ok, _account, version} <-
            ProviderAccounts.fetch(scope, account_id),
          {:ok, _result} <-
@@ -40,7 +40,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
              scope,
              account_id,
              version.credential_ref,
-             provider_account_opts()
+             Keyword.put(provider_account_opts(), :reason, optional_text(value(params, "reason")))
            ),
          # The account's own status follows its active credential, or every reader of the
          # account (lists, PA1) keeps showing a revoked credential as active.

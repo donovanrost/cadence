@@ -363,12 +363,12 @@ Under `/organizations/:organization_id`, in the organization the path names:
 ### Provider accounts (PA1, organization admins)
 
 - `GET /provider-accounts` → `{accounts: [{id, name, provider: {key, label}, status: "connected" |
-  "auth_failed" | "not_checked", status_detail, expires_at: null, last_success_at, missions: [{id,
+  "credential_revoked" | "not_checked", status_detail, expires_at: null, last_success_at, missions: [{id,
   name}], added_at, added_by: {name} | null}], adapters: [{key, label}], permissions:
   ["provider_accounts.manage"]}`.
   - `missions` lists the missions whose ground-network providers use the account.
-  - `status` is `auth_failed` when the credential is revoked, and `not_checked` before a first
-    successful test.
+  - `status` is `credential_revoked` when the account's credential is revoked (L13; older
+    servers sent `auth_failed`), and `not_checked` before a first successful test.
   - There's no `expiring`: credentials carry no expiry yet.
 - `GET /provider-accounts/:id/versions` → `{id, name, current_version, versions: [{version,
   created_at, actor: {kind: "user" | "system", id, name} | null, changes: [{field, label, before,
@@ -401,6 +401,48 @@ Under `/organizations/:organization_id`, in the organization the path names:
   name}]`. `409 already_retired`.
 - Writes need `provider_accounts.manage` (organization admin). Errors: `422 invalid_params`
   (`provider_key`, `credential`, `settings`), `403 forbidden`.
+
+### Provider-account grants and credential (L13, organization admins; owner: api-ops)
+
+Under `/organizations/:organization_id/provider-accounts/:id`. Every route needs
+`provider_accounts.manage`, else `403 forbidden`; an unknown account is `404
+provider_account_not_found`. A stale view answers which thing changed, with its current version in
+`details.version`, so the console can reload just that.
+
+- `GET /` (PA2) → `{account: <PA1 row> + {version, credential: {ref, version, status: "active" |
+  "revoked"}, guardrails: {allowed_services: [..] | null, allowed_stations: [..] | null}}, grants:
+  [<grant>], permissions}`.
+  - `credential.ref` is masked (`"…"` and the last 6 characters). The reference isn't a secret,
+    but the console only needs to recognise it.
+  - `grants` is every grant of the account (active and revoked; the latest version of each),
+    newest first.
+  - `<grant>`: `{id, version, mission: {id, name}, state: "active" | "revoked", allowed_services:
+    [..] | null, allowed_stations: [..] | null, max_quota: int | null, reason: string | null,
+    granted_by: {id, name} | null, granted_at, revoked_by: {id, name} | null, revoked_at | null,
+    revoke_reason | null}`. A `null` restriction means the account's own guardrail applies.
+- `POST /grants` `{mission_id, allowed_services?, allowed_stations?, max_quota?, reason?,
+  expected_account_version}` → `201 {grant}`.
+  - The server rebuilds the credential reference and its version from the account version.
+  - `409 account_changed {version}`, `409 account_archived`.
+  - `422 invalid_params` with the field:
+    - a restriction that widens the account's guardrails: `allowed_services`,
+      `allowed_stations` or `max_quota`;
+    - a malformed value;
+    - `mission_id` (missing, or not this organization's);
+    - `expected_account_version` missing.
+- `POST /grants/:grant_id/revoke` `{reason, expected_grant_version}` → `200 {grant,
+  flagged_reservations}`. `flagged_reservations` is how many open bookings that carry the grant
+  now wait for an operator's review.
+  - `422 invalid_params {reason: "Say why."}`.
+  - `409 grant_changed {version}`, `409 grant_already_revoked`.
+  - `404 account_grant_not_found` (also for another account's grant).
+- `POST /credential/revoke` `{reason, expected_credential_version}` → `200 {account: <PA1 row>}`.
+  - The row's `status` is `credential_revoked`.
+  - The reason is recorded in the credential's audit entry.
+  - Every mission provider on the account fails at credential resolve until the account points
+    at a new reference.
+  - `422 invalid_params {reason}`; `409 credential_changed {version}`; `409
+    credential_already_revoked`.
 
 ### `GET /audit` (AU1, organization admins)
 

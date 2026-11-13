@@ -66,12 +66,19 @@ defmodule Cadence.Control.Providers do
   @spec revoke_account_grant(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, struct()} | {:error, term()}
   def revoke_account_grant(%Scope{} = scope, grant_id, reason, opts \\ []) do
+    with {:ok, revoked, _flagged} <- revoke_account_grant_flagging(scope, grant_id, reason, opts),
+         do: {:ok, revoked}
+  end
+
+  @doc "`revoke_account_grant/4`, also answering how many open reservations now need review."
+  @spec revoke_account_grant_flagging(Scope.t(), binary(), binary(), keyword()) ::
+          {:ok, struct(), non_neg_integer()} | {:error, term()}
+  def revoke_account_grant_flagging(%Scope{} = scope, grant_id, reason, opts \\ []) do
     now = Keyword.get(opts, :now, DateTime.utc_now())
 
     with {:ok, revoked} <- ProviderAccountGrants.revoke(scope, grant_id, reason, opts),
-         {:ok, _affected_count} <-
-           ProviderGrants.mark_reservations_for_review(revoked, now) do
-      {:ok, revoked}
+         {:ok, flagged} <- ProviderGrants.mark_reservations_for_review(revoked, now) do
+      {:ok, revoked, flagged}
     end
   end
 

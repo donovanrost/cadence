@@ -4,8 +4,8 @@ defmodule Cadence.Management.ProviderAccountDirectory do
   each account's connection status and the missions whose providers use it.
   `test/2` runs the real credential check (`ProviderAccounts.validate/3`).
 
-  Status: `auth_failed` when the credential is revoked; `not_checked` before
-  a first successful validation; otherwise `connected`. `expires_at` is
+  Status: `credential_revoked` when the credential is revoked (L13); `not_checked`
+  before a first successful validation; otherwise `connected`. `expires_at` is
   always `nil` (credentials carry no expiry yet), so there's no `expiring`.
   """
 
@@ -81,6 +81,11 @@ defmodule Cadence.Management.ProviderAccountDirectory do
       else: []
   end
 
+  @doc "One account's PA1 row (PA2 builds on it)."
+  @spec account_row(ProviderAccount.t(), struct()) :: map()
+  def account_row(%ProviderAccount{} = account, version),
+    do: row(account, version, missions_by_account(account.organization_id))
+
   defp row(%ProviderAccount{} = account, version, used_by) do
     %{
       id: account.provider_account_id,
@@ -96,12 +101,12 @@ defmodule Cadence.Management.ProviderAccountDirectory do
     }
   end
 
-  defp status(%ProviderAccount{credential_status: :revoked}), do: :auth_failed
+  defp status(%ProviderAccount{credential_status: :revoked}), do: :credential_revoked
   defp status(%ProviderAccount{last_validated_at: nil}), do: :not_checked
   defp status(_account), do: :connected
 
   defp detail(%ProviderAccount{credential_status: :revoked}),
-    do: "The credentials were revoked. Replace them to reconnect."
+    do: "The credential was revoked. Point the account at a new reference to reconnect."
 
   defp detail(%ProviderAccount{last_validated_at: nil}), do: "Not checked yet."
   defp detail(_account), do: nil

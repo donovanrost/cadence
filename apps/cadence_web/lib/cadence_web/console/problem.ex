@@ -59,6 +59,12 @@ defmodule CadenceWeb.Console.Problem do
     provider_account_not_found: {404, "Provider account not found."},
     provider_adapter_not_found: {404, "Provider adapter not found."},
     in_use: {409, "Missions still use this. Move them to another account first."},
+    account_changed: {409, "This account changed since you loaded it."},
+    account_archived: {409, "This account was removed."},
+    account_grant_not_found: {404, "Grant not found."},
+    grant_already_revoked: {409, "This grant was already revoked."},
+    credential_changed: {409, "The credential changed since you loaded it."},
+    credential_already_revoked: {409, "This credential was already revoked."},
     already_retired: {409, "This account was already removed."},
     settings_enforced_by_organization:
       {409, "The organization doesn't let missions change this setting."},

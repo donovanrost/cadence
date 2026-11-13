@@ -2,10 +2,9 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
   @moduledoc """
   Organization and Provider Account-scoped credential lifecycle registry.
 
-  Changes (created, rotated, revoked) and their failures are audited. A routine resolve isn't:
-  providers resolve on every call (about 12/s on :4011, qa #51), so it only touches
-  `last_resolved_at`, at most every 300 s, and a failing resolve is audited at most once per
-  credential in that time.
+  Changes (created, rotated, revoked, with the `:reason` given) and their failures are audited.
+  A routine resolve isn't: providers resolve on every call (about 12/s on :4011, qa #51), so it
+  only touches `last_resolved_at` at most every 300 s; a failing one is audited once per window.
   """
 
   import Ecto.Query
@@ -299,7 +298,8 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
       credential_backend_version: text_value(Map.get(backend_metadata, :backend_version)),
       source_document: %{
         "kind" => "provider_credential_registry",
-        "backend_type" => Atom.to_string(credential.backend_type)
+        "backend_type" => Atom.to_string(credential.backend_type),
+        "reason" => Keyword.get(opts, :reason)
       },
       actor_document: Keyword.get(opts, :actor, %{"kind" => "system"}),
       current_document: %{

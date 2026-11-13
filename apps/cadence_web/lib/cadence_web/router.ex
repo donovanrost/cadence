@@ -1125,6 +1125,22 @@ defmodule CadenceWeb.Router do
       get("/provider-accounts", ProviderAccountController, :index)
       post("/provider-accounts/:id/test", ProviderAccountController, :test)
       get("/provider-accounts/:id/versions", ProviderAccountController, :versions)
+      # L13 PA2 detail, grants and credential revoke (owner: api-ops).
+      get("/provider-accounts/:id", ProviderAccountGrantController, :show)
+      post("/provider-accounts/:id/grants", ProviderAccountGrantController, :grant)
+
+      post(
+        "/provider-accounts/:id/grants/:grant_id/revoke",
+        ProviderAccountGrantController,
+        :revoke_grant
+      )
+
+      post(
+        "/provider-accounts/:id/credential/revoke",
+        ProviderAccountGrantController,
+        :revoke_credential
+      )
+
       post("/provider-accounts", ProviderAccountController, :create)
       put("/provider-accounts/:id", ProviderAccountController, :update)
       delete("/provider-accounts/:id", ProviderAccountController, :delete)
