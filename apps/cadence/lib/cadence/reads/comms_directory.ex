@@ -94,7 +94,8 @@ defmodule Cadence.Reads.CommsDirectory do
       name: provider.display_name,
       provider_type: provider.provider_type,
       version: provider.version,
-      policy_mode: (provider.delivery_policy_document || %{})["mode"],
+      # A policy without a mode is approval_required, as DeliveryPolicy.normalize/1 reads it.
+      policy_mode: (provider.delivery_policy_document || %{})["mode"] || "approval_required",
       account: %{
         id: provider.provider_account_id,
         name: account_name(scope, provider.provider_account_id)

@@ -135,6 +135,18 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
            |> json_response(403)
   end
 
+  test "a policy without a mode lists as approval_required, never null", c do
+    id = create!(c)["id"]
+
+    Cadence.Repo.query!(
+      "UPDATE mission_providers SET delivery_policy_document = delivery_policy_document - 'mode' WHERE provider_id = $1",
+      [id]
+    )
+
+    assert %{"providers" => [%{"id" => ^id, "policy_mode" => "approval_required"}]} =
+             c |> admin() |> get(c.base) |> json_response(200) |> Map.fetch!("data")
+  end
+
   test "create refuses a stale or revoked grant and names bad fields", c do
     body = %{
       "grant_id" => c.grant.provider_account_grant_id,

@@ -500,6 +500,7 @@ provider_account_not_found`. A stale view answers which thing changed, with its 
     [..] | null, allowed_stations: [..] | null, max_quota: int | null, reason: string | null,
     granted_by: {id, name} | null, granted_at, revoked_by: {id, name} | null, revoked_at | null,
     revoke_reason | null}`. A `null` restriction means the account's own guardrail applies.
+    `mission.name` is always a string: a mission with no name on record reads as its id.
 - `POST /grants` `{mission_id, allowed_services?, allowed_stations?, max_quota?, reason?,
   expected_account_version}` → `201 {grant}`.
   - The server rebuilds the credential reference and its version from the account version.
@@ -513,7 +514,8 @@ provider_account_not_found`. A stale view answers which thing changed, with its 
 - `POST /grants/:grant_id/revoke` `{reason, expected_grant_version}` → `200 {grant,
   flagged_reservations}`. `flagged_reservations` is how many open bookings that carry the grant
   now wait for an operator's review.
-  - `422 invalid_params {reason: "Say why."}`.
+  - `422 invalid_params {reason: "Say why."}`; `422 invalid_params {expected_grant_version}`
+    when it's missing.
   - `409 grant_changed {version}`, `409 grant_already_revoked`.
   - `404 account_grant_not_found` (also for another account's grant).
 - `POST /credential/revoke` `{reason, expected_credential_version}` → `200 {account: <PA1 row>}`.
@@ -521,8 +523,8 @@ provider_account_not_found`. A stale view answers which thing changed, with its 
   - The reason is recorded in the credential's audit entry.
   - Every mission provider on the account fails at credential resolve until the account points
     at a new reference.
-  - `422 invalid_params {reason}`; `409 credential_changed {version}`; `409
-    credential_already_revoked`.
+  - `422 invalid_params {reason}`, or `{expected_credential_version}` when it's missing; `409
+    credential_changed {version}`; `409 credential_already_revoked`.
 
 ### `GET /audit` (AU1, organization admins)
 
@@ -869,8 +871,11 @@ the Stations · Providers tab, sorted by name.
 
 - `account.name` is `null` for members (only organization admins can read accounts).
 - `grant` is `null` only for a provider bound without an account grant (older, direct bindings).
-  `state` is the grant's current state: a revoked grant leaves the provider in place but unusable
-  until it's archived or rebound.
+  `grant.version` is the grant version the provider was **bound at**, not the grant's current
+  version. `state` is the grant's current state: a revoked grant leaves the provider in place but
+  unusable until it's archived or rebound.
+- `policy_mode` is always one of the two keys: a policy recorded without a mode reads
+  `approval_required`, which is how the domain applies it.
 - `<health>` is `{status: "healthy" | "failed" | null, checked_at | null, error | null}`, the
   provider's own record of its last validate and sync. `null` means never checked. `error` is a
   sentence for a person, not provider evidence.
@@ -886,7 +891,7 @@ forbidden`. Each answers with the provider's row as the list shows it.
   allowed_stations: [..] | null, allowed_services: [..] | null}], policy_modes: [{key, label}],
   deadline_behaviors: [{key, label}]}`. `grants` are this mission's active account grants.
 - `POST /` `{grant_id, display_name, policy_mode, deadline_behavior?, permitted_resource_refs?:
-  [..], bounded?: {approved_station_substitutions?: [..], minimum_retained_duration_seconds,
+  [..], bounded?: {approved_station_substitutions?: [..], minimum_retained_duration_seconds?,
   maximum_earlier_start_shift_seconds?, maximum_later_start_shift_seconds?,
   maximum_earlier_end_shift_seconds?, maximum_later_end_shift_seconds?}, expected_grant_version?}`
   → `201 {provider}`.
@@ -894,7 +899,8 @@ forbidden`. Each answers with the provider's row as the list shows it.
   - `bounded` is read only for `policy_mode: "bounded_automatic"`.
   - `409 grant_revoked`; `409 grant_changed {version}` when `expected_grant_version` is stale.
   - `422 invalid_params` names the field: `grant_id` (unknown, or another mission's),
-    `display_name` (1 to 120 characters), `policy_mode`, `deadline_behavior`,
+    `display_name` (1 to 120 bytes after trimming, so fewer characters outside ASCII),
+    `policy_mode`, `deadline_behavior`,
     `permitted_resource_refs` (outside the grant's or account's stations, or malformed),
     `approved_station_substitutions`, or `bounded` (a shift limit).
 - `POST /:id/validate` → `200 {provider, result: {ok, message | null}}`.

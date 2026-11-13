@@ -46,7 +46,8 @@ defmodule Cadence.Management.Providers.ProviderAccountDetail do
     %{
       id: grant.provider_account_grant_id,
       version: grant.version,
-      mission: %{id: grant.mission_id, name: Map.get(names, grant.mission_id)},
+      # A mission with no name on record reads as its id (the console shows a string).
+      mission: %{id: grant.mission_id, name: Map.get(names, grant.mission_id) || grant.mission_id},
       state: grant.lifecycle_state,
       allowed_services: list(restrictions, "allowed_services"),
       allowed_stations: list(restrictions, "allowed_stations"),
