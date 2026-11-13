@@ -14,6 +14,7 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
   import Ecto.Query
 
   alias Cadence.Accounts
+  alias Cadence.Contacts.ProviderChangeApprovals
   alias Cadence.Control.Contacts.Store.{ProviderReservationChangeRow, ProviderReservationRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
@@ -25,6 +26,19 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
     "configuration_failure" => "configuration_failure"
   }
   @decided ~w(approved rejected acknowledged superseded)
+
+  # Draft words for the fields a provider changes (ux U44 may reword them); unknown keys read nil.
+  @labels %{
+    "starts_at" => "Start (AOS)",
+    "ends_at" => "End (LOS)",
+    "ground_station_ref" => "Station",
+    "antenna_or_service_pool_ref" => "Antenna",
+    "service_profile_ref" => "Service profile",
+    "delivery_profile_ref" => "Delivery profile",
+    "spacecraft_ref" => "Spacecraft",
+    "pass_phase" => "Pass phase",
+    "status" => "Status"
+  }
 
   def source, do: @source
 
@@ -57,7 +71,9 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
         source: @source,
         resolved_by: resolver(row, names),
         action: row.lifecycle_state,
-        resolved_at: row.decided_at || row.updated_at
+        resolved_at: row.decided_at || row.updated_at,
+        # U44: "Approved by Mira K. at 02:31Z: <reason>."
+        note: note(org, row)
       }
     end
   end
@@ -133,6 +149,15 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
     }
   end
 
+  defp note(_org, %{lifecycle_state: "superseded"}), do: nil
+
+  defp note(org, row) do
+    case ProviderChangeApprovals.fetch(org, row.provider_reservation_change_id) do
+      {:ok, approval} -> approval.reason
+      _none -> nil
+    end
+  end
+
   # 64-bit safe: values travel as JSON text.
   defp fields(document) do
     (JsonDocument.unwrap_value(document) || %{})
@@ -140,7 +165,7 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
     |> Enum.map(fn {field, values} ->
       %{
         field: field,
-        label: nil,
+        label: Map.get(@labels, field),
         before_json: Jason.encode!(values["before"]),
         after_json: Jason.encode!(values["after"])
       }

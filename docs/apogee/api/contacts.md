@@ -125,9 +125,21 @@ per open change, `id` = the change id, `conflict`:
 
 The item carries the usual `contact_id`, `station`, `provider`, `starts_at` and `raised_at`, plus
 `deadline_at` and `provider_change: {id, classification, state, deadline_at, provider_revision,
-proposal_hash, already_effective, fields: [{field, label: null, before_json, after_json}]}`. Values
-are JSON text, so they're 64-bit safe. The item resolves when the change is decided (`action`
-`approved | rejected | acknowledged`, `resolved_by` the user) or superseded (`system`).
+proposal_hash, already_effective, fields: [{field, label, before_json, after_json}]}`. Values are
+JSON text, so they're 64-bit safe.
+- `label` is the server's word for the known keys: `starts_at` "Start (AOS)", `ends_at` "End
+  (LOS)", `ground_station_ref` "Station", `antenna_or_service_pool_ref` "Antenna",
+  `service_profile_ref` "Service profile", `delivery_profile_ref` "Delivery profile",
+  `spacecraft_ref` "Spacecraft", `pass_phase` "Pass phase", `status` "Status". It's null for any
+  other key.
+- The item resolves when the change is decided (`action` `approved | rejected | acknowledged`,
+  `resolved_by` the user, `note` = the decision's reason) or superseded (`system`, `note` null).
+- **At the deadline Cadence does nothing by itself.** Approve and reject are refused from then on
+  (`409 provider_change_deadline_passed`), and the change stays open until the provider's next
+  revision supersedes it: the provider decides.
+- Pass rows (`GET /passes`, `/passes/:id`) carry an open provider-change item as their
+  `attention`. Precedence: a booking resolution, then an approval, then another provider change,
+  then a failed release.
 
 `POST …/attention/provider_change/:id/approve | reject | acknowledge {reason, proposal_hash}` →
 `200 {item: <the attention object> | null}` (null once decided). Organization admins only:

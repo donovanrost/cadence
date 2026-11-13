@@ -60,8 +60,8 @@ defmodule CadenceWeb.Console.PassController do
     # provider didn't confirm); a blocked uplink shows through uplink_readiness instead.
     {resolutions, blocked} =
       items
-      |> Enum.sort_by(&if(&1.source == "pass_resolution", do: 1, else: 0))
-      |> Enum.split_with(&(&1.source in ["pass_resolution", "pass_release"]))
+      |> Enum.sort_by(&attention_rank/1)
+      |> Enum.split_with(&(&1.source in ["pass_resolution", "pass_release", "provider_change"]))
 
     conn
     |> with_replacements(result)
@@ -214,6 +214,13 @@ defmodule CadenceWeb.Console.PassController do
 
   # U32: each booking's open or acknowledged pass-resolution item (the drawer's attention block),
   # for viewers who operate the mission. A blocked uplink shows in `uplink_readiness` instead.
+  # One item per pass, the highest rank winning (the last one kept): a booking resolution, then a
+  # provider change awaiting approval (L14, fe-ops), another provider change, then a failed release.
+  defp attention_rank(%{source: "pass_resolution"}), do: 3
+  defp attention_rank(%{source: "provider_change", conflict: "approval_required"}), do: 2
+  defp attention_rank(%{source: "provider_change"}), do: 1
+  defp attention_rank(_item), do: 0
+
   defp with_attention(result, _conn, []), do: result
 
   defp with_attention(%{passes: passes} = result, conn, items) do

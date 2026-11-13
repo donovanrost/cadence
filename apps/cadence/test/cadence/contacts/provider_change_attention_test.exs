@@ -27,7 +27,12 @@ defmodule Cadence.Contacts.ProviderChangeAttentionTest do
            } = item
 
     assert reservation_id == c.reservation.provider_reservation_id
-    assert Enum.any?(fields, &(&1.field == "starts_at" and is_binary(&1.after_json)))
+
+    assert Enum.any?(
+             fields,
+             &(&1.field == "starts_at" and &1.label == "Start (AOS)" and is_binary(&1.after_json))
+           )
+
     assert %{open: 1} = ProviderChangeAttention.counts(c.organization_id, c.mission_id)
 
     assert {:ok, %{items: items}} = Attention.load(c.admin_scope, c.mission_id)
@@ -39,7 +44,14 @@ defmodule Cadence.Contacts.ProviderChangeAttentionTest do
     assert [] = ProviderChangeAttention.items(c.organization_id, c.mission_id)
     since = DateTime.add(DateTime.utc_now(), -60)
 
-    assert [%{id: id, action: "approved", resolved_by: %{"kind" => "user"}}] =
+    assert [
+             %{
+               id: id,
+               action: "approved",
+               resolved_by: %{"kind" => "user"},
+               note: "Inside the plan"
+             }
+           ] =
              ProviderChangeAttention.resolved_since(c.organization_id, c.mission_id, since)
 
     assert id == item.id

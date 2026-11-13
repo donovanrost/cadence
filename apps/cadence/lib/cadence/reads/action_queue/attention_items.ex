@@ -296,7 +296,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
         name: resolved_name(by, names)
       },
       action: entry.action,
-      resolved_at: entry.resolved_at
+      resolved_at: entry.resolved_at,
+      note: Map.get(entry, :note)
     }
   end
 
