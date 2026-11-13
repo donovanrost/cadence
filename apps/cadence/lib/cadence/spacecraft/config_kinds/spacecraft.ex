@@ -1,9 +1,13 @@
 defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   @moduledoc """
-  Change-set kind for spacecraft identity and profile pin.
+  Change-set kind for spacecraft identity, profile pin and its commanding and telemetry switches.
 
   Document: `%{"display_name", "scid", "spacecraft_type_id", "spacecraft_type_version",
-  "metadata"}`. Deleting a spacecraft archives it (#49/#50): it leaves the mission's lists, fleet
+  "metadata", "commanding_enabled", "telemetry_enabled"}`. The switches (L22) are what a change
+  set set: `true`/`false`, or `nil` while the spacecraft's own configuration still decides (the
+  configuration read shows that running value). Setting one is a runtime generation (the
+  configuration follows, `Cadence.Control.ConfigurationSwitches`), with the HOLDs in
+  `SwitchCompatibility`. Deleting a spacecraft archives it (#49/#50): it leaves the mission's lists, fleet
   and planning but keeps its id, SCID and history. Archiving one that has had traffic (provider
   reservations or command requests) raises a `spacecraft_has_traffic` HOLD.
 
@@ -21,7 +25,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
-  @fields ~w(display_name scid spacecraft_type_id spacecraft_type_version metadata)
+  @switches ~w(commanding_enabled telemetry_enabled)
+  @fields ~w(display_name scid spacecraft_type_id spacecraft_type_version metadata) ++ @switches
   @governed_key "spacecraft_configuration_revision_id"
   @synthetic_prefix "spacecraft_configuration_profile_"
   @pin_keys ["spacecraft_type_id", "spacecraft_type_version"]
@@ -56,7 +61,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
         F.integer(document, "scid", 0..1023, label: "SCID") ++
         F.text(document, "spacecraft_type_id", 1..120, label: "Profile") ++
         F.integer(document, "spacecraft_type_version", 1..1_000_000, label: "Profile version") ++
-        F.map(document, "metadata") ++ pin_pair(document)
+        F.map(document, "metadata") ++ pin_pair(document) ++ switch_errors(document)
 
     F.result(document, errors)
   end
@@ -79,12 +84,22 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   @impl true
   def write(organization_id, mission_id, :create, id, nil, proposed, _options) do
     spacecraft = asset(organization_id, mission_id, id, proposed)
-    stored(SpacecraftStore.persist_spacecraft(organization_id, spacecraft))
+
+    with {:ok, created} <- SpacecraftStore.persist_spacecraft(organization_id, spacecraft) do
+      organization_id
+      |> put_switches(mission_id, id, %{}, proposed, created)
+      |> stored(organization_id, mission_id)
+    end
   end
 
-  def write(organization_id, mission_id, :update, id, _previous, proposed, _options) do
+  def write(organization_id, mission_id, :update, id, previous, proposed, _options) do
     spacecraft = asset(organization_id, mission_id, id, proposed)
-    stored(SpacecraftStore.update_spacecraft(organization_id, spacecraft))
+
+    with {:ok, updated} <- SpacecraftStore.update_spacecraft(organization_id, spacecraft) do
+      organization_id
+      |> put_switches(mission_id, id, previous || %{}, proposed, updated)
+      |> stored(organization_id, mission_id)
+    end
   end
 
   def write(organization_id, mission_id, :delete, id, _previous, nil, options) do
@@ -131,8 +146,38 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   def summary(:create, nil, proposed), do: "Add spacecraft #{proposed["display_name"]}"
   def summary(_action, previous, _proposed), do: "Edit spacecraft #{previous["display_name"]}"
 
+  # A switch change rebuilds the runtime (the configuration follows it); identity doesn't.
   @impl true
+  def runtime_impact(:update, previous, proposed) when is_map(previous) and is_map(proposed),
+    do: if(switch_changes(previous, proposed) == %{}, do: :none, else: :generation)
+
   def runtime_impact(_action, _previous, _proposed), do: :none
+
+  # Absent or nil leaves a switch as it is (older recorded documents, rollbacks).
+  defp switch_errors(document) do
+    for key <- @switches,
+        not is_nil(document[key]),
+        not is_boolean(document[key]),
+        do: F.error(key, "Choose on or off")
+  end
+
+  # Only switches the change set moves are written: an edit of the name doesn't make the change
+  # set the writer of a switch it never touched.
+  defp switch_changes(previous, proposed) do
+    for key <- @switches,
+        Map.has_key?(proposed, key),
+        is_boolean(proposed[key]),
+        proposed[key] != Map.get(previous, key),
+        into: %{},
+        do: {String.to_existing_atom(key), proposed[key]}
+  end
+
+  defp put_switches(organization_id, mission_id, id, previous, proposed, written) do
+    case switch_changes(previous, proposed) do
+      changes when changes == %{} -> {:ok, written}
+      changes -> SpacecraftStore.put_switches(organization_id, mission_id, id, changes)
+    end
+  end
 
   defp pin_pair(%{"spacecraft_type_id" => id, "spacecraft_type_version" => version})
        when is_nil(id) == is_nil(version),
@@ -234,8 +279,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
     })
   end
 
-  defp stored({:ok, spacecraft}), do: {:ok, document(spacecraft), []}
-  defp stored({:error, reason}), do: {:error, reason}
+  defp stored({:ok, spacecraft}, _organization_id, _mission_id),
+    do: {:ok, document(spacecraft), []}
+
+  defp stored({:error, reason}, _organization_id, _mission_id), do: {:error, reason}
 
   @doc false
   def document(%SpacecraftAsset{} = spacecraft) do
@@ -246,5 +293,12 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
       "spacecraft_type_version" => spacecraft.spacecraft_type_version,
       "metadata" => spacecraft.metadata || %{}
     }
+    # A switch is in the document once a change set set it; before that the spacecraft's own
+    # configuration decides, and recorded documents from before L22 compare equal.
+    |> put_set("commanding_enabled", spacecraft.commanding_enabled)
+    |> put_set("telemetry_enabled", spacecraft.telemetry_enabled)
   end
+
+  defp put_set(document, _key, nil), do: document
+  defp put_set(document, key, value), do: Map.put(document, key, value)
 end

@@ -42,7 +42,9 @@ config :cadence,
     # Derived: framing compatibility HOLDs when the profile becomes framing authority.
     Cadence.Comms.ConfigKinds.FramingCompatibility,
     # Derived: catalog compatibility HOLDs when spacecraft move to another catalog (#36/#65).
-    Cadence.Spacecraft.ConfigKinds.CatalogCompatibility
+    Cadence.Spacecraft.ConfigKinds.CatalogCompatibility,
+    # Derived: commanding and telemetry switch HOLDs (L22).
+    Cadence.Spacecraft.ConfigKinds.SwitchCompatibility
   ],
   # Which spacecraft have had traffic, for the archive HOLD (#49/#50).
   spacecraft_traffic: Cadence.Control.SpacecraftTraffic,

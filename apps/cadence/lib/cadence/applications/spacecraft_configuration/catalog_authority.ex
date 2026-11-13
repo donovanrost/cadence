@@ -50,6 +50,23 @@ defmodule Cadence.Applications.SpacecraftConfiguration.CatalogAuthority do
   end
 
   @doc """
+  `:ok` when the spacecraft's own configuration may carry these commanding and telemetry
+  switches: those a change set has set on the spacecraft (L22) are its only writer, so the
+  configuration must match them. Otherwise `{:error, :spacecraft_switch_set_by_change_set}`.
+  """
+  @spec switches_check(struct(), map()) :: :ok | {:error, :spacecraft_switch_set_by_change_set}
+  def switches_check(spacecraft, document) do
+    set = [
+      {"commanding_enabled", spacecraft.commanding_enabled},
+      {"telemetry_enabled", spacecraft.telemetry_enabled}
+    ]
+
+    if Enum.all?(set, fn {key, value} -> is_nil(value) or document[key] == value end),
+      do: :ok,
+      else: {:error, :spacecraft_switch_set_by_change_set}
+  end
+
+  @doc """
   Spacecraft whose configuration uses another catalog than their profile sets:
   `[%{spacecraft_id, effective_catalog_revision_id, configured_catalog_revision_id}]`.
   """

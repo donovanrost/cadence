@@ -41,6 +41,8 @@ defmodule CadenceWeb.API.CommsParams do
   end
 
   @spec spacecraft(binary(), binary(), map()) :: {:ok, Spacecraft.t()} | {:error, term()}
+  # Returns a `%Cadence.Spacecraft{}` (its switches, L22, stay nil: they're set through change
+  # sets only).
   def spacecraft(organization_id, mission_id, params)
       when is_binary(organization_id) and is_binary(mission_id) and is_map(params) do
     with {:ok, display_name} <- required_string(params, "display_name"),

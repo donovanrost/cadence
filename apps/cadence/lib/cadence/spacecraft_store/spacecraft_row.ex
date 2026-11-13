@@ -23,6 +23,9 @@ defmodule Cadence.SpacecraftStore.SpacecraftRow do
     field(:lifecycle_state, :string, default: "active")
     field(:archived_at, :utc_datetime_usec)
     field(:archived_by, :map)
+    # L22: change-set switches; nil means "as the spacecraft's configuration has it".
+    field(:commanding_enabled, :boolean)
+    field(:telemetry_enabled, :boolean)
 
     timestamps()
   end
@@ -70,8 +73,19 @@ defmodule Cadence.SpacecraftStore.SpacecraftRow do
       metadata: JsonDocument.unwrap_value(row.metadata),
       lifecycle_state: row.lifecycle_state,
       archived_at: row.archived_at,
-      archived_by: row.archived_by
+      archived_by: row.archived_by,
+      commanding_enabled: row.commanding_enabled,
+      telemetry_enabled: row.telemetry_enabled
     })
+  end
+
+  @doc """
+  Sets the commanding and telemetry switches (L22). Only the change-set kind writes them, so the
+  identity update above never clears one.
+  """
+  @spec switches_changeset(struct(), map()) :: Ecto.Changeset.t()
+  def switches_changeset(%__MODULE__{} = row, switches) do
+    cast(row, switches, [:commanding_enabled, :telemetry_enabled])
   end
 
   @doc "Archives the spacecraft (#49/#50): it leaves lists, the fleet and planning targets."

@@ -12,6 +12,10 @@ defmodule Cadence.Control.ConfigurationGeneration do
     review's builder (`Review.compile/3`), and the binding set is rebuilt with its new
     telemetry contribution. Commands not yet released on it are canceled
     (`catalog_changed`); one releasing or radiating refuses the apply.
+  - **Switches** (L22): a spacecraft whose commanding or telemetry switch the set changed gets
+    a derived configuration with it (with a new catalog in the same revision). Turning
+    commanding off cancels its waiting commands (`commanding_disabled`) and refuses while one is
+    being sent; turning telemetry on needs packet inputs (`ConfigurationSwitches`).
   - **Framing** (#33/#45): entries are rebuilt from effective profile framing, marked
     `framing_authority: "profile"`.
 
@@ -25,6 +29,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
   alias Cadence.Catalog
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Commanding.{Cancellation, RequestActivity}
+  alias Cadence.Control.ConfigurationSwitches
   alias Cadence.Governance
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Missions
@@ -80,14 +85,22 @@ defmodule Cadence.Control.ConfigurationGeneration do
     with {:ok, mission} <- Missions.fetch_mission(org, set.mission_id),
          {:ok, %{activation: %{}} = active} <- Active.load(mission),
          targets = catalog_targets(mission, touched, active.entries),
+         switches = switch_targets(mission, touched, active.entries),
+         commanding_off = ConfigurationSwitches.commanding_off(switches),
          :ok <- nothing_in_flight(org, set.mission_id, Map.keys(targets)),
-         {:ok, items} <- derive_catalogs(mission, active.entries, targets, input.applier),
+         :ok <- nothing_in_flight(org, set.mission_id, commanding_off, :commanding),
+         :ok <- telemetry_inputs(switches, active.entries),
+         derivations = derivations(targets, switches),
+         {:ok, items} <- derive_configurations(mission, active.entries, derivations, input),
          {:ok, binding_set} <- next_binding_set(mission, active, items) do
       base = Map.merge(active.entries, Map.new(items, &{&1.id, &1.entry}))
 
       org
       |> changed_entries(set.mission_id, touched, base, active.entries)
-      |> activate_changed(input, active, binding_set, Map.keys(targets))
+      |> activate_changed(input, active, binding_set, %{
+        catalog_changed: Map.keys(targets),
+        commanding_disabled: commanding_off
+      })
     else
       {:ok, _no_active_activation} -> {:ok, nil}
       {:error, reason} -> {:error, reason}
@@ -98,12 +111,58 @@ defmodule Cadence.Control.ConfigurationGeneration do
        when changed == %{},
        do: {:ok, nil}
 
-  defp activate_changed(changed, input, active, binding_set, catalog_ids) do
-    with {:ok, canceled} <- cancel_waiting(input, catalog_ids),
+  # Commands not yet released on a spacecraft whose catalog changes (#65) or whose commanding is
+  # turned off (L22) are canceled with the apply, each with its reason.
+  defp activate_changed(changed, input, active, binding_set, cancel) do
+    with {:ok, by_catalog} <- cancel_waiting(input, cancel.catalog_changed, "catalog_changed"),
+         {:ok, by_switch} <-
+           cancel_waiting(
+             input,
+             cancel.commanding_disabled -- cancel.catalog_changed,
+             "commanding_disabled"
+           ),
          {:ok, result} <- activate(input, active, binding_set, changed) do
-      {:ok, Map.put(result, :canceled_request_ids, canceled)}
+      {:ok, Map.put(result, :canceled_request_ids, by_catalog ++ by_switch)}
     end
   end
+
+  ## Switches (L22)
+
+  defp switch_targets(mission, ids, entries) do
+    ids = Enum.filter(ids, &Map.has_key?(entries, &1))
+
+    {:ok, spacecraft} =
+      SpacecraftStore.fetch_spacecrafts_in_batches(
+        mission.organization_id,
+        mission.mission_id,
+        ids
+      )
+
+    ConfigurationSwitches.targets(spacecraft, entries)
+  end
+
+  # Telemetry turned on decodes what the configuration names; without packet inputs there's
+  # nothing to decode, so the apply refuses (the preview shows it as a blocking HOLD).
+  defp telemetry_inputs(switches, entries) do
+    case Enum.reject(
+           ConfigurationSwitches.telemetry_on(switches),
+           &ConfigurationSwitches.packet_inputs?(entries[&1])
+         ) do
+      [] -> :ok
+      ids -> {:error, {:telemetry_packet_inputs_required, ids}}
+    end
+  end
+
+  # One derived configuration per spacecraft, with its new catalog and switches together.
+  defp derivations(targets, switches) do
+    catalogs = Map.new(targets, fn {id, to} -> {id, %{"catalog_revision_id" => to}} end)
+    Map.merge(catalogs, switches, fn _id, catalog, switch -> Map.merge(catalog, switch) end)
+  end
+
+  @doc "What an apply would do to these spacecraft's switches (L22 HOLDs)."
+  defdelegate switch_impact(organization_id, mission_id, ids),
+    to: ConfigurationSwitches,
+    as: :impact
 
   ## Catalog-path generations (DECISIONS #36/#65)
 
@@ -198,29 +257,36 @@ defmodule Cadence.Control.ConfigurationGeneration do
 
   # #65: a spacecraft releasing or radiating a command right now keeps its catalog until that
   # finishes (the preview shows it as a blocking HOLD; this guards the race).
-  defp nothing_in_flight(_org, _mission_id, []), do: :ok
+  defp nothing_in_flight(org, mission_id, ids, why \\ :catalog)
 
-  defp nothing_in_flight(org, mission_id, ids) do
+  defp nothing_in_flight(_org, _mission_id, [], _why), do: :ok
+
+  defp nothing_in_flight(org, mission_id, ids, why) do
     case RequestActivity.in_flight(org, mission_id, endpoints(org, mission_id, ids)) do
       [] ->
         :ok
 
       requests ->
-        {:error, {:catalog_command_in_flight, Enum.map(requests, & &1.command_request_id)}}
+        reason =
+          if why == :commanding,
+            do: :commanding_command_in_flight,
+            else: :catalog_command_in_flight
+
+        {:error, {reason, Enum.map(requests, & &1.command_request_id)}}
     end
   end
 
-  defp derive_catalogs(mission, entries, targets, applier) do
-    Enum.reduce_while(targets, {:ok, []}, fn {id, to}, {:ok, items} ->
+  defp derive_configurations(mission, entries, derivations, %{applier: applier}) do
+    Enum.reduce_while(derivations, {:ok, []}, fn {id, changes}, {:ok, items} ->
       with running when is_binary(running) <-
              entries[id]["configuration_revision_id"] ||
                {:error, :spacecraft_configuration_required},
            {:ok, row} <-
-             Drafts.derive_catalog(
+             Drafts.derive(
                mission.organization_id,
                mission.mission_id,
                running,
-               to,
+               changes,
                applier["id"]
              ),
            {:ok, item} <- Review.compile(mission, id, row) do
@@ -253,9 +319,9 @@ defmodule Cadence.Control.ConfigurationGeneration do
 
   # #65: commands not yet released on a spacecraft whose catalog changes are canceled with the
   # apply, so they don't fail closed at release (mid-pass) or trip stop-on-failure.
-  defp cancel_waiting(_input, []), do: {:ok, []}
+  defp cancel_waiting(_input, [], _reason), do: {:ok, []}
 
-  defp cancel_waiting(%{set: set}, ids) do
+  defp cancel_waiting(%{set: set}, ids, reason) do
     org = set.organization_id
 
     waiting =
@@ -268,7 +334,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
         org,
         set.mission_id,
         waiting,
-        "catalog_changed: " <> set.change_set_id,
+        reason <> ": " <> set.change_set_id,
         %{
           "actor_kind" => "system",
           "id" => "change_set:" <> set.change_set_id

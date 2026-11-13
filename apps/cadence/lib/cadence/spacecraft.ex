@@ -16,7 +16,9 @@ defmodule Cadence.Spacecraft do
           metadata: map(),
           lifecycle_state: :active | :archived,
           archived_at: DateTime.t() | nil,
-          archived_by: map() | nil
+          archived_by: map() | nil,
+          commanding_enabled: boolean() | nil,
+          telemetry_enabled: boolean() | nil
         }
 
   defstruct [
@@ -29,6 +31,9 @@ defmodule Cadence.Spacecraft do
     :spacecraft_type_version,
     :archived_at,
     :archived_by,
+    # L22: set by change sets; nil means "as the spacecraft's configuration has it".
+    :commanding_enabled,
+    :telemetry_enabled,
     metadata: %{},
     lifecycle_state: :active
   ]
@@ -50,7 +55,10 @@ defmodule Cadence.Spacecraft do
       lifecycle_state:
         lifecycle(Map.get(attrs, :lifecycle_state, Map.get(attrs, "lifecycle_state"))),
       archived_at: Map.get(attrs, :archived_at, Map.get(attrs, "archived_at")),
-      archived_by: Map.get(attrs, :archived_by, Map.get(attrs, "archived_by"))
+      archived_by: Map.get(attrs, :archived_by, Map.get(attrs, "archived_by")),
+      commanding_enabled:
+        Map.get(attrs, :commanding_enabled, Map.get(attrs, "commanding_enabled")),
+      telemetry_enabled: Map.get(attrs, :telemetry_enabled, Map.get(attrs, "telemetry_enabled"))
     }
   end
 

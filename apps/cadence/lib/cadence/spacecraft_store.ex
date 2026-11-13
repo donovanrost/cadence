@@ -109,6 +109,23 @@ defmodule Cadence.SpacecraftStore do
     |> notify_configuration_change()
   end
 
+  @doc """
+  Sets a spacecraft's commanding and telemetry switches (L22; the change-set kind is their only
+  writer). `switches`: `%{commanding_enabled: bool, telemetry_enabled: bool}`.
+  """
+  @spec put_switches(binary(), binary(), binary(), map()) ::
+          {:ok, Spacecraft.t()} | {:error, term()}
+  def put_switches(organization_id, mission_id, spacecraft_id, switches) when is_map(switches) do
+    with {:ok, %SpacecraftRow{} = row} <-
+           fetch_spacecraft_row(organization_id, mission_id, spacecraft_id) do
+      case row |> SpacecraftRow.switches_changeset(switches) |> Repo.update() do
+        {:ok, %SpacecraftRow{} = updated} -> {:ok, SpacecraftRow.to_domain(updated)}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+    |> notify_configuration_change()
+  end
+
   @spec fetch_spacecraft(binary(), binary()) :: {:ok, Spacecraft.t()} | {:error, term()}
   def fetch_spacecraft(mission_id, spacecraft_id)
       when is_binary(mission_id) and is_binary(spacecraft_id) do

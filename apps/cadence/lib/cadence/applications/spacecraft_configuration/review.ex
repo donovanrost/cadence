@@ -77,6 +77,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            true <- not is_nil(current.row) and not current.external_changes,
            :ok <- ready(current.row.document),
            :ok <- CatalogAuthority.check(mission, spacecraft, current.row.catalog_revision_id),
+           :ok <- CatalogAuthority.switches_check(spacecraft, current.row.document),
            {:ok, item} <- compile(mission, id, current.row) do
         review = %{
           "spacecraft_id" => id,

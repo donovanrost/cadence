@@ -97,12 +97,28 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   """
   @spec derive_catalog(binary(), binary(), binary(), binary(), binary()) ::
           {:ok, struct()} | {:error, term()}
-  def derive_catalog(organization_id, mission_id, running_id, catalog_revision_id, actor_id) do
+  def derive_catalog(organization_id, mission_id, running_id, catalog_revision_id, actor_id),
+    do:
+      derive(
+        organization_id,
+        mission_id,
+        running_id,
+        %{"catalog_revision_id" => catalog_revision_id},
+        actor_id
+      )
+
+  @doc """
+  The running configuration with `changes` (document keys: the catalog, the switches) as the
+  spacecraft's next configuration revision, for a change-set apply (#36/#65, L22). Refused when a
+  newer configuration than the running one exists.
+  """
+  def derive(organization_id, mission_id, running_id, changes, actor_id) when is_map(changes) do
     with {:ok, running} <- fetch(organization_id, mission_id, running_id),
          %{configuration_revision_id: ^running_id} = latest <-
            latest(organization_id, mission_id, running.spacecraft_id) ||
              {:error, :spacecraft_configuration_not_found} do
-      document = Map.put(running.document, "catalog_revision_id", catalog_revision_id)
+      document = Map.merge(running.document, changes)
+      catalog_revision_id = document["catalog_revision_id"]
 
       Repo.insert(
         ConfigurationRevisionRow.changeset(%{
@@ -230,7 +246,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   defp validate_references(mission, spacecraft, document) do
     with :ok <- validate_catalog(mission, document["catalog_revision_id"]),
          # DECISIONS #65: a profile catalog is set through change sets only.
-         :ok <- CatalogAuthority.check(mission, spacecraft, document["catalog_revision_id"]) do
+         :ok <- CatalogAuthority.check(mission, spacecraft, document["catalog_revision_id"]),
+         # L22: switches a change set has set are written through change sets only.
+         :ok <- CatalogAuthority.switches_check(spacecraft, document) do
       validate_source(mission, spacecraft, document["telemetry_source_endpoint_id"])
     end
   end

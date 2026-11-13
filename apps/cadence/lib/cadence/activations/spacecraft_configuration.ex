@@ -32,7 +32,12 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
            {:ok, mission} <- Missions.fetch_mission(org, attrs.mission_id),
            {:ok, active} <- ConfigurationActive.load(mission),
            true <- Map.drop(entries, ids) == Map.drop(active.entries, ids),
-           true <- Enum.all?(ids, &framing_change?(entries[&1], active.entries[&1])),
+           true <-
+             Enum.all?(
+               ids,
+               &(framing_change?(entries[&1], active.entries[&1]) or
+                   derived_configuration?(org, attrs.mission_id, entries[&1], active.entries[&1]))
+             ),
            true <-
              Enum.all?(
                ids,
@@ -218,6 +223,32 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   end
 
   defp catalog_settled?(_org, _mission_id, _entry, _active), do: false
+
+  # L22: a switch change on a spacecraft without profile framing. Its entry runs the
+  # configuration the change set derived in this transaction (the spacecraft's latest), with
+  # framing and protocol exactly as active.
+  defp derived_configuration?(
+         org,
+         mission_id,
+         %{"configuration_revision_id" => id} = entry,
+         active
+       )
+       when is_binary(id) and is_map(active) do
+    case ConfigurationDrafts.fetch(org, mission_id, id) do
+      {:ok, row} ->
+        latest = ConfigurationDrafts.latest(org, mission_id, row.spacecraft_id)
+
+        latest != nil and latest.configuration_revision_id == id and
+          id != active["configuration_revision_id"] and
+          Map.take(entry, @framing_fields) == Map.take(active, @framing_fields) and
+          get_in(entry, ["document", "protocol"]) == get_in(active, ["document", "protocol"])
+
+      _missing ->
+        false
+    end
+  end
+
+  defp derived_configuration?(_org, _mission_id, _entry, _active), do: false
 
   defp framing_change?(%{"framing_authority" => "profile"}, _active), do: true
 
