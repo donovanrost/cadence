@@ -839,3 +839,15 @@ configuration failure P3. The amendments to fe-ops' drafts:
     evidence rules), plus `Acknowledge` with a required reason (placeholder "What you checked"). After that:
     "Acknowledged by Mira K. at 11-14 09:10Z: <reason>." It's not in Now, so nothing else nags. The pass detail
     header shows the count `1 CHANGE NOT ACKNOWLEDGED` (caution text), linking to the entry.
+  - **Pass history = `provider_changes`, every change** (api: newest first, at most 50, each with `resolution`).
+    Every entry leads with the evidence, "Northlight changed this pass: AOS 03:10Z → 03:12Z.", then its outcome:
+    - approved / rejected / acknowledged: "Approved by Mira K. at 02:31Z: <reason>." With `by` null: "by an
+      operator" (U29).
+    - policy_accepted (`by` null): "Accepted by the mission's policy at 02:31Z."
+    - superseded: "Replaced by a newer change."
+    - expired: "Expired: not decided before the pass flew."
+    - configuration_failure / apply_failed: "Cadence couldn't apply it." (crit mark).
+    - observed: no outcome line and no tag; the evidence alone. It's shown, not hidden, because the pass did
+      change, and history should say so (U20).
+    - Open states keep their block (approve, acknowledge). An unknown state shows the evidence alone.
+    - At 50: "Showing the latest 50 changes."
