@@ -38,10 +38,13 @@ The same issuance as People (O6), for any organization.
   {name} | null, last_used_at: null}], capabilities: [{key, label, needs_mission}]}`. Active
   identities only, at most 500. `last_used_at` isn't tracked yet.
 - `POST /service-identities {organization_id, name, capability: organization_admin |
-  mission_admin, mission_id?}` → `201 {service_identity, token}`. The **token is shown once**.
-  `mission_id` is required for `mission_admin`. `422 invalid_params` by field.
-- `POST /service-identities/:id/rotate {organization_id}` → `{service_identity, token}`. The old
-  token stops working.
+  mission_admin, mission_id?}` → `201 {service_identity, token}`. `service_identity` is exactly
+  the list row above (`{id, name, organization, capabilities, mission, created_at, created_by,
+  last_used_at}`), never the domain record. The **token is shown once** and the reply carries
+  `cache-control: no-store`. `mission_id` is required for `mission_admin`. `422 invalid_params`
+  by field.
+- `POST /service-identities/:id/rotate {organization_id}` → `{service_identity, token}`, the same
+  list row and `no-store`. The old token stops working.
 - `DELETE /service-identities/:id?organization_id=` → `200 {id, state: "revoked"}`.
 
 ## AD4 runtime
@@ -58,7 +61,8 @@ slug}, runtime: {...} | null, telemetry_last_received_at | null, technical: []}]
 
 `GET /audit?after=` → `{events: [{id, at, actor: {kind, id, name}, kind: "platform", action,
 target: {kind, id, label} | null, organization: {id, name} | null}], next | null}`, newest first,
-100 per page.
+100 per page. `target.label` is always a string: the target's name when one was recorded, else its
+id (withdrawn invitations; revokes recorded before 11-13).
 
 - What's recorded: organizations created, invitations sent and withdrawn, service identities
   issued, rotated and revoked, and admin mode entered (with when it ends) and left, through the

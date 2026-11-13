@@ -115,31 +115,49 @@ defmodule Cadence.Accounts.PlatformDirectory do
 
   @doc "Active service identities, newest first, optionally for one organization."
   def service_identities(organization_id, limit) do
+    organization_id
+    |> service_identity_query()
+    |> limit(^limit)
+    |> Repo.all()
+    |> Enum.map(&service_identity_view/1)
+  end
+
+  @doc "One active service identity of the organization, in the same shape as the list, or nil."
+  def service_identity(organization_id, id)
+      when is_binary(organization_id) and organization_id != "" and is_binary(id) do
+    organization_id
+    |> service_identity_query()
+    |> where([s], s.service_identity_id == ^id)
+    |> Repo.one()
+    |> then(&(&1 && service_identity_view(&1)))
+  end
+
+  def service_identity(_organization_id, _id), do: nil
+
+  defp service_identity_query(organization_id) do
     ServiceIdentityRow
     |> where([s], s.lifecycle_state == "active")
     |> for_organization(organization_id)
     |> join(:inner, [s], o in OrganizationRow, on: o.organization_id == s.organization_id)
     |> join(:left, [s], m in MissionRow, on: m.mission_id == s.mission_id)
     |> order_by([s], desc: s.inserted_at, desc: s.service_identity_id)
-    |> limit(^limit)
     |> select([s, o, m], %{
       row: s,
       organization: %{id: o.organization_id, name: o.display_name},
       mission: %{id: m.mission_id, name: m.display_name}
     })
-    |> Repo.all()
-    |> Enum.map(fn %{row: s} = found ->
-      %{
-        id: s.service_identity_id,
-        name: s.display_name,
-        organization: found.organization,
-        capabilities: s.capabilities,
-        mission: found.mission.id && found.mission,
-        created_at: s.inserted_at,
-        created_by_id: creator_id(s)
-      }
-    end)
   end
+
+  defp service_identity_view(%{row: s} = found),
+    do: %{
+      id: s.service_identity_id,
+      name: s.display_name,
+      organization: found.organization,
+      capabilities: s.capabilities,
+      mission: found.mission.id && found.mission,
+      created_at: s.inserted_at,
+      created_by_id: creator_id(s)
+    }
 
   defp creator_id(s) do
     case JsonDocument.unwrap_value(s.metadata) || %{} do

@@ -9,6 +9,7 @@ defmodule Cadence.Administration.ConsoleAdmin do
   alias Cadence.Administration.{
     Access,
     ConsoleOrganizations,
+    ConsoleServiceIdentities,
     OrganizationCreation,
     OrganizationInvitations,
     OrganizationPeople,
@@ -111,8 +112,16 @@ defmodule Cadence.Administration.ConsoleAdmin do
 
   def revoke_service_identity(scope, organization_id, id) do
     with {:ok, admin} <- Access.authorize(scope),
+         # The name is read before the revoke: a revoked identity is no longer listed.
+         row = ConsoleServiceIdentities.row(organization_id, id),
          :ok <- ServiceIdentityAdministration.revoke(scope, organization_id, id) do
-      record(admin, "service_identity_revoked", organization_id, {"service_identity", id, nil})
+      record(
+        admin,
+        "service_identity_revoked",
+        organization_id,
+        {"service_identity", id, row && row.name}
+      )
+
       {:ok, %{id: id, state: "revoked"}}
     end
   end

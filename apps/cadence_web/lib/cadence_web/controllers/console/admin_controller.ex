@@ -54,11 +54,19 @@ defmodule CadenceWeb.Console.AdminController do
 
   def issue(conn, params) do
     input = Map.take(params, ~w(organization_id name capability mission_id))
-    respond(conn, ConsoleAdmin.issue_service_identity(scope(conn), input) |> issued(), :created)
+    result = ConsoleAdmin.issue_service_identity(scope(conn), input)
+
+    respond(
+      no_store(conn),
+      ConsoleServiceIdentities.issued(result, params["organization_id"]),
+      :created
+    )
   end
 
-  def rotate(conn, %{"id" => id, "organization_id" => org}),
-    do: respond(conn, ConsoleAdmin.rotate_service_identity(scope(conn), org, id) |> issued())
+  def rotate(conn, %{"id" => id, "organization_id" => org}) do
+    result = ConsoleAdmin.rotate_service_identity(scope(conn), org, id)
+    respond(no_store(conn), ConsoleServiceIdentities.issued(result, org))
+  end
 
   def rotate(conn, _params),
     do: Problem.respond(conn, :invalid_params, %{organization_id: "is required"})
@@ -74,20 +82,6 @@ defmodule CadenceWeb.Console.AdminController do
 
   def audit(conn, params),
     do: respond(conn, PlatformAudit.list(scope(conn), Map.take(params, ~w(after))))
-
-  # The token is shown once: {service_identity, token}.
-  defp issued({:ok, %{service_identity: identity, api_token: token}}) do
-    {:ok,
-     %{
-       service_identity:
-         Map.update!(identity, :capabilities, fn keys ->
-           Enum.map(keys, &%{key: &1, label: ConsoleServiceIdentities.label(&1)})
-         end),
-       token: token
-     }}
-  end
-
-  defp issued(other), do: other
 
   defp respond(conn, result, status \\ :ok)
 
@@ -115,6 +109,9 @@ defmodule CadenceWeb.Console.AdminController do
        do: Problem.respond(conn, :not_found)
 
   defp respond(conn, {:error, _reason}, _status), do: Problem.respond(conn, :invalid_params)
+
+  # The token is in the body once; tell caches and proxies not to keep it (as People's O6 does).
+  defp no_store(conn), do: put_resp_header(conn, "cache-control", "no-store")
 
   defp scope(conn), do: conn.assigns.current_scope
 end

@@ -41,8 +41,7 @@ defmodule Cadence.Administration.PlatformAudit do
         actor: %{kind: "user", id: row.actor_id, name: Map.get(actors, row.actor_id)},
         kind: "platform",
         action: sentence(row, org),
-        target:
-          row.target_kind && %{kind: row.target_kind, id: row.target_id, label: row.target_label},
+        target: row.target_kind && %{kind: row.target_kind, id: row.target_id, label: label(row)},
         organization: row.organization_id && %{id: row.organization_id, name: org},
         mission: nil,
         reason: nil
@@ -65,8 +64,8 @@ defmodule Cadence.Administration.PlatformAudit do
   defp sentence(%{action: "service_identity_rotated", target_label: name}, _org),
     do: "Rotated the token of service identity #{name}"
 
-  defp sentence(%{action: "service_identity_revoked", target_id: id}, org),
-    do: "Revoked service identity #{id} in #{org || "an organization"}"
+  defp sentence(%{action: "service_identity_revoked"} = row, org),
+    do: "Revoked service identity #{label(row)} in #{org || "an organization"}"
 
   defp sentence(%{action: "admin_mode_entered", details: %{"expires_at" => until}}, _org)
        when is_binary(until),
@@ -75,6 +74,10 @@ defmodule Cadence.Administration.PlatformAudit do
   defp sentence(%{action: "admin_mode_entered"}, _org), do: "Entered admin mode"
   defp sentence(%{action: "admin_mode_left"}, _org), do: "Left admin mode"
   defp sentence(%{action: action}, _org), do: action
+
+  # The target's name when one was recorded, else its id: never null (withdrawn invitations and
+  # revokes recorded before 11-13 carry no name).
+  defp label(row), do: row.target_label || to_string(row.target_id)
 
   defp organizations(rows) do
     rows

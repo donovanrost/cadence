@@ -18,26 +18,52 @@ defmodule Cadence.Administration.ConsoleServiceIdentities do
   @spec list(term(), map()) :: {:ok, map()} | {:error, term()}
   def list(scope, params) do
     with {:ok, _admin} <- Access.authorize(scope) do
-      rows = PlatformDirectory.service_identities(params["organization_id"], @cap)
-      creators = rows |> Enum.map(& &1.created_by_id) |> Enum.reject(&is_nil/1) |> names()
-
       {:ok,
        %{
          service_identities:
-           Enum.map(rows, fn row ->
-             creator = row.created_by_id
-
-             row
-             |> Map.delete(:created_by_id)
-             |> Map.merge(%{
-               capabilities: Enum.map(row.capabilities, &%{key: &1, label: label(&1)}),
-               created_by: creator && %{name: Map.get(creators, creator)},
-               last_used_at: nil
-             })
-           end),
+           params["organization_id"] |> PlatformDirectory.service_identities(@cap) |> present(),
          capabilities: @capabilities
        }}
     end
+  end
+
+  @doc "One active identity of the organization as a list row (AD3), or nil."
+  @spec row(binary(), binary()) :: map() | nil
+  def row(organization_id, id) do
+    case PlatformDirectory.service_identity(organization_id, id) do
+      nil -> nil
+      found -> hd(present([found]))
+    end
+  end
+
+  @doc """
+  An issue or rotate result for the console: `{service_identity, token}`, where `service_identity`
+  is the list row (AD3), so the sheet can show the token once and the row it belongs to.
+  """
+  @spec issued({:ok, map()} | term(), binary()) :: {:ok, map()} | term()
+  def issued({:ok, %{service_identity: identity, api_token: token}}, organization_id) do
+    case row(organization_id, identity.id) do
+      nil -> {:error, :service_identity_not_found}
+      row -> {:ok, %{service_identity: row, token: token}}
+    end
+  end
+
+  def issued(other, _organization_id), do: other
+
+  defp present(rows) do
+    creators = rows |> Enum.map(& &1.created_by_id) |> Enum.reject(&is_nil/1) |> names()
+
+    Enum.map(rows, fn row ->
+      creator = row.created_by_id
+
+      row
+      |> Map.delete(:created_by_id)
+      |> Map.merge(%{
+        capabilities: Enum.map(row.capabilities, &%{key: &1, label: label(&1)}),
+        created_by: creator && %{name: Map.get(creators, creator)},
+        last_used_at: nil
+      })
+    end)
   end
 
   @doc "A capability key in words (unknown keys stay as they are)."

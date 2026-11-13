@@ -4,6 +4,7 @@ defmodule CadenceWeb.Console.AdminAPITest do
 
   @moduletag :capture_log
 
+  alias Cadence.Administration.PlatformEvents
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -24,6 +25,8 @@ defmodule CadenceWeb.Console.AdminAPITest do
   end
 
   defp api(path), do: "/api/console/v1/admin" <> path
+
+  @row_keys ~w(capabilities created_at created_by id last_used_at mission name organization)
 
   test "only a platform admin in admin mode gets in", c do
     for conn <- [TestFixtures.member_conn(c.member), TestFixtures.member_conn(c.admin)] do
@@ -168,15 +171,24 @@ defmodule CadenceWeb.Console.AdminAPITest do
     refute Map.has_key?(row, "token")
     assert length(listed["data"]["capabilities"]) == 2
 
-    rotated =
+    # Issue answers with the list row (AD3), so the console decodes it and shows the token.
+    assert Map.keys(row) |> Enum.sort() == @row_keys
+    assert issued["service_identity"] == row
+    assert %{"organization" => %{"id" => _, "name" => "Acme Space"}, "last_used_at" => nil} = row
+
+    rotated_conn =
       c
       |> admin_conn()
       |> post(api("/service-identities/#{id}/rotate"), %{
         "organization_id" => c.org.organization_id
       })
-      |> json_response(200)
+
+    rotated = json_response(rotated_conn, 200)
 
     assert rotated["data"]["token"] != token
+    assert get_resp_header(rotated_conn, "cache-control") == ["no-store"]
+    assert Map.keys(rotated["data"]) |> Enum.sort() == ["service_identity", "token"]
+    assert rotated["data"]["service_identity"] == row
 
     assert %{"data" => %{"state" => "revoked"}} =
              c
@@ -193,6 +205,54 @@ defmodule CadenceWeb.Console.AdminAPITest do
                "capability" => "mission_admin"
              })
              |> json_response(422)
+  end
+
+  test "audit targets always carry a label: the name, else the id", c do
+    %{"data" => %{"service_identity" => %{"id" => id}}} =
+      c
+      |> admin_conn()
+      |> post(api("/service-identities"), %{
+        "organization_id" => c.org.organization_id,
+        "name" => "Relay bot",
+        "capability" => "organization_admin"
+      })
+      |> json_response(201)
+
+    c
+    |> admin_conn()
+    |> delete(api("/service-identities/#{id}?organization_id=#{c.org.organization_id}"))
+    |> json_response(200)
+
+    # A withdrawal (and any revoke recorded before the name was) has no name on record.
+    :ok =
+      PlatformEvents.record(c.admin.user_id, "invitation_withdrawn", %{
+        organization_id: c.org.organization_id,
+        target: {"invitation", "inv_unnamed", nil}
+      })
+
+    events =
+      c |> admin_conn() |> get(api("/audit")) |> json_response(200) |> get_in(["data", "events"])
+
+    for %{"target" => target} <- events, target != nil do
+      assert %{"kind" => kind, "id" => target_id, "label" => label} = target
+      assert is_binary(kind) and is_binary(target_id) and is_binary(label)
+    end
+
+    assert Enum.any?(
+             events,
+             &match?(
+               %{
+                 "action" => "Revoked service identity Relay bot in Acme Space",
+                 "target" => %{"id" => ^id, "label" => "Relay bot"}
+               },
+               &1
+             )
+           )
+
+    assert Enum.any?(
+             events,
+             &match?(%{"target" => %{"id" => "inv_unnamed", "label" => "inv_unnamed"}}, &1)
+           )
   end
 
   test "AD4: every mission with what this node knows", c do
