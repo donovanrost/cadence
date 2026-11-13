@@ -25,6 +25,8 @@ missing endpoint or decision; an item with no blocker can start now.
 
 - **Reservation-window change reverted before the pass (director 11-13):** domain's cfe2e95fa (window follows the accepted snapshot) failed reservations when a timing shift crossed the old activation window; reverted as 40873a5a2 (qa reloads, confirms 001's _39GIA). The fixed version (window and the snapshot's own activation_window together, with a +60 s shift test) re-lands after 11-14 01:30Z through qa. Until 01:00Z nothing on the reservation, contact or uplink path lands without qa's OK. The two failed 008 test rows stay as they are.
 
+- **Uplink dispatch has no clock gate (domain 11-13; director: fix after 01:00Z):** ReleaseTargetSelection releases to a :defined/:active contact by lifecycle only. Director approved (i) a dispatch-time window gate and (ii) closing the command window when an accepted change drops the uplink leg, as release-path work after 11-14 01:00Z through qa with tests, then develop/main ports. Tonight: no release-path code. qa watches P9CS every minute 00:25Z→AOS 00:33:52Z; whether pre-AOS release is possible goes to the director, with options before 22:30Z if so.
+
 - **A lib save isn't live on the next request (qa 11-13):** three times today the :4011 reloader didn't recompile on ordinary requests (and never retries after a broken compile). If you need a save live, ask qa for an in-node `Phoenix.CodeReloader.reload(CadenceWeb.Endpoint)` (runbook 9b8e3197e). A save that doesn't compile still takes :4011 down (09:59Z), so compile under `MIX_ENV=test` first.
 
 - **Legacy pages (director 11-13):** the old LiveView pages are being deleted. No new features in them; bug fixes only if something live depends on them. §11 lists what still exists only there.
