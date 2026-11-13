@@ -119,6 +119,52 @@ ACCEPTED · <reason>` rows, and in the revision history.
 **Repairs (U28):** K1 never opens a repair proposal as the day's plan. It shows the day's own plan + an info
 callout `A re-plan proposal is open for this day … Open in Re-plan →`.
 
+### K1 booking reasons (`passes[].booking.reason`, api list)
+Demand leads with `<Word> · SVB-1 03:00Z: <reason>.`, where the word is the bar's state: `Rejected`, `Failed`,
+`Unconfirmed` (uncertain), `Not sent` (Cadence stopped before the provider call) or `Lost` (after a booking was
+placed). When api exposes the provider's free-text `detail`, it's appended in quotes: `…no capacity then
+("Station full")`. Any code not listed: the code with underscores as spaces, plus the raw code in Technical
+details.
+
+| Code | Reason text | Next step shown |
+| --- | --- | --- |
+| no_capacity | the station has no capacity then | `Re-plan` |
+| conflict | it clashes with another booking at the provider | `Re-plan` |
+| invalid_request | the provider refused the request as invalid | — |
+| provider_unavailable | the provider couldn't be reached | (retry) |
+| authentication_failed | the provider didn't accept Cadence's credentials | `Check provider account` |
+| authorization_failed | the provider account isn't allowed to book this | `Check provider account` |
+| unsupported_capability | the provider doesn't offer this kind of pass | — |
+| not_found | the provider doesn't know this pass or station | — |
+| provider_not_ready | the provider wasn't ready to take bookings | — |
+| rate_limited | the provider asked Cadence to slow down | — |
+| known_timeout | the provider didn't answer in time | — |
+| ambiguous_outcome | the provider's answer didn't say whether it's booked | (U30/U32 resolve) |
+| malformed_response | the provider's answer couldn't be read | (U30/U32 resolve) |
+| provider_error | the provider reported an error | — |
+| contact_plan_execution_opportunity_expired | the window passed before it was sent | `Re-plan` |
+| contact_plan_execution_snapshot_not_found | the pass isn't in the plan's opportunities any more | `Re-plan` |
+| contact_plan_execution_route_changed | its route changed after the plan was drafted | `Re-plan` |
+| contact_plan_execution_route_not_ready | its route isn't ready yet | — |
+| mission_provider_not_found | this mission has no provider set up for that station | `Fix in Setup` |
+| provider_account_version_not_found | the provider account's settings are missing | `Fix in Setup` |
+| provider_account_grant_not_found | this mission isn't granted the provider account | `Fix in Setup` |
+| provider_account_grant_revoked | this mission's access to the provider account was revoked | `Fix in Setup` |
+| credential_reference_not_found | the provider credentials can't be found | `Fix in Setup` |
+| invalid_provider_context | the provider setup for this mission isn't valid | `Fix in Setup` |
+| missing/invalid_provider_booking_field, invalid_provider_booking, invalid_contact_interval, unknown_provider_client, malformed_provider_booking_result, provider_booking_failed | Cadence couldn't build the booking request. This needs a Cadence fix | — (code in Technical details) |
+| booking_lost | the provider dropped a confirmed booking | `Re-plan` |
+| provider_canceled | the provider canceled it | `Re-plan` |
+| provider_reservation_not_found | the provider has no record of the booking | `Re-plan` |
+| provider_configuration_failure | the provider setup failed | `Fix in Setup` |
+| operator_not_booked / rejected / not_sent | marked not booked / rejected / not sent by Mira K. at 10:52Z (U29; without an actor: "by an operator") | — |
+| null | the provider didn't say why | — |
+
+`Fix in Setup` → Setup › Ground stations › Providers. `Check provider account` → Organization › Provider
+accounts. `Re-plan` → K2. A next step shows only when the viewer can take it. A `(retry)` or `—` row says nothing
+about retrying until api sends `retryable` / `retry_after_seconds`. Then it adds "Cadence retries at 03:12Z." or
+"Retrying won't help."
+
 ## K2 · A station goes down (`M/contacts/replan/:stationId`)
 Entered from Now (P2 station degraded), the Contacts station row or ⌘K. Takeover header: close ·
 mono `RE-PLAN · LIVE PLAN R41 · 02:45–10:45Z` over `Svalbard outage` · step bar `01 Impact · 02
