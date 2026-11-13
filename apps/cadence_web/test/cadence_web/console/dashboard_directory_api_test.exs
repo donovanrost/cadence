@@ -103,6 +103,31 @@ defmodule CadenceWeb.Console.DashboardDirectoryAPITest do
     assert "Restored dashboard #{name}" in actions
   end
 
+  # Moved from the legacy ops_directory_page_test (L8 cutover): the cross-organization and
+  # revoked-session refusals it checked through the old page, now through the console API.
+  test "another organization's member can't star, archive or duplicate; a revoked session can't",
+       c do
+    outsider = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(outsider, TestFixtures.persist_org!())
+    foreign = TestFixtures.member_conn(outsider)
+
+    for request <- [
+          &put(&1, path(c, "/star")),
+          &post(&1, path(c, "/archive"), %{"confirm" => true}),
+          &post(&1, path(c, "/duplicate"), %{"name" => "Mine"})
+        ] do
+      assert request.(foreign).status in [403, 404]
+    end
+
+    assert [%{"archived" => false, "starred" => false}] = list(c)["data"]["dashboards"]
+    assert length(list(c)["data"]["dashboards"]) == 1
+
+    revoked = conn(c)
+    :ok = Cadence.Auth.revoke_user_session(get_session(revoked, :user_session_token))
+    assert revoked |> put(path(c, "/star")) |> json_response(401)
+    assert list(c)["data"]["shortcuts"]["starred"] == []
+  end
+
   test "D4 creates a blank dashboard with tags, and duplicates one", c do
     assert %{"data" => %{"id" => id, "version" => 1}} =
              c

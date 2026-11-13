@@ -11,23 +11,9 @@ defmodule CadenceWeb.OpsDashboardAuthoringEntryLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "dashboard directory and creation mount their host contributions" do
+  # The directory now redirects to the console (L8 cutover); creation stays on the legacy route.
+  test "dashboard creation mounts its host contribution" do
     {conn, mission} = signed_in()
-
-    {:ok, directory, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
-
-    HostTransportTestSupport.assert_context(directory, %{
-      "application_key" => nil,
-      "surface_id" => nil,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => %{}
-    })
-
-    page = LiveVue.Test.get_vue(directory, id: "application-shell").props["snapshot"]["ops_page"]
-    assert page["id"] == "dashboards.directory"
-    assert page["slot"] == "ops.page"
-    assert page["status"] == "ready"
 
     {:ok, new_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/new")
 

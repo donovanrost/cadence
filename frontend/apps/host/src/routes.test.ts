@@ -255,32 +255,6 @@ test("dashboard history is a resource-bound compiled feature with independent bo
   // History is read-only; versions are compared and restored on the dashboard page.
   expect(required(opsPages["dashboards.activity"]).actions).toEqual(["reload_activity"]);
 });
-test("dashboard editing is the dashboard page in edit mode, without an installation lookup", () => {
-  const route = required(
-    routes.find(
-      (route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
-    ),
-  );
-  expect(route).toMatchObject({
-    kind: "ops_module",
-    contribution: "dashboards.workspace",
-    resourceParam: "dashboard_id",
-  });
-  expect(route).not.toHaveProperty("application");
-  expect(route).not.toHaveProperty("surface");
-});
-test("the dashboard viewer is a resource-bound compiled Ops contribution, not an installed application", () => {
-  const route = required(
-    routes.find((route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id"),
-  );
-  expect(route).toMatchObject({
-    kind: "ops_module",
-    contribution: "dashboards.workspace",
-    resourceParam: "dashboard_id",
-  });
-  expect(route).not.toHaveProperty("application");
-  expect(route).not.toHaveProperty("surface");
-});
 test("Communications collections forward the bounded producer query keys", () => {
   const collections = routes.filter(
     (route) =>

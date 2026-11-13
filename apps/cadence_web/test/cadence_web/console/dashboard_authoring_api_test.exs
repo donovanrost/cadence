@@ -3,7 +3,7 @@ defmodule CadenceWeb.Console.DashboardAuthoringAPITest do
   use CadenceWeb.ConnCase, async: false
   import CadenceWeb.DashboardAuthoringDraftTestSupport
 
-  alias Cadence.Dashboards.StatelessAuthoring
+  alias Cadence.Dashboards.{AuthoringWidget, Documents, StatelessAuthoring}
   alias CadenceWeb.TestFixtures
 
   setup do: authoring_draft_setup()
@@ -163,6 +163,66 @@ defmodule CadenceWeb.Console.DashboardAuthoringAPITest do
              json_response(post_json(c, "/versions/1/restore", %{"expected_version" => 2}), 409)[
                "error"
              ]
+  end
+
+  # Moved from the legacy ops_dashboard_editor_test (L8 cutover).
+  test "D9 save keeps the author's note and the opted-in time and spacecraft defaults", c do
+    craft = TestFixtures.persist_spacecraft!(c.mission)
+
+    assert %{"version" => 2} =
+             json_response(
+               post_json(c, "/save", %{
+                 "base_version" => 1,
+                 "commands" => [rename("Noted")],
+                 "message" => "Pass review layout",
+                 "runtime" => %{
+                   "from" => "now-6h",
+                   "to" => "now",
+                   "spacecraft_id" => craft.spacecraft_id
+                 },
+                 "defaults" => %{"time" => true, "scope" => true}
+               }),
+               201
+             )["data"]
+
+    {:ok, saved} =
+      Documents.fetch(c.org.organization_id, c.mission.mission_id, c.document.dashboard_id)
+
+    assert saved.name == "Noted"
+    assert %{"mode" => "live", "window_seconds" => 21_600} = saved.defaults["time"]
+    assert saved.defaults["scope"]["spacecraft_id"] == craft.spacecraft_id
+
+    assert %{"versions" => [%{"message" => "Pass review layout"} | _]} =
+             c |> get_json("/versions") |> json_response(200) |> Map.fetch!("data")
+  end
+
+  # Moved from the legacy ops_dashboard_editor_test (L8 cutover).
+  test "D8 observable search finds the mission's observables, writes nothing, and is scoped",
+       c do
+    fields =
+      Map.merge(AuthoringWidget.defaults(), %{
+        "type" => "time_series",
+        "binding_source" => "operational_observables",
+        "mode" => "scope",
+        "scope_kind" => "spacecraft",
+        "scope_id" => "craft"
+      })
+
+    body = %{"query" => "downlink", "base_version" => 1, "fields" => fields}
+
+    assert %{"observables" => [%{"id" => "comms.transport.downlink_bitrate"} | _]} =
+             c |> post_json("/observables", body) |> json_response(200) |> Map.fetch!("data")
+
+    assert %{"current_version" => 1} =
+             c |> get_json("/versions") |> json_response(200) |> Map.fetch!("data")
+
+    outsider = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(outsider, TestFixtures.persist_org!())
+
+    assert (outsider |> TestFixtures.member_conn() |> post(path(c, "/observables"), body)).status in [
+             403,
+             404
+           ]
   end
 
   test "D8 observable choices need the widget's form fields", c do

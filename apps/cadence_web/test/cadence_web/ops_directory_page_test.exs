@@ -1,6 +1,10 @@
 defmodule CadenceWeb.OpsDirectoryPageTest do
+  @moduledoc """
+  The dashboards directory read model (`Reads.Dashboards.Directory`). The legacy page tests went with
+  the L8 cutover; their cross-organization and revoked-session checks moved to
+  `Console.DashboardDirectoryAPITest`.
+  """
   use CadenceWeb.ConnCase, async: false
-  import Phoenix.LiveViewTest
   alias Cadence.Auth.Scope
   alias Cadence.Dashboards
   alias Cadence.Dashboards.{CurrentVersions, DirectoryActions, Document}
@@ -36,8 +40,7 @@ defmodule CadenceWeb.OpsDirectoryPageTest do
       scope: scope,
       mission: mission,
       base: Dashboards.load_document!(@fixture),
-      conn: TestFixtures.member_conn(user),
-      path: "/missions/#{mission.mission_id}/ops/dashboards"
+      conn: TestFixtures.member_conn(user)
     }
 
     flight = create(context, "Flight board", "Thermal monitoring", ["flight", "thermal"])
@@ -131,123 +134,6 @@ defmodule CadenceWeb.OpsDirectoryPageTest do
     end
   end
 
-  test "the host binds URL filters and consumes ordered, token-bound actions", c do
-    path = c.path <> "?tags=thermal"
-    {:ok, view, _} = live(c.conn, path)
-    original = page(view)
-    assert %{"id" => "dashboards.directory", "status" => "ready"} = original
-    assert [%{"id" => id, "starred" => false}] = original["data"]["model"]["rows"]
-    command = %{"dashboard_id" => id, "starred" => true}
-
-    assert action(view, path, %{original | "token" => Ecto.UUID.generate()}, "star", 1, command)[
-             "ok"
-           ] == false
-
-    assert %{"status" => "rejected"} =
-             action(view, path, original, "star", 2, command)["snapshot"]
-
-    assert %{"status" => "ok", "page" => page} =
-             action(view, path, original, "star", 1, command)["snapshot"]
-
-    assert [%{"starred" => true}] = page["data"]["model"]["rows"]
-    assert page["data"]["sequence"] == 1
-
-    assert %{"status" => "rejected"} =
-             action(view, path, original, "star", 1, command)["snapshot"]
-
-    refresh(view, c.path)
-    assert action(view, path, original, "star", 2, command)["ok"] == false
-  end
-
-  test "operators archive, restore and duplicate; other organizations cannot", c do
-    {:ok, view, _} = live(c.conn, c.path)
-    page = page(view)
-    id = c.power.dashboard_id
-
-    assert %{"status" => "ok", "page" => archived} =
-             action(view, c.path, page, "archive", 1, %{"dashboard_id" => id})["snapshot"]
-
-    refute Enum.any?(archived["data"]["model"]["rows"], &(&1["id"] == id))
-
-    assert %{"status" => "ok"} =
-             action(view, c.path, page, "restore", 2, %{"dashboard_id" => id})["snapshot"]
-
-    assert %{"status" => "invalid", "code" => "invalid_name"} =
-             action(view, c.path, page, "duplicate", 3, %{"dashboard_id" => id, "name" => " "})[
-               "snapshot"
-             ]
-
-    assert %{"status" => "ok", "result" => %{"dashboard_id" => copy}, "page" => duplicated} =
-             action(view, c.path, page, "duplicate", 4, %{
-               "dashboard_id" => id,
-               "name" => "Power copy"
-             })[
-               "snapshot"
-             ]
-
-    assert Enum.any?(
-             duplicated["data"]["model"]["rows"],
-             &(&1["id"] == copy and &1["name"] == "Power copy")
-           )
-
-    foreign = TestFixtures.persist_org!()
-    outsider = TestFixtures.persist_user!()
-    membership = TestFixtures.grant_membership!(outsider, foreign)
-
-    other =
-      Scope.new(%{
-        user: outsider,
-        organization_id: foreign.organization_id,
-        organization_membership: membership
-      })
-
-    for {event, command} <- [
-          {"archive", %{"dashboard_id" => id}},
-          {"duplicate", %{"dashboard_id" => id, "name" => "Mine"}}
-        ] do
-      assert {:error, _} = DirectoryActions.execute(other, mission(c), event, command)
-    end
-
-    assert {:error, _} =
-             DirectoryActions.execute(other, mission(c), "star", %{
-               "dashboard_id" => id,
-               "starred" => true
-             })
-
-    assert {:ok, %{starred: true}} =
-             DirectoryActions.execute(member_scope(c), mission(c), "star", %{
-               "dashboard_id" => id,
-               "starred" => true
-             })
-  end
-
-  test "the directory follows dashboards created and archived by other sessions", c do
-    {:ok, view, _} = live(c.conn, c.path)
-    assert length(page(view)["data"]["model"]["rows"]) == 2
-
-    create(c, "Conjunction watch", "Close approaches", ["fdyn"])
-    eventually(fn -> length(page(view)["data"]["model"]["rows"]) == 3 end)
-
-    :ok = Dashboards.archive_document(org(c), mission(c), c.flight.dashboard_id)
-
-    eventually(fn ->
-      not Enum.any?(page(view)["data"]["model"]["rows"], &(&1["name"] == "Flight board"))
-    end)
-  end
-
-  test "a revoked authenticated session cannot star a dashboard", c do
-    {:ok, view, _} = live(c.conn, c.path)
-    original = page(view)
-    :ok = Cadence.Auth.revoke_user_session(get_session(c.conn, :user_session_token))
-
-    action_request(view, c.path, original, "star", 1, %{
-      "dashboard_id" => c.flight.dashboard_id,
-      "starred" => true
-    })
-
-    assert_redirect(view, "/sign-in")
-  end
-
   defp create(c, name, description, tags) do
     %Document{} = base = c.base
 
@@ -294,43 +180,7 @@ defmodule CadenceWeb.OpsDirectoryPageTest do
     assert status == 0, output
   end
 
-  defp eventually(check, attempts \\ 40) do
-    cond do
-      check.() -> :ok
-      attempts == 0 -> flunk("The directory did not follow the change")
-      true -> retry(check, attempts)
-    end
-  end
-
-  defp retry(check, attempts) do
-    Process.sleep(25)
-    eventually(check, attempts - 1)
-  end
-
   defp org(c), do: c.org.organization_id
   defp mission(c), do: c.mission.mission_id
 
-  defp page(view),
-    do: LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
-
-  defp refresh(view, path) do
-    render_hook(view, "host:context", %{"path" => path})
-    assert_reply(view, %{ok: true})
-  end
-
-  defp action(view, path, page, event, sequence, command) do
-    action_request(view, path, page, event, sequence, command)
-    assert_reply(view, reply)
-    reply |> Jason.encode!() |> Jason.decode!()
-  end
-
-  defp action_request(view, path, page, event, sequence, command) do
-    render_hook(view, "host:ops-page", %{
-      "path" => path,
-      "id" => page["id"],
-      "token" => page["token"],
-      "event" => event,
-      "input" => %{"sequence" => sequence, "command" => command}
-    })
-  end
 end

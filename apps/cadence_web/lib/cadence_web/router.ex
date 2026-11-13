@@ -407,16 +407,8 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :ops_dashboard_author}
       )
 
-      live("/missions/:mission_id/ops/dashboards/:dashboard_id/edit", HostPageLive, :edit,
-        metadata: %{host_policy: :ops_dashboard_author}
-      )
-
       live("/missions/:mission_id/ops/dashboards/:dashboard_id/settings", HostPageLive, :show,
         metadata: %{host_policy: :ops_dashboard_author}
-      )
-
-      live("/missions/:mission_id/ops/dashboards", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
       )
 
       live("/missions/:mission_id/ops/dashboard-shares/:share_id", HostPageLive, :show,
@@ -553,10 +545,6 @@ defmodule CadenceWeb.Router do
       )
 
       live("/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/dashboards/:dashboard_id", HostPageLive, :show,
         metadata: %{host_policy: :ops}
       )
 
@@ -763,6 +751,22 @@ defmodule CadenceWeb.Router do
       "/missions/:mission_id/comms/advanced/runtime-identities/new",
       LegacyCommsRedirectController,
       :runtime_identities_new
+    )
+
+    # L8 cutover (owner: api-ops): the legacy directory, viewer and editor go to the console.
+    # After the live sessions, so the literal /new, /library, /playlists routes match first.
+    get("/missions/:mission_id/ops/dashboards", LegacyDashboardRedirectController, :directory)
+
+    get(
+      "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
+      LegacyDashboardRedirectController,
+      :edit
+    )
+
+    get(
+      "/missions/:mission_id/ops/dashboards/:dashboard_id",
+      LegacyDashboardRedirectController,
+      :viewer
     )
   end
 
