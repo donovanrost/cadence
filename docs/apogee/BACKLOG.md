@@ -25,9 +25,9 @@ missing endpoint or decision; an item with no blocker can start now.
 
 | Who | Start now (unblocked) | Waiting on |
 | --- | --- | --- |
-| **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (five hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | — (api's K1 items shipped: send back, approval, stop time) |
-| **fe-ops** | In order: ux's D4 gap fold + Now h1 copy; Investigate B1 add-point chips, resolved alarm, B4; Now tile links (kit `ApStatTile` `to` from lead); Fleet/Alarms Next contact; Mobile GO block; move the Now, Contacts, Compose and Resolve dialogs onto `ApSheet`. Done: A4 pass select (51cc6133), approval rows → review (a0e33fe1), Investigate tabs link out (0d05d195), D3 outage bands (181fb5d1), Telemetry `Dashboards ↗` (718fd269), Timeline sc/plane (cb5767c9, 97e12555), palette hooks Compose `?command=` (63588467) and Contacts `?station=` (7807e12b), U2 Needs you per target (0ea3b97b) | — (api's M22, A1, M24 and drafts are in) |
-| **fe-setup** | In order: New profile + Duplicate as new profile; `setup/catalog/:databaseId`; R2 `Compare revisions` link; `org.people.invite` redirect to People (§7 #8); Audit kind chips + `Export CSV`. Done: P4 Changes / Keeps tiles (b136754d), Audit actor select (d21aad0b), Readiness R2 (d03eea14), P1 edit + P4 Stage edit (217feb23), Changes Compare (8b58f513), Keep mine / Take live (3ced6cea, 433bcd0f), People Command policies tab (11374b5a). fe-setup updates the §4 rows as each lands | qa: C3 live check. (api's People, Account and provider-history writes are in and built: f9e79c71, 19b2ba55, a3df522d, 2fdd2692; qa #19 copy c16546c4) |
+| **lead** | K1 C panel (focused spacecraft 24 h strip; in progress); Palette recent items on empty query, `SEARCHING…`, Setup-mode ranking; then K1 per-contact Requested → Confirmed / Rejected. Done: `ApSheet` + K1 sheets moved (86187004), `ApStatTile` `to` (86187004), Palette `>` / `@` groups (c45fd134) | — |
+| **fe-ops** | In order: Investigate B1 add-point chips, resolved alarm, B4; Now tile links (`ApStatTile` `to` is in, 86187004); Fleet/Alarms Next contact; Mobile GO block; move QueueListSheet, ReleasePass, ConfirmDialog and ResolveSheet onto `ApSheet`. Done: D4 coverage-gap fold (4ade99dd), Now h1 'needs you' (b94b0163), A4 pass select (51cc6133), approval rows → review (a0e33fe1), Investigate tabs link out (0d05d195), D3 outage bands (181fb5d1), Telemetry `Dashboards ↗` (718fd269), Timeline sc/plane (cb5767c9, 97e12555), palette hooks (63588467, 7807e12b), U2 Needs you per target (0ea3b97b) | — |
+| **fe-setup** | In order: #19 lift (framing editable; callout only when ST1 has `profile_framing_generations` off); ux §7 #3; New profile + Duplicate as new profile; R2 `Compare revisions` link; Audit kind chips + `Export CSV`. Done: ux §7 pass 1 fixes incl. the `org.people.invite` and `catalog/:databaseId` redirects (b42b2358, 7fe01991, 02e87cee), P4 tiles (b136754d), Audit actor select (d21aad0b), R2 (d03eea14), P1/P4 (217feb23), Compare (8b58f513), Keep mine / Take live (3ced6cea, 433bcd0f), Command policies (11374b5a) | qa: C3 live check |
 | **ux** | In progress: §7 visual review pass 2: Approve, Uplink, CommandFlow, Palette, Mobile, Audit (load-gated). Done: pass 1 PassReview, Replan, People, Settings/Providers (83ee8a26); Compose C1 accepted as built (#64; fe-ops b8fe16e0) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Port the lane fix (b7cc12de, 4ae3fd8e) to `develop`; then §8 8d (Now P3 stale-change-set source, Timeline `config` applied events). Done: C3 rollout read + profiles `catalog_revision` (34b8cc27). Done: #42 port to `develop` (f9d89f83). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
@@ -58,7 +58,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | B1 add points (chips, max 3, search this spacecraft's points) | fe-ops | — (M23 point search) |
 | No active alarm: show the latest resolved alarm "back in limits" | fe-ops | — |
 | B4 sisters: plane ring, sparklines, next AOS | fe-ops | — |
-| ~~Live chart tail~~ done (f38a4dfb); live event log | fe-ops | *(check whether M8 covers events)* |
+| ~~Live chart tail~~ done (f38a4dfb); ~~live event log~~ done (e62f05fe: refetches on the `events` and `alarms` invalidations) | fe-ops | — |
 | ~~`FULL TIMELINE →` carries `?sc=`~~ done (cb5767c9) | fe-ops | — |
 
 ### Command a group / Compose (`Command.md`, `CommandFlow.md` C1): partial
@@ -93,7 +93,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Query line ⌘K (`Palette.md`, J5): partial
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Commands (`>`) and Stations (`@`) groups | lead + fe-ops | — (M17 catalog, stations reads exist) |
+| ~~Commands (`>`) and Stations (`@`) groups~~ done (c45fd134; fe-ops hooks 63588467, 7807e12b) | lead + fe-ops | — |
 | Recent items on empty query, `SEARCHING…`, Setup-mode ranking | lead | — |
 | One server search endpoint instead of client-side fleet search | api-ops | ask when fleets exceed the client list |
 
@@ -151,7 +151,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Catalog (`Catalog.md`, S3): partial
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| `setup/catalog/:databaseId` route (pending) | fe-setup | — |
+| ~~`setup/catalog/:databaseId` route (pending)~~ redirects (fe-setup, ux §7 pass 1: b42b2358, 7fe01991, 02e87cee) | fe-setup | — |
 | ~~C1 diff + stat strip~~ done (30b69efc, live on r3) | fe-setup | — |
 | ~~C3 Roll out to~~ built (96256074, 1d5335e6, 0391a9a5; api 34b8cc27, domain 2ef4ca79). 'Request activation' is gone after #65 (ux re-spec: 'Stage rev N for <profiles>') | fe-setup | qa: live check (no catalog change touching 001 before the 11-14 00:33Z pass) |
 | ~~Commands vs Telemetry split~~ done (30b69efc); `Replace file`; warnings disclosure *(unverified)* | fe-setup | — |
@@ -179,7 +179,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~Command policies tab (U4); `GET /command-policies` (O4)~~ done (11374b5a; copy a4b42eca) | fe-setup | — |
-| `org.people.invite` route is pending though the form renders inline: wire or drop (§7 #8: redirect to People); ~~`org.people.services`~~ wired to the Services tab (19b2ba55) | fe-setup | — |
+| ~~`org.people.invite` route~~ redirects to People (fe-setup, ux §7 pass 1); ~~`org.people.services`~~ wired to the Services tab (19b2ba55) | fe-setup | — |
 | ~~Person page (Access, Activity, change role, remove)~~ done (f9e79c71; api 1b4defb8, activity `GET /audit?actor_id=`) | fe-setup | — |
 | ~~Invitation Resend / Revoke; service identity create / rotate / revoke (secret shown once)~~ done (f9e79c71, 19b2ba55) | fe-setup | — |
 
