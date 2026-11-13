@@ -230,7 +230,11 @@ const tabs = [
       "
       title="Contacts"
     >
-      <p class="m-0 font-mono text-sm text-text-3 uppercase">{{ meta }}</p>
+      <div class="flex flex-wrap items-center gap-3">
+        <p class="m-0 font-mono text-sm text-text-3 uppercase">{{ meta }}</p>
+        <!-- Contacts.md: Book passes is a shortcut to Plan (single bookings come with L15). -->
+        <ApButton size="compact" :to="{ name: 'ops.contacts.plan' }">Book passes</ApButton>
+      </div>
     </ApPageHeader>
     <div class="flex flex-wrap items-center justify-between gap-3">
       <ApTabLinks :links="tabs" active="live" label="Contacts sections" />
