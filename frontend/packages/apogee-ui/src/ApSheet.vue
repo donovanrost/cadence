@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, useId } from "vue";
+import { useScrollable } from "./lib/scrollable.ts";
 
 /**
  * A modal sheet on the native `<dialog>`: `showModal` gives the focus trap, Escape and the inert
@@ -23,6 +24,9 @@ defineSlots<{ default(): unknown; footer?(): unknown }>();
 
 const dialog = ref<HTMLDialogElement | null>(null);
 const titleId = useId();
+/** A body that scrolls is a named, focusable group (axe scrollable-region-focusable). */
+const body = ref<HTMLElement | null>(null);
+const scrolls = useScrollable(body);
 let opener: HTMLElement | null = null;
 
 function open() {
@@ -53,7 +57,13 @@ defineExpose({ open, close });
     "
     @close="onClose"
   >
-    <div class="flex max-h-[70vh] flex-col gap-3 overflow-auto p-5">
+    <div
+      ref="body"
+      class="flex max-h-[70vh] flex-col gap-3 overflow-auto p-5"
+      :tabindex="scrolls ? 0 : undefined"
+      :role="scrolls ? 'group' : undefined"
+      :aria-labelledby="scrolls ? titleId : undefined"
+    >
       <h2 :id="titleId" class="m-0 font-display text-xl font-semibold tracking-tag uppercase">
         {{ title }}
       </h2>
