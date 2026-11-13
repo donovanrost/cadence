@@ -197,6 +197,25 @@ post-restart checks above. Never during the freeze. Big tables: CREATE INDEX CON
 `lock_timeout` on ALTERs of hot tables (`mission_spacecraft`, `provider_audit_entries`).
 `cadence_dev` is left alone (it belongs to the main checkout).
 
+**Test partitions go stale** (lead, 2026-11-13). Each `MIX_TEST_PARTITION=N` has its own database,
+`cadence_testN`, and `mix test` doesn't migrate it. A partition last used before a migration landed
+fails with `Postgrex.Error ERROR 42703 (undefined_column)` (or `42P01 undefined_table`). That is a
+stale database, not a real failure: on 11-13 `OpsLandingPageTest` on partition 11 died on
+`command_requests.command_group_id`, with 53 migrations missing. Check every partition against the
+tree (missing = migrations the database hasn't run):
+
+```
+ls apps/cadence/priv/repo/migrations/*.exs | xargs -n1 basename | sed 's/_.*//' | sort > /tmp/mig.txt
+for db in $(psql -h localhost -U postgres -Atc "select datname from pg_database where datname ~ '^cadence_test[0-9]*$'"); do
+  echo "$db missing=$(psql -h localhost -U postgres -d $db -Atc 'select version from schema_migrations' | sort | comm -23 /tmp/mig.txt - | wc -l)"
+done
+```
+
+A test database isn't :4011's, so qa doesn't schedule it. Migrate it through check-slot:
+`cd apps/cadence && MIX_ENV=test MIX_TEST_PARTITION=N ../../scripts/check-slot.sh mix ecto.migrate`
+(empty N = `cadence_test`). On 11-13, partitions 2, 3, 4, 5, 7, 10, 11 and 19 were brought up to
+20261113150000.
+
 ## Known limits
 
 - **Live telemetry saturates the shared laptop.** On 2026-11-08, ten 1 Hz feeds plus team builds
