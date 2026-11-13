@@ -14,7 +14,9 @@ export const roleWord = (role: InvitationRole | null) => (role ? ROLE[role] : nu
 const day = (iso: string) => iso.slice(5, 10);
 
 /** "Mira K. invited you to Acme Space as Member on 11-10." */
-export function invitationHeader(i: Invitation): string {
+export function invitationHeader(i: Invitation): string | null {
+  // `unknown` (and anything without an organization) has no header (session.md: all fields null).
+  if (!i.organization) return null;
   const who = i.invited_by?.name;
   const role = roleWord(i.role);
   const on = i.invited_at ? ` on ${day(i.invited_at)}` : "";
@@ -31,7 +33,7 @@ export type InvitationView = Readonly<{
 
 /** The Auth.md case table: h1 and callout per case (forms and actions live in the screen). */
 export function invitationView(i: Invitation, signedInAs: string | null): InvitationView {
-  const org = i.organization.name;
+  const org = i.organization?.name ?? "this organization";
   const who = i.invited_by?.name;
   switch (i.case) {
     case "new_account":
@@ -45,7 +47,7 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
         h1: null,
         callout: {
           tone: "caution",
-          text: `This invitation is for ${i.email}.${signedInAs ? ` You're signed in as ${signedInAs}.` : ""}`,
+          text: `This invitation is for ${i.email ?? "another account"}.${signedInAs ? ` You're signed in as ${signedInAs}.` : ""}`,
         },
       };
     case "expired":
@@ -85,6 +87,8 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
           text: "This invitation isn't available any more. Ask for a new one.",
         },
       };
+    case "unknown":
+      return { h1: null, callout: { tone: "off", text: UNKNOWN_INVITATION } };
     case "unrecognized":
       return {
         h1: null,

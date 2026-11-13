@@ -1,15 +1,15 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { safeReturn, type Invitation } from "./api.ts";
+import { fetchInvitation, safeReturn, type Invitation } from "./api.ts";
 import SignInScreen from "./SignInScreen.vue";
 import { invitationHeader, invitationView } from "./words.ts";
 
 const inv = (over: Partial<Invitation> = {}): Invitation => ({
   case: "new_account",
-  organization: { id: "o", name: "Acme Space" },
+  organization: { name: "Acme Space" },
   role: "member",
-  invited_by: { id: "u", name: "Mira K." },
+  invited_by: { name: "Mira K." },
   invited_at: "2026-11-10T09:00:00Z",
   email: "ana@x.com",
   expires_at: "2026-11-17T09:00:00Z",
@@ -58,6 +58,52 @@ describe("auth words (ux Auth.md)", () => {
     expect(safeReturn("//evil.example/x")).toBeNull();
     expect(safeReturn("https://evil.example")).toBeNull();
     expect(safeReturn(undefined)).toBeNull();
+  });
+});
+
+describe("invitation decoder on the live payloads (qa, api-ops e3c5d19b)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const stub = (body: unknown) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: body }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+  it("reads an unknown token (every field null) and words it with no header", async () => {
+    stub({
+      case: "unknown",
+      organization: null,
+      role: null,
+      invited_by: null,
+      invited_at: null,
+      email: null,
+      expires_at: null,
+    });
+    const r = await fetchInvitation("x");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(invitationHeader(r.value)).toBeNull();
+    expect(invitationView(r.value, null).callout?.text).toBe("This invitation link isn't valid.");
+  });
+  it("reads a new_account invitation with organization {name} and no ids", async () => {
+    stub({
+      case: "new_account",
+      organization: { name: "QA Org" },
+      role: "member",
+      invited_by: { name: "Qa Admin" },
+      invited_at: "2026-11-13T04:00:00Z",
+      email: "qa-l5-a-965955@example.com",
+      expires_at: "2026-11-20T04:00:00Z",
+    });
+    const r = await fetchInvitation("orginvite_4njbj3gbj4_KDK6");
+    expect(r.ok && [invitationView(r.value, null).h1, invitationHeader(r.value)]).toEqual([
+      "Join QA Org",
+      "Qa Admin invited you to QA Org as Member on 11-13.",
+    ]);
   });
 });
 

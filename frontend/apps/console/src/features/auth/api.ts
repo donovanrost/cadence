@@ -27,20 +27,23 @@ export const invitationCases = [
   "used",
   "declined",
   "unavailable",
+  "unknown",
 ] as const;
 /** Typing rule (1): a new server case reads as "unrecognized", never a failed page. */
 export type InvitationCase = (typeof invitationCases)[number] | "unrecognized";
 export const invitationRoles = ["member", "organization_admin"] as const;
 export type InvitationRole = (typeof invitationRoles)[number] | "unrecognized";
 
-const person = d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) }));
+/** session.md L5: people and organizations come as `{name} | null` (no ids on this public read). */
+const person = d.nullable(d.object({ name: d.nullable(d.string) }));
+const org = d.nullable(d.object({ name: d.string }));
 const invitationReader = d.object({
   case: d.known(invitationCases),
-  organization: d.object({ id: d.token, name: d.string }),
+  organization: org,
   role: d.nullable(d.known(invitationRoles)),
   invited_by: person,
   invited_at: d.nullable(d.timestamp),
-  email: d.string,
+  email: d.nullable(d.string),
   expires_at: d.nullable(d.timestamp),
   /** Withdrawn: who withdrew it, when the server says (U29). */
   withdrawn_by: d.optional(person),
@@ -53,11 +56,11 @@ export type Invitation = Decoded<typeof invitationReader>;
  */
 export const unavailableReader = d.object({
   case: d.known(invitationCases),
-  organization: d.optional(d.object({ id: d.token, name: d.string })),
+  organization: d.optional(org),
   role: d.optional(d.nullable(d.known(invitationRoles))),
   invited_by: d.optional(person),
   invited_at: d.optional(d.nullable(d.timestamp)),
-  email: d.optional(d.string),
+  email: d.optional(d.nullable(d.string)),
   expires_at: d.optional(d.nullable(d.timestamp)),
   withdrawn_by: d.optional(person),
 });

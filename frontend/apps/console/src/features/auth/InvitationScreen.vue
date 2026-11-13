@@ -64,11 +64,11 @@ function fromUnavailable(e: ApiError): Invitation | null {
   const v = r.value;
   return {
     case: v.case,
-    organization: v.organization ?? { id: "", name: "this organization" },
+    organization: v.organization ?? null,
     role: v.role ?? null,
     invited_by: v.invited_by ?? null,
     invited_at: v.invited_at ?? null,
-    email: v.email ?? "",
+    email: v.email ?? null,
     expires_at: v.expires_at ?? null,
     withdrawn_by: v.withdrawn_by,
   };
@@ -164,7 +164,7 @@ const reason = computed(
     <template v-else-if="declined">
       <h1 class="m-0 font-display text-[24px] font-semibold tracking-head uppercase">Declined</h1>
       <p class="m-0 text-text-2">
-        You declined the invitation to {{ invitation.organization.name }}.
+        You declined the invitation to {{ invitation.organization?.name ?? "this organization" }}.
       </p>
       <ApButton variant="secondary" class="w-full" @click="goTo('/console/')"
         >Continue to Cadence</ApButton
@@ -174,7 +174,9 @@ const reason = computed(
       <h1 v-if="view.h1" class="m-0 font-display text-[24px] font-semibold tracking-head uppercase">
         {{ view.h1 }}
       </h1>
-      <p class="m-0 text-text-2">{{ invitationHeader(invitation) }}</p>
+      <p v-if="invitationHeader(invitation)" class="m-0 text-text-2">
+        {{ invitationHeader(invitation) }}
+      </p>
       <ApCallout v-if="view.callout" :tone="view.callout.tone">{{ view.callout.text }}</ApCallout>
       <ApCallout v-if="retry.text.value" tone="caution">{{ retry.text.value }}</ApCallout>
       <ApCallout v-else-if="error" :tone="error.tone">{{ error.text }}</ApCallout>
@@ -192,7 +194,7 @@ const reason = computed(
           required
         />
         <ApField
-          :model-value="invitation.email"
+          :model-value="invitation.email ?? ''"
           label="Email"
           type="email"
           autocomplete="username"
@@ -240,7 +242,7 @@ const reason = computed(
         >
         <div v-else class="flex flex-col gap-2">
           <p class="m-0 text-text-2">
-            Decline the invitation to {{ invitation.organization.name }}?
+            Decline the invitation to {{ invitation.organization?.name ?? "this organization" }}?
           </p>
           <ApButton variant="danger" class="w-full" :disabled="busy" @click="run(decline)()"
             >Decline the invitation</ApButton
@@ -257,7 +259,7 @@ const reason = computed(
         >Sign out and continue</ApButton
       >
       <ApButton
-        v-else-if="['accepted', 'used', 'unrecognized'].includes(invitation.case)"
+        v-else-if="['accepted', 'used', 'unknown', 'unrecognized'].includes(invitation.case)"
         variant="primary"
         class="w-full"
         :to="{ name: 'auth.sign-in' }"
