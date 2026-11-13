@@ -39,6 +39,48 @@ defmodule Cadence.Control.PlanningRequirements.Schema do
   # A one-off must say why (the version row requires a rationale; a template supplies its own).
   @required_here ~w(rationale)
 
+  @doc """
+  Admits wire `content`: only the schema's keys (`{:invalid_params, %{"content.<key>" =>
+  "unknown field"}}` otherwise), with null constraint lists read as no constraint.
+  """
+  @spec admit(term()) :: {:ok, map()} | {:error, term()}
+  def admit(content) when is_map(content) do
+    case Map.keys(content) -- content_keys() do
+      [] ->
+        {:ok,
+         content
+         |> constraints("provider_constraints_document")
+         |> constraints("station_constraints_document")}
+
+      unknown ->
+        {:error, {:invalid_params, Map.new(unknown, &{"content.#{&1}", "unknown field"})}}
+    end
+  end
+
+  def admit(_content), do: {:error, {:invalid_params, %{content: "must be an object"}}}
+
+  # qa P4: a form with Advanced untouched sends {allowed: null, excluded: null}; null means no
+  # constraint (an empty list), and a null document none at all.
+  defp constraints(content, key) do
+    case Map.fetch(content, key) do
+      {:ok, nil} ->
+        Map.put(content, key, %{"allowed" => [], "excluded" => []})
+
+      {:ok, %{} = document} ->
+        Map.put(
+          content,
+          key,
+          Map.merge(document, %{
+            "allowed" => document["allowed"] || [],
+            "excluded" => document["excluded"] || []
+          })
+        )
+
+      _absent_or_other ->
+        content
+    end
+  end
+
   defp requirement_fields do
     for %{path: @prefix <> path} = field <- TemplateSchema.fields() do
       %{

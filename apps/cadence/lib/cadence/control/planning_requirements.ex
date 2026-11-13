@@ -125,7 +125,7 @@ defmodule Cadence.Control.PlanningRequirements do
   @doc "Creates (`requirement_id` nil) or versions a requirement: `{:ok, %{id, version}}`."
   @spec save(Scope.t(), binary(), binary() | nil, map()) :: {:ok, map()} | {:error, term()}
   def save(%Scope{} = scope, mission_id, requirement_id, params) do
-    with {:ok, content} <- content(params["content"]),
+    with {:ok, content} <- Schema.admit(params["content"]),
          {:ok, requirement, version} <- write(scope, mission_id, requirement_id, content, params) do
       {:ok, %{id: requirement.contact_requirement_id, version: version.version}}
     else
@@ -225,18 +225,6 @@ defmodule Cadence.Control.PlanningRequirements do
       ContactRequirements.version(scope, mission_id, requirement_id, expected, content)
     end
   end
-
-  defp content(content) when is_map(content) do
-    case Map.keys(content) -- Schema.content_keys() do
-      [] ->
-        {:ok, content}
-
-      unknown ->
-        {:error, {:invalid_params, Map.new(unknown, &{"content.#{&1}", "unknown field"})}}
-    end
-  end
-
-  defp content(_content), do: {:error, {:invalid_params, %{content: "must be an object"}}}
 
   defp row(requirement, version, names) do
     %{

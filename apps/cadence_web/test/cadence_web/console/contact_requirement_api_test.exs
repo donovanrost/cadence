@@ -232,6 +232,19 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
     assert %{"requirements" => []} = json_response(get_json(c, "?state=active"), 200)["data"]
   end
 
+  test "null constraint lists mean no constraint (qa P4: Advanced untouched)", c do
+    untouched = %{"allowed" => nil, "excluded" => nil}
+
+    id =
+      create!(c, c.sc1, %{
+        "provider_constraints_document" => untouched,
+        "station_constraints_document" => nil
+      })
+
+    assert %{"provider_constraints_document" => %{"allowed" => [], "excluded" => []}} =
+             json_response(get_json(c, "/#{id}"), 200)["data"]["content"]
+  end
+
   test "max_gap_seconds round-trips; null clears it; out of range is 422 on the field", c do
     id = create!(c, c.sc1, %{"max_gap_seconds" => 3_600})
 
