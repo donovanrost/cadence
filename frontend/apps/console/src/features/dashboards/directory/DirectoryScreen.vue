@@ -52,6 +52,7 @@ async function onAction(
   <ApPageHeader :label="`${scope.mission.name} · telemetry`" title="Dashboards" size="reading">
     <!-- ux § Where it sits: Library · Playlists · New dashboard; wraps under the h1 on a phone. -->
     <span class="flex flex-wrap gap-2">
+      <ApButton variant="secondary" :to="{ name: 'ops.dashboards.library' }">Library</ApButton>
       <ApButton variant="secondary" :to="{ name: 'ops.dashboards.playlists' }">Playlists</ApButton>
       <ApButton v-if="canEdit" variant="primary" :to="{ name: 'ops.dashboards.new' }"
         >New dashboard</ApButton

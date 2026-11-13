@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { describeApiError, isError } from "@/api";
+import { describeApiError, fieldErrors, isError } from "@/api";
 import { ApButton, ApCallout, ApField, ApSheet, ApTextarea } from "@/ui";
 import { renameItem } from "./api.ts";
 
@@ -48,7 +48,12 @@ async function save() {
       ? "Someone changed this widget meanwhile. Close and open it again to rename the current one."
       : r.error.kind === "forbidden"
         ? "Dashboard editors manage the library."
-        : describeApiError(r.error);
+        : r.error.kind === "not_found"
+          ? "This widget was deleted meanwhile."
+          : // 422 details.request (bad name) or details.expected_version: the server's sentence.
+            (fieldErrors(r.error).request ??
+            fieldErrors(r.error).expected_version ??
+            describeApiError(r.error));
 }
 defineExpose({ open });
 </script>

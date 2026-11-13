@@ -127,13 +127,14 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "telemetry/dashboards/library",
     name: "ops.dashboards.library",
-    component: pending,
+    // D21/D22 (api ffd5c6d69).
+    component: () => import("@/features/dashboards/library/LibraryScreen.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "Dashboard library" },
   },
   {
     path: "telemetry/dashboards/library/:itemId",
     name: "ops.dashboards.library.item",
-    component: pending,
+    component: () => import("@/features/dashboards/library/LibraryItemScreen.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "Library widget" },
   },
   {

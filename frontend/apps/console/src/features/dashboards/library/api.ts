@@ -6,6 +6,7 @@ import {
   type ApiError,
   type ApiResult,
   type Decoded,
+  type Reader,
   type Unrecognized,
 } from "@/api";
 
@@ -26,6 +27,18 @@ export const widgetKinds = [
   "constellation_health",
 ] as const;
 export type WidgetKind = (typeof widgetKinds)[number];
+
+/**
+ * `kind` is the latest version's widget_type_id (api ffd5c6d69), namespaced: `cadence.time_series`.
+ * Cadence's own types read without the namespace; another vendor's keeps its full id as the word.
+ */
+const kindReader: Reader<WidgetKind | Unrecognized> = (value, path = "") => {
+  const id = d.string(value, path);
+  return d.knownText(widgetKinds)(
+    id.startsWith("cadence.") ? id.slice("cadence.".length) : id,
+    path,
+  );
+};
 
 export const KIND_WORDS: Readonly<Record<WidgetKind, string>> = {
   value_tile: "Value tile",
@@ -48,7 +61,7 @@ const itemReader = d.object({
   id: d.token,
   name: d.string,
   description: d.nullable(d.string),
-  kind: d.knownText(widgetKinds),
+  kind: kindReader,
   latest_version: d.integer,
   updated_at: d.nullable(d.timestamp),
   updated_by: person,
@@ -57,7 +70,7 @@ const rowReader = d.object({
   id: d.token,
   name: d.string,
   description: d.nullable(d.string),
-  kind: d.knownText(widgetKinds),
+  kind: kindReader,
   latest_version: d.integer,
   used_by_count: d.integer,
   updated_at: d.nullable(d.timestamp),

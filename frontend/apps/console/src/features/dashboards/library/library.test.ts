@@ -19,7 +19,7 @@ const row = (id: string, over: Record<string, unknown> = {}) => ({
   id,
   name: `Battery tile ${id}`,
   description: null,
-  kind: "value_tile",
+  kind: "cadence.value_tile",
   latest_version: 3,
   used_by_count: 2,
   updated_at: "2026-11-12T03:10:00Z",
@@ -39,7 +39,7 @@ const detail = {
     id: "lib-1",
     name: "Battery tile",
     description: "VBAT with limits",
-    kind: "value_tile",
+    kind: "cadence.value_tile",
     latest_version: 3,
     updated_at: "2026-11-12T03:10:00Z",
     updated_by: { id: "u-1", name: "Ana P." },
@@ -55,7 +55,9 @@ const detail = {
   versions: [
     { version: 3, summary: "Two decimals", saved_at: "2026-11-12T03:10:00Z", saved_by: null },
   ],
-  used_by: { dashboards: [{ id: "d-1", name: "Bus overview", placements: 2 }] },
+  used_by: {
+    dashboards: [{ id: "d-1", name: "Bus overview", placements: 2, pinned_versions: [] }],
+  },
   can_edit: true,
 };
 const reply = (status: number, body: unknown) =>
@@ -75,11 +77,22 @@ describe("dashboards library (slice 8)", () => {
 
   it("reads the list and an item; an unknown kind still reads", async () => {
     stub(
-      reply(200, { data: list([row("a"), row("b", { kind: "sky_plot" })]) }),
+      // api ffd5c6d69: kind is the widget_type_id, namespaced; another vendor's keeps its id.
+      reply(200, {
+        data: list([
+          row("a"),
+          row("b", { kind: "cadence.sky_plot" }),
+          row("c", { kind: "acme.gauge" }),
+        ]),
+      }),
       reply(200, { data: detail }),
     );
     const l = await fetchLibrary("m", { q: "", page: 1 });
-    expect(l.ok && l.value.items.map((r) => kindWord(r.kind))).toEqual(["Value tile", "sky plot"]);
+    expect(l.ok && l.value.items.map((r) => kindWord(r.kind))).toEqual([
+      "Value tile",
+      "sky plot",
+      "acme.gauge",
+    ]);
     const item = await fetchLibraryItem("m", "lib-1", null);
     expect(item.ok && item.value.used_by.dashboards[0]?.name).toBe("Bus overview");
   });
@@ -93,10 +106,11 @@ describe("dashboards library (slice 8)", () => {
           details: {
             used_by: {
               dashboards: [
-                { id: "d-1", name: "Bus overview", placements: 1 },
-                { id: "d-2", name: "Night shift", placements: 3 },
+                { id: "d-1", name: "Bus overview", placements: 1, pinned_versions: [2] },
+                { id: "d-2", name: "Night shift", placements: 3, pinned_versions: [] },
               ],
             },
+            consumer_count: 2,
           },
         },
       }),

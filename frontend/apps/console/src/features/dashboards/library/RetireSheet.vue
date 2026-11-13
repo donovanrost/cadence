@@ -34,7 +34,8 @@ async function retire() {
   busy.value = true;
   const r = await retireItem(props.missionId, t.id, t.version);
   busy.value = false;
-  if (r.ok) {
+  // 404: someone retired it meanwhile, so it's already what was asked (api ffd5c6d69).
+  if (r.ok || r.error.kind === "not_found") {
     sheet.value?.close();
     emit("done");
     return;
