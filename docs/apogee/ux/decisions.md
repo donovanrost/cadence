@@ -702,3 +702,36 @@ more than 24 h old.
   - **Refusal `spacecraft_archived`** (releasing or uplinking a command for an archived spacecraft): "EARENDIL-312
     is archived, so commands can't be released or sent to it." On a release it reads as the release outcome:
     "Not released: EARENDIL-312 is archived." In Compose, an archived target isn't offered.
+
+### U41 · An approved activation that didn't apply: sentences, Retry, Now row, audit (§11 L10, domain 9b8456132) (domain / api / fe-setup / fe-ops)
+- **Error sentences** (domain's `error` field; standalone, so Now and the review page use them as they are; the
+  code goes in Technical details):
+  - `apply_stalled`: "Applying didn't finish, and nothing is working on it now." It's true both when it stopped
+    partway and when it never started.
+  - `activation_execution_interrupted`: "Applying was cut off: Cadence lost its database connection partway."
+  - `spacecraft_configuration_review_stale`: "EARENDIL-312's configuration changed after it was reviewed, so the
+    reviewed version can't be applied." Several or unknown: "A spacecraft's configuration changed after it was
+    reviewed, so the reviewed version can't be applied."
+  - `approved_activation_content_mismatch`: "What would be applied now differs from what was approved, so it
+    wasn't applied."
+  - Any other code: "Applying failed." Never the raw reason (U20).
+- **Next step, by cause:**
+  - Stalled, interrupted or another code: `Retry apply` (people who may approve). Domain says every step is
+    safe to repeat, so the button needs no warning. Without the permission: "Someone who can approve activations
+    can retry it."
+  - Review stale or content mismatch: no `Retry apply`, because re-running checks the same thing and fails again.
+    The next step: "Request activation again so the current version can be approved." If domain says a retry
+    can succeed here, Retry comes back.
+- **Review page line** (fe-setup): caution "Approved, but it didn't apply. <sentence> Since 02:14Z." Then the next
+  step as above.
+- **Now row** (`activation_apply`, fe-ops):
+  - Title `Decom composition for 3 spacecraft · approved, not applied` (the server's summary; spacecraft batch-named).
+  - Meta: `Approved by Mira K. at 02:10Z · since 02:14Z`. Body: the sentence. Action: `Retry apply` or `Review`, as
+    above.
+  - Priority: P1 when `runtime_not_applied` (add the line "Telemetry isn't being processed until this applies."),
+    else P2. This is domain's suggestion, accepted.
+  - Resolved: applied reads "Applied at 02:20Z."; superseded reads "A newer activation replaced this one." The
+    row fades as other resolved items do.
+- **Audit `activation_resumed`** (mission event log): "Mira K. retried applying “Decom composition for 3
+  spacecraft”." Without a summary: "Mira K. retried applying an approved activation." The binding set and its
+  version go in Technical details.
