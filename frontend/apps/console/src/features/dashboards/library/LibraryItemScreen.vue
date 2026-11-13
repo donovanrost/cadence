@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { useMissionScope } from "@/shell";
 import {
   formatShort,
+  ApBreadcrumb,
   ApButton,
   ApCallout,
   ApKeyValue,
@@ -11,12 +12,20 @@ import {
   ApPanel,
   ApRemote,
   ApTag,
+  type ApCrumb,
 } from "@/ui";
 import { kindWord, usedInWords } from "./api.ts";
 import { previewOf } from "./preview.ts";
 import RenameSheet from "./RenameSheet.vue";
 import RetireSheet from "./RetireSheet.vue";
 import { useLibraryItem } from "./useLibrary.ts";
+
+/** ux Dashboards.md › Where it sits: Dashboards / Library / this widget. */
+const crumbsFor = (name: string): readonly ApCrumb[] => [
+  { label: "Dashboards", to: { name: "ops.dashboards" } },
+  { label: "Library", to: { name: "ops.dashboards.library" } },
+  { label: name },
+];
 
 /**
  * A library widget (ux Dashboards.md § Library): its versions (pick one to preview it), a
@@ -53,12 +62,10 @@ function retired() {
   <ApRemote :state="item.state.value" loading-label="LOADING WIDGET…" @retry="item.refetch">
     <template #default="{ value }">
       <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
+        <ApBreadcrumb :crumbs="crumbsFor(value.item.name)" />
         <ApPageHeader :label="`${scope.mission.name} · dashboard library`" :title="value.item.name">
           <template #status><ApTag state="neutral" :label="kindWord(value.item.kind)" /></template>
           <div class="flex flex-wrap gap-2">
-            <ApButton size="compact" variant="ghost" :to="{ name: 'ops.dashboards.library' }"
-              >Library</ApButton
-            >
             <template v-if="value.can_edit">
               <ApButton size="compact" variant="secondary" @click="rename?.open(value.item)"
                 >Rename</ApButton

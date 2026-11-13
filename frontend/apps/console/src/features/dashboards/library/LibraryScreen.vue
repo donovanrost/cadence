@@ -5,7 +5,7 @@ import { useMissionScope } from "@/shell";
 import {
   formatShort,
   plural,
-  ApButton,
+  ApBreadcrumb,
   ApEmptyState,
   ApField,
   ApPageHeader,
@@ -13,12 +13,19 @@ import {
   ApRemote,
   ApTable,
   type ApColumn,
+  type ApCrumb,
 } from "@/ui";
 import MoreMenu from "../viewer/MoreMenu.vue";
 import { kindWord, type LibraryRow } from "./api.ts";
 import RenameSheet from "./RenameSheet.vue";
 import RetireSheet from "./RetireSheet.vue";
 import { useLibraryList } from "./useLibrary.ts";
+
+/** ux Dashboards.md › Where it sits: the library belongs to Dashboards, so it crumbs back. */
+const crumbs: readonly ApCrumb[] = [
+  { label: "Dashboards", to: { name: "ops.dashboards" } },
+  { label: "Library" },
+];
 
 /**
  * Dashboards › Library (ux Dashboards.md § Library): reusable widgets, Name · Kind · Used in N
@@ -63,11 +70,8 @@ function act(row: LibraryRow, id: "rename" | "delete") {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
-    <ApPageHeader :label="`${scope.mission.name} · dashboards`" title="Library">
-      <ApButton size="compact" variant="ghost" :to="{ name: 'ops.dashboards' }"
-        >All dashboards</ApButton
-      >
-    </ApPageHeader>
+    <ApBreadcrumb :crumbs="crumbs" />
+    <ApPageHeader :label="`${scope.mission.name} · dashboards`" title="Library" />
     <div class="w-72 max-md:w-full">
       <ApField
         v-model="q"
