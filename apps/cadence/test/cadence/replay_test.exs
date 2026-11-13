@@ -254,6 +254,49 @@ defmodule Cadence.ReplayTest do
            ]
   end
 
+  # #56: the report is ordered in Elixir (bytewise), not by the database's text collation. Under
+  # en_US (CI) the replay query returns HK.a, HK.b, HK.B; bytewise it's HK.B, HK.a, HK.b.
+  test "reports missing live samples in bytewise {evidence, point} order" do
+    binding_set = persist_binding_set_fixture()
+
+    raw_evidence =
+      RawEvidence.new(%{mission_id: "mission-alpha", raw: build_space_packet(42, 4, <<0, 33>>)})
+
+    assert {:ok, _live_result} =
+             Cadence.process_and_persist_telemetry_ingress(
+               raw_evidence,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    assert {:ok, replay_run} =
+             Replay.replay_telemetry_evidence(
+               "mission-alpha",
+               raw_evidence.evidence_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    replayed =
+      Repo.one!(
+        from(row in ReplayTelemetrySampleRow,
+          where: row.replay_run_id == ^replay_run.replay_run_id
+        )
+      )
+
+    for point <- ["HK.b", "HK.B", "HK.a"] do
+      replayed
+      |> Ecto.put_meta(state: :built)
+      |> Map.merge(%{sample_id: "#{replayed.sample_id}-#{point}", point_id: point})
+      |> Repo.insert!()
+    end
+
+    diff_report = ReplayDiff.diff_run(replay_run.replay_run_id)
+
+    assert diff_report.matching_count == 1
+    assert Enum.map(diff_report.missing_live, & &1.point_id) == ["HK.B", "HK.a", "HK.b"]
+  end
+
   test "replays managed capability runtime records into replay tables and operational events" do
     mission_id = "mission-managed-replay"
     source_endpoint = persist_source_endpoint(mission_id)
