@@ -47,6 +47,8 @@ const passes = usePasses(
   30 * 60_000,
   computed(() => range.value.ms),
 );
+/** §4: "6 h", not "6h" (ux §7 #17). */
+const rangeWords = computed(() => range.value.label.toLowerCase().replace(/h$/, " h"));
 const rangeOptions = RANGES.map((r) => ({ value: r.value, label: r.label }));
 /** D4 (M22): hidden when the read isn't available (Contacts.md: "Unavailable: hide D4"). */
 const findings = useFindings(
@@ -170,7 +172,7 @@ const meta = computed(() => {
     (p) => Date.parse(p.starts_at) > t && passStatus(p, t) !== "canceled",
   ).length;
   const issues = findingsMeta(findingsReady.value);
-  return `${plural(ahead, "pass", "passes")} next ${range.value.label.toLowerCase()} · ${live} AOS now${issues ? ` · ${issues}` : ""}`;
+  return `${plural(ahead, "pass", "passes")} next ${rangeWords.value} · ${live} AOS now${issues ? ` · ${issues}` : ""}`;
 });
 const tabs = [
   { key: "live", label: "Live", to: { name: "ops.contacts" } },
@@ -229,7 +231,9 @@ const tabs = [
       <ApCallout v-if="list.some((p) => p.source.synthetic)" tone="stale">
         These passes are the simulator's synthetic windows, not a real ground provider's.
       </ApCallout>
-      <ApPanel index="D1" title="Ground track" flush class="flex-none">
+      <!-- ux §7 #17: on a phone, D1 hides while it's unavailable and D2 until a bar is chosen, so
+           D4 is on the first screen. -->
+      <ApPanel index="D1" title="Ground track" flush class="flex-none max-md:hidden">
         <ApEmptyState
           state="off"
           headline="Ground track not available"
@@ -241,7 +245,7 @@ const tabs = [
       >
         <ApPanel
           index="D3"
-          :title="`Pass schedule · ${range.label.toLowerCase()}`"
+          :title="`Pass schedule · ${rangeWords}`"
           :meta="view ? `${view.bars.length} in view` : undefined"
           pane
           flush
@@ -253,7 +257,7 @@ const tabs = [
           >
             <ApEmptyState
               v-if="view && view.bars.length === 0"
-              :headline="`No passes${stationId === null ? '' : ` at ${stationName}`} in the next ${range.label.toLowerCase().replace(/h$/, ' h')}`"
+              :headline="`No passes${stationId === null ? '' : ` at ${stationName}`} in the next ${rangeWords}`"
             />
             <div v-else-if="view" class="p-3">
               <ApGantt
@@ -271,16 +275,13 @@ const tabs = [
         </ApPanel>
         <div class="flex min-h-0 flex-col gap-3">
           <SelectedPassPanel
+            :class="selectedId === null ? 'max-md:hidden' : undefined"
             :mission-id="missionId"
             :pass="selected"
             :spacecraft="selectedSpacecraft"
             @changed="refetchPass"
           />
-          <FindingsPanel
-            v-if="findingsReady"
-            :findings="findingsReady"
-            :label="range.label.toLowerCase().replace(/h$/, ' h')"
-          />
+          <FindingsPanel v-if="findingsReady" :findings="findingsReady" :label="rangeWords" />
         </div>
       </div>
     </template>

@@ -184,7 +184,7 @@ onBeforeUnmount(() => returnFocus?.focus());
           @input="onInput"
           @keydown="onKey"
         />
-        <ApKbd>Esc</ApKbd>
+        <ApKbd class="max-md:hidden">Esc</ApKbd>
       </div>
       <PaletteResults
         :groups="groups"
@@ -194,7 +194,7 @@ onBeforeUnmount(() => returnFocus?.focus());
         @expand="expand"
       />
       <p
-        class="m-0 flex flex-wrap gap-4 border-t border-hairline px-4 py-2 font-mono text-xs text-text-4 uppercase"
+        class="m-0 flex flex-wrap gap-4 border-t border-hairline px-4 py-2 font-mono text-xs text-text-4 uppercase max-md:hidden"
       >
         <span>↑↓ move</span><span>↵ open</span><span v-if="access.request">⌘↵ command it</span
         ><span>G N now</span><span>G C contacts</span><span>[ ] prev/next sc</span>
