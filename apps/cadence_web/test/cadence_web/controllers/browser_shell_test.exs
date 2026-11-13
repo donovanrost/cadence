@@ -44,20 +44,6 @@ defmodule CadenceWeb.BrowserShellTest do
     assert redirected_to(get(conn, "/sign-in")) == "/console/sign-in"
   end
 
-  test "environment admin credentials on /sign-in enter admin mode and route to admin dashboard",
-       %{conn: conn} do
-    conn =
-      post(conn, "/sign-in", %{
-        "user" => %{
-          "email" => @environment_admin_email,
-          "password" => @environment_admin_password
-        }
-      })
-
-    assert redirected_to(conn) == "/admin"
-    assert CadenceWeb.AdminMode.active?(get_session(conn, :admin_mode_expires_at))
-  end
-
   test "platform admin root redirect routes to admin dashboard", %{conn: conn} do
     root_conn =
       conn
@@ -105,33 +91,6 @@ defmodule CadenceWeb.BrowserShellTest do
       |> get("/admin")
 
     assert redirected_to(expired_conn) == "/admin-mode"
-  end
-
-  test "durable user sign-in reaches the organization home", %{conn: _conn} do
-    durable_password = "durable-password-123"
-    persist_durable_user!(email: "ops-lead@example.com", password: durable_password)
-
-    org = Organization.new(%{display_name: "Cadence Operations", slug: "cadence-operations"})
-    assert {:ok, persisted_org} = Cadence.Organizations.persist_organization(org)
-
-    assert {:ok, _result} =
-             Cadence.Accounts.establish_organization_access(
-               "ops-lead@example.com",
-               persisted_org.organization_id,
-               membership_role: :organization_admin,
-               invited_by_user_id: "user_environment_admin"
-             )
-
-    durable_conn =
-      build_conn()
-      |> post("/sign-in", %{
-        "user" => %{
-          "email" => "ops-lead@example.com",
-          "password" => durable_password
-        }
-      })
-
-    assert redirected_to(durable_conn) == "/"
   end
 
   test "durable platform administrator must reauthenticate to enter admin mode", %{conn: _conn} do
@@ -214,68 +173,6 @@ defmodule CadenceWeb.BrowserShellTest do
            |> redirected_to() == "/admin-mode"
   end
 
-  test "invitation acceptance creates a durable session and routes to org home", %{conn: _conn} do
-    org = Organization.new(%{display_name: "Cadence Operations", slug: "cadence-operations"})
-    assert {:ok, persisted_org} = Cadence.Organizations.persist_organization(org)
-
-    assert {:ok, %{mode: :invited, invitation: invitation, invitation_token: token}} =
-             Cadence.Accounts.establish_organization_access(
-               "new-admin@example.com",
-               persisted_org.organization_id,
-               membership_role: :organization_admin,
-               invited_by_user_id: "user_environment_admin",
-               display_name: "New Admin"
-             )
-
-    assert {:ok, email} =
-             CadenceWeb.UserNotifier.deliver_organization_invitation(
-               invitation,
-               persisted_org,
-               "http://localhost:4002/invitations/#{token}"
-             )
-
-    assert email.subject == "Cadence invitation for Cadence Operations"
-    assert email.to == [{"", "new-admin@example.com"}]
-
-    invitation_path = "/invitations/#{token}"
-
-    # L5: the emailed link opens the console's invitation screen; it reads the same invitation.
-    assert redirected_to(get(build_conn(), invitation_path)) == "/console" <> invitation_path
-
-    assert %{"case" => "new_account", "email" => "new-admin@example.com"} =
-             build_conn()
-             |> get("/api/console/v1/auth/invitations/#{token}")
-             |> json_response(200)
-             |> Map.fetch!("data")
-
-    # The legacy POST still accepts for a page that was already open.
-
-    accepted_conn =
-      build_conn()
-      |> post(invitation_path, %{
-        "organization_invitation_acceptance" => %{
-          "display_name" => "New Admin",
-          "password" => "new-admin-password-123",
-          "password_confirmation" => "new-admin-password-123"
-        }
-      })
-
-    assert redirected_to(accepted_conn) == "/"
-  end
-
-  test "invalid credentials redirect back to /sign-in with a flash error", %{conn: conn} do
-    conn =
-      post(conn, "/sign-in", %{
-        "user" => %{
-          "email" => @environment_admin_email,
-          "password" => "definitely-wrong"
-        }
-      })
-
-    assert redirected_to(conn) == "/sign-in"
-    assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "rejected"
-  end
-
   test "logout revokes the issued environment-admin browser session", %{conn: conn} do
     issued_session = environment_admin_session()
     session_token = issued_session.session_token
@@ -298,25 +195,6 @@ defmodule CadenceWeb.BrowserShellTest do
     assert redirected_to(copied_conn) == "/sign-in"
     assert {:error, :unauthenticated} = Cadence.Auth.authenticate_browser_session(session_token)
     assert {:error, :unauthenticated} = Cadence.Auth.authenticate_api_token(session_token)
-  end
-
-  test "disabled environment-admin config rejects environment-admin credentials",
-       %{conn: conn} do
-    assert {:ok, nil} =
-             Cadence.Auth.reconcile_environment_admin(
-               EnvironmentAdminPolicy.from_config(enabled: false)
-             )
-
-    conn =
-      post(conn, "/sign-in", %{
-        "user" => %{
-          "email" => @environment_admin_email,
-          "password" => @environment_admin_password
-        }
-      })
-
-    assert redirected_to(conn) == "/sign-in"
-    assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "rejected"
   end
 
   defp environment_admin_session do

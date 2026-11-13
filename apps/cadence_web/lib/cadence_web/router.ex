@@ -13,10 +13,6 @@ defmodule CadenceWeb.Router do
     plug(CadenceWeb.Plugs.AssignUserMenuContext)
   end
 
-  pipeline :redirect_if_authenticated_scope do
-    plug(CadenceWeb.Plugs.RedirectIfAuthenticatedScope)
-  end
-
   pipeline :require_authenticated_scope do
     plug(CadenceWeb.Plugs.RequireAuthenticatedScope)
   end
@@ -94,20 +90,16 @@ defmodule CadenceWeb.Router do
     )
   end
 
-  scope "/", CadenceWeb do
-    pipe_through([:browser, :redirect_if_authenticated_scope])
-
-    # The legacy form's POST stays for a page that's already open (L5 replaced its GET).
-    post("/sign-in", UserSessionController, :create)
-  end
-
-  # L5: the old auth pages' GETs move to the console's (return_to and the token kept). The pages'
-  # code stays until the legacy deletion.
+  # L5: the old auth pages' GETs move to the console's (return_to and the token kept); emailed
+  # links and bookmarks keep working. The legacy pages are gone (DECISIONS #79): a form still open
+  # in an old tab POSTs here and gets a 303 to the console screen.
   scope "/", CadenceWeb do
     pipe_through(:browser)
 
     get("/sign-in", AuthRedirectController, :sign_in)
+    post("/sign-in", AuthRedirectController, :sign_in_form)
     get("/invitations/:invitation_token", AuthRedirectController, :invitation)
+    post("/invitations/:invitation_token", AuthRedirectController, :invitation_form)
     get("/no-organization", AuthRedirectController, :no_organization)
   end
 
@@ -127,12 +119,6 @@ defmodule CadenceWeb.Router do
 
     get("/", SPAController, :index)
     get("/*path", SPAController, :index)
-  end
-
-  scope "/", CadenceWeb do
-    pipe_through(:browser)
-
-    post("/invitations/:invitation_token", OrganizationInvitationController, :update)
   end
 
   scope "/", CadenceWeb do

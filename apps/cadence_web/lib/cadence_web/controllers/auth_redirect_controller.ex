@@ -24,4 +24,15 @@ defmodule CadenceWeb.AuthRedirectController do
     do: redirect(conn, to: "/console/invitations/" <> URI.encode(token, &URI.char_unreserved?/1))
 
   def no_organization(conn, _params), do: redirect(conn, to: "/console/no-organization")
+
+  @doc "A legacy sign-in form POSTed from an old tab: 303 to the console's sign-in (DECISIONS #79)."
+  def sign_in_form(conn, _params),
+    do: conn |> put_status(:see_other) |> redirect(to: "/console/sign-in")
+
+  @doc "A legacy invitation form POSTed from an old tab: 303 to the console's invitation page."
+  def invitation_form(conn, %{"invitation_token" => token}),
+    do:
+      conn
+      |> put_status(:see_other)
+      |> redirect(to: "/console/invitations/" <> URI.encode(token, &URI.char_unreserved?/1))
 end
