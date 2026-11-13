@@ -269,7 +269,9 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   `features/dashboard` widgets.
 - **`frontend/tools/phoenix/ops_initial_state_browser.mjs`:** the dashboard routes (:44-52) and assertions
   (:135-167). Also its driver's `draft-dashboard` seed (`browser_test/…/ops_initial_state_browser_test.exs`
-  :33-91). CI runs it (`.github/workflows/frontend.yml:92`), so tell devops.
+  :33-91). CI runs it in `ci.yml`'s "Federation browser (2/2)" job (#73; this branch's `frontend.yml` predates
+  it). The trim keeps the step, because `/ops/explore`, commands and the other routes stay in it. If a later trim
+  empties the step, tell devops.
 
 **Keep** (the console API or channel uses them):
 - web `OpsWorkspaceURL` (`console/dashboard_runtime.ex`)
