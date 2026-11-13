@@ -765,3 +765,19 @@ then the fix:
 - It doesn't fire when every dependent is retired or changed in the same change set. If domain makes it
   acknowledgeable instead, the first clause becomes "Retiring BATT_SOC_PCT breaks BATT_HEALTH, whose expression
   uses it." and ux adds a placeholder.
+
+### U43 · Limits as a change-set kind `limit_definition` (#77 stage 2; domain proposal 11-13) (domain / api / fe-setup)
+- **Summaries:** the set is named only when it isn't DEFAULT. "Add limits for BATT_V" / "Edit limits for BATT_V" /
+  "Retire limits for BATT_V"; with a named set: "Add ECLIPSE limits for BATT_V". Point ids are in mono.
+- **Retire** is the verb for delete. Its effect line on Changes: "BATT_V stops being checked against these limits
+  when this is applied. Its alarm history stays." Re-adding the same point and set continues that history.
+- **HOLD `limit_alarm_active`** (acknowledgeable). Severity words follow the Alarms page: red, yellow, or "limit"
+  when unknown.
+  - Edit: "BATT_V has a red-limit alarm raised now. When this is applied, it's checked against the new limits
+    and may clear or change." Placeholder: "Why it's safe to change them while it's raised".
+  - Retire: "BATT_V has a red-limit alarm raised now. Retiring these limits clears it when this is applied."
+    Placeholder: "Why it's safe to clear it".
+  - With a named set: "BATT_V's ECLIPSE limits have a red-limit alarm raised now. …"
+  - One HOLD per point and set. The row links `Open alarm` (episode_id) to the alarm page.
+- **Field errors** keep today's direct-save messages. Two new ones: "Limits for BATT_V already exist. Edit them
+  instead." (with a link to them) and "The point and limit set can't change after the limits are added."
