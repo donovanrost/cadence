@@ -1,38 +1,21 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useRoute } from "vue-router";
-import { useSession } from "@/shell";
-import { ApCallout, ApTabLinks } from "@/ui";
+import { AdminModeForm, useAdminMode } from "@/shell";
+import { ApPanel, useNow } from "@/ui";
 
 /**
- * L7 platform admin (ux screens/Admin.md), outside org and mission scope. Until lead's 'admin' shell
- * mode lands, the area's nav is in-page; outside admin mode nothing renders behind the notice.
+ * L7 platform admin (ux screens/Admin.md), outside org and mission scope; the 'admin' shell mode
+ * draws the top bar and rail. Outside admin mode every route shows the step-up form inline and
+ * nothing renders behind it (Auth.md). The session is a boot snapshot, so the live state is lead's.
  */
-const route = useRoute();
-const session = useSession();
-const links = [
-  { key: "admin.organizations", label: "Organizations", to: { name: "admin.organizations" } },
-  {
-    key: "admin.service-identities",
-    label: "Service identities",
-    to: { name: "admin.service-identities" },
-  },
-  { key: "admin.runtime", label: "Runtime", to: { name: "admin.runtime" } },
-];
-const active = computed(() =>
-  String(route.name ?? "").startsWith("admin.organization")
-    ? "admin.organizations"
-    : String(route.name ?? ""),
-);
+const now = useNow();
+const admin = useAdminMode(() => now.value);
 </script>
 
 <template>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-    <p class="m-0 font-mono text-xs text-text-3 uppercase">Platform admin</p>
-    <ApTabLinks :links="links" :active="active" label="Platform administration" />
-    <ApCallout v-if="!session.admin_mode" tone="info">
-      Platform administration needs admin mode. Turn it on from the account menu, then come back.
-    </ApCallout>
+    <ApPanel v-if="!admin.active.value" index="A0" title="Admin mode">
+      <AdminModeForm />
+    </ApPanel>
     <RouterView v-else />
   </div>
 </template>

@@ -14,7 +14,7 @@ import TokenShown from "./TokenShown.vue";
 /**
  * Issue a service identity (Admin.md): organization, name, what it may do in the server's words.
  * The token shows once; Done waits for "I've stored the token" and the sheet can't be dismissed
- * while it shows (ApSheet can't block Escape, so a dismissal reopens it).
+ * while it shows (ApSheet dismissible=false).
  */
 const props = defineProps<{ capabilities: AdminServiceIdentities["capabilities"] }>();
 const emit = defineEmits<{ issued: [] }>();
@@ -82,9 +82,6 @@ function done() {
   token.value = null;
   sheet.value?.close();
 }
-function closed() {
-  if (token.value && !stored.value) sheet.value?.open();
-}
 defineExpose({ open });
 </script>
 
@@ -92,7 +89,7 @@ defineExpose({ open });
   <ApSheet
     ref="sheet"
     :title="token ? 'Store the token' : 'Issue a service identity'"
-    @closed="closed"
+    :dismissible="!token"
   >
     <TokenShown v-if="token" v-model="stored" :token="token" />
     <form v-else class="flex flex-col gap-3" @submit.prevent="submit">

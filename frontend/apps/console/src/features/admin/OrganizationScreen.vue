@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { ApBreadcrumb, ApCallout, ApPageHeader, ApRemote, formatShort } from "@/ui";
 import { fetchOrganization } from "./api.ts";
@@ -8,7 +8,7 @@ import OrganizationInvite from "./OrganizationInvite.vue";
 import OrganizationPanels from "./OrganizationPanels.vue";
 
 /** Admin › one organization (Admin.md): members, invitations (Withdraw), missions; cross-org invite. */
-const route = useRoute();
+const route = useRoute("admin.organization");
 const orgId = computed(() => (typeof route.params.orgId === "string" ? route.params.orgId : ""));
 const detail = useRemoteQuery(orgId, fetchOrganization);
 const note = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
@@ -17,7 +17,7 @@ const name = computed(() =>
     ? detail.state.value.value.organization.name
     : "Organization",
 );
-const crumbs = computed(() => [
+const crumbs = computed((): readonly Readonly<{ label: string; to?: RouteLocationRaw }>[] => [
   { label: "Organizations", to: { name: "admin.organizations" } },
   { label: name.value },
 ]);
