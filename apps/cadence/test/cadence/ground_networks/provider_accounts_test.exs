@@ -5,6 +5,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountsTest do
   alias Cadence.Auth.Scope
 
   alias Cadence.GroundNetworks.{
+    ProviderAccountOperations,
     ProviderAccounts,
     ProviderAudit,
     ProviderCredentials
@@ -128,6 +129,47 @@ defmodule Cadence.GroundNetworks.ProviderAccountsTest do
 
     assert {:error, :provider_account_not_found} =
              ProviderAccounts.fetch_for_system("another-org", @account_id)
+  end
+
+  test "revoking the credential marks the account's credential revoked", %{
+    admin_scope: admin_scope
+  } do
+    original = Application.fetch_env(:cadence_web, :provider_account_live_opts)
+    Application.put_env(:cadence_web, :provider_account_live_opts, manage_backend?: false)
+
+    on_exit(fn ->
+      case original do
+        {:ok, opts} -> Application.put_env(:cadence_web, :provider_account_live_opts, opts)
+        :error -> Application.delete_env(:cadence_web, :provider_account_live_opts)
+      end
+    end)
+
+    credential = persist_credential!()
+
+    assert {:ok, %{credential_status: :active}, version} =
+             ProviderAccounts.create(admin_scope, account_attrs(),
+               validate_credential?: false,
+               now: @now
+             )
+
+    assert {:ok, %{completed: true}} =
+             ProviderAccountOperations.execute(admin_scope, "revoke_provider_credential", %{
+               "provider_account_id" => @account_id,
+               "expected_account_version" => version.version,
+               "credential_ref" => @credential_ref,
+               "expected_credential_version" => credential.registry_version
+             })
+
+    assert {:ok, %{credential_status: :revoked}, _version} =
+             ProviderAccounts.fetch_for_system(@organization_id, @account_id)
+
+    assert "provider_account.operational_state_updated" in Enum.map(
+             ProviderAudit.list_entries(@organization_id,
+               provider_account_id: @account_id,
+               limit: 20
+             ),
+             & &1.action
+           )
   end
 
   defp persist_credential! do

@@ -41,6 +41,16 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
              account_id,
              version.credential_ref,
              provider_account_opts()
+           ),
+         # The account's own status follows its active credential, or every reader of the
+         # account (lists, PA1) keeps showing a revoked credential as active.
+         {:ok, _account} <-
+           ProviderAccounts.update_operational_state(
+             scope.organization_id,
+             account_id,
+             %{credential_status: :revoked},
+             actor_document(scope),
+             provider_account_opts()
            ) do
       {:ok, %{completed: true}}
     end
@@ -103,6 +113,13 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
         {:error, reason}
     end
   end
+
+  defp actor_document(%Scope{user: %{user_id: user_id}}), do: %{"kind" => "user", "id" => user_id}
+
+  defp actor_document(%Scope{service_identity: %{service_identity_id: id}}),
+    do: %{"kind" => "service", "id" => id}
+
+  defp actor_document(_scope), do: %{"kind" => "system"}
 
   defp provider_account_opts,
     do: Application.get_env(:cadence_web, :provider_account_live_opts, [])
