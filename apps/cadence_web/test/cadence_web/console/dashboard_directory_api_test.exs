@@ -206,6 +206,29 @@ defmodule CadenceWeb.Console.DashboardDirectoryAPITest do
              |> json_response(422)
   end
 
+  test "D4 takes null for optional fields and names the field that's wrong", c do
+    assert %{"data" => %{"id" => _}} =
+             c
+             |> conn()
+             |> post(base(c), %{
+               "name" => "Blank",
+               "description" => nil,
+               "tags" => [],
+               "spacecraft" => %{"mode" => "context"}
+             })
+             |> json_response(201)
+
+    for {body, field} <- [
+          {%{"name" => " "}, "name"},
+          {%{"name" => "X", "description" => 7}, "description"},
+          {%{"name" => "X", "tags" => ["ok", ""]}, "tags"},
+          {%{"name" => "X", "spacecraft" => %{"mode" => "orbit"}}, "spacecraft"}
+        ] do
+      assert %{"error" => %{"details" => %{"field" => ^field}}} =
+               c |> conn() |> post(base(c), body) |> json_response(422)
+    end
+  end
+
   describe "BindingSummary.summarize/2" do
     defp placement(type, scope \\ nil),
       do: %Placement{

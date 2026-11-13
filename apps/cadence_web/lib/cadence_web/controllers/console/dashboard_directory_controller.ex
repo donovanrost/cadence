@@ -81,8 +81,17 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
     input =
       params
       |> Map.take(~w(name description tags spacecraft))
+      # Optional fields may come as null (qa: the console sent description: null).
+      |> Map.reject(fn {key, value} -> key != "name" and is_nil(value) end)
       |> Map.put_new("description", "")
 
+    case creation_fields(input) do
+      :ok -> create_dashboard(conn, input)
+      {:invalid, field} -> Problem.respond(conn, :invalid_params, %{field: field})
+    end
+  end
+
+  defp create_dashboard(conn, input) do
     case Creation.create(scope(conn), mission(conn), %{mode: "new"}, input) do
       {:ok, created} ->
         conn
@@ -102,6 +111,42 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
         command_error(conn, error, "name")
     end
   end
+
+  # Which field is wrong, before Creation's all-or-nothing check (it only says :fields).
+  defp creation_fields(input) do
+    cond do
+      not (is_binary(input["name"]) and String.trim(input["name"]) != "" and
+               byte_size(input["name"]) <= 512) ->
+        {:invalid, "name"}
+
+      not (is_binary(input["description"]) and byte_size(input["description"]) <= 4096) ->
+        {:invalid, "description"}
+
+      not tags?(Map.get(input, "tags", [])) ->
+        {:invalid, "tags"}
+
+      not spacecraft?(Map.get(input, "spacecraft")) ->
+        {:invalid, "spacecraft"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp tags?(tags) when is_list(tags) and length(tags) <= 10,
+    do: Enum.all?(tags, &(is_binary(&1) and String.trim(&1) != "" and byte_size(&1) <= 64))
+
+  defp tags?(_tags), do: false
+
+  defp spacecraft?(nil), do: true
+
+  defp spacecraft?(%{"mode" => mode} = value) when mode in ~w(context fleet),
+    do: map_size(value) == 1
+
+  defp spacecraft?(%{"mode" => "fixed", "spacecraft_id" => id} = value),
+    do: map_size(value) == 2 and is_binary(id) and id != ""
+
+  defp spacecraft?(_value), do: false
 
   def duplicate(conn, %{"dashboard_id" => id} = params) do
     input = %{"dashboard_id" => id, "name" => to_string(params["name"] || "")}
