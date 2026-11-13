@@ -139,11 +139,29 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
     id = create!(c)["id"]
 
     Cadence.Repo.query!(
-      "UPDATE mission_providers SET delivery_policy_document = delivery_policy_document - 'mode' WHERE provider_id = $1",
+      "UPDATE mission_providers SET delivery_policy_document = delivery_policy_document #- '{value,mode}' WHERE provider_id = $1",
       [id]
     )
 
+    assert %{rows: [[nil]]} =
+             Cadence.Repo.query!(
+               "SELECT delivery_policy_document #> '{value,mode}' FROM mission_providers WHERE provider_id = $1",
+               [id]
+             )
+
     assert %{"providers" => [%{"id" => ^id, "policy_mode" => "approval_required"}]} =
+             c |> admin() |> get(c.base) |> json_response(200) |> Map.fetch!("data")
+  end
+
+  test "a direct binding (no account grant) lists account: null and grant: null", c do
+    id = create!(c)["id"]
+
+    Cadence.Repo.query!(
+      "UPDATE mission_providers SET provider_account_id = NULL, provider_account_version = NULL, provider_account_grant_id = NULL, provider_account_grant_version = NULL WHERE provider_id = $1",
+      [id]
+    )
+
+    assert %{"providers" => [%{"id" => ^id, "account" => nil, "grant" => nil}]} =
              c |> admin() |> get(c.base) |> json_response(200) |> Map.fetch!("data")
   end
 

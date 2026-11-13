@@ -489,9 +489,11 @@ Under `/organizations/:organization_id/provider-accounts/:id`. Every route needs
 provider_account_not_found`. A stale view answers which thing changed, with its current version in
 `details.version`, so the console can reload just that.
 
-- `GET /` (PA2) → `{account: <PA1 row> + {version, credential: {ref, version, status: "active" |
-  "revoked"}, guardrails: {allowed_services: [..] | null, allowed_stations: [..] | null}}, grants:
-  [<grant>], permissions}`.
+- `GET /` (PA2) → `{account: <PA1 row> + {version, credential: {ref, version: int | null, status:
+  "active" | "revoked" | "missing"}, guardrails: {allowed_services: [..] | null, allowed_stations:
+  [..] | null}}, grants: [<grant>], permissions}`.
+  - `credential.status` is `missing` (and `version` `null`, only then) when no credential is
+    registered under the account's reference (older accounts). There's nothing to revoke.
   - `credential.ref` is masked (`"…"` and the last 6 characters). The reference isn't a secret,
     but the console only needs to recognise it.
   - `grants` is every grant of the account (active and revoked; the latest version of each),
@@ -864,12 +866,13 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
 
 ## `GET /api/console/v1/missions/:mission_id/providers`
 
-`{providers: [{id, name, provider_type, version, policy_mode, account: {id, name}, grant: {id,
+`{providers: [{id, name, provider_type, version, policy_mode, account: {id, name} | null, grant: {id,
 version, state: "active" | "revoked"} | null, status: {lifecycle_state, last_validated_at,
 last_synced_at}, health: {validate: <health>, sync: <health>}, station_count}], permissions}` for
 the Stations · Providers tab, sorted by name.
 
-- `account.name` is `null` for members (only organization admins can read accounts).
+- `account` is `null` exactly when `grant` is (older, direct bindings with no account).
+  `account.name` is `null` for members (only organization admins can read accounts).
 - `grant` is `null` only for a provider bound without an account grant (older, direct bindings).
   `grant.version` is the grant version the provider was **bound at**, not the grant's current
   version. `state` is the grant's current state: a revoked grant leaves the provider in place but

@@ -66,8 +66,10 @@ defmodule Cadence.Management.Providers.ProviderAccountDetail do
       {:ok, credential} ->
         %{ref: mask(ref), version: credential.registry_version, status: credential.status}
 
+      # The account points at a reference with no registered credential (accounts created without
+      # validation, older ones): fe-setup 377e08c79 reads "missing".
       {:error, _not_found} ->
-        %{ref: mask(ref), version: nil, status: nil}
+        %{ref: mask(ref), version: nil, status: :missing}
     end
   end
 

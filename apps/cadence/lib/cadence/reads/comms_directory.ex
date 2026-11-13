@@ -96,10 +96,13 @@ defmodule Cadence.Reads.CommsDirectory do
       version: provider.version,
       # A policy without a mode is approval_required, as DeliveryPolicy.normalize/1 reads it.
       policy_mode: (provider.delivery_policy_document || %{})["mode"] || "approval_required",
-      account: %{
-        id: provider.provider_account_id,
-        name: account_name(scope, provider.provider_account_id)
-      },
+      # null for a direct binding (no account; grant is null too). fe-setup 377e08c79.
+      account:
+        provider.provider_account_id &&
+          %{
+            id: provider.provider_account_id,
+            name: account_name(scope, provider.provider_account_id)
+          },
       grant:
         provider.provider_account_grant_id &&
           %{
@@ -123,8 +126,6 @@ defmodule Cadence.Reads.CommsDirectory do
     |> ProviderAccountGrants.list_for_mission(mission_id, active_only?: false)
     |> Map.new(&{&1.provider_account_grant_id, &1.lifecycle_state})
   end
-
-  defp account_name(_scope, nil), do: nil
 
   defp account_name(scope, account_id) do
     case ProviderAccounts.fetch(scope, account_id) do

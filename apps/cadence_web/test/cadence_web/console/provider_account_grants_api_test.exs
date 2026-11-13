@@ -109,6 +109,18 @@ defmodule CadenceWeb.Console.ProviderAccountGrantsAPITest do
     assert c |> admin() |> get(c.base <> "-nope") |> json_response(404)
   end
 
+  test "PA2: a reference with no registered credential reads status missing, version null", c do
+    # Accounts can't be created on an unregistered reference; an older account's record can be gone.
+    Cadence.Repo.query!(
+      "DELETE FROM provider_credentials WHERE provider_credential_ref = 'cred-simulator-alpha'"
+    )
+
+    assert %{"credential" => credential} =
+             c |> admin() |> get(c.base) |> json_response(200) |> get_in(["data", "account"])
+
+    assert credential == %{"ref" => "…-alpha", "version" => nil, "status" => "missing"}
+  end
+
   test "grant refuses a stale account version, a widening field and a bad mission", c do
     assert %{"error" => %{"code" => "account_changed", "details" => %{"version" => 1}}} =
              c
