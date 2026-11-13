@@ -70,12 +70,14 @@ test.describe("console shell, platform admin without a membership", () => {
 test.describe("console shell, signed out", () => {
   test.use({
     storageState: { cookies: [], origins: [] },
-    // The LiveView /sign-in page has no favicon (outside the console); see qa issues #2.
+    // The bounce passes through the old /sign-in (no favicon outside the console; qa issues #2).
     allowedDiagnostics: allow(/\/favicon\.ico/),
   });
 
-  test("redirects to the Phoenix sign-in page", async ({ page }) => {
+  test("redirects to the console sign-in screen", async ({ page }) => {
+    // /console → /sign-in → 302 /console/sign-in (L5, api-ops ecdddab10).
     await page.goto("/console");
-    await expect(page).toHaveURL(/\/sign-in(?:[/?#]|$)/);
+    await expect(page).toHaveURL(/\/console\/sign-in(?:[/?#]|$)/);
+    await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
   });
 });

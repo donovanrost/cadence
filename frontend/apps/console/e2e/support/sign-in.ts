@@ -6,33 +6,31 @@ export interface Credentials {
 }
 
 const ATTEMPTS = 3;
-const MOUNT_TIMEOUT_MS = 25_000;
+const BOOT_TIMEOUT_MS = 45_000;
 
 /**
- * Signs in through the real Phoenix /sign-in page, the console's only login path.
+ * Signs in through the console's own sign-in screen (`/console/sign-in`, L5). The old Phoenix
+ * `/sign-in` page now 302s here (api-ops ecdddab10), so this is the only login path.
  *
- * On the shared, loaded dev laptop the LiveView socket sometimes misses its 2.5 s WebSocket
- * window, falls back to long polling and never mounts the form; a reload fixes it (the same thing
- * a person would do). So we wait for LiveView to connect and reload up to ATTEMPTS times.
+ * On the shared, loaded dev laptop the SPA can take a while to boot; a fresh navigation fixes a
+ * stuck boot (the same thing a person would do), so we try up to ATTEMPTS times. The button is
+ * scoped to `#main`: the dev-only Tidewave toolbar has its own "Sign in" button.
  */
 export async function signIn(page: Page, credentials: Credentials): Promise<void> {
+  const email = page.getByLabel("Email", { exact: true });
   for (let attempt = 1; ; attempt += 1) {
-    // A fresh navigation (not reload): a late LiveView connect can be mid-redirect, and reloading
-    // a navigating frame aborts. An aborted navigation just means "try again".
-    await page.goto("/sign-in").catch(() => undefined);
-    const connected = await page
-      .locator(".phx-connected")
-      .first()
-      .waitFor({ state: "attached", timeout: MOUNT_TIMEOUT_MS })
+    // An aborted navigation just means "try again".
+    await page.goto("/console/sign-in").catch(() => undefined);
+    const ready = await email
+      .waitFor({ state: "visible", timeout: BOOT_TIMEOUT_MS })
       .then(() => true)
       .catch(() => false);
-    if (connected) break;
+    if (ready) break;
     if (attempt === ATTEMPTS)
-      throw new Error(`LiveView sign-in didn't connect after ${ATTEMPTS} attempts`);
+      throw new Error(`The console sign-in screen didn't render after ${ATTEMPTS} attempts`);
   }
-  const form = page.locator("#sign-in-form");
-  await form.locator("#user_email").fill(credentials.email);
-  await form.locator("#user_password").fill(credentials.password);
-  await form.locator('button[type="submit"]').click();
-  await expect(page).not.toHaveURL(/\/sign-in(?:\?|$)/);
+  await email.fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
+  await page.locator("#main").getByRole("button", { name: "Sign in" }).click();
+  await expect(page).not.toHaveURL(/\/sign-in(?:\?|$)/, { timeout: BOOT_TIMEOUT_MS });
 }
