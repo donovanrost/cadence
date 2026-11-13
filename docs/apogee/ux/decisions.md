@@ -723,8 +723,15 @@ more than 24 h old.
     safe to repeat, so the button needs no warning. Without the permission: "Someone who can approve activations
     can retry it."
   - Review stale or content mismatch: no `Retry apply`, because re-running checks the same thing and fails again.
-    The next step: "Request activation again so the current version can be approved." If domain says a retry
-    can succeed here, Retry comes back.
+    The next step: "Request activation again so the current version can be approved." Domain confirms a resume can
+    never succeed for these two (8f30aac21).
+  - **The console reads `retryable`** (domain's field on the item and row) and doesn't keep its own list of codes:
+    true shows `Retry apply`, false shows the request-again sentence.
+  - **Refusals from `Retry apply`:**
+    - `409 not_resumable {error_code}`: "This can't be retried: <the code's sentence>" followed by the
+      request-again sentence. The row then switches to the false state.
+    - `409 nothing_to_resume {state}`: succeeded reads "It already applied." in_progress reads "It's applying now."
+      Any other state: "There's nothing to retry." Refetch either way.
 - **Review page line** (fe-setup): caution "Approved, but it didn't apply. <sentence> Since 02:14Z." Then the next
   step as above.
 - **Now row** (`activation_apply`, fe-ops):
