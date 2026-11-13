@@ -58,7 +58,7 @@ const list = useRemoteQuery(query, fetchRequirements);
         @update:model-value="setFilter"
       />
     </div>
-    <TemplateLinks v-if="filter === 'template'" :templates="templates" />
+    <TemplateLinks v-if="filter === 'template'" :mission-id="missionId" />
     <ApRemote
       v-else
       :state="list.state.value"

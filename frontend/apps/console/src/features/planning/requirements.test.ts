@@ -114,3 +114,19 @@ describe("one-off requirements (ux P4, api fb7510be)", () => {
     expect(facts.find((f) => f.key === "contact_count")?.value).toBe("2");
   });
 });
+
+describe("From templates counts (api df98dcd3)", () => {
+  it("reads 'Block 1 daily · 1,500 for 11-14 · 1,480 active'", async () => {
+    const { templateCountLine } = await import("./requirements.ts");
+    const row = {
+      template: { id: "t1", name: "Block 1 daily", state: "active" },
+      count: 1500,
+      active_count: 1480,
+    };
+    expect(templateCountLine(row, "2026-11-14")).toBe("1,500 for 11-14 · 1,480 active");
+    expect(templateCountLine({ ...row, active_count: 1500 }, "2026-11-14")).toBe("1,500 for 11-14");
+    expect(
+      templateCountLine({ ...row, template: { ...row.template, state: "retired" } }, "2026-11-14"),
+    ).toBe("1,500 for 11-14 · 1,480 active · retired");
+  });
+});

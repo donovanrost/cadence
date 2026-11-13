@@ -1,6 +1,6 @@
 import { decoders, request, type ApiError, type ApiResult, type Decoded, type Reader } from "@/api";
 import { displayValue } from "@/features/changes/index.ts";
-import { formatShort } from "@/ui";
+import { formatCount, formatShort } from "@/ui";
 import { readPath, templateSchemaReader, type TemplateSchema } from "./templates.ts";
 
 /** Contract: docs/apogee/api/scheduling.md "Requirements (one-off; BACKLOG §8 8g)", api fb7510be. */
@@ -202,4 +202,42 @@ export function requirementFacts(
     });
   }
   return facts;
+}
+
+const byTemplateReader = object({
+  day: string,
+  templates: array(
+    object({
+      template: object({ id: token, name: string, state: token }),
+      count: integer,
+      active_count: integer,
+    }),
+    1000,
+  ),
+});
+export type TemplateDayCounts = Decoded<typeof byTemplateReader>;
+
+/** P4 "From templates" (api df98dcd3): per template, the requirements whose window opens that UTC day. */
+export function fetchByTemplate(
+  key: Readonly<{ missionId: string; day: string }>,
+  signal: AbortSignal,
+): Promise<ApiResult<TemplateDayCounts>> {
+  return request(
+    `${base(key.missionId)}/by-template?day=${encodeURIComponent(key.day)}`,
+    byTemplateReader,
+    {
+      signal,
+    },
+  );
+}
+
+/** ux P4: `Block 1 daily · 1,500 for 11-14 · 1,480 active` (+ `· retired` for a template no longer active). */
+export function templateCountLine(
+  row: TemplateDayCounts["templates"][number],
+  day: string,
+): string {
+  const active = row.active_count === row.count ? "" : ` · ${formatCount(row.active_count)} active`;
+  const retired =
+    row.template.state === "active" ? "" : ` · ${row.template.state.replaceAll("_", " ")}`;
+  return `${formatCount(row.count)} for ${day.slice(5)}${active}${retired}`;
 }
