@@ -187,9 +187,12 @@ function emptyList(value: unknown, path = ""): readonly never[] {
   if (!Array.isArray(value) || value.length > 0) throw new DecodeError(path, "empty list");
   return [];
 }
-const placement = d.variant("status", { ready: readyPlacement, unavailable: unavailablePlacement });
+export const placement = d.variant("status", {
+  ready: readyPlacement,
+  unavailable: unavailablePlacement,
+});
 
-const context = d.object({
+export const context = d.object({
   time_mode: d.oneOf(["live", "range", "archive", "replay_run"] as const),
   time_axis: d.oneOf(["generation_time", "receipt_time"] as const),
   from: d.nullable(text(128)),

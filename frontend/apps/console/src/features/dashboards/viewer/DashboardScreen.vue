@@ -22,6 +22,7 @@ import ViewerActions from "./ViewerActions.vue";
 import ViewerBody from "./ViewerBody.vue";
 import CockpitStatus from "./CockpitStatus.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
+import { useDashboardLive } from "./useDashboardLive.ts";
 
 /**
  * Dashboard viewer and editor (ux Dashboards.md): a takeover cockpit. The URL owns the runtime
@@ -49,14 +50,32 @@ const refresh = computed<RefreshChoice>(
   () => refreshChoices.find((c) => c.value === one(route.query.refresh))?.value ?? "2s",
 );
 const editRequested = computed(() => one(route.query.edit) === "1");
+const refreshMs = computed(() => refreshChoices.find((c) => c.value === refresh.value)?.ms ?? null);
+/** Live step 2 (C1, flagged): pushes drive the board; step 1's data refetch stands down meanwhile. */
+const pushing = ref(false);
 const query = useDashboardView(missionId, dashboardId, runtime, {
-  refreshMs: computed(() => refreshChoices.find((c) => c.value === refresh.value)?.ms ?? null),
+  refreshMs,
   sliding: computed(() => selection.value.kind !== "absolute"),
-  paused: editRequested,
+  paused: computed(() => editRequested.value || pushing.value),
 });
-const view = computed(() =>
-  query.state.value.status === "ready" ? query.state.value.value : null,
+const live = useDashboardLive(
+  missionId,
+  dashboardId,
+  runtime,
+  refreshMs,
+  editRequested,
+  computed(() => (query.state.value.status === "ready" ? query.state.value.value.snapshot : null)),
 );
+watch(live.active, (on) => (pushing.value = on));
+// Someone saved, restored or archived it: re-read the head (current_version drives the editor's callout).
+watch(live.version, () => query.refetch());
+const shown = computed(() => {
+  const s = query.state.value;
+  return s.status === "ready" && live.active.value && live.snapshot.value
+    ? { ...s, value: { ...s.value, snapshot: live.snapshot.value } }
+    : s;
+});
+const view = computed(() => (shown.value.status === "ready" ? shown.value.value : null));
 // D6: each open feeds the directory's "Recent". `request` resolves to a result (it never rejects),
 // and a failed record changes nothing on this page, so the outcome is ignored on purpose.
 watch(
@@ -166,12 +185,7 @@ const onRange = (s: TimeSelection) =>
     :mission-id="missionId"
     @saved="onSaved"
   />
-  <ViewerBody
-    v-else
-    :state="query.state.value"
-    :stale="connection !== 'live'"
-    @retry="query.refetch"
-  />
+  <ViewerBody v-else :state="shown" :stale="connection !== 'live'" @retry="query.refetch" />
   <VersionsSheet
     ref="versions"
     :mission-id="missionId"
