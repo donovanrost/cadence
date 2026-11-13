@@ -229,7 +229,8 @@ confirmation (the 422 fix was 78564fa90).
 ### L8a directory, viewer, editor, New (after qa's live check; to the director with qa's result)
 **Routes:** `/ops/dashboards`, `/ops/dashboards/:id`, `/ops/dashboards/:id/edit`, `/ops/dashboards/new`.
 
-**Done by the cutover (api-ops 5e151d4a3, one commit):**
+**Done by the cutover (api-ops 5e151d4a3, one commit; qa passed it live on :4011, 11-14: the three redirect with
+their params, and library, playlists, new, settings, activity and diagnostics still serve legacy):**
 - The first three live routes are now `LegacyDashboardRedirectController` (one hop; slugs from the signed-in
   org's mission, else `/console`). Kept: `from`, `to`, `spacecraft` (legacy `spacecraft_id`), `refresh`, `kiosk`;
   the directory's `q`/`tags` (legacy `query`/`tag`); `/edit` adds `?edit=1`.
