@@ -6,18 +6,22 @@ import {
   decide,
   decidedLine,
   decideFailure,
+  isRequester as requestedBy,
+  mayDecide,
   type ActivationDetail,
   type DetailKey,
   type Verb,
+  type Viewer,
 } from "./api.ts";
 
 /** The reviewer's Approve and apply / Reject, or the requester's Withdraw…; a reason is required. */
 const props = defineProps<{
   requestKey: DetailKey;
   request: ActivationDetail;
-  isRequester: boolean;
+  viewer: Viewer;
 }>();
 const emit = defineEmits<{ decided: [note: { tone: "nominal" | "caution"; text: string }] }>();
+const isRequester = computed(() => requestedBy(props.request, props.viewer));
 const reason = ref("");
 const error = ref<string | null>(null);
 const failure = ref<string | null>(null);
@@ -51,7 +55,7 @@ async function go(verb: Verb) {
       <ApTextarea v-model="reason" label="Reason" required :maxlength="4096" :error="error" />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
       <div class="flex flex-wrap gap-2">
-        <template v-if="!isRequester && request.can_decide">
+        <template v-if="mayDecide(request, viewer)">
           <ApButton
             variant="primary"
             :disabled="blocked !== null"

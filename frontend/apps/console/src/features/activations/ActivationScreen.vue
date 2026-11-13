@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
-import { useMissionScope, useSession } from "@/shell";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import {
   ApBreadcrumb,
   ApCallout,
@@ -21,6 +21,10 @@ const scope = useMissionScope();
 const session = useSession();
 const key = computed(() => ({ missionId: scope.value.mission.id, requestId: props.requestId }));
 const page = useRemoteQuery(key, fetchActivation);
+const viewer = computed(() => ({
+  userId: session.user.id,
+  orgAdmin: canAdministerOrganization(session, scope.value.organization),
+}));
 const note = ref<{ tone: "nominal" | "caution"; text: string } | null>(null);
 const crumbs: readonly ApCrumb[] = [
   { label: "Changes", to: { name: "setup.changes" } },
@@ -61,7 +65,7 @@ function decided(n: { tone: "nominal" | "caution"; text: string }) {
           v-if="value.state === 'approval_pending'"
           :request-key="key"
           :request="value"
-          :is-requester="value.requested_by?.id === session.user.id"
+          :viewer="viewer"
           @decided="decided"
         />
       </template>

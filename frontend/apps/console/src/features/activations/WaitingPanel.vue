@@ -2,8 +2,9 @@
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApPanel, ApTable, ApTag, plural, type ApColumn } from "@/ui";
-import { fetchActivations, requestedLine, stateTag } from "./api.ts";
+import { fetchActivations, mayDecide, requestedLine, stateTag } from "./api.ts";
 
 /** Setup › Changes · Waiting for activation (L10): app saves a second person approves. */
 const props = defineProps<{ missionId: string }>();
@@ -17,6 +18,12 @@ useMissionInvalidation(
 const pending = computed(() =>
   list.state.value.status === "ready" ? list.state.value.value.requests : [],
 );
+const scope = useMissionScope();
+const session = useSession();
+const viewer = computed(() => ({
+  userId: session.user.id,
+  orgAdmin: canAdministerOrganization(session, scope.value.organization),
+}));
 const columns: readonly ApColumn[] = [
   { key: "what", label: "Activation" },
   { key: "who", label: "Requested" },
@@ -52,7 +59,7 @@ const columns: readonly ApColumn[] = [
       <template #cell-state="{ row }"
         ><ApTag
           :state="stateTag(row).state"
-          :label="row.can_decide ? 'AWAITS YOU' : stateTag(row).label"
+          :label="mayDecide(row, viewer) ? 'AWAITS YOU' : stateTag(row).label"
       /></template>
     </ApTable>
   </ApPanel>
