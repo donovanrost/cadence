@@ -14,7 +14,12 @@ import {
   type ChartSeries,
   type PlotSeries,
 } from "./chart-input.ts";
-import type { TelemetryChartProps } from "./chart-props.ts";
+import type {
+  ChartAxisMode,
+  ChartLegendMode,
+  ChartLineWidth,
+  TelemetryChartProps,
+} from "./chart-props.ts";
 
 /**
  * Series half of the chart model: admitted samples, aligned plot data, gaps and the live window.
@@ -32,12 +37,12 @@ export abstract class ChartSeriesModel {
   eventMarkers: ChartMarker[];
   annotations: ChartMarker[];
   selectedRef: ChartMarker | null;
-  axisMode: "unit" | "shared";
+  axisMode: ChartAxisMode;
   readonly widgetId: string;
   readonly placementId: string;
   readonly windowSeconds: number;
-  readonly legendMode: string;
-  readonly lineWidth: string;
+  readonly legendMode: ChartLegendMode;
+  readonly lineWidth: ChartLineWidth;
   readonly fillOpacity: number;
   readonly spanGaps: boolean;
   readonly showPoints: boolean;

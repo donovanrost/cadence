@@ -1,3 +1,17 @@
+/** Display options, as the snapshot decodes them (model/snapshot.ts; unknown values are dropped). */
+export type ChartLegendMode = "auto" | "always" | "hidden";
+export type ChartLineWidth = "thin" | "normal" | "bold";
+export type ChartAxisMode = "unit" | "shared";
+/** The snapshot's time modes, plus `snapshot` (a live range re-sent whole, without appends). */
+export type ChartTimeMode =
+  | "live"
+  | "range"
+  | "archive"
+  | "replay_run"
+  | "snapshot"
+  | "unrecognized"
+  | "";
+
 /** Chart input boundary. External data is admitted by the chart model. */
 export interface TelemetryChartProps {
   chart_id: string;
@@ -7,12 +21,12 @@ export interface TelemetryChartProps {
   correlation_group: string;
   edit_mode?: boolean;
   show_min_max_band?: boolean;
-  legend_mode?: string;
-  line_width?: string;
+  legend_mode?: ChartLegendMode;
+  line_width?: ChartLineWidth;
   fill_opacity?: number;
   span_gaps?: boolean;
   show_points?: boolean;
-  axis_mode?: string;
+  axis_mode?: ChartAxisMode;
   shared_tooltip?: boolean;
   label?: string;
   unit?: string;
@@ -22,7 +36,7 @@ export interface TelemetryChartProps {
   event_markers?: unknown[];
   annotations?: unknown[];
   selected_ref?: Record<string, unknown> | null;
-  time_mode?: string;
+  time_mode?: ChartTimeMode;
   time_from?: string;
   time_to?: string;
   time_axis?: string;
