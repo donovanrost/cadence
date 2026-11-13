@@ -2,6 +2,7 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
   @moduledoc "BACKLOG 8g: console one-off contact requirements (list, show, schema, writes)."
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.ContactPlanning.ContactRequirements
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -15,6 +16,8 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
           do: TestFixtures.persist_spacecraft!(mission, display_name: name)
 
     %{
+      org: org,
+      mission: mission,
       member: member,
       sc1: sc1,
       sc2: sc2,
@@ -57,6 +60,7 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
 
     assert %{"required" => true, "type" => "reference"} = by_path["spacecraft_id"]
     assert %{"required" => true, "type" => "datetime"} = by_path["latest_end"]
+    assert by_path["rationale"]["required"] == true
 
     assert %{"unit" => "s", "range" => %{"min" => 600, "max" => 604_800}, "advanced" => true} =
              by_path["max_gap_seconds"]
@@ -80,6 +84,7 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
              "spacecraft" => %{"name" => "SC-1"},
              "content" => %{"contact_count" => 2, "preferred_duration_seconds" => 600},
              "state_changed" => nil,
+             "rule_summary" => "2 downlinks ≥ 5 min each",
              "versions" => [%{"version" => 1, "actor" => %{"name" => "Mia"}}]
            } = shown
 
@@ -141,6 +146,10 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
              invalid.(%{"content" => content(c.sc1, %{"spacecraft_id" => "spacecraft-nope"})})
 
     assert %{"content" => _} = invalid.(%{"content" => "nope"})
+
+    assert %{"rationale" => _} =
+             invalid.(%{"content" => Map.delete(content(c.sc1, %{}), "rationale")})
+
     assert %{"state" => _} = json_response(get_json(c, "?state=paused"), 422)["error"]["details"]
 
     id = create!(c, c.sc1)
@@ -221,6 +230,140 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
 
     # Nothing is active any more.
     assert %{"requirements" => []} = json_response(get_json(c, "?state=active"), 200)["data"]
+  end
+
+  test "max_gap_seconds round-trips; null clears it; out of range is 422 on the field", c do
+    id = create!(c, c.sc1, %{"max_gap_seconds" => 3_600})
+
+    assert %{"content" => %{"max_gap_seconds" => 3_600}, "rule_summary" => summary} =
+             json_response(get_json(c, "/#{id}"), 200)["data"]
+
+    assert summary == "2 downlinks ≥ 5 min each · gaps ≤ 1h00"
+
+    assert json_response(
+             post_json(c, "/#{id}", %{
+               "expected_version" => 1,
+               "content" => %{"max_gap_seconds" => nil}
+             }),
+             201
+           )
+
+    assert %{
+             "content" => %{"max_gap_seconds" => nil},
+             "rule_summary" => "2 downlinks ≥ 5 min each"
+           } =
+             json_response(get_json(c, "/#{id}"), 200)["data"]
+
+    for {gap, message} <- [
+          {60, "must be between 600 and 604800 seconds"},
+          # The window is 12 h.
+          {86_400, "must not be longer than the window"}
+        ] do
+      response = post_json(c, "", %{"content" => content(c.sc1, %{"max_gap_seconds" => gap})})
+      assert %{"max_gap_seconds" => ^message} = json_response(response, 422)["error"]["details"]
+    end
+  end
+
+  test "by-template counts a day's generated requirements per template, active ones too", c do
+    admin_user = TestFixtures.persist_user!(display_name: "Ada")
+    TestFixtures.grant_membership!(admin_user, c.org, role: :organization_admin)
+
+    {:ok, admin} =
+      Cadence.Auth.authenticate_browser_session(TestFixtures.member_session_token!(admin_user),
+        current_organization_id: c.org.organization_id
+      )
+
+    template_id = template!(c, admin_user)
+
+    ids =
+      for sc <- [c.sc1, c.sc2] do
+        {:ok, requirement, _version} =
+          ContactRequirements.create(admin, c.mission.mission_id, %{
+            "spacecraft_id" => sc.spacecraft_id,
+            "earliest_start" => "2030-06-01T06:00:00Z",
+            "latest_end" => "2030-06-01T12:00:00Z",
+            "contact_intent" => "recurring_payload_downlink",
+            "rationale" => "Generated",
+            "metadata" => %{"generation" => %{"contact_requirement_template_id" => template_id}}
+          })
+
+        requirement.contact_requirement_id
+      end
+
+    assert json_response(
+             post_json(c, "/#{hd(ids)}/cancel", %{
+               "expected_version" => 1,
+               "reason" => "Not needed"
+             }),
+             200
+           )
+
+    # A one-off the same day isn't a template's.
+    _one_off =
+      create!(c, c.sc1, %{
+        "earliest_start" => "2030-06-01T01:00:00Z",
+        "latest_end" => "2030-06-01T03:00:00Z"
+      })
+
+    assert %{
+             "day" => "2030-06-01",
+             "templates" => [
+               %{
+                 "template" => %{
+                   "id" => ^template_id,
+                   "name" => "Daily dump",
+                   "state" => "active"
+                 },
+                 "count" => 2,
+                 "active_count" => 1
+               }
+             ]
+           } = json_response(get_json(c, "/by-template?day=2030-06-01"), 200)["data"]
+
+    assert %{"templates" => []} =
+             json_response(get_json(c, "/by-template?day=2030-06-02"), 200)["data"]
+
+    assert %{"day" => _} =
+             json_response(get_json(c, "/by-template?day=June"), 422)["error"]["details"]
+
+    # The list's source filter agrees.
+    assert %{"requirements" => [_, _]} =
+             json_response(get_json(c, "?source=template"), 200)["data"]
+  end
+
+  defp template!(c, admin_user) do
+    body = %{
+      "name" => "Daily dump",
+      "target" => %{"kind" => "spacecraft_ids", "spacecraft_ids" => [c.sc1.spacecraft_id]},
+      "document" => %{
+        "schedule" => %{
+          "type" => "fixed_interval",
+          "anchor_at" => "2030-01-01T00:00:00Z",
+          "interval_seconds" => 86_400,
+          "window_offset_seconds" => 0,
+          "window_duration_seconds" => 21_600
+        },
+        "requirement" => %{
+          "service_direction" => "downlink",
+          "contact_intent" => "recurring_payload_downlink",
+          "success_measure" => "minimum_duration",
+          "minimum_duration_seconds" => 300,
+          "contact_count" => 1,
+          "minimum_separation_seconds" => 0,
+          "priority" => "routine"
+        },
+        "catch_up_policy" => %{
+          "maximum_occurrences_per_run" => 8,
+          "maximum_lookback_seconds" => 86_400
+        }
+      }
+    }
+
+    admin_user
+    |> TestFixtures.member_conn()
+    |> post("/api/console/v1/missions/#{c.mission.mission_id}/contact-planning/templates", body)
+    |> json_response(201)
+    |> get_in(["data", "id"])
   end
 
   test "an unknown requirement is 404", c do

@@ -36,9 +36,18 @@ defmodule Cadence.Control.PlanningRequirements.Schema do
     fields() |> Enum.map(&(&1.path |> String.split(".") |> hd())) |> Enum.uniq()
   end
 
+  # A one-off must say why (the version row requires a rationale; a template supplies its own).
+  @required_here ~w(rationale)
+
   defp requirement_fields do
     for %{path: @prefix <> path} = field <- TemplateSchema.fields() do
-      %{field | path: path, group: "requirement", visible_when: unprefixed(field.visible_when)}
+      %{
+        field
+        | path: path,
+          group: "requirement",
+          visible_when: unprefixed(field.visible_when),
+          required: field.required or path in @required_here
+      }
     end
   end
 

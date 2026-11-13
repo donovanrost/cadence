@@ -19,6 +19,13 @@ defmodule CadenceWeb.Console.ContactRequirementController do
     end
   end
 
+  def by_template(conn, params) do
+    case PlanningRequirements.by_template(org_id(conn), mission_id(conn), params) do
+      {:ok, data} -> ok(conn, data)
+      {:error, reason} -> error(conn, reason)
+    end
+  end
+
   def show(conn, %{"requirement_id" => id}) do
     case PlanningRequirements.get(org_id(conn), mission_id(conn), id) do
       {:ok, requirement} -> ok(conn, requirement)

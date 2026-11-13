@@ -10,7 +10,14 @@ defmodule Cadence.Control.PlanningRequirements do
 
   alias Cadence.Accounts
   alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.{ContactRequirements, RequirementListing}
+
+  alias Cadence.ContactPlanning.{
+    ContactRequirements,
+    ContactRequirementTemplates,
+    RequirementListing,
+    TemplateDescriptions
+  }
+
   alias Cadence.Control.PlanningRequirements.Schema
   alias Cadence.SpacecraftStore
 
@@ -44,6 +51,54 @@ defmodule Cadence.Control.PlanningRequirements do
        }}
     end
   end
+
+  @doc """
+  'From templates' (fe-setup, ContactPlanning.md P4): per template, how many requirements it
+  generated whose window opens on the UTC `day` (`"YYYY-MM-DD"`, default today), and how many of
+  those are still active. Templates with none that day are left out.
+  """
+  @spec by_template(binary(), binary(), map()) :: {:ok, map()} | {:error, term()}
+  def by_template(organization_id, mission_id, params) do
+    with {:ok, day} <- day(params["day"]) do
+      from = DateTime.new!(day, ~T[00:00:00], "Etc/UTC")
+
+      counts =
+        RequirementListing.counts_by_template(
+          organization_id,
+          mission_id,
+          from,
+          DateTime.add(from, 86_400)
+        )
+
+      templates =
+        for {template, version} <- ContactRequirementTemplates.list(organization_id, mission_id),
+            %{} = counted <- [counts[template.contact_requirement_template_id]] do
+          Map.merge(
+            %{
+              template: %{
+                id: template.contact_requirement_template_id,
+                name: version.name,
+                state: template.lifecycle_state
+              }
+            },
+            counted
+          )
+        end
+
+      {:ok, %{day: Date.to_iso8601(day), templates: Enum.sort_by(templates, & &1.template.name)}}
+    end
+  end
+
+  defp day(nil), do: {:ok, Date.utc_today()}
+
+  defp day(value) when is_binary(value) do
+    case Date.from_iso8601(value) do
+      {:ok, day} -> {:ok, day}
+      _invalid -> {:error, {:invalid_params, %{day: "must be YYYY-MM-DD"}}}
+    end
+  end
+
+  defp day(_value), do: {:error, {:invalid_params, %{day: "must be YYYY-MM-DD"}}}
 
   @doc "One requirement with its content and version history."
   @spec get(binary(), binary(), binary()) :: {:ok, map()} | {:error, :requirement_not_found}
@@ -188,9 +243,28 @@ defmodule Cadence.Control.PlanningRequirements do
       spacecraft: %{id: version.spacecraft_id, name: Map.get(names, version.spacecraft_id)},
       template_id: RequirementListing.template_id(version),
       content: version |> Map.from_struct() |> Map.take(content_atoms()),
+      rule_summary: rule_summary(version),
       updated_at: version.created_at,
       state_changed: state_changed(requirement)
     }
+  end
+
+  # The templates' sentence without a cadence, plus the gap limit: "1 downlink ≥ 5 min each ·
+  # gaps ≤ 6h00".
+  defp rule_summary(version) do
+    asks =
+      TemplateDescriptions.requirement_summary(%{
+        "contact_count" => version.contact_count,
+        "service_direction" => to_string(version.service_direction),
+        "success_measure" => to_string(version.success_measure),
+        "minimum_duration_seconds" => version.minimum_duration_seconds,
+        "minimum_data_volume_bytes" => version.minimum_data_volume_bytes
+      })
+
+    case Map.get(version, :max_gap_seconds) do
+      gap when is_integer(gap) -> asks <> " · gaps ≤ " <> TemplateDescriptions.duration(gap)
+      _none -> asks
+    end
   end
 
   defp state_changed(%{lifecycle_state: :active}), do: nil
@@ -297,6 +371,9 @@ defmodule Cadence.Control.PlanningRequirements do
 
   defp error(:contact_requirement_transition_reason_required),
     do: {:invalid_params, %{reason: "is required"}}
+
+  defp error(%Ecto.Changeset{errors: errors}),
+    do: {:invalid_params, Map.new(errors, fn {field, {message, _opts}} -> {field, message} end)}
 
   defp error(reason), do: reason
 

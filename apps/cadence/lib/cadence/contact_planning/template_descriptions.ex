@@ -30,7 +30,14 @@ defmodule Cadence.ContactPlanning.TemplateDescriptions do
   @doc ~S|"1 downlink ≥ 5 min every 6h00" style: count, direction, duration, cadence.|
   @spec rule_summary(ContactRequirementTemplateVersion.t()) :: binary()
   def rule_summary(%ContactRequirementTemplateVersion{} = version) do
-    requirement = version.requirement_document
+    [requirement_summary(version.requirement_document), cadence(version.schedule_document)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
+  end
+
+  @doc ~S|"2 downlinks ≥ 5 min each": what one requirement asks for (string-keyed content).|
+  @spec requirement_summary(map()) :: binary()
+  def requirement_summary(requirement) do
     count = requirement["contact_count"] || 1
     direction = direction(requirement["service_direction"], count)
 
@@ -47,12 +54,7 @@ defmodule Cadence.ContactPlanning.TemplateDescriptions do
           nil
       end
 
-    [
-      Enum.join(["#{count} #{direction}", measure] |> Enum.reject(&is_nil/1), " "),
-      cadence(version.schedule_document)
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join(" · ")
+    ["#{count} #{direction}", measure] |> Enum.reject(&is_nil/1) |> Enum.join(" ")
   end
 
   defp cadence(%{"type" => "fixed_interval", "interval_seconds" => seconds}),

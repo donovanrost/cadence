@@ -68,6 +68,42 @@ defmodule Cadence.ContactPlanning.RequirementListing do
     }
   end
 
+  @doc """
+  Template-generated requirements whose window opens in `[from, to)`, counted per template:
+  `%{template_id => %{count, active_count}}` (current versions, any state; `active_count` the
+  active ones). One grouped query.
+  """
+  @spec counts_by_template(binary(), binary(), DateTime.t(), DateTime.t()) :: %{
+          binary() => %{count: non_neg_integer(), active_count: non_neg_integer()}
+        }
+  def counts_by_template(organization_id, mission_id, %DateTime{} = from, %DateTime{} = to) do
+    ContactRequirementRow
+    |> join(:inner, [requirement], version in ContactRequirementVersionRow,
+      on:
+        version.organization_id == requirement.organization_id and
+          version.mission_id == requirement.mission_id and
+          version.contact_requirement_id == requirement.contact_requirement_id and
+          version.version == requirement.current_version
+    )
+    |> where(
+      [requirement, version],
+      requirement.organization_id == ^organization_id and requirement.mission_id == ^mission_id and
+        version.earliest_start >= ^from and version.earliest_start < ^to
+    )
+    |> source(:template)
+    |> group_by(
+      [_requirement, version],
+      fragment("?->'value'->'generation'->>'contact_requirement_template_id'", version.metadata)
+    )
+    |> select([requirement, version], {
+      fragment("?->'value'->'generation'->>'contact_requirement_template_id'", version.metadata),
+      count(requirement.contact_requirement_id),
+      filter(count(requirement.contact_requirement_id), requirement.lifecycle_state == "active")
+    })
+    |> Repo.all()
+    |> Map.new(fn {id, count, active} -> {id, %{count: count, active_count: active}} end)
+  end
+
   @doc "The template that generated `version`, or nil for a one-off requirement."
   @spec template_id(ContactRequirementVersion.t()) :: binary() | nil
   def template_id(%{metadata: %{"generation" => %{"contact_requirement_template_id" => id}}}),

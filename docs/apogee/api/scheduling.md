@@ -559,13 +559,20 @@ rationale, provider_constraints_document {allowed, excluded}, station_constraint
   template's `requirement.*` fields without the prefix, plus `spacecraft_id` (`reference`,
   required), `earliest_start` / `latest_end` (`datetime`, required) and `max_gap_seconds`
   (DECISIONS #74: `integer | null`, unit `s`, 600–604800, optional, `advanced`; "Longest time
-  without a contact"). `group` is `window` or `requirement`.
+  without a contact"). `group` is `window` or `requirement`. `rationale` is required (a one-off
+  must say why).
 - `GET /requirements?spacecraft_id=&state=&source=&page=&limit=` → `{requirements: [row], page,
   next_page}`. Each row is a requirement at its **current version**, most recently changed first.
   `state` is `active | closed | canceled`; `source` is `one_off | template`; `limit` 1–200
   (default 50); `next_page` is `null` on the last page. A row is `{id, state, version, spacecraft
-  {id, name}, template_id | null, content, updated_at}`. `updated_at` is the current version's
-  time.
+  {id, name}, template_id | null, content, rule_summary, updated_at}`. `updated_at` is the current
+  version's time. `rule_summary` is the templates' sentence without a cadence, plus the gap limit
+  when set: "2 downlinks ≥ 5 min each", "1 downlink ≥ 2.0 GB each · gaps ≤ 6h00".
+- `GET /requirements/by-template?day=YYYY-MM-DD` (UTC day, default today) → `{day, templates:
+  [{template {id, name, state}, count, active_count}]}` by name: per template, the requirements it
+  generated whose window opens that day (any state), and how many of those are still active.
+  Templates with none that day are left out. One grouped query; `422 details.day` for a bad
+  date.
 - `GET /requirements/:id` → the row plus `versions: [{version, created_at, actor {kind, id,
   name}}]` (newest first). `404 requirement_not_found`.
 - `POST /requirements` `{content}` → `201 {id, version: 1}`. Omitted fields take the schema's
