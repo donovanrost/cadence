@@ -125,18 +125,37 @@ export function statusTag(
 
 export type PersonName = (userId: string | null) => string;
 
-/** #51 failure reasons and `completed` outcome keys, in operator words. */
-const OUTCOME_WORDS: Readonly<Record<string, string>> = {
+/** #51 failure reasons and `completed` outcome keys (commanding.md; L22 adds spacecraft_archived). */
+export const outcomeKeys = [
+  "verified",
+  "no_verifier",
+  "verify_failed",
+  "verify_timed_out",
+  "catalog_changed",
+  "release_failed",
+  "spacecraft_archived",
+  "canceled",
+  "rejected",
+] as const;
+type OutcomeKey = (typeof outcomeKeys)[number];
+/** In operator words; a new key is a compile error here (typing rule 2). */
+const OUTCOME_WORDS: Readonly<Record<OutcomeKey, string>> = {
   verified: "verified",
   no_verifier: "not verifiable",
   verify_failed: "verify failed",
   verify_timed_out: "verify timed out",
   catalog_changed: "canceled by a catalog change",
   release_failed: "release failed",
+  // ux U40 (api 8243895f1).
+  spacecraft_archived: "not released: spacecraft archived",
   canceled: "canceled",
   rejected: "rejected",
 };
-const outcomeWord = (key: string) => OUTCOME_WORDS[key] ?? key.replaceAll("_", " ");
+/** The payload's key (text: an object key or a reason); one the console doesn't know reads as words. */
+const outcomeWord = (key: string) => {
+  const known = outcomeKeys.find((candidate) => candidate === key);
+  return known ? OUTCOME_WORDS[known] : key.replaceAll("_", " ");
+};
 
 /** Enough of a group to name a failed member: `SET_MODE on EARENDIL-004`. */
 export type EventTargets = readonly Readonly<{

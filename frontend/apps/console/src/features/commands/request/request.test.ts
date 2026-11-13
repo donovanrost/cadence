@@ -631,3 +631,23 @@ describe("U1 targets matrix looks (CommandFlow C3)", () => {
     ]);
   });
 });
+
+describe("completed outcome words (L22, ux U40)", () => {
+  it("tallies archived members in words, and an unknown key as words", () => {
+    const g = groupOf({
+      events: [
+        {
+          id: "e1",
+          kind: "completed",
+          actor: { actor_kind: "system" },
+          at: "2026-11-13T10:00:00Z",
+          payload: { members: { verified: 2, spacecraft_archived: 1, brand_new: 1 } },
+        },
+      ],
+    });
+    const [completed] = g.events;
+    expect(completed && eventText(completed, () => "Cadence")).toBe(
+      "Cadence closed the run · 2 verified · 1 not released: spacecraft archived · 1 brand new",
+    );
+  });
+});
