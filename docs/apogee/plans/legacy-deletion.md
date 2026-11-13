@@ -16,7 +16,7 @@ the tree moves.
 | L5 sign-in, invitations, no-org | POST `/sign-in`, POST `/invitations/:token` (+ dead modules) | console auth screens | deletable now (GET 302s stay) |
 | L6 admin mode | `/admin-mode` | account menu admin mode | deletable now |
 | L7 platform admin | `/admin/**` | `/console/admin/**` | after qa's live check (L7 migration) |
-| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a after qa's live check (editing smoke PASS 11-14); federated surfaces own batch; L8b blocked (slices 6, library, settings) |
+| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a after qa's live check (editing smoke PASS 11-14); federated surfaces own batch; L8b blocked (slices 6, library, settings); L8c decision machinery after D18 drops `refresh` |
 | L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | blocked: no console API yet |
 | L11 data sources | `/ops/data-sources/**` | `setup.data-sources[/:sourceId]` | after qa's live check (endpoints 2e3c8c5ab) |
 | L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | blocked: L12 endpoints not built (api-ops) |
@@ -373,6 +373,33 @@ their params, and library, playlists, new, settings, activity and diagnostics st
 - **Keep:** the domain behind them: `SharedViews`, `SettingsAuthoring`, `Reads.Dashboards.{Settings,Library,
   Playlists}`, `LibraryAuthoring`, `PlaylistAuthoring`. The console endpoints wrap them.
   `Playlists.present/search` can go.
+
+### L8c dashboard invalidation decisions (follow-up batch; lead 11-14)
+Nothing in lib records dashboard invalidation decisions any more. Neither writer has callers:
+`RuntimeInvalidation.emit_decision` (`runtime_invalidation.ex:264`), which feeds RuntimeHealth's in-memory
+projection, and `DashboardRuntimeInvalidations.record` / `DecisionEvents.record` (durable). Only tests write
+decisions, and C1 coalesces invalidations itself. L7 already drops their only page, `/admin/runtime`'s "Dashboard
+Invalidation Decisions" (with `Reads.Dashboards.RuntimeDiagnostics`); it gets no console home.
+
+1. **D18's `refresh` block, in this order, so nothing fails decoding:**
+   - fe-setup makes DiagnosticsTab's reader tolerate an absent `refresh`, then removes it;
+   - only then, api drops `refresh {observed_at, decision_status, context_reason}` from D18 (it reads the same
+     decisions: `execution_diagnostics.ex:133-139`).
+2. **The decision machinery** (a deletion batch under #79: the director's go first, and a re-grep proving no
+   callers):
+   - `RuntimeInvalidation.emit_decision`, `decision_telemetry_event` and `@decision_telemetry_event`;
+   - `Dashboards.RuntimeInvalidation.{DecisionEvents, DecisionProjection, DecisionEvent}`;
+   - `Dashboards.Diagnostics.{runtime_invalidation_decisions, record_runtime_invalidation_decision,
+     durable_runtime_invalidation_decisions}`;
+   - `Projections.DashboardRuntimeInvalidations`;
+   - the facade functions in `dashboards.ex:76-83` and `cadence.ex:745-779`;
+   - `ExecutionDiagnostics`' decision lookup and `ExecutionEvidence`'s "Recorded invalidation" row;
+   - their tests (`dashboard_runtime_invalidation_decisions_test`, `runtime_invalidation/decision_events_test`,
+     the decision cases in `runtime_health_test`).
+3. **Later, domain's call:** a migration dropping the durable decision events table.
+
+Future note, not work now: "why did my board refresh" would be a per-dashboard Diagnostics feature fed by C1's own
+coalescing. That's new work, not a port.
 
 ### Answers (lead 11-14)
 - **Explore's `add_to_dashboard`:** dead at both ends. Nothing dispatches it: it appears only in ops-console's
