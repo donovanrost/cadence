@@ -35,7 +35,7 @@ export async function fetchStations(
   return result.ok ? { ok: true, value: result.value.stations } : result;
 }
 
-/** A provider check's result (L12 proposal): the row's last validate / sync. */
+/** A provider check's result (L12): the row's last validate / sync. */
 const check = object({
   status: nullable(known(["healthy", "failed"] as const)),
   checked_at: nullable(decoders.timestamp),
@@ -55,13 +55,14 @@ const provider = object({
     last_synced_at: nullable(decoders.timestamp),
   }),
   station_count: integer,
-  // L12 additions (plans/providers.md); optional until api-ops ships them.
-  version: decoders.optional(integer),
-  policy_mode: decoders.optional(known(["approval_required", "bounded_automatic"] as const)),
-  grant: decoders.optional(
+  // L12 (api-ops 4f81a1d0d, setup.md "Mission providers").
+  version: integer,
+  policy_mode: known(["approval_required", "bounded_automatic"] as const),
+  /** null: bound before account grants (an old direct binding). */
+  grant: nullable(
     object({ id: token, version: integer, state: known(["active", "revoked"] as const) }),
   ),
-  health: decoders.optional(object({ validate: check, sync: check })),
+  health: object({ validate: check, sync: check }),
 });
 export type MissionProvider = Decoded<typeof provider>;
 export const providerReader = provider;
@@ -71,7 +72,7 @@ export type MissionProviders = Readonly<{
   canManage: boolean;
 }>;
 
-/** `GET /missions/:id/providers` sends `{providers}`; L12 adds `permissions: ["providers.manage"]`. */
+/** `GET /missions/:id/providers`: `{providers, permissions}`; `providers.manage` gates the writes. */
 export async function fetchProviders(
   missionId: string,
   signal: AbortSignal,
@@ -80,7 +81,7 @@ export async function fetchProviders(
     `/missions/${encodeURIComponent(missionId)}/providers`,
     object({
       providers: array(provider, 500),
-      permissions: decoders.optional(array(known(["providers.manage"] as const), 10)),
+      permissions: array(known(["providers.manage"] as const), 10),
     }),
     { signal },
   );
@@ -89,7 +90,7 @@ export async function fetchProviders(
         ok: true,
         value: {
           providers: result.value.providers,
-          canManage: result.value.permissions?.includes("providers.manage") ?? false,
+          canManage: result.value.permissions.includes("providers.manage"),
         },
       }
     : result;

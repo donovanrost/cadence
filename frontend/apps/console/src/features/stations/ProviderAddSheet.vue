@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { fieldErrors, useRemoteQuery } from "@/api";
+import { fieldErrors, isError, useRemoteQuery } from "@/api";
 import { ApButton, ApCallout, ApRemote, ApSheet } from "@/ui";
 import ProviderAddFields from "./ProviderAddFields.vue";
 import {
@@ -36,11 +36,18 @@ async function submit() {
   if (!b.ok || busy.value) return;
   busy.value = true;
   try {
-    const r = await addProvider(props.missionId, b.body);
+    const offered = options.state.value;
+    const version =
+      offered.status === "ready"
+        ? offered.value.grants.find((g) => g.id === b.body.grant_id)?.version
+        : undefined;
+    const body = version === undefined ? b.body : { ...b.body, expected_grant_version: version };
+    const r = await addProvider(props.missionId, body);
     if (r.ok) {
       sheet.value?.close();
       return void emit("added");
     }
+    if (isError(r.error, "grant_changed")) options.refetch();
     errors.value = fieldErrors(r.error);
     failure.value = Object.keys(errors.value).length > 0 ? null : providerFailure(r.error);
   } finally {

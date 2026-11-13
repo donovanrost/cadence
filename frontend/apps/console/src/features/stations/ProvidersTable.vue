@@ -32,8 +32,8 @@ const when = (at: string | null) => (at ? formatShort(new Date(at)) : "never");
     <template #cell-stations="{ row }">{{ row.station_count }}</template>
     <template #cell-health="{ row }"
       ><span class="inline-flex items-center gap-2"
-        ><ApStatusMark :state="healthLine(row.health?.validate).state" />{{
-          healthLine(row.health?.validate).text
+        ><ApStatusMark :state="healthLine(row.health.validate).state" />{{
+          healthLine(row.health.validate).text
         }}</span
       ></template
     >

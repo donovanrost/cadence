@@ -13,13 +13,13 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ changed: [] }>();
 const busy = ref<"validate" | "sync" | null>(null);
-const note = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
+const note = ref<{ tone: "nominal" | "info" | "caution" | "crit"; text: string } | null>(null);
 const confirm = ref<InstanceType<typeof ProviderArchive> | null>(null);
 
 async function check(what: "validate" | "sync") {
   if (!props.provider || busy.value) return;
   busy.value = what;
-  note.value = { tone: "nominal", text: "Contacting the provider…" };
+  note.value = { tone: "info", text: "Contacting the provider…" };
   try {
     const r = await checkProvider(props.missionId, props.provider.id, what);
     note.value = r.ok
@@ -38,9 +38,13 @@ const facts = (p: MissionProvider) => [
   { key: "account", label: "Account", value: p.account.name ?? "Org admins only" },
   { key: "type", label: "Type", value: p.provider_type, mono: true },
   { key: "stations", label: "Stations", value: String(p.station_count) },
-  { key: "validate", label: "Validated", value: healthLine(p.health?.validate).text },
-  { key: "sync", label: "Synced", value: healthLine(p.health?.sync).text },
-  { key: "grant", label: "Grant", value: p.grant ? `${p.grant.state} · v${p.grant.version}` : "—" },
+  { key: "validate", label: "Validated", value: healthLine(p.health.validate).text },
+  { key: "sync", label: "Synced", value: healthLine(p.health.sync).text },
+  {
+    key: "grant",
+    label: "Grant",
+    value: p.grant ? `${p.grant.state} · v${p.grant.version}` : "None (bound directly)",
+  },
 ];
 </script>
 

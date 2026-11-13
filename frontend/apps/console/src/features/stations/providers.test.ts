@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { fetchProviders } from "./api.ts";
 import { addBody, blankAdd, checkSentence, healthLine, type ProviderCheck } from "./providers.ts";
 
-/** Fixtures: plans/providers.md L12 (proposed 11-13) and today's GET /providers. */
+/** Fixtures: setup.md "Mission providers (L12)" (api-ops 4f81a1d0d). */
 const row = {
   id: "prov_1",
   name: "Northlight",
@@ -10,6 +10,13 @@ const row = {
   account: { id: "acc_1", name: "Northlight prod" },
   status: { lifecycle_state: "active", last_validated_at: null, last_synced_at: null },
   station_count: 4,
+  version: 2,
+  policy_mode: "approval_required",
+  grant: { id: "g1", version: 3, state: "active" },
+  health: {
+    validate: { status: "healthy", checked_at: "2026-11-13T02:10:00Z", error: null },
+    sync: { status: null, checked_at: null, error: null },
+  },
 };
 
 async function decoded(body: unknown) {
@@ -23,10 +30,14 @@ async function decoded(body: unknown) {
 }
 
 describe("mission providers (L12)", () => {
-  it("reads today's {providers} payload (it used to expect a bare array)", async () => {
-    const r = await decoded({ providers: [row] });
+  it("reads {providers, permissions}; a direct binding has no grant", async () => {
+    const r = await decoded({
+      providers: [row, { ...row, id: "prov_2", grant: null }],
+      permissions: [],
+    });
     expect(r.ok && r.value.providers[0]?.name).toBe("Northlight");
     expect(r.ok && r.value.canManage).toBe(false);
+    expect(r.ok && r.value.providers[1]?.grant).toBeNull();
     const withL12 = await decoded({ providers: [row], permissions: ["providers.manage"] });
     expect(withL12.ok && withL12.value.canManage).toBe(true);
   });
@@ -67,10 +78,12 @@ describe("mission providers (L12)", () => {
       provider: {
         ...row,
         status: { ...row.status, lifecycle_state: "active" },
-        version: undefined,
-        policy_mode: undefined,
-        grant: undefined,
-        health: undefined,
+        policy_mode: "approval_required",
+        grant: null,
+        health: {
+          validate: { status: null, checked_at: null, error: null },
+          sync: { status: null, checked_at: null, error: null },
+        },
       },
       result: { ok, stations, message },
     });
@@ -81,6 +94,9 @@ describe("mission providers (L12)", () => {
     expect(checkSentence("sync", check(false, null, "unsupported_capability"))).toBe(
       "Sync failed: unsupported_capability.",
     );
-    expect(healthLine(undefined)).toEqual({ state: "off", text: "Never checked" });
+    expect(healthLine({ status: null, checked_at: null, error: null })).toEqual({
+      state: "off",
+      text: "Never checked",
+    });
   });
 });

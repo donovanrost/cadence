@@ -4,7 +4,7 @@ import { formatShort, type OpState } from "@/ui";
 import { providerReader, type MissionProvider } from "./api.ts";
 
 /**
- * L12 mission providers (plans/providers.md, proposed to api-ops 11-13): add by binding an org
+ * L12 mission providers (api-ops 4f81a1d0d, setup.md): add by binding an org
  * account grant, validate, sync stations, archive. Validate and sync answer a result, not an error.
  */
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/providers`;
@@ -40,6 +40,8 @@ export type AddProviderBody = Readonly<{
   policy_mode: (typeof policyModes)[number];
   deadline_behavior?: string;
   bounded?: BoundedBody;
+  /** The grant's version as offered; a stale one is 409 grant_changed. */
+  expected_grant_version?: number;
 }>;
 const one = d.object({ provider: providerReader });
 export async function addProvider(missionId: string, body: AddProviderBody) {
@@ -82,10 +84,10 @@ export function checkSentence(what: "validate" | "sync", c: ProviderCheck): stri
 }
 
 /** One health line: "Healthy · 11-13 02:10Z" / "Failed · <error>" / "Never checked". */
-export function healthLine(c: NonNullable<MissionProvider["health"]>["validate"] | undefined) {
+export function healthLine(c: MissionProvider["health"]["validate"]) {
   const state: OpState =
-    c?.status === "healthy" ? "nominal" : c?.status === "failed" ? "crit" : "off";
-  if (!c || c.status === null) return { state, text: "Never checked" };
+    c.status === "healthy" ? "nominal" : c.status === "failed" ? "crit" : "off";
+  if (c.status === null) return { state, text: "Never checked" };
   const at = c.checked_at ? ` · ${formatShort(new Date(c.checked_at))}` : "";
   if (c.status === "failed") return { state, text: `Failed${at}${c.error ? ` · ${c.error}` : ""}` };
   return { state, text: c.status === "healthy" ? `Healthy${at}` : `Unknown${at}` };
