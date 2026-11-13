@@ -265,6 +265,33 @@ Priority order. Each one wraps an existing domain function unless marked **new**
 7. **C1** `dashboard:<m>:<d>` channel (step 2). C2 appends only if needed.
 8. Legacy route redirects to console URLs at each cutover.
 
+## D5 proposed shape (for api-ops)
+
+`GET /api/console/v1/missions/:m/dashboards/:id?from&to&spacecraft_id` wraps `Reads.Dashboards.DashboardPage.load/4`
+with the runtime admitted by `OpsWorkspaceURL` (same `from`/`to` grammar: `now-6h` … `now`, or ISO bounds).
+
+```json
+{"data": {
+  "dashboard": {"id": "…", "name": "Bus overview", "description": null, "tags": ["power"],
+                "current_version": 12, "updated_at": "2026-11-13T02:51:00Z"},
+  "can_edit": true,
+  "scope_options": [{"id": "spacecraft-earendil-312", "name": "EARENDIL-312"}],
+  "snapshot": <WorkspaceSnapshot.build/4 map, unchanged (version 1)> | null,
+  "resolved_at": "2026-11-13T02:52:10Z"}}
+```
+
+- `snapshot` is passed through unchanged (`Reads.Dashboards.WorkspaceSnapshot`, `WorkspaceFrame`), so the console
+  decoder mirrors it 1:1. `null` means the dashboard was never made current and the viewer isn't an author
+  (`DashboardPage.unpublished`). The console shows "This dashboard has no saved version yet."
+- `current_version` is `saved.version`, and `can_edit` is `author`. `tags` come from document `metadata["tags"]`
+  (`[]` when absent). `scope_options` is capped at 1000, as today.
+- Errors use the console envelope: 404 `not_found` (unknown or other-mission dashboard), 422 `invalid` with
+  `details.field` `spacecraft_id` (`:invalid_scope`) or `from`/`to` (range admission), 503 `unavailable` for a
+  failed resolve.
+- Invalidation resources: `dashboards` (document), `telemetry`, `limits`, `alarms`, `events` (data).
+- **D0:** add `dashboard.author` to `organizations[].capabilities`, derived from the `:author_dashboards` policy
+  (DECISIONS #38 style).
+
 ## Kit (lead's answers)
 
 - **K1 yes:** dashboards adds `uplot` 1.6.32 and `gridstack` 10.3.1 to `@cadence/console`, imported only from
