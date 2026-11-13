@@ -36,23 +36,16 @@ const storedReader = d.object({
 });
 export type StoredDraft = Decoded<typeof storedReader>;
 
-/**
- * GET's body: `{draft: <draft> | null}` (qa a11y #6, api: no 404 for "no draft"), or the bare
- * draft the endpoint answered before that switch.
- */
-const storedOrNone = d.nullable(storedReader);
-export const draftReplyReader: Reader<StoredDraft | null> = (value, path = "") =>
-  typeof value === "object" && value !== null && "draft" in value
-    ? storedOrNone(value.draft, `${path}.draft`)
-    : storedReader(value, path);
+/** GET's body: `{draft: <draft> | null}`, with no 404 for "no draft" (qa a11y #6, api 444a187fc). */
+export const draftReplyReader = d.object({ draft: d.nullable(storedReader) });
 
-/** The caller's draft, or null when there is none (200 `{draft: null}`; 404 until api switches). */
+/** The caller's draft, or null when there is none. */
 export async function fetchComposeDraft(
   missionId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<StoredDraft | null>> {
   const r = await request(draftPath(missionId), draftReplyReader, signal ? { signal } : {});
-  return !r.ok && r.error.kind === "not_found" ? { ok: true, value: null } : r;
+  return r.ok ? { ok: true, value: r.value.draft } : r;
 }
 
 export function saveComposeDraft(

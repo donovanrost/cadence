@@ -159,16 +159,12 @@ describe("GET /command-draft reply", () => {
     document: { version: 1 },
     catalog: { revision_saved: null, revision_now: null, missing_command_ids: [] },
   };
-  it("reads {draft: null} as no draft, without a 404 (qa a11y #6)", () => {
-    expect(decode(draftReplyReader, { draft: null })).toEqual({ ok: true, value: null });
+  it("reads {draft: null} as no draft (qa a11y #6, api 444a187fc)", () => {
+    expect(decode(draftReplyReader, { draft: null })).toEqual({ ok: true, value: { draft: null } });
   });
-  it("reads {draft} and the bare draft alike", () => {
-    const wrapped = decode(draftReplyReader, { draft: body });
-    const bare = decode(draftReplyReader, body);
-    expect(wrapped.ok && wrapped.value?.revision).toBe(3);
-    expect(bare.ok && bare.value?.revision).toBe(3);
-  });
-  it("still refuses a malformed draft", () => {
+  it("reads {draft} and refuses a malformed one", () => {
+    const r = decode(draftReplyReader, { draft: body });
+    expect(r.ok && r.value.draft?.revision).toBe(3);
     expect(decode(draftReplyReader, { draft: { revision: "x" } }).ok).toBe(false);
   });
 });
