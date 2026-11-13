@@ -66,9 +66,12 @@ const saveLabel = computed(() => {
     : next;
 });
 
+/** Set once a new requirement is created: Create stays off, and the note links to it. */
+const created = ref<string | null>(null);
+
 async function save() {
   const s = rawSchema.state.value;
-  if (s.status !== "ready" || busy.value) return;
+  if (s.status !== "ready" || busy.value || created.value) return;
   // Every field is sent: an explicit null clears (e.g. no gap limit), the rest restate the version.
   const built = buildNested(
     s.value.fields,
@@ -97,12 +100,14 @@ async function save() {
         text: notActiveLine(r.error) ?? failureOutcome(r.error, "changed").sentence,
       });
     }
-    if (props.requirement) emit("close");
-    else
-      await router.push({
-        name: "setup.contact-planning.requirement",
-        params: { requirementId: r.value.id },
-      });
+    if (props.requirement) return void emit("close");
+    // qa: twice the server created it but the page stayed on New with nothing said, and a second
+    // click made a duplicate. Say it's created and lock Create first, whatever the navigation does.
+    created.value = r.value.id;
+    note.value = { tone: "nominal", text: "Created." };
+    await router
+      .push({ name: "setup.contact-planning.requirement", params: { requirementId: r.value.id } })
+      .catch(() => undefined);
   } finally {
     busy.value = false;
   }
@@ -116,11 +121,27 @@ async function save() {
       <ApCallout v-if="requirement && drafts.length > 0" tone="caution">{{
         supersedeSentence(drafts, requirement.version + 1, session.user.id)
       }}</ApCallout>
-      <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <ApCallout v-if="note" :tone="note.tone"
+        >{{ note.text }}
+        <template v-if="created" #action>
+          <ApButton
+            size="compact"
+            :to="{
+              name: 'setup.contact-planning.requirement',
+              params: { requirementId: created },
+            }"
+            >Open it</ApButton
+          >
+        </template>
+      </ApCallout>
       <div class="flex flex-wrap gap-2">
-        <ApButton variant="primary" :disabled="busy" disabled-reason="Saving…" @click="save">{{
-          saveLabel
-        }}</ApButton>
+        <ApButton
+          variant="primary"
+          :disabled="busy || created !== null"
+          :disabled-reason="created ? 'Created. Open it above.' : 'Saving…'"
+          @click="save"
+          >{{ saveLabel }}</ApButton
+        >
         <ApButton variant="ghost" @click="emit('close')">Cancel</ApButton>
       </div>
     </template>
