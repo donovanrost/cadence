@@ -3,7 +3,15 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
-import { ApCallout, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks } from "@/ui";
+import {
+  ApCallout,
+  ApEmptyState,
+  ApPageHeader,
+  ApPanel,
+  ApRemote,
+  ApTabLinks,
+  type ApTabLink,
+} from "@/ui";
 import PolicyTab from "./PolicyTab.vue";
 import RequirementsTab from "./RequirementsTab.vue";
 import { fetchPlanning, situation, type PlanningSummary } from "./api.ts";
@@ -18,7 +26,7 @@ const notProvided = computed(
 const tab = computed(() =>
   route.name === "setup.contact-planning.policy" ? "policy" : "requirements",
 );
-const links = [
+const links: readonly ApTabLink[] = [
   { key: "requirements", label: "Requirements", to: { name: "setup.contact-planning" } },
   { key: "policy", label: "Policy", to: { name: "setup.contact-planning.policy" } },
 ];

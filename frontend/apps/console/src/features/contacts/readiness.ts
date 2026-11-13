@@ -1,3 +1,4 @@
+import type { RouteLocationRaw } from "vue-router";
 import { decoders as d, request, type ApiError, type Decoded } from "@/api/index.ts";
 import type { OpState } from "@/ui";
 
@@ -129,7 +130,7 @@ export const noRecoverText = (reason: string | null) =>
     : "Recovery isn't possible on this pass.";
 
 /** Where to fix a reason, when it names one. */
-export function reasonLink(reason: string | null) {
+export function reasonLink(reason: string | null): { label: string; to: RouteLocationRaw } | null {
   if (reason === "provider_credential_unavailable")
     return { label: "Org › Provider accounts", to: { name: "org.provider-accounts" } };
   if (reason === CANNOT_ATTEST)

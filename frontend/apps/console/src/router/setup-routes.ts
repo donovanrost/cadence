@@ -1,3 +1,4 @@
+import { paramText } from "@/shell/route-params.ts";
 import type { RouteRecordRaw } from "vue-router";
 
 /** Setup mode, children of /console/:org/:mission. Owner: fe-setup (swap `pending` for your screen). */
@@ -26,7 +27,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     },
   },
   {
-    path: "setup/spacecraft/:scId",
+    path: "setup/spacecraft/:spacecraftId",
     name: "setup.spacecraft.one",
     component: () => import("@/features/spacecraft/SpacecraftDetailScreen.vue"),
     meta: { mode: "setup", nav: "spacecraft", title: "Spacecraft" },
@@ -65,10 +66,10 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     // ux §7 #8: one Catalog page with a database picker; the old path opens it on that database.
     path: "setup/catalog/:databaseId",
     name: "setup.catalog.database",
-    redirect: (to) => {
-      const { databaseId, ...params } = to.params;
-      return { name: "setup.catalog", params, query: { database: databaseId } };
-    },
+    redirect: (to) => ({
+      name: "setup.catalog",
+      query: { database: paramText(to.params, "databaseId") },
+    }),
   },
   {
     path: "setup/changes",

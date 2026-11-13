@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { linkByName, type ParamlessRouteName } from "@/shell";
 import { onScopeDispose, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { registerPalette, useConsoleScope, usePalette, useSmallScreen } from "@/shell/index.ts";
@@ -25,7 +26,7 @@ watch(
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName));
-const CHORDS: Readonly<Record<string, string>> = { n: "ops.now", c: "ops.contacts" };
+const CHORDS: Readonly<Record<string, ParamlessRouteName>> = { n: "ops.now", c: "ops.contacts" };
 let armedUntil = 0;
 
 function onKey(event: KeyboardEvent) {
@@ -41,7 +42,9 @@ function onKey(event: KeyboardEvent) {
   armedUntil = 0;
   if (!name) return;
   event.preventDefault();
-  router.push({ name }).catch((error: unknown) => console.error("Navigation failed", error));
+  router
+    .push(linkByName(name))
+    .catch((error: unknown) => console.error("Navigation failed", error));
 }
 window.addEventListener("keydown", onKey);
 onScopeDispose(() => window.removeEventListener("keydown", onKey));

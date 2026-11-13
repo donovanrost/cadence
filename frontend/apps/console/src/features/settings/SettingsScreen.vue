@@ -3,12 +3,12 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
-import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks } from "@/ui";
+import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks, type ApTabLink } from "@/ui";
 import SettingsSectionPanel from "./SettingsSectionPanel.vue";
 import { fetchSettings, type Settings, type SettingsScope } from "./api.ts";
 
 /** Mission or organization settings, sections from the server registry (editable with settings.edit; saves are direct (ST1)). */
-const route = useRoute();
+const route = useRoute<"setup.settings" | "org.settings">();
 const scope = useConsoleScope();
 const target = computed((): SettingsScope | null => {
   const s = scope.value;
@@ -22,14 +22,14 @@ const { state, refetch } = useRemoteQuery(target, fetchSettings);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
-const routeName = computed(() =>
+const routeName = computed((): "setup.settings" | "org.settings" =>
   route.name === "setup.settings" ? "setup.settings" : "org.settings",
 );
 const active = (s: Settings) =>
   typeof route.params.section === "string" && route.params.section
     ? route.params.section
     : (s.sections[0]?.key ?? "");
-const links = (s: Settings) =>
+const links = (s: Settings): readonly ApTabLink[] =>
   s.sections.map((x) => ({
     key: x.key,
     label: x.title,

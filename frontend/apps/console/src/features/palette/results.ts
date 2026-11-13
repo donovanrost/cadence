@@ -1,3 +1,4 @@
+import { linkByName, type ParamlessRouteName } from "@/shell";
 import type { RouteLocationRaw } from "vue-router";
 import type { OpState } from "@/ui";
 import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/fleet/index.ts";
@@ -38,7 +39,7 @@ export type PaletteItem = Readonly<{
   rank: number;
 }>;
 
-export type PageEntry = Readonly<{ name: string; title: string; mode: string }>;
+export type PageEntry = Readonly<{ name: ParamlessRouteName; title: string; mode: string }>;
 
 /** `#` spacecraft only, `>` commands only, `@` stations only. */
 export function parseQuery(raw: string): {
@@ -163,7 +164,7 @@ export function search(
       subtitle: page.mode === "setup" ? "Setup" : "Ops",
       hint: page.name === "ops.now" ? "G N" : page.name === "ops.contacts" ? "G C" : "PAGE",
       state: null,
-      to: { name: page.name },
+      to: linkByName(page.name),
       commandTo: null,
       rank: 0,
     });

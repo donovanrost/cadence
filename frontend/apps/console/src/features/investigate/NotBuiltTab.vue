@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { RouteLocationRaw } from "vue-router";
+import type { SpacecraftTab } from "@/shell";
 import { ApButton, ApEmptyState, ApPanel } from "@/ui";
 
 /**
@@ -8,13 +9,13 @@ import { ApButton, ApEmptyState, ApPanel } from "@/ui";
  * state that links to the existing page for this spacecraft, until each tab is built.
  */
 const props = defineProps<{
-  tab: string;
+  tab: Exclude<SpacecraftTab, "investigate">;
   sc: Readonly<{ id: string; scid: number; name: string }>;
 }>();
 
 const TABS: Readonly<
   Record<
-    string,
+    Exclude<SpacecraftTab, "investigate">,
     (sc: typeof props.sc) => {
       title: string;
       label: string;
@@ -45,7 +46,7 @@ const TABS: Readonly<
     title: "Configuration",
     label: "Open in Setup",
     sentence: `Setup holds ${sc.name}'s configuration and its profile.`,
-    to: { name: "setup.spacecraft.one", params: { scId: sc.id } },
+    to: { name: "setup.spacecraft.one", params: { spacecraftId: sc.id } },
   }),
   history: (sc) => ({
     title: "History",
@@ -54,7 +55,7 @@ const TABS: Readonly<
     to: { name: "ops.timeline", query: { sc: String(sc.scid) } },
   }),
 };
-const view = computed(() => TABS[props.tab]?.(props.sc) ?? null);
+const view = computed(() => TABS[props.tab](props.sc));
 </script>
 
 <template>

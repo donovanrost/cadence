@@ -23,7 +23,7 @@ const columns: readonly ApColumn[] = [
   <ApTable :columns="columns" :rows="rows" :row-key="(row) => row.id" caption="Spacecraft">
     <template #cell-name="{ row }">
       <RouterLink
-        :to="{ name: 'setup.spacecraft.one', params: { scId: row.id } }"
+        :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: row.id } }"
         class="text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
         >{{ row.name }}</RouterLink
       >

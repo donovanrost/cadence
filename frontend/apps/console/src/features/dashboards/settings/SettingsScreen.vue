@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTabLinks } from "@/ui";
+import {
+  ApBreadcrumb,
+  ApButton,
+  ApPageHeader,
+  ApRemote,
+  ApTabLinks,
+  type ApCrumb,
+  type ApTabLink,
+} from "@/ui";
 import ActivityTab from "./ActivityTab.vue";
 import { exportUrl, fetchSettings } from "./api.ts";
 import DiagnosticsTab from "./DiagnosticsTab.vue";
@@ -12,7 +20,7 @@ import GeneralTab from "./GeneralTab.vue";
 import SharingTab from "./SharingTab.vue";
 
 /** Dashboard settings (ux Dashboards.md § Settings, slice 5): General · Sharing · Activity · Diagnostics. */
-const route = useRoute();
+const route = useRoute("ops.dashboard.settings");
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const dashboardId = computed(() =>
@@ -30,12 +38,16 @@ useMissionInvalidation(missionId, ["dashboards"], settings.refetch);
 const name = computed(() =>
   settings.state.value.status === "ready" ? settings.state.value.value.dashboard.name : "Dashboard",
 );
-const to = (t: Tab) => ({
+const to = (t: Tab): RouteLocationRaw => ({
   name: "ops.dashboard.settings",
   params: { dashboardId: dashboardId.value, tab: t },
 });
-const links = tabs.map((t) => ({ key: t, label: t[0]?.toUpperCase() + t.slice(1), to: to(t) }));
-const crumbs = computed(() => [
+const links: readonly ApTabLink[] = tabs.map((t) => ({
+  key: t,
+  label: t[0]?.toUpperCase() + t.slice(1),
+  to: to(t),
+}));
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Dashboards", to: { name: "ops.dashboards" } },
   { label: name.value, to: { name: "ops.dashboard", params: { dashboardId: dashboardId.value } } },
   { label: "Settings" },

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 import {
   formatClock,
   formatCountdown,
@@ -74,7 +74,7 @@ const access = useCommandAccess();
 /** false only: null means no uplink leg was asked for (downlink only). */
 const uplinkUnconfirmed = computed(() => props.pass?.uplink_confirmed === false);
 /** K2: a rejected / failed reservation booked by a plan can be re-planned (lead, 4259c615). */
-const replan = computed(() => {
+const replan = computed((): RouteLocationRaw | null => {
   const p = props.pass;
   return p?.plan && (p.state === "rejected" || p.state === "failed")
     ? { name: "ops.contacts.replan", query: { plan: p.plan.id } }

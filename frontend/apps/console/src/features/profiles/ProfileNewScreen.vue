@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { fetchKindSchema } from "@/features/changes/index.ts";
 import { useMissionScope } from "@/shell";
-import { ApBreadcrumb, ApPageHeader, ApRemote } from "@/ui";
+import { ApBreadcrumb, ApPageHeader, ApRemote, type ApCrumb } from "@/ui";
 import { fetchProfileDetail } from "./detail.ts";
 import { blankForm, duplicateForm } from "./newProfile.ts";
 import ProfileNewForm from "./ProfileNewForm.vue";
@@ -29,7 +29,10 @@ const schema = useRemoteQuery(
 const noSchema = computed(
   () => schema.state.value.status === "failed" && schema.state.value.error.kind === "invalid",
 );
-const crumbs = [{ label: "Profiles", to: { name: "setup.profiles" } }, { label: "New profile" }];
+const crumbs: readonly ApCrumb[] = [
+  { label: "Profiles", to: { name: "setup.profiles" } },
+  { label: "New profile" },
+];
 </script>
 
 <template>

@@ -37,7 +37,7 @@ import YourGoBlock from "./YourGoBlock.vue";
  * and timing first, then "Your GO is requested" when a request awaiting your GO targets it, then
  * Acknowledge / Hand off (fe-ops' EpisodeBar, stacked).
  */
-const route = useRoute();
+const route = useRoute("ops.spacecraft");
 const scope = useMissionScope();
 const now = useNow();
 const missionId = computed(() => scope.value.mission.id);

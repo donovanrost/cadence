@@ -112,7 +112,7 @@ export function fixLink(fix: FindingFix, severity: Severity): FixLink {
       case "spacecraft":
         return {
           label: "Open spacecraft",
-          to: { name: "setup.spacecraft.one", params: { scId: fix.id } },
+          to: { name: "setup.spacecraft.one", params: { spacecraftId: fix.id } },
         };
       case "profile":
         return {

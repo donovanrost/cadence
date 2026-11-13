@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { useMissionScope } from "@/shell";
-import { ApPageHeader, ApTabLinks } from "@/ui";
+import { paramText, useMissionScope } from "@/shell";
+import { ApPageHeader, ApTabLinks, type ApTabLink } from "@/ui";
 import RoutingRulesPanel from "./RoutingRulesPanel.vue";
 import TransportEditor from "./TransportEditor.vue";
 import TransportsPanel from "./TransportsPanel.vue";
@@ -11,12 +11,13 @@ import TransportsPanel from "./TransportsPanel.vue";
 const route = useRoute();
 const scope = useMissionScope();
 const transportId = computed(() =>
-  typeof route.params.transportId === "string" && route.params.transportId
-    ? route.params.transportId
+  typeof paramText(route.params, "transportId") === "string" &&
+  paramText(route.params, "transportId")
+    ? paramText(route.params, "transportId")
     : null,
 );
 const active = computed(() => (route.name === "setup.comms.transports" ? "transports" : "routing"));
-const links = [
+const links: readonly ApTabLink[] = [
   { key: "routing", label: "Routing rules", to: { name: "setup.comms" } },
   { key: "transports", label: "Transports", to: { name: "setup.comms.transports" } },
 ];

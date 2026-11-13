@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
-import { ApBreadcrumb, ApPageHeader, ApRemote, ApTag, formatAbsolute } from "@/ui";
+import { ApBreadcrumb, ApPageHeader, ApRemote, ApTag, formatAbsolute, type ApCrumb } from "@/ui";
 import EntryList from "./EntryList.vue";
 import RollbackPanel from "./RollbackPanel.vue";
 import { useConfigState } from "./useConfigState.ts";
@@ -13,7 +13,7 @@ import { fetchRevision } from "./api.ts";
  * Setup › Revisions › rN (Changes.md §4). Rollback (#49): on the live revision, roll back to the
  * one before it (undo); on an older one, roll back to it. Needs config.rollback.
  */
-const route = useRoute();
+const route = useRoute("setup.revision");
 const scope = useMissionScope();
 const revision = computed(() => {
   const raw = route.params.revision;
@@ -34,7 +34,7 @@ const rollback = computed(() => {
   const to = n === head ? n - 1 : n < head ? n : null;
   return to !== null && to >= 1 ? { to, staged: c.value.change_set?.staged_count ?? 0 } : null;
 });
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Revisions", to: { name: "setup.revisions" } },
   revision.value === null ? { label: "Unknown" } : { label: `r${revision.value}`, literal: true },
 ]);

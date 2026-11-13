@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { linkByName, type ParamlessRouteName } from "@/shell";
 import { computed } from "vue";
 import { describeApiError } from "@/api";
 import { ApCallout, ApPanel, ApStatusMark, formatCount, formatRelative, useNow } from "@/ui";
@@ -8,18 +9,19 @@ import type { PlanView } from "./plan-state.ts";
 const props = defineProps<{ view: Exclude<PlanView, { kind: "plan" }> }>();
 const now = useNow();
 const PHASES = ["materializing", "searching", "optimizing", "materializing_plan"] as const;
-const MISSING: Readonly<Record<string, { text: string; link: string; route: string }>> = {
-  fleet_planning_policy: {
-    text: "No planning policy",
-    link: "Policy",
-    route: "setup.contact-planning.policy",
-  },
-  contact_requirements: {
-    text: "No active contact rule",
-    link: "Requirements",
-    route: "setup.contact-planning",
-  },
-};
+const MISSING: Readonly<Record<string, { text: string; link: string; route: ParamlessRouteName }>> =
+  {
+    fleet_planning_policy: {
+      text: "No planning policy",
+      link: "Policy",
+      route: "setup.contact-planning.policy",
+    },
+    contact_requirements: {
+      text: "No active contact rule",
+      link: "Requirements",
+      route: "setup.contact-planning",
+    },
+  };
 const elapsed = computed(() =>
   props.view.kind === "drafting" && props.view.startedAt
     ? formatRelative(new Date(props.view.startedAt), now.value).replace(/^T\+/, "")
@@ -46,7 +48,7 @@ const elapsed = computed(() =>
           }}</span>
           <RouterLink
             v-if="MISSING[item]"
-            :to="{ name: MISSING[item].route }"
+            :to="linkByName(MISSING[item].route)"
             class="max-md:hit-44 font-mono text-sm text-readout"
             >{{ MISSING[item].link }} →</RouterLink
           >

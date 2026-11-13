@@ -1,6 +1,7 @@
 import { computed, ref, watch, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
+import { paramText } from "@/shell";
 import { fetchStations } from "@/features/stations/index.ts";
 import { useNow } from "@/ui";
 import { fetchAvailability, fetchStationImpact, outageWindow } from "./station.ts";
@@ -16,7 +17,9 @@ export function useStationEntry(missionId: Readonly<Ref<string>>) {
   const router = useRouter();
   const now = useNow();
   const stationId = computed(() =>
-    typeof route.params.stationId === "string" ? route.params.stationId : null,
+    typeof paramText(route.params, "stationId") === "string"
+      ? paramText(route.params, "stationId")
+      : null,
   );
   const availability = useRemoteQuery(
     () => (stationId.value ? { missionId: missionId.value, stationId: stationId.value } : null),

@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { canAdministerOrganization, paramText, useMissionScope, useSession } from "@/shell";
 import {
   ApButton,
   ApCallout,
@@ -13,6 +13,7 @@ import {
   ApRemote,
   ApTabLinks,
   plural,
+  type ApTabLink,
 } from "@/ui";
 import ProvidersPanel from "./ProvidersPanel.vue";
 import { KindEditor } from "@/features/changes/index.ts";
@@ -30,12 +31,12 @@ const session = useSession();
 const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
 /** `new` = add; an id = edit that station; none = list only. */
 const editing = computed(() =>
-  typeof route.params.stationId === "string" && route.params.stationId
-    ? route.params.stationId
+  typeof paramText(route.params, "stationId") === "string" && paramText(route.params, "stationId")
+    ? paramText(route.params, "stationId")
     : null,
 );
 const tab = computed(() => (route.name === "setup.stations.providers" ? "providers" : "stations"));
-const tabs = [
+const tabs: readonly ApTabLink[] = [
   { key: "stations", label: "Stations", to: { name: "setup.stations" } },
   { key: "providers", label: "Providers", to: { name: "setup.stations.providers" } },
 ];

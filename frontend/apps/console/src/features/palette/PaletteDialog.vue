@@ -9,7 +9,7 @@ import {
   useTemplateRef,
 } from "vue";
 import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
-import { useConsoleScope } from "@/shell/index.ts";
+import { isParamlessRouteName, useConsoleScope } from "@/shell/index.ts";
 import { ApKbd } from "@/ui";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
@@ -46,15 +46,15 @@ let returnFocus: HTMLElement | null = null;
 const pages = computed<PageEntry[]>(() =>
   router
     .getRoutes()
-    .filter(
-      (r) =>
-        typeof r.name === "string" &&
-        r.meta.title &&
-        r.meta.mode &&
-        !/:(?!org\b|mission\b)/.test(r.path) &&
-        (access.value.request || r.name !== "ops.commands.new"),
-    )
-    .map((r) => ({ name: String(r.name), title: r.meta.title ?? "", mode: r.meta.mode ?? "" })),
+    .flatMap((r) =>
+      isParamlessRouteName(r.name) &&
+      r.meta.title &&
+      r.meta.mode &&
+      !/:(?!org\b|mission\b)/.test(r.path) &&
+      (access.value.request || r.name !== "ops.commands.new")
+        ? [{ name: r.name, title: r.meta.title, mode: r.meta.mode }]
+        : [],
+    ),
 );
 const spacecraft = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],

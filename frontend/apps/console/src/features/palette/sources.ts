@@ -1,3 +1,4 @@
+import type { RouteLocationRaw } from "vue-router";
 import { formatHourMinute, type OpState } from "@/ui";
 import type { CommandSummary } from "@/features/commands/index.ts";
 import type { Station } from "@/features/stations/index.ts";
@@ -52,7 +53,7 @@ function commandRank(c: CommandSummary, text: string, index: number): number {
 export function commandItems(commands: readonly CommandSummary[], text: string): PaletteItem[] {
   return commands
     .map((c, index) => {
-      const to = { name: "ops.commands.new", query: { command: c.id } };
+      const to: RouteLocationRaw = { name: "ops.commands.new", query: { command: c.id } };
       return {
         key: `command-${c.id}`,
         group: "Commands" as const,

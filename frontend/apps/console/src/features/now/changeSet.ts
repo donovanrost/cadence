@@ -1,3 +1,4 @@
+import type { RouteLocationRaw } from "vue-router";
 import { decoders as d, type Decoded } from "@/api/index.ts";
 import { short } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
@@ -70,7 +71,7 @@ export function changeSetRow(
   c: ChangeSet,
   now: Date = new Date(),
 ): QueueItem {
-  const to = { name: "setup.changes" };
+  const to: RouteLocationRaw = { name: "setup.changes" };
   const words = changeSetWords(c, now);
   return {
     ...base,

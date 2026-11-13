@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApCallout, ApPageHeader, ApRemote, ApTabLinks, plural } from "@/ui";
+import { ApCallout, ApPageHeader, ApRemote, ApTabLinks, plural, type ApTabLink } from "@/ui";
 import DailyPanel from "./DailyPanel.vue";
 import LostPanel from "./LostPanel.vue";
 import ReviewControls from "./ReviewControls.vue";
@@ -51,7 +51,7 @@ const exporter = useReviewExport(
   computed(() => scope.value.mission.slug),
   s,
 );
-const tabs = [
+const tabs: readonly ApTabLink[] = [
   { key: "live", label: "Live", to: { name: "ops.contacts" } },
   { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
   { key: "review", label: "Review", to: { name: "ops.contacts.review" } },

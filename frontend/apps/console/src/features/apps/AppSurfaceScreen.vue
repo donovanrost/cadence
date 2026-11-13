@@ -3,7 +3,14 @@ import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
-import { ApBreadcrumb, ApPageHeader, ApRemote, ApTabLinks } from "@/ui";
+import {
+  ApBreadcrumb,
+  ApPageHeader,
+  ApRemote,
+  ApTabLinks,
+  type ApCrumb,
+  type ApTabLink,
+} from "@/ui";
 import AppStatusLine from "./AppStatusLine.vue";
 import AppSurfaceNotice from "./AppSurfaceNotice.vue";
 import { fetchApps } from "./api.ts";
@@ -16,7 +23,7 @@ import SurfaceMount from "./SurfaceMount.vue";
  * L9 app surface host (ux screens/AppSurfaces.md, DECISIONS #75/#77): the host draws the label,
  * status, title, tabs, notices and states; the app renders only its body.
  */
-const route = useRoute();
+const route = useRoute("setup.app");
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const appKey = computed(() => (typeof route.params.appKey === "string" ? route.params.appKey : ""));
@@ -71,14 +78,14 @@ const status = computed(() =>
 const refusal = computed(() =>
   host.state.value.status === "failed" ? hostRefusal(host.state.value.error) : null,
 );
-const links = computed(() =>
+const links = computed((): readonly ApTabLink[] =>
   surfaces.value.map((s) => ({
     key: s.surface_id,
     label: s.label,
     to: { name: "setup.app", params: { appKey: appKey.value, surface: s.surface_id } },
   })),
 );
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Apps", to: { name: "setup.apps" } },
   { label: name.value },
 ]);

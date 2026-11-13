@@ -16,6 +16,7 @@ import {
   ApRemote,
   ApSegmented,
   ApTabLinks,
+  type ApTabLink,
 } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import { fetchGroups } from "@/features/commands/index.ts";
@@ -237,7 +238,7 @@ watch(
   },
   { immediate: true },
 );
-const tabs = [
+const tabs: readonly ApTabLink[] = [
   { key: "live", label: "Live", to: { name: "ops.contacts" } },
   { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
   { key: "review", label: "Review", to: { name: "ops.contacts.review" } },

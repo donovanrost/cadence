@@ -14,12 +14,13 @@ import {
   formatAbsolute,
   plural,
   type ApColumn,
+  type ApCrumb,
 } from "@/ui";
 import TemplateEditor from "./TemplateEditor.vue";
 import { fetchTemplate, ruleText, type TemplateDetail } from "./api.ts";
 
 /** Contact planning › one requirement template (CP3): read, edit (new version) or create. */
-const route = useRoute();
+const route = useRoute("setup.contact-planning.template");
 const scope = useMissionScope();
 const templateId = computed(() =>
   typeof route.params.templateId === "string" ? route.params.templateId : null,
@@ -40,7 +41,7 @@ function closed() {
   editing.value = false;
   refetch();
 }
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Contact planning", to: { name: "setup.contact-planning" } },
   {
     label: isNew.value

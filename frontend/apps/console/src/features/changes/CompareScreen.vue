@@ -3,18 +3,18 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
-import { ApBreadcrumb, ApEmptyState, ApPageHeader, ApRemote, plural } from "@/ui";
+import { ApBreadcrumb, ApEmptyState, ApPageHeader, ApRemote, plural, type ApCrumb } from "@/ui";
 import EntryList from "./EntryList.vue";
 import { fetchComparison } from "./compare.ts";
 
 /** Changes.md §4 Compare (`revisions/r4...r6`): the combined diff, grouped by entity. */
 const scope = useMissionScope();
-const route = useRoute();
-const from = computed(() => Number(route.params["from"]));
-const to = computed(() => Number(route.params["to"]));
+const route = useRoute("setup.revisions.compare");
+const from = computed(() => Number(route.params.from));
+const to = computed(() => Number(route.params.to));
 const key = computed(() => ({ missionId: scope.value.mission.id, from: from.value, to: to.value }));
 const { state, refetch } = useRemoteQuery(key, fetchComparison);
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Revisions", to: { name: "setup.revisions" } },
   { label: `r${from.value} ↔ r${to.value}`, literal: true },
 ]);

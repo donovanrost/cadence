@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, type RouteLocationRaw } from "vue-router";
 import {
   formatCountdown,
   useNow,
@@ -11,8 +11,11 @@ import {
   ApStatStrip,
   ApTabLinks,
   ApTag,
+  type ApCrumb,
+  type ApTabLink,
   type OpState,
 } from "@/ui";
+import { spacecraftTabs, type SpacecraftTab } from "@/shell";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { usePrevNextKeys } from "./usePrevNextKeys.ts";
@@ -24,14 +27,14 @@ const props = defineProps<{
   hero: { state: OpState; label: string };
   prev: FleetSpacecraft | null;
   next: FleetSpacecraft | null;
-  tab: string;
+  tab: SpacecraftTab;
 }>();
 const router = useRouter();
 /** Members without command access get no Command button (DECISIONS #38). */
 const access = useCommandAccess();
 const now = useNow();
 
-const at = (sc: FleetSpacecraft) => ({
+const at = (sc: FleetSpacecraft): RouteLocationRaw => ({
   name: "ops.spacecraft",
   params: { scId: String(sc.scid), tab: props.tab },
 });
@@ -41,18 +44,18 @@ usePrevNextKeys(
   router,
 );
 
-const crumbs = computed(() => [
-  { label: "Fleet", to: { name: "ops.fleet" } },
-  ...(props.sc.plane === null
-    ? []
-    : [
-        {
-          label: `Plane ${String(props.sc.plane).padStart(2, "0")}`,
-          to: { name: "ops.fleet", query: { plane: String(props.sc.plane) } },
-        },
-      ]),
-  { label: props.sc.name },
-]);
+const crumbs = computed((): readonly ApCrumb[] => {
+  const plane: readonly ApCrumb[] =
+    props.sc.plane === null
+      ? []
+      : [
+          {
+            label: `Plane ${String(props.sc.plane).padStart(2, "0")}`,
+            to: { name: "ops.fleet", query: { plane: String(props.sc.plane) } },
+          },
+        ];
+  return [{ label: "Fleet", to: { name: "ops.fleet" } }, ...plane, { label: props.sc.name }];
+});
 
 const facts = computed(() => {
   const sc = props.sc;
@@ -85,14 +88,12 @@ const facts = computed(() => {
   return list;
 });
 
-const tabs = computed(() =>
-  (["investigate", "telemetry", "uplink", "passes", "configuration", "history"] as const).map(
-    (key) => ({
-      key,
-      label: key[0]?.toUpperCase() + key.slice(1),
-      to: { name: "ops.spacecraft", params: { scId: String(props.sc.scid), tab: key } },
-    }),
-  ),
+const tabs = computed((): readonly ApTabLink[] =>
+  spacecraftTabs.map((key) => ({
+    key,
+    label: key[0]?.toUpperCase() + key.slice(1),
+    to: { name: "ops.spacecraft", params: { scId: String(props.sc.scid), tab: key } },
+  })),
 );
 </script>
 

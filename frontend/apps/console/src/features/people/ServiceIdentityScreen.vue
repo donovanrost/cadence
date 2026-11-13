@@ -17,14 +17,14 @@ import { fetchServiceIdentities, keyAgeWarning } from "./api.ts";
 
 /** U3 · Service identity detail (O3 read + O6 rotate / revoke). */
 const scope = useConsoleScope();
-const route = useRoute();
+const route = useRoute("org.people.service");
 const now = useNow();
 const org = computed(() =>
   scope.value.kind === "organization" || scope.value.kind === "mission"
     ? scope.value.organization
     : null,
 );
-const id = computed(() => String(route.params["serviceId"] ?? ""));
+const id = computed(() => String(route.params.serviceId ?? ""));
 const { state, refetch } = useRemoteQuery(() => org.value?.id ?? null, fetchServiceIdentities);
 const identity = computed(() =>
   state.value.status === "ready"

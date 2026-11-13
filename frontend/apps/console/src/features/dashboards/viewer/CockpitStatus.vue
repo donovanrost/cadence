@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 import { ClockCluster, useMissionScope } from "@/shell";
 import { useFleet } from "@/features/fleet/index.ts";
 import { ApStatusMark, stateTextClass } from "@/ui";
@@ -14,14 +14,16 @@ const fleet = useFleet(
   computed(() => scope.value.mission.id),
   { live: false },
 );
+const alarms: RouteLocationRaw = { name: "ops.alarms" };
+const fleetTo: RouteLocationRaw = { name: "ops.fleet" };
 const chips = computed(() => {
   const s = fleet.state.value;
   if (s.status !== "ready") return [];
   const c = s.value.counts;
   return [
-    { state: "crit" as const, count: c.critical, label: "critical", to: { name: "ops.alarms" } },
-    { state: "caution" as const, count: c.caution, label: "caution", to: { name: "ops.alarms" } },
-    { state: "stale" as const, count: c.stale, label: "stale", to: { name: "ops.fleet" } },
+    { state: "crit" as const, count: c.critical, label: "critical", to: alarms },
+    { state: "caution" as const, count: c.caution, label: "caution", to: alarms },
+    { state: "stale" as const, count: c.stale, label: "stale", to: fleetTo },
   ].filter((chip) => chip.count > 0);
 });
 </script>

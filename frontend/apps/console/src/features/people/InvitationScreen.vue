@@ -9,13 +9,13 @@ import { fetchPeople } from "./api.ts";
 
 /** People.md Invitations: the email link's page (one h1 per page, qa #36). */
 const scope = useConsoleScope();
-const route = useRoute();
+const route = useRoute("org.people.invitation");
 const org = computed(() =>
   scope.value.kind === "organization" || scope.value.kind === "mission"
     ? scope.value.organization
     : null,
 );
-const id = computed(() => String(route.params["invitationId"] ?? ""));
+const id = computed(() => String(route.params.invitationId ?? ""));
 const { state, refetch } = useRemoteQuery(() => org.value?.id ?? null, fetchPeople);
 const invitation = computed(() =>
   state.value.status === "ready"

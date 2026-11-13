@@ -27,7 +27,7 @@ import {
  * account, sign in, join, or the right account's callout) or says why it can't be used. Accepting
  * follows the server's redirect_to with a full navigation.
  */
-const route = useRoute();
+const route = useRoute("auth.invitation");
 const token = computed(() => String(route.params.token ?? ""));
 const invitation = shallowRef<Invitation | null>(null);
 const unknown = ref(false);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
@@ -72,7 +72,7 @@ const blockedLine = (u: SpacecraftUplink) =>
 /** ux #12: U2 says "other" only when U1's pass is itself inside the 24 h it counts. */
 const nowWithin24h = (u: SpacecraftUplink) =>
   u.now !== null && Date.parse(u.now.pass.starts_at) - now.value.getTime() <= 86_400_000;
-const composeTo = computed(() => ({
+const composeTo = computed((): RouteLocationRaw => ({
   name: "ops.commands.new",
   query: { targets: `sc:${props.sc.id}` },
 }));

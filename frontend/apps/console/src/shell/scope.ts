@@ -1,3 +1,4 @@
+import { paramText } from "./route-params.ts";
 import { computed, type ComputedRef } from "vue";
 import { useRoute } from "vue-router";
 import type { SessionMission, SessionOrganization } from "@/api/session.ts";
@@ -20,11 +21,11 @@ export function useConsoleScope(): ComputedRef<ConsoleScope> {
   const route = useRoute();
   const session = useSession();
   return computed(() => {
-    const orgSlug = param(route.params.org);
+    const orgSlug = param(paramText(route.params, "org"));
     if (orgSlug === null) return { kind: "none" };
     const organization = session.organizations.find((org) => org.slug === orgSlug);
     if (!organization) return { kind: "unknown-organization", slug: orgSlug };
-    const missionSlug = param(route.params.mission);
+    const missionSlug = param(paramText(route.params, "mission"));
     if (missionSlug === null) return { kind: "organization", organization };
     const mission = organization.missions.find((m) => m.slug === missionSlug);
     if (!mission) return { kind: "unknown-mission", organization, slug: missionSlug };

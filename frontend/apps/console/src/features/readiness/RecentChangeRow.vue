@@ -13,7 +13,7 @@ defineProps<{ change: RecentChange }>();
   >
     <RouterLink
       v-if="revisionOf(change.versionLabel)"
-      :to="{ name: 'setup.revision', params: { revision: revisionOf(change.versionLabel) } }"
+      :to="{ name: 'setup.revision', params: { revision: revisionOf(change.versionLabel) ?? '' } }"
       class="truncate font-mono text-[12px] text-readout hover:underline"
       >{{ change.versionLabel }}</RouterLink
     >

@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftRow } from "@/features/fleet/index.ts";
-import { grouped, groupJump, parseQuery, PER_GROUP, rowsOf, search } from "./results.ts";
+import {
+  grouped,
+  groupJump,
+  parseQuery,
+  PER_GROUP,
+  rowsOf,
+  search,
+  type PageEntry,
+} from "./results.ts";
 import type { TelemetryPoint } from "@/features/telemetry/index.ts";
 import { pointItems, telemetryQuery } from "./telemetry.ts";
 
 const fleet = Array.from({ length: 500 }, (_, i) => spacecraftRow(i + 1));
-const pages = [
+const pages: PageEntry[] = [
   { name: "ops.now", title: "Now", mode: "ops" },
   { name: "ops.contacts", title: "Contacts", mode: "ops" },
 ];

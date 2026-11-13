@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
@@ -168,7 +168,7 @@ const csvHref = computed(() =>
     ? `data:text/csv;charset=utf-8,${encodeURIComponent(toCsv(focused.value.id, valueRows.value))}`
     : null,
 );
-const exploreTo = computed(() => ({
+const exploreTo = computed((): RouteLocationRaw => ({
   name: "ops.telemetry",
   query: {
     sc: String(props.sc.scid),

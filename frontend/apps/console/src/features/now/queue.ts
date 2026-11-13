@@ -1,3 +1,4 @@
+import type { SpacecraftTab } from "@/shell";
 import type { RouteLocationRaw } from "vue-router";
 import { plural, type OpState } from "@/ui";
 import type { Fleet, FleetSpacecraft } from "@/features/fleet/index.ts";
@@ -58,7 +59,10 @@ const LIMIT_WORDS: Readonly<Record<string, string>> = {
   yellow_high: "above yellow limit",
 };
 
-const spacecraftRoute = (sc: FleetSpacecraft, tab = "investigate"): RouteLocationRaw => ({
+const spacecraftRoute = (
+  sc: FleetSpacecraft,
+  tab: SpacecraftTab = "investigate",
+): RouteLocationRaw => ({
   name: "ops.spacecraft",
   params: { scId: String(sc.scid), tab },
 });

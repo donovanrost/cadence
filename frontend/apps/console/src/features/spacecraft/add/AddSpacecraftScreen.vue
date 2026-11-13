@@ -16,7 +16,7 @@ import StepSource from "./StepSource.vue";
 import SummaryAside from "./SummaryAside.vue";
 
 /** S2 · Add spacecraft (takeover, U5). Spec: docs/apogee/ux/screens/AddSpacecraft.md. */
-const route = useRoute();
+const route = useRoute("setup.spacecraft.new");
 const router = useRouter();
 const scope = useMissionScope();
 const missionId = scope.value.mission.id;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
@@ -147,7 +147,7 @@ const peakMeta = computed(() => {
     ? `Peak ${valueWords(p.value, o.point.unit)} · ${shortTime(new Date(p.t).toISOString())}`
     : undefined;
 });
-const telemetryTo = computed(() => {
+const telemetryTo = computed((): RouteLocationRaw | null => {
   const o = selected.value;
   if (!o) return null;
   const w = windowOf(o);

@@ -15,7 +15,7 @@ import { usePresent } from "./usePresent.ts";
  * Present a playlist (ux): a kiosk takeover rotating its dashboards through the viewer's own read
  * (D5, live), with ←/→ to step, Space to pause and Esc to leave.
  */
-const route = useRoute();
+const route = useRoute("ops.dashboards.present");
 const router = useRouter();
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);

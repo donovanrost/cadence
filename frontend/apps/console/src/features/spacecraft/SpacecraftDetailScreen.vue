@@ -4,15 +4,15 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTag } from "@/ui";
+import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTag, type ApCrumb } from "@/ui";
 import SpacecraftPanels from "./SpacecraftPanels.vue";
 import { fetchSpacecraftDetail } from "./detail.ts";
 
 /** Setup › Spacecraft › one (ux U6: Profile layout, `Open in Ops →`). */
-const route = useRoute();
+const route = useRoute("setup.spacecraft.one");
 const scope = useMissionScope();
 const spacecraftId = computed(() =>
-  typeof route.params.scId === "string" ? route.params.scId : null,
+  typeof route.params.spacecraftId === "string" ? route.params.spacecraftId : null,
 );
 const key = computed(() =>
   spacecraftId.value
@@ -35,7 +35,7 @@ const opsScid = computed(() =>
     ? String(state.value.value.spacecraft.scid)
     : null,
 );
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Spacecraft", to: { name: "setup.spacecraft" } },
   { label: title.value },
 ]);

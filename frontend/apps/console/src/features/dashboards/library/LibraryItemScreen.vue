@@ -23,7 +23,7 @@ import { useLibraryItem } from "./useLibrary.ts";
  * definition preview, where it's used (links), and Rename / Delete for editors.
  */
 const scope = useMissionScope();
-const route = useRoute();
+const route = useRoute("ops.dashboards.library.item");
 const router = useRouter();
 const missionId = computed(() => scope.value.mission.id);
 const itemId = computed(() =>

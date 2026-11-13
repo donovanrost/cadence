@@ -1,4 +1,6 @@
 import type { RouteRecordRaw } from "vue-router";
+import { paramText } from "@/shell/route-params.ts";
+import { pending } from "./pending.ts";
 import { responsive } from "./responsive.ts";
 
 /**
@@ -98,8 +100,7 @@ export const opsRoutes: RouteRecordRaw[] = [
     name: "ops.contact",
     redirect: (to) => ({
       name: "ops.contacts",
-      params: { org: to.params.org, mission: to.params.mission },
-      query: { ...to.query, contact: to.params.contactId },
+      query: { ...to.query, contact: paramText(to.params, "contactId") },
     }),
   },
   {
@@ -121,6 +122,50 @@ export const opsRoutes: RouteRecordRaw[] = [
     component: () => import("@/features/dashboards/directory/NewDashboardScreen.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "New dashboard" },
   },
+  // Dashboards screens built against fixtures, registered as pending until their endpoints land
+  // (plans/dashboards.md slices 5, 6, 8); owners swap in the screen when they do.
+  {
+    path: "telemetry/dashboards/library",
+    name: "ops.dashboards.library",
+    component: pending,
+    meta: { mode: "ops", nav: "telemetry", title: "Dashboard library" },
+  },
+  {
+    path: "telemetry/dashboards/library/:itemId",
+    name: "ops.dashboards.library.item",
+    component: pending,
+    meta: { mode: "ops", nav: "telemetry", title: "Library widget" },
+  },
+  {
+    path: "telemetry/dashboards/playlists",
+    name: "ops.dashboards.playlists",
+    component: pending,
+    meta: { mode: "ops", nav: "telemetry", title: "Playlists" },
+  },
+  {
+    path: "telemetry/dashboards/playlists/:playlistId/present",
+    name: "ops.dashboards.present",
+    component: pending,
+    meta: { mode: "takeover", nav: "telemetry", title: "Present playlist" },
+  },
+  {
+    path: "telemetry/dashboards/shares/:shareId",
+    name: "ops.dashboards.share",
+    component: pending,
+    meta: { mode: "takeover", nav: "telemetry", title: "Shared dashboard" },
+  },
+  {
+    path: "telemetry/dashboards/snapshots/:snapshotId",
+    name: "ops.dashboards.snapshot",
+    component: pending,
+    meta: { mode: "takeover", nav: "telemetry", title: "Dashboard snapshot" },
+  },
+  {
+    path: "telemetry/dashboards/:dashboardId/settings/:tab?",
+    name: "ops.dashboard.settings",
+    component: pending,
+    meta: { mode: "ops", nav: "telemetry", title: "Dashboard settings" },
+  },
   {
     // Dashboard viewer (dashboards, L8): a takeover cockpit (ux Dashboards.md).
     path: "telemetry/dashboards/:dashboardId",
@@ -134,7 +179,7 @@ export const opsRoutes: RouteRecordRaw[] = [
     name: "ops.dashboard.edit",
     redirect: (to) => ({
       name: "ops.dashboard",
-      params: to.params,
+      params: { dashboardId: paramText(to.params, "dashboardId") },
       query: { ...to.query, edit: "1" },
     }),
   },

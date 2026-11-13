@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { ApButton, ApCallout, ApListRow, ApPanel } from "@/ui";
 import { needsYouCards } from "../groups/needsYou.ts";
@@ -13,7 +14,7 @@ import type { Group } from "../groups/show.ts";
 const props = defineProps<{ group: Group; series: VerifierSeries | null }>();
 const cards = computed(() => needsYouCards(props.group, props.series));
 const resendable = computed(() => cards.value.filter((c) => c.resend));
-const resend = (ids: readonly string[]) => ({
+const resend = (ids: readonly string[]): RouteLocationRaw => ({
   name: "ops.commands.new",
   query: { from: `group:${props.group.id}`, only: ids.join(",") },
 });

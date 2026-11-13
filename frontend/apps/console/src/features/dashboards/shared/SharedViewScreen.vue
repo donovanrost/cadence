@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute, type LocationQueryValue } from "vue-router";
-import { TakeoverHeader, useMissionScope } from "@/shell";
+import { paramText, TakeoverHeader, useMissionScope } from "@/shell";
 import { ApEmptyState, ApRemote, formatShort } from "@/ui";
 import type { Runtime } from "../api.ts";
 import { selectionFromQuery, selectionParams } from "../model/time-range.ts";
@@ -22,9 +22,7 @@ const one = (v: LocationQueryValue | LocationQueryValue[] | undefined) =>
   typeof v === "string" ? v : "";
 const missionId = computed(() => scope.value.mission.id);
 const isShare = computed(() => route.name === "ops.dashboards.share");
-const id = computed(() =>
-  one((isShare.value ? route.params.shareId : route.params.snapshotId) as LocationQueryValue),
-);
+const id = computed(() => paramText(route.params, isShare.value ? "shareId" : "snapshotId"));
 const selection = computed(() => selectionFromQuery(one(route.query.from), one(route.query.to)));
 const runtime = computed<Runtime>(() => {
   const p = selectionParams(selection.value);

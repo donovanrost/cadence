@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { ResolveBookingActions } from "@/features/resolutions/index.ts";
-import { useRoute } from "vue-router";
+import { useRoute, type RouteLocationRaw } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApStationBar, useNow } from "@/ui";
@@ -179,7 +179,7 @@ function headerFor(v: PlanView, d: string): string {
   }
 }
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));
-const setupLink = computed(() => ({ name: "setup.contact-planning" }));
+const setupLink = computed((): RouteLocationRaw => ({ name: "setup.contact-planning" }));
 /** ux: "NEXT OFFER EXPIRES T−… · KSAT" from the plan's provider_freeze (domain c38bb5de). */
 const clockNow = useNow();
 const clock = computed(() =>

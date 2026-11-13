@@ -20,3 +20,14 @@ export type { RuntimeStatus } from "./counts.ts";
 /** L6 admin mode for features (L7 admin pages): state, enter/leave, and the step-up form. */
 export { enterAdminMode, leaveAdminMode, useAdminMode } from "./admin-mode.ts";
 export { default as AdminModeForm } from "./AdminModeForm.vue";
+export { paramText } from "./route-params.ts";
+/** Typed route names and the Investigate tab union (router/route-map.ts, typing audit Fix 4). */
+export {
+  isConsoleRouteName,
+  isParamlessRouteName,
+  linkByName,
+  spacecraftTabs,
+  type ConsoleRouteName,
+  type ParamlessRouteName,
+  type SpacecraftTab,
+} from "@/router/route-map.ts";

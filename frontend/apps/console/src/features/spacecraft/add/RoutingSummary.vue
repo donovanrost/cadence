@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fetchProfileDetail } from "@/features/profiles/index.ts";
@@ -16,7 +17,7 @@ const summary = computed(() =>
     ? routingSummary(detail.state.value.value, props.count)
     : null,
 );
-const routingTab = computed(() => ({
+const routingTab = computed((): RouteLocationRaw => ({
   name: "setup.profile",
   params: { profileId: props.profileId, section: "routing" },
 }));

@@ -72,7 +72,7 @@ const meta = computed(() =>
           size="compact"
           :to="{
             name: 'setup.profile',
-            params: { profileId: rowProfile(row.key), section: 'routing' },
+            params: { profileId: rowProfile(row.key) ?? '', section: 'routing' },
           }"
           >Fix routing</ApButton
         >

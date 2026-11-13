@@ -46,7 +46,7 @@ async function reset(o: ProfileOverride) {
       class="grid grid-cols-[150px_minmax(0,1fr)_auto] items-center gap-3 border-t border-hairline px-4 py-2.5 first:border-t-0 max-md:grid-cols-1"
     >
       <RouterLink
-        :to="{ name: 'setup.spacecraft.one', params: { scId: o.spacecraft.id } }"
+        :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: o.spacecraft.id } }"
         class="font-mono text-readout no-underline hover:underline max-md:hit-44"
         >{{ o.spacecraft.name }}</RouterLink
       >

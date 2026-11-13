@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef, watch } from "vue";
-import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
@@ -218,7 +218,7 @@ const context = computed(() => {
     ? `Uplink sequence · for ${sc.name}`
     : `Uplink sequence · for ${sc.name} · ${line}`;
 });
-const close = computed(() =>
+const close = computed((): RouteLocationRaw =>
   only.value
     ? { name: "ops.spacecraft", params: { scId: String(only.value.scid) } }
     : { name: "ops.commands" },

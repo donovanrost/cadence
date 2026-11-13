@@ -30,13 +30,13 @@ import { useDashboardLive } from "./useDashboardLive.ts";
  * (live step 1 refreshes on invalidations); edit mode previews the browser-held draft (D7) with
  * live values paused.
  */
-const route = useRoute();
+const route = useRoute("ops.dashboard");
 const router = useRouter();
 const scope = useMissionScope();
 const one = (v: LocationQueryValue | LocationQueryValue[] | undefined) =>
   typeof v === "string" ? v : "";
 const missionId = computed(() => scope.value.mission.id);
-const dashboardId = computed(() => one(route.params.dashboardId as LocationQueryValue));
+const dashboardId = computed(() => route.params.dashboardId);
 const selection = computed(() => selectionFromQuery(one(route.query.from), one(route.query.to)));
 const runtime = computed<Runtime>(() => {
   const params = selectionParams(selection.value);

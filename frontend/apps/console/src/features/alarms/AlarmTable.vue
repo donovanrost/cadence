@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RouterLink } from "vue-router";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 import {
   formatAbsolute,
   formatCountdown,
@@ -42,7 +42,7 @@ const contactText = (row: AlarmListRow) => {
   const sc = contactOf(row);
   return (sc && nextContact(sc, now.value)) ?? "—";
 };
-const to = (row: AlarmListRow) => ({
+const to = (row: AlarmListRow): RouteLocationRaw => ({
   name: "ops.spacecraft",
   params: { scId: String(row.sc?.scid ?? ""), tab: "investigate" },
   query: { point: row.episode.point.id },

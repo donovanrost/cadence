@@ -3,13 +3,14 @@ import { onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ApPageHeader, ApPanel } from "@/ui";
 import { defaultMission } from "./last-mission.ts";
+import { paramText } from "./route-params.ts";
 import { useSession } from "./session.ts";
 
 /** `/console` and `/console/:org`: go to the last (or first) mission's Now. */
 const session = useSession();
 const route = useRoute();
 const router = useRouter();
-const org = typeof route.params.org === "string" ? route.params.org : undefined;
+const org = paramText(route.params, "org") || undefined;
 const target = defaultMission(session, org);
 
 onMounted(() => {

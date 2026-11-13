@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote } from "@/ui";
+import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, type ApCrumb } from "@/ui";
 import ImportRunBody from "./ImportRunBody.vue";
 import UploadPanel from "./UploadPanel.vue";
 import { fetchCatalogIndex } from "./api.ts";
@@ -12,7 +12,7 @@ import { fetchImporters } from "./upload.ts";
 import { fetchImportRun } from "./importRun.ts";
 
 /** S3 · Catalog import: validation + diagnostics (+ diff when the server has one). */
-const route = useRoute();
+const route = useRoute("setup.catalog.import");
 const scope = useMissionScope();
 const importId = computed(() =>
   typeof route.params.importId === "string" && route.params.importId ? route.params.importId : null,
@@ -46,7 +46,7 @@ const title = computed(() => {
   if (rev && base) return `Catalog rev ${base.number} → rev ${rev.number}`;
   return rev ? `Catalog rev ${rev.number}` : "Catalog import";
 });
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Catalog", to: { name: "setup.catalog" } },
   { label: state.value.status === "ready" ? state.value.value.file.name : "Import" },
 ]);

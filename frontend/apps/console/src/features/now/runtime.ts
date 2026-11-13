@@ -1,3 +1,4 @@
+import type { RouteLocationRaw } from "vue-router";
 import { short, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 
@@ -72,7 +73,7 @@ export function runtimeRow(
   now: Date = new Date(),
 ): QueueItem {
   // Review: Setup › Changes (no per-change-set deep link yet, so the list; ux's fallback).
-  const to = { name: "setup.changes" };
+  const to: RouteLocationRaw = { name: "setup.changes" };
   return {
     ...base,
     key,

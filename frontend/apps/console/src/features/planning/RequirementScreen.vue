@@ -3,13 +3,13 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote } from "@/ui";
+import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, type ApCrumb } from "@/ui";
 import RequirementEditor from "./RequirementEditor.vue";
 import RequirementView from "./RequirementView.vue";
 import { fetchRequirement, windowText } from "./requirements.ts";
 
 /** Contact planning › one one-off requirement (ux ContactPlanning.md P4; api fb7510be). */
-const route = useRoute();
+const route = useRoute("setup.contact-planning.requirement");
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const requirementId = computed(() =>
@@ -38,7 +38,7 @@ const title = computed(() => {
     ? `${s.value.spacecraft.name ?? s.value.spacecraft.id} · ${windowText(s.value.content)}`
     : "Requirement";
 });
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Contact planning", to: { name: "setup.contact-planning" } },
   { label: isNew.value ? "New requirement" : "Requirement" },
 ]);

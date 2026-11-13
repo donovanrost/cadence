@@ -94,7 +94,7 @@ const facts = (c: SpacecraftConfiguration) => [
               <ApButton
                 size="compact"
                 variant="ghost"
-                :to="{ name: 'setup.spacecraft.one', params: { scId: c.spacecraft.id } }"
+                :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: c.spacecraft.id } }"
                 >Edit in Setup</ApButton
               >
             </template>

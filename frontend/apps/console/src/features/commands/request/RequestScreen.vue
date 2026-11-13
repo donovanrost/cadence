@@ -15,7 +15,7 @@ import { useRequest } from "./useRequest.ts";
  * One command request: C2 Approve (`…/review`, or by default while it awaits a GO) and C3 Uplink &
  * verify (`…/uplink`, or by default afterwards). Shared takeover header with the seven stations.
  */
-const route = useRoute();
+const route = useRoute("ops.commands.request");
 const access = useCommandAccess();
 const groupId = computed(() => String(route.params.requestId));
 const req = useRequest(groupId);

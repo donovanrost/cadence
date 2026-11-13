@@ -20,7 +20,7 @@ export function replanSources(
   nameOf: (stationId: string) => string,
 ): ReplanSource[] {
   const plans = days.flatMap(({ day, plans }) =>
-    plans.flatMap((p) => {
+    plans.flatMap((p): ReplanSource[] => {
       const word = planWord[p.state];
       return word
         ? [
@@ -35,7 +35,7 @@ export function replanSources(
   );
   const stations = (availability?.stations ?? [])
     .filter((s) => s.state === "down")
-    .map((s) => ({
+    .map((s): ReplanSource => ({
       key: `station-${s.ground_station_id}`,
       label: `${nameOf(s.ground_station_id)} is down${s.since ? ` since ${s.since.slice(5, 10)} ${s.since.slice(11, 16)}Z` : ""}`,
       to: { name: "ops.contacts.replan.station", params: { stationId: s.ground_station_id } },

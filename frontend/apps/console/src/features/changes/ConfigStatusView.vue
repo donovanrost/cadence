@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { outageText, useMissionScope, useRuntimeStatus } from "@/shell";
 import { configRuntime, runtimeWord } from "./runtime.ts";
@@ -22,7 +23,7 @@ const title = computed(() =>
     : undefined,
 );
 /** Staged changes lead to review; a runtime state to the revision it's about; else the list. */
-const to = computed(() =>
+const to = computed((): RouteLocationRaw =>
   staged.value > 0
     ? { name: "setup.changes" }
     : runtime.value && config.value

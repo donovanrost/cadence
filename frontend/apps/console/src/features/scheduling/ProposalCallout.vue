@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApCallout, plural } from "@/ui";
@@ -34,7 +35,7 @@ const moves = computed(() => {
 const proposed = computed(() => {
   return `proposed ${props.proposal.updated_at.slice(11, 16)}Z${byAuthor(props.proposal.author)}`;
 });
-const to = computed(() =>
+const to = computed((): RouteLocationRaw | null =>
   repairOf.value
     ? {
         name: "ops.contacts.replan",

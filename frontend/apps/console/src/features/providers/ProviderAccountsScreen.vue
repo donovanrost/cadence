@@ -27,7 +27,7 @@ const { state, refetch } = useRemoteQuery(
   () => organization.value?.id ?? null,
   fetchProviderAccounts,
 );
-const route = useRoute();
+const route = useRoute("org.provider-accounts");
 const adding = computed(() => route.params.accountId === "new");
 const selected = computed(() => {
   const id = route.params.accountId;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SpacecraftTab } from "@/shell";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
@@ -17,14 +18,12 @@ import { useSpacecraftAlarms } from "./useInvestigate.ts";
 
 /** Spacecraft detail (route ops.spacecraft): shared header + tabs; J2 Investigate is the first tab. */
 const scope = useMissionScope();
-const route = useRoute();
+const route = useRoute("ops.spacecraft");
 const missionId = computed(() => scope.value.mission.id);
 const fleet = useFleet(missionId);
 
 const scid = computed(() => Number(route.params.scId));
-const tab = computed(
-  () => (typeof route.params.tab === "string" && route.params.tab) || "investigate",
-);
+const tab = computed((): SpacecraftTab => route.params.tab || "investigate");
 const scId = computed(() => {
   const s = fleet.state.value;
   return s.status === "ready"

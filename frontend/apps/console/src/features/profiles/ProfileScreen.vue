@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTabLinks } from "@/ui";
+import {
+  ApBreadcrumb,
+  ApButton,
+  ApPageHeader,
+  ApRemote,
+  ApTabLinks,
+  type ApCrumb,
+  type ApTabLink,
+} from "@/ui";
 import LimitsNotice from "./LimitsNotice.vue";
 import ProfileHistoryPanel from "./ProfileHistoryPanel.vue";
 import ProfileRoutingPanel from "./ProfileRoutingPanel.vue";
@@ -15,7 +23,7 @@ import { useFramingOff } from "./useFramingOff.ts";
 import { useStagedFields } from "./staged.ts";
 
 /** S4 · Profile. Spec: docs/apogee/ux/screens/Profile.md. */
-const route = useRoute();
+const route = useRoute("setup.profile");
 const scope = useMissionScope();
 const profileId = computed(() =>
   typeof route.params.profileId === "string" ? route.params.profileId : null,
@@ -37,8 +45,8 @@ const editing = ref<string | null>(null);
 const sectionParam = computed(() =>
   typeof route.params.section === "string" ? route.params.section : null,
 );
-function links(detail: ProfileDetail) {
-  const to = (section: string) => ({
+function links(detail: ProfileDetail): readonly ApTabLink[] {
+  const to = (section: string): RouteLocationRaw => ({
     name: "setup.profile",
     params: { profileId: detail.profile.id, section },
   });
@@ -63,7 +71,7 @@ const staged = useStagedFields(
 const title = computed(() =>
   state.value.status === "ready" ? state.value.value.profile.name : "Profile",
 );
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Profiles", to: { name: "setup.profiles" } },
   { label: title.value },
 ]);

@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope, useSession } from "@/shell";
-import { ApBreadcrumb, ApEmptyState, ApPageHeader, ApRemote, ApTag } from "@/ui";
+import { ApBreadcrumb, ApEmptyState, ApPageHeader, ApRemote, ApTag, type ApCrumb } from "@/ui";
 import PersonAccess from "./PersonAccess.vue";
 import PersonActivity from "./PersonActivity.vue";
 import PersonManage from "./PersonManage.vue";
@@ -12,13 +12,13 @@ import { fetchPeople, roleLabel } from "./api.ts";
 /** People.md person page: Access (capabilities in words), Activity, Manage (org admins). */
 const scope = useConsoleScope();
 const session = useSession();
-const route = useRoute();
+const route = useRoute("org.people.person");
 const org = computed(() =>
   scope.value.kind === "organization" || scope.value.kind === "mission"
     ? scope.value.organization
     : null,
 );
-const userId = computed(() => String(route.params["userId"] ?? ""));
+const userId = computed(() => String(route.params.userId ?? ""));
 const { state, refetch } = useRemoteQuery(() => org.value?.id ?? null, fetchPeople);
 const member = computed(() =>
   state.value.status === "ready"
@@ -29,7 +29,7 @@ const canManage = computed(
   () =>
     state.value.status === "ready" && state.value.value.permissions.includes("org.manage_members"),
 );
-const crumbs = computed(() => [
+const crumbs = computed((): readonly ApCrumb[] => [
   { label: "People & access", to: { name: "org.people" } },
   { label: member.value?.display_name ?? member.value?.email ?? userId.value, literal: true },
 ]);

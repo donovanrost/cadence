@@ -1,4 +1,5 @@
 import "vue-router";
+import type { ConsoleRoutes } from "./route-map.ts";
 
 /** `admin`: platform administration (L7), outside org and mission scope (ux Admin.md). */
 export type ShellMode = "ops" | "setup" | "takeover" | "account" | "admin";
@@ -28,6 +29,10 @@ export type NavKey =
   | "audit";
 
 declare module "vue-router" {
+  interface TypesConfig {
+    RouteNamedMap: ConsoleRoutes;
+  }
+
   interface RouteMeta {
     mode?: ShellMode;
     nav?: NavKey;
