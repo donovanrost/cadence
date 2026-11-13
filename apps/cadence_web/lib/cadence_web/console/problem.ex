@@ -65,6 +65,8 @@ defmodule CadenceWeb.Console.Problem do
     grant_already_revoked: {409, "This grant was already revoked."},
     credential_changed: {409, "The credential changed since you loaded it."},
     credential_already_revoked: {409, "This credential was already revoked."},
+    provider_not_found: {404, "Provider not found."},
+    grant_revoked: {409, "That grant was revoked. Ask an organization admin for a new one."},
     already_retired: {409, "This account was already removed."},
     settings_enforced_by_organization:
       {409, "The organization doesn't let missions change this setting."},

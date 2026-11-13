@@ -805,11 +805,57 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
 
 ## `GET /api/console/v1/missions/:mission_id/providers`
 
-`{providers: [{id, name, provider_type, account: {id, name}, status: {lifecycle_state,
-last_validated_at, last_synced_at}, station_count}]}` for the Stations · Providers tab, sorted by
-name. `account.name` is `null` for members (only organization admins can read accounts).
-`station_count` counts active stations whose `provider` is this provider's name. `status` is
-the provider's own record; there is no inferred health.
+`{providers: [{id, name, provider_type, version, policy_mode, account: {id, name}, grant: {id,
+version, state: "active" | "revoked"} | null, status: {lifecycle_state, last_validated_at,
+last_synced_at}, health: {validate: <health>, sync: <health>}, station_count}], permissions}` for
+the Stations · Providers tab, sorted by name.
+
+- `account.name` is `null` for members (only organization admins can read accounts).
+- `grant` is `null` only for a provider bound without an account grant (older, direct bindings).
+  `state` is the grant's current state: a revoked grant leaves the provider in place but unusable
+  until it's archived or rebound.
+- `<health>` is `{status: "healthy" | "failed" | null, checked_at | null, error | null}`, the
+  provider's own record of its last validate and sync. `null` means never checked. `error` is a
+  sentence for a person, not provider evidence.
+- `station_count` counts active stations whose `provider` is this provider's name.
+- `permissions`: `["providers.manage"]` for mission admins (`:manage_mission`), else `[]`.
+
+## Mission providers (L12): `/api/console/v1/missions/:mission_id/providers` (owner: api-ops)
+
+Every write needs `providers.manage` (mission admins; organization admins qualify), else `403
+forbidden`. Each answers with the provider's row as the list shows it.
+
+- `GET /options` → `{grants: [{id, version, account: {id, name, provider: {key, label}},
+  allowed_stations: [..] | null, allowed_services: [..] | null}], policy_modes: [{key, label}],
+  deadline_behaviors: [{key, label}]}`. `grants` are this mission's active account grants.
+- `POST /` `{grant_id, display_name, policy_mode, deadline_behavior?, permitted_resource_refs?:
+  [..], bounded?: {approved_station_substitutions?: [..], minimum_retained_duration_seconds,
+  maximum_earlier_start_shift_seconds?, maximum_later_start_shift_seconds?,
+  maximum_earlier_end_shift_seconds?, maximum_later_end_shift_seconds?}, expected_grant_version?}`
+  → `201 {provider}`.
+  - The provider's type, URL, credential and environment come from the granted account version.
+  - `bounded` is read only for `policy_mode: "bounded_automatic"`.
+  - `409 grant_revoked`; `409 grant_changed {version}` when `expected_grant_version` is stale.
+  - `422 invalid_params` names the field: `grant_id` (unknown, or another mission's),
+    `display_name` (1 to 120 characters), `policy_mode`, `deadline_behavior`,
+    `permitted_resource_refs` (outside the grant's or account's stations, or malformed),
+    `approved_station_substitutions`, or `bounded` (a shift limit).
+- `POST /:id/validate` → `200 {provider, result: {ok, message | null}}`.
+- `POST /:id/sync` → `200 {provider, result: {ok, stations: int | null, message | null}}`.
+  - `stations` is how many ground stations the provider listed.
+  - A successful sync also rewrites the stations' provider availability.
+- Validate and sync are **results, not errors**: a provider that refuses, can't be reached or
+  doesn't support the call answers `200` with `ok: false` and a sentence in `message`, and the
+  row's `health` says `failed`.
+  - Both call the provider inline and give up after **25 s**: `ok: false`, "The provider didn't
+    answer in time." Show "Contacting the provider…" while waiting.
+  - The provider's late answer, if one comes, replaces that in the row's `health`.
+- `POST /:id/archive` `{reason}` → `200 {provider}` (`status.lifecycle_state: "archived"`).
+  - Works when the grant was revoked.
+  - Bookings already made keep the provider's version; no new ones can use it, and the provider
+    leaves the list.
+  - `422 invalid_params {reason: "Say why."}`.
+- `404 provider_not_found` for an unknown or archived provider.
 
 ## `GET /api/console/v1/missions/:mission_id/config/kinds/:kind/schema`
 

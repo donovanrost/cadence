@@ -17,8 +17,10 @@ defmodule Cadence.Reads.CommsDirectory do
     TransportStore
   }
 
+  alias Cadence.Auth.Scope
   alias Cadence.Configuration.Kinds
-  alias Cadence.GroundNetworks.ProviderAccounts
+  alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts}
+  alias Cadence.Reads.Comms.ProviderHealth
   alias Cadence.Reads.OperationalState
 
   @default_limit 100
@@ -63,25 +65,62 @@ defmodule Cadence.Reads.CommsDirectory do
       |> GroundStationStore.list_ground_stations(mission_id)
       |> Enum.frequencies_by(& &1.provider)
 
+    grants = grant_states(organization_id, mission_id)
+
     organization_id
     |> Cadence.GroundNetworks.list_providers(mission_id)
-    |> Enum.map(fn provider ->
-      %{
-        id: provider.provider_id,
-        name: provider.display_name,
-        provider_type: provider.provider_type,
-        account: %{
-          id: provider.provider_account_id,
-          name: account_name(scope, provider.provider_account_id)
-        },
-        status: %{
-          lifecycle_state: provider.lifecycle_state,
-          last_validated_at: provider.last_validated_at,
-          last_synced_at: provider.last_synced_at
-        },
-        station_count: Map.get(station_counts, provider.display_name, 0)
-      }
-    end)
+    |> Enum.map(&provider_row(scope, &1, station_counts, grants))
+  end
+
+  @doc "One provider's row, as `providers/2` lists it (L12 writes answer with it)."
+  @spec provider(Scope.t(), struct()) :: map()
+  def provider(scope, provider) do
+    station_counts =
+      scope.organization_id
+      |> GroundStationStore.list_ground_stations(provider.mission_id)
+      |> Enum.frequencies_by(& &1.provider)
+
+    provider_row(
+      scope,
+      provider,
+      station_counts,
+      grant_states(scope.organization_id, provider.mission_id)
+    )
+  end
+
+  defp provider_row(scope, provider, station_counts, grants) do
+    %{
+      id: provider.provider_id,
+      name: provider.display_name,
+      provider_type: provider.provider_type,
+      version: provider.version,
+      policy_mode: (provider.delivery_policy_document || %{})["mode"],
+      account: %{
+        id: provider.provider_account_id,
+        name: account_name(scope, provider.provider_account_id)
+      },
+      grant:
+        provider.provider_account_grant_id &&
+          %{
+            id: provider.provider_account_grant_id,
+            version: provider.provider_account_grant_version,
+            state: Map.get(grants, provider.provider_account_grant_id, :revoked)
+          },
+      status: %{
+        lifecycle_state: provider.lifecycle_state,
+        last_validated_at: provider.last_validated_at,
+        last_synced_at: provider.last_synced_at
+      },
+      health: ProviderHealth.of(provider),
+      station_count: Map.get(station_counts, provider.display_name, 0)
+    }
+  end
+
+  # The grant's current state; a grant with no active version reads as revoked.
+  defp grant_states(organization_id, mission_id) do
+    organization_id
+    |> ProviderAccountGrants.list_for_mission(mission_id, active_only?: false)
+    |> Map.new(&{&1.provider_account_grant_id, &1.lifecycle_state})
   end
 
   defp account_name(_scope, nil), do: nil

@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.CommsController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Control.Providers.MissionProviderWrites
   alias Cadence.Reads.CommsDirectory
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
@@ -33,7 +34,10 @@ defmodule CadenceWeb.Console.CommsController do
       json(conn, %{
         data: %{
           providers:
-            encode(CommsDirectory.providers(conn.assigns.current_scope, mission_id(conn)))
+            encode(CommsDirectory.providers(conn.assigns.current_scope, mission_id(conn))),
+          # L12: what the provider writes check (`:manage_mission`).
+          permissions:
+            MissionProviderWrites.permissions(conn.assigns.current_scope, mission_id(conn))
         }
       })
 

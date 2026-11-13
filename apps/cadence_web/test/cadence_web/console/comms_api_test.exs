@@ -29,7 +29,7 @@ defmodule CadenceWeb.Console.CommsAPITest do
 
   test "empty mission lists no stations, transports, providers or rules", c do
     assert get_data(c, "/ground-stations") == %{"stations" => []}
-    assert get_data(c, "/providers") == %{"providers" => []}
+    assert get_data(c, "/providers") == %{"providers" => [], "permissions" => []}
     assert get_data(c, "/transports") == %{"transports" => []}
     assert get_data(c, "/routing-rules") == %{"rules" => [], "total" => 0, "next_cursor" => nil}
   end

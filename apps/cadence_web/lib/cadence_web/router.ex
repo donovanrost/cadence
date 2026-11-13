@@ -960,6 +960,12 @@ defmodule CadenceWeb.Router do
       get("/catalog/importers", CatalogImportController, :importers)
       get("/ground-stations", CommsController, :stations)
       get("/providers", CommsController, :providers)
+      # L12 mission-provider writes (owner: api-ops).
+      get("/providers/options", MissionProviderController, :options)
+      post("/providers", MissionProviderController, :create)
+      post("/providers/:provider_id/validate", MissionProviderController, :validate)
+      post("/providers/:provider_id/sync", MissionProviderController, :sync)
+      post("/providers/:provider_id/archive", MissionProviderController, :archive)
       get("/transports", CommsController, :transports)
       get("/transports/:transport_id", CommsController, :transport)
       get("/routing-rules", CommsController, :routing_rules)

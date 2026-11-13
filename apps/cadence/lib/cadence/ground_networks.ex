@@ -322,6 +322,15 @@ defmodule Cadence.GroundNetworks do
     }
   end
 
+  @doc """
+  Records a failed observation (`"control_plane"` or `"sync"`) the caller ended itself, such as a
+  call it stopped waiting for, the way a failed call records its own.
+  """
+  @spec record_provider_failure(MissionProvider.t(), binary(), term()) :: {:error, term()}
+  def record_provider_failure(%MissionProvider{} = provider, observation, reason)
+      when observation in ["control_plane", "sync"],
+      do: record_failure(provider, observation, reason, now([]))
+
   defp record_failure(provider, observation, reason, at) do
     metadata =
       Map.put(provider.metadata, observation, %{
