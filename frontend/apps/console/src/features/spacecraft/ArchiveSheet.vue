@@ -6,11 +6,12 @@ import {
   previewOps,
   refreshConfigState,
   stageChange,
+  useConfigState,
   type Preview,
 } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import type { SpacecraftDetail } from "./detail.ts";
-import { archiveHolds, archiveOp } from "./edit.ts";
+import { archiveHolds, archiveOp, archiveStaged } from "./edit.ts";
 
 /** U40 Archive (L17 `delete`): the dry run's waiting/booked holds, then Stage archive. */
 const props = defineProps<{ missionId: string; detail: SpacecraftDetail }>();
@@ -25,6 +26,22 @@ const holds = computed(() =>
     : { waiting: null, booked: null },
 );
 const scId = computed(() => props.detail.spacecraft.scid);
+const config = useConfigState(props.missionId);
+/** Staged here, or already in the open change set: Stage archive doesn't stage it twice (qa). */
+const staged = ref(false);
+const already = computed(() => {
+  const s = config.state.value;
+  return (
+    staged.value ||
+    (s.status === "ready" && archiveStaged(s.value.change_set, props.detail.spacecraft.id))
+  );
+});
+const blocked = computed((): string | null => {
+  if (busy.value) return "Staging…";
+  if (already.value) return "Already staged. Review it in Changes.";
+  if (holds.value.waiting) return "Release or cancel the waiting requests first.";
+  return null;
+});
 let controller: AbortController | null = null;
 
 async function open() {
@@ -44,7 +61,7 @@ function closed() {
   controller?.abort();
 }
 async function stage() {
-  if (busy.value || holds.value.waiting) return;
+  if (blocked.value !== null) return;
   busy.value = true;
   try {
     const r = await stageChange(props.missionId, {
@@ -53,8 +70,9 @@ async function stage() {
       ops: [archiveOp(props.detail)],
     });
     if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged").sentence);
+    staged.value = true;
     refreshConfigState(props.missionId);
-    sheet.value?.close();
+    // If the navigation doesn't happen, the sheet stays open and says it's staged (qa 11-13).
     await router.push({ name: "setup.changes" });
   } finally {
     busy.value = false;
@@ -85,13 +103,19 @@ defineExpose({ open });
         >
       </template>
     </ApCallout>
+    <ApCallout v-if="already" tone="nominal">
+      Archiving {{ detail.spacecraft.name }} is staged. Review it in Changes.
+      <template #action>
+        <ApButton size="compact" :to="{ name: 'setup.changes' }">Open Changes</ApButton>
+      </template>
+    </ApCallout>
     <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
     <template #footer>
       <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
       <ApButton
         variant="danger"
-        :disabled="holds.waiting !== null || busy"
-        :disabled-reason="busy ? 'Staging…' : 'Release or cancel the waiting requests first.'"
+        :disabled="blocked !== null"
+        :disabled-reason="blocked ?? ''"
         @click="stage"
         >Stage archive</ApButton
       >

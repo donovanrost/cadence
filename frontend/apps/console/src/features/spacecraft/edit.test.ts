@@ -5,6 +5,7 @@ import { detailReader, type SpacecraftDetail } from "./detail.ts";
 import {
   archiveHolds,
   archiveOp,
+  archiveStaged,
   pairProfile,
   spacecraftDocument,
   withPinnedProfile,
@@ -122,6 +123,15 @@ describe("spacecraft edits (L17)", () => {
       action: "delete",
       entity_id: "sc-1",
     });
+  });
+
+  it("knows an archive is already staged, so it isn't staged twice (qa 11-13)", () => {
+    const op = { kind: "spacecraft", action: "delete", entity_id: "sc-1" };
+    const set = (state: string) => ({ changes: [{ state, ops: [op] }] });
+    expect(archiveStaged(set("staged"), "sc-1")).toBe(true);
+    expect(archiveStaged(set("withdrawn"), "sc-1")).toBe(false);
+    expect(archiveStaged(set("staged"), "sc-2")).toBe(false);
+    expect(archiveStaged(null, "sc-1")).toBe(false);
   });
 
   it("says what each switch does now (U40)", () => {

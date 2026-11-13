@@ -62,3 +62,20 @@ export function archiveHolds(
   const find = (reason: string) => items.find((i) => i.reason === reason) ?? null;
   return { waiting: find("spacecraft_commands_waiting"), booked: find("spacecraft_passes_booked") };
 }
+
+/** qa 11-13: an archive of this spacecraft already staged in the open set isn't staged twice. */
+type StagedSet = Readonly<{
+  changes: readonly Readonly<{
+    state: unknown;
+    ops: readonly Readonly<{ kind: unknown; action: unknown; entity_id: string | null }>[];
+  }>[];
+}>;
+export function archiveStaged(set: StagedSet | null, spacecraftId: string): boolean {
+  return (set?.changes ?? []).some(
+    (c) =>
+      c.state === "staged" &&
+      c.ops.some(
+        (o) => o.kind === "spacecraft" && o.action === "delete" && o.entity_id === spacecraftId,
+      ),
+  );
+}
