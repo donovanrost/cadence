@@ -789,6 +789,21 @@ defmodule CadenceWeb.Router do
       post("/dashboards/:dashboard_id/archive", DashboardDirectoryController, :archive)
       post("/dashboards/:dashboard_id/restore", DashboardDirectoryController, :restore)
       post("/dashboards/:dashboard_id/duplicate", DashboardDirectoryController, :duplicate)
+      # Dashboard editing D7-D13 (owner: api): stateless, the browser keeps the commands.
+      post("/dashboards/:dashboard_id/preview", DashboardAuthoringController, :preview)
+      post("/dashboards/:dashboard_id/observables", DashboardAuthoringController, :observables)
+      post("/dashboards/:dashboard_id/save", DashboardAuthoringController, :save)
+      post("/dashboards/:dashboard_id/rebase", DashboardAuthoringController, :rebase)
+      post("/dashboards/:dashboard_id/copy", DashboardAuthoringController, :copy)
+      get("/dashboards/:dashboard_id/versions", DashboardAuthoringController, :versions)
+      get("/dashboards/:dashboard_id/versions/compare", DashboardAuthoringController, :compare)
+
+      post(
+        "/dashboards/:dashboard_id/versions/:version/restore",
+        DashboardAuthoringController,
+        :restore
+      )
+
       get("/passes", PassController, :index)
       get("/contact-findings", ContactFindingsController, :index)
       get("/passes/:id", PassController, :show)
