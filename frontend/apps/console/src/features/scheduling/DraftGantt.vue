@@ -20,6 +20,7 @@ import {
   type PlanDetail,
   type StationRef,
 } from "./api.ts";
+import { bookingLook } from "./booking-state.ts";
 import type { SpacecraftName } from "./names.ts";
 
 /** B · Draft by station: the plan's passes; the focused spacecraft ringed, conflicts dashed caution. */
@@ -95,6 +96,8 @@ const draftedBars = computed<GanttBar[]>(() =>
   props.plan.passes.map((p) => {
     const sc = props.nameOf(p.spacecraft_id);
     const who = sc ? `${sc.name} (SCID ${sc.scid})` : (p.spacecraft_id ?? "unknown spacecraft");
+    // Executing: the pass's own booking wins (api 8e), except the U30 unconfirmed hatch.
+    const booked = props.muted ? null : bookingLook(p.booking);
     return {
       id: p.snapshot_id,
       rowId: stationKey(p.station),
@@ -104,15 +107,17 @@ const draftedBars = computed<GanttBar[]>(() =>
         ? "done"
         : unconfirmed.value.has(p.snapshot_id)
           ? "unconfirmed"
-          : clashing.value.has(p.snapshot_id) || down.value.has(p.snapshot_id)
-            ? "clash"
-            : risky.value.has(p.snapshot_id)
-              ? "risk"
-              : p.spacecraft_id === props.focused
-                ? "focused"
-                : "own",
+          : booked
+            ? booked.kind
+            : clashing.value.has(p.snapshot_id) || down.value.has(p.snapshot_id)
+              ? "clash"
+              : risky.value.has(p.snapshot_id)
+                ? "risk"
+                : p.spacecraft_id === props.focused
+                  ? "focused"
+                  : "own",
       label: sc ? String(sc.scid) : undefined,
-      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}${unconfirmed.value.has(p.snapshot_id) ? ` · UNCONFIRMED · sent ${unconfirmed.value.get(p.snapshot_id)?.slice(11, 16) ?? "?"}Z` : ""}`,
+      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}${unconfirmed.value.has(p.snapshot_id) ? ` · UNCONFIRMED · sent ${unconfirmed.value.get(p.snapshot_id)?.slice(11, 16) ?? "?"}Z` : booked ? ` · ${booked.word}${p.booking?.reason && p.booking.reason !== "sending" ? `: ${p.booking.reason.replaceAll("_", " ")}` : ""}` : ""}`,
     };
   }),
 );

@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ApListRow, ApPanel } from "@/ui";
 import { reasonText, type PlanDetail } from "./api.ts";
+import { rejectedRows } from "./booking-state.ts";
 import { contactsShortText, coverage } from "./coverage.ts";
 import type { SpacecraftName } from "./names.ts";
 
@@ -14,6 +15,8 @@ const props = defineProps<{
 defineEmits<{ focus: [spacecraftId: string] }>();
 
 const unmet = computed(() => props.plan.demand.spacecraft.filter((s) => !s.rule_met));
+/** Rejected or failed bookings lead the list (ScheduleFlow K1: rejections become A rows). */
+const rejected = computed(() => rejectedRows(props.plan.passes));
 const ruleText = computed(() =>
   [...new Set(props.plan.demand.rules.map((r) => r.text))].slice(0, 2),
 );
@@ -52,6 +55,24 @@ const meta = computed(() => {
 
 <template>
   <ApPanel index="A" title="Demand" :meta="meta" pane flush>
+    <ul v-if="rejected.length > 0" class="m-0 list-none border-b border-hairline p-0">
+      <ApListRow
+        v-for="row in rejected"
+        :key="row.snapshotId"
+        state="caution"
+        :sentence="row.sentence"
+      >
+        <template #title>
+          <button
+            type="button"
+            class="max-md:hit-44 cursor-pointer border-0 bg-transparent p-0 text-left font-mono text-base font-semibold text-readout hover:underline"
+            @click="row.spacecraftId && $emit('focus', row.spacecraftId)"
+          >
+            {{ nameOf(row.spacecraftId)?.name ?? row.spacecraftId ?? "Unknown spacecraft" }}
+          </button>
+        </template>
+      </ApListRow>
+    </ul>
     <ul v-if="unmet.length > 0" class="m-0 list-none p-0">
       <ApListRow
         v-for="row in unmet"

@@ -242,6 +242,20 @@ export const planDetailReader = d.object({
       locked: d.boolean,
       /** That offer's expiry (domain c38bb5de). */
       expires_at: d.optional(d.nullable(d.timestamp)),
+      /**
+       * api 8e: this pass's booking in the approved version; null before execution. state is
+       * never_sent | confirmed | uncertain | rejected | failed (kept as a token: a new state
+       * reads as plain, it doesn't fail the plan). reason `sending` while requesting.
+       */
+      booking: d.optional(
+        d.nullable(
+          d.object({
+            state: d.token,
+            reason: d.optional(d.nullable(d.token)),
+            at: d.optional(d.nullable(d.timestamp)),
+          }),
+        ),
+      ),
     }),
     5_000,
   ),
