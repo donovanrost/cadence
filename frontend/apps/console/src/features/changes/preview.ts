@@ -1,10 +1,17 @@
 import { configKind, opActions } from "./shapes.ts";
-import { decoders, type Decoded } from "@/api";
+import { decoders, isRecord, type Decoded } from "@/api";
 
 /** The change-set dry run's shape. Contract: docs/apogee/api/changes.md (preview). */
 const { array, boolean, integer, nullable, object, oneOf, string, token } = decoders;
 
 const verdict = oneOf(["go", "hold", "no_go"]);
+
+/** U42 derived_point_in_use (domain 5504322a8): the live points whose expressions read it. */
+const dependentsDetails = object({
+  used_by: decoders.optional(
+    array(object({ point_id: string, name: nullable(string), definition_id: token }), 200),
+  ),
+});
 
 // Items are diagnostics: ids and reasons may be absent or null without failing the preview (qa #18).
 const previewItem = object({
@@ -30,6 +37,8 @@ const previewItem = object({
   sentence: decoders.optional(nullable(string)),
   /** L17/L22 holds (api setup.md): true when it can't be acknowledged away; the sentence says what to do. */
   blocking: decoders.optional(boolean),
+  // Lenient: each hold sends details of its own shape; only an object is read, for its used_by.
+  details: (v: unknown, path = "") => (isRecord(v) ? dependentsDetails(v, path) : null),
   /** #65 catalog holds (catalog-generations.md): who moves from → to, and the requests involved. */
   spacecraft_ids: decoders.optional(array(token, 20_000)),
   from: decoders.optional(nullable(token)),

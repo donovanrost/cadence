@@ -29,6 +29,7 @@ export const configKinds = [
   "framing_compatibility",
   "catalog_compatibility",
   "switch_compatibility",
+  "derived_telemetry",
 ] as const;
 export type ConfigKind = (typeof configKinds)[number];
 const configKindWords: Readonly<Record<ConfigKind, string>> = {
@@ -41,6 +42,7 @@ const configKindWords: Readonly<Record<ConfigKind, string>> = {
   framing_compatibility: "Framing compatibility",
   catalog_compatibility: "Catalog compatibility",
   switch_compatibility: "Commanding and telemetry switches",
+  derived_telemetry: "Derived point",
 };
 export const configKind = decoders.knownText(configKinds);
 /** A kind in words, or the server's word for a kind the console doesn't know yet. */
