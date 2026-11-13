@@ -158,7 +158,8 @@ defmodule CadenceWeb.Console.DashboardSettings do
       state: share.state,
       expires_at: share.expires_at,
       created_at: share.created_at,
-      created_by: share.created_by
+      created_by: share.created_by,
+      revoked_by: Map.get(share, :revoked_by)
     }
 
   defp snapshot(snapshot, base),

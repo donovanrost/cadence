@@ -28,7 +28,8 @@ defmodule Cadence.Reads.Dashboards.SharedViewRecords do
            created_at: share.inserted_at,
            created_by: person(share.created_by),
            expires_at: share.expires_at,
-           revoked_at: share.revoked_at
+           revoked_at: share.revoked_at,
+           revoked_by: person(share.revoked_by)
          }}
     end
   end

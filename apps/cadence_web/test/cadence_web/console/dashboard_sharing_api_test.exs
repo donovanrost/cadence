@@ -148,7 +148,7 @@ defmodule CadenceWeb.Console.DashboardSharingAPITest do
 
     c |> call(:delete, "/shares/" <> share["id"]) |> json_response(200)
 
-    assert %{"code" => "share_revoked", "message" => "Revoked " <> _} =
+    assert %{"code" => "share_revoked", "message" => "Revoked by " <> _} =
              open.("/dashboard-shares/" <> share["id"])
              |> json_response(404)
              |> Map.fetch!("error")

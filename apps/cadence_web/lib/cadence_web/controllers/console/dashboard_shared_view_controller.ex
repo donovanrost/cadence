@@ -8,17 +8,20 @@ defmodule CadenceWeb.Console.DashboardSharedViewController do
 
   alias CadenceWeb.Console.{ConfigJSON, DashboardSettings, DashboardSharedViews, Problem}
 
-  def share(conn, %{"share_id" => id}), do: show(conn, :share, id)
-  def snapshot(conn, %{"snapshot_id" => id}), do: show(conn, :snapshot, id)
+  def share(conn, %{"share_id" => id} = params), do: show(conn, :share, id, params)
+  def snapshot(conn, %{"snapshot_id" => id} = params), do: show(conn, :snapshot, id, params)
 
-  defp show(conn, kind, id) do
+  defp show(conn, kind, id, params) do
     scope = conn.assigns.current_scope
     mission = conn.assigns.current_mission.mission_id
     base = DashboardSettings.base_url(scope.organization_id, mission)
 
-    case DashboardSharedViews.load(scope, mission, kind, id, base) do
+    case DashboardSharedViews.load(scope, mission, kind, id, base, params) do
       {:ok, view} ->
         json(conn, %{data: ConfigJSON.encode(view)})
+
+      {:error, {:invalid_params, details}} ->
+        Problem.respond(conn, :invalid_params, details)
 
       # The message is the sentence the page shows (like share_revoked), with the facts too.
       {:error, {:gone, code, message, details}} ->

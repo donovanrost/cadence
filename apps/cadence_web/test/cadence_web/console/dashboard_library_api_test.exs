@@ -72,12 +72,19 @@ defmodule CadenceWeb.Console.DashboardLibraryAPITest do
              |> json_response(409)
              |> Map.fetch!("error")
 
-    renamed =
-      c
-      |> call(:patch, "/" <> id, %{"name" => "Battery", "expected_version" => 2})
-      |> json_response(200)
+    # Two tabs read the item; the first renames, the second's stale rename is refused (qa).
+    read_at =
+      c |> call(:get, "/" <> id) |> json_response(200) |> get_in(["data", "item", "updated_at"])
 
+    first = %{"name" => "Battery", "expected_version" => 2, "expected_updated_at" => read_at}
+    renamed = c |> call(:patch, "/" <> id, first) |> json_response(200)
     assert renamed["data"]["name"] == "Battery"
+
+    assert %{"code" => "library_item_changed"} =
+             c
+             |> call(:patch, "/" <> id, %{first | "name" => "Tab two"})
+             |> json_response(409)
+             |> Map.fetch!("error")
 
     assert %{"code" => "library_item_changed"} =
              c

@@ -162,7 +162,8 @@ From fe-setup's proposal (docs/apogee/plans/dashboards-settings.md). Under
   limits: {name: 120, description: 500, tags: 32, tag: 64}, shares: {rows: [share], next},
   snapshots: {rows: [snapshot], next}}`.
   - `share = {id, url, data_visibility: with_data | definition_only, state: active | expired |
-    revoked, expires_at, created_at, created_by: {id, name, kind: "user"} | null}`.
+    revoked, expires_at, created_at, created_by: {id, name, kind: "user"} | null, revoked_by:
+    {id, name, kind: "user"} | null}`.
   - `snapshot = {id, url, version, data_visibility, window: {from, to} | null, created_at,
     created_by}`. `window` is null for snapshots taken before frozen windows (never a guess).
   - `url` is the console path (`/console/:org/:mission/telemetry/dashboards/shares/:id` or
@@ -203,11 +204,13 @@ definition: <editor outline, version 3> | null, snapshot: <WorkspaceSnapshot> | 
   yet. A snapshot shows its stored version over its frozen window.
 - `snapshot` is null for `definition_only` links; each widget then says "Data isn't shared in this
   link."
-- Not yet: a share's `from`/`to`/`spacecraft_id` runtime params. The domain read takes the share's
-  stored context only (asked of domain).
+- A share takes the viewer's `?from=&to=&spacecraft_id=` (D5-style: ISO bounds, or `now-6h` /
+  `now`, resolved at each load). The share's own scope always wins, so a scoped share can't be
+  widened. A bad one is `422 invalid_params` with `details["runtime.from" | "runtime.to" |
+  "runtime.spacecraft_id" | "runtime"]`. Snapshots ignore them (frozen).
 - Errors, all 404, each with the page's sentence as the `message`:
-  - `share_revoked` "Revoked 11-14 02:10Z.", `details {revoked_at}`. Shares don't record who
-    revoked them.
+  - `share_revoked` "Revoked by Mira K. at 11-14 02:10Z." ("Revoked at …" when nobody's
+    recorded), `details {revoked_at, revoked_by {id, name} | null}`.
   - `share_expired` "Expired 11-20 00:00Z.", `details {expires_at}`.
   - `snapshot_deleted` "Deleted by Mira K. on 11-14.", `details {deleted_by {id, name} | null,
     deleted_at}`.
@@ -258,8 +261,11 @@ Refetch on `invalidate` with `dashboards`.
 - **D22** writes. A viewer gets `403 forbidden` ("Dashboard editors manage the library.").
   - `POST / {name, description, definition_json, summary}` → `201 {id, version: 1}`.
   - `POST /:item_id/versions {definition_json, summary, expected_version}` → `{version}`.
-  - `PATCH /:item_id {name?, description?, expected_version}` → the D21 item.
-  - `DELETE /:item_id?expected_version=n` → `204`. This **retires** the item: its versions stay
+  - `PATCH /:item_id {name?, description?, expected_version, expected_updated_at?}` → the D21 item.
+  - `DELETE /:item_id?expected_version=n&expected_updated_at=…` → `204`.
+  - `expected_updated_at` is the item's `updated_at` exactly as read (microseconds). A rename
+    doesn't add a version, so send it to catch a stale rename or retire; a mismatch on either
+    guard is `409 library_item_changed`. This **retires** the item: its versions stay
     for old dashboard versions. Audited ("Retired library widget Battery tile").
   - `409 library_item_changed {latest_version}` when it moved.
   - `409 library_item_in_use {used_by: {dashboards: [{id, name, placements, pinned_versions}]},

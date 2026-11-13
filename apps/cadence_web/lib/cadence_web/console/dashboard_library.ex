@@ -48,7 +48,8 @@ defmodule CadenceWeb.Console.DashboardLibrary do
              mission,
              id,
              Map.take(body, ~w(name description)),
-             expected
+             expected,
+             body["expected_updated_at"]
            ) do
       with {:ok, read} <- LibraryRows.get(scope, mission, id, nil), do: {:ok, read.item}
     else
@@ -58,7 +59,13 @@ defmodule CadenceWeb.Console.DashboardLibrary do
 
   def retire(scope, mission, id, params) do
     with {:ok, expected} <- expected(params["expected_version"]) do
-      case LibraryLifecycle.retire_item(scope, mission, id, expected) do
+      case LibraryLifecycle.retire_item(
+             scope,
+             mission,
+             id,
+             expected,
+             params["expected_updated_at"]
+           ) do
         :ok -> :ok
         {:ok, _audited} -> :ok
         error -> error(scope, mission, id, error)

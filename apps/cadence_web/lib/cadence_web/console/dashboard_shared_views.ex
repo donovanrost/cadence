@@ -14,14 +14,16 @@ defmodule CadenceWeb.Console.DashboardSharedViews do
     "definition_only" => "definition_only"
   }
 
-  @spec load(map(), binary(), :share | :snapshot, binary(), binary() | nil) ::
+  @spec load(map(), binary(), :share | :snapshot, binary(), binary() | nil, map()) ::
           {:ok, map()} | {:error, term()}
-  def load(scope, mission, kind, id, base_url) do
+  def load(scope, mission, kind, id, base_url, params \\ %{}) do
     org = scope.organization_id
+    opts = runtime_opts(kind, params)
 
-    case {SharedViews.load(scope, mission, kind, id),
+    case {SharedViews.load(scope, mission, kind, id, opts),
           SharedViewRecords.fetch(org, mission, kind, id)} do
       {{:ok, view}, {:ok, record}} -> {:ok, view(kind, view, record, base_url)}
+      {{:error, {:invalid, details}}, _record} -> {:error, {:invalid_params, details}}
       {_refused, {:ok, record}} -> {:error, gone(kind, record)}
       {_refused, :error} -> {:error, :not_found}
     end
@@ -44,8 +46,12 @@ defmodule CadenceWeb.Console.DashboardSharedViews do
     }
   end
 
-  defp gone(:share, %{revoked_at: %DateTime{} = at}),
-    do: {:gone, :share_revoked, "Revoked #{stamp(at)}.", %{revoked_at: at}}
+  defp gone(:share, %{revoked_at: %DateTime{} = at} = record) do
+    by = record[:revoked_by]
+
+    {:gone, :share_revoked, "Revoked#{by_name(by)} at #{stamp(at)}.",
+     %{revoked_at: at, revoked_by: by && Map.take(by, [:id, :name])}}
+  end
 
   defp gone(:share, %{expires_at: %DateTime{} = at}) do
     if DateTime.compare(at, DateTime.utc_now()) != :gt,
@@ -59,6 +65,18 @@ defmodule CadenceWeb.Console.DashboardSharedViews do
        %{deleted_by: by && Map.take(by, [:id, :name]), deleted_at: at}}
 
   defp gone(_kind, _record), do: :unavailable
+
+  # A share's live range (D5-style from/to and spacecraft_id); snapshots are frozen.
+  defp runtime_opts(:share, params) do
+    runtime =
+      params
+      |> Map.take(~w(from to spacecraft_id))
+      |> Map.reject(fn {_key, value} -> value in [nil, ""] end)
+
+    if runtime == %{}, do: [], else: [runtime: runtime]
+  end
+
+  defp runtime_opts(:snapshot, _params), do: []
 
   defp by_name(%{name: name}) when is_binary(name), do: " by #{name}"
   defp by_name(_unknown), do: ""
