@@ -116,7 +116,8 @@ defmodule Cadence.GroundNetworks.ProviderCredentialsTest do
       |> Enum.map(& &1.action)
 
     assert "provider_credential.created" in actions
-    assert "provider_credential.resolved" in actions
+    # Routine resolves are not audited (qa #51); failures are.
+    refute "provider_credential.resolved" in actions
     assert "provider_credential.rotated" in actions
     assert "provider_credential.revoked" in actions
     assert "provider_credential.resolution_failed" in actions
@@ -191,6 +192,54 @@ defmodule Cadence.GroundNetworks.ProviderCredentialsTest do
                manage_backend?: true,
                now: @now
              )
+  end
+
+  test "routine resolves write no audit rows and touch last_resolved_at at most every 5 min (qa #51)" do
+    ref = "provider-credential-quiet"
+
+    assert {:ok, _credential} =
+             ProviderCredentials.create(
+               @organization_id,
+               @account_id,
+               credential_attrs(
+                 provider_credential_ref: ref,
+                 backend_type: :env,
+                 backend_key: "CADENCE_PROVIDER_ACCOUNT_TOKEN"
+               ),
+               manage_backend?: false,
+               now: @now
+             )
+
+    entries = fn -> ProviderAudit.list_entries(@organization_id, limit: 50) end
+    after_create = length(entries.())
+
+    resolve = fn seconds, allowed? ->
+      ProviderCredentials.resolve(@organization_id, @account_id, ref,
+        allow_local_provider_credentials?: allowed?,
+        env_reader: fn _key -> "local-provider-secret" end,
+        now: DateTime.add(@now, seconds)
+      )
+    end
+
+    last_resolved = fn ->
+      {:ok, credential} = ProviderCredentials.fetch(@organization_id, @account_id, ref)
+      credential.last_resolved_at
+    end
+
+    for seconds <- [0, 1, 2], do: assert({:ok, _} = resolve.(seconds, true))
+    assert last_resolved.() == @now
+    assert {:ok, _} = resolve.(299, true)
+    assert last_resolved.() == @now
+    assert {:ok, _} = resolve.(301, true)
+    assert last_resolved.() == DateTime.add(@now, 301)
+    assert length(entries.()) == after_create
+
+    # A failing backend is audited once per credential per 5 min, not once per call.
+    for seconds <- [400, 401, 402], do: assert({:error, _} = resolve.(seconds, false))
+    assert length(entries.()) == after_create + 1
+    assert {:error, _} = resolve.(701, false)
+
+    assert entries.() |> Enum.count(&(&1.action == "provider_credential.resolution_failed")) == 2
   end
 
   test "never persists material-like metadata" do
