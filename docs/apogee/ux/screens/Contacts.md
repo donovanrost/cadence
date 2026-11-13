@@ -85,6 +85,8 @@ shows the problem and `Open in Plan`. **Empty:** nominal callout "No conflicts o
      - An offer that overlaps a booked pass of the same spacecraft or antenna is shown disabled, with "Overlaps
        EARENDIL-312's KIR 03:00Z pass."
      - Empty: "No passes for EARENDIL-312 between 03:00Z and 09:00Z."
+     - With `With uplink`, stations that have no uplink route to the spacecraft are hidden, with one line under the
+       list: "3 stations hidden: no uplink route to EARENDIL-312." (fe-ops).
      - An expired offer row turns off with "Offer expired. Search again." and can't be chosen.
   3. **Confirm** (under the chosen row): "Book EARENDIL-312 · SVA 03:10Z–03:19Z with Northlight, with an uplink."
      plus an optional note `Why`. Primary `Book this pass`, with the caption "Outside a plan: it doesn't count
@@ -98,7 +100,8 @@ shows the problem and `Open in Plan`. **Empty:** nominal callout "No conflicts o
   - Unclear (network): caution "It's unclear whether it was booked." with `Try again`. Reserving is idempotent,
     so the button says "it won't book twice" in its caption.
 - **In D2 and D3:** off-plan bookings carry the tag `OFF-PLAN`. D2 adds "Booked outside a plan by Mira K. at
-  02:10Z · doesn't count toward contact rules."
+  02:10Z: “<Why note>” · doesn't count toward contact rules." (the note only when given; it also goes in the
+  Timeline event).
 - **Release** (same action and label as plan bookings, so there's one verb):
   - Who: for an off-plan booking, its booker or an org admin. Others see "Mira K. or an org admin can release
     this booking." (todo(authz) per lead).
