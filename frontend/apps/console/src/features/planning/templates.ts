@@ -67,7 +67,14 @@ export function previewTemplate(
 export function saveTemplate(
   missionId: string,
   id: string | null,
-  body: Readonly<{ name: string; target: Target; document: unknown; expected_version?: number }>,
+  body: Readonly<{
+    name: string;
+    target: Target;
+    document: unknown;
+    expected_version?: number;
+    /** Creates only: one per form open, reused on retry (api 66875fb39). */
+    operation_id?: string;
+  }>,
 ) {
   return request(
     id ? `${base(missionId)}/${encodeURIComponent(id)}` : base(missionId),

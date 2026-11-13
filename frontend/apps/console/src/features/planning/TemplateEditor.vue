@@ -22,6 +22,7 @@ import {
   warningText,
   type TemplateSchema,
 } from "./templates.ts";
+import { alreadyCreated } from "./requirements.ts";
 
 /** New or edit a requirement template (CP3): form generated from the server's template schema. */
 const props = defineProps<{ missionId: string; template: TemplateDetail | null }>();
@@ -114,6 +115,8 @@ async function preview() {
 }
 
 const canSave = computed(() => name.value.trim().length > 0);
+/** One create per form open: a retry replays it, and the server answers with the template it made. */
+const operationId = crypto.randomUUID();
 async function save() {
   const input = collect();
   if (!input || !canSave.value || busy.value) return;
@@ -122,10 +125,13 @@ async function save() {
     const body = {
       name: name.value.trim(),
       ...input,
-      ...(props.template ? { expected_version: props.template.version } : {}),
+      ...(props.template
+        ? { expected_version: props.template.version }
+        : { operation_id: operationId }),
     };
     const r = await saveTemplate(props.missionId, props.template?.id ?? null, body);
-    if (!r.ok)
+    const replayed = r.ok ? null : alreadyCreated(r.error, "template_id");
+    if (!r.ok && !replayed)
       return void (note.value = {
         tone: "crit",
         text: failureOutcome(r.error, "changed").sentence,
@@ -134,7 +140,7 @@ async function save() {
     else
       await router.push({
         name: "setup.contact-planning.template",
-        params: { templateId: r.value.id },
+        params: { templateId: r.ok ? r.value.id : (replayed ?? "") },
       });
   } finally {
     busy.value = false;

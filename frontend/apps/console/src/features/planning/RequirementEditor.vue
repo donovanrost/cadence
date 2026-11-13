@@ -11,6 +11,7 @@ import {
   fetchRequirementSchema,
   fieldErrors,
   notActiveLine,
+  alreadyCreated,
   saveRequirement,
   withSpacecraftChoices,
   type RequirementDetail,
@@ -68,6 +69,8 @@ const saveLabel = computed(() => {
 
 /** Set once a new requirement is created: Create stays off, and the note links to it. */
 const created = ref<string | null>(null);
+/** One create per form open: a retry replays it, and the server answers with the row it made. */
+const operationId = crypto.randomUUID();
 
 async function save() {
   const s = rawSchema.state.value;
@@ -91,9 +94,12 @@ async function save() {
   try {
     const r = await saveRequirement(props.missionId, props.requirement?.id ?? null, {
       content: withoutBlankConstraints(built.document),
-      ...(props.requirement ? { expected_version: props.requirement.version } : {}),
+      ...(props.requirement
+        ? { expected_version: props.requirement.version }
+        : { operation_id: operationId }),
     });
-    if (!r.ok) {
+    const replayed = r.ok ? null : alreadyCreated(r.error, "requirement_id");
+    if (!r.ok && !replayed) {
       errors.value = fieldErrors(r.error);
       return void (note.value = {
         tone: "crit",
@@ -103,10 +109,11 @@ async function save() {
     if (props.requirement) return void emit("close");
     // qa: twice the server created it but the page stayed on New with nothing said, and a second
     // click made a duplicate. Say it's created and lock Create first, whatever the navigation does.
-    created.value = r.value.id;
+    const id = r.ok ? r.value.id : (replayed ?? "");
+    created.value = id;
     note.value = { tone: "nominal", text: "Created." };
     await router
-      .push({ name: "setup.contact-planning.requirement", params: { requirementId: r.value.id } })
+      .push({ name: "setup.contact-planning.requirement", params: { requirementId: id } })
       .catch(() => undefined);
   } finally {
     busy.value = false;

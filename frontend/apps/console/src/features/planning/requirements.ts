@@ -100,13 +100,27 @@ export function fetchRequirement(
 export function saveRequirement(
   missionId: string,
   id: string | null,
-  body: Readonly<{ content: Record<string, unknown>; expected_version?: number }>,
+  body: Readonly<{
+    content: Record<string, unknown>;
+    expected_version?: number;
+    /** Creates only: one per form open, reused on retry (api 66875fb39, qa P4). */
+    operation_id?: string;
+  }>,
 ) {
   return request(
     id ? `${base(missionId)}/${encodeURIComponent(id)}` : base(missionId),
     object({ id: token, version: integer }),
     { method: "POST", body },
   );
+}
+
+/** A replayed create (409 duplicate_operation): the id of the row the first attempt made. */
+export function alreadyCreated(
+  error: ApiError,
+  key: "requirement_id" | "template_id",
+): string | null {
+  if (!isError(error, "duplicate_operation")) return null;
+  return detailsOf(error, object({ [key]: token }))?.[key] ?? null;
 }
 
 export type EndAction = "close" | "cancel";
