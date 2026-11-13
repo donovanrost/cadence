@@ -190,3 +190,6 @@ Feature engineers compose these; ask lead before adding a new shared primitive.
   Elixir check (compile, credo, xref, `mix cadence.architecture.check`, tests) with `MIX_ENV=test`,
   which builds to `_build/test`. A dev-env build rewrites `_build/dev` under the running :4011 node and
   can purge modules (`Cadence.Repo`) from running processes. Lib saves reach :4011 through its own reloader.
+  `scripts/check-slot.sh` refuses a `mix` task without `MIX_ENV=test`. Dev-DB migrations go to qa, who runs
+  them through the live node (`Ecto.Migrator`) or inside a planned restart, never `mix ecto.migrate` from the
+  shared tree.
