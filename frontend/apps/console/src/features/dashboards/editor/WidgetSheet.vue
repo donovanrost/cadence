@@ -10,6 +10,7 @@ import {
   type WidgetFieldKey,
 } from "./contracts.ts";
 import { newId } from "./draft.ts";
+import { bindsObservables } from "./widget-form.ts";
 import WidgetBindingFields from "./WidgetBindingFields.vue";
 import WidgetDisplayFields from "./WidgetDisplayFields.vue";
 
@@ -40,11 +41,15 @@ const sources = [
 const setSource = (v: string) => {
   if (v === "new" || v === "library") source.value = v;
 };
-const valid = computed(
-  () =>
-    fields.value.title.trim() !== "" &&
-    (fields.value.mode !== "fixed" || fields.value.spacecraft_id !== ""),
-);
+/** Why Add/Apply can't run yet, or null. Caught here, not by the preview's 422 (qa: a pointless
+ * widget closed the sheet, then read "That widget isn't valid."). */
+const blocked = computed(() => {
+  const f = fields.value;
+  if (f.title.trim() === "") return "Give it a title.";
+  if (f.mode === "fixed" && f.spacecraft_id === "") return "Pick the spacecraft.";
+  if (bindsObservables(f.type) && observables.value.length === 0) return "Choose at least one point.";
+  return null;
+});
 
 function openFor(placement: OutlinePlacement | null, sectionId = "") {
   placementId.value = placement?.id ?? null;
@@ -110,8 +115,8 @@ defineExpose({ openFor, close: () => sheet.value?.close() });
       <ApButton
         v-if="source === 'new'"
         variant="primary"
-        :disabled="!valid"
-        disabled-reason="Give it a title (and a spacecraft when it's fixed to one)."
+        :disabled="blocked !== null"
+        :disabled-reason="blocked ?? ''"
         @click="apply"
         >{{ placementId ? "Apply" : "Add widget" }}</ApButton
       >
