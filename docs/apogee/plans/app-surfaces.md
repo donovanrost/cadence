@@ -31,9 +31,9 @@ their UI (managed-application framework).
    nearest, so the host maps `application_workspace` → Setup and `ops_*` → Ops.
 4. No dirty / title reporting from a surface (host-owned leave guard and title).
 5. "Saving and activation go through the change set" (spec) has no backing: there's no change-set kind for app
-   configuration or installation. **Needs a director/domain decision**; until then the host shows the app's own
-   save results and links `request_activation` to L10 approvals. The apps list already has the
-   `applied | staged` seam for installation (Changes.md §6).
+   configuration or installation. **Ruled (DECISIONS #77): A now**: the host shows each app's own save results
+   (a per-app save-outcome adapter, the seam for B later) and telemetry_decom's `request_activation` goes to L10
+   approvals. B (change-set kinds for app config) is queued for domain much later.
 
 ## Proposed endpoints (console API, `/api/console/v1/missions/:mission_id`)
 
@@ -47,21 +47,20 @@ app's own words when it has them. `area` is from `placement` (gap 3).
 
 ### S1 `GET /apps/:key/surfaces/:surface_id/host?spacecraft_id=` (operator)
 ```
-{application: {key, version, display_name},
- surface: {surface_id, version, label, purpose, area, data_contract {query_id, version}},
- release: {federation, release_id, remote_name, manifest_url, exposed_module},
- manifest: {package_id, version},            // what the loaded module must declare (catalog.ts check)
- context: {scope, organization_id, mission_id, mission_name, spacecraft_id|null, spacecraft_name|null,
-           actor {display_name, permissions: [string]}},   // the REAL permissions (gap 1)
- bridge: {base_url, session_id, csrf_token},
- status: {state, label, version}}
+{catalog: <today's FrontendApplicationCatalog for this one surface:
+           {schema: "cadence.first-party-frontend-catalog.v1", hostContract, generatedAt,
+            session {sessionId, csrfToken, bridgeBaseUrl, context}, applications: [one CatalogApplication]}>,
+ status: {state, label, version},
+ surfaces: [the app's surfaces as in A1, for the host's tabs]}
 ```
-- One surface's slice of today's catalog, built by the same code (`ApplicationHostCatalog`), console-authorized.
+- The catalog is built by today's code (`ApplicationHostCatalog`), console-authorized, so the console validates it
+  with plugin-sdk's `assertFrontendApplicationCatalog` and hands it to the copied loader and bridge unchanged.
+- The one change inside it: `session.context.actor.permissions` carries the REAL permissions (gap 1).
 - `404 application_not_found | surface_not_found`; `409 application_not_installed` with `details.status` (the host
   shows "Limits & Alarming isn't installed on Earendil." + `Install` for admins).
 - The bridge stays `/api/cadence/application-host/v1` (query/actions), unchanged.
 
-### Later (decision first, gap 5)
+### Later (DECISIONS #77: A now, B queued for domain much later)
 - `application_installation` change-set kind (install / disable / uninstall staged; the apps list seam is ready).
 - `application_configuration` change-set kind for app saves that need activation, and L10 reading
   `ActivationRequest`s as approvals.
