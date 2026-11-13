@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.PassController do
 
   alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.RepairChain
-  alias Cadence.Contacts.ScheduleCommands
+  alias Cadence.Contacts.{ProviderChangeAttention, ScheduleCommands}
   alias Cadence.Control.{Contacts, UplinkReadiness}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.ActionQueue.AttentionItems
@@ -42,7 +42,13 @@ defmodule CadenceWeb.Console.PassController do
 
         # D2 Release sheet: the groups that would lose this pass, and where they'd go instead.
         queued = PassUplink.queued_for_pass(org_id(conn), mission_id(conn), pass)
-        json(conn, %{data: Map.put(pass, :queued_command_groups, queued)})
+
+        json(conn, %{
+          data:
+            pass
+            |> Map.put(:queued_command_groups, queued)
+            |> Map.put(:provider_changes, provider_changes(conn, pass.id))
+        })
 
       {:error, :pass_not_found} ->
         Problem.respond(conn, :pass_not_found)
@@ -52,8 +58,13 @@ defmodule CadenceWeb.Console.PassController do
   defp decorate(conn, result) do
     items =
       case Attention.load(conn.assigns.current_scope, mission_id(conn)) do
-        {:ok, %{items: items}} -> items
-        _forbidden -> []
+        # A pass keeps its provider changes after it ends (Now drops them; domain fb09ac755).
+        {:ok, %{items: items}} ->
+          Enum.reject(items, &(&1.source == "provider_change")) ++
+            ProviderChangeAttention.pass_items(org_id(conn), mission_id(conn))
+
+        _forbidden ->
+          []
       end
 
     # A pass row carries its booking's pass_resolution item, else a pass_release one (a Release the
@@ -214,6 +225,25 @@ defmodule CadenceWeb.Console.PassController do
 
   # U32: each booking's open or acknowledged pass-resolution item (the drawer's attention block),
   # for viewers who operate the mission. A blocked uplink shows in `uplink_readiness` instead.
+  # ux U44's pass history: every change of the pass, decided ones with their resolution.
+  defp provider_changes(conn, reservation_id) do
+    org_id(conn)
+    |> ProviderChangeAttention.pass_history(mission_id(conn), reservation_id)
+    |> Enum.map(fn change ->
+      change
+      |> AttentionItems.provider_change()
+      |> Map.update(:resolution, nil, &resolution/1)
+    end)
+  end
+
+  defp resolution(nil), do: nil
+
+  defp resolution(%{by: by} = resolution),
+    do: %{resolution | by: person(by)}
+
+  defp person(%{"kind" => "user", "id" => id} = by), do: %{id: id, name: by["name"]}
+  defp person(_system), do: nil
+
   # One item per pass, the highest rank winning (the last one kept): a booking resolution, then a
   # provider change awaiting approval (L14, fe-ops), another provider change, then a failed release.
   defp attention_rank(%{source: "pass_resolution"}), do: 3

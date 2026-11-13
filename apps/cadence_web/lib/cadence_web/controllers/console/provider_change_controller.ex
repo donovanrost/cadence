@@ -64,6 +64,9 @@ defmodule CadenceWeb.Console.ProviderChangeController do
   defp error(conn, id, reason) when reason in @stale,
     do: Problem.respond(conn, :provider_change_stale, %{item: current(conn, id)})
 
+  defp error(conn, id, :provider_change_expired),
+    do: Problem.respond(conn, :provider_change_expired, %{item: current(conn, id)})
+
   defp error(conn, _id, :provider_change_decision_deadline_passed),
     do: Problem.respond(conn, :provider_change_deadline_passed)
 

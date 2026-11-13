@@ -146,8 +146,11 @@ defmodule CadenceWeb.Console.Problem do
     dashboard_unavailable: {503, "This dashboard couldn't be resolved right now."},
     share_not_active: {409, "That share is already revoked or expired."},
     playlist_not_found: {404, "This playlist was deleted."},
-    provider_change_stale: {409, "The provider changed this booking again. Review the new change."},
+    provider_change_stale:
+      {409, "The provider changed this booking again. Review the new change."},
     provider_change_deadline_passed: {409, "The deadline to decide this change has passed."},
+    provider_change_expired:
+      {409, "The pass has ended, so this change can't be decided any more."},
     library_item_not_found: {404, "Library widget not found."},
     library_item_changed: {409, "This library widget changed since you opened it."},
     library_item_in_use: {409, "Dashboards still place this library widget."},

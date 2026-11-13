@@ -227,4 +227,12 @@ defmodule Cadence.Reads.ActionQueue.AttentionItemsTest do
     assert Enum.map(items, & &1.priority) == [2, 3, 3]
     assert hd(items).due_at == at(600)
   end
+
+  test "the console reads one provider-change state: expired when the pass ended undecided" do
+    pending = %{id: "c", state: "pending_approval", expired: false}
+
+    assert AttentionItems.provider_change(pending).state == "pending_approval"
+    assert AttentionItems.provider_change(%{pending | expired: true}).state == "expired"
+    assert AttentionItems.provider_change(nil) == nil
+  end
 end

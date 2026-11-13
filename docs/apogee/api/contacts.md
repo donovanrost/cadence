@@ -133,6 +133,15 @@ JSON text, so they're 64-bit safe.
   other key.
 - The item resolves when the change is decided (`action` `approved | rejected | acknowledged`,
   `resolved_by` the user, `note` = the decision's reason) or superseded (`system`, `note` null).
+- **Once the pass ends** (its `ends_at` is past; domain fb09ac755) the change leaves Now. A
+  pending one then reads `state: "expired"`: it can't be decided, and approve or reject answers
+  `409 provider_change_expired` ("The pass has ended, so this change can't be decided any more.",
+  `details.item`). An acknowledgment still works from the pass. Pass rows keep their open changes
+  after the pass ends.
+- `GET /passes/:id` adds `provider_changes`: the pass's history (ux U44). That's every change,
+  newest first, at most 50, as `provider_change` plus `raised_at` and `resolution: {action:
+  approved | rejected | acknowledged | superseded | policy_accepted, by: {id, name} | null, at,
+  reason} | null` (null while open or expired). `state` is the lifecycle, or `expired`.
 - **At the deadline Cadence does nothing by itself.** Approve and reject are refused from then on
   (`409 provider_change_deadline_passed`), and the change stays open until the provider's next
   revision supersedes it: the provider decides.

@@ -217,10 +217,21 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     do: Map.take(attention, @activation_apply_keys)
 
   # §11 L14: what the provider changed, for the decision block.
-  defp settlement(%{source: "provider_change"} = attention),
-    do: Map.take(attention, [:provider_change, :deadline_at])
+  defp settlement(%{source: "provider_change"} = attention) do
+    attention
+    |> Map.take([:provider_change, :deadline_at])
+    |> Map.update(:provider_change, nil, &provider_change/1)
+  end
 
   defp settlement(_attention), do: %{}
+
+  @doc """
+  A provider change as the console reads it (ux U44): one `state`, which is `expired` for a
+  pending change whose pass has ended (domain's derived `expired`, kept alongside).
+  """
+  @spec provider_change(map() | nil) :: map() | nil
+  def provider_change(%{expired: true} = change), do: %{change | state: "expired"}
+  def provider_change(change), do: change
 
   # D2 Release whose cancel the provider didn't confirm (domain 548b8dd9).
   defp release(%{source: "pass_release"} = attention),
