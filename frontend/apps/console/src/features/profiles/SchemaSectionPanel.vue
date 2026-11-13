@@ -29,8 +29,8 @@ defineEmits<{ edit: [] }>();
       to the new revision. Spacecraft still running another catalog show in Readiness.
     </ApCallout>
     <ApCallout v-else-if="section.key === 'framing' && framingOff" tone="info">
-      This mission's settings keep profile framing out of the runtime, so a framing change here
-      doesn't reach ingress.
+      This mission's settings keep profile framing out of the runtime, so changing it here doesn't
+      change how telemetry is decoded.
       <RouterLink :to="{ name: 'setup.settings' }" class="text-readout hover:underline"
         >Mission settings</RouterLink
       >
