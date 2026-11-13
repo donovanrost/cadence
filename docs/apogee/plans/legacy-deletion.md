@@ -16,6 +16,7 @@ the tree moves.
 | L5 sign-in, invitations, no-org | POST `/sign-in`, POST `/invitations/:token` (+ dead modules) | console auth screens | deletable now (GET 302s stay) |
 | L6 admin mode | `/admin-mode` | account menu admin mode | deletable now |
 | L7 platform admin | `/admin/**` | `/console/admin/**` | after qa's live check (L7 migration) |
+| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a after qa's live check (editing smoke PASS 11-14); federated surfaces own batch; L8b blocked (slices 6, library, settings) |
 | L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | blocked: no console API yet |
 | L11 data sources | `/ops/data-sources/**` | `setup.data-sources[/:sourceId]` | after qa's live check (endpoints 2e3c8c5ab) |
 | L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | blocked: L12 endpoints not built (api-ops) |
@@ -213,6 +214,142 @@ die.
 **Redirects:** `/admin/**` → `/console/admin/**`, with `/new` and `/invite` going to the list or detail page.
 Check that the console route takes the org id.
 
+## L8 dashboards (dashboards for lead, 2026-11-14; three batches)
+Only the directory, viewer, editor and New are replaced (lead 11-14). Library, playlists, settings (with its
+activity and diagnostics tabs), shares and snapshots keep their legacy pages until their console slices are live.
+The ten legacy pages share one frontend module, one HPL dispatch and one set of federated `ops_console`
+surfaces, so most files are **trimmed** in L8a and **deleted** in L8b. Paths come from an inventory run on
+11-14. R line numbers move while api-ops' redirect is in flight, so routes below are named by path. Re-grep
+before each batch.
+
+**qa:** the editing smoke passed live on 11-14, 11:52-11:56Z (duplicate, edit, save, versions, restore, Save as
+copy, conflict with Continue editing). qa then cleared the redirect. New dashboard still needs qa's live
+confirmation (the 422 fix was 78564fa90).
+
+### L8a directory, viewer, editor, New (after qa's live check; to the director with qa's result)
+**Routes:** `/ops/dashboards`, `/ops/dashboards/:id`, `/ops/dashboards/:id/edit`, `/ops/dashboards/new`.
+api-ops' cutover (uncommitted on 11-14) replaces the first three live routes with
+`LegacyDashboardRedirectController`.
+
+**Redirects** (slug lookup, falls back to `/console`):
+- directory → `ops.dashboards`
+- `/:id` → `ops.dashboard`, keeping `from`, `to`, `spacecraft`, `refresh` and `kiosk`
+- `/:id/edit` → `ops.dashboard?edit=1`
+- add `/new` → `ops.dashboards.new` in this batch
+
+**Delete (web):**
+- `ops_dashboard_page.ex`, `ops_dashboard_page/actions.ex`, `ops_dashboard_page/updates.ex`
+- `ops_directory_page.ex`, `ops_creation_page.ex`
+- `Cadence.Dashboards.AuthoringDraft` (the LiveView-held draft; the console is stateless). First trim its
+  legacy-only callers:
+  - `Reads.Dashboards.Editor.staged/3` (editor.ex:38-50; `load/4` has no callers at all)
+  - `DashboardPage.staged/3` (:63-88)
+  - `ObservableChoices.staged/3` (:52-55)
+  - `Versions.list/staged/summary`, which are legacy-only (`compare` stays)
+
+**Trim (shared):**
+- **HPL:**
+  - the `workspace`, `create` and `directory` handlers (inside :658-803; `create` matches without an id guard);
+  - `dashboard_refresh` (:1227-1236) and its `handle_info` clauses (:1169-1182);
+  - the dashboard steps of the prepare pipeline (:1295-1299, :1308-1311; keep :1300 Exploration);
+  - `active_dashboard_id` where only these pages use it.
+- **`frontend/apps/host/src/routes.json`:** the `dashboards.directory`, `.show`, `.edit` and `.new` entries.
+  Then regenerate `catalog.generated.ts` with `tools/generate-route-types.mjs`.
+- **`live/host_page_authorization.ex`:** nothing yet. `:ops_dashboard_author` still guards library, playlists
+  and settings.
+- **Host contributions** (`ops-workspace/features/module-pages/contributions.ts:126-169`): only the directory,
+  workspace and creation contributions.
+- **`frontend/modules/dashboards-and-exploration`:** delete `directory.ts`, `creation.ts` and `workspace.ts`, and
+  `features/{directory,creation,workspace,dashboard}`. Keep `shared/`, `charts.ts`, `workspace.css`,
+  `charts.css`, `gridstack` and `uplot` until L8b. Re-grep first: library and settings may import
+  `features/dashboard` widgets.
+- **`frontend/tools/phoenix/ops_initial_state_browser.mjs`:** the dashboard routes (:44-52) and assertions
+  (:135-167). Also its driver's `draft-dashboard` seed (`browser_test/…/ops_initial_state_browser_test.exs`
+  :33-91). CI runs it (`.github/workflows/frontend.yml:92`), so tell devops.
+
+**Keep** (the console API or channel uses them):
+- web `OpsWorkspaceURL` (`console/dashboard_runtime.ex`)
+- `DashboardPage.load`, `Editor.outline`, `Versions.compare`, `ObservableChoices.search`,
+  `ExecutionDiagnostics.load`
+- `Reads.Dashboards.{Workspace,Directory,Activity}`, `DirectoryActions`, `Dashboards.Creation`,
+  `CurrentVersions`, `RuntimeInvalidation`
+- `DashboardAuthorAuth.authorized?/2`
+
+**Tests:**
+- **Delete:**
+  - `live/ops_dashboard_{directory,editor,authoring_entry}_live_test.exs`
+  - `ops_{directory,creation}_page_test.exs`
+  - `ops_dashboard_{page,editor,updates}_test.exs`
+  - `dashboard_authoring_draft{,_conflict}_test.exs`
+  - `reads/dashboards/{creation,directory}_destination_test.exs`
+- **Change:**
+  - `test/support/dashboard_authoring_draft_test_support.ex` calls `AuthoringDraft.open`, and the console tests
+    use it (`dashboard_settings_api_test`, `dashboard_authoring_api_test`, `dashboard_stateless_authoring_test`).
+    Rewrite `authoring_draft_setup` onto `StatelessAuthoring` before AuthoringDraft goes.
+  - `test/support/ops_dashboard_page_test_support.ex`: keep `dashboard_page_setup`/`save` (the console channel,
+    API and directory tests use them). Drop the `host:ops-page` helpers and `@renderer`.
+  - `dashboard_workspace_read_test.exs:23` shells out to the deleted producer check; remove that assertion.
+  - Frontend: `BrowserHost.test.ts:75-89` (keep the exploration and runtime-diagnostics fixtures),
+    `OpsModulePage.test.ts:7-18`, `routes.test.ts`, `landing.test.ts`, plugin-sdk `routes.test.ts`.
+  - Storybook: delete `DashboardWidgetDrawer.stories.ts` and `TelemetryChart.stories.ts`, unless L8b's pages
+    still use those components.
+
+**Links in:**
+- Legacy host nav `dashboards/new` (author-only): `ops-workspace/features/frame/navigation.ts:35,49`,
+  `primary-navigation/navigation.ts:64`, `ops-workspace/shared/destinations.ts:32`, `BrowserHost.vue:252`,
+  timeline `contracts.ts:149` and `TimelinePanel.vue:79`. The directory and viewer links already go through the
+  redirect.
+- `live/dashboard_author_auth.ex:38` redirects to `/ops/dashboards`, which the redirect covers.
+- `ExplorationPanel.vue:20` "Open source dashboard" is covered by the redirect.
+- **Explore's `add_to_dashboard`** (`ops_console/actions/telemetry_explore.ex:132-150, 273-275`) navigates to
+  `/edit?<widget candidate>`. The redirect drops the candidate. It's reachable only through the federated
+  `telemetry_explore` surface; confirm it's unreachable, or retire the action with L20.
+
+**Docs:** `ux/information-architecture.md:143`, `api/inventory.md:21`, `plans/dashboards.md:44,100`,
+`briefs/dashboards.md:11`, and this section.
+
+### L8 federated `ops_console` dashboard surfaces (own batch, after L8a)
+- **Delete:**
+  - `frontend/apps/ops-console/src/OpsDashboard*.vue` (11 files) and their tests;
+  - `applications/ops_console/actions/dashboard_workflows.ex` (1175 lines) and `dashboard_deep_actions.ex`,
+    trimming `action_provider.ex:11-12,26-27`;
+  - `Reads.Dashboards.Creation` (only `reads/application_surfaces/ops_console.ex:31,580` uses it).
+- **Trim:**
+  - the surface specs and both ledgers in `applications/ops_console.ex` (:106-257, :425-435, :454-~480);
+  - `reads/application_surfaces/ops_console.ex` (the dashboard read dispatch);
+  - `OpsConsoleApplication.vue:24,109`;
+  - the ops_console tests (`ops_console_test`, `_action_provider_test`, `_action_adapters_test`,
+    `ops_route_action_ledger_test`, `ops_console_dashboard_workflows_test`, `dashboard_legacy_test`).
+- **Blocker:** the federation smoke uses `dashboard_directory` as its canonical ops_console surface
+  (`federation_browser_smoke_setup.exs:88-106`, `federation_release_fixture.exs:59,597`,
+  `federation_browser_smoke.mjs:4855-4873, 5019-5020, 5216-5231`). devops picks another surface first.
+
+### L8b library, playlists, settings (+ activity, diagnostics), shares, snapshots, export (blocked)
+- **Blocked on:** slice 6 (api D20/D23/D24 after L10; domain's Q6 functions are being built), the library (D21/
+  D22, fe-ops), and settings (fe-setup's slice 5; its console route is still pending).
+- **Delete then:**
+  - their pages: `ops_{library,playlist,settings,activity,diagnostics,shared_view}_page.ex` and
+    `ops_diagnostics_url.ex`;
+  - their HPL handlers;
+  - the rest of `frontend/modules/dashboards-and-exploration` except `exploration.ts`, `features/exploration`,
+    `index.ts`/`contributions.ts` and `features/runtime-diagnostics` (L7). Also drop `gridstack`/`uplot`, the
+    `exports` entries and the four CSS imports, among them `apps/host/src/phoenix.css:15`, which the Phoenix
+    build imports;
+  - the `:ops_dashboard_author` policy and `DashboardAuthorAuth`'s `on_mount`/`authorize/3`;
+  - `DashboardExportController` (the console has its own export) and its route;
+  - their tests and the producer-check assertions in the settings, library, playlists, shared-views and
+    execution-diagnostics tests.
+- **Keep:** the domain behind them: `SharedViews`, `SettingsAuthoring`, `Reads.Dashboards.{Settings,Library,
+  Playlists}`, `LibraryAuthoring`, `PlaylistAuthoring`. The console endpoints wrap them.
+  `Playlists.present/search` can go.
+
+### Open (for lead)
+- `RuntimeCoordinator` and `RuntimeInvalidationRelevance` have no callers in lib, legacy pages included.
+  `plans/dashboards-live.md` named them for the channel, but C1 shipped without them. Delete them in L8a unless
+  api-ops plans to use them.
+- `test/support/dashboard_review_fixtures.ex` has no users: delete it in L8a.
+- The storybook `dashboard-directory-study/` is a design study (ux's call).
+
 ## L10 activation approvals (blocked: no console API)
 **Routes:** R:563.
 
@@ -385,7 +522,7 @@ the console yet**: each target below is where the old URL should go (with the sl
 **Legacy dashboards are host-served.** Each `dashboards.*` contribution renders
 `frontend/modules/dashboards-and-exploration` through `ops-workspace/features/module-pages`; the surfaces are
 `ops_console.ex` :106-251.
-- **Live in the console, so covered:** R:418 directory, :398 new, :559 view, :410 edit.
+- **Live in the console, so covered:** R:418 directory, :398 new, :559 view, :410 edit. See **L8** above.
 - **Console routes still pending (L8):** R:402 library, :406 and :430 playlists, :414 settings, :551 activity,
   :555 diagnostics, and :422 and :426 shares and snapshots.
 - **Downloads to keep** until L8 and L18 decide: R:230 export and R:155 artifact download.
