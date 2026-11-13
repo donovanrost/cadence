@@ -9,7 +9,8 @@ const reader = object({
   drafts: array(
     object({
       plan: object({ id: token, version: integer }),
-      day: string,
+      // api drift sweep 11-13: null for a draft with no passes yet (contact_plan_overview.ex:76).
+      day: nullable(string),
       author: nullable(object({ id: optional(nullable(token)), name: string })),
       state: decoders.known(planStates),
     }),
@@ -70,7 +71,7 @@ export function supersedeSentence(
   const list = drafts
     .map((d) => {
       const who = d.author ? (d.author.id === userId ? "you" : d.author.name) : null;
-      return `${dayText(d.day)} (r${d.plan.version}${who ? `, ${who}` : ""})`;
+      return `${d.day ? dayText(d.day) : "No passes yet"} (r${d.plan.version}${who ? `, ${who}` : ""})`;
     })
     .join(", ");
   return `${doing} supersedes ${n === 1 ? "1 open draft" : `${n} open drafts`}: ${list}. ${n === 1 ? "It'll" : "They'll"} need drafting again.`;
