@@ -119,9 +119,17 @@ defmodule Cadence.Reads.ConfigLabels do
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
     |> Map.new(fn kind ->
+      # The edit schema wins where it has the path; the fallback keeps paths it doesn't edit
+      # (a spacecraft's metadata.norad_id) and display hints such as `format`.
       case ConfigKindSchema.fields(kind, organization_id, mission_id) do
-        {:ok, fields} -> {kind, Map.new(fields, &{&1.path, &1})}
-        _none -> {kind, fallback(kind)}
+        {:ok, fields} ->
+          schema = Map.new(fields, &{&1.path, &1})
+
+          {kind,
+           Map.merge(fallback(kind), schema, fn _path, hint, field -> Map.merge(hint, field) end)}
+
+        _none ->
+          {kind, fallback(kind)}
       end
     end)
   end
