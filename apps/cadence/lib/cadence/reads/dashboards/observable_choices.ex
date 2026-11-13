@@ -4,7 +4,6 @@ defmodule Cadence.Reads.Dashboards.ObservableChoices do
 
   alias Cadence.Dashboards.{
     Authoring,
-    AuthoringDraft,
     AuthoringInput,
     AuthoringWidget,
     Document,
@@ -36,34 +35,6 @@ defmodule Cadence.Reads.Dashboards.ObservableChoices do
          mission_id: mission,
          dashboard_id: dashboard,
          document_version: version,
-         query: query,
-         options: options,
-         more: more
-       }}
-    else
-      _ -> {:error, :unavailable}
-    end
-  rescue
-    _ -> {:error, :unavailable}
-  catch
-    _, _ -> {:error, :unavailable}
-  end
-
-  def staged(scope, %AuthoringDraft{} = draft, input) when is_map(input) do
-    with true <- input["expected_revision"] == draft.revision,
-         {:ok, query, fields, version} <- admit(Map.delete(input, "expected_revision")),
-         {:ok, document} <- AuthoringDraft.current(scope, draft),
-         true <- Document.version(document) == version,
-         {:ok, options, more} <- choices(scope, document, query, fields),
-         true <- bounded_options?(options) do
-      {:ok,
-       %{
-         version: 2,
-         organization_id: document.organization_id,
-         mission_id: document.mission_id,
-         dashboard_id: document.dashboard_id,
-         document_version: version,
-         staging_revision: draft.revision,
          query: query,
          options: options,
          more: more

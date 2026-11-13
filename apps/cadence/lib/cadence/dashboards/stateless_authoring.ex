@@ -2,8 +2,8 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
   @moduledoc """
   Dashboard authoring without a server-held draft (DECISIONS #76): the client keeps its
   commands and sends them with the version it started from. Each call opens the document at
-  `base_version`, replays the commands through the same admission and changes as
-  `AuthoringDraft.stage/4`, and either returns the staged result (`preview/5`) or persists it
+  `base_version`, replays the commands through the authoring admission and changes (the legacy
+  page's server-held draft went with L8a), and either returns the staged result (`preview/5`) or persists it
   through `CurrentVersions` (`save/6`, `copy/6`). `rebase/4` replays onto the latest version
   after someone else saved.
 

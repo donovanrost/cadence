@@ -1,62 +1,12 @@
 defmodule Cadence.Reads.Dashboards.Editor do
-  @moduledoc "Authorized, versioned dashboard authoring state without frontend presentation."
+  @moduledoc "The editable outline of a dashboard document, without frontend presentation."
   alias Cadence.Dashboards.{
-    Authoring,
     AuthoringDefaults,
-    AuthoringDraft,
     AuthoringInput,
     AuthoringWidget,
     Document,
-    Documents,
     LibraryLifecycle
   }
-
-  alias Cadence.Reads.Dashboards.Workspace
-
-  def load(scope, mission, dashboard, opts \\ []) do
-    with :ok <- Authoring.authorize(scope, mission),
-         true <- AuthoringInput.id?(dashboard),
-         {:ok, document} <-
-           Documents.fetch_for_mode(scope.organization_id, mission, dashboard, :edit),
-         true <-
-           document.organization_id == scope.organization_id and document.mission_id == mission and
-             document.dashboard_id == dashboard do
-      {:ok, project(document, preview(scope, mission, dashboard, document, opts))}
-    else
-      _ -> {:error, :unavailable}
-    end
-  rescue
-    _ -> {:error, :unavailable}
-  catch
-    _, _ -> {:error, :unavailable}
-  end
-
-  @doc """
-  Projects a reauthorized staging transaction and its actual unsaved preview.
-  The model's document_version is the save precondition, not a claim that the
-  candidate is persisted. Revision identifies the staged content independently.
-  """
-  def staged(scope, %AuthoringDraft{} = draft, opts \\ []) do
-    with {:ok, document} <- AuthoringDraft.current(scope, draft) do
-      preview =
-        case Workspace.preview(scope, document, opts) do
-          {:ok, snapshot} -> snapshot
-          _ -> nil
-        end
-
-      {:ok,
-       %{
-         version: 1,
-         revision: draft.revision,
-         dirty: AuthoringDraft.dirty?(draft),
-         model: project(document, preview)
-       }}
-    end
-  rescue
-    _ -> {:error, :unavailable}
-  catch
-    _, _ -> {:error, :unavailable}
-  end
 
   @doc "Editable outline of a server-held document, without resolving a preview."
   def outline(%Document{} = document), do: document |> project(nil) |> Map.delete(:preview)
@@ -139,14 +89,4 @@ defmodule Cadence.Reads.Dashboards.Editor do
        }
 
   defp library_ref(_placement, _library), do: nil
-
-  defp preview(scope, mission, dashboard, document, opts) do
-    case Workspace.load(scope, mission, dashboard, :edit, opts) do
-      {:ok, %{document_version: version} = snapshot} ->
-        if version == Document.version(document), do: snapshot
-
-      _ ->
-        nil
-    end
-  end
 end
