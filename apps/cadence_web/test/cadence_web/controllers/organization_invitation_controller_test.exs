@@ -9,52 +9,25 @@ defmodule CadenceWeb.OrganizationInvitationControllerTest do
   alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
-  test "GET keeps an available invitation in a connected non-SSR LiveVue page", %{conn: conn} do
+  # L5: the page's GET goes to the console's invitation screen; the legacy POST (below) stays for a
+  # page that was already open.
+  test "GET goes to the console's invitation screen with the token, whatever its state", %{
+    conn: conn
+  } do
     %{path: path} = invitation_fixture()
+    token = String.replace_prefix(path, "/invitations/", "")
+    assert redirected_to(get(conn, path)) == "/console/invitations/" <> token
 
-    {:ok, view, _html} = live(conn, path)
-    vue = invitation_vue(view)
-    presentation = vue.props["page"]
-
-    assert presentation["available"] == true
-    assert presentation["error"] == nil
-    assert presentation["token"] == String.replace_prefix(path, "/invitations/", "")
-    assert presentation["csrf_token"] != ""
-  end
-
-  test "GET preserves not-found status and unavailable presentation", %{conn: conn} do
-    response = get(conn, "/invitations/not-a-valid-invitation-token")
-    html = html_response(response, 404)
-    presentation = invitation_vue(html).props["page"]
-
-    assert presentation["error"] == "This invitation link is not valid."
-    assert presentation["available"] == false
-  end
-
-  test "GET preserves gone status for expired and unavailable invitations", %{conn: conn} do
     expired = invitation_fixture()
 
     expired.row
     |> change(expires_at: DateTime.add(DateTime.utc_now(), -60, :second))
     |> Repo.update!()
 
-    expired_response = get(conn, expired.path)
-    expired_presentation = expired_response |> html_response(410) |> invitation_vue()
+    assert redirected_to(get(recycle(conn), expired.path)) =~ "/console/invitations/"
 
-    assert expired_presentation.props["page"]["error"] ==
-             "This invitation link has expired."
-
-    unavailable = invitation_fixture()
-
-    unavailable.row
-    |> change(status: "revoked")
-    |> Repo.update!()
-
-    unavailable_response = get(recycle(conn), unavailable.path)
-    unavailable_presentation = unavailable_response |> html_response(410) |> invitation_vue()
-
-    assert unavailable_presentation.props["page"]["error"] ==
-             "This invitation can no longer be used."
+    assert redirected_to(get(recycle(conn), "/invitations/not-a-valid-token")) ==
+             "/console/invitations/not-a-valid-token"
   end
 
   test "POST preserves validation status, copy, and non-password form values", %{conn: conn} do
@@ -96,9 +69,14 @@ defmodule CadenceWeb.OrganizationInvitationControllerTest do
       Map.put(invitation_fixture(user.email), :user, user)
     end
 
-    test "GET asks for the current password only", %{conn: conn, path: path} do
-      {:ok, view, _html} = live(conn, path)
-      assert invitation_vue(view).props["page"]["existing_account"] == true
+    test "a POST without the current password asks for it", c do
+      response = post(c.conn, c.path, %{"organization_invitation_acceptance" => %{}})
+
+      page =
+        response |> html_response(422) |> invitation_vue() |> get_in([Access.key(:props), "page"])
+
+      assert page["existing_account"] == true
+      assert page["error"] == "Enter your current password."
     end
 
     test "POST with a wrong password is refused and changes nothing", c do

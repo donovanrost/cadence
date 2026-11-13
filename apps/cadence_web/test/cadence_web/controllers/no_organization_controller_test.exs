@@ -1,20 +1,21 @@
 defmodule CadenceWeb.NoOrganizationControllerTest do
+  @moduledoc """
+  /no-organization now redirects to the console's screen (L5); the pending-invitation count the
+  old page showed is the console session's `pending_invitations_count` (L21), checked here.
+  """
   use CadenceWeb.ConnCase, async: true
-  import Phoenix.LiveViewTest
   alias Cadence.Accounts
   alias Cadence.Accounts.OrganizationInvitationRow
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
-  test "an authenticated recipient without invitations gets the versioned empty page" do
+  test "an authenticated recipient goes to the console's screen, with no invitations counted" do
     user = TestFixtures.persist_user!()
-    page = no_organization_page(TestFixtures.member_conn(user))
-    assert page["version"] == 1
-    assert page["pending_invitations_count"] == 0
-    assert is_binary(page["csrf_token"]) and page["csrf_token"] != ""
+    conn = user |> TestFixtures.member_conn() |> get("/no-organization")
+    assert redirected_to(conn) == "/console/no-organization"
+    assert no_organization_page(TestFixtures.member_conn(user))["pending_invitations_count"] == 0
   end
 
   test "reading an invitation notification does not hide a pending invitation" do
@@ -57,8 +58,10 @@ defmodule CadenceWeb.NoOrganizationControllerTest do
     assert no_organization_page(TestFixtures.member_conn(user))["pending_invitations_count"] == 2
   end
 
-  test "unauthenticated requests require sign-in", %{conn: conn} do
-    assert redirected_to(get(conn, "/no-organization")) == "/sign-in"
+  test "signed out, it goes to the console's screen too (which sends you to sign in)", %{
+    conn: conn
+  } do
+    assert redirected_to(get(conn, "/no-organization")) == "/console/no-organization"
   end
 
   defp invitation!(user) do
@@ -74,12 +77,7 @@ defmodule CadenceWeb.NoOrganizationControllerTest do
     invitation
   end
 
-  defp no_organization_page(conn) do
-    {:ok, view, _} = live(conn, "/no-organization")
-    vue = Test.get_vue(view, id: "no-organization-page-component")
-    assert vue.component == "NoOrganizationPage"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-    vue.props["page"]
-  end
+  # What the console's no-organization screen reads.
+  defp no_organization_page(conn),
+    do: conn |> get("/api/console/v1/session") |> json_response(200) |> Map.fetch!("data")
 end

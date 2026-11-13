@@ -97,11 +97,18 @@ defmodule CadenceWeb.Router do
   scope "/", CadenceWeb do
     pipe_through([:browser, :redirect_if_authenticated_scope])
 
-    live_session :auth, layout: {CadenceWeb.Layouts, :auth} do
-      live("/sign-in", UserSessionLive, :new)
-    end
-
+    # The legacy form's POST stays for a page that's already open (L5 replaced its GET).
     post("/sign-in", UserSessionController, :create)
+  end
+
+  # L5: the old auth pages' GETs move to the console's (return_to and the token kept). The pages'
+  # code stays until the legacy deletion.
+  scope "/", CadenceWeb do
+    pipe_through(:browser)
+
+    get("/sign-in", AuthRedirectController, :sign_in)
+    get("/invitations/:invitation_token", AuthRedirectController, :invitation)
+    get("/no-organization", AuthRedirectController, :no_organization)
   end
 
   # Apogee console SPA document. Every client-side route returns the same
@@ -125,7 +132,6 @@ defmodule CadenceWeb.Router do
   scope "/", CadenceWeb do
     pipe_through(:browser)
 
-    get("/invitations/:invitation_token", OrganizationInvitationController, :show)
     post("/invitations/:invitation_token", OrganizationInvitationController, :update)
   end
 
@@ -137,7 +143,6 @@ defmodule CadenceWeb.Router do
     get("/admin-mode", AdminModeController, :new)
     post("/admin-mode", AdminModeController, :create)
     delete("/admin-mode", AdminModeController, :delete)
-    get("/no-organization", NoOrganizationController, :show)
 
     get("/missions/:mission_id/ops/contact-workspace", ContactWorkspaceController, :show)
 

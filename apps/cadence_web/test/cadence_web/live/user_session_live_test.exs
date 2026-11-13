@@ -1,26 +1,27 @@
 defmodule CadenceWeb.UserSessionLiveTest do
+  @moduledoc "The old sign-in page's GET now goes to the console's sign-in (L5)."
   use CadenceWeb.ConnCase, async: true
-  import Phoenix.LiveViewTest
-  alias LiveVue.Test
 
-  test "sign-in bootstraps only its session transport", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/sign-in")
-    vue = Test.get_vue(view, id: "user-session-component")
-    assert vue.component == "UserSession"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-    assert Map.keys(vue.props) == ["page"]
-    assert vue.props["page"]["version"] == 1
-    assert is_binary(vue.props["page"]["csrf_token"])
-    assert vue.props["page"]["csrf_token"] != ""
-    assert Test.get_vue(view, id: "application-shell").props["variant"] == "auth"
-    assert has_element?(view, "#user-session-component[data-name=UserSession]")
+  test "GET /sign-in goes to the console's sign-in", %{conn: conn} do
+    assert redirected_to(get(conn, "/sign-in")) == "/console/sign-in"
   end
 
-  test "keeps the connection and flash transport in the auth boundary", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/sign-in")
-    assert has_element?(view, "#toast-group[data-live-toast-group='true']")
-    assert has_element?(view, "#toast-group #client-error[phx-hook='LiveToast']")
-    assert has_element?(view, "#toast-group #server-error[phx-hook='LiveToast']")
+  test "return_to is carried along (the console checks it)", %{conn: conn} do
+    conn = get(conn, "/sign-in?return_to=%2Fconsole%2Fm%2Fearendil%2Ffleet")
+    assert redirected_to(conn) == "/console/sign-in?return_to=%2Fconsole%2Fm%2Fearendil%2Ffleet"
+  end
+
+  test "the legacy POST still signs in a page that was already open", %{conn: conn} do
+    user = CadenceWeb.TestFixtures.persist_user!()
+
+    conn =
+      post(conn, "/sign-in", %{
+        "user" => %{
+          "email" => user.email,
+          "password" => CadenceWeb.TestFixtures.default_password()
+        }
+      })
+
+    assert is_binary(get_session(conn, :user_session_token))
   end
 end
