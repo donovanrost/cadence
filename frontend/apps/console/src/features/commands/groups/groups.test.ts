@@ -4,7 +4,15 @@ import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { CommandArgument, CommandDetail } from "../api.ts";
 import { argumentValuesJson, buildDraft } from "../compose/draft.ts";
 import { splitArgs } from "../compose/resend.ts";
-import { newItem } from "../compose/stack.ts";
+import {
+  checkItem,
+  clearPerTarget,
+  fillFromForm,
+  newItem,
+  pastePerTargetCsv,
+  setPerTargetMode,
+  setTargetValue,
+} from "../compose/stack.ts";
 import { resendFrom } from "../compose/useResend.ts";
 import { EMPTY_QUERY } from "../compose/targets.ts";
 import { fetchGroups, groupRow, preflightReader, type Preflight } from "./api.ts";
@@ -430,5 +438,56 @@ describe("L22 archived spacecraft (ux U40)", () => {
     expect(memberStageWord("canceled", "queued", "spacecraft_archived")).toBe(
       "Not released: the spacecraft is archived",
     );
+  });
+});
+
+describe("B2 per-target values (CommandFlow.md C1)", () => {
+  const item = {
+    ...newItem(
+      command([
+        arg({ id: "n", name: "count", valid_range: { minimum_json: "0", maximum_json: "10" } }),
+        arg({ id: "m", name: "mode" }),
+      ]),
+    ),
+    values: { n: "3", m: "1" },
+  };
+  const ids = ["spacecraft-earendil-001", "spacecraft-earendil-002"];
+  const targets = [spacecraftRow(1), spacecraftRow(2)];
+
+  it("switches an argument to Per target and back, forgetting its values", () => {
+    const on = { ...item, perTarget: setPerTargetMode(item, "n", true) };
+    expect(on.perTarget).toEqual({ n: {} });
+    const set = { ...on, perTarget: setTargetValue(on, "n", ids[1] ?? "", "8") };
+    expect(set.perTarget).toEqual({ n: { "spacecraft-earendil-002": "8" } });
+    // Empty inherits again.
+    expect(setTargetValue(set, "n", ids[1] ?? "", "")).toEqual({ n: {} });
+    expect(setPerTargetMode(set, "n", false)).toEqual({});
+  });
+
+  it("fills every target from the form, and clears back to inheriting", () => {
+    const on = { ...item, perTarget: { n: { "spacecraft-earendil-002": "8" } } };
+    expect(fillFromForm(on, ids)).toEqual({
+      n: { "spacecraft-earendil-001": "3", "spacecraft-earendil-002": "3" },
+    });
+    expect(clearPerTarget(on)).toEqual({ n: {} });
+  });
+
+  it("pastes CSV by SCID or name, in the Per-target arguments' order, and reports the rest", () => {
+    const on = { ...item, perTarget: { n: {}, m: {} } };
+    const r = pastePerTargetCsv(on, "1, 7, 2\nEARENDIL-002, , 5\n999, 1, 1\n", targets);
+    expect(r.perTarget).toEqual({
+      n: { "spacecraft-earendil-001": "7" },
+      m: { "spacecraft-earendil-001": "2", "spacecraft-earendil-002": "5" },
+    });
+    expect(r.unmatched).toEqual(["999"]);
+  });
+
+  it("marks a target's out-of-range value and blocks the item", () => {
+    const on = { ...item, perTarget: { n: { "spacecraft-earendil-002": "40" } } };
+    const check = checkItem(on, ids);
+    expect(check.ok).toBe(false);
+    expect(Object.keys(check.targetErrors.n ?? {})).toEqual(["spacecraft-earendil-002"]);
+    // A target outside the request doesn't count.
+    expect(checkItem(on, ["spacecraft-earendil-001"]).ok).toBe(true);
   });
 });

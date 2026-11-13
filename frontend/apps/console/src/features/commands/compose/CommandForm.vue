@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, useTemplateRef } from "vue";
-import { ApCallout } from "@/ui";
+import { ApCallout, ApSegmented } from "@/ui";
+import type { FleetSpacecraft } from "@/features/fleet/index.ts";
+import { argInput } from "../args.ts";
 import ArgField from "./ArgField.vue";
-import { checkItem, verifierLine, type StackItem } from "./stack.ts";
+import PerTargetPanel from "./PerTargetPanel.vue";
+import { checkItem, setPerTargetMode, verifierLine, type StackItem } from "./stack.ts";
 
 /** Inline form for one stack row: every argument from the catalog, errors inline. */
-const props = defineProps<{ item: StackItem }>();
-const emit = defineEmits<{ change: [values: Record<string, string>]; done: [] }>();
+const props = defineProps<{ item: StackItem; targets: readonly FleetSpacecraft[] }>();
+const emit = defineEmits<{
+  change: [values: Record<string, string>];
+  perTarget: [perTarget: StackItem["perTarget"]];
+  done: [];
+}>();
 const root = useTemplateRef<HTMLFormElement>("root");
 /** Canvas fix #13: the form opens with focus on the first argument; ↵ confirms (closes the row). */
 onMounted(() => {
@@ -14,7 +21,22 @@ onMounted(() => {
     root.value?.querySelector<HTMLElement>("input, select, textarea, [role=radio]")?.focus(),
   );
 });
-const check = computed(() => checkItem(props.item));
+const check = computed(() =>
+  checkItem(
+    props.item,
+    props.targets.map((t) => t.id),
+  ),
+);
+/** B2: numbers can differ per target (CommandFlow.md C1 `Same for all │ Per target`). */
+const perTargetable = (argId: string) => {
+  const arg = props.item.command.arguments.find((a) => a.id === argId);
+  return arg !== undefined && argInput(arg).kind === "number";
+};
+const MODES = [
+  { value: "all", label: "Same for all" },
+  { value: "per", label: "Per target" },
+] as const;
+const anyPerTarget = computed(() => Object.keys(props.item.perTarget).length > 0);
 const verifier = computed(() => verifierLine(props.item.command));
 /**
  * ↵ closes the row only when every value checks (ux Compose ruling #1). Otherwise the form stays
@@ -56,15 +78,31 @@ const set = (argId: string, value: string) =>
       No arguments
     </p>
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-      <ArgField
-        v-for="arg in item.command.arguments"
-        :key="arg.id"
-        :arg="arg"
-        :error="check.errors[arg.id] ?? null"
-        :model-value="item.values[arg.id] ?? ''"
-        @update:model-value="(v) => set(arg.id, v)"
-      />
+      <div v-for="arg in item.command.arguments" :key="arg.id" class="flex flex-col gap-1">
+        <ArgField
+          :arg="arg"
+          :error="check.errors[arg.id] ?? null"
+          :model-value="item.values[arg.id] ?? ''"
+          @update:model-value="(v) => set(arg.id, v)"
+        />
+        <ApSegmented
+          v-if="perTargetable(arg.id)"
+          :model-value="arg.id in item.perTarget ? 'per' : 'all'"
+          :options="MODES"
+          :label="`${arg.name} values`"
+          variant="micro"
+          @update:model-value="
+            (v) => emit('perTarget', setPerTargetMode(item, arg.id, v === 'per'))
+          "
+        />
+      </div>
     </div>
+    <PerTargetPanel
+      v-if="anyPerTarget"
+      :item="item"
+      :targets="targets"
+      @change="(p) => emit('perTarget', p)"
+    />
     <ApCallout v-if="check.hazardousValues.length" tone="caution">
       The catalog marks the value of {{ check.hazardousValues.join(", ") }} as hazardous.
     </ApCallout>

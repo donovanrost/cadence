@@ -50,18 +50,95 @@ export type ItemCheck = Readonly<{
   ok: boolean;
   /** argument id → reason, for the inline errors. */
   errors: Readonly<Record<string, string>>;
+  /** B2: argument id → spacecraft id → reason, for a target's own value. */
+  targetErrors: Readonly<Record<string, Readonly<Record<string, string>>>>;
   hazardousValues: readonly string[];
 }>;
 
-export function checkItem(item: StackItem): ItemCheck {
+/** The form's values, then each listed target's own (B2) for the targets in the request. */
+export function checkItem(item: StackItem, targetIds: readonly string[] = []): ItemCheck {
   const errors: Record<string, string> = {};
+  const targetErrors: Record<string, Record<string, string>> = {};
   const hazardousValues: string[] = [];
   for (const arg of item.command.arguments) {
     const result = checkArg(arg, item.values[arg.id] ?? "");
     if (!result.ok) errors[arg.id] = result.reason;
     else if (result.hazardous) hazardousValues.push(arg.name);
+    for (const id of targetIds) {
+      const own = item.perTarget[arg.id]?.[id];
+      if (own === undefined) continue;
+      const r = checkArg(arg, own);
+      if (!r.ok) targetErrors[arg.id] = { ...targetErrors[arg.id], [id]: r.reason };
+      else if (r.hazardous && !hazardousValues.includes(arg.name)) hazardousValues.push(arg.name);
+    }
   }
-  return { ok: Object.keys(errors).length === 0, errors, hazardousValues };
+  const ok = Object.keys(errors).length === 0 && Object.keys(targetErrors).length === 0;
+  return { ok, errors, targetErrors, hazardousValues };
+}
+
+type PerTarget = StackItem["perTarget"];
+
+/** B2's `Same for all │ Per target` switch for one argument; off forgets the targets' values. */
+export function setPerTargetMode(item: StackItem, argId: string, on: boolean): PerTarget {
+  const { [argId]: current, ...rest } = item.perTarget;
+  return on ? { ...rest, [argId]: current ?? {} } : rest;
+}
+
+/** One target's own text; empty inherits the form's value again. */
+export function setTargetValue(
+  item: StackItem,
+  argId: string,
+  spacecraftId: string,
+  text: string,
+): PerTarget {
+  const { [spacecraftId]: _old, ...others } = item.perTarget[argId] ?? {};
+  return { ...item.perTarget, [argId]: text === "" ? others : { ...others, [spacecraftId]: text } };
+}
+
+/** `All from form · 8.0`: every target gets the form's value written in (B2). */
+export function fillFromForm(item: StackItem, targetIds: readonly string[]): PerTarget {
+  const out: Record<string, Readonly<Record<string, string>>> = {};
+  for (const argId of Object.keys(item.perTarget))
+    out[argId] = Object.fromEntries(targetIds.map((id) => [id, item.values[argId] ?? ""]));
+  return out;
+}
+
+/** `Clear`: every target inherits the form again; the arguments stay Per target. */
+export const clearPerTarget = (item: StackItem): PerTarget =>
+  Object.fromEntries(Object.keys(item.perTarget).map((argId) => [argId, {}]));
+
+export type CsvTarget = Readonly<{ id: string; name: string; scid: number }>;
+
+/**
+ * `Paste CSV`: `SCID OR NAME, THEN ONE COLUMN PER ARGUMENT` (B2), the columns in the order of the
+ * Per-target arguments. Blank cells leave that value alone; rows naming no target are reported.
+ */
+export function pastePerTargetCsv(
+  item: StackItem,
+  text: string,
+  targets: readonly CsvTarget[],
+): Readonly<{ perTarget: PerTarget; unmatched: readonly string[] }> {
+  const argIds = item.command.arguments.map((a) => a.id).filter((id) => id in item.perTarget);
+  const out: Record<string, Record<string, string>> = Object.fromEntries(
+    argIds.map((id) => [id, { ...item.perTarget[id] }]),
+  );
+  const unmatched: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const [who = "", ...cells] = line.split(",").map((c) => c.trim());
+    const target = targets.find(
+      (t) => String(t.scid) === who || t.name.toLowerCase() === who.toLowerCase(),
+    );
+    if (!target) {
+      unmatched.push(who);
+      continue;
+    }
+    argIds.forEach((argId, i) => {
+      const cell = cells[i];
+      if (cell !== undefined && cell !== "") (out[argId] ??= {})[target.id] = cell;
+    });
+  }
+  return { perTarget: { ...item.perTarget, ...out }, unmatched };
 }
 
 /** Argument chips for a stack row: `mode LOW`, `setpoint 21.5 degC`. */

@@ -67,6 +67,8 @@ async function add(commandId: string) {
 const onAdd = (id: string) => add(id).catch((e: unknown) => console.error("Add command failed", e));
 const setValues = (key: string, values: Record<string, string>) =>
   (stack.value = stack.value.map((i) => (i.key === key ? { ...i, values } : i)));
+const setPerTarget = (key: string, perTarget: StackItem["perTarget"]) =>
+  (stack.value = stack.value.map((i) => (i.key === key ? { ...i, perTarget } : i)));
 
 const release = ref<Release>({ mode: "next_contact", notBefore: null });
 const approver = ref("");
@@ -198,7 +200,14 @@ const steps = computed(() => [
 const current = computed(() =>
   targets.value.length === 0
     ? 0
-    : stack.value.length === 0 || stack.value.some((i) => !checkItem(i).ok)
+    : stack.value.length === 0 ||
+        stack.value.some(
+          (i) =>
+            !checkItem(
+              i,
+              targets.value.map((t) => t.id),
+            ).ok,
+        )
       ? 1
       : blocked.value === null
         ? 3
@@ -305,8 +314,10 @@ const close = computed((): RouteLocationRaw =>
             :revision="revision"
             :catalog-rev="catalogRev"
             :adding="adding"
+            :targets="targets"
             @add="onAdd"
             @change="setValues"
+            @per-target="setPerTarget"
             @move="(i, by) => (stack = move(stack, i, by))"
             @reorder="(from, to) => (stack = moveTo(stack, from, to))"
             @remove="(key) => (stack = stack.filter((s) => s.key !== key))"

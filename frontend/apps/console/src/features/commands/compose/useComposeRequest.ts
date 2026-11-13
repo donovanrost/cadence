@@ -87,7 +87,9 @@ export function useComposeRequest(
   const blocked = computed(() => {
     if (targets.value.length === 0) return "Add at least one target.";
     if (stack.value.length === 0) return "Add a command from the catalog.";
-    if (stack.value.some((i) => !checkItem(i).ok)) return "Fix the highlighted argument values.";
+    const ids = targets.value.map((t) => t.id);
+    if (stack.value.some((i) => !checkItem(i, ids).ok))
+      return "Fix the highlighted argument values.";
     if (!form.title.value.trim()) return "Give the request a title.";
     if (secondGo.value.length && !form.log.value.trim())
       return "Write a log entry: a second GO needs one.";

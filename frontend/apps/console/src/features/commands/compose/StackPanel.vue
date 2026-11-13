@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { ApButton, ApEmptyState, ApPanel, ApTag } from "@/ui";
+import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import CatalogSearch from "./CatalogSearch.vue";
 import CommandForm from "./CommandForm.vue";
 import { argSummary, checkItem, type StackItem } from "./stack.ts";
@@ -15,10 +16,13 @@ const props = defineProps<{
   /** "Catalog rev 14" when the catalog revision is recorded (backlog §2). */
   catalogRev?: string | null;
   adding: boolean;
+  /** The request's targets, for B2 per-target values. */
+  targets: readonly FleetSpacecraft[];
 }>();
 const emit = defineEmits<{
   add: [commandId: string];
   change: [key: string, values: Record<string, string>];
+  perTarget: [key: string, perTarget: StackItem["perTarget"]];
   move: [index: number, by: -1 | 1];
   reorder: [from: number, to: number];
   remove: [key: string];
@@ -87,7 +91,16 @@ function altMove(e: KeyboardEvent, i: number) {
             {{ item.command.name }}
           </button>
           <ApTag v-if="item.command.hazardous" state="crit" label="Hazardous" />
-          <ApTag v-if="!checkItem(item).ok" state="caution" label="Needs values" />
+          <ApTag
+            v-if="
+              !checkItem(
+                item,
+                targets.map((t) => t.id),
+              ).ok
+            "
+            state="caution"
+            label="Needs values"
+          />
           <!-- ux Compose ruling #1: the value summary reopens the form. -->
           <button
             v-if="item.command.arguments.length"
@@ -130,7 +143,9 @@ function altMove(e: KeyboardEvent, i: number) {
         <CommandForm
           v-if="open === item.key"
           :item="item"
+          :targets="targets"
           @change="(v) => emit('change', item.key, v)"
+          @per-target="(p) => emit('perTarget', item.key, p)"
           @done="open = null"
         />
       </li>
