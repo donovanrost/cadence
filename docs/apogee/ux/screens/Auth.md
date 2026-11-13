@@ -19,6 +19,8 @@ primary. Footer text-3: `UTC 23:55:03`.
 - h1 `Sign in`. Fields: Email, Password. Primary `Sign in`. On success, go to `return_to` (same-origin only), else
   console home.
 - Wrong email or password: crit callout "That email and password don't match." It never says which.
+- Account disabled (403 `account_disabled`, only after a right password): crit callout "This account is
+  disabled. Ask an organization admin for help." It doesn't say who can turn it back on, because we don't know.
 - Network or 5xx: caution callout "Couldn't reach Cadence. Try again." with the server's reason when it gives one.
 - Already signed in: redirect straight to `return_to` or home.
 - There's no "forgot password" link until a reset flow exists (U20).
@@ -44,6 +46,9 @@ The header line for every case is "Mira K. invited you to Acme Space as Member o
 | Withdrawn | off callout "Mira K. withdrew this invitation." | — |
 | Already used | off callout "This invitation was already accepted." | `Sign in` |
 | Unknown token | off callout "This invitation link isn't valid." | `Sign in` |
+| Declined | off callout "This invitation was declined. Ask for a new one if you want to join." | — |
+| Unavailable | off callout "This invitation isn't available any more. Ask for a new one." | — |
+| A case the console doesn't know | off callout "This invitation can't be used here. Ask for a new one." | `Sign in` |
 Use the actor and time the server gives (U29). Without them, drop the clause and keep the sentence.
 
 ## Admin mode step-up (L6)
