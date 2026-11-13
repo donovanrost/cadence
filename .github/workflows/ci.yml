@@ -82,10 +82,9 @@ jobs:
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: mix workspace.run -t cadence.architecture.check -p cadence --order postorder --early-stop --env-var MIX_ENV=test -- --summary
       # Every project: child locks hold deps the root lock lacks (e.g. ccsds/xtce's ex_doc).
-      # Advisory until develop is clean (api-ops' dependency bumps); then drop continue-on-error.
-      - name: Hex audit, every project (advisory until develop is clean)
+      # Blocking: a retired package or a security advisory in any lock fails the PR.
+      - name: Hex audit, every project
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        continue-on-error: true
         run: |
           status=0
           mix hex.audit || status=1
