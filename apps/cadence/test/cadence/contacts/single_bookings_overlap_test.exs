@@ -34,6 +34,32 @@ defmodule Cadence.Contacts.SingleBookingsOverlapTest do
              SingleBookings.overlap(occupancy, slot("sc-1", "ant-1", 0, 4))
   end
 
+  test "an opportunity two routes reach is offered once, through the first route" do
+    route = fn key, provider ->
+      %{
+        route_key: key,
+        provider_id: provider,
+        provider_display_name: provider,
+        route_display_name: key
+      }
+    end
+
+    offer = fn id -> %{"id" => id, "starts_at" => "2026-11-15T10:00:00Z"} end
+
+    found = [
+      {route.("b-route", "prov-1"), offer.("opp-1")},
+      {route.("a-route", "prov-1"), offer.("opp-1")},
+      {route.("a-route", "prov-1"), offer.("opp-2")},
+      {route.("a-route", "prov-2"), offer.("opp-1")}
+    ]
+
+    assert [
+             {%{route_key: "a-route", provider_id: "prov-1"}, %{"id" => "opp-1"}},
+             {%{route_key: "a-route", provider_id: "prov-1"}, %{"id" => "opp-2"}},
+             {%{route_key: "a-route", provider_id: "prov-2"}, %{"id" => "opp-1"}}
+           ] = SingleBookings.Search.distinct_offers(found)
+  end
+
   test "touching ends, another antenna, or no antenna is free" do
     occupancy = [booked("r", "sc-2", "ant-1", 0, 10)]
 

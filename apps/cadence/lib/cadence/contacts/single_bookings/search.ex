@@ -130,9 +130,11 @@ defmodule Cadence.Contacts.SingleBookings.Search do
 
       true ->
         found =
-          for {route, {:ok, result}} <- ok,
-              offer <- result["opportunities"] || [],
-              do: {route, offer}
+          distinct_offers(
+            for {route, {:ok, result}} <- ok,
+                offer <- result["opportunities"] || [],
+                do: {route, offer}
+          )
 
         not_ready =
           Enum.map(failed, fn {route, _error} ->
@@ -144,6 +146,18 @@ defmodule Cadence.Contacts.SingleBookings.Search do
 
         {:ok, found, not_ready, Enum.any?(ok, fn {_route, {:ok, r}} -> r["truncated"] end)}
     end
+  end
+
+  @doc false
+  # One offer per provider opportunity. Two ready routes to the same provider (another routing
+  # rule, transport or delivery profile) find the same pass; the first route in a fixed order
+  # (provider, route name, route key) books it, as fe-ops saw each pass listed twice.
+  def distinct_offers(found) do
+    found
+    |> Enum.sort_by(fn {route, offer} ->
+      {route.provider_display_name, route.route_display_name, route.route_key, offer["starts_at"]}
+    end)
+    |> Enum.uniq_by(fn {route, offer} -> {route.provider_id, offer["id"]} end)
   end
 
   defp enrich(org, mission, sc, found) do
