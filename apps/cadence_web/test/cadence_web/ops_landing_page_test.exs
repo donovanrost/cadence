@@ -43,10 +43,10 @@ defmodule CadenceWeb.OpsLandingPageTest do
     foreign_org = TestFixtures.persist_org!()
     foreign = TestFixtures.persist_mission!(foreign_org)
     destination = "/missions/#{foreign.mission_id}/ops"
-    assert {:error, {:redirect, %{to: "/missions"}}} = live(c.conn, destination)
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} = live(c.conn, destination)
     {:ok, view, _} = live(c.conn, path(c))
 
-    assert {:error, {:redirect, %{to: "/missions"}}} =
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} =
              render_hook(view, "host:context", %{"path" => destination})
   end
 

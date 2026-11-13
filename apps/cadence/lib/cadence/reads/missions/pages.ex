@@ -1,9 +1,9 @@
 defmodule Cadence.Reads.Missions.Pages do
-  @moduledoc "Authorized host reads for core mission features."
+  @moduledoc "Authorized host read for the mission overview page."
 
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Reads.Missions.{CreationForm, Directory, Overview}
+  alias Cadence.Reads.Missions.Overview
 
   def load(%Scope{} = scope, page, mission_id \\ nil) do
     with :ok <- authorize(scope, page, mission_id),
@@ -11,9 +11,6 @@ defmodule Cadence.Reads.Missions.Pages do
       JSONBoundary.safe(data)
     end
   end
-
-  defp authorize(scope, page, _mission_id) when page in ["mission_list", "mission_new"],
-    do: Policy.authorize(scope, :operate_organization, %{organization_id: scope.organization_id})
 
   defp authorize(scope, "mission_overview", mission_id) when is_binary(mission_id),
     do:
@@ -23,8 +20,6 @@ defmodule Cadence.Reads.Missions.Pages do
       })
 
   defp authorize(_scope, _page, _mission_id), do: {:error, :invalid_mission_page}
-  defp read(scope, "mission_list", _mission_id), do: Directory.load(scope.organization_id)
-  defp read(_scope, "mission_new", _mission_id), do: {:ok, CreationForm.new()}
 
   defp read(scope, "mission_overview", mission_id),
     do: Overview.load(scope.organization_id, mission_id)

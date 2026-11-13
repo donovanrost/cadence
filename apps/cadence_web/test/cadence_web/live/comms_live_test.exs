@@ -65,7 +65,7 @@ defmodule CadenceWeb.CommsLiveTest do
     other_organization = TestFixtures.persist_org!()
     mission = TestFixtures.persist_mission!(other_organization)
 
-    assert {:error, {:redirect, %{to: "/missions"}}} =
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} =
              live(TestFixtures.member_conn(user), ~p"/missions/#{mission.mission_id}/comms")
   end
 

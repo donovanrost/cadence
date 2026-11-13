@@ -530,31 +530,6 @@ defmodule CadenceWeb.HostPageLive do
     end
   end
 
-  def handle_event(
-        "host:mission",
-        %{"path" => path, "event" => event, "input" => input, "token" => token},
-        socket
-      )
-      when event in ["validate", "save"] do
-    with true <- path == socket.assigns.host_path,
-         true <- MissionPage.matches?(socket, token),
-         {:ok, %{route: "/missions/new"}} <- resolve_path(path),
-         {:ok, socket} <- prepare_context(socket, path),
-         true <- MissionPage.matches?(socket, token) do
-      result = MissionPage.action(socket.assigns.current_scope, event, input)
-
-      socket =
-        if event == "save" and result.status == "ok",
-          do: assign(socket, :mission_creation_session, nil),
-          else: socket
-
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _invalid -> {:reply, %{ok: false}, socket}
-    end
-  end
-
   def handle_event(event, %{"catalog_upload" => %{"path" => path}} = params, socket)
       when event in ["catalog:upload:validate", "catalog:upload:save", "catalog:upload:cancel"] do
     with true <- CatalogUpload.matches?(socket, params),
@@ -892,13 +867,6 @@ defmodule CadenceWeb.HostPageLive do
           spacecraft_identity_session:
             SpacecraftPage.identity_session(
               socket.assigns[:spacecraft_identity_session],
-              socket.assigns.current_scope,
-              info,
-              path
-            ),
-          mission_creation_session:
-            MissionPage.creation_session(
-              socket.assigns[:mission_creation_session],
               socket.assigns.current_scope,
               info,
               path

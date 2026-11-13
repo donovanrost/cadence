@@ -35,7 +35,7 @@ defmodule CadenceWeb.OrganizationHomePageTest do
     TestFixtures.persist_mission!(c.org)
     render_hook(view, "host:context", %{"path" => "/"})
     assert page(view)["data"]["counts"]["missions"] == 1
-    render_hook(view, "host:context", %{"path" => "/missions"})
+    render_hook(view, "host:context", %{"path" => "/settings"})
     assert page(view) == nil
   end
 

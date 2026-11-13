@@ -15,34 +15,6 @@
     "administrationPage": "organization_home"
   },
   {
-    "path": "/missions",
-    "scope": "organization",
-    "mountId": "mission-list-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "",
-    "metadata": {
-      "page_title": "Missions",
-      "nav_item": "missions"
-    },
-    "kind": "mission",
-    "missionPage": "mission_list"
-  },
-  {
-    "path": "/missions/new",
-    "scope": "organization",
-    "mountId": "mission-new-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "space-y-6 max-w-xl",
-    "metadata": {
-      "page_title": "New Mission",
-      "nav_item": "missions"
-    },
-    "kind": "mission",
-    "missionPage": "mission_new"
-  },
-  {
     "path": "/provider-accounts",
     "kind": "organization_module",
     "contribution": "comms.provider-account-directory",

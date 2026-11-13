@@ -44,7 +44,7 @@ defmodule CadenceWeb.OrganizationModulePageTest do
     assert row["provider_account_id"] == account_id
     assert row["href"] == "/provider-accounts/" <> account_id
     assert_consumer(populated, context.scope)
-    render_hook(view, "host:context", %{"path" => "/missions"})
+    render_hook(view, "host:context", %{"path" => "/settings"})
     assert contribution(view) == nil
   end
 

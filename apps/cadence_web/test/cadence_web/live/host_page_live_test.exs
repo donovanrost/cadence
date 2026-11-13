@@ -14,10 +14,10 @@ defmodule CadenceWeb.HostPageLiveTest do
     {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}")
     target = "/missions/#{other_mission.mission_id}"
 
-    assert {:error, {:redirect, %{to: "/missions"}}} =
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} =
              render_hook(view, "host:context", %{"path" => target})
 
-    assert {:error, {:redirect, %{to: "/missions"}}} = live(conn, target)
+    assert {:error, {:redirect, %{to: "/console/" <> _}}} = live(conn, target)
   end
 
   test "requesting context within a mission updates the frontend surface and bounded query" do
@@ -47,7 +47,6 @@ defmodule CadenceWeb.HostPageLiveTest do
     pid = view.pid
 
     for {path, _variant, mission_id} <- [
-          {"/missions", "sidebar", nil},
           {"/missions/#{mission.mission_id}", "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/comms", "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/applications", "mission_sidebar", mission.mission_id},
@@ -56,7 +55,6 @@ defmodule CadenceWeb.HostPageLiveTest do
            "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/explore", "ops", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/activations", "ops", mission.mission_id},
-          {"/missions", "sidebar", nil},
           {"/missions/#{second.mission_id}/ops/explore", "ops", second.mission_id},
           {"/", "sidebar", nil}
         ] do
@@ -150,13 +148,13 @@ defmodule CadenceWeb.HostPageLiveTest do
     :ok = Cadence.Auth.revoke_user_session(Plug.Conn.get_session(conn, :user_session_token))
 
     assert {:error, {:redirect, %{to: "/sign-in"}}} =
-             render_hook(view, "host:context", %{"path" => "/missions"})
+             render_hook(view, "host:context", %{"path" => "/"})
   end
 
   test "query parameters cannot replace authorized path resources" do
     {conn, organization, mission} = navigation_fixture()
     other = TestFixtures.persist_mission!(organization)
-    {:ok, view, _html} = live(conn, "/missions")
+    {:ok, view, _html} = live(conn, "/")
     path = "/missions/#{mission.mission_id}?mission_id=#{other.mission_id}&host_policy=admin"
     render_hook(view, "host:context", %{"path" => path})
     snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
@@ -166,7 +164,7 @@ defmodule CadenceWeb.HostPageLiveTest do
 
   test "invalid context targets leave the authorized snapshot unchanged" do
     {conn, _organization, _mission} = navigation_fixture()
-    {:ok, view, _html} = live(conn, "/missions")
+    {:ok, view, _html} = live(conn, "/")
     initial = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
 
     for path <- [

@@ -49,7 +49,7 @@ defmodule CadenceWeb.MissionAuthTest do
       assert socket.assigns.recent_notifications == []
     end
 
-    test "halts and redirects to /missions when mission id does not exist" do
+    test "halts and redirects to the console's missions when mission id does not exist" do
       org = TestFixtures.persist_org!()
       socket = socket_with_scope_for(org)
 
@@ -61,10 +61,10 @@ defmodule CadenceWeb.MissionAuthTest do
                  socket
                )
 
-      assert socket.redirected == {:redirect, %{to: "/missions", status: 302}}
+      assert {:redirect, %{to: "/console/" <> _, status: 302}} = socket.redirected
     end
 
-    test "halts and redirects to /missions when mission belongs to another org" do
+    test "halts and redirects to the console's missions when mission belongs to another org" do
       mine = TestFixtures.persist_org!(slug: "mine")
       other = TestFixtures.persist_org!(slug: "other")
       mission = persist_mission!(other, "alpha")
@@ -78,7 +78,7 @@ defmodule CadenceWeb.MissionAuthTest do
                  socket
                )
 
-      assert socket.redirected == {:redirect, %{to: "/missions", status: 302}}
+      assert {:redirect, %{to: "/console/" <> _, status: 302}} = socket.redirected
     end
   end
 end
