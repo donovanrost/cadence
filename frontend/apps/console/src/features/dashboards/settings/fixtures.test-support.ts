@@ -104,5 +104,4 @@ export const diagnosticsWire = {
       ],
     },
   ],
-  refresh: null,
 };

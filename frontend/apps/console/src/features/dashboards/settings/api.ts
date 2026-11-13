@@ -249,15 +249,7 @@ const diagnosticsReader = d.object({
     }),
     500,
   ),
-  refresh: d.nullable(
-    d.object({
-      observed_at: d.nullable(d.string),
-      // free-text: the refresh decision's domain word, for Technical details only.
-      decision_status: d.string,
-      // free-text: the domain's reason for the decision, for Technical details only.
-      context_reason: d.nullable(d.string),
-    }),
-  ),
+  // `refresh` isn't read: nothing records invalidation decisions any more (lead, L8c); api drops it.
 });
 export type Diagnostics = Decoded<typeof diagnosticsReader>;
 export type WidgetDiagnostics = Diagnostics["widgets"][number];
