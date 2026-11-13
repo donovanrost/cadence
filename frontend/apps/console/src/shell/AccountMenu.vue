@@ -18,6 +18,7 @@ const otherOrganizations = computed(() =>
 const eligible = computed(
   () => session.platform_admin_eligible || hasCapability(session, "platform_admin"),
 );
+const invitations = computed(() => session.pending_invitations_count ?? 0);
 const now = useNow();
 const admin = useAdminMode(() => now.value);
 const adminSheet = ref<InstanceType<typeof AdminModeSheet> | null>(null);
@@ -69,6 +70,14 @@ const itemClass =
           >{{ org.name }}</RouterLink
         >
       </template>
+      <!-- L21 (ux People.md Account): pending invitations open Account, where they're accepted. -->
+      <RouterLink
+        v-if="invitations > 0"
+        :to="{ name: 'account' }"
+        :class="[itemClass, 'text-caution-text']"
+        @click="close"
+        >{{ invitations === 1 ? "1 invitation" : `${invitations} invitations` }}</RouterLink
+      >
       <template v-if="eligible">
         <template v-if="admin.active.value">
           <!-- The console admin area is §11 L7; until it ships, the existing one. -->

@@ -1,6 +1,7 @@
 import {
   array,
   boolean,
+  integer,
   nullable,
   object,
   optional,
@@ -29,6 +30,8 @@ export const sessionReader = object({
   /** api-ops L6: when admin mode ends (ISO); null when off or unknown. */
   admin_mode_expires_at: optional(nullable(timestamp)),
   platform_admin_eligible: boolean,
+  /** api cfdf79f7: pending invitations for my email (L21; the org switcher footer). */
+  pending_invitations_count: optional(nullable(integer)),
   capabilities: array(token),
   organizations: array(organization),
   csrf_token: token,
