@@ -21,7 +21,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     SourceFocus,
     SourceFocusResources,
     SourceInventoryPresentation,
-    SourceRegistration
+    SourceRegistration,
+    WriteGuard
   }
 
   @source_mutation_events ~w(
@@ -90,10 +91,12 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("disable_source", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope} = socket.assigns
 
-    case DataSources.disable_data_source(data_source_id, %{},
-           actor_id: current_user_id(scope),
-           payload: source_action_payload(socket)
-         ) do
+    case guarded(socket, data_source_id, fn ->
+           DataSources.disable_data_source(data_source_id, %{},
+             actor_id: current_user_id(scope),
+             payload: source_action_payload(socket)
+           )
+         end) do
       {:ok, _source} ->
         {:noreply,
          socket
@@ -108,10 +111,12 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("enable_source", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope} = socket.assigns
 
-    case DataSources.enable_data_source(data_source_id, %{},
-           actor_id: current_user_id(scope),
-           payload: source_action_payload(socket)
-         ) do
+    case guarded(socket, data_source_id, fn ->
+           DataSources.enable_data_source(data_source_id, %{},
+             actor_id: current_user_id(scope),
+             payload: source_action_payload(socket)
+           )
+         end) do
       {:ok, _source} ->
         {:noreply,
          socket
@@ -135,9 +140,11 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       payload: source_action_payload(socket, %{data_source_id: data_source_id})
     }
 
-    case SourceCredentials.rotate_reference(credentials_ref, attrs,
-           actor_id: current_user_id(scope)
-         ) do
+    case guarded_credential(socket, data_source_id, credentials_ref, fn ->
+           SourceCredentials.rotate_reference(credentials_ref, attrs,
+             actor_id: current_user_id(scope)
+           )
+         end) do
       {:ok, _reference, _event} ->
         {:noreply,
          socket
@@ -153,10 +160,12 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("reconcile_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope} = socket.assigns
 
-    case ManagedResources.reconcile_tsdb_backend(data_source_id, %{},
-           actor_id: current_user_id(scope),
-           payload: source_action_payload(socket, %{data_source_id: data_source_id})
-         ) do
+    case guarded(socket, data_source_id, fn ->
+           ManagedResources.reconcile_tsdb_backend(data_source_id, %{},
+             actor_id: current_user_id(scope),
+             payload: source_action_payload(socket, %{data_source_id: data_source_id})
+           )
+         end) do
       {:ok, _source} ->
         {:noreply,
          socket
@@ -172,10 +181,12 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("deprovision_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope} = socket.assigns
 
-    case ManagedResources.request_tsdb_backend(data_source_id, :deprovision, %{},
-           actor_id: current_user_id(scope),
-           payload: source_action_payload(socket, %{data_source_id: data_source_id})
-         ) do
+    case guarded(socket, data_source_id, fn ->
+           ManagedResources.request_tsdb_backend(data_source_id, :deprovision, %{},
+             actor_id: current_user_id(scope),
+             payload: source_action_payload(socket, %{data_source_id: data_source_id})
+           )
+         end) do
       {:ok, _source, _job} ->
         {:noreply,
          socket
@@ -195,10 +206,12 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   def handle_event("provision_tsdb_backend", %{"data-source-id" => data_source_id}, socket) do
     %{current_scope: scope} = socket.assigns
 
-    case ManagedResources.request_tsdb_backend(data_source_id, :provision, %{},
-           actor_id: current_user_id(scope),
-           payload: source_action_payload(socket, %{data_source_id: data_source_id})
-         ) do
+    case guarded(socket, data_source_id, fn ->
+           ManagedResources.request_tsdb_backend(data_source_id, :provision, %{},
+             actor_id: current_user_id(scope),
+             payload: source_action_payload(socket, %{data_source_id: data_source_id})
+           )
+         end) do
       {:ok, _source, _job} ->
         {:noreply,
          socket
@@ -219,15 +232,17 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     source = find_data_source(socket.assigns.data_sources, data_source_id)
 
-    case DataSourceControl.probe(
-           data_source_id,
-           %{mission_id: mission.mission_id},
-           [
-             actor_id: current_user_id(scope),
-             materialize_adapter_capabilities?: true,
-             payload: source_action_payload(socket)
-           ] ++ source_probe_opts(source)
-         ) do
+    case guarded(socket, data_source_id, fn ->
+           DataSourceControl.probe(
+             data_source_id,
+             %{mission_id: mission.mission_id},
+             [
+               actor_id: current_user_id(scope),
+               materialize_adapter_capabilities?: true,
+               payload: source_action_payload(socket)
+             ] ++ source_probe_opts(source)
+           )
+         end) do
       {:ok, _event_or_unchanged, status} ->
         {:noreply,
          socket
@@ -240,7 +255,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   def handle_event("retry_deployment_run", %{"job-id" => job_id}, socket) do
-    case retry_deployment_run(job_id) do
+    case guarded_job(socket, job_id, fn -> retry_deployment_run(job_id) end) do
       {:ok, run} ->
         {:noreply,
          socket
@@ -254,7 +269,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   def handle_event("requeue_deployment_run", %{"job-id" => job_id}, socket) do
-    case requeue_deployment_run(job_id) do
+    case guarded_job(socket, job_id, fn -> requeue_deployment_run(job_id) end) do
       {:ok, run} ->
         {:noreply,
          socket
@@ -272,6 +287,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
     with {:ok, attrs} <-
            SourceRegistration.parse(params, scope.organization_id, mission.mission_id),
+         :ok <- WriteGuard.new_source_id(attrs.data_source_id),
          :ok <-
            maybe_register_source_credentials(
              attrs,
@@ -341,6 +357,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     %{current_scope: scope} = socket.assigns
 
     with %{binding: %DataBinding{} = binding} <- socket.assigns.change_binding,
+         :ok <- WriteGuard.binding(scope, binding),
          {:ok, data_source_id} <- selected_data_source_id(params),
          :ok <- validate_changed_source(binding, data_source_id),
          :ok <- validate_compatible_source(socket.assigns.data_sources, binding, data_source_id),
@@ -583,6 +600,35 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   defp metadata_value(_metadata, _key), do: nil
+
+  # Every write first checks the target against this mission and the caller's organization
+  # (WriteGuard); a refusal flashes through the handler's existing error branch.
+  defp guarded(socket, data_source_id, write) do
+    %{current_scope: scope, current_mission: mission} = socket.assigns
+
+    case WriteGuard.source(scope, mission.mission_id, data_source_id) do
+      {:ok, _source} -> write.()
+      {:error, _reason} = refused -> refused
+    end
+  end
+
+  defp guarded_credential(socket, data_source_id, credentials_ref, write) do
+    %{current_scope: scope, current_mission: mission} = socket.assigns
+
+    case WriteGuard.credential(scope, mission.mission_id, data_source_id, credentials_ref) do
+      {:ok, _source} -> write.()
+      {:error, _reason} = refused -> refused
+    end
+  end
+
+  defp guarded_job(socket, job_id, write) do
+    %{current_scope: scope, current_mission: mission} = socket.assigns
+
+    case WriteGuard.job(scope, mission.mission_id, job_id) do
+      :ok -> write.()
+      {:error, _reason} = refused -> refused
+    end
+  end
 
   defp retry_deployment_run(job_id) do
     ManagedResources.retry_deployment_run(job_id)
