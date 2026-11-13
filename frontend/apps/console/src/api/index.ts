@@ -25,3 +25,13 @@ export {
   recordOf,
   type JsonObject,
 } from "./json.ts";
+/** Typed server error codes (typing §12 A2): isError, codeOf, detailsOf, fieldErrors. */
+export {
+  codeOf,
+  detailsOf,
+  errorCodes,
+  fieldErrors,
+  isError,
+  knownErrorCode,
+  type ErrorCode,
+} from "./errors.ts";

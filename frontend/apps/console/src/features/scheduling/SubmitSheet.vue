@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { ApiError } from "@/api";
+import { isError, type ApiError } from "@/api";
 import { ApButton, ApCallout, ApField, ApSheet, ApTextarea, plural } from "@/ui";
 import {
   reasonText,
@@ -138,7 +138,7 @@ const title = computed(() =>
 const errorText = computed(() => {
   const e = error.value;
   if (!e) return null;
-  if (e.kind === "conflict" && e.code === "plan_changed")
+  if (e.kind === "conflict" && isError(e, "plan_changed"))
     return "The plan changed since you opened this. Close it and review again.";
   return planErrorText(e);
 });

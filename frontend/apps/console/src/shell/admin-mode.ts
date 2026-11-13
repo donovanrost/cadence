@@ -1,5 +1,5 @@
 import { computed, readonly, ref } from "vue";
-import { decoders as d, request, type ApiError } from "@/api/index.ts";
+import { decoders as d, isError, request, type ApiError } from "@/api/index.ts";
 import type { Session } from "@/api/session.ts";
 import { formatCountdown } from "@/ui";
 
@@ -37,14 +37,13 @@ export async function enterAdminMode(password: string): Promise<EnterOutcome> {
     return { ok: true };
   }
   const e = result.error;
-  const reason =
-    e.kind === "invalid" && e.code === "password_incorrect"
-      ? "wrong_password"
-      : e.kind === "invalid" && e.code === "too_many_attempts"
-        ? "throttled"
-        : e.kind === "forbidden"
-          ? "forbidden"
-          : "other";
+  const reason = isError(e, "password_incorrect")
+    ? "wrong_password"
+    : isError(e, "too_many_attempts")
+      ? "throttled"
+      : e.kind === "forbidden"
+        ? "forbidden"
+        : "other";
   return { ok: false, reason, error: e };
 }
 

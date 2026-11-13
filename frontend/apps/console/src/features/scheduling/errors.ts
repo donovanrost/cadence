@@ -1,10 +1,19 @@
-import { decode, decoders as d, describeApiError, outcomeUnknown, type ApiError } from "@/api";
+import {
+  decoders as d,
+  describeApiError,
+  detailsOf,
+  isError,
+  knownErrorCode,
+  outcomeUnknown,
+  type ApiError,
+  type ErrorCode,
+} from "@/api";
 
 /** U36 race: `details.decided_by` names who decided the version (api, once shipped). */
 const decidedBy = d.object({ decided_by: d.object({ name: d.nullable(d.string) }) });
 
 /** Plain words for scheduling refusals the planner can act on; anything else falls back. */
-const MESSAGES: Readonly<Record<string, string>> = {
+const MESSAGES: Readonly<Partial<Record<ErrorCode, string>>> = {
   fleet_planning_requirement_not_active:
     "Contact rules aren't active for this day. Check them in Setup › Contact planning.",
   planning_not_set_up:
@@ -34,17 +43,16 @@ const UNCLEAR =
 export function planErrorText(error: ApiError): string {
   if (outcomeUnknown(error)) return UNCLEAR;
   // U36: after resubmission exists, this only means someone decided the version meanwhile.
-  if ("code" in error && error.code === "contact_plan_version_already_decided") {
-    const read = decode(decidedBy, "details" in error ? error.details : null);
-    const by = read.ok ? read.value.decided_by.name : null;
+  if (isError(error, "contact_plan_version_already_decided")) {
+    const by = detailsOf(error, decidedBy)?.decided_by.name ?? null;
     const sentence = `This version was already decided${by ? ` by ${by}` : ""}`;
     return `${sentence}${sentence.endsWith(".") ? "" : "."} Reload to see it.`;
   }
-  const code = "code" in error ? error.code : null;
+  const code = knownErrorCode(error);
   return (code && MESSAGES[code]) ?? describeApiError(error);
 }
 
 /** 409 plan_superseded: the draft's rules changed on read (U27); the screen shows the superseded state. */
 export function isPlanSuperseded(error: ApiError): boolean {
-  return error.kind === "conflict" && error.code === "plan_superseded";
+  return error.kind === "conflict" && isError(error, "plan_superseded");
 }

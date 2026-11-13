@@ -1,0 +1,16 @@
+{
+  "id": "error-code-compared-as-text",
+  "valid":
+    [
+      "if (isError(e, 'version_conflict')) retry();",
+      "if (issue.code === 'station_unavailable') mark();",
+      "const c = keep.code;",
+    ],
+  "invalid":
+    [
+      "if (e.code === 'version_conflict') retry();",
+      "if (error.code !== 'plan_superseded') return;",
+      "if (result.error.code === 'pass_changed') reload();",
+      "if ('code' in error) show(error);",
+    ],
+}

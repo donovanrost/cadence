@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
+import { decoders as d, isError, useRemoteQuery, type ApiError } from "@/api";
 import { useChannelEvent, useMissionInvalidation } from "@/live";
 import {
   continueDraft,
@@ -98,7 +98,7 @@ export function usePlanDay(
       if (result.ok) {
         refusedNotSetUp.value = null;
         await router.replace({ query: { ...route.query, run: result.value.run_id } });
-      } else if (result.error.kind === "invalid" && result.error.code === "planning_not_set_up") {
+      } else if (result.error.kind === "invalid" && isError(result.error, "planning_not_set_up")) {
         const missing = d.optional(d.object({ missing: d.array(d.string) }));
         const details = (() => {
           try {
