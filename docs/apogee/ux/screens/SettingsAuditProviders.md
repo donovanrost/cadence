@@ -13,9 +13,22 @@ with Profile/People.
   local nav (as on Profile) lists the sections with a mono key in Technical details; the default
   section opens first.
 - **Section panel:** title + one-sentence purpose, then fields generated from the section schema
-  (label, type, unit, enum, default, help, `effective` vs `set here`). Each field shows where its value
-  comes from: `SET FOR THIS MISSION`, `INHERITED FROM ORG`, or `DEFAULT`. Inherited values render in
-  `text-4` with `Override` / `Reset to inherited` (the Profile override pattern).
+  (label, type, unit, enum, default, help, `effective` vs `set here`).
+- **Override is per section for now** (fe-setup's code read, 11-13). Today a mission override stores the whole
+  section, so per-field Override and Reset can't be done truthfully (U20).
+  - **Header tag:** the section header carries the source: `SET FOR THIS MISSION`, `INHERITED FROM ORG`, or
+    `DEFAULT`. Fields carry no tag of their own.
+  - **Inherited section:** values render in `text-4`, read-only, with the compact `Override for this mission`.
+    It opens the fields for editing under an info line: "Overriding copies all of this section's organization
+    values to Earendil. They stop following organization changes until you go back to the organization's
+    settings." Saving stores the override.
+  - **Overridden section:** the fields are editable. `Use the organization's settings` confirms first: "Earendil
+    will use Acme Space's <Section> settings. This mission's own values for it are discarded." It saves
+    immediately with the version line.
+  - **Org lock:** `allow_override` false keeps the section locked, as built.
+  - **Per field, later:** once api stores only the overridden paths, each field gets its own source tag and
+    `Override` / `Reset to inherited` (the Profile override pattern). Until then, don't show either control per
+    field.
 - **Saving:** settings that are change-set kinds (when domain adds them) stage (`Stage change`);
   everything else saves immediately with a version line (`v4 · 01:12Z by Donovan R.`). Governance
   changes that need approval follow the server's policy (ApDecision, reviewer ≠ author). Errors follow U20.
@@ -72,6 +85,6 @@ filters: actor (select) · mission (select) · kind as a one-of segmented contro
   not connected.
 
 ## Acceptance (for qa)
-- No hard-coded settings sections or fields; inheritance source is shown on every field.
+- No hard-coded settings sections or fields; every section shows where its values come from (per field once api stores only overridden paths).
 - The audit log says which sources are missing until it's unified.
 - No secret is ever entered or shown; credentials are references. Provider status is never green without a real check.
