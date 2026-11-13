@@ -39,17 +39,9 @@ defmodule CadenceWeb.BrowserShellTest do
     assert get_session(conn, :user_return_to) == "/"
   end
 
-  test "sign-in page renders a single unified sign-in form", %{conn: conn} do
-    response = conn |> get("/sign-in") |> html_response(200)
-    document = LazyHTML.from_fragment(response)
-    sign_in_component = LazyHTML.query(document, "#user-session-component")
-
-    assert LazyHTML.attribute(sign_in_component, "data-name") == ["UserSession"]
-
-    vue = Test.get_vue(response, id: "user-session-component")
-    assert Map.keys(vue.props) == ["page"]
-    assert vue.props["page"]["version"] == 1
-    assert is_binary(vue.props["page"]["csrf_token"])
+  # L5: the sign-in page's GET goes to the console's sign-in screen (ecdddab10).
+  test "GET /sign-in goes to the console's sign-in", %{conn: conn} do
+    assert redirected_to(get(conn, "/sign-in")) == "/console/sign-in"
   end
 
   test "environment admin credentials on /sign-in enter admin mode and route to admin dashboard",
@@ -247,15 +239,16 @@ defmodule CadenceWeb.BrowserShellTest do
 
     invitation_path = "/invitations/#{token}"
 
-    {:ok, invitation_view, _html} = live(build_conn(), invitation_path)
-    invitation_vue = Test.get_vue(invitation_view, id: "organization-invitation-page-component")
+    # L5: the emailed link opens the console's invitation screen; it reads the same invitation.
+    assert redirected_to(get(build_conn(), invitation_path)) == "/console" <> invitation_path
 
-    assert invitation_vue.component == "OrganizationInvitationPage"
-    assert invitation_vue.ssr == false
-    assert invitation_vue.props == Jason.decode!(Jason.encode!(invitation_vue.props))
+    assert %{"case" => "new_account", "email" => "new-admin@example.com"} =
+             build_conn()
+             |> get("/api/console/v1/auth/invitations/#{token}")
+             |> json_response(200)
+             |> Map.fetch!("data")
 
-    assert invitation_vue.props["page"]["available"]
-    assert invitation_vue.props["page"]["invitation"]["email"] == "new-admin@example.com"
+    # The legacy POST still accepts for a page that was already open.
 
     accepted_conn =
       build_conn()

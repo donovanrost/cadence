@@ -37,7 +37,8 @@ defmodule CadenceWeb.Console.SPAControllerTest do
   test "redirects an unauthenticated visitor to sign-in and remembers the path", %{conn: conn} do
     conn = get(conn, "/console/missions/m1/now?tab=alarms")
 
-    assert redirected_to(conn) == "/sign-in"
+    # One hop: straight to the console's own sign-in, with the target remembered.
+    assert redirected_to(conn) == "/console/sign-in"
     assert get_session(conn, :user_return_to) == "/console/missions/m1/now?tab=alarms"
   end
 
