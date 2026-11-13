@@ -223,14 +223,14 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplatesTest do
 
     assert %{range: %{min: 600, max: 604_800}, unit: "s"} =
              Enum.find(
-               Cadence.ContactPlanning.TemplateSchema.fields(),
+               TemplateSchema.fields(),
                &(&1.path == "requirement.max_gap_seconds")
              )
 
     # The requirement form reuses the template's field rather than its own copy.
     assert [_one] =
              Enum.filter(
-               Cadence.Control.PlanningRequirements.Schema.fields(),
+               RequirementSchema.fields(),
                &(&1.path == "max_gap_seconds")
              )
   end
