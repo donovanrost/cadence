@@ -50,13 +50,15 @@ STAGED · NOT APPLIED   2 changes: 50 new spacecraft (Block 2), catalog rev 15 �
 - **States:**
   - *Conflict* (live config moved since a change was staged): caution mark + `1 change conflicts with
     r6`; primary becomes `Review conflicts`.
-  - *Applying*: summary replaced by mono `APPLYING r6 · 3 OF 5 STEPS` (live); buttons hidden.
+  - *Applying*: **dropped** (fe-setup): the commit is one synchronous request on the review page, so the bar
+    has no step source. The review page's primary shows `Applying…` while the request runs.
   - *In review* (the set is frozen while in review, change-sets §13.1): `r6 in review · staging is
     paused` + `Open review`; stage CTAs elsewhere are disabled with that reason.
-  - *Apply failed before commit*: crit mark + `Apply failed · nothing changed`; primary `Review`.
+  - *Apply failed before commit*: shown on the review page (below), not on the bar.
   - *Applied, runtime converging / degraded* (after commit, §7): bar is gone (the set is applied);
-    the top bar shows `CONFIG r6 · CONVERGING` (white) or `CONFIG r6 · RUNTIME DEGRADED` (caution,
-    links to the revision). Never "nothing changed" after commit.
+    the top bar shows `CONFIG r6 · APPLYING` (readout) while the runtime applies it, or `CONFIG r6 · NOT
+    APPLIED` (caution) when it hasn't, with the U38 sentence as its tooltip. Both link to r6. "Converging" and
+    "degraded" are our words, not the operator's. Never "nothing changed" after commit.
   - *Awaiting review* (policy, §3): `r6 awaits review by an org admin · requested 14:02Z`; primary
     `Open review`.
   - *No apply capability*: primary reads `Review changes`; the review page explains who can apply.
@@ -102,9 +104,12 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   *Commit* (all-or-nothing): freeze & check → compose → request approval (if policy) → write
   revision. A failure here = crit callout "Nothing changed. <step> failed: …", and the set returns
   to open. *Runtime* (after commit, from the `config_runtime` signal): `converging` → `applied` or
-  `degraded`. Success = nominal callout "r6 applied · 2 changes · 549 spacecraft · runtime applied"
-  + `View r6`. Degraded = caution callout "r6 is applied. The runtime hasn't converged on 2
-  partitions." + link to the revision's runtime detail. **Never say "nothing changed" after
+  `degraded`. Wording keeps the two steps apart: the configuration becomes **active**, then the
+  runtime **applies** it (U38's verbs).
+  - Right after commit: "r6 is active · 2 changes. The runtime is applying it."
+  - Then nominal "r6 is active and the runtime has applied it · 2 changes." + `View r6`.
+  - Or caution "r6 is active, but the runtime hasn't applied it yet: <U38 reason words>." + `View r6`.
+  - The spacecraft count appears only if the read gives it (fe-setup 11-14). **Never say "nothing changed" after
   commit** (change-sets §7).
 - **Empty:** "Nothing staged. Edits in Setup collect here before they reach the fleet."
 
