@@ -116,6 +116,12 @@ defmodule CadenceWeb.Console.ProviderAccountController do
   defp error(conn, {:invalid_params, details}),
     do: Problem.respond(conn, :invalid_params, details)
 
+  defp error(conn, :invalid_provider_account_base_url),
+    do:
+      Problem.respond(conn, :invalid_params, %{
+        "settings.base_url" => "Use an http or https address."
+      })
+
   defp error(conn, {:invalid_provider_account, message}),
     do: Problem.respond(conn, :invalid_params, %{settings: message})
 

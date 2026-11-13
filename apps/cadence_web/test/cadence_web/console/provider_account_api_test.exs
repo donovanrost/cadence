@@ -84,11 +84,35 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
       "credential" => %{"backend" => "external", "key" => "providers/sim/control-plane"}
     }
 
-    %{"id" => id, "version" => 1} =
+    # Drift sweep: a refused create names the field, before anything is registered.
+    bad_url = put_in(body, ["settings", "base_url"], "sim.test")
+
+    assert %{"code" => "invalid_params", "details" => %{"settings.base_url" => _}} =
+             conn.()
+             |> post(base <> "/provider-accounts", bad_url)
+             |> json_response(422)
+             |> Map.fetch!("error")
+
+    assert %{"name" => _} =
+             conn.()
+             |> post(base <> "/provider-accounts", %{body | "name" => "  "})
+             |> json_response(422)
+             |> get_in(["error", "details"])
+
+    created =
       conn.()
-      |> post(base <> "/provider-accounts", body)
+      |> post(base <> "/provider-accounts", %{body | "name" => "  Sim "})
       |> json_response(201)
       |> Map.fetch!("data")
+
+    assert %{"id" => id, "version" => 1} = created
+    assert Map.keys(created) |> Enum.sort() == ["id", "version"]
+
+    assert [%{"name" => "Sim"}] =
+             conn.()
+             |> get(base <> "/provider-accounts")
+             |> json_response(200)
+             |> get_in(["data", "accounts"])
 
     assert %{"version" => 2} =
              conn.()

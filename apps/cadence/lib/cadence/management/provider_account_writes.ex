@@ -27,7 +27,11 @@ defmodule Cadence.Management.ProviderAccountWrites do
   def create(%Scope{} = scope, params) do
     account_id = Cadence.Ids.new("provider_account")
 
-    with {:ok, provider_type} <- provider_type(params["provider_key"]),
+    # Name and address are checked before the credential is registered, so a refused create
+    # leaves nothing behind.
+    with {:ok, name} <- create_name(params["name"]),
+         :ok <- base_url(params["settings"]),
+         {:ok, provider_type} <- provider_type(params["provider_key"]),
          {:ok, credential_ref} <- register_credential(scope, account_id, params["credential"]),
          {:ok, _account, version} <-
            ProviderAccounts.create(
@@ -36,7 +40,7 @@ defmodule Cadence.Management.ProviderAccountWrites do
              |> settings()
              |> Map.merge(%{
                provider_account_id: account_id,
-               display_name: params["name"],
+               display_name: name,
                provider_type: provider_type,
                credential_ref: credential_ref
              }),
@@ -109,6 +113,27 @@ defmodule Cadence.Management.ProviderAccountWrites do
       visible_when: nil
     }
   end
+
+  # As a rename (ProviderAccountRename): trimmed, 1 to 120 bytes.
+  defp create_name(value) when is_binary(value) do
+    case String.trim(value) do
+      trimmed when byte_size(trimmed) in 1..120 -> {:ok, trimmed}
+      _invalid -> {:error, {:invalid_params, %{"name" => "Use 1 to 120 characters."}}}
+    end
+  end
+
+  defp create_name(_value),
+    do: {:error, {:invalid_params, %{"name" => "Use 1 to 120 characters."}}}
+
+  # The account's own check (ProviderAccounts), answered on the field.
+  defp base_url(%{"base_url" => url}) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) -> :ok
+      _other -> {:error, :invalid_provider_account_base_url}
+    end
+  end
+
+  defp base_url(_settings), do: {:error, :invalid_provider_account_base_url}
 
   defp settings(params) do
     settings = params["settings"] || %{}
