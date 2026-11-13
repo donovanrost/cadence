@@ -8,7 +8,7 @@ import {
   type ApiError,
   type ApiResult,
 } from "@/api/index.ts";
-import { attentionReader, serverKey, type Attention } from "@/features/now/index.ts";
+import { attentionReader, serverKey, short, type Attention } from "@/features/now/index.ts";
 
 /**
  * Contact drawer attention block (ux U32; contacts.md d2632794): the resolution record, what to do
@@ -176,7 +176,7 @@ export async function decideProviderChange(
   if (isError(e, "provider_change_deadline_passed"))
     return {
       status: "refused",
-      text: `The deadline passed${deadline ? ` at ${hhmm(deadline)}` : ""}. This change stays until ${a.provider?.name ?? "the provider"}'s next update replaces it.`,
+      text: `The deadline passed${deadline ? ` at ${short(deadline, new Date())}` : ""}. This change stays until ${a.provider?.name ?? "the provider"}'s next update replaces it.`,
       deadlinePassed: true,
     };
   if (e.kind === "forbidden")

@@ -8,6 +8,7 @@ import {
   fieldKey,
   fieldLabel,
   pastDeadline,
+  short,
   valueWords,
   type Attention,
 } from "@/features/now/index.ts";
@@ -47,7 +48,7 @@ const expired = computed(
 );
 const expiredLine = computed(() => {
   const d = deadline.value;
-  const at = d ? ` at ${d.slice(11, 16)}Z` : "";
+  const at = d ? ` at ${short(d, props.now)}` : "";
   return `The deadline passed${at}. This change stays until ${current.value.provider?.name ?? "the provider"}'s next update replaces it.`;
 });
 
