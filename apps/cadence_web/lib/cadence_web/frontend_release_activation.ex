@@ -122,19 +122,21 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   defp normalize_transaction_success({:ok, response}), do: {:ok, response}
   defp normalize_transaction_success({:error, response}), do: {:error, response}
 
-  defp normalize_transaction_failure({:semantic, _failure}),
-    do: {:error, response_error(500, :integrity_failure)}
+  # The rollback reason rides along in `reason` (never in the response body) so a failure says
+  # which check fired.
+  defp normalize_transaction_failure({:semantic, _failure} = reason),
+    do: {:error, response_error(500, :integrity_failure, reason)}
 
-  defp normalize_transaction_failure({:integrity, _reason}),
-    do: {:error, response_error(500, :integrity_failure)}
+  defp normalize_transaction_failure({:integrity, _reason} = reason),
+    do: {:error, response_error(500, :integrity_failure, reason)}
 
   defp normalize_transaction_failure({:transient, _reason}),
     do: {:error, response_error(503, :transient_persistence_failure)}
 
   defp normalize_transaction_failure(%{} = failure), do: {:error, failure}
 
-  defp normalize_transaction_failure(_reason),
-    do: {:error, response_error(500, :integrity_failure)}
+  defp normalize_transaction_failure(reason),
+    do: {:error, response_error(500, :integrity_failure, reason)}
 
   defp activate_new(
          raw_document_bytes,
@@ -178,27 +180,48 @@ defmodule CadenceWeb.FrontendReleaseActivation do
          control,
          opts
        ) do
-    with {:ok, latest_catalog} <- locked_latest_catalog(),
-         {:ok, latest_generation} <- locked_latest_generation(),
-         {:ok, entries} <- reread_input_entries(verified.entries, opts),
+    with {:ok, latest_catalog} <- step(:locked_latest_catalog, locked_latest_catalog()),
+         {:ok, latest_generation} <- step(:locked_latest_generation, locked_latest_generation()),
+         {:ok, entries} <-
+           step(:reread_input_entries, reread_input_entries(verified.entries, opts)),
          {:ok, state} <-
-           validate_transition(
-             verified,
-             entries,
-             latest_catalog,
-             latest_generation,
-             control,
-             opts
+           step(
+             :validate_transition,
+             validate_transition(
+               verified,
+               entries,
+               latest_catalog,
+               latest_generation,
+               control,
+               opts
+             )
            ),
-         {:ok, catalog} <- insert_catalog(verified, raw_document_bytes, entries),
-         {:ok, generation} <- insert_generation(verified, catalog, state),
-         :ok <- insert_bindings(verified.entries, entries, generation, state),
-         :ok <- cut_over_if_required(control, state),
-         {:ok, snapshot} <- persisted_snapshot(catalog.publication_id, generation.generation_id),
-         :ok <- exact_snapshot_digest(snapshot, verified.snapshot_digest),
+         {:ok, catalog} <-
+           step(:insert_catalog, insert_catalog(verified, raw_document_bytes, entries)),
+         {:ok, generation} <-
+           step(:insert_generation, insert_generation(verified, catalog, state)),
+         :ok <-
+           step(:insert_bindings, insert_bindings(verified.entries, entries, generation, state)),
+         :ok <- step(:cut_over_if_required, cut_over_if_required(control, state)),
+         {:ok, snapshot} <-
+           step(
+             :persisted_snapshot,
+             persisted_snapshot(catalog.publication_id, generation.generation_id)
+           ),
+         :ok <-
+           step(:exact_snapshot_digest, exact_snapshot_digest(snapshot, verified.snapshot_digest)),
          response <- accepted_response(verified, catalog, generation),
          :ok <-
-           insert_accepted_request(response, idempotency_key_digest, document_digest, state, opts) do
+           step(
+             :insert_accepted_request,
+             insert_accepted_request(
+               response,
+               idempotency_key_digest,
+               document_digest,
+               state,
+               opts
+             )
+           ) do
       {:ok, response}
     else
       {:error, %{code: _code} = failure} ->
@@ -209,8 +232,8 @@ defmodule CadenceWeb.FrontendReleaseActivation do
           Keyword.get(opts, :publisher_identity)
         )
 
-      {:error, :integrity} ->
-        Repo.rollback({:integrity, :persisted_state_mismatch})
+      {:error, {:integrity_at, step}} ->
+        Repo.rollback({:integrity, {:persisted_state_mismatch, step}})
 
       {:error, :snapshot_integrity} ->
         Repo.rollback({:integrity, :snapshot_digest_mismatch})
@@ -225,6 +248,11 @@ defmodule CadenceWeb.FrontendReleaseActivation do
         Repo.rollback({:integrity, reason})
     end
   end
+
+  # Names the activation step a bare {:error, :integrity} came from; every other result passes
+  # through unchanged.
+  defp step(name, {:error, :integrity}), do: {:error, {:integrity_at, name}}
+  defp step(_name, result), do: result
 
   defp reread_input_entries(entries, opts) do
     entries
