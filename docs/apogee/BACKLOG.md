@@ -365,7 +365,13 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 | A6 | ~~Gates~~ done (a7a1095e): ast-grep `vocabulary-field-decoded-as-text` (178 sites in 59 files ignored until migrated; `// free-text:` opt-out); `requireDefaultForNonUnion` on the console and kit | lead | done |
 
 ### 12B. Owners migrate their own features (normal queue, gated by A's rules), worst first
-**How to migrate a file:** switch its enum-like fields to `known`/`knownText` (display the raw word with `vocabularyText`), its error checks to `isError`/`fieldErrors`/`detailsOf`, its word maps to `Record<Union, string>`, its query keys to typed objects; then delete the file from the `ignores` list in `frontend/ast-grep/rules/vocabulary-field-decoded-as-text.yml` and `error-code-compared-as-text.yml` so the gate holds it.
+**How to migrate a file:** switch its enum-like fields to `known`/`knownText` (display the raw word with `vocabularyText`), its error checks to `isError`/`fieldErrors`/`detailsOf`, its word maps to `Record<Union, string>`, its query keys to typed objects; then delete the file from the `ignores` list in `frontend/ast-grep/rules/vocabulary-field-decoded-as-text.yml` and `error-code-compared-as-text.yml` AND from `frontend/ast-grep/migration-baselines.json`, so the gate holds it.
+
+**Ratchet (director 11-13):** the ignore lists only shrink. `test:structure` fails if a rule's ignores gain a file not in the baseline or grow past it. Not yet migrated (update when a file comes off):
+| Rule | Files left | Baseline 11-13 |
+| --- | --- | --- |
+| `error-code-compared-as-text` | 29 | 29 |
+| `vocabulary-field-decoded-as-text` | 59 (178 sites) | 59 |
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |
 | 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |

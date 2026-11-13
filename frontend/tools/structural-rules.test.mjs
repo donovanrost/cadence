@@ -77,3 +77,25 @@ void test("scheduling boundary applies to real Vue scripts and permits transport
   assert.equal(matches[0]?.ruleId, "scheduling-domain-api-only");
   assert.equal(basename(fixtureString(matches[0]?.file)), "OpsContactSchedule.vue");
 });
+
+// Typing plan §12B ratchet (director 11-13): a rule's not-yet-migrated ignores may only shrink.
+// The baseline lists the files still allowed; nothing may be added to a rule's ignores.
+void test("typing-migration ignore lists only shrink", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const baseline = JSON.parse(
+    await readFile(resolve(root, "ast-grep/migration-baselines.json"), "utf8"),
+  );
+  for (const rule of ["error-code-compared-as-text", "vocabulary-field-decoded-as-text"]) {
+    const text = await readFile(resolve(root, `ast-grep/rules/${rule}.yml`), "utf8");
+    const ignored = [...text.matchAll(/"(apps\/console\/src\/[^"*]+\.(?:ts|vue))"/g)].map(
+      (m) => m[1],
+    );
+    const allowed = new Set(baseline[rule]);
+    const added = ignored.filter((file) => !allowed.has(file));
+    assert.deepEqual(added, [], `${rule}: these files were added to its ignores; migrate them instead`);
+    assert.ok(
+      ignored.length <= allowed.size,
+      `${rule}: ${ignored.length} ignored files exceed the baseline of ${allowed.size}`,
+    );
+  }
+});
