@@ -243,7 +243,7 @@ missing endpoint or decision; an item with no blocker can start now.
 8g. ~~Console requirement writes (create + new version) + list + close/cancel~~ done (fb7510be). fe-setup then builds the console requirement form with `max_gap_seconds` on it. About 1-2 days across api and fe-setup.
 8b. ~~qa #42 verify race~~ done (32b945f3, DECISIONS #72; api-ops reviewed; both follow-ups in: call-site lock tests and the global mission-then-attempt order). Ported to `develop` (f9d89f83). Waiting: qa's 'Accepted on board' rerun on 023's next pass. (#38 release targeting verified live 21:15Z, issues 3953f19e.)
 
-**Security dependency (api-ops, 11-13):** `mix deps.get` reports a Bandit advisory (HTTP/2 `StreamError` recovery bypasses per-connection limits). A separate Bandit bump on our branch, `develop` and `main`, on the director's go; it touches `mix.lock`, so never 11-13 23:00Z to 11-14 01:00Z.
+**Security dependency (api-ops, 11-13):** `mix deps.get` reports a Bandit advisory (HTTP/2 `StreamError` recovery bypasses per-connection limits). A separate Bandit bump on our branch, `develop` and `main`: **director's go given 11-13**; the team branch only through a qa-planned restart and never 11-13 23:00Z to 11-14 01:00Z (it touches `mix.lock`). The invitation security fix is merged on `develop` (PR #54) and `main` (#57).
 
 **api-ops** (director, in this order)
 1. ~~M26 retries + verifier series (Uplink U2)~~ done (2b50e7d1).
