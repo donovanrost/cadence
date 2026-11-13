@@ -85,6 +85,7 @@ export const invitationStates = [
   "revoked",
   "withdrawn",
 ] as const;
+export type InvitationState = (typeof invitationStates)[number];
 export const invitationState = knownText(invitationStates);
 
 /** Who sent an invitation, when known. */

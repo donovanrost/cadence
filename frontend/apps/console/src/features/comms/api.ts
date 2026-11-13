@@ -10,6 +10,7 @@ const transport = object({
   display_name: string,
   version: integer,
   origin: oneOf(["direct", "provider_managed"]),
+  // free-text: an open vocabulary (transport adapter kinds from the registry), shown as words.
   transport_kind: token,
   direction_capability: direction,
   lifecycle_state: oneOf(["active", "archived"]),

@@ -5,6 +5,7 @@ const {
   array,
   boolean,
   integer,
+  known,
   nullable,
   number,
   object,
@@ -28,6 +29,7 @@ const provider = object({ id: token, name: string });
 const station = object({
   ref: string,
   id: nullable(token),
+  // free-text: the station's short code, an identifier.
   code: nullable(string),
   name: nullable(string),
 });
@@ -67,7 +69,7 @@ const summary = object({
   by_cause: array(
     object({
       cause: nullable(string),
-      cause_source: nullable(token),
+      cause_source: nullable(known(["cadence", "provider"] as const)),
       owner: oneOf(owners),
       missed: count,
       partial: count,

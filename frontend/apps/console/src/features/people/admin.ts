@@ -1,4 +1,4 @@
-import { request, type ApiError, type ApiResult, outcomeUnknown } from "@/api";
+import { codeOf, request, type ApiError, type ApiResult, outcomeUnknown } from "@/api";
 import { decoders as d } from "@/api";
 import { roles, type Role } from "./api.ts";
 
@@ -41,7 +41,7 @@ export function revokeInvitation(orgId: string, invitationId: string): Promise<A
 
 /** O5 errors in words (U20: a dropped connection never claims it saved). */
 export function adminErrorText(e: ApiError): string {
-  const code = "code" in e ? e.code : null;
+  const code = codeOf(e);
   switch (code) {
     case "last_admin":
       return "Nothing changed: the organization needs at least one admin. Make someone else an admin first.";

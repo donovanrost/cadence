@@ -372,8 +372,8 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 **Ratchet (director 11-13):** the ignore lists only shrink. `test:structure` fails if a rule's ignores gain a file not in the baseline or grow past it. Not yet migrated (update when a file comes off):
 | Rule | Files left | Baseline 11-13 |
 | --- | --- | --- |
-| `error-code-compared-as-text` | 26 (fe-setup: planning/requirements, changes/actions, dashboards/settings/present; 11-13) | 29 |
-| `vocabulary-field-decoded-as-text` | 41 (fe-setup: planning ×5, profiles/detail, changes ×7, dashboards/settings/api; lead: scheduling ×2, shell/counts, api/session; 11-13) | 59 |
+| `error-code-compared-as-text` | 20 (fe-setup off: planning/requirements, changes/actions, dashboards/settings/present, account ×2, apps/surfaces, people ×2, replan/errors; apps/hostBridge stays: HostBridgeError, not ApiError; 11-13) | 29 |
+| `vocabulary-field-decoded-as-text` | 30 (fe-setup off: all its files; lead: scheduling ×2, shell/counts, api/session; 11-13) | 59 |
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |
 | 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |

@@ -22,10 +22,7 @@
       "**/*.test.ts",
       "ast-grep/fixtures/**",
       # Not migrated yet (BACKLOG §12B): each owner removes their file when they switch to isError.
-      "apps/console/src/features/account/api.ts",
-      "apps/console/src/features/account/invitations.ts",
       "apps/console/src/features/apps/hostBridge.ts",
-      "apps/console/src/features/apps/surfaces.ts",
       "apps/console/src/features/auth/InvitationScreen.vue",
       "apps/console/src/features/auth/SignInScreen.vue",
       "apps/console/src/features/commands/compose/useComposeDraft.ts",
@@ -44,9 +41,6 @@
       "apps/console/src/features/dashboards/shared/api.ts",
       "apps/console/src/features/mobile/YourGoBlock.vue",
       "apps/console/src/features/now/useQueueCommand.ts",
-      "apps/console/src/features/people/admin.ts",
-      "apps/console/src/features/people/services.ts",
-      "apps/console/src/features/replan/errors.ts",
       "apps/console/src/features/resolutions/api.ts",
     ],
 }

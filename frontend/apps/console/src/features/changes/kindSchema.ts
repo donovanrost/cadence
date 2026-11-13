@@ -1,14 +1,15 @@
 import { decoders, pathGet, request, type ApiResult, type Decoded, type Reader } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:id/config/kinds/:kind/schema`. */
-const { array, boolean, nullable, number, object, oneOf, optional, string, token } = decoders;
+const { array, boolean, nullable, number, object, optional, string, token } = decoders;
 
 const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
 
 export const schemaFieldReader = object({
   path: string,
   label: string,
-  type: oneOf([
+  // known, not oneOf (lead): a new field type reads as text instead of failing the whole schema.
+  type: decoders.known([
     "integer",
     "number",
     "boolean",
@@ -18,7 +19,7 @@ export const schemaFieldReader = object({
     "datetime",
     "time",
     "list",
-  ]),
+  ] as const),
   unit: nullable(string),
   enum: nullable(array(object({ value: raw, label: string }), 200)),
   range: nullable(object({ min: optional(nullable(number)), max: optional(nullable(number)) })),
@@ -178,6 +179,7 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
       };
     case "string":
     case "reference":
+    case "unrecognized":
       if (f.pattern && !safeTest(f.pattern, t))
         return { ok: false, message: `${f.label} doesn't match the required format.` };
       if (f.range?.max != null && t.length > f.range.max)

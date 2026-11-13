@@ -44,6 +44,7 @@ export {
   stationRef,
   type Actor,
   type ActorKind,
+  type InvitationState,
   type Role,
   type SpacecraftRef,
   type StationRef,

@@ -46,11 +46,13 @@ export const importRunReader = object({
   started_at: timestamp,
   completed_at: nullable(timestamp),
   file: object({ name: string, format_label: string, size_bytes: nullable(count) }),
+  // free-text: the importer's sentence for why the run failed.
   failure_reason: nullable(string),
   declaration_count: nullable(count),
   diagnostics: array(
     object({
       severity: oneOf(["error", "warning", "info"]),
+      // free-text: importer diagnostic codes, an open vocabulary per importer, shown mono.
       code: token,
       message: string,
       path: nullable(string),

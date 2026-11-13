@@ -1,4 +1,8 @@
 import {
+  isKnown,
+  isError,
+  invitationState,
+  detailsOf,
   decoders as d,
   request,
   role,
@@ -6,6 +10,7 @@ import {
   type ApiError,
   type ApiResult,
   type Decoded,
+  type InvitationState,
 } from "@/api";
 import { formatShort } from "@/ui";
 
@@ -41,7 +46,7 @@ export function acceptInvitation(id: string) {
 export function declineInvitation(id: string) {
   return request(
     `/account/invitations/${encodeURIComponent(id)}/decline`,
-    d.object({ id: d.token, status: d.token }),
+    d.object({ id: d.token, status: d.known(["declined"] as const) }),
     { method: "POST", body: {} },
   );
 }
@@ -53,9 +58,11 @@ export function invitationLine(i: MyInvitation): string {
   return `${i.organization.name} · ${roleWord} · ${by} on ${formatShort(new Date(i.invited_at)).slice(0, 5)}`;
 }
 
-const notPendingWords: Readonly<Record<string, string>> = {
+const notPendingWords: Readonly<Record<InvitationState, string>> = {
+  pending: "",
   accepted: "You've already accepted it.",
   revoked: "It was withdrawn by the organization.",
+  withdrawn: "It was withdrawn by the organization.",
   declined: "You've already declined it.",
   expired: "It expired.",
 };
@@ -63,13 +70,10 @@ const notPendingWords: Readonly<Record<string, string>> = {
 /** 404 (unknown or not yours, same answer) and 409 invitation_not_pending (by details.status). */
 export function invitationFailure(e: ApiError): string | null {
   if (e.kind === "not_found") return "This invitation isn't available any more.";
-  if (e.kind === "conflict" && e.code === "invitation_not_pending") {
-    const details: unknown = e.details;
-    const status =
-      details !== null && typeof details === "object" && "status" in details
-        ? details.status
-        : null;
-    return `This invitation isn't pending any more. ${typeof status === "string" ? (notPendingWords[status] ?? "") : ""}`.trim();
+  if (isError(e, "invitation_not_pending")) {
+    const status = detailsOf(e, d.object({ status: invitationState }))?.status;
+    const why = status && isKnown(status) ? notPendingWords[status] : "";
+    return `This invitation isn't pending any more. ${why}`.trim();
   }
   return null;
 }

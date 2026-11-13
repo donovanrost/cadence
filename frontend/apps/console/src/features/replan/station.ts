@@ -22,6 +22,7 @@ const window = object({
   eta: nullable(timestamp),
   source: oneOf(["operator", "provider", "simulator"]),
   reported_by: actor,
+  // free-text: the provider's or operator's reason for the outage.
   reason: nullable(string),
   cleared_at: nullable(timestamp),
 });

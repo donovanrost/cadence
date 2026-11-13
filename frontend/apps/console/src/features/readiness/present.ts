@@ -125,10 +125,12 @@ export function fixLink(fix: FindingFix, severity: Severity): FixLink {
           to: { name: "setup.stations", params: { stationId: fix.id } },
         };
       case "data_source":
-        return {
-          label: "Open source",
-          to: { name: "setup.data-sources", params: { sourceId: fix.id } },
-        };
+        return fix.id === null
+          ? { label: "Open Data sources", to: { name: "setup.data-sources" } }
+          : {
+              label: "Open source",
+              to: { name: "setup.data-sources", params: { sourceId: fix.id } },
+            };
       case "app":
         return {
           label: severity === "not_set_up" || severity === "optional" ? "Install" : "Open app",

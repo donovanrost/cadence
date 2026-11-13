@@ -6,9 +6,9 @@ const { array, boolean, integer, nullable, object, oneOf, string, timestamp, tok
 const source = object({
   id: token,
   display_name: string,
+  // free-text: an open vocabulary (data-source connector kinds), shown as words.
   kind: token,
   owner: token,
-  status: token,
   health: nullable(
     object({ status: oneOf(["healthy", "degraded", "unknown"]), checked_at: nullable(timestamp) }),
   ),

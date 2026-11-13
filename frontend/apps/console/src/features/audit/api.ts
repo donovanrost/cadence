@@ -16,11 +16,21 @@ const event = object({
   // The shared entity (typing §12 A5); settings history sends only a name, some records none.
   actor: orNull(actor),
   // A source the console doesn't know yet (api is adding more) decodes; kindText labels it.
+  // free-text: an open vocabulary (the server adds sources); kindText words it and new kinds get a chip.
   kind: token,
+  // free-text: the server's sentence for what happened.
   action: string,
   // Revision targets carry their integer number as the id; settings carry the section key.
-  target: nullable(object({ kind: token, id: idText, label: string })),
+  target: nullable(
+    object({
+      // free-text: the target's kind is technical context; the row shows `label`.
+      kind: token,
+      id: idText,
+      label: string,
+    }),
+  ),
   mission: nullable(object({ id: token, name: string })),
+  // free-text: the reason or note a person gave.
   reason: nullable(string),
 });
 export const auditReader = object({

@@ -1,9 +1,9 @@
-import type { ApiError } from "@/api";
+import { codeOf, type ApiError } from "@/api";
 import { planErrorText } from "@/features/scheduling/index.ts";
 
 /** K2's known rejections in words (S8 / S5 / CP), falling back to the server's message. */
 export function replanErrorText(error: ApiError): string {
-  const code = "code" in error && typeof error.code === "string" ? error.code : null;
+  const code = codeOf(error);
   switch (code) {
     case "plan_not_repairable":
       return "This plan can't be re-planned now: only executing, partially reserved or failed plans can.";

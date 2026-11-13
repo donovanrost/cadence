@@ -1,4 +1,4 @@
-import { recordOf } from "@/api";
+import { codeOf, recordOf } from "@/api";
 import {
   decoders as d,
   request,
@@ -58,7 +58,7 @@ export type ServiceFailure = Readonly<{
 
 /** O6 errors in words; invalid fields inline (name, mission_id); U20 on a dropped connection. */
 export function serviceFailure(e: ApiError): ServiceFailure {
-  const code = "code" in e ? e.code : null;
+  const code = codeOf(e);
   if (code === "invalid_params" && "details" in e && e.details && typeof e.details === "object") {
     const fields: Record<string, string> = {};
     for (const [k, v] of Object.entries(recordOf(e.details) ?? {})) {

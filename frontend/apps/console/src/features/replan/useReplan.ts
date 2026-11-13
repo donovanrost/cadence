@@ -13,7 +13,8 @@ import {
   type PlanDetail,
 } from "@/features/scheduling/index.ts";
 
-const progressReader = d.object({ kind: d.string, id: d.token, state: d.string });
+/** Only the run id matters: a progress event for this run refetches it. */
+const progressReader = d.object({ id: d.token });
 
 /**
  * K2 v1 data owner (DECISIONS #25): the source plan (`?plan=`), the repair run (`?run=`, S8,

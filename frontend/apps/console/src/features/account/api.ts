@@ -1,4 +1,4 @@
-import { recordOf } from "@/api";
+import { codeOf, recordOf } from "@/api";
 import {
   decoders as d,
   request,
@@ -59,7 +59,7 @@ export function passwordProblems(
 export function passwordFailure(
   e: ApiError,
 ): Readonly<{ text: string | null; fields: Record<string, string> }> {
-  const code = "code" in e ? e.code : null;
+  const code = codeOf(e);
   if (code === "current_password_incorrect")
     return { text: null, fields: { current: "That isn't your current password." } };
   if (code === "password_managed_externally")

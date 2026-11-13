@@ -4,7 +4,7 @@ import { decoders, request, type ApiResult, type Reader } from "@/api/index.ts";
  * Contract (requested): docs/apogee/plans/setup-shapes.md §R, final in docs/apogee/api/setup.md.
  * GET /api/console/v1/missions/:mission_id/readiness
  */
-const { array, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
+const { array, integer, known, nullable, object, oneOf, string, timestamp, token } = decoders;
 
 export const areaKeys = ["fleet", "catalog", "comms", "stations", "data_sources", "apps"] as const;
 export type AreaKey = (typeof areaKeys)[number];
@@ -44,10 +44,12 @@ export type FindingFix =
       label: string | null;
     }>
   | Readonly<{
-      kind: "spacecraft" | "profile" | "station" | "data_source" | "app";
+      kind: "spacecraft" | "profile" | "station" | "app";
       id: string;
       label: string | null;
-    }>;
+    }>
+  /** domain source_endpoint_ambiguous: no single source to open, so the list (id null). */
+  | Readonly<{ kind: "data_source"; id: string | null; label: string | null }>;
 
 export type ReadinessArea = Readonly<{
   key: AreaKey;
@@ -91,9 +93,7 @@ const count: Reader<number> = (value, path = "") => {
   return n;
 };
 
-const rawFix = object({ kind: token, id: nullable(token), label: nullable(string) });
-const isFixKind = (kind: string): kind is (typeof fixKinds)[number] =>
-  fixKinds.some((known) => known === kind);
+const rawFix = object({ kind: known(fixKinds), id: nullable(token), label: nullable(string) });
 
 /**
  * A fix target this console doesn't know yet (the server adds areas over time) reads as "no
@@ -101,7 +101,7 @@ const isFixKind = (kind: string): kind is (typeof fixKinds)[number] =>
  */
 const fix: Reader<FindingFix | null> = (value, path = "") => {
   const raw = rawFix(value, path);
-  if (!isFixKind(raw.kind)) return null;
+  if (raw.kind === "unrecognized") return null;
   switch (raw.kind) {
     case "spacecraft_list":
     case "spacecraft_new":
@@ -115,10 +115,11 @@ const fix: Reader<FindingFix | null> = (value, path = "") => {
     // the server ever sends one, isn't needed to get there.
     case "change_set":
       return { kind: raw.kind, label: raw.label };
+    case "data_source":
+      return { kind: raw.kind, id: raw.id, label: raw.label };
     case "spacecraft":
     case "profile":
     case "station":
-    case "data_source":
     case "app":
       if (raw.id === null) throw new decoders.DecodeError(`${path}.id`, "id for an object target");
       return { kind: raw.kind, id: raw.id, label: raw.label };
@@ -176,6 +177,7 @@ const finding: Reader<Finding> = (value, path = "") => {
 const recentChange: Reader<RecentChange> = (value, path = "") => {
   const raw = object({
     at: timestamp,
+    // free-text: the change's kind, shown as its chip only when there's no version label.
     kind: token,
     version_label: nullable(string),
     summary: string,
