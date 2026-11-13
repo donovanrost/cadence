@@ -23,6 +23,8 @@ missing endpoint or decision; an item with no blocker can start now.
     catalog change may touch 001 (it would cancel the command). Catalog step 4 (the other 499)
     lands after 11-14 or must not touch 001.
 
+- **A lib save isn't live on the next request (qa 11-13):** three times today the :4011 reloader didn't recompile on ordinary requests (and never retries after a broken compile). If you need a save live, ask qa for an in-node `Phoenix.CodeReloader.reload(CadenceWeb.Endpoint)` (runbook 9b8e3197e). A save that doesn't compile still takes :4011 down (09:59Z), so compile under `MIX_ENV=test` first.
+
 - **Legacy pages (director 11-13):** the old LiveView pages are being deleted. No new features in them; bug fixes only if something live depends on them. §11 lists what still exists only there.
 
 - **:4011 outage 11-13 03:45:59Z → 04:12:48Z** (dev-env mix builds in the shared tree purged `Cadence.Repo`). Back with gen 8, `modified_modules` [], P9CS still queued. Rules since: Elixir checks only with `MIX_ENV=test` (check-slot enforces it); dev-DB migrations through qa (in-node `Ecto.Migrator` or a planned restart). Runbook e53a9c00. The queued commits went live early with that restart; qa #51 verified (Audit 1.5 s).
