@@ -32,6 +32,13 @@ with Profile/People.
 - **Saving:** settings that are change-set kinds (when domain adds them) stage (`Stage change`);
   everything else saves immediately with a version line (`v4 · 01:12Z by Donovan R.`). Governance
   changes that need approval follow the server's policy (ApDecision, reviewer ≠ author). Errors follow U20.
+- **Governance section** (`cadence.governance`, lead's ask 11-13). Its one setting gates both change-set applies
+  and app activations (L10), so the words name both:
+  - Section text: "Who has to agree before configuration changes and app activations take effect."
+  - Field `approval_requirement`, label `Approval for changes and app activations`.
+  - Options: `direct` `Applies without approval` · `independent` `Needs a second person's approval`.
+  - Help: "Covers change sets in Setup › Changes and app settings that need activation, such as decom. App
+    settings that save immediately, such as limits, aren't covered."
 - **Read-only** without the capability: values as text plus "Org admins change settings."
 - **Empty section** (an app with no settings): don't list it.
 
