@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { ApiError } from "@/api";
-import { decidedLine, decideFailure, decisionLine, type ActivationRequest } from "./api.ts";
+import {
+  applyCodes,
+  applySentence,
+  decidedLine,
+  decideFailure,
+  decisionLine,
+  notApplied,
+  resumeFailure,
+  type ActivationRequest,
+} from "./api.ts";
 
 /** Fixtures: plans/activations.md (proposed 11-13). */
 const request: ActivationRequest = {
@@ -23,10 +32,20 @@ describe("app activation approvals (L10)", () => {
       tone: "nominal",
       text: "Approved and applied.",
     });
-    const failed = { ...request, execution: { state: "failed" as const, error: "runtime busy" } };
+    // U20/U41: an uncoded reason is never shown raw.
+    const failed = {
+      ...request,
+      execution: {
+        state: "failed" as const,
+        since: undefined,
+        error_code: undefined,
+        retryable: undefined,
+        error: "runtime busy",
+      },
+    };
     expect(decidedLine("approve", { request: failed, outcome: "needs_review" })).toEqual({
       tone: "caution",
-      text: "Approved, but it didn't apply: runtime busy.",
+      text: "Approved, but it didn't apply. Applying failed.",
     });
     expect(decidedLine("reject", { request, outcome: undefined }).text).toBe(
       "Rejected. Nothing changes.",
@@ -57,5 +76,56 @@ describe("app activation approvals (L10)", () => {
       "You requested this. Someone else approves it.",
     );
     expect(decideFailure(refused("conflict", "not_pending"))).toContain("already decided");
+  });
+
+  it("words an approved activation that didn't apply (U41)", () => {
+    const exec = (
+      error_code: (typeof applyCodes)[number] | "unrecognized",
+      error: string | null,
+    ) => ({
+      ...request,
+      state: "approved" as const,
+      execution: {
+        state: "failed" as const,
+        since: "2026-11-13T02:14:00Z",
+        error_code,
+        error,
+        retryable: error_code !== "spacecraft_configuration_review_stale",
+      },
+    });
+    expect(notApplied(exec("activation_execution_interrupted", null))).toEqual({
+      text: "Approved, but it didn't apply. Applying was cut off: Cadence lost its database connection partway. Since 02:14Z.",
+      retry: true,
+      next: null,
+    });
+    const stale = notApplied(
+      exec(
+        "spacecraft_configuration_review_stale",
+        "EARENDIL-312's configuration changed after it was reviewed, so the reviewed version can't be applied.",
+      ),
+    );
+    expect(stale?.retry).toBe(false);
+    expect(stale?.text).toContain("EARENDIL-312's configuration changed");
+    expect(stale?.next).toBe("Request activation again so the current version can be approved.");
+    expect(applySentence(exec("unrecognized", "SQL error 42").execution)).toBe("Applying failed.");
+    expect(notApplied(request)).toBeNull();
+    expect(
+      resumeFailure({
+        kind: "conflict",
+        code: "not_resumable",
+        message: "x",
+        details: { error_code: "approved_activation_content_mismatch" },
+      }),
+    ).toBe(
+      "This can't be retried: What would be applied now differs from what was approved, so it wasn't applied. Request activation again so the current version can be approved.",
+    );
+    expect(
+      resumeFailure({
+        kind: "conflict",
+        code: "nothing_to_resume",
+        message: "x",
+        details: { state: "succeeded" },
+      }),
+    ).toBe("It already applied.");
   });
 });

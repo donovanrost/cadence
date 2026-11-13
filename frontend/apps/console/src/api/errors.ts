@@ -83,6 +83,8 @@ export const errorCodes = [
   // App activations (L10)
   "self_approval_forbidden",
   "not_pending",
+  "nothing_to_resume",
+  "not_resumable",
   "app_not_found",
   "application_not_found",
   "application_not_installed",

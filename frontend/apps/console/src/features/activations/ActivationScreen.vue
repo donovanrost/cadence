@@ -12,6 +12,7 @@ import {
   ApTag,
   type ApCrumb,
 } from "@/ui";
+import ActivationApply from "./ActivationApply.vue";
 import ActivationDecide from "./ActivationDecide.vue";
 import { decisionLine, fetchActivation, requestedLine, stateTag } from "./api.ts";
 
@@ -49,6 +50,13 @@ function decided(n: { tone: "nominal" | "caution"; text: string }) {
           <ApTag :state="stateTag(value).state" :label="stateTag(value).label" />
         </ApPageHeader>
         <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+        <ActivationApply
+          v-else
+          :request-key="key"
+          :request="value"
+          @resumed="decided"
+          @refused="page.refetch"
+        />
         <ApPanel index="R1" title="What it activates">
           <ApKeyValue
             :items="[

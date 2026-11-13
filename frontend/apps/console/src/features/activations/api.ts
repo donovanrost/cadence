@@ -1,6 +1,15 @@
-import { actor, decoders as d, isError, orNull, request, type ApiError, type Decoded } from "@/api";
+import {
+  actor,
+  decoders as d,
+  detailsOf,
+  isError,
+  orNull,
+  request,
+  type ApiError,
+  type Decoded,
+} from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
-import { formatShort, type OpState } from "@/ui";
+import { formatHourMinute, formatShort, type OpState } from "@/ui";
 
 /**
  * L10 app activation approvals (plans/activations.md, proposed to api 11-13): a save that needs
@@ -10,6 +19,14 @@ const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/
 
 /** Off until api serves L10 (a 404 on Setup › Changes trips qa's e2e diagnostics guard). */
 export const ACTIVATIONS_LIVE = false;
+
+/** U41: why an approved activation didn't apply. */
+export const applyCodes = [
+  "apply_stalled",
+  "activation_execution_interrupted",
+  "spacecraft_configuration_review_stale",
+  "approved_activation_content_mismatch",
+] as const;
 
 export const requestStates = [
   "approval_pending",
@@ -41,7 +58,12 @@ const row = d.object({
   execution: d.nullable(
     d.object({
       state: d.known(["in_progress", "succeeded", "failed"] as const),
-      // free-text: the apply error, shown as is.
+      /** Resume addition (plans/activations.md): when it failed or stalled, and why by code. */
+      since: d.optional(d.nullable(d.timestamp)),
+      error_code: d.optional(d.nullable(d.known(applyCodes))),
+      /** U41 (domain 8f30aac21): whether Retry apply can succeed; absent reads as no. */
+      retryable: d.optional(d.boolean),
+      // free-text: domain's U41 sentence for a known code; never shown for an unknown one (U20).
       error: d.nullable(d.string),
     }),
   ),
@@ -65,6 +87,8 @@ const detailReader = (value: unknown, path = "") => ({
   ...d.object({
     details: d.array(d.object({ label: d.string, value: d.string }), 100),
     comparison: d.nullable(d.object({ report_id: d.token, label: d.string })),
+    /** U41 Retry apply is for people who may approve; absent reads as no (asked of api 11-13). */
+    permissions: d.optional(d.array(d.known(["activations.approve"] as const), 10)),
   })(value, path),
 });
 export type ActivationDetail = ReturnType<typeof detailReader>;
@@ -113,9 +137,74 @@ export function decidedLine(
   if (r.outcome === "needs_review" || r.request.execution?.state === "failed")
     return {
       tone: "caution",
-      text: `Approved, but it didn't apply: ${r.request.execution?.error ?? "no reason given"}.`,
+      text: `Approved, but it didn't apply. ${applySentence(r.request.execution)}`,
     };
   return { tone: "nominal", text: "Approved and applied." };
+}
+
+/** Retry apply (resume addition): re-runs a failed or stalled apply; every step is safe to repeat. */
+export function resume(k: DetailKey) {
+  return request(`${base(k.missionId)}/${encodeURIComponent(k.requestId)}/resume`, decided, {
+    method: "POST",
+    body: {},
+  });
+}
+
+type Execution = ActivationRequest["execution"];
+type ApplyCode = NonNullable<NonNullable<Execution>["error_code"]>;
+/** U41 sentences, for when domain's own sentence is missing; any other code is "Applying failed." */
+const APPLY_WORDS: Readonly<Record<ApplyCode, string>> = {
+  apply_stalled: "Applying didn't finish, and nothing is working on it now.",
+  activation_execution_interrupted:
+    "Applying was cut off: Cadence lost its database connection partway.",
+  spacecraft_configuration_review_stale:
+    "A spacecraft's configuration changed after it was reviewed, so the reviewed version can't be applied.",
+  approved_activation_content_mismatch:
+    "What would be applied now differs from what was approved, so it wasn't applied.",
+  unrecognized: "Applying failed.",
+};
+/** U41: the standalone sentence for why it didn't apply (domain's, which names the spacecraft). */
+export function applySentence(e: Execution): string {
+  const code = e?.error_code ?? "unrecognized";
+  return code !== "unrecognized" && e?.error ? e.error : APPLY_WORDS[code];
+}
+
+/** An approved activation whose apply failed or stalled, with what the review page says (U41). */
+export function notApplied(
+  r: ActivationRequest,
+): { text: string; retry: boolean; next: string | null } | null {
+  const e = r.execution;
+  if (r.state !== "approved" || !e) return null;
+  if (e.state !== "failed" && e.error_code !== "apply_stalled") return null;
+  const since = e.since ? ` Since ${formatHourMinute(new Date(e.since))}.` : "";
+  const retry = e.retryable === true;
+  return {
+    text: `Approved, but it didn't apply. ${applySentence(e)}${since}`,
+    retry,
+    next: retry ? null : REQUEST_AGAIN,
+  };
+}
+
+const REQUEST_AGAIN = "Request activation again so the current version can be approved.";
+const notResumable = d.object({ error_code: d.known(applyCodes) });
+const nothingToResume = d.object({
+  state: d.known(["succeeded", "in_progress", "failed"] as const),
+});
+/** U41: a refused Retry apply, in words. The caller refetches either way. */
+export function resumeFailure(error: ApiError): string {
+  if (isError(error, "not_resumable")) {
+    const code = detailsOf(error, notResumable)?.error_code ?? "unrecognized";
+    return `This can't be retried: ${APPLY_WORDS[code]} ${REQUEST_AGAIN}`;
+  }
+  if (isError(error, "nothing_to_resume")) {
+    const state = detailsOf(error, nothingToResume)?.state;
+    return state === "succeeded"
+      ? "It already applied."
+      : state === "in_progress"
+        ? "It's applying now."
+        : "There's nothing to retry.";
+  }
+  return decideFailure(error);
 }
 
 const TAGS: Readonly<Record<ActivationRequest["state"], { state: OpState; label: string }>> = {
@@ -150,6 +239,8 @@ export function decideFailure(error: ApiError): string {
   if (isError(error, "self_approval_forbidden"))
     return "You requested this. Someone else approves it.";
   if (isError(error, "not_pending")) return "It's already decided. Reload to see how.";
+  if (isError(error, "nothing_to_resume"))
+    return "It isn't stuck any more. Reload to see how it ended.";
   if (isError(error, "policy_changed"))
     return "The approval rules changed since it was requested. Reject it, or ask the requester to withdraw it.";
   return failureOutcome(error, "changed").sentence;
