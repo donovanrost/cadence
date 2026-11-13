@@ -36,7 +36,14 @@ built.
 ## K1 · Plan tomorrow (`M/contacts/plan`)
 Takeover header: close · mono `CONTACT PLAN · R41 DRAFT · MAYA T.` over the day (`Friday 24 Oct`) ·
 step bar `01 Demand · 02 Opportunities · 03 Draft · 04 Reserve · 05 · 06` · clocks `UTC` +
-**`PROVIDER FREEZE T−15:15:51`** (white; caution under 1 h).
+**`NEXT OFFER EXPIRES T−15:15:51 · KSAT`** (white; caution under 1 h). Providers publish no day-level
+cutoff, so there's no "freeze" (U20). The clock is the earliest `expires_at` among the plan's passes not yet
+sent (domain), with that offer's provider. It's absent when nothing is left to send.
+- Hover/focus detail: "KSAT's offer for EARENDIL-012 · SVB-1 · 03:00Z expires at 02:30Z. Send before then,
+  or that pass can't be booked." With several providers, one line each, earliest first: `KSAT T−15:15:51 ·
+  Northlight T−18:02:10`. Add "3 more offers expire in the next hour." when that's so.
+- The pass link goes to the pass in B (`snapshot_id`). On the simulator offers expire at AOS, so the same
+  words apply.
 ```
 ┌ A Demand (300, pane) ┐ ┌ B Draft · by station (Gantt, pane) ───────┐ ┌ D Selected (340, pane) ┐
 │ search · exceptions  │ ├ C <focused spacecraft> · 24 h strip ──────┤ │ pass detail + options   │
