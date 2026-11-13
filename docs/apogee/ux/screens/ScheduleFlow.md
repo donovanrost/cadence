@@ -57,7 +57,8 @@ footer: Passes │ Minutes / budget │ Cost / budget │ Rule met │ Conflicts
 ```
 - **A Demand:** header meta `6 NOT COVERED` (caution) or `ALL COVERED` (nominal). Search ("any
   spacecraft"); list = **only spacecraft whose rule isn't met** (start from demand, R01), each `dm`
-  row: mark, name (mono), why ("Longest gap 11h20 > 10h00"), stat (`2 / 3 CONTACTS`). Selecting
+  row: mark, name (mono), why, stat (`2 / 3 CONTACTS`). For `max_gap_exceeded` (#74) the why reads "No contact
+  for 11h20, 03:10Z–14:30Z. The rule allows 10h00." (`from`/`to` with the §4 date prefix when not on this day). Selecting
   focuses C and highlights the spacecraft on B. Footer: the profile rule (`≥ 3 CONTACTS A DAY · NO
   GAP OVER 10h00 · ≥ 1 UPLINK-CAPABLE PASS`) + `EDIT IN SETUP · PROFILE →`. Rules come from profile
   demand (requirements/templates today, IA §3).
@@ -66,7 +67,8 @@ footer: Passes │ Minutes / budget │ Cost / budget │ Rule met │ Conflicts
   white), windows taken by others (dashed, caution when clashing), newly added (white + green ring
   `mk.new` **[only place nominal green appears on the Gantt: "now covered"]**), station maintenance
   (amber hatch band). Hour axis. Header meta `1,512 PASSES · 18 ANTENNAS · 00–24Z`. Legend above.
-- **C Focused spacecraft · 24 h:** rule chips (`rc`: `Contacts 3/3` GO, `Longest gap 11h20` HOLD,
+- **C Focused spacecraft · 24 h:** rule chips (`rc`: `Contacts 3/3` GO, `Longest gap 11h20 · max 10h00` HOLD (GO when within; with no limit, a
+  measure with no verdict and no `max`),
   `Uplink passes 1` GO), then a 24 h strip of passes (`cb`, uplink-capable with a notch) and gaps
   (`gp`: 1px line with label, caution + 2px when over the rule). Header meta `RULE MET` /
   `RULE NOT MET` tinted.
