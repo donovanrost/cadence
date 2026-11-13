@@ -16,8 +16,10 @@ export function usePointSearch(
   missionId: Ref<string | null>,
   raw: Ref<string>,
   fleet: Ref<readonly FleetSpacecraft[]>,
-): Ref<PaletteItem[]> {
+): { items: Ref<PaletteItem[]>; pending: Ref<boolean> } {
   const settled = ref<{ m: string; tq: TelemetryQuery } | null>(null);
+  /** True from a keystroke that will ask the server until the debounce settles. */
+  const waiting = ref(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   watch(
     [raw, missionId, fleet],
@@ -26,7 +28,11 @@ export function usePointSearch(
       const { only } = parseQuery(raw.value);
       const tq = only === null ? telemetryQuery(raw.value, fleet.value) : null;
       const m = missionId.value;
-      timer = setTimeout(() => (settled.value = m && tq ? { m, tq } : null), DEBOUNCE_MS);
+      waiting.value = Boolean(m && tq);
+      timer = setTimeout(() => {
+        waiting.value = false;
+        settled.value = m && tq ? { m, tq } : null;
+      }, DEBOUNCE_MS);
     },
     { immediate: true },
   );
@@ -39,10 +45,18 @@ export function usePointSearch(
       signal,
     ),
   );
-  return computed(() => {
+  // While the next search is out, the last results stay (Palette.md: no flicker).
+  let last: PaletteItem[] = [];
+  const items = computed(() => {
     const s = query.state.value;
     const tq = settled.value?.tq;
-    if (s.status !== "ready" || !tq) return [];
-    return pointItems(s.value.points.slice(0, PER_GROUP * 4), tq.spacecraft);
+    if (!tq) return (last = []);
+    if (s.status === "loading") return last;
+    if (s.status !== "ready") return (last = []);
+    return (last = pointItems(s.value.points.slice(0, PER_GROUP * 4), tq.spacecraft));
   });
+  const pending = computed(
+    () => waiting.value || (settled.value !== null && query.state.value.status === "loading"),
+  );
+  return { items, pending };
 }

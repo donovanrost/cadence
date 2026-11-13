@@ -9,6 +9,7 @@ import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/f
  */
 
 export const GROUPS = [
+  "Recent",
   "Spacecraft",
   "Telemetry",
   "Actions",
@@ -169,9 +170,25 @@ export function search(
 
 export type GroupView = Readonly<{ group: Group; items: readonly PaletteItem[]; more: number }>;
 
-/** Groups in spec order, max PER_GROUP rows each unless the group is expanded. */
-export function grouped(items: readonly PaletteItem[], expanded: ReadonlySet<Group>): GroupView[] {
-  return GROUPS.flatMap((group) => {
+/** Setup mode ranks Profiles, Stations, Pages first (Palette.md; there's no Catalog group yet). */
+export const SETUP_GROUPS: readonly Group[] = [
+  "Recent",
+  "Profiles",
+  "Stations",
+  "Pages",
+  "Spacecraft",
+  "Telemetry",
+  "Actions",
+  "Commands",
+];
+
+/** Groups in spec order (or `order`), max PER_GROUP rows each unless the group is expanded. */
+export function grouped(
+  items: readonly PaletteItem[],
+  expanded: ReadonlySet<Group>,
+  order: readonly Group[] = GROUPS,
+): GroupView[] {
+  return order.flatMap((group) => {
     const all = items.filter((item) => item.group === group);
     if (all.length === 0) return [];
     const shown = expanded.has(group) ? all : all.slice(0, PER_GROUP);

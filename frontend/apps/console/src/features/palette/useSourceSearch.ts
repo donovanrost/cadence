@@ -20,6 +20,7 @@ export function useSourceSearch(
   canCommand: Ref<boolean>,
 ) {
   const settled = ref<{ m: string; q: string } | null>(null);
+  const waiting = ref(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   watch(
     [raw, missionId, canCommand],
@@ -28,10 +29,11 @@ export function useSourceSearch(
       const { text, only } = parseQuery(raw.value);
       const q = canCommand.value ? catalogQuery(text, only) : null;
       const m = missionId.value;
-      timer = setTimeout(
-        () => (settled.value = m !== null && q !== null ? { m, q } : null),
-        DEBOUNCE_MS,
-      );
+      waiting.value = m !== null && q !== null;
+      timer = setTimeout(() => {
+        waiting.value = false;
+        settled.value = m !== null && q !== null ? { m, q } : null;
+      }, DEBOUNCE_MS);
     },
     { immediate: true },
   );
@@ -41,13 +43,18 @@ export function useSourceSearch(
   const stations = useRemoteQuery(missionId, (id, signal) => fetchStations(id, signal));
   useMissionInvalidation(missionId, ["configuration", "stations"], stations.refetch);
 
+  let lastCommands: PaletteItem[] = [];
   const items = computed<PaletteItem[]>(() => {
     const { text, only } = parseQuery(raw.value);
     const out: PaletteItem[] = [];
     const c = catalog.state.value;
     const q = settled.value?.q;
-    if (c.status === "ready" && q !== undefined && (only === null || only === "commands"))
-      out.push(...commandItems(c.value.commands.slice(0, PER_GROUP * 4), q.toLowerCase()));
+    // While the next catalog search is out, the last commands stay (Palette.md: no flicker).
+    if (q === undefined) lastCommands = [];
+    else if (c.status === "ready")
+      lastCommands = commandItems(c.value.commands.slice(0, PER_GROUP * 4), q.toLowerCase());
+    else if (c.status !== "loading") lastCommands = [];
+    if (only === null || only === "commands") out.push(...lastCommands);
     const s = stations.state.value;
     // An empty unprefixed query shows Pages, not every station.
     if (s.status === "ready" && (only === "stations" || (only === null && text !== "")))
@@ -60,5 +67,8 @@ export function useSourceSearch(
       ? s.value.filter((st) => st.lifecycle_state === "active").length
       : null;
   });
-  return { items, stationCount };
+  const pending = computed(
+    () => waiting.value || (settled.value !== null && catalog.state.value.status === "loading"),
+  );
+  return { items, stationCount, pending };
 }

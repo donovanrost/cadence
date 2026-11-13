@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { RouteLocationRaw } from "vue-router";
 import { ApStatusMark } from "@/ui";
-import type { Group, GroupView } from "./results.ts";
+import type { Group, GroupView, PaletteItem } from "./results.ts";
 
 /** Grouped listbox. Rows are options; the active row is tracked by the input's activedescendant. */
 const props = defineProps<{ groups: readonly GroupView[]; activeKey: string | null }>();
 const total = computed(() => props.groups.reduce((n, g) => n + g.items.length + g.more, 0));
-const emit = defineEmits<{ open: [to: RouteLocationRaw]; expand: [group: Group] }>();
+const emit = defineEmits<{ open: [item: PaletteItem]; expand: [group: Group] }>();
 </script>
 
 <template>
@@ -38,7 +37,7 @@ const emit = defineEmits<{ open: [to: RouteLocationRaw]; expand: [group: Group] 
             ? 'bg-raised-hi shadow-[inset_2px_0_0_var(--color-readout)]'
             : 'hover:bg-raised'
         "
-        @click="emit('open', item.to)"
+        @click="emit('open', item)"
       >
         <span class="flex size-7 flex-none items-center justify-center border border-line">
           <ApStatusMark :state="item.state ?? 'neutral'" />

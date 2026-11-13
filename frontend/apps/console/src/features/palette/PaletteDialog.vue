@@ -8,19 +8,30 @@ import {
   shallowRef,
   useTemplateRef,
 } from "vue";
-import { useRouter, type RouteLocationRaw } from "vue-router";
+import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { useConsoleScope } from "@/shell/index.ts";
 import { ApKbd } from "@/ui";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
 import PaletteResults from "./PaletteResults.vue";
-import { grouped, groupJump, rowsOf, search, type Group, type PageEntry } from "./results.ts";
+import { recentItems, rememberOpened } from "./recent.ts";
+import {
+  grouped,
+  groupJump,
+  SETUP_GROUPS,
+  rowsOf,
+  search,
+  type Group,
+  type PageEntry,
+  type PaletteItem,
+} from "./results.ts";
 import { usePointSearch } from "./usePointSearch.ts";
 import { useSourceSearch } from "./useSourceSearch.ts";
 
 /** The modal query line: combobox input + grouped listbox. Esc closes and restores focus. */
 const emit = defineEmits<{ close: [] }>();
 const router = useRouter();
+const route = useRoute();
 const scope = useConsoleScope();
 const missionId = computed(() => (scope.value.kind === "mission" ? scope.value.mission.id : null));
 const fleet = useFleet(missionId, { live: false });
@@ -54,14 +65,27 @@ const sources = useSourceSearch(
   query,
   computed(() => access.value.request),
 );
+/** Recent first on an empty query (Palette.md); routes that no longer resolve are dropped. */
+const resolves = (to: RouteLocationRaw) => {
+  try {
+    return router.resolve(to).matched.length > 0;
+  } catch {
+    return false;
+  }
+};
+const recent = computed(() =>
+  missionId.value && query.value.trim() === "" ? recentItems(missionId.value, resolves) : [],
+);
 const groups = computed(() =>
   grouped(
     [
+      ...recent.value,
       ...search(query.value, spacecraft.value, pages.value, access.value.request),
-      ...points.value,
+      ...points.items.value,
       ...sources.items.value,
     ],
     expanded.value,
+    route.meta.mode === "setup" ? SETUP_GROUPS : undefined,
   ),
 );
 const rows = computed(() => rowsOf(groups.value));
@@ -73,6 +97,8 @@ const strip = computed(() => {
   const stations = sources.stationCount.value;
   return [
     s.mission.name,
+    // The previous results stay while a search is out (Palette.md: no flicker).
+    points.pending.value || sources.pending.value ? "Searching…" : null,
     sc === null ? null : `${sc} SC`,
     stations === null ? null : `${stations} ${stations === 1 ? "station" : "stations"}`,
   ]
@@ -80,8 +106,10 @@ const strip = computed(() => {
     .join(" · ");
 });
 
-function go(to: RouteLocationRaw | null) {
+function go(item: PaletteItem, command = false) {
+  const to = command ? item.commandTo : item.to;
   if (to === null) return;
+  if (missionId.value) rememberOpened(missionId.value, item);
   emit("close");
   router.push(to).catch((error: unknown) => console.error("Navigation failed", error));
 }
@@ -103,7 +131,7 @@ function onKey(event: KeyboardEvent) {
     event.preventDefault();
     const row = rows.value[active.value];
     if (row?.kind === "more") expand(row.group);
-    else if (row) go(event.metaKey || event.ctrlKey ? row.item.commandTo : row.item.to);
+    else if (row) go(row.item, event.metaKey || event.ctrlKey);
   }
 }
 function onInput() {
