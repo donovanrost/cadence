@@ -85,6 +85,9 @@ describe("app activation approvals (L10)", () => {
       "You requested this. Someone else approves it.",
     );
     expect(decideFailure(refused("conflict", "not_pending"))).toContain("already decided");
+    expect(decideFailure(refused("forbidden", "not_requester"))).toBe(
+      "Only the person who requested it can withdraw it.",
+    );
   });
 
   it("words an approved activation that didn't apply (U41)", () => {

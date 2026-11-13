@@ -19,7 +19,7 @@ const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/
 
 /** api serves L10 (be59d4f32); on since qa's go 11-13. */
 export const ACTIVATIONS_LIVE = true;
-/** Withdraw waits on domain (api activations.md: withdrawn isn't a state yet). */
+/** Withdraw waits on domain; api's shape is agreed: POST /:id/withdraw {reason} → {request}. */
 export const WITHDRAW_LIVE = false;
 
 /** U41: why an approved activation didn't apply. */
@@ -256,6 +256,7 @@ export function replacedBy(r: ActivationRequest): string | null {
 export function decideFailure(error: ApiError): string {
   if (isError(error, "self_approval_forbidden"))
     return "You requested this. Someone else approves it.";
+  if (isError(error, "not_requester")) return "Only the person who requested it can withdraw it.";
   if (isError(error, "not_pending")) return "It's already decided. Reload to see how.";
   if (isError(error, "nothing_to_resume"))
     return "It isn't stuck any more. Reload to see how it ended.";

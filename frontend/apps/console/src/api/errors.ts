@@ -82,6 +82,7 @@ export const errorCodes = [
   "account_grant_not_found",
   // App activations (L10)
   "self_approval_forbidden",
+  "not_requester",
   "not_pending",
   "nothing_to_resume",
   "not_resumable",
