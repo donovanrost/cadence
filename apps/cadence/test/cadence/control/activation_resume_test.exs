@@ -144,6 +144,17 @@ defmodule Cadence.Control.ActivationResumeTest do
     assert {:ok, %{status: :succeeded}} = ControlActivations.resume(c.scope, @mid, c.id)
   end
 
+  test "a lock connection that can't start is an interrupted execution, not a crash", c do
+    # The lock's session can't connect (as when the database is at max connections).
+    config = Application.get_env(:cadence, Cadence.Repo)
+    Application.put_env(:cadence, Cadence.Repo, Keyword.put(config, :port, 1))
+    on_exit(fn -> Application.put_env(:cadence, Cadence.Repo, config) end)
+
+    assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
+    Application.put_env(:cadence, Cadence.Repo, config)
+    assert Process.alive?(self())
+  end
+
   test "a stale review isn't retried: it needs a new request", c do
     interrupt_apply!()
     assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
