@@ -145,21 +145,39 @@ export type ChangeOutcome =
 
 const replyReader = d.object({ item: d.nullable(attentionReader) });
 
-/** POST …/attention/provider_change/:id/<decision> {reason, proposal_hash} (api 30b3f60b9). */
+/** What a decision needs of a change: from the live attention item or the pass's history. */
+export type ChangeTarget = Readonly<{
+  id: string;
+  proposalHash: string;
+  deadlineAt: string | null;
+  provider: string | null;
+}>;
+
+export const targetOfAttention = (a: Attention): ChangeTarget => ({
+  id: a.provider_change?.id ?? a.id,
+  proposalHash: a.provider_change?.proposal_hash ?? "",
+  deadlineAt: a.deadline_at ?? a.provider_change?.deadline_at ?? null,
+  provider: a.provider?.name ?? null,
+});
+
+/**
+ * POST …/attention/provider_change/:id/<decision> {reason, proposal_hash} (api 30b3f60b9). The
+ * endpoint also finds a flown pass's changes (acknowledge keeps working; api, L14 flown passes).
+ */
 export async function decideProviderChange(
   missionId: MissionId,
-  a: Attention,
+  t: ChangeTarget,
   decision: ChangeDecision,
   reason: string,
 ): Promise<ChangeOutcome> {
-  const r = await request(`${itemPath(missionId, a)}/${decision}`, replyReader, {
+  const path = `/missions/${encodeURIComponent(missionId)}/attention/provider_change/${encodeURIComponent(t.id)}/${decision}`;
+  const r = await request(path, replyReader, {
     method: "POST",
-    body: { reason, proposal_hash: a.provider_change?.proposal_hash ?? "" },
+    body: { reason, proposal_hash: t.proposalHash },
   });
   if (r.ok) return { status: "done", item: r.value.item };
   const e = r.error;
-  const provider = a.provider?.name ?? "The provider";
-  const deadline = a.deadline_at ?? a.provider_change?.deadline_at ?? null;
+  const provider = t.provider ?? "The provider";
   if (isError(e, "provider_change_stale")) {
     const item = detailsOf(e, replyReader)?.item ?? null;
     return item
@@ -172,13 +190,19 @@ export async function decideProviderChange(
   }
   if (isError(e, "attention_item_not_found"))
     return { status: "refused", text: "This change was already decided or replaced.", item: null };
-  // api 84f58b73d: past the deadline neither approve nor reject lands; the provider's next
-  // revision replaces the change (ux U44 re-ruling pending).
+  // api 84f58b73d / ux U44: past the deadline neither approve nor reject lands.
   if (isError(e, "provider_change_deadline_passed"))
     return {
       status: "refused",
-      text: `The deadline passed${deadline ? ` at ${short(deadline, new Date())}` : ""}. This change stays until ${a.provider?.name ?? "the provider"}'s next update replaces it.`,
+      text: `The deadline passed${t.deadlineAt ? ` at ${short(t.deadlineAt, new Date())}` : ""}. This change stays until ${t.provider ?? "the provider"}'s next update replaces it.`,
       deadlinePassed: true,
+    };
+  // api (L14 flown passes; ux U44 final): a pending change whose pass has ended.
+  if (isError(e, "provider_change_expired"))
+    return {
+      status: "refused",
+      text: "The pass has ended, so this change can't be decided any more.",
+      item: null,
     };
   if (e.kind === "forbidden")
     return { status: "refused", text: "Org admins decide provider changes." };

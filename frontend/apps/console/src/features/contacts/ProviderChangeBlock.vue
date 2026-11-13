@@ -1,26 +1,33 @@
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref, watch } from "vue";
 import { organizationCapabilities, useConsoleScope, useSession } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApTextarea } from "@/ui";
 import {
-  changeEvidence,
-  changeTitle,
   fieldKey,
   fieldLabel,
-  pastDeadline,
   short,
   valueWords,
-  type Attention,
+  type ProviderChange,
 } from "@/features/now/index.ts";
-import { decideProviderChange, type ChangeDecision } from "./attention.ts";
+import { decideProviderChange, type ChangeDecision, type ChangeTarget } from "./attention.ts";
 
 /**
  * §11 L14 provider change on the pass (ux U44): what changed (Before → After), then Approve /
- * Reject before the deadline, or Acknowledge. Every decision needs a reason. Org admins decide
- * (`:approve_provider_changes`); members see the block without buttons.
+ * Reject before the deadline, or Acknowledge. Every decision needs a reason. Org admins decide;
+ * members see the block without buttons. Fed by the live attention item or, for a flown pass, by
+ * its history entry (api, L14 flown passes).
  */
-const props = defineProps<{ missionId: MissionId; attention: Attention; now: Date }>();
+const props = defineProps<{
+  missionId: MissionId;
+  target: ChangeTarget;
+  /** approval_required | acknowledgment_required | configuration_failure (shown only). */
+  conflict: "approval_required" | "acknowledgment_required" | "configuration_failure";
+  fields: ProviderChange["fields"];
+  title: string;
+  evidence: string;
+  now: Date;
+}>();
 const emit = defineEmits<{ changed: [] }>();
 
 const session = useSession();
@@ -32,25 +39,20 @@ const isAdmin = computed(() => {
     : false;
 });
 
-/** The change on show: the server's newer one replaces it after a stale refusal (U44). */
-const current = ref<Attention>(props.attention);
-watch(
-  () => props.attention,
-  (a) => (current.value = a),
-);
-const change = computed(() => current.value.provider_change ?? null);
-const deadline = computed(() => current.value.deadline_at ?? change.value?.deadline_at ?? null);
 /** A 409 that raced the deadline counts as past it (ux U44). */
 const refusedPast = ref(false);
-const approval = computed(() => current.value.conflict === "approval_required");
-/** api 84f58b73d / ux U44: past the deadline neither decision lands; the provider's next update replaces it. */
+const approval = computed(() => props.conflict === "approval_required");
+/** api 84f58b73d / ux U44: past the deadline neither decision lands. */
 const expired = computed(
-  () => approval.value && (refusedPast.value || pastDeadline(current.value, props.now)),
+  () =>
+    approval.value &&
+    (refusedPast.value ||
+      (props.target.deadlineAt !== null &&
+        Date.parse(props.target.deadlineAt) <= props.now.getTime())),
 );
 const expiredLine = computed(() => {
-  const d = deadline.value;
-  const at = d ? ` at ${short(d, props.now)}` : "";
-  return `The deadline passed${at}. This change stays until ${current.value.provider?.name ?? "the provider"}'s next update replaces it.`;
+  const d = props.target.deadlineAt;
+  return `The deadline passed${d ? ` at ${short(d, props.now)}` : ""}. This change stays until ${props.target.provider ?? "the provider"}'s next update replaces it.`;
 });
 
 const PLACEHOLDER: Readonly<Record<ChangeDecision, string>> = {
@@ -63,11 +65,18 @@ const LABEL: Readonly<Record<ChangeDecision, string>> = {
   reject: "Reject",
   acknowledge: "Acknowledge",
 };
+const DONE: Readonly<Record<ChangeDecision, string>> = {
+  approve: "Approved",
+  reject: "Rejected",
+  acknowledge: "Acknowledged",
+};
 
 const deciding = ref<ChangeDecision | null>(null);
 const reason = ref("");
 const reasonError = ref<string | null>(null);
 const notice = ref<{ tone: "caution" | "info"; text: string } | null>(null);
+/** qa: the decision shows at once; the server's record replaces it on the next read. */
+const decided = ref<string | null>(null);
 const busy = ref(false);
 
 function start(d: ChangeDecision) {
@@ -87,8 +96,9 @@ async function submit() {
   }
   busy.value = true;
   try {
-    const o = await decideProviderChange(props.missionId, current.value, d, why);
+    const o = await decideProviderChange(props.missionId, props.target, d, why);
     if (o.status === "done") {
+      decided.value = `${DONE[d]} at ${short(new Date().toISOString(), props.now)}: ${why.replace(/[.!?]+$/, "")}.`;
       deciding.value = null;
       emit("changed");
       return;
@@ -102,20 +112,15 @@ async function submit() {
       reasonError.value = o.reasonError;
       return;
     }
+    deciding.value = null;
     if (o.deadlinePassed) {
       // The block's own past-deadline state says it; no second notice.
       refusedPast.value = true;
-      deciding.value = null;
       return;
     }
     notice.value = { tone: "caution", text: o.text };
-    if (o.item) {
-      current.value = o.item;
-      deciding.value = null;
-    } else if (o.item === null) {
-      deciding.value = null;
-      emit("changed");
-    }
+    // Changed again, already decided, or flown: the pass's next read shows the current state.
+    if (o.item !== undefined) emit("changed");
   } finally {
     busy.value = false;
   }
@@ -124,11 +129,11 @@ async function submit() {
 
 <template>
   <div class="flex flex-col gap-2">
-    <ApCallout :tone="approval ? 'caution' : 'info'">
-      <p class="m-0 font-semibold">{{ changeTitle(current, now) }}.</p>
-      <p class="m-0 text-text-2">{{ changeEvidence(current, now) }}</p>
+    <ApCallout :tone="approval && !decided ? 'caution' : 'info'">
+      <p class="m-0 font-semibold">{{ title }}</p>
+      <p class="m-0 text-text-2">{{ evidence }}</p>
     </ApCallout>
-    <table v-if="change && change.fields.length" class="w-full border-collapse text-sm">
+    <table v-if="fields.length" class="w-full border-collapse text-sm">
       <caption class="ap-label pb-1 text-left">
         What changes
       </caption>
@@ -140,11 +145,7 @@ async function submit() {
         </tr>
       </thead>
       <tbody>
-        <tr
-          v-for="f in change.fields"
-          :key="typeof f.field === 'string' ? f.field : f.field.unrecognized"
-          class="border-t border-hairline-faint"
-        >
+        <tr v-for="f in fields" :key="fieldKey(f)" class="border-t border-hairline-faint">
           <th scope="row" class="py-1 pr-3 text-left font-normal text-text-2">
             {{ fieldLabel(f) }}
             <!-- ux U44: an unnamed field's raw key and values live here, never in visible text. -->
@@ -162,14 +163,16 @@ async function submit() {
       </tbody>
     </table>
     <ApCallout v-if="notice" :tone="notice.tone">{{ notice.text }}</ApCallout>
-    <p v-if="expired" class="m-0 text-sm text-text-2">{{ expiredLine }}</p>
-    <template v-else-if="current.conflict !== 'configuration_failure'">
+    <p v-if="decided" class="m-0 text-sm text-text-2">{{ decided }}</p>
+    <p v-else-if="expired" class="m-0 text-sm text-text-2">{{ expiredLine }}</p>
+    <template v-else-if="conflict !== 'configuration_failure'">
       <p v-if="!isAdmin" class="m-0 text-sm text-text-2">Org admins decide provider changes.</p>
       <template v-else-if="deciding">
         <ApTextarea
           v-model="reason"
           :label="`Reason to ${LABEL[deciding].toLowerCase()}`"
           :placeholder="PLACEHOLDER[deciding]"
+          hint="Required."
           :rows="2"
           :error="reasonError ?? undefined"
           required
@@ -192,11 +195,7 @@ async function submit() {
           <ApButton size="compact" variant="primary" @click="start('approve')">Approve…</ApButton>
           <ApButton size="compact" variant="secondary" @click="start('reject')">Reject…</ApButton>
         </template>
-        <ApButton
-          v-else-if="current.conflict === 'acknowledgment_required'"
-          size="compact"
-          variant="primary"
-          @click="start('acknowledge')"
+        <ApButton v-else size="compact" variant="primary" @click="start('acknowledge')"
           >Acknowledge…</ApButton
         >
       </div>

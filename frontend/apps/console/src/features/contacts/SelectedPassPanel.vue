@@ -25,7 +25,9 @@ import {
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
 import ProviderChangeBlock from "./ProviderChangeBlock.vue";
-import { attentionWords } from "@/features/now/index.ts";
+import PassChangeHistory from "./PassChangeHistory.vue";
+import { attentionWords, changeEvidence, changeTitle } from "@/features/now/index.ts";
+import { targetOfAttention } from "./attention.ts";
 import SettlementBlock from "./SettlementBlock.vue";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
@@ -48,6 +50,25 @@ const props = defineProps<{
 }>();
 defineEmits<{ changed: [] }>();
 const now = useNow();
+/** The live provider change on this pass (its attention item), for the decision block. */
+const liveChange = computed(() => {
+  const a = props.pass?.attention;
+  // An expired change (its pass ended undecided) has no decision; the history shows it (U44).
+  if (!a || a.source !== "provider_change" || a.provider_change?.state === "expired") return null;
+  const c = a.conflict;
+  const conflict =
+    c === "approval_required" || c === "acknowledgment_required" || c === "configuration_failure"
+      ? c
+      : null;
+  if (conflict === null) return null;
+  return {
+    target: targetOfAttention(a),
+    conflict,
+    fields: a.provider_change?.fields ?? [],
+    title: `${changeTitle(a, now.value)}.`,
+    evidence: changeEvidence(a, now.value),
+  };
+});
 
 const state = computed(() => (props.pass ? contactState(props.pass) : null));
 /** U32: an attested pass says whose word it rests on, not the provider's. */
@@ -150,9 +171,23 @@ const countdown = computed(() => {
       />
       <!-- §11 L14 (ux U44): a provider's change to this pass, decided here. -->
       <ProviderChangeBlock
-        v-if="pass.attention && pass.attention.source === 'provider_change'"
+        v-if="liveChange"
+        :key="liveChange.target.id"
         :mission-id="missionId"
-        :attention="pass.attention"
+        :target="liveChange.target"
+        :conflict="liveChange.conflict"
+        :fields="liveChange.fields"
+        :title="liveChange.title"
+        :evidence="liveChange.evidence"
+        :now="now"
+        @changed="$emit('changed')"
+      />
+      <!-- ux U44 pass history (api, L14 flown passes): every change and its outcome. -->
+      <PassChangeHistory
+        :mission-id="missionId"
+        :pass-id="pass.id"
+        :provider="pass.source.provider_name ?? null"
+        :live-change-id="liveChange?.target.id ?? null"
         :now="now"
         @changed="$emit('changed')"
       />

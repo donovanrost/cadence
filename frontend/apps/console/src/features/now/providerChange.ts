@@ -1,5 +1,5 @@
 import { isKnown } from "@/api/index.ts";
-import { short, type Attention, type ProviderChange } from "./attention.ts";
+import { short, type Attention, type PassChange, type ProviderChange } from "./attention.ts";
 
 /**
  * §11 L14 provider changes to booked passes (api 30b3f60b9; ux U44). One item per change:
@@ -117,4 +117,64 @@ export function changeEvidence(a: Attention, now: Date): string {
       : null,
   ];
   return parts.filter(Boolean).join(" ");
+}
+
+/**
+ * A pass's change history (ux U44 pass history): each entry leads with what changed, then its
+ * outcome. Open states keep their decision block (`open`); an unknown state shows the evidence
+ * alone; a change Cadence couldn't apply carries a crit mark.
+ */
+export type HistoryEntry = Readonly<{
+  evidence: string;
+  outcome: string | null;
+  open: "approval_required" | "acknowledgment_required" | null;
+  crit: boolean;
+  /** A pending change whose pass ended undecided (the EXPIRED block when it's the newest). */
+  expired: boolean;
+}>;
+
+const DECIDED: Readonly<Record<"approved" | "rejected" | "acknowledged", string>> = {
+  approved: "Approved",
+  rejected: "Rejected",
+  acknowledged: "Acknowledged",
+};
+
+export function historyEntry(c: PassChange, provider: string | null, now: Date): HistoryEntry {
+  const line = c.fields.length ? changeLine(c, now) : null;
+  const evidence = `${provider ?? "The provider"} changed this pass${line ? `: ${line}` : ""}.`;
+  const r = c.resolution;
+  const entry = (outcome: string | null, extra: Partial<HistoryEntry> = {}): HistoryEntry => ({
+    evidence,
+    outcome,
+    open: null,
+    crit: false,
+    expired: false,
+    ...extra,
+  });
+  if (!isKnown(c.state)) return entry(null);
+  switch (c.state) {
+    case "approved":
+    case "rejected":
+    case "acknowledged": {
+      const at = r ? ` at ${short(r.at, now)}` : "";
+      const why = r?.reason ? `: ${r.reason.trim().replace(/[.!?]+$/, "")}` : "";
+      return entry(`${DECIDED[c.state]} by ${r?.by?.name ?? "an operator"}${at}${why}.`);
+    }
+    case "policy_accepted":
+      return entry(`Accepted by the mission's policy at ${short(r?.at ?? c.raised_at, now)}.`);
+    case "superseded":
+      return entry("Replaced by a newer change.");
+    case "expired":
+      // ux U44 (final): "ended", since the pass's ends_at decides it.
+      return entry("Not decided: the pass ended first.", { expired: true });
+    case "configuration_failure":
+    case "apply_failed":
+      return entry("Cadence couldn't apply it.", { crit: true });
+    case "pending_approval":
+      return entry(null, { open: "approval_required" });
+    case "acknowledgment_required":
+      return entry(null, { open: "acknowledgment_required" });
+    case "observed":
+      return entry(null);
+  }
 }

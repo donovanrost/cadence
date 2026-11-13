@@ -8,6 +8,7 @@ export {
   attentionReader,
   passChangeReader,
   type PassChange,
+  type ProviderChange,
   attentionWords,
   serverKey,
   type Attention,
@@ -17,8 +18,11 @@ export { NO_ACCESS, NO_ACCESS_SEEN, retryTargets, seenTargets } from "./useQueue
 export {
   changeEvidence,
   changeTitle,
+  changeLine,
   fieldKey,
   fieldLabel,
+  historyEntry,
+  type HistoryEntry,
   pastDeadline,
   valueWords,
 } from "./providerChange.ts";

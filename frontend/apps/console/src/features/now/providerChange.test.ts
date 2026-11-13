@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { attentionReader, passChangeReader, resolvedWords } from "./attention.ts";
-import { valueWords, fieldLabel } from "./providerChange.ts";
+import { fieldLabel, historyEntry, valueWords } from "./providerChange.ts";
 
 /** §11 L14 provider changes (api 30b3f60b9; ux U44), decoded as api sends them. */
 const NOW = new Date("2026-11-13T02:20:00Z");
@@ -168,5 +168,45 @@ describe("a pass's change history (api, L14 flown passes)", () => {
     expect(expired.ok && expired.value.state).toBe("expired");
     const later = decode(passChangeReader, entry("brand_new_state"));
     expect(later.ok && later.value.state).toEqual({ unrecognized: "brand_new_state" });
+  });
+});
+
+describe("pass change history words (ux U44)", () => {
+  const entryOf = (state: string, resolution: unknown = null) => {
+    const r = decode(passChangeReader, {
+      ...change("approval_required").attention.provider_change,
+      fields: [fieldOf("starts_at", "2026-11-13T03:10:00Z", "2026-11-13T03:12:00Z")],
+      state,
+      raised_at: "2026-11-13T02:00:00Z",
+      resolution,
+    });
+    if (!r.ok) throw new Error(r.error.message);
+    return historyEntry(r.value, "Northlight", NOW);
+  };
+  it("leads with the evidence, then the outcome", () => {
+    const approved = entryOf("approved", {
+      action: "approved",
+      by: null,
+      at: "2026-11-13T02:31:00Z",
+      reason: "Clears the eclipse.",
+    });
+    expect(approved.evidence).toBe("Northlight changed this pass: AOS 03:10Z → 03:12Z.");
+    expect(approved.outcome).toBe("Approved by an operator at 02:31Z: Clears the eclipse.");
+    expect(entryOf("policy_accepted").outcome).toBe("Accepted by the mission's policy at 02:00Z.");
+    expect(entryOf("superseded").outcome).toBe("Replaced by a newer change.");
+    expect(entryOf("expired")).toMatchObject({
+      outcome: "Not decided: the pass ended first.",
+      expired: true,
+    });
+    expect(entryOf("apply_failed")).toMatchObject({
+      outcome: "Cadence couldn't apply it.",
+      crit: true,
+    });
+  });
+  it("keeps open states' blocks; observed and unknown states show the evidence alone", () => {
+    expect(entryOf("pending_approval").open).toBe("approval_required");
+    expect(entryOf("acknowledgment_required").open).toBe("acknowledgment_required");
+    expect(entryOf("observed").outcome).toBeNull();
+    expect(entryOf("brand_new").outcome).toBeNull();
   });
 });
