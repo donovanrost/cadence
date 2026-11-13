@@ -64,7 +64,7 @@ export abstract class ChartSeriesModel {
       this.normalizeCompareSeriesPayload(input.compare_backfill),
     );
     this.limitMarkers = readMarkers(input.limit_markers);
-    this.eventMarkers = this.collapseSourceWatermarkMarkers(readMarkers(input.event_markers));
+    this.eventMarkers = readMarkers(input.event_markers);
     this.annotations = readMarkers(input.annotations);
     this.selectedRef = readSelection(input.selected_ref);
     if (this.liveMode()) this.advanceLiveWindow(Date.now());
@@ -380,6 +380,4 @@ export abstract class ChartSeriesModel {
     this.liveWindowEnd = windowEnd;
     return true;
   }
-
-  abstract collapseSourceWatermarkMarkers(markers: ChartMarker[]): ChartMarker[];
 }

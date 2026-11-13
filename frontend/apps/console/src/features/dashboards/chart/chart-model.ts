@@ -59,9 +59,7 @@ export class ChartModel extends ChartSeriesModel {
     }
 
     if (eventMarkerAppends.length > 0) {
-      this.eventMarkers = this.collapseSourceWatermarkMarkers(
-        this.dedupeMarkers(this.eventMarkers.concat(eventMarkerAppends)),
-      );
+      this.eventMarkers = this.dedupeMarkers(this.eventMarkers.concat(eventMarkerAppends));
       appended = true;
     }
 
@@ -73,70 +71,8 @@ export class ChartModel extends ChartSeriesModel {
     return appended;
   }
 
-  collapseSourceWatermarkMarkers(markers: ChartMarker[]) {
-    if (!Array.isArray(markers)) return [];
-
-    const latestCursors = this.latestSourceWatermarkMarkers(
-      markers.filter((marker) => marker.marker_type === "source_watermark_cursor"),
-    );
-    const cursorIdentities = new Set(
-      latestCursors.map((marker) => this.sourceWatermarkIdentity(marker)),
-    );
-    const fallbackEvents = this.latestSourceWatermarkMarkers(
-      markers.filter((marker) => marker.marker_type === "source_watermark_event"),
-    ).filter((marker) => !cursorIdentities.has(this.sourceWatermarkIdentity(marker)));
-
-    return markers
-      .filter(
-        (marker) =>
-          marker.marker_type !== "source_watermark_cursor" &&
-          marker.marker_type !== "source_watermark_event",
-      )
-      .concat(latestCursors, fallbackEvents);
-  }
-
-  latestSourceWatermarkMarkers(markers: ChartMarker[]) {
-    const latest = new Map<string, ChartMarker>();
-
-    markers.forEach((marker) => {
-      const identity = this.sourceWatermarkIdentity(marker);
-      const current = latest.get(identity);
-      if (
-        !current ||
-        this.sourceWatermarkTimestamp(marker) >= this.sourceWatermarkTimestamp(current)
-      ) {
-        latest.set(identity, marker);
-      }
-    });
-
-    return Array.from(latest.values());
-  }
-
-  sourceWatermarkIdentity(marker: ChartMarker) {
-    return [
-      marker.logical_source || "",
-      marker.data_source_id || "",
-      marker.source_binding_id || "",
-      marker.dataset || "",
-      marker.realm || "",
-      marker.replay_run_id || "",
-    ].join(":");
-  }
-
-  sourceWatermarkTimestamp(marker: ChartMarker) {
-    return Number(marker.timestamp_ms || marker.complete_through_ms || marker.observed_at_ms || 0);
-  }
-
   eventMarkerOverlapsWindow(marker: ChartMarker, cutoff: number) {
-    if (
-      marker.marker_type === "source_binding_interval" ||
-      marker.marker_type === "retention_gap" ||
-      marker.marker_type === "telemetry_revision_range" ||
-      (marker.marker_type === "telemetry_backfill_lifecycle" && marker.starts_at_ms)
-    ) {
-      return this.intervalMarkerOverlapsWindow(marker, cutoff);
-    }
-
+    if (marker.starts_at_ms) return this.intervalMarkerOverlapsWindow(marker, cutoff);
     if (!marker.timestamp_ms) return false;
     return marker.timestamp_ms / 1000 >= cutoff;
   }

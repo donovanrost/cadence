@@ -146,19 +146,6 @@ export class ChartLive {
       return "degraded";
     }
 
-    const delayedWatermark = (this.surface.model.eventMarkers || []).some(
-      (marker) =>
-        (marker.marker_type === "source_watermark_cursor" ||
-          marker.marker_type === "source_watermark_event") &&
-        (marker.display_mode !== "status" ||
-          marker.freshness_state === "stale" ||
-          marker.freshness_state === "retention_gap"),
-    );
-
-    if (this.surface.el.dataset.watermarkBoundaryVisible === "true" || delayedWatermark) {
-      return "delayed";
-    }
-
     if (!this.liveHeartbeatObserved) return "connecting";
     if (!this.liveHeartbeatCurrent) return "paused";
     if (this.liveReceivingSamples) return "receiving";

@@ -47,7 +47,7 @@ test("aligns series and explicit gaps, preserves point evidence, and pairs envel
   });
   expect(model.seriesList.map((series) => series.id)).toEqual(["voltage", "temperature"]);
 });
-test("append and window trimming retain interval overlaps and the latest watermark per source", () => {
+test("append and window trimming keep interval overlaps and drop points before the window", () => {
   const model = new ChartModel({
     ...input,
     time_mode: "live",
@@ -59,35 +59,16 @@ test("append and window trimming retain interval overlaps and the latest waterma
       { marker_id: "past", marker_type: "mission_event", timestamp_ms: 1_000 },
       {
         marker_id: "interval",
-        marker_type: "source_binding_interval",
+        marker_type: "mission_event",
         starts_at_ms: 1_000,
         ends_at_ms: 80_000,
-      },
-      {
-        marker_id: "cursor-a",
-        marker_type: "source_watermark_cursor",
-        data_source_id: "source",
-        timestamp_ms: 60_000,
       },
     ],
   });
   expect(model.appendSeriesPayload([[120_000, 3]])).toBe(true);
   expect(
     model.appendMarkerPayload({
-      event_markers: [
-        {
-          marker_id: "cursor-b",
-          marker_type: "source_watermark_cursor",
-          data_source_id: "source",
-          timestamp_ms: 110_000,
-        },
-        {
-          marker_id: "other",
-          marker_type: "source_watermark_cursor",
-          data_source_id: "other",
-          timestamp_ms: 100_000,
-        },
-      ],
+      event_markers: [{ marker_id: "late", marker_type: "mission_event", timestamp_ms: 110_000 }],
     }),
   ).toBe(true);
   expect(model.advanceLiveWindow(120_000)).toBe(true);
@@ -96,12 +77,7 @@ test("append and window trimming retain interval overlaps and the latest waterma
     [60, 120],
     [2, 3],
   ]);
-  expect(model.eventMarkers.map((marker) => marker.marker_id)).toEqual([
-    "interval",
-    "cursor-b",
-    "other",
-  ]);
-  expect(model.chartXRange(60, 120)).toEqual([60, 120]);
+  expect(model.eventMarkers.map((marker) => marker.marker_id)).toEqual(["interval", "late"]);
 });
 test("normalizers reject malformed coordinates and keep absent marker timestamps absent", () => {
   const model = new ChartModel({

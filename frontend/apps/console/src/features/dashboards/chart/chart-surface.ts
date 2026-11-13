@@ -149,41 +149,7 @@ export class ChartSurface {
       return `${this.themeColor("--chart-critical-90")}`;
     if (marker.severity === "warning" || marker.status === "canceled")
       return `${this.themeColor("--chart-warning-90")}`;
-    if (marker.marker_type === "retention_gap") return this.retentionGapColor(marker);
-    if (marker.marker_type === "source_binding_interval")
-      return this.sourceBindingIntervalColor(marker);
-    if (
-      marker.marker_type === "source_watermark_cursor" ||
-      marker.marker_type === "source_watermark_event"
-    )
-      return this.sourceWatermarkCursorColor(marker);
-    if (
-      marker.marker_type === "telemetry_revision_range" ||
-      marker.marker_type === "telemetry_revision_decision" ||
-      marker.marker_type === "telemetry_backfill_lifecycle"
-    )
-      return this.telemetryRevisionColor(marker);
     return `${this.themeColor("--chart-revision-86")}`;
-  }
-
-  retentionGapColor(_marker: ChartMarker) {
-    return `${this.themeColor("--chart-critical-76")}`;
-  }
-
-  sourceBindingIntervalColor(_marker: ChartMarker) {
-    return `${this.themeColor("--chart-revision-68")}`;
-  }
-
-  sourceWatermarkCursorColor(marker: ChartMarker) {
-    if (marker.freshness_state === "stale") return `${this.themeColor("--chart-warning-82")}`;
-    if (marker.freshness_state === "retention_gap")
-      return `${this.themeColor("--chart-critical-78")}`;
-    return `${this.themeColor("--chart-current-76")}`;
-  }
-
-  telemetryRevisionColor(marker: ChartMarker) {
-    if (marker.revision_state === "backfill") return `${this.themeColor("--chart-backfill-72")}`;
-    return `${this.themeColor("--chart-warning-78")}`;
   }
 
   chartSize() {
