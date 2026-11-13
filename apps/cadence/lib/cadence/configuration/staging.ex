@@ -48,15 +48,19 @@ defmodule Cadence.Configuration.Staging do
     with :ok <- not_frozen(set),
          :ok <- rollback_alone(set, source),
          :ok <- resolve_overlaps(set, actor, prepared) do
-      entity_ids = Enum.map(prepared, & &1.entity_id)
-      held = Enum.map(prepared, &staged_delete(&1, set, actor))
-
-      case for {op, nil} <- Enum.zip(prepared, held), do: op do
-        [] -> result(set, set.version, hd(held), entity_ids)
-        fresh -> insert_change(set, actor, summary, source, fresh, entity_ids)
-      end
+      write(set, actor, summary, source, prepared)
     else
       {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp write(set, actor, summary, source, prepared) do
+    entity_ids = Enum.map(prepared, & &1.entity_id)
+    held = Enum.map(prepared, &staged_delete(&1, set, actor))
+
+    case for {op, nil} <- Enum.zip(prepared, held), do: op do
+      [] -> result(set, set.version, hd(held), entity_ids)
+      fresh -> insert_change(set, actor, summary, source, fresh, entity_ids)
     end
   end
 
