@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { stationId } from "@/api";
 import type { CommandSummary } from "@/features/commands/index.ts";
 import type { Station } from "@/features/stations/index.ts";
 import { grouped } from "./results.ts";
@@ -20,7 +21,7 @@ const command = (name: string, extra: Partial<CommandSummary> = {}): CommandSumm
 });
 
 const station = (code: string | null, name: string, extra: Partial<Station> = {}): Station => ({
-  id: `gs-${name.toLowerCase()}`,
+  id: stationId(`gs-${name.toLowerCase()}`),
   display_name: name,
   code,
   suggested_code: null,
