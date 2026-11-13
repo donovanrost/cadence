@@ -40,9 +40,10 @@ subline: 500 spacecraft inherit this profile · 3 override it · catalog rev 14 
   revisions touching this profile). Read-only without `config.stage` (Changes.md §5).
 
 ### P1 · Section form (Framing shown; Limits, Commanding, Catalog use the same pattern)
-**Until P2 (DECISIONS #19) Framing is read-only** with an `info` callout: "Decode uses each
-transport's frame settings today. Profile framing takes effect when the pipeline reads it." Values
-render as text, with no Stage aside.
+**Framing is editable** like the other sections (DECISIONS #19 lifted; lead b2f92dba). Only when the mission's
+settings keep profile framing out of the runtime (ST1 `profile_framing_generations` off), an info note reads:
+"This mission's settings keep profile framing out of the runtime, so changing it here doesn't change how
+telemetry is decoded." with the link `Mission settings`.
 Header meta: `INHERITED BY 500 · 1 EDIT STAGED`. Body is a 2-column **key/value tile grid** (1px
 hairline gaps): `lbl` + inline input (mono 14 for values). Fields come **only** from the server's
 section schema (`docs/apogee/domain/profile-routing.md` §3: path, label, type, unit, enum, range,
