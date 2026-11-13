@@ -96,6 +96,10 @@ defmodule Cadence.GroundNetworks.ProviderAccountRetirementTest do
              ProviderAccountRetirement.retire(ctx.scope, @account, "Contract ended")
 
     assert {:error, :already_retired} = ProviderAccountRetirement.retire(ctx.scope, @account)
+
+    # L13 defect 3: a grant on a retired account says so, not "widens guardrails".
+    assert {:error, :provider_account_archived} =
+             ProviderAccountGrants.grant(ctx.scope, @mission, @account, %{}, now: @now)
   end
 
   test "only organization admins retire accounts, and unknown accounts are not found", ctx do
