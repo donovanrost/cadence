@@ -37,7 +37,7 @@ const run = d.object({
   job_id: d.token,
   kind: d.known(runKinds),
   status: d.known(runStatuses),
-  inserted_at: d.timestamp,
+  started_at: d.timestamp,
   // free-text: the job's error message, shown as is.
   error: d.optional(d.nullable(d.string)),
   actions: d.optional(d.array(d.known(["retry", "requeue"] as const), 2)),
@@ -138,7 +138,10 @@ export function probeSource(k: SourceKey) {
 /** W6: start a TSDB job (202); the page polls R2 while it runs. */
 const started = d.object({
   source: sourceReader,
-  run: d.object({ job_id: d.token, kind: d.known(runKinds), status: d.known(runStatuses) }),
+  // api-ops 2e3c8c5ab: null only for reconcile, which repairs the backend at once (no run).
+  run: d.nullable(
+    d.object({ job_id: d.token, kind: d.known(runKinds), status: d.known(runStatuses) }),
+  ),
 });
 export function startTsdbJob(k: SourceKey, kind: (typeof runKinds)[number]) {
   return request(

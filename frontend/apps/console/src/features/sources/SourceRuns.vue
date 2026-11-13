@@ -48,7 +48,7 @@ async function act(r: SourceRun) {
       <template #cell-status="{ row }"
         ><ApTag :state="runTag(row).state" :label="runTag(row).label"
       /></template>
-      <template #cell-at="{ row }">{{ formatShort(new Date(row.inserted_at)) }}</template>
+      <template #cell-at="{ row }">{{ formatShort(new Date(row.started_at)) }}</template>
       <template #cell-error="{ row }"
         ><span class="text-text-2">{{ row.error ?? "—" }}</span></template
       >

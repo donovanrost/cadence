@@ -48,7 +48,7 @@ const job = (kind: "provision" | "reconcile" | "deprovision") => {
   confirm.value?.close();
   return run(
     () => startTsdbJob(key.value, kind),
-    () => "Started. Its progress shows under Runs.",
+    (r) => (r.run ? "Started. Its progress shows under Runs." : "Reconciled. Nothing queued."),
   );
 };
 </script>

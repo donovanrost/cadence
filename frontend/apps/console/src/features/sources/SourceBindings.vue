@@ -42,7 +42,8 @@ const failure = ref<string | null>(null);
 const busy = ref(false);
 const choices = computed(() =>
   props.sources
-    .filter((s) => s.shared !== true || s.id === picked.value?.data_source_id)
+    // A binding may read a shared source; the server refuses one that can't serve it (422).
+    .filter((s) => s.state !== "disabled" || s.id === picked.value?.data_source_id)
     .map((s) => ({ value: s.id, label: s.display_name })),
 );
 function open(b: SourceBinding) {

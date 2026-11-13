@@ -109,7 +109,7 @@ describe("source page", () => {
       job_id: "j",
       kind: "provision" as const,
       status,
-      inserted_at: "2026-11-13T01:00:00Z",
+      started_at: "2026-11-13T01:00:00Z",
       error: null,
       actions: [],
     });
