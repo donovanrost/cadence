@@ -50,7 +50,7 @@ const add = (d: { id: string; name: string }) => {
       <span class="min-w-0 flex-1 truncate text-md text-readout"
         >{{ item.name
         }}<span v-if="item.archived" class="ml-2 text-xs uppercase tracking-tag text-text-4"
-          >Archived · skipped</span
+          >Archived · remove to save</span
         ></span
       >
       <ApButton

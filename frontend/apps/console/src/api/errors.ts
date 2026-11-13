@@ -186,6 +186,7 @@ export const errorCodes = [
   "share_expired",
   "share_revoked",
   "snapshot_deleted",
+  "playlist_not_found",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 

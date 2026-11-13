@@ -139,13 +139,14 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "telemetry/dashboards/playlists",
     name: "ops.dashboards.playlists",
-    component: pending,
+    // D23/D24 (api 475cf1295).
+    component: () => import("@/features/dashboards/playlists/PlaylistsScreen.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "Playlists" },
   },
   {
     path: "telemetry/dashboards/playlists/:playlistId/present",
     name: "ops.dashboards.present",
-    component: pending,
+    component: () => import("@/features/dashboards/playlists/PresentScreen.vue"),
     meta: { mode: "takeover", nav: "telemetry", title: "Present playlist" },
   },
   {

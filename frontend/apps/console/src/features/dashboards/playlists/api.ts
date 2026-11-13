@@ -1,9 +1,17 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders as d,
+  detailsOf,
+  isError,
+  request,
+  type ApiError,
+  type ApiResult,
+  type Decoded,
+} from "@/api";
 
 /**
- * Playlists (plans/dashboards-slice6.md D23/D24; DECISIONS #76 Q6 update/delete, Q10 delete =
- * hard delete after a confirm, audited). Present mode has no endpoint: it walks `dashboards`
- * through the viewer's D5. Invalidation: `dashboards`.
+ * Playlists (api 475cf1295, contract dashboards.md §D23/D24; DECISIONS #76 Q6 update/delete, Q10
+ * delete = hard delete after a confirm, audited). Present mode has no endpoint: it walks
+ * `dashboards` through the viewer's D5. Invalidation: `dashboards`.
  */
 const person = d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) }));
 const summary = d.object({
@@ -19,18 +27,18 @@ const summary = d.object({
 export type PlaylistSummary = Decoded<typeof summary>;
 const listing = d.object({ playlists: d.array(summary, 500), can_edit: d.boolean });
 
-const detail = d.object({
-  playlist: d.object({
-    id: d.token,
-    name: d.string,
-    description: d.nullable(d.string),
-    dwell_seconds: d.integer,
-    wallboard_mode: d.boolean,
-    updated_at: d.nullable(d.timestamp),
-    dashboards: d.array(d.object({ id: d.token, name: d.string, archived: d.boolean }), 50),
-  }),
+const playlist = d.object({
+  id: d.token,
+  name: d.string,
+  description: d.nullable(d.string),
+  dwell_seconds: d.integer,
+  wallboard_mode: d.boolean,
+  updated_at: d.nullable(d.timestamp),
+  updated_by: person,
+  dashboards: d.array(d.object({ id: d.token, name: d.string, archived: d.boolean }), 100),
 });
-export type Playlist = Decoded<typeof detail>["playlist"];
+const detail = d.object({ playlist });
+export type Playlist = Decoded<typeof playlist>;
 
 export type PlaylistInput = Readonly<{
   name: string;
@@ -39,9 +47,9 @@ export type PlaylistInput = Readonly<{
   wallboard_mode: boolean;
   dashboard_ids: readonly string[];
 }>;
-/** Server bounds (proposal): name 1–120, dwell 10–3600 s, 1–50 unique dashboards. */
-export const DWELL = { min: 10, max: 3600 } as const;
-export const MAX_DASHBOARDS = 50;
+/** Domain's bounds (§D24): name 1–120, dwell 5–900 s, 1–100 unique active dashboards. */
+export const DWELL = { min: 5, max: 900 } as const;
+export const MAX_DASHBOARDS = 100;
 
 const root = (missionId: string) =>
   `/missions/${encodeURIComponent(missionId)}/dashboard-playlists`;
@@ -73,10 +81,33 @@ export const createPlaylist = (missionId: string, body: PlaylistInput) =>
     method: "POST",
     body: { ...body, description: body.description || null },
   });
-export const updatePlaylist = (missionId: string, id: string, body: PlaylistInput) =>
+/** `expectedUpdatedAt` is the row's `updated_at` as read; a stale one is 409 version_conflict. */
+export const updatePlaylist = (
+  missionId: string,
+  id: string,
+  body: PlaylistInput,
+  expectedUpdatedAt: string | null,
+) =>
   request(one(missionId, id), created, {
     method: "PATCH",
-    body: { ...body, description: body.description || null },
+    body: {
+      ...body,
+      description: body.description || null,
+      expected_updated_at: expectedUpdatedAt,
+    },
   });
 export const deletePlaylist = (missionId: string, id: string) =>
   request(one(missionId, id), nothing, { method: "DELETE" });
+
+/** 409 version_conflict on a stale PATCH: the playlist as it is now (§D24). */
+export const changedPlaylist = (error: ApiError): Playlist | null =>
+  isError(error, "version_conflict")
+    ? (detailsOf(error, d.object({ current: playlist }))?.current ?? null)
+    : null;
+
+/** 422 `details.unknown`: dashboards that aren't active (archived) or aren't this mission's. */
+export const refusedDashboards = (error: ApiError): readonly string[] =>
+  detailsOf(error, d.object({ unknown: d.array(d.token, 100) }))?.unknown ?? [];
+
+/** 404 playlist_not_found: deleted (present mode, an open sheet). */
+export const playlistDeleted = (error: ApiError) => isError(error, "playlist_not_found");

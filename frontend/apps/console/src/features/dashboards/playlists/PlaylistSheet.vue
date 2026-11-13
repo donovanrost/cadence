@@ -3,11 +3,15 @@ import { computed, ref } from "vue";
 import { ApButton, ApCallout, ApField, ApNumberField, ApSheet, ApTextarea } from "@/ui";
 import {
   DWELL,
+  changedPlaylist,
   createPlaylist,
   fetchPlaylist,
+  refusedDashboards,
   updatePlaylist,
+  type Playlist,
   type PlaylistSummary,
 } from "./api.ts";
+import PlaylistConflict from "./PlaylistConflict.vue";
 import PlaylistOrder from "./PlaylistOrder.vue";
 
 /** New / edit playlist (ux: a wide sheet): name, dwell, wallboard mode, ordered dashboards. */
@@ -20,35 +24,55 @@ const description = ref("");
 const dwell = ref("30");
 const wallboard = ref(false);
 const dashboards = ref<readonly { id: string; name: string; archived: boolean }[]>([]);
+/** The row's `updated_at` as read: a stale one is 409 version_conflict (§D24). */
+const expectedUpdatedAt = ref<string | null>(null);
+const conflict = ref<Playlist | null>(null);
 const error = ref<string | null>(null);
 const busy = ref(false);
 const dwellSeconds = computed(() => Number.parseInt(dwell.value, 10));
-const valid = computed(
-  () =>
-    name.value.trim() !== "" &&
-    dashboards.value.length > 0 &&
-    dwellSeconds.value >= DWELL.min &&
-    dwellSeconds.value <= DWELL.max,
-);
+const archived = computed(() => dashboards.value.filter((d) => d.archived).length);
+const blocked = computed(() => {
+  if (name.value.trim() === "" || dashboards.value.length === 0)
+    return "Name it and add a dashboard.";
+  if (!(dwellSeconds.value >= DWELL.min && dwellSeconds.value <= DWELL.max))
+    return `Pick a dwell of ${DWELL.min} to ${DWELL.max} s.`;
+  // The server refuses archived dashboards in a saved playlist (§D24).
+  if (archived.value) return "Remove the archived dashboards first.";
+  return null;
+});
 
+function fill(from: Playlist | PlaylistSummary) {
+  name.value = from.name;
+  description.value = from.description ?? "";
+  dwell.value = String(from.dwell_seconds);
+  wallboard.value = from.wallboard_mode;
+  expectedUpdatedAt.value = from.updated_at;
+}
 async function open(existing: PlaylistSummary | null) {
   id.value = existing?.id ?? null;
-  name.value = existing?.name ?? "";
-  description.value = existing?.description ?? "";
-  dwell.value = String(existing?.dwell_seconds ?? 30);
-  wallboard.value = existing?.wallboard_mode ?? false;
+  if (existing) fill(existing);
+  else {
+    name.value = description.value = "";
+    dwell.value = "30";
+    wallboard.value = false;
+    expectedUpdatedAt.value = null;
+  }
   dashboards.value = [];
   error.value = null;
+  conflict.value = null;
   sheet.value?.open();
   if (existing) {
     const r = await fetchPlaylist(props.missionId, existing.id);
-    if (r.ok) dashboards.value = r.value.dashboards;
-    else error.value = r.error.kind === "unauthenticated" ? "Signed out." : r.error.message;
+    if (r.ok) {
+      fill(r.value);
+      dashboards.value = r.value.dashboards;
+    } else error.value = r.error.kind === "unauthenticated" ? "Signed out." : r.error.message;
   }
 }
 async function save() {
-  if (!valid.value || busy.value) return;
+  if (blocked.value || busy.value) return;
   busy.value = true;
+  error.value = null;
   const body = {
     name: name.value.trim(),
     description: description.value.trim(),
@@ -57,15 +81,35 @@ async function save() {
     dashboard_ids: dashboards.value.map((d) => d.id),
   };
   const r = id.value
-    ? await updatePlaylist(props.missionId, id.value, body)
+    ? await updatePlaylist(props.missionId, id.value, body, expectedUpdatedAt.value)
     : await createPlaylist(props.missionId, body);
   busy.value = false;
-  if (!r.ok) {
-    error.value = r.error.kind === "unauthenticated" ? "Signed out." : r.error.message;
-    return;
+  if (r.ok) {
+    sheet.value?.close();
+    return void emit("saved");
   }
-  sheet.value?.close();
-  emit("saved");
+  conflict.value = changedPlaylist(r.error);
+  if (conflict.value) return;
+  const refused = refusedDashboards(r.error);
+  if (refused.length) {
+    // Archived (or gone) since they were added: flag them so they can be removed.
+    dashboards.value = dashboards.value.map((d) =>
+      refused.includes(d.id) ? { ...d, archived: true } : d,
+    );
+    return void (error.value = "Some dashboards are archived or no longer in this mission.");
+  }
+  error.value = r.error.kind === "unauthenticated" ? "Signed out." : r.error.message;
+}
+/** Someone saved meanwhile: take their playlist, or keep mine over it. */
+function useTheirs(current: Playlist) {
+  fill(current);
+  dashboards.value = current.dashboards;
+  conflict.value = null;
+}
+function keepMine(current: Playlist) {
+  expectedUpdatedAt.value = current.updated_at;
+  conflict.value = null;
+  void save();
 }
 defineExpose({ open });
 </script>
@@ -100,14 +144,15 @@ defineExpose({ open });
         </label>
       </div>
       <PlaylistOrder v-model="dashboards" :mission-id="missionId" />
+      <PlaylistConflict v-if="conflict" :current="conflict" @theirs="useTheirs" @mine="keepMine" />
       <ApCallout v-if="error" tone="crit">{{ error }}</ApCallout>
     </div>
     <template #footer>
       <ApButton variant="secondary" class="mr-auto" @click="sheet?.close()">Cancel</ApButton>
       <ApButton
         variant="primary"
-        :disabled="!valid || busy"
-        disabled-reason="Name it, add a dashboard and pick a dwell of 10 to 3600 s."
+        :disabled="blocked !== null || busy"
+        :disabled-reason="blocked ?? 'Saving…'"
         @click="save"
         >{{ id ? "Save playlist" : "Create playlist" }}</ApButton
       >

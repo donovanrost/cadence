@@ -50,6 +50,8 @@ async function onAction(
 
 <template>
   <ApPageHeader :label="`${scope.mission.name} · telemetry`" title="Dashboards" size="reading">
+    <!-- Playlists' way in (pending ux's ruling; the spec names the page, not its entry point). -->
+    <ApButton variant="secondary" :to="{ name: 'ops.dashboards.playlists' }">Playlists</ApButton>
     <ApButton v-if="canEdit" variant="primary" :to="{ name: 'ops.dashboards.new' }"
       >New dashboard</ApButton
     >

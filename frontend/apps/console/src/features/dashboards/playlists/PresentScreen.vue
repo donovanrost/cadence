@@ -2,14 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { useConnection } from "@/live";
+import { useConnection, useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
 import { ApEmptyState, ApRemote } from "@/ui";
 import ViewerBody from "../viewer/ViewerBody.vue";
 import { useDashboardView } from "../viewer/useDashboardView.ts";
 import { liveSnapshot } from "../model/live-merge.ts";
 import { LIVE_PUSH, useDashboardLive } from "../viewer/useDashboardLive.ts";
-import { fetchPlaylist } from "./api.ts";
+import { fetchPlaylist, playlistDeleted } from "./api.ts";
 import PresentLine from "./PresentLine.vue";
 import { usePresent } from "./usePresent.ts";
 
@@ -28,8 +28,17 @@ const playlist = useRemoteQuery(
   computed(() => (id.value ? JSON.stringify([missionId.value, id.value]) : null)),
   (_k, signal) => fetchPlaylist(missionId.value, id.value, signal),
 );
+// An edit or a delete reaches a running kiosk: playlist writes fire `dashboards` (§D23).
+useMissionInvalidation(
+  computed<string | null>(() => missionId.value),
+  ["dashboards"],
+  playlist.refetch,
+);
 const ready = computed(() =>
   playlist.state.value.status === "ready" ? playlist.state.value.value : null,
+);
+const deleted = computed(
+  () => playlist.state.value.status === "failed" && playlistDeleted(playlist.state.value.error),
 );
 const show = usePresent(
   computed(() => ready.value?.dashboards ?? []),
@@ -74,7 +83,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
     :skipped="show.skipped.value"
     @exit="leave"
   />
-  <ApRemote :state="playlist.state.value" @retry="playlist.refetch">
+  <ApEmptyState
+    v-if="deleted"
+    headline="This playlist was deleted."
+    sentence="Press Esc or Exit to go back to Playlists."
+    state="off"
+  />
+  <ApRemote v-else :state="playlist.state.value" @retry="playlist.refetch">
     <template #default="{ value }">
       <ApEmptyState
         v-if="show.total.value === 0"
