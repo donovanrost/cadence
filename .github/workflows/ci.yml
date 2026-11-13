@@ -1,0 +1,218 @@
+name: CI
+
+# Elixir quality and test suites (docs/ci/plan.md). `ci-ok` is the single required check.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # Pushes to develop/main write the caches PRs restore; let them finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MIX_ENV: test
+
+jobs:
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
+    steps:
+      - if: github.event_name == 'pull_request'
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - "**"
+              - "!docs/**"
+              - "!**/*.md"
+
+  quality:
+    name: Elixir quality
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - id: setup
+        uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
+          xmllint: "false"
+
+      # Each check runs even when an earlier one fails, so one run reports every problem.
+      - name: Compile every project (warnings as errors)
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --warnings-as-errors
+      - name: Format
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix format.all --check-formatted
+      - name: Credo (strict, zero issues)
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix credo --strict
+      - name: No new credo suppressions
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && github.event_name == 'pull_request' }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          scripts/ci/credo_suppressions.sh FETCH_HEAD HEAD
+      - name: Workspace check
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix workspace.check
+      - name: Extensions check
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix workspace.run -t cadence.extensions.check -p cadence --order postorder --early-stop --env-var MIX_ENV=test --
+      - name: Architecture check
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix workspace.run -t cadence.architecture.check -p cadence --order postorder --early-stop --env-var MIX_ENV=test -- --summary
+      - name: Hex audit (advisory, non-blocking)
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        continue-on-error: true
+        run: mix hex.audit
+
+      # Only develop/main pushes save caches; PRs restore the latest one and never churn the quota.
+      # This job compiles every project, so it alone saves _build.
+      - name: Save deps
+        if: ${{ github.event_name == 'push' && steps.setup.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CADENCE_DEPS_PATHS }}
+          key: ${{ env.CADENCE_DEPS_KEY }}
+      - name: Save _build
+        if: ${{ github.event_name == 'push' && steps.setup.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CADENCE_BUILD_PATHS }}
+          key: ${{ env.CADENCE_BUILD_KEY }}
+
+  test-core:
+    name: Core tests (${{ matrix.partition }}/4)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3, 4]
+    env:
+      MIX_TEST_PARTITION: ${{ matrix.partition }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      - name: mix test --partitions 4
+        working-directory: apps/cadence
+        run: mix test --partitions 4 --slowest-modules 10
+      - name: Save pnpm store
+        if: github.event_name == 'push' && matrix.partition == 1
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CADENCE_PNPM_STORE }}
+          key: pnpm-v1-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+  test-packages:
+    name: Packages, simulator, planes and cluster tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - id: setup
+        uses: ./.github/actions/setup-cadence
+
+      # Each suite runs even when an earlier one fails, so one run reports every problem.
+      - name: ccsds
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: packages/ccsds
+        run: mix test
+      - name: xtce
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: packages/xtce
+        run: mix test
+      - name: cadence_catalog
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: packages/cadence_catalog
+        run: mix test
+      # The simulator suite uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
+      - name: Create and migrate the cadence test database
+        id: db
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      - name: cadence_simulator
+        if: ${{ !cancelled() && steps.db.outcome == 'success' }}
+        working-directory: apps/cadence_simulator
+        run: mix test
+      - name: Plane tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix test.planes
+      - name: OTP cluster tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix test.cluster
+
+  ci-ok:
+    name: ci-ok
+    needs: [changes, quality, test-core, test-packages]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every needed job succeeded or was skipped as unaffected
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null

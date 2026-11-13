@@ -16,6 +16,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
   @organization_id "org-sim-cop1"
   @mission_id "mission-sim-cop1"
   @spacecraft_id "sc-sim-cop1"
+  # The release guard (#38) requires the gateway binding and the spacecraft to share a SCID.
+  @scid 31
   @source_endpoint_id "source-endpoint-sim-cop1"
 
   setup do
@@ -50,6 +52,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
         source_endpoint.source_endpoint_id,
         %{
           "service_name" => "cop1",
+          "scid" => @scid,
           "cop1_mode" => "fop",
           "cop1_timeout_ms" => 500,
           "cop1_max_retransmit" => 2,
@@ -156,7 +159,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
       Spacecraft.new(%{
         spacecraft_id: @spacecraft_id,
         mission_id: @mission_id,
-        display_name: "SC Simulator"
+        display_name: "SC Simulator",
+        scid: @scid
       })
 
     assert {:ok, _spacecraft} =

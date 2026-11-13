@@ -29,10 +29,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24.16.0"
-      - uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236 # v1
-        with:
-          otp-version: "29.0.5"
-          elixir-version: "1.20.3"
+      # OTP and Elixir versions come from mise.toml.
+      - uses: ./.github/actions/setup-beam
       # The frontend consumes the locked Phoenix and LiveVue JavaScript packages.
       - run: mix deps.get --check-locked
       - run: corepack enable
@@ -67,10 +65,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24.16.0"
-      - uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236 # v1
-        with:
-          otp-version: "29.0.5"
-          elixir-version: "1.20.3"
+      # OTP and Elixir versions come from mise.toml.
+      - uses: ./.github/actions/setup-beam
       - run: mix deps.get --check-locked
       - run: mix setup --check-locked
       - run: corepack enable

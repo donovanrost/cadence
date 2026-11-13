@@ -1,0 +1,36 @@
+name: Set up BEAM from mise.toml
+description: >-
+  Installs the Erlang/OTP and Elixir versions pinned in mise.toml, the single source of truth
+  for developer machines and CI.
+outputs:
+  otp-version:
+    description: Erlang/OTP version from mise.toml
+    value: ${{ steps.pins.outputs.otp-version }}
+  elixir-version:
+    description: Elixir version from mise.toml, without the -otp-NN suffix
+    value: ${{ steps.pins.outputs.elixir-version }}
+runs:
+  using: composite
+  steps:
+    - name: Read OTP and Elixir pins from mise.toml
+      id: pins
+      shell: bash
+      run: |
+        otp=$(sed -n 's/^erlang = "\(.*\)"$/\1/p' mise.toml)
+        elixir=$(sed -n 's/^elixir = "\(.*\)"$/\1/p' mise.toml)
+        elixir=${elixir%-otp-*}
+        for pin in "erlang=$otp" "elixir=$elixir"; do
+          case "${pin#*=}" in
+            "" | latest | *[!0-9.]*)
+              echo "::error file=mise.toml::${pin%%=*} must be pinned to an exact version in mise.toml (found '${pin#*=}')"
+              exit 1
+              ;;
+          esac
+        done
+        echo "otp-version=$otp" >> "$GITHUB_OUTPUT"
+        echo "elixir-version=$elixir" >> "$GITHUB_OUTPUT"
+    - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+      with:
+        otp-version: ${{ steps.pins.outputs.otp-version }}
+        elixir-version: ${{ steps.pins.outputs.elixir-version }}
+        version-type: strict
