@@ -785,3 +785,36 @@ then the fix:
   the field uses that hold's placeholder. With several, it uses "Why it's safe to apply despite these holds".
 - **Field errors** keep today's direct-save messages. Two new ones: "Limits for BATT_V already exist. Edit them
   instead." (with a link to them) and "The point and limit set can't change after the limits are added."
+
+### U44 · Provider changes to booked passes (§11 L14, api 30b3f60b9) (fe-ops / api)
+The U31/U32 grammar applies: one item per change, approval P2 due at the deadline, acknowledgement and
+configuration failure P3. The amendments to fe-ops' drafts:
+- **Titles** (the pass identified as in Contacts, §4 time with the date when it isn't today):
+  - approval_required: `EARENDIL-312 · Northlight wants to change the SVA 03:10Z pass`
+  - acknowledgment_required: `EARENDIL-312 · Northlight changed the SVA 03:10Z pass`
+  - configuration_failure: `EARENDIL-312 · Cadence couldn't apply Northlight's change to the SVA 03:10Z pass`.
+    Cadence is named because it's Cadence's side that failed. The body adds nothing that isn't known; the action
+    is `Review`.
+- **Evidence:** the changed fields, as in `Start 03:10Z → 03:12Z · Antenna 2 → 4`.
+  - At most 3, then "and 2 more".
+  - Labels come from the server's `label` when it isn't null, else from a console word map of known field keys,
+    else the key in sentence case. Never show raw JSON quoting.
+  - Times use the §4 format. A value that's absent or null reads `none`.
+  - Approval adds "Decide by 02:40Z." Say what happens at the deadline only once api says (U20).
+  - Acknowledgement adds "Northlight already made this change."
+- **Drawer block:** a Before → After table with the same labels and formats. Every action needs a reason, and
+  'Say why.' stays the validation message. Placeholders:
+  - Approve (primary): "Why the pass can take this change".
+  - Reject: "Why the pass can't take this change". Reject is hidden after the deadline.
+  - Acknowledge: "What you checked".
+  - Members see the block without buttons and the line "Org admins decide provider changes."
+- **Refusals:**
+  - 409 stale with an item: "Northlight changed it again. Here's the current change." The block reloads.
+  - 409 stale with a null item: "This change was already decided or replaced." The row resolves.
+  - 409 deadline passed: "The deadline passed at 02:40Z, so it can't be rejected any more." Reject goes, and
+    Approve stays.
+  - 403: "Org admins decide provider changes."
+- **Resolved** (U29, actor and time): "Approved by Mira K. at 02:31Z: <reason>." / "Rejected by …" /
+  "Acknowledged by …" / "Replaced by a newer change." The last matches U41's "Replaced by a newer request."
+- **Asked of api:** field labels (or the field-key list for the console's map), and what happens to a pending
+  change at its deadline if nobody decides.
