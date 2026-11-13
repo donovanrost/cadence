@@ -333,6 +333,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     case DataSourceRegistry.resolve(request, opts) do
       {:ok, resolved_binding} ->
         source_policy = SourceExecutionPolicy.resolve(request, resolved_binding, opts)
+        reason = ExecutionMonitoring.failure_reason(reason, resolved_binding)
         result = source_unavailable(request, resolved_binding, reason)
 
         ExecutionMonitoring.record_result(
@@ -899,6 +900,9 @@ defmodule Cadence.Dashboards.SourceRegistry do
   defp inspect_source_failure({kind, exception}) when kind in [:exception, :platform_store] do
     Exception.message(exception)
   end
+
+  defp inspect_source_failure({:platform_store_timeout, ms}),
+    do: "timeout after #{ms}ms waiting on Cadence's database"
 
   defp inspect_source_failure({:timeout, timeout_ms}) when is_integer(timeout_ms) do
     "timeout after #{timeout_ms}ms"
