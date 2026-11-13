@@ -44,7 +44,12 @@ const schema = {
   refetch: fetched.refetch,
   state: computed(() => {
     const s = fetched.state.value;
-    return s.status === "ready" && props.prepare ? { ...s, value: props.prepare(s.value) } : s;
+    if (s.status !== "ready") return s;
+    // A create-only field (a derived point's id) isn't part of an edit (api fa7e9e463).
+    const editable = props.entityId
+      ? { ...s.value, fields: s.value.fields.filter((f) => f.create_only !== true) }
+      : s.value;
+    return { ...s, value: props.prepare ? props.prepare(editable) : editable };
   }),
 };
 const before = ref<FormValues>({});

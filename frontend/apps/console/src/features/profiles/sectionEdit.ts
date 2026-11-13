@@ -28,6 +28,7 @@ export const schemaFieldOf = (f: ProfileField): SchemaField => ({
   help: f.help,
   visible_when: null,
   pattern: null,
+  create_only: undefined,
 });
 
 export const schemaFieldsOf = (section: ProfileSection): SchemaField[] =>

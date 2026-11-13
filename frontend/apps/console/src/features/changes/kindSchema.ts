@@ -15,6 +15,8 @@ export const schemaFieldReader = object({
     "boolean",
     "enum",
     "string",
+    // api fa7e9e463: multi-line text (a derived point's expression).
+    "text",
     "reference",
     "datetime",
     "time",
@@ -28,6 +30,8 @@ export const schemaFieldReader = object({
   help: nullable(string),
   visible_when: nullable(object({ path: string, equals: raw })),
   pattern: optional(nullable(string)),
+  /** api fa7e9e463: set on create only (a derived point's id); the edit form leaves it out. */
+  create_only: optional(boolean),
 });
 export const kindSchemaReader = object({
   // free-text: the schema's own kind name, echoed back; templates, requirements and settings build theirs locally.
@@ -178,6 +182,7 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
           .filter(Boolean),
       };
     case "string":
+    case "text":
     case "reference":
     case "unrecognized":
       if (f.pattern && !safeTest(f.pattern, t))

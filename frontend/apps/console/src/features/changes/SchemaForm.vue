@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ApField, ApSegmented, ApSelect } from "@/ui";
+import { ApField, ApSegmented, ApSelect, ApTextarea } from "@/ui";
 import {
   displayValue,
   visible,
@@ -83,6 +83,16 @@ const hint = (f: SchemaField) =>
           placeholder="Choose…"
           :hint="hint(f)"
           :error="errors[f.path] ?? null"
+          @update:model-value="set(f.path, $event)"
+        />
+        <ApTextarea
+          v-else-if="f.type === 'text'"
+          class="md:col-span-2"
+          :label="f.label"
+          :model-value="values[f.path] ?? ''"
+          :hint="hint(f)"
+          :error="errors[f.path] ?? null"
+          :required="f.required"
           @update:model-value="set(f.path, $event)"
         />
         <ApField

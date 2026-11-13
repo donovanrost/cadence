@@ -116,6 +116,7 @@ describe("number fields (ST1 pass review)", () => {
     default: 0.98,
     required: false,
     help: null,
+    create_only: undefined,
     visible_when: null,
     pattern: undefined,
   };
@@ -131,5 +132,34 @@ describe("number fields (ST1 pass review)", () => {
     expect(fromDocument({ kind: "s", fields: [ratio] }, { realization_target: 0.95 })).toEqual({
       realization_target: "95%",
     });
+  });
+
+  it("reads the derived_telemetry schema's text type and create_only key (api fa7e9e463)", () => {
+    const base = {
+      unit: null,
+      enum: null,
+      range: null,
+      default: null,
+      help: null,
+      visible_when: null,
+    };
+    const r = decode(kindSchemaReader, {
+      kind: "derived_telemetry",
+      fields: [
+        {
+          ...base,
+          path: "point_id",
+          label: "Point ID",
+          type: "string",
+          required: true,
+          create_only: true,
+        },
+        { ...base, path: "expression", label: "Expression", type: "text", required: true },
+      ],
+    });
+    expect(r.ok && r.value.fields.map((f) => [f.type, f.create_only])).toEqual([
+      ["string", true],
+      ["text", undefined],
+    ]);
   });
 });
