@@ -1054,6 +1054,10 @@ defmodule CadenceWeb.Router do
       )
 
       post("/contact-planning/templates/:template_id/close", ContactTemplateController, :close)
+      # L3: automation grants (owner: api).
+      get("/contact-planning/grants", ContactGrantController, :index)
+      post("/contact-planning/grants", ContactGrantController, :create)
+      post("/contact-planning/grants/:grant_id/revoke", ContactGrantController, :revoke)
 
       post("/contact-plans/:plan_id/execute", ContactPlanController, :execute)
 

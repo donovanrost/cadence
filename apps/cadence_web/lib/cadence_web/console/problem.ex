@@ -64,6 +64,10 @@ defmodule CadenceWeb.Console.Problem do
       {409, "The organization doesn't let missions change this setting."},
     app_action_failed: {422, "The app change was refused."},
     template_rejected: {422, "The template change was refused."},
+    policy_changed:
+      {409, "The planning policy changed since you loaded it. Review it, then try again."},
+    grant_changed: {409, "This grant changed since you loaded it."},
+    grant_not_found: {404, "Automation grant not found."},
     template_transition_not_allowed:
       {409, "The template can't move to that state from where it is."},
     requirement_rejected: {422, "The requirement change was refused."},

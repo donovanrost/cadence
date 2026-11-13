@@ -553,6 +553,31 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
 - Templates aren't change sets: edits are versioned and audited on the template (planning policy,
   not mission configuration).
 
+### Automation grants (§11 L3)
+
+A grant lets a service identity act without a person (plan, repair, execute, submit, approve)
+within the active fleet planning policy. Under `/contact-planning`:
+
+- `GET /grants` (mission operators) → `{grants: [grant], service_identities: [{id, name, state:
+  active | disabled}] (this mission's), policy_version: <active policy version> | null, limits:
+  {maximum_horizon_seconds, maximum_contacts, maximum_execution_concurrency} (the active policy's
+  ceilings, for hints; null without a policy), permissions: ["grants.manage"] | []}`. A grant is
+  `{id, service_identity {id, name}, policy_version, allowed_actions: [plan | repair | execute |
+  submit | approve], maximum_horizon_seconds, maximum_contacts, maximum_execution_concurrency,
+  maximum_estimated_cost_micros, currency, valid_from, valid_until, state: active | revoked | expired,
+  approved_by {id, name}, approved_at, reason, revoked_by {id, name} | null, revoked_at,
+  revocation_reason, sha256}`. `expired` is computed (active past `valid_until`). Cost stays
+  hidden in the console (#63).
+- `POST /grants` (organization admins) `{service_identity_id, maximum_horizon_seconds,
+  maximum_contacts, maximum_execution_concurrency, valid_days (1–365), reason, policy_version}` →
+  `201 {grant}`. `allowed_actions` and the cost limit come from the active policy. `409
+  policy_changed` with `details.active_version` when `policy_version` isn't the active one; `422
+  invalid_params` on the field for limits beyond the policy (`maximum_horizon_seconds`,
+  `maximum_contacts`, `maximum_execution_concurrency`), a disabled or other-mission identity
+  (`service_identity_id`), or missing input.
+- `POST /grants/:id/revoke` (organization admins) `{reason, sha256}` → `200 {grant}` (state
+  `revoked`). `409 grant_changed` when `sha256` no longer matches; `404 grant_not_found`.
+
 ### Requirements (one-off; BACKLOG §8 8g)
 
 A one-off **contact requirement** is one spacecraft's need in one window. Templates generate them
