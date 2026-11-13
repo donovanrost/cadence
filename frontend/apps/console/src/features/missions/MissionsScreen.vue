@@ -28,7 +28,7 @@ const organization = computed(() =>
     : null,
 );
 const session = useSession();
-/** DECISIONS #64: New mission opens the existing create page on the host (no console route). */
+/** L4: New mission is the console form (plans/mission-create.md). */
 const canCreate = computed(() =>
   organization.value ? canAdministerOrganization(session, organization.value) : false,
 );
@@ -50,7 +50,9 @@ const columns: readonly ApColumn[] = [
       :title="organization ? plural(organization.missions.length, 'mission') : 'Missions'"
       size="reading"
     >
-      <ApButton v-if="canCreate" variant="primary" href="/missions/new">New mission</ApButton>
+      <ApButton v-if="canCreate" variant="primary" :to="{ name: 'org.missions.new' }"
+        >New mission</ApButton
+      >
     </ApPageHeader>
     <ApPanel index="M1" title="Missions" flush>
       <ApEmptyState

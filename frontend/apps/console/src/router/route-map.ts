@@ -102,6 +102,7 @@ export interface ConsoleRoutes {
     { invitationId: string }
   >;
   "org.missions": InOrg<"org.missions", "/org/missions">;
+  "org.missions.new": InOrg<"org.missions.new", "/org/missions/new">;
   "org.provider-accounts": InOrg<
     "org.provider-accounts",
     "/org/provider-accounts/:accountId?",
@@ -334,6 +335,7 @@ export const consoleRouteNames: Readonly<Record<ConsoleRouteName, true>> = {
   "org.people.person": true,
   "org.people.invitation": true,
   "org.missions": true,
+  "org.missions.new": true,
   "org.provider-accounts": true,
   "org.settings": true,
   "org.audit": true,
@@ -419,6 +421,7 @@ const paramlessRouteNames: Readonly<Record<ParamlessRouteName, true>> = {
   "org.people.services": true,
   "org.people.services.new": true,
   "org.missions": true,
+  "org.missions.new": true,
   "org.provider-accounts": true,
   "org.settings": true,
   "org.audit": true,
