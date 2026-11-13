@@ -148,7 +148,12 @@ Tabs: `General` · `Sharing` · `Activity` · `Diagnostics`.
 
 ## Library
 `…/dashboards/library`: ApTable of reusable widgets (Name · Kind · Used in N dashboards · Updated).
-- The row page shows the versions and a preview.
+- The row page shows the versions and a preview. The preview's binding line is a `READS` label, then a sentence
+  that names the point and says where the spacecraft comes from, because a library item doesn't know its placement
+  (fe-ops aed173887):
+  - Follows the dashboard: "EPS.batt_soc on the dashboard's spacecraft".
+  - One spacecraft: "EPS.batt_soc on one spacecraft, chosen where it's placed".
+  - Repeats: "EPS.batt_soc on each spacecraft or resource it repeats over, chosen where it's placed".
 - `Rename`.
 - `Delete`: refused while it's used, with "Used in 3 dashboards: A, B, C." From the editor's Add widget sheet, a
   `From library` tab inserts one.
