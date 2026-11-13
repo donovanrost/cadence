@@ -6,6 +6,7 @@ import AuditFilters from "./AuditFilters.vue";
 import AuditResults from "./AuditResults.vue";
 import { auditKinds, kindText } from "./api.ts";
 import { useAuditActor } from "./useAuditActor.ts";
+import { useAuditExport } from "./useAuditExport.ts";
 import { useAuditLog } from "./useAuditLog.ts";
 
 /** Organization › Audit log. Says which sources are missing until the read is unified (ux spec). */
@@ -40,6 +41,10 @@ const query = computed(() =>
     : null,
 );
 const log = useAuditLog(query);
+const exporter = useAuditExport(
+  query,
+  computed(() => organization.value?.slug ?? "organization"),
+);
 const notProvided = computed(
   () => log.state.value.status === "failed" && log.state.value.error.kind === "not_found",
 );
@@ -86,10 +91,9 @@ const missionOptions = computed(() => [
       :kind="kind"
       :kind-options="kindOptions"
       :mission-options="missionOptions"
-      :actor="actor.id.value ?? ''"
-      :actor-options="actor.options.value"
+      :actor="actor"
+      :exporter="exporter"
       @kind="setKind"
-      @actor="actor.set"
     />
     <ApPanel v-if="notProvided" index="L1" title="Audit log" flush>
       <ApEmptyState

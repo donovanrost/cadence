@@ -55,3 +55,4 @@ export function useAuditActor(organizationId: Ref<string | null>) {
   }
   return { id, options, set };
 }
+export type AuditActor = ReturnType<typeof useAuditActor>;
