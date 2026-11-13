@@ -1,6 +1,7 @@
 import {
   DecodeError,
   decoders as d,
+  isError,
   request,
   type ApiError,
   type ApiResult,
@@ -82,7 +83,7 @@ export function endedShare(
   error: ApiError,
 ): { kind: "revoked" | "expired"; message: string } | null {
   if (error.kind !== "not_found") return null;
-  if (error.code === "share_revoked") return { kind: "revoked", message: error.message };
-  if (error.code === "share_expired") return { kind: "expired", message: error.message };
+  if (isError(error, "share_revoked")) return { kind: "revoked", message: error.message };
+  if (isError(error, "share_expired")) return { kind: "expired", message: error.message };
   return null;
 }

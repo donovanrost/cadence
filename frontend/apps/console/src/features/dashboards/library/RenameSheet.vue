@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { describeApiError } from "@/api";
+import { describeApiError, isError } from "@/api";
 import { ApButton, ApCallout, ApField, ApSheet, ApTextarea } from "@/ui";
 import { renameItem } from "./api.ts";
 
@@ -44,12 +44,11 @@ async function save() {
     sheet.value?.close();
     emit("done");
   } else
-    error.value =
-      r.error.kind === "conflict" && r.error.code === "library_item_changed"
-        ? "Someone changed this widget meanwhile. Close and open it again to rename the current one."
-        : r.error.kind === "forbidden"
-          ? "Dashboard editors manage the library."
-          : describeApiError(r.error);
+    error.value = isError(r.error, "library_item_changed")
+      ? "Someone changed this widget meanwhile. Close and open it again to rename the current one."
+      : r.error.kind === "forbidden"
+        ? "Dashboard editors manage the library."
+        : describeApiError(r.error);
 }
 defineExpose({ open });
 </script>

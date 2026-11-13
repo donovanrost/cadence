@@ -227,8 +227,12 @@ export const versionConflict = d.object({
 export const notReady = d.object({
   // domain 124c1d6f: a dashboard-level issue has no placement.
   placements: d.array(
-    // Readiness codes are open (domain PublishReadiness grows them); the UI shows `message`.
-    d.object({ placement_id: d.nullable(id), code: d.string, message: d.string }),
+    d.object({
+      placement_id: d.nullable(id),
+      // free-text: readiness codes are open (domain PublishReadiness grows them); the UI shows `message`.
+      code: d.string,
+      message: d.string,
+    }),
     1024,
   ),
 });

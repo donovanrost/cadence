@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { RouterLink } from "vue-router";
-import { describeApiError } from "@/api";
+import { describeApiError, isError } from "@/api";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import { retireItem, usedByOf, usedInWords, type UsedBy } from "./api.ts";
 
@@ -45,7 +45,7 @@ async function retire() {
     error.value =
       r.error.kind === "forbidden"
         ? "Dashboard editors manage the library."
-        : r.error.kind === "conflict" && r.error.code === "library_item_changed"
+        : isError(r.error, "library_item_changed")
           ? "Someone changed this widget meanwhile. Close and check it again."
           : describeApiError(r.error);
 }

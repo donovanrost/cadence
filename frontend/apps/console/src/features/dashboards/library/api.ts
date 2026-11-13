@@ -1,4 +1,13 @@
-import { decode, decoders as d, request, type ApiError, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders as d,
+  detailsOf,
+  isError,
+  request,
+  type ApiError,
+  type ApiResult,
+  type Decoded,
+  type Unrecognized,
+} from "@/api";
 
 /**
  * Dashboards library (slice 8; proposal plans/dashboards-library.md, D21/D22, DECISIONS #76 Q6/Q10).
@@ -28,15 +37,18 @@ export const KIND_WORDS: Readonly<Record<WidgetKind, string>> = {
   constellation_health: "Constellation health",
 };
 /** A kind this console doesn't know reads in words from its key, never as an error. */
-export const kindWord = (kind: string) =>
-  (KIND_WORDS as Readonly<Record<string, string>>)[kind] ?? kind.replaceAll("_", " ");
+export const kindWord = (kind: string | Unrecognized): string => {
+  const raw = typeof kind === "string" ? kind : kind.unrecognized;
+  const known = widgetKinds.find((k) => k === raw);
+  return known ? KIND_WORDS[known] : raw.replaceAll("_", " ");
+};
 
 const person = d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) }));
 const itemReader = d.object({
   id: d.token,
   name: d.string,
   description: d.nullable(d.string),
-  kind: d.token,
+  kind: d.knownText(widgetKinds),
   latest_version: d.integer,
   updated_at: d.nullable(d.timestamp),
   updated_by: person,
@@ -45,7 +57,7 @@ const rowReader = d.object({
   id: d.token,
   name: d.string,
   description: d.nullable(d.string),
-  kind: d.token,
+  kind: d.knownText(widgetKinds),
   latest_version: d.integer,
   used_by_count: d.integer,
   updated_at: d.nullable(d.timestamp),
@@ -143,9 +155,8 @@ export function retireItem(missionId: string, id: string, expectedVersion: numbe
  * an in-use refusal whose details don't decode (the sheet then shows the error, never "unused").
  */
 export function usedByOf(error: ApiError): UsedBy["dashboards"] | null {
-  if (error.kind !== "conflict" || error.code !== "library_item_in_use") return null;
-  const r = decode(d.object({ used_by: usedByReader }), error.details);
-  return r.ok ? r.value.used_by.dashboards : null;
+  if (!isError(error, "library_item_in_use")) return null;
+  return detailsOf(error, d.object({ used_by: usedByReader }))?.used_by.dashboards ?? null;
 }
 
 /** "Used in 3 dashboards: A, B, C." (ux Dashboards.md § Library). */

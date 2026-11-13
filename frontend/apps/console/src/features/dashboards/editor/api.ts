@@ -1,4 +1,4 @@
-import { decode, request, type ApiError, type ApiResult } from "@/api";
+import { detailsOf, isError, request, type ApiError, type ApiResult } from "@/api";
 import type { Runtime } from "../api.ts";
 import {
   commandFailure,
@@ -138,32 +138,25 @@ export type EditFailure =
   | { kind: "other"; error: ApiError };
 
 export function editFailure(error: ApiError, draft: Draft): EditFailure {
-  if (error.kind === "conflict" && error.code === "version_conflict") {
-    const c = decode(versionConflict, error.details);
-    if (c.ok)
-      return {
-        kind: "conflict",
-        currentVersion: c.value.current_version,
-        savedBy: c.value.saved_by?.name ?? null,
-        savedAt: c.value.saved_at,
-      };
-  }
-  if (error.kind === "invalid" && error.code === "invalid_command") {
-    const c = decode(commandFailure, error.details);
-    if (c.ok)
-      return {
-        kind: "command",
-        index: c.value.index,
-        command: draft.commands[c.value.index] ?? null,
-        code: c.value.code,
-        field: c.value.field,
-      };
-  }
-  if (error.kind === "invalid" && error.code === "dashboard_not_ready") {
-    const n = decode(notReady, error.details);
-    if (n.ok) return { kind: "not_ready", placements: n.value.placements };
-  }
-  if (error.kind === "invalid" && error.code === "too_many_commands")
-    return { kind: "too_many_commands" };
+  const conflict = isError(error, "version_conflict") ? detailsOf(error, versionConflict) : null;
+  if (conflict)
+    return {
+      kind: "conflict",
+      currentVersion: conflict.current_version,
+      savedBy: conflict.saved_by?.name ?? null,
+      savedAt: conflict.saved_at,
+    };
+  const refused = isError(error, "invalid_command") ? detailsOf(error, commandFailure) : null;
+  if (refused)
+    return {
+      kind: "command",
+      index: refused.index,
+      command: draft.commands[refused.index] ?? null,
+      code: refused.code,
+      field: refused.field,
+    };
+  const unready = isError(error, "dashboard_not_ready") ? detailsOf(error, notReady) : null;
+  if (unready) return { kind: "not_ready", placements: unready.placements };
+  if (isError(error, "too_many_commands")) return { kind: "too_many_commands" };
   return { kind: "other", error };
 }
