@@ -47,6 +47,10 @@ export type GanttBar = Readonly<{
   label?: string | undefined;
   /** Full sentence for assistive tech and the tooltip. */
   description: string;
+  /** Not the current filter's match (Contacts `sc any`): drawn faint, still focusable and named. */
+  dim?: boolean | undefined;
+  /** A queued uplink rides this pass (Contacts 'highlight queued uplinks', `.cb.up`): a dark notch at the top. */
+  notch?: boolean | undefined;
 }>;
 
 export type GanttBand = Readonly<{

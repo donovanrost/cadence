@@ -161,7 +161,12 @@ const barKinds = computed(() =>
             :aria-pressed="bar.id === selected"
             :title="bar.description"
             class="ap-bar absolute top-1/2 h-4 -translate-y-1/2 overflow-hidden px-1 text-left font-mono text-2xs leading-4 whitespace-nowrap"
-            :class="[`ap-bar--${bar.kind}`, bar.id === selected ? 'ap-bar--selected' : '']"
+            :class="[
+              `ap-bar--${bar.kind}`,
+              bar.id === selected ? 'ap-bar--selected' : '',
+              bar.dim ? 'ap-bar--dim' : '',
+              bar.notch ? 'ap-bar--notch' : '',
+            ]"
             :style="style(bar.from, bar.to)"
             @click="emit('select', bar.id)"
             @focus="focusId = bar.id"
@@ -273,6 +278,21 @@ const barKinds = computed(() =>
   background-color: var(--color-stale-deep);
   background-image: var(--apogee-hatch-stale-cell);
   color: var(--color-stale-text);
+}
+.ap-bar--dim {
+  /* Faint, not hidden: still a tab stop with its description (Contacts `sc any`). */
+  opacity: 0.35;
+}
+.ap-bar--notch::before {
+  /* Queued uplink on this pass (Contacts `.cb.up`): an inset dark notch, kind's own look kept. */
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 6px;
+  height: 4px;
+  transform: translateX(-50%);
+  background: var(--color-vacuum);
 }
 .ap-bar--selected {
   outline: 2px solid var(--color-readout);

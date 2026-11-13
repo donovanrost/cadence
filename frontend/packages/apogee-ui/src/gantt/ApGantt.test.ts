@@ -70,4 +70,26 @@ describe("ApGantt labels", () => {
     expect(first?.attributes("aria-label")).toBe("118 pass");
     wrapper.unmount();
   });
+
+  it("draws a dimmed bar faint but still named and focusable, and notches a queued-uplink pass", () => {
+    const wrapper = mount(ApGantt, {
+      props: {
+        label: "Passes",
+        rows: [{ id: "svb", label: "SVB-1" }],
+        bars: [
+          { ...bar("118", "svb", H), dim: true },
+          { ...bar("119", "svb", 3 * H), notch: true },
+        ],
+        bands: [],
+        window: { from: 0, to: 24 * H },
+        now: 2 * H,
+        selected: null,
+      },
+    });
+    const [dimmed, notched] = wrapper.findAll("button");
+    expect(dimmed?.classes()).toContain("ap-bar--dim");
+    expect(dimmed?.attributes("aria-label")).toBe("118 pass");
+    expect(notched?.classes()).toContain("ap-bar--notch");
+    expect(notched?.classes()).not.toContain("ap-bar--dim");
+  });
 });
