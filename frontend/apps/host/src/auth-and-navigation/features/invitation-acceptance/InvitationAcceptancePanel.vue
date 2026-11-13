@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { readPage } from "./contracts";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 const props = defineProps<{ page: unknown }>();
-const fields = [
+const newAccountFields = [
   { name: "display_name", label: "Display Name", type: "text", autocomplete: "name" },
   { name: "password", label: "Password", type: "password", autocomplete: "new-password" },
   {
@@ -13,7 +13,19 @@ const fields = [
     autocomplete: "new-password",
   },
 ];
+// An existing account proves itself with its own password; nothing about it is changed.
+const existingAccountFields = [
+  {
+    name: "password",
+    label: "Your current password",
+    type: "password",
+    autocomplete: "current-password",
+  },
+];
 const model = computed(() => readPage(props.page));
+const fields = computed(() =>
+  model.value?.existing_account ? existingAccountFields : newAccountFields,
+);
 </script>
 <template>
   <section v-if="model" id="organization-invitation" class="space-y-6">
@@ -88,7 +100,10 @@ const model = computed(() => readPage(props.page));
           class="w-full input"
       /></CadenceField>
       <button type="submit" class="btn btn-primary">Accept Invitation</button>
-      <p class="text-sm text-base-content/70">
+      <p v-if="model.existing_account" class="text-sm text-base-content/70">
+        You already have a Cadence account. Enter its password to join; accepting signs you in.
+      </p>
+      <p v-else class="text-sm text-base-content/70">
         Passwords must be at least 12 characters. Accepting this invitation signs you in
         immediately.
       </p>

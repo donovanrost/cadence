@@ -63,3 +63,29 @@ test("malformed transport hides native effects and valid refresh recovers withou
   expect(wrapper.find("#organization-invitation-acceptance-form").exists()).toBe(true);
   wrapper.unmount();
 });
+
+test("an existing account is asked only for its current password", () => {
+  const page = {
+    version: 1,
+    csrf_token: "csrf",
+    token: "existing",
+    available: true,
+    error: null,
+    display_name: "",
+    existing_account: true,
+    organization: { display_name: "Flight", slug: "flight" },
+    invitation: {
+      email: "operator@example.test",
+      membership_role: "member",
+      grant_platform_admin: false,
+    },
+  };
+  const wrapper = mount(OrganizationInvitationPage, { props: { page } });
+  expect(wrapper.findAll("input").map((input) => input.attributes("name"))).toEqual([
+    "_csrf_token",
+    "organization_invitation_acceptance[password]",
+  ]);
+  expect(wrapper.get('[type="password"]').attributes("autocomplete")).toBe("current-password");
+  expect(wrapper.text()).toContain("Your current password");
+  wrapper.unmount();
+});
