@@ -40,9 +40,13 @@ GET /dashboard-snapshots/:snapshot_id
   - 404 `not_found` (unknown or other mission);
   - 404 `share_revoked` / `share_expired`, whose **message** is the sentence the page shows, e.g. "Revoked by Mira K.
     at 11-14 02:10Z." / "Expired 11-20 00:00Z.". The console's 404 keeps code and message only, no details;
+  - 404 `snapshot_deleted` (Q6 final, lead 11-14): `details {deleted_by, deleted_at}`, and the **message** is the
+    sentence the page shows, as with the share codes (a 410 would read as a retryable `unavailable`);
   - 503 `dashboard_unavailable`.
 - **Snapshot delete** (lead queued it with domain): `DELETE /dashboards/:id/snapshots/:snapshot_id` → 204. It's
-  audited. It belongs with fe-setup's Sharing tab (D16), but is listed here so the shape is agreed once.
+  audited ("Deleted snapshot of <dashboard>"). It belongs with fe-setup's Sharing tab (D16), but is listed here so the
+  shape is agreed once. Domain keeps a tombstone (`deleted_at/by`), so the old link reads `snapshot_deleted`. Shares
+  never point at snapshots, so there's nothing to revoke.
 
 ## D23 playlists (read)
 ```
@@ -67,8 +71,11 @@ DELETE /dashboard-playlists/:id                                                 
 ```
 - **Validation (422 `invalid_params`, `details.field`):** `name` 1–120; `dwell_seconds` 10–3600; `dashboard_ids` 1–50,
   unique, and each a dashboard of this mission. Archived dashboards are allowed, since present skips them.
-- Last write wins (no version on playlists today). If concurrent edits matter, add `expected_updated_at` → 409.
-  I'd skip it for v1.
+- **Stale edit (Q6 final):** PATCH carries `expected_updated_at` (the row's `updated_at`, microsecond precision);
+  a stale one is `409 version_conflict` with `details {current}` (the current playlist row). The sheet offers
+  reload-and-reapply.
+- **Deleted while presenting:** the next D23 read is `404 playlist_not_found`; present mode says "This playlist
+  was deleted." with a way back to Playlists.
 - **Delete (Q10):** a hard delete after the console's confirm; nothing references a playlist. It's audited (`config`
   kind): "Deleted playlist Ops wall". Create and update are audited too: "Created / Updated playlist …".
 - **New domain functions (Q6):** `PlaylistAuthoring.update/4` and `PlaylistAuthoring.delete/3`, with
