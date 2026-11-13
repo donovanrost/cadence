@@ -33,6 +33,8 @@ const props = defineProps<{
     rate: number | null;
   } | null;
   rangeLabel: string;
+  /** "3 sisters in P07 out of limits" (B4's v1 rule; null without a plane or any). */
+  sisters?: string | null;
 }>();
 defineEmits<{ retry: [] }>();
 
@@ -65,7 +67,7 @@ const unit = computed(() => props.alarm.point.unit ?? undefined);
           view?.rate == null
             ? "Rate needs 15 min of data"
             : `${formatRate(view.rate)} ${unit ?? ""}/h`.replace(" /h", "/h")
-        }}
+        }}<template v-if="sisters"> · {{ sisters }}</template>
       </p>
     </div>
     <TrendBlock

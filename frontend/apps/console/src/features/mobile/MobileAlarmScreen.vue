@@ -26,6 +26,8 @@ import {
   usePointTrend,
   useSpacecraftAlarms,
   useSpacecraftEpisodes,
+  usePointAlarms,
+  sisters as sistersOf,
 } from "@/features/investigate/index.ts";
 import MobileAlarmPanel from "./MobileAlarmPanel.vue";
 import YourGoBlock from "./YourGoBlock.vue";
@@ -80,6 +82,24 @@ function refreshEpisode() {
   detail.refetch();
 }
 
+/**
+ * Mobile.md §1's "3 sisters in P07 …": same plane, same point out of limits now (B4's v1 rule).
+ * It says "out of limits", not "trending": nothing here computes a trend across sisters.
+ */
+const pointAlarms = usePointAlarms(
+  missionId,
+  computed(() => (sc.value?.plane == null ? null : (alarm.value?.point.id ?? null))),
+);
+const sisterLine = computed(() => {
+  const s = pointAlarms.state.value;
+  const f = fleet.state.value;
+  const me = sc.value;
+  const a = alarm.value;
+  if (s.status !== "ready" || f.status !== "ready" || !me || !a || me.plane === null) return null;
+  const n = sistersOf(s.value.alarms, f.value.spacecraft, me, a.point.id).length;
+  const plane = `P${String(me.plane).padStart(2, "0")}`;
+  return n === 0 ? null : `${n} ${n === 1 ? "sister" : "sisters"} in ${plane} out of limits`;
+});
 const range = computed(() => DEFAULT_RANGE);
 const rangeLabel = RANGES.find((r) => r.value === DEFAULT_RANGE)?.label ?? DEFAULT_RANGE;
 const trend = usePointTrend(
@@ -137,6 +157,7 @@ useMobileHeader(() => {
             :history="trend.history.state.value"
             :view="view"
             :range-label="rangeLabel"
+            :sisters="sisterLine"
             @retry="trend.history.refetch"
           />
           <template v-else>
