@@ -171,7 +171,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | ~~Compare revisions (`r4...r6`)~~ done (8b58f513) | fe-setup | — |
 | ~~`Keep mine` / `Take live` on conflicts~~ done (3ced6cea, 433bcd0f) | fe-setup | — |
-| Staged bar conflict / applying / apply-failed states; top bar `CONVERGING` / `RUNTIME DEGRADED`; live apply steps | fe-setup | source now exists: `/counts.runtime` {state, desired_generation, applied_generation, reason} (api-ops c69f0578, domain 292c8e6b) + the U38 banner; ux to confirm wording |
+| Top bar `CONFIG r6 · CONVERGING` / `RUNTIME DEGRADED` (title = the U38 sentence) and the runtime line in the Changes outcome, on `useRuntimeStatus()` (7404a079). ~~Staged bar 'APPLYING · N OF 5 STEPS' / 'Apply failed · nothing changed'~~ no source: submit is synchronous and change sets have no applying state (fe-setup 11-13) | fe-setup | domain: an invalidation when the runtime's applied generation changes (asked) |
 | ~~qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now"~~ copy done (c16546c4; domain 33529f29) | qa closes | — |
 | Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | api: §8 8d |
 
