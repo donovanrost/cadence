@@ -14,14 +14,27 @@ describe("platform admin readers", () => {
     };
     const original = globalThis.fetch;
     globalThis.fetch = async () =>
-      new Response(JSON.stringify({ data: { events: [good, { id: 7 }], next: null } }), {
-        status: 200,
-      });
+      new Response(
+        JSON.stringify({
+          data: {
+            events: [good, { id: "e2", at: 7, target: { kind: "service_identity" } }],
+            next: null,
+          },
+        }),
+        {
+          status: 200,
+        },
+      );
     try {
       const r = await fetchPlatformAudit({ after: null }, new AbortController().signal);
       expect(r.ok && r.value.events.map((e) => ("unreadable" in e ? "unreadable" : e.id))).toEqual([
         "e1",
         "unreadable",
+      ]);
+      const bad = r.ok ? r.value.events[1] : undefined;
+      expect(bad && "raw" in bad ? bad.raw : null).toEqual([
+        { label: "kind", value: "service_identity" },
+        { label: "id", value: "e2" },
       ]);
     } finally {
       globalThis.fetch = original;

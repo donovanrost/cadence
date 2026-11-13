@@ -1,6 +1,7 @@
 import {
   actor,
   decoders as d,
+  isRecord,
   orNull,
   request,
   role,
@@ -255,7 +256,23 @@ const auditEvent = d.object({
 });
 export type PlatformAuditEvent = Decoded<typeof auditEvent>;
 /** A row the console can't read stays in the list as such (lead): one bad event can't hide the rest. */
-export type UnreadableAuditEvent = Readonly<{ id: string; unreadable: true }>;
+export type UnreadableAuditEvent = Readonly<{
+  id: string;
+  unreadable: true;
+  /** ux: whatever the row still has as text (kind, id, at), for Technical details. */
+  raw: readonly Readonly<{ label: string; value: string }>[];
+}>;
+/** The text fields an unreadable event still carries (ux): kind (its target's), id, at. */
+function rawFields(v: unknown): UnreadableAuditEvent["raw"] {
+  if (!isRecord(v)) return [];
+  const target = isRecord(v["target"]) ? v["target"] : {};
+  const pick = (label: string, x: unknown) => (typeof x === "string" ? [{ label, value: x }] : []);
+  return [
+    ...pick("kind", target["kind"] ?? v["kind"]),
+    ...pick("id", v["id"]),
+    ...pick("at", v["at"]),
+  ];
+}
 const auditEvents = (
   value: unknown,
   path = "",
@@ -266,7 +283,7 @@ const auditEvents = (
       return auditEvent(v, `${path}[${i}]`);
     } catch (e) {
       if (!(e instanceof d.DecodeError)) throw e;
-      return { id: `unreadable-${path}-${i}`, unreadable: true as const };
+      return { id: `unreadable-${path}-${i}`, unreadable: true as const, raw: rawFields(v) };
     }
   });
 };

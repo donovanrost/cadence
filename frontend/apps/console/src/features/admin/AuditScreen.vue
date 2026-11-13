@@ -74,7 +74,9 @@ const columns: readonly ApColumn[] = [
         >
           <template #cell-at="{ row }">{{ atText(row) }}</template>
           <template #cell-actor="{ row }">{{ whoText(row) }}</template>
-          <template #cell-action="{ row }"><AuditAction :event="readable(row)" /></template>
+          <template #cell-action="{ row }"
+            ><AuditAction :event="readable(row)" :raw="'raw' in row ? row.raw : []"
+          /></template>
           <template #cell-org="{ row }"><AuditOrg :event="readable(row)" /></template>
         </ApTable>
         <div v-if="cursor" class="border-t border-hairline px-4 py-2.5">
