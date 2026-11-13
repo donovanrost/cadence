@@ -21,10 +21,12 @@ const emit = defineEmits<{
   edit: [];
   menu: [id: MenuId];
 }>();
-type MenuId = "versions" | "copy" | "kiosk";
+type MenuId = "versions" | "copy" | "export" | "kiosk";
 const menu = computed(() => [
   { id: "versions" as const, label: "Versions" },
   ...(props.canEdit ? [{ id: "copy" as const, label: "Save as copy…" }] : []),
+  // ux § Export: the bundle (JSON); the export endpoint needs dashboard authoring.
+  ...(props.canEdit ? [{ id: "export" as const, label: "Export" }] : []),
   { id: "kiosk" as const, label: "Kiosk" },
 ]);
 </script>

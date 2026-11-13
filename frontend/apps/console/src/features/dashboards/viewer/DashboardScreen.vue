@@ -6,6 +6,7 @@ import { useConnection } from "@/live";
 import { ApCallout } from "@/ui";
 import type { Runtime } from "../api.ts";
 import { recordView } from "../directory/api.ts";
+import { exportUrl } from "../settings/api.ts";
 import CopySheet from "../editor/CopySheet.vue";
 import EditActions from "../editor/EditActions.vue";
 import EditorPane from "../editor/EditorPane.vue";
@@ -105,13 +106,26 @@ const kiosk = computed(() => one(route.query.kiosk) === "1");
 const pane = ref<InstanceType<typeof EditorPane> | null>(null);
 const versions = ref<InstanceType<typeof VersionsSheet> | null>(null);
 const copySheet = ref<InstanceType<typeof CopySheet> | null>(null);
-function onMenu(id: "versions" | "copy" | "kiosk") {
-  if (id === "kiosk") setQuery({ kiosk: "1" });
-  else if (id === "versions") versions.value?.open();
-  else
-    copySheet.value?.open(
-      session.draft.value ?? { baseVersion: currentVersion.value ?? 1, commands: [] },
-    );
+function onMenu(id: "versions" | "copy" | "export" | "kiosk") {
+  switch (id) {
+    case "kiosk":
+      return setQuery({ kiosk: "1" });
+    case "versions":
+      return versions.value?.open();
+    case "export":
+      // A plain download (the server records the export); ux's toast waits for a kit toast.
+      return download(exportUrl({ missionId: missionId.value, dashboardId: dashboardId.value }));
+    case "copy":
+      return copySheet.value?.open(
+        session.draft.value ?? { baseVersion: currentVersion.value ?? 1, commands: [] },
+      );
+  }
+}
+function download(href: string) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = "";
+  link.click();
 }
 function onDiscard() {
   session.discard();
