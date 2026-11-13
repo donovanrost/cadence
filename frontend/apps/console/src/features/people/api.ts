@@ -1,28 +1,38 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders,
+  invitationState,
+  request,
+  role,
+  roleText,
+  type ApiResult,
+  type Decoded,
+  type Role,
+} from "@/api";
 
 /** Requested shapes: docs/apogee/plans/setup-shapes.md §O (final contract in api/setup.md). */
 const { array, nullable, object, oneOf, string, timestamp, token } = decoders;
 
-export const roles = ["organization_admin", "member"] as const;
-export type Role = (typeof roles)[number];
+/** Roles are the shared entity vocabulary (typing §12 A5); re-exported for People's own callers. */
+export { roles, type Role } from "@/api";
 
 const member = object({
   user_id: token,
   display_name: nullable(string),
   email: string,
-  role: oneOf(roles),
+  role,
   capabilities: array(token, 100),
   joined_at: nullable(timestamp),
 });
 const invitation = object({
   id: token,
   email: string,
-  role: oneOf(roles),
+  role,
   invited_by: nullable(object({ name: string })),
   sent_at: timestamp,
   expires_at: nullable(timestamp),
   /** api-ops L5/L21: `declined` when the invitee turns it down. */
-  status: oneOf(["pending", "expired", "declined"]),
+  /** Shared vocabulary (typing §12 A5); People lists pending, expired and declined ones. */
+  status: invitationState,
 });
 
 export const peopleReader = object({
@@ -71,7 +81,8 @@ export function inviteFailure(code: string | null, message: string): string {
   }
 }
 
-export const roleLabel = (role: Role) => (role === "organization_admin" ? "Org admin" : "Member");
+/** `Org admin` / `Member`, or the server's word for a role the console doesn't know. */
+export const roleLabel = roleText;
 
 /** Command / Second GO come from server-evaluated capabilities, never the role name (DECISIONS #2). */
 export const canCommand = (m: Member) => m.capabilities.includes("command.request");

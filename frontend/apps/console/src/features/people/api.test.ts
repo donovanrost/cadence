@@ -43,8 +43,13 @@ describe("peopleReader", () => {
     expect(result.ok && result.value.invitations[0]?.status).toBe("declined");
   });
 
-  it("rejects a role the console doesn't know", () => {
+  it("reads a role the console doesn't know as unrecognized, keeping its word (typing §12 A5)", async () => {
+    const { roleText } = await import("@/api");
     const member = { ...body.members[0], role: "flight_director" };
-    expect(decode(peopleReader, { ...body, members: [member] }).ok).toBe(false);
+    const r = decode(peopleReader, { ...body, members: [member] });
+    if (!r.ok) throw r.error;
+    const read = r.value.members[0];
+    if (!read) throw new Error("fixture");
+    expect(roleText(read.role)).toBe("flight_director");
   });
 });

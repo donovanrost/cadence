@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { failureOutcome } from "@/features/changes/index.ts";
+import { roleText } from "@/api";
 import { ApButton, ApPanel, ApTable, formatShort, plural, type ApColumn } from "@/ui";
 import { withdrawInvitation, type AdminOrganizationDetail } from "./api.ts";
-import { roleWord } from "./present.ts";
 
 /** The organization's invitations (Admin.md), each pending one with Withdraw. */
 const props = defineProps<{ orgId: string; invitations: AdminOrganizationDetail["invitations"] }>();
@@ -29,7 +29,7 @@ async function withdraw(id: string, email: string) {
 <template>
   <ApPanel index="O3" title="Invitations" :meta="plural(invitations.length, 'invitation')" flush>
     <ApTable :columns="columns" :rows="invitations" :row-key="(i) => i.id" caption="Invitations">
-      <template #cell-role="{ row }">{{ roleWord[row.role] }}</template>
+      <template #cell-role="{ row }">{{ roleText(row.role) }}</template>
       <template #cell-by="{ row }"
         >{{ row.invited_by?.name ?? "Not recorded" }} ·
         {{ formatShort(new Date(row.invited_at)) }}</template

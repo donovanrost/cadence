@@ -1,4 +1,12 @@
-import { decoders as d, request, type ApiError, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders as d,
+  request,
+  role,
+  roleText,
+  type ApiError,
+  type ApiResult,
+  type Decoded,
+} from "@/api";
 import { formatShort } from "@/ui";
 
 /** Contract: api cfdf79f7 (L21): the signed-in user's pending invitations to other organizations. */
@@ -6,7 +14,7 @@ const organization = d.object({ id: d.token, slug: d.token, name: d.string });
 const invitation = d.object({
   id: d.token,
   organization,
-  role: d.oneOf(["member", "organization_admin"] as const),
+  role,
   invited_by: d.nullable(d.object({ name: d.string })),
   invited_at: d.timestamp,
   expires_at: d.nullable(d.timestamp),
@@ -25,7 +33,7 @@ export async function fetchMyInvitations(
 export function acceptInvitation(id: string) {
   return request(
     `/account/invitations/${encodeURIComponent(id)}/accept`,
-    d.object({ organization, role: d.token }),
+    d.object({ organization, role }),
     { method: "POST", body: {} },
   );
 }
@@ -40,9 +48,9 @@ export function declineInvitation(id: string) {
 
 /** `Acme Space · Member · invited by Mira K. on 11-10` (People.md Account). */
 export function invitationLine(i: MyInvitation): string {
-  const role = i.role === "organization_admin" ? "Org admin" : "Member";
+  const roleWord = roleText(i.role);
   const by = i.invited_by ? `invited by ${i.invited_by.name}` : "invited";
-  return `${i.organization.name} · ${role} · ${by} on ${formatShort(new Date(i.invited_at)).slice(0, 5)}`;
+  return `${i.organization.name} · ${roleWord} · ${by} on ${formatShort(new Date(i.invited_at)).slice(0, 5)}`;
 }
 
 const notPendingWords: Readonly<Record<string, string>> = {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { isKnown } from "@/api";
 import { ApButton, ApCallout, ApField, ApPanel, ApSelect } from "@/ui";
 import { adminErrorText, removeMember, setRole } from "./admin.ts";
 import { roleLabel, roles, type Member, type Role } from "./api.ts";
@@ -9,10 +10,12 @@ import { roleLabel, roles, type Member, type Role } from "./api.ts";
 const props = defineProps<{ orgId: string; member: Member; self: boolean }>();
 const emit = defineEmits<{ changed: [] }>();
 const router = useRouter();
-const role = ref<Role>(props.member.role);
+/** A role the console doesn't know starts empty: the admin picks one rather than overwriting blind. */
+const current = (r: Member["role"]): Role | "" => (isKnown(r) ? r : "");
+const role = ref<Role | "">(current(props.member.role));
 watch(
   () => props.member.role,
-  (r) => (role.value = r),
+  (r) => (role.value = current(r)),
 );
 const confirm = ref("");
 const busy = ref(false);
@@ -21,6 +24,7 @@ const name = computed(() => props.member.display_name ?? props.member.email);
 const options = roles.map((r) => ({ value: r, label: roleLabel(r) }));
 
 async function saveRole() {
+  if (role.value === "") return;
   busy.value = true;
   note.value = null;
   try {
@@ -59,7 +63,7 @@ async function remove() {
           <ApSelect v-model="role" label="Role" :options="options" :disabled="self" />
         </div>
         <ApButton
-          :disabled="self || busy || role === member.role"
+          :disabled="self || busy || role === '' || role === current(member.role)"
           :disabled-reason="self ? 'You can\'t change your own role.' : 'Pick a different role'"
           @click="saveRole"
           >Save</ApButton

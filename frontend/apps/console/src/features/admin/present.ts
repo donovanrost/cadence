@@ -88,10 +88,3 @@ export function createdText(r: {
     text: `Created ${r.organization.name}, but no email went out. Share the invitation link from its page.`,
   };
 }
-
-export const roleWord: Readonly<Record<"member" | "organization_admin" | "unrecognized", string>> =
-  {
-    member: "Member",
-    organization_admin: "Org admin",
-    unrecognized: "Not known",
-  };

@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { roleText } from "@/api";
 import { ApPanel, ApTable, formatShort, plural, type ApColumn } from "@/ui";
 import type { AdminOrganizationDetail } from "./api.ts";
 import InvitationsPanel from "./InvitationsPanel.vue";
-import { roleWord } from "./present.ts";
 
 /** The organization's Members (read-only) · Invitations (Withdraw) · Missions (read-only). */
 defineProps<{ detail: AdminOrganizationDetail }>();
@@ -27,7 +27,7 @@ const missions: readonly ApColumn[] = [
       caption="Members"
     >
       <template #cell-name="{ row }">{{ row.name ?? "—" }}</template>
-      <template #cell-role="{ row }">{{ roleWord[row.role] }}</template>
+      <template #cell-role="{ row }">{{ roleText(row.role) }}</template>
     </ApTable>
   </ApPanel>
   <InvitationsPanel

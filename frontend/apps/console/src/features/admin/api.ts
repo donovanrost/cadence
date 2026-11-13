@@ -1,11 +1,10 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
+import { decoders as d, request, role, type ApiResult, type Decoded, type Role } from "@/api";
 
 /**
  * L7 platform admin (ux screens/Admin.md): AD1–AD4 as proposed in docs/apogee/plans/admin.md
  * (api-ops reviewing; fixtures until it ships). Base `/admin`, behind admin mode (L6).
  */
 const named = d.nullable(d.object({ name: d.string }));
-const roles = ["member", "organization_admin"] as const;
 
 const orgRow = d.object({
   id: d.token,
@@ -68,7 +67,7 @@ const orgDetail = d.object({
       user_id: d.token,
       name: d.nullable(d.string),
       email: d.string,
-      role: d.known(roles),
+      role,
     }),
     500,
   ),
@@ -76,7 +75,7 @@ const orgDetail = d.object({
     d.object({
       id: d.token,
       email: d.string,
-      role: d.known(roles),
+      role,
       invited_by: named,
       invited_at: d.timestamp,
       expires_at: d.nullable(d.timestamp),
@@ -98,10 +97,7 @@ export function fetchOrganization(
   return request(`/admin/organizations/${encodeURIComponent(id)}`, orgDetail, { signal });
 }
 
-export function inviteInto(
-  orgId: string,
-  body: Readonly<{ email: string; role: (typeof roles)[number] }>,
-) {
+export function inviteInto(orgId: string, body: Readonly<{ email: string; role: Role }>) {
   return request(
     `/admin/organizations/${encodeURIComponent(orgId)}/invitations`,
     d.object({ invitation: d.object({ id: d.token, email: d.string }), delivery }),

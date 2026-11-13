@@ -25,6 +25,28 @@ export {
   recordOf,
   type JsonObject,
 } from "./json.ts";
+/** Shared entity decoders: one reader per server entity (typing §12 A5). */
+export {
+  actor,
+  actorKinds,
+  actorName,
+  invitationCore,
+  invitationState,
+  invitationStates,
+  invitedBy,
+  orNull,
+  role,
+  roleText,
+  roleWords,
+  roles,
+  spacecraftRef,
+  stationRef,
+  type Actor,
+  type ActorKind,
+  type Role,
+  type SpacecraftRef,
+  type StationRef,
+} from "./entities.ts";
 /** Typed server error codes (typing §12 A2): isError, codeOf, detailsOf, fieldErrors. */
 export {
   codeOf,
