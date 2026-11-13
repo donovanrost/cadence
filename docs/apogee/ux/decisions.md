@@ -749,3 +749,16 @@ more than 24 h old.
   the review page (required, placeholder "Why you're withdrawing it"). There's no sheet, so the label has no `…`.
   After it: the decision line "Withdrawn by Mira K. at 02:20Z: <reason>." Superseded: "Replaced by a newer
   request.", where `newer request` links to it.
+
+### U42 · HOLD `derived_point_in_use` (derived telemetry kind; domain proposal 11-13) (domain / api / fe-setup)
+A blocking HOLD: retiring a point that another derived point's expression uses. It names the point first, then why,
+then the fix:
+- One dependent: "BATT_SOC_PCT can't be retired: BATT_HEALTH's expression uses it. Change or retire BATT_HEALTH
+  in this change set too."
+- Several: "BATT_SOC_PCT can't be retired: 3 derived points use it in their expressions (BATT_HEALTH, PWR_MARGIN,
+  EPS_FLAG). Change or retire them in this change set too." List at most 5 names, then "and 2 more".
+- Names are the points' names as the server gives them, in mono. On Changes each dependent links to its
+  definition in the Derived telemetry app (from `used_by[].point_id`).
+- It doesn't fire when every dependent is retired or changed in the same change set. If domain makes it
+  acknowledgeable instead, the first clause becomes "Retiring BATT_SOC_PCT breaks BATT_HEALTH, whose expression
+  uses it." and ux adds a placeholder.
