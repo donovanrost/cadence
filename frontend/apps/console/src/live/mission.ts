@@ -4,6 +4,8 @@ import { coalesce } from "./coalesce.ts";
 import { useChannelEvent } from "./useChannelEvent.ts";
 
 export const missionResources = [
+  // L10 (plans/activations.md): app activation requests created or decided.
+  "activations",
   "alarms",
   "attention",
   "catalog",

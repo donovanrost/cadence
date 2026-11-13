@@ -245,6 +245,12 @@ export interface ConsoleRoutes {
     { databaseId: string }
   >;
   "setup.changes": InMission<"setup.changes", "/setup/changes">;
+  "setup.activation": InMission<
+    "setup.activation",
+    "/setup/changes/activations/:requestId",
+    { requestId: Raw },
+    { requestId: string }
+  >;
   "setup.revisions": InMission<"setup.revisions", "/setup/revisions">;
   "setup.revisions.compare": InMission<
     "setup.revisions.compare",
@@ -384,6 +390,7 @@ export const consoleRouteNames: Readonly<Record<ConsoleRouteName, true>> = {
   "setup.catalog.database": true,
   "setup.catalog.artifact": true,
   "setup.changes": true,
+  "setup.activation": true,
   "setup.revisions": true,
   "setup.revisions.compare": true,
   "setup.revision": true,

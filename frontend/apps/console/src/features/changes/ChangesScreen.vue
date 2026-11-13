@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ActivationsWaiting } from "@/features/activations/index.ts";
 import { computed, onScopeDispose, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -122,6 +123,7 @@ function meta(config: ConfigState): string | null {
         <span class="font-mono text-sm text-text-3">{{ subtitle }}</span>
       </template>
     </ApPageHeader>
+    <ActivationsWaiting :mission-id="missionId" />
     <ChangesEmpty v-if="notProvided" reason="unavailable" />
     <ChangesOutcome
       :outcome="outcome"

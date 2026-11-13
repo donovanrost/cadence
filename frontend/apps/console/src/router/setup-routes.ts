@@ -85,6 +85,13 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "readiness", title: "Staged changes" },
   },
   {
+    path: "setup/changes/activations/:requestId",
+    name: "setup.activation",
+    component: () => import("@/features/activations/ActivationScreen.vue"),
+    props: (to) => ({ requestId: paramText(to.params, "requestId") }),
+    meta: { mode: "setup", nav: "readiness", title: "Activation" },
+  },
+  {
     path: "setup/revisions",
     name: "setup.revisions",
     component: () => import("@/features/changes/RevisionsScreen.vue"),
