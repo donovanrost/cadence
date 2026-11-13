@@ -1,4 +1,4 @@
-import { findingTitle, findingsMeta } from "./findings.ts";
+import { findingKinds, findingTitle, findingsMeta, type Finding } from "./findings.ts";
 import { contactTrail } from "./trail.ts";
 import { duration, findingRows } from "./findingRows.ts";
 import type { Availability, AvailabilityWindow } from "@/features/scheduling/index.ts";
@@ -9,7 +9,27 @@ import { passesReader, type Pass } from "./api.ts";
 import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
 import type { Attention } from "@/features/now/index.ts";
 import { attentionErrorWords, resolutionRecord, whatToDo } from "./attention.ts";
-import { groupBlockedLine, readinessTag, recoverable, recoverErrorWords } from "./readiness.ts";
+import {
+  groupBlockedLine,
+  groupUplinkReader,
+  passReadinessReader,
+  readinessReasons,
+  readinessTag,
+  recoverable,
+  recoverErrorWords,
+  type ReadinessReason,
+} from "./readiness.ts";
+
+/** Typing §12: readiness fixtures go through the real readers, so strings become the unions. */
+const readRaw = <T>(reader: (v: unknown, path?: string) => T, raw: unknown): T => {
+  const r = decode(reader, raw);
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
+};
+const reason = (key: string): ReadinessReason =>
+  (readinessReasons as readonly string[]).includes(key)
+    ? (key as ReadinessReason)
+    : { unrecognized: key };
 
 const now = Date.parse("2026-11-09T02:00:00Z");
 const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
@@ -182,13 +202,14 @@ describe("attention block words (U32)", () => {
 
 describe("uplink readiness (U33)", () => {
   it("is quiet when ready except in the drawer; blocked is crit with queued groups", () => {
-    const r = (state: string, extra = {}) => ({
-      state,
-      reason: null,
-      since: null,
-      command_groups_queued: 0,
-      ...extra,
-    });
+    const r = (state: string, extra = {}) =>
+      readRaw(passReadinessReader, {
+        state,
+        reason: null,
+        since: null,
+        command_groups_queued: 0,
+        ...extra,
+      });
     expect(readinessTag(r("ready"), "row")).toBeNull();
     expect(readinessTag(r("ready"), "drawer")?.label).toBe("Uplink ready");
     expect(readinessTag(r("recovering", { since: "2026-11-10T00:41:00Z" }), "row")).toEqual({
@@ -207,7 +228,7 @@ describe("uplink readiness (U33)", () => {
         "Can't command: the uplink restarted after this pass had sent commands, and it can't resume before LOS 01:06Z. The next pass isn't affected.",
     });
     expect(
-      readinessTag({ ...blocked, command_groups_queued: 0, reason: "lane_held" }, "row"),
+      readinessTag({ ...blocked, command_groups_queued: 0, reason: reason("lane_held") }, "row"),
     ).toEqual({
       state: "caution",
       label: "Can't command",
@@ -217,7 +238,7 @@ describe("uplink readiness (U33)", () => {
 
   it("words a blocked group's line, naming the next pass and expiry only when known", () => {
     const station = { ref: null, id: null, code: "SVB-1", name: null };
-    const uplink = {
+    const uplink = readRaw(groupUplinkReader, {
       pass: { reservation_id: "p1", contact_id: null, station, starts_at: "2026-11-10T00:54:00Z" },
       next_pass: {
         reservation_id: "p2",
@@ -226,28 +247,29 @@ describe("uplink readiness (U33)", () => {
         starts_at: "2026-11-10T02:31:00Z",
       },
       readiness: { state: "blocked", reason: "protocol_state_restore_required", since: null },
-    };
+    });
+    const readiness = uplink.readiness ?? { state: "blocked" as const, reason: null, since: null };
     expect(groupBlockedLine(uplink, "2026-11-10T03:00:00Z")).toBe(
       "Can't command on the SVB-1 pass (AOS 00:54Z): the uplink restarted after this pass had sent commands, and it can't resume. Nothing will be sent on this pass. It goes on the next pass (FBK 02:31Z) unless it expires at 03:00Z.",
     );
-    const evidence = { ...uplink.readiness, reason: "attestation_expired" };
+    const evidence = { ...readiness, reason: reason("attestation_expired") };
     expect(groupBlockedLine({ ...uplink, next_pass: null, readiness: evidence }, null)).toMatch(
       /until the uplink recovers\. No later pass is booked for it yet\.$/,
     );
     expect(
-      groupBlockedLine({ ...uplink, readiness: { ...uplink.readiness, state: "ready" } }, null),
+      groupBlockedLine({ ...uplink, readiness: { ...readiness, state: "ready" } }, null),
     ).toBeNull();
   });
 
   it("cop1_awaiting_clcw is qualifying, not blocked; a mid-pass restart can't be recovered", () => {
     expect(
       readinessTag(
-        {
+        readRaw(passReadinessReader, {
           state: "qualifying",
           reason: "cop1_awaiting_clcw",
           since: null,
           command_groups_queued: 1,
-        },
+        }),
         "row",
       ),
     ).toEqual({
@@ -257,13 +279,17 @@ describe("uplink readiness (U33)", () => {
     });
     expect(recoverable("protocol_state_restore_required")).toBe(false);
     expect(recoverable("provider_cannot_attest_uplink_sessions")).toBe(false);
-    expect(recoverable("attestation_signature")).toBe(true);
+    expect(recoverable(reason("attestation_signature"))).toBe(true);
   });
 
   it("words reasons per U33 amendment 2, naming the provider", () => {
     const c = { provider: "Northlight" };
-    const tag = (reason: string, state = "blocked") =>
-      readinessTag({ state, reason, since: null, command_groups_queued: 1 }, "row", c)?.sentence;
+    const tag = (key: string, state = "blocked") =>
+      readinessTag(
+        readRaw(passReadinessReader, { state, reason: key, since: null, command_groups_queued: 1 }),
+        "row",
+        c,
+      )?.sentence;
     expect(tag("attestation_peer")).toBe(
       "Can't command: Northlight's proof for this session didn't check out.",
     );
@@ -286,7 +312,7 @@ describe("uplink readiness (U33)", () => {
 
   it("names the next pass by station code from the index when the row lacks it", () => {
     const station = { ref: "earendil-kiruna", id: null, code: null, name: null };
-    const uplink = {
+    const uplink = readRaw(groupUplinkReader, {
       pass: { reservation_id: "p1", contact_id: null, station, starts_at: "2026-11-10T00:54:00Z" },
       next_pass: {
         reservation_id: "p2",
@@ -295,7 +321,7 @@ describe("uplink readiness (U33)", () => {
         starts_at: "2026-11-10T02:31:00Z",
       },
       readiness: { state: "blocked", reason: "attestation_peer", since: null },
-    };
+    });
     const stations = {
       code: (ref: string | null | undefined) => (ref === "earendil-kiruna" ? "KIR" : null),
       provider: (ref: string | null | undefined) =>
@@ -373,9 +399,14 @@ describe("D3 station bands (S7)", () => {
 });
 
 describe("D4 findings (M22)", () => {
-  const f = (kind: string, code: string | null, at: string | null) => ({
+  // Typing §12: kind is knownText; an unknown one keeps its raw word.
+  const kindOf = (k: string): Finding["kind"] =>
+    (findingKinds as readonly string[]).includes(k)
+      ? (k as (typeof findingKinds)[number])
+      : { unrecognized: k };
+  const f = (kind: string, code: string | null, at: string | null): Finding => ({
     id: kind,
-    kind,
+    kind: kindOf(kind),
     severity: "caution" as const,
     at,
     station: code ? { ref: null, id: null, code, name: null } : null,

@@ -24,7 +24,7 @@ import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
 import { attentionWords } from "@/features/now/index.ts";
 import SettlementBlock from "./SettlementBlock.vue";
-import { noRecoverText, readinessTag, reasonLink, recoverable } from "./readiness.ts";
+import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
 import PassUplinks from "./PassUplinks.vue";
@@ -193,7 +193,7 @@ const countdown = computed(() => {
         <!-- U33 amendment 2: the raw key lives here only, never in the copy. -->
         <details v-if="readiness.reason" class="text-xs text-text-3">
           <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
-          <p class="m-0 pt-1 font-mono">reason: {{ readiness.reason }}</p>
+          <p class="m-0 pt-1 font-mono">reason: {{ reasonKey(readiness.reason) }}</p>
         </details>
       </div>
       <ApStateTrail v-if="state" :steps="contactTrail(state)" label="Contact state" />

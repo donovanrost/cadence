@@ -19,7 +19,7 @@ const offer = (id: string, over: Partial<Offer> = {}): Offer => ({
   expires_at: "2026-11-13T03:14:32Z",
   starts_at: "2026-11-13T03:10:00Z",
   ends_at: "2026-11-13T03:19:12Z",
-  station: { id: "sva", code: "SVA", name: "Svalbard" },
+  station: { ref: "sva", id: "sva", code: "SVA", name: "Svalbard" },
   antenna: null,
   provider: { id: "nl", name: "Northlight" },
   availability: "available",

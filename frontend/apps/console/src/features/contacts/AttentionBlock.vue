@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { RouterLink } from "vue-router";
+import { describeApiError, isError } from "@/api/index.ts";
 import { ApButton, ApCallout, ApTextarea } from "@/ui";
 import { attentionWords, type Attention } from "@/features/now/index.ts";
 import {
@@ -81,12 +82,8 @@ async function resolve() {
   busy.value = true;
   try {
     const o = await resolveAttention(props.missionId, props.attention, text);
-    if (
-      o.status === "rejected" &&
-      o.error.kind === "invalid" &&
-      o.error.code === "invalid_params"
-    ) {
-      fieldError.value = o.error.message;
+    if (o.status === "rejected" && isError(o.error, "invalid_params")) {
+      fieldError.value = describeApiError(o.error);
       return;
     }
     settle(o, "Resolved. It leaves the queue.");

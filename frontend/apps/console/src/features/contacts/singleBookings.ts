@@ -17,10 +17,18 @@ const offerReader = d.object({
   expires_at: d.timestamp,
   starts_at: d.timestamp,
   ends_at: d.timestamp,
-  station: d.object({ id: d.token, code: d.nullable(d.string), name: d.nullable(d.string) }),
+  // domain/api (L15): ref is always set; id, code and name are null for a provider station that
+  // matches no Cadence station.
+  station: d.object({
+    ref: d.string,
+    id: d.nullable(d.token),
+    // free-text: a station call sign (SVA), not a vocabulary
+    code: d.nullable(d.string),
+    name: d.nullable(d.string),
+  }),
   antenna: d.nullable(d.object({ id: d.token, label: d.nullable(d.string) })),
   provider: d.object({ id: d.token, name: d.nullable(d.string) }),
-  availability: d.token,
+  availability: d.knownText(["available", "limited"] as const),
   uplink_capable: d.boolean,
   synthetic: d.boolean,
   cost: d.nullable(d.number),
@@ -28,9 +36,10 @@ const offerReader = d.object({
     d.object({
       reservation_id: d.token,
       spacecraft: d.object({ id: d.token, name: d.string }),
+      // free-text: a station call sign, not a vocabulary
       station_code: d.nullable(d.string),
       starts_at: d.timestamp,
-      reason: d.token,
+      reason: d.known(["same_spacecraft", "same_antenna"] as const),
     }),
   ),
 });
@@ -41,13 +50,21 @@ const searchReader = d.object({
   window: d.object({ from: d.timestamp, to: d.timestamp }),
   offers: d.array(offerReader, 500),
   hidden: d.object({ no_uplink_route: d.integer }),
-  not_ready: d.array(d.object({ code: d.token, message: d.string }), 50),
+  not_ready: d.array(
+    d.object({
+      // free-text: the route finding's code is only a list key; the message is what's shown
+      code: d.token,
+      message: d.string,
+    }),
+    50,
+  ),
   truncated: d.boolean,
 });
 export type Search = Decoded<typeof searchReader>;
 
 const reserveReader = d.object({
   outcome: d.oneOf(["confirmed", "requested", "unconfirmed", "rejected"] as const),
+  // free-text: the provider's category or code, worded by K1's reasonWords (which has a fallback)
   reason: d.nullable(d.token),
   reason_message: d.nullable(d.string),
   provider_reference: d.nullable(d.string),

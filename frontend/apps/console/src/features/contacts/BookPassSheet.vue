@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { describeApiError } from "@/api/index.ts";
+import { describeApiError, isError } from "@/api/index.ts";
 import {
   formatDuration,
   useNow,
@@ -122,9 +122,8 @@ async function book() {
     return;
   }
   const e = r.error;
-  if (e.kind === "conflict" && e.code === "opportunity_expired")
-    searchError.value = "That offer expired. Search again.";
-  else if (e.kind === "conflict" && e.code === "route_changed")
+  if (isError(e, "opportunity_expired")) searchError.value = "That offer expired. Search again.";
+  else if (isError(e, "route_changed"))
     searchError.value = "The route to that station changed. Search again.";
   else if (e.kind === "forbidden") searchError.value = "Operators book passes.";
   else unclear.value = `It's unclear whether it was booked (${describeApiError(e)}).`;

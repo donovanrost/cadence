@@ -1,4 +1,4 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import { attentionReader } from "@/features/now/index.ts";
 import { passReadinessReader } from "./readiness.ts";
 
@@ -17,18 +17,44 @@ export const reservationStates = [
   "failed",
 ] as const;
 
+/** Provider pass and delivery progress (domain `KnownAtom.provider_pass_phase!` / `_delivery_state!`). */
+export const passPhases = ["scheduled", "prepass", "pass", "postpass", "closed"] as const;
+export const deliveryStates = [
+  "pending",
+  "ready",
+  "connected",
+  "flowing",
+  "degraded",
+  "failed",
+  "ended",
+] as const;
+
+/**
+ * Who ended a booking (reads/pass_enders.ex): a person, a service, Cadence, or the provider itself
+ * ("Canceled by Northlight"), so not the shared actor, whose kinds don't include provider.
+ */
+export const passEnderKinds = ["user", "service", "system", "provider"] as const;
+const passEnder = d.object({
+  kind: d.nullable(d.knownText(passEnderKinds)),
+  id: d.nullable(d.string),
+  name: d.nullable(d.string),
+});
+export type PassEnder = Decoded<typeof passEnder>;
+
 const pass = d.object({
   id: d.token,
   kind: d.literal("contact"),
   state: d.oneOf(reservationStates),
-  pass_phase: d.nullable(d.token),
-  delivery_state: d.nullable(d.token),
+  // The provider's progress (domain KnownAtom); an unknown value reads "unrecognized".
+  pass_phase: d.nullable(d.known(passPhases)),
+  delivery_state: d.nullable(d.known(deliveryStates)),
   spacecraft_id: d.nullable(d.token),
   /** Identity on the row (5f02fd3d), so names never depend on a client join. */
   spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.nullable(d.integer) })),
   station: d.object({
     ref: d.nullable(d.string),
     id: d.nullable(d.token),
+    // free-text: a station call sign (SVA), not a vocabulary
     code: d.nullable(d.string),
     name: d.nullable(d.string),
   }),
@@ -45,9 +71,7 @@ const pass = d.object({
   /** The contact plan revision that booked it; null for direct bookings. */
   plan: d.nullable(d.object({ id: d.token, version: d.nullable(d.integer) })),
   /** qa #30: who ended a canceled/rejected/failed booking; absent on older servers. */
-  ended_by: d.optional(
-    d.nullable(d.object({ kind: d.string, id: d.nullable(d.string), name: d.nullable(d.string) })),
-  ),
+  ended_by: d.optional(d.nullable(passEnder)),
   /**
    * qa #30 / domain #56: what replaced this lost booking (an applied repair, or a single booking
    * with plan_id null); null while still lost.
@@ -55,7 +79,7 @@ const pass = d.object({
   replaced_by: d.optional(
     d.nullable(
       d.object({
-        kind: d.optional(d.nullable(d.string)),
+        kind: d.optional(d.nullable(d.knownText(["repair", "single_booking"] as const))),
         plan_id: d.nullable(d.token),
         reservation_id: d.nullable(d.token),
       }),
@@ -63,9 +87,7 @@ const pass = d.object({
   ),
   /** U32 (contacts.md d2632794): how the booking is known; optional until api-ops ships it. */
   booking_evidence: d.optional(d.nullable(d.oneOf(["provider", "operator_attested"] as const))),
-  attested_by: d.optional(
-    d.nullable(d.object({ kind: d.string, id: d.nullable(d.string), name: d.nullable(d.string) })),
-  ),
+  attested_by: d.optional(d.nullable(actor)),
   /** null: no uplink leg was requested (downlink only), which isn't "unconfirmed". */
   uplink_confirmed: d.optional(d.nullable(d.boolean)),
   /** The pass's open or acknowledged attention item (U31/U32), the queue's object. */
@@ -99,7 +121,11 @@ const queuedReader = d.object({
         count: d.integer,
         next_pass: d.nullable(
           d.object({
-            station: d.object({ code: d.nullable(d.string), name: d.nullable(d.string) }),
+            station: d.object({
+              // free-text: a station call sign, not a vocabulary
+              code: d.nullable(d.string),
+              name: d.nullable(d.string),
+            }),
             starts_at: d.timestamp,
           }),
         ),
@@ -163,6 +189,7 @@ const stationsReader = d.object({
     d.object({
       id: d.token,
       display_name: d.nullable(d.string),
+      // free-text: a station call sign (SVA), not a vocabulary
       code: d.nullable(d.string),
       /** The station's provider, by name (U33: group lines name it without a new field). */
       provider: d.optional(d.nullable(d.string)),

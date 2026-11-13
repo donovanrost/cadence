@@ -1,5 +1,5 @@
-import { decode, decoders as d, describeApiError, request } from "@/api/index.ts";
-import { passReader } from "./api.ts";
+import { decoders as d, describeApiError, detailsOf, isError, request } from "@/api/index.ts";
+import { passReader, reservationStates } from "./api.ts";
 
 /**
  * D2 Release (contacts.md §Contact drawer D2 actions): cancels the booking at the provider. U20
@@ -8,9 +8,11 @@ import { passReader } from "./api.ts";
 export type ReleaseOutcome = Readonly<{ tone: "info" | "caution" | "crit"; text: string }>;
 
 const failed = d.object({
-  outcome: d.token,
+  // An outcome this console doesn't know reads as unclear (the default branch below).
+  outcome: d.known(["refused", "not_sent", "unknown"] as const),
+  // free-text: the provider's own sentence, shown in parentheses
   reason: d.optional(d.nullable(d.string)),
-  state: d.optional(d.nullable(d.token)),
+  state: d.optional(d.nullable(d.known(reservationStates))),
 });
 const noStop = (s: string) => s.trim().replace(/[.!?]+$/, "");
 
@@ -41,14 +43,13 @@ export function releaseErrorWords(
   e: Parameters<typeof describeApiError>[0],
   provider: string,
 ): ReleaseOutcome {
-  const code = "code" in e ? e.code : null;
-  if (code === "provider_cancel_failed" && "details" in e) {
-    const f = decode(failed, e.details);
-    if (f.ok) {
-      const why = f.value.reason ? ` (${noStop(f.value.reason)})` : "";
-      if (f.value.outcome === "refused")
+  const f = isError(e, "provider_cancel_failed") ? detailsOf(e, failed) : null;
+  if (f) {
+    {
+      const why = f.reason ? ` (${noStop(f.reason)})` : "";
+      if (f.outcome === "refused")
         return { tone: "crit", text: `Nothing changed: ${provider} refused the cancel${why}.` };
-      if (f.value.outcome === "not_sent")
+      if (f.outcome === "not_sent")
         return { tone: "crit", text: `Nothing changed: the cancel wasn't sent${why}.` };
       return {
         tone: "caution",
@@ -56,9 +57,9 @@ export function releaseErrorWords(
       };
     }
   }
-  if (code === "pass_changed")
+  if (isError(e, "pass_changed"))
     return { tone: "caution", text: "The pass changed while you looked; it's been reloaded." };
-  if (code === "pass_not_releasable")
+  if (isError(e, "pass_not_releasable"))
     return { tone: "crit", text: "Nothing changed: this pass can't be released any more." };
   if (e.kind === "forbidden") return { tone: "crit", text: "Org admins can release a booking." };
   if (e.kind === "unavailable" || e.kind === "malformed")

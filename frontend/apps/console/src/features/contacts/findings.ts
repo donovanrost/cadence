@@ -1,6 +1,8 @@
 import { computed, type Ref } from "vue";
 import {
   decoders as d,
+  isKnown,
+  knownText,
   request,
   useRemoteQuery,
   type ApiResult,
@@ -13,17 +15,26 @@ import { useMissionInvalidation } from "@/live/index.ts";
  * bookings, bookings into an outage, and coverage gaps over the Contacts window. `message` is the
  * server's sentence; `fix` is null for now, so each row offers `Open in Plan`.
  */
+/** M22 finding kinds the console titles (contacts.md §contact-findings). */
+export const findingKinds = [
+  "station_double_booked",
+  "booked_into_outage",
+  "coverage_gap",
+] as const;
+type FindingKind = (typeof findingKinds)[number];
+
 const station = d.nullable(
   d.object({
     ref: d.nullable(d.string),
     id: d.nullable(d.token),
+    // free-text: a station call sign (SVB), not a vocabulary
     code: d.nullable(d.string),
     name: d.nullable(d.string),
   }),
 );
 const finding = d.object({
   id: d.string,
-  kind: d.token,
+  kind: knownText(findingKinds),
   severity: d.oneOf(["caution", "critical"] as const),
   at: d.nullable(d.timestamp),
   station,
@@ -68,7 +79,7 @@ export function useFindings(missionId: Ref<string>, spanMs: Ref<number>) {
   return query;
 }
 
-const TITLE: Readonly<Record<string, string>> = {
+const TITLE: Readonly<Record<FindingKind, string>> = {
   station_double_booked: "double-booked",
   booked_into_outage: "booked into an outage",
   coverage_gap: "coverage gap",
@@ -77,7 +88,8 @@ const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
 
 /** Row title: "SVB double-booked 03:20Z", "Coverage gap"; mono ids stay in the message. */
 export function findingTitle(f: Finding): string {
-  const what = TITLE[f.kind] ?? f.kind.replaceAll("_", " ");
+  // A kind this console doesn't know reads from its own key (typing §12: knownText keeps it).
+  const what = isKnown(f.kind) ? TITLE[f.kind] : f.kind.unrecognized.replaceAll("_", " ");
   const where = f.station?.code ?? f.station?.name ?? null;
   const when = f.at ? ` ${hhmm(f.at)}` : "";
   const text = where ? `${where} ${what}${when}` : `${what}${when}`;

@@ -1,4 +1,4 @@
-import { request, type ApiError, type ApiResult } from "@/api/index.ts";
+import { isError, request, type ApiError, type ApiResult } from "@/api/index.ts";
 import { attentionReader, type Attention } from "@/features/now/index.ts";
 
 /**
@@ -98,8 +98,7 @@ export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }
 
 /** U20/U32 words for a write that didn't land. `refresh` asks the caller to reload the pass. */
 export function attentionErrorWords(error: ApiError): Readonly<{ text: string; refresh: boolean }> {
-  const code = "code" in error ? error.code : null;
-  if (code === "attention_item_not_found" || code === "attention_item_not_open")
+  if (isError(error, "attention_item_not_found") || isError(error, "attention_item_not_open"))
     return { text: "This was already resolved.", refresh: true };
   if (error.kind === "forbidden")
     return {
