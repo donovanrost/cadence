@@ -38,10 +38,11 @@ defmodule CadenceWeb.OrganizationInvitationController do
       {:ok, acceptance_params} ->
         form = acceptance_form(acceptance_params)
 
-        with {:ok, acceptance_attrs} <-
-               IdentityParams.organization_invitation_acceptance(acceptance_params),
+        with {:ok, acceptance_attrs} <- acceptance_attrs(invitation_token, acceptance_params),
              {:ok, acceptance_result} <-
-               Cadence.Auth.accept_organization_invitation(invitation_token, acceptance_attrs) do
+               Cadence.Auth.accept_organization_invitation(invitation_token, acceptance_attrs,
+                 ip: conn.remote_ip
+               ) do
           finalize_acceptance(conn, acceptance_result)
         else
           {:error, reason} ->
@@ -101,6 +102,8 @@ defmodule CadenceWeb.OrganizationInvitationController do
       available: assigns.invitation_available?,
       error: error_message,
       display_name: Form.input_value(assigns.form, :display_name) || "",
+      # The invited email already has an account: it joins with its current password (748fcbc9).
+      existing_account: Map.get(assigns, :existing_account?, false),
       organization:
         if(assigns.organization, do: Map.take(assigns.organization, [:display_name, :slug])),
       invitation:
@@ -119,8 +122,28 @@ defmodule CadenceWeb.OrganizationInvitationController do
          invitation_token: invitation_token,
          invitation: invitation,
          organization: organization,
-         invitation_available?: true
+         invitation_available?: true,
+         # Only after the token checked out: the token holder got the email, so this says
+         # nothing a lookup by email could.
+         existing_account?: existing_account?(invitation)
        }}
+    end
+  end
+
+  defp existing_account?(invitation),
+    do: match?({:ok, _user}, Cadence.Accounts.fetch_user_by_email(invitation.email))
+
+  # An existing account gives only its current password; a new one a name and a new password.
+  defp acceptance_attrs(invitation_token, params) do
+    case {invitation_assigns(invitation_token), params["password"]} do
+      {{:ok, %{existing_account?: true}}, password} when is_binary(password) and password != "" ->
+        {:ok, %{password: password}}
+
+      {{:ok, %{existing_account?: true}}, _missing} ->
+        {:error, {:invalid_param, "current_password", :required}}
+
+      _new_account_or_unavailable ->
+        IdentityParams.organization_invitation_acceptance(params)
     end
   end
 
@@ -160,6 +183,8 @@ defmodule CadenceWeb.OrganizationInvitationController do
   defp error_status(:organization_invitation_not_found), do: :not_found
   defp error_status(:organization_invitation_expired), do: :gone
   defp error_status(:organization_invitation_unavailable), do: :gone
+  defp error_status({:too_many_attempts, _retry_after}), do: :too_many_requests
+  defp error_status(:account_disabled), do: :forbidden
   defp error_status(_reason), do: :unprocessable_entity
 
   defp error_message(:organization_invitation_not_found) do
@@ -178,6 +203,9 @@ defmodule CadenceWeb.OrganizationInvitationController do
     "Submit a valid invitation acceptance form."
   end
 
+  defp error_message({:invalid_param, "current_password", :required}),
+    do: "Enter your current password."
+
   defp error_message({:invalid_param, _field, :required}) do
     "Enter your name, password, and password confirmation."
   end
@@ -189,6 +217,14 @@ defmodule CadenceWeb.OrganizationInvitationController do
   defp error_message({:invalid_param, "password", :too_short}) do
     "Password must be at least 12 characters."
   end
+
+  defp error_message(:invalid_credentials), do: "That password isn't right."
+
+  defp error_message({:too_many_attempts, retry_after}),
+    do: CadenceWeb.UserSessionController.too_many_attempts(retry_after)
+
+  defp error_message(:account_disabled),
+    do: "Your account is disabled. Ask an administrator to enable it, then use this link again."
 
   defp error_message(_reason) do
     "Cadence could not accept this invitation."

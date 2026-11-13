@@ -36,6 +36,8 @@ export function readPage(value: unknown) {
     available: value.available,
     error: value.error,
     display_name: value.display_name,
+    // The invited email already has an account: it joins with its current password.
+    existing_account: value.existing_account === true,
     organization: organization as { display_name: string; slug: string } | null,
     invitation: invitation as {
       email: string;
