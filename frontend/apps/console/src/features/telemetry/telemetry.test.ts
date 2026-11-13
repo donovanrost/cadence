@@ -126,6 +126,14 @@ describe("M23 points reader", () => {
     });
     expect(r.ok && r.value.points[0]?.latest?.limit_state).toBe("no_data");
   });
+  it("reads a point type it doesn't know as unrecognized, not a failed read (lead)", () => {
+    const r = decode(pointsReader, {
+      points: [
+        { id: "p", name: "Q", description: null, unit: null, subsystem: null, type: "quaternion" },
+      ],
+    });
+    expect(r.ok && r.value.points[0]?.type).toBe("unrecognized");
+  });
 });
 
 describe("M23 latest.source (551cb796, b8181eb9)", () => {

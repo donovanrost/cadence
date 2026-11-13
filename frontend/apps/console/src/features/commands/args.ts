@@ -10,7 +10,11 @@ export type ArgInput =
   | Readonly<{ kind: "choice"; options: readonly { value: string; label: string }[] }>
   | Readonly<{ kind: "boolean" }>
   | Readonly<{ kind: "number"; integer: boolean; min?: number; max?: number }>
-  | Readonly<{ kind: "text"; hex: boolean }>;
+  | Readonly<{ kind: "text"; hex: boolean }>
+  /** An argument type this console doesn't know: read-only, and its command can't be staged. */
+  | Readonly<{ kind: "unsupported" }>;
+
+export const UNSUPPORTED_ARG = "This argument type isn't supported here.";
 
 /** JSON text → display text: strings unquoted, everything else as written. */
 function display(json: string): string {
@@ -54,6 +58,8 @@ export function argInput(arg: CommandArgument): ArgInput {
       return { kind: "text", hex: false };
     case "binary":
       return { kind: "text", hex: true };
+    case "unrecognized":
+      return { kind: "unsupported" };
   }
 }
 
@@ -96,6 +102,7 @@ export function checkArg(arg: CommandArgument, raw: string): ArgCheck {
   if (arg.fixed_value_json !== null)
     return { ok: true, json: arg.fixed_value_json, hazardous: false };
   const text = raw.trim();
+  if (arg.type === "unrecognized") return { ok: false, reason: UNSUPPORTED_ARG };
   if (text === "")
     return arg.required
       ? { ok: false, reason: "Required." }

@@ -41,7 +41,9 @@ const argument = d.object({
   id: d.token,
   name: d.string,
   description: d.nullable(d.string),
-  type: d.oneOf(["integer", "float", "string", "binary", "boolean", "enumerated"] as const),
+  // Typing rule (1), lead: a new argument type mustn't fail the whole catalog read; it reads
+  // "unrecognized" and that argument renders read-only (args.ts).
+  type: d.known(["integer", "float", "string", "binary", "boolean", "enumerated"] as const),
   required: d.boolean,
   default_value_json: d.nullable(d.string),
   fixed_value_json: d.nullable(d.string),

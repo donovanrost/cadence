@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { CommandArgument } from "./api.ts";
-import { argInput, checkArg, initialText } from "./args.ts";
+import { argInput, checkArg, initialText, UNSUPPORTED_ARG } from "./args.ts";
 
 const arg = (overrides: Partial<CommandArgument>): CommandArgument => ({
   id: "a",
@@ -76,5 +76,18 @@ describe("command arguments", () => {
       ok: true,
       hazardous: true,
     });
+  });
+});
+
+describe("an argument type the console doesn't know (lead)", () => {
+  it("renders read-only and can't be staged, unless the catalog fixes its value", () => {
+    expect(argInput(arg({ type: "unrecognized" }))).toEqual({ kind: "unsupported" });
+    expect(checkArg(arg({ type: "unrecognized" }), "1")).toEqual({
+      ok: false,
+      reason: UNSUPPORTED_ARG,
+    });
+    const fixed = arg({ type: "unrecognized", fixed_value_json: "3" });
+    expect(argInput(fixed).kind).toBe("fixed");
+    expect(checkArg(fixed, "").ok).toBe(true);
   });
 });

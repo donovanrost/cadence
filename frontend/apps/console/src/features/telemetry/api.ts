@@ -18,7 +18,9 @@ const point = d.object({
   description: d.nullable(d.string),
   unit: d.nullable(d.string),
   subsystem: d.nullable(d.string),
-  type: d.oneOf(["numeric", "enum", "text"] as const),
+  // Typing rule (1), lead: a new point type mustn't fail the whole points read; it reads
+  // "unrecognized", which isn't plotted (only numeric is) and lists as text.
+  type: d.known(["numeric", "enum", "text"] as const),
   latest: d.optional(
     d.nullable(
       d.object({

@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { ApField, ApNumberField, ApSegmented, ApSelect } from "@/ui";
 import type { CommandArgument } from "../api.ts";
-import { argInput } from "../args.ts";
+import { argInput, UNSUPPORTED_ARG } from "../args.ts";
 
 /** One catalog argument (R03: the catalog writes the form). Fixed values are read-only. */
 const props = defineProps<{ arg: CommandArgument; error: string | null }>();
@@ -39,6 +39,10 @@ const bools = [
       :label="label"
       @update:model-value="(v) => (model = v)"
     />
+    <p v-else-if="input.kind === 'unsupported'" class="m-0 flex flex-col gap-1">
+      <span class="ap-label">{{ arg.name }}</span>
+      <span class="text-sm text-caution-text">{{ UNSUPPORTED_ARG }}</span>
+    </p>
     <ApNumberField
       v-else-if="input.kind === 'number'"
       v-model="model"
@@ -59,7 +63,9 @@ const bools = [
       v-bind="error ? { error } : {}"
     />
     <p
-      v-if="error && input.kind !== 'choice' && input.kind !== 'text'"
+      v-if="
+        error && input.kind !== 'choice' && input.kind !== 'text' && input.kind !== 'unsupported'
+      "
       class="m-0 text-sm text-caution-text"
     >
       {{ error }}
