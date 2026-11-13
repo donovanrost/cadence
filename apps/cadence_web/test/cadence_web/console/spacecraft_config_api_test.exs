@@ -11,7 +11,12 @@ defmodule CadenceWeb.Console.SpacecraftConfigAPITest do
     mission = TestFixtures.persist_mission!(org)
     craft = TestFixtures.persist_spacecraft!(mission, display_name: "EARENDIL-001")
 
-    %{member: member, craft: craft, base: "/api/console/v1/missions/#{mission.mission_id}"}
+    %{
+      member: member,
+      mission: mission,
+      craft: craft,
+      base: "/api/console/v1/missions/#{mission.mission_id}"
+    }
   end
 
   test "a spacecraft's configuration; an unknown one is not found", c do
@@ -38,5 +43,28 @@ defmodule CadenceWeb.Console.SpacecraftConfigAPITest do
              |> TestFixtures.member_conn()
              |> get(c.base <> "/spacecraft/nobody/configuration")
              |> json_response(404)
+  end
+
+  test "the profile carries its lifecycle and protocols (§11c, fe-ops G1)", c do
+    profile = TestFixtures.persist_spacecraft_profile!(c.mission, display_name: "Block 1")
+
+    craft =
+      TestFixtures.persist_spacecraft!(c.mission,
+        display_name: "EARENDIL-002",
+        spacecraft_type_id: profile.spacecraft_type_id,
+        spacecraft_type_version: profile.version
+      )
+
+    data =
+      c.member
+      |> TestFixtures.member_conn()
+      |> get(c.base <> "/spacecraft/#{craft.spacecraft_id}/configuration")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert %{"lifecycle" => "active", "uplink_protocol" => uplink, "packet_protocol" => packet} =
+             data["profile"]
+
+    assert is_binary(uplink) and is_binary(packet)
   end
 end

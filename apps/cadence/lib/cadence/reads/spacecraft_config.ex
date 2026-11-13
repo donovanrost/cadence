@@ -33,7 +33,7 @@ defmodule Cadence.Reads.SpacecraftConfig do
       {:ok,
        %{
          spacecraft: Map.put(detail.spacecraft, :archived, archived(craft)),
-         profile: detail.profile,
+         profile: profile_facts(detail.profile, profile),
          catalog: catalog(scope, craft),
          overrides: overrides(org, mission, spacecraft_id, profile),
          routing_rules: routing_rules(org, mission, detail.routing_rules),
@@ -57,6 +57,23 @@ defmodule Cadence.Reads.SpacecraftConfig do
   end
 
   defp actor(_none), do: nil
+
+  # §11c parity (fe-ops G1 fact line): the pinned version's lifecycle and protocols.
+  defp profile_facts(nil, _pinned), do: nil
+
+  defp profile_facts(profile, nil),
+    do: Map.merge(profile, %{lifecycle: nil, uplink_protocol: nil, packet_protocol: nil})
+
+  defp profile_facts(profile, pinned),
+    do:
+      Map.merge(profile, %{
+        lifecycle: text(pinned.lifecycle_state),
+        uplink_protocol: text(pinned.uplink_protocol),
+        packet_protocol: text(pinned.packet_protocol)
+      })
+
+  defp text(nil), do: nil
+  defp text(value), do: to_string(value)
 
   # The catalog its active configuration runs, and the one its profile (with overrides) sets.
   defp catalog(scope, craft) do

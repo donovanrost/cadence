@@ -496,7 +496,9 @@ Errors: `404 spacecraft_not_found`.
 
 - **G1:** `spacecraft` as `/spacecraft/:id` (identity, plane/slot null when unknown). `archived` is
   `{at, by: actor | null}` for an archived spacecraft, else `null`. `profile` as `/spacecraft/:id`
-  (null when unbound).
+  (null when unbound), plus the pinned version's `lifecycle` (`active | deleted`),
+  `uplink_protocol` (`tc | uslp`) and `packet_protocol` (`space_packet`), each null when the pinned
+  version can't be read (§11c parity, the G1 fact line).
   - `catalog.running` is the catalog revision the spacecraft's active configuration uses;
     `catalog.profile` is the one its profile (with its overrides) sets. Either can be `null`. When
     both are set and differ, show the "Running rev 14; the profile is on rev 15" caution (the same
