@@ -325,8 +325,8 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 Telemetry Explore and Investigate `Dashboards ↗` (L8); account menu `Platform admin ↗` (L7); Setup › Apps surfaces (L9); `org.missions` New mission (L4); PendingScreen "use the existing Cadence pages" and the K1 template link. ux amends the IA and specs as each row gets its home.
 
 ### 11c. Verify, then keep or delete
-- `/spacecraft/:sid/commanding` (command interpretation, read-only): fe-ops checks the `ops.spacecraft` configuration tab shows the pinned interpretation and target identities.
-- Legacy commanding stage-only features (batch preview, `restart_draft`): fe-ops confirms none are still needed.
+- ~~`/spacecraft/:sid/commanding` (command interpretation)~~ checked by fe-ops: covered by Investigate › Configuration G1–G3 and Compose's resolved endpoints; deletable. Small parity extra (low priority): api adds `profile.{lifecycle, uplink_protocol, packet_protocol}` to the configuration read, fe-ops one fact line in G1.
+- ~~Legacy commanding stage-only features (batch preview, `restart_draft`)~~ checked by fe-ops: not needed (live preflight M18 + submit digest; Compose drafts with 409 Load / Keep mine). Deletable.
 - ~~Profile overrides cover every per-spacecraft field of the old spacecraft config workspace~~ checked by fe-setup: partly. `protocol.*` and `catalog_revision_id` are covered; the other four keys became L22.
 - Redirect-only controllers (`LegacyOpsRedirect`, `LegacyApplicationRedirect`, 17 `LegacyCommsRedirect` aliases): point at console routes or delete with the pages (api-ops).
 - Keep: DELETE `/session`, PUT `/session/organization` (plain controllers the console uses); the downloads `/catalog/artifacts/:id/download` and `/ops/dashboards/:id/export` until L18/L8 decide.
