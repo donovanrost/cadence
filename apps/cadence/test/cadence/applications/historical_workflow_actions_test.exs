@@ -2,6 +2,7 @@ defmodule Cadence.Applications.HistoricalWorkflowActionsTest do
   use Cadence.DataCase, async: false
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowActions, as: Actions
+  alias Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest
   alias Cadence.Auth.Scope
   alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Jobs
@@ -63,7 +64,7 @@ defmodule Cadence.Applications.HistoricalWorkflowActionsTest do
     assert Repo.aggregate(EventRow, :count) == 0
 
     assert {:ok, result} = execute(c, "record-request", request)
-    assert result.group_id == "native-group"
+    assert result.group_id == group(c)
     assert result.event_count == 2
     assert result.actor_id == c.scope.user.user_id
     assert result.operation_id == "operation-one"
@@ -88,13 +89,13 @@ defmodule Cadence.Applications.HistoricalWorkflowActionsTest do
   test "group decisions consume exact review evidence and return actual started job identities",
        c do
     assert {:ok, _} = execute(c, "record-request", request(c))
-    c = %{c | capture: capture(c.scope, "native-group")}
+    c = %{c | capture: capture(c.scope, group(c))}
     approval = decision(c, "approved")
     assert {:ok, approved} = execute(c, "transition-group", approval)
     assert approved.event_count == 2
     assert {:rejected, ["review_changed"]} = execute(c, "transition-group", approval)
 
-    c = %{c | capture: capture(c.scope, "native-group")}
+    c = %{c | capture: capture(c.scope, group(c))}
     assert {:ok, started} = execute(c, "transition-group", decision(c, "started"))
     assert started.job_count == 2
 
@@ -107,15 +108,15 @@ defmodule Cadence.Applications.HistoricalWorkflowActionsTest do
 
   test "job changes invalidate an approved review and readers cannot manage", c do
     assert {:ok, _} = execute(c, "record-request", request(c))
-    c = %{c | capture: capture(c.scope, "native-group")}
+    c = %{c | capture: capture(c.scope, group(c))}
     assert {:ok, _} = execute(c, "transition-group", decision(c, "approved"))
-    c = %{c | capture: capture(c.scope, "native-group")}
+    c = %{c | capture: capture(c.scope, group(c))}
 
     assert {:ok, _} =
              Jobs.enqueue(
                :telemetry_historical_data_workflow,
                "mission-native",
-               "native-group-001",
+               group(c) <> "-001",
                %{}
              )
 
@@ -237,6 +238,15 @@ defmodule Cadence.Applications.HistoricalWorkflowActionsTest do
     {job, event}
   end
 
+  # Client run ids are namespaced to the tenant (director L1).
+  defp group(c),
+    do:
+      HistoricalWorkflowRequest.tenant_run_id(
+        c.scope.organization_id,
+        "mission-native",
+        "native-group"
+      )
+
   defp capture(scope, group \\ nil) do
     query = if group, do: %{"group" => group}, else: %{}
     assert {:ok, model, review} = Read.load(scope, "mission-native", "manage", query)
@@ -257,7 +267,7 @@ defmodule Cadence.Applications.HistoricalWorkflowActionsTest do
 
   defp decision(c, stage),
     do: %{
-      "group_id" => "native-group",
+      "group_id" => group(c),
       "evidence" => c.capture.model.selected.evidence,
       "stage" => stage,
       "reason" => String.duplicate("界", 600),
