@@ -53,7 +53,7 @@ async function revoke() {
         <span class="font-mono">{{ when(invitation.sent_at) }}</span
         ><template v-if="invitation.expires_at">
           · expires <span class="font-mono">{{ when(invitation.expires_at) }}</span></template
-        ><template v-if="invitation.status === 'expired'"> · expired</template>
+        ><template v-if="invitation.status !== 'pending'"> · {{ invitation.status }}</template>
       </p>
       <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
       <div v-if="canManage" class="flex flex-wrap items-center gap-3">

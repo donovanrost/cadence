@@ -27,6 +27,7 @@ const columns: readonly ApColumn[] = [
     <template #cell-sent="{ row }">{{ formatShort(new Date(row.sent_at)) }}</template>
     <template #cell-status="{ row }">
       <ApTag v-if="row.status === 'expired'" state="caution" label="Expired" />
+      <ApTag v-else-if="row.status === 'declined'" state="off" label="Declined" />
       <span v-else class="text-text-3">Pending</span>
     </template>
   </ApTable>

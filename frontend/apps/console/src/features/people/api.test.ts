@@ -29,6 +29,20 @@ describe("peopleReader", () => {
     expect(matchesPerson(mira, "org admin")).toBe(true);
   });
 
+  it("reads a declined invitation (api-ops L5/L21)", () => {
+    const invitation = {
+      id: "inv_1",
+      email: "ana@example.com",
+      role: "member",
+      invited_by: { name: "Mira K." },
+      sent_at: "2026-11-10T01:00:00Z",
+      expires_at: null,
+      status: "declined",
+    };
+    const result = decode(peopleReader, { ...body, invitations: [invitation] });
+    expect(result.ok && result.value.invitations[0]?.status).toBe("declined");
+  });
+
   it("rejects a role the console doesn't know", () => {
     const member = { ...body.members[0], role: "flight_director" };
     expect(decode(peopleReader, { ...body, members: [member] }).ok).toBe(false);

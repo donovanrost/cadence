@@ -21,7 +21,8 @@ const invitation = object({
   invited_by: nullable(object({ name: string })),
   sent_at: timestamp,
   expires_at: nullable(timestamp),
-  status: oneOf(["pending", "expired"]),
+  /** api-ops L5/L21: `declined` when the invitee turns it down. */
+  status: oneOf(["pending", "expired", "declined"]),
 });
 
 export const peopleReader = object({

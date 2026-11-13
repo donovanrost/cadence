@@ -48,7 +48,7 @@ export function adminErrorText(e: ApiError): string {
     case "member_not_found":
       return "They aren't a member any more. The list has been reloaded.";
     case "invitation_not_found":
-      return "This invitation isn't pending any more (accepted, revoked or expired). The list has been reloaded.";
+      return "This invitation isn't pending any more (accepted, declined, revoked or expired). The list has been reloaded.";
     case "forbidden":
       return "Only an organization admin can manage people.";
     case null:
