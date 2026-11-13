@@ -1,14 +1,19 @@
 import { computed, shallowRef, type Ref } from "vue";
 import { useChannelEvent, useChannelSubscription } from "@/live";
 import type { Runtime } from "../api.ts";
-import { applyPush, versionEvent, viewPush, type VersionEvent } from "../model/live-merge.ts";
-import type { WorkspaceSnapshot } from "../model/snapshot.ts";
+import {
+  applyPush,
+  versionEvent,
+  viewPush,
+  type LiveBoard,
+  type VersionEvent,
+} from "../model/live-merge.ts";
 
 /**
- * C1 is not served yet (api-ops builds it after L6/L5): until then the viewer stays on live step 1
- * (D5 refetch on invalidations). Flip when `dashboard:<m>:<d>` lands (plans/dashboards-live.md).
+ * Live step 2 (C1, api-ops 30295106): the dashboard channel drives the board; step 1's
+ * invalidation-driven D5 data refetch is retired for the viewer and present mode.
  */
-export const LIVE_PUSH = false;
+export const LIVE_PUSH = true;
 
 /**
  * Live push for one dashboard (C1): joins `dashboard:<m>:<d>`, subscribes with the viewer's runtime
@@ -22,14 +27,12 @@ export function useDashboardLive(
   runtime: Readonly<Ref<Runtime>>,
   refreshMs: Readonly<Ref<number | null>>,
   paused: Readonly<Ref<boolean>>,
-  /** The REST snapshot (D5) a first delta could apply to; normally the first push is full. */
-  base: Readonly<Ref<WorkspaceSnapshot | null>>,
 ) {
   const topic = computed(() =>
     LIVE_PUSH && dashboardId.value ? `dashboard:${missionId.value}:${dashboardId.value}` : null,
   );
   const subscribed = computed(() => (paused.value ? null : topic.value));
-  const snapshot = shallowRef<WorkspaceSnapshot | null>(null);
+  const board = shallowRef<LiveBoard | null>(null);
   const version = shallowRef<VersionEvent | null>(null);
   let lastSeq = 0;
 
@@ -49,21 +52,21 @@ export function useDashboardLive(
     update: "view:set",
   });
   const restart = () => {
-    snapshot.value = null;
+    board.value = null;
     lastSeq = 0;
     sub.resubscribe();
   };
   useChannelEvent(subscribed, "view", viewPush, {
     onEvent: (push) => {
       if (!push.full && push.seq !== lastSeq + 1) return restart();
-      const applied = applyPush(snapshot.value ?? base.value, push);
+      const applied = applyPush(board.value, push);
       if (!applied.ok) return restart();
-      snapshot.value = applied.snapshot;
+      board.value = applied.board;
       lastSeq = push.seq;
     },
     // A new channel process starts from a full push after the (re)subscribe.
     onResync: () => {
-      snapshot.value = null;
+      board.value = null;
       lastSeq = 0;
     },
   });
@@ -73,7 +76,9 @@ export function useDashboardLive(
     },
   });
 
-  /** True while pushes are driving the board: step 1's data refetch stands down. */
-  const active = computed(() => subscribed.value !== null && snapshot.value !== null);
-  return { snapshot, version, active };
+  /** The pushed board (null until the first full push, or when the dashboard has no current version). */
+  const snapshot = computed(() =>
+    subscribed.value === null ? null : (board.value?.snapshot ?? null),
+  );
+  return { snapshot, version };
 }

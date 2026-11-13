@@ -7,6 +7,7 @@ import { useMissionScope } from "@/shell";
 import { ApEmptyState, ApRemote } from "@/ui";
 import ViewerBody from "../viewer/ViewerBody.vue";
 import { useDashboardView } from "../viewer/useDashboardView.ts";
+import { LIVE_PUSH, useDashboardLive } from "../viewer/useDashboardLive.ts";
 import { fetchPlaylist } from "./api.ts";
 import PresentLine from "./PresentLine.vue";
 import { usePresent } from "./usePresent.ts";
@@ -34,10 +35,19 @@ const show = usePresent(
   computed(() => ready.value?.dwell_seconds ?? 30),
 );
 const dashboardId = computed(() => show.current.value?.id ?? "");
-const view = useDashboardView(missionId, dashboardId, ref({ from: "", to: "", spacecraftId: "" }), {
+// Each dashboard opens on its own defaults; D5 loads it, the channel (C1) keeps it live.
+const runtime = ref({ from: "", to: "", spacecraftId: "" });
+const view = useDashboardView(missionId, dashboardId, runtime, {
   refreshMs: ref(2_000),
   sliding: ref(true),
-  paused: ref(false),
+  paused: ref(LIVE_PUSH),
+});
+const live = useDashboardLive(missionId, dashboardId, runtime, ref(2_000), ref(false));
+const shown = computed(() => {
+  const s = view.state.value;
+  return s.status === "ready" && live.snapshot.value
+    ? { ...s, value: { ...s.value, snapshot: live.snapshot.value } }
+    : s;
 });
 const connection = useConnection();
 const leave = () => void router.push({ name: "ops.dashboards.playlists" });
@@ -83,11 +93,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         <h2 class="m-0 font-display text-sm uppercase tracking-title text-text-2">
           {{ show.current.value?.name }}
         </h2>
-        <ViewerBody
-          :state="view.state.value"
-          :stale="connection !== 'live'"
-          @retry="view.refetch"
-        />
+        <ViewerBody :state="shown" :stale="connection !== 'live'" @retry="view.refetch" />
       </section>
     </template>
   </ApRemote>

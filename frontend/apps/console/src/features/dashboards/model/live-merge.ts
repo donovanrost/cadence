@@ -12,39 +12,45 @@ const pushShape = d.object({
   full: d.boolean,
   version: d.integer,
   resolved_at: d.timestamp,
-  context,
+  /** null only on a full push for a dashboard with no current version (no snapshot to show). */
+  context: d.nullable(context),
   snapshot: d.nullable(workspaceSnapshot),
   placements: d.array(placement, 1024),
   removed: d.array(d.token, 1024),
 });
 export type ViewPush = Decoded<typeof pushShape>;
 
-/** A full push carries the snapshot and nothing else; a delta carries no snapshot. */
+/** A full push carries no deltas; a delta carries no snapshot, and always the new context. */
 export const viewPush: Reader<ViewPush> = (value, path = "") => {
   const p = pushShape(value, path);
-  if (p.full !== (p.snapshot !== null))
-    throw new DecodeError(`${path}.snapshot`, "a snapshot exactly when full");
   if (p.full && (p.placements.length > 0 || p.removed.length > 0))
     throw new DecodeError(`${path}.placements`, "no deltas on a full push");
+  if (!p.full && (p.snapshot !== null || p.context === null))
+    throw new DecodeError(`${path}.snapshot`, "a delta: no snapshot, and a context");
   return p;
 };
 
+/** C1 `version` (api-ops 30295106): always this shape; `archived` stops the pushes. */
 export const versionEvent = d.object({
   current_version: d.integer,
   saved_by: d.nullable(actor),
   saved_at: d.nullable(d.timestamp),
-  archived: d.optional(d.boolean),
+  archived: d.boolean,
 });
 export type VersionEvent = Decoded<typeof versionEvent>;
 
+/** What the pushes have built: the board, and the document version the server resolved it for. */
+export type LiveBoard = Readonly<{ snapshot: WorkspaceSnapshot | null; version: number }>;
 export type Applied =
-  | { ok: true; snapshot: WorkspaceSnapshot }
+  | { ok: true; board: LiveBoard }
   | { ok: false; reason: "no_base" | "version_mismatch" };
 
-export function applyPush(current: WorkspaceSnapshot | null, push: ViewPush): Applied {
-  if (push.snapshot) return { ok: true, snapshot: push.snapshot };
-  if (!current) return { ok: false, reason: "no_base" };
-  if (current.document_version !== push.version) return { ok: false, reason: "version_mismatch" };
+export function applyPush(board: LiveBoard | null, push: ViewPush): Applied {
+  if (push.full) return { ok: true, board: { snapshot: push.snapshot, version: push.version } };
+  const current = board?.snapshot;
+  if (!board || !current || !push.context) return { ok: false, reason: "no_base" };
+  // The channel versions deltas by its own document version: compare with the last full push.
+  if (board.version !== push.version) return { ok: false, reason: "version_mismatch" };
   const changed = new Map(push.placements.map((p) => [p.id, p]));
   const removed = new Set(push.removed);
   const kept = current.placements
@@ -54,6 +60,9 @@ export function applyPush(current: WorkspaceSnapshot | null, push: ViewPush): Ap
   const added = push.placements.filter((p) => !known.has(p.id));
   return {
     ok: true,
-    snapshot: { ...current, context: push.context, placements: [...kept, ...added] },
+    board: {
+      version: board.version,
+      snapshot: { ...current, context: push.context, placements: [...kept, ...added] },
+    },
   };
 }

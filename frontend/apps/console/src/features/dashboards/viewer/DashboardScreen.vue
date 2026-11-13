@@ -22,7 +22,7 @@ import ViewerActions from "./ViewerActions.vue";
 import ViewerBody from "./ViewerBody.vue";
 import CockpitStatus from "./CockpitStatus.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
-import { useDashboardLive } from "./useDashboardLive.ts";
+import { LIVE_PUSH, useDashboardLive } from "./useDashboardLive.ts";
 
 /**
  * Dashboard viewer and editor (ux Dashboards.md): a takeover cockpit. The URL owns the runtime
@@ -51,27 +51,18 @@ const refresh = computed<RefreshChoice>(
 );
 const editRequested = computed(() => one(route.query.edit) === "1");
 const refreshMs = computed(() => refreshChoices.find((c) => c.value === refresh.value)?.ms ?? null);
-/** Live step 2 (C1, flagged): pushes drive the board; step 1's data refetch stands down meanwhile. */
-const pushing = ref(false);
+/** D5 loads the head and the first board; with C1 on, data comes over the channel (step 1 retired). */
 const query = useDashboardView(missionId, dashboardId, runtime, {
   refreshMs,
   sliding: computed(() => selection.value.kind !== "absolute"),
-  paused: computed(() => editRequested.value || pushing.value),
+  paused: computed(() => editRequested.value || LIVE_PUSH),
 });
-const live = useDashboardLive(
-  missionId,
-  dashboardId,
-  runtime,
-  refreshMs,
-  editRequested,
-  computed(() => (query.state.value.status === "ready" ? query.state.value.value.snapshot : null)),
-);
-watch(live.active, (on) => (pushing.value = on));
+const live = useDashboardLive(missionId, dashboardId, runtime, refreshMs, editRequested);
 // Someone saved, restored or archived it: re-read the head (current_version drives the editor's callout).
 watch(live.version, () => query.refetch());
 const shown = computed(() => {
   const s = query.state.value;
-  return s.status === "ready" && live.active.value && live.snapshot.value
+  return s.status === "ready" && live.snapshot.value
     ? { ...s, value: { ...s.value, snapshot: live.snapshot.value } }
     : s;
 });
