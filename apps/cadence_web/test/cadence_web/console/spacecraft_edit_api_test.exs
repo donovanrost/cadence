@@ -70,6 +70,13 @@ defmodule CadenceWeb.Console.SpacecraftEditAPITest do
            }
   end
 
+  test "the derived_telemetry schema: a create-only id, a name, a multiline expression", c do
+    fields = get_data(c, "/config/kinds/derived_telemetry/schema")["fields"]
+    assert Enum.map(fields, & &1["path"]) == ~w(point_id point_name expression)
+    assert %{"create_only" => true, "required" => true} = hd(fields)
+    assert %{"type" => "text", "required" => true} = List.last(fields)
+  end
+
   test "catalog APIDs: an unknown revision is not found", c do
     conn =
       c.user

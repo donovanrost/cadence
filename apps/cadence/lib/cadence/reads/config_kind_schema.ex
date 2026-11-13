@@ -12,6 +12,8 @@ defmodule Cadence.Reads.ConfigKindSchema do
   `spacecraft_profile` (fe-setup, New profile) is the name plus the profile sections of
   `Cadence.SpacecraftType.Schema` (framing, catalog), each field carrying its `section`; routing
   rules, applications and metadata have their own editors.
+  `derived_telemetry` (#77): `point_id` (`create_only: true`), `point_name`, and `expression`
+  (`type: :text`, multiline); `metadata` isn't in the form.
   `spacecraft` (L17/L22) is identity (`section: "identity"`) plus the commanding and telemetry
   switches (`section: "switches"`, help is ux's U40). Profile choices are the mission's shared
   profiles; a version left empty means the profile's latest (`Cadence.Control.SpacecraftOps`).
@@ -132,6 +134,26 @@ defmodule Cadence.Reads.ConfigKindSchema do
          enum: Enum.map(TransportKind.all(), &%{value: &1.form_value, label: &1.label})
        )
      ] ++ configuration_fields()}
+  end
+
+  # #77 stage 1 (domain 5504322a8): one derived point. `point_id` is set on create only;
+  # `metadata` isn't edited here (stored as is).
+  def fields("derived_telemetry") do
+    {:ok,
+     [
+       field("point_id", "Point ID", :string,
+         required: true,
+         range: %{min: 1, max: 240},
+         help: "A qualified id such as DERIVED.SOC. It can't change after the point is added."
+       )
+       |> Map.put(:create_only, true),
+       field("point_name", "Name", :string, range: %{min: 1, max: 240}),
+       field("expression", "Expression", :text,
+         required: true,
+         range: %{min: 1, max: 8192},
+         help: "Stateless, over qualified point ids (PACKET.field)."
+       )
+     ]}
   end
 
   def fields(_kind), do: {:error, :unknown_kind}
