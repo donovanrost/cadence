@@ -135,10 +135,11 @@ defmodule Cadence.Auth do
     Accounts.fetch_organization_invitation(invitation_token)
   end
 
-  @spec accept_organization_invitation(binary(), map()) :: {:ok, map()} | {:error, term()}
-  def accept_organization_invitation(invitation_token, attrs)
+  @spec accept_organization_invitation(binary(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def accept_organization_invitation(invitation_token, attrs, opts \\ [])
       when is_binary(invitation_token) and is_map(attrs) do
-    Accounts.accept_organization_invitation(invitation_token, attrs)
+    Accounts.accept_organization_invitation(invitation_token, attrs, opts)
   end
 
   defp browser_organization_context(user, organization_id, true)
