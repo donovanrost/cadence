@@ -110,7 +110,9 @@ defmodule Cadence.Reads.SpacecraftDetail do
       telemetry_check(last_received_at)
     ]
 
-    %{ready: Enum.all?(Enum.take(checks, 3), &(&1.status == :ready)), checks: checks}
+    # Ready when identity, profile and routing have no blocker (a caution, such as an older
+    # profile version, is still ready), as the directory's `ready` (setup.md).
+    %{ready: not Enum.any?(Enum.take(checks, 3), &(&1.status == :blocker)), checks: checks}
   end
 
   defp identity_check(%Spacecraft{scid: scid}) when is_integer(scid),

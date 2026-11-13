@@ -72,6 +72,29 @@ defmodule Cadence.Reads.SpacecraftDetailTest do
            }
   end
 
+  test "a caution alone (an older profile version) is still ready (qa, L17)" do
+    rule = %RoutingRule{
+      routing_rule_id: "r1",
+      spacecraft_id: "sc",
+      direction: :inbound,
+      role: :primary,
+      transport_id: "t1",
+      lifecycle_state: :active,
+      enabled?: true
+    }
+
+    detail =
+      SpacecraftDetail.build(%{
+        spacecraft: craft(version: 1),
+        profiles: [@profile],
+        routing_rules: [rule],
+        transports: []
+      })
+
+    assert checks(detail).profile == :caution
+    assert detail.readiness.ready
+  end
+
   test "a deleted pinned profile is a blocker" do
     detail = SpacecraftDetail.build(%{spacecraft: craft([]), profiles: []})
     assert checks(detail).profile == :blocker
