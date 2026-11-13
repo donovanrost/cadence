@@ -85,6 +85,20 @@ defmodule Cadence.Jobs do
     |> binary_part(0, 10)
   end
 
+  @doc """
+  `fetch_job_for_run/2` for one mission: a job of another mission (run ids are unique per job
+  type across every tenant) reads as not found, so a reader can't show another tenant's job.
+  """
+  @spec fetch_mission_job_for_run(Job.job_type(), binary(), binary()) ::
+          {:ok, Job.t()} | {:error, :job_not_found}
+  def fetch_mission_job_for_run(job_type, mission_id, run_id)
+      when is_atom(job_type) and is_binary(mission_id) and is_binary(run_id) do
+    case fetch_job_for_run(job_type, run_id) do
+      {:ok, %Job{mission_id: ^mission_id} = job} -> {:ok, job}
+      _other_or_none -> {:error, :job_not_found}
+    end
+  end
+
   @spec list_jobs(Job.job_type(), binary(), keyword()) :: [Job.t()]
   def list_jobs(job_type, mission_id, opts \\ [])
       when is_atom(job_type) and is_binary(mission_id) and is_list(opts) do

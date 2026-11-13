@@ -16,6 +16,28 @@ defmodule Cadence.JobsTest do
     [:cadence, :jobs, :dispatcher, :stale_timer]
   ]
 
+  test "a mission's run lookup doesn't see another mission's job with the same run id" do
+    assert {:ok, _job} =
+             Cadence.Jobs.enqueue(
+               :replay_telemetry_scope,
+               "mission-alpha",
+               "run-scoped",
+               %{"replay_run_id" => "run-scoped"}
+             )
+
+    assert {:ok, %Job{mission_id: "mission-alpha"}} =
+             Cadence.Jobs.fetch_mission_job_for_run(
+               :replay_telemetry_scope,
+               "mission-alpha",
+               "run-scoped"
+             )
+
+    for {mission, run} <- [{"mission-beta", "run-scoped"}, {"mission-alpha", "run-other"}] do
+      assert {:error, :job_not_found} =
+               Cadence.Jobs.fetch_mission_job_for_run(:replay_telemetry_scope, mission, run)
+    end
+  end
+
   test "requeues running jobs for recovery" do
     assert {:ok, job} =
              Cadence.Jobs.enqueue(

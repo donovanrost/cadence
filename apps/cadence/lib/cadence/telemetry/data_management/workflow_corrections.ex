@@ -309,11 +309,10 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
     |> Map.put(:stage, Storage.BackfillLifecycleGroup.payload_value(correction_event, :stage))
   end
 
-  defp transition_job_context(correction_event) do
-    case Jobs.fetch_job_for_run(
-           :telemetry_historical_data_workflow,
-           correction_event.backfill_run_id
-         ) do
+  # Only this mission's job: run ids are unique per job type across every tenant.
+  defp transition_job_context(%{mission_id: mission_id, backfill_run_id: run_id})
+       when is_binary(mission_id) and is_binary(run_id) do
+    case Jobs.fetch_mission_job_for_run(:telemetry_historical_data_workflow, mission_id, run_id) do
       {:ok, %{job_id: job_id, status: status}} ->
         %{job_id: job_id, job_status: Atom.to_string(status)}
 
@@ -321,6 +320,8 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
         %{}
     end
   end
+
+  defp transition_job_context(_event_without_run), do: %{}
 
   defp transition_attrs(event, attrs) do
     attrs
