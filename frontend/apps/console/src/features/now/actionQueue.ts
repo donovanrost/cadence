@@ -29,6 +29,7 @@ import { GROUP_AT, type QueueItem } from "./queue.ts";
 import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settlement.ts";
 import { runtimeRow } from "./runtime.ts";
 import { activationRow } from "./activation.ts";
+import { changeEvidence, changeTitle } from "./providerChange.ts";
 import { changeSetReader, changeSetRow } from "./changeSet.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
@@ -379,6 +380,28 @@ function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueI
       if (a.source === "mission_runtime")
         return [runtimeRow(base(item), item.id, a, missionName, now)];
       if (a.source === "activation_apply") return [activationRow(base(item), item.id, a, now)];
+      if (a.source === "provider_change") {
+        // U44: the pass in Contacts holds the decision; an approval counts down to its deadline.
+        const pass = a.reservation_id ?? a.contact_id;
+        const to: RouteLocationRaw = pass
+          ? { name: "ops.contacts", query: { contact: pass } }
+          : { name: "ops.contacts" };
+        const deadline = a.deadline_at ?? a.provider_change?.deadline_at ?? null;
+        return [
+          {
+            ...base(item),
+            key: item.id,
+            title: `${item.spacecraft[0]?.name ?? "Spacecraft"} · ${changeTitle(a, now)}`,
+            titleTo: to,
+            sentence: changeEvidence(a, now),
+            meta: attentionMeta(a),
+            ...(a.conflict === "approval_required" && deadline
+              ? { due: { label: "Decide", at: deadline } }
+              : {}),
+            action: { label: "Review", to },
+          },
+        ];
+      }
       const w = attentionWords(a);
       const pass = a.reservation_id ?? a.contact_id;
       const to: RouteLocationRaw = pass

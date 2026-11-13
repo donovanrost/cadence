@@ -292,6 +292,7 @@ describe("attention rows (U31, fafe581a)", () => {
         resolved_by: { kind: "user" as const, id: "u-1", name: "Mira K." },
         action: "resolved",
         resolved_at: "2026-11-09T11:00:00Z",
+        note: null,
       },
     ];
     const fading = newlyResolved(before, after, resolved, [], 1_000);
@@ -354,6 +355,7 @@ describe("attention rows (U31, fafe581a)", () => {
       resolved_by: { kind, id: null, name },
       action,
       resolved_at: "2026-11-09T11:00:00Z",
+      note: null,
     });
     expect(resolvedWords(r("provider", "Northlight", "confirmed"))).toBe(
       "Resolved: Northlight confirmed.",
@@ -543,6 +545,7 @@ describe("contact_settlement (U37, #71)", () => {
         resolved_by: { kind: "system", id: null, name: null },
         action: "replayed",
         resolved_at: "2026-11-12T01:00:00Z",
+        note: null,
       }),
     ).toBe("Resolved: telemetry stored.");
   });
@@ -579,6 +582,7 @@ describe("contact_settlement (U37, #71)", () => {
       resolved_by: { kind: "system" as const, id: null, name: null },
       action: "replayed",
       resolved_at: "2026-11-12T01:00:00Z",
+      note: null,
     });
     const one = present([two("a", "2026-11-11T18:49:00Z")]);
     expect(newlyResolved(rows, one, [done("b")], [], 0)).toEqual([]);
@@ -833,6 +837,7 @@ describe("mission_runtime (U38; domain 292c8e6b reasons)", () => {
         resolved_by: { kind: "system", id: null, name: null },
         action: "applied",
         resolved_at: "2026-11-11T23:26:00Z",
+        note: null,
       }),
     ).toBe("Resolved: configuration applied.");
   });
@@ -932,6 +937,7 @@ describe("activation_apply (domain 9b8456132; ux U41)", () => {
         resolved_by: { kind: "system", id: null, name: null },
         action,
         resolved_at: "2026-11-13T02:20:00Z",
+        note: null,
       });
     expect(closed("applied")).toBe("Applied at 02:20Z.");
     expect(closed("superseded")).toBe("Replaced by a newer request.");

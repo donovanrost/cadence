@@ -1,4 +1,13 @@
-import { isError, request, type ApiError, type ApiResult } from "@/api/index.ts";
+import {
+  decoders as d,
+  describeApiError,
+  detailsOf,
+  fieldErrors,
+  isError,
+  request,
+  type ApiError,
+  type ApiResult,
+} from "@/api/index.ts";
 import { attentionReader, serverKey, type Attention } from "@/features/now/index.ts";
 
 /**
@@ -90,6 +99,14 @@ export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }
         text: "Don't count on this contact. Re-plan the spacecraft if it needs this contact.",
         plan: true,
       };
+    // pass_resolution only: other sources have their own blocks (settlement, provider change, …).
+    case "unsettled":
+    case "generation_not_applied":
+    case "apply_failed":
+    case "apply_stalled":
+    case "approval_required":
+    case "acknowledgment_required":
+    case "configuration_failure":
     case null:
     default:
       return { text: `Check the booking with ${provider}, then record what you did.`, plan: false };
@@ -107,4 +124,69 @@ export function attentionErrorWords(error: ApiError): Readonly<{ text: string; r
     };
   const message = "message" in error ? error.message : "the server didn't say why";
   return { text: `Nothing changed: ${message.replace(/[.!?]+$/, "")}.`, refresh: false };
+}
+
+/** §11 L14 / U44: the three decisions on a provider change. */
+export type ChangeDecision = "approve" | "reject" | "acknowledge";
+
+export type ChangeOutcome =
+  | { status: "done"; item: Attention | null }
+  /** Refused: say why; `item` is the current change when the provider changed it again. */
+  | {
+      status: "refused";
+      text: string;
+      item?: Attention | null;
+      reasonError?: string;
+      /** 409 deadline passed: Reject goes, Approve stays (U44). */
+      deadlinePassed?: boolean;
+    }
+  | { status: "unclear"; text: string };
+
+const replyReader = d.object({ item: d.nullable(attentionReader) });
+
+/** POST …/attention/provider_change/:id/<decision> {reason, proposal_hash} (api 30b3f60b9). */
+export async function decideProviderChange(
+  missionId: string,
+  a: Attention,
+  decision: ChangeDecision,
+  reason: string,
+): Promise<ChangeOutcome> {
+  const r = await request(`${itemPath(missionId, a)}/${decision}`, replyReader, {
+    method: "POST",
+    body: { reason, proposal_hash: a.provider_change?.proposal_hash ?? "" },
+  });
+  if (r.ok) return { status: "done", item: r.value.item };
+  const e = r.error;
+  const provider = a.provider?.name ?? "The provider";
+  const deadline = a.deadline_at ?? a.provider_change?.deadline_at ?? null;
+  if (isError(e, "provider_change_stale")) {
+    const item = detailsOf(e, replyReader)?.item ?? null;
+    return item
+      ? {
+          status: "refused",
+          text: `${provider} changed it again. Here's the current change.`,
+          item,
+        }
+      : { status: "refused", text: "This change was already decided or replaced.", item: null };
+  }
+  if (isError(e, "attention_item_not_found"))
+    return { status: "refused", text: "This change was already decided or replaced.", item: null };
+  if (isError(e, "provider_change_deadline_passed"))
+    return {
+      status: "refused",
+      text: `The deadline passed${deadline ? ` at ${hhmm(deadline)}` : ""}, so it can't be rejected any more.`,
+      deadlinePassed: true,
+    };
+  if (e.kind === "forbidden")
+    return { status: "refused", text: "Org admins decide provider changes." };
+  if (isError(e, "invalid_params")) {
+    const f = fieldErrors(e);
+    return f.reason
+      ? { status: "refused", text: "", reasonError: f.reason }
+      : { status: "refused", text: f.proposal_hash ?? describeApiError(e) };
+  }
+  return {
+    status: "unclear",
+    text: `It's unclear whether it was recorded (${describeApiError(e)}).`,
+  };
 }

@@ -23,6 +23,7 @@ import {
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
+import ProviderChangeBlock from "./ProviderChangeBlock.vue";
 import { attentionWords } from "@/features/now/index.ts";
 import SettlementBlock from "./SettlementBlock.vue";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
@@ -144,6 +145,14 @@ const countdown = computed(() => {
         v-if="pass.attention && pass.attention.source === 'pass_resolution'"
         :mission-id="missionId"
         :attention="pass.attention"
+        @changed="$emit('changed')"
+      />
+      <!-- §11 L14 (ux U44): a provider's change to this pass, decided here. -->
+      <ProviderChangeBlock
+        v-if="pass.attention && pass.attention.source === 'provider_change'"
+        :mission-id="missionId"
+        :attention="pass.attention"
+        :now="now"
         @changed="$emit('changed')"
       />
       <div class="flex flex-wrap items-center gap-3">

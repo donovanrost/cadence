@@ -133,6 +133,9 @@ export const errorCodes = [
   "assignee_not_member",
   "attention_item_not_found",
   "attention_item_not_open",
+  // §11 L14 provider-change decisions (api 30b3f60b9).
+  "provider_change_stale",
+  "provider_change_deadline_passed",
   "retry_not_manual",
   "history_unavailable",
   // Contacts, planning, bookings

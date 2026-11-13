@@ -12,3 +12,4 @@ export {
 } from "./attention.ts";
 export { useSettlement } from "./useSettlement.ts";
 export { NO_ACCESS, NO_ACCESS_SEEN, retryTargets, seenTargets } from "./useQueueCommand.ts";
+export { changeEvidence, changeTitle, fieldLabel, valueWords } from "./providerChange.ts";

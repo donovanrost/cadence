@@ -158,6 +158,7 @@ describe("attention block words (U32)", () => {
     approved_by: undefined,
     approved_at: undefined,
     runtime_not_applied: undefined,
+    provider_change: undefined,
     station: { ref: "svb-1", id: "st-1", code: "SVB-1", name: "Svalbard 1" },
     provider: { id: "p-1", name: "Northlight" },
     starts_at: "2026-11-14T03:00:00Z",

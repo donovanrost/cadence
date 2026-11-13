@@ -32,6 +32,8 @@ export const attentionSources = [
   "mission_runtime",
   // An approved activation whose apply failed or stalled (domain 9b8456132, L10 resume).
   "activation_apply",
+  // §11 L14 (api 30b3f60b9): a provider changed a booked pass.
+  "provider_change",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -44,6 +46,10 @@ export const attentionConflicts = [
   // activation_apply: execution failed, or in progress >10 min with no live executor.
   "apply_failed",
   "apply_stalled",
+  // provider_change: decide before deadline_at · already applied · shown only.
+  "approval_required",
+  "acknowledgment_required",
+  "configuration_failure",
 ] as const;
 /** U38 mission_runtime reason keys (domain 292c8e6b, final). */
 export const runtimeReasons = [
@@ -58,6 +64,55 @@ export const settlementFailures = ["telemetry_storage_unavailable", "settle_fail
 /** The server's own key, known or not: attention routes, fold keys. */
 export const serverKey = <T extends string>(value: T | Unrecognized): string =>
   isKnown(value) ? value : value.unrecognized;
+
+/** Provider-change fields (ProviderReservationChanges' document keys); values are JSON text. */
+export const changeFields = [
+  "starts_at",
+  "ends_at",
+  "ground_station_ref",
+  "antenna_or_service_pool_ref",
+  "service_profile_ref",
+  "delivery_profile_ref",
+  "spacecraft_ref",
+  "pass_phase",
+  "status",
+] as const;
+const providerChangeReader = d.object({
+  id: d.token,
+  classification: d.knownText([
+    "approval_required",
+    "acknowledgment_required",
+    "configuration_failure",
+    "policy_accept",
+  ] as const),
+  state: d.knownText([
+    "observed",
+    "pending_approval",
+    "acknowledgment_required",
+    "policy_accepted",
+    "approved",
+    "rejected",
+    "acknowledged",
+    "applied",
+    "superseded",
+  ] as const),
+  deadline_at: d.nullable(d.timestamp),
+  provider_revision: d.nullable(d.integer),
+  // The decision's guard, sent back verbatim with approve / reject / acknowledge.
+  proposal_hash: d.string,
+  already_effective: d.boolean,
+  fields: d.array(
+    d.object({
+      field: d.knownText(changeFields),
+      // free-text: a server label for the field when it has one (null today)
+      label: d.nullable(d.string),
+      before_json: d.nullable(d.string),
+      after_json: d.nullable(d.string),
+    }),
+    50,
+  ),
+});
+export type ProviderChange = Decoded<typeof providerChangeReader>;
 
 export const attentionReader = d.object({
   id: d.token,
@@ -160,6 +215,7 @@ export const attentionReader = d.object({
   approved_at: d.optional(d.nullable(d.timestamp)),
   /** true: the runtime isn't running the active configuration either (mission_runtime is left out). */
   runtime_not_applied: d.optional(d.nullable(d.boolean)),
+  provider_change: d.optional(d.nullable(providerChangeReader)),
   resolution: d.nullable(
     d.object({
       // free-text: what the operator recorded doing (resolve's action_text, contacts.md)
@@ -177,6 +233,8 @@ export type Attention = Decoded<typeof attentionReader>;
 export const resolvedReader = d.object({
   id: d.token,
   resolved_by: who,
+  // free-text: the decision's reason (provider_change, asked of api for U44)
+  note: d.optional(d.nullable(d.string)),
   // free-text: an open phrase or key ("uplink recovered", "replayed"); known keys get words (U32)
   action: d.optional(d.nullable(d.string)),
   resolved_at: d.timestamp,
@@ -328,6 +386,9 @@ export function attentionWords(
     case "generation_not_applied":
     case "apply_failed":
     case "apply_stalled":
+    case "approval_required":
+    case "acknowledgment_required":
+    case "configuration_failure":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.
@@ -373,8 +434,24 @@ const ACTION_WORDS: Readonly<Record<string, string>> = {
  * "Resolved: Northlight confirmed"; the system its action alone ("Resolved: cancel confirmed").
  * Never "by Cadence".
  */
+const CHANGE_DECIDED: ReadonlyMap<string, string> = new Map([
+  ["approved", "Approved"],
+  ["rejected", "Rejected"],
+  ["acknowledged", "Acknowledged"],
+]);
+
 export function resolvedWords(r: Resolved): string {
   // U41: a stuck activation closes by applying, or by a newer activation replacing it.
+  // U44: a provider change says who decided, when and why; a newer change replaces it.
+  if (r.id.startsWith("attention:provider_change:")) {
+    const decided = CHANGE_DECIDED.get(r.action ?? "");
+    if (r.action === "superseded") return "Replaced by a newer change.";
+    if (decided) {
+      const who = r.resolved_by.name ?? "an operator";
+      const why = r.note ? `: ${noStop(r.note)}` : "";
+      return `${decided} by ${who} at ${hhmm(r.resolved_at)}${why}.`;
+    }
+  }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";
     if (r.action === "applied") return `Applied at ${hhmm(r.resolved_at)}.`;
