@@ -73,12 +73,22 @@ defineExpose({ open });
 <template>
   <ApSheet ref="sheet" title="Grant to a mission" initial-focus="select">
     <form class="flex flex-col gap-3" @submit.prevent="submit">
-      <ApSelect v-model="mission" label="Mission" :options="missions" placeholder="Choose…" />
+      <ApSelect
+        v-model="mission"
+        label="Mission"
+        :options="missions"
+        placeholder="Choose…"
+        :error="errors['mission_id'] ?? null"
+      />
       <ApField
         v-model="stations"
         label="Only these stations"
         mono
-        :hint="`Optional, comma-separated; within the account's ${detail.account.guardrails.allowed_stations.length || 'all'} stations.`"
+        :hint="
+          detail.account.guardrails.allowed_stations
+            ? `Optional, comma-separated; within the account's ${detail.account.guardrails.allowed_stations.join(', ')}.`
+            : 'Optional, comma-separated station refs.'
+        "
         :error="errors['allowed_stations'] ?? null"
       />
       <ApField

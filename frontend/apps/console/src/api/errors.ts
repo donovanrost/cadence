@@ -79,6 +79,7 @@ export const errorCodes = [
   "account_archived",
   "credential_changed",
   "credential_already_revoked",
+  "account_grant_not_found",
   // App activations (L10)
   "self_approval_forbidden",
   "not_pending",

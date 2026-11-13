@@ -25,7 +25,7 @@ const raw: Reader<unknown> = (value) => value;
  * Off until api-ops serves PA2 (plans/providers.md): reading a route the server doesn't have logs a
  * 404 on a live page (qa: it trips the e2e diagnostics guard). Flip when it lands.
  */
-export const PA2_LIVE = false;
+export const PA2_LIVE = true;
 
 const grant = d.object({
   id: d.token,
@@ -57,9 +57,10 @@ const detailReader = d.object({
       version: d.integer,
       status: d.known(["active", "revoked"] as const),
     }),
+    /** null = no restriction on the account (api-ops 74ad20816). */
     guardrails: d.object({
-      allowed_services: d.array(d.string, 500),
-      allowed_stations: d.array(d.string, 500),
+      allowed_services: d.nullable(d.array(d.string, 500)),
+      allowed_stations: d.nullable(d.array(d.string, 500)),
     }),
   }),
   grants: d.array(grant, 500),
@@ -123,6 +124,8 @@ export function accountFailure(error: ApiError): string {
   if (isError(error, "grant_changed"))
     return "That grant changed since you loaded it. Reload to see it.";
   if (isError(error, "grant_already_revoked")) return "That grant is already revoked.";
+  if (isError(error, "account_grant_not_found"))
+    return "That grant isn't on this account any more.";
   if (isError(error, "credential_changed"))
     return "The credential changed since you loaded it. Reload to see it.";
   if (isError(error, "credential_already_revoked")) return "The credential is already revoked.";
