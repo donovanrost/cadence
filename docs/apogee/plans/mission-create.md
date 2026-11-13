@@ -32,10 +32,11 @@ GET /missions/slug?slug=   → {slug, available: bool, suggestion|null}
 ```
 POST /missions {name, slug}
   → 201 {mission: {id, name, slug}}
-  → 422 invalid_params, details {fields: {name?: [msg], slug?: [msg]}, suggestion|null}
+  → 422 invalid_params, details {name?: msg, slug?: msg, suggestion?: slug|null}   (flat, as AD1)
   → 403 forbidden
 ```
-- Validation is `Creation.validate/1`'s, mapped to `name` / `slug` fields. A slug clash is a `slug` field error
+- Validation is `Creation.validate/1`'s, mapped to `name` / `slug` keys directly in `details` (the console's
+  `fieldErrors` reads them there; AD1's create sends `{"slug" => message, "suggestion" => …}` the same way). A slug clash is a `slug` field error
   ("This slug is already in use.") plus `suggestion`, the same shape as AD1's organization create, so the console
   shows both in one line.
 - Authorize and create in **the path's organization** (not `scope.organization_id`), so a member of several orgs
