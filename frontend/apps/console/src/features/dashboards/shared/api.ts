@@ -14,16 +14,17 @@ import { workspaceSnapshot } from "../model/snapshot.ts";
 import { shareRow, snapshotRow } from "../settings/api.ts";
 
 /**
- * D20 shared views (plans/dashboards-slice6.md): a share link (live, current version) or a
- * snapshot (frozen window, stored document). `definition` always draws the grid; `snapshot` is
- * null when the link shares the definition only. Rows reuse Settings' readers (one definition).
+ * D20 shared views (api f622f0772, contract dashboards.md §D20): a share link (live, current
+ * version) or a snapshot (frozen window, stored document). `definition` draws the grid, null when
+ * the dashboard has no current version; `snapshot` is null when the link shares the definition
+ * only. Rows reuse Settings' readers (one definition).
  */
 const shape = d.object({
   kind: d.oneOf(["share", "snapshot"] as const),
   share: d.nullable(shareRow),
   snapshot_row: d.nullable(snapshotRow),
   dashboard: d.object({ id: d.token, name: d.string, description: d.nullable(d.string) }),
-  definition: outline,
+  definition: d.nullable(outline),
   snapshot: d.nullable(workspaceSnapshot),
 });
 export type SharedView = Decoded<typeof shape>;
@@ -49,6 +50,7 @@ export function fetchShare(
   runtime: Runtime,
   signal?: AbortSignal,
 ): Promise<ApiResult<SharedView>> {
+  // Not applied yet (§D20: domain's SharedViews takes the stored context only); the server ignores them.
   const p = new URLSearchParams();
   if (runtime.from && runtime.to) {
     p.set("from", runtime.from);
@@ -75,15 +77,16 @@ export function fetchSnapshot(
   );
 }
 
+export type EndedLink = Readonly<{ kind: "revoked" | "expired" | "deleted"; message: string }>;
 /**
- * A share that ended: 404 `share_revoked` / `share_expired`. The console's 404 error keeps code
- * and message only (no details), so the page says which, in the server's words for when.
+ * A link that ended: 404 `share_revoked` / `share_expired` / `snapshot_deleted`. The message is
+ * the sentence the page shows ("Revoked 11-14 02:10Z.", "Deleted by Mira K. on 11-14."); the
+ * page says which in its headline.
  */
-export function endedShare(
-  error: ApiError,
-): { kind: "revoked" | "expired"; message: string } | null {
+export function endedLink(error: ApiError): EndedLink | null {
   if (error.kind !== "not_found") return null;
   if (isError(error, "share_revoked")) return { kind: "revoked", message: error.message };
   if (isError(error, "share_expired")) return { kind: "expired", message: error.message };
+  if (isError(error, "snapshot_deleted")) return { kind: "deleted", message: error.message };
   return null;
 }

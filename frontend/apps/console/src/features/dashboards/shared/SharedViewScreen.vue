@@ -9,7 +9,7 @@ import CockpitStatus from "../viewer/CockpitStatus.vue";
 import DashboardGrid from "../viewer/DashboardGrid.vue";
 import InspectSheet from "../viewer/InspectSheet.vue";
 import { useLiveRead } from "../viewer/useDashboardView.ts";
-import { endedShare, fetchShare, fetchSnapshot, type SharedView } from "./api.ts";
+import { endedLink, fetchShare, fetchSnapshot, type EndedLink, type SharedView } from "./api.ts";
 import DefinitionGrid from "./DefinitionGrid.vue";
 
 /**
@@ -48,8 +48,13 @@ const view = computed(() =>
   query.state.value.status === "ready" ? query.state.value.value : null,
 );
 const ended = computed(() =>
-  query.state.value.status === "failed" ? endedShare(query.state.value.error) : null,
+  query.state.value.status === "failed" ? endedLink(query.state.value.error) : null,
 );
+const ENDED: Readonly<Record<EndedLink["kind"], string>> = {
+  revoked: "This share link was revoked.",
+  expired: "This share link has expired.",
+  deleted: "This snapshot was deleted.",
+};
 const inspect = ref<InstanceType<typeof InspectSheet> | null>(null);
 
 const when = (iso: string) => formatShort(new Date(iso));
@@ -78,14 +83,7 @@ function headerLine(v: SharedView | null): string {
   >
     <template #clocks><CockpitStatus /></template>
   </TakeoverHeader>
-  <ApEmptyState
-    v-if="ended"
-    :headline="
-      ended.kind === 'revoked' ? 'This share link was revoked.' : 'This share link has expired.'
-    "
-    :sentence="ended.message"
-    state="off"
-  />
+  <ApEmptyState v-if="ended" :headline="ENDED[ended.kind]" :sentence="ended.message" state="off" />
   <ApRemote v-else :state="query.state.value" @retry="query.refetch">
     <template #default="{ value }">
       <DashboardGrid
@@ -93,7 +91,12 @@ function headerLine(v: SharedView | null): string {
         :snapshot="value.snapshot"
         @inspect="inspect?.open($event)"
       />
-      <DefinitionGrid v-else :definition="value.definition" />
+      <DefinitionGrid v-else-if="value.definition" :definition="value.definition" />
+      <ApEmptyState
+        v-else
+        headline="Nothing saved yet."
+        sentence="This dashboard has no saved version to show."
+      />
     </template>
   </ApRemote>
   <InspectSheet ref="inspect" />

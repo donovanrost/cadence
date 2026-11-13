@@ -185,6 +185,7 @@ export const errorCodes = [
   "library_item_in_use",
   "share_expired",
   "share_revoked",
+  "snapshot_deleted",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 

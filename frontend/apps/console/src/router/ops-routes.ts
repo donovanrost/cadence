@@ -151,13 +151,14 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "telemetry/dashboards/shares/:shareId",
     name: "ops.dashboards.share",
-    component: pending,
+    // D20 (api f622f0772).
+    component: () => import("@/features/dashboards/shared/SharedViewScreen.vue"),
     meta: { mode: "takeover", nav: "telemetry", title: "Shared dashboard" },
   },
   {
     path: "telemetry/dashboards/snapshots/:snapshotId",
     name: "ops.dashboards.snapshot",
-    component: pending,
+    component: () => import("@/features/dashboards/shared/SharedViewScreen.vue"),
     meta: { mode: "takeover", nav: "telemetry", title: "Dashboard snapshot" },
   },
   {

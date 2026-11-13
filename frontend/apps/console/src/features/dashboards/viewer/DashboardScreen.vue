@@ -20,6 +20,7 @@ import {
 } from "../model/time-range.ts";
 import KioskLine from "./KioskLine.vue";
 import ViewerActions from "./ViewerActions.vue";
+import SnapshotSheet from "./SnapshotSheet.vue";
 import ViewerBody from "./ViewerBody.vue";
 import CockpitStatus from "./CockpitStatus.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
@@ -106,12 +107,15 @@ const kiosk = computed(() => one(route.query.kiosk) === "1");
 const pane = ref<InstanceType<typeof EditorPane> | null>(null);
 const versions = ref<InstanceType<typeof VersionsSheet> | null>(null);
 const copySheet = ref<InstanceType<typeof CopySheet> | null>(null);
-function onMenu(id: "versions" | "copy" | "export" | "kiosk") {
+const snapshotSheet = ref<InstanceType<typeof SnapshotSheet> | null>(null);
+function onMenu(id: "versions" | "copy" | "snapshot" | "export" | "kiosk") {
   switch (id) {
     case "kiosk":
       return setQuery({ kiosk: "1" });
     case "versions":
       return versions.value?.open();
+    case "snapshot":
+      return snapshotSheet.value?.open();
     case "export":
       // A plain download (the server records the export); ux's toast waits for a kit toast.
       return download(exportUrl({ missionId: missionId.value, dashboardId: dashboardId.value }));
@@ -209,6 +213,14 @@ const onRange = (s: TimeSelection) =>
     :dashboard-id="dashboardId"
     :can-restore="canEdit && !editing"
     @restored="query.refetch"
+  />
+  <SnapshotSheet
+    ref="snapshotSheet"
+    :mission-id="missionId"
+    :dashboard-id="dashboardId"
+    :selection="selection"
+    :spacecraft-id="runtime.spacecraftId"
+    :version="currentVersion"
   />
   <CopySheet
     ref="copySheet"
