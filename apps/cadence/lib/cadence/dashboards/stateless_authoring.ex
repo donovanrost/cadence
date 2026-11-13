@@ -249,6 +249,15 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
   defp admit_all(_commands), do: {:error, :invalid_input}
 
   # The version check is the call's (`base_version`), so each command is admitted at version 1.
+  # A new section or widget must carry its client-chosen id, so every replay gives the same ids.
+  defp admit(%{"event" => "add_section", "input" => input})
+       when not is_map_key(input, "section_id"),
+       do: :error
+
+  defp admit(%{"event" => "add_widget", "input" => input})
+       when not is_map_key(input, "placement_id"),
+       do: :error
+
   defp admit(%{"event" => event, "input" => input} = command)
        when map_size(command) == 2 and is_binary(event) and is_map(input) do
     case AuthoringInput.admit(event, Map.put(input, "expected_version", 1)) do

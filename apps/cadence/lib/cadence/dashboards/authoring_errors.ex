@@ -18,7 +18,8 @@ defmodule Cadence.Dashboards.AuthoringErrors do
              :missing_placement,
              :unsupported_widget,
              :invalid_widget,
-             :capacity
+             :capacity,
+             :duplicate_id
            ],
       do: {:error, code}
 

@@ -12,11 +12,18 @@ defmodule Cadence.Dashboards.AuthoringChanges do
        }, %{}}
 
   def apply(document, "add_section", fields) do
-    if length(document.sections) < 64 do
-      section = section(Cadence.Ids.new("dash_section"), fields)
-      {:ok, Document.put_section(document, section), %{section_id: section.section_id}}
-    else
-      {:error, :capacity}
+    id = fields["section_id"] || Cadence.Ids.new("dash_section")
+
+    cond do
+      length(document.sections) >= 64 ->
+        {:error, :capacity}
+
+      Enum.any?(document.sections, &(&1.section_id == id)) ->
+        {:error, :duplicate_id}
+
+      true ->
+        section = section(id, fields)
+        {:ok, Document.put_section(document, section), %{section_id: section.section_id}}
     end
   end
 
@@ -44,10 +51,12 @@ defmodule Cadence.Dashboards.AuthoringChanges do
   end
 
   def apply(document, "add_widget", fields) do
-    if length(document.placements) < 1024 do
-      put_widget(document, fields, nil)
-    else
-      {:error, :capacity}
+    id = fields["placement_id"]
+
+    cond do
+      length(document.placements) >= 1024 -> {:error, :capacity}
+      id && Enum.any?(document.placements, &(&1.placement_id == id)) -> {:error, :duplicate_id}
+      true -> put_widget(document, fields, nil)
     end
   end
 
@@ -85,6 +94,12 @@ defmodule Cadence.Dashboards.AuthoringChanges do
     with :ok <- optional_section(document, input["fields"]["section_id"]),
          {:ok, widget} <-
            AuthoringWidget.build(document, input["fields"], input["observables"], existing) do
+      # A new widget keeps a client-chosen id when it named one (#76: deterministic replay).
+      widget =
+        if is_nil(existing) and is_binary(input["placement_id"]),
+          do: %{widget | placement_id: input["placement_id"]},
+          else: widget
+
       {:ok, Document.put_placement(document, widget), %{placement_id: widget.placement_id}}
     end
   end

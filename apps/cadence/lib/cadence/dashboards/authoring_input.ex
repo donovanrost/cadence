@@ -73,10 +73,13 @@ defmodule Cadence.Dashboards.AuthoringInput do
   defp valid_payload?(_, _), do: false
 
   defp section?(input, existing?) when is_map(input) do
+    # A new section may name its own id (client-chosen, so a replayed draft is deterministic).
+    {input, client_id?} = client_id(input, "section_id", "dash_section_", existing?)
+
     keys =
       ~w(title description collapsed_by_default) ++ if(existing?, do: ["section_id"], else: [])
 
-    exact?(input, keys) and (not existing? or id?(input["section_id"])) and
+    client_id? and exact?(input, keys) and (not existing? or id?(input["section_id"])) and
       text?(input["title"], 512) and String.trim(input["title"]) != "" and
       text?(input["description"], 4096) and is_boolean(input["collapsed_by_default"])
   end
@@ -84,13 +87,28 @@ defmodule Cadence.Dashboards.AuthoringInput do
   defp section?(_, _), do: false
 
   defp widget?(input, existing?) when is_map(input) do
+    {input, client_id?} = client_id(input, "placement_id", "dash_widget_", existing?)
     keys = ~w(fields observables) ++ if(existing?, do: ["placement_id"], else: [])
 
-    exact?(input, keys) and (not existing? or id?(input["placement_id"])) and
+    client_id? and exact?(input, keys) and (not existing? or id?(input["placement_id"])) and
       widget_fields?(input["fields"]) and observables?(input["observables"])
   end
 
   defp widget?(_, _), do: false
+
+  @doc "A client-chosen id for a new section or widget: `prefix` plus 1-64 of [A-Za-z0-9_-]."
+  def client_id?(id, prefix) when is_binary(id) do
+    String.starts_with?(id, prefix) and
+      Regex.match?(~r/\A[A-Za-z0-9_-]{1,64}\z/, String.replace_prefix(id, prefix, ""))
+  end
+
+  def client_id?(_id, _prefix), do: false
+
+  # On an add, an optional client id is checked and set aside; an update names its own id.
+  defp client_id(input, key, prefix, false = _existing?) when is_map_key(input, key),
+    do: {Map.delete(input, key), client_id?(input[key], prefix)}
+
+  defp client_id(input, _key, _prefix, _existing?), do: {input, true}
 
   defp observables?(values) when is_list(values),
     do: length(values) <= 24 and Enum.all?(values, &id?/1) and unique?(values)

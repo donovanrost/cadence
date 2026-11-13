@@ -76,6 +76,42 @@ defmodule CadenceWeb.DashboardStatelessAuthoringTest do
              StatelessAuthoring.save(scope, mission, id, 1, List.duplicate(rename("x"), 257), nil)
   end
 
+  defp section(event, extra),
+    do: %{
+      "event" => event,
+      "input" =>
+        Map.merge(
+          %{"title" => "Power", "description" => "", "collapsed_by_default" => false},
+          extra
+        )
+    }
+
+  test "new sections carry client ids, so replay is the same in preview, save and rebase", c do
+    {scope, mission, id} = ids(c)
+    added = section("add_section", %{"section_id" => "dash_section_a1"})
+    renamed = section("update_section", %{"section_id" => "dash_section_a1", "title" => "Bus"})
+
+    assert {:ok, preview} = StatelessAuthoring.preview(scope, mission, id, 1, [added, renamed])
+    assert [%{section_id: "dash_section_a1", title: "Bus"}] = preview.document.sections
+
+    assert {:ok, %{version: 2}} =
+             StatelessAuthoring.save(scope, mission, id, 1, [added, renamed], nil)
+
+    assert [%{section_id: "dash_section_a1"}] = fetch(c).sections
+
+    # Without an id the replay couldn't be repeated; an id already there is refused.
+    assert {:error, {:command, 0, :invalid_input, nil}} =
+             StatelessAuthoring.preview(scope, mission, id, 2, [section("add_section", %{})])
+
+    assert {:error, {:command, 0, :duplicate_id, nil}} =
+             StatelessAuthoring.preview(scope, mission, id, 2, [added])
+
+    assert {:error, {:command, 0, :invalid_input, nil}} =
+             StatelessAuthoring.preview(scope, mission, id, 2, [
+               section("add_section", %{"section_id" => "not-prefixed"})
+             ])
+  end
+
   test "copy keeps unsaved edits as a new dashboard; versions say who and how", c do
     {scope, mission, id} = ids(c)
 
