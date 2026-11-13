@@ -8,6 +8,8 @@ import { useScrollable } from "./lib/scrollable.ts";
  * to whatever opened it. The title is the dialog's name; the body scrolls past 70vh so the footer
  * stays in view. A footer item with `mr-auto` sits on the left. Callers open and close it through the
  * exposed `open()` / `close()`; `closed` fires on every close (button, Escape or `close()`).
+ * `placement="side"` is a 400px panel on the right, full height and NOT modal, so the page behind
+ * stays usable (dashboards' widget sheet while editing); Escape still closes it.
  */
 const props = withDefaults(
   defineProps<{
@@ -16,8 +18,10 @@ const props = withDefaults(
     width?: "narrow" | "wide" | undefined;
     /** Selector inside the sheet to focus on open. */
     initialFocus?: string | undefined;
+    /** `center` (modal, the default) or `side` (400px, right-anchored, non-modal). */
+    placement?: "center" | "side" | undefined;
   }>(),
-  { width: "narrow", initialFocus: "footer button" },
+  { width: "narrow", initialFocus: "footer button", placement: "center" },
 );
 const emit = defineEmits<{ closed: [] }>();
 defineSlots<{ default(): unknown; footer?(): unknown }>();
@@ -32,11 +36,19 @@ let opener: HTMLElement | null = null;
 function open() {
   if (dialog.value?.open) return;
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  dialog.value?.showModal();
+  if (props.placement === "side") dialog.value?.show();
+  else dialog.value?.showModal();
   void nextTick(() => dialog.value?.querySelector<HTMLElement>(props.initialFocus)?.focus());
 }
 function close() {
   dialog.value?.close();
+}
+/** A non-modal dialog gets no native Escape; the side sheet adds it. */
+function onKeydown(event: KeyboardEvent) {
+  if (props.placement === "side" && event.key === "Escape") {
+    event.stopPropagation();
+    close();
+  }
 }
 function onClose() {
   opener?.focus();
@@ -50,16 +62,25 @@ defineExpose({ open, close });
   <dialog
     ref="dialog"
     :aria-labelledby="titleId"
-    aria-modal="true"
-    class="m-auto border border-line bg-panel p-0 text-readout backdrop:bg-[rgba(5,7,10,0.72)]"
+    :aria-modal="placement === 'side' ? undefined : 'true'"
+    class="border border-line bg-panel p-0 text-readout"
     :class="
-      width === 'wide' ? 'w-[min(760px,calc(100vw-32px))]' : 'w-[min(560px,calc(100vw-32px))]'
+      placement === 'side'
+        ? 'fixed inset-y-0 right-0 left-auto z-40 m-0 h-dvh max-h-none w-[min(400px,100vw)] flex-col open:flex'
+        : [
+            'm-auto backdrop:bg-[rgba(5,7,10,0.72)]',
+            width === 'wide'
+              ? 'w-[min(760px,calc(100vw-32px))]'
+              : 'w-[min(560px,calc(100vw-32px))]',
+          ]
     "
     @close="onClose"
+    @keydown="onKeydown"
   >
     <div
       ref="body"
-      class="flex max-h-[70vh] flex-col gap-3 overflow-auto p-5"
+      class="flex flex-col gap-3 overflow-auto p-5"
+      :class="placement === 'side' ? 'min-h-0 flex-1' : 'max-h-[70vh]'"
       :tabindex="scrolls ? 0 : undefined"
       :role="scrolls ? 'group' : undefined"
       :aria-labelledby="scrolls ? titleId : undefined"

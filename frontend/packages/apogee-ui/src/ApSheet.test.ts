@@ -49,4 +49,21 @@ describe("ApSheet", () => {
     wrapper.unmount();
     opener.remove();
   });
+
+  it("opens a side sheet without a modal and closes it on Escape", async () => {
+    const wrapper = mount(ApSheet, {
+      attachTo: document.body,
+      props: { title: "Widget", placement: "side" },
+      slots: { default: "<input aria-label='Name' />" },
+    });
+    const sheet = wrapper.vm as { open: () => void; close: () => void };
+    sheet.open();
+    await nextTick();
+    const dialog = wrapper.get("dialog");
+    expect(dialog.element.open).toBe(true);
+    expect(dialog.attributes("aria-modal")).toBeUndefined();
+    await dialog.trigger("keydown", { key: "Escape" });
+    expect(dialog.element.open).toBe(false);
+    wrapper.unmount();
+  });
 });
