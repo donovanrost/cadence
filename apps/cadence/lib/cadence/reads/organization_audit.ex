@@ -20,18 +20,17 @@ defmodule Cadence.Reads.OrganizationAudit do
   alias Cadence.Configuration.Status
   alias Cadence.Dashboards.ConfigAudit
   alias Cadence.Management.{Commanding, Contacts, DataSources}
-  alias Cadence.Platform.ScopedSettings
-  alias Cadence.Reads.OrganizationAudit.{AccountEvents, DashboardEvents, ProviderAccountEvents}
+
+  alias Cadence.Reads.OrganizationAudit.{
+    AccountEvents,
+    DashboardEvents,
+    ProviderAccountEvents,
+    SettingsEvents
+  }
 
   @included ~w(config commanding access alarms contacts data provider_accounts account platform)
   @missing []
   @plan_cap 100
-  @settings [
-    {"cadence.governance", "Governance"},
-    {"commanding.defaults", "Commanding"},
-    {"cadence.configuration", "Configuration"},
-    {"cadence.pass_review", "Pass review"}
-  ]
 
   @doc "The event kinds the log can contain (the `kinds` filter's values)."
   @spec kinds() :: [String.t()]
@@ -50,7 +49,7 @@ defmodule Cadence.Reads.OrganizationAudit do
 
     events =
       (Enum.flat_map(missions, &mission_events(organization_id, &1, opts)) ++
-         settings_events(organization_id, nil, nil) ++
+         SettingsEvents.list(organization_id, nil, nil) ++
          access_events(organization_id) ++
          ProviderAccountEvents.list(organization_id) ++
          AccountEvents.list(organization_id) ++
@@ -73,7 +72,7 @@ defmodule Cadence.Reads.OrganizationAudit do
     id = mission.mission_id
 
     (revision_events(organization_id, id) ++
-       settings_events(organization_id, id, ref) ++
+       SettingsEvents.list(organization_id, id, ref) ++
        command_events(organization_id, id) ++
        alarm_events(id, opts) ++
        plan_events(organization_id, id) ++
@@ -102,23 +101,6 @@ defmodule Cadence.Reads.OrganizationAudit do
         reason: revision.reason
       )
     end)
-  end
-
-  defp settings_events(organization_id, mission_id, mission) do
-    for {section, title} <- @settings,
-        entry <- ScopedSettings.history(organization_id, mission_id, section) do
-      {:ok, at, _offset} = DateTime.from_iso8601(entry.saved_at)
-      where = if mission_id, do: "", else: " (organization default)"
-
-      event(
-        "config",
-        at,
-        %{kind: "user", id: nil, name: entry.actor},
-        "Changed #{title} settings#{where}",
-        target: %{kind: "settings", id: section, label: title},
-        mission: mission
-      )
-    end
   end
 
   defp command_events(organization_id, mission_id) do
