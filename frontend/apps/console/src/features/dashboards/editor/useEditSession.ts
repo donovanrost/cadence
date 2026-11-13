@@ -31,6 +31,9 @@ export function useEditSession(
 ) {
   const draft = shallowRef<Draft | null>(null);
   const staged = shallowRef<Preview | null>(null);
+  /** The draft `staged` was previewed for: the change list is only true for that draft. */
+  const stagedFor = shallowRef<Draft | null>(null);
+  const previewing = ref(false);
   const busy = ref(false);
   const notice = shallowRef<Notice | null>(null);
   const resumed = ref(false);
@@ -41,6 +44,10 @@ export function useEditSession(
   const conflictBy = shallowRef<Conflict | null>(null);
   const editing = computed(() => draft.value !== null);
   const dirty = computed(() => (draft.value?.commands.length ?? 0) > 0);
+  /** What this save changes; null while the preview for the current draft is pending or failed. */
+  const changes = computed(() =>
+    staged.value && stagedFor.value === draft.value ? staged.value.changes : null,
+  );
   /** Someone saved over the version this draft is based on (ux's callout). */
   const conflict = computed<Conflict | null>(() => {
     const d = draft.value;
@@ -63,25 +70,36 @@ export function useEditSession(
     const mine = new AbortController();
     controller = mine;
     const id = ++generation;
-    const result = await api.preview(
-      missionId.value,
-      dashboardId.value,
-      next,
-      runtime.value,
-      mine.signal,
-    );
+    previewing.value = true;
+    let result: Awaited<ReturnType<typeof api.preview>>;
+    try {
+      result = await api.preview(
+        missionId.value,
+        dashboardId.value,
+        next,
+        runtime.value,
+        mine.signal,
+      );
+    } catch (error) {
+      // qa: a newer edit aborts the older preview; that rejection is expected, not an error.
+      if (mine.signal.aborted) return;
+      throw error;
+    } finally {
+      if (id === generation) previewing.value = false;
+    }
     if (id !== generation || mine.signal.aborted) return;
     if (result.ok) {
       staged.value = result.value;
+      stagedFor.value = next;
       return;
     }
     const failure = api.editFailure(result.error, next);
     if (failure.kind === "command") {
       // The command the server refused is dropped; the rest of the draft stays.
-      const commands = next.commands.filter((_, i) => i !== failure.index);
-      persist({ ...next, commands });
+      const kept = { ...next, commands: next.commands.filter((_, i) => i !== failure.index) };
+      persist(kept);
       notice.value = { kind: "rejected", message: rejectionText(failure.code, failure.field) };
-      void refresh({ ...next, commands });
+      void refresh(kept);
     } else if (failure.kind === "too_many_commands") notice.value = { kind: "too_many_commands" };
     else if (failure.kind === "other")
       notice.value = { kind: "failed", message: failureText(failure.error) };
@@ -116,6 +134,8 @@ export function useEditSession(
     generation++;
     draft.value = null;
     staged.value = null;
+    stagedFor.value = null;
+    previewing.value = false;
     notice.value = null;
     conflictBy.value = null;
   }
@@ -166,6 +186,7 @@ export function useEditSession(
       const r = result.value;
       persist({ baseVersion: r.base_version, commands: r.applied });
       staged.value = r;
+      stagedFor.value = draft.value;
       conflictBy.value = null;
       notice.value = r.skipped.length
         ? { kind: "skipped", events: r.skipped.map((s) => s.event) }
@@ -186,6 +207,8 @@ export function useEditSession(
   return {
     draft,
     staged,
+    changes,
+    previewing,
     busy,
     notice,
     resumed,

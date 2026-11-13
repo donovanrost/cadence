@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { snapshotJson } from "../fixtures.test-support.ts";
-import { applyPush, viewPush, type LiveBoard } from "./live-merge.ts";
+import { applyPush, liveSnapshot, viewPush, type LiveBoard } from "./live-merge.ts";
 import { workspaceSnapshot } from "./snapshot.ts";
 
 const base = (): LiveBoard => {
@@ -72,5 +72,16 @@ describe("C1 view pushes", () => {
       false,
     );
     expect(decode(viewPush, { ...raw, full: false, snapshot: null, context: null }).ok).toBe(false);
+  });
+});
+
+describe("which snapshot the board shows", () => {
+  it("shows a push only when it is at least as new as the read's head (qa: lag after save)", () => {
+    const b = base();
+    expect(liveSnapshot(b, b.version)).toBe(b.snapshot);
+    expect(liveSnapshot(b, b.version - 1)).toBe(b.snapshot);
+    expect(liveSnapshot(b, b.version + 1)).toBeNull();
+    expect(liveSnapshot(null, b.version)).toBeNull();
+    expect(liveSnapshot({ snapshot: null, version: 9 }, null)).toBeNull();
   });
 });

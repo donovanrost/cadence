@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { ApButton, ApSheet, ApTextarea } from "@/ui";
 import ChangeList from "./ChangeList.vue";
 import type { VersionChange } from "./contracts.ts";
@@ -8,7 +8,19 @@ import type { VersionChange } from "./contracts.ts";
  * Save drawer (Grafana-style): an optional message, the changes this save makes, and opt-in
  * "save current range / scope as default". Saving makes the new version current for everyone.
  */
-defineProps<{ changes: readonly VersionChange[]; busy: boolean; hasScope: boolean }>();
+const props = defineProps<{
+  /** null: the preview for the current draft is pending or failed (qa: never claim "No changes"). */
+  changes: readonly VersionChange[] | null;
+  previewing: boolean;
+  busy: boolean;
+  hasScope: boolean;
+}>();
+const emptyText = computed(() => {
+  if (props.changes) return undefined;
+  return props.previewing
+    ? "Listing the changes…"
+    : "The change list didn't load. Saving still saves your edits.";
+});
 const emit = defineEmits<{
   save: [input: { message: string; defaults: { time: boolean; scope: boolean } }];
 }>();
@@ -31,7 +43,7 @@ defineExpose({ open, close: () => sheet.value?.close() });
       <ApTextarea v-model="message" label="Message (optional)" :rows="2" :maxlength="500" />
       <section class="flex flex-col gap-2">
         <h3 class="m-0 font-display text-xs uppercase tracking-label text-text-4">Changes</h3>
-        <ChangeList :changes="changes" />
+        <ChangeList :changes="changes ?? []" :empty="emptyText" />
       </section>
       <label class="flex items-center gap-2 text-md text-readout">
         <input

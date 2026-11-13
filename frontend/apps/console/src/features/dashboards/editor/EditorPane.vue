@@ -60,7 +60,8 @@ defineExpose({
   />
   <SaveSheet
     ref="saveSheet"
-    :changes="staged?.changes ?? []"
+    :changes="session.changes.value"
+    :previewing="session.previewing.value"
     :busy="session.busy.value"
     :has-scope="view.scope_options.length > 0"
     @save="onSave"

@@ -7,6 +7,7 @@ import { useMissionScope } from "@/shell";
 import { ApEmptyState, ApRemote } from "@/ui";
 import ViewerBody from "../viewer/ViewerBody.vue";
 import { useDashboardView } from "../viewer/useDashboardView.ts";
+import { liveSnapshot } from "../model/live-merge.ts";
 import { LIVE_PUSH, useDashboardLive } from "../viewer/useDashboardLive.ts";
 import { fetchPlaylist } from "./api.ts";
 import PresentLine from "./PresentLine.vue";
@@ -45,9 +46,9 @@ const view = useDashboardView(missionId, dashboardId, runtime, {
 const live = useDashboardLive(missionId, dashboardId, runtime, ref(2_000), ref(false));
 const shown = computed(() => {
   const s = view.state.value;
-  return s.status === "ready" && live.snapshot.value
-    ? { ...s, value: { ...s.value, snapshot: live.snapshot.value } }
-    : s;
+  const pushed =
+    s.status === "ready" ? liveSnapshot(live.board.value, s.value.dashboard.current_version) : null;
+  return s.status === "ready" && pushed ? { ...s, value: { ...s.value, snapshot: pushed } } : s;
 });
 const connection = useConnection();
 const leave = () => void router.push({ name: "ops.dashboards.playlists" });

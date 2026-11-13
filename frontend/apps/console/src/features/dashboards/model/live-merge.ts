@@ -65,3 +65,16 @@ export function applyPush(board: LiveBoard | null, push: ViewPush): Applied {
     },
   };
 }
+
+/**
+ * The pushed snapshot, only when it is at least as new as the head the D5 read returned. A re-read
+ * after this browser's own save or restore (or with the channel down) must not be hidden behind
+ * an older push (qa: the board lagged one version).
+ */
+export function liveSnapshot(
+  board: LiveBoard | null,
+  headVersion: number | null,
+): WorkspaceSnapshot | null {
+  if (!board?.snapshot) return null;
+  return board.version >= (headVersion ?? 0) ? board.snapshot : null;
+}

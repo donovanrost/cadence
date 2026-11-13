@@ -22,6 +22,7 @@ import ViewerActions from "./ViewerActions.vue";
 import ViewerBody from "./ViewerBody.vue";
 import CockpitStatus from "./CockpitStatus.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
+import { liveSnapshot } from "../model/live-merge.ts";
 import { LIVE_PUSH, useDashboardLive } from "./useDashboardLive.ts";
 
 /**
@@ -62,9 +63,9 @@ const live = useDashboardLive(missionId, dashboardId, runtime, refreshMs, editRe
 watch(live.version, () => query.refetch());
 const shown = computed(() => {
   const s = query.state.value;
-  return s.status === "ready" && live.snapshot.value
-    ? { ...s, value: { ...s.value, snapshot: live.snapshot.value } }
-    : s;
+  const pushed =
+    s.status === "ready" ? liveSnapshot(live.board.value, s.value.dashboard.current_version) : null;
+  return s.status === "ready" && pushed ? { ...s, value: { ...s.value, snapshot: pushed } } : s;
 });
 const view = computed(() => (shown.value.status === "ready" ? shown.value.value : null));
 // D6: each open feeds the directory's "Recent". `request` resolves to a result (it never rejects),

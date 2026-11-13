@@ -51,6 +51,11 @@ export function useDashboardLive(
     unsubscribe: ["view:unsubscribe", {}],
     update: "view:set",
   });
+  // Leaving edit mode (or a new runtime topic) starts over: the board pushed before it is stale.
+  watch(subscribed, () => {
+    board.value = null;
+    lastSeq = 0;
+  });
   const restart = () => {
     board.value = null;
     lastSeq = 0;
@@ -105,9 +110,7 @@ export function useDashboardLive(
   );
   onScopeDispose(settle);
 
-  /** The pushed board (null until the first full push, or when the dashboard has no current version). */
-  const snapshot = computed(() =>
-    subscribed.value === null ? null : (board.value?.snapshot ?? null),
-  );
-  return { snapshot, version, stalled };
+  /** The pushed board (null until the first full push); screens show it via `liveSnapshot`. */
+  const pushed = computed(() => (subscribed.value === null ? null : board.value));
+  return { board: pushed, version, stalled };
 }

@@ -47,7 +47,8 @@ const noticeText = computed(() => {
     case "too_many_commands":
       return "Save to keep going. This draft has as many changes as one save can take.";
     case "not_ready":
-      return `Not saved: ${n.placements.map((p) => p.message).join(" ")}`;
+      // One message per distinct reason: three widgets on one unavailable source say it once (qa).
+      return `Not saved: ${[...new Set(n.placements.map((p) => p.message))].join(" ")}`;
   }
   return null;
 });
