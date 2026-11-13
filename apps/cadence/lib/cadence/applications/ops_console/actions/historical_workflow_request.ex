@@ -15,7 +15,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest do
          {:ok, source} <- source(scope, mission_id, values),
          {:ok, binding} <- binding(scope, mission_id, values, source),
          {:ok, points} <- points(values),
-         {:ok, run_id} <- run_id(values),
+         {:ok, run_id} <- run_id(scope, mission_id, values),
          {:ok, reason} <- reason(values),
          attrs = attrs(scope, mission_id, source, binding, run_id, from, to, reason),
          :ok <- WorkflowEvents.validate_context(workflow, attrs) do
@@ -116,12 +116,39 @@ defmodule Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest do
       else: invalid("point_ids", "too_large")
   end
 
-  defp run_id(values) do
+  defp run_id(scope, mission, values) do
     case text(values, "run_id") do
-      "" -> {:ok, Cadence.Ids.new("telemetry_backfill_run")}
-      value when byte_size(value) <= 240 -> {:ok, value}
-      _ -> invalid("run_id", "too_large")
+      "" ->
+        {:ok, Cadence.Ids.new("telemetry_backfill_run")}
+
+      value when byte_size(value) <= 228 ->
+        {:ok, tenant_run_id(scope.organization_id, mission, value)}
+
+      _ ->
+        invalid("run_id", "too_large")
     end
+  end
+
+  @doc """
+  A client-chosen run id, namespaced to the organization and mission (director L1). Background
+  jobs are unique per `(job_type, run_id)` across every organization, so a bare client value let
+  one tenant pre-claim another's run id (their job then fails) and probe whether a run id exists
+  anywhere. The suffix is a hash of the organization and mission: stable for the same tenant
+  (retries stay idempotent), different for every other. Already-namespaced values pass through.
+  """
+  @spec tenant_run_id(binary(), binary(), binary()) :: binary()
+  def tenant_run_id(organization_id, mission_id, value) do
+    # todo(authz): run ids should be server-minted or uniquely indexed per organization and
+    # mission; the suffix makes collisions across tenants impossible meanwhile.
+    suffix = "--" <> tenant_suffix(organization_id, mission_id)
+    if String.ends_with?(value, suffix), do: value, else: value <> suffix
+  end
+
+  defp tenant_suffix(organization_id, mission_id) do
+    :sha256
+    |> :crypto.hash("#{organization_id}\0#{mission_id}")
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 10)
   end
 
   defp reason(values) do

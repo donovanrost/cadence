@@ -38,7 +38,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowActions do
               is_map(values) do
     if Enum.sort(Map.keys(values)) == Enum.sort(@fields) and
          Enum.all?(Map.values(values), &text?(&1, 8_192)) and text?(evidence, 64) and
-         text?(values["run_id"], 232), do: :ok, else: {:error, :invalid_request}
+         text?(values["run_id"], 220), do: :ok, else: {:error, :invalid_request}
   end
 
   defp admit(action, input) when is_map(input) do
@@ -88,10 +88,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowActions do
   defp dispatch(scope, mission, mode, capture, "record-request", input, id) do
     values = input["request"]
 
+    # Namespaced to the tenant: jobs are unique per run id across all organizations (L1).
     group =
-      if String.trim(values["run_id"]) == "",
-        do: "historical-" <> id,
-        else: String.trim(values["run_id"])
+      HistoricalWorkflowRequest.tenant_run_id(
+        scope.organization_id,
+        mission,
+        if(String.trim(values["run_id"]) == "",
+          do: "historical-" <> id,
+          else: String.trim(values["run_id"])
+        )
+      )
 
     if values["confirmed"] == "true" do
       locked(scope, mission, group, fn ->
