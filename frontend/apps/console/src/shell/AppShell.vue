@@ -5,6 +5,7 @@ import MobileTabBar from "./MobileTabBar.vue";
 import { ApCallout, useScrollable } from "@/ui";
 import NotFoundScreen from "./NotFoundScreen.vue";
 import OpsRail from "./OpsRail.vue";
+import AdminRail from "./AdminRail.vue";
 import SetupRail from "./SetupRail.vue";
 import TopBar from "./TopBar.vue";
 import { rememberMission } from "./last-mission.ts";
@@ -99,6 +100,7 @@ const mainScrolls = useScrollable(main);
         :can-admin-org="canAdminOrg"
         :counts="counts"
       />
+      <AdminRail v-else-if="mode === 'admin'" />
       <SetupRail
         v-else-if="mode === 'setup' && orgSlug"
         :org="orgSlug"

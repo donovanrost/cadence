@@ -40,7 +40,14 @@ const placeholder = computed(() =>
     <MobileHeaderBar v-if="small && mobileHeader" :header="mobileHeader" />
     <template v-else>
       <BrandMark />
-      <ScopeSwitcher :scope="scope" />
+      <!-- L7 (ux Admin.md): platform admin has no org or mission scope to switch. -->
+      <p
+        v-if="mode === 'admin'"
+        class="m-0 flex items-center border-r border-hairline px-4 font-mono text-sm font-semibold tracking-tag text-caution-text uppercase md:px-[18px]"
+      >
+        Platform admin
+      </p>
+      <ScopeSwitcher v-else :scope="scope" />
       <ModeSwitch
         v-if="mission && mode !== 'account'"
         class="max-md:hidden"

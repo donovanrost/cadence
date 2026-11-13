@@ -1,6 +1,7 @@
 import "vue-router";
 
-export type ShellMode = "ops" | "setup" | "takeover" | "account";
+/** `admin`: platform administration (L7), outside org and mission scope (ux Admin.md). */
+export type ShellMode = "ops" | "setup" | "takeover" | "account" | "admin";
 
 export type NavKey =
   | "now"
