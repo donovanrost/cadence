@@ -396,3 +396,5 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 
 ### 12C. Branded ids, last and phased
 `api/ids.ts`: `MissionId`, `SpacecraftId`, `Scid`, `StationId` first (decoders mint them, so no assertions outside `api/`), then the rest by audit §1.2. Lead owns `ids.ts`; owners adopt it per feature.
+
+**Step 1 done (lead 10ac63a9e):** `api/ids.ts` with the four brands, decoders (`missionId`, `spacecraftId`, `stationId`, `scid`) and route-param readers (`spacecraftIdParam`, `stationIdParam`, `scidParam`, `scidText`), exported from `@/api`. **Step 2 (owners, audit §1.2 swap sites first):** fe-setup: setup routes' `:scId` (spacecraft id), OverridesList, SpacecraftDetailScreen, profiles, stations; fe-ops: fleet/alarms `:scId` (SCID; AlarmTable's `""` fallback), now/sources.ts `scId`/`scid`, investigate/api.ts and alarms/episodes.ts argument order, useStationCodes' mixed id/code map; everyone: `missionId` params where the slug could slip in (live/mission.ts). Add a brand to ids.ts through lead.
