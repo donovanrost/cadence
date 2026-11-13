@@ -93,24 +93,15 @@ async function load() {
     failure.value = cause instanceof Error ? cause.message : "it didn't answer.";
   }
 }
-/** Another tab may have taken the session while this one was hidden: re-pin on return (lead). */
-function onVisible() {
-  if (document.visibilityState === "visible" && bridge)
-    void bridge.repinNow().then((ok) => (lost.value = !ok));
-}
 // A new selection or page (a deep link, or the surface's own link) re-queries with the new params.
 watch(
   () => JSON.stringify(params.value),
   () => void load(),
 );
-onMounted(() => {
-  void load();
-  document.addEventListener("visibilitychange", onVisible);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener("visibilitychange", onVisible);
-  bridge?.dispose();
-});
+// L19b (api eecfc73d5): the session keeps its 16 latest scopes, so a tab regaining focus needn't
+// re-pin; a mismatch (a scope pushed out) still re-pins and retries once in the bridge.
+onMounted(() => void load());
+onBeforeUnmount(() => bridge?.dispose());
 </script>
 
 <template>
