@@ -67,8 +67,7 @@ defmodule CadenceWeb.Console.DashboardDiagnostics do
     %{
       version: model.document_version,
       loaded_at: model.loaded_at,
-      widgets: widgets,
-      refresh: refresh(Map.get(rows, "refresh", []))
+      widgets: widgets
     }
   end
 
@@ -132,15 +131,6 @@ defmodule CadenceWeb.Console.DashboardDiagnostics do
       {row.details["request_id"], row.status}
     end
   end
-
-  defp refresh([]), do: nil
-
-  defp refresh([row | _]),
-    do: %{
-      observed_at: row.details["observed_at"],
-      decision_status: row.status,
-      context_reason: row.details["context_reason"]
-    }
 
   defp details(%{details: details}) when is_list(details),
     do: Map.new(details, &{&1.key, &1.value})

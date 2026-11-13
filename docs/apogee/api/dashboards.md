@@ -283,8 +283,8 @@ Refetch on `invalidate` with `dashboards`.
 - **D18** `GET /diagnostics` (operator) → `{version, loaded_at, widgets: [{placement_id, title,
   status, sources: [{logical_source, status, status_code, cache, cache_status, severity, retryable,
   operator_action, warning_codes: [string], duration_ms, outcome, error}], warnings: [{code,
-  severity, field_name, message}]}], refresh: {observed_at, decision_status, context_reason} |
-  null}` for the **current** version, widgets worst first. `status` (widget and source) is the
+  severity, field_name, message}]}]}` for the **current** version (the `refresh` block was
+  dropped after L8c, 4bc972bbe: nothing records invalidation decisions any more), widgets worst first. `status` (widget and source) is the
   closed set `ok | degraded | failed | not_run`; `status_code` keeps the engine's outcome
   (`cache_hit`, `source_degraded`, `skipped`, …) for Technical details. `cache` is `cached | fresh
   | null` (the tab's "From cache" / "Fresh"). `duration_ms`, `outcome`, `error` and warning
