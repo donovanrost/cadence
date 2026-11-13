@@ -761,6 +761,10 @@ defmodule CadenceWeb.Router do
     get("/account/sessions", AccountController, :sessions)
     delete("/account/sessions", AccountController, :revoke_others)
     delete("/account/sessions/:session_id", AccountController, :revoke_session)
+    # L21: my pending invitations (the token path stays server-rendered, /invitations/:token).
+    get("/account/invitations", AccountInvitationController, :index)
+    post("/account/invitations/:invitation_id/accept", AccountInvitationController, :accept)
+    post("/account/invitations/:invitation_id/decline", AccountInvitationController, :decline)
 
     scope "/missions/:mission_id" do
       pipe_through(:console_mission)

@@ -44,10 +44,15 @@ The bootstrap payload.
       }
     ],
     "csrf_token": "…",
-    "socket": {"path": "/socket/console"}
+    "socket": {"path": "/socket/console"},
+    "pending_invitations_count": 1
   }
 }
 ```
+
+- `pending_invitations_count` (L21): how many pending, unexpired invitations are addressed to the
+  user's current email (the org switcher footer's "1 invitation", `/no-organization`). Details
+  come from `GET /account/invitations`.
 
 - `organizations`: the user's active memberships, sorted by name. A platform admin in admin mode
   also sees the current organization even without a membership (`role` is then `null`).
@@ -98,6 +103,24 @@ Errors: `404 mission_not_found`.
 `DELETE /session` (the existing browser route) also broadcasts `disconnect` to that session's
 console sockets. After it, the next API call returns `401` and the SPA should redirect to
 `/sign-in`.
+
+## Account: my invitations (§11 L21)
+
+The signed-in user's own pending invitations. People who aren't signed in accept through the
+emailed link (`/invitations/:token`, server-rendered; api-ops' L5 token path).
+
+- `GET /api/console/v1/account/invitations` → `{invitations: [{id, organization {id, slug,
+  name}, role, invited_by {name} | null, invited_at, expires_at}]}`, oldest first. Only pending,
+  unexpired invitations addressed to my current email (the same rule as
+  `pending_invitations_count`).
+- `POST /api/console/v1/account/invitations/:id/accept` → `{organization {id, slug, name}, role}`.
+  The membership exists at once. The session is a boot snapshot, so open the new organization
+  with a full navigation (re-bootstrap).
+- `POST /api/console/v1/account/invitations/:id/decline` → `{id, status: "declined"}`. Final; the
+  inviter's People list shows it as declined.
+- Errors: `404 invitation_not_found` for an unknown id **or** one addressed to someone else (the
+  same answer, so ids don't leak); `409 invitation_not_pending` with `details.status` `accepted |
+  revoked | declined | expired` when it was already answered or has lapsed.
 
 ## Account: password and sessions (backlog)
 

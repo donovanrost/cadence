@@ -53,15 +53,19 @@ defmodule CadenceWeb.Console.SessionController do
   end
 
   defp render_session(conn, %Scope{} = scope) do
-    json(conn, %{
-      data:
-        SessionJSON.session(%{
-          scope: scope,
-          organizations: organizations(scope),
-          csrf_token: get_csrf_token()
-        })
-    })
+    session =
+      SessionJSON.session(%{
+        scope: scope,
+        organizations: organizations(scope),
+        csrf_token: get_csrf_token()
+      })
+
+    # L21: the org switcher footer and /no-organization show it on every page.
+    json(conn, %{data: Map.put(session, :pending_invitations_count, pending_invitations(scope))})
   end
+
+  defp pending_invitations(%Scope{user: user}),
+    do: Cadence.Accounts.count_pending_invitations_for_user(user.user_id)
 
   # Memberships, plus the current organization when a platform admin in admin
   # mode is viewing one they are not a member of. Capabilities are computed per

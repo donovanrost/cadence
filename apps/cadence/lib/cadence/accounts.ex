@@ -640,6 +640,20 @@ defmodule Cadence.Accounts do
     end
   end
 
+  @doc false
+  # Shared with `Accounts.InvitationResponses` (L21 decline), so both paths lock and check alike.
+  def lock_pending_invitation(repo, invitation_id),
+    do: lock_pending_invitation_by_id(repo, invitation_id)
+
+  @doc false
+  def invitation_for_user?(%User{} = user, %OrganizationInvitation{} = invitation),
+    do: validate_email_match(user, invitation) == :ok
+
+  defdelegate decline_invitation_as_user(user_id, invitation_id),
+    to: Cadence.Accounts.InvitationResponses
+
+  defdelegate list_pending_invitations_for_user(user_id), to: Cadence.Accounts.InvitationResponses
+
   defp validate_email_match(%User{email: user_email}, %OrganizationInvitation{email: inv_email}) do
     if User.normalize_email(user_email) == User.normalize_email(inv_email) do
       :ok

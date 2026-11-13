@@ -6,9 +6,9 @@ defmodule Cadence.Accounts.OrganizationInvitation do
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Ids
 
-  @statuses [:pending, :accepted, :revoked, :expired]
+  @statuses [:pending, :accepted, :revoked, :expired, :declined]
 
-  @type status :: :pending | :accepted | :revoked | :expired
+  @type status :: :pending | :accepted | :revoked | :expired | :declined
 
   @type t :: %__MODULE__{
           organization_invitation_id: binary(),
@@ -94,6 +94,9 @@ defmodule Cadence.Accounts.OrganizationInvitation do
   def normalize_status("revoked"), do: :revoked
   def normalize_status(:expired), do: :expired
   def normalize_status("expired"), do: :expired
+  # The invitee said no (L21 by id, L5 by token); final.
+  def normalize_status(:declined), do: :declined
+  def normalize_status("declined"), do: :declined
 
   @spec pending?(t()) :: boolean()
   def pending?(%__MODULE__{status: :pending}), do: true
