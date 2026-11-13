@@ -682,5 +682,9 @@ more than 24 h old.
   - HOLD `spacecraft_has_traffic` sentence: "EARENDIL-312 has had passes booked or commands requested. Archiving
     it takes it out of the mission's lists, fleet and planning when this is applied. Its history stays."
     Placeholder: "Why EARENDIL-312 is being archived". Say "passes booked" (reservations), not "contacts".
-  - Open, for api: what archiving does to future booked passes and requests still waiting. Until api says, no
-    sentence claims either way (U20).
+  - Archiving leaves future booked passes and waiting requests as they are (api, 11-13: it only changes the
+    lifecycle state, and nothing stops a waiting request from being released later). Lead and domain are deciding
+    whether archive should refuse, warn or release. Until then, no sentence claims either way (U20). ux's
+    preference: a waiting request is a hard HOLD ("EARENDIL-312 has 1 command request waiting. Release or cancel
+    it first."); future booked passes are acknowledged with their count ("3 booked passes from 11-15 stay booked
+    after it's archived. Release them in Contacts if they're not needed.").
