@@ -12,24 +12,40 @@ let socket: Socket | null = null;
 const reconnectListeners = new Set<() => void>();
 let everOpened = false;
 
+/** How often the reported state is checked against the socket itself (qa 11-13). */
+export const HEAL_MS = 5_000;
+let heal: ReturnType<typeof setInterval> | null = null;
+
+function markLive() {
+  connection.value = "live";
+  if (everOpened) for (const listener of reconnectListeners) listener();
+  everOpened = true;
+}
+
 export function startSocket(path: string, csrfToken: string) {
   if (socket) return;
-  socket = new Socket(path, { params: { _csrf_token: csrfToken } });
-  socket.onOpen(() => {
-    connection.value = "live";
-    if (everOpened) for (const listener of reconnectListeners) listener();
-    everOpened = true;
+  const s = new Socket(path, { params: { _csrf_token: csrfToken } });
+  socket = s;
+  s.onOpen(markLive);
+  // An error or close from an old transport can arrive after the socket has already reopened
+  // (a server-side channel crash did this on 11-13): only a socket that's really down is offline.
+  s.onError(() => {
+    if (!s.isConnected()) connection.value = "offline";
   });
-  socket.onError(() => {
-    connection.value = "offline";
+  s.onClose(() => {
+    if (!s.isConnected()) connection.value = "offline";
   });
-  socket.onClose(() => {
-    connection.value = "offline";
-  });
-  socket.connect();
+  // Self-heal: a stale "offline" on a connected socket goes back to live (and owners refetch,
+  // since pushes may have been missed).
+  heal = setInterval(() => {
+    if (s.isConnected() && connection.value !== "live") markLive();
+  }, HEAL_MS);
+  s.connect();
 }
 
 export function stopSocket() {
+  if (heal !== null) clearInterval(heal);
+  heal = null;
   socket?.disconnect();
   socket = null;
   everOpened = false;
