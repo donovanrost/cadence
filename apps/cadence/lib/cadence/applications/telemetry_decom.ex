@@ -358,9 +358,10 @@ defmodule Cadence.Applications.TelemetryDecom do
     configuration =
       config.organization_id
       |> PacketBindings.list_for_mission(config.mission_id,
-        application_key: @application_key
+        application_key: @application_key,
+        spacecraft_ids: [config.spacecraft_id]
       )
-      |> Enum.find(&(&1.spacecraft_id == config.spacecraft_id))
+      |> List.first()
 
     overlay_packet_binding_selection(config, configuration)
   end
@@ -632,10 +633,7 @@ defmodule Cadence.Applications.TelemetryDecom do
          true <-
            active.binding_set_id == binding_set.binding_set_id and
              active.binding_set_version == binding_set.version do
-      ids =
-        Enum.flat_map(entries, fn {id, entry} ->
-          applied_configuration_ids(mission, id, entry)
-        end)
+      ids = applied_configuration_ids(mission, entries)
 
       configs =
         list_configs(mission.organization_id, mission.mission_id)
@@ -657,19 +655,22 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp applied_configuration_ids(mission, id, entry) do
-    row =
-      ConfigurationDrafts.latest(
-        mission.organization_id,
-        mission.mission_id,
-        id
-      )
+  # The fleet's spacecraft whose latest saved configuration is the one reviewed, on the current
+  # application basis. A fixed number of queries for any fleet size: this runs inside the
+  # activation's configuration lock, which a 500-spacecraft fleet used to hold past its timeout.
+  defp applied_configuration_ids(mission, entries) do
+    ids = Map.keys(entries)
+    latest = ConfigurationDrafts.latest_many(mission.organization_id, mission.mission_id, ids)
+    bases = ConfigurationApplications.bases(mission, Map.keys(latest))
 
-    if row && row.configuration_revision_id == entry["configuration_revision_id"] &&
-         row.application_basis ==
-           ConfigurationApplications.basis(mission, id),
-       do: [id],
-       else: []
+    Enum.flat_map(entries, fn {id, entry} ->
+      row = latest[id]
+
+      if row && row.configuration_revision_id == entry["configuration_revision_id"] &&
+           row.application_basis == bases[id],
+         do: [id],
+         else: []
+    end)
   end
 
   defp apply_configuration_state(binding_set) do

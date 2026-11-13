@@ -19,25 +19,60 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
     :updated_at
   ]
 
-  def basis(mission, spacecraft_id) do
+  def basis(mission, spacecraft_id),
+    do: mission |> bases([spacecraft_id]) |> Map.fetch!(spacecraft_id)
+
+  @doc """
+  `basis/2` for many spacecraft in a fixed number of queries (`%{spacecraft_id => basis}`), so a
+  fleet activation doesn't reload the mission's bindings once per spacecraft.
+  """
+  def bases(_mission, []), do: %{}
+
+  def bases(mission, spacecraft_ids) when is_list(spacecraft_ids) do
+    %{organization_id: org, mission_id: mission_id} = mission
+
     installations =
-      ApplicationInstallations.configuration_basis(
-        mission.organization_id,
-        mission.mission_id,
-        spacecraft_id,
+      ApplicationInstallations.configuration_bases(
+        org,
+        mission_id,
+        spacecraft_ids,
         "telemetry_decom"
       )
 
     bindings =
-      ApplicationBindingStore.list(mission.organization_id, mission.mission_id,
-        application_key: "telemetry_decom"
+      org
+      |> ApplicationBindingStore.list(mission_id,
+        application_key: "telemetry_decom",
+        spacecraft_ids: spacecraft_ids
       )
-      |> Enum.filter(&(&1.spacecraft_id == spacecraft_id))
+      |> Enum.group_by(& &1.spacecraft_id)
+
+    packets =
+      org
+      |> PacketBindings.list_for_mission(mission_id,
+        application_key: "telemetry_decom",
+        spacecraft_ids: spacecraft_ids
+      )
+      |> Enum.group_by(& &1.spacecraft_id)
+
+    Map.new(spacecraft_ids, fn id ->
+      {id,
+       basis_hash(
+         Map.get(bindings, id, []),
+         Map.get(packets, id, []),
+         Map.get(installations, id, [])
+       )}
+    end)
+  end
+
+  defp basis_hash(bindings, packets, installations) do
+    bindings =
+      bindings
       |> Enum.map(&Map.drop(&1, @bookkeeping))
       |> Enum.sort_by(& &1.application_binding_id)
 
     packets =
-      packet_inputs(mission, spacecraft_id)
+      packets
       |> Enum.map(&canonical_packet_input/1)
       |> Enum.sort_by(& &1.packet_binding_configuration_id)
 
@@ -200,8 +235,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
 
   defp packet_inputs(mission, spacecraft_id) do
     PacketBindings.list_for_mission(mission.organization_id, mission.mission_id,
-      application_key: "telemetry_decom"
+      application_key: "telemetry_decom",
+      spacecraft_ids: [spacecraft_id]
     )
-    |> Enum.filter(&(&1.spacecraft_id == spacecraft_id))
   end
 end

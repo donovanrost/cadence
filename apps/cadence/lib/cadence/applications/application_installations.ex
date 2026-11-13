@@ -51,14 +51,25 @@ defmodule Cadence.Applications.ApplicationInstallations do
 
   @doc "Immutable installation identity contributing to a spacecraft configuration revision."
   def configuration_basis(organization_id, mission_id, spacecraft_id, application_key) do
+    organization_id
+    |> configuration_bases(mission_id, [spacecraft_id], application_key)
+    |> Map.get(spacecraft_id, [])
+  end
+
+  @doc "`configuration_basis/4` for many spacecraft in one query: `%{spacecraft_id => basis}`."
+  def configuration_bases(organization_id, mission_id, spacecraft_ids, application_key)
+      when is_list(spacecraft_ids) do
     from(row in InstallationRow,
       where:
         row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.spacecraft_id == ^spacecraft_id and row.application_key == ^application_key,
+          row.spacecraft_id in ^spacecraft_ids and row.application_key == ^application_key,
       order_by: row.application_installation_id,
-      select: {row.application_installation_id, row.application_version, row.lifecycle_state}
+      select:
+        {row.spacecraft_id,
+         {row.application_installation_id, row.application_version, row.lifecycle_state}}
     )
     |> Repo.all()
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 
   @spec install(Scope.t(), HostContext.t(), binary(), keyword()) ::
