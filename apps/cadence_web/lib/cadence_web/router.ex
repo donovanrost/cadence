@@ -833,6 +833,9 @@ defmodule CadenceWeb.Router do
         DashboardAuthoringController,
         :restore
       )
+      # Dashboard settings D14-D19 (owner: api).
+      get("/dashboards/:dashboard_id/diagnostics", DashboardSettingsController, :diagnostics)
+      get("/dashboards/:dashboard_id/export", DashboardSettingsController, :export)
 
       get("/passes", PassController, :index)
       get("/contact-findings", ContactFindingsController, :index)

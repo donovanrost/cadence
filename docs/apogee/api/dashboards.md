@@ -151,3 +151,22 @@ dashboard.
 
 `204`. Records that the viewer opened it, for `shortcuts.recent`. The viewer sends it once per
 open, not on refresh. `404 not_found` for an unknown or archived dashboard.
+
+## D14-D19: settings, sharing, activity, diagnostics, export (owner: api)
+
+From fe-setup's proposal (docs/apogee/plans/dashboards-settings.md). Under
+`/api/console/v1/missions/:mission_id/dashboards/:dashboard_id`. D14-D17 follow.
+
+- **D18** `GET /diagnostics` (operator) → `{version, loaded_at, widgets: [{placement_id, title,
+  status, sources: [{logical_source, status, status_code, cache, cache_status, severity, retryable,
+  operator_action, warning_codes: [string], duration_ms, outcome, error}], warnings: [{code,
+  severity, field_name, message}]}], refresh: {observed_at, decision_status, context_reason} |
+  null}` for the **current** version, widgets worst first. `status` (widget and source) is the
+  closed set `ok | degraded | failed | not_run`; `status_code` keeps the engine's outcome
+  (`cache_hit`, `source_degraded`, `skipped`, …) for Technical details. `cache` is `cached | fresh
+  | null` (the tab's "From cache" / "Fresh"). `duration_ms`, `outcome`, `error` and warning
+  `message` are `null`: the engine doesn't record them yet. `404 not_found` when the dashboard has
+  no current version.
+- **D19** `GET /export` (author) → the portable bundle as an attachment
+  (`<name>.cadence-dashboard.json`); the deployment is recorded (`portable_json`) as before.
+  `403 forbidden`, `404 not_found`. The legacy route goes with the legacy pages.
