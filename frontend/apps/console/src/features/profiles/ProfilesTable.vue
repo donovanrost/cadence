@@ -1,17 +1,26 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { ApTable, formatCount, type ApColumn } from "@/ui";
-import { protocolLine, type ProfileSummary } from "./api.ts";
+import { lastChangeText, manyOverrides, protocolLine, type ProfileSummary } from "./api.ts";
 
-/** Profile rows; the Name cell links to the profile page. */
-defineProps<{ rows: readonly ProfileSummary[] }>();
-
-const columns: readonly ApColumn[] = [
-  { key: "name", label: "Name" },
-  { key: "version", label: "Version", mono: true },
-  { key: "spacecraft", label: "Spacecraft", mono: true, align: "end" },
-  { key: "catalog", label: "Catalog", mono: true },
-  { key: "protocols", label: "Protocols" },
-];
+/** Profile rows; the Name cell links to the profile page (Profile.md list). */
+const props = defineProps<{ rows: readonly ProfileSummary[] }>();
+/** Overrides / Last changed appear once the list read carries them (asked of api). */
+const columns = computed((): readonly ApColumn[] => {
+  const overrides = props.rows.some((r) => r.overrideCount !== null);
+  const changed = props.rows.some((r) => r.lastChange !== null);
+  return [
+    { key: "name", label: "Name" },
+    { key: "version", label: "Version", mono: true },
+    { key: "spacecraft", label: "Spacecraft", mono: true, align: "end" },
+    ...(overrides
+      ? [{ key: "overrides", label: "Overrides", mono: true, align: "end" as const }]
+      : []),
+    { key: "catalog", label: "Catalog", mono: true },
+    { key: "protocols", label: "Protocols" },
+    ...(changed ? [{ key: "changed", label: "Last changed", mono: true }] : []),
+  ];
+});
 </script>
 
 <template>
@@ -34,6 +43,14 @@ const columns: readonly ApColumn[] = [
       <span v-if="row.catalogRevision">rev {{ row.catalogRevision.number }}</span>
       <span v-else class="font-sans text-text-3">Set per spacecraft</span>
     </template>
+    <template #cell-overrides="{ row }">
+      <span :class="manyOverrides(row) ? 'text-caution-text' : ''">{{
+        formatCount(row.overrideCount ?? 0)
+      }}</span>
+    </template>
+    <template #cell-changed="{ row }">{{
+      row.lastChange ? lastChangeText(row.lastChange) : "—"
+    }}</template>
     <template #cell-protocols="{ row }">
       <span class="text-text-2">{{ protocolLine(row) }}</span>
     </template>

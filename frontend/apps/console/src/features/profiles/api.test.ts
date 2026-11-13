@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { profilesReader, protocolLine } from "./api.ts";
+import { lastChangeText, manyOverrides, profilesReader, protocolLine } from "./api.ts";
 
 const profile = (extra: Record<string, unknown> = {}) => ({
   id: "profile-1",
@@ -34,5 +34,25 @@ describe("profilesReader", () => {
     expect(
       decode(profilesReader, { profiles: [profile({ uplink_protocol: { value: "tc" } })] }).ok,
     ).toBe(false);
+  });
+
+  it("reads Overrides and Last changed when sent, null when not (Profile.md list)", () => {
+    const old = decode(profilesReader, { profiles: [profile()] });
+    expect(old.ok && old.value[0]?.overrideCount).toBeNull();
+    const r = decode(profilesReader, {
+      profiles: [
+        profile({
+          override_count: 60,
+          last_change: { version: 4, revision: 5, at: "2026-10-19T02:29:00Z", actor: null },
+        }),
+      ],
+    });
+    if (!r.ok) throw r.error;
+    const row = r.value[0];
+    if (!row?.lastChange) throw new Error("fixture");
+    expect(lastChangeText(row.lastChange)).toBe("r5");
+    expect(lastChangeText({ ...row.lastChange, revision: null })).toMatch(/^v4 · 10-19 02:29Z$/);
+    expect(manyOverrides(row)).toBe(true);
+    expect(manyOverrides({ ...row, overrideCount: 50 })).toBe(false);
   });
 });

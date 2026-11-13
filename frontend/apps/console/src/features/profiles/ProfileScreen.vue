@@ -5,6 +5,7 @@ import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTabLinks } from "@/ui";
+import LimitsNotice from "./LimitsNotice.vue";
 import ProfileHistoryPanel from "./ProfileHistoryPanel.vue";
 import ProfileRoutingPanel from "./ProfileRoutingPanel.vue";
 import SchemaSectionPanel from "./SchemaSectionPanel.vue";
@@ -45,6 +46,7 @@ function links(detail: ProfileDetail) {
   return [
     ...detail.sections.map((s) => ({ key: s.key, label: s.label, to: to(s.key) })),
     { key: "routing", label: "Routing", to: to("routing") },
+    { key: "limits", label: "Limits", to: to("limits") },
     { key: "overrides", label: "Overrides", to: to("overrides"), count: detail.override_count },
     { key: "history", label: "History", to: to("history") },
   ];
@@ -81,6 +83,7 @@ const crumbs = computed(() => [
       <template #default="{ value }">
         <ApTabLinks :links="links(value)" :active="active(value)" label="Profile sections" />
         <ProfileHistoryPanel v-if="active(value) === 'history'" :detail="value" />
+        <LimitsNotice v-else-if="active(value) === 'limits'" />
         <ProfileRoutingPanel
           v-else-if="active(value) === 'routing' || active(value) === 'overrides'"
           :detail="value"
