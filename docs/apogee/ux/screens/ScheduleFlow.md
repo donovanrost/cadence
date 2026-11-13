@@ -42,6 +42,11 @@ sent (domain), with that offer's provider. It's absent when nothing is left to s
 - Hover/focus detail: "KSAT's offer for EARENDIL-012 · SVB-1 · 03:00Z expires at 02:30Z. Send before then,
   or that pass can't be booked." With several providers, one line each, earliest first: `KSAT T−15:15:51 ·
   Northlight T−18:02:10`. Add "3 more offers expire in the next hour." when that's so.
+- **Expired offers** (lead 47ef6310 asked): an offer that lapsed before it was sent can't be fixed, so the clock
+  doesn't count up from it. It moves on to the next live offer and adds a caution count, `NEXT OFFER EXPIRES
+  T−01:12:40 · KSAT · 1 EXPIRED`. When every unsent offer has lapsed: `3 OFFERS EXPIRED` (caution, no clock).
+  Expired passes lead Demand like rejections: `Expired · SVB-1 03:00Z: the offer lapsed at 02:30Z before it was
+  sent.` The detail line reads "…expired at 02:30Z. That pass can't be booked; re-plan to replace it."
 - The pass link goes to the pass in B (`snapshot_id`). On the simulator offers expire at AOS, so the same
   words apply.
 ```
