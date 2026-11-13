@@ -627,6 +627,9 @@ more than 24 h old.
   - `Telemetry`. On: "Cadence decodes telemetry from EARENDIL-312." Off: "Cadence doesn't decode telemetry from
     EARENDIL-312: no live values, alarms or new history." What happens to incoming frames (kept raw or dropped) is
     for domain to confirm; add it to the sentence when known.
+  - **Not set** (api: `null` when the mission has no active configuration for the spacecraft): the state sentence
+    is "No active configuration covers EARENDIL-312 yet, so this isn't set." with the off tag `NOT SET`. It
+    doesn't claim on or off (U20). Staging a value from here works like any other switch change.
 - **Changing a switch stages it** (L17 spacecraft kind). The switch shows the staged target with a caution tag
   `STAGED · APPLIES WITH r7` until it's applied. Changes line: `EARENDIL-312 · turn commanding off` / `turn
   commanding on` / `turn telemetry off` / `turn telemetry on`.
