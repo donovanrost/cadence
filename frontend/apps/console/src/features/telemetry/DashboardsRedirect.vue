@@ -1,21 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { useRoute } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApEmptyState, ApPanel } from "@/ui";
 
 /**
- * Dashboards come last (DECISIONS #11): until they're rebuilt here, ops.dashboards hands over to
- * the existing dashboard pages (/missions/:id/ops/dashboards[/:dashboard]), so Telemetry's
- * `Dashboards ↗` and Timeline's dashboard links land on the real thing.
+ * The dashboard directory is still the legacy page until D1–D4 land (plans/dashboards.md slice
+ * 2); the viewer is the console's own (ops.dashboard).
  */
-const route = useRoute();
 const scope = useMissionScope();
-const href = computed(() => {
-  const base = `/missions/${encodeURIComponent(scope.value.mission.id)}/ops/dashboards`;
-  const id = route.params.dashboardId;
-  return typeof id === "string" && id ? `${base}/${encodeURIComponent(id)}` : base;
-});
+const href = computed(
+  () => `/missions/${encodeURIComponent(scope.value.mission.id)}/ops/dashboards`,
+);
 onMounted(() => window.location.assign(href.value));
 </script>
 

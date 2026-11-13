@@ -109,10 +109,28 @@ export const opsRoutes: RouteRecordRaw[] = [
     meta: { mode: "ops", nav: "telemetry", title: "Telemetry" },
   },
   {
-    path: "telemetry/dashboards/:dashboardId?",
+    // Directory: the legacy pages until D1–D4 land (plans/dashboards.md slice 2).
+    path: "telemetry/dashboards",
     name: "ops.dashboards",
     component: () => import("@/features/telemetry/DashboardsRedirect.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "Dashboards" },
+  },
+  {
+    // Dashboard viewer (dashboards, L8): a takeover cockpit (ux Dashboards.md).
+    path: "telemetry/dashboards/:dashboardId",
+    name: "ops.dashboard",
+    component: () => import("@/features/dashboards/viewer/DashboardScreen.vue"),
+    meta: { mode: "takeover", nav: "telemetry", title: "Dashboard" },
+  },
+  {
+    // `/edit` opens the viewer in edit mode (user decision 2026-10-08).
+    path: "telemetry/dashboards/:dashboardId/edit",
+    name: "ops.dashboard.edit",
+    redirect: (to) => ({
+      name: "ops.dashboard",
+      params: to.params,
+      query: { ...to.query, edit: "1" },
+    }),
   },
   {
     path: "timeline",

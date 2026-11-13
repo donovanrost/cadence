@@ -30,7 +30,7 @@ export function subjectLink(event: MissionEvent): RouteLocationRaw | null {
     case "contact":
       return { name: "ops.contacts", query: { contact: s.id } };
     case "dashboard":
-      return { name: "ops.dashboards", params: { dashboardId: s.id } };
+      return { name: "ops.dashboard", params: { dashboardId: s.id } };
     case "catalog_revision":
       return { name: "setup.catalog" };
     // api 8d: applied / rolled-back configuration revisions (id is the revision number). Setup has
