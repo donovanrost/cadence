@@ -1,4 +1,5 @@
 import {
+  stationId as stationIdReader,
   spacecraftId as spacecraftIdReader,
   scid as scidReader,
   actor,
@@ -195,7 +196,7 @@ export function fetchPasses(
 const stationsReader = d.object({
   stations: d.array(
     d.object({
-      id: d.token,
+      id: stationIdReader,
       display_name: d.nullable(d.string),
       // free-text: a station call sign (SVA), not a vocabulary
       code: d.nullable(d.string),

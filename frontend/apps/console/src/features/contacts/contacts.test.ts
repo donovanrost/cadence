@@ -322,11 +322,9 @@ describe("uplink readiness (U33)", () => {
       },
       readiness: { state: "blocked", reason: "attestation_peer", since: null },
     });
-    const stations = {
-      code: (ref: string | null | undefined) => (ref === "earendil-kiruna" ? "KIR" : null),
-      provider: (ref: string | null | undefined) =>
-        ref === "earendil-kiruna" ? "Northlight" : null,
-    };
+    const kiruna = (key: string | null | undefined) =>
+      key === "earendil-kiruna" ? { code: "KIR", provider: "Northlight" } : null;
+    const stations = { byId: kiruna, byRef: kiruna };
     expect(groupBlockedLine(uplink, null, stations)).toContain(
       "(AOS 00:54Z): Northlight's proof for this session didn't check out.",
     );

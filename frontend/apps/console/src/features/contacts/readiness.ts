@@ -1,5 +1,7 @@
 import type { RouteLocationRaw } from "vue-router";
 import {
+  stationId as stationIdReader,
+  type StationId,
   decoders as d,
   detailsOf,
   isError,
@@ -64,7 +66,7 @@ const passRef = d.object({
   contact_id: d.nullable(d.token),
   station: d.object({
     ref: d.nullable(d.string),
-    id: d.nullable(d.token),
+    id: d.nullable(stationIdReader),
     // free-text: a station call sign (SVA, KIR), not a vocabulary
     code: d.nullable(d.string),
     name: d.nullable(d.string),
@@ -186,13 +188,23 @@ export function reasonLink(
   return null;
 }
 
-/** The stations index by ref: code and provider name (U33). */
-type ByRef = (ref: string | null | undefined) => string | null;
-export type StationLookup = Readonly<{ code: ByRef; provider: ByRef }>;
-const NO_STATIONS: StationLookup = { code: () => null, provider: () => null };
-type StationRef = Readonly<{ ref: string | null; id: string | null; code: string | null }>;
-const codeFor = (st: StationRef, s: StationLookup) => st.code ?? s.code(st.ref) ?? s.code(st.id);
-const providerFor = (st: StationRef, s: StationLookup) => s.provider(st.ref) ?? s.provider(st.id);
+/** What the stations index knows of a station (U33): its code and provider name. */
+export type StationInfo = Readonly<{ code: string | null; provider: string | null }>;
+/**
+ * The stations index, with its two identifier spaces kept apart (§12C, audit §1.2 item 6):
+ * `byId` takes the station's own id; `byRef` a provider's ground_station_ref, matched as text
+ * against station ids and then codes, since a contact may name only its code.
+ */
+export type StationLookup = Readonly<{
+  byId: (id: StationId | null | undefined) => StationInfo | null;
+  byRef: (ref: string | null | undefined) => StationInfo | null;
+}>;
+const NO_STATIONS: StationLookup = { byId: () => null, byRef: () => null };
+type StationRef = Readonly<{ ref: string | null; id: StationId | null; code: string | null }>;
+const codeFor = (st: StationRef, s: StationLookup) =>
+  st.code ?? s.byId(st.id)?.code ?? s.byRef(st.ref)?.code ?? null;
+const providerFor = (st: StationRef, s: StationLookup) =>
+  s.byId(st.id)?.provider ?? s.byRef(st.ref)?.provider ?? null;
 
 export type ReadinessTag = Readonly<{ state: OpState; label: string; sentence: string | null }>;
 

@@ -28,7 +28,8 @@ const stations = useStationCodes(computed(() => scope.value.mission.id));
 /** "SVB-1 · Northlight": the contact's station and its provider from the stations index. */
 const via = (r: Row) => {
   if (!r.station) return null;
-  const provider = stations.provider(r.ref) ?? stations.provider(r.station);
+  // r.ref is the provider's station ref, r.station its code: both text lookups.
+  const provider = stations.byRef(r.ref)?.provider ?? stations.byRef(r.station)?.provider;
   return provider ? `${r.station} · ${provider}` : r.station;
 };
 const all = computed<Row[]>(() =>

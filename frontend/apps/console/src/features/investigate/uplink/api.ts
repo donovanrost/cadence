@@ -1,4 +1,5 @@
 import {
+  stationId as stationIdReader,
   scid as scidReader,
   actor,
   decoders as d,
@@ -15,7 +16,7 @@ import { passReadinessReader } from "@/features/contacts/readiness.ts";
  */
 const station = d.object({
   ref: d.nullable(d.string),
-  id: d.nullable(d.token),
+  id: d.nullable(stationIdReader),
   // free-text: the station's short code, an identifier shown as is.
   code: d.nullable(d.string),
   name: d.nullable(d.string),

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { stationIdParam } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -24,7 +25,8 @@ const stations = useStationCodes(mission);
 const stationIssue = computed(() =>
   worstStationIssue(
     availability.state.value.status === "ready" ? availability.state.value.value : null,
-    (id) => stations.code(id),
+    // scheduling's availability reads ground_station_id as text until it decodes StationId (lead).
+    (id) => stations.byId(stationIdParam(id))?.code ?? null,
     now.value,
   ),
 );
