@@ -168,6 +168,9 @@ const onRange = (s: TimeSelection) =>
   <ApCallout v-if="connection !== 'live'" tone="stale">
     Live connection lost. Values may be out of date; they'll refresh when it's back.
   </ApCallout>
+  <ApCallout v-else-if="live.stalled.value && !editing" tone="stale">
+    Live updates aren't arriving for this dashboard. Values may be out of date.
+  </ApCallout>
   <EditorPane
     v-if="editing && view"
     ref="pane"
