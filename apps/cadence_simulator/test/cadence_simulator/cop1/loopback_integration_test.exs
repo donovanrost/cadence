@@ -85,6 +85,20 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
 
     assert_eventually(fn -> LoopbackPeer.snapshot(loopback_peer).connected? end)
 
+    # The peer's connect returns before the listening provider has accepted it, and the session
+    # review behind ready!/4 refuses until it has (:tcp_provider_not_connected).
+    assert_eventually(fn ->
+      match?(
+        {:ok, %{provider_runtimes: [%{connected?: true}]}},
+        Cadence.path_runtime_snapshot(
+          @organization_id,
+          @mission_id,
+          realized_contact.realized_contact_id,
+          "uplink-path-alpha"
+        )
+      )
+    end)
+
     SessionTestSupport.ready!(
       @mission_id,
       realized_contact.realized_contact_id,
