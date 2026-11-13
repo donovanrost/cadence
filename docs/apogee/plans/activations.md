@@ -55,7 +55,8 @@ POST /:id/withdraw {reason} → 200 {request: <row>}                 (requester 
 ```
 - `can_decide` lets Now ask "awaits your GO" without re-deriving the rule; `GET /?state=pending` filtered to
   `can_decide` is Now's list (fe-ops).
-- Refetch on the mission channel's existing invalidate for configuration, or add `activations`; say which.
+- **Invalidate:** a separate `activations` topic on the mission channel (fe-ops: so Now doesn't refetch on every
+  configuration change), sent when a request is created or decided.
 
 ## Console (fe-setup, against fixtures)
 - **Setup › Changes** gains a **Waiting for activation** panel above the change set (only when something is
