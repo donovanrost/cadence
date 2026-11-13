@@ -313,7 +313,9 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     realized_contact
   end
 
-  defp assert_eventually(fun, attempts \\ 20)
+  # Up to 5 s (100 x 50 ms): a real TCP round trip and COP-1 verification can take longer than
+  # 1 s on a busy machine, and polling returns as soon as the condition holds.
+  defp assert_eventually(fun, attempts \\ 100)
 
   defp assert_eventually(_fun, 0), do: flunk("condition was not satisfied in time")
 
