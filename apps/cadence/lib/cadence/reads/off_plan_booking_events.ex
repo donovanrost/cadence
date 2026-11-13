@@ -32,9 +32,9 @@ defmodule Cadence.Reads.OffPlanBookingEvents do
 
   @doc "The operator sentence: who booked what, where and when it starts."
   @spec sentence(Entry.t(), binary()) :: binary()
-  def sentence(%Entry{metadata: metadata}, by) do
+  def sentence(%Entry{metadata: metadata, occurred_at: booked_at}, by) do
     where =
-      [metadata["spacecraft_name"], station_time(metadata)]
+      [metadata["spacecraft_name"], station_time(metadata, booked_at)]
       |> Enum.reject(&(&1 in [nil, ""]))
       |> Enum.join(" · ")
 
@@ -74,15 +74,22 @@ defmodule Cadence.Reads.OffPlanBookingEvents do
     })
   end
 
-  defp station_time(%{"station_code" => code, "starts_at" => starts_at}) do
+  # ux: the AOS gets its date when it isn't on the booking's UTC day (the event's own time).
+  defp station_time(%{"station_code" => code, "starts_at" => starts_at}, booked_at) do
     time =
       case starts_at && DateTime.from_iso8601(starts_at) do
-        {:ok, at, _offset} -> Calendar.strftime(at, "%H:%MZ")
+        {:ok, at, _offset} -> Calendar.strftime(at, aos_format(at, booked_at))
         _unknown -> nil
       end
 
     [code, time] |> Enum.reject(&is_nil/1) |> Enum.join(" ")
   end
+
+  defp aos_format(at, %DateTime{} = booked_at) do
+    if DateTime.to_date(at) == DateTime.to_date(booked_at), do: "%H:%MZ", else: "%m-%d %H:%MZ"
+  end
+
+  defp aos_format(_at, _booked_at), do: "%m-%d %H:%MZ"
 
   defp booked_at(iso) when is_binary(iso) do
     case DateTime.from_iso8601(iso) do

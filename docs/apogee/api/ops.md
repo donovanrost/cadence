@@ -615,8 +615,9 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
 - `refs.subject` is the link target `{kind: "data_source" | "contact" | "dashboard" |
   "catalog_revision" | "activation" | "config_revision" | "pass", id, name}`, or `null` when there is none.
 - **Off-plan bookings** (L15, DECISIONS #78) are `contact` events: `raw_kind`
-  `contact_booked_off_plan`, "EARENDIL-312 · SVA 03:10Z booked outside a plan by Mira K." (the
-  pass's AOS; "by an operator" without an actor; ux, Contacts.md), severity `info`, `at` = when it
+  `contact_booked_off_plan`, "EARENDIL-312 · SVA 11-15 03:10Z booked outside a plan by Mira K." (the
+  pass's AOS, dated when it isn't on the booking's UTC day, else time only; "by an operator"
+  without an actor; ux, Contacts.md), severity `info`, `at` = when it
   was booked, `detail` = "“<note>” Doesn't count toward contact rules." (without a note, just the
   second sentence; the only kind with a `detail` so far), `spacecraft` its spacecraft,
   `refs.subject` `{kind: "pass", id: <reservation id>, name: null}` (`GET /passes/:id`).
