@@ -93,18 +93,22 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert data["inherit_count"] == 1
     assert data["routing_model"] == "per_spacecraft"
     assert data["rules"] == [] and data["overrides"] == []
-    assert [%{"version" => 1, "created_at" => _, "actor" => nil}] = data["versions"]
+
+    assert [%{"version" => 1, "created_at" => _, "actor" => nil, "spacecraft_count" => _}] =
+             data["versions"]
 
     # No catalog revisions in this mission: the catalog field has no choices.
     catalog = Enum.find(data["sections"], &(&1["key"] == "catalog"))
-    assert [%{"path" => "catalog_revision_id", "enum" => nil}] = catalog["fields"]
+    # The catalog section also carries handled_apids (L22, 9251b745).
+    assert %{"enum" => nil} = Enum.find(catalog["fields"], &(&1["path"] == "catalog_revision_id"))
+    assert Enum.any?(catalog["fields"], &(&1["path"] == "handled_apids"))
 
     # With revisions, the field offers them (fe-setup), as built by the pure builder.
     choices = [%{value: "rev-3", label: "r3 · demo_spacecraft.yaml"}]
     built = ProfileDetail.build(%{profile: profile, catalog_choices: choices})
 
-    assert [%{path: "catalog_revision_id", enum: ^choices}] =
-             Enum.find(built.sections, &(&1.key == :catalog)).fields
+    catalog_fields = Enum.find(built.sections, &(&1.key == :catalog)).fields
+    assert %{enum: ^choices} = Enum.find(catalog_fields, &(&1.path == "catalog_revision_id"))
 
     # ux U25 / Profile.md P3: "rev N" (never "rN", a change-set revision) and the import date
     # (UTC); the source file only when the date isn't known.

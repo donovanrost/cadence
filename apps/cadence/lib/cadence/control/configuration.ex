@@ -176,6 +176,47 @@ defmodule Cadence.Control.Configuration do
          do: {:ok, Status.entity_history(mission.mission_id, kind, entity_id)}
   end
 
+  @doc """
+  The revisions whose entries touch one entity, newest first (fe-setup, Profile History): each
+  revision's summary (as `list_revisions/3`) plus `entries`, that entity's entries in it (as
+  `get_revision/3`'s). At most `opts[:limit]` (default 25) revisions.
+  """
+  @spec entity_revisions(Scope.t(), String.t(), String.t(), String.t(), keyword()) ::
+          {:ok, [map()]} | {:error, term()}
+  def entity_revisions(%Scope{} = scope, mission_id, kind, entity_id, opts \\ []) do
+    with {:ok, mission} <- Access.authorize(scope, mission_id, :read) do
+      by_revision =
+        mission.mission_id
+        |> Status.entity_history(kind, entity_id)
+        |> Enum.group_by(& &1.revision)
+
+      numbers =
+        by_revision |> Map.keys() |> Enum.sort(:desc) |> Enum.take(Keyword.get(opts, :limit, 25))
+
+      recent =
+        mission.organization_id
+        |> Status.list_revisions(mission.mission_id, limit: 200)
+        |> Map.new(&{&1.revision, &1})
+
+      revisions =
+        for number <- numbers,
+            %{} = summary <- [summary(mission, recent, number)],
+            do: Map.put(summary, :entries, Enum.reverse(by_revision[number]))
+
+      {:ok, revisions}
+    end
+  end
+
+  # Most entity histories fall within the 200 newest revisions; an older one is read alone.
+  defp summary(mission, recent, number) do
+    Map.get_lazy(recent, number, fn ->
+      case Status.get_revision(mission.organization_id, mission.mission_id, number) do
+        {:ok, revision} -> Map.delete(revision, :entries)
+        _missing -> nil
+      end
+    end)
+  end
+
   @doc "Topic carrying `{:change_set_progress, change_set_id, step}` for one change set."
   @spec progress_topic(String.t()) :: String.t()
   def progress_topic(change_set_id), do: "change-sets:" <> change_set_id

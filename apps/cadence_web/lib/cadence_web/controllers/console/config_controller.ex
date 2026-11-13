@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.ConfigController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Configuration.Kinds
   alias Cadence.Control.{Configuration, ConfigurationRollback}
   alias Cadence.Reads.{ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
@@ -82,12 +83,35 @@ defmodule CadenceWeb.Console.ConfigController do
     |> reply(conn)
   end
 
+  # fe-setup (Profile History): the revisions touching one entity, each with its labelled entries.
+  def revisions(conn, %{"entity_kind" => kind, "entity_id" => id} = params)
+      when is_binary(kind) and is_binary(id) and id != "" do
+    org = scope(conn).organization_id
+
+    with {:ok, opts} <- params(ConfigParams.list_opts(params)),
+         {:ok, _module} <- params(known_kind(kind)),
+         {:ok, revisions} <-
+           Configuration.entity_revisions(scope(conn), mission_id(conn), kind, id, opts) do
+      ok(conn, %{
+        revisions: Enum.map(revisions, &ConfigLabels.revision(org, mission_id(conn), &1))
+      })
+    end
+    |> reply(conn)
+  end
+
   def revisions(conn, params) do
     with {:ok, opts} <- params(ConfigParams.list_opts(params)),
          {:ok, revisions} <- Configuration.list_revisions(scope(conn), mission_id(conn), opts) do
       ok(conn, %{revisions: revisions})
     end
     |> reply(conn)
+  end
+
+  defp known_kind(kind) do
+    case Kinds.fetch(kind) do
+      {:ok, module} -> {:ok, module}
+      {:error, _unknown} -> {:error, %{entity_kind: "is not a configuration kind"}}
+    end
   end
 
   def revision(conn, %{"revision" => number}) do

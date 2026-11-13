@@ -57,6 +57,7 @@ defmodule Cadence.Reads.ProfileDetail do
       |> Enum.filter(&(&1.spacecraft_type_id == profile.spacecraft_type_id))
 
     inherit_count = pinned |> Enum.map(& &1.count) |> Enum.sum()
+    pinned_by_version = Map.new(pinned, &{&1.spacecraft_type_version, &1.count})
 
     %{
       profile: %{
@@ -83,7 +84,16 @@ defmodule Cadence.Reads.ProfileDetail do
       rules: rules,
       overrides: overrides,
       routing_model: if(rules == [], do: :per_spacecraft, else: :profile),
-      versions: Enum.map(versions, &%{version: &1.version, created_at: &1.created_at, actor: nil})
+      # ux: "12 spacecraft on v5".
+      versions:
+        Enum.map(versions, fn version ->
+          %{
+            version: version.version,
+            created_at: version.created_at,
+            actor: nil,
+            spacecraft_count: Map.get(pinned_by_version, version.version, 0)
+          }
+        end)
     }
   end
 

@@ -20,6 +20,7 @@ Base: `/api/console/v1/missions/:mission_id/config`. Write calls need `x-csrf-to
 | `POST /ops/:op_id/rebase` | `rebase/4` | `{choice: keep_mine \| take_live}` | `{change_set_id, version, state}` |
 | `GET /revisions?limit=&before=` | `list_revisions/3` | | `{revisions: [revision_summary]}` (newest first; `limit` 1–100) |
 | `GET /revisions/:n` | `get_revision/3` | | revision_summary + `entries` |
+| `GET /revisions?entity_kind=&entity_id=&limit=` | `entity_revisions/5` | | `{revisions: [revision_summary + entries]}`: only the revisions touching that entity, newest first, each with just that entity's entries, labelled as `GET /revisions/:n`'s (Profile History; `422 details.entity_kind` for an unknown kind) |
 | `GET /compare?from=&to=` | `compare/4` | | `{from, to, entries}` |
 
 `op` = `{kind: "ground_station" | "transport" | "spacecraft" | "spacecraft_profile", action:

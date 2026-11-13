@@ -204,12 +204,15 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
   ],
   "applications": {"telemetry_decom": {}},
   "rules": [], "overrides": [], "routing_model": "per_spacecraft",
-  "versions": [{"version": 4, "created_at": "2026-10-19T02:29:00Z", "actor": null}]
+  "versions": [{"version": 4, "created_at": "2026-10-19T02:29:00Z", "actor": null,
+                "spacecraft_count": 497}]
 }}
 ```
 
 - Fields are exactly the model-backed ones from profile-routing §3: framing (TM/TC/packet
   protocol, frame length, secondary header, insert zone, OCF, FECF, truncated primary header) and catalog.
+  `versions[].spacecraft_count` is how many spacecraft pin that version ("12 spacecraft on v5"). The
+  field diffs per revision come from `GET /config/revisions?entity_kind=spacecraft_profile&entity_id=`.
   `type` is `integer | boolean | enum | string | reference`; `runtime_impact` is
   `generation | routes | none`. Enum options come as `[{value, label}]`.
 - `rules` and `overrides` come from domain's profile routing (DECISIONS #3, shapes in domain.md

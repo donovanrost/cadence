@@ -113,6 +113,43 @@ defmodule CadenceWeb.Console.ConfigAPITest do
     assert Enum.all?(entry["fields"], &Map.has_key?(&1, "label"))
   end
 
+  defp apply!(c, name) do
+    %{"change_set_id" => set_id, "version" => version} = stage!(c, c.alice, name)
+
+    c.alice
+    |> call(:post, "#{c.base}/change-sets/#{set_id}/submit", %{
+      "reason" => "Add #{name}",
+      "expected_version" => version
+    })
+    |> json_response(200)
+    |> Map.fetch!("data")
+  end
+
+  test "revisions by entity: only the revisions that touch it, with its labelled entries", c do
+    approval_required(false)
+    assert %{"revision" => 2} = apply!(c, "Svalbard")
+    assert %{"revision" => 3} = apply!(c, "Kiruna")
+
+    [%{"entity_id" => svalbard}] =
+      c.alice
+      |> call(:get, c.base <> "/revisions/2")
+      |> json_response(200)
+      |> get_in(["data", "entries"])
+
+    revisions =
+      c.alice
+      |> call(:get, c.base <> "/revisions?entity_kind=ground_station&entity_id=#{svalbard}")
+      |> json_response(200)
+      |> get_in(["data", "revisions"])
+
+    assert [%{"revision" => 2, "entries" => [entry]}] = revisions
+    assert %{"entity_id" => ^svalbard, "op" => "create", "entity_name" => "Svalbard"} = entry
+    assert Enum.all?(entry["fields"], &Map.has_key?(&1, "label"))
+
+    conn = call(c.alice, :get, c.base <> "/revisions?entity_kind=nope&entity_id=x")
+    assert %{"entity_kind" => _} = json_response(conn, 422)["error"]["details"]
+  end
+
   test "independent approval: the author can't review; another member approves", c do
     approval_required(true)
     staged = stage!(c, c.alice, "Inuvik")
