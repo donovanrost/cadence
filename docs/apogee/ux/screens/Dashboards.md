@@ -37,7 +37,7 @@ fleet health counts (crit · caution · stale chips, each linking to Alarms or F
 
 ## Edit in place
 - `Edit` unlocks the grid. The header shows `EDITING` (caution text) with `Save…` (primary) and `Discard`.
-- The widget config is a right-side ApSheet, `narrow` (560px), with no new size (K3).
+- The widget config is a right-side 400px ApSheet (lead adds the size, K3).
 - While editing, live values pause, and a text-3 caption in the header says "Live values paused while editing."
 - `Save…` opens a drawer with a message (optional), a changes summary and "Save current range and scope as
   default". Saving creates the new current version.
