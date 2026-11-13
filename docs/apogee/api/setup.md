@@ -411,6 +411,8 @@ first.
   - `provider_accounts`: account added, settings changed (a new version), renamed, retired;
     credential reference set / rotated / revoked; mission access granted / removed. Named by the
     account's current name (a rename says both names); the credential only as its reference.
+  - `config` also carries dashboards created, archived and restored (dashboards.md §D3), target
+    `{kind: "dashboard", id, label}`.
   - `account`: members changing their own password and signing out sessions (session.md
     §Account, Audit). The actor is the member; `target` is `null`.
 - `sources.missing` is empty now. Keep handling it generically.

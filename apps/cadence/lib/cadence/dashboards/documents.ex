@@ -84,6 +84,9 @@ defmodule Cadence.Dashboards.Documents do
 
   defdelegate list_versions(organization_id, mission_id, dashboard_id), to: DocumentStore
 
+  defdelegate list_mission_lifecycle_events(organization_id, mission_id, event_types, limit),
+    to: DocumentStore
+
   defdelegate history(organization_id, mission_id, dashboard_id, query),
     to: Cadence.Dashboards.DocumentStore.History,
     as: :load

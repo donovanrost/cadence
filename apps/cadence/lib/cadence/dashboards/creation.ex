@@ -40,18 +40,23 @@ defmodule Cadence.Dashboards.Creation do
     _, _ -> {:error, :unknown}
   end
 
-  defp fields(input, mode) when is_map(input) and map_size(input) <= 3 do
+  # A new (blank) dashboard may also carry `tags` (console D4); the other modes take exactly
+  # their keys.
+  defp fields(input, mode) when is_map(input) and map_size(input) <= 4 do
     keys = if mode == "import", do: ~w(name description document_json), else: ~w(name description)
+    optional = if mode == "new", do: ~w(tags), else: []
 
-    with true <- Enum.sort(Map.keys(input)) == Enum.sort(keys),
+    with true <- Enum.sort(Map.keys(input) -- optional) == Enum.sort(keys),
          true <- text?(input["name"], 512) and String.trim(input["name"]) != "",
          true <- text?(input["description"], 4096),
-         true <- mode != "import" or text?(input["document_json"], 262_144) do
+         true <- mode != "import" or text?(input["document_json"], 262_144),
+         {:ok, tags} <- tags(Map.get(input, "tags", [])) do
       {:ok,
        %{
          name: String.trim(input["name"]),
          description: String.trim(input["description"]),
-         json: input["document_json"]
+         json: input["document_json"],
+         tags: tags
        }}
     else
       _ -> {:invalid, :fields}
@@ -59,6 +64,16 @@ defmodule Cadence.Dashboards.Creation do
   end
 
   defp fields(_, _), do: {:invalid, :fields}
+
+  defp tags(tags) when is_list(tags) and length(tags) <= 10 do
+    trimmed = tags |> Enum.filter(&text?(&1, 64)) |> Enum.map(&String.trim/1)
+
+    if length(trimmed) == length(tags) and "" not in trimmed,
+      do: {:ok, Enum.uniq(trimmed)},
+      else: :error
+  end
+
+  defp tags(_tags), do: :error
 
   defp text?(value, max),
     do: is_binary(value) and byte_size(value) <= max and String.valid?(value)
@@ -71,7 +86,9 @@ defmodule Cadence.Dashboards.Creation do
        mission_id: mission,
        name: fields.name,
        description: fields.description,
-       metadata: %{"source" => "dashboard_creation", "created_by" => scope.user.user_id}
+       metadata:
+         %{"source" => "dashboard_creation", "created_by" => scope.user.user_id}
+         |> put_tags(fields.tags)
      }}
   end
 
@@ -95,6 +112,9 @@ defmodule Cadence.Dashboards.Creation do
   end
 
   defp document(_, _, _, _), do: {:invalid, :fields}
+
+  defp put_tags(metadata, []), do: metadata
+  defp put_tags(metadata, tags), do: Map.put(metadata, "tags", tags)
 
   defp copy(document, scope, mission, fields, source) do
     DocumentCodec.copy_for_scope(document, scope.organization_id, mission,

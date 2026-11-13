@@ -19,7 +19,7 @@ defmodule Cadence.Reads.OrganizationAudit do
   alias Cadence.Configuration.Status
   alias Cadence.Management.{Commanding, Contacts, DataSources}
   alias Cadence.Platform.ScopedSettings
-  alias Cadence.Reads.OrganizationAudit.{AccountEvents, ProviderAccountEvents}
+  alias Cadence.Reads.OrganizationAudit.{AccountEvents, DashboardEvents, ProviderAccountEvents}
 
   @included ~w(config commanding access alarms contacts data provider_accounts account)
   @missing []
@@ -74,7 +74,8 @@ defmodule Cadence.Reads.OrganizationAudit do
        command_events(organization_id, id) ++
        alarm_events(id, opts) ++
        plan_events(organization_id, id) ++
-       data_events(organization_id, id))
+       data_events(organization_id, id) ++
+       DashboardEvents.list(organization_id, id))
     |> Enum.map(fn event -> %{event | mission: event.mission || ref} end)
   end
 

@@ -51,6 +51,15 @@ defmodule Cadence.Dashboards.PlaylistStore do
     end)
   end
 
+  @doc "Playlists that show this dashboard, by name (archive's 'used by', director Q10)."
+  def using_dashboard(org, mission, dashboard_id) do
+    scoped(DashboardPlaylist, org, mission)
+    |> where([p], ^dashboard_id in p.dashboard_ids)
+    |> order_by([p], asc: p.name, asc: p.dashboard_playlist_id)
+    |> select([p], %{id: p.dashboard_playlist_id, name: p.name})
+    |> Repo.all()
+  end
+
   def dashboard(org, mission, id) do
     active(org, mission)
     |> where([d], d.dashboard_id == ^id)

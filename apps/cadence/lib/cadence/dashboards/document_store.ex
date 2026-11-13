@@ -750,6 +750,11 @@ defmodule Cadence.Dashboards.DocumentStore do
   defdelegate list_lifecycle_events(organization_id, mission_id, dashboard_id),
     to: LifecycleEvents
 
+  @spec list_mission_lifecycle_events(binary(), binary(), [atom()], pos_integer()) ::
+          [LifecycleEvent.t()]
+  defdelegate list_mission_lifecycle_events(organization_id, mission_id, event_types, limit),
+    to: LifecycleEvents
+
   @spec fetch_lifecycle_event(binary(), binary(), binary()) ::
           {:ok, LifecycleEvent.t()} | {:error, :dashboard_lifecycle_event_not_found}
   defdelegate fetch_lifecycle_event(
