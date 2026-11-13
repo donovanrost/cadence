@@ -103,7 +103,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | Fleet: ~~"in contact" filter, Next contact column~~ done (3ebcc9f8); virtualization past 200 rows *(unverified)* | fe-ops | — |
-| Alarms: group identical point+condition across spacecraft, ~~Next contact~~ done (3ebcc9f8), "Last cleared…" empty state; Cleared tab re-check (investigate review #20) | fe-ops | — |
+| ~~Alarms: group identical point+condition across spacecraft~~ done (784726fc), ~~Next contact~~ done (3ebcc9f8), ~~"Last cleared…" empty state~~ done (784726fc); Cleared tab re-check (investigate review #20) | fe-ops | — |
 | ~~Telemetry `Dashboards ↗` → existing pages (#11)~~ done (718fd269); empty state's three suggested points | fe-ops | — |
 | Timeline: ~~sc scope~~ done (cb5767c9); ~~plane filter~~ done (97e12555); custom range, E1 brush; ~~live prepend + "N new events ↑"~~ done (0521f407) | fe-ops | — |
 
@@ -202,10 +202,10 @@ missing endpoint or decision; an item with no blocker can start now.
 ## 5. Phase 4 · Mobile on call (`Mobile.md`, J6)
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Alarm page "Your GO is requested" block (GO / NO-GO + confirm sheet) | fe-ops | — |
-| Mobile Approve layout (GO opens the desktop takeover today) | fe-ops + lead (shell) | — |
+| ~~Alarm page "Your GO is requested" block (GO / NO-GO + confirm sheet)~~ done (ca6fccb0) | fe-ops | — |
+| ~~Mobile Approve layout (GO opens the desktop takeover today)~~ done (235e2b42; kit commit button 48px on phones 6112a828) | fe-ops + lead (shell) | — |
 | ~~Search as a full-screen sheet limited to spacecraft, alarms, requests~~ done (6f7e3f87, ux ruling 68d12603) | lead | — |
-| "N sisters in P07 trending" line *(unverified)* | fe-ops | — |
+| ~~"N sisters in P07 trending"~~ done as 'N sisters in P07 out of limits' (3330f6c2, honest wording) | fe-ops | — |
 
 ## 6. Phase 4 · Accessibility pass
 | Item | Owner | Blocked on |
