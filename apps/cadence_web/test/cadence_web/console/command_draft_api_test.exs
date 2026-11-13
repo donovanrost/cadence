@@ -45,24 +45,27 @@ defmodule CadenceWeb.Console.CommandDraftAPITest do
                c |> put_draft(c.user, document("stale"), expected) |> json_response(409)
     end
 
-    data = c.user |> as() |> get(path(c)) |> json_response(200) |> Map.fetch!("data")
+    data = c.user |> as() |> get(path(c)) |> json_response(200) |> get_in(["data", "draft"])
     assert %{"revision" => 2, "document" => %{"title" => "Load shed v2"}} = data
-    assert %{"revision_saved" => _, "revision_now" => _, "missing_command_ids" => _} = data["catalog"]
+
+    assert %{"revision_saved" => _, "revision_now" => _, "missing_command_ids" => _} =
+             data["catalog"]
   end
 
   test "a draft is its author's alone; delete discards it", c do
     assert c |> put_draft(c.user, document("Mine"), nil) |> json_response(200)
 
-    assert %{"error" => %{"code" => "command_draft_not_found"}} =
-             c.other |> as() |> get(path(c)) |> json_response(404)
+    # Someone else's draft isn't visible: no draft is 200 with null, not an error.
+    assert %{"data" => %{"draft" => nil}} = c.other |> as() |> get(path(c)) |> json_response(200)
 
     # The other operator's first save is their own draft, not a conflict with mine.
     assert %{"data" => %{"revision" => 1}} =
              c |> put_draft(c.other, document("Theirs"), nil) |> json_response(200)
 
     assert c.user |> as() |> delete(path(c)) |> response(204)
-    assert c.user |> as() |> get(path(c)) |> json_response(404)
-    assert %{"data" => %{"document" => %{"title" => "Theirs"}}} =
+    assert %{"data" => %{"draft" => nil}} = c.user |> as() |> get(path(c)) |> json_response(200)
+
+    assert %{"data" => %{"draft" => %{"document" => %{"title" => "Theirs"}}}} =
              c.other |> as() |> get(path(c)) |> json_response(200)
   end
 

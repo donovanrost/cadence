@@ -417,7 +417,8 @@ group revalidates the group body in full, so nothing is trusted from a draft. A 
 days reads as gone and is deleted on the next read or write.
 
 ### `GET /command-draft`
-The caller's draft:
+The caller's draft, as `{draft: <below> | null}`; `null` when they have none (200, not an error:
+qa a11y #6).
 
 ```json
 {"revision": 3, "saved_at": "…", "document": {…},
@@ -428,7 +429,7 @@ The caller's draft:
 `missing_command_ids` lists stacked commands the active catalog no longer has. It's empty when no
 catalog is active.
 
-Errors: `404 command_draft_not_found`.
+Errors: `404 mission_not_found` for an unknown mission only. Having no draft is `{draft: null}`.
 
 ### `PUT /command-draft`
 Body `{document, expected_revision}`. `expected_revision` is the revision you last saved, or null

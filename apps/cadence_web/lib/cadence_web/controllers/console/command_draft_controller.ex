@@ -9,9 +9,12 @@ defmodule CadenceWeb.Console.CommandDraftController do
   alias Cadence.Control.Commanding.CommandDrafts
   alias CadenceWeb.Console.Problem
 
+  # 200 {draft: body | null}: having no draft isn't an error (qa a11y #6: a 404 logged a console
+  # error on every Commands, Compose and Request load).
   def show(conn, _params) do
     case CommandDrafts.fetch(conn.assigns.current_scope, mission(conn)) do
-      {:ok, draft} -> json(conn, %{data: draft})
+      {:ok, draft} -> json(conn, %{data: %{draft: draft}})
+      {:error, :command_draft_not_found} -> json(conn, %{data: %{draft: nil}})
       error -> problem(conn, error)
     end
   end
