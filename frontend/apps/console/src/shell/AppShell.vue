@@ -12,6 +12,7 @@ import { bindPaletteShortcut } from "./palette.ts";
 import { useConsoleScope } from "./scope.ts";
 import { canAdministerOrganization, useSession } from "./session.ts";
 import { useOpsCounts } from "./counts.ts";
+import { provideRuntimeStatus } from "./runtime-status.ts";
 import RuntimeBanner from "./RuntimeBanner.vue";
 import { useRuntimeBanner } from "./runtime-banner.ts";
 import { useAdminOrgSelect } from "./admin-org.ts";
@@ -45,8 +46,11 @@ const unknownScope = computed(() => {
 });
 /** Read on every mission page: the Ops rail's counts, and U38's runtime banner (Ops and Setup). */
 const { counts } = useOpsCounts(computed(() => missionScope.value?.mission.id ?? null));
+/** One runtime status for the banner and for features (useRuntimeStatus). */
+const runtimeStatus = computed(() => (counts.value ? (counts.value.runtime ?? null) : undefined));
+provideRuntimeStatus(runtimeStatus);
 const runtimeBanner = useRuntimeBanner(
-  computed(() => (counts.value ? (counts.value.runtime ?? null) : undefined)),
+  runtimeStatus,
   computed(() => missionScope.value?.mission.name ?? null),
 );
 /** Ops screens fit the viewport and scroll their panes; reading views scroll main. */

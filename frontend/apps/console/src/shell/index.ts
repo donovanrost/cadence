@@ -13,3 +13,6 @@ export { useDisclosure } from "./disclosure.ts";
 /** Cockpit pieces for takeover headers (dashboards, DECISIONS #76): the UTC clocks and mission counts. */
 export { default as ClockCluster } from "./ClockCluster.vue";
 export { useOpsCounts, type OpsCounts } from "./counts.ts";
+/** The mission runtime status from the shell's /counts read (U38; Setup CONVERGING / DEGRADED). */
+export { useRuntimeStatus } from "./runtime-status.ts";
+export type { RuntimeStatus } from "./counts.ts";

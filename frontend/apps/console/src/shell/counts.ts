@@ -52,7 +52,8 @@ function fetchCounts(missionId: string, signal: AbortSignal): Promise<ApiResult<
 const GAP_MS = 5_000;
 
 /**
- * Shell counts (Ops rail, on-call tabs). Refetches on alarms/commanding/spacecraft invalidations,
+ * Shell counts (Ops rail, on-call tabs, runtime status). Refetches on alarms/attention/commanding/
+ * spacecraft/configuration invalidations,
  * at most every 5 s with one trailing refetch. `counts` is null until the first read lands.
  */
 export function useOpsCounts(missionId: Readonly<Ref<string | null>>) {
@@ -68,7 +69,12 @@ export function useOpsCounts(missionId: Readonly<Ref<string | null>>) {
       query.refetch();
     }, wait);
   };
-  useMissionInvalidation(missionId, ["alarms", "attention", "commanding", "spacecraft"], refetch);
+  // `configuration`: an applied change set moves the runtime generation (CONVERGING, fe-setup).
+  useMissionInvalidation(
+    missionId,
+    ["alarms", "attention", "commanding", "spacecraft", "configuration"],
+    refetch,
+  );
   onScopeDispose(() => {
     if (timer !== null) clearTimeout(timer);
   });
