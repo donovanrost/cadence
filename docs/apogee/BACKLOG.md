@@ -330,7 +330,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 | 6 Shares, snapshots, playlists | D20, D23, D24; Q6 playlist and library update/delete (domain functions) | **domain** (functions) → **api** | after slice 5 |
 | 7 Channel push | C1 `dashboard:<m>:<d>` | **api-ops** | after L6/L5 |
 | 8 Library | D21, D22 (fe-ops proposes the shapes, cc dashboards) + domain Q6 update/retire | **api**; UI **fe-ops** (dashboards hands it over 11-13: `features/dashboards/library/`, `LibraryPicker.vue` for the editor, dashboards reviews) | last |
-**Cutover (lead 11-13):** the console directory, New and viewer are live (35d3e03f, 3680e721; D8 b92f380b). The legacy directory + viewer + `/edit` redirect to the console in ONE step once slices 3–4 (Edit, Save, Versions on D7–D13) are live, so authors never lose editing; api-ops does the redirects.
+**Cutover (lead 11-13):** the console directory, New and viewer are live (35d3e03f, 3680e721; D8 b92f380b). Slices 3–4 are wired (fe1ecd0b on api b5f724a6). The legacy directory + viewer + `/edit` redirect to the console in ONE step after qa's live smoke on :4011 (edit → save → versions → restore → copy + a conflict) passes, so authors never lose editing; api-ops does the redirects.
 Kit (lead): K1 `uplot` + `gridstack` in the console, dashboards-only lazy imports; K2 `--chart-*` tokens in `apogee-ui` tokens (ux supplies values); K3 a side placement for `ApSheet` (400px, right-anchored, non-modal while editing); the cockpit cluster composes the shell's exported `ClockCluster` and counts. Q8: dashboards edits fe-ops' three Telemetry/Timeline files itself, telling fe-ops first.
 
 ### 11b. Console places that still send people to a legacy page (ux)
