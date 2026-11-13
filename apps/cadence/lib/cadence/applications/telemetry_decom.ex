@@ -550,6 +550,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         {:ok, %{config: config, activation_request: activation_request}}
       end
     end)
+    |> ScopedReadUpdates.publish_result(:activations_changed, organization_id, mission_id)
   end
 
   defp mission_model_revision_for_apply(

@@ -20,6 +20,7 @@ defmodule Cadence.Management.Activations do
 
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ContentHash
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
   @change_classes [
@@ -70,7 +71,13 @@ defmodule Cadence.Management.Activations do
           requested_at
         )
 
-      with :ok <- expected_policy(request.policy_document, opts), do: persist_request(request)
+      # The pending list refreshes on :activations_changed (api, L10). Inside a caller's
+      # transaction this is a no-op; those callers announce it after their commit.
+      with :ok <- expected_policy(request.policy_document, opts) do
+        request
+        |> persist_request()
+        |> ScopedReadUpdates.publish_result(:activations_changed, organization_id, mission_id)
+      end
     end
   end
 

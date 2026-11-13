@@ -44,6 +44,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
         scope.organization_id,
         mission_id
       )
+      |> ScopedReadUpdates.publish_result(:activations_changed, scope.organization_id, mission_id)
     end
   end
 
