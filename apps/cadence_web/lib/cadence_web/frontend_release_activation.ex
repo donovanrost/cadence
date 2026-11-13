@@ -412,11 +412,13 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   end
 
   defp reread_artifacts(row, release, path) do
+    # Sorted here, bytewise, not by ORDER BY: the database collation (glibc en_US sorts "_"
+    # and case linguistically) must not decide whether two path lists match.
     persisted =
       ReleaseArtifact
       |> where([artifact], artifact.release_publication_id == ^row.publication_id)
-      |> order_by([artifact], asc: artifact.path)
       |> Repo.all()
+      |> Enum.sort_by(& &1.path)
 
     declarations = Map.new(release["artifacts"], &{&1["path"], &1})
 
@@ -424,7 +426,7 @@ defmodule CadenceWeb.FrontendReleaseActivation do
       length(persisted) != length(release["artifacts"]) ->
         reread_mismatch(:artifact_count, path, row.release_id)
 
-      Map.keys(declarations) != Enum.map(persisted, & &1.path) ->
+      Enum.sort(Map.keys(declarations)) != Enum.map(persisted, & &1.path) ->
         reread_mismatch(:artifact_paths, path, row.release_id)
 
       true ->
@@ -683,22 +685,22 @@ defmodule CadenceWeb.FrontendReleaseActivation do
 
   defp legacy_persisted_entries(_catalog, _entries), do: {:error, :integrity}
 
+  # Binding identity order, bytewise (as a C-collated ORDER BY would give), independent of the
+  # database collation; the persisted snapshot built from it is digest-compared.
+  defp sort_bindings(bindings) do
+    Enum.sort_by(
+      bindings,
+      &{&1.application_id, &1.application_version, &1.package_id, &1.package_version,
+       &1.surface_id, &1.surface_version}
+    )
+  end
+
   defp persisted_generation_entries(generation) do
     bindings =
       CatalogBinding
       |> where([binding], binding.generation_id == ^generation.generation_id)
-      |> order_by(
-        [
-          binding
-        ],
-        asc: binding.application_id,
-        asc: binding.application_version,
-        asc: binding.package_id,
-        asc: binding.package_version,
-        asc: binding.surface_id,
-        asc: binding.surface_version
-      )
       |> Repo.all()
+      |> sort_bindings()
 
     if length(bindings) != generation.identity_count or bindings == [],
       do: {:error, :integrity},
@@ -1029,18 +1031,8 @@ defmodule CadenceWeb.FrontendReleaseActivation do
     bindings =
       CatalogBinding
       |> where([binding], binding.generation_id == ^generation.generation_id)
-      |> order_by(
-        [
-          binding
-        ],
-        asc: binding.application_id,
-        asc: binding.application_version,
-        asc: binding.package_id,
-        asc: binding.package_version,
-        asc: binding.surface_id,
-        asc: binding.surface_version
-      )
       |> Repo.all()
+      |> sort_bindings()
 
     cond do
       length(bindings) != generation.identity_count -> {:error, :integrity}
