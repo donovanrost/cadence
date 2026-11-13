@@ -38,7 +38,8 @@ GET /dashboard-snapshots/:snapshot_id
   refresh.
 - **Errors:**
   - 404 `not_found` (unknown or other mission);
-  - 404 `share_revoked` / `share_expired` with `details.at`, so the page says which and when;
+  - 404 `share_revoked` / `share_expired`, whose **message** is the sentence the page shows, e.g. "Revoked by Mira K.
+    at 11-14 02:10Z." / "Expired 11-20 00:00Z.". The console's 404 keeps code and message only, no details;
   - 503 `dashboard_unavailable`.
 - **Snapshot delete** (lead queued it with domain): `DELETE /dashboards/:id/snapshots/:snapshot_id` → 204. It's
   audited. It belongs with fe-setup's Sharing tab (D16), but is listed here so the shape is agreed once.
