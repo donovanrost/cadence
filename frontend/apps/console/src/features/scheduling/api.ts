@@ -468,6 +468,8 @@ const REASONS: Readonly<Record<string, string>> = {
   estimated_volume_unknown: "Expected volume unknown",
   estimated_volume_unavailable: "Expected volume not reported",
   preferred_duration_not_met: "Shorter than the preferred duration",
+  // #74 (domain 1cf19879); provisional words until ux rules.
+  max_gap_exceeded: "A gap between contacts is longer than the rule allows",
 };
 
 /** Plain words for a reason code; unknown codes are shown as words, never dropped. */
