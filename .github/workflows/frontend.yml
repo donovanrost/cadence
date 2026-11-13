@@ -89,6 +89,11 @@ jobs:
       - name: Select the installed browser
         working-directory: frontend
         run: node --input-type=module -e 'import { chromium } from "playwright"; console.log("CHROME_BIN=" + chromium.executablePath())' >> "$GITHUB_ENV"
+      # The browser tests run in cadence_web, which has no DB setup alias (apps/cadence's
+      # mix test creates the database; nothing else in this job runs it).
+      - name: Create and migrate the cadence test database
+        working-directory: apps/cadence
+        run: mix db.setup.test
       # This alias builds and validates the publication before starting Phoenix and Chrome.
       - name: Federation browser tests
         id: federation
