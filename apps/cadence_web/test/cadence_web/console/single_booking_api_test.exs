@@ -90,6 +90,20 @@ defmodule CadenceWeb.Console.SingleBookingAPITest do
              "releasable" => true
            } = row
 
+    # The Timeline says who booked it outside a plan, with the note as the detail (L15).
+    window =
+      URI.encode_query(%{
+        "from" => DateTime.to_iso8601(DateTime.add(DateTime.utc_now(), -600)),
+        "to" => DateTime.to_iso8601(DateTime.add(DateTime.utc_now(), 600))
+      })
+
+    events = json_response(get_json(c, "/events?" <> window), 200)["data"]["events"]
+
+    assert %{"kind" => "contact", "detail" => "Eclipse test", "text" => text} =
+             Enum.find(events, &(&1["raw_kind"] == "contact_booked_off_plan"))
+
+    assert text =~ "Booked outside a plan by Mira K.: "
+
     stale =
       post_json(c, "/passes/#{id}/release", %{
         "expected_provider_revision" => row["provider_revision"] + 7

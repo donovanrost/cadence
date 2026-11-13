@@ -613,7 +613,12 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
 - `activation` subjects have no console page yet; leave them unlinked (Setup's change history is
   the nearest place).
 - `refs.subject` is the link target `{kind: "data_source" | "contact" | "dashboard" |
-  "catalog_revision" | "activation" | "config_revision", id, name}`, or `null` when there is none.
+  "catalog_revision" | "activation" | "config_revision" | "pass", id, name}`, or `null` when there is none.
+- **Off-plan bookings** (L15, DECISIONS #78) are `contact` events: `raw_kind`
+  `contact_booked_off_plan`, "Booked outside a plan by Mira K.: EARENDIL-312 · SVA 03:10Z"
+  (spacecraft · station code and the pass's AOS), severity `info`, `at` = when it was booked,
+  `detail` = the booker's note (the only kind with a `detail` so far), `spacecraft` its spacecraft,
+  `refs.subject` `{kind: "pass", id: <reservation id>, name: null}` (`GET /passes/:id`).
 - **Applied configuration revisions** (BACKLOG 8d) are `config` events: `raw_kind`
   `config_revision_applied` ("Applied r6 · 2 changes") or `config_revision_rolled_back`
   ("Rolled back to r4"), severity `info`, `at` = applied time, `spacecraft` `null`,

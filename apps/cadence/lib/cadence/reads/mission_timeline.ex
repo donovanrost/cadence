@@ -10,7 +10,7 @@ defmodule Cadence.Reads.MissionTimeline do
   alias Cadence.MissionEvents.Entry
   alias Cadence.OperationalEvents
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
-  alias Cadence.Reads.{ConfigRevisionEvents, MissionEvents}
+  alias Cadence.Reads.{ConfigRevisionEvents, MissionEvents, OffPlanBookingEvents}
   alias Cadence.SourceEndpoints
 
   @spec list_for_mission(binary(), binary(), keyword()) :: [Entry.t()]
@@ -24,6 +24,7 @@ defmodule Cadence.Reads.MissionTimeline do
 
   `config_revisions: true` also merges applied configuration revisions
   (`Cadence.Reads.ConfigRevisionEvents`; mission-wide, so not with a `spacecraft_id` filter).
+  `off_plan_bookings: true` merges off-plan bookings (`Cadence.Reads.OffPlanBookingEvents`, L15).
   """
   def page_for_mission(organization_id, mission_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
@@ -65,7 +66,10 @@ defmodule Cadence.Reads.MissionTimeline do
 
     entries =
       (operational_entries ++
-         overrides ++ projected ++ config_revisions(organization_id, mission_id, opts))
+         overrides ++
+         projected ++
+         config_revisions(organization_id, mission_id, opts) ++
+         off_plan_bookings(organization_id, mission_id, opts))
       |> Map.new(&{&1.mission_event_id, &1})
       |> Map.values()
 
@@ -97,6 +101,17 @@ defmodule Cadence.Reads.MissionTimeline do
     if Keyword.get(opts, :config_revisions, false) and is_nil(Keyword.get(opts, :spacecraft_id)),
       do:
         ConfigRevisionEvents.entries(
+          organization_id,
+          mission_id,
+          Keyword.take(opts, [:from_occurred_at, :to_occurred_at])
+        ),
+      else: []
+  end
+
+  defp off_plan_bookings(organization_id, mission_id, opts) do
+    if Keyword.get(opts, :off_plan_bookings, false),
+      do:
+        OffPlanBookingEvents.entries(
           organization_id,
           mission_id,
           Keyword.take(opts, [:from_occurred_at, :to_occurred_at])

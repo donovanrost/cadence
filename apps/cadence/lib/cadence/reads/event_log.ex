@@ -19,7 +19,15 @@ defmodule Cadence.Reads.EventLog do
 
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Reads.{EventContacts, EventSentences, MissionTimeline, SpacecraftMetadata}
+
+  alias Cadence.Reads.{
+    EventContacts,
+    EventSentences,
+    MissionTimeline,
+    OffPlanBookingEvents,
+    SpacecraftMetadata
+  }
+
   alias Cadence.SpacecraftStore
 
   @kinds ~w(limit flight_event contact command config operator data)
@@ -67,6 +75,7 @@ defmodule Cadence.Reads.EventLog do
         to_occurred_at: opts.to,
         spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
         config_revisions: true,
+        off_plan_bookings: true,
         limit: remaining,
         cursor: cursor
       )
@@ -100,6 +109,7 @@ defmodule Cadence.Reads.EventLog do
         to_occurred_at: opts.to,
         spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
         config_revisions: true,
+        off_plan_bookings: true,
         limit: @density_cap
       )
 
@@ -140,7 +150,7 @@ defmodule Cadence.Reads.EventLog do
       raw_kind: entry.kind && to_string(entry.kind),
       severity: described.severity || severity(entry),
       text: described.text,
-      detail: nil,
+      detail: detail(entry),
       spacecraft: spacecraft(entry.spacecraft_id, context.spacecraft),
       refs: %{
         subject: described.subject,
@@ -151,6 +161,12 @@ defmodule Cadence.Reads.EventLog do
       }
     }
   end
+
+  # L15: an off-plan booking's note.
+  defp detail(%Entry{source_record_kind: :off_plan_booking} = entry),
+    do: OffPlanBookingEvents.detail(entry)
+
+  defp detail(_entry), do: nil
 
   defp kind(%Entry{kind: kind} = entry) when is_atom(kind) or is_binary(kind) do
     raw = to_string(kind)

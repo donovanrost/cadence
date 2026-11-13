@@ -48,4 +48,25 @@ defmodule Cadence.Contacts.ReservationActivity do
     |> Repo.all()
     |> Map.new()
   end
+
+  @doc """
+  Ids of the mission's off-plan bookings (L15, DECISIONS #78) made in `[from, to)` (either may be
+  nil), newest first, at most `limit`. The booking row is written when it's booked.
+  """
+  @spec off_plan(binary(), binary(), DateTime.t() | nil, DateTime.t() | nil, pos_integer()) ::
+          [binary()]
+  def off_plan(organization_id, mission_id, from, to, limit) do
+    ProviderReservationRow
+    |> where(
+      [r],
+      r.organization_id == ^organization_id and r.mission_id == ^mission_id and
+        fragment("(? -> 'value') \\? 'off_plan'", r.metadata)
+    )
+    |> then(&if(from, do: where(&1, [r], r.inserted_at >= ^from), else: &1))
+    |> then(&if(to, do: where(&1, [r], r.inserted_at < ^to), else: &1))
+    |> order_by([r], desc: r.inserted_at)
+    |> limit(^limit)
+    |> select([r], r.provider_reservation_id)
+    |> Repo.all()
+  end
 end
