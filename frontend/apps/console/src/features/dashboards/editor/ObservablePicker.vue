@@ -2,26 +2,38 @@
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApChip, ApField } from "@/ui";
+import type { WidgetFields } from "./contracts.ts";
 import { searchObservables } from "./observables.ts";
 
-/** Points bound to a widget: chosen ids as removable chips, and a search to add more. */
+/**
+ * Points bound to a widget: chosen ids as removable chips, and a search to add more. The search
+ * sends the sheet's whole form (D8), so results follow the widget's source and spacecraft.
+ */
 const props = defineProps<{
   missionId: string;
-  source: string;
-  spacecraftId: string;
+  dashboardId: string;
+  baseVersion: number;
+  fields: WidgetFields;
   limit: number;
 }>();
 const model = defineModel<readonly string[]>({ required: true });
 const q = ref("");
 const key = computed(() =>
   q.value.trim().length >= 2
-    ? JSON.stringify([props.missionId, props.source, props.spacecraftId, q.value.trim()])
+    ? JSON.stringify([
+        props.missionId,
+        props.dashboardId,
+        props.baseVersion,
+        props.fields,
+        q.value.trim(),
+      ])
     : null,
 );
 const search = useRemoteQuery(key, (_k, signal) =>
   searchObservables(
     props.missionId,
-    { q: q.value.trim(), source: props.source, spacecraftId: props.spacecraftId },
+    props.dashboardId,
+    { query: q.value.trim(), baseVersion: props.baseVersion, fields: props.fields },
     signal,
   ),
 );

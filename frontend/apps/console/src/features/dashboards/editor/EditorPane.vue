@@ -52,6 +52,8 @@ defineExpose({
   <WidgetSheet
     ref="widgetSheet"
     :mission-id="missionId"
+    :dashboard-id="view.dashboard.id"
+    :base-version="session.draft.value?.baseVersion ?? view.dashboard.current_version ?? 0"
     :sections="sections"
     :spacecraft="view.scope_options"
     @stage="session.stage"

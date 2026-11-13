@@ -17,6 +17,8 @@ import WidgetDisplayFields from "./WidgetDisplayFields.vue";
  */
 const props = defineProps<{
   missionId: string;
+  dashboardId: string;
+  baseVersion: number;
   sections: readonly { id: string; title: string }[];
   spacecraft: readonly { id: string; name: string }[];
 }>();
@@ -62,6 +64,8 @@ defineExpose({ openFor, close: () => sheet.value?.close() });
         v-model:fields="fields"
         v-model:observables="observables"
         :mission-id="missionId"
+        :dashboard-id="dashboardId"
+        :base-version="baseVersion"
         :sections="sections"
         :spacecraft="spacecraft"
       />

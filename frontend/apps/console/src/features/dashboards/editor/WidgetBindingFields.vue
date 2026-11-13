@@ -17,6 +17,8 @@ import {
 /** What the widget shows and what it's bound to. Limits and units come from the catalog, never here. */
 const props = defineProps<{
   missionId: string;
+  dashboardId: string;
+  baseVersion: number;
   sections: readonly { id: string; title: string }[];
   spacecraft: readonly { id: string; name: string }[];
 }>();
@@ -77,8 +79,9 @@ const spacecraftOptions = computed(() =>
     <ObservablePicker
       v-model="observables"
       :mission-id="missionId"
-      :source="source"
-      :spacecraft-id="mode === 'fixed' ? spacecraftId : ''"
+      :dashboard-id="dashboardId"
+      :base-version="baseVersion"
+      :fields="fields"
       :limit="observableLimit(type)"
     />
   </template>
