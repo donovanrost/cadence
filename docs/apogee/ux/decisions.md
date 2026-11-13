@@ -654,6 +654,15 @@ more than 24 h old.
   - (d) Hard: "EARENDIL-312 handles APIDs 0x101 and 0x1A0, which rev 15 doesn't define. Change its handled APIDs
     first." Several spacecraft: "12 spacecraft handle APIDs that rev 15 doesn't define (0x101, 0x1A0). Change
     their handled APIDs first." List at most 5 APIDs, then "and 3 more".
+  - (e) Acknowledgeable `handled_apids_change` (domain: null = all, expanded at apply; any apply that changes what
+    a spacecraft decodes is shown). The sentence states the change, not the full list, and always says "after this
+    is applied":
+    - Wider: "EARENDIL-312 will also decode APIDs 0x2B, 0x30 and 3 more after this is applied (today only 0x2A)."
+    - Narrower: "EARENDIL-312 will stop decoding APIDs 0x2B and 0x30 after this is applied."
+    - Both: "EARENDIL-312 will start decoding 0x31 and stop decoding 0x2B after this is applied."
+    - Several spacecraft: "12 spacecraft will decode different APIDs after this is applied." The list is in the
+      HOLD's detail (spacecraft, with added and removed APIDs).
+    - Ack placeholder: "Why this change is intended". At most 5 APIDs per list, then "and N more".
 - **Handled APIDs** (profile field next to the catalog revision, overridable like P3): label `Handled APIDs`, with
   the default value `All of the catalog's APIDs`. An override is a mono chip list in the catalog's notation:
   `Only 0x101, 0x102, 0x1A0`. Help: "Packets with other APIDs aren't decoded." (domain to confirm the effect).
