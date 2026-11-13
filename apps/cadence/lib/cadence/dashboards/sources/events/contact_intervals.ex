@@ -13,6 +13,8 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
     ScopeContext
   }
 
+  alias Cadence.Reads.ContactStations
+
   def contact_interval_frame(
         %PlannedSourceRequest{} = request,
         source_binding,
@@ -32,6 +34,8 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
       |> Enum.sort_by(&interval_sort_key/1)
       |> Enum.take(limit)
 
+    stations = ContactStations.column(organization_id, mission_id, contacts)
+
     %Frame{
       frame_id: "#{request.request_id}:contact_intervals",
       source: :events,
@@ -45,10 +49,11 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
         %Field{name: "status", kind: :enum, values: Enum.map(contacts, & &1.status)},
         %Field{name: "label", kind: :string, values: Enum.map(contacts, & &1.label)},
         %Field{name: "contact_id", kind: :string, values: Enum.map(contacts, & &1.contact_id)},
+        %Field{name: "station", kind: :string, values: stations},
         %Field{
           name: "source_event_id",
           kind: :string,
-          values: Enum.map(contacts, &contact_interval_source_event_id/1)
+          values: Enum.map(contacts, &source_event_id/1)
         }
       ],
       meta:
@@ -70,11 +75,7 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
     }
   end
 
-  defp contact_interval_source_event_id(interval) do
-    interval
-    |> get_attr(:source)
-    |> get_attr(:source_event_id)
-  end
+  defp source_event_id(interval), do: interval |> get_attr(:source) |> get_attr(:source_event_id)
 
   defp contact_intervals(
          %PlannedSourceRequest{} = request,
