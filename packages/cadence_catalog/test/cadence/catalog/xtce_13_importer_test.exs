@@ -46,6 +46,52 @@ defmodule Cadence.Catalog.Xtce13ImporterTest do
            )
 
     assert diagnostic?(compilation.plans.command, "MM_COMMAND_DEFINITION_NOT_LOWERABLE")
+
+    # XTCE 1.2 rangeForm defaults to "outside": each range is the acceptable band (above 80 is a
+    # warning, above 100 critical). The ChangeAlarmRanges (rate of change) isn't a value range.
+    # Both temperature parameters share the type, so both carry these rules.
+    assert [policy, _same] = compilation.plans.monitoring.plan["policies"]
+
+    rules =
+      policy["default_rules"]
+      |> Enum.map(fn rule -> Map.new(rule, fn {k, v} -> {to_string(k), v} end) end)
+      |> Enum.sort_by(& &1["upper"])
+
+    assert [
+             %{
+               "kind" => :range,
+               "upper" => warning_max,
+               "outside" => true,
+               "severity" => :warning
+             },
+             %{
+               "kind" => :range,
+               "upper" => critical_max,
+               "outside" => true,
+               "severity" => :critical
+             }
+           ] = rules
+
+    assert {warning_max, critical_max} == {80.0, 100.0}
+  end
+
+  test "rangeForm inside alarms on values inside the range" do
+    xml =
+      String.replace(
+        xtce_document(),
+        "<StaticAlarmRanges>",
+        ~s(<StaticAlarmRanges rangeForm="inside">)
+      )
+
+    assert {:ok, result} = Xtce13.import(source(xml), %{import_run_id: "import-xtce-inside"})
+    assert [layer] = result.bundle.declaration_layers
+    assert {:ok, compilation} = Compiler.compile([layer])
+    # Both temperature parameters share the type, so both carry these rules.
+    assert [policy, _same] = compilation.plans.monitoring.plan["policies"]
+
+    assert Enum.all?(policy["default_rules"], fn rule ->
+             Map.get(rule, :outside, Map.get(rule, "outside")) == false
+           end)
   end
 
   test "rejects document types and entity declarations before XML parsing" do
@@ -171,9 +217,12 @@ defmodule Cadence.Catalog.Xtce13ImporterTest do
             <IntegerDataEncoding sizeInBits="16" encoding="unsigned"/>
             <DefaultAlarm minViolations="2">
               <StaticAlarmRanges>
-                <WarningRange minInclusive="80" maxInclusive="100"/>
-                <CriticalRange minInclusive="100"/>
+                <WarningRange maxInclusive="80"/>
+                <CriticalRange maxInclusive="100"/>
               </StaticAlarmRanges>
+              <ChangeAlarmRanges>
+                <WarningRange maxInclusive="5"/>
+              </ChangeAlarmRanges>
             </DefaultAlarm>
           </IntegerParameterType>
         </ParameterTypeSet>
