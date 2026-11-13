@@ -24,7 +24,7 @@ defmodule Cadence.Reads.PassReviewStationsTest do
     c
   end
 
-  defp result!(c, id, ref, aos) do
+  defp result!(c, id, ref, aos, outcome \\ "missed") do
     %Row{}
     |> Row.changeset(%{
       provider_reservation_id: id,
@@ -36,7 +36,7 @@ defmodule Cadence.Reads.PassReviewStationsTest do
       planned_aos: aos,
       planned_los: DateTime.add(aos, 600),
       planned_seconds: 600,
-      outcome: "missed",
+      outcome: outcome,
       cause: "no_acquisition",
       cause_source: "provider",
       owner: "provider"
@@ -68,5 +68,31 @@ defmodule Cadence.Reads.PassReviewStationsTest do
 
     assert [%{planned: 1, station: %{ref: "PUQ"}}] =
              Enum.filter(summary.by_station, &is_nil(&1.station.id))
+  end
+
+  # contacts.md R1: missed includes failed, and failed is also given alone.
+  test "a by_station row's exact shape, with failed counted alone and within missed", c do
+    t0 = ~U[2026-11-10 01:00:00.000000Z]
+    result!(c, "res-missed", "gs-svb", t0)
+    result!(c, "res-failed", "gs-svb", DateTime.add(t0, 3_600), "failed")
+
+    {:ok, summary} =
+      PassReview.summary(c.scope, c.mission, DateTime.add(t0, -60), DateTime.add(t0, 86_400))
+
+    assert [row] = summary.by_station
+
+    assert Map.delete(row, :provider) == %{
+             station: %{ref: "gs-svb", id: "gs-svb", code: "SVB1", name: "Svalbard 1"},
+             planned: 2,
+             realized: 0,
+             partial: 0,
+             missed: 2,
+             failed: 1,
+             canceled: 0,
+             planned_seconds: 1200,
+             flown_seconds: 0
+           }
+
+    assert Map.has_key?(row, :provider)
   end
 end

@@ -157,7 +157,9 @@ defmodule Cadence.Reads.PassReview do
         planned: Enum.sum(Enum.map(group, & &1.count)),
         realized: outcome.(["realized"]),
         partial: outcome.(["partial"]),
+        # As on the strip: missed includes failed, and failed is also given alone (contacts.md).
         missed: outcome.(["missed", "failed"]),
+        failed: outcome.(["failed"]),
         canceled: outcome.(["canceled"]),
         planned_seconds: group |> Enum.map(&(&1.planned_seconds || 0)) |> Enum.sum(),
         flown_seconds: group |> Enum.map(&(&1.flown_seconds || 0)) |> Enum.sum()
