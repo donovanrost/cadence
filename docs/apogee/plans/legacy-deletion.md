@@ -330,9 +330,9 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   - `OpsConsoleApplication.vue:24,109`;
   - the ops_console tests (`ops_console_test`, `_action_provider_test`, `_action_adapters_test`,
     `ops_route_action_ledger_test`, `ops_console_dashboard_workflows_test`, `dashboard_legacy_test`).
-- **Blocker:** the federation smoke uses `dashboard_directory` as its canonical ops_console surface
-  (`federation_browser_smoke_setup.exs:88-106`, `federation_release_fixture.exs:59,597`,
-  `federation_browser_smoke.mjs:4855-4873, 5019-5020, 5216-5231`). devops picks another surface first.
+- **Blocker, being cleared:** the federation smoke used `dashboard_directory` as its canonical ops_console surface.
+  devops moved it to `commands` (branch `ci/smoke-canonical-surface`, 9f0927b4c, waiting on the director's push).
+  The batch can go once that merges.
 
 ### L8b library, playlists, settings (+ activity, diagnostics), shares, snapshots, export (blocked)
 - **Blocked on:** slice 6 (api D20/D23/D24 after L10; domain's Q6 functions are being built), the library (D21/
@@ -360,7 +360,7 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   work**. Retire the action with the federated `ops_console` batch. A console "Add to dashboard" from Explore
   would be a future console design (WidgetSheet prefilled from an observable).
 - **`RuntimeCoordinator` / `RuntimeInvalidationRelevance`:** api-ops confirms they aren't needed. Listed in L8a.
-- **Federation smoke:** devops moves its canonical ops_console surface off `dashboard_directory` (asked).
+- **Federation smoke:** devops moved it to `commands` (9f0927b4c on `ci/smoke-canonical-surface`; merges with the director's push).
 - **Gate:** L8a goes to the director once qa confirms New live.
 - Still open: the storybook `dashboard-directory-study/` is ux's call.
 
