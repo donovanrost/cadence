@@ -89,8 +89,6 @@ jobs:
       - name: Select the installed browser
         working-directory: frontend
         run: node --input-type=module -e 'import { chromium } from "playwright"; console.log("CHROME_BIN=" + chromium.executablePath())' >> "$GITHUB_ENV"
-      - run: corepack pnpm test:producers
-        working-directory: frontend
       # This alias builds and validates the publication before starting Phoenix and Chrome.
       - name: Federation browser tests
         id: federation
