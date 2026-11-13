@@ -54,6 +54,8 @@ export function expiredRows(plan: Pick<PlanDetail, "passes" | "state">, now: Dat
         snapshotId: p.snapshot_id,
         spacecraftId: p.spacecraft_id,
         sentence: `Expired · ${stationCode(p.station)} ${p.starts_at.slice(11, 16)}Z: the offer lapsed at ${formatHourMinute(new Date(at))} before it was sent.`,
+        next: "replan" as const,
+        code: null,
       },
     ];
   });

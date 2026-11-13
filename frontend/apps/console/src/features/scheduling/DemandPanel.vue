@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ApListRow, ApPanel, useNow } from "@/ui";
 import { reasonText, type PlanDetail } from "./api.ts";
+import BookingIssues from "./BookingIssues.vue";
 import { rejectedRows } from "./booking-state.ts";
 import { expiredRows } from "./offer-clock.ts";
 import { contactsShortText, coverage } from "./coverage.ts";
@@ -61,24 +62,12 @@ const meta = computed(() => {
 
 <template>
   <ApPanel index="A" title="Demand" :meta="meta" pane flush>
-    <ul v-if="rejected.length > 0" class="m-0 list-none border-b border-hairline p-0">
-      <ApListRow
-        v-for="row in rejected"
-        :key="row.snapshotId"
-        state="caution"
-        :sentence="row.sentence"
-      >
-        <template #title>
-          <button
-            type="button"
-            class="max-md:hit-44 cursor-pointer border-0 bg-transparent p-0 text-left font-mono text-base font-semibold text-readout hover:underline"
-            @click="row.spacecraftId && $emit('focus', row.spacecraftId)"
-          >
-            {{ nameOf(row.spacecraftId)?.name ?? row.spacecraftId ?? "Unknown spacecraft" }}
-          </button>
-        </template>
-      </ApListRow>
-    </ul>
+    <BookingIssues
+      :rows="rejected"
+      :plan-id="plan.id"
+      :name-of="nameOf"
+      @focus="$emit('focus', $event)"
+    />
     <ul v-if="unmet.length > 0" class="m-0 list-none p-0">
       <ApListRow
         v-for="row in unmet"

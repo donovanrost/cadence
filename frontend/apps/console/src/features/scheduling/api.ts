@@ -253,6 +253,23 @@ export const planDetailReader = d.object({
             state: d.token,
             reason: d.optional(d.nullable(d.token)),
             at: d.optional(d.nullable(d.timestamp)),
+            /** The provider's own text (ux: appended in quotes). */
+            detail: d.optional(d.nullable(d.string)),
+            retryable: d.optional(d.nullable(d.boolean)),
+            retry_after_seconds: d.optional(d.nullable(d.integer)),
+            /** Operator resolutions (operator_not_booked / rejected / not_sent): who and when. */
+            resolved: d.optional(
+              d.nullable(
+                d.object({
+                  by: d.object({
+                    kind: d.token,
+                    id: d.nullable(d.token),
+                    name: d.nullable(d.string),
+                  }),
+                  at: d.timestamp,
+                }),
+              ),
+            ),
           }),
         ),
       ),
