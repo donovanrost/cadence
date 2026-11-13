@@ -119,10 +119,13 @@ const mainScrolls = useScrollable(main);
               : 'gap-4 overflow-auto px-4 pt-4 pb-6 md:px-6 md:pt-5'
           "
         >
-          <ApCallout v-if="mode === 'setup'" tone="info" class="md:hidden">
-            Setup is designed for a larger screen. You can read here; editing works best on a
-            desktop.
-          </ApCallout>
+          <!-- The wrapper hides it: on ApCallout's root the kit's own `flex` outranks md:hidden (qa, 1440). -->
+          <div v-if="mode === 'setup'" class="md:hidden">
+            <ApCallout tone="info">
+              Setup is designed for a larger screen. You can read here; editing works best on a
+              desktop.
+            </ApCallout>
+          </div>
           <p v-if="switching" role="status" class="m-0 font-mono text-sm text-text-3 uppercase">
             Opening {{ switching }} as platform admin…
           </p>
