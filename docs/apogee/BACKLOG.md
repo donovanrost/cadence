@@ -311,6 +311,15 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 | L20 | Telemetry explore canned questions | The feature | **Parked (#75):** the legacy page stays until the user revisits. ux's four empty-state links to console homes may still ship (fe-ops, no api); they don't replace the feature | parked |
 | L21 | Accept an invitation as a signed-in user (`/notifications` and the bell) | A home: **Account** (ux 11-12, People.md Account). Pending invitations first ('Acme Space · Member · invited by Mira K. on 11-10' [Accept] [Decline (confirm)]); Accept adds the org to the switcher and opens it; the org switcher footer shows '1 invitation' | api (a 'my pending invitations' read + accept / decline for a signed-in user) → fe-setup (Account) + lead (switcher footer) | open |
 
+### 11d. Hand-out order (lead, 11-13; after each person's current items)
+- **api:** L1 (8g + close/cancel) → L21 invitations → L4 mission create → L2 template verbs + L3 grant verbs → L17 spacecraft edit/archive kind → L18 catalog reimport/download → L14 provider-change decisions.
+- **api-ops:** qa #51 → M26 → L6 admin-mode step-up → L5 SPA sign-in / invitation accept (JSON, with the attempt limit) → L7 admin endpoints → L11 data-source writes → L12 mission-provider writes → L13 provider-account grants.
+- **domain:** #74 → L15 single bookings (search, reserve, cancel outside plans; reuse the contact workflow) → L9 surface host server side (managed-application framework), with api for the endpoints.
+- **fe-setup:** each screen as its endpoint lands: L21, L4, L2/L3, L17, L18, L11–L13, L7, L9 → L10 → L19.
+- **fe-ops:** L14 decisions UI, L15 single bookings in `ops.contacts`, L20 empty-state links.
+- **lead:** L5 SPA auth screens (sign-in, invitation accept, no-organization), L6 admin-mode step-up in the shell, the switcher footer for L21.
+- **dashboards:** L8 (plan first, to lead).
+
 ### 11b. Console places that still send people to a legacy page (ux)
 Telemetry Explore and Investigate `Dashboards ↗` (L8); account menu `Platform admin ↗` (L7); Setup › Apps surfaces (L9); `org.missions` New mission (L4); PendingScreen "use the existing Cadence pages" and the K1 template link. ux amends the IA and specs as each row gets its home.
 
