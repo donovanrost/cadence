@@ -2,7 +2,15 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useMissionScope, useMobileHeader } from "@/shell";
-import { ApCallout, ApEmptyState, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
+import {
+  ApCallout,
+  ApEmptyState,
+  ApPanel,
+  ApRemote,
+  formatCountdown,
+  formatRelative,
+  useNow,
+} from "@/ui";
 import { conditionWords, crossedCondition, episodeFor } from "@/features/alarms/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
 import {
@@ -20,10 +28,12 @@ import {
   useSpacecraftEpisodes,
 } from "@/features/investigate/index.ts";
 import MobileAlarmPanel from "./MobileAlarmPanel.vue";
+import YourGoBlock from "./YourGoBlock.vue";
 
 /**
  * J6 paged view (Mobile.md), the ops.spacecraft route under 768px: is this real? Alarm, its trend
- * and timing first, then Acknowledge / Hand off (fe-ops' EpisodeBar, stacked). GO polls wait on M16+.
+ * and timing first, then "Your GO is requested" when a request awaiting your GO targets it, then
+ * Acknowledge / Hand off (fe-ops' EpisodeBar, stacked).
  */
 const route = useRoute();
 const scope = useMissionScope();
@@ -139,6 +149,24 @@ useMobileHeader(() => {
             >
           </template>
         </ApRemote>
+        <ApPanel index="T" title="Timing" flush>
+          <p v-if="sc.in_contact" class="m-0 px-4 py-3 font-mono text-[28px] text-readout">
+            In contact
+          </p>
+          <div v-else-if="sc.next_aos_at" class="flex flex-col gap-1 px-4 py-3">
+            <span class="ap-label">Next AOS</span>
+            <span class="font-mono text-[28px] text-readout tabular">{{
+              formatCountdown(new Date(sc.next_aos_at), now)
+            }}</span>
+          </div>
+          <ApEmptyState
+            v-else
+            state="off"
+            headline="No pass booked"
+            sentence="No upcoming contact is booked for this spacecraft. Check Contacts on a desktop."
+          />
+        </ApPanel>
+        <YourGoBlock :mission-id="missionId" :spacecraft-id="sc.id" />
         <EpisodeBar
           v-if="episode"
           :episode="episode"
@@ -146,13 +174,6 @@ useMobileHeader(() => {
           layout="stacked"
           @changed="refreshEpisode"
         />
-        <ApPanel index="T" title="Timing" flush>
-          <ApEmptyState
-            state="off"
-            headline="Next AOS not available yet"
-            sentence="Pass predictions aren't connected to the console. Check Contacts on a desktop."
-          />
-        </ApPanel>
       </template>
       <template v-else>
         <h1 class="m-0 font-display text-[22px] font-bold tracking-id uppercase">
