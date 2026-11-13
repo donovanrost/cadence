@@ -784,7 +784,8 @@ then the fix:
 - **Hold placeholders in Apply's one `Why` field** (also for U40's holds): with exactly one acknowledgeable hold,
   the field uses that hold's placeholder. With several, it uses "Why it's safe to apply despite these holds".
 - **Field errors** keep today's direct-save messages. Two new ones: "Limits for BATT_V already exist. Edit them
-  instead." (with a link to them) and "The point and limit set can't change after the limits are added."
+  instead." (a point_id field error at staging, domain 63206b13d; link to them only through a query key the Limits
+  app declares, AppSurfaces.md › Deep links, otherwise no link) and "The point and limit set can't change after the limits are added."
 
 ### U44 · Provider changes to booked passes (§11 L14, api 30b3f60b9) (fe-ops / api)
 The U31/U32 grammar applies: one item per change, approval P2 due at the deadline, acknowledgement and
