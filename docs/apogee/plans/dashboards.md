@@ -197,6 +197,11 @@ shape on every 409, so the client renders one "Used by" list.
   so Versions keeps working for any dashboard whose history placed a retired item. Unarchiving a dashboard is
   exempt too. The restored version renders from the stored library version, and its next edit and save is
   refused until the placement is removed.
+- **The editor says so up front (lead 11-14):** in edit mode, a board that places a retired library item shows
+  the save refusal's sentence as a caution callout ("That library widget was retired or removed. Remove it from
+  this dashboard to save."), so the author learns before Save. It needs a signal: the editor outline (`Reads.
+  Dashboards.Editor.outline`) gives library placements only `editable: false`. Asked: each library placement
+  gains `library: {item_id, version, retired: boolean}`.
 
 **Audit (director):** library retire, playlist delete and dashboard archive/restore each write an audit record. They
 appear in `GET /audit` (setup.md AU1) under kind `config` as server-made sentences, e.g. "Archived dashboard Bus
