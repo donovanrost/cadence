@@ -396,27 +396,7 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :ops}
       )
 
-      live("/missions/:mission_id/ops/planning/policy", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
       live("/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/requirement-templates", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/requirements", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/requirements/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/requirements/:contact_requirement_id", HostPageLive, :show,
         metadata: %{host_policy: :ops}
       )
 
@@ -761,6 +741,29 @@ defmodule CadenceWeb.Router do
       LegacyDashboardRedirectController,
       :viewer
     )
+
+    # L1-L3 cutover (owner: api; DECISIONS #79): contact planning moved to the console's Setup.
+    get("/missions/:mission_id/ops/requirements", LegacySetupRedirectController, :requirements)
+
+    get(
+      "/missions/:mission_id/ops/requirements/new",
+      LegacySetupRedirectController,
+      :requirements
+    )
+
+    get(
+      "/missions/:mission_id/ops/requirements/:contact_requirement_id",
+      LegacySetupRedirectController,
+      :requirement
+    )
+
+    get(
+      "/missions/:mission_id/ops/requirement-templates",
+      LegacySetupRedirectController,
+      :templates
+    )
+
+    get("/missions/:mission_id/ops/planning/policy", LegacySetupRedirectController, :policy)
   end
 
   scope "/api", CadenceWeb do
