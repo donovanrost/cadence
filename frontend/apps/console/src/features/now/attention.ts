@@ -155,7 +155,7 @@ export const attentionReader = d.object({
   spacecraft_count: d.optional(d.nullable(d.integer)),
   /** false: retrying can't help (review stale, content mismatch); request activation again (U41). */
   retryable: d.optional(d.nullable(d.boolean)),
-  /** U41 meta: who approved it and when (asked of api; null until sent). */
+  /** U41 meta: who approved it and when (api be59d4f32; null when the record has no approver). */
   approved_by: d.optional(d.nullable(d.object({ name: d.nullable(d.string) }))),
   approved_at: d.optional(d.nullable(d.timestamp)),
   /** true: the runtime isn't running the active configuration either (mission_runtime is left out). */
