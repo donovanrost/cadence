@@ -14,7 +14,7 @@ export type Notice =
   | { kind: "rejected"; message: string }
   | { kind: "skipped"; events: readonly string[] }
   | { kind: "too_many_commands" }
-  | { kind: "not_ready"; placements: readonly { id: string; message: string }[] }
+  | { kind: "not_ready"; placements: readonly { placement_id: string | null; message: string }[] }
   | { kind: "failed"; message: string };
 
 /**

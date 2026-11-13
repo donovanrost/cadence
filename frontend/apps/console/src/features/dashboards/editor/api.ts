@@ -123,7 +123,10 @@ export type EditFailure =
       savedBy: string | null;
       savedAt: string | null;
     }
-  | { kind: "not_ready"; placements: readonly { id: string; code: string; message: string }[] }
+  | {
+      kind: "not_ready";
+      placements: readonly { placement_id: string | null; code: string; message: string }[];
+    }
   | { kind: "too_many_commands" }
   | { kind: "other"; error: ApiError };
 
@@ -149,7 +152,7 @@ export function editFailure(error: ApiError, draft: Draft): EditFailure {
         field: c.value.field,
       };
   }
-  if (error.kind === "invalid" && error.code === "not_ready") {
+  if (error.kind === "invalid" && error.code === "dashboard_not_ready") {
     const n = decode(notReady, error.details);
     if (n.ok) return { kind: "not_ready", placements: n.value.placements };
   }

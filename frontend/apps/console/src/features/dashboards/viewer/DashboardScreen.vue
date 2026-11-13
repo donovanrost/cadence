@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
-import { TakeoverHeader, useMissionScope } from "@/shell";
+import { TakeoverHeader, useMissionScope, useSmallScreen } from "@/shell";
 import { useConnection } from "@/live";
 import { ApCallout } from "@/ui";
 import type { Runtime } from "../api.ts";
 import { recordView } from "../directory/api.ts";
+import CopySheet from "../editor/CopySheet.vue";
+import EditActions from "../editor/EditActions.vue";
+import EditorPane from "../editor/EditorPane.vue";
+import { useEditSession } from "../editor/useEditSession.ts";
+import VersionsSheet from "../versions/VersionsSheet.vue";
 import {
   selectionFromQuery,
   selectionLabel,
@@ -13,15 +18,16 @@ import {
   type TimeSelection,
 } from "../model/time-range.ts";
 import KioskLine from "./KioskLine.vue";
-import MoreMenu from "./MoreMenu.vue";
+import ViewerActions from "./ViewerActions.vue";
 import ViewerBody from "./ViewerBody.vue";
-import ViewerControls from "./ViewerControls.vue";
 import CockpitStatus from "./CockpitStatus.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
 
 /**
- * Dashboard viewer (ux Dashboards.md): a takeover cockpit. The URL owns the runtime (`from`,
- * `to`, `spacecraft`, `refresh`); D5 resolves it; live step 1 refreshes on invalidations.
+ * Dashboard viewer and editor (ux Dashboards.md): a takeover cockpit. The URL owns the runtime
+ * (`from`, `to`, `spacecraft`, `refresh`), kiosk and edit mode (`edit=1`). D5 resolves the view
+ * (live step 1 refreshes on invalidations); edit mode previews the browser-held draft (D7) with
+ * live values paused.
  */
 const route = useRoute();
 const router = useRouter();
@@ -42,10 +48,11 @@ const runtime = computed<Runtime>(() => {
 const refresh = computed<RefreshChoice>(
   () => refreshChoices.find((c) => c.value === one(route.query.refresh))?.value ?? "2s",
 );
+const editRequested = computed(() => one(route.query.edit) === "1");
 const query = useDashboardView(missionId, dashboardId, runtime, {
   refreshMs: computed(() => refreshChoices.find((c) => c.value === refresh.value)?.ms ?? null),
   sliding: computed(() => selection.value.kind !== "absolute"),
-  paused: ref(false),
+  paused: editRequested,
 });
 const view = computed(() =>
   query.state.value.status === "ready" ? query.state.value.value : null,
@@ -59,12 +66,41 @@ watch(
   },
   { immediate: true },
 );
+const currentVersion = computed(() => view.value?.dashboard.current_version ?? null);
+const session = useEditSession(missionId, dashboardId, runtime, currentVersion);
+/** Phone is view-only (ux). */
+const small = useSmallScreen();
+const canEdit = computed(() => view.value?.can_edit === true && !small.value);
+const editing = computed(() => editRequested.value && canEdit.value);
+watch(
+  [editing, () => view.value !== null],
+  ([on, loaded]) => {
+    if (on && loaded && !session.editing.value) session.enter();
+    else if (!on && session.editing.value) session.leave();
+  },
+  { immediate: true },
+);
 const connection = useConnection();
 /** Kiosk (ux): `?kiosk=1` or ⋯ › Kiosk; the header collapses to a status line. */
 const kiosk = computed(() => one(route.query.kiosk) === "1");
-const menu = [{ id: "kiosk", label: "Kiosk" }] as const;
-function onMenu(id: (typeof menu)[number]["id"]) {
+const pane = ref<InstanceType<typeof EditorPane> | null>(null);
+const versions = ref<InstanceType<typeof VersionsSheet> | null>(null);
+const copySheet = ref<InstanceType<typeof CopySheet> | null>(null);
+function onMenu(id: "versions" | "copy" | "kiosk") {
   if (id === "kiosk") setQuery({ kiosk: "1" });
+  else if (id === "versions") versions.value?.open();
+  else
+    copySheet.value?.open(
+      session.draft.value ?? { baseVersion: currentVersion.value ?? 1, commands: [] },
+    );
+}
+function onDiscard() {
+  session.discard();
+  setQuery({ edit: null });
+}
+function onSaved() {
+  setQuery({ edit: null });
+  query.refetch();
 }
 
 function setQuery(changes: Record<string, string | null>) {
@@ -95,23 +131,59 @@ const onRange = (s: TimeSelection) =>
     title-as="h1"
   >
     <template #actions>
-      <span class="flex items-center gap-2">
-        <ViewerControls
-          :scope-options="view?.scope_options ?? []"
-          :spacecraft="runtime.spacecraftId"
-          :selection="selection"
-          :refresh="refresh"
-          @spacecraft="setQuery({ spacecraft: $event })"
-          @range="onRange"
-          @refresh="setQuery({ refresh: $event === '2s' ? null : $event })"
-        />
-        <MoreMenu :items="menu" @select="onMenu" />
-      </span>
+      <EditActions
+        v-if="editing"
+        :changes="session.draft.value?.commands.length ?? 0"
+        :busy="session.busy.value"
+        @add="pane?.add()"
+        @save="pane?.save()"
+        @discard="onDiscard"
+      />
+      <ViewerActions
+        v-else
+        :scope-options="view?.scope_options ?? []"
+        :spacecraft="runtime.spacecraftId"
+        :selection="selection"
+        :refresh="refresh"
+        :can-edit="canEdit"
+        @spacecraft="setQuery({ spacecraft: $event })"
+        @range="onRange"
+        @refresh="setQuery({ refresh: $event === '2s' ? null : $event })"
+        @edit="setQuery({ edit: '1' })"
+        @menu="onMenu"
+      />
     </template>
     <template #clocks><CockpitStatus /></template>
   </TakeoverHeader>
   <ApCallout v-if="connection !== 'live'" tone="stale">
     Live connection lost. Values may be out of date; they'll refresh when it's back.
   </ApCallout>
-  <ViewerBody :state="query.state.value" :stale="connection !== 'live'" @retry="query.refetch" />
+  <EditorPane
+    v-if="editing && view"
+    ref="pane"
+    :session="session"
+    :view="view"
+    :mission-id="missionId"
+    @saved="onSaved"
+  />
+  <ViewerBody
+    v-else
+    :state="query.state.value"
+    :stale="connection !== 'live'"
+    @retry="query.refetch"
+  />
+  <VersionsSheet
+    ref="versions"
+    :mission-id="missionId"
+    :dashboard-id="dashboardId"
+    :can-restore="canEdit && !editing"
+    @restored="query.refetch"
+  />
+  <CopySheet
+    ref="copySheet"
+    :mission-id="missionId"
+    :dashboard-id="dashboardId"
+    :name="view?.dashboard.name ?? 'Dashboard'"
+    @copied="session.discard"
+  />
 </template>

@@ -190,5 +190,9 @@ export const versionConflict = d.object({
   saved_at: d.nullable(d.timestamp),
 });
 export const notReady = d.object({
-  placements: d.array(d.object({ id, code: d.string, message: d.string }), 1024),
+  // domain 124c1d6f: a dashboard-level issue has no placement.
+  placements: d.array(
+    d.object({ placement_id: d.nullable(id), code: d.string, message: d.string }),
+    1024,
+  ),
 });
