@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApPanel, ApTag, stateTextClass } from "@/ui";
+import { ApPanel, stateTextClass } from "@/ui";
 import type { PlanDetail } from "./api.ts";
+import FocusChips from "./FocusChips.vue";
 import { focusDay } from "./focus-day.ts";
 import FocusStrip from "./FocusStrip.vue";
 import type { SpacecraftName } from "./names.ts";
 
 /**
  * K1 C · focused spacecraft · 24 h (ScheduleFlow C): rule chips, then its drafted passes on a
- * day strip with the gaps between them. Clicking a pass selects it for D. Only the contacts chip
- * carries a verdict: the server sends no gap limit or uplink count yet (BACKLOG §8 domain 7), so
- * the longest gap is a measure, never a HOLD.
+ * day strip with the gaps between them. Clicking a pass selects it for D. The gap and uplink chips
+ * carry a verdict only when the server sends a limit or a need (both null until rules carry them,
+ * BACKLOG §8 domain 7b); until then they're measures, never a HOLD.
  */
 const props = defineProps<{
   plan: PlanDetail;
@@ -33,10 +34,6 @@ const name = computed(() => {
   const sc = props.nameOf(props.focused);
   return sc ? sc.name : props.focused;
 });
-const contactsMet = computed(() => {
-  const c = view.value?.contacts;
-  return c && c.need !== null ? c.have >= c.need : null;
-});
 </script>
 
 <template>
@@ -54,20 +51,7 @@ const contactsMet = computed(() => {
       Pick a spacecraft in Demand to see its passes that day and the gaps between them.
     </p>
     <div v-else class="flex flex-col gap-3">
-      <ul class="m-0 flex list-none flex-wrap items-center gap-x-4 gap-y-2 p-0">
-        <li v-if="view.contacts" class="flex items-center gap-2 font-mono text-sm text-text-2">
-          Contacts {{ view.contacts.have
-          }}{{ view.contacts.need === null ? "" : `/${view.contacts.need}` }}
-          <ApTag
-            v-if="contactsMet !== null"
-            :state="contactsMet ? 'nominal' : 'caution'"
-            :label="contactsMet ? 'GO' : 'HOLD'"
-          />
-        </li>
-        <li v-if="view.longestGapSeconds !== null" class="font-mono text-sm text-text-2">
-          Longest gap {{ view.gaps.find((g) => g.longest)?.text }}
-        </li>
-      </ul>
+      <FocusChips :view="view" />
       <p v-if="view.passes.length === 0" class="m-0 text-md text-text-3">
         No passes drafted for {{ name }} on this day.
       </p>

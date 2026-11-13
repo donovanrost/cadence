@@ -202,6 +202,33 @@ const unconfirmedReader = d.nullable(
   }),
 );
 
+/** Domain c38bb5de (scheduling.md "Plan detail measures"): LOS → next AOS over the plan's UTC
+ * day, edges included; `from`/`to` null only when the day is fully covered. No limit yet. */
+export const longestGapReader = d.optional(
+  d.nullable(
+    d.object({
+      seconds: d.integer,
+      limit_seconds: d.nullable(d.integer),
+      from: d.nullable(d.timestamp),
+      to: d.nullable(d.timestamp),
+    }),
+  ),
+);
+const freezeProvider = d.object({ id: d.nullable(d.token), name: d.nullable(d.string) });
+/** The earliest offer expiry among passes not yet sent (ux: "Next offer expires"); may be past. */
+const providerFreezeReader = d.optional(
+  d.nullable(
+    d.object({
+      at: d.timestamp,
+      provider: freezeProvider,
+      snapshot_id: d.nullable(d.token),
+      by_provider: d.optional(
+        d.array(d.object({ provider: freezeProvider, at: d.timestamp }), 100),
+      ),
+    }),
+  ),
+);
+
 export const planDetailReader = d.object({
   ...planRow,
   passes: d.array(
@@ -213,6 +240,8 @@ export const planDetailReader = d.object({
       ends_at: d.timestamp,
       synthetic: d.boolean,
       locked: d.boolean,
+      /** That offer's expiry (domain c38bb5de). */
+      expires_at: d.optional(d.nullable(d.timestamp)),
     }),
     5_000,
   ),
@@ -225,6 +254,11 @@ export const planDetailReader = d.object({
         rule_met: d.boolean,
         contacts: d.object({ have: d.integer, need: d.nullable(d.integer) }),
         reasons: d.array(d.string),
+        longest_gap: longestGapReader,
+        /** Requested uplink legs, not confirmed; `need` null until rules carry a count. */
+        uplink_passes: d.optional(
+          d.nullable(d.object({ have: d.integer, need: d.nullable(d.integer) })),
+        ),
       }),
       5_000,
     ),
@@ -240,6 +274,7 @@ export const planDetailReader = d.object({
       5_000,
     ),
   }),
+  provider_freeze: providerFreezeReader,
   unmet: d.array(
     d.object({
       requirement_id: d.token,
@@ -522,6 +557,8 @@ export const alternativesReader = d.object({
   spacecraft_id: d.token,
   rule_met: d.boolean,
   contacts: d.object({ have: d.integer, need: d.nullable(d.integer) }),
+  /** The spacecraft's longest gap today (domain c38bb5de), for "6h10 → 3h05". */
+  longest_gap: longestGapReader,
   alternatives: d.array(
     d.object({
       snapshot_id: d.token,
@@ -534,6 +571,7 @@ export const alternativesReader = d.object({
         rule_met_after: d.boolean,
         contacts_after: d.object({ have: d.integer, need: d.nullable(d.integer) }),
         clashes_with: d.array(d.token),
+        longest_gap_after_seconds: d.optional(d.nullable(d.integer)),
       }),
     }),
     2_000,

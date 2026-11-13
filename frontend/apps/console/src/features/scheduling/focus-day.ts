@@ -3,10 +3,10 @@ import { stationCode, type PlanDetail } from "./api.ts";
 
 /**
  * K1 C · the focused spacecraft's day (ScheduleFlow C): its drafted passes on a 24 h strip and
- * the gaps between them. Positions are fractions of the window (0..1). Gaps are measured only
- * between passes inside the window: the day's edges border another day's plan, which this
- * read doesn't have. The server sends no gap limit yet (scheduling.md S4), so a gap is a
- * measure here, not a verdict.
+ * the gaps between them. Positions are fractions of the window (0..1). Gaps follow the
+ * server's measure (domain c38bb5de): LOS → next AOS, the day's edges included. The server's
+ * `longest_gap` wins when present; with no limit yet (`limit_seconds` null) it's a measure, not
+ * a verdict.
  */
 export type StripPass = Readonly<{
   id: string;
@@ -25,6 +25,10 @@ export type StripGap = Readonly<{
 export type FocusDay = Readonly<{
   ruleMet: boolean | null;
   contacts: Readonly<{ have: number; need: number | null }> | null;
+  /** Passes whose booking will request an uplink leg (requested, not confirmed). */
+  uplink: Readonly<{ have: number; need: number | null }> | null;
+  /** The server's limit when a rule carries one (max_gap_seconds, pending); null today. */
+  gapLimitSeconds: number | null;
   passes: readonly StripPass[];
   gaps: readonly StripGap[];
   longestGapSeconds: number | null;
@@ -58,25 +62,36 @@ export function focusDay(
     station: stationCode(p.station),
     text: `${stationCode(p.station)} ${hm(p.starts_at)}–${hm(p.ends_at)}Z`,
   }));
-  const raw = own.slice(1).flatMap((cur, i) => {
-    const prevEnd = Math.max(...own.slice(0, i + 1).map((o) => o.to));
-    const seconds = (cur.from - prevEnd) / 1000;
-    return seconds > 0 ? [{ fromMs: prevEnd, toMs: cur.from, seconds }] : [];
-  });
-  const longestGapSeconds = raw.length ? Math.max(...raw.map((g) => g.seconds)) : null;
+  // Covered stretches end at the latest LOS so far; each gap runs to the next AOS.
+  const raw: { fromMs: number; toMs: number; seconds: number }[] = [];
+  let coveredTo = window.from;
+  for (const o of own) {
+    if (o.from > coveredTo)
+      raw.push({ fromMs: coveredTo, toMs: o.from, seconds: (o.from - coveredTo) / 1000 });
+    coveredTo = Math.max(coveredTo, o.to);
+  }
+  if (own.length && window.to > coveredTo)
+    raw.push({ fromMs: coveredTo, toMs: window.to, seconds: (window.to - coveredTo) / 1000 });
+  const demand = plan.demand.spacecraft.find((s) => s.spacecraft_id === spacecraftId);
+  const server = demand?.longest_gap ?? null;
+  const clientMax = raw.length ? Math.max(...raw.map((g) => g.seconds)) : null;
+  const serverFrom = server?.from ? Date.parse(server.from) : null;
+  const isLongest = (g: { fromMs: number; seconds: number }) =>
+    serverFrom !== null ? Math.abs(g.fromMs - serverFrom) < 1000 : g.seconds === clientMax;
   const gaps = raw.map((g) => ({
     from: at(g.fromMs),
     to: at(g.toMs),
     seconds: g.seconds,
     text: gapText(g.seconds),
-    longest: g.seconds === longestGapSeconds,
+    longest: isLongest(g),
   }));
-  const demand = plan.demand.spacecraft.find((s) => s.spacecraft_id === spacecraftId);
   return {
     ruleMet: demand?.rule_met ?? null,
     contacts: demand?.contacts ?? null,
+    uplink: demand?.uplink_passes ?? null,
+    gapLimitSeconds: server?.limit_seconds ?? null,
     passes,
     gaps,
-    longestGapSeconds,
+    longestGapSeconds: server ? server.seconds : clientMax,
   };
 }

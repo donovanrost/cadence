@@ -34,9 +34,12 @@ describe("K1 C · focused spacecraft day", () => {
     const f = focusDay(plan, "sc1", day);
     expect(f.passes.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
     expect(f.passes[0]?.text).toBe("SVB 00:30–00:40Z");
+    // The day's edges count (domain c38bb5de): 00:00Z → first AOS and last LOS → 24:00Z.
     expect(f.gaps.map((g) => [g.text, g.longest])).toEqual([
+      ["30m", false],
       ["6h00", false],
       ["11h10", true],
+      ["5h50", false],
     ]);
     expect(f.longestGapSeconds).toBe(11 * 3600 + 600);
     expect(f.ruleMet).toBe(false);
@@ -49,10 +52,41 @@ describe("K1 C · focused spacecraft day", () => {
     expect(f).toEqual({
       ruleMet: null,
       contacts: null,
+      uplink: null,
+      gapLimitSeconds: null,
       passes: [],
       gaps: [],
       longestGapSeconds: null,
     });
+  });
+
+  it("takes the server's longest gap, limit and uplink passes when it sends them", () => {
+    const served = {
+      ...plan,
+      demand: {
+        ...plan.demand,
+        spacecraft: [
+          {
+            spacecraft_id: "sc1",
+            rule_met: false,
+            contacts: { have: 3, need: 4 },
+            reasons: [],
+            longest_gap: {
+              seconds: 21_000,
+              limit_seconds: 36_000,
+              from: "2026-11-13T18:10:00Z",
+              to: "2026-11-14T00:00:00Z",
+            },
+            uplink_passes: { have: 1, need: null },
+          },
+        ],
+      },
+    };
+    const f = focusDay(served, "sc1", day);
+    expect(f.longestGapSeconds).toBe(21_000);
+    expect(f.gapLimitSeconds).toBe(36_000);
+    expect(f.gaps.filter((g) => g.longest).map((g) => g.text)).toEqual(["5h50"]);
+    expect(f.uplink).toEqual({ have: 1, need: null });
   });
 
   it("writes short gaps in minutes", () => {
