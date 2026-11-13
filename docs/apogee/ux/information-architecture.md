@@ -69,8 +69,8 @@ org and mission (decision U1): `O = /console/:orgId`, `M = O/:missionId` (e.g.
 | --- | --- |
 | `/console/account` | Your profile, password, sessions (fixes review #18). From the account menu. |
 | ~~`/console/notifications`~~ | **Dropped (DECISIONS #64).** Now's attention queue (#54, U31) is the console's notification surface. |
-| `/sign-in`, `/invitations/:token`, `/no-organization`, `/admin-mode` | **Stay server-rendered** (auth layout). The SPA redirects to `/sign-in?return_to=…` on 401. |
-| `/admin/**` (platform admin) | **Becomes a console admin area** (L7, DECISIONS #75; ux spec to follow when it's scheduled). Account menu shows "Platform admin ↗" only with the `platform_admin` capability. |
+| `/sign-in`, `/invitations/:token`, `/no-organization`, `/admin-mode` | **SPA auth screens** (L5/L6, screens/Auth.md; auth layout, admin mode as a step-up dialog). The SPA redirects to `/sign-in?return_to=…` on 401. |
+| `/admin/**` (platform admin) | **Becomes a console admin area** (L7, DECISIONS #75; screens/Admin.md at `/console/admin/**`). Account menu shows `Enter admin mode` / `Admin area` only with the `platform_admin` capability. |
 
 Rules: every screen state worth sharing is in the URL (tab, filters, selected spacecraft, time
 range as `from`/`to` ISO or a preset key such as `range=orb6`). Back always works. Mission switch
