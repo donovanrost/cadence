@@ -7,9 +7,15 @@ defmodule Cadence.Reads.DataSourceDirectory do
   to judge it by (`metadata.expected_interval_seconds`).
   """
 
-  alias Cadence.DataSources.{DataSource, SourceCredentialReference}
+  alias Cadence.DataSources.{AdapterRegistry, DataSource, SourceCredentialReference}
+  alias Cadence.ExtensionCatalog
   alias Cadence.Projections.DataSources.{Health, Watermarks}
   alias Cadence.Reads.DataSources
+
+  @doc "One source as `list/3` shows it, or `nil` when the mission can't see it."
+  @spec fetch(binary(), binary(), binary()) :: map() | nil
+  def fetch(organization_id, mission_id, data_source_id),
+    do: organization_id |> list(mission_id) |> Enum.find(&(&1.id == data_source_id))
 
   @spec list(binary(), binary(), DateTime.t()) :: [map()]
   def list(organization_id, mission_id, now \\ DateTime.utc_now()) do
@@ -42,6 +48,13 @@ defmodule Cadence.Reads.DataSourceDirectory do
       kind: source.kind,
       owner: source.owner,
       status: source.status,
+      # L11 (fe-setup): what the edit screens need.
+      state: if(source.status == :active, do: :enabled, else: :disabled),
+      shared: is_nil(source.organization_id),
+      logical_source: logical_source(source, metadata),
+      isolation_level: source.isolation_level,
+      storage: metadata["storage"],
+      credentials_ref: mask(source.credentials_ref),
       health: health(health, source, now),
       last_received_at: last_received_at,
       expected_interval_s: if(is_integer(interval), do: interval),
@@ -81,6 +94,29 @@ defmodule Cadence.Reads.DataSourceDirectory do
     do: DateTime.diff(now, to_utc(received)) > interval
 
   defp stale(_received, _interval, _now), do: nil
+
+  defp logical_source(source, metadata) do
+    key =
+      metadata["logical_source"] ||
+        case AdapterRegistry.logical_source(source.adapter) do
+          nil -> nil
+          logical -> to_string(logical)
+        end
+
+    key && %{key: key, label: Map.get(adapter_labels(), key, humanize(key))}
+  end
+
+  @doc "Registrable logical sources: `%{key => label}`."
+  def adapter_labels do
+    Map.new(ExtensionCatalog.source_adapters(), &{to_string(&1.logical_source), &1.label})
+  end
+
+  # The reference only, with its middle elided (never material).
+  defp mask(nil), do: nil
+  defp mask(ref) when byte_size(ref) <= 12, do: ref
+
+  defp mask(ref),
+    do: String.slice(ref, 0, 8) <> "…" <> String.slice(ref, -4, 4)
 
   defp credentials(nil), do: nil
 

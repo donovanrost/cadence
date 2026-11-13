@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.DataSourceController do
   use CadenceWeb, :controller
 
   alias Cadence.Reads.DataSourceDirectory
-  alias CadenceWeb.Console.ConfigJSON
+  alias CadenceWeb.Console.{ConfigJSON, DataSourceWritesController}
 
   def index(conn, _params) do
     sources =
@@ -16,6 +16,12 @@ defmodule CadenceWeb.Console.DataSourceController do
         conn.assigns.current_mission.mission_id
       )
 
-    json(conn, %{data: ConfigJSON.encode(%{sources: sources})})
+    permissions =
+      DataSourceWritesController.permissions(
+        conn.assigns.current_scope,
+        conn.assigns.current_mission.mission_id
+      )
+
+    json(conn, %{data: ConfigJSON.encode(%{sources: sources, permissions: permissions})})
   end
 end

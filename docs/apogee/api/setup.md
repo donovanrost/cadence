@@ -537,6 +537,54 @@ sources come first, then by name.
   declares one yet, so expect `null`.
 - `credentials` is `null` for sources without a credential reference. There's no expiry data yet,
   so there's no `expiring`.
+- **L11 additions (api-ops):**
+  - Row fields:
+    - `state: enabled | disabled` (the word form of `status`);
+    - `shared`: `true` for a platform-shared source, which is read-only unless you're a
+      platform admin in admin mode;
+    - `logical_source: {key, label} | null`, `isolation_level`, `storage | null`;
+    - `credentials_ref`: the reference with its middle elided, never material, or `null`.
+  - `kind` is a closed set: `managed_tsdb | byo_tsdb | postgres | object_archive | projection`.
+  - `permissions: ["data_sources.manage"]` (top level) when the caller passes the check the
+    writes use (`operate_mission` today), else `[]`.
+
+### Data sources (L11): writes, and the reads behind them
+
+All under `/missions/:mission_id`. They wrap the legacy page's `OpsConsole.Actions.DataSources`,
+so the validation and authorization are the same. Only the organization's own sources and
+bindings can be written. A platform-shared one needs a platform admin in admin mode, otherwise
+`403 platform_source`. Each write answers with the source's D1 row as `source`.
+
+- `GET /data-sources/options` → `{logical_sources: [{key, label}], kinds: [{key, label,
+  requires_credentials}], isolation_levels: {<kind>: [{key, label}]}, storages: [{key, label}]}`.
+  Registration offers `byo_tsdb` and `managed_tsdb`.
+- `GET /data-sources/:id` → `{source, bindings: [{id, logical_source, data_source_id, status:
+  active | disabled | superseded}], runs: [{job_id, kind: provision | deprovision | reconcile,
+  status: queued | running | completed | failed, started_at, error | null, actions: [] |
+  ["retry"] | ["requeue"]}]}`. Runs are the newest 20. `404 data_source_not_found`.
+- `POST /data-sources {display_name, logical_source, kind, isolation_level, storage,
+  credentials_ref?, credential_provider?, endpoint_ref?, material_env_profile?,
+  http_endpoint_env?}` → `201 {source}`.
+  - The server makes the id from the name (`Bus history` → `bus_history`, then `bus_history_2`
+    and so on).
+  - `credentials_ref` is required for `byo_tsdb`.
+  - `422 invalid_params` with `details.field`.
+- `POST /data-sources/:id/disable` and `/enable` → `{source}`. `409 data_source_state {state}`
+  when it's already in that state.
+- `PUT /data-source-bindings/:binding_id {data_source_id, expected_data_source_id?}` → `{binding}`.
+  - `409 binding_changed {current_data_source_id}` when `expected_data_source_id` is stale.
+  - `422` when the source doesn't serve the binding's logical source or isn't enabled.
+  - The binding must be the mission's own. It may point at a shared source.
+- `POST /data-sources/:id/probe` → `{source, probe: {health: {status, checked_at} | null,
+  reason | null}}`.
+- `POST /data-sources/:id/credential {credentials_ref}` rotates to that reference (the reference
+  only) → `{source}`.
+- `POST /data-sources/:id/tsdb/provision | reconcile | deprovision` → `202 {source, run | null}`.
+- `POST /data-source-runs/:job_id/retry | requeue` → `202 {run}`. Retry starts a failed run again;
+  requeue puts a run stuck in running back in the queue. `404 run_not_found`.
+- While any run is `queued` or `running`, poll `GET /data-sources/:id` (about every 5 s). The
+  mission channel's `data_sources` invalidate covers binding and health changes, not run
+  progress.
 
 ### `GET /missions/:mission_id/apps` (A1)
 

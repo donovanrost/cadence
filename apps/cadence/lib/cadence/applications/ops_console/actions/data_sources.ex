@@ -277,7 +277,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   defp normalize_register_source(params) do
     with :ok <- exact_keys(params, ["source"], ["mission_id"]),
          {:ok, source_params} <- fetch_map(params, "source"),
-         :ok <- exact_keys(source_params, @source_fields, []),
+         # display_name: optional (console L11); the legacy page doesn't send it.
+         :ok <- exact_keys(source_params, @source_fields, ["display_name"]),
          {:ok, attrs} <- parse_source(source_params) do
       {:ok, %{source: attrs}}
     end
@@ -366,7 +367,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          {:ok, credential_provider} <- optional_text(params, "credential_provider"),
          {:ok, endpoint_ref} <- optional_text(params, "endpoint_ref"),
          {:ok, material_env_profile} <- optional_text(params, "material_env_profile"),
-         {:ok, http_endpoint_env} <- optional_text(params, "http_endpoint_env") do
+         {:ok, http_endpoint_env} <- optional_text(params, "http_endpoint_env"),
+         {:ok, display_name} <- optional_text(params, "display_name") do
       {:ok,
        %{
          data_source_id: data_source_id,
@@ -380,6 +382,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          material_env_profile: material_env_profile,
          http_endpoint_env: http_endpoint_env,
          storage: storage,
+         display_name: display_name,
          adapter_definition: adapter_definition
        }}
     end
@@ -815,7 +818,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
           registered_by: "ops_console_data_sources_action",
           logical_source: attrs.logical_source,
           endpoint_ref: attrs.endpoint_ref,
-          material_env_profile: attrs.material_env_profile
+          material_env_profile: attrs.material_env_profile,
+          display_name: Map.get(attrs, :display_name)
         })
     }
   end
