@@ -16,7 +16,13 @@ import { groupUplinkReader } from "@/features/contacts/readiness.ts";
  */
 
 export type DraftTarget = Readonly<{ spacecraft_id: string; source_endpoint_id: string | null }>;
-export type DraftCommand = Readonly<{ command_id: string; argument_values_json: string }>;
+/** A target's own argument values (B2; api f1bed1880): overrides the command's for that target. */
+export type DraftPerTarget = Readonly<{ spacecraft_id: string; argument_values_json: string }>;
+export type DraftCommand = Readonly<{
+  command_id: string;
+  argument_values_json: string;
+  per_target?: readonly DraftPerTarget[];
+}>;
 export type TargetChip = Readonly<{ key: string; value: string | number | readonly string[] }>;
 export type Draft = Readonly<{
   title: string;

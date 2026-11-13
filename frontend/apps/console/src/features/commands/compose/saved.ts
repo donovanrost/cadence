@@ -79,6 +79,17 @@ const text = (v: unknown, path = ""): Readonly<Record<string, string>> => {
   for (const [k, value] of Object.entries(v)) out[k] = d.string(value, `${path}.${k}`);
   return out;
 };
+/** argument id → spacecraft id → raw text (B2); older documents have `{}` or nothing. */
+const perTargetText = (
+  v: unknown,
+  path = "",
+): Readonly<Record<string, Readonly<Record<string, string>>>> => {
+  if (typeof v !== "object" || v === null || Array.isArray(v))
+    throw new DecodeError(path, "object");
+  const out: Record<string, Readonly<Record<string, string>>> = {};
+  for (const [k, value] of Object.entries(v)) out[k] = text(value, `${path}.${k}`);
+  return out;
+};
 const isFleetState = (s: string): s is FleetState => (fleetStates as readonly string[]).includes(s);
 
 const documentReader = d.object({
@@ -92,7 +103,14 @@ const documentReader = d.object({
     explicit: d.array(d.token, 1_000),
   }),
   endpoints: text,
-  stack: d.array(d.object({ command_id: d.token, values: text }), 500),
+  stack: d.array(
+    d.object({
+      command_id: d.token,
+      values: text,
+      per_target: d.optional((v, path = "") => perTargetText(v, path)),
+    }),
+    500,
+  ),
   release: d.object({
     mode: d.oneOf(["next_contact", "not_before"] as const),
     not_before: d.nullable(d.timestamp),
@@ -132,7 +150,9 @@ export function toDocument(f: ComposeFields) {
       key: i.key,
       command_id: i.command.id,
       values: { ...i.values },
-      per_target: {},
+      per_target: Object.fromEntries(
+        Object.entries(i.perTarget).map(([arg, byTarget]) => [arg, { ...byTarget }]),
+      ),
     })),
     release: {
       mode: f.release.mode,
@@ -197,7 +217,12 @@ export async function restoreDraft(
       const saved = s.values[arg.id];
       if (saved !== undefined) values[arg.id] = saved;
     }
-    stack.push({ ...item, values });
+    // Per target only for arguments the command still has.
+    const known = new Set(detail.arguments.map((a) => a.id));
+    const perTarget = Object.fromEntries(
+      Object.entries(s.per_target ?? {}).filter(([arg]) => known.has(arg)),
+    );
+    stack.push({ ...item, values, perTarget });
   }
   const nb = v.release.not_before;
   return {

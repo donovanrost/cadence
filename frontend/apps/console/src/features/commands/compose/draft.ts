@@ -1,6 +1,6 @@
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { checkArg } from "../args.ts";
-import type { Draft, TargetChip } from "../groups/api.ts";
+import type { Draft, DraftPerTarget, TargetChip } from "../groups/api.ts";
 import type { StackItem } from "./stack.ts";
 import type { TargetQuery } from "./targets.ts";
 
@@ -9,16 +9,44 @@ import type { TargetQuery } from "./targets.ts";
  * spliced as JSON text so 64-bit integers survive; fixed and empty optional arguments are left to
  * the catalog.
  */
-export function argumentValuesJson(item: StackItem): string | null {
+export function argumentValuesJson(
+  item: StackItem,
+  spacecraftId: string | null = null,
+): string | null {
   const parts: string[] = [];
   for (const arg of item.command.arguments) {
     if (arg.fixed_value_json !== null) continue;
-    const checked = checkArg(arg, item.values[arg.id] ?? "");
+    const own = spacecraftId === null ? undefined : item.perTarget[arg.id]?.[spacecraftId];
+    const checked = checkArg(arg, own ?? item.values[arg.id] ?? "");
     if (!checked.ok) return null;
     if (checked.json === "null") continue;
     parts.push(`${JSON.stringify(arg.name)}:${checked.json}`);
   }
   return `{${parts.join(",")}}`;
+}
+
+/** The text a target sends for an argument: its own when Per target and set, else the form's. */
+export const targetText = (item: StackItem, argId: string, spacecraftId: string) =>
+  item.perTarget[argId]?.[spacecraftId] ?? item.values[argId] ?? "";
+
+/**
+ * B2 → commands[].per_target (api f1bed1880): each target with a value of its own, with every
+ * argument's JSON (its own where set, else the form's). Null while any of them is invalid.
+ */
+export function perTargetJson(
+  item: StackItem,
+  spacecraftIds: readonly string[],
+): DraftPerTarget[] | null {
+  const args = Object.keys(item.perTarget);
+  if (args.length === 0) return [];
+  const out: DraftPerTarget[] = [];
+  for (const id of spacecraftIds) {
+    if (!args.some((a) => item.perTarget[a]?.[id] !== undefined)) continue;
+    const json = argumentValuesJson(item, id);
+    if (json === null) return null;
+    out.push({ spacecraft_id: id, argument_values_json: json });
+  }
+  return out;
 }
 
 export function queryChips(q: TargetQuery): TargetChip[] {
@@ -50,8 +78,17 @@ export function buildDraft(input: ComposeInput): Draft | null {
   const commands = [];
   for (const item of input.stack) {
     const json = argumentValuesJson(item);
-    if (json === null) return null;
-    commands.push({ command_id: item.command.id, argument_values_json: json });
+    const perTarget = perTargetJson(
+      item,
+      input.targets.map((sc) => sc.id),
+    );
+    if (json === null || perTarget === null) return null;
+    commands.push({
+      command_id: item.command.id,
+      argument_values_json: json,
+      // Only when set, so a draft without per-target values keeps its digest (api f1bed1880).
+      ...(perTarget.length ? { per_target: perTarget } : {}),
+    });
   }
   return {
     title: input.title.trim(),

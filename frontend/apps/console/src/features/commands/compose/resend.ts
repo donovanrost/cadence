@@ -80,7 +80,19 @@ export async function loadResend(
       if (json !== undefined && arg.fixed_value_json === null)
         values[arg.id] = textFromJson(arg, json);
     }
-    stack.push({ ...item, values });
+    // api f1bed1880: a target's own values come back as Per target where they differ.
+    const perTarget: Record<string, Record<string, string>> = {};
+    for (const t of c.per_target ?? []) {
+      const own = splitArgs(t.argument_values_json) ?? {};
+      for (const arg of detail.arguments) {
+        const json = own[arg.name];
+        if (json === undefined || arg.fixed_value_json !== null) continue;
+        const text = textFromJson(arg, json);
+        if (text === values[arg.id]) continue;
+        perTarget[arg.id] = { ...perTarget[arg.id], [t.spacecraft_id]: text };
+      }
+    }
+    stack.push({ ...item, values, perTarget });
   }
   return { ok: true, value: { group: g.value, stack, missing } };
 }

@@ -160,6 +160,58 @@ describe("group draft", () => {
       requested_approver_user_id: null,
     });
   });
+
+  it("sends a target's own values as per_target, only for targets that have them (B2)", () => {
+    const item = newItem(
+      command([arg({ id: "n", name: "count" }), arg({ id: "m", name: "mode" })]),
+    );
+    const base = {
+      title: "t",
+      log: "",
+      targets: [spacecraftRow(1), spacecraftRow(2), spacecraftRow(3)],
+      query: EMPTY_QUERY,
+      notBefore: null,
+      approver: "",
+      sentBackFrom: null,
+      endpoints: {},
+    };
+    const draft = buildDraft({
+      ...base,
+      stack: [
+        {
+          ...item,
+          values: { n: "3", m: "1" },
+          // EARENDIL-002 has its own count; 003 is listed but inherits; a removed target is ignored.
+          perTarget: { n: { "spacecraft-earendil-002": "8", "spacecraft-earendil-404": "9" } },
+        },
+      ],
+    });
+    expect(draft?.commands).toEqual([
+      {
+        command_id: "cmd-1",
+        argument_values_json: '{"count":3,"mode":1}',
+        per_target: [
+          {
+            spacecraft_id: "spacecraft-earendil-002",
+            argument_values_json: '{"count":8,"mode":1}',
+          },
+        ],
+      },
+    ]);
+    // An invalid per-target value blocks the draft, as an invalid form value does.
+    expect(
+      buildDraft({
+        ...base,
+        stack: [
+          {
+            ...item,
+            values: { n: "3", m: "1" },
+            perTarget: { n: { "spacecraft-earendil-002": "x" } },
+          },
+        ],
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("preflight", () => {

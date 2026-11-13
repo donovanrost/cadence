@@ -95,6 +95,10 @@ const command = d.object({
   critical: d.boolean,
   hazardous: d.boolean,
   argument_values_json: d.string,
+  // api f1bed1880: each target's own values ([] when none); optional for older reads.
+  per_target: d.optional(
+    d.array(d.object({ spacecraft_id: d.token, argument_values_json: d.string }), 2_000),
+  ),
 });
 export type GroupCommand = Decoded<typeof command>;
 

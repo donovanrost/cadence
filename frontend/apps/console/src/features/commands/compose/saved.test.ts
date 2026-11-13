@@ -94,6 +94,16 @@ describe("compose draft document", () => {
     });
   });
 
+  it("keeps each target's own values (B2) in the document", () => {
+    const [first] = fields.stack;
+    if (!first) throw new Error("stack");
+    const doc = toDocument({
+      ...fields,
+      stack: [{ ...first, perTarget: { s: { "spacecraft-earendil-002": "xyz" } } }],
+    });
+    expect(doc.stack[0]?.per_target).toEqual({ s: { "spacecraft-earendil-002": "xyz" } });
+  });
+
   it("restores fields, keeping invalid text, and counts commands the catalog lost", async () => {
     fetchCommand.mockResolvedValue({
       ok: true,

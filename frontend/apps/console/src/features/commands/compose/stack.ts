@@ -7,6 +7,11 @@ export type StackItem = Readonly<{
   command: CommandDetail;
   /** Raw form text per argument id (validated with checkArg; JSON values staged at submit). */
   values: Readonly<Record<string, string>>;
+  /**
+   * B2 Per target (CommandFlow.md; api f1bed1880): argument id → spacecraft id → raw text. An
+   * argument listed here is Per target; a target without its own text inherits the form value.
+   */
+  perTarget: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }>;
 
 let counter = 0;
@@ -16,6 +21,7 @@ export function newItem(command: CommandDetail): StackItem {
     key: `${command.id}#${counter}`,
     command,
     values: Object.fromEntries(command.arguments.map((a) => [a.id, initialText(a)])),
+    perTarget: {},
   };
 }
 
