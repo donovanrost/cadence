@@ -601,3 +601,20 @@ system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first
   - Commanding also stopped: the evidence adds "Commands can't be sent."
 - Domain states that no spacecraft's telemetry is processed while the item is open, for every reason. The title
   relies on that.
+
+### U39 · Staged changes left waiting (api BACKLOG 8d, Now queue kind `change_set_stale`) (api / fe-ops)
+P3, `off` mark, at most one per mission. Shown when the active change set holds staged changes and the oldest is
+more than 24 h old.
+- **Open:**
+  - Title: `3 staged changes aren't applied`.
+  - Evidence: "Staged on r6 by Mira K. and Ana P. The oldest has waited since 11-11 02:10Z." The time belongs to
+    "the oldest", not to the authors (U29). With 3 or more authors: "Mira K., Ana P. and 2 others".
+- **In review:**
+  - Title: `3 staged changes are waiting for review`.
+  - Evidence: "Sent for review at 11-12 09:00Z. Staged on r6 by Mira K. and Ana P." Name a submitter only if the
+    server sends one.
+- **Meta:** `SINCE 11-11 02:10Z · T+1d 21:44` (oldest_staged_at, as U38's age).
+- **Action:** `Review` → Setup › Changes.
+- **Singular:** `1 staged change isn't applied` / `is waiting for review`.
+- **Timeline `config_revision`:** `Applied r6 · 2 changes`, plus the actor when the event has one. It links to
+  Setup › Revisions r6.
