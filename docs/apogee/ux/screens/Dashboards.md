@@ -97,6 +97,9 @@ call (K2). The old teal "current" and violet "compare" hues are gone on purpose.
   expiry`). Data visibility: `Definition only` (widgets show "Data isn't shared in this link.") or `With data`.
 - **Settings › Sharing tab:** two tables.
   - Shares: link (copy) · Data · Expires · Created by/when · `Revoke` (confirms).
+  - Snapshots are taken only in the viewer, where you can see the window (no `Take snapshot` here). The table's
+    caption reads "Take a snapshot from the dashboard: set the range, then ⋯ › Take snapshot." with a link to the
+    viewer.
   - Snapshots: window · version · taken by/when · open. There's no Delete: snapshots are immutable in the domain
     (fe-setup 294f66b4). If snapshots are ever reachable outside the mission, stopping access becomes a director
     question.
