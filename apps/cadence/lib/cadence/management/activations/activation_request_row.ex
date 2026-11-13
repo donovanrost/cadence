@@ -28,7 +28,10 @@ defmodule Cadence.Management.Activations.ActivationRequestRow do
       ]
     )
 
-    field(:state, Ecto.Enum, values: [:approval_pending, :approved, :rejected])
+    field(:state, Ecto.Enum,
+      values: [:approval_pending, :approved, :rejected, :withdrawn, :superseded]
+    )
+
     field(:requester_actor_kind, Ecto.Enum, values: [:user, :service])
     field(:requester_actor_id, :string)
     field(:requester_actor_document, :map, default: %{})
@@ -36,6 +39,9 @@ defmodule Cadence.Management.Activations.ActivationRequestRow do
     field(:metadata, :map, default: %{})
     field(:requested_at, :utc_datetime_usec)
     field(:decided_at, :utc_datetime_usec)
+    # L10: the newer request that superseded this one, and when.
+    field(:superseded_by, :string)
+    field(:superseded_at, :utc_datetime_usec)
 
     timestamps()
   end
@@ -88,7 +94,9 @@ defmodule Cadence.Management.Activations.ActivationRequestRow do
       policy_document: JsonDocument.unwrap_value(row.policy_document),
       metadata: JsonDocument.unwrap_value(row.metadata),
       requested_at: row.requested_at,
-      decided_at: row.decided_at
+      decided_at: row.decided_at,
+      superseded_by: row.superseded_by,
+      superseded_at: row.superseded_at
     }
   end
 

@@ -3,7 +3,7 @@ defmodule Cadence.Management.Activations.ActivationRequest do
 
   alias Cadence.Ids
 
-  @type state :: :approval_pending | :approved | :rejected
+  @type state :: :approval_pending | :approved | :rejected | :withdrawn | :superseded
   @type t :: %__MODULE__{
           activation_request_id: binary(),
           organization_id: binary(),
@@ -19,7 +19,9 @@ defmodule Cadence.Management.Activations.ActivationRequest do
           policy_document: map(),
           metadata: map(),
           requested_at: DateTime.t(),
-          decided_at: DateTime.t() | nil
+          decided_at: DateTime.t() | nil,
+          superseded_by: binary() | nil,
+          superseded_at: DateTime.t() | nil
         }
 
   defstruct [
@@ -37,7 +39,9 @@ defmodule Cadence.Management.Activations.ActivationRequest do
     :policy_document,
     :metadata,
     :requested_at,
-    :decided_at
+    :decided_at,
+    :superseded_by,
+    :superseded_at
   ]
 
   @spec new(map()) :: t()

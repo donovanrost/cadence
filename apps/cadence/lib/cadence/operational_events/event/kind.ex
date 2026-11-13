@@ -3,6 +3,7 @@ defmodule Cadence.OperationalEvents.Event.Kind do
 
   @kinds [
     :activation_resumed,
+    :activation_superseded,
     :binding_set_activated,
     :catalog_revision_registered,
     :dashboard_archived,

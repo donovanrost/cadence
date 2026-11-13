@@ -8,7 +8,7 @@ defmodule Cadence.Management.Activations.ActivationDecision do
           activation_request_id: binary(),
           organization_id: binary(),
           mission_id: binary(),
-          decision: :approved | :rejected,
+          decision: :approved | :rejected | :withdrawn,
           actor_kind: :user,
           actor_id: binary(),
           actor_document: map(),

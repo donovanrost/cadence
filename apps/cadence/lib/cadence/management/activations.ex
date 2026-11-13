@@ -15,7 +15,8 @@ defmodule Cadence.Management.Activations do
     ActivationDecisionRow,
     ActivationRequest,
     ActivationRequestRow,
-    ApprovedActivation
+    ApprovedActivation,
+    Lifecycle
   }
 
   alias Cadence.Persistence.JsonDocument
@@ -75,7 +76,7 @@ defmodule Cadence.Management.Activations do
       # transaction this is a no-op; those callers announce it after their commit.
       with :ok <- expected_policy(request.policy_document, opts) do
         request
-        |> persist_request()
+        |> persist_superseding()
         |> ScopedReadUpdates.publish_result(:activations_changed, organization_id, mission_id)
       end
     end
@@ -86,6 +87,20 @@ defmodule Cadence.Management.Activations do
           | {:error, term()}
   def approve(%Scope{} = current_scope, request_id, reason, opts \\ []) do
     decide(current_scope, request_id, :approved, reason, opts)
+  end
+
+  @doc "The requester withdraws a pending request (L10). See `Activations.Lifecycle.withdraw/3`."
+  def withdraw(%Scope{} = scope, request_id, reason) do
+    scope
+    |> Lifecycle.withdraw(request_id, reason)
+    |> case do
+      {:ok, request, _decision} = result ->
+        ScopedReadUpdates.publish(:activations_changed, scope.organization_id, request.mission_id)
+        result
+
+      error ->
+        error
+    end
   end
 
   @spec reject(Scope.t(), binary(), binary(), keyword()) ::
@@ -302,6 +317,20 @@ defmodule Cadence.Management.Activations do
     end)
   end
 
+  # L10: a new request supersedes the older pending ones it replaces (Lifecycle), atomically.
+  defp persist_superseding(request) do
+    Repo.transaction(fn ->
+      case persist_request(request) do
+        {:ok, persisted} ->
+          _superseded = Lifecycle.supersede_older(persisted)
+          persisted
+
+        {:error, reason} ->
+          Repo.rollback(reason)
+      end
+    end)
+  end
+
   defp persist_request(request) do
     request
     |> ActivationRequestRow.changeset()
@@ -336,12 +365,7 @@ defmodule Cadence.Management.Activations do
   defp persist_decision(scope, request_id, decision, actor, reason, decided_at) do
     with {:ok, request_row} <- lock_pending_request(scope, request_id),
          :ok <- authorize_decision(scope, request_row),
-         :ok <-
-           ActivationPolicy.validate(
-             request_row.organization_id,
-             request_row.mission_id,
-             JsonDocument.unwrap_value(request_row.policy_document)
-           ),
+         :ok <- current_policy(decision, request_row),
          :ok <- distinct_approver(request_row, actor),
          {:ok, decision_row} <-
            insert_decision(request_row, request_id, decision, actor, reason, decided_at),
@@ -350,6 +374,17 @@ defmodule Cadence.Management.Activations do
     else
       {:error, error} -> Repo.rollback(error)
     end
+  end
+
+  # L10: reject never waits on the policy, so a request stuck under a changed one can go.
+  defp current_policy(:rejected, _request_row), do: :ok
+
+  defp current_policy(_decision, request_row) do
+    ActivationPolicy.validate(
+      request_row.organization_id,
+      request_row.mission_id,
+      JsonDocument.unwrap_value(request_row.policy_document)
+    )
   end
 
   defp authorize_decision(scope, request_row) do
