@@ -1,0 +1,218 @@
+import { computed, onScopeDispose, ref, shallowRef, type Ref } from "vue";
+import type { ApiError } from "@/api";
+import type { Runtime } from "../api.ts";
+import * as api from "./api.ts";
+import type { Command, Preview } from "./contracts.ts";
+import { append, clearDraft, loadDraft, storeDraft, type Draft } from "./draft.ts";
+
+export type Conflict = Readonly<{
+  currentVersion: number;
+  savedBy: string | null;
+  savedAt: string | null;
+}>;
+export type Notice =
+  | { kind: "rejected"; message: string }
+  | { kind: "skipped"; events: readonly string[] }
+  | { kind: "too_many_commands" }
+  | { kind: "not_ready"; placements: readonly { id: string; message: string }[] }
+  | { kind: "failed"; message: string };
+
+/**
+ * Edit in place (plan: save model). Owns the browser-held draft, its autosave, the staged
+ * preview (live values paused), save, discard, and the "saved by someone else" rebase. The
+ * server is stateless: every preview replays the draft onto its base version.
+ */
+export function useEditSession(
+  missionId: Readonly<Ref<string>>,
+  dashboardId: Readonly<Ref<string>>,
+  runtime: Readonly<Ref<Runtime>>,
+  /** The dashboard's current version, from the viewer read (refreshed on `dashboards`). */
+  currentVersion: Readonly<Ref<number | null>>,
+) {
+  const draft = shallowRef<Draft | null>(null);
+  const staged = shallowRef<Preview | null>(null);
+  const busy = ref(false);
+  const notice = shallowRef<Notice | null>(null);
+  const resumed = ref(false);
+  let controller: AbortController | null = null;
+  let generation = 0;
+
+  /** Who saved over this draft and when, once a save or a rebase learned it (409 details). */
+  const conflictBy = shallowRef<Conflict | null>(null);
+  const editing = computed(() => draft.value !== null);
+  const dirty = computed(() => (draft.value?.commands.length ?? 0) > 0);
+  /** Someone saved over the version this draft is based on (ux's callout). */
+  const conflict = computed<Conflict | null>(() => {
+    const d = draft.value;
+    const current = Math.max(currentVersion.value ?? 0, staged.value?.current_version ?? 0);
+    if (!d || !dirty.value || current <= d.baseVersion) return null;
+    return {
+      currentVersion: current,
+      savedBy: conflictBy.value?.savedBy ?? null,
+      savedAt: conflictBy.value?.savedAt ?? null,
+    };
+  });
+
+  function persist(next: Draft) {
+    draft.value = next;
+    storeDraft(missionId.value, dashboardId.value, next);
+  }
+
+  async function refresh(next: Draft) {
+    controller?.abort();
+    const mine = new AbortController();
+    controller = mine;
+    const id = ++generation;
+    const result = await api.preview(
+      missionId.value,
+      dashboardId.value,
+      next,
+      runtime.value,
+      mine.signal,
+    );
+    if (id !== generation || mine.signal.aborted) return;
+    if (result.ok) {
+      staged.value = result.value;
+      return;
+    }
+    const failure = api.editFailure(result.error, next);
+    if (failure.kind === "command") {
+      // The command the server refused is dropped; the rest of the draft stays.
+      const commands = next.commands.filter((_, i) => i !== failure.index);
+      persist({ ...next, commands });
+      notice.value = { kind: "rejected", message: rejectionText(failure.code, failure.field) };
+      void refresh({ ...next, commands });
+    } else if (failure.kind === "too_many_commands") notice.value = { kind: "too_many_commands" };
+    else if (failure.kind === "other")
+      notice.value = { kind: "failed", message: failureText(failure.error) };
+  }
+
+  /** Enter edit mode: resume a stored draft for this dashboard, else start on the current version. */
+  function enter() {
+    const storedDraft = loadDraft(missionId.value, dashboardId.value);
+    const base = currentVersion.value;
+    if (!storedDraft && base === null) return;
+    resumed.value = storedDraft !== null;
+    const next = storedDraft ?? { baseVersion: base ?? 0, commands: [] };
+    draft.value = next;
+    notice.value = null;
+    void refresh(next);
+  }
+
+  function stage(command: Command) {
+    const d = draft.value;
+    if (!d) return;
+    const result = append(d, command);
+    if (!result.ok) {
+      notice.value = { kind: "too_many_commands" };
+      return;
+    }
+    persist(result.draft);
+    void refresh(result.draft);
+  }
+
+  function leave() {
+    controller?.abort();
+    generation++;
+    draft.value = null;
+    staged.value = null;
+    notice.value = null;
+    conflictBy.value = null;
+  }
+
+  function discard() {
+    clearDraft(missionId.value, dashboardId.value);
+    leave();
+  }
+
+  async function save(input: { message: string; defaults: { time: boolean; scope: boolean } }) {
+    const d = draft.value;
+    if (!d || busy.value) return { ok: false as const };
+    busy.value = true;
+    try {
+      const result = await api.save(missionId.value, dashboardId.value, d, {
+        ...input,
+        runtime: runtime.value,
+      });
+      if (result.ok) {
+        discard();
+        return { ok: true as const, version: result.value.version };
+      }
+      const failure = api.editFailure(result.error, d);
+      if (failure.kind === "conflict") conflictBy.value = failure;
+      else if (failure.kind === "not_ready")
+        notice.value = { kind: "not_ready", placements: failure.placements };
+      else if (failure.kind === "too_many_commands") notice.value = { kind: "too_many_commands" };
+      else if (failure.kind === "command")
+        notice.value = { kind: "rejected", message: rejectionText(failure.code, failure.field) };
+      else notice.value = { kind: "failed", message: failureText(failure.error) };
+      return { ok: false as const };
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  /** Continue editing: replay my edits onto the newest version; report the ones that no longer apply. */
+  async function continueEditing() {
+    const d = draft.value;
+    if (!d || busy.value) return;
+    busy.value = true;
+    try {
+      const result = await api.rebase(missionId.value, dashboardId.value, d, runtime.value);
+      if (!result.ok) {
+        notice.value = { kind: "failed", message: failureText(result.error) };
+        return;
+      }
+      const r = result.value;
+      persist({ baseVersion: r.base_version, commands: r.applied });
+      staged.value = r;
+      conflictBy.value = null;
+      notice.value = r.skipped.length
+        ? { kind: "skipped", events: r.skipped.map((s) => s.event) }
+        : null;
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  /** Discard mine: drop the draft and keep editing on the newest version. */
+  function discardMine() {
+    clearDraft(missionId.value, dashboardId.value);
+    leave();
+    enter();
+  }
+
+  onScopeDispose(() => controller?.abort());
+  return {
+    draft,
+    staged,
+    busy,
+    notice,
+    resumed,
+    editing,
+    dirty,
+    conflict,
+    enter,
+    stage,
+    save,
+    discard,
+    leave,
+    continueEditing,
+    discardMine,
+  };
+}
+
+function failureText(error: ApiError): string {
+  return error.kind === "unauthenticated" ? "Signed out." : error.message;
+}
+
+const REJECTION: Readonly<Record<string, string>> = {
+  not_found: "That widget or section no longer exists.",
+  capacity: "This dashboard is at its widget or section limit.",
+  invalid_input: "That change isn't valid.",
+  duplicate_id: "That widget already exists.",
+};
+function rejectionText(code: string, field: string | null): string {
+  const base = REJECTION[code] ?? "The server didn't accept that change.";
+  return field ? `${base} (${field.replaceAll("_", " ")})` : base;
+}
