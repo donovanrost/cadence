@@ -10,6 +10,7 @@ import {
   type Reader,
 } from "@/api";
 import {
+  displayValue,
   schemaFieldReader,
   toValue,
   visible,
@@ -124,3 +125,19 @@ export const warningWords: Readonly<Record<(typeof previewWarnings)[number], str
 /** A preview warning in words, or the server's own code for one the console doesn't know. */
 export const warningText = (w: TemplatePreview["warnings"][number]["code"]) =>
   decoders.vocabularyText(w, warningWords);
+
+/**
+ * The template page's max-gap fact (#74, domain e99fe3830): the schema field's own label and unit, as
+ * on the requirement page; an empty limit reads "No limit" (ux P4). Null until the schema is read.
+ */
+export function maxGapFact(
+  fields: readonly SchemaField[] | null,
+  document: unknown,
+): Readonly<{ key: string; label: string; value: string; mono: boolean }> | null {
+  const f = fields?.find((x) => x.path === "requirement.max_gap_seconds");
+  if (!f) return null;
+  const v = readPath(document, f.path);
+  return v === null || v === undefined
+    ? { key: f.path, label: f.label, value: "No limit", mono: false }
+    : { key: f.path, label: f.label, value: displayValue(f, v), mono: true };
+}

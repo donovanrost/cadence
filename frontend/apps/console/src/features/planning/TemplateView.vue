@@ -1,11 +1,20 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRemoteQuery } from "@/api";
 import { ApKeyValue, ApPanel, ApTable, formatAbsolute, plural, type ApColumn } from "@/ui";
 import { ruleText, type TemplateDetail } from "./api.ts";
 import { stateChangedLine } from "./lifecycle.ts";
 import TemplateLifecycle from "./TemplateLifecycle.vue";
+import { fetchTemplateSchema, maxGapFact } from "./templates.ts";
 
 /** CP3 read view: the rule, its last lifecycle move, Pause/Resume/Close (L2), and versions. */
-defineProps<{ missionId: string; template: TemplateDetail; canEdit: boolean }>();
+const props = defineProps<{ missionId: string; template: TemplateDetail; canEdit: boolean }>();
+// The form's schema gives the max-gap label and unit, so the page and the form say the same thing.
+const schema = useRemoteQuery(() => props.missionId, fetchTemplateSchema);
+const gap = computed(() => {
+  const s = schema.state.value;
+  return maxGapFact(s.status === "ready" ? s.value.fields : null, props.template.document);
+});
 const emit = defineEmits<{ moved: [] }>();
 const stateWords: Readonly<Record<TemplateDetail["state"], string>> = {
   active: "Active",
@@ -22,6 +31,7 @@ const facts = (t: TemplateDetail) => [
   },
   { key: "priority", label: "Priority", value: t.priority.replaceAll("_", " ") },
   { key: "state", label: "State", value: stateWords[t.state] },
+  ...(gap.value ? [gap.value] : []),
 ];
 const columns: readonly ApColumn[] = [
   { key: "version", label: "Version", mono: true },
