@@ -1,6 +1,9 @@
-import { recordOf } from "@/api";
 import {
+  actor,
   decoders as d,
+  fieldErrors,
+  isError,
+  recordOf,
   request,
   type ApiError,
   type ApiResult,
@@ -13,8 +16,6 @@ import {
  * Contract: docs/apogee/api/scheduling.md, `POST /contact-plans/:plan_id/unconfirmed/:snapshot_id/resolve`.
  */
 export type ResolveAction = "booked" | "not_booked";
-
-const actor = d.object({ kind: d.string, id: d.nullable(d.string), name: d.nullable(d.string) });
 
 export const resolveReader = d.object({
   outcome: d.oneOf(["provider_answered", "attested", "not_booked"]),
@@ -67,44 +68,33 @@ export type ResolveFailure = Readonly<{
   refresh: boolean;
 }>;
 
-const codeOf = (e: ApiError) => ("code" in e ? e.code : null);
-
 /** U32 / U20 error copy; never claims something saved when the reply doesn't say so. */
 export function failureText(e: ApiError, provider: string): ResolveFailure {
-  switch (codeOf(e)) {
-    case "booking_not_unconfirmed":
-      return {
-        text: `This booking isn't unconfirmed any more. ${provider} may have answered.`,
-        fields: {},
-        refresh: true,
-      };
-    case "booking_already_resolved": {
-      const name = resolverName("details" in e ? e.details : null);
-      return {
-        text: `${name ?? "Someone"} already resolved this.`,
-        fields: {},
-        refresh: true,
-      };
-    }
-    case "booking_not_found":
-      return { text: "This booking isn't on the plan any more.", fields: {}, refresh: true };
-    case "invalid_params": {
-      const fields = fieldMessages("details" in e ? e.details : null);
-      const inline = Object.keys(fields).every((k) => k === "note" || k === "provider_reference");
-      return {
-        text:
-          inline && Object.keys(fields).length > 0 ? null : "Nothing was marked. Check the fields.",
-        fields,
-        refresh: false,
-      };
-    }
-    case "forbidden":
-      return { text: "Org admins resolve unconfirmed bookings.", fields: {}, refresh: false };
-    case null:
-    default:
-      break;
+  if (isError(e, "booking_not_unconfirmed"))
+    return {
+      text: `This booking isn't unconfirmed any more. ${provider} may have answered.`,
+      fields: {},
+      refresh: true,
+    };
+  if (isError(e, "booking_already_resolved"))
+    return {
+      text: `${resolverName("details" in e ? e.details : null) ?? "Someone"} already resolved this.`,
+      fields: {},
+      refresh: true,
+    };
+  if (isError(e, "booking_not_found"))
+    return { text: "This booking isn't on the plan any more.", fields: {}, refresh: true };
+  if (isError(e, "invalid_params")) {
+    const fields = fieldErrors(e);
+    const inline = Object.keys(fields).every((k) => k === "note" || k === "provider_reference");
+    return {
+      text:
+        inline && Object.keys(fields).length > 0 ? null : "Nothing was marked. Check the fields.",
+      fields,
+      refresh: false,
+    };
   }
-  if (e.kind === "forbidden")
+  if (isError(e, "forbidden") || e.kind === "forbidden")
     return { text: "Org admins resolve unconfirmed bookings.", fields: {}, refresh: false };
   if (outcomeUnknown(e))
     return {
@@ -122,13 +112,4 @@ export function failureText(e: ApiError, provider: string): ResolveFailure {
 function resolverName(details: unknown): string | null {
   const name = recordOf(recordOf(details)?.["actor"])?.["name"];
   return typeof name === "string" && name ? name : null;
-}
-
-function fieldMessages(details: unknown): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(recordOf(details) ?? {})) {
-    const text = Array.isArray(v) ? v.filter((x) => typeof x === "string").join(" ") : v;
-    if (typeof text === "string" && text) out[k] = text;
-  }
-  return out;
 }

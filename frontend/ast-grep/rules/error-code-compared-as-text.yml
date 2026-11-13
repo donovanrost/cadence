@@ -23,6 +23,5 @@
       "ast-grep/fixtures/**",
       # Not migrated yet (BACKLOG §12B): each owner removes their file when they switch to isError.
       "apps/console/src/features/apps/hostBridge.ts",
-      "apps/console/src/features/resolutions/api.ts",
     ],
 }
