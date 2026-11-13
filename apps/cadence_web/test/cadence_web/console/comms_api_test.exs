@@ -148,4 +148,30 @@ defmodule CadenceWeb.Console.CommsAPITest do
     conn = c.user |> TestFixtures.member_conn() |> get(c.base <> "/config/kinds/nope/schema")
     assert json_response(conn, 422)["error"]["code"] == "invalid_params"
   end
+
+  test "the spacecraft_profile schema is the name plus the profile's framing and catalog fields",
+       c do
+    fields = get_data(c, "/config/kinds/spacecraft_profile/schema")["fields"]
+    by_path = Map.new(fields, &{&1["path"], &1})
+
+    assert hd(fields)["path"] == "display_name"
+
+    assert ~w(display_name downlink_protocol uplink_protocol packet_protocol
+              frame_parameters.frame_size frame_parameters.fecf catalog_revision_id) --
+             Map.keys(by_path) == []
+
+    assert %{"required" => true, "section" => "profile"} = by_path["display_name"]
+
+    assert %{"required" => true, "type" => "enum", "default" => "tm", "section" => "framing"} =
+             by_path["downlink_protocol"]
+
+    assert %{"required" => false, "unit" => "bytes", "range" => %{"max" => 65_535}} =
+             by_path["frame_parameters.frame_size"]
+
+    # No catalog revisions in this mission: the reference keeps no choices.
+    assert %{"type" => "reference", "section" => "catalog", "enum" => nil} =
+             by_path["catalog_revision_id"]
+
+    refute Map.has_key?(by_path, "routing_rules")
+  end
 end

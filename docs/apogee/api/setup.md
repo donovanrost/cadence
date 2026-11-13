@@ -602,8 +602,8 @@ the provider's own record; there is no inferred health.
 ## `GET /api/console/v1/missions/:mission_id/config/kinds/:kind/schema`
 
 `{kind, fields: [{path, label, type, unit, enum, range, default, required, help, visible_when}]}`
-for generating change-set edit forms. `kind` is `ground_station` or `transport`; anything else
-gets `422 invalid_params`.
+for generating change-set edit forms. `kind` is `ground_station`, `transport` or
+`spacecraft_profile`; anything else gets `422 invalid_params`.
 
 - `ground_station`: `display_name` (required), `code` (required for new stations, `pattern`
   `^[A-Z0-9]{2,8}$`, unique per mission), `provider` (an `enum` of the mission's provider names when
@@ -614,6 +614,15 @@ gets `422 invalid_params`.
   `configuration.framing.mode`, `configuration.framing.fixed_message_bytes`,
   `configuration.reconnect.policy`, `configuration.tls.enabled` (boolean)). They match the transport
   detail `document`, so stage edits to exactly these paths.
+- `spacecraft_profile` (8f, New profile): `display_name` (required), then the profile detail's
+  section fields on the kind's document paths: `downlink_protocol`, `uplink_protocol` (both
+  required), `packet_protocol`, `frame_parameters.{frame_size, secondary_header_length,
+  insert_zone_length, ocf_length, fecf, truncated_primary_header}`, `catalog_revision_id`
+  (`reference`; `enum` = the mission's catalog revisions, newest first, labelled "rev 4 · imported
+  11-10"; no `enum` when there are none). Each field adds `section` (`profile | framing |
+  catalog`). Labels, units, ranges and help match the profile detail's. Routing rules,
+  applications and metadata aren't in it (their own editors). The kind still validates on stage
+  (e.g. frame lengths per protocol).
 - `visible_when: {path, equals}` says when to show a field (for example `frame_size` only when
   `configuration.framing_mode` is `fixed_size`, and each kind's fields only for its
   `transport_kind`).

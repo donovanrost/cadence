@@ -9,9 +9,18 @@ defmodule Cadence.Reads.ConfigKindSchema do
   `transport` adds the transport kind's own configuration fields (today
   `tcp_socket`) under `configuration.*`, addressing the stored, normalized
   configuration document (e.g. `configuration.framing.mode`).
+  `spacecraft_profile` (fe-setup, New profile) is the name plus the profile sections of
+  `Cadence.SpacecraftType.Schema` (framing, catalog), each field carrying its `section`; routing
+  rules, applications and metadata have their own editors.
   """
 
+  alias Cadence.Catalog
   alias Cadence.Comms.TransportKind
+  alias Cadence.Reads.ProfileDetail
+  alias Cadence.SpacecraftType.Schema, as: ProfileSchema
+
+  # A profile can't be framed without both transfer frames.
+  @profile_required ~w(downlink_protocol uplink_protocol)
 
   # Definition field names mapped to the paths of the stored (normalized)
   # configuration document, so prefill, staged changes and conflict checks all
@@ -52,6 +61,20 @@ defmodule Cadence.Reads.ConfigKindSchema do
      ]}
   end
 
+  def fields("spacecraft_profile", organization_id, mission_id) do
+    choices =
+      organization_id
+      |> Catalog.list_revisions(mission_id)
+      |> Enum.map(&%{value: &1.catalog_revision_id, label: ProfileDetail.catalog_label(&1)})
+
+    name =
+      "display_name"
+      |> field("Name", :string, required: true, range: %{min: 1, max: 200})
+      |> Map.put(:section, "profile")
+
+    {:ok, [name | Enum.flat_map(ProfileSchema.sections(), &profile_section(&1, choices))]}
+  end
+
   def fields(kind, _organization_id, _mission_id), do: fields(kind)
 
   @spec fields(binary()) :: {:ok, [map()]} | {:error, :unknown_kind}
@@ -68,6 +91,26 @@ defmodule Cadence.Reads.ConfigKindSchema do
   end
 
   def fields(_kind), do: {:error, :unknown_kind}
+
+  defp profile_section(section, catalog_choices) do
+    Enum.map(section.fields, fn schema_field ->
+      enum =
+        if schema_field.path == "catalog_revision_id" and catalog_choices != [],
+          do: catalog_choices,
+          else: schema_field.enum
+
+      schema_field.path
+      |> field(schema_field.label, schema_field.type,
+        unit: schema_field.unit,
+        enum: enum,
+        range: schema_field.range,
+        default: schema_field.default,
+        required: schema_field.path in @profile_required,
+        help: schema_field.help
+      )
+      |> Map.put(:section, Atom.to_string(section.key))
+    end)
+  end
 
   defp configuration_fields do
     TransportKind.all()
