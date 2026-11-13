@@ -826,3 +826,16 @@ configuration failure P3. The amendments to fe-ops' drafts:
   A field the server can't label (null) isn't hidden, because hiding it would understate the change (U20). In
   Now it counts toward "and N more". In the drawer it's a row labelled `Other`, with its key and raw values in
   Technical details.
+- **After the pass has flown** (lead 11-13: these leave Now).
+  - **An unapproved change expires.** On the pass detail its block keeps the Before → After table, read-only,
+    with the off tag `EXPIRED` and the line "Northlight's change wasn't decided before the pass flew, so it
+    expired." It doesn't say whether Northlight applied it (U20); the pass's own times show what flew. There are
+    no buttons.
+    - 409 when a decision races the pass: "The pass has flown, so this change can't be decided any more." The
+      block then shows the expired state.
+    - Pass history line: "Northlight's change expired: not decided before the pass flew."
+  - **An unacknowledged change stays acknowledgeable** in the pass history. Its entry shows the caution tag
+    `NOT ACKNOWLEDGED` and "Northlight changed this pass: AOS 03:10Z → 03:12Z · Antenna 2 → 4." (the same
+    evidence rules), plus `Acknowledge` with a required reason (placeholder "What you checked"). After that:
+    "Acknowledged by Mira K. at 11-14 09:10Z: <reason>." It's not in Now, so nothing else nags. The pass detail
+    header shows the count `1 CHANGE NOT ACKNOWLEDGED` (caution text), linking to the entry.
