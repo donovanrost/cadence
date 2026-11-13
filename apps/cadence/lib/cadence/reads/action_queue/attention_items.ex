@@ -46,7 +46,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
 
   defp attention_names(org, mission_id, fleet, loaded) do
     wanted =
-      loaded.items |> Enum.map(& &1.spacecraft_id) |> Enum.reject(&is_nil/1) |> MapSet.new()
+      loaded.items
+      |> Enum.flat_map(&(Map.get(&1, :spacecraft_ids) || [Map.get(&1, :spacecraft_id)]))
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
 
     in_fleet =
       fleet.spacecraft
@@ -125,7 +128,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       since: attention.raised_at,
       due_at: due_at(attention),
       count: 1,
-      spacecraft: spacecraft(attention.spacecraft_id, names),
+      spacecraft: members(attention, names),
       attention: object(attention, names)
     })
   end
@@ -142,11 +145,11 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       conflict: Map.get(attention, :conflict),
       state: attention.state,
       acknowledged_by: Map.get(attention, :acknowledged_by),
-      contact_id: attention.contact_id,
+      contact_id: Map.get(attention, :contact_id),
       reservation_id: Map.get(attention, :provider_reservation_id),
-      station: station(attention.ground_station_ref, names),
-      provider: provider(attention.provider_id, names),
-      starts_at: attention.starts_at,
+      station: station(Map.get(attention, :ground_station_ref), names),
+      provider: provider(Map.get(attention, :provider_id), names),
+      starts_at: Map.get(attention, :starts_at),
       raised_at: attention.raised_at,
       provider_message: Map.get(attention, :provider_message),
       resolution: Map.get(attention, :resolution),
@@ -187,11 +190,31 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     :change_set_id
   ]
 
+  # Director C / ux U41: an approved activation whose apply failed or stalled (Retry apply).
+  @activation_apply_keys [
+    :error_code,
+    :error,
+    :retryable,
+    :activation_request_id,
+    :summary,
+    :kind,
+    :app,
+    :spacecraft_ids,
+    :spacecraft_count,
+    :runtime_not_applied,
+    :since,
+    :approved_by,
+    :approved_at
+  ]
+
   defp settlement(%{source: "contact_settlement"} = attention),
     do: Map.take(attention, @settlement_keys)
 
   defp settlement(%{source: "mission_runtime"} = attention),
     do: Map.take(attention, @mission_runtime_keys)
+
+  defp settlement(%{source: "activation_apply"} = attention),
+    do: Map.take(attention, @activation_apply_keys)
 
   defp settlement(_attention), do: %{}
 
@@ -222,12 +245,15 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp due_at(%{source: "contact_settlement"} = attention),
     do: Map.get(attention, :next_attempt_at) || attention.starts_at
 
-  defp due_at(attention), do: attention.starts_at
+  defp due_at(attention), do: Map.get(attention, :starts_at)
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{source: "contact_settlement"}, _now), do: false
   # No spacecraft's telemetry is processed while it's open.
   defp p1?(%{source: "mission_runtime"}, _now), do: true
+  # The same while an apply that would bring the runtime up is stuck (ux U41).
+  defp p1?(%{source: "activation_apply"} = attention, _now),
+    do: Map.get(attention, :runtime_not_applied) == true
 
   defp p1?(%{starts_at: %DateTime{} = starts_at} = attention, now) do
     horizon = DateTime.add(now, @p1_horizon_s, :second)
@@ -262,6 +288,12 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     do: provider(id, names).name || by["name"]
 
   defp resolved_name(by, _names), do: by["name"]
+
+  # An activation names several spacecraft; other sources one.
+  defp members(%{spacecraft_ids: [_ | _] = ids}, names),
+    do: Enum.flat_map(ids, &spacecraft(&1, names))
+
+  defp members(attention, names), do: spacecraft(Map.get(attention, :spacecraft_id), names)
 
   defp spacecraft(nil, _names), do: []
 

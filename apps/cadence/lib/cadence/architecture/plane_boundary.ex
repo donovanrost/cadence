@@ -501,6 +501,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/management/activations/approved_activation.ex",
                               "lib/cadence/management/activations/activation_request.ex",
                               "lib/cadence/management/activations.ex",
+                              "lib/cadence/management/activations/directory.ex",
                               "lib/cadence/management/commanding/approved_command.ex",
                               "lib/cadence/management/commanding.ex",
                               "lib/cadence/management/commanding/request_review.ex",

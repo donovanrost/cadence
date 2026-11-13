@@ -152,4 +152,47 @@ defmodule Cadence.Reads.ActionQueue.AttentionItemsTest do
     assert %{resolved_by: %{kind: "provider", name: "Northlight"}, action: "confirmed"} = provider
     assert %{resolved_by: %{kind: "system", name: nil}, action: "cancel confirmed"} = system
   end
+
+  test "a stuck activation apply: P1 only while the runtime is down, with its members and facts" do
+    stuck = fn runtime_not_applied ->
+      %{
+        id: "activation_request_1",
+        source: "activation_apply",
+        conflict: "apply_failed",
+        state: "open",
+        error_code: "activation_execution_interrupted",
+        error: "Applying was cut off: Cadence lost its database connection partway.",
+        retryable: true,
+        activation_request_id: "activation_request_1",
+        summary: "Decom composition for 2 spacecraft",
+        kind: "telemetry_decom",
+        app: %{key: "telemetry_decom", name: "Telemetry Decom"},
+        spacecraft_ids: ["sc-1", "sc-gone"],
+        spacecraft_id: nil,
+        spacecraft_count: 2,
+        runtime_not_applied: runtime_not_applied,
+        approved_by: %{id: "u1", name: "Mira K."},
+        approved_at: at(-600),
+        since: at(-300),
+        raised_at: at(-300)
+      }
+    end
+
+    %{items: [down]} = build([stuck.(true)], [])
+    %{items: [up]} = build([stuck.(false)], [])
+
+    assert {down.priority, up.priority} == {1, 2}
+    assert down.id == "attention:activation_apply:activation_request_1"
+    # Members the fleet knows; one that left it is skipped here (names come from load/4).
+    assert [%{id: "sc-1"}] = down.spacecraft
+
+    assert %{
+             retryable: true,
+             error_code: "activation_execution_interrupted",
+             approved_by: %{name: "Mira K."},
+             runtime_not_applied: true,
+             contact_id: nil,
+             starts_at: nil
+           } = down.attention
+  end
 end

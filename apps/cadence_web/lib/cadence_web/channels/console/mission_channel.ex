@@ -33,7 +33,8 @@ defmodule CadenceWeb.Console.MissionChannel do
     spacecraft_configuration_changed: "spacecraft",
     dashboards_changed: "dashboards",
     settings_changed: "settings",
-    configuration_changed: "configuration"
+    configuration_changed: "configuration",
+    activations_changed: "activations"
   }
 
   @runtime_resources %{
