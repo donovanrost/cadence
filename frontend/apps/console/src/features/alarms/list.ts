@@ -1,5 +1,6 @@
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { bandFor } from "./api.ts";
+import { formatValue, withUnit } from "./format.ts";
 import type { Episode } from "./episodes.ts";
 
 /**
@@ -22,7 +23,18 @@ export type AlarmListRow = Readonly<{
    * A group header (OpsLists §Alarms: identical point + condition across GROUP_AT or more
    * spacecraft): `episode` is its first (most severe) member's; the members follow when expanded.
    */
-  group?: Readonly<{ size: number; where: string; expanded: boolean; unassigned: number }>;
+  group?: Readonly<{
+    size: number;
+    where: string;
+    expanded: boolean;
+    unassigned: number;
+    /** Members' value range when numeric with one unit ("23.1–23.6 V"), else null (blank). */
+    range: string | null;
+    /** The earliest member opening. */
+    openedAt: string;
+    /** The member the operator acts on first: in contact, else the soonest booked AOS. */
+    soonest: FleetSpacecraft | null;
+  }>;
   /** A row shown under its expanded group. */
   member?: boolean;
 }>;
@@ -36,6 +48,28 @@ function planesOf(rows: readonly AlarmListRow[]): string {
     .map((p) => String(p).padStart(2, "0"));
   if (planes.length === 0) return "";
   return planes.length === 1 ? `plane ${planes[0]}` : `planes ${planes.join(", ")}`;
+}
+
+function valueRange(members: readonly AlarmListRow[]): string | null {
+  const units = new Set(members.map((m) => m.episode.point.unit));
+  const values = members.map((m) => m.episode.last_value);
+  if (units.size !== 1 || !values.every((v): v is number => typeof v === "number")) return null;
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const unit = members[0]?.episode.point.unit ?? null;
+  const text = lo === hi ? formatValue(lo) : `${formatValue(lo)}–${formatValue(hi)}`;
+  return withUnit(text, unit);
+}
+
+function soonestOf(members: readonly AlarmListRow[]): FleetSpacecraft | null {
+  const scs = members.flatMap((m) => (m.sc ? [m.sc] : []));
+  return (
+    scs.find((sc) => sc.in_contact) ??
+    scs
+      .filter((sc) => sc.next_aos_at !== null)
+      .sort((a, b) => Date.parse(a.next_aos_at ?? "") - Date.parse(b.next_aos_at ?? ""))[0] ??
+    null
+  );
 }
 
 /**
@@ -66,6 +100,12 @@ export function groupAlarmRows(
         where: `${members.length} spacecraft${where ? ` in ${where}` : ""}`,
         expanded: open,
         unassigned: members.filter((m) => m.owner === "Unassigned").length,
+        range: valueRange(members),
+        openedAt: members.reduce(
+          (min, m) => (m.episode.opened_at < min ? m.episode.opened_at : min),
+          r.episode.opened_at,
+        ),
+        soonest: soonestOf(members),
       },
     };
     return open ? [header, ...members.map((m) => ({ ...m, member: true }))] : [header];

@@ -35,6 +35,13 @@ const state = (row: AlarmListRow) =>
     : row.episode.severity === "critical"
       ? "crit"
       : "caution";
+/** A group row opens at its earliest member and contacts through its soonest (ux 784726fc). */
+const openedAt = (row: AlarmListRow) => row.group?.openedAt ?? row.episode.opened_at;
+const contactOf = (row: AlarmListRow) => (row.group ? row.group.soonest : row.sc);
+const contactText = (row: AlarmListRow) => {
+  const sc = contactOf(row);
+  return (sc && nextContact(sc, now.value)) ?? "—";
+};
 const to = (row: AlarmListRow) => ({
   name: "ops.spacecraft",
   params: { scId: String(row.sc?.scid ?? ""), tab: "investigate" },
@@ -87,7 +94,7 @@ const to = (row: AlarmListRow) => ({
       >
     </template>
     <template #cell-value="{ row }">
-      <span v-if="row.group" class="text-text-4">—</span>
+      <span v-if="row.group" class="text-text-2">{{ row.group.range ?? "" }}</span>
       <template v-else>
         <span :class="tint(row)">{{
           withUnit(formatValue(row.episode.last_value), row.episode.point.unit) ?? "—"
@@ -102,11 +109,9 @@ const to = (row: AlarmListRow) => ({
       </template>
     </template>
     <template #cell-since="{ row }">
-      <time
-        :datetime="row.episode.opened_at"
-        :title="formatAbsolute(new Date(row.episode.opened_at))"
-        >{{ formatCountdown(new Date(row.episode.opened_at), now) }}</time
-      >
+      <time :datetime="openedAt(row)" :title="formatAbsolute(new Date(openedAt(row)))">{{
+        formatCountdown(new Date(openedAt(row)), now)
+      }}</time>
     </template>
     <template #cell-owner="{ row }">
       <span v-if="row.group" class="font-mono text-xs text-text-3 uppercase">{{
@@ -122,8 +127,8 @@ const to = (row: AlarmListRow) => ({
       </span>
     </template>
     <template #cell-contact="{ row }"
-      ><span :class="row.sc?.in_contact && !row.group ? 'text-readout' : 'text-text-3'">{{
-        (!row.group && row.sc && nextContact(row.sc, now)) || "—"
+      ><span :class="contactOf(row)?.in_contact ? 'text-readout' : 'text-text-3'">{{
+        contactText(row)
       }}</span></template
     >
   </ApTable>

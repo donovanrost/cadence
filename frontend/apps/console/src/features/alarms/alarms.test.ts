@@ -119,6 +119,31 @@ describe("alarm grouping and the empty state (OpsLists §Alarms)", () => {
       ["x", null],
     ]);
     expect(closed[0]?.group?.unassigned).toBe(3);
+    // ux: the members' range when they share a unit; the earliest opening; the soonest contact.
+    expect(closed[0]?.group?.range).toBe("23.1 V");
+    const spread = groupAlarmRows(
+      alarmRows(
+        [
+          ep("a", { ...at(1), last_value: 23.6 }),
+          ep("b", { ...at(2), opened_at: "2026-11-09T00:10:00Z" }),
+          ep("c", at(3)),
+        ],
+        [
+          spacecraftRow(1, { plane: 7 }),
+          spacecraftRow(2, { plane: 7, next_aos_at: "2026-11-09T03:00:00Z" }),
+          spacecraftRow(3, { plane: 7, next_aos_at: "2026-11-09T02:30:00Z" }),
+        ],
+        "new",
+        null,
+        now,
+      ),
+      new Set(),
+    )[0]?.group;
+    expect([spread?.range, spread?.openedAt, spread?.soonest?.scid]).toEqual([
+      "23.1–23.6 V",
+      "2026-11-09T00:10:00Z",
+      3,
+    ]);
     const open = groupAlarmRows(rows, new Set(["group:EPS.VBAT|red_low"]));
     expect(open.map((r) => [r.key, r.member ?? false])).toEqual([
       ["group:EPS.VBAT|red_low", false],
