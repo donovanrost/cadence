@@ -77,6 +77,17 @@ defmodule CadenceWeb.Console.SpacecraftEditAPITest do
     assert %{"type" => "text", "required" => true} = List.last(fields)
   end
 
+  test "the limit_definition schema: a create-only point and set, four optional thresholds", c do
+    fields = get_data(c, "/config/kinds/limit_definition/schema")["fields"]
+
+    assert Enum.map(fields, & &1["path"]) ==
+             ~w(point_id limit_set_name thresholds.red_low thresholds.yellow_low thresholds.yellow_high thresholds.red_high)
+
+    assert %{"create_only" => true} = Enum.at(fields, 0)
+    assert %{"create_only" => true, "default" => "DEFAULT"} = Enum.at(fields, 1)
+    assert %{"type" => "number", "required" => false} = List.last(fields)
+  end
+
   test "catalog APIDs: an unknown revision is not found", c do
     conn =
       c.user

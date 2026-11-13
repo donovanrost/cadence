@@ -888,7 +888,8 @@ forbidden`. Each answers with the provider's row as the list shows it.
 
 `{kind, fields: [{path, label, type, unit, enum, range, default, required, help, visible_when}]}`
 for generating change-set edit forms. `kind` is `ground_station`, `transport`,
-`spacecraft_profile`, `spacecraft` or `derived_telemetry`; anything else gets `422 invalid_params`.
+`spacecraft_profile`, `spacecraft`, `derived_telemetry` or `limit_definition`; anything else gets
+`422 invalid_params`.
 
 - `ground_station`: `display_name` (required), `code` (required for new stations, `pattern`
   `^[A-Z0-9]{2,8}$`, unique per mission), `provider` (an `enum` of the mission's provider names when
@@ -913,6 +914,19 @@ for generating change-set edit forms. `kind` is `ground_station`, `transport`,
   empty means the profile's latest), all with `section: "identity"`. Then `commanding_enabled`
   and `telemetry_enabled` (boolean, `section: "switches"`, `help` = ux's U40 text). See "Spacecraft
   edits" above for the staging rules.
+- `limit_definition` (#77 stage 2, domain c495f6d9f; staged once it's registered at tonight's
+  restart): `point_id` (required, `create_only`; a catalog point or a live derived point),
+  `limit_set_name` (required, `create_only`, default `DEFAULT`), then `thresholds.red_low`,
+  `thresholds.yellow_low`, `thresholds.yellow_high`, `thresholds.red_high` (**`type: "number"`**,
+  new in the field shape; each optional).
+  - Ordering rule: red low ≤ yellow low < yellow high ≤ red high where present. Errors come back on
+    `thresholds`.
+  - A create gets a deterministic `entity_id` (`limit_definition:<hash of point + set>`), so leave
+    `entity_id` out. A create for a point and set that are live now is the `entity_exists`
+    conflict (Edit them instead).
+  - Delete = **retire**: evaluation stops and the history stays; re-adding continues it.
+  - HOLD `limit_alarm_active` (acknowledge): `details {point_id, limit_set_name, severity:
+    critical | caution, episode_id}` (U43 sentence).
 - `derived_telemetry` (#77 stage 1, domain 5504322a8): `point_id` (required, 1–240, **`create_only:
   true`**: show it on create, read-only after), `point_name` (1–240), `expression` (required,
   1–8192, **`type: "text"`**: a multiline editor). `metadata` isn't in the form and is kept as it is.

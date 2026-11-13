@@ -12,6 +12,8 @@ defmodule Cadence.Reads.ConfigKindSchema do
   `spacecraft_profile` (fe-setup, New profile) is the name plus the profile sections of
   `Cadence.SpacecraftType.Schema` (framing, catalog), each field carrying its `section`; routing
   rules, applications and metadata have their own editors.
+  `limit_definition` (#77 stage 2): `point_id` and `limit_set_name` (`create_only`), then
+  `thresholds.{red_low, yellow_low, yellow_high, red_high}` (`type: :number`, each optional).
   `derived_telemetry` (#77): `point_id` (`create_only: true`), `point_name`, and `expression`
   (`type: :text`, multiline); `metadata` isn't in the form.
   `spacecraft` (L17/L22) is identity (`section: "identity"`) plus the commanding and telemetry
@@ -154,6 +156,39 @@ defmodule Cadence.Reads.ConfigKindSchema do
          help: "Stateless, over qualified point ids (PACKET.field)."
        )
      ]}
+  end
+
+  # #77 stage 2 (domain c495f6d9f): one limit set for one point. The point and set are fixed
+  # after create; thresholds are optional numbers, red low ≤ yellow low < yellow high ≤ red high.
+  def fields("limit_definition") do
+    point =
+      "point_id"
+      |> field("Point", :string,
+        required: true,
+        range: %{min: 1, max: 240},
+        help: "A catalog point or a live derived point."
+      )
+      |> Map.put(:create_only, true)
+
+    set =
+      "limit_set_name"
+      |> field("Limit set", :string,
+        required: true,
+        default: "DEFAULT",
+        range: %{min: 1, max: 120}
+      )
+      |> Map.put(:create_only, true)
+
+    thresholds =
+      for {key, label} <- [
+            {"red_low", "Red low"},
+            {"yellow_low", "Yellow low"},
+            {"yellow_high", "Yellow high"},
+            {"red_high", "Red high"}
+          ],
+          do: field("thresholds." <> key, label, :number, [])
+
+    {:ok, [point, set | thresholds]}
   end
 
   def fields(_kind), do: {:error, :unknown_kind}
