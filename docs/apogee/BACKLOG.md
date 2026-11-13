@@ -281,3 +281,43 @@ missing endpoint or decision; an item with no blocker can start now.
 2. **Compose layout:** ux rules; default accept as built.
 3. **Investigate:** the five tabs link to the existing pages for now.
 4. **Notifications** dropped; **New mission** links to the existing create page.
+
+## 11. Legacy-parity inventory (director 11-13: the old pages get deleted)
+
+Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy host app (`frontend/apps/host`, served by `HostPageLive` and `ApplicationHostLive`, writes in `*_page.ex` and `ops_console/actions/*.ex`) and the console's routes and `/api/console/v1` endpoints; plus ux's six "existing page" handoffs. **Rule:** no new features in the legacy pages; bug fixes only if something live depends on them. A page is deleted only when its row is done or explicitly dropped. **Scope** = needs the director's call before anyone builds.
+
+### 11a. Missing or partial in the console, with owners
+| # | Capability (legacy route) | What's missing in the console | Owner → console home | Status |
+| --- | --- | --- | --- | --- |
+| L1 | Contact requirements (`/ops/requirements…`): declare, edit, plan from one | Writes, list, form; close/cancel | api 8g (writes + list), then close/cancel → fe-setup requirement form under `setup.contact-planning` | in progress (api 8g, #74) |
+| L2 | Requirement templates (`/ops/requirement-templates`): pause, activate, close | Lifecycle verbs (create/edit exist) | api + fe-setup → `setup.contact-planning.template` | open |
+| L3 | Fleet planning policy (`/ops/planning/policy`): automation grant issue/revoke | Grant verbs (policy save/decide exist) | api + fe-setup → `setup.contact-planning.policy` | open |
+| L4 | Mission creation (`/missions/new`) | Console endpoint + screen (`org.missions` links out today) | api (endpoint; `POST /api/organizations/:id/missions` exists outside the console API) + fe-setup → `org.missions.new` | open |
+| L5 | Sign-in (`/sign-in`), invitation acceptance (`/invitations/:token`), no-organization landing | Still LiveView; the SPA redirects to them | lead (SPA auth screens) + api-ops (JSON sign-in / invitation-accept with the attempt limit, 2ba5cd57) | open |
+| L6 | Admin mode step-up (`/admin-mode`) | Enter/leave admin mode | api-ops (endpoint) + lead (shell) | open |
+| L7 | Platform admin (`/admin/**`): create org, invite into any org, service identity, runtime diagnostics | Whole area (the account menu links out) | **Scope**: a console admin area (api + fe-setup) or keep a minimal admin page | scope |
+| L8 | Dashboards (`/ops/dashboards/**`, shares, snapshots, playlists, export) | Everything (`ops.dashboards` redirects out; #11 'last') | **Scope**: the planned Vue dashboards overhaul (2026-10 decisions), owner and timing | scope |
+| L9 | App configuration and app surfaces (`/applications/:key[/:surface]`, federated routes): limits definitions, derived telemetry, CFDP, decom bindings, `request_activation` | Any app configuration UI or surface host. **Limits and derived telemetry can't be authored without it** | **Scope**: native console forms per app vs a console surface host; then api + fe-setup | scope |
+| L10 | Activation approvals for apps (`/ops/activations`) | A reviewer for application activations | api + fe-setup, with L9 | blocked on L9 |
+| L11 | Data sources (`/ops/data-sources/**`): register, binding, enable/disable, probe, rotate, provision/reconcile TSDB, retry runs | All writes (read exists) | api + fe-setup → `setup.data-sources` | open |
+| L12 | Mission ground-network providers (`/comms/providers`): create (bind org account), validate, sync, archive | Writes (read exists) | api + fe-setup → `setup.stations.providers` | open |
+| L13 | Provider accounts: grant/revoke for a mission, explicit credential revoke | Those verbs (register/edit/test exist) | api + fe-setup → `org.provider-accounts` | open |
+| L14 | Contacts: provider-change decisions (approve/reject/acknowledge) | The decision UI | api + fe-ops → `ops.contacts` (a Now attention item?) | open |
+| L15 | Contacts: direct search-and-reserve outside a plan | Booking only through plans | **Scope**: keep plans-only or add single bookings | scope |
+| L16 | Historical data operations (`/ops/data-operations`): request, approve/reject/start/complete/fail, retry, correction | Everything | **Scope**: keep (api + fe-ops) or drop | scope |
+| L17 | Spacecraft identity edit / archive (`/spacecraft/:sid/edit`) | Staged `spacecraft` update/archive (create exists) | api (kind schema) + fe-setup → `setup.spacecraft.one` | open |
+| L18 | Catalog extras: reimport, artifact page, download | Those | api + fe-setup → `setup.catalog` | open |
+| L19 | Spacecraft-scope apps (`/spacecraft/:sid/applications`) | Spacecraft scope | fe-setup, with L9 | blocked on L9 |
+| L20 | Telemetry explore canned questions (recent anomalies, what changed, missing history, link degradation) | Apparently absent *(unverified)* | ux: keep or drop; then fe-ops → `ops.telemetry` | open |
+| L21 | Notifications inbox + in-app invitation accept for existing users (`/notifications`) | Inbox dropped (#64); **accepting an invitation** has no console home | fe-setup + api → account menu or `org.people` | open |
+
+### 11b. Console places that still send people to a legacy page (ux)
+Telemetry Explore and Investigate `Dashboards ↗` (L8); account menu `Platform admin ↗` (L7); Setup › Apps surfaces (L9); `org.missions` New mission (L4); PendingScreen "use the existing Cadence pages" and the K1 template link. ux amends the IA and specs as each row gets its home.
+
+### 11c. Verify, then keep or delete
+- `/spacecraft/:sid/commanding` (command interpretation, read-only): fe-ops checks the `ops.spacecraft` configuration tab shows the pinned interpretation and target identities.
+- Legacy commanding stage-only features (batch preview, `restart_draft`): fe-ops confirms none are still needed.
+- Profile overrides cover every per-spacecraft field of the old spacecraft config workspace: fe-setup checks.
+- Redirect-only controllers (`LegacyOpsRedirect`, `LegacyApplicationRedirect`, 17 `LegacyCommsRedirect` aliases): point at console routes or delete with the pages (api-ops).
+- Keep: DELETE `/session`, PUT `/session/organization` (plain controllers the console uses); the downloads `/catalog/artifacts/:id/download` and `/ops/dashboards/:id/export` until L18/L8 decide.
+- Covered already (no work): org home, missions, timeline, settings, spacecraft create, profiles, routing (replacement model), transports, stations, catalog import, planning runs, commanding (replacement model), alarms, app install, people.
