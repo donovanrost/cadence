@@ -21,6 +21,8 @@ export type StripGap = Readonly<{
   seconds: number;
   text: string;
   longest: boolean;
+  /** The longest gap past the rule's limit (#74): caution + 2px on the strip (ux). */
+  over: boolean;
 }>;
 export type FocusDay = Readonly<{
   ruleMet: boolean | null;
@@ -84,6 +86,7 @@ export function focusDay(
     seconds: g.seconds,
     text: gapText(g.seconds),
     longest: isLongest(g),
+    over: isLongest(g) && server?.limit_seconds != null && g.seconds > server.limit_seconds,
   }));
   return {
     ruleMet: demand?.rule_met ?? null,
@@ -106,4 +109,30 @@ export function gapEffect(
 ): string | null {
   if (before === null || before === undefined || after === null || after === undefined) return null;
   return after < before ? `Longest gap ${gapText(before)} → ${gapText(after)}` : null;
+}
+
+/** `03:10Z`, or `11-14 03:10Z` when not on the plan's day (§4 date prefix). */
+function stamp(iso: string, day: string): string {
+  const time = `${iso.slice(11, 16)}Z`;
+  return iso.slice(0, 10) === day ? time : `${iso.slice(5, 10)} ${time}`;
+}
+
+/**
+ * #74 Demand why (ux, ScheduleFlow K1): "No contact for 11h20, 03:10Z–14:30Z. The rule allows
+ * 10h00." Null unless the server sent the gap, its span and the limit.
+ */
+export function gapSentence(
+  gap:
+    | Readonly<{
+        seconds: number;
+        limit_seconds: number | null;
+        from: string | null;
+        to: string | null;
+      }>
+    | null
+    | undefined,
+  day: string,
+): string | null {
+  if (!gap || gap.limit_seconds === null || !gap.from || !gap.to) return null;
+  return `No contact for ${gapText(gap.seconds)}, ${stamp(gap.from, day)}–${stamp(gap.to, day)}. The rule allows ${gapText(gap.limit_seconds)}.`;
 }

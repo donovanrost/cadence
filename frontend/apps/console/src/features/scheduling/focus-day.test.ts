@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { focusDay, gapEffect, gapText } from "./focus-day.ts";
+import { focusDay, gapEffect, gapSentence, gapText } from "./focus-day.ts";
 
 const day = { from: Date.parse("2026-11-13T00:00:00Z"), to: Date.parse("2026-11-14T00:00:00Z") };
 const station = { ref: "svb", id: "gs_svb", code: "SVB", name: "Svalbard" };
@@ -103,6 +103,52 @@ describe("K1 C · focused spacecraft day", () => {
     expect(gapEffect(11_100, 11_100)).toBeNull();
     expect(gapEffect(undefined, 3_600)).toBeNull();
     expect(gapEffect(3_600, null)).toBeNull();
+  });
+
+  it("says a gap over the limit as ux's sentence, with a date prefix off the plan's day (#74)", () => {
+    const gap = (from: string, to: string) => ({
+      seconds: 40_800,
+      limit_seconds: 36_000,
+      from,
+      to,
+    });
+    expect(gapSentence(gap("2026-11-13T03:10:00Z", "2026-11-13T14:30:00Z"), "2026-11-13")).toBe(
+      "No contact for 11h20, 03:10Z–14:30Z. The rule allows 10h00.",
+    );
+    expect(gapSentence(gap("2026-11-13T18:00:00Z", "2026-11-14T05:20:00Z"), "2026-11-13")).toBe(
+      "No contact for 11h20, 18:00Z–11-14 05:20Z. The rule allows 10h00.",
+    );
+    expect(gapSentence({ ...gap("a", "b"), limit_seconds: null }, "2026-11-13")).toBeNull();
+  });
+
+  it("marks the longest gap over the limit, and only then", () => {
+    const over = focusDay(
+      {
+        ...plan,
+        demand: {
+          ...plan.demand,
+          spacecraft: [
+            {
+              spacecraft_id: "sc1",
+              rule_met: false,
+              contacts: { have: 3, need: 4 },
+              reasons: [],
+              longest_gap: {
+                seconds: 40_200,
+                limit_seconds: 36_000,
+                from: "2026-11-13T06:50:00Z",
+                to: "2026-11-13T18:00:00Z",
+              },
+              uplink_passes: null,
+            },
+          ],
+        },
+      },
+      "sc1",
+      day,
+    );
+    expect(over.gaps.filter((g) => g.over).map((g) => g.text)).toEqual(["11h10"]);
+    expect(focusDay(plan, "sc1", day).gaps.some((g) => g.over)).toBe(false);
   });
 
   it("writes short gaps in minutes", () => {

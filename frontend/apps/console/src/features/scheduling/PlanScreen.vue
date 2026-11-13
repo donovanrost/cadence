@@ -243,6 +243,7 @@ const clock = computed(() =>
     >
       <DemandPanel
         :plan="view.plan"
+        :day="day"
         :name-of="nameOf"
         :focused="focused"
         @focus="focused = focused === $event ? null : $event"

@@ -6,6 +6,7 @@ import BookingIssues from "./BookingIssues.vue";
 import { rejectedRows } from "./booking-state.ts";
 import { expiredRows } from "./offer-clock.ts";
 import { contactsShortText, coverage } from "./coverage.ts";
+import { gapSentence } from "./focus-day.ts";
 import type { SpacecraftName } from "./names.ts";
 
 /** A · Demand: only spacecraft whose rule isn't met (ScheduleFlow R01: start from demand). */
@@ -13,6 +14,8 @@ const props = defineProps<{
   plan: PlanDetail;
   nameOf: (id: string | null) => SpacecraftName | null;
   focused: string | null;
+  /** The plan's UTC day (YYYY-MM-DD), for the #74 gap sentence's date prefix. */
+  day: string;
 }>();
 defineEmits<{ focus: [spacecraftId: string] }>();
 
@@ -34,10 +37,18 @@ function causes(spacecraftId: string, reasons: readonly string[]): string[] {
     .flatMap((u) => u.why);
   return [...new Set([...fromUnmet, ...reasons])];
 }
-function why(reasons: readonly string[], have: number): string {
-  if (have === 0 && reasons.length > 0)
+type DemandRow = PlanDetail["demand"]["spacecraft"][number];
+/** #74 (ux): a gap over the limit reads as the sentence with its span and the limit. */
+function words(code: string, row: DemandRow): string {
+  return (
+    (code === "max_gap_exceeded" ? gapSentence(row.longest_gap, props.day) : null) ??
+    reasonText(code)
+  );
+}
+function why(reasons: readonly string[], row: DemandRow): string {
+  if (row.contacts.have === 0 && reasons.length > 0)
     return `No window can cover it: ${reasonText(reasons[0] ?? "").toLowerCase()}`;
-  return reasons.length > 0 ? reasons.map(reasonText).join(" · ") : "Rule not met";
+  return reasons.length > 0 ? reasons.map((r) => words(r, row)).join(" · ") : "Rule not met";
 }
 /** U28/#28: requirements an admin accepted as gaps, with the reason (api 97523716). */
 const accepted = computed(
@@ -74,8 +85,7 @@ const meta = computed(() => {
         :key="row.spacecraft_id"
         :state="row.contacts.have === 0 ? 'crit' : 'caution'"
         :sentence="
-          acceptedText(row.spacecraft_id) ??
-          why(causes(row.spacecraft_id, row.reasons), row.contacts.have)
+          acceptedText(row.spacecraft_id) ?? why(causes(row.spacecraft_id, row.reasons), row)
         "
         :meta="`${row.contacts.have} / ${row.contacts.need ?? '?'} contacts`"
       >

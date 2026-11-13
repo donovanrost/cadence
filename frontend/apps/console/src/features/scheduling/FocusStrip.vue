@@ -15,12 +15,12 @@ const TICKS = [0, 6, 12, 18, 24];
       :key="`gap-${i}`"
       aria-hidden="true"
       class="absolute top-1/2"
-      :class="g.longest ? 'h-0.5 bg-text-2' : 'h-px bg-text-4'"
+      :class="g.over ? 'h-0.5 bg-caution' : g.longest ? 'h-0.5 bg-text-2' : 'h-px bg-text-4'"
       :style="{ left: pct(g.from), width: pct(g.to - g.from) }"
     >
       <span
         class="absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-xs whitespace-nowrap"
-        :class="g.longest ? 'text-readout' : 'text-text-4'"
+        :class="g.over ? 'text-caution-text' : g.longest ? 'text-readout' : 'text-text-4'"
         >{{ g.text }}</span
       >
     </span>

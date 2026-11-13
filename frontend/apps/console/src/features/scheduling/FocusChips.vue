@@ -33,7 +33,8 @@ const contactsMet = computed(() => {
       v-if="view.longestGapSeconds !== null"
       class="flex items-center gap-2 font-mono text-sm text-text-2"
     >
-      Longest gap {{ gapText(view.longestGapSeconds) }}
+      Longest gap {{ gapText(view.longestGapSeconds)
+      }}{{ view.gapLimitSeconds === null ? "" : ` · max ${gapText(view.gapLimitSeconds)}` }}
       <ApTag
         v-if="gapMet !== null"
         :state="gapMet ? 'nominal' : 'caution'"
