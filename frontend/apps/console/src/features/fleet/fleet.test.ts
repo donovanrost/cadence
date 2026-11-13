@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { computed, nextTick, ref, watch } from "vue";
+import { floorTo } from "./coarseClock.ts";
 import { decode } from "@/api/index.ts";
 import { fleetReader } from "./api.ts";
 import { fleetOf, spacecraftRow } from "./fixtures.ts";
@@ -230,5 +232,23 @@ describe("fleet filters", () => {
       fleet.spacecraft.filter((sc) => sc.state === "critical"),
     );
     expect(subset.counts).toMatchObject({ total: 1, critical: 1, nominal: 0 });
+  });
+});
+
+describe("coarse clock (Fleet past 200 rows)", () => {
+  it("floors to the step, so values inside one step are equal", () => {
+    expect(floorTo(1_234_567, 10_000)).toBe(1_230_000);
+    expect(floorTo(1_239_999, 10_000)).toBe(floorTo(1_230_001, 10_000));
+  });
+  it("a number computed doesn't notify within a step", async () => {
+    const t = ref(1_230_000);
+    const coarse = computed(() => floorTo(t.value, 10_000));
+    let runs = 0;
+    watch(coarse, () => (runs += 1));
+    t.value = 1_235_000;
+    await nextTick();
+    t.value = 1_241_000;
+    await nextTick();
+    expect(runs).toBe(1);
   });
 });

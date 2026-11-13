@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import { formatCount, formatDuration, useNow, ApStatusMark, ApTable, type ApColumn } from "@/ui";
+import { formatCount, formatDuration, ApStatusMark, ApTable, type ApColumn } from "@/ui";
 import type { FleetSpacecraft } from "./api.ts";
+import { useCoarseNow } from "./coarseClock.ts";
 import { nextContact } from "./filters.ts";
 import { fleetOpState, fleetStateWord } from "./matrix.ts";
 
 /** Fleet table: Name links to the spacecraft (Investigate); state is mark + word (+ worst point). */
 defineProps<{ rows: readonly FleetSpacecraft[]; total: number }>();
-const now = useNow();
+/** Last TLM and Next contact move every 10 s, so 500 rows don't re-render each second. */
+const now = useCoarseNow();
 
 const columns: readonly ApColumn[] = [
   { key: "name", label: "Name" },
@@ -24,7 +26,7 @@ const orbit = (sc: FleetSpacecraft) =>
     : `P${String(sc.plane).padStart(2, "0")}${sc.slot === null ? "" : ` · ${String(sc.slot).padStart(2, "0")}`}`;
 const age = (sc: FleetSpacecraft) =>
   sc.last_received_at
-    ? formatDuration((now.value.getTime() - Date.parse(sc.last_received_at)) / 1000)
+    ? formatDuration((now.value - Date.parse(sc.last_received_at)) / 1000)
     : "never";
 const tint = (sc: FleetSpacecraft) =>
   sc.state === "critical"
@@ -74,7 +76,7 @@ const rowState = (sc: FleetSpacecraft) =>
     >
     <template #cell-contact="{ row }"
       ><span :class="row.in_contact ? 'text-readout' : 'text-text-3'">{{
-        nextContact(row, now) ?? "—"
+        nextContact(row, new Date(now)) ?? "—"
       }}</span></template
     >
     <template #footer>
