@@ -50,7 +50,7 @@ export function fetchShare(
   runtime: Runtime,
   signal?: AbortSignal,
 ): Promise<ApiResult<SharedView>> {
-  // Not applied yet (§D20: domain's SharedViews takes the stored context only); the server ignores them.
+  // A share is live: the viewer's window and spacecraft apply (api d8de53662; 422 runtime.* if bad).
   const p = new URLSearchParams();
   if (runtime.from && runtime.to) {
     p.set("from", runtime.from);
