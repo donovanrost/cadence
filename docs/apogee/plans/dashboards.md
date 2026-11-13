@@ -292,6 +292,30 @@ with the runtime admitted by `OpsWorkspaceURL` (same `from`/`to` grammar: `now-6
 - **D0:** add `dashboard.author` to `organizations[].capabilities`, derived from the `:author_dashboards` policy
   (DECISIONS #38 style).
 
+## D1–D4, D6 proposed shapes (for api-ops)
+
+They wrap `Reads.Dashboards.Directory.load/3`, `DirectoryActions` and `Creation.create/4`.
+
+- **D1** `GET /dashboards?q&tags=a,b&starred=true&archived=true&sort=updated|name|name_desc&page=N` →
+  `{dashboards: [row], available_tags, total, page, pages, page_size, can_create, shortcuts: {starred: [row],
+  recent: [row]}}`. `can_create` is `author?`.
+  - `row`: `{id, name, description, tags, archived, starred, current_version, updated_at, updated_by: {id, name} |
+    null, viewed_at, spacecraft}`.
+  - `spacecraft` is **new**, for ux's Spacecraft column (Q4). It's derived from the document's scope default and
+    placement bindings: `{mode: "fixed", spacecraft: {id, name}}`, `{mode: "context"}` (chosen when viewing),
+    `{mode: "fleet"}` (only constellation-wide widgets), `{mode: "mixed"}`, or `null` when there are no widgets.
+- **D2** `PUT /dashboards/:id/star` and `DELETE /dashboards/:id/star` → 204.
+- **D3** `POST /:id/archive {confirm?}`:
+  - → 200 `{archived: true}`;
+  - 409 `in_use` with `details.used_by.playlists [{id, name}]` unless `confirm: true` (Q10);
+  - audited.
+  `POST /:id/restore` → 200, also audited.
+- **D4** `POST /dashboards {name, description?, tags?, spacecraft: {mode: fixed|context|fleet, spacecraft_id?},
+  library_item_id?}` → 201 `{id, version}`. These are ux's New fields; with a library template it starts from that
+  widget. Errors: 422 `invalid` with `details.field`.
+  `POST /:id/duplicate {name}` → 201 `{id, version}`. There's no import in this step (ux).
+- **D6** `POST /:id/views` → 204 (feeds "recent"; the viewer fires it once per open).
+
 ## Kit (lead's answers)
 
 - **K1 yes:** dashboards adds `uplot` 1.6.32 and `gridstack` 10.3.1 to `@cadence/console`, imported only from
