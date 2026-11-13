@@ -194,6 +194,10 @@ defmodule Cadence.Control.PlanningTemplates do
       {:error,
        {:template_target_unknown_spacecraft, get_in(params, ["target", "spacecraft_ids"]) || []}}
 
+  # A requirement field the template carries (#74's max_gap_seconds, say) names its form path.
+  defp target_error({:error, {:contact_requirement_field_invalid, field, message}}, _params),
+    do: {:error, {:invalid_params, %{"requirement.#{field}" => message}}}
+
   defp target_error(result, _params), do: result
 
   @doc """

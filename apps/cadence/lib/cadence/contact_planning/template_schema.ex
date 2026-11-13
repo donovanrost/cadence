@@ -110,6 +110,14 @@ defmodule Cadence.ContactPlanning.TemplateSchema do
         unit: "s",
         advanced: true
       ),
+      # DECISIONS #74: carried by templates too; requirements generated from one inherit it.
+      int("requirement.max_gap_seconds", "Longest time without a contact", nil, 600, 7 * @day,
+        unit: "s",
+        advanced: true,
+        help:
+          "Longest stretch from one contact's end to the next contact's start, counting the " <>
+            "window's start and end. Empty means no limit."
+      ),
       field("requirement.priority", "Priority", :enum, "routine",
         required: true,
         enum: options(ContactRequirementVersion.priorities())
