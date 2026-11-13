@@ -747,7 +747,8 @@ audited lifecycle events.
 The apps installable on one spacecraft (today `spacecraft` and `telemetry_decom`) with **this
 spacecraft's** installations: `{apps: [<A1 row>], permissions}`. `surfaces` holds only the
 spacecraft-scope ones (open them with S1's `?spacecraft_id=`), and `status` is the app's status
-at this spacecraft. Installations are per spacecraft, so the A1 verbs apply under this path: `POST
+at this spacecraft. `activation_pending` counts only a decom request that names this spacecraft
+(or names none: a mission-wide composition). Installations are per spacecraft, so the A1 verbs apply under this path: `POST
 …/spacecraft/:spacecraft_id/apps/:key/install | disable | uninstall` → the row. `404
 spacecraft_not_found` and A1's errors.
 

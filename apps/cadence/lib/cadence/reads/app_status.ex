@@ -6,7 +6,8 @@ defmodule Cadence.Reads.AppStatus do
   - `active`: a platform app, or installed and its status loads.
   - `not_installed`: no installation row, or uninstalled. `disabled`: installed then disabled.
   - `activation_pending`: installed with an approval-pending activation request for its binding
-    set (only telemetry decom requests activation today; L10 approves it).
+    set (only telemetry decom requests activation today; L10 approves it). At a spacecraft, only a
+    request naming that spacecraft (or none) counts.
   - `failed`: installed but its status can't be loaded.
 
   `label` is the app's own status words (`Cadence.Applications.Status.label`, e.g. "Monitoring")
@@ -20,6 +21,7 @@ defmodule Cadence.Reads.AppStatus do
 
   alias Cadence.Applications.{ApplicationDefinition, HostContext, TelemetryDecom}
   alias Cadence.Auth.Scope
+  alias Cadence.Control.Activations.Description
   alias Cadence.Management.Activations
   alias Cadence.Reads.Applications
 
@@ -75,23 +77,35 @@ defmodule Cadence.Reads.AppStatus do
   end
 
   # The mission-wide binding set's pending request belongs to telemetry decom today
-  # (TelemetryDecom.binding_set_id/1); other apps don't request activation.
+  # (TelemetryDecom.binding_set_id/1); other apps don't request activation. At a spacecraft
+  # (L19), only a request that touches it counts: one naming that spacecraft, or naming none
+  # (a mission-wide composition).
   defp pending_request(scope, %ApplicationDefinition{application_key: key}, %HostContext{
-         mission_id: mission_id
+         mission_id: mission_id,
+         spacecraft_id: spacecraft_id
        })
        when is_binary(mission_id) do
     with true <- key == TelemetryDecom.application_key(),
-         {:ok, %{} = request} <-
-           Activations.latest_pending(
-             scope,
-             mission_id,
-             TelemetryDecom.binding_set_id(mission_id)
+         {:ok, requests} <-
+           Activations.list(scope, mission_id,
+             state: :approval_pending,
+             binding_set_id: TelemetryDecom.binding_set_id(mission_id),
+             limit: 50
            ) do
-      request
+      Enum.find(requests, &touches?(&1, spacecraft_id))
     else
       _none -> nil
     end
   end
 
   defp pending_request(_scope, _definition, _host_context), do: nil
+
+  defp touches?(_request, nil), do: true
+
+  defp touches?(request, spacecraft_id) do
+    case Description.describe(request.metadata || %{}).spacecraft_ids do
+      [] -> true
+      ids -> spacecraft_id in ids
+    end
+  end
 end

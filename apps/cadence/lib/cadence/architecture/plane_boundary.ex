@@ -550,6 +550,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/control/uplink_readiness/attention.ex",
                               # The activation_apply attention source, read by Now (2026-11-13).
                               "lib/cadence/control/activations/apply_attention.ex",
+                              # What an activation request activates, for app status (L19).
+                              "lib/cadence/control/activations/description.ex",
                               "lib/cadence/control/uplink_readiness/groups.ex",
                               "lib/cadence/runtime/transport_action_request.ex",
                               "lib/cadence/runtime/transport_capability_record.ex",
