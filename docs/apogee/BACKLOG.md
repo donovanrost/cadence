@@ -319,7 +319,18 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 - **fe-setup:** each screen as its endpoint lands: L21, L9 host frame + Setup › Apps routes (`ux/AppSurfaces.md`) → L10 → L19, L4, L2/L3, L17 + L22, L18, L11–L13, L7.
 - **fe-ops:** L14 decisions UI, L15 single bookings in `ops.contacts`, L20 empty-state links.
 - **lead:** L5 SPA auth screens (sign-in, invitation accept, no-organization), L6 admin-mode step-up in the shell, the switcher footer for L21.
-- **dashboards:** L8 (plan first, to lead).
+- **dashboards:** L8 (plan 6dc7421b approved; slices in §11e).
+
+### 11e. L8 dashboards: endpoint routing (lead, 11-13; plan `plans/dashboards.md`, DECISIONS #76)
+| Slice (ships) | Server asks | Owner | Order in their queue |
+| --- | --- | --- | --- |
+| 1 Read-only viewer · 2 Live (step 1) + directory | D5 viewer read, D0 `dashboard.author` in the session; D1–D4, D6 directory, star, archive/restore, create/import/duplicate, record view (`binding_summary` new) | **api-ops** | right after the invitation security fix, before L6 |
+| 3 Edit in place · 4 Versions + conflict | domain: Q1 fix (settings + library through `CurrentVersions`) and the stateless entry (open at version + replay); then api: D7 preview, D9 save, D8 observable search, D10–D13 rebase, copy, versions, restore | **domain** (core) → **api** (endpoints) | domain: after #74, the booking race and L22, before L15. api: after requirement close/cancel, before 8f |
+| 5 Settings, sharing, activity, diagnostics, export | D14–D19 | **api** | after D7–D13 |
+| 6 Shares, snapshots, playlists | D20, D23, D24; Q6 playlist and library update/delete (domain functions) | **domain** (functions) → **api** | after slice 5 |
+| 7 Channel push | C1 `dashboard:<m>:<d>` | **api-ops** | after L6/L5 |
+| 8 Library | D21, D22 | **api** | last |
+Kit (lead): K1 `uplot` + `gridstack` in the console, dashboards-only lazy imports; K2 `--chart-*` tokens in `apogee-ui` tokens (ux supplies values); K3 a side placement for `ApSheet` (400px, right-anchored, non-modal while editing); the cockpit cluster composes the shell's exported `ClockCluster` and counts. Q8: dashboards edits fe-ops' three Telemetry/Timeline files itself, telling fe-ops first.
 
 ### 11b. Console places that still send people to a legacy page (ux)
 Telemetry Explore and Investigate `Dashboards ↗` (L8); account menu `Platform admin ↗` (L7); Setup › Apps surfaces (L9); `org.missions` New mission (L4); PendingScreen "use the existing Cadence pages" and the K1 template link. ux amends the IA and specs as each row gets its home.
