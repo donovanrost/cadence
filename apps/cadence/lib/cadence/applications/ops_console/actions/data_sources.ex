@@ -501,7 +501,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     source = data_source(attrs, organization_id, mission_id)
     payload = action_payload(request)
 
-    with :ok <- maybe_register_credentials(attrs, organization_id, mission_id, payload, scope) do
+    # persist_data_source upserts by id: registering an existing id (a platform-shared source's,
+    # or another organization's) would overwrite it.
+    with :ok <- new_source_id(attrs.data_source_id),
+         :ok <- maybe_register_credentials(attrs, organization_id, mission_id, payload, scope) do
       DataSources.persist_data_source(source, actor_id: actor_id(scope), payload: payload)
     end
   end
@@ -559,6 +562,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     organization_id = scope.organization_id
 
     with {:ok, binding} <- scoped_binding(organization_id, mission_id, binding_id),
+         :ok <- writable(scope, binding),
          :ok <- different_source?(binding, data_source_id),
          {:ok, source} <- scoped_source(organization_id, mission_id, data_source_id),
          :ok <- compatible_source?(source, binding) do
@@ -575,7 +579,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   end
 
   defp source_action(scope, %HostContext{mission_id: mission_id}, request, data_source_id) do
-    with {:ok, source} <- scoped_source(scope.organization_id, mission_id, data_source_id) do
+    with {:ok, source} <- scoped_source(scope.organization_id, mission_id, data_source_id),
+         :ok <- writable(scope, source) do
       execute_source_action(scope, mission_id, request, source)
     end
   end
@@ -673,6 +678,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          credentials_ref
        ) do
     with {:ok, source} <- scoped_source(scope.organization_id, mission_id, data_source_id),
+         :ok <- writable(scope, source),
          :ok <- credential_belongs_to_source?(source, credentials_ref),
          {:ok, reference, event} <-
            DataSources.rotate_credential_reference(
@@ -691,7 +697,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
 
   defp deployment_action(scope, %HostContext{mission_id: mission_id}, request, job_id) do
     with {:ok, %Job{} = job} <- Jobs.fetch_job(job_id),
-         :ok <- scoped_job?(scope.organization_id, mission_id, job) do
+         :ok <- scoped_job?(scope.organization_id, mission_id, job),
+         :ok <- writable_job_source(scope, mission_id, job) do
       case request.action_id do
         "retry-deployment-run" ->
           ManagedResources.retry_deployment_run(job_id)
@@ -709,6 +716,40 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          ) do
       %DataSource{} = source -> {:ok, source}
       nil -> {:error, :scope_mismatch}
+    end
+  end
+
+  # Reads are scoped to the organization, mission and the platform-shared records
+  # (list_data_sources/2 and list_data_bindings/2 include organization_id nil). Writes must
+  # target the caller's own: a platform-shared source or binding, used by every tenant, only by
+  # a platform admin in admin mode.
+  # todo(authz): Cedar should decide who may change a data source or binding (any mission
+  # operator for their organization's own today; platform admins in admin mode for shared ones).
+  defp writable(%Scope{organization_id: organization_id}, %{organization_id: organization_id})
+       when is_binary(organization_id),
+       do: :ok
+
+  defp writable(%Scope{} = scope, %{organization_id: nil}) do
+    if Scope.admin_mode?(scope), do: :ok, else: {:error, :platform_source}
+  end
+
+  defp writable(_scope, _record), do: {:error, :scope_mismatch}
+
+  defp writable_job_source(scope, mission_id, %Job{} = job) do
+    case payload_value(job.payload, :data_source_id) do
+      id when is_binary(id) ->
+        with {:ok, source} <- scoped_source(scope.organization_id, mission_id, id),
+             do: writable(scope, source)
+
+      _no_source ->
+        :ok
+    end
+  end
+
+  defp new_source_id(data_source_id) do
+    case DataSources.fetch_data_source(data_source_id) do
+      {:ok, _existing} -> {:error, :data_source_exists}
+      _not_found -> :ok
     end
   end
 
