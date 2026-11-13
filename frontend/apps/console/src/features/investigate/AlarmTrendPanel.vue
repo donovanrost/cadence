@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { tailPoints, useSpacecraftTail } from "./tail.ts";
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import type { RemoteState } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
   formatAbsolute,
   ApCallout,
+  ApChip,
   ApPanel,
   ApRemote,
   ApSegmented,
@@ -24,6 +25,9 @@ import {
   type EpisodeDetail,
 } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
+import type { TelemetryPoint } from "@/features/telemetry/index.ts";
+import AddPointSearch from "./AddPointSearch.vue";
+import PointPlot from "./telemetry/PointPlot.vue";
 import TrendBlock from "./TrendBlock.vue";
 import {
   formatRate,
@@ -59,11 +63,30 @@ const trend = usePointTrend(
 const rangeLabel = computed(
   () => RANGES.find((r) => r.value === range.value)?.label ?? range.value,
 );
-/** M8 live tail for the shown point; history stays authoritative and refetches as before. */
+/**
+ * Added points (§B1: max 3, chips with remove): stacked under the alarm's plot on the same time
+ * axis and crosshair, each with its own unit and limits (never two y-axes on one plot).
+ */
+const MAX_ADDED = 3;
+const added = ref<TelemetryPoint[]>([]);
+watch(
+  () => props.sc.id,
+  () => (added.value = []),
+);
+const plotted = computed(() => [
+  ...(props.alarm ? [props.alarm.point.id] : []),
+  ...added.value.map((p) => p.id),
+]);
+const addPoint = (p: TelemetryPoint) => {
+  if (added.value.length < MAX_ADDED) added.value = [...added.value, p];
+};
+const removePoint = (id: string) => (added.value = added.value.filter((p) => p.id !== id));
+const hover = ref<number | null>(null);
+/** M8 live tail for the shown points; history stays authoritative and refetches as before. */
 const tail = useSpacecraftTail(
   computed(() => scope.value.mission.id),
   computed(() => props.sc.id),
-  computed(() => (props.alarm ? [props.alarm.point.id] : [])),
+  plotted,
   () => trend.history.refetch(),
 );
 const view = computed(() => {
@@ -158,7 +181,38 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
           :history="trend.history.state.value"
           :view="view"
           :height="episode ? 170 : 220"
+          v-model:hover="hover"
           @retry="trend.history.refetch"
+        />
+        <div class="flex flex-wrap items-center gap-2">
+          <ApChip
+            v-for="p in added"
+            :key="p.id"
+            removable
+            :remove-label="`Remove ${p.name}`"
+            @remove="removePoint(p.id)"
+            >{{ p.name }}</ApChip
+          >
+          <AddPointSearch
+            :mission-id="scope.mission.id"
+            :spacecraft-id="sc.id"
+            :exclude="plotted"
+            :full="added.length >= MAX_ADDED"
+            @add="addPoint"
+          />
+        </div>
+        <PointPlot
+          v-for="p in added"
+          :key="p.id"
+          v-model:hover="hover"
+          :mission-id="scope.mission.id"
+          :spacecraft-id="sc.id"
+          :point="p"
+          :range="range"
+          :range-label="rangeLabel"
+          :tail="tail.tails.value.get(p.id) ?? []"
+          :height="110"
+          :bands="[]"
         />
       </div>
     </ApRemote>
