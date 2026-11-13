@@ -57,6 +57,34 @@ defmodule Cadence.Jobs do
     end
   end
 
+  @doc """
+  A client-chosen run id, namespaced to the organization and mission. Jobs are unique per
+  `(job_type, run_id)` across every organization (`fetch_job_for_run/2`), so a bare client value
+  let one tenant pre-claim another's run id (their job insert then fails) and probe whether a run
+  id exists anywhere. The suffix is `--` and a hash of the organization and mission: stable for
+  the same tenant (retries stay idempotent), different for every other. A value already carrying
+  this tenant's suffix, or a request item derived from one (`<run id>-001`), passes through.
+  Server-minted ids don't need it. The suffix takes 12 of the `run_id` column's 255 bytes.
+  """
+  @spec tenant_run_id(binary(), binary(), binary()) :: binary()
+  def tenant_run_id(organization_id, mission_id, run_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(run_id) do
+    # todo(authz): run ids should be server-minted or uniquely indexed per organization and
+    # mission; the suffix makes collisions across tenants impossible meanwhile.
+    suffix = "--" <> tenant_suffix(organization_id, mission_id)
+
+    if String.ends_with?(run_id, suffix) or Regex.match?(~r/#{suffix}-\d+\z/, run_id),
+      do: run_id,
+      else: run_id <> suffix
+  end
+
+  defp tenant_suffix(organization_id, mission_id) do
+    :sha256
+    |> :crypto.hash("#{organization_id}\0#{mission_id}")
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 10)
+  end
+
   @spec list_jobs(Job.job_type(), binary(), keyword()) :: [Job.t()]
   def list_jobs(job_type, mission_id, opts \\ [])
       when is_atom(job_type) and is_binary(mission_id) and is_list(opts) do

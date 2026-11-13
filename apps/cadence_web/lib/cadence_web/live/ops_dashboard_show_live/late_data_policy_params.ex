@@ -92,6 +92,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams do
 
   @spec attrs(t(), map(), map()) :: map()
   def attrs(%__MODULE__{} = params, scope, mission) do
+    # run_id names an existing run, so it isn't namespaced like a new one; LateDataPolicyCommands
+    # refuses one that isn't a run of this organization and mission.
     %{
       backfill_run_id: params.run_id,
       execution_mode: params.execution_mode,

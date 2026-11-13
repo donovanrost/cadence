@@ -20,7 +20,8 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommands do
     with {:ok, %HistoricalWorkflowStageHandoff{} = handoff} <-
            HistoricalWorkflowHandoff.stage(params, scope, mission),
          {:ok, event} <- record_stage_event(handoff, opts) do
-      {:ok, event, maybe_start_job(handoff.stage, handoff.workflow, handoff.attrs, opts)}
+      {:ok, event,
+       maybe_start_job(handoff.stage, handoff.workflow, job_attrs(handoff.attrs, event), opts)}
     else
       {:error, reason} ->
         {:error, reason}
@@ -224,6 +225,13 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommands do
   end
 
   defp maybe_start_job(_stage, _workflow, _attrs, _opts), do: {:ok, nil}
+
+  # The job runs under the recorded event's run id, never a client value that differs from it.
+  defp job_attrs(attrs, %Storage.BackfillLifecycleEvent{backfill_run_id: run_id})
+       when is_binary(run_id),
+       do: Map.merge(attrs, %{backfill_run_id: run_id, import_run_id: run_id})
+
+  defp job_attrs(attrs, _event), do: attrs
 
   defp group_transition_target(
          %HistoricalWorkflowGroupStageHandoff{

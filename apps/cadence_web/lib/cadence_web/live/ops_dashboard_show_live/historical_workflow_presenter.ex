@@ -834,6 +834,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter do
     "Missing required field #{reason_text(field)}."
   end
 
+  defp workflow_error_message({:invalid_field, field, :too_large}) do
+    "Field #{reason_text(field)} is too long."
+  end
+
   defp workflow_error_message({:unexpected_job_type, job_type}) do
     "The selected job is #{reason_text(job_type)}, not a historical data workflow job."
   end

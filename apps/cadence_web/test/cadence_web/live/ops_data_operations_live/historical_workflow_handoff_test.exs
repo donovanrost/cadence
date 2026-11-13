@@ -15,6 +15,10 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
   @scope %{organization_id: "org-handoff", user: %{id: "operator-handoff"}}
   @mission %{mission_id: "mission-handoff"}
 
+  defp long_id(bytes), do: String.duplicate("r", bytes)
+
+  defp tenant(run_id), do: Cadence.Jobs.tenant_run_id("org-handoff", "mission-handoff", run_id)
+
   describe "stage/3" do
     test "builds an individual stage handoff" do
       params = %{
@@ -35,10 +39,24 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
       assert handoff.stage == "started"
       assert handoff.selection_params["workflow"] == "backfill"
       assert handoff.selection_params["stage"] == "started"
-      assert handoff.attrs.backfill_run_id == "stage-handoff"
+      assert handoff.attrs.backfill_run_id == tenant("stage-handoff")
       assert handoff.attrs.point_id == "HK.counter"
       assert handoff.attrs.authority == :unknown
       assert handoff.attrs.reason == "dashboard_backfill_started"
+    end
+
+    test "a transition of a recorded event keeps the run id (the event's run id is used)" do
+      params = %{
+        "workflow" => "backfill",
+        "stage" => "approved",
+        "event_id" => "event-1",
+        "run_id" => "legacy-run",
+        "realm" => "backfill"
+      }
+
+      assert {:ok, handoff} = HistoricalWorkflowHandoff.stage(params, @scope, @mission)
+      assert handoff.event_id == "event-1"
+      assert handoff.attrs.backfill_run_id == "legacy-run"
     end
   end
 
@@ -138,7 +156,25 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
       assert handoff.selection_params["workflow"] == "backfill"
       assert handoff.selection_params["stage"] == "requested"
 
-      assert handoff.attrs.backfill_run_id == "request-handoff"
+      assert handoff.attrs.backfill_run_id == tenant("request-handoff")
+      assert handoff.attrs.import_run_id == tenant("request-handoff")
+      assert handoff.selection_params["run_id"] == tenant("request-handoff")
+      assert "request-handoff--" <> <<_hash::binary-size(10)>> = handoff.attrs.backfill_run_id
+
+      other_tenant =
+        HistoricalWorkflowHandoff.request(params, %{@scope | organization_id: "org-2"}, @mission)
+
+      assert {:ok, %{attrs: %{backfill_run_id: other_run_id}}} = other_tenant
+      refute other_run_id == handoff.attrs.backfill_run_id
+
+      assert {:ok, %{attrs: %{backfill_run_id: again}}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", handoff.attrs.backfill_run_id),
+                 @scope,
+                 @mission
+               )
+
+      assert again == handoff.attrs.backfill_run_id
       assert handoff.attrs.organization_id == "org-handoff"
       assert handoff.attrs.mission_id == "mission-handoff"
       assert handoff.attrs.actor_id == "operator-handoff"
@@ -157,6 +193,13 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
              }
     end
 
+    test "without a client run id the server mints one later (no namespacing here)" do
+      assert {:ok, handoff} =
+               HistoricalWorkflowHandoff.request(%{"realm" => "backfill"}, @scope, @mission)
+
+      refute Map.has_key?(handoff.attrs, :backfill_run_id)
+    end
+
     test "preserves explicit import workflow and single-point fallback" do
       params = %{
         "workflow" => "import",
@@ -173,7 +216,7 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
       assert handoff.point_ids == ["HK.temperature"]
       assert handoff.selection_params["workflow"] == "import"
       assert handoff.selection_params["stage"] == "requested"
-      assert handoff.attrs.import_run_id == "request-import"
+      assert handoff.attrs.import_run_id == tenant("request-import")
       assert handoff.attrs.reason == "dashboard_import_requested"
     end
   end
@@ -200,8 +243,77 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
       assert handoff.selection_params["workflow"] == "backfill"
       refute Map.has_key?(handoff.selection_params, "stage")
       refute Map.has_key?(handoff.attrs, :stage)
-      assert handoff.attrs.backfill_run_id == "corrected-handoff"
+      assert handoff.attrs.backfill_run_id == tenant("corrected-handoff")
       assert handoff.attrs.reason == "dashboard_backfill"
+    end
+  end
+
+  describe "client run id length" do
+    # The namespaced id (client id + 12 bytes) and every request item (`-001`) fit varchar(255).
+    test "one point: 243 bytes are accepted, 244 refused" do
+      params = %{"realm" => "backfill", "point_id" => "HK.counter"}
+
+      assert {:ok, %{attrs: %{backfill_run_id: run_id}}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", long_id(243)),
+                 @scope,
+                 @mission
+               )
+
+      assert byte_size(run_id) == 255
+
+      assert {:error, {:invalid_field, :run_id, :too_large}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", long_id(244)),
+                 @scope,
+                 @mission
+               )
+    end
+
+    test "several points: 239 bytes are accepted, 240 refused" do
+      params = %{"realm" => "backfill", "point_ids" => "HK.counter HK.voltage"}
+
+      assert {:ok, %{attrs: %{backfill_run_id: run_id}}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", long_id(239)),
+                 @scope,
+                 @mission
+               )
+
+      assert byte_size(run_id <> "-002") == 255
+
+      assert {:error, {:invalid_field, :run_id, :too_large}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", long_id(240)),
+                 @scope,
+                 @mission
+               )
+    end
+
+    test "corrections and stages without a source event: 243 accepted, 244 refused" do
+      for handoff <- [
+            &HistoricalWorkflowHandoff.correction_request/3,
+            &HistoricalWorkflowHandoff.stage/3
+          ] do
+        params = %{"workflow" => "backfill", "stage" => "requested", "realm" => "backfill"}
+
+        assert {:ok, _handoff} =
+                 handoff.(Map.put(params, "run_id", long_id(243)), @scope, @mission)
+
+        assert {:error, {:invalid_field, :run_id, :too_large}} =
+                 handoff.(Map.put(params, "run_id", long_id(244)), @scope, @mission)
+      end
+    end
+
+    test "an already-namespaced id at the limit passes through" do
+      run_id = tenant(long_id(243))
+
+      assert {:ok, %{attrs: %{backfill_run_id: ^run_id}}} =
+               HistoricalWorkflowHandoff.request(
+                 %{"realm" => "backfill", "run_id" => run_id},
+                 @scope,
+                 @mission
+               )
     end
   end
 
