@@ -23,6 +23,8 @@ missing endpoint or decision; an item with no blocker can start now.
     catalog change may touch 001 (it would cancel the command). Catalog step 4 (the other 499)
     lands after 11-14 or must not touch 001.
 
+- **Reservation-window change reverted before the pass (director 11-13):** domain's cfe2e95fa (window follows the accepted snapshot) failed reservations when a timing shift crossed the old activation window; reverted as 40873a5a2 (qa reloads, confirms 001's _39GIA). The fixed version (window and the snapshot's own activation_window together, with a +60 s shift test) re-lands after 11-14 01:30Z through qa. Until 01:00Z nothing on the reservation, contact or uplink path lands without qa's OK. The two failed 008 test rows stay as they are.
+
 - **A lib save isn't live on the next request (qa 11-13):** three times today the :4011 reloader didn't recompile on ordinary requests (and never retries after a broken compile). If you need a save live, ask qa for an in-node `Phoenix.CodeReloader.reload(CadenceWeb.Endpoint)` (runbook 9b8e3197e). A save that doesn't compile still takes :4011 down (09:59Z), so compile under `MIX_ENV=test` first.
 
 - **Legacy pages (director 11-13):** the old LiveView pages are being deleted. No new features in them; bug fixes only if something live depends on them. §11 lists what still exists only there.
