@@ -193,3 +193,5 @@ Feature engineers compose these; ask lead before adding a new shared primitive.
   `scripts/check-slot.sh` refuses a `mix` task without `MIX_ENV=test`. Dev-DB migrations go to qa, who runs
   them through the live node (`Ecto.Migrator`) or inside a planned restart, never `mix ecto.migrate` from the
   shared tree.
+  A save that changes a widely used struct, schema or macro (e.g. `%Spacecraft{}` fields) makes :4011's
+  reloader recompile much of the app: tell qa before saving one, and never during a freeze.
