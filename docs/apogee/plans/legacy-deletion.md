@@ -246,6 +246,10 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   - `DashboardPage.staged/3` (:63-88)
   - `ObservableChoices.staged/3` (:52-55)
   - `Versions.list/staged/summary`, which are legacy-only (`compare` stays)
+- `Cadence.Dashboards.RuntimeCoordinator` and `RuntimeInvalidationRelevance` (`dashboards/runtime_coordinator.ex`,
+  `runtime_invalidation_relevance.ex`). Nothing in lib calls them, and api-ops confirms C1 coalesces
+  invalidations itself (lead 11-14).
+- `test/support/dashboard_review_fixtures.ex` (no users)
 
 **Trim (shared):**
 - **HPL:**
@@ -282,6 +286,7 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   - `ops_dashboard_{page,editor,updates}_test.exs`
   - `dashboard_authoring_draft{,_conflict}_test.exs`
   - `reads/dashboards/{creation,directory}_destination_test.exs`
+  - `dashboards/runtime_coordinator_test.exs`, `dashboards/runtime_invalidation_relevance_test.exs`
 - **Change:**
   - `test/support/dashboard_authoring_draft_test_support.ex` calls `AuthoringDraft.open`, and the console tests
     use it (`dashboard_settings_api_test`, `dashboard_authoring_api_test`, `dashboard_stateless_authoring_test`).
@@ -354,11 +359,10 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   The legacy editor never reads `candidate_*`. So there's **no redirect exemption and no console `?candidate`
   work**. Retire the action with the federated `ops_console` batch. A console "Add to dashboard" from Explore
   would be a future console design (WidgetSheet prefilled from an observable).
-- **`RuntimeCoordinator` / `RuntimeInvalidationRelevance`:** delete them in L8a unless api-ops objects (asked).
+- **`RuntimeCoordinator` / `RuntimeInvalidationRelevance`:** api-ops confirms they aren't needed. Listed in L8a.
 - **Federation smoke:** devops moves its canonical ops_console surface off `dashboard_directory` (asked).
 - **Gate:** L8a goes to the director once qa confirms New live.
-- Still open: `test/support/dashboard_review_fixtures.ex` has no users, so delete it in L8a. The storybook
-  `dashboard-directory-study/` is ux's call.
+- Still open: the storybook `dashboard-directory-study/` is ux's call.
 
 ## L10 activation approvals (blocked: no console API)
 **Routes:** R:563.
