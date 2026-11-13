@@ -10,6 +10,7 @@ defmodule CadenceWeb.Console.ProviderChangeController do
 
   alias Cadence.Contacts.ProviderChangeAttention
   alias Cadence.Control.Contacts
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
@@ -34,6 +35,9 @@ defmodule CadenceWeb.Console.ProviderChangeController do
          {:ok, reason} <- reason(params["reason"]),
          {:ok, hash} <- hash(params["proposal_hash"]),
          {:ok, _decided} <- Map.fetch!(@actions, action).(scope(conn), id, hash, reason) do
+      # The pass row and Now both change: tell the mission channel (qa, L14).
+      ScopedReadUpdates.publish(:attention_changed, org(conn), mission(conn))
+      ScopedReadUpdates.publish(:contacts_changed, org(conn), mission(conn))
       json(conn, %{data: %{item: current(conn, id)}})
     else
       {:error, reason} -> error(conn, id, reason)
