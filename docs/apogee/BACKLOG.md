@@ -17,6 +17,8 @@ missing endpoint or decision; an item with no blocker can start now.
   00:42Z; uplink booking confirmed). Negative check: 005 INV 00:27:53-00:35:53Z.
   - **FREEZE 11-13 23:33Z to 11-14 01:00Z:** no lib saves, no :4011 or simulator restarts, no sim
     pause, light load (targeted tests only; no full suites, verify runs or builds).
+  - **Also from 11-13 23:00Z to 01:00Z (director):** no saves to `config/`, `mix.exs` or `mix.lock`,
+    and no dev-env `mix` at all (it was already banned while :4011 runs).
   - **Until the pass:** don't abort the queued group (it shows as queued in Commanding), and no
     catalog change may touch 001 (it would cancel the command). Catalog step 4 (the other 499)
     lands after 11-14 or must not touch 001.
