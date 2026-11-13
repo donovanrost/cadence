@@ -46,11 +46,15 @@ tabs: Requirements · Policy
     read-only, with "Change it in its template: Block 1 daily." and a link.
   - **Close… / Cancel…** (secondary, each confirms with a required reason). Each sheet says what it does, in the
     server's terms:
-    - Close: "Cadence stops planning for it from now. Passes already booked stay booked."
-    - Cancel: "It's withdrawn as if it was never needed. Nothing more is planned for it."
-    - Both end with "This is final: declare a new requirement to plan it again."
-    - fe-setup confirms with domain what each does to passes already booked, and the sentences follow the answer
-      (U20).
+    - Domain: both behave the same today. Booked passes stay booked, draft and pending plans that use it read
+      superseded, and it leaves demand. Only the recorded state differs, so each sheet says when to use it:
+    - Close: "Use this when it's done or no longer needed. Cadence stops planning for it. Passes already
+      booked stay booked."
+    - Cancel: "Use this when it was a mistake. It's withdrawn and nothing more is planned for it. Passes
+      already booked stay booked."
+    - Both add "Draft plans that use it will need drafting again." (only when the dry run finds some) and end
+      "This is final: declare a new requirement to plan it again." (fe-setup 0dace065)
+    - Releasing future bookings on Cancel would be a director decision, and isn't specified here.
   - Ended rows read `Closed by Mira K. on 11-12: <reason>` / `Canceled by …`.
 - **Template page:** the rule as a form generated from the requirement fields (contacts per day,
   window `earliest_start` → `latest_end` in UTC time-of-day, minimum and preferred duration,
