@@ -87,8 +87,8 @@ Console takeover:
   OF YOU` (re-auth only if the backend requires it).
 
 ## C3 · Uplink & verify (`M/commands/:requestId/uplink`, live)
-Console takeover. Header right adds `Pause` and `Abort remaining` (danger), both only when the
-backend supports them (M20).
+Console takeover. Header right adds `Abort remaining` (danger, M20). There's no Pause: there's no group
+hold server-side, and none is planned (lead, api-ops).
 ```
 lbl "BATTERY HEATER SETPOINT · 5.0 → 8.0 °C"   h1 "34 of 96 verified · 2 need you"
 pipeline tiles ×6: Queued for AOS · Radiating · Executed · Verified · No ACK · retry · Verify failed
