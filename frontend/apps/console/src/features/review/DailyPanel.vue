@@ -2,9 +2,10 @@
 import { computed } from "vue";
 import { ApPanel } from "@/ui";
 import type { ReviewDaily } from "./api.ts";
+import PercentTicks from "./PercentTicks.vue";
 import { causeText, dayRatio, fillDays, percent } from "./format.ts";
 
-/** R3 · Realization over 30 days: one bar per UTC day against the dashed target. */
+/** R3 · Realization over 30 days: one bar per UTC day (height = realized %), dashed target. */
 const props = defineProps<{ daily: ReviewDaily; day: string }>();
 const days = computed(() => fillDays(props.daily.days, props.day));
 const short = (day: string) =>
@@ -30,10 +31,11 @@ function title(d: (typeof days.value)[number]): string {
 <template>
   <ApPanel index="R3" title="Realization · 30 days" :meta="`Target ${percent(daily.target)}`">
     <div
-      class="relative h-40"
+      class="relative ml-10 h-40"
       role="img"
-      :aria-label="`Daily realization for the 30 days to ${short(day)}`"
+      :aria-label="`Daily realization for the 30 days to ${short(day)}: bar height is the share realized, 0 to 100%`"
     >
+      <PercentTicks />
       <div
         class="absolute inset-x-0 border-t border-dashed border-readout"
         :style="{ bottom: `${daily.target * 100}%` }"
@@ -56,7 +58,7 @@ function title(d: (typeof days.value)[number]): string {
         </div>
       </div>
     </div>
-    <div class="mt-2 flex justify-between font-mono text-xs text-text-3">
+    <div class="mt-2 ml-10 flex justify-between font-mono text-xs text-text-3">
       <span>{{ short(days[0]?.day ?? day) }}</span>
       <span>{{ short(day) }}</span>
     </div>
