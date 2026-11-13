@@ -206,7 +206,7 @@ tree (missing = migrations the database hasn't run):
 
 ```
 ls apps/cadence/priv/repo/migrations/*.exs | xargs -n1 basename | sed 's/_.*//' | sort > /tmp/mig.txt
-for db in $(psql -h localhost -U postgres -Atc "select datname from pg_database where datname ~ '^cadence_test[0-9]*$'"); do
+for db in $(psql -h localhost -U postgres -Atc "select datname from pg_database where datname ~ '^cadence_test(1?[0-9])?$'"); do
   echo "$db missing=$(psql -h localhost -U postgres -d $db -Atc 'select version from schema_migrations' | sort | comm -23 /tmp/mig.txt - | wc -l)"
 done
 ```
@@ -215,6 +215,27 @@ A test database isn't :4011's, so qa doesn't schedule it. Migrate it through che
 `cd apps/cadence && MIX_ENV=test MIX_TEST_PARTITION=N ../../scripts/check-slot.sh mix ecto.migrate`
 (empty N = `cadence_test`). On 11-13, partitions 2, 3, 4, 5, 7, 10, 11 and 19 were brought up to
 20261113150000.
+
+**Port worktrees use partitions 20–29** (lead, 2026-11-13). Partitions empty–19 belong to the team
+tree and carry `ui/apogee-spa`'s schema. A port worktree (`develop-*`, `main-*`, `fix/*`) running
+tests there gets misleading evidence. Our columns can break an older branch's inserts (NOT NULL
+without a default), or its tests pass against tables that branch doesn't have. So:
+
+- develop ports use 20–24, main ports 25–29 (fix/* takes the free number in its target's range);
+  the port's evidence names its partition.
+- Before every evidence run, rebuild the partition from **that worktree's own** migrations: check
+  nobody's connected (`select count(*) from pg_stat_activity where datname = 'cadence_testN'` → 0),
+  then from the port worktree's `apps/cadence`:
+
+  ```
+  export MIX_ENV=test MIX_TEST_PARTITION=21
+  CS=~/.herdr/worktrees/cadence/ui-apogee-spa/scripts/check-slot.sh   # older branches lack it
+  $CS mix ecto.drop && $CS mix ecto.create && $CS mix ecto.migrate
+  ```
+
+  and run that worktree's tests with the same `MIX_TEST_PARTITION`. Drop-and-recreate (not just
+  migrate) is what removes another branch's extra tables and columns.
+- Never point a team-tree run at 20–29, or a port run at empty–19.
 
 ## Known limits
 
