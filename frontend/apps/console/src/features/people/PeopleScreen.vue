@@ -44,6 +44,9 @@ const tabs = (p: People) => [
     : []),
   { value: "policies" as const, label: "Command policies" },
 ];
+/** U2 Invite beside People and Invitations only (ux §7 #9), with org.invite. */
+const canInvite = (p: People) =>
+  p.permissions.includes("org.invite") && (tab.value === "people" || tab.value === "invitations");
 </script>
 
 <template>
@@ -84,7 +87,7 @@ const tabs = (p: People) => [
             </ApPanel>
           </div>
           <InvitePanel
-            v-if="organization && value.permissions.includes('org.invite')"
+            v-if="organization && canInvite(value)"
             :organization-id="organization.id"
             class="min-w-0 flex-[1_1_340px]"
             @invited="refetch"

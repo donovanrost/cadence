@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import { ApButton, ApCallout, ApField, ApPanel, ApSelect } from "@/ui";
 import { errorCode, failureOutcome } from "@/features/changes/index.ts";
 import { inviteFailure, sendInvitation, type Role } from "./api.ts";
@@ -8,6 +9,12 @@ import { inviteFailure, sendInvitation, type Role } from "./api.ts";
 const props = defineProps<{ organizationId: string }>();
 const emit = defineEmits<{ invited: [] }>();
 const email = ref("");
+const form = ref<HTMLFormElement | null>(null);
+/** `org/people/invite` redirects to People with `?invite=1` (ux §7 #8): start in the email field. */
+const route = useRoute();
+onMounted(() => {
+  if (route.query["invite"]) form.value?.querySelector<HTMLInputElement>("input")?.focus();
+});
 const role = ref<Role | "">("member");
 const busy = ref(false);
 const sent = ref<string | null>(null);
@@ -52,7 +59,7 @@ async function invite() {
 
 <template>
   <ApPanel index="U2" title="Invite">
-    <form class="flex flex-col gap-3" @submit.prevent="invite">
+    <form ref="form" class="flex flex-col gap-3" @submit.prevent="invite">
       <ApField v-model="email" label="Email" type="email" autocomplete="off" :error="failure" />
       <ApSelect v-model="role" label="Role" :options="options" />
       <ApCallout v-if="sent" tone="nominal">{{ sent }}</ApCallout>

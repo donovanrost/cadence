@@ -1,5 +1,4 @@
 import type { RouteRecordRaw } from "vue-router";
-import { pending } from "./pending.ts";
 
 /** Setup mode, children of /console/:org/:mission. Owner: fe-setup (swap `pending` for your screen). */
 export const setupMissionRoutes: RouteRecordRaw[] = [
@@ -57,10 +56,13 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "catalog", title: "Import catalog", board: "Catalog (S3)" },
   },
   {
+    // ux §7 #8: one Catalog page with a database picker; the old path opens it on that database.
     path: "setup/catalog/:databaseId",
     name: "setup.catalog.database",
-    component: pending,
-    meta: { mode: "setup", nav: "catalog", title: "Catalog" },
+    redirect: (to) => {
+      const { databaseId, ...params } = to.params;
+      return { name: "setup.catalog", params, query: { database: databaseId } };
+    },
   },
   {
     path: "setup/changes",
@@ -158,10 +160,10 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "people", title: "People & access", board: "People (S5)" },
   },
   {
+    // ux §7 #8: the invite form lives on People (U2); this path focuses its email field.
     path: "org/people/invite",
     name: "org.people.invite",
-    component: pending,
-    meta: { mode: "setup", nav: "people", title: "Invite people" },
+    redirect: (to) => ({ name: "org.people", params: to.params, query: { invite: "1" } }),
   },
   {
     path: "org/people/services",

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
@@ -12,7 +13,9 @@ import { fetchCatalogIndex, revisionSummary } from "./api.ts";
 const scope = useMissionScope();
 const session = useSession();
 const canManage = computed(() => canAdministerOrganization(session, scope.value.organization));
-const databaseId = ref<string | null>(null);
+/** `?database=` (the old `setup/catalog/:databaseId` path redirects here, ux §7 #8). */
+const initial = useRoute().query["database"];
+const databaseId = ref<string | null>(typeof initial === "string" && initial ? initial : null);
 const key = computed(() => ({ missionId: scope.value.mission.id, databaseId: databaseId.value }));
 const { state, refetch } = useRemoteQuery(key, fetchCatalogIndex);
 useMissionInvalidation(
