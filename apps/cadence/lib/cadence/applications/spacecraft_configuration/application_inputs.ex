@@ -41,7 +41,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
       |> Enum.map(&canonical_packet_input/1)
       |> Enum.sort_by(& &1.packet_binding_configuration_id)
 
-    ContentHash.term_sha256({1, bindings, packets, installations})
+    # Sorted here, not by the query: a database's text collation mustn't move the hash (#56).
+    ContentHash.term_sha256({1, bindings, packets, Enum.sort(installations)})
   end
 
   defp canonical_packet_input(input) do

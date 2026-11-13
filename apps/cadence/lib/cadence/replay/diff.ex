@@ -64,8 +64,9 @@ defmodule Cadence.Replay.Diff do
       replay_run_id: replay_run_id,
       compared_count: length(replay_rows),
       matching_count: matching_count,
-      mismatches: Enum.reverse(mismatches),
-      missing_live: Enum.reverse(missing_live),
+      # By {evidence, point} like extra_live, not in the replay query's text order (#56).
+      mismatches: Enum.sort_by(mismatches, &sample_key/1),
+      missing_live: Enum.sort_by(missing_live, &sample_key/1),
       extra_live: extra_live
     }
   end
