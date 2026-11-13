@@ -7,6 +7,7 @@ import {
   useNow,
   ApButton,
   ApCallout,
+  ApChip,
   ApEmptyState,
   ApGantt,
   ApPageHeader,
@@ -22,7 +23,7 @@ import SelectedPassPanel from "./SelectedPassPanel.vue";
 import FindingsPanel from "./FindingsPanel.vue";
 import { findingsMeta, useFindings } from "./findings.ts";
 import { usePasses } from "./usePasses.ts";
-import { fetchPass, fetchStations } from "./api.ts";
+import { fetchPass, fetchStations, type Pass } from "./api.ts";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 
@@ -93,14 +94,28 @@ const byId = computed(() => {
   const s = fleet.state.value;
   return new Map((s.status === "ready" ? s.value.spacecraft : []).map((sc) => [sc.id, sc]));
 });
-const list = computed(() =>
+const all = computed(() =>
   passes.state.value.status === "ready" ? passes.state.value.value.passes : [],
 );
+/** Palette `@` (Palette.md): `?station=<id>` narrows the schedule to that station's passes. */
+const stationId = computed(() =>
+  typeof route.query.station === "string" ? route.query.station : null,
+);
+const atStation = (p: Pass) =>
+  stationId.value === null || p.station.id === stationId.value || p.station.ref === stationId.value;
+const list = computed(() => all.value.filter(atStation));
+const stationName = computed(() => {
+  const id = stationId.value;
+  const s = stationsQuery.state.value;
+  const known = s.status === "ready" ? s.value.stations.find((x) => x.id === id) : undefined;
+  const pass = all.value.find((p) => p.station.id === id);
+  return known?.display_name ?? known?.code ?? pass?.station.name ?? id ?? "";
+});
 /** A pass named in the URL but outside the window (Review from Now, U31) is read on its own. */
 const outsideKey = computed(() => {
   const id = selectedId.value;
   if (id === null || passes.state.value.status !== "ready") return null;
-  return list.value.some((p) => p.id === id) ? null : `${missionId.value}|${id}`;
+  return all.value.some((p) => p.id === id) ? null : `${missionId.value}|${id}`;
 });
 const outside = useRemoteQuery(outsideKey, (k, signal) => {
   const [m = "", id = ""] = k.split("|");
@@ -118,7 +133,7 @@ function refetchPass() {
 const selected = computed(() => {
   const t = now.value.getTime();
   return (
-    list.value.find((p) => p.id === selectedId.value) ??
+    all.value.find((p) => p.id === selectedId.value) ??
     outsidePass.value ??
     list.value.find((p) => Date.parse(p.starts_at) > t && passStatus(p, t) === "scheduled") ??
     null
@@ -140,7 +155,7 @@ const view = computed(() => {
   return {
     window,
     ...passGantt(
-      s.value.passes,
+      s.value.passes.filter(atStation),
       (id) => byId.value.get(id) ?? null,
       now.value.getTime(),
       selected.value?.id ?? null,
@@ -178,7 +193,15 @@ const tabs = [
     </ApPageHeader>
     <div class="flex flex-wrap items-center justify-between gap-3">
       <ApTabLinks :links="tabs" active="live" label="Contacts sections" />
-      <div class="flex gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <ApChip
+          v-if="stationId !== null"
+          name="STATION"
+          removable
+          remove-label="Show all stations"
+          @remove="go({ station: undefined })"
+          >{{ stationName }}</ApChip
+        >
         <ApSegmented
           :model-value="range.value"
           :options="rangeOptions"
@@ -230,7 +253,7 @@ const tabs = [
           >
             <ApEmptyState
               v-if="view && view.bars.length === 0"
-              headline="No passes in the next 6 h"
+              :headline="`No passes${stationId === null ? '' : ` at ${stationName}`} in the next ${range.label.toLowerCase().replace(/h$/, ' h')}`"
             />
             <div v-else-if="view" class="p-3">
               <ApGantt
