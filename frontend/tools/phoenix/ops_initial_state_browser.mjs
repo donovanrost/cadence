@@ -133,15 +133,18 @@ try {
     assert.equal(failure, null, route + " must render");
     assert.deepEqual(item.errors, [], route + " must not crash");
     if (route === "/ops/dashboards") {
+      // The directory (rebuilt as a list in 56282f3e) renders each dashboard as
+      // li#dashboard-<id> whose name links to the dashboard itself; a draft opens there and
+      // edits in place (the publication-required guidance is checked on that route below).
       assert.equal(
-        await page.locator("#open-draft-dashboard").getAttribute("href"),
-        "/missions/" + mission + "/ops/dashboards/draft-dashboard/edit",
+        await page.locator("#dashboard-draft-dashboard a").first().getAttribute("href"),
+        "/missions/" + mission + "/ops/dashboards/draft-dashboard",
       );
     }
-    if (
-      route === "/ops/dashboards/draft-dashboard" ||
-      route.endsWith("/draft-dashboard/diagnostics")
-    ) {
+    // Since the Ops dashboard overhaul (b7096924: live viewer with in-place editing; every save
+    // is current) a saved dashboard opens in the viewer, not behind publication guidance;
+    // PublicationRequired remains only on the diagnostics page.
+    if (route.endsWith("/draft-dashboard/diagnostics")) {
       assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
       assert.equal(
         await page.locator("#dashboard-publication-editor").getAttribute("href"),
@@ -153,19 +156,6 @@ try {
         return button instanceof HTMLButtonElement && !button.disabled;
       });
       assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
-      if (!route.endsWith("/diagnostics")) {
-        await page.screenshot({ path: out + "/publication-desktop.png" });
-        await page.setViewportSize({ width: 390, height: 844 });
-        await page.screenshot({ path: out + "/publication-mobile.png" });
-        assert.equal(
-          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-          true,
-        );
-        await page.setViewportSize({ width: 1366, height: 900 });
-        await page.locator("#dashboard-publication-editor").click();
-        await page.waitForURL(prefix + "/ops/dashboards/draft-dashboard/edit");
-        await page.locator("#dashboard-editor-feature").waitFor();
-      }
     }
   }
   console.log(
