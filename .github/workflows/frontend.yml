@@ -3,15 +3,16 @@ name: Frontend
 on:
   pull_request:
   push:
-    branches: [main]
+    # develop pushes save the npm cache that PR runs restore.
+    branches: [develop, main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: frontend-${{ github.ref }}
-  cancel-in-progress: true
+  group: frontend-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   MIX_ENV: test
@@ -54,6 +55,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
+          --tmpfs /var/lib/postgresql/data:rw
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s
           --health-timeout 5s
@@ -62,17 +64,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      # Ubuntu 23.10+ restricts unprivileged user namespaces through AppArmor. Chrome's sandbox
+      # needs them; without this it aborts at launch with "No usable sandbox".
+      - name: Allow Chrome's sandbox to create user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      # BEAM and Node, restored deps/_build/pnpm caches (saved by CI's develop pushes), Elixir
+      # deps for every project, and the frontend workspace.
+      - uses: ./.github/actions/setup-cadence
+      - name: Restore npm cache (LiveView assets)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          node-version: "24.16.0"
-      # OTP and Elixir versions come from mise.toml.
-      - uses: ./.github/actions/setup-beam
-      - run: mix deps.get --check-locked
-      - run: mix setup --check-locked
-      - run: corepack enable
-      - run: corepack pnpm install --frozen-lockfile
-        working-directory: frontend
-      - run: npm ci
+          path: ~/.npm
+          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
+          restore-keys: npm-v1-${{ runner.os }}-
+      - run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: apps/cadence_web
       - run: corepack pnpm exec playwright install --with-deps chromium chrome
         working-directory: frontend
@@ -89,3 +96,9 @@ jobs:
         working-directory: apps/cadence_web
         env:
           CADENCE_BROWSER_PROPS_DIFF: "true"
+      - name: Save npm cache
+        if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
