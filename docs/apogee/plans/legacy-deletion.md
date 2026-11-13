@@ -228,14 +228,21 @@ confirmation (the 422 fix was 78564fa90).
 
 ### L8a directory, viewer, editor, New (after qa's live check; to the director with qa's result)
 **Routes:** `/ops/dashboards`, `/ops/dashboards/:id`, `/ops/dashboards/:id/edit`, `/ops/dashboards/new`.
-api-ops' cutover (uncommitted on 11-14) replaces the first three live routes with
-`LegacyDashboardRedirectController`.
+
+**Done by the cutover (api-ops 5e151d4a3, one commit):**
+- The first three live routes are now `LegacyDashboardRedirectController` (one hop; slugs from the signed-in
+  org's mission, else `/console`). Kept: `from`, `to`, `spacecraft` (legacy `spacecraft_id`), `refresh`, `kiosk`;
+  the directory's `q`/`tags` (legacy `query`/`tag`); `/edit` adds `?edit=1`.
+- `routes.json` lost its three entries.
+- The page-only suites are deleted or moved to the console API tests (listed in the commit message).
+- Left for this batch: `catalog.generated.ts`, which isn't regenerated because the legacy frontend still links
+  those paths by type (`TimelinePanel.vue` etc.).
 
 **Redirects** (slug lookup, falls back to `/console`):
 - directory → `ops.dashboards`
 - `/:id` → `ops.dashboard`, keeping `from`, `to`, `spacecraft`, `refresh` and `kiosk`
 - `/:id/edit` → `ops.dashboard?edit=1`
-- add `/new` → `ops.dashboards.new` in this batch
+- add `/new` → `ops.dashboards.new` in this batch (still a live legacy route)
 
 **Delete (web):**
 - `ops_dashboard_page.ex`, `ops_dashboard_page/actions.ex`, `ops_dashboard_page/updates.ex`
@@ -257,8 +264,9 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   - `dashboard_refresh` (:1227-1236) and its `handle_info` clauses (:1169-1182);
   - the dashboard steps of the prepare pipeline (:1295-1299, :1308-1311; keep :1300 Exploration);
   - `active_dashboard_id` where only these pages use it.
-- **`frontend/apps/host/src/routes.json`:** the `dashboards.directory`, `.show`, `.edit` and `.new` entries.
-  Then regenerate `catalog.generated.ts` with `tools/generate-route-types.mjs`.
+- **`frontend/apps/host/src/routes.json`:** the `dashboards.new` entry (5e151d4a3 removed the other three). Then
+  regenerate plugin-sdk's `catalog.generated.ts` with `tools/generate-route-types.mjs`, after repointing the
+  legacy frontend's typed links to those paths.
 - **`live/host_page_authorization.ex`:** nothing yet. `:ops_dashboard_author` still guards library, playlists
   and settings.
 - **Host contributions** (`ops-workspace/features/module-pages/contributions.ts:126-169`): only the directory,
@@ -283,9 +291,11 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
 
 **Tests:**
 - **Delete:**
-  - `live/ops_dashboard_{directory,editor,authoring_entry}_live_test.exs`
-  - `ops_{directory,creation}_page_test.exs`
-  - `ops_dashboard_{page,editor,updates}_test.exs`
+  - `live/ops_dashboard_authoring_entry_live_test.exs` (5e151d4a3 removed its directory half)
+  - `ops_directory_page_test.exs` (its two remaining read-model tests: move them to the read's own test first)
+    and `ops_creation_page_test.exs`
+  - `ops_dashboard_updates_test.exs` (5e151d4a3 already deleted the directory/editor live tests and the
+    `ops_dashboard_{page,editor}` tests)
   - `dashboard_authoring_draft{,_conflict}_test.exs`
   - `reads/dashboards/{creation,directory}_destination_test.exs`
   - `dashboards/runtime_coordinator_test.exs`, `dashboards/runtime_invalidation_relevance_test.exs`
@@ -296,8 +306,9 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   - `test/support/ops_dashboard_page_test_support.ex`: keep `dashboard_page_setup`/`save` (the console channel,
     API and directory tests use them). Drop the `host:ops-page` helpers and `@renderer`.
   - `dashboard_workspace_read_test.exs:23` shells out to the deleted producer check; remove that assertion.
-  - Frontend: `BrowserHost.test.ts:75-89` (keep the exploration and runtime-diagnostics fixtures),
-    `OpsModulePage.test.ts:7-18`, `routes.test.ts`, `landing.test.ts`, plugin-sdk `routes.test.ts`.
+  - Frontend: `OpsModulePage.test.ts:7-18`, `landing.test.ts`, plugin-sdk `routes.test.ts`. (5e151d4a3 trimmed
+    `BrowserHost.test.ts` and `routes.test.ts`; `host_page_live_test` now uses `/ops/dashboards/library` as its
+    ops-layout example, so that changes again in L8b.)
   - Storybook: delete `DashboardWidgetDrawer.stories.ts` and `TelemetryChart.stories.ts`, unless L8b's pages
     still use those components.
 
@@ -306,7 +317,8 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   `primary-navigation/navigation.ts:64`, `ops-workspace/shared/destinations.ts:32`, `BrowserHost.vue:252`,
   timeline `contracts.ts:149` and `TimelinePanel.vue:79`. The directory and viewer links already go through the
   redirect.
-- `live/dashboard_author_auth.ex:38` redirects to `/ops/dashboards`, which the redirect covers.
+- `live/dashboard_author_auth.ex:38` sends to the legacy directory, now one extra hop through the redirect.
+  Point it at the console directory in this batch (api-ops).
 - `ExplorationPanel.vue:20` "Open source dashboard" is covered by the redirect.
 - **Explore's `add_to_dashboard`** (`ops_console/actions/telemetry_explore.ex`) links to `/edit?candidate_*`.
   It's unreachable, and the editor ignores the candidate (lead 11-14), so it's retired with the federated batch.
