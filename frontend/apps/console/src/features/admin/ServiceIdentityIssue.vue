@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
-import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApSelect, ApSheet } from "@/ui";
 import {
   fetchOrganization,
   fetchOrganizations,
   issueServiceIdentity,
+  tokenFailure,
   type AdminServiceIdentities,
 } from "./api.ts";
 import TokenShown from "./TokenShown.vue";
@@ -71,7 +71,12 @@ async function submit() {
       capability: c.key,
       mission_id: c.needs_mission ? missionId.value : null,
     });
-    if (!r.ok) return void (failure.value = failureOutcome(r.error, "changed").sentence);
+    if (!r.ok) {
+      failure.value = tokenFailure(r.error, "issue");
+      // A 2xx we couldn't read still issued it: refresh the list so it shows.
+      if (r.error.kind === "malformed") emit("issued");
+      return;
+    }
     token.value = r.value.token;
     emit("issued");
   } finally {

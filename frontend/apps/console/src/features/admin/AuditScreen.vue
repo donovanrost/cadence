@@ -11,14 +11,27 @@ import {
   formatShort,
   type ApColumn,
 } from "@/ui";
-import { fetchPlatformAudit, type PlatformAuditEvent } from "./api.ts";
+import AuditAction from "./AuditAction.vue";
+import AuditOrg from "./AuditOrg.vue";
+import { fetchPlatformAudit, type PlatformAuditEvent, type UnreadableAuditEvent } from "./api.ts";
 
 /**
  * Admin › Audit (api-ops): organizations created, cross-org invitations, service identities issued
  * or revoked, admin mode on and off. Events with an organization also show in that org's Audit.
  */
 const first = useRemoteQuery(() => ({ after: null }), fetchPlatformAudit);
-const older = ref<readonly PlatformAuditEvent[]>([]);
+type Row = PlatformAuditEvent | UnreadableAuditEvent;
+const older = ref<readonly Row[]>([]);
+/** lead 11-13: an event the console can't read keeps its place as "Unreadable entry". */
+const readable = (r: Row): PlatformAuditEvent | null => ("unreadable" in r ? null : r);
+const atText = (r: Row) => {
+  const e = readable(r);
+  return e ? formatShort(new Date(e.at)) : "—";
+};
+const whoText = (r: Row) => {
+  const e = readable(r);
+  return e ? actorName(e.actor) : "";
+};
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 watch(first.state, (s) => {
@@ -59,21 +72,10 @@ const columns: readonly ApColumn[] = [
           :row-key="(e) => e.id"
           caption="Platform audit"
         >
-          <template #cell-at="{ row }">{{ formatShort(new Date(row.at)) }}</template>
-          <template #cell-actor="{ row }">{{ actorName(row.actor) }}</template>
-          <template #cell-action="{ row }"
-            >{{ row.action
-            }}<span v-if="row.target" class="text-text-3"> · {{ row.target.label }}</span></template
-          >
-          <template #cell-org="{ row }">
-            <RouterLink
-              v-if="row.organization"
-              :to="{ name: 'admin.organization', params: { orgId: row.organization.id } }"
-              class="text-readout hover:underline"
-              >{{ row.organization.name }}</RouterLink
-            >
-            <span v-else class="text-text-3">Platform</span>
-          </template>
+          <template #cell-at="{ row }">{{ atText(row) }}</template>
+          <template #cell-actor="{ row }">{{ whoText(row) }}</template>
+          <template #cell-action="{ row }"><AuditAction :event="readable(row)" /></template>
+          <template #cell-org="{ row }"><AuditOrg :event="readable(row)" /></template>
         </ApTable>
         <div v-if="cursor" class="border-t border-hairline px-4 py-2.5">
           <ApButton size="compact" :disabled="loading" disabled-reason="Loading…" @click="loadOlder"

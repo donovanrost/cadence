@@ -4,10 +4,12 @@ import {
   orNull,
   request,
   role,
+  type ApiError,
   type ApiResult,
   type Decoded,
   type Role,
 } from "@/api";
+import { failureOutcome } from "@/features/changes/index.ts";
 
 /**
  * L7 platform admin (ux screens/Admin.md): AD1–AD4 as proposed in docs/apogee/plans/admin.md
@@ -153,6 +155,17 @@ export function fetchServiceIdentities(
   return request(`/admin/service-identities${q}`, identities, { signal });
 }
 
+/**
+ * lead 11-13: a decode failure (`malformed`) only follows a 2xx, so the identity was issued or rotated
+ * and only its token couldn't be read: say that, not "unclear whether anything changed".
+ */
+export function tokenFailure(error: ApiError, verb: "issue" | "rotate"): string {
+  if (error.kind !== "malformed") return failureOutcome(error, "changed").sentence;
+  return verb === "issue"
+    ? "Issued, but the token couldn't be shown. Rotate it to get a new one."
+    : "Rotated, but the new token couldn't be shown. Rotate it again to get one.";
+}
+
 export function issueServiceIdentity(
   body: Readonly<{
     organization_id: string;
@@ -234,13 +247,30 @@ const auditEvent = d.object({
       // free-text: the target's kind is technical context; the row shows `label`.
       kind: d.string,
       id: d.string,
-      label: d.string,
+      // qa 11-13: a revoked or rotated identity's event can come without one.
+      label: d.nullable(d.string),
     }),
   ),
   organization: d.nullable(d.object({ id: d.token, name: d.string })),
 });
 export type PlatformAuditEvent = Decoded<typeof auditEvent>;
-const auditPage = d.object({ events: d.array(auditEvent, 500), next: d.nullable(d.string) });
+/** A row the console can't read stays in the list as such (lead): one bad event can't hide the rest. */
+export type UnreadableAuditEvent = Readonly<{ id: string; unreadable: true }>;
+const auditEvents = (
+  value: unknown,
+  path = "",
+): readonly (PlatformAuditEvent | UnreadableAuditEvent)[] => {
+  if (!Array.isArray(value)) throw new d.DecodeError(path, "array");
+  return value.slice(0, 500).map((v: unknown, i) => {
+    try {
+      return auditEvent(v, `${path}[${i}]`);
+    } catch (e) {
+      if (!(e instanceof d.DecodeError)) throw e;
+      return { id: `unreadable-${path}-${i}`, unreadable: true as const };
+    }
+  });
+};
+const auditPage = d.object({ events: auditEvents, next: d.nullable(d.string) });
 
 export type PlatformAuditPage = Decoded<typeof auditPage>;
 export function fetchPlatformAudit(

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
-import { rotateServiceIdentity } from "./api.ts";
+import { rotateServiceIdentity, tokenFailure } from "./api.ts";
 import TokenShown from "./TokenShown.vue";
 
 /** Rotate (api-ops): confirms, then shows the new token once; the old one stops working now. */
@@ -22,7 +21,11 @@ async function rotate() {
   busy.value = true;
   try {
     const r = await rotateServiceIdentity(props.id, props.organizationId);
-    if (!r.ok) return void (failure.value = failureOutcome(r.error, "changed").sentence);
+    if (!r.ok) {
+      failure.value = tokenFailure(r.error, "rotate");
+      if (r.error.kind === "malformed") emit("rotated");
+      return;
+    }
     token.value = r.value.token;
     emit("rotated");
   } finally {
