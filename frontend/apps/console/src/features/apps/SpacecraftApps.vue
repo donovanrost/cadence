@@ -2,14 +2,15 @@
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApEmptyState, ApPanel, ApRemote, ApTable, ApTag, type ApColumn } from "@/ui";
-import { fetchScopedApps } from "./api.ts";
+import { fetchScopedApps, SPACECRAFT_APPS_LIVE } from "./api.ts";
 import { statusTag } from "./host.ts";
 import { setupSurfaces } from "./surfaces.ts";
 
 /** L19 · the apps that work per spacecraft (telemetry decom, spacecraft), for this spacecraft. */
 const props = defineProps<{ missionId: string; spacecraftId: string }>();
 const apps = useRemoteQuery(
-  () => ({ missionId: props.missionId, spacecraftId: props.spacecraftId }),
+  () =>
+    SPACECRAFT_APPS_LIVE ? { missionId: props.missionId, spacecraftId: props.spacecraftId } : null,
   fetchScopedApps,
 );
 const notProvided = computed(
@@ -23,7 +24,7 @@ const columns: readonly ApColumn[] = [
 </script>
 
 <template>
-  <ApPanel index="S9" title="Apps" flush>
+  <ApPanel v-if="SPACECRAFT_APPS_LIVE" index="S9" title="Apps" flush>
     <ApEmptyState
       v-if="notProvided"
       state="off"

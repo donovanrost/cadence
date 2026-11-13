@@ -20,6 +20,9 @@ import { formatBytes } from "./importRun.ts";
  */
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/catalog`;
 
+/** Off until api serves K1-K3: the Revisions table doesn't link a page the server can't fill yet. */
+export const ARTIFACT_LIVE = false;
+
 const artifactReader = d.object({
   artifact: d.object({
     id: d.token,

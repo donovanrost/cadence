@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useConsoleScope } from "@/shell";
-import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
+import { canAdministerOrganization, useConsoleScope, useSession } from "@/shell";
+import { ApPageHeader, ApRemote, ApSegmented } from "@/ui";
 import AuditFilters from "./AuditFilters.vue";
 import AuditResults from "./AuditResults.vue";
+import AuditUnavailable from "./AuditUnavailable.vue";
 import { auditKinds, kindText } from "./api.ts";
 import { useAuditActor } from "./useAuditActor.ts";
 import { useAuditExport } from "./useAuditExport.ts";
@@ -16,6 +17,11 @@ const organization = computed(() =>
     ? scope.value.organization
     : null,
 );
+/** Org admins only: a member never fires the read (qa: a 403 trips the e2e diagnostics guard). */
+const session = useSession();
+const isAdmin = computed(() =>
+  organization.value ? canAdministerOrganization(session, organization.value) : false,
+);
 const days = ref<"1" | "7" | "30">("7");
 const kind = ref<string>("all");
 /** ApSegmented emits strings; keep only values this screen knows (typed v-model, lead c41e549d). */
@@ -27,9 +33,11 @@ const setKind = (v: string) => {
 };
 const missionId = ref("");
 /** One actor (Actor select, or People › person › Activity's link), in the query. */
-const actor = useAuditActor(computed(() => organization.value?.id ?? null));
+const actor = useAuditActor(
+  computed(() => (isAdmin.value ? (organization.value?.id ?? null) : null)),
+);
 const query = computed(() =>
-  organization.value
+  organization.value && isAdmin.value
     ? {
         organizationId: organization.value.id,
         days: Number(days.value),
@@ -80,6 +88,7 @@ const missionOptions = computed(() => [
       size="reading"
     >
       <ApSegmented
+        v-if="isAdmin"
         :model-value="days"
         @update:model-value="setDays"
         label="Range"
@@ -87,6 +96,7 @@ const missionOptions = computed(() => [
       />
     </ApPageHeader>
     <AuditFilters
+      v-if="isAdmin"
       v-model:mission-id="missionId"
       :kind="kind"
       :kind-options="kindOptions"
@@ -95,13 +105,7 @@ const missionOptions = computed(() => [
       :exporter="exporter"
       @kind="setKind"
     />
-    <ApPanel v-if="notProvided" index="L1" title="Audit log" flush>
-      <ApEmptyState
-        state="off"
-        headline="The audit log isn't available in the console yet"
-        sentence="Configuration revisions are in Setup › Revisions in the meantime."
-      />
-    </ApPanel>
+    <AuditUnavailable v-if="!isAdmin || notProvided" :member="!isAdmin" />
     <ApRemote
       forbidden-text="Org admins see this."
       v-else

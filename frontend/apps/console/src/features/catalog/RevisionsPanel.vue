@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ApPanel, ApTable, formatCount, formatShort, type ApColumn } from "@/ui";
 import type { CatalogRevision } from "./api.ts";
+import { ARTIFACT_LIVE } from "./artifact.ts";
 
 /** Revisions of one catalog database, newest first. */
 defineProps<{ revisions: readonly CatalogRevision[] }>();
@@ -27,10 +28,12 @@ const columns: readonly ApColumn[] = [
       <template #cell-label="{ row }">{{ row.label ?? "—" }}</template>
       <template #cell-file="{ row }">
         <RouterLink
+          v-if="ARTIFACT_LIVE"
           :to="{ name: 'setup.catalog.artifact', params: { artifactId: row.artifact.id } }"
           class="text-primary no-underline hover:underline"
           >{{ row.artifact.file_name }}</RouterLink
         >
+        <span v-else class="text-text-2">{{ row.artifact.file_name }}</span>
         <span class="block font-sans text-xs text-text-4">{{ row.artifact.format_label }}</span>
       </template>
       <template #cell-declarations="{ row }">{{ formatCount(row.declaration_count) }}</template>

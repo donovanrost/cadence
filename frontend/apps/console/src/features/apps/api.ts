@@ -28,6 +28,9 @@ export function fetchApps(missionId: string, signal: AbortSignal): Promise<ApiRe
   return request(`/missions/${encodeURIComponent(missionId)}/apps`, appsReader, { signal });
 }
 
+/** Off until api serves L19's read (a 404 on the spacecraft page trips qa's e2e diagnostics guard). */
+export const SPACECRAFT_APPS_LIVE = false;
+
 /** Mission apps (A1), or one spacecraft's (L19, plans/spacecraft-apps.md: the same row shape). */
 export type AppsKey = Readonly<{ missionId: string; spacecraftId: string | null }>;
 export function fetchScopedApps(k: AppsKey, signal: AbortSignal): Promise<ApiResult<Apps>> {

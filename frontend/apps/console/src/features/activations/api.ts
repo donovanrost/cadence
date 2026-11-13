@@ -8,6 +8,9 @@ import { formatShort, type OpState } from "@/ui";
  */
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/activations`;
 
+/** Off until api serves L10 (a 404 on Setup › Changes trips qa's e2e diagnostics guard). */
+export const ACTIVATIONS_LIVE = false;
+
 export const requestStates = [
   "approval_pending",
   "approved",

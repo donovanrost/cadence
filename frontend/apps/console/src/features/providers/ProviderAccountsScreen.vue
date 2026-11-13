@@ -2,8 +2,8 @@
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { useConsoleScope } from "@/shell";
-import { ApButton, ApPageHeader, plural } from "@/ui";
+import { canAdministerOrganization, useConsoleScope, useSession } from "@/shell";
+import { ApButton, ApEmptyState, ApPageHeader, plural } from "@/ui";
 import AddAccountPanel from "./AddAccountPanel.vue";
 import AccountHistory from "./AccountHistory.vue";
 import AccountsPanel from "./AccountsPanel.vue";
@@ -23,8 +23,13 @@ const organization = computed(() =>
     ? scope.value.organization
     : null,
 );
+/** Org admins only: a member never fires the read (qa: a 403 trips the e2e diagnostics guard). */
+const session = useSession();
+const isAdmin = computed(() =>
+  organization.value ? canAdministerOrganization(session, organization.value) : false,
+);
 const { state, refetch } = useRemoteQuery(
-  () => organization.value?.id ?? null,
+  () => (isAdmin.value ? (organization.value?.id ?? null) : null),
   fetchProviderAccounts,
 );
 const route = useRoute("org.provider-accounts");
@@ -84,6 +89,7 @@ const notProvided = computed(
       :adapters="state.value.adapters"
       @added="refetch"
     />
-    <AccountsPanel :state="state" :not-provided="notProvided" @retry="refetch" />
+    <AccountsPanel v-if="isAdmin" :state="state" :not-provided="notProvided" @retry="refetch" />
+    <ApEmptyState v-else state="off" headline="Org admins see this." />
   </div>
 </template>

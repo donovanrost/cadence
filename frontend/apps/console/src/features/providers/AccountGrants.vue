@@ -10,6 +10,7 @@ import ReasonSheet from "./ReasonSheet.vue";
 import {
   accountFailure,
   fetchAccountDetail,
+  PA2_LIVE,
   revokedLine,
   revokeGrant,
   type AccountGrant,
@@ -23,7 +24,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ changed: [] }>();
 const key = computed(() => ({ orgId: props.organization.id, accountId: props.accountId }));
-const detail = useRemoteQuery(key, fetchAccountDetail);
+const detail = useRemoteQuery(() => (PA2_LIVE ? key.value : null), fetchAccountDetail);
 const ready = computed(() =>
   detail.state.value.status === "ready" ? detail.state.value.value : null,
 );

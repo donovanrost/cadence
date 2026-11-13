@@ -21,6 +21,12 @@ const path = (orgId: string, accountId: string) =>
 
 const raw: Reader<unknown> = (value) => value;
 
+/**
+ * Off until api-ops serves PA2 (plans/providers.md): reading a route the server doesn't have logs a
+ * 404 on a live page (qa: it trips the e2e diagnostics guard). Flip when it lands.
+ */
+export const PA2_LIVE = false;
+
 const grant = d.object({
   id: d.token,
   version: d.integer,
