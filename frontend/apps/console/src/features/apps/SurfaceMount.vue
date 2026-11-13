@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, type Component } from "vue";
-import { onBeforeRouteLeave, useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import {
   fullPageSurfaceProps,
   type FullPageSurfaceProps,
@@ -25,6 +25,13 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ outcome: [outcome: SaveOutcome] }>();
 const router = useRouter();
+const route = useRoute();
+/** ux U42 deep links: the URL's single-valued query is the surface's starting selection. */
+function selection(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(route.query).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : [])),
+  );
+}
 const app = props.host.catalog.applications[0];
 const surface = shallowRef<{ component: Component; props: FullPageSurfaceProps } | null>(null);
 const failure = ref<string | null>(null);
@@ -68,7 +75,12 @@ async function load() {
     });
     surface.value = {
       component: module.default,
-      props: fullPageSurfaceProps(app, props.host.catalog.session.context, bridge.bridge),
+      props: fullPageSurfaceProps(
+        app,
+        props.host.catalog.session.context,
+        bridge.bridge,
+        selection(),
+      ),
     };
   } catch (cause) {
     failure.value = cause instanceof Error ? cause.message : "it didn't answer.";

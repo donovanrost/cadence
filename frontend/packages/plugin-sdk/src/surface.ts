@@ -12,6 +12,11 @@ export interface FullPageSurfaceProps {
   surface: FederatedSurfaceDefinition;
   context: HostContext;
   bridge: HostBridge;
+  /**
+   * The console URL's query as the surface's starting selection (ux U42, AppSurfaces.md › Deep links),
+   * e.g. `{point: "BATT_SOC_PCT"}`. Absent when the link has none; a surface that ignores it just opens.
+   */
+  selection?: Readonly<Record<string, string>>;
 }
 
 /** A remote contribution is metadata plus a renderer entry owned by its app. */
@@ -43,6 +48,7 @@ export function fullPageSurfaceProps(
   application: CatalogApplication,
   context: HostContext,
   bridge: HostBridge,
+  selection?: Readonly<Record<string, string>>,
 ): FullPageSurfaceProps {
   const surface = application.surface;
   if (surface.placement !== "application_workspace" && surface.placement !== "ops_workspace") {
@@ -53,5 +59,7 @@ export function fullPageSurfaceProps(
   if (surface.scope !== context.scope) {
     throw new Error("A full-page surface must match the active host context.");
   }
-  return { application, surface, context, bridge };
+  return selection && Object.keys(selection).length > 0
+    ? { application, surface, context, bridge, selection }
+    : { application, surface, context, bridge };
 }

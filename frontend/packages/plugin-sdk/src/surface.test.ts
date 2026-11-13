@@ -77,6 +77,18 @@ describe("domain-agnostic surface contributions", () => {
     });
   });
 
+  it("passes a deep link's query as the starting selection, only when there is one", () => {
+    const bridge = {} as never;
+    expect(fullPageSurfaceProps(application, context, bridge, { point: "BATT_SOC_PCT" })).toEqual({
+      application,
+      surface: application.surface,
+      context,
+      bridge,
+      selection: { point: "BATT_SOC_PCT" },
+    });
+    expect(fullPageSurfaceProps(application, context, bridge, {})).not.toHaveProperty("selection");
+  });
+
   it("rejects a surface that is not a full-page application workspace", () => {
     expect(() =>
       fullPageSurfaceProps(
