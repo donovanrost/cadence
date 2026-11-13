@@ -179,7 +179,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~`Keep mine` / `Take live` on conflicts~~ done (3ced6cea, 433bcd0f) | fe-setup | — |
 | ~~Top bar runtime state and the Changes outcome's runtime line~~ done (ba5ad77a, ux words: `CONFIG r6 · APPLYING` / `NOT APPLIED`, outcome 'r6 is active and the runtime has applied it'). ~~Staged bar 'APPLYING · N OF 5 STEPS' / 'Apply failed'~~ no source | fe-setup | — (domain f0570c8e publishes on each generation step) |
 | ~~qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now"~~ copy done (c16546c4; domain 33529f29) | qa closes | — |
-| Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | api: §8 8d |
+| ~~Now P3 row when a set sits > 24 h; Timeline `Config r6 applied`~~ done: P3 row 947cc9d8 + 0078e4f6; Timeline shows `config_revision_applied` ("Applied r9 · 1 change", seen live 11-13) and `config_revision_rolled_back` ("Rolled back to r4"), linked to Setup › Revisions (0078e4f6) | fe-ops | done |
 
 ### Contact planning (`ContactPlanning.md`): built. Money policy fields hidden (d50ca428, #63). ~~Review 6/7 (template sort; rule line without uppercase, `6h 00m`)~~ done (238a1b06). Owner fe-setup.
 
