@@ -372,8 +372,8 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 **Ratchet (director 11-13):** the ignore lists only shrink. `test:structure` fails if a rule's ignores gain a file not in the baseline or grow past it. Not yet migrated (update when a file comes off):
 | Rule | Files left | Baseline 11-13 |
 | --- | --- | --- |
-| `error-code-compared-as-text` | 15: fe-ops 10 (auth 2, commands 4, mobile 1, now 1, resolutions 1, + apps/hostBridge kept: it compares plugin-sdk's HostBridgeError.code, not an ApiError; contacts done 11-13), dashboards 5 | 29 |
-| `vocabulary-field-decoded-as-text` | 13: fe-ops commands 6, now 4, resolutions 1; dashboards 2. Done 11-13: lead's, fe-setup's own, contacts 5 (fe-ops), and fe-ops' investigate 6, timeline, telemetry, fleet, alarms 2 (fe-setup, e3eaeedff..3dc518802) | 59 |
+| `error-code-compared-as-text` | 10: fe-ops 9 (auth 2, commands 4, mobile 1, now 1, resolutions 1), + apps/hostBridge kept (fe-setup): it compares plugin-sdk's HostBridgeError.code, not an ApiError. Done 11-13: contacts (fe-ops), dashboards 5 | 29 |
+| `vocabulary-field-decoded-as-text` | 11: fe-ops commands 6, now 4, resolutions 1. Done 11-13: dashboards 2, lead's, fe-setup's own, contacts 5 (fe-ops), and fe-ops' investigate 6, timeline, telemetry, fleet, alarms 2 (fe-setup, e3eaeedff..3dc518802) | 59 |
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |
 | 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |
