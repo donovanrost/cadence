@@ -15,4 +15,5 @@ export { default as ClockCluster } from "./ClockCluster.vue";
 export { useOpsCounts, type OpsCounts } from "./counts.ts";
 /** The mission runtime status from the shell's /counts read (U38; Setup CONVERGING / DEGRADED). */
 export { useRuntimeStatus } from "./runtime-status.ts";
+export { outageText } from "./runtime-banner.ts";
 export type { RuntimeStatus } from "./counts.ts";
