@@ -13,5 +13,6 @@
 | api-ops | Backend engineer, Ops + commanding endpoints | `w0R:pC` |
 | devops | CI on GitHub Actions (own worktree `ci-github-actions`, branch `ci/github-actions` off develop) | `w0S:p1` |
 | credo | Credo scope burn-down, GitHub #39-#46 (own worktree `chore-credo-scope-burndown` off develop) | `w0T:p1` |
+| dashboards | Dashboards rebuild in the console (BACKLOG L8) | `w0R:pG` |
 
 Message someone: `herdr pane run <pane> "[from <you>] <message>"`
