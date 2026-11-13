@@ -73,6 +73,12 @@ defmodule Cadence.Control.LimitDefinitionKind do
   @impl true
   def validate(_organization_id, _mission_id, :delete, _id, _previous, nil), do: :ok
 
+  # Staging shows a create the live limits its id already names (ux U43).
+  def validate(_organization_id, _mission_id, :create, _id, %{} = _live, proposed),
+    do:
+      {:error,
+       [F.error("point_id", "#{capitalize(subject(proposed))} already exist. Edit them instead.")]}
+
   def validate(org, mission_id, action, id, previous, proposed) do
     errors =
       identity_errors(org, mission_id, action, {id, previous}, proposed) ++
@@ -123,9 +129,9 @@ defmodule Cadence.Control.LimitDefinitionKind do
   end
 
   @impl true
-  def summary(:create, nil, proposed), do: "Add limits for #{label(proposed)}"
-  def summary(:delete, previous, nil), do: "Retire limits for #{label(previous)}"
-  def summary(:update, previous, _proposed), do: "Edit limits for #{label(previous)}"
+  def summary(:create, nil, proposed), do: "Add #{subject(proposed)}"
+  def summary(:delete, previous, nil), do: "Retire #{subject(previous)}"
+  def summary(:update, previous, _proposed), do: "Edit #{subject(previous)}"
 
   @impl true
   def runtime_impact(_action, _previous, _proposed), do: :none
@@ -141,7 +147,7 @@ defmodule Cadence.Control.LimitDefinitionKind do
     Limits.announce_limit_definitions(organization_id, mission_id, definitions)
   end
 
-  @doc "Acknowledge HOLD (ux U43): the point's limit alarm is raised now."
+  @doc "Acknowledge HOLD (ux U43), one per point and set: the point's limit alarm is raised now."
   @impl true
   def holds(_organization_id, mission_id, entries) do
     for %{kind: "limit_definition"} = entry <- entries,
@@ -155,7 +161,7 @@ defmodule Cadence.Control.LimitDefinitionKind do
         entity_id: entry.entity_id,
         reason: :limit_alarm_active,
         blocking: false,
-        sentence: alarm_sentence(entry.op, document["point_id"], episode.severity),
+        sentence: alarm_sentence(entry.op, document, episode.severity),
         details: %{
           point_id: document["point_id"],
           limit_set_name: document["limit_set_name"],
@@ -166,26 +172,48 @@ defmodule Cadence.Control.LimitDefinitionKind do
     end
   end
 
-  defp raised(mission_id, point_id),
-    do: mission_id |> Alarms.active_limit_alarms(point_id) |> Enum.take(1)
+  # The worst one raised on the point (any spacecraft: limits are mission-wide).
+  defp raised(mission_id, point_id) do
+    case Alarms.active_limit_alarms(mission_id, point_id) do
+      [] -> []
+      episodes -> [Enum.min_by(episodes, &severity_rank(&1.severity))]
+    end
+  end
 
-  # Placeholder until ux's U43 wording lands.
-  defp alarm_sentence(:delete, point, severity),
-    do: "#{point}'s #{severity} alarm is raised now: retiring these limits clears it."
+  defp severity_rank("critical"), do: 0
+  defp severity_rank("caution"), do: 1
+  defp severity_rank(_other), do: 2
 
-  defp alarm_sentence(_op, point, severity),
+  # ux U43, in the Alarms page's words.
+  defp alarm_sentence(:delete, document, severity),
+    do: raised_now(document, severity) <> " Retiring these limits clears it when this is applied."
+
+  defp alarm_sentence(_op, document, severity),
     do:
-      "#{point}'s #{severity} alarm is raised now: applying this re-evaluates it against the new limits."
+      raised_now(document, severity) <>
+        " When this is applied, it's checked against the new limits and may clear or change."
+
+  defp raised_now(%{"point_id" => point, "limit_set_name" => "DEFAULT"}, severity),
+    do: "#{point} has a #{alarm_word(severity)} alarm raised now."
+
+  defp raised_now(%{"point_id" => point, "limit_set_name" => set}, severity),
+    do: "#{point}'s #{set} limits have a #{alarm_word(severity)} alarm raised now."
+
+  defp alarm_word("critical"), do: "red-limit"
+  defp alarm_word("caution"), do: "yellow-limit"
+  defp alarm_word(_unknown), do: "limit"
 
   defp identity_errors(_org, _mission, :update, {_id, previous}, proposed) do
     if previous["point_id"] == proposed["point_id"] and
          previous["limit_set_name"] == proposed["limit_set_name"],
        do: [],
-       else: [F.error("point_id", "Retire these limits and add new ones to move them")]
+       else: [
+         F.error("point_id", "The point and limit set can't change after the limits are added.")
+       ]
   end
 
-  # A create staged with its own entity id must still name its point and set's id (a second
-  # create of live limits is the change set's entity_exists conflict).
+  # A create staged with its own entity id must still name its point and set's id. (Live limits
+  # under that id are refused at staging, above; one added meanwhile is an entity_exists conflict.)
   defp identity_errors(_org, _mission, :create, {id, _previous}, proposed) do
     if id == create_entity_id(proposed),
       do: [],
@@ -257,5 +285,9 @@ defmodule Cadence.Control.LimitDefinitionKind do
       "metadata" => definition.metadata || %{}
     }
 
-  defp label(document), do: "#{document["point_id"]} (#{document["limit_set_name"]})"
+  # ux U43: the set is named only when it isn't DEFAULT.
+  defp subject(%{"point_id" => point, "limit_set_name" => "DEFAULT"}), do: "limits for #{point}"
+  defp subject(%{"point_id" => point, "limit_set_name" => set}), do: "#{set} limits for #{point}"
+
+  defp capitalize(<<first::utf8, rest::binary>>), do: String.upcase(<<first::utf8>>) <> rest
 end

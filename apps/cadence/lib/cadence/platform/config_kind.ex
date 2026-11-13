@@ -118,6 +118,8 @@ defmodule Cadence.Platform.ConfigKind do
   @doc """
   The entity id a create gets, when the kind's ids follow from the document (a limit
   definition's is its point and limit set's). Without it, creates get a fresh `id_prefix/0` id.
+  When that id is live already, staging calls `validate/6` with the live document as `previous`
+  so the kind words the refusal.
   """
   @callback create_entity_id(document()) :: String.t()
 

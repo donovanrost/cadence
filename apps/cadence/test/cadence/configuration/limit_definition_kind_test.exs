@@ -60,11 +60,13 @@ defmodule Cadence.Configuration.LimitDefinitionKindTest do
       assert [%{limit_definition_id: ^id, version: 3}] = live(ctx)
     end
 
-    test "summaries name the point and set" do
+    test "summaries name the set only when it isn't DEFAULT (U43)" do
       doc = %{"point_id" => @point, "limit_set_name" => "DEFAULT"}
-      assert ConfigKind.summary(:create, nil, doc) == "Add limits for #{@point} (DEFAULT)"
-      assert ConfigKind.summary(:update, doc, doc) == "Edit limits for #{@point} (DEFAULT)"
-      assert ConfigKind.summary(:delete, doc, nil) == "Retire limits for #{@point} (DEFAULT)"
+      eclipse = %{doc | "limit_set_name" => "ECLIPSE"}
+      assert ConfigKind.summary(:create, nil, doc) == "Add limits for #{@point}"
+      assert ConfigKind.summary(:update, doc, doc) == "Edit limits for #{@point}"
+      assert ConfigKind.summary(:delete, doc, nil) == "Retire limits for #{@point}"
+      assert ConfigKind.summary(:create, nil, eclipse) == "Add ECLIPSE limits for #{@point}"
     end
   end
 
@@ -78,17 +80,34 @@ defmodule Cadence.Configuration.LimitDefinitionKindTest do
                "point_id"
              ]
 
-      # Limits already live for the point and set: their id exists, so a create conflicts.
-      [_id] = apply_ops(ctx, "Add", [create(thresholds(20, 22, 30, 32))])
+      # Limits already live for the point and set are refused when staging (U43).
+      [id] = apply_ops(ctx, "Add", [create(thresholds(20, 22, 30, 32))])
 
-      assert {:ok, %{verdict: :no_go, checks: checks}} =
+      assert {:error,
+              {:invalid_op, 0,
+               [
+                 %{
+                   path: "point_id",
+                   message: "Limits for DERIVED.BUS_VOLTAGE already exist. Edit them instead."
+                 }
+               ]}} =
                Configuration.preview(
                  ctx.alice,
                  ctx.mission,
                  {:ops, [create(thresholds(1, 2, 3, 4))]}
                )
 
-      assert %{items: [%{reason: :entity_exists}]} = Enum.find(checks, &(&1.key == "conflicts"))
+      {:ok, %{verdict: :no_go, checks: checks}} =
+        Configuration.preview(
+          ctx.alice,
+          ctx.mission,
+          {:ops, [edit(id, "limit_set_name", "ECLIPSE")]}
+        )
+
+      assert %{items: [%{errors: [%{path: "point_id", message: message}]}]} =
+               Enum.find(checks, &(&1.key == "validation"))
+
+      assert message == "The point and limit set can't change after the limits are added."
     end
   end
 
@@ -109,6 +128,9 @@ defmodule Cadence.Configuration.LimitDefinitionKindTest do
                  %{
                    reason: :limit_alarm_active,
                    blocking: false,
+                   sentence:
+                     "DERIVED.BUS_VOLTAGE has a red-limit alarm raised now. When this is " <>
+                       "applied, it's checked against the new limits and may clear or change.",
                    details: %{
                      point_id: @point,
                      limit_set_name: "DEFAULT",

@@ -148,11 +148,12 @@ defmodule Cadence.Configuration.Staging do
   defp put_options(prepared, options),
     do: %{prepared | payload: Map.put(prepared.payload, "options", options)}
 
-  defp prepare(kind, "create", _organization_id, _mission_id, op) do
+  defp prepare(kind, "create", organization_id, mission_id, op) do
     entity_id = Map.get(op, :entity_id) || Ids.new(kind.id_prefix())
 
-    with {:ok, document} <- kind.normalize(:create, entity_id, Document.normalize(op[:document])) do
-      entity_id = Map.get(op, :entity_id) || create_entity_id(kind, document, entity_id)
+    with {:ok, document} <- kind.normalize(:create, entity_id, Document.normalize(op[:document])),
+         entity_id = Map.get(op, :entity_id) || create_entity_id(kind, document, entity_id),
+         :ok <- not_live(kind, organization_id, mission_id, entity_id, document) do
       {:ok, op_attrs(kind, "create", entity_id, %{"document" => document}, %{}, [])}
     end
   end
@@ -162,6 +163,20 @@ defmodule Cadence.Configuration.Staging do
 
     with {:ok, current} <- current(kind, organization_id, mission_id, entity_id) do
       prepare_existing(kind, action, entity_id, current, op)
+    end
+  end
+
+  # A kind whose ids follow from the document can be asked to create what's already live: its
+  # validate/6 sees the live document as `previous` and words the refusal.
+  defp not_live(kind, organization_id, mission_id, entity_id, document) do
+    with true <- function_exported?(kind, :create_entity_id, 1),
+         %{} = live <- Map.get(kind.load(organization_id, mission_id, [entity_id]), entity_id),
+         {:error, errors} <-
+           kind.validate(organization_id, mission_id, :create, entity_id, live, document) do
+      {:error, errors}
+    else
+      :ok -> {:error, [%{path: "entity_id", message: "This already exists"}]}
+      _not_live -> :ok
     end
   end
 
