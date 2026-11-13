@@ -6,6 +6,7 @@ import {
   decidedLine,
   decideFailure,
   decisionLine,
+  fetchActivations,
   notApplied,
   resumeFailure,
   type ActivationRequest,
@@ -24,6 +25,8 @@ const request: ActivationRequest = {
   decision: null,
   execution: null,
   can_decide: true,
+  superseded_by: undefined,
+  superseded_at: undefined,
 };
 
 describe("app activation approvals (L10)", () => {
@@ -32,7 +35,7 @@ describe("app activation approvals (L10)", () => {
       tone: "nominal",
       text: "Approved and applied.",
     });
-    // U20/U41: an uncoded reason is never shown raw.
+    // U41: no sentence and no known code reads as the generic failure.
     const failed = {
       ...request,
       execution: {
@@ -40,7 +43,7 @@ describe("app activation approvals (L10)", () => {
         since: undefined,
         error_code: undefined,
         retryable: undefined,
-        error: "runtime busy",
+        error: null,
       },
     };
     expect(decidedLine("approve", { request: failed, outcome: "needs_review" })).toEqual({
@@ -107,16 +110,33 @@ describe("app activation approvals (L10)", () => {
     expect(stale?.retry).toBe(false);
     expect(stale?.text).toContain("EARENDIL-312's configuration changed");
     expect(stale?.next).toBe("Request activation again so the current version can be approved.");
-    expect(applySentence(exec("unrecognized", "SQL error 42").execution)).toBe("Applying failed.");
+    expect(applySentence(exec("unrecognized", null).execution)).toBe("Applying failed.");
     expect(notApplied(request)).toBeNull();
     // ux: unknown retryability says neither Retry nor "Request activation again".
-    const unknown = exec("apply_stalled", null);
+    const unknown = exec("activation_execution_interrupted", null);
     expect(
       notApplied({ ...unknown, execution: { ...unknown.execution, retryable: undefined } }),
     ).toMatchObject({
       retry: false,
       next: null,
     });
+    // api: a stalled apply is still in_progress, with no code and the U41 sentence set.
+    const stalled = {
+      ...request,
+      state: "approved" as const,
+      execution: {
+        state: "in_progress" as const,
+        since: "2026-11-13T02:14:00Z",
+        error_code: null,
+        error: "Applying didn't finish, and nothing is working on it now.",
+        retryable: true,
+      },
+    };
+    expect(notApplied(stalled)).toMatchObject({
+      text: "Approved, but it didn't apply. Applying didn't finish, and nothing is working on it now. Since 11-13 02:14Z.",
+      retry: true,
+    });
+    expect(notApplied({ ...stalled, execution: { ...stalled.execution, error: null } })).toBeNull();
     expect(
       resumeFailure({
         kind: "conflict",
@@ -135,5 +155,43 @@ describe("app activation approvals (L10)", () => {
         details: { state: "succeeded" },
       }),
     ).toBe("It already applied.");
+  });
+
+  it("reads api's contract example (activations.md, be59d4f32)", async () => {
+    const row = {
+      id: "activation_request_1",
+      kind: null,
+      app: null,
+      summary: "Decom composition for 3 spacecraft",
+      binding_set: { id: "bs_1", version: 4 },
+      requested_by: { kind: "user", id: "u1", name: "Mira K." },
+      requested_at: "2026-11-13T02:10:00Z",
+      state: "approved",
+      decision: null,
+      execution: {
+        state: "failed",
+        since: "2026-11-13T02:14:00Z",
+        error_code: "spacecraft_configuration_review_stale",
+        error:
+          "A spacecraft's configuration changed after it was reviewed, so the reviewed version can't be applied.",
+        retryable: false,
+      },
+      can_decide: false,
+    };
+    const original = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ data: { requests: [row], next: null, permissions: [] } }), {
+        status: 200,
+      });
+    try {
+      const r = await fetchActivations(
+        { missionId: "m", state: "decided" },
+        new AbortController().signal,
+      );
+      expect(r.ok && r.value.requests[0]?.execution?.retryable).toBe(false);
+      expect(r.ok && r.value.requests[0]?.kind).toBeNull();
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

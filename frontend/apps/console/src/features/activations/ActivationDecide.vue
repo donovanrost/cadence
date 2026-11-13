@@ -12,6 +12,7 @@ import {
   type DetailKey,
   type Verb,
   type Viewer,
+  WITHDRAW_LIVE,
 } from "./api.ts";
 
 /** The reviewer's Approve and apply / Reject, or the requester's Withdraw…; a reason is required. */
@@ -22,6 +23,10 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ decided: [note: { tone: "nominal" | "caution"; text: string }] }>();
 const isRequester = computed(() => requestedBy(props.request, props.viewer));
+/** Approve/reject through the one gate; Withdraw only once domain has it. */
+const canAct = computed(
+  () => mayDecide(props.request, props.viewer) || (isRequester.value && WITHDRAW_LIVE),
+);
 const reason = ref("");
 const error = ref<string | null>(null);
 const failure = ref<string | null>(null);
@@ -52,9 +57,16 @@ async function go(verb: Verb) {
       <p v-else class="m-0 text-md text-text-2">
         Approving applies it to the mission now. Rejecting leaves things as they are.
       </p>
-      <ApTextarea v-model="reason" label="Reason" required :maxlength="4096" :error="error" />
+      <ApTextarea
+        v-if="canAct"
+        v-model="reason"
+        label="Reason"
+        required
+        :maxlength="4096"
+        :error="error"
+      />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
-      <div class="flex flex-wrap gap-2">
+      <div v-if="canAct" class="flex flex-wrap gap-2">
         <template v-if="mayDecide(request, viewer)">
           <ApButton
             variant="primary"
@@ -71,12 +83,12 @@ async function go(verb: Verb) {
           >
         </template>
         <ApButton
-          v-if="isRequester"
+          v-if="isRequester && WITHDRAW_LIVE"
           variant="danger"
           :disabled="blocked !== null"
           :disabled-reason="blocked ?? ''"
           @click="go('withdraw')"
-          >Withdraw</ApButton
+          >Withdraw request</ApButton
         >
       </div>
     </div>

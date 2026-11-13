@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
+import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import {
   ApBreadcrumb,
@@ -14,7 +15,8 @@ import {
 } from "@/ui";
 import ActivationApply from "./ActivationApply.vue";
 import ActivationDecide from "./ActivationDecide.vue";
-import { decisionLine, fetchActivation, requestedLine, stateTag } from "./api.ts";
+import ActivationOutcome from "./ActivationOutcome.vue";
+import { fetchActivation, requestedLine, stateTag } from "./api.ts";
 
 /** L10 review page: what an app activation applies, who asked, and the second person's decision. */
 const props = defineProps<{ requestId: string }>();
@@ -22,6 +24,12 @@ const scope = useMissionScope();
 const session = useSession();
 const key = computed(() => ({ missionId: scope.value.mission.id, requestId: props.requestId }));
 const page = useRemoteQuery(key, fetchActivation);
+// api: decide/resume fire `activations`; an apply that fails or stalls fires `attention`.
+useMissionInvalidation(
+  computed(() => scope.value.mission.id),
+  ["activations", "attention"],
+  page.refetch,
+);
 const viewer = computed(() => ({
   userId: session.user.id,
   orgAdmin: canAdministerOrganization(session, scope.value.organization),
@@ -65,9 +73,7 @@ function decided(n: { tone: "nominal" | "caution"; text: string }) {
             ]"
             :columns="2"
           />
-          <p v-if="decisionLine(value)" class="m-0 mt-3 text-sm text-text-2">
-            {{ decisionLine(value) }}
-          </p>
+          <ActivationOutcome :request="value" />
         </ApPanel>
         <ActivationDecide
           v-if="value.state === 'approval_pending'"

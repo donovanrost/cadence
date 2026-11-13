@@ -12,17 +12,18 @@ import { failureOutcome } from "@/features/changes/index.ts";
 import { formatShort, type OpState } from "@/ui";
 
 /**
- * L10 app activation approvals (plans/activations.md, proposed to api 11-13): a save that needs
+ * L10 app activation approvals (api activations.md, be59d4f32): a save that needs
  * activation waits for a second person; approving applies it at once.
  */
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/activations`;
 
-/** Off until api serves L10 (a 404 on Setup › Changes trips qa's e2e diagnostics guard). */
+/** api served L10 in be59d4f32; flips on with qa (a 404 on Setup › Changes trips qa's e2e guard). */
 export const ACTIVATIONS_LIVE = false;
+/** Withdraw waits on domain (api activations.md: withdrawn isn't a state yet). */
+export const WITHDRAW_LIVE = false;
 
 /** U41: why an approved activation didn't apply. */
 export const applyCodes = [
-  "apply_stalled",
   "activation_execution_interrupted",
   "spacecraft_configuration_review_stale",
   "approved_activation_content_mismatch",
@@ -38,7 +39,8 @@ export const requestStates = [
 const row = d.object({
   id: d.token,
   // knownText: a new kind still renders its server summary (fe-ops, Now).
-  kind: d.knownText(["telemetry_decom", "spacecraft_configuration"] as const),
+  // null: a mission activation that's neither (api activations.md).
+  kind: d.nullable(d.knownText(["telemetry_decom", "spacecraft_configuration"] as const)),
   app: d.nullable(d.object({ key: d.token, name: d.string })),
   // free-text: the server's sentence for what the request activates.
   summary: d.string,
@@ -68,6 +70,9 @@ const row = d.object({
     }),
   ),
   can_decide: d.boolean,
+  /** domain L10 asks (11-13): the newer request that replaced this one; absent until api sends it. */
+  superseded_by: d.optional(d.nullable(d.token)),
+  superseded_at: d.optional(d.nullable(d.timestamp)),
 });
 export type ActivationRequest = Decoded<typeof row>;
 
@@ -154,7 +159,6 @@ type Execution = ActivationRequest["execution"];
 type ApplyCode = NonNullable<NonNullable<Execution>["error_code"]>;
 /** U41 sentences, for when domain's own sentence is missing; any other code is "Applying failed." */
 const APPLY_WORDS: Readonly<Record<ApplyCode, string>> = {
-  apply_stalled: "Applying didn't finish, and nothing is working on it now.",
   activation_execution_interrupted:
     "Applying was cut off: Cadence lost its database connection partway.",
   spacecraft_configuration_review_stale:
@@ -163,10 +167,12 @@ const APPLY_WORDS: Readonly<Record<ApplyCode, string>> = {
     "What would be applied now differs from what was approved, so it wasn't applied.",
   unrecognized: "Applying failed.",
 };
-/** U41: the standalone sentence for why it didn't apply (domain's, which names the spacecraft). */
+/**
+ * U41: the standalone sentence for why it didn't apply. api's `error` is always ux's sentence (it
+ * names the spacecraft), never a raw reason; the code's words stand in only when it's missing.
+ */
 export function applySentence(e: Execution): string {
-  const code = e?.error_code ?? "unrecognized";
-  return code !== "unrecognized" && e?.error ? e.error : APPLY_WORDS[code];
+  return e?.error ?? APPLY_WORDS[e?.error_code ?? "unrecognized"];
 }
 
 /** An approved activation whose apply failed or stalled, with what the review page says (U41). */
@@ -175,7 +181,8 @@ export function notApplied(
 ): { text: string; retry: boolean; next: string | null } | null {
   const e = r.execution;
   if (r.state !== "approved" || !e) return null;
-  if (e.state !== "failed" && e.error_code !== "apply_stalled") return null;
+  // Failed, or stalled: still in_progress, but api sets `error` once nothing is working on it.
+  if (e.state !== "failed" && !(e.state === "in_progress" && e.error !== null)) return null;
   const since = e.since ? ` Since ${formatShort(new Date(e.since))}.` : "";
   // ux: unknown retryability (api hasn't sent it) offers neither Retry nor the request-again step (U20).
   const retry = e.retryable === true;
@@ -189,7 +196,7 @@ export function notApplied(
 const REQUEST_AGAIN = "Request activation again so the current version can be approved.";
 const notResumable = d.object({ error_code: d.known(applyCodes) });
 const nothingToResume = d.object({
-  state: d.known(["succeeded", "in_progress", "failed"] as const),
+  state: d.nullable(d.known(["succeeded", "in_progress", "approval_pending", "rejected"] as const)),
 });
 /** U41: a refused Retry apply, in words. The caller refetches either way. */
 export function resumeFailure(error: ApiError): string {
@@ -205,6 +212,7 @@ export function resumeFailure(error: ApiError): string {
         ? "It's applying now."
         : "There's nothing to retry.";
   }
+  if (isError(error, "activation_execution_in_progress")) return "It's applying now.";
   return decideFailure(error);
 }
 
@@ -235,6 +243,11 @@ export function decisionLine(r: ActivationRequest): string | null {
   return `${word} by ${dcs.by?.name ?? "someone"} on ${formatShort(new Date(dcs.at))}: ${dcs.reason}`;
 }
 
+/** lead 11-13: a superseded request names the one that replaced it (the link is the caller's). */
+export function replacedBy(r: ActivationRequest): string | null {
+  return r.state === "superseded" ? (r.superseded_by ?? null) : null;
+}
+
 /** One sentence for a refused decision (U20). */
 export function decideFailure(error: ApiError): string {
   if (isError(error, "self_approval_forbidden"))
@@ -242,7 +255,7 @@ export function decideFailure(error: ApiError): string {
   if (isError(error, "not_pending")) return "It's already decided. Reload to see how.";
   if (isError(error, "nothing_to_resume"))
     return "It isn't stuck any more. Reload to see how it ended.";
-  if (isError(error, "policy_changed"))
+  if (isError(error, "activation_policy_changed"))
     return "The approval rules changed since it was requested. Reject it, or ask the requester to withdraw it.";
   return failureOutcome(error, "changed").sentence;
 }
