@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { fetchProviders } from "./api.ts";
-import { addBody, blankAdd, checkSentence, healthLine, type ProviderCheck } from "./providers.ts";
+import {
+  addBody,
+  blankAdd,
+  checkSentence,
+  grantLine,
+  healthLine,
+  revokedSentence,
+  type ProviderCheck,
+} from "./providers.ts";
 
 /** Fixtures: setup.md "Mission providers (L12)" (api-ops 4f81a1d0d). */
 const row = {
@@ -101,5 +109,22 @@ describe("mission providers (L12)", () => {
       state: "off",
       text: "Never checked",
     });
+  });
+
+  it("words the account grant (ux SettingsAuditProviders.md)", () => {
+    expect(grantLine(null).text).toBe("None: set up before account grants");
+    expect(grantLine({ id: "g1", version: 3, state: "active" })).toEqual({
+      text: "Active · v3",
+      revoked: false,
+    });
+    expect(grantLine({ id: "g1", version: 3, state: "revoked" })).toEqual({
+      text: "Revoked · v3",
+      revoked: true,
+    });
+    expect(grantLine({ id: "g1", version: 3, state: "unrecognized" }).text).toBe("v3");
+    expect(revokedSentence("Northlight prod")).toBe(
+      "The organization revoked this mission's grant to Northlight prod, so this provider can't be used until it's added again from an active grant.",
+    );
+    expect(revokedSentence(null)).toContain("revoked this mission's grant, so");
   });
 });

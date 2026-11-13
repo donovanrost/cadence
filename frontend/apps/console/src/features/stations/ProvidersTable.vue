@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ApStatusMark, ApTable, formatShort, type ApColumn } from "@/ui";
 import type { MissionProvider } from "./api.ts";
-import { healthLine } from "./providers.ts";
+import { grantLine, healthLine } from "./providers.ts";
 
 /** The mission's providers; the name opens the provider (L12 Validate / Sync / Archive). */
 defineProps<{ providers: readonly MissionProvider[] }>();
@@ -24,8 +24,8 @@ const when = (at: string | null) => (at ? formatShort(new Date(at)) : "never");
         >{{ row.name }}</RouterLink
       >
       <span class="font-mono text-xs text-text-3"> {{ row.provider_type }}</span>
-      <span v-if="row.grant?.state === 'revoked'" class="text-xs text-crit-text">
-        · grant revoked</span
+      <span v-if="grantLine(row.grant).revoked" class="text-xs text-crit-text">
+        · Account grant {{ grantLine(row.grant).text }}</span
       >
     </template>
     <template #cell-account="{ row }">{{ row.account.name ?? "Org admins only" }}</template>

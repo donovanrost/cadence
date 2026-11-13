@@ -3,7 +3,14 @@ import { ref } from "vue";
 import { ApButton, ApCallout, ApEmptyState, ApKeyValue } from "@/ui";
 import type { MissionProvider } from "./api.ts";
 import ProviderArchive from "./ProviderArchive.vue";
-import { checkProvider, checkSentence, healthLine, providerFailure } from "./providers.ts";
+import {
+  checkProvider,
+  checkSentence,
+  grantLine,
+  healthLine,
+  providerFailure,
+  revokedSentence,
+} from "./providers.ts";
 
 /** One provider (L12): what it's bound to, its health, and Validate / Sync stations / Archive. */
 const props = defineProps<{
@@ -40,11 +47,7 @@ const facts = (p: MissionProvider) => [
   { key: "stations", label: "Stations", value: String(p.station_count) },
   { key: "validate", label: "Validated", value: healthLine(p.health.validate).text },
   { key: "sync", label: "Synced", value: healthLine(p.health.sync).text },
-  {
-    key: "grant",
-    label: "Grant",
-    value: p.grant ? `${p.grant.state} · v${p.grant.version}` : "None (bound directly)",
-  },
+  { key: "grant", label: "Account grant", value: grantLine(p.grant).text },
 ];
 </script>
 
@@ -57,7 +60,16 @@ const facts = (p: MissionProvider) => [
   />
   <div v-else class="flex flex-col gap-3 p-4">
     <h2 class="m-0 text-lg text-readout">{{ provider.name }}</h2>
-    <ApKeyValue :items="facts(provider)" :columns="2" />
+    <ApKeyValue :items="facts(provider)" :columns="2">
+      <template #value-grant>
+        <span :class="grantLine(provider.grant).revoked ? 'text-crit-text' : ''">{{
+          grantLine(provider.grant).text
+        }}</span>
+      </template>
+    </ApKeyValue>
+    <ApCallout v-if="provider.grant?.state === 'revoked'" tone="crit">{{
+      revokedSentence(provider.account.name)
+    }}</ApCallout>
     <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
     <div
       v-if="canManage && provider.status.lifecycle_state === 'active'"

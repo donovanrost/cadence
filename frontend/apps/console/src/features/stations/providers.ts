@@ -148,3 +148,27 @@ export function addBody(
     },
   };
 }
+
+type GrantState = NonNullable<MissionProvider["grant"]>["state"];
+/** ux SettingsAuditProviders.md: the grant's state in words; an unknown state shows only its version. */
+const grantWords: Readonly<Record<GrantState, string | null>> = {
+  active: "Active",
+  revoked: "Revoked",
+  unrecognized: null,
+};
+
+/** The Account grant value: "Active · v3", "Revoked · v3" (crit), "v3", or no grant at all. */
+export function grantLine(grant: MissionProvider["grant"]): { text: string; revoked: boolean } {
+  if (!grant) return { text: "None: set up before account grants", revoked: false };
+  const word = grantWords[grant.state];
+  return {
+    text: word ? `${word} · v${grant.version}` : `v${grant.version}`,
+    revoked: grant.state === "revoked",
+  };
+}
+
+/** The detail's crit callout for a revoked grant; members don't see the account's name. */
+export function revokedSentence(accountName: string | null): string {
+  const whose = accountName ? `grant to ${accountName}` : "grant";
+  return `The organization revoked this mission's ${whose}, so this provider can't be used until it's added again from an active grant.`;
+}
