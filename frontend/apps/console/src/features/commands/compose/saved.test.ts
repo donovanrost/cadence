@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { CommandDetail } from "../api.ts";
-import { changedBy, isBlank, restoreDraft, toDocument, type ComposeFields } from "./saved.ts";
+import { decode } from "@/api/index.ts";
+import {
+  changedBy,
+  draftReplyReader,
+  isBlank,
+  restoreDraft,
+  toDocument,
+  type ComposeFields,
+} from "./saved.ts";
 import { newItem } from "./stack.ts";
 import { EMPTY_QUERY } from "./targets.ts";
 import { closeLabel, draftLine, savedWhen } from "./useComposeDraft.ts";
@@ -141,5 +149,26 @@ describe("compose draft gone elsewhere", () => {
       `Close and return to EARENDIL-312 · draft saved ${hhmm}`,
     );
     expect(closeLabel("Commands", null)).toBe("Close and return to Commands");
+  });
+});
+
+describe("GET /command-draft reply", () => {
+  const body = {
+    revision: 3,
+    saved_at: "2026-11-13T01:00:00Z",
+    document: { version: 1 },
+    catalog: { revision_saved: null, revision_now: null, missing_command_ids: [] },
+  };
+  it("reads {draft: null} as no draft, without a 404 (qa a11y #6)", () => {
+    expect(decode(draftReplyReader, { draft: null })).toEqual({ ok: true, value: null });
+  });
+  it("reads {draft} and the bare draft alike", () => {
+    const wrapped = decode(draftReplyReader, { draft: body });
+    const bare = decode(draftReplyReader, body);
+    expect(wrapped.ok && wrapped.value?.revision).toBe(3);
+    expect(bare.ok && bare.value?.revision).toBe(3);
+  });
+  it("still refuses a malformed draft", () => {
+    expect(decode(draftReplyReader, { draft: { revision: "x" } }).ok).toBe(false);
   });
 });

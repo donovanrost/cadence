@@ -36,12 +36,22 @@ const storedReader = d.object({
 });
 export type StoredDraft = Decoded<typeof storedReader>;
 
-/** The caller's draft, or null when there is none (404 command_draft_not_found). */
+/**
+ * GET's body: `{draft: <draft> | null}` (qa a11y #6, api: no 404 for "no draft"), or the bare
+ * draft the endpoint answered before that switch.
+ */
+const storedOrNone = d.nullable(storedReader);
+export const draftReplyReader: Reader<StoredDraft | null> = (value, path = "") =>
+  typeof value === "object" && value !== null && "draft" in value
+    ? storedOrNone(value.draft, `${path}.draft`)
+    : storedReader(value, path);
+
+/** The caller's draft, or null when there is none (200 `{draft: null}`; 404 until api switches). */
 export async function fetchComposeDraft(
   missionId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<StoredDraft | null>> {
-  const r = await request(draftPath(missionId), storedReader, signal ? { signal } : {});
+  const r = await request(draftPath(missionId), draftReplyReader, signal ? { signal } : {});
   return !r.ok && r.error.kind === "not_found" ? { ok: true, value: null } : r;
 }
 
