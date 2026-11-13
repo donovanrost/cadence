@@ -8,7 +8,7 @@ import { renameItem } from "./api.ts";
 const props = defineProps<{ missionId: string }>();
 const emit = defineEmits<{ done: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
-const target = ref<{ id: string; version: number } | null>(null);
+const target = ref<{ id: string; version: number; updatedAt: string | null } | null>(null);
 const name = ref("");
 const description = ref("");
 const error = ref<string | null>(null);
@@ -19,8 +19,9 @@ function open(item: {
   name: string;
   description: string | null;
   latest_version: number;
+  updated_at: string | null;
 }) {
-  target.value = { id: item.id, version: item.latest_version };
+  target.value = { id: item.id, version: item.latest_version, updatedAt: item.updated_at };
   name.value = item.name;
   description.value = item.description ?? "";
   error.value = null;
@@ -38,6 +39,8 @@ async function save() {
     name: name.value.trim(),
     description: description.value.trim(),
     expected_version: t.version,
+    // A rename adds no version, so the row's updated_at is what catches a stale tab (qa 13:36Z).
+    expected_updated_at: t.updatedAt,
   });
   busy.value = false;
   if (r.ok) {

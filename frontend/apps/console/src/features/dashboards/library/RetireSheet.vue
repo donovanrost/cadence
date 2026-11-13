@@ -13,17 +13,27 @@ import { retireItem, usedByOf, usedInWords, type UsedBy } from "./api.ts";
 const props = defineProps<{ missionId: string }>();
 const emit = defineEmits<{ done: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
-const target = ref<{ id: string; name: string; version: number } | null>(null);
+const target = ref<{
+  id: string;
+  name: string;
+  version: number;
+  updatedAt: string | null;
+} | null>(null);
 const usedBy = ref<UsedBy["dashboards"]>([]);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
 /** `known`: the item page's used_by, so a used widget is refused before asking the server. */
 function open(
-  item: { id: string; name: string; latest_version: number },
+  item: { id: string; name: string; latest_version: number; updated_at: string | null },
   known: UsedBy["dashboards"] = [],
 ) {
-  target.value = { id: item.id, name: item.name, version: item.latest_version };
+  target.value = {
+    id: item.id,
+    name: item.name,
+    version: item.latest_version,
+    updatedAt: item.updated_at,
+  };
   usedBy.value = known;
   error.value = null;
   sheet.value?.open();
@@ -32,7 +42,7 @@ async function retire() {
   const t = target.value;
   if (!t || busy.value || usedBy.value.length) return;
   busy.value = true;
-  const r = await retireItem(props.missionId, t.id, t.version);
+  const r = await retireItem(props.missionId, t.id, t.version, t.updatedAt);
   busy.value = false;
   // 404: someone retired it meanwhile, so it's already what was asked (api ffd5c6d69).
   if (r.ok || r.error.kind === "not_found") {

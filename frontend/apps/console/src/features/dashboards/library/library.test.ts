@@ -47,7 +47,7 @@ const detail = {
   version: {
     version: 3,
     definition_json:
-      '{"type":"value_tile","title":"VBAT","observables":["EPS.VBAT"],"precision":2}',
+      '{"widget_type_id":"cadence.value_tile","widget_type_version":1,"title":"VBAT","binding":{"observables":["EPS.VBAT"],"scope_mode":"context","sampling":"latest","aggregation":null},"options":{"precision":2}}',
     summary: "Two decimals",
     saved_at: "2026-11-12T03:10:00Z",
     saved_by: { id: "u-1", name: "Ana P." },
@@ -98,7 +98,7 @@ describe("dashboards library (slice 8)", () => {
   });
 
   it("delete: 409 in use names the dashboards; 204 retires", async () => {
-    stub(
+    const fetchMock = stub(
       reply(409, {
         error: {
           code: "library_item_in_use",
@@ -116,10 +116,15 @@ describe("dashboards library (slice 8)", () => {
       }),
       reply(204, null),
     );
-    const refused = await retireItem("m", "lib-1", 3);
+    const at = "2026-11-12T03:10:00.123456Z";
+    const refused = await retireItem("m", "lib-1", 3, at);
     const used = refused.ok ? null : usedByOf(refused.error);
     expect(used && usedInWords(used)).toBe("Used in 2 dashboards: Bus overview, Night shift.");
-    expect((await retireItem("m", "lib-1", 3)).ok).toBe(true);
+    expect((await retireItem("m", "lib-1", 3, at)).ok).toBe(true);
+    // Both guards ride along (dashboards/domain: a rename adds no version).
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+      "expected_version=3&expected_updated_at=2026-11-12T03%3A10%3A00.123456Z",
+    );
     expect(usedInWords([])).toBe("Not used in any dashboard.");
     // Undecodable in-use details: an error to show, never "unused".
     expect(
@@ -136,8 +141,9 @@ describe("dashboards library (slice 8)", () => {
     expect(previewOf(detail.version.definition_json)).toEqual({
       kind: "Value tile",
       title: "VBAT",
-      reads: ["EPS.VBAT"],
-      settings: ["precision: 2"],
+      // qa 13:36Z: a context-scoped binding is bound, to the dashboard's spacecraft.
+      reads: ["EPS.VBAT for the dashboard's spacecraft"],
+      settings: ["precision: 2", "sampling: latest"],
     });
     expect(previewOf("not json")).toBeNull();
   });
