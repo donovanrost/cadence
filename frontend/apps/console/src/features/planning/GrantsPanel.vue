@@ -4,7 +4,15 @@ import { useRemoteQuery } from "@/api";
 import { ApButton, ApEmptyState, ApPanel, ApRemote, ApTable, ApTag, type ApColumn } from "@/ui";
 import GrantRevoke from "./GrantRevoke.vue";
 import GrantSheet from "./GrantSheet.vue";
-import { canText, fetchGrants, grantTag, limitsText, untilText, type Grant } from "./grants.ts";
+import {
+  canText,
+  fetchGrants,
+  grantTag,
+  identityName,
+  limitsText,
+  untilText,
+  type Grant,
+} from "./grants.ts";
 
 /** Policy › Grants (L3): what lets a service identity act without a person. */
 const props = defineProps<{ missionId: string }>();
@@ -45,7 +53,7 @@ const revoke = ref<InstanceType<typeof GrantRevoke> | null>(null);
           :row-key="(g: Grant) => g.id"
           caption="Automation grants"
         >
-          <template #cell-who="{ row }">{{ row.service_identity.name }}</template>
+          <template #cell-who="{ row }">{{ identityName(row) }}</template>
           <template #cell-can="{ row }">{{ canText(row) }}</template>
           <template #cell-limits="{ row }">{{ limitsText(row) }}</template>
           <template #cell-until="{ row }">{{ untilText(row) }}</template>

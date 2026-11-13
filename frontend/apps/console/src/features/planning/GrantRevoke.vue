@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { fieldErrors } from "@/api";
 import { ApButton, ApCallout, ApSheet, ApTextarea } from "@/ui";
-import { grantFailure, revokeGrant, type Grant } from "./grants.ts";
+import { grantFailure, identityName, revokeGrant, type Grant } from "./grants.ts";
 
 /** L3 Revoke…: ends a grant now, with a required reason; sends the sha256 it read (409 if changed). */
 const props = defineProps<{ missionId: string }>();
@@ -44,8 +44,8 @@ defineExpose({ open });
   <ApSheet ref="sheet" title="Revoke grant" width="narrow" initial-focus="textarea">
     <div class="flex flex-col gap-3">
       <p class="m-0 text-md text-text-2">
-        {{ grant?.service_identity.name }} stops acting on its own now. Plans it already submitted
-        stay as they are.
+        {{ grant ? identityName(grant) : "" }} stops acting on its own now. Plans it already
+        submitted stay as they are.
       </p>
       <ApTextarea v-model="reason" label="Reason" required :maxlength="2000" :error="error" />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>

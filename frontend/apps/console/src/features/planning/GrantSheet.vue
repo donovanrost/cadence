@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { fieldErrors } from "@/api";
-import { ApButton, ApCallout, ApSheet } from "@/ui";
+import { ApButton, ApCallout, ApSheet, ApTextarea } from "@/ui";
 import GrantFields from "./GrantFields.vue";
 import {
   blankGrant,
+  generalError,
   grantBody,
   grantFailure,
   issueGrant,
@@ -39,7 +40,8 @@ async function submit() {
       return void emit("granted");
     }
     errors.value = fieldErrors(r.error);
-    failure.value = Object.keys(errors.value).length > 0 ? null : grantFailure(r.error);
+    failure.value =
+      Object.keys(errors.value).length > 0 ? generalError(errors.value) : grantFailure(r.error);
   } finally {
     busy.value = false;
   }
@@ -51,6 +53,14 @@ defineExpose({ open });
   <ApSheet ref="sheet" title="Grant automation" initial-focus="select">
     <form class="flex flex-col gap-3" @submit.prevent="submit">
       <GrantFields v-model="draft" :grants="grants" :errors="errors" />
+      <ApTextarea
+        :model-value="draft.reason"
+        label="Reason"
+        required
+        :maxlength="2000"
+        :error="errors['reason'] ?? null"
+        @update:model-value="draft = { ...draft, reason: $event }"
+      />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
     </form>
     <template #footer>

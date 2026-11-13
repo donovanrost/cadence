@@ -12,7 +12,8 @@ const base = (missionId: string) =>
 export const grantActions = ["plan", "repair", "execute", "submit", "approve"] as const;
 const grant = d.object({
   id: d.token,
-  service_identity: d.object({ id: d.token, name: d.string }),
+  /** name is null when the identity no longer exists (api 12562f5ca). */
+  service_identity: d.object({ id: d.token, name: d.nullable(d.string) }),
   policy_version: d.integer,
   allowed_actions: d.array(d.known(grantActions), 10),
   maximum_horizon_seconds: d.integer,
@@ -100,6 +101,13 @@ export function grantTag(g: Grant): { state: "nominal" | "off" | "stale"; label:
   }
 }
 export const untilText = (g: Grant) => formatShort(new Date(g.valid_until));
+
+/** "Night ops bot", or its id when the identity is gone. */
+export const identityName = (g: Grant) => g.service_identity.name ?? g.service_identity.id;
+
+/** 422 messages with no field of their own (the grant as a whole, the policy evidence). */
+export const generalError = (errors: Readonly<Record<string, string>>) =>
+  errors["grant"] ?? (errors["policy_version"] ? "Reload: the active policy changed." : null);
 
 /** One sentence for a refused grant write (U20). */
 export function grantFailure(error: ApiError): string {

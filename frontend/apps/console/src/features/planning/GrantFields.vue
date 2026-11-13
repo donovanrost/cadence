@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApField, ApSelect, ApTextarea, plural } from "@/ui";
+import { ApField, ApSelect, plural } from "@/ui";
 import { ceiling, type GrantDraft, type Grants } from "./grants.ts";
 
 /** Grant automation's fields; each limit's hint is the active policy's ceiling. */
@@ -54,15 +54,9 @@ const l = computed(() => props.grants.limits);
     :model-value="draft.days"
     label="Valid for"
     unit="days"
+    hint="1 to 365 days."
+    :error="errors['valid_days'] ?? null"
     inputmode="numeric"
     @update:model-value="set('days', $event)"
-  />
-  <ApTextarea
-    :model-value="draft.reason"
-    label="Reason"
-    required
-    :maxlength="2000"
-    :error="errors['reason'] ?? null"
-    @update:model-value="set('reason', $event)"
   />
 </template>
