@@ -4,17 +4,24 @@ import { useRouter } from "vue-router";
 import { decode, decoders as d, type ApiError } from "@/api";
 import { useMissionScope } from "@/shell";
 import { ApButton, ApCallout, ApField, ApPageHeader, ApPanel, ApTextarea } from "@/ui";
-import { createDashboard } from "./api.ts";
+import { createDashboard, type NewSpacecraft } from "./api.ts";
+import SpacecraftDefault from "./SpacecraftDefault.vue";
 
 /**
- * New dashboard (ux: a small reading page). D4 v1 takes name, description and tags. The
- * spacecraft default and library templates join when D4 accepts them (api-ops), not before.
+ * New dashboard (ux: a small reading page): name, description, tags and the spacecraft default
+ * (D4). Starting from a library template joins with slice 8's endpoints.
  */
 const scope = useMissionScope();
 const router = useRouter();
 const name = ref("");
 const description = ref("");
 const tags = ref("");
+const spacecraft = ref<NewSpacecraft>({ mode: "context" });
+const ready = computed(
+  () =>
+    name.value.trim() !== "" &&
+    (spacecraft.value.mode !== "fixed" || spacecraft.value.spacecraft_id !== ""),
+);
 const busy = ref(false);
 const error = ref<ApiError | null>(null);
 const tagList = computed(() => [
@@ -35,13 +42,14 @@ function fieldError(field: string): string | null {
 }
 
 async function create() {
-  if (busy.value || !name.value.trim()) return;
+  if (busy.value || !ready.value) return;
   busy.value = true;
   error.value = null;
   const result = await createDashboard(scope.value.mission.id, {
     name: name.value.trim(),
     description: description.value.trim(),
     tags: tagList.value,
+    spacecraft: spacecraft.value,
   });
   busy.value = false;
   if (!result.ok) {
@@ -72,15 +80,19 @@ async function create() {
         hint="Separate tags with commas."
         :error="fieldError('tags')"
       />
-      <ApCallout v-if="error && !fieldError('name') && !fieldError('tags')" tone="crit">
+      <SpacecraftDefault v-model="spacecraft" :error="fieldError('spacecraft')" />
+      <ApCallout
+        v-if="error && !fieldError('name') && !fieldError('tags') && !fieldError('spacecraft')"
+        tone="crit"
+      >
         {{ error.kind === "unauthenticated" ? "Signed out." : error.message }}
       </ApCallout>
       <span class="flex gap-2">
         <ApButton
           type="submit"
           variant="primary"
-          :disabled="busy || !name.trim()"
-          disabled-reason="Give it a name."
+          :disabled="busy || !ready"
+          disabled-reason="Give it a name (and pick the spacecraft for One spacecraft)."
           >Create and edit</ApButton
         >
         <ApButton variant="secondary" :to="{ name: 'ops.dashboards' }">Cancel</ApButton>

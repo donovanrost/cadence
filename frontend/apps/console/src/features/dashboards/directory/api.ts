@@ -80,13 +80,28 @@ export const unarchive = (missionId: string, id: string) =>
   request(`${one(missionId, id)}/restore`, nothing, { method: "POST", body: {} });
 
 const created = d.object({ id: d.token, version: d.integer });
+export type NewSpacecraft =
+  | { mode: "fixed"; spacecraft_id: string }
+  | { mode: "context" }
+  | { mode: "fleet" };
+/** D4: `spacecraft` fixed sets the default scope (76ff5edc); context and fleet set none. */
 export const createDashboard = (
   missionId: string,
-  input: Readonly<{ name: string; description: string; tags: readonly string[] }>,
+  input: Readonly<{
+    name: string;
+    description: string;
+    tags: readonly string[];
+    spacecraft: NewSpacecraft;
+  }>,
 ) =>
   request(root(missionId), created, {
     method: "POST",
-    body: { name: input.name, description: input.description || null, tags: input.tags },
+    body: {
+      name: input.name,
+      description: input.description || null,
+      tags: input.tags,
+      spacecraft: input.spacecraft,
+    },
   });
 export const duplicate = (missionId: string, id: string, name: string) =>
   request(`${one(missionId, id)}/duplicate`, created, { method: "POST", body: { name } });
