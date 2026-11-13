@@ -9,8 +9,19 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
 
   use CadenceWeb, :controller
 
+  require Logger
+
   alias Cadence.Dashboards
-  alias Cadence.Dashboards.{Creation, DirectoryActions, Documents, PlaylistStore}
+
+  alias Cadence.Dashboards.{
+    Creation,
+    DirectoryActions,
+    Documents,
+    PlaylistStore,
+    PublishReadinessPresentation,
+    ValidationResult
+  }
+
   alias Cadence.Reads.Dashboards.{Authors, BindingSummary, Directory}
   alias CadenceWeb.Console.Problem
 
@@ -87,8 +98,8 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
       {:invalid, _reason} ->
         Problem.respond(conn, :invalid_params, %{field: "name"})
 
-      {:error, _reason} ->
-        Problem.respond(conn, :dashboard_unavailable)
+      error ->
+        command_error(conn, error, "name")
     end
   end
 
@@ -141,7 +152,21 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
   defp command_error(conn, {:error, :invalid_request}, field),
     do: Problem.respond(conn, :invalid_params, %{field: field})
 
-  defp command_error(conn, _error, _field), do: Problem.respond(conn, :dashboard_unavailable)
+  # Creating or duplicating publishes the first version (D9's rule): say what isn't ready.
+  defp command_error(
+         conn,
+         {:error, {:invalid_dashboard_document, %ValidationResult{errors: errors}}},
+         _field
+       ),
+       do:
+         Problem.respond(conn, :dashboard_not_ready, %{
+           placements: PublishReadinessPresentation.editor_issues(errors)
+         })
+
+  defp command_error(conn, error, _field) do
+    Logger.warning("dashboard directory command failed: #{inspect(error, limit: 20)}")
+    Problem.respond(conn, :dashboard_unavailable)
+  end
 
   defp confirmed([], _confirm), do: :ok
   defp confirmed(_used_by, confirm) when confirm in [true, "true"], do: :ok

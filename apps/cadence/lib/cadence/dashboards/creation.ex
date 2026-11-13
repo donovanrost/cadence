@@ -1,5 +1,7 @@
 defmodule Cadence.Dashboards.Creation do
   @moduledoc "Scoped blank, clone and import creation independent of frontend delivery."
+  require Logger
+
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.Dashboards.{
@@ -38,7 +40,12 @@ defmodule Cadence.Dashboards.Creation do
           {:ok,
            %{dashboard_id: saved.dashboard_id, version: Document.version(saved), mode: model.mode}}
 
-        _ ->
+        # Creating publishes the first version: a readiness failure says what to fix.
+        {:error, {:invalid_dashboard_document, _result}} = not_ready ->
+          not_ready
+
+        error ->
+          Logger.warning("dashboard creation failed: #{inspect(error, limit: 20)}")
           {:error, :unknown}
       end
     end

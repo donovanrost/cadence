@@ -175,6 +175,37 @@ defmodule CadenceWeb.Console.DashboardDirectoryAPITest do
     end
   end
 
+  test "duplicating a dashboard that isn't publish-ready says what to fix (422, not 503)", c do
+    # A placement scoped to a kind no resolver knows: the readiness plan can't build its request.
+    [placement | rest] = c.document.placements
+
+    scoped = %{
+      placement
+      | scope_override: %{
+          "primary" => %{"kind" => "not_a_scope", "mode" => "one", "ids" => ["x"]}
+        }
+    }
+
+    unready = %{
+      c.document
+      | dashboard_id: "dashboard-unready-#{System.unique_integer([:positive])}",
+        placements: [scoped | rest]
+    }
+
+    {:ok, unready} = Documents.persist(c.org.organization_id, unready)
+
+    assert %{
+             "error" => %{
+               "code" => "dashboard_not_ready",
+               "details" => %{"placements" => [_ | _]}
+             }
+           } =
+             c
+             |> conn()
+             |> post(base(c) <> "/#{unready.dashboard_id}/duplicate", %{"name" => "Copy"})
+             |> json_response(422)
+  end
+
   describe "BindingSummary.summarize/2" do
     defp placement(type, scope \\ nil),
       do: %Placement{
