@@ -5,7 +5,8 @@ defmodule Cadence.Reads.Attention do
   groups back, #58), `pass_release` (a pass whose cancel failed, so it may still be booked) and
   `contact_settlement` (an ended contact whose telemetry isn't stored yet, #71),
   `mission_runtime` (the active generation isn't applied; 2026-11-12) and `activation_apply` (an
-  approved activation whose apply failed or stalled, to retry; 2026-11-13). While an
+  approved activation whose apply failed or stalled, to retry; 2026-11-13) and `provider_change`
+  (a provider changed a booked pass: approve, reject or acknowledge; §11 L14). While an
   `activation_apply` item is open it carries the cause, so `mission_runtime` stays out of the list
   and those items say `runtime_not_applied: true` instead (fe-ops: one row for one cause). Other
   mission-level sources (provider changes, for example) join by implementing the same four
@@ -20,6 +21,7 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
   alias Cadence.Contacts.ContactSettlementAttention, as: ContactSettlement
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
+  alias Cadence.Contacts.ProviderChangeAttention, as: ProviderChange
   alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
   alias Cadence.Control.UplinkReadiness.Attention, as: UplinkBlocked
   alias Cadence.Reads.MissionRuntimeAttention, as: MissionRuntime
@@ -30,7 +32,8 @@ defmodule Cadence.Reads.Attention do
     PassRelease,
     ContactSettlement,
     MissionRuntime,
-    ActivationApply
+    ActivationApply,
+    ProviderChange
   ]
   @resolved_window_s 60
 

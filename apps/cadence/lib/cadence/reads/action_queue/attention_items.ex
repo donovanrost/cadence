@@ -121,7 +121,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
 
     Item.new(%{
       id: item_id(attention),
-      priority: if(p1?, do: 1, else: 2),
+      priority: priority(p1?, attention),
       kind: :attention,
       state: if(p1?, do: :critical, else: :caution),
       source: attention.source,
@@ -216,6 +216,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp settlement(%{source: "activation_apply"} = attention),
     do: Map.take(attention, @activation_apply_keys)
 
+  # §11 L14: what the provider changed, for the decision block.
+  defp settlement(%{source: "provider_change"} = attention),
+    do: Map.take(attention, [:provider_change, :deadline_at])
+
   defp settlement(_attention), do: %{}
 
   # D2 Release whose cancel the provider didn't confirm (domain 548b8dd9).
@@ -245,10 +249,22 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp due_at(%{source: "contact_settlement"} = attention),
     do: Map.get(attention, :next_attempt_at) || attention.starts_at
 
+  # An approval is due at its deadline (the provider applies or drops it then).
+  defp due_at(%{source: "provider_change", deadline_at: %DateTime{} = deadline}), do: deadline
   defp due_at(attention), do: Map.get(attention, :starts_at)
+
+  # fe-ops (L14): a provider change to acknowledge, or one that failed, is P3; an approval P2.
+  defp priority(true, _attention), do: 1
+
+  defp priority(false, %{source: "provider_change", conflict: conflict})
+       when conflict != "approval_required",
+       do: 3
+
+  defp priority(false, _attention), do: 2
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{source: "contact_settlement"}, _now), do: false
+  defp p1?(%{source: "provider_change"}, _now), do: false
   # No spacecraft's telemetry is processed while it's open.
   defp p1?(%{source: "mission_runtime"}, _now), do: true
   # The same while an apply that would bring the runtime up is stuck (ux U41).

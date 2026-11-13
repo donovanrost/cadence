@@ -977,6 +977,10 @@ defmodule CadenceWeb.Router do
       get("/alarm-episodes/:episode_id/history", AlarmHistoryController, :episode)
       get("/spacecraft/:spacecraft_id/alarm-episodes", AlarmHistoryController, :spacecraft)
       get("/spacecraft/:spacecraft_id/passes", SpacecraftPassesController, :show)
+      # L14 provider-change decisions (owner: api), ahead of the generic attention verbs.
+      post("/attention/provider_change/:id/approve", ProviderChangeController, :approve)
+      post("/attention/provider_change/:id/reject", ProviderChangeController, :reject)
+      post("/attention/provider_change/:id/acknowledge", ProviderChangeController, :acknowledge)
       post("/attention/:source/:id/acknowledge", AttentionController, :acknowledge)
       post("/attention/:source/:id/resolve", AttentionController, :resolve)
       post("/attention/:source/:id/retry", AttentionController, :retry)

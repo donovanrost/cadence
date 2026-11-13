@@ -114,6 +114,35 @@ This read alone adds `queued_command_groups: {count, next_pass}` for the D2 Rele
 - `next_pass` (`{reservation_id, contact_id, station, starts_at, ends_at}` or `null`) is the
   spacecraft's next commandable pass after it, where they'd go if this one were released.
 
+### Provider changes (§11 L14): the `provider_change` attention source
+
+A provider changed a booked pass (`ProviderReservationChange`) and someone must decide. One item
+per open change, `id` = the change id, `conflict`:
+
+- `approval_required` (state `pending_approval`): approve or reject before `deadline_at`;
+- `acknowledgment_required`: the provider already applied it, so acknowledge it;
+- `configuration_failure`: shown only, with nothing to decide here.
+
+The item carries the usual `contact_id`, `station`, `provider`, `starts_at` and `raised_at`, plus
+`deadline_at` and `provider_change: {id, classification, state, deadline_at, provider_revision,
+proposal_hash, already_effective, fields: [{field, label: null, before_json, after_json}]}`. Values
+are JSON text, so they're 64-bit safe. The item resolves when the change is decided (`action`
+`approved | rejected | acknowledged`, `resolved_by` the user) or superseded (`system`).
+
+`POST …/attention/provider_change/:id/approve | reject | acknowledge {reason, proposal_hash}` →
+`200 {item: <the attention object> | null}` (null once decided). Organization admins only:
+`:approve_provider_changes`.
+
+- `422 invalid_params`: `details.reason` ("Say why.") or `details.proposal_hash`.
+- `409 provider_change_stale {item}`: the hash or revision moved, the policy changed, or reject
+  isn't possible any more. `item` is the current one, or null.
+- `409 provider_change_deadline_passed`. Hide Reject after the deadline.
+- `403 forbidden` ("Org admins decide provider changes.").
+- `404 attention_item_not_found`: not an open change of this mission.
+
+Now (ops.md): approval rows are P2, due at `deadline_at`. Acknowledgement and configuration-failure
+rows are P3.
+
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id` (`pass_resolution`, the

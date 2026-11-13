@@ -336,6 +336,9 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
     `starts_at` are null). `Retry apply` is `POST …/activations/:id/resume` (activations.md), shown
     only when `retryable`. Resolved: `action` `applied` | `superseded`, `resolved_by.kind`
     `system`.
+  - **`provider_change`** (§11 L14, contacts.md): **P2** for `approval_required`, due at
+    `deadline_at`; **P3** for `acknowledgment_required` and `configuration_failure`. `attention`
+    adds `provider_change {…}` and `deadline_at`.
 - **`missed_pass` and `station` items** (§8; U11 amended by U35).
   - `missed_pass`: one row per spacecraft with a pass result `missed` or `failed` (S9) whose
     planned AOS falls within `failure_lookback_s`.
