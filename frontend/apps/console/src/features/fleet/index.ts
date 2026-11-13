@@ -9,6 +9,7 @@ export {
   type FleetSpacecraft,
   type FleetState,
   type FleetWorstPoint,
+  type RawLimitState,
 } from "./api.ts";
 export {
   FLEET_POLL_OFFLINE_S,

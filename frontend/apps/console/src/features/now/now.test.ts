@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
-import { fleetOf, spacecraftRow, statTiles } from "@/features/fleet/index.ts";
+import { fleetOf, spacecraftRow, statTiles, type RawLimitState } from "@/features/fleet/index.ts";
 import { constellation } from "./constellation.ts";
 import { deriveQueue, GROUP_AT, nowHeadline } from "./queue.ts";
 import { freshKeys } from "./useFreshFlash.ts";
 import { worstStationIssue } from "./stationMeta.ts";
 
-const vbat = (raw: string) =>
+const vbat = (raw: RawLimitState) =>
   ({
     point_id: "HK.battery_voltage",
     point_name: "VBAT",

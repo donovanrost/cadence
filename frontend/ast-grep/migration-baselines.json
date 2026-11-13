@@ -26,7 +26,6 @@
     "apps/console/src/features/commands/request/brief.ts",
     "apps/console/src/features/dashboards/editor/contracts.ts",
     "apps/console/src/features/dashboards/library/api.ts",
-    "apps/console/src/features/fleet/api.ts",
     "apps/console/src/features/now/actionQueue.ts",
     "apps/console/src/features/now/attention.ts",
     "apps/console/src/features/now/changeSet.ts",

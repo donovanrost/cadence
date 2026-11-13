@@ -6,6 +6,16 @@ export const fleetStates = ["critical", "caution", "stale", "nominal", "never_he
 export type FleetState = (typeof fleetStates)[number];
 
 const limitState = d.oneOf(["critical", "caution", "nominal", "no_data"] as const);
+/** The evaluator's own state (Cadence.Limits.Evaluator), before normalising to limit_state. */
+export const rawLimitStates = [
+  "green",
+  "yellow_low",
+  "yellow_high",
+  "red_low",
+  "red_high",
+  "blue",
+] as const;
+export type RawLimitState = (typeof rawLimitStates)[number];
 
 const worstPoint = d.object({
   point_id: d.token,
@@ -13,7 +23,7 @@ const worstPoint = d.object({
   // Exact server value: numbers stay numbers, enum/text values stay text.
   value: d.nullable((value, path) => (typeof value === "string" ? value : d.number(value, path))),
   limit_state: limitState,
-  raw_limit_state: d.nullable(d.token),
+  raw_limit_state: d.nullable(d.known(rawLimitStates)),
   received_at: d.nullable(d.timestamp),
 });
 
@@ -31,6 +41,7 @@ const spacecraft = d.object({
   plane: d.nullable(d.integer),
   slot: d.nullable(d.integer),
   phase_deg: d.nullable(d.number),
+  // free-text: spacecraft metadata an operator sets (FleetStatus reads it as any string).
   operational_phase: d.nullable(d.token),
   state: d.oneOf(fleetStates),
   limit_state: limitState,
