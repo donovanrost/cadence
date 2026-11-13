@@ -48,13 +48,12 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
      admin_scope: Scope.new(%{user: admin, admin_mode?: true})}
   end
 
-  test "registers all twelve surfaces with executable query and action authorities" do
+  test "registers all eleven surfaces with executable query and action authorities" do
     assert Enum.map(OrganizationAdmin.surface_query_contributions(), & &1.query_id) == [
              "cadence.organization.home",
              "cadence.organization.provider_accounts.list",
              "cadence.organization.provider_accounts.new",
              "cadence.organization.provider_account.show",
-             "cadence.organization.notifications",
              "cadence.organization.notifications_bell",
              "cadence.platform_admin.home",
              "cadence.platform_admin.runtime",
@@ -94,11 +93,10 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert :ok = ActionContractLedger.validate()
 
     ledgers = ActionContractLedger.ledgers()
-    assert length(ledgers.declared) == 60
+    assert length(ledgers.declared) == 58
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
 
-    assert OrganizationAdminAction.host_owned?("notifications", "accept_invitation")
     assert OrganizationAdminAction.host_owned?("admin_organization_show", "open_organization")
 
     refute OrganizationAdminAction.host_owned?(
@@ -161,8 +159,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     ]
 
     user_queries = [
-      {user_scope, HostContext.user(user_scope.user.user_id), "notifications",
-       "cadence.organization.notifications", %{}},
       {user_scope, HostContext.user(user_scope.user.user_id), "notifications_bell",
        "cadence.organization.notifications_bell", %{}}
     ]
@@ -211,7 +207,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert {:ok, %{page: _page, account_grants: _grants}} =
              Providers.ProviderAccountShow.props(organization_scope, account.provider_account_id)
 
-    assert is_map(Providers.Notifications.props(user_scope))
     assert is_map(Providers.AdminHome.props())
     assert is_map(Providers.AdminRuntime.props())
     assert is_map(Providers.AdminOrganizationList.props())
@@ -354,8 +349,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert actions["validate_provider_account_form"].effect == :none
     assert actions["validate_provider_account"].effect == :external
     assert actions["validate_provider_account"].intent == :maintenance
-    assert actions["accept_invitation"].required_permission == "accept_invitation"
-    assert actions["accept_invitation"].effect == :durable
     assert actions["refresh_runtime"].effect == :none
     assert actions["dismiss_service_token"].effect == :none
     assert actions["open_organization"].effect == :external
@@ -401,17 +394,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                  "provider_account_show",
                  action_id,
                  %{"provider_account_id" => "missing-provider-account"}
-               )
-    end
-
-    for action_id <- ["accept_invitation", "mark_notification_read"] do
-      assert {:error, %ActionFailure{}} =
-               execute_action(
-                 user_scope,
-                 HostContext.user(user_scope.user.user_id),
-                 "notifications",
-                 action_id,
-                 %{}
                )
     end
 
@@ -531,7 +513,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                  application_key: "organization_admin",
                  application_version: 1,
                  action_id: "mark_notification_read",
-                 surface_id: "notifications",
+                 surface_id: "notifications_bell",
                  surface_version: 1
                }
              )
@@ -624,7 +606,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
              OrganizationAdminQuery.load(
                user_scope,
                HostContext.user("different-user"),
-               query_request("notifications", "cadence.organization.notifications")
+               query_request("notifications_bell", "cadence.organization.notifications_bell")
              )
 
     assert {:error, :forbidden} =
@@ -777,15 +759,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert row.notification_id == n.notification_id
     assert user.user_id == scope.user.user_id
     assert {:ok, _, 0} = DateTime.from_iso8601(row.read_at)
-
-    assert {:ok, %{"data" => destination}} =
-             OrganizationAdminQuery.load(
-               scope,
-               HostContext.user(scope.user.user_id),
-               query_request("notifications", "cadence.organization.notifications")
-             )
-
-    assert destination == %{}
   end
 
   defp query_request(surface_id, query_id, params \\ %{}) do

@@ -32,12 +32,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
       stream?: false
     },
     %{
-      id: "cadence.organization.notifications",
-      version: 1,
-      surface_id: "notifications",
-      stream?: true
-    },
-    %{
       id: "cadence.organization.notifications_bell",
       version: 1,
       surface_id: "notifications_bell",
@@ -140,9 +134,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
       Providers.ProviderAccountShow.props(scope, provider_account_id)
     end
   end
-
-  defp surface_data(scope, %HostContext{placement: :user}, "notifications", _params),
-    do: {:ok, Providers.Notifications.props(scope)}
 
   defp surface_data(scope, %HostContext{placement: :user}, "notifications_bell", _params),
     do: {:ok, Providers.Notifications.bell_props(scope)}

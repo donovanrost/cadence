@@ -30,4 +30,9 @@ defmodule CadenceWeb.AuthRedirectControllerTest do
     conn = CadenceWeb.TestFixtures.persist_user!() |> CadenceWeb.TestFixtures.member_conn()
     assert redirected_to(get(conn, "/admin-mode")) == "/console"
   end
+
+  test "the old notifications page goes to the console's Account page (L21)" do
+    conn = CadenceWeb.TestFixtures.persist_user!() |> CadenceWeb.TestFixtures.member_conn()
+    assert redirected_to(get(conn, "/notifications")) == "/console/account"
+  end
 end

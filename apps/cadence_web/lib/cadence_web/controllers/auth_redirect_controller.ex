@@ -25,6 +25,9 @@ defmodule CadenceWeb.AuthRedirectController do
 
   def no_organization(conn, _params), do: redirect(conn, to: "/console/no-organization")
 
+  @doc "L21: the old notifications page; invitations are on the console's Account page."
+  def notifications(conn, _params), do: redirect(conn, to: "/console/account")
+
   @doc "L6: the old admin-mode page; the console's account menu holds admin mode now."
   def admin_mode(conn, _params), do: redirect(conn, to: "/console")
 

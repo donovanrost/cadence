@@ -59,20 +59,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
       host_owned?: false
     },
     %{
-      id: "accept_invitation",
-      version: 1,
-      surface_id: "notifications",
-      effect: :durable,
-      host_owned?: true
-    },
-    %{
-      id: "mark_notification_read",
-      version: 1,
-      surface_id: "notifications",
-      effect: :durable,
-      host_owned?: false
-    },
-    %{
       id: "mark_notification_read",
       version: 1,
       surface_id: "notifications_bell",
@@ -227,21 +213,7 @@ defmodule Cadence.Applications.OrganizationAdminAction do
   end
 
   defp execute_action(scope, _host_context, %ActionRequest{
-         action_id: "accept_invitation",
-         params: params
-       }) do
-    with {:ok, id} <- required_param(params, "notification_id"),
-         {:ok, _} <-
-           NotificationActions.execute(scope, "accept_invitation", %{
-             "notification_id" => id
-           }) do
-      {:ok, %{navigate: "/"}}
-    end
-  end
-
-  defp execute_action(scope, _host_context, %ActionRequest{
          action_id: "mark_notification_read",
-         surface_id: surface,
          params: params
        }) do
     with {:ok, id} <- required_param(params, "notification_id"),
@@ -249,12 +221,7 @@ defmodule Cadence.Applications.OrganizationAdminAction do
            NotificationActions.execute(scope, "mark_notification_read", %{
              "notification_id" => id
            }) do
-      props =
-        if surface == "notifications_bell",
-          do: Providers.Notifications.bell_props(scope),
-          else: Providers.Notifications.props(scope)
-
-      {:ok, %{patch: props}}
+      {:ok, %{patch: Providers.Notifications.bell_props(scope)}}
     end
   end
 
@@ -389,7 +356,7 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     ]
   end
 
-  defp user_actions, do: ["accept_invitation", "mark_notification_read"]
+  defp user_actions, do: ["mark_notification_read"]
 
   defp admin_actions do
     [

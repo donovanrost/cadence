@@ -128,6 +128,8 @@ defmodule CadenceWeb.Router do
     put("/session/organization", UserSessionController, :update)
     # L6: the admin-mode page is gone (DECISIONS #79); the console's account menu holds it.
     get("/admin-mode", AuthRedirectController, :admin_mode)
+    # L21: the notifications page is gone; invitations are on the console's Account page.
+    get("/notifications", AuthRedirectController, :notifications)
 
     get("/missions/:mission_id/ops/contact-workspace", ContactWorkspaceController, :show)
 
@@ -560,7 +562,6 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :spacecraft_show}
       )
 
-      live("/notifications", HostPageLive, :index, metadata: %{host_policy: :user})
       live("/admin", HostPageLive, :index, metadata: %{host_policy: :admin})
       live("/admin/runtime", HostPageLive, :index, metadata: %{host_policy: :admin})
       live("/admin/organizations", HostPageLive, :index, metadata: %{host_policy: :admin})

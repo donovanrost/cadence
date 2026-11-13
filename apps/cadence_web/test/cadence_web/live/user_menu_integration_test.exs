@@ -12,8 +12,7 @@ defmodule CadenceWeb.UserMenuIntegrationTest do
 
     for {path, _variant} <- [
           {"/", "sidebar"},
-          {"/missions/#{mission.mission_id}", "mission_sidebar"},
-          {"/notifications", "user_shell"}
+          {"/missions/#{mission.mission_id}", "mission_sidebar"}
         ] do
       {:ok, view, _html} = live(TestFixtures.member_conn(user), path)
       shell = LiveVue.Test.get_vue(view, id: "application-shell")

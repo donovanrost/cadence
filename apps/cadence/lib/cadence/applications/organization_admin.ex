@@ -82,19 +82,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
       exposed_module: "./Application"
     },
     %{
-      id: "notifications",
-      scope: :user,
-      component: "NotificationsPage",
-      purpose: :activity,
-      placement: :application_workspace,
-      navigation_label: "Notifications",
-      navigation_order: 50,
-      query: "cadence.organization.notifications",
-      query_version: 1,
-      actions: ["accept_invitation", "mark_notification_read"],
-      exposed_module: "./Application"
-    },
-    %{
       id: "notifications_bell",
       scope: :user,
       component: "NotificationsBell",
@@ -220,11 +207,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
       surface_id: "provider_account_show",
       live_view: "CadenceWeb.HostPageLive",
       component: "ProviderAccountShow"
-    },
-    %{
-      surface_id: "notifications",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "NotificationsPage"
     },
     %{
       surface_id: "notifications_bell",
@@ -447,7 +429,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
             ],
        do: "manage_provider_accounts"
 
-  defp action_permission("accept_invitation"), do: "accept_invitation"
   defp action_permission("mark_notification_read"), do: "read_notifications"
 
   defp action_permission(action_id)
@@ -475,7 +456,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
             ],
        do: :none
 
-  defp action_effect("accept_invitation"), do: :durable
   defp action_effect("open_organization"), do: :external
   defp action_effect("validate_provider_account"), do: :external
   defp action_effect(_action_id), do: :durable
@@ -491,7 +471,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
             ],
        do: :diagnostic
 
-  defp action_intent("accept_invitation"), do: :operation
   defp action_intent("open_organization"), do: :operation
   defp action_intent("validate_provider_account"), do: :maintenance
   defp action_intent(_action_id), do: :configuration

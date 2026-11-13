@@ -1,6 +1,5 @@
 defmodule Cadence.Applications.OrganizationAdminProviders.Notifications do
-  @moduledoc "Compatibility destination and recipient bell context; the host owns both presentations."
-  def props(_scope), do: %{}
+  @moduledoc "The recipient bell's context; the host owns its presentation."
 
   def bell_props(%Cadence.Auth.Scope{user: %{user_id: user_id}}) do
     %{

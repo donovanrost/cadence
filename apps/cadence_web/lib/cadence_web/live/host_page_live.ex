@@ -21,7 +21,6 @@ defmodule CadenceWeb.HostPageLive do
     HostPageAuthorization,
     MissionModulePage,
     MissionPage,
-    NotificationsPage,
     OpsLandingPage,
     OpsTimelinePage,
     OrganizationModulePage,
@@ -1016,36 +1015,6 @@ defmodule CadenceWeb.HostPageLive do
   end
 
   def handle_event(
-        "host:notifications",
-        %{"path" => path, "event" => event, "input" => input, "token" => token},
-        socket
-      )
-      when event in ["accept_invitation", "mark_notification_read"] do
-    with true <- path == socket.assigns.host_path,
-         true <- NotificationsPage.matches?(socket, token),
-         {:ok, %{route: "/notifications"}} <- resolve_path(path),
-         {:ok, socket} <- prepare_context(socket, path),
-         true <- NotificationsPage.matches?(socket, token) do
-      result = NotificationsPage.action(socket, event, input)
-
-      case prepare_context(socket, path) do
-        {:ok, socket} ->
-          {:reply, %{ok: true, snapshot: Map.put(result, :host, snapshot(socket.assigns))},
-           socket}
-
-        {:halt, socket} ->
-          {:noreply, socket}
-
-        :error ->
-          {:reply, %{ok: false}, socket}
-      end
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
         "host:platform-administration",
         %{"path" => path, "event" => event, "input" => input, "token" => token},
         socket
@@ -1201,25 +1170,7 @@ defmodule CadenceWeb.HostPageLive do
     end
   end
 
-  def handle_info(
-        {event, record},
-        %{assigns: %{current_scope: %{user: %{user_id: user_id}}}} = socket
-      )
-      when event in [:notification_created, :notification_updated, :invitation_accepted] and
-             is_map(record) do
-    recipient_id = Map.get(record, :user_id) || Map.get(record, :accepted_by_user_id)
-
-    if recipient_id == user_id and socket.assigns[:notifications_page] != nil do
-      case prepare_context(socket, socket.assigns.host_path) do
-        {:ok, socket} -> {:noreply, socket}
-        {:halt, socket} -> {:noreply, socket}
-        :error -> {:noreply, socket}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
-
+  # L21: the notifications page is gone (DECISIONS #79); these broadcasts refresh nothing here.
   def handle_info({event, _record}, socket)
       when event in [:notification_created, :notification_updated, :invitation_accepted],
       do: {:noreply, socket}
@@ -1285,7 +1236,6 @@ defmodule CadenceWeb.HostPageLive do
           catalog: CatalogPage.load(socket.assigns.current_scope, info)
         )
         |> SpacecraftConfigurationPage.subscribe(info)
-        |> NotificationsPage.prepare(info, path)
         |> PlatformAdministrationPage.prepare(info, path)
         |> CatalogUpload.prepare(info, path)
         |> ProviderAccountRegistrationPage.prepare(info, path)
@@ -1380,7 +1330,6 @@ defmodule CadenceWeb.HostPageLive do
       activation_approvals: ActivationApprovals.presentation(assigns),
       settings_page: assigns[:settings_page],
       catalog: CatalogUpload.presentation(assigns),
-      notifications_page: assigns[:notifications_page],
       platform_administration_page: assigns[:platform_administration_page],
       timeline_page: assigns[:timeline_page],
       ops_landing_page: assigns[:ops_landing_page],

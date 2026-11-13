@@ -1191,18 +1191,6 @@
     "contribution": "data-operations.history-manage"
   },
   {
-    "path": "/notifications",
-    "scope": "user",
-    "mountId": "notifications-page-component",
-    "queryKeys": ["unread", "before_at", "before_id"],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Notifications"
-    },
-    "kind": "notifications"
-  },
-  {
     "path": "/admin",
     "scope": "admin",
     "mountId": "admin-home-component",
