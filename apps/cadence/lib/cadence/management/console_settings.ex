@@ -7,8 +7,9 @@ defmodule Cadence.Management.ConsoleSettings do
   the console has no fields for is left out.
 
   Every section stores `%{"value" => map, "allow_override" => bool}` for the
-  organization and `%{"value" => map | nil}` for a mission (nil means
-  inherit); writes go through the section's own provider, which validates.
+  organization and `%{"value" => map | nil}` for a mission: only the fields
+  it sets, the rest follow the organization (nil inherits all of them).
+  Writes go through the section's own provider, which validates.
   """
 
   alias Cadence.Auth.{Scope, SettingsAccess}
@@ -42,9 +43,10 @@ defmodule Cadence.Management.ConsoleSettings do
   end
 
   @doc """
-  Saves `values` (`%{path => value | nil}`) into a section. For a mission, a nil value
-  inherits that field and all nils clear the override; for the organization, `allow_override`
-  is a field too. `expected_version` must match the section's current version.
+  Saves `values` (`%{path => value | nil}`) into a section. For a mission, a value sets that
+  field for the mission and nil inherits it again (the override keeps only the fields it sets);
+  for the organization, `allow_override` is a field too. `expected_version` must match the
+  section's current version.
   """
   @spec save(Scope.t(), binary() | nil, binary(), map(), integer() | nil) ::
           {:ok, %{version: pos_integer(), state: :active}} | {:error, term()}
@@ -163,12 +165,13 @@ defmodule Cadence.Management.ConsoleSettings do
     {:ok, snapshot} = snapshot(scope, mission_id, id)
     effective = snapshot.effective || %{}
     inherited = snapshot.organization_default || %{}
+    set_here = if snapshot.source == "overridden", do: snapshot.saved || %{}, else: %{}
 
     fields =
       Enum.map(fields()[id], fn field ->
         Map.merge(field, %{
           value: effective[field.path],
-          source: source(mission_id, snapshot.source),
+          source: source(mission_id, Map.has_key?(set_here, field.path)),
           inherited_value: if(mission_id, do: inherited[field.path])
         })
       end)
@@ -196,9 +199,10 @@ defmodule Cadence.Management.ConsoleSettings do
     }
   end
 
-  defp source(nil, _source), do: "organization"
-  defp source(_mission, "overridden"), do: "mission"
-  defp source(_mission, _inherited), do: "organization"
+  # Per field: a mission's field is its own only when its override sets that path.
+  defp source(nil, _set_here?), do: "organization"
+  defp source(_mission, true), do: "mission"
+  defp source(_mission, false), do: "organization"
 
   defp version(_organization_id, _mission_id, _id, %{version: 0}), do: nil
 
@@ -250,8 +254,8 @@ defmodule Cadence.Management.ConsoleSettings do
   defp current_version(%{version: version}, version), do: :ok
   defp current_version(%{version: version}, _expected), do: {:error, {:version_conflict, version}}
 
-  # The organization keeps every field (nil is rejected by the provider); a mission inherits
-  # nil fields, and clears its override when none is left.
+  # The organization keeps every field (nil is rejected by the provider); a mission stores only
+  # the fields it sets (nil removes one), and clears its override when none is left.
   defp input(snapshot, values, nil) do
     value =
       Map.merge(snapshot.saved || snapshot.effective || %{}, Map.delete(values, "allow_override"))
@@ -263,17 +267,11 @@ defmodule Cadence.Management.ConsoleSettings do
   end
 
   defp input(snapshot, values, _mission) do
-    base = snapshot.saved || snapshot.organization_default || %{}
-    merged = Map.merge(base, values)
+    set =
+      (snapshot.saved || %{})
+      |> Map.merge(values)
+      |> Map.reject(fn {_path, value} -> is_nil(value) end)
 
-    if Enum.all?(values, fn {_path, value} -> is_nil(value) end) and map_size(values) > 0,
-      do: %{"value" => nil},
-      else: %{
-        "value" =>
-          Map.new(merged, fn
-            {path, nil} -> {path, (snapshot.organization_default || %{})[path]}
-            pair -> pair
-          end)
-      }
+    if set == %{}, do: %{"value" => nil}, else: %{"value" => set}
   end
 end

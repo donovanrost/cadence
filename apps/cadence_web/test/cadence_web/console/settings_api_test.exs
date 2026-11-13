@@ -88,6 +88,48 @@ defmodule CadenceWeb.Console.SettingsAPITest do
              )
   end
 
+  test "a mission sets single fields; the others follow the organization (per-field)", c do
+    put =
+      put_json(c.admin, c.mission_base <> "/cadence.pass_review", %{
+        "values" => %{"pass_realized_threshold" => 0.9},
+        "expected_version" => 0
+      })
+
+    assert json_response(put, 201)
+    data = read(c.admin, c.mission_base)
+
+    assert %{"value" => 0.9, "source" => "mission"} =
+             field(data, "cadence.pass_review", "pass_realized_threshold")
+
+    assert %{"value" => 0.98, "source" => "organization"} =
+             field(data, "cadence.pass_review", "realization_target")
+
+    org =
+      put_json(c.admin, c.org_base <> "/cadence.pass_review", %{
+        "values" => %{"realization_target" => 0.97}
+      })
+
+    assert json_response(org, 201)
+
+    assert %{"value" => 0.97, "source" => "organization"} =
+             field(read(c.admin, c.mission_base), "cadence.pass_review", "realization_target")
+
+    reset =
+      put_json(c.admin, c.mission_base <> "/cadence.pass_review", %{
+        "values" => %{"pass_realized_threshold" => nil},
+        "expected_version" => 1
+      })
+
+    assert json_response(reset, 201)
+
+    assert %{"value" => 0.95, "source" => "organization"} =
+             field(
+               read(c.admin, c.mission_base),
+               "cadence.pass_review",
+               "pass_realized_threshold"
+             )
+  end
+
   test "the organization level has allow_override; bad values and unknown fields are refused",
        c do
     data = read(c.admin, c.org_base)
