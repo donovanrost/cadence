@@ -238,7 +238,7 @@ defmodule CadenceWeb.OpsPlanReviewPageTest do
     assert_reply(view, %{ok: false})
 
     render_hook(view, "host:context", %{
-      "path" => "/missions/#{c.mission.mission_id}/ops/requirements"
+      "path" => "/missions/#{c.mission.mission_id}/ops/planning"
     })
 
     assert_reply(view, %{ok: true})

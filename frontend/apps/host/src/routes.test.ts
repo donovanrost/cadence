@@ -10,26 +10,6 @@ import { loadedMissionPages as missionModulePages } from "./module-pages.test-su
 import { loadedOpsPages as opsPages } from "./module-pages.test-support";
 import { loadedOrganizationPages as organizationModulePages } from "./module-pages.test-support";
 import { resolveHostComponent } from "./shell/registry";
-test("requirement review captures exact version, run and page queries", () => {
-  const route = required(
-    routes.find((r) => r.path === "/missions/:mission_id/ops/requirements/:contact_requirement_id"),
-  );
-  expect(route).toMatchObject({
-    kind: "ops_module",
-    contribution: "planning.requirement-review",
-    resourceParam: "contact_requirement_id",
-    scope: "mission",
-  });
-  expect(route.queryKeys).toEqual([
-    "contact_requirement_id",
-    "version",
-    "planning_run_id",
-    "versions_page",
-    "runs_page",
-    "searches_page",
-    "opportunities_page",
-  ]);
-});
 test("plan review retains the exact version and independently paged evidence", () => {
   const route = required(
     routes.find((r) => r.path === "/missions/:mission_id/ops/plans/:contact_plan_id"),
@@ -50,15 +30,6 @@ test("plan review retains the exact version and independently paged evidence", (
     "requirements_page",
     "issues_page",
   ]);
-});
-test("requirements retain bounded page and lifecycle query parameters", () => {
-  const route = required(routes.find((r) => r.path === "/missions/:mission_id/ops/requirements"));
-  expect(route).toMatchObject({
-    kind: "ops_module",
-    contribution: "planning.requirement-directory",
-    scope: "mission",
-  });
-  expect(route.queryKeys).toEqual(["page", "state"]);
 });
 test("commands are a compiled read-only mission contribution with explicit navigation", () => {
   const route = required(routes.find((r) => r.path === "/missions/:mission_id/ops/commands"));
@@ -311,21 +282,3 @@ test("contact scheduling captures spacecraft selection and independent ledger pa
   ]);
 });
 
-test("declaration uses a compiled feature contribution at its existing URL", () => {
-  const route = routes.find((r) => r.path === "/missions/:mission_id/ops/requirements/new");
-  expect(route).toMatchObject({
-    kind: "ops_module",
-    contribution: "planning.requirement-declaration",
-    queryKeys: [],
-  });
-});
-
-test("recurring requirement templates use the compiled Planning contribution", () => {
-  expect(
-    routes.find((r) => r.path === "/missions/:mission_id/ops/requirement-templates"),
-  ).toMatchObject({
-    kind: "ops_module",
-    contribution: "planning.requirement-templates",
-    queryKeys: [],
-  });
-});
