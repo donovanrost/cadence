@@ -32,7 +32,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Port the lane fix (b7cc12de, 4ae3fd8e) to `develop`; then §8 8d (Now P3 stale-change-set source, Timeline `config` applied events). Done: C3 rollout read + profiles `catalog_revision` (34b8cc27). Done: #42 port to `develop` (f9d89f83). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
 | **api-ops** | §8 api-ops 8: sign-in and current-password attempt limit, then Audit entries for password change and session revoke. Done: qa #46 simulator Orchestrator survives Store timeouts (3ea527b2: ETS-mirrored Store reads, guarded tick steps, linked-stream sweep; live after qa's sim restart); flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live; #46: qa sim restart |
-| **domain** | the monitoring-enabled fixture with the end-to-end catalog-rule test, then catalog-path generations (#36; plan to the director first, it touches activation) | — (done tonight: #71 settlement + replay 1d6be29f, mission_runtime 7a6c596a, lost-item acknowledge e99cd89d, reconciler rescue 292c8e6b) |
+| **domain** | §8 domain 7: K1 demand measures (per spacecraft longest gap vs the rule's limit, uplink-capable passes vs need; alternatives' gap after), shape to lead first; then 8: a provider freeze time for K1's header; then the UplinkQualification readiness reason cleanup. With qa after 11-14 LOS: #65 step 3 evidence queries | — (done: #36 catalog generations 0c615544, a01cf95f, 450369b9, 2ef4ca79, 7533d50a; monitoring fixture + end-to-end test 865d51fd; #71, mission_runtime, reconciler rescue) |
 
 ## 2. Ops
 
@@ -112,12 +112,12 @@ missing endpoint or decision; an item with no blocker can start now.
 ### K1 · Plan the day (`contacts/plan`): built; gaps against the SchedulePlan board
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| C · focused spacecraft 24 h strip (rule chips, pass and gap strip) | lead | — |
+| C · focused spacecraft 24 h strip (rule chips, pass and gap strip) | lead | v1 from the plan's passes and `contacts`; the gap and uplink chips' verdicts wait on domain §8 7 |
 | ~~Admin `pending_approval` review: `Send back` with a comment beside `Approve and book`~~ done (cd7b3fcb; api c7c7b277) | lead | — |
 | ~~Accepted gaps as `GAP ACCEPTED · <reason>` rows; a sent-back draft says who and why~~ done (cd7b3fcb, 9df61cc0; api 97523716) | lead | — |
 | Per-contact Requested → Confirmed / Rejected on the Gantt; rejections become Demand rows | lead | — (passes read + `execution`, cf3cd37a) |
 | ~~`Drafting stopped at or after 02:31Z`~~ done (cd7b3fcb, copy 9df61cc0; api 413c8e18) | lead | — |
-| `PROVIDER FREEZE T−…` header clock | lead | api/domain: no provider freeze time in any read |
+| `PROVIDER FREEZE T−…` header clock | lead | domain §8 8 (no provider freeze time in any read) |
 | Cost tiles / column: **hidden** (#63). Minutes `/ budget` and D's Link, Max el | lead | a minutes budget setting; Max el only when provider-supplied |
 | Done today: U26, U28, U30, U31, U32, superseded, execution header (live check pending, qa) | — | — |
 
@@ -160,7 +160,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~P1 edit + P4 staged aside (`Stage edit`, `Changes N / Keeps M`)~~ done (217feb23, b136754d) | fe-setup | — |
-| The #19 read-only framing callout looks stale after #33/#45 | fe-setup | ux/domain confirm #19 is lifted |
+| The #19 read-only framing callout is stale: #19 is lifted (domain: `profile_framing_generations` defaults on, #45). Drop it; show a note only when a mission has turned that setting off in ST1 (profile framing then doesn't reach ingress) | fe-setup | — |
 | `New profile`, `Duplicate as new profile` (create op exists) | fe-setup | — |
 | List: Overrides, Last changed columns; Limits notice; History field diffs, `Compare`, pin; conflict chip | fe-setup | — |
 
@@ -254,7 +254,10 @@ missing endpoint or decision; an item with no blocker can start now.
 **domain**
 1. ~~qa #34~~ done (#59, e683b3e2).
 2. ~~qa #19 server side~~ done (33529f29).
-3. Catalog-path generations (#36), which unblock Catalog C3 rollout. Plan to the director first.
+3. ~~Catalog-path generations (#36)~~ done (0c615544, a01cf95f, 59a7433c, 450369b9; C3 2ef4ca79; >100 spacecraft 7533d50a; monitoring fixture and end-to-end test 865d51fd). #65 steps 3 and 4 are ops (qa 11-14 00:33Z; step 4 on the director's go).
+7. K1 demand measures for the C panel (lead, 11-12): per spacecraft in plan `demand.spacecraft[]`, `longest_gap: {seconds, limit_seconds | null}` and `uplink_passes: {have, need | null}`, and in S4 alternatives `effect.longest_gap_after_seconds`. Today the rules have no gap measure (scheduling.md S4), so C can't say HOLD on a gap. Send lead the shape first.
+8. A provider freeze time (the last moment a provider takes requests for the day) on the plan or day read, for K1's `PROVIDER FREEZE T−…` clock. Null when the provider doesn't publish one.
+9. UplinkQualification readiness reason normalization (domain's deferred cleanup).
 4. ~~Spacecraft archive model (#50)~~ done (7dbd3994, e0232291, 5ee6d6e8; rollback of create verified c8526c57).
 4b. ~~Reconciler give-up~~ fixed (292c8e6b: a raising reconcile is rescued as `reconcile_crashed`, polling continues). Original: the mission runtime reconciler has crash-looped since the 22:14Z restart (`binary_to_existing_atom("criteria")` in `MissionModel.Reference.new`). No runtime spec, so no spacecraft ingress. No live remedy during the #65 pass (director). Then one qa restart, plus an `active_spec` check in the runbook.
 4c. ~~`mission_runtime` attention source~~ landed (7a6c596a; fe-ops row 751ac5f5; `MissionRuntimeStatus` 292c8e6b; `/counts` runtime api-ops c69f0578). Live on :4011 since 00:57Z (gen 8 applied on boot, so no item open).
