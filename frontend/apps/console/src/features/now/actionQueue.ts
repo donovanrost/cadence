@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import {
   spacecraftId as spacecraftIdReader,
@@ -197,7 +198,7 @@ export const actionQueueReader = d.object({
 export type ActionQueue = Decoded<typeof actionQueueReader>;
 
 export function fetchActionQueue(
-  missionId: string,
+  missionId: MissionId,
   signal?: AbortSignal,
 ): Promise<ApiResult<ActionQueue>> {
   return request(

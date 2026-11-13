@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { SpacecraftId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -16,7 +17,7 @@ import type { TimeBand } from "@/ui";
  * M8 tail after the last bucket. Stacked plots share the window, so their time axes line up.
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   spacecraftId: SpacecraftId;
   point: TelemetryPoint;
   range: RangeKey;

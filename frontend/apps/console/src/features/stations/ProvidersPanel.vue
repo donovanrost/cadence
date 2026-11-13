@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -10,7 +11,7 @@ import ProviderDetail from "./ProviderDetail.vue";
 import ProvidersTable from "./ProvidersTable.vue";
 
 /** Stations · Providers (ux U4): the ground networks that supply this mission's stations (L12). */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const route = useRoute();
 const providerId = computed(() => paramText(route.params, "providerId") || null);
 const { state, refetch } = useRemoteQuery(() => props.missionId, fetchProviders);

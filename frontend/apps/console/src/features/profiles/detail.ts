@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   actor,
   decoders,
@@ -114,7 +115,7 @@ export type ProfileField = Decoded<typeof field>;
 export type ProfileSection = ProfileDetail["sections"][number];
 
 export function fetchProfileDetail(
-  key: Readonly<{ missionId: string; profileId: string }>,
+  key: Readonly<{ missionId: MissionId; profileId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<ProfileDetail>> {
   return request(

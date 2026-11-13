@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import { fetchProviders } from "./api.ts";
 import {
   addBody,
@@ -31,7 +32,7 @@ async function decoded(body: unknown) {
   const original = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ data: body }), { status: 200 });
   try {
-    return await fetchProviders("m", new AbortController().signal);
+    return await fetchProviders(missionIdReader("m"), new AbortController().signal);
   } finally {
     globalThis.fetch = original;
   }

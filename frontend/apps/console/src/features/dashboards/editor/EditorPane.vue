@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApEmptyState } from "@/ui";
 import type { DashboardView } from "../api.ts";
@@ -12,7 +13,7 @@ import type { useEditSession } from "./useEditSession.ts";
 const props = defineProps<{
   session: ReturnType<typeof useEditSession>;
   view: DashboardView;
-  missionId: string;
+  missionId: MissionId;
 }>();
 const emit = defineEmits<{ saved: [version: number] }>();
 const widgetSheet = ref<InstanceType<typeof WidgetSheet> | null>(null);

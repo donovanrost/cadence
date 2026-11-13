@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import { attentionReader, type Attention } from "./attention.ts";
 import { NO_ACCESS, NO_ACCESS_SEEN, retryTargets, seenTargets } from "./useQueueCommand.ts";
 
@@ -54,7 +54,7 @@ describe("Retry storing (domain #71 final contract, ux c10265fd review)", () => 
       reply(409, err("retry_not_manual", "Already retrying.", { item: sample("b", "automatic") })),
       reply(404, err("attention_item_not_found", "Gone.")),
     );
-    const out = await retryTargets("m", [manual("a"), manual("b"), manual("c")]);
+    const out = await retryTargets(missionIdReader("m"), [manual("a"), manual("b"), manual("c")]);
     expect(out.text).toBe("Retried 2.");
     expect(out.emptied).toBe(true);
     expect(out.items.map((a) => [a.id, a.retry])).toEqual([
@@ -68,26 +68,26 @@ describe("Retry storing (domain #71 final contract, ux c10265fd review)", () => 
       reply(200, { data: sample("a", "automatic") }),
       reply(422, err("invalid_params", "Replay is busy.")),
     );
-    const partial = await retryTargets("m", [manual("a"), manual("b")]);
+    const partial = await retryTargets(missionIdReader("m"), [manual("a"), manual("b")]);
     expect([partial.text, partial.emptied]).toEqual([
       "Retried 1 of 2. 1 failed: Replay is busy.",
       false,
     ]);
     stub(reply(403, err("forbidden", "No.")));
-    expect((await retryTargets("m", [manual("a")])).text).toBe(NO_ACCESS);
+    expect((await retryTargets(missionIdReader("m"), [manual("a")])).text).toBe(NO_ACCESS);
     stub(reply(200, { data: sample("a", "automatic") }));
-    const single = await retryTargets("m", [manual("a")]);
+    const single = await retryTargets(missionIdReader("m"), [manual("a")]);
     expect([single.text, single.emptied, single.items.length]).toEqual([null, false, 1]);
   });
 
   it("Mark as seen takes the returned item; 404 is silent; 403 reads the operators line", async () => {
     const seen = { ...sample("a", "manual"), resolution: null, state: "acknowledged" };
     stub(reply(200, { data: seen }));
-    const ok = await seenTargets("m", [manual("a")]);
+    const ok = await seenTargets(missionIdReader("m"), [manual("a")]);
     expect([ok.text, ok.items.map((a) => a.state)]).toEqual([null, ["acknowledged"]]);
     stub(reply(404, err("attention_item_not_found", "Gone.")));
-    expect((await seenTargets("m", [manual("a")])).text).toBeNull();
+    expect((await seenTargets(missionIdReader("m"), [manual("a")])).text).toBeNull();
     stub(reply(403, err("forbidden", "No.")));
-    expect((await seenTargets("m", [manual("a")])).text).toBe(NO_ACCESS_SEEN);
+    expect((await seenTargets(missionIdReader("m"), [manual("a")])).text).toBe(NO_ACCESS_SEEN);
   });
 });

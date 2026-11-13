@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   scid as scidReader,
   decoders as d,
@@ -92,9 +93,9 @@ export type SearchInput = Readonly<{
   stationIds: readonly string[];
 }>;
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/single-bookings`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/single-bookings`;
 
-export function searchOffers(missionId: string, input: SearchInput): Promise<ApiResult<Search>> {
+export function searchOffers(missionId: MissionId, input: SearchInput): Promise<ApiResult<Search>> {
   return request(`${base(missionId)}/search`, searchReader, {
     method: "POST",
     body: {
@@ -107,7 +108,7 @@ export function searchOffers(missionId: string, input: SearchInput): Promise<Api
   });
 }
 
-export function reserveOffer(missionId: string, token: string, note: string) {
+export function reserveOffer(missionId: MissionId, token: string, note: string) {
   return request(base(missionId), reserveReader, {
     method: "POST",
     body: { token, ...(note.trim() ? { note: note.trim() } : {}) },

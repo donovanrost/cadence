@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import { useRemoteQuery, type ApiResult } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -16,7 +17,7 @@ import { cannotDecide, noGoAfter } from "./decision.ts";
 const MAX_LOOKED = 5;
 
 export async function requestFor(
-  missionId: string,
+  missionId: MissionId,
   spacecraftId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Group | null>> {
@@ -35,23 +36,18 @@ export async function requestFor(
   return { ok: true, value: null };
 }
 
-export function useYourGo(missionId: Ref<string>, spacecraftId: Ref<string | null>) {
+export function useYourGo(missionId: Ref<MissionId>, spacecraftId: Ref<string | null>) {
   const found = useRemoteQuery(
-    computed(() => (spacecraftId.value ? `${missionId.value}|${spacecraftId.value}` : null)),
-    (k, signal) => {
-      const [m = "", sc = ""] = k.split("|");
-      return requestFor(m, sc, signal);
-    },
+    // A typed key (§12 A4; useRemoteQuery compares by value), so the MissionId stays one.
+    computed(() => (spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null)),
+    (k, signal) => requestFor(k.m, k.sc, signal),
   );
   const group = computed(() =>
     found.state.value.status === "ready" ? found.state.value.value : null,
   );
   const review = useRemoteQuery(
-    computed(() => (group.value ? `${missionId.value}|${group.value.id}` : null)),
-    (k, signal) => {
-      const [m = "", id = ""] = k.split("|");
-      return fetchReview(m, id, signal);
-    },
+    computed(() => (group.value ? { m: missionId.value, id: group.value.id } : null)),
+    (k, signal) => fetchReview(k.m, k.id, signal),
   );
   const refetch = () => {
     found.refetch();

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import type { ComparisonSeries, TimeWindow } from "@/ui";
 
@@ -43,7 +44,7 @@ const seriesReader = d.object({
 export type VerifierSeries = Decoded<typeof seriesReader>;
 
 export function fetchVerifierSeries(
-  missionId: string,
+  missionId: MissionId,
   groupId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<VerifierSeries>> {

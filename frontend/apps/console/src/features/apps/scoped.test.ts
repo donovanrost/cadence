@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { spacecraftId } from "@/api";
+import { missionId as missionIdReader, spacecraftId } from "@/api";
 import { changeApp, fetchScopedApps } from "./api.ts";
 
 /** L19 (plans/spacecraft-apps.md): one spacecraft's apps come from its own path, same rows as A1. */
@@ -13,8 +13,11 @@ describe("scoped apps (L19)", () => {
     };
     try {
       const signal = new AbortController().signal;
-      await fetchScopedApps({ missionId: "m1", spacecraftId: null }, signal);
-      await fetchScopedApps({ missionId: "m1", spacecraftId: spacecraftId("sc 4") }, signal);
+      await fetchScopedApps({ missionId: missionIdReader("m1"), spacecraftId: null }, signal);
+      await fetchScopedApps(
+        { missionId: missionIdReader("m1"), spacecraftId: spacecraftId("sc 4") },
+        signal,
+      );
     } finally {
       globalThis.fetch = original;
     }
@@ -31,8 +34,8 @@ describe("scoped apps (L19)", () => {
       return new Response("{}", { status: 500 });
     };
     try {
-      await changeApp("m1", "telemetry_decom", "install", spacecraftId("sc 4"));
-      await changeApp("m1", "limits", "disable");
+      await changeApp(missionIdReader("m1"), "telemetry_decom", "install", spacecraftId("sc 4"));
+      await changeApp(missionIdReader("m1"), "limits", "disable");
     } finally {
       globalThis.fetch = original;
     }

@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { useRemoteQuery } from "@/api";
 import { ApEmptyState, ApPanel, ApRemote } from "@/ui";
 import { fetchProfiles, protocolLine } from "./api.ts";
 
 /** A blank profile needs the server's field list; until it's served, start from an existing one. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const profiles = useRemoteQuery(() => props.missionId, fetchProfiles);
 </script>
 

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { changeSetStates } from "./shapes.ts";
 import { decoders as d, request, type ApiResult } from "@/api";
 import { valueText, type Preview, type PreviewItem } from "./actions.ts";
@@ -12,7 +13,7 @@ const rebased = d.object({
 });
 
 export function rebaseOp(
-  missionId: string,
+  missionId: MissionId,
   opId: string,
   choice: RebaseChoice,
 ): Promise<ApiResult<{ change_set_id: string; version: number; state: string }>> {

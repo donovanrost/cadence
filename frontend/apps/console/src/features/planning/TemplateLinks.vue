@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApEmptyState, ApRemote, ApSegmented } from "@/ui";
@@ -8,7 +9,7 @@ import { fetchByTemplate, templateCountLine } from "./requirements.ts";
  * P4 "From templates" (ux): requirements grouped by template with a count per UTC day, never one per
  * row (api df98dcd3). Each links to its template.
  */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const utcDay = (offset: number) =>
   new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 const days = [

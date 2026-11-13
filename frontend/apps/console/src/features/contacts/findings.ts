@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import {
   scid as scidReader,
@@ -56,7 +57,7 @@ export type Findings = Decoded<typeof findingsReader>;
 export type Finding = Findings["findings"][number];
 
 export function fetchFindings(
-  missionId: string,
+  missionId: MissionId,
   window: Readonly<{ from: Date; to: Date }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<Findings>> {
@@ -69,12 +70,12 @@ export function fetchFindings(
 }
 
 /** Findings over now → now + span; refetched on contacts and stations. */
-export function useFindings(missionId: Ref<string>, spanMs: Ref<number>) {
-  const key = computed(() => `${missionId.value}|${spanMs.value}`);
+export function useFindings(missionId: Ref<MissionId>, spanMs: Ref<number>) {
+  // A typed key (§12 A4; useRemoteQuery compares by value), so the MissionId stays one.
+  const key = computed(() => ({ m: missionId.value, ms: spanMs.value }));
   const query = useRemoteQuery(key, (k, signal) => {
-    const [m = "", ms = "0"] = k.split("|");
     const now = Date.now();
-    return fetchFindings(m, { from: new Date(now), to: new Date(now + Number(ms)) }, signal);
+    return fetchFindings(k.m, { from: new Date(now), to: new Date(now + k.ms) }, signal);
   });
   useMissionInvalidation(missionId, ["contacts", "stations"], query.refetch);
   return query;

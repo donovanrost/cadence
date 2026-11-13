@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import { fetchComparison } from "./compare.ts";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -28,7 +29,7 @@ describe("fetchComparison", () => {
       ),
     );
     const r = await fetchComparison(
-      { missionId: "m", from: 6, to: 8 },
+      { missionId: missionIdReader("m"), from: 6, to: 8 },
       new AbortController().signal,
     );
     if (!r.ok) throw new Error("failed");

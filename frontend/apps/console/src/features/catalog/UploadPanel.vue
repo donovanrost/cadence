@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { failureOutcome } from "@/features/changes/index.ts";
@@ -7,7 +8,7 @@ import type { CatalogIndex } from "./api.ts";
 import { formatMiB, precheck, uploadCatalog, type Importers } from "./upload.ts";
 
 /** B · Upload: one file, the database it revises (or a new one), label and notes. */
-const props = defineProps<{ missionId: string; index: CatalogIndex; importers: Importers }>();
+const props = defineProps<{ missionId: MissionId; index: CatalogIndex; importers: Importers }>();
 const router = useRouter();
 const file = ref<File | null>(null);
 const databaseId = ref<string>(props.index.database?.id ?? "new");

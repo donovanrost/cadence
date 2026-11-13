@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { RemoteState } from "@/api";
 import ApplyAside from "./ApplyAside.vue";
 import ChangeList from "./ChangeList.vue";
@@ -9,7 +10,7 @@ import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /** The open set: K1 changes and K2 checks, beside K3 Apply (or review, for a reviewer). */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   config: ConfigState;
   changeSet: ChangeSet;
   preview: RemoteState<Preview>;

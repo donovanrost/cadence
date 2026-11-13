@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, effectScope, onScopeDispose, type EffectScope, type ShallowRef } from "vue";
 import { useRemoteQuery, type RemoteState } from "@/api";
 import { useMissionInvalidation } from "@/live";
@@ -17,7 +18,7 @@ const shared = new Map<string, Shared>();
  * shared by the top-bar status, the staged bar and the Changes screen. The query lives in a
  * detached scope that is disposed when its last user unmounts.
  */
-export function useConfigState(missionId: string) {
+export function useConfigState(missionId: MissionId) {
   let entry = shared.get(missionId);
   if (!entry) {
     const scope = effectScope(true);
@@ -47,6 +48,6 @@ export function useConfigState(missionId: string) {
 }
 
 /** After a write on the Changes page, refresh the shared state the top bar and staged bar show. */
-export function refreshConfigState(missionId: string): void {
+export function refreshConfigState(missionId: MissionId): void {
   shared.get(missionId)?.refetch();
 }

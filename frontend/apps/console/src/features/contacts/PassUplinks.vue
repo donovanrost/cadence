@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -11,7 +12,7 @@ import { fetchGroups } from "@/features/commands/index.ts";
  * "Low power safe · 2 cmds" linking to the request, or "None queued". Requests still awaiting a GO
  * count: they'll go on this pass once approved.
  */
-const props = defineProps<{ missionId: string; passId: string }>();
+const props = defineProps<{ missionId: MissionId; passId: string }>();
 const groups = useRemoteQuery(
   computed(() => props.missionId),
   (m, signal) => fetchGroups(m, { states: ["queued", "approval_pending"] }, signal),

@@ -1,10 +1,11 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import { useFleet } from "@/features/fleet/index.ts";
 
 export type SpacecraftName = Readonly<{ name: string; scid: number }>;
 
 /** Spacecraft id → name + SCID for plan rows and bars (identity on every line, CommandFlow R01). */
-export function useSpacecraftNames(missionId: Readonly<Ref<string>>) {
+export function useSpacecraftNames(missionId: Readonly<Ref<MissionId>>) {
   const fleet = useFleet(missionId, { live: false });
   const byId = computed(() => {
     const s = fleet.state.value;

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   stationId as stationIdReader,
   spacecraftId as spacecraftIdReader,
@@ -144,7 +145,7 @@ const queuedReader = d.object({
 });
 export type QueuedGroups = NonNullable<Decoded<typeof queuedReader>["queued_command_groups"]>;
 
-export function fetchQueuedGroups(missionId: string, passId: string, signal?: AbortSignal) {
+export function fetchQueuedGroups(missionId: MissionId, passId: string, signal?: AbortSignal) {
   return request(
     `/missions/${encodeURIComponent(missionId)}/passes/${encodeURIComponent(passId)}`,
     queuedReader,
@@ -163,7 +164,7 @@ export type Pass = Passes["passes"][number];
 
 /** One pass in any window (8329ec68): Review from Now can name a pass days out. 404 pass_not_found. */
 export function fetchPass(
-  missionId: string,
+  missionId: MissionId,
   passId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Pass>> {
@@ -175,7 +176,7 @@ export function fetchPass(
 }
 
 export function fetchPasses(
-  missionId: string,
+  missionId: MissionId,
   query: Readonly<{ from: Date; to: Date; spacecraftId?: string; station?: string }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<Passes>> {
@@ -208,7 +209,7 @@ const stationsReader = d.object({
 });
 export type GroundStation = Decoded<typeof stationsReader>["stations"][number];
 
-export function fetchStations(missionId: string, signal?: AbortSignal) {
+export function fetchStations(missionId: MissionId, signal?: AbortSignal) {
   return request(
     `/missions/${encodeURIComponent(missionId)}/ground-stations`,
     stationsReader,

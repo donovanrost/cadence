@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md (C3) = setup-shapes.md §C3 + declaration_count. */
@@ -74,7 +75,7 @@ export type ImportRunDetail = Decoded<typeof importRunReader>;
 export type Diagnostic = ImportRunDetail["diagnostics"][number];
 
 export function fetchImportRun(
-  key: Readonly<{ missionId: string; importId: string }>,
+  key: Readonly<{ missionId: MissionId; importId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<ImportRunDetail>> {
   return request(

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fetchPasses } from "@/features/contacts/index.ts";
@@ -6,19 +7,18 @@ import { impactOf } from "./impact.ts";
 
 /** The live plan's lost bookings (passes read over the plan window), shared by A Impact and Propose. */
 export function useLostBookings(
-  missionId: Readonly<Ref<string>>,
+  missionId: Readonly<Ref<MissionId>>,
   live: Readonly<Ref<PlanDetail | null>>,
 ) {
-  // A string key: every refetch of the live plan yields a new object, and an object key would
-  // reload the passes read (and flash its loading state) each time.
+  // A typed key of plain values: useRemoteQuery compares keys structurally (§12 A4), so a
+  // refetched plan (a new object) with the same window doesn't reload the passes read.
   const key = computed(() => {
     const w = live.value?.window;
-    return w?.from && w.to ? `${missionId.value}|${w.from}|${w.to}` : null;
+    return w?.from && w.to ? { m: missionId.value, from: w.from, to: w.to } : null;
   });
-  const passes = useRemoteQuery(key, (k, signal) => {
-    const [mission = "", from = "", to = ""] = k.split("|");
-    return fetchPasses(mission, { from: new Date(from), to: new Date(to) }, signal);
-  });
+  const passes = useRemoteQuery(key, (k, signal) =>
+    fetchPasses(k.m, { from: new Date(k.from), to: new Date(k.to) }, signal),
+  );
   const impact = computed(() => {
     const s = passes.state.value;
     return s.status === "ready" && live.value

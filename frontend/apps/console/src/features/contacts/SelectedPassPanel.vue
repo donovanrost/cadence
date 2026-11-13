@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { Scid } from "@/api/index.ts";
 import { computed } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
@@ -41,7 +42,7 @@ import { stationLabel } from "./gantt.ts";
  * downlink estimates are omitted (no propagation, DECISIONS #4); Swap station is out (#68).
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   pass: Pass | null;
   spacecraft: { name: string; scid: Scid | null } | null;
 }>();

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApEmptyState, ApPanel, ApRemote, ApTable, ApTag, type ApColumn } from "@/ui";
@@ -15,7 +16,7 @@ import {
 } from "./grants.ts";
 
 /** Policy › Grants (L3): what lets a service identity act without a person. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const grants = useRemoteQuery(() => props.missionId, fetchGrants);
 const ready = computed(() =>
   grants.state.value.status === "ready" ? grants.state.value.value : null,

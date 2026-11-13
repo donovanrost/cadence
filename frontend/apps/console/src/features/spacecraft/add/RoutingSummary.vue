@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
@@ -7,7 +8,7 @@ import { ApCallout, ApRemote } from "@/ui";
 import { routingSummary } from "./routing.ts";
 
 /** Step 03 routing (AddSpacecraft.md): the profile's rules generate the new spacecraft's routes. */
-const props = defineProps<{ missionId: string; profileId: string; count: number }>();
+const props = defineProps<{ missionId: MissionId; profileId: string; count: number }>();
 const detail = useRemoteQuery(
   () => ({ missionId: props.missionId, profileId: props.profileId }),
   fetchProfileDetail,

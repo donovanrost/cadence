@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { RouterLink } from "vue-router";
 import { describeApiError, isError } from "@/api";
@@ -10,7 +11,7 @@ import { retireItem, usedByOf, usedInWords, type UsedBy } from "./api.ts";
  * as links ("Used in 3 dashboards: A, B, C."); once unused it retires: gone from the library,
  * versions kept so older dashboard versions still render. Audited server-side.
  */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{ done: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const target = ref<{

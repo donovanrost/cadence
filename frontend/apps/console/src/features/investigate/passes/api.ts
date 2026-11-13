@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders as d,
   DecodeError,
@@ -61,7 +62,7 @@ const coverageReader = d.object({
 export type SpacecraftCoverage = Decoded<typeof coverageReader>;
 
 export function fetchCoverage(
-  missionId: string,
+  missionId: MissionId,
   spacecraftId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<SpacecraftCoverage>> {
@@ -95,7 +96,7 @@ const recentReader = d.object({ rows: d.array(recentRow, 500) });
 
 /** P4: the last 7 days of this spacecraft's pass results. */
 export function fetchRecentPasses(
-  missionId: string,
+  missionId: MissionId,
   spacecraftId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Decoded<typeof recentReader>>> {

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, type Ref } from "vue";
 import { decoders as d, request, useRemoteQuery, type ApiResult, type Decoded } from "@/api";
 import { useMissionInvalidation } from "@/live";
@@ -50,7 +51,7 @@ export const countsReader = d.object({
 export type RuntimeStatus = NonNullable<OpsCounts["runtime"]>;
 export type OpsCounts = Decoded<typeof countsReader>;
 
-function fetchCounts(missionId: string, signal: AbortSignal): Promise<ApiResult<OpsCounts>> {
+function fetchCounts(missionId: MissionId, signal: AbortSignal): Promise<ApiResult<OpsCounts>> {
   return request(`/missions/${encodeURIComponent(missionId)}/counts`, countsReader, { signal });
 }
 
@@ -61,7 +62,7 @@ const GAP_MS = 5_000;
  * spacecraft/configuration invalidations,
  * at most every 5 s with one trailing refetch. `counts` is null until the first read lands.
  */
-export function useOpsCounts(missionId: Readonly<Ref<string | null>>) {
+export function useOpsCounts(missionId: Readonly<Ref<MissionId | null>>) {
   const query = useRemoteQuery(missionId, fetchCounts);
   let last = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;

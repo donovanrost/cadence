@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { ApButton, ApCallout, ApEmptyState, ApKeyValue } from "@/ui";
 import type { MissionProvider } from "./api.ts";
@@ -14,7 +15,7 @@ import {
 
 /** One provider (L12): what it's bound to, its health, and Validate / Sync stations / Archive. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   provider: MissionProvider | null;
   canManage: boolean;
 }>();

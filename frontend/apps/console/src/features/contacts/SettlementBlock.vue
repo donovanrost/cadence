@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApCallout } from "@/ui";
 import { useCommandAccess } from "@/features/commands/index.ts";
@@ -15,7 +16,7 @@ import {
  * storing once Cadence stopped retrying; Mark as seen on lost telemetry (ux bda6f91d). Both need
  * operate_mission, the flag Recover uses (access.abort). The returned item shows at once.
  */
-const props = defineProps<{ missionId: string; passId: string }>();
+const props = defineProps<{ missionId: MissionId; passId: string }>();
 const read = useSettlement(
   computed(() => props.missionId),
   computed(() => props.passId),

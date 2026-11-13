@@ -1,5 +1,11 @@
 import { computed, onScopeDispose, type Ref } from "vue";
-import { useRemoteQuery, type ApiResult, type Scid, type SpacecraftId } from "@/api/index.ts";
+import {
+  useRemoteQuery,
+  type ApiResult,
+  type MissionId,
+  type Scid,
+  type SpacecraftId,
+} from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { FLEET_TELEMETRY_GAP_MS, throttle, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import { fetchHistory, type History } from "@/features/investigate/index.ts";
@@ -9,7 +15,7 @@ import { resolveWindow, type WindowSel } from "./window.ts";
 export type SeriesData = Readonly<{ key: SeriesKey; sc: FleetSpacecraft; history: History }>;
 
 type Request = Readonly<{
-  m: string;
+  m: MissionId;
   w: WindowSel;
   series: readonly { scid: Scid; id: SpacecraftId; p: string }[];
 }>;
@@ -20,7 +26,7 @@ type Request = Readonly<{
  * 10 s, like the fleet.
  */
 export function useSeries(
-  missionId: Ref<string>,
+  missionId: Ref<MissionId>,
   series: Ref<readonly SeriesKey[]>,
   fleet: Ref<readonly FleetSpacecraft[]>,
   window: Ref<WindowSel>,

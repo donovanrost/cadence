@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import type { RemoteState } from "@/api";
 import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
@@ -14,7 +15,7 @@ import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K3 Apply: why (required), holds acknowledgement, apply or request review (mission policy). */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   config: ConfigState;
   changeSet: ChangeSet;
   preview: RemoteState<Preview>;

@@ -54,13 +54,10 @@ const episode = computed(() =>
 const clearedRead = useRemoteQuery(
   computed(() =>
     props.alarms.status === "ready" && alarm.value === null
-      ? `${missionId.value}|${props.sc.id}`
+      ? { m: missionId.value, sc: props.sc.id }
       : null,
   ),
-  (k, signal) => {
-    const [m = "", sc = ""] = k.split("|");
-    return fetchEpisodes(m, { spacecraftId: sc, state: "cleared" }, signal);
-  },
+  (k, signal) => fetchEpisodes(k.m, { spacecraftId: k.sc, state: "cleared" }, signal),
 );
 useMissionInvalidation(missionId, ["alarms"], clearedRead.refetch);
 const resolved = computed(() =>

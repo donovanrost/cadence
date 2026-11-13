@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, shallowRef, watch, type Ref } from "vue";
 import { decoders as d, useRemoteQuery, type RemoteState } from "@/api/index.ts";
 import { useChannelEvent, useMissionInvalidation } from "@/live/index.ts";
@@ -53,7 +54,7 @@ export function useRequest(groupId: Ref<string>) {
     fetchGroups(m, { states: ["approval_pending"] }, signal),
   );
   const nameOf = usePeopleNames();
-  const missionRef = computed<string | null>(() => missionId.value);
+  const missionRef = computed<MissionId | null>(() => missionId.value);
   const refetch = () => {
     fetched.refetch();
     if (pending.value) review.refetch();

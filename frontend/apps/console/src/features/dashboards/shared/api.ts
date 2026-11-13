@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   DecodeError,
   decoders as d,
@@ -42,10 +43,10 @@ const sharedView: Reader<SharedView> = (value, path = "") => {
   return v;
 };
 
-const mission = (missionId: string) => `/missions/${encodeURIComponent(missionId)}`;
+const mission = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}`;
 
 export function fetchShare(
-  missionId: string,
+  missionId: MissionId,
   shareId: string,
   runtime: Runtime,
   signal?: AbortSignal,
@@ -66,7 +67,7 @@ export function fetchShare(
 }
 
 export function fetchSnapshot(
-  missionId: string,
+  missionId: MissionId,
   snapshotId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<SharedView>> {

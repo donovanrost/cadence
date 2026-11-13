@@ -6,12 +6,16 @@ import { fetchCommandPolicies, policyText } from "./policies.ts";
 
 /** U4 · Command policies (read-only, DECISIONS #7): each as a title + one sentence, per mission. */
 const props = defineProps<{ organization: SessionOrganization }>();
-const missionId = ref(props.organization.missions[0]?.id ?? "");
+const missionId = ref<string>(props.organization.missions[0]?.id ?? "");
+/** The select's text back to the session's MissionId (§12C). */
+const mission = computed(
+  () => props.organization.missions.find((m) => m.id === missionId.value)?.id ?? null,
+);
 const options = computed(() =>
   props.organization.missions.map((m) => ({ value: m.id, label: m.name })),
 );
 const { state, refetch } = useRemoteQuery(
-  () => missionId.value || null,
+  () => mission.value,
   (id, signal) => fetchCommandPolicies(id, signal),
 );
 </script>

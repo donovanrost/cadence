@@ -64,14 +64,9 @@ onScopeDispose(() => {
 });
 const firstSc = computed(() => props.fleet.find((sc) => sc.scid === props.scids[0])?.id);
 const search = useRemoteQuery(
-  computed(() =>
-    JSON.stringify({ m: scope.value.mission.id, q: term.value, sc: firstSc.value ?? "" }),
-  ),
-  (k, signal) => {
-    // Sound: produced by JSON.stringify above.
-    const { m, q: text, sc } = JSON.parse(k) as { m: string; q: string; sc: string };
-    return fetchPoints(m, { q: text, ...(sc ? { spacecraftId: sc } : {}) }, signal);
-  },
+  // A typed key (§12 A4): compared by value, no JSON round trip or cast.
+  computed(() => ({ m: scope.value.mission.id, q: term.value, sc: firstSc.value ?? null })),
+  (k, signal) => fetchPoints(k.m, { q: k.q, ...(k.sc ? { spacecraftId: k.sc } : {}) }, signal),
 );
 // Null can mean the stored history couldn't be read (b8181eb9), so never "yet".
 const latestText = (p: TelemetryPoint) =>

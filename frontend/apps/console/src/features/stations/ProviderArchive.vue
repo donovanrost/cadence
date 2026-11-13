@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { ApButton, ApSheet, ApTextarea } from "@/ui";
 import { archiveProvider, providerFailure } from "./providers.ts";
 
 /** L12 Archive…: required reason; bookings already made keep the provider's version. */
-const props = defineProps<{ missionId: string; providerId: string }>();
+const props = defineProps<{ missionId: MissionId; providerId: string }>();
 const emit = defineEmits<{ done: [note: { tone: "nominal" | "crit"; text: string }] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const reason = ref("");

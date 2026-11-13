@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { useRoute, useRouter } from "vue-router";
@@ -104,18 +105,25 @@ function setKinds(next: EventKind[]) {
     .catch((e: unknown) => console.error("Navigation failed", e));
 }
 // While ?sc= waits on the fleet read to resolve, don't fetch fleet-wide events by mistake.
-const key = computed(() =>
+/** A typed key (§12 A4; compared by value): no JSON round trip, and the MissionId stays one. */
+type Key = Readonly<{
+  m: MissionId;
+  w: WindowSel;
+  k: readonly EventKind[];
+  sc: string | null;
+  p: number | null;
+}>;
+const key = computed((): Key | null =>
   typeof route.query.sc === "string" && fleet.state.value.status !== "ready"
     ? null
-    : JSON.stringify({
+    : {
         m: missionId.value,
         w: sel.value,
         k: kinds.value,
         sc: scope.value.kind === "spacecraft" ? scope.value.id : null,
         p: scope.value.kind === "plane" ? scope.value.plane : null,
-      }),
+      },
 );
-type Key = { m: string; w: WindowSel; k: EventKind[]; sc: string | null; p: number | null };
 const filters = (k: Key) => ({
   kinds: k.k,
   ...(k.sc ? { spacecraftId: k.sc } : {}),
@@ -125,17 +133,14 @@ const windowOf = (w: WindowSel) => {
   const r = resolveWindow(w, new Date());
   return { from: new Date(r.from), to: new Date(r.to) };
 };
-// Sound: keys are produced by JSON.stringify(Key) above.
-const events = useRemoteQuery(key, (k, signal) => {
-  const parsed = JSON.parse(k) as Key;
-  return fetchEvents(parsed.m, { ...windowOf(parsed.w), ...filters(parsed) }, signal);
-});
+const events = useRemoteQuery(key, (k, signal) =>
+  fetchEvents(k.m, { ...windowOf(k.w), ...filters(k) }, signal),
+);
 const density = useRemoteQuery(key, (k, signal) => {
-  const parsed = JSON.parse(k) as Key;
-  const w = windowOf(parsed.w);
+  const w = windowOf(k.w);
   return fetchDensity(
-    parsed.m,
-    { ...w, ...filters(parsed) },
+    k.m,
+    { ...w, ...filters(k) },
     densityBucketS(w.to.getTime() - w.from.getTime()),
     signal,
   );
@@ -160,15 +165,8 @@ const scroller = computed(() => {
 /** Default view only: the data kind's caution/critical events, merged in (ux). */
 const defaultView = computed(() => typeof route.query.kind !== "string");
 const dataAlerts = useRemoteQuery(
-  computed(() => (defaultView.value && key.value ? `${key.value}|data` : null)),
-  (k, signal) => {
-    const parsed = JSON.parse(k.slice(0, -5)) as Key;
-    return fetchEvents(
-      parsed.m,
-      { ...windowOf(parsed.w), ...filters({ ...parsed, k: ["data"] }) },
-      signal,
-    );
-  },
+  computed(() => (defaultView.value ? key.value : null)),
+  (k, signal) => fetchEvents(k.m, { ...windowOf(k.w), ...filters({ ...k, k: ["data"] }) }, signal),
 );
 const shownEvents = computed(() => {
   if (events.state.value.status !== "ready") return null;

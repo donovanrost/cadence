@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ResolveBookingActions } from "@/features/resolutions/index.ts";
 import {
   UnconfirmedCallout,
@@ -8,7 +9,7 @@ import {
 
 /** U30 + U32 in K2: the unconfirmed list, with Mark booked / Mark not booked for org admins. */
 defineProps<{
-  missionId: string;
+  missionId: MissionId;
   plan: PlanDetail;
   nameOf: (id: string | null) => SpacecraftName | null;
   isAdmin: boolean;

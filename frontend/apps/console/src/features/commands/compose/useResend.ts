@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { ref, shallowRef, type Ref } from "vue";
 import type { Release } from "./draft.ts";
 import { loadResend } from "./resend.ts";
@@ -25,7 +26,7 @@ export function resendFrom(value: unknown): string | null {
  * title, log, approver and hold time. The reviewer's note shows above the form.
  */
 export function useResend(
-  missionId: Ref<string>,
+  missionId: Ref<MissionId>,
   fromId: string | null,
   into: ResendTargets,
   /** Uplink N `Re-send` (DECISIONS #69): only these targets of the group. */

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { actor, decoders as d, isError, orNull, request, type ApiError, type Decoded } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { formatDuration, formatShort, plural } from "@/ui";
@@ -6,7 +7,7 @@ import { formatDuration, formatShort, plural } from "@/ui";
  * L3 automation grants (plans/planning-verbs.md, api agreed 11-13): what lets a service identity
  * plan, repair or submit without a person. Cost stays hidden (DECISIONS #63); the server fills it.
  */
-const base = (missionId: string) =>
+const base = (missionId: MissionId) =>
   `/missions/${encodeURIComponent(missionId)}/contact-planning/grants`;
 
 export const grantActions = ["plan", "repair", "execute", "submit", "approve"] as const;
@@ -52,7 +53,7 @@ const grantsReader = d.object({
 });
 export type Grants = Decoded<typeof grantsReader>;
 
-export function fetchGrants(missionId: string, signal: AbortSignal) {
+export function fetchGrants(missionId: MissionId, signal: AbortSignal) {
   return request(base(missionId), grantsReader, { signal });
 }
 
@@ -65,10 +66,10 @@ export type GrantBody = Readonly<{
   reason: string;
   policy_version: number;
 }>;
-export function issueGrant(missionId: string, body: GrantBody) {
+export function issueGrant(missionId: MissionId, body: GrantBody) {
   return request(base(missionId), d.object({ grant }), { method: "POST", body });
 }
-export function revokeGrant(missionId: string, g: Grant, reason: string) {
+export function revokeGrant(missionId: MissionId, g: Grant, reason: string) {
   return request(`${base(missionId)}/${encodeURIComponent(g.id)}/revoke`, d.object({ grant }), {
     method: "POST",
     body: { reason, sha256: g.sha256 },

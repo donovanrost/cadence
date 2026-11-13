@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, shallowRef, watch, type Ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -12,7 +13,7 @@ type Settled = Readonly<{ json: string; draft: Draft }>;
  * Server preflight (M18) for the current draft. `checking` is true until the result answers the
  * draft on screen, so a stale digest is never submitted. Queue and booking changes re-check.
  */
-export function usePreflight(missionId: Ref<string>, draft: Ref<Draft | null>) {
+export function usePreflight(missionId: Ref<MissionId>, draft: Ref<Draft | null>) {
   const json = computed(() => (draft.value ? JSON.stringify(draft.value) : null));
   const settled = shallowRef<Settled | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -36,7 +37,7 @@ export function usePreflight(missionId: Ref<string>, draft: Ref<Draft | null>) {
   const query = useRemoteQuery(settled, (s, signal) =>
     fetchPreflight(missionId.value, s.draft, signal),
   );
-  const missionRef = computed<string | null>(() => missionId.value);
+  const missionRef = computed<MissionId | null>(() => missionId.value);
   useMissionInvalidation(missionRef, ["commanding", "contacts", "catalog"], query.refetch);
 
   const checking = computed(

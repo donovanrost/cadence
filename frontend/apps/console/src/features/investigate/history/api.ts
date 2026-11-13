@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   actor as sharedActor,
   decoders as d,
@@ -72,7 +73,7 @@ export type EpisodeHistory = Decoded<typeof historyReader>;
 const base = (m: string) => `/missions/${encodeURIComponent(m)}`;
 
 export function fetchEpisodeList(
-  missionId: string,
+  missionId: MissionId,
   spacecraftId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<EpisodeList>> {
@@ -84,7 +85,7 @@ export function fetchEpisodeList(
 }
 
 export function fetchEpisodeHistory(
-  missionId: string,
+  missionId: MissionId,
   episodeId: string,
   scope: "alarm" | "point",
   signal?: AbortSignal,

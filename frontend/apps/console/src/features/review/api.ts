@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
 
 /** Contract: docs/apogee/api/contacts.md, "Pass review (S9, K3)". */
@@ -162,7 +163,7 @@ export type ReviewDaily = Decoded<typeof daily>;
 export type ReviewDay = ReviewDaily["days"][number];
 
 export type Span = "day" | "week" | "month";
-export type ReviewKey = Readonly<{ missionId: string; day: string; span: Span }>;
+export type ReviewKey = Readonly<{ missionId: MissionId; day: string; span: Span }>;
 const path = (k: ReviewKey, tail: string, extra: Record<string, string> = {}) =>
   `/missions/${encodeURIComponent(k.missionId)}/pass-review${tail}?${new URLSearchParams({
     day: k.day,

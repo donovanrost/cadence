@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import {
   DWELL,
   MAX_DASHBOARDS,
@@ -68,7 +69,9 @@ describe("playlists against api's D23/D24 (475cf1295)", () => {
       wallboard_mode: true,
       dashboard_ids: ["dash-1"],
     };
-    expect((await updatePlaylist("m-1", "pl-1", body, current.updated_at)).ok).toBe(true);
+    expect(
+      (await updatePlaylist(missionIdReader("m-1"), "pl-1", body, current.updated_at)).ok,
+    ).toBe(true);
     const init: unknown = fetch.mock.calls[0]?.[1];
     const sent: unknown =
       init && typeof init === "object" && "body" in init ? JSON.parse(String(init.body)) : null;

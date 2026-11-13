@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { shallowRef, type Ref } from "vue";
 import { decoders as d, describeApiError, detailsOf, isError, request } from "@/api/index.ts";
 import { attentionReader, serverKey, type Attention } from "./attention.ts";
@@ -11,7 +12,7 @@ export type CommandKind = "retry" | "seen";
 export const noAccessText = (kind: CommandKind) => (kind === "seen" ? NO_ACCESS_SEEN : NO_ACCESS);
 
 /** POST …/acknowledge on a lost settlement (domain: allowed only when backlog.lost). */
-export function markSeen(missionId: string, a: Attention) {
+export function markSeen(missionId: MissionId, a: Attention) {
   return request(
     `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}/acknowledge`,
     attentionReader,
@@ -21,7 +22,7 @@ export function markSeen(missionId: string, a: Attention) {
 
 /** Mark as seen: the returned item (resolved) shows at once; 404 = already closed, silently. */
 export async function seenTargets(
-  missionId: string,
+  missionId: MissionId,
   targets: readonly Attention[],
 ): Promise<RetryOutcome> {
   const items: Attention[] = [];
@@ -36,7 +37,7 @@ export async function seenTargets(
 }
 
 /** POST …/attention/contact_settlement/:id/retry (domain #71; operate_mission). */
-export function retrySettlement(missionId: string, a: Attention) {
+export function retrySettlement(missionId: MissionId, a: Attention) {
   return request(
     `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}/retry`,
     attentionReader,
@@ -61,7 +62,7 @@ const conflictItem = d.object({ item: attentionReader });
  * item; 404 means it resolved meanwhile and drops out; 403 reads "Operators can retry storing."
  */
 export async function retryTargets(
-  missionId: string,
+  missionId: MissionId,
   targets: readonly Attention[],
 ): Promise<RetryOutcome> {
   let dropped = 0;
@@ -94,7 +95,7 @@ export async function retryTargets(
 
 /** Row commands for the queue panel: "Retrying…" only while the requests run (ux). */
 export function useQueueCommand(
-  missionId: Ref<string>,
+  missionId: Ref<MissionId>,
   onDone: (row: QueueItem, outcome: RetryOutcome) => void,
 ) {
   const running = shallowRef<ReadonlySet<string>>(new Set());

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   scid as scidReader,
   actor as sharedActor,
@@ -85,7 +86,7 @@ const configurationReader = d.object({
 export type SpacecraftConfiguration = Decoded<typeof configurationReader>;
 
 export function fetchConfiguration(
-  missionId: string,
+  missionId: MissionId,
   spacecraftId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<SpacecraftConfiguration>> {

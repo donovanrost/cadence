@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -15,7 +16,7 @@ import type { RetryOutcome } from "./useQueueCommand.ts";
 
 /** The viewer's ranked queue (M6), refetched per the contract: state changes promptly, telemetry every 10 s. */
 export function useActionQueue(
-  missionId: Ref<string | null>,
+  missionId: Ref<MissionId | null>,
   missionName: Ref<string | null> = ref(null),
 ) {
   const query = useRemoteQuery(missionId, (id, signal) => fetchActionQueue(id, signal));

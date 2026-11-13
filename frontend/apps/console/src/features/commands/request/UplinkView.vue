@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import {
   formatClock,
@@ -40,7 +41,7 @@ const props = defineProps<{
   canAbort: boolean;
   /** Anyone who may request can resend a sent-back request (DECISIONS #31 (4)). */
   canResend: boolean;
-  missionId: string;
+  missionId: MissionId;
 }>();
 defineEmits<{ changed: [] }>();
 const tiles = computed(() => pipeline(props.group));

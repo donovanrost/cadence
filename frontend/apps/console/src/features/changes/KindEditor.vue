@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -20,7 +21,7 @@ import { refreshConfigState } from "./useConfigState.ts";
  * form comes from the kind schema; staged paths are exactly the schema's (api: conflict checks).
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   kind: EditableKind;
   entityId: string | null;
   document: Readonly<Record<string, unknown>>;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import { fetchQueuedGroups, type Pass, type QueuedGroups } from "./api.ts";
@@ -9,7 +10,7 @@ import { stationLabel } from "./gantt.ts";
  * D2 `Release pass` (contacts.md; ux copy): a danger confirm that names the pass, warns when it's
  * in progress or has command groups queued, then cancels at the provider. Members see why not.
  */
-const props = defineProps<{ missionId: string; pass: Pass; spacecraft: string; now: Date }>();
+const props = defineProps<{ missionId: MissionId; pass: Pass; spacecraft: string; now: Date }>();
 const emit = defineEmits<{ changed: [] }>();
 const provider = computed(() => props.pass.source.provider_name ?? "the provider");
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);

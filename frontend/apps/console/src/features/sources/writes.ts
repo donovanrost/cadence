@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
 import { healthReader, sourceReader, storages, isolationLevels, registerKinds } from "./api.ts";
 
@@ -6,7 +7,7 @@ import { healthReader, sourceReader, storages, isolationLevels, registerKinds } 
  * LiveView's OpsConsole.Actions.DataSources (operate_mission); platform-shared sources answer
  * 403 platform_source. Writes return the source's D1 row so a page replaces it in place.
  */
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}`;
 const option = <T extends readonly string[]>(keys: T) =>
   d.object({ key: d.known(keys), label: d.string });
 
@@ -25,7 +26,7 @@ const optionsReader = d.object({
 });
 export type SourceOptions = Decoded<typeof optionsReader>;
 export function fetchSourceOptions(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<SourceOptions>> {
   return request(`${base(missionId)}/data-sources/options`, optionsReader, { signal });
@@ -60,7 +61,7 @@ const detailReader = d.object({
   runs: d.array(run, 20),
 });
 export type SourceDetail = Decoded<typeof detailReader>;
-export type SourceKey = Readonly<{ missionId: string; sourceId: string }>;
+export type SourceKey = Readonly<{ missionId: MissionId; sourceId: string }>;
 export function fetchSourceDetail(
   k: SourceKey,
   signal: AbortSignal,
@@ -87,7 +88,7 @@ export type RegisterBody = Readonly<{
   credentials_ref?: string;
 }>;
 /** W1: the server makes the id from the name (unique with -2, -3…). */
-export function registerSource(missionId: string, body: RegisterBody) {
+export function registerSource(missionId: MissionId, body: RegisterBody) {
   return unwrap(request(`${base(missionId)}/data-sources`, sourceOnly, { method: "POST", body }));
 }
 
@@ -152,7 +153,7 @@ export function startTsdbJob(k: SourceKey, kind: (typeof runKinds)[number]) {
 }
 
 /** W7: retry a failed run, or requeue one stuck in running. */
-export function runAction(missionId: string, jobId: string, action: "retry" | "requeue") {
+export function runAction(missionId: MissionId, jobId: string, action: "retry" | "requeue") {
   return request(
     `${base(missionId)}/data-source-runs/${encodeURIComponent(jobId)}/${action}`,
     d.object({ run }),
@@ -162,7 +163,7 @@ export function runAction(missionId: string, jobId: string, action: "retry" | "r
 
 /** W3: switch which source a binding reads; 409 binding_changed if someone switched it first. */
 export function switchBinding(
-  missionId: string,
+  missionId: MissionId,
   bindingId: string,
   body: Readonly<{ data_source_id: string; expected_data_source_id: string }>,
 ) {

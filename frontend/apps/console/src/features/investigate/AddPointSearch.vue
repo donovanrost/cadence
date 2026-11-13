@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { SpacecraftId } from "@/api/index.ts";
 import { computed, nextTick, onScopeDispose, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -10,7 +11,7 @@ import { fetchPoints, type TelemetryPoint } from "@/features/telemetry/index.ts"
  * search) and add one to plot under the alarm's. Numeric points only; at most 3 added.
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   spacecraftId: SpacecraftId;
   /** Already plotted (the alarm's point and the added ones). */
   exclude: readonly string[];
@@ -31,15 +32,9 @@ onScopeDispose(() => {
 });
 const results = useRemoteQuery(
   computed(() =>
-    open.value
-      ? JSON.stringify({ m: props.missionId, sc: props.spacecraftId, q: term.value })
-      : null,
+    open.value ? { m: props.missionId, sc: props.spacecraftId, q: term.value } : null,
   ),
-  (k, signal) => {
-    // Sound: produced by JSON.stringify above.
-    const { m, sc, q: text } = JSON.parse(k) as { m: string; sc: string; q: string };
-    return fetchPoints(m, { q: text, spacecraftId: sc, limit: 20 }, signal);
-  },
+  (k, signal) => fetchPoints(k.m, { q: k.q, spacecraftId: k.sc, limit: 20 }, signal),
 );
 const shown = computed(() =>
   results.state.value.status === "ready"

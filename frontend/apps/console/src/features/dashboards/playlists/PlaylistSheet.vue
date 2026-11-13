@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApCallout, ApField, ApNumberField, ApSheet, ApTextarea } from "@/ui";
 import {
@@ -15,7 +16,7 @@ import PlaylistConflict from "./PlaylistConflict.vue";
 import PlaylistOrder from "./PlaylistOrder.vue";
 
 /** New / edit playlist (ux: a wide sheet): name, dwell, wallboard mode, ordered dashboards. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{ saved: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const id = ref<string | null>(null);

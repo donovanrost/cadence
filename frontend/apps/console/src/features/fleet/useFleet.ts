@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, shallowRef, watch, type Ref } from "vue";
 import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
 import {
@@ -61,7 +62,7 @@ export function throttle(run: () => void, gapMs: number, clock: () => number = D
  * closing them doesn't unsubscribe the screen underneath.
  */
 export function useFleet(
-  missionId: Readonly<Ref<string | null>>,
+  missionId: Readonly<Ref<MissionId | null>>,
   options: Readonly<{ live?: boolean }> = {},
 ): FleetHandle {
   const query = useRemoteQuery(missionId, (id, signal) => fetchFleet(id, signal));

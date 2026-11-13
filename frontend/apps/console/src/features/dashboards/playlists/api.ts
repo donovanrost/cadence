@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders as d,
   detailsOf,
@@ -51,14 +52,14 @@ export type PlaylistInput = Readonly<{
 export const DWELL = { min: 5, max: 900 } as const;
 export const MAX_DASHBOARDS = 100;
 
-const root = (missionId: string) =>
+const root = (missionId: MissionId) =>
   `/missions/${encodeURIComponent(missionId)}/dashboard-playlists`;
-const one = (missionId: string, id: string) => `${root(missionId)}/${encodeURIComponent(id)}`;
+const one = (missionId: MissionId, id: string) => `${root(missionId)}/${encodeURIComponent(id)}`;
 const created = d.object({ id: d.token });
 const nothing = d.nullable((value) => value);
 
 export function fetchPlaylists(
-  missionId: string,
+  missionId: MissionId,
   q: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Decoded<typeof listing>>> {
@@ -66,7 +67,7 @@ export function fetchPlaylists(
   return request(`${root(missionId)}${query}`, listing, signal ? { signal } : {});
 }
 export function fetchPlaylist(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Playlist>> {
@@ -76,14 +77,14 @@ export function fetchPlaylist(
     signal ? { signal } : {},
   );
 }
-export const createPlaylist = (missionId: string, body: PlaylistInput) =>
+export const createPlaylist = (missionId: MissionId, body: PlaylistInput) =>
   request(root(missionId), created, {
     method: "POST",
     body: { ...body, description: body.description || null },
   });
 /** `expectedUpdatedAt` is the row's `updated_at` as read; a stale one is 409 version_conflict. */
 export const updatePlaylist = (
-  missionId: string,
+  missionId: MissionId,
   id: string,
   body: PlaylistInput,
   expectedUpdatedAt: string | null,
@@ -96,7 +97,7 @@ export const updatePlaylist = (
       expected_updated_at: expectedUpdatedAt,
     },
   });
-export const deletePlaylist = (missionId: string, id: string) =>
+export const deletePlaylist = (missionId: MissionId, id: string) =>
   request(one(missionId, id), nothing, { method: "DELETE" });
 
 /** 409 version_conflict on a stale PATCH: the playlist as it is now (§D24). */

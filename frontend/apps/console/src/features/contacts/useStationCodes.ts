@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import { useRemoteQuery, type StationId } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -9,7 +10,7 @@ import type { StationInfo, StationLookup } from "./readiness.ts";
  * ground_station_ref reads "KIR 02:31Z", and its group line names the provider). null until the
  * index loads, or for an unknown station. Ids and provider refs are separate lookups (§12C).
  */
-export function useStationCodes(missionId: Ref<string | null>): StationLookup {
+export function useStationCodes(missionId: Ref<MissionId | null>): StationLookup {
   const query = useRemoteQuery(missionId, (id, signal) => fetchStations(id, signal));
   useMissionInvalidation(missionId, ["configuration", "stations"], query.refetch);
   const rows = computed(() => {

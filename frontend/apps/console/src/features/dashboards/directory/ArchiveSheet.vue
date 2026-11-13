@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
@@ -10,7 +11,7 @@ import type { DirectoryRow } from "./api.ts";
  * Archive with the director's Q10 rule: if playlists show this dashboard, say which ones and
  * ask again (present mode skips archived dashboards); archiving is audited.
  */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{ done: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const row = ref<DirectoryRow | null>(null);

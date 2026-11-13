@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -15,7 +16,7 @@ export type SourceState = "loading" | "ready" | "failed";
  * opens and kept live by invalidation; matching is local, so typing never waits on the server.
  * Each group reports its own state: a failed read shows its own Try again (ux 68d12603).
  */
-export function useMobileSearch(missionId: Ref<string>, raw: Ref<string>) {
+export function useMobileSearch(missionId: Ref<MissionId>, raw: Ref<string>) {
   const now = useNow();
   const fleet = useFleet(missionId, { live: false });
   const alarms = useRemoteQuery(missionId, (m, signal) =>

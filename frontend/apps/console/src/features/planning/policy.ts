@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   childRecord,
   decoders,
@@ -51,15 +52,15 @@ export type PolicyGroup = Readonly<{
   advanced: readonly SchemaField[];
 }>;
 
-const base = (missionId: string) =>
+const base = (missionId: MissionId) =>
   `/missions/${encodeURIComponent(missionId)}/contact-planning/policy`;
 
-export function fetchPolicy(missionId: string, signal: AbortSignal): Promise<ApiResult<Policy>> {
+export function fetchPolicy(missionId: MissionId, signal: AbortSignal): Promise<ApiResult<Policy>> {
   return request(base(missionId), policyReader, { signal });
 }
 
 export function savePolicy(
-  missionId: string,
+  missionId: MissionId,
   body: Readonly<{ document: unknown; expected_version: number | null; reason: string }>,
 ) {
   const payload =
@@ -75,7 +76,7 @@ export function savePolicy(
 }
 
 export function decidePolicy(
-  missionId: string,
+  missionId: MissionId,
   version: number,
   body: Readonly<{ decision: "approve" | "reject"; comment: string }>,
 ) {

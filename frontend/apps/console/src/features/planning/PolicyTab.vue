@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
 import { failureOutcome, SchemaForm, type FormValues } from "@/features/changes/index.ts";
@@ -15,7 +16,7 @@ import {
 } from "./policy.ts";
 
 /** Policy tab (CP2): grouped fields from the server schema; save makes a version needing approval. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const { state, refetch } = useRemoteQuery(() => props.missionId, fetchPolicy);
 const values = ref<FormValues>({});
 const errors = ref<Readonly<Record<string, string>>>({});

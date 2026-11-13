@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import { allLost, reviewCsv, reviewFileName, type LostLine } from "./export.ts";
 
 const station = { ref: "KIR", id: null, code: "KIR", name: "Kiruna" };
@@ -34,7 +35,7 @@ describe("reviewCsv (ux: pass rows only, ISO UTC, words)", () => {
 
 describe("reviewFileName", () => {
   it("names the day, or the inclusive range for week/month", () => {
-    const day = { missionId: "m", day: "2026-11-09", span: "day" } as const;
+    const day = { missionId: missionIdReader("m"), day: "2026-11-09", span: "day" } as const;
     const week = { ...day, span: "week" } as const;
     expect(reviewFileName("earendil", day, "", "")).toBe("pass-review-earendil-2026-11-09.csv");
     expect(reviewFileName("earendil", week, "2026-11-03T00:00:00Z", "2026-11-10T00:00:00Z")).toBe(
@@ -55,8 +56,9 @@ describe("allLost", () => {
       if (!p) throw new Error(`no page ${n}`);
       return p;
     };
-    const r = await allLost({ missionId: "m", day: "2026-11-09", span: "day" }, () =>
-      Promise.resolve({ ok: true as const, value: page(i++) }),
+    const r = await allLost(
+      { missionId: missionIdReader("m"), day: "2026-11-09", span: "day" },
+      () => Promise.resolve({ ok: true as const, value: page(i++) }),
     );
     expect(r.ok && r.value.length).toBe(2);
   });

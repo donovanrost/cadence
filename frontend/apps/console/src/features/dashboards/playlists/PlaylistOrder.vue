@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApField } from "@/ui";
@@ -7,7 +8,7 @@ import { MAX_DASHBOARDS } from "./api.ts";
 
 /** The playlist's dashboards in order: ↑ ↓ remove, and a search (D1) to add more. */
 type Item = Readonly<{ id: string; name: string; archived: boolean }>;
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const model = defineModel<readonly Item[]>({ required: true });
 const q = ref("");
 const key = computed(() =>

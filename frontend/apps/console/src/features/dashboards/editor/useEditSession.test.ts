@@ -1,4 +1,5 @@
 import { effectScope, ref } from "vue";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { useEditSession } from "./useEditSession.ts";
 
@@ -39,7 +40,12 @@ function session() {
   const scope = effectScope();
   const dashboardId = ref("dash-1");
   const s = scope.run(() =>
-    useEditSession(ref("m-1"), dashboardId, ref({ from: "", to: "", spacecraftId: "" }), ref(1)),
+    useEditSession(
+      ref(missionIdReader("m-1")),
+      dashboardId,
+      ref({ from: "", to: "", spacecraftId: "" }),
+      ref(1),
+    ),
   );
   if (!s) throw new Error("scope");
   return { s, dashboardId, stop: () => scope.stop() };

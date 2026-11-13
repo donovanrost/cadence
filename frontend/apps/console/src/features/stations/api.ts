@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, stationId, type ApiResult, type Decoded } from "@/api";
 
 /** Requested shape: docs/apogee/plans/setup-shapes.md §G1 (final contract in api/setup.md). */
@@ -24,7 +25,7 @@ export const stationsReader = object({ stations: array(station, 5000) });
 export type Station = Decoded<typeof station>;
 
 export async function fetchStations(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<readonly Station[]>> {
   const result = await request(
@@ -74,7 +75,7 @@ export type MissionProviders = Readonly<{
 
 /** `GET /missions/:id/providers`: `{providers, permissions}`; `providers.manage` gates the writes. */
 export async function fetchProviders(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<MissionProviders>> {
   const result = await request(

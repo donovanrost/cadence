@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   spacecraftId as spacecraftIdReader,
   decoders as d,
@@ -100,7 +101,7 @@ export function alarmQueryString(query: AlarmQuery): string {
 }
 
 export function fetchAlarms(
-  missionId: string,
+  missionId: MissionId,
   query: AlarmQuery,
   signal?: AbortSignal,
 ): Promise<ApiResult<Alarms>> {

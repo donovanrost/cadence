@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { describeApiError, isError } from "@/api/index.ts";
 import {
@@ -39,7 +40,7 @@ import {
  * `booked` hands the new pass to Contacts so D3 shows the bar and D2 opens on it.
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   fleet: readonly FleetSpacecraft[];
   stations: readonly GroundStation[];
 }>();

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { describeApiError } from "@/api/index.ts";
 import { useSession } from "@/shell/index.ts";
@@ -19,7 +20,7 @@ import {
  * A HOLD needing your note, or a NO-GO in the re-check, sends you to the full review (DECISIONS #7:
  * a GO from the phone is a second GO like any other).
  */
-const props = defineProps<{ missionId: string; spacecraftId: string }>();
+const props = defineProps<{ missionId: MissionId; spacecraftId: string }>();
 const session = useSession();
 const access = useCommandAccess();
 const nameOf = usePeopleNames();

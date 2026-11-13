@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   actor as sharedActor,
   decoders,
@@ -63,18 +64,18 @@ export type StationAvailability = Decoded<typeof availabilityReader>;
 export type StationWindow = Decoded<typeof window>;
 export type StationImpact = Decoded<typeof impactReader>;
 
-const base = (missionId: string, stationId: string) =>
+const base = (missionId: MissionId, stationId: string) =>
   `/missions/${encodeURIComponent(missionId)}/station-availability/${encodeURIComponent(stationId)}`;
 
 export function fetchAvailability(
-  key: Readonly<{ missionId: string; stationId: string }>,
+  key: Readonly<{ missionId: MissionId; stationId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<StationAvailability>> {
   return request(base(key.missionId, key.stationId), availabilityReader, { signal });
 }
 
 export function fetchStationImpact(
-  key: Readonly<{ missionId: string; stationId: string; from: string; to: string }>,
+  key: Readonly<{ missionId: MissionId; stationId: string; from: string; to: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<StationImpact>> {
   const q = new URLSearchParams({ from: key.from, to: key.to });

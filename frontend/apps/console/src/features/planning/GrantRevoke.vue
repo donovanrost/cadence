@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { fieldErrors } from "@/api";
 import { ApButton, ApCallout, ApSheet, ApTextarea } from "@/ui";
 import { grantFailure, identityName, revokeGrant, type Grant } from "./grants.ts";
 
 /** L3 Revoke…: ends a grant now, with a required reason; sends the sha256 it read (409 if changed). */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{ revoked: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const grant = ref<Grant | null>(null);

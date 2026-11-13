@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import { preflightReader, type Preflight } from "../groups/api.ts";
 import { groupOf, showBody } from "../groups/fixtures.ts";
 import { phoneGoBlocked, requestFor, yourGoWords } from "./yourGo.ts";
@@ -46,7 +46,7 @@ describe("Mobile 'Your GO is requested' (Mobile.md §3)", () => {
     );
     fetch.mockResolvedValueOnce(reply({ ...showBody, id: "grp-new" }));
     vi.stubGlobal("fetch", fetch);
-    const r = await requestFor("m", "sc-1");
+    const r = await requestFor(missionIdReader("m"), "sc-1");
     expect(r.ok && r.value?.id).toBe("grp-new");
   });
 

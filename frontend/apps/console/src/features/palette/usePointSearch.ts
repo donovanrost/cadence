@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, ref, watch, type Ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
@@ -13,11 +14,11 @@ const DEBOUNCE_MS = 120;
  * `@` stations) skip it. Up to four groups' worth come back, so "Show all" has rows to show.
  */
 export function usePointSearch(
-  missionId: Ref<string | null>,
+  missionId: Ref<MissionId | null>,
   raw: Ref<string>,
   fleet: Ref<readonly FleetSpacecraft[]>,
 ): { items: Ref<PaletteItem[]>; pending: Ref<boolean> } {
-  const settled = ref<{ m: string; tq: TelemetryQuery } | null>(null);
+  const settled = ref<{ m: MissionId; tq: TelemetryQuery } | null>(null);
   /** True from a keystroke that will ask the server until the debounce settles. */
   const waiting = ref(false);
   let timer: ReturnType<typeof setTimeout> | undefined;

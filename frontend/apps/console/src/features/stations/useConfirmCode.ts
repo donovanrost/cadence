@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { ref, shallowRef } from "vue";
 import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
 import type { Station } from "./api.ts";
@@ -6,7 +7,7 @@ import type { Station } from "./api.ts";
  * U25: confirming a suggested code stages a normal ground_station change writing `code`. The
  * suggestion is never stored by itself; until the change set is applied the read still says null.
  */
-export function useConfirmCode(missionId: () => string) {
+export function useConfirmCode(missionId: () => MissionId) {
   const staged = shallowRef<ReadonlySet<string>>(new Set());
   const busy = ref<string | null>(null);
   const failure = ref<string | null>(null);

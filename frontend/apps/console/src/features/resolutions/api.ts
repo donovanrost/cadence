@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   actor,
   decoders as d,
@@ -32,7 +33,7 @@ export const resolveReader = d.object({
 export type Resolved = Decoded<typeof resolveReader>;
 
 export function resolveUnconfirmed(
-  missionId: string,
+  missionId: MissionId,
   planId: string,
   snapshotId: string,
   body: Readonly<{ action: ResolveAction; note: string; provider_reference?: string }>,

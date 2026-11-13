@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
@@ -21,7 +22,7 @@ const progressReader = d.object({ id: d.token });
  * followed by progress events + a 5 s poll while running), and start / continue / apply (S5 on the
  * new plan).
  */
-export function useReplan(missionId: Readonly<Ref<string>>) {
+export function useReplan(missionId: Readonly<Ref<MissionId>>) {
   const route = useRoute();
   const router = useRouter();
   const planId = computed(() => (typeof route.query.plan === "string" ? route.query.plan : null));

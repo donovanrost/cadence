@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   scid as scidReader,
   decoders as d,
@@ -213,10 +214,11 @@ export const groupReader = d.object({
 });
 export type Group = Decoded<typeof groupReader>;
 
-const one = (missionId: string, id: string) => `${groupsBase(missionId)}/${encodeURIComponent(id)}`;
+const one = (missionId: MissionId, id: string) =>
+  `${groupsBase(missionId)}/${encodeURIComponent(id)}`;
 
 export function fetchGroup(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Group>> {
@@ -225,7 +227,7 @@ export function fetchGroup(
 
 /** Preflight re-run at review (A2), with `changed_since_submit`. */
 export function fetchReview(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Preflight>> {
@@ -243,7 +245,7 @@ export type Decision = Readonly<{
 }>;
 
 export async function decide(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   decision: Decision,
 ): Promise<WriteOutcome<Group>> {
@@ -262,7 +264,7 @@ export async function decide(
 }
 
 export async function abortGroup(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   reason: string,
 ): Promise<WriteOutcome<Group>> {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import { deletePlaylist, type PlaylistSummary } from "./api.ts";
 
 /** Delete a playlist (Q10): a hard delete after this confirm; nothing else references it. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{ deleted: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const target = ref<PlaylistSummary | null>(null);

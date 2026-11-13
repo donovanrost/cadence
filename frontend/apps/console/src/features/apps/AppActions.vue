@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout } from "@/ui";
@@ -6,7 +7,7 @@ import type { SpacecraftId } from "@/api";
 import { changeApp, type App, type AppAction } from "./api.ts";
 
 /** Install / disable / uninstall for one app, through the app-change seam. */
-const props = defineProps<{ missionId: string; app: App; spacecraftId?: SpacecraftId | null }>();
+const props = defineProps<{ missionId: MissionId; app: App; spacecraftId?: SpacecraftId | null }>();
 const emit = defineEmits<{ changed: [] }>();
 const busy = ref(false);
 const note = ref<string | null>(null);

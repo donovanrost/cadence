@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { describeApiError, fieldErrors, isError } from "@/api";
 import { ApButton, ApCallout, ApField, ApSheet, ApTextarea } from "@/ui";
 import { renameItem } from "./api.ts";
 
 /** Rename a library widget (D22 PATCH): name and description, against the version on screen. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{ done: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const target = ref<{ id: string; version: number; updatedAt: string | null } | null>(null);

@@ -1,5 +1,5 @@
 import { computed, onScopeDispose, type Ref } from "vue";
-import { useRemoteQuery, type SpacecraftId } from "@/api/index.ts";
+import { useRemoteQuery, type MissionId, type SpacecraftId } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { fetchAlarms, fetchEpisode, fetchEpisodes } from "@/features/alarms/index.ts";
 import { FLEET_REFETCH_GAP_MS, throttle } from "@/features/fleet/index.ts";
@@ -7,31 +7,28 @@ import { fetchEvents } from "@/features/timeline/index.ts";
 import { fetchHistory, fetchLimitIntervals } from "./api.ts";
 import { rangeWindow, type RangeKey } from "./model.ts";
 
-type Key = Readonly<Record<string, string>>;
-/** useRemoteQuery compares keys by value, so a key is the typed object itself (typing §12 A4). */
-const keyOf = (parts: Key | null): Key | null => parts;
+/**
+ * useRemoteQuery compares keys by value, so each key is a typed object (typing §12 A4) and the
+ * MissionId stays one on its way to the request (§12C).
+ */
 
 /** Active alarms of one spacecraft (B1, title tag). Refetch on limit-state transitions. */
-export function useSpacecraftAlarms(missionId: Ref<string>, spacecraftId: Ref<string | null>) {
+export function useSpacecraftAlarms(missionId: Ref<MissionId>, spacecraftId: Ref<string | null>) {
   const key = computed(() =>
-    keyOf(spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null),
+    spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null,
   );
   const query = useRemoteQuery(key, (k, signal) => {
-    const { m = "", sc = "" } = k;
-    return fetchAlarms(m, { state: "active", spacecraftId: sc }, signal);
+    return fetchAlarms(k.m, { state: "active", spacecraftId: k.sc }, signal);
   });
   useMissionInvalidation(missionId, ["alarms", "limits"], query.refetch);
   return query;
 }
 
 /** Active alarms on one point across the mission (B4 sisters). */
-export function usePointAlarms(missionId: Ref<string>, pointId: Ref<string | null>) {
-  const key = computed(() =>
-    keyOf(pointId.value ? { m: missionId.value, p: pointId.value } : null),
-  );
+export function usePointAlarms(missionId: Ref<MissionId>, pointId: Ref<string | null>) {
+  const key = computed(() => (pointId.value ? { m: missionId.value, p: pointId.value } : null));
   const query = useRemoteQuery(key, (k, signal) => {
-    const { m = "", p = "" } = k;
-    return fetchAlarms(m, { state: "active", q: p }, signal);
+    return fetchAlarms(k.m, { state: "active", q: k.p }, signal);
   });
   useMissionInvalidation(missionId, ["alarms", "limits"], query.refetch);
   return query;
@@ -42,12 +39,12 @@ export function usePointAlarms(missionId: Ref<string>, pointId: Ref<string | nul
  * read back from the response (`from`/`to`), so a refetch slides the window forward.
  */
 export function usePointTrend(
-  missionId: Ref<string>,
+  missionId: Ref<MissionId>,
   spacecraftId: Ref<SpacecraftId | null>,
   pointId: Ref<string | null>,
   range: Ref<RangeKey>,
 ) {
-  type TrendKey = Readonly<{ m: string; sc: SpacecraftId; p: string; r: RangeKey }>;
+  type TrendKey = Readonly<{ m: MissionId; sc: SpacecraftId; p: string; r: RangeKey }>;
   const key = computed((): TrendKey | null =>
     spacecraftId.value && pointId.value
       ? { m: missionId.value, sc: spacecraftId.value, p: pointId.value, r: range.value }
@@ -72,42 +69,37 @@ function toWindow(range: RangeKey) {
 }
 
 /** Alarm episodes of one spacecraft (lifecycle: status, ack, assignee) and the viewer's permissions. */
-export function useSpacecraftEpisodes(missionId: Ref<string>, spacecraftId: Ref<string | null>) {
+export function useSpacecraftEpisodes(missionId: Ref<MissionId>, spacecraftId: Ref<string | null>) {
   const key = computed(() =>
-    keyOf(spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null),
+    spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null,
   );
   const query = useRemoteQuery(key, (k, signal) => {
-    const { m = "", sc = "" } = k;
-    return fetchEpisodes(m, { spacecraftId: sc }, signal);
+    return fetchEpisodes(k.m, { spacecraftId: k.sc }, signal);
   });
   useMissionInvalidation(missionId, ["alarms"], query.refetch);
   return query;
 }
 
 /** One episode with its events (B2 and the escalation notice). */
-export function useEpisodeDetail(missionId: Ref<string>, episodeId: Ref<string | null>) {
-  const key = computed(() =>
-    keyOf(episodeId.value ? { m: missionId.value, e: episodeId.value } : null),
-  );
+export function useEpisodeDetail(missionId: Ref<MissionId>, episodeId: Ref<string | null>) {
+  const key = computed(() => (episodeId.value ? { m: missionId.value, e: episodeId.value } : null));
   const query = useRemoteQuery(key, (k, signal) => {
-    const { m = "", e = "" } = k;
-    return fetchEpisode(m, e, signal);
+    return fetchEpisode(k.m, k.e, signal);
   });
   useMissionInvalidation(missionId, ["alarms"], query.refetch);
   return query;
 }
 
 /** The spacecraft's mission events over the last 24 h (B2), newest first. */
-export function useSpacecraftEvents(missionId: Ref<string>, spacecraftId: Ref<string | null>) {
+export function useSpacecraftEvents(missionId: Ref<MissionId>, spacecraftId: Ref<string | null>) {
   const key = computed(() =>
-    keyOf(spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null),
+    spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null,
   );
   const query = useRemoteQuery(key, (k, signal) => {
-    const { m = "", sc = "" } = k;
     const to = new Date();
     return fetchEvents(
-      m,
-      { from: new Date(to.getTime() - 86_400_000), to, spacecraftId: sc },
+      k.m,
+      { from: new Date(to.getTime() - 86_400_000), to, spacecraftId: k.sc },
       signal,
     );
   });

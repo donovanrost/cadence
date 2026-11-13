@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
@@ -10,7 +11,7 @@ import { byAuthor, fetchRepair, stationCode, type PlanSummary } from "./api.ts";
  * owns applying it. The move summary comes from the repair run (absent until it loads).
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   proposal: PlanSummary;
 }>();
 const repairOf = computed(() => props.proposal.repair_of);

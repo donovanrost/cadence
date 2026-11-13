@@ -30,11 +30,8 @@ const session = useSession();
 const canEdit = computed(() => canAdministerOrganization(session, scope.value.organization));
 const missionId = computed(() => scope.value.mission.id);
 const config = useRemoteQuery(
-  computed(() => `${missionId.value}|${props.sc.id}`),
-  (k, signal) => {
-    const [m = "", sc = ""] = k.split("|");
-    return fetchConfiguration(m, sc, signal);
-  },
+  computed(() => ({ m: missionId.value, sc: props.sc.id })),
+  (k, signal) => fetchConfiguration(k.m, k.sc, signal),
 );
 useMissionInvalidation(missionId, ["spacecraft", "catalog", "configuration"], config.refetch);
 

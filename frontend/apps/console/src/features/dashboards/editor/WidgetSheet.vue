@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApSegmented, ApSheet } from "@/ui";
 import LibraryPicker from "../library/LibraryPicker.vue";
@@ -19,7 +20,7 @@ import WidgetDisplayFields from "./WidgetDisplayFields.vue";
  * not a copy, so "Used in N dashboards" stays true.
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   dashboardId: string;
   baseVersion: number;
   sections: readonly { id: string; title: string }[];

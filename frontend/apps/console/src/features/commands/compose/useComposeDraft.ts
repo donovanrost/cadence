@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, onBeforeUnmount, shallowRef, watch, type Ref } from "vue";
 import { codeOf, describeApiError, isError, type ApiError } from "@/api/index.ts";
 import { formatClock, formatShort } from "@/ui";
@@ -48,7 +49,7 @@ function serverReason(e: ApiError): string | null {
  * POST /command-groups, so the server deletes exactly that draft.
  */
 export function useComposeDraft(
-  missionId: Ref<string>,
+  missionId: Ref<MissionId>,
   fields: Ref<ComposeFields>,
   apply: (restored: Restored) => void,
   resume: boolean,

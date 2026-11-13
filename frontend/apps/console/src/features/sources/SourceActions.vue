@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import type { ApiResult } from "@/api";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
@@ -8,7 +9,7 @@ import { health, sourceFailure } from "./present.ts";
 import { probeSource, setSourceEnabled, startTsdbJob } from "./writes.ts";
 
 /** L11 W2 enable/disable, W4 probe, W5 rotate, W6 TSDB jobs (managed stores only). */
-const props = defineProps<{ missionId: string; source: DataSource }>();
+const props = defineProps<{ missionId: MissionId; source: DataSource }>();
 const emit = defineEmits<{ done: [note: { tone: "nominal" | "crit"; text: string }] }>();
 const key = computed(() => ({ missionId: props.missionId, sourceId: props.source.id }));
 const busy = ref(false);

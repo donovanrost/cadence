@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import { actorName } from "@/api";
 import { useConfigState, type ChangeSet } from "@/features/changes/index.ts";
@@ -42,7 +43,7 @@ export function stagedFields(
 
 /** The shared config state (no extra fetch) narrowed to one profile's staged fields. */
 export function useStagedFields(
-  missionId: Readonly<Ref<string>>,
+  missionId: Readonly<Ref<MissionId>>,
   profileId: Readonly<Ref<string>>,
 ) {
   const config = useConfigState(missionId.value);

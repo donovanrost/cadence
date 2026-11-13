@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   actor,
   decoders as d,
@@ -15,7 +16,7 @@ import { formatShort, type OpState } from "@/ui";
  * L10 app activation approvals (api activations.md, be59d4f32): a save that needs
  * activation waits for a second person; approving applies it at once.
  */
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/activations`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/activations`;
 
 /** api serves L10 (be59d4f32); on since qa's go 11-13. */
 export const ACTIVATIONS_LIVE = true;
@@ -82,7 +83,7 @@ const listReader = d.object({
   permissions: d.array(d.known(["activations.approve"] as const), 10),
 });
 export type ActivationList = Decoded<typeof listReader>;
-export type ListKey = Readonly<{ missionId: string; state: "pending" | "decided" }>;
+export type ListKey = Readonly<{ missionId: MissionId; state: "pending" | "decided" }>;
 export function fetchActivations(k: ListKey, signal: AbortSignal) {
   return request(`${base(k.missionId)}?state=${k.state}`, listReader, { signal });
 }
@@ -97,7 +98,7 @@ const detailReader = (value: unknown, path = "") => ({
   })(value, path),
 });
 export type ActivationDetail = ReturnType<typeof detailReader>;
-export type DetailKey = Readonly<{ missionId: string; requestId: string }>;
+export type DetailKey = Readonly<{ missionId: MissionId; requestId: string }>;
 export function fetchActivation(k: DetailKey, signal: AbortSignal) {
   return request(`${base(k.missionId)}/${encodeURIComponent(k.requestId)}`, detailReader, {
     signal,

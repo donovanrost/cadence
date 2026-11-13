@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { ApButton, ApCallout, ApEmptyState, ApPanel } from "@/ui";
 import OverrideCreate from "./OverrideCreate.vue";
@@ -9,7 +10,7 @@ import type { ProfileDetail } from "./detail.ts";
  * P3 Overrides: the spacecraft that differ from the profile, Reset, and Add override. Catalog and
  * framing overrides don't depend on the routing model (qa #65); only routing overrides wait for it.
  */
-defineProps<{ missionId: string; detail: ProfileDetail; canStage: boolean }>();
+defineProps<{ missionId: MissionId; detail: ProfileDetail; canStage: boolean }>();
 const adding = ref(false);
 </script>
 

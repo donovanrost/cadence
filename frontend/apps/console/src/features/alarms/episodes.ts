@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   spacecraftId as spacecraftIdReader,
   type SpacecraftId,
@@ -75,10 +76,10 @@ export const episodesReader = d.object({
 });
 export type Episodes = Decoded<typeof episodesReader>;
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/alarm-episodes`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/alarm-episodes`;
 
 export function fetchEpisodes(
-  missionId: string,
+  missionId: MissionId,
   query: Readonly<{ spacecraftId?: string; state?: "active" | "cleared" | "all" }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<Episodes>> {
@@ -91,7 +92,7 @@ export function fetchEpisodes(
   );
 }
 
-export function fetchEpisode(missionId: string, episodeId: string, signal?: AbortSignal) {
+export function fetchEpisode(missionId: MissionId, episodeId: string, signal?: AbortSignal) {
   return request(
     `${base(missionId)}/${encodeURIComponent(episodeId)}`,
     episodeDetail,
@@ -129,7 +130,7 @@ function bodyOf(command: EpisodeCommand): { path: string; body: Record<string, u
 }
 
 export async function runEpisodeCommand(
-  missionId: string,
+  missionId: MissionId,
   episodeId: string,
   command: EpisodeCommand,
 ): Promise<CommandOutcome> {

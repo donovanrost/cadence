@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded, type SpacecraftId } from "@/api";
 import { appStatus, surfaceRow } from "./host.ts";
 
@@ -24,7 +25,7 @@ export const appsReader = object({ apps: array(app, 200), permissions: array(tok
 export type Apps = Decoded<typeof appsReader>;
 export type App = Decoded<typeof app>;
 
-export function fetchApps(missionId: string, signal: AbortSignal): Promise<ApiResult<Apps>> {
+export function fetchApps(missionId: MissionId, signal: AbortSignal): Promise<ApiResult<Apps>> {
   return request(`/missions/${encodeURIComponent(missionId)}/apps`, appsReader, { signal });
 }
 
@@ -32,7 +33,7 @@ export function fetchApps(missionId: string, signal: AbortSignal): Promise<ApiRe
 export const SPACECRAFT_APPS_LIVE = true;
 
 /** Mission apps (A1), or one spacecraft's (L19, plans/spacecraft-apps.md: the same row shape). */
-export type AppsKey = Readonly<{ missionId: string; spacecraftId: SpacecraftId | null }>;
+export type AppsKey = Readonly<{ missionId: MissionId; spacecraftId: SpacecraftId | null }>;
 export function fetchScopedApps(k: AppsKey, signal: AbortSignal): Promise<ApiResult<Apps>> {
   const m = `/missions/${encodeURIComponent(k.missionId)}`;
   const path = k.spacecraftId
@@ -54,7 +55,7 @@ export type AppChangeOutcome =
   | Readonly<{ kind: "failed"; error: import("@/api").ApiError }>;
 
 export async function changeApp(
-  missionId: string,
+  missionId: MissionId,
   key: string,
   action: AppAction,
   /** L19: installations are per spacecraft, so a spacecraft's verbs go under its path. */

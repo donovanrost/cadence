@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { ApButton, ApCallout } from "@/ui";
 import { recoverUplink, type RecoverOutcome } from "./readiness.ts";
@@ -8,7 +9,7 @@ import { recoverUplink, type RecoverOutcome } from "./readiness.ts";
  * "Qualifying now". The outcome shows in words beside it.
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   passId: string;
   recovering: boolean;
   canRecover: boolean;

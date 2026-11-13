@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders as d,
   describeApiError,
@@ -33,11 +34,11 @@ function outcome(result: ApiResult<Attention>): AttentionOutcome {
   return rejected ? { status: "rejected", error: e } : { status: "unclear", error: e };
 }
 
-const itemPath = (missionId: string, a: Attention) =>
+const itemPath = (missionId: MissionId, a: Attention) =>
   `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}`;
 
 export async function acknowledgeAttention(
-  missionId: string,
+  missionId: MissionId,
   a: Attention,
 ): Promise<AttentionOutcome> {
   return outcome(
@@ -46,7 +47,7 @@ export async function acknowledgeAttention(
 }
 
 export async function resolveAttention(
-  missionId: string,
+  missionId: MissionId,
   a: Attention,
   actionText: string,
 ): Promise<AttentionOutcome> {
@@ -146,7 +147,7 @@ const replyReader = d.object({ item: d.nullable(attentionReader) });
 
 /** POST …/attention/provider_change/:id/<decision> {reason, proposal_hash} (api 30b3f60b9). */
 export async function decideProviderChange(
-  missionId: string,
+  missionId: MissionId,
   a: Attention,
   decision: ChangeDecision,
   reason: string,

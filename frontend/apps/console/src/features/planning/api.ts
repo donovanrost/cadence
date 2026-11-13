@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { actor, decoders, request, type ApiResult, type Decoded, type Reader, orNull } from "@/api";
 import { formatCount } from "@/ui";
 
@@ -47,7 +48,7 @@ const summary = object({
 export type PlanningSummary = Decoded<typeof summary>;
 
 export function fetchPlanning(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<PlanningSummary>> {
   return request(`/missions/${encodeURIComponent(missionId)}/contact-planning`, summary, {
@@ -92,7 +93,7 @@ const templateDetail = (value: unknown, path = "") => ({
 export type TemplateDetail = ReturnType<typeof templateDetail>;
 
 export function fetchTemplate(
-  key: Readonly<{ missionId: string; templateId: string }>,
+  key: Readonly<{ missionId: MissionId; templateId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<TemplateDetail>> {
   return request(

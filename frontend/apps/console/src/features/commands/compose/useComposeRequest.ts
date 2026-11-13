@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
@@ -30,7 +31,7 @@ export type ComposeForm = Readonly<{
  * submit. The commit opens only when the checks on screen answer this exact draft with no NO-GO.
  */
 export function useComposeRequest(
-  missionId: Ref<string>,
+  missionId: Ref<MissionId>,
   fleet: Ref<readonly FleetSpacecraft[]>,
   targets: Ref<readonly FleetSpacecraft[]>,
   query: Ref<TargetQuery>,

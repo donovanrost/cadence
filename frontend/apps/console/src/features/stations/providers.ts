@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders as d, isError, request, type ApiError, type Decoded } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { formatShort, type OpState } from "@/ui";
@@ -7,7 +8,7 @@ import { providerReader, type MissionProvider } from "./api.ts";
  * L12 mission providers (api-ops 4f81a1d0d, setup.md): add by binding an org
  * account grant, validate, sync stations, archive. Validate and sync answer a result, not an error.
  */
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/providers`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/providers`;
 
 export const policyModes = ["approval_required", "bounded_automatic"] as const;
 const option = d.object({ key: d.token, label: d.string });
@@ -26,7 +27,7 @@ const optionsReader = d.object({
   deadline_behaviors: d.array(option, 10),
 });
 export type ProviderOptions = Decoded<typeof optionsReader>;
-export function fetchProviderOptions(missionId: string, signal: AbortSignal) {
+export function fetchProviderOptions(missionId: MissionId, signal: AbortSignal) {
   return request(`${base(missionId)}/options`, optionsReader, { signal });
 }
 
@@ -44,7 +45,7 @@ export type AddProviderBody = Readonly<{
   expected_grant_version?: number;
 }>;
 const one = d.object({ provider: providerReader });
-export async function addProvider(missionId: string, body: AddProviderBody) {
+export async function addProvider(missionId: MissionId, body: AddProviderBody) {
   const r = await request(base(missionId), one, { method: "POST", body });
   return r.ok ? { ok: true as const, value: r.value.provider } : r;
 }
@@ -58,13 +59,13 @@ const result = d.object({
 const checked = d.object({ provider: providerReader, result });
 export type ProviderCheck = Decoded<typeof checked>;
 /** Validate (contact the provider) or sync (pull its stations). Inline: can take seconds. */
-export function checkProvider(missionId: string, id: string, what: "validate" | "sync") {
+export function checkProvider(missionId: MissionId, id: string, what: "validate" | "sync") {
   return request(`${base(missionId)}/${encodeURIComponent(id)}/${what}`, checked, {
     method: "POST",
     body: {},
   });
 }
-export async function archiveProvider(missionId: string, id: string, reason: string) {
+export async function archiveProvider(missionId: MissionId, id: string, reason: string) {
   const r = await request(`${base(missionId)}/${encodeURIComponent(id)}/archive`, one, {
     method: "POST",
     body: { reason },

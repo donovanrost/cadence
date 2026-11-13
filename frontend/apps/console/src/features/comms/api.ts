@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, jsonObject, request, type ApiResult, type Decoded } from "@/api";
 
 /** Requested shapes: docs/apogee/plans/setup-shapes.md §T1/§T2 (final contract in api/setup.md). */
@@ -33,10 +34,10 @@ const rule = object({
 });
 export type RoutingRule = Decoded<typeof rule>;
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}`;
 
 export async function fetchTransports(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<readonly Transport[]>> {
   const result = await request(
@@ -52,7 +53,7 @@ export type RulesPage = Decoded<typeof rulesReader>;
 
 /** One group's rules (first 500); the groups read is the overview (pass-2 #10). */
 export function fetchRoutingRules(
-  key: Readonly<{ missionId: string; transportId: string }>,
+  key: Readonly<{ missionId: MissionId; transportId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<RulesPage>> {
   const query = new URLSearchParams({ transport_id: key.transportId, limit: "500" });
@@ -73,7 +74,7 @@ export type RoutingGroup = Decoded<typeof group>;
 
 /** Active rules grouped by transport, direction and role, sorted by transport name. */
 export async function fetchRoutingGroups(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<readonly RoutingGroup[]>> {
   const result = await request(
@@ -103,7 +104,7 @@ const transportDetail = object({
 export type TransportDetail = Decoded<typeof transportDetail>;
 
 export function fetchTransport(
-  key: Readonly<{ missionId: string; transportId: string }>,
+  key: Readonly<{ missionId: MissionId; transportId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<TransportDetail>> {
   return request(

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   spacecraftId as spacecraftIdReader,
   type SpacecraftId,
@@ -71,7 +72,7 @@ export const intervalsReader = d.object({
 });
 export type LimitIntervals = Decoded<typeof intervalsReader>;
 
-const pointPath = (missionId: string, prefix: string, pointId: string) =>
+const pointPath = (missionId: MissionId, prefix: string, pointId: string) =>
   `/missions/${encodeURIComponent(missionId)}/${prefix}/points/${encodeURIComponent(pointId)}`;
 
 function windowQuery(
@@ -88,7 +89,7 @@ function windowQuery(
 }
 
 export function fetchHistory(
-  missionId: string,
+  missionId: MissionId,
   pointId: string,
   spacecraftId: SpacecraftId,
   window: HistoryWindow,
@@ -103,7 +104,7 @@ export function fetchHistory(
 }
 
 export function fetchLimitIntervals(
-  missionId: string,
+  missionId: MissionId,
   pointId: string,
   spacecraftId: SpacecraftId,
   window: HistoryWindow,

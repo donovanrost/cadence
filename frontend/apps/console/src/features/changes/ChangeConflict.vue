@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { ApButton, ApCallout } from "@/ui";
 import { failureOutcome } from "./actions.ts";
@@ -6,7 +7,7 @@ import { rebaseOp, type ConflictRow, type RebaseChoice } from "./rebase.ts";
 
 /** Changes.md K1 (ux): the conflict fact beside Keep / Take, and what each choice does. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   opIds: readonly string[];
   row: ConflictRow;
   canAct: boolean;

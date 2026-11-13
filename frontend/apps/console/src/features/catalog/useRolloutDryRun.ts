@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { onScopeDispose, ref, watch, type Ref } from "vue";
 import { itemLine, previewOps, type Preview, type StageOp } from "@/features/changes/index.ts";
 
@@ -8,7 +9,7 @@ export type DryRun =
   | Readonly<{ status: "failed"; text: string }>;
 
 /** C3: the server's dry run of the chosen ops, re-run (debounced) whenever the choice changes. */
-export function useRolloutDryRun(missionId: Ref<string>, ops: Ref<readonly StageOp[]>) {
+export function useRolloutDryRun(missionId: Ref<MissionId>, ops: Ref<readonly StageOp[]>) {
   const dryRun = ref<DryRun>({ status: "idle" });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | null = null;

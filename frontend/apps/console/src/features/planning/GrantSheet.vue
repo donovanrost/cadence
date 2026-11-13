@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { fieldErrors } from "@/api";
 import { ApButton, ApCallout, ApSheet, ApTextarea } from "@/ui";
@@ -14,7 +15,7 @@ import {
 } from "./grants.ts";
 
 /** L3 Grant automation…: identity, three limits within the policy's ceilings, days, reason. */
-const props = defineProps<{ missionId: string; grants: Grants }>();
+const props = defineProps<{ missionId: MissionId; grants: Grants }>();
 const emit = defineEmits<{ granted: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const draft = ref<GrantDraft>(blankGrant);

@@ -41,23 +41,18 @@ const scope = useMissionScope();
 const router = useRouter();
 const now = useNow();
 const missionId = computed(() => scope.value.mission.id);
-const key = computed(() => `${missionId.value}|${props.sc.id}`);
-const split = (k: string) => {
-  const [m = "", sc = ""] = k.split("|");
-  return { m, sc };
-};
-const coverage = useRemoteQuery(key, (k, signal) => fetchCoverage(split(k).m, split(k).sc, signal));
+// A typed key (§12 A4), so the MissionId reaches the requests as one.
+const key = computed(() => ({ m: missionId.value, sc: props.sc.id }));
+const coverage = useRemoteQuery(key, (k, signal) => fetchCoverage(k.m, k.sc, signal));
 const passes = useRemoteQuery(key, (k, signal) => {
   const t = Date.now();
   return fetchPasses(
-    split(k).m,
-    { from: new Date(t - 86_400_000), to: new Date(t + 86_400_000), spacecraftId: split(k).sc },
+    k.m,
+    { from: new Date(t - 86_400_000), to: new Date(t + 86_400_000), spacecraftId: k.sc },
     signal,
   );
 });
-const recent = useRemoteQuery(key, (k, signal) =>
-  fetchRecentPasses(split(k).m, split(k).sc, signal),
-);
+const recent = useRemoteQuery(key, (k, signal) => fetchRecentPasses(k.m, k.sc, signal));
 useMissionInvalidation(missionId, ["contacts", "commanding", "pass_results"], () => {
   coverage.refetch();
   passes.refetch();

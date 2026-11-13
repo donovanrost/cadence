@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -21,7 +22,7 @@ import { buildNested } from "./templates.ts";
 import { withoutBlankConstraints } from "./requirements.ts";
 
 /** P4 one-off requirement: new, or a new version (ux ContactPlanning.md; api fb7510be). */
-const props = defineProps<{ missionId: string; requirement: RequirementDetail | null }>();
+const props = defineProps<{ missionId: MissionId; requirement: RequirementDetail | null }>();
 const emit = defineEmits<{ close: [] }>();
 const router = useRouter();
 const session = useSession();

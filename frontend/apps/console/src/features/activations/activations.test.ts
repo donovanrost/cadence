@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import type { ApiError } from "@/api";
 import {
   applyCodes,
@@ -194,7 +195,7 @@ describe("app activation approvals (L10)", () => {
       });
     try {
       const r = await fetchActivations(
-        { missionId: "m", state: "decided" },
+        { missionId: missionIdReader("m"), state: "decided" },
         new AbortController().signal,
       );
       expect(r.ok && r.value.requests[0]?.execution?.retryable).toBe(false);

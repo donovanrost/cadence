@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApEmptyState, ApPanel, ApRemote, ApStatTile, ApTag, formatShort, useNow } from "@/ui";
@@ -12,7 +13,7 @@ import {
 
 /** A Impact (station entry, S7): station state, the provider's report, passes hit in the outage. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   stationId: string;
   stationName: string;
   availability: StationAvailability;

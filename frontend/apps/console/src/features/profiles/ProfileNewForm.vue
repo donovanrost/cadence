@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
@@ -13,7 +14,7 @@ import { createOp, type NewProfileForm } from "./newProfile.ts";
 
 /** Profile.md New profile: name + the generated fields, staged as one create in a change set. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   form: NewProfileForm;
   initialName: string;
   /** Duplicate: the source, so the form says what was copied (ux). */

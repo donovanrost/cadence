@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders as d, recordOf, request, type ApiResult, type Decoded } from "@/api";
 
 /** O4 command policies (api commanding.md): keys + parameters; the console writes the sentences. */
@@ -10,7 +11,7 @@ export const policiesReader = d.object({
 export type CommandPolicy = Decoded<typeof policiesReader>["policies"][number];
 
 export function fetchCommandPolicies(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<Decoded<typeof policiesReader>>> {
   return request(`/missions/${encodeURIComponent(missionId)}/command-policies`, policiesReader, {

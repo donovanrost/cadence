@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { CommandArgument, CommandDetail } from "../api.ts";
 import { argumentValuesJson, buildDraft } from "../compose/draft.ts";
@@ -324,7 +324,7 @@ describe("group list", () => {
     globalThis.fetch = () =>
       Promise.resolve(new Response(JSON.stringify({ data: { groups: [] } }), { status: 200 }));
     try {
-      const r = await fetchGroups("m", {});
+      const r = await fetchGroups(missionIdReader("m"), {});
       expect(r).toEqual({ ok: true, value: [] });
     } finally {
       globalThis.fetch = original;
@@ -372,7 +372,7 @@ describe("M24 encode preview", () => {
         ),
       );
     try {
-      expect(await fetchEncoding("m", "r")).toEqual({
+      expect(await fetchEncoding(missionIdReader("m"), "r")).toEqual({
         ok: false,
         reason: "the catalog revision it was submitted against has been superseded",
       });

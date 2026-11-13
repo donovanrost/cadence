@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery, type RemoteState } from "@/api";
 import { fetchPlans, type Availability } from "@/features/scheduling/index.ts";
@@ -7,7 +8,7 @@ import { ApEmptyState, ApPanel, useNow } from "@/ui";
 import { replanDays, replanSources } from "./sources.ts";
 
 /** R1 · Re-plan landing (ux §7 #6): what can be re-planned, each linking to its re-plan. */
-const props = defineProps<{ missionId: string; availability: RemoteState<Availability> }>();
+const props = defineProps<{ missionId: MissionId; availability: RemoteState<Availability> }>();
 const now = useNow();
 const days = computed(() => replanDays(now.value));
 const today = useRemoteQuery(

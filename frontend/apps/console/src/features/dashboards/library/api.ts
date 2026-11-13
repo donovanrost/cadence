@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders as d,
   detailsOf,
@@ -127,12 +128,13 @@ export type LibraryDetail = Decoded<typeof detailReader>;
 export type LibraryItem = LibraryDetail["item"];
 
 /** A sibling of /dashboards (like /dashboard-playlists), so `library` never reads as a dashboard id. */
-const root = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/dashboard-library`;
-const one = (missionId: string, id: string) => `${root(missionId)}/${encodeURIComponent(id)}`;
+const root = (missionId: MissionId) =>
+  `/missions/${encodeURIComponent(missionId)}/dashboard-library`;
+const one = (missionId: MissionId, id: string) => `${root(missionId)}/${encodeURIComponent(id)}`;
 const nothing = d.nullable((value) => value);
 
 export function fetchLibrary(
-  missionId: string,
+  missionId: MissionId,
   query: Readonly<{ q: string; page: number }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<LibraryList>> {
@@ -142,7 +144,7 @@ export function fetchLibrary(
 }
 
 export function fetchLibraryItem(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   version: number | null,
   signal?: AbortSignal,
@@ -152,7 +154,7 @@ export function fetchLibraryItem(
 }
 
 export function renameItem(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   body: Readonly<{
     name: string;
@@ -166,7 +168,7 @@ export function renameItem(
 
 /** Retire (Q10). 204 decodes null. Both guards: the version and the row as read (dashboards). */
 export function retireItem(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   expectedVersion: number,
   expectedUpdatedAt: string | null,

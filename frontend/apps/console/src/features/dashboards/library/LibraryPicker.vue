@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { plural, ApButton, ApEmptyState, ApField, ApRemote } from "@/ui";
 import { kindWord } from "./api.ts";
@@ -9,7 +10,7 @@ import { useLibraryList } from "./useLibrary.ts";
  * `{library_item_id, version, name}` and the editor stages a library reference
  * (`add_library_widget`), not a copy, so "Used in N dashboards" stays true.
  */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{
   pick: [pick: { library_item_id: string; version: number; name: string }];
 }>();

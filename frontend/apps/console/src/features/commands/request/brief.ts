@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import { formatDayTime } from "@/ui";
 
@@ -54,7 +55,7 @@ const briefReader = d.object({
 export type Brief = Decoded<typeof briefReader>;
 
 export function fetchBrief(
-  missionId: string,
+  missionId: MissionId,
   requestId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Brief>> {

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { describeApiError } from "@/api/index.ts";
 import { fetchCommand } from "../api.ts";
 import { textFromJson } from "../args.ts";
@@ -57,7 +58,7 @@ export type Resend = Readonly<{
 }>;
 
 export async function loadResend(
-  missionId: string,
+  missionId: MissionId,
   groupId: string,
 ): Promise<{ ok: true; value: Resend } | { ok: false; message: string }> {
   const g = await fetchGroup(missionId, groupId);

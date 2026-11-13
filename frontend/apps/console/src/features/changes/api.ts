@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult } from "@/api";
 import {
   configStateReader,
@@ -8,18 +9,18 @@ import {
   type RevisionSummary,
 } from "./shapes.ts";
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/config`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/config`;
 
 /** The staged bar, `CONFIG rN · N STAGED`, and the caller's config capabilities. */
 export function fetchConfigState(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<ConfigState>> {
   return request(base(missionId), configStateReader, { signal });
 }
 
 export async function fetchRevisions(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<readonly RevisionSummary[]>> {
   const result = await request(`${base(missionId)}/revisions?limit=50`, revisionsReader, {
@@ -29,7 +30,7 @@ export async function fetchRevisions(
 }
 
 export function fetchRevision(
-  key: Readonly<{ missionId: string; revision: number }>,
+  key: Readonly<{ missionId: MissionId; revision: number }>,
   signal: AbortSignal,
 ): Promise<ApiResult<RevisionDetail>> {
   return request(`${base(key.missionId)}/revisions/${key.revision}`, revisionDetailReader, {
@@ -56,7 +57,7 @@ export function showValue(value: unknown, unit?: string | null, format?: string 
  * (api c3b07440d; Profile History). An unknown kind is 422 details.entity_kind.
  */
 export async function fetchEntityRevisions(
-  key: Readonly<{ missionId: string; kind: string; entityId: string; limit?: number }>,
+  key: Readonly<{ missionId: MissionId; kind: string; entityId: string; limit?: number }>,
   signal: AbortSignal,
 ): Promise<ApiResult<readonly RevisionDetail[]>> {
   const q = new URLSearchParams({ entity_kind: key.kind, entity_id: key.entityId });

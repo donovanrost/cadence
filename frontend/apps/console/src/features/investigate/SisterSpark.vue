@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { SpacecraftId } from "@/api/index.ts";
 import { computed, onScopeDispose } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -10,7 +11,7 @@ import { sparkPoints } from "./sisters.ts";
 
 /** B4 row sparkline: 80×24, the point's last 6 h on that sister, in the row's state (aria-hidden). */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   spacecraftId: SpacecraftId;
   pointId: string;
   tone: "crit" | "caution";

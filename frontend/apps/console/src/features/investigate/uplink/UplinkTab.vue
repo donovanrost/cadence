@@ -44,11 +44,8 @@ const now = useNow();
 const access = useCommandAccess();
 const missionId = computed(() => scope.value.mission.id);
 const uplink = useRemoteQuery(
-  computed(() => `${missionId.value}|${props.sc.id}`),
-  (k, signal) => {
-    const [m = "", sc = ""] = k.split("|");
-    return fetchSpacecraftUplink(m, sc, signal);
-  },
+  computed(() => ({ m: missionId.value, sc: props.sc.id })),
+  (k, signal) => fetchSpacecraftUplink(k.m, k.sc, signal),
 );
 useMissionInvalidation(missionId, ["commanding", "contacts", "attention"], uplink.refetch);
 

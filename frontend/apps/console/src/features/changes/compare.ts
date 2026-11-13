@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { configKind } from "./shapes.ts";
 import { decoders as d, request, type ApiResult } from "@/api";
 import { field, type RevisionEntry } from "./shapes.ts";
@@ -28,7 +29,7 @@ export type Comparison = Readonly<{
 
 /** Compare entries in the revision entry shape, so the revision page's list renders them. */
 export async function fetchComparison(
-  key: Readonly<{ missionId: string; from: number; to: number }>,
+  key: Readonly<{ missionId: MissionId; from: number; to: number }>,
   signal: AbortSignal,
 ): Promise<ApiResult<Comparison>> {
   const r = await request(

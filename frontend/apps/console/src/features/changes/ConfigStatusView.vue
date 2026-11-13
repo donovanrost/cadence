@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { outageText, useMissionScope, useRuntimeStatus } from "@/shell";
@@ -10,7 +11,7 @@ import { useConfigState } from "./useConfigState.ts";
  * `CONFIG r6 · NOT APPLIED` (caution, lead's U38 sentence as its title; ux). Nothing until the
  * mission has change sets (U2).
  */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const { state } = useConfigState(props.missionId);
 const scope = useMissionScope();
 const runtimeStatus = useRuntimeStatus();

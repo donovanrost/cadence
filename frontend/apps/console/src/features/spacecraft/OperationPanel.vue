@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fetchKindSchema } from "@/features/changes/index.ts";
@@ -7,7 +8,7 @@ import type { SpacecraftDetail } from "./detail.ts";
 import { operationRows, switchHelp } from "./operation.ts";
 
 /** U40 Operation: Commanding and Telemetry as running now. Changing one stages it (Edit, L17). */
-const props = defineProps<{ missionId: string; detail: SpacecraftDetail }>();
+const props = defineProps<{ missionId: MissionId; detail: SpacecraftDetail }>();
 // ux: the help is the schema's, so the panel and the edit form can't drift.
 const schema = useRemoteQuery(
   () => ({ missionId: props.missionId, kind: "spacecraft" as const }),

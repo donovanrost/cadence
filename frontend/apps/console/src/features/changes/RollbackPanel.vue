@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -13,7 +14,7 @@ import { refreshConfigState } from "./useConfigState.ts";
  * Roll back to rN (DECISIONS #49): preview first (writes nothing), then stage it as a new change
  * set that goes through review like any other. Danger tone only in the confirm (Changes.md §4).
  */
-const props = defineProps<{ missionId: string; to: number; stagedCount: number }>();
+const props = defineProps<{ missionId: MissionId; to: number; stagedCount: number }>();
 const router = useRouter();
 const open = ref(false);
 const busy = ref(false);

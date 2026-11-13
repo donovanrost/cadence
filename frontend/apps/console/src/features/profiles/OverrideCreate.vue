@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
@@ -25,7 +26,7 @@ import {
 import { describePreview } from "./sectionEdit.ts";
 
 /** P3 Add override (Profile.md): one spacecraft, one profile field, its value and why. */
-const props = defineProps<{ missionId: string; detail: ProfileDetail }>();
+const props = defineProps<{ missionId: MissionId; detail: ProfileDetail }>();
 const emit = defineEmits<{ cancel: [] }>();
 const router = useRouter();
 const target = ref<Readonly<{ id: string; name: string }> | null>(null);

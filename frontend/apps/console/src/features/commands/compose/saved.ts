@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   DecodeError,
   decoders as d,
@@ -18,7 +19,8 @@ import type { TargetQuery } from "./targets.ts";
  * inert, autosaved. The document is Compose's editor state, opaque to the server; values stay
  * raw text so invalid input survives a reload (only preflight validates).
  */
-const draftPath = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/command-draft`;
+const draftPath = (missionId: MissionId) =>
+  `/missions/${encodeURIComponent(missionId)}/command-draft`;
 
 const savedReader = d.object({ revision: d.integer, saved_at: d.timestamp });
 export type DraftSaved = Decoded<typeof savedReader>;
@@ -41,7 +43,7 @@ export const draftReplyReader = d.object({ draft: d.nullable(storedReader) });
 
 /** The caller's draft, or null when there is none. */
 export async function fetchComposeDraft(
-  missionId: string,
+  missionId: MissionId,
   signal?: AbortSignal,
 ): Promise<ApiResult<StoredDraft | null>> {
   const r = await request(draftPath(missionId), draftReplyReader, signal ? { signal } : {});
@@ -49,7 +51,7 @@ export async function fetchComposeDraft(
 }
 
 export function saveComposeDraft(
-  missionId: string,
+  missionId: MissionId,
   document: ComposeDocument,
   expectedRevision: number | null,
 ) {
@@ -59,7 +61,7 @@ export function saveComposeDraft(
   });
 }
 
-export function discardComposeDraft(missionId: string) {
+export function discardComposeDraft(missionId: MissionId) {
   return request(draftPath(missionId), () => null, { method: "DELETE" });
 }
 
@@ -190,7 +192,7 @@ export type Restored = Readonly<{
  * saved text is kept per argument that still exists, even when invalid (C2 flags it).
  */
 export async function restoreDraft(
-  missionId: string,
+  missionId: MissionId,
   stored: StoredDraft,
 ): Promise<{ ok: true; value: Restored } | { ok: false; message: string }> {
   const doc = decode(documentReader, stored.document);

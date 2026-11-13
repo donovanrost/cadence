@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md (C2): importers + multipart upload. */
@@ -9,10 +10,10 @@ export const importersReader = object({
 });
 export type Importers = Decoded<typeof importersReader>;
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/catalog`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/catalog`;
 
 export function fetchImporters(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<Importers>> {
   return request(`${base(missionId)}/importers`, importersReader, { signal });
@@ -25,7 +26,7 @@ export type UploadInput = Readonly<{
   revisionNotes: string;
 }>;
 
-export function uploadCatalog(missionId: string, input: UploadInput) {
+export function uploadCatalog(missionId: MissionId, input: UploadInput) {
   const form = new FormData();
   form.append("file", input.file);
   if ("databaseId" in input.target) form.append("database_id", input.target.databaseId);

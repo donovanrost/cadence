@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders as d,
   request,
@@ -73,7 +74,7 @@ const hostReader = d.object({ catalog, status: appStatus, surfaces: d.array(surf
 export type SurfaceHost = Decoded<typeof hostReader>;
 
 export type SurfaceKey = Readonly<{
-  missionId: string;
+  missionId: MissionId;
   appKey: string;
   surfaceId: string;
   spacecraftId: SpacecraftId | null;

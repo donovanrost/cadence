@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -9,7 +10,7 @@ import RegisterFields from "./RegisterFields.vue";
 import { fetchSourceOptions, registerSource } from "./writes.ts";
 
 /** L11 W1 Register source: the server makes the id from the name; options come from R1. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const router = useRouter();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const opened = ref(false);

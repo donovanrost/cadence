@@ -44,11 +44,8 @@ const now = useNow();
 const missionId = computed(() => scope.value.mission.id);
 
 const points = useRemoteQuery(
-  computed(() => `${missionId.value}|${props.sc.id}`),
-  (k, signal) => {
-    const [m = "", sc = ""] = k.split("|");
-    return fetchPoints(m, { q: "", spacecraftId: sc, limit: 200 }, signal);
-  },
+  computed(() => ({ m: missionId.value, sc: props.sc.id })),
+  (k, signal) => fetchPoints(k.m, { q: "", spacecraftId: k.sc, limit: 200 }, signal),
 );
 useMissionInvalidation(missionId, ["telemetry", "limits", "catalog"], points.refetch, {
   throttleMs: 10_000,

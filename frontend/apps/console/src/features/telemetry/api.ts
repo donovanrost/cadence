@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import type { OpState } from "@/ui";
 import { engineeringValue } from "@/features/alarms/index.ts";
@@ -57,7 +58,7 @@ export const pointsReader = d.object({ points: d.array(point, 200) });
 export type TelemetryPoint = Decoded<typeof point>;
 
 export function fetchPoints(
-  missionId: string,
+  missionId: MissionId,
   query: Readonly<{ spacecraftId?: string; q: string; limit?: number }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<Decoded<typeof pointsReader>>> {

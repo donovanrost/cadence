@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { spacecraftId as spacecraftIdReader, scid as scidReader, decode } from "@/api/index.ts";
+import {
+  missionId as missionIdReader,
+  spacecraftId as spacecraftIdReader,
+  scid as scidReader,
+  decode,
+} from "@/api/index.ts";
 import {
   episodeFor,
   episodesReader,
@@ -132,13 +137,19 @@ describe("episode commands (U20 outcomes)", () => {
 
   it("calls a 409 rejected (nothing changed) and a 503 unclear", async () => {
     respond(409, { error: { code: "episode_cleared", message: "Already cleared." } });
-    expect((await runEpisodeCommand("m", "e", { kind: "acknowledge" })).status).toBe("rejected");
+    expect(
+      (await runEpisodeCommand(missionIdReader("m"), "e", { kind: "acknowledge" })).status,
+    ).toBe("rejected");
     respond(503, { error: { code: "alarms_unavailable", message: "Down." } });
-    expect((await runEpisodeCommand("m", "e", { kind: "acknowledge" })).status).toBe("unclear");
+    expect(
+      (await runEpisodeCommand(missionIdReader("m"), "e", { kind: "acknowledge" })).status,
+    ).toBe("unclear");
   });
 
   it("treats an unreadable success as unclear, not done", async () => {
     respond(200, { data: { nope: true } });
-    expect((await runEpisodeCommand("m", "e", { kind: "acknowledge" })).status).toBe("unclear");
+    expect(
+      (await runEpisodeCommand(missionIdReader("m"), "e", { kind: "acknowledge" })).status,
+    ).toBe("unclear");
   });
 });

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fetchProfiles } from "@/features/profiles/index.ts";
@@ -11,7 +12,7 @@ export type TargetDraft = {
   plane: string;
   ids: string;
 };
-const props = defineProps<{ missionId: string; error: string | null }>();
+const props = defineProps<{ missionId: MissionId; error: string | null }>();
 const target = defineModel<TargetDraft>({ required: true });
 const profiles = useRemoteQuery(() => props.missionId, fetchProfiles);
 const profileOptions = computed(() =>

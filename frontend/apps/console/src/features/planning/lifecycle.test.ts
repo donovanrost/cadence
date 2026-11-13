@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import type { ApiError } from "@/api";
 import { fetchTemplate } from "./api.ts";
 import { stateChangedLine, transitionFailure, verbsFor } from "./lifecycle.ts";
@@ -29,7 +30,7 @@ async function decoded(body: unknown) {
   globalThis.fetch = async () => new Response(JSON.stringify({ data: body }), { status: 200 });
   try {
     return await fetchTemplate(
-      { missionId: "m", templateId: "tpl_1" },
+      { missionId: missionIdReader("m"), templateId: "tpl_1" },
       new AbortController().signal,
     );
   } finally {

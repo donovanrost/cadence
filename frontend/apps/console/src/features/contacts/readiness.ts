@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import {
   stationId as stationIdReader,
@@ -286,7 +287,7 @@ const refusal = d.object({ reason: d.optional(d.nullable(readinessReason)) });
 export type RecoverOutcome = Readonly<{ tone: "nominal" | "info" | "caution"; text: string }>;
 
 /** `Recover uplink` (U33): re-runs the automatic recovery; audited and safe to repeat, so no confirm. */
-export async function recoverUplink(missionId: string, passId: string): Promise<RecoverOutcome> {
+export async function recoverUplink(missionId: MissionId, passId: string): Promise<RecoverOutcome> {
   const r = await request(
     `/missions/${encodeURIComponent(missionId)}/passes/${encodeURIComponent(passId)}/recover-uplink`,
     recovered,

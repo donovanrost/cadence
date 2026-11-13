@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
 import { formatCount } from "@/ui";
 
@@ -74,7 +75,7 @@ export type CatalogRevision = Decoded<typeof revision>;
 export type ImportRun = Decoded<typeof importRunRow>;
 export type CurrentRevision = Decoded<typeof currentRevision>;
 
-export type CatalogKey = Readonly<{ missionId: string; databaseId: string | null }>;
+export type CatalogKey = Readonly<{ missionId: MissionId; databaseId: string | null }>;
 
 export function fetchCatalogIndex(
   key: CatalogKey,

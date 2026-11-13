@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { fieldErrors, isError, useRemoteQuery } from "@/api";
 import { ApButton, ApCallout, ApRemote, ApSheet } from "@/ui";
@@ -13,7 +14,7 @@ import {
 } from "./providers.ts";
 
 /** L12 Add provider: bind one of this mission's account grants; bounded mode asks two more things. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{ added: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const opened = ref(false);

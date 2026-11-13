@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -8,7 +9,7 @@ const one = (v: LocationQueryValue | LocationQueryValue[] | undefined) =>
   typeof v === "string" ? v : "";
 
 /** The directory's filters live in the URL; the listing refetches on `dashboards` invalidations. */
-export function useDirectory(missionId: Readonly<Ref<string>>) {
+export function useDirectory(missionId: Readonly<Ref<MissionId>>) {
   const route = useRoute();
   const router = useRouter();
   const query = computed<DirectoryQuery>(() => {

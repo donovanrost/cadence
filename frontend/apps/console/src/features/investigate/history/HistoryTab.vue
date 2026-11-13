@@ -41,11 +41,8 @@ const now = useNow();
 const missionId = computed(() => scope.value.mission.id);
 
 const list = useRemoteQuery(
-  computed(() => `${missionId.value}|${props.sc.id}`),
-  (k, signal) => {
-    const [m = "", sc = ""] = k.split("|");
-    return fetchEpisodeList(m, sc, signal);
-  },
+  computed(() => ({ m: missionId.value, sc: props.sc.id })),
+  (k, signal) => fetchEpisodeList(k.m, k.sc, signal),
 );
 const items = computed(() =>
   list.state.value.status === "ready" ? list.state.value.value.items : [],

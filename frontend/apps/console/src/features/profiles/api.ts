@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Reader } from "@/api";
 import { formatShort } from "@/ui";
 
@@ -85,7 +86,7 @@ export const profilesReader: Reader<readonly ProfileSummary[]> = (value, path = 
   object({ profiles: array(profile, 1000) })(value, path).profiles;
 
 export function fetchProfiles(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<readonly ProfileSummary[]>> {
   return request(`/missions/${encodeURIComponent(missionId)}/profiles`, profilesReader, { signal });

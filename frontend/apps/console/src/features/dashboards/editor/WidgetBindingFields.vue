@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { ApField, ApSelect } from "@/ui";
 import type { WidgetFieldKey } from "./contracts.ts";
@@ -16,7 +17,7 @@ import {
 
 /** What the widget shows and what it's bound to. Limits and units come from the catalog, never here. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   dashboardId: string;
   baseVersion: number;
   sections: readonly { id: string; title: string }[];

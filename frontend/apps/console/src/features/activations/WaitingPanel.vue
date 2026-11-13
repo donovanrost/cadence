@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
@@ -7,7 +8,7 @@ import { ApPanel, ApTable, ApTag, plural, type ApColumn } from "@/ui";
 import { ACTIVATIONS_LIVE, fetchActivations, mayDecide, requestedLine, stateTag } from "./api.ts";
 
 /** Setup › Changes · Waiting for activation (L10): app saves a second person approves. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const key = computed(() => ({ missionId: props.missionId, state: "pending" as const }));
 const list = useRemoteQuery(() => (ACTIVATIONS_LIVE ? key.value : null), fetchActivations);
 useMissionInvalidation(

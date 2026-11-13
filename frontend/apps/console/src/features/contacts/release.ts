@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders as d, describeApiError, detailsOf, isError, request } from "@/api/index.ts";
 import { passReader, reservationStates } from "./api.ts";
 
@@ -17,7 +18,7 @@ const failed = d.object({
 const noStop = (s: string) => s.trim().replace(/[.!?]+$/, "");
 
 export async function releasePass(
-  missionId: string,
+  missionId: MissionId,
   passId: string,
   expectedRevision: number,
   provider: string,

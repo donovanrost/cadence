@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApCallout, ApField, ApSheet } from "@/ui";
 import type { DataSource } from "./api.ts";
@@ -6,7 +7,7 @@ import { sourceFailure } from "./present.ts";
 import { rotateCredential } from "./writes.ts";
 
 /** L11 W5: point the source at a new secret reference (the reference only, never the secret). */
-const props = defineProps<{ missionId: string; source: DataSource }>();
+const props = defineProps<{ missionId: MissionId; source: DataSource }>();
 const emit = defineEmits<{ done: [note: { tone: "nominal" | "crit"; text: string }] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const ref_ = ref("");

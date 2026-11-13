@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
@@ -14,7 +15,7 @@ import type { SpacecraftDetail } from "./detail.ts";
 import { archiveHolds, archiveOp, archiveStaged } from "./edit.ts";
 
 /** U40 Archive (L17 `delete`): the dry run's waiting/booked holds, then Stage archive. */
-const props = defineProps<{ missionId: string; detail: SpacecraftDetail }>();
+const props = defineProps<{ missionId: MissionId; detail: SpacecraftDetail }>();
 const router = useRouter();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const preview = ref<Preview | null>(null);

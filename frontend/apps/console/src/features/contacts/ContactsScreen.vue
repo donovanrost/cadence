@@ -159,12 +159,9 @@ const stationName = computed(() => {
 const outsideKey = computed(() => {
   const id = selectedId.value;
   if (id === null || passes.state.value.status !== "ready") return null;
-  return all.value.some((p) => p.id === id) ? null : `${missionId.value}|${id}`;
+  return all.value.some((p) => p.id === id) ? null : { m: missionId.value, id };
 });
-const outside = useRemoteQuery(outsideKey, (k, signal) => {
-  const [m = "", id = ""] = k.split("|");
-  return fetchPass(m, id, signal);
-});
+const outside = useRemoteQuery(outsideKey, (k, signal) => fetchPass(k.m, k.id, signal));
 useMissionInvalidation(missionId, ["contacts", "attention"], outside.refetch);
 const outsidePass = computed(() =>
   outside.state.value.status === "ready" ? outside.state.value.value : null,

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { useRemoteQuery } from "@/api";
 import { KindEditor } from "@/features/changes/index.ts";
 import { ApRemote } from "@/ui";
 import { fetchTransport } from "./api.ts";
 
 /** Edit one transport: prefill from its stored document, stage schema paths (api contract). */
-const props = defineProps<{ missionId: string; transportId: string }>();
+const props = defineProps<{ missionId: MissionId; transportId: string }>();
 const detail = useRemoteQuery(
   () => ({ missionId: props.missionId, transportId: props.transportId }),
   fetchTransport,

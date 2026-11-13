@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { stationIdParam } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -11,7 +12,7 @@ import { worstStationIssue } from "./stationMeta.ts";
 
 /** Header: computed situation h1 + freshness meta. Unknown parts are omitted, never guessed. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   missionName: string;
   headline: string;
   fleet: Fleet | null;

@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import BookPassSheet from "./BookPassSheet.vue";
 import {
@@ -117,7 +117,7 @@ describe("BookPassSheet", () => {
     fetch.mockResolvedValueOnce(reply(reserve({ outcome: "requested" })));
     vi.stubGlobal("fetch", fetch);
     const w = mount(BookPassSheet, {
-      props: { missionId: "m", fleet: [spacecraftRow(1)], stations: [] },
+      props: { missionId: missionIdReader("m"), fleet: [spacecraftRow(1)], stations: [] },
       attachTo: document.body,
     });
     // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.

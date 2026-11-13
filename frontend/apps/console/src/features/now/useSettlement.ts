@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, shallowRef, watch, type Ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -8,7 +9,7 @@ import { attentionWords, short, type Attention } from "./attention.ts";
  * U37 drawer block: the open contact_settlement for one pass, read from the action queue (domain
  * #71 doesn't attach it to the pass row). Matched by the pass's reservation id. Null when none.
  */
-export function useSettlement(missionId: Ref<string>, passId: Ref<string | null>) {
+export function useSettlement(missionId: Ref<MissionId>, passId: Ref<string | null>) {
   const queue = useRemoteQuery(
     computed(() => (passId.value === null ? null : missionId.value)),
     (m, signal) => fetchActionQueue(m, signal),

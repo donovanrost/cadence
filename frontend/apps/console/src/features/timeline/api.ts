@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   scid as scidReader,
   decoders as d,
@@ -102,10 +103,10 @@ function params(query: EventQuery, extra: Record<string, string>) {
   return p.toString();
 }
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/events`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/events`;
 
 export function fetchEvents(
-  missionId: string,
+  missionId: MissionId,
   query: EventQuery,
   signal?: AbortSignal,
 ): Promise<ApiResult<Events>> {
@@ -117,7 +118,7 @@ export function fetchEvents(
 }
 
 export function fetchDensity(
-  missionId: string,
+  missionId: MissionId,
   query: EventQuery,
   bucketS: number,
   signal?: AbortSignal,

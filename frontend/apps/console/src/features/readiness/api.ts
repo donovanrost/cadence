@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Reader } from "@/api/index.ts";
 
 /**
@@ -242,7 +243,7 @@ export const readinessReader: Reader<Readiness> = (value, path = "") => {
 };
 
 export function fetchReadiness(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<Readiness>> {
   return request(`/missions/${encodeURIComponent(missionId)}/readiness`, readinessReader, {

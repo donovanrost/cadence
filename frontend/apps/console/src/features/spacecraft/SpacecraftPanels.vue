@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ApButton, ApEmptyState, ApKeyValue, ApPanel, useNow } from "@/ui";
 import ChecksPanel from "./ChecksPanel.vue";
 import OperationPanel from "./OperationPanel.vue";
@@ -6,7 +7,7 @@ import RoutingRulesPanel from "./RoutingRulesPanel.vue";
 import { identityFacts, type SpacecraftDetail } from "./detail.ts";
 
 /** Readiness, identity, pinned profile, routing and operation switches for one spacecraft. */
-defineProps<{ missionId: string; detail: SpacecraftDetail }>();
+defineProps<{ missionId: MissionId; detail: SpacecraftDetail }>();
 const now = useNow();
 </script>
 

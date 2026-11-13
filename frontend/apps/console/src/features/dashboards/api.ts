@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   DecodeError,
   decoders as d,
@@ -33,7 +34,7 @@ const viewShape = d.object({
 });
 
 /** The view is for the dashboard and mission asked for; a snapshot of anything else is refused. */
-function viewFor(missionId: string, dashboardId: string): Reader<Decoded<typeof viewShape>> {
+function viewFor(missionId: MissionId, dashboardId: string): Reader<Decoded<typeof viewShape>> {
   return (value, path = "") => {
     const view = viewShape(value, path);
     if (view.dashboard.id !== dashboardId)
@@ -51,7 +52,7 @@ export type DashboardView = Decoded<typeof viewShape>;
 export type Runtime = Readonly<{ from: string; to: string; spacecraftId: string }>;
 
 export function fetchDashboard(
-  missionId: string,
+  missionId: MissionId,
   dashboardId: string,
   runtime: Runtime,
   signal?: AbortSignal,

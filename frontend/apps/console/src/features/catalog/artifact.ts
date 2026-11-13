@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders as d,
   detailsOf,
@@ -16,7 +17,7 @@ import { formatBytes } from "./importRun.ts";
  * L18 (api setup.md "Source files", 05aa7e399): one source file, the revisions made from it, its
  * import runs, Import again (K2) and Download (K3).
  */
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/catalog`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/catalog`;
 
 /** api serves K1-K3 (05aa7e399); on since the live check 11-13. */
 export const ARTIFACT_LIVE = true;
@@ -50,7 +51,7 @@ const artifactReader = d.object({
   permissions: d.array(d.known(["catalog.import"] as const), 10),
 });
 export type ArtifactPage = Decoded<typeof artifactReader>;
-export type ArtifactKey = Readonly<{ missionId: string; artifactId: string }>;
+export type ArtifactKey = Readonly<{ missionId: MissionId; artifactId: string }>;
 
 export function fetchArtifact(
   k: ArtifactKey,

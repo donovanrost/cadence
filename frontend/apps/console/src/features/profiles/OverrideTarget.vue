@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fetchSpacecraftDirectory } from "@/features/spacecraft/index.ts";
@@ -6,7 +7,7 @@ import { ApRemote, ApSelect } from "@/ui";
 
 /** Add override's target: a spacecraft on this profile and the field it overrides. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   profile: Readonly<{ id: string; name: string }>;
   fieldOptions: readonly Readonly<{ value: string; label: string }>[];
 }>();

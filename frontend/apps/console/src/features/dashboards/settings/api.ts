@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   actor as sharedActor,
   API_BASE,
@@ -13,7 +14,7 @@ import {
  * Dashboard settings (slice 5, L8): D14–D19, api's contract docs/apogee/api/dashboards.md (D14–D16
  * f4ef739b9). Base `/missions/:m/dashboards/:id`.
  */
-const base = (missionId: string, dashboardId: string) =>
+const base = (missionId: MissionId, dashboardId: string) =>
   `/missions/${encodeURIComponent(missionId)}/dashboards/${encodeURIComponent(dashboardId)}`;
 
 /** Who did it: the shared entity (typing §12 A5); the name is null when the user is gone. */
@@ -90,7 +91,7 @@ export const settingsReader = d.object({
 });
 export type DashboardSettings = Decoded<typeof settingsReader>;
 
-export type SettingsKey = Readonly<{ missionId: string; dashboardId: string }>;
+export type SettingsKey = Readonly<{ missionId: MissionId; dashboardId: string }>;
 
 export function fetchSettings(
   k: SettingsKey,
@@ -145,7 +146,7 @@ export function revokeShare(k: SettingsKey, shareId: string) {
  * absolute; Settings sends the default range resolved at the moment of creation. 422 without from/to.
  */
 export function postSnapshot(
-  missionId: string,
+  missionId: MissionId,
   dashboardId: string,
   body: Readonly<{
     data_visibility: DataVisibility;

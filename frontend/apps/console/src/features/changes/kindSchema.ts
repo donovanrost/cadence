@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, pathGet, request, type ApiResult, type Decoded, type Reader } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:id/config/kinds/:kind/schema`. */
@@ -43,7 +44,7 @@ export type SchemaField = Decoded<typeof schemaFieldReader>;
 export type EditableKind = "ground_station" | "transport" | "spacecraft_profile" | "spacecraft";
 
 export function fetchKindSchema(
-  key: Readonly<{ missionId: string; kind: EditableKind }>,
+  key: Readonly<{ missionId: MissionId; kind: EditableKind }>,
   signal: AbortSignal,
 ): Promise<ApiResult<KindSchema>> {
   return request(

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery, type RemoteState } from "@/api";
 import { fetchProfiles } from "@/features/profiles/index.ts";
@@ -9,7 +10,7 @@ import type { Rollout } from "./rollout.ts";
 
 /** C3's two option cards: by profile (listed first) or a few spacecraft first (a canary). */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   revisionNumber: number;
   /** The rollout read: profile cards show once it answers; the options render at once (qa #50). */
   rollout: RemoteState<Rollout>;

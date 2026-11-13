@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
@@ -14,7 +15,7 @@ import {
 import { fetchRequirementSupersedes, supersedeSentence } from "./supersedes.ts";
 
 /** ux P4 Close… / Cancel…: each confirms with a required reason; both are final. */
-const props = defineProps<{ missionId: string; requirement: RequirementDetail }>();
+const props = defineProps<{ missionId: MissionId; requirement: RequirementDetail }>();
 const emit = defineEmits<{ ended: [] }>();
 const session = useSession();
 const action = ref<EndAction | null>(null);

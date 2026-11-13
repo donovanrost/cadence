@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApCallout, ApKeyValue, ApPanel, ApRemote, ApTable, formatAbsolute, plural } from "@/ui";
@@ -14,7 +15,7 @@ import {
 
 /** P4 requirement, read: its facts, how it ended, where a template's lives, and its versions. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   requirement: RequirementDetail;
   editable: boolean;
   canEdit: boolean;

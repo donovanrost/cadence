@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { shallowRef, type Ref } from "vue";
 import {
   codeOf,
@@ -35,7 +36,7 @@ function unackedWords(details: unknown): string {
     : "a HOLD isn't acknowledged against the latest checks.";
 }
 
-export function useSubmit(missionId: Ref<string>, onStale: () => void) {
+export function useSubmit(missionId: Ref<MissionId>, onStale: () => void) {
   const state = shallowRef<SubmitState>({ status: "idle" });
   let operationId: string | null = null;
 

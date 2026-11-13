@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, isError, useRemoteQuery, type ApiError } from "@/api";
@@ -34,7 +35,7 @@ const progressReader = d.object({
  * start / continue actions. Exposes one derived `view`.
  */
 export function usePlanDay(
-  missionId: Readonly<Ref<string>>,
+  missionId: Readonly<Ref<MissionId>>,
   day: Readonly<Ref<string>>,
   focused: Readonly<Ref<string | null>>,
 ) {

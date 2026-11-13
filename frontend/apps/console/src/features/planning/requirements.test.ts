@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api";
+import { missionId as missionIdReader, decode } from "@/api";
 import {
   endedLine,
   fetchRequirements,
@@ -66,7 +66,7 @@ describe("one-off requirements (ux P4, api fb7510be)", () => {
     globalThis.fetch = fetchMock as typeof fetch;
     try {
       const r = await fetchRequirements(
-        { missionId: "m", source: "one_off", page: 1 },
+        { missionId: missionIdReader("m"), source: "one_off", page: 1 },
         new AbortController().signal,
       );
       expect(r.ok && r.value.requirements[0]?.rule_summary).toBeNull();

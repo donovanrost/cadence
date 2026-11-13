@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { actorName, decoders as d, detailsOf, isError, request, type ApiError } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { formatShort } from "@/ui";
@@ -10,7 +11,7 @@ import { templateStates, type TemplateDetail } from "./api.ts";
 export type TemplateVerb = "pause" | "activate" | "close";
 
 export function transitionTemplate(
-  missionId: string,
+  missionId: MissionId,
   templateId: string,
   verb: TemplateVerb,
   body: Readonly<{ expected_version: number; reason: string }>,

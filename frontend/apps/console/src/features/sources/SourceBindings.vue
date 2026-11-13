@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import {
   ApButton,
@@ -16,7 +17,7 @@ import { switchBinding, type SourceBinding } from "./writes.ts";
 
 /** S2 · which logical sources read from this source; W3 switches one to another source. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   bindings: readonly SourceBinding[];
   sources: readonly DataSource[];
   editable: boolean;

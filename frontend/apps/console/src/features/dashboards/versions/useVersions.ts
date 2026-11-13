@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { ref, shallowRef, type Ref } from "vue";
 import type { ApiError } from "@/api";
 import { compareVersions, fetchVersions, restore } from "../editor/api.ts";
@@ -15,7 +16,10 @@ export type Comparison = Readonly<{
  * The Versions sheet's reads and its one write (D12, D13). Restore makes a new current version
  * from an old one (non-destructive); a 409 means someone saved first, so the list reloads.
  */
-export function useVersions(missionId: Readonly<Ref<string>>, dashboardId: Readonly<Ref<string>>) {
+export function useVersions(
+  missionId: Readonly<Ref<MissionId>>,
+  dashboardId: Readonly<Ref<string>>,
+) {
   const list = shallowRef<Versions | null>(null);
   const comparison = shallowRef<Comparison | null>(null);
   const error = shallowRef<ApiError | null>(null);

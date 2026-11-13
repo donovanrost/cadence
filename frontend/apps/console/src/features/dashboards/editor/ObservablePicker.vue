@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApChip, ApField } from "@/ui";
@@ -10,7 +11,7 @@ import { searchObservables } from "./observables.ts";
  * sends the sheet's whole form (D8), so results follow the widget's source and spacecraft.
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   dashboardId: string;
   baseVersion: number;
   fields: WidgetFields;

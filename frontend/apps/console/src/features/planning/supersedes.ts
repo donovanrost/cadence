@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
 import { planStates } from "@/features/scheduling/index.ts";
 
@@ -18,7 +19,7 @@ const reader = object({
 export type SupersededDraft = Decoded<typeof reader>["drafts"][number];
 
 export async function fetchTemplateSupersedes(
-  key: Readonly<{ missionId: string; templateId: string }>,
+  key: Readonly<{ missionId: MissionId; templateId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<readonly SupersededDraft[]>> {
   const r = await request(
@@ -31,7 +32,7 @@ export async function fetchTemplateSupersedes(
 
 /** One-off requirements: the drafts a new version, close or cancel supersedes (same row shape). */
 export async function fetchRequirementSupersedes(
-  key: Readonly<{ missionId: string; requirementId: string }>,
+  key: Readonly<{ missionId: MissionId; requirementId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<readonly SupersededDraft[]>> {
   const r = await request(

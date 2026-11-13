@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   stationId as stationIdReader,
   scid as scidReader,
@@ -91,7 +92,7 @@ const uplinkReader = d.object({
 export type SpacecraftUplink = Decoded<typeof uplinkReader>;
 
 export function fetchSpacecraftUplink(
-  missionId: string,
+  missionId: MissionId,
   spacecraftId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<SpacecraftUplink>> {

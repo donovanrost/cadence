@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import ResolveFields from "./ResolveFields.vue";
@@ -9,7 +10,7 @@ import type { ResolvablePass } from "./types.ts";
  * ux U32 sheets: Mark booked / Mark not booked for one unconfirmed pass. Cadence re-asks the
  * provider first; the outcome replaces the form, and `resolved` tells the screen to refetch.
  */
-const props = defineProps<{ missionId: string; planId: string; pass: ResolvablePass }>();
+const props = defineProps<{ missionId: MissionId; planId: string; pass: ResolvablePass }>();
 const emit = defineEmits<{ resolved: [] }>();
 
 const action = ref<ResolveAction>("booked");

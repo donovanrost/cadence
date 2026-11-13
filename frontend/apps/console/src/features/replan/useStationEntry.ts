@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -12,7 +13,7 @@ import { fetchAvailability, fetchStationImpact, outageWindow } from "./station.t
  * found it goes into `?plan=`
  * so the plan-based flow (useReplan) takes over unchanged.
  */
-export function useStationEntry(missionId: Readonly<Ref<string>>) {
+export function useStationEntry(missionId: Readonly<Ref<MissionId>>) {
   const route = useRoute();
   const router = useRouter();
   const now = useNow();

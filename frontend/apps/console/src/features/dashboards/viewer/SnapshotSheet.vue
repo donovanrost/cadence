@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { fieldErrors } from "@/api";
@@ -11,7 +12,7 @@ import { postSnapshot, type DataVisibility, type Snapshot } from "../settings/ap
  * becomes absolute now) at the current version. D16 POST /snapshots (api f4ef739b9).
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   dashboardId: string;
   selection: TimeSelection;
   spacecraftId: string;

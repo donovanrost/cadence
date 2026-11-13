@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { useSession } from "@/shell";
 import { ApButton, ApCallout, ApPanel, plural } from "@/ui";
@@ -11,7 +12,7 @@ import type { Change, ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K1: one row per staged change, collapsed; expanded shows what each op touches. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   config: ConfigState;
   changeSet: ChangeSet;
   /** The Conflicts check's items by op id (rebase.ts conflictOps). */

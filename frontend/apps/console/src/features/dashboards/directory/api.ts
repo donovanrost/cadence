@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
 
 /**
@@ -55,12 +56,12 @@ export type DirectoryQuery = Readonly<{
   page: number;
 }>;
 
-const root = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/dashboards`;
-const one = (missionId: string, id: string) => `${root(missionId)}/${encodeURIComponent(id)}`;
+const root = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/dashboards`;
+const one = (missionId: MissionId, id: string) => `${root(missionId)}/${encodeURIComponent(id)}`;
 const nothing = d.nullable((value) => value);
 
 export function fetchDirectory(
-  missionId: string,
+  missionId: MissionId,
   query: DirectoryQuery,
   signal?: AbortSignal,
 ): Promise<ApiResult<Directory>> {
@@ -72,11 +73,11 @@ export function fetchDirectory(
   return request(`${root(missionId)}?${p.toString()}`, listing, signal ? { signal } : {});
 }
 
-export const setStarred = (missionId: string, id: string, starred: boolean) =>
+export const setStarred = (missionId: MissionId, id: string, starred: boolean) =>
   request(`${one(missionId, id)}/star`, nothing, { method: starred ? "PUT" : "DELETE" });
 
 // Archive (D3) lives once, in settings/api.ts (`archiveDashboard`), shared with Settings › General.
-export const unarchive = (missionId: string, id: string) =>
+export const unarchive = (missionId: MissionId, id: string) =>
   request(`${one(missionId, id)}/restore`, nothing, { method: "POST", body: {} });
 
 const created = d.object({ id: d.token, version: d.integer });
@@ -86,7 +87,7 @@ export type NewSpacecraft =
   | { mode: "fleet" };
 /** D4: `spacecraft` fixed sets the default scope (76ff5edc); context and fleet set none. */
 export const createDashboard = (
-  missionId: string,
+  missionId: MissionId,
   input: Readonly<{
     name: string;
     description: string;
@@ -104,9 +105,9 @@ export const createDashboard = (
       spacecraft: input.spacecraft,
     },
   });
-export const duplicate = (missionId: string, id: string, name: string) =>
+export const duplicate = (missionId: MissionId, id: string, name: string) =>
   request(`${one(missionId, id)}/duplicate`, created, { method: "POST", body: { name } });
 
 /** D6: feeds "recent"; fired once per viewer open. Failures don't matter to the viewer. */
-export const recordView = (missionId: string, id: string) =>
+export const recordView = (missionId: MissionId, id: string) =>
   request(`${one(missionId, id)}/views`, nothing, { method: "POST", body: {} });

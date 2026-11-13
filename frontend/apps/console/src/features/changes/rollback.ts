@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { configKind, opActions } from "./shapes.ts";
 import { decoders, request, type ApiError, type ApiResult, type Decoded } from "@/api";
 import {
@@ -25,18 +26,18 @@ export const rollbackReader = object({
 });
 export type RollbackPreview = Decoded<typeof rollbackReader>;
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/config/rollback`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/config/rollback`;
 
 /** Previews rolling back to `to`, checked like any change. Writes nothing. */
 export function fetchRollback(
-  key: Readonly<{ missionId: string; to: number }>,
+  key: Readonly<{ missionId: MissionId; to: number }>,
   signal: AbortSignal,
 ): Promise<ApiResult<RollbackPreview>> {
   return request(`${base(key.missionId)}?to=${key.to}`, rollbackReader, { signal });
 }
 
 /** Stages the rollback as one change in a new change set; review and apply as usual. */
-export function stageRollback(missionId: string, to: number): Promise<ApiResult<StageResult>> {
+export function stageRollback(missionId: MissionId, to: number): Promise<ApiResult<StageResult>> {
   return request(base(missionId), stageResultReader, {
     method: "POST",
     body: { to },

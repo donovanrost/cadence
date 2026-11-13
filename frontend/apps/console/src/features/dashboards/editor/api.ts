@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { detailsOf, isError, request, type ApiError, type ApiResult } from "@/api";
 import type { Runtime } from "../api.ts";
 import {
@@ -20,7 +21,7 @@ import type { Draft } from "./draft.ts";
 
 /** D7–D13 under `/missions/:m/dashboards/:id` (plans/dashboards.md; api builds on StatelessAuthoring). */
 
-const base = (missionId: string, dashboardId: string) =>
+const base = (missionId: MissionId, dashboardId: string) =>
   `/missions/${encodeURIComponent(missionId)}/dashboards/${encodeURIComponent(dashboardId)}`;
 const wireRuntime = (r: Runtime) => ({
   from: r.from || null,
@@ -32,7 +33,7 @@ const opts = (body: unknown, signal?: AbortSignal) =>
   signal ? { method: "POST" as const, body, signal } : { method: "POST" as const, body };
 
 export function preview(
-  missionId: string,
+  missionId: MissionId,
   dashboardId: string,
   draft: Draft,
   runtime: Runtime,
@@ -46,7 +47,7 @@ export function preview(
 }
 
 export function save(
-  missionId: string,
+  missionId: MissionId,
   dashboardId: string,
   draft: Draft,
   input: Readonly<{
@@ -68,7 +69,7 @@ export function save(
 }
 
 export function rebase(
-  missionId: string,
+  missionId: MissionId,
   dashboardId: string,
   draft: Draft,
   runtime: Runtime,
@@ -80,7 +81,7 @@ export function rebase(
   );
 }
 
-export function copy(missionId: string, dashboardId: string, draft: Draft, name: string) {
+export function copy(missionId: MissionId, dashboardId: string, draft: Draft, name: string) {
   return request(
     `${base(missionId, dashboardId)}/copy`,
     copiedReply,
@@ -89,7 +90,7 @@ export function copy(missionId: string, dashboardId: string, draft: Draft, name:
 }
 
 export function fetchVersions(
-  missionId: string,
+  missionId: MissionId,
   dashboardId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Versions>> {
@@ -100,14 +101,24 @@ export function fetchVersions(
   );
 }
 
-export function compareVersions(missionId: string, dashboardId: string, from: number, to: number) {
+export function compareVersions(
+  missionId: MissionId,
+  dashboardId: string,
+  from: number,
+  to: number,
+) {
   return request(
     `${base(missionId, dashboardId)}/versions/compare?from=${from}&to=${to}`,
     compareReply,
   );
 }
 
-export function restore(missionId: string, dashboardId: string, version: number, expected: number) {
+export function restore(
+  missionId: MissionId,
+  dashboardId: string,
+  version: number,
+  expected: number,
+) {
   return request(
     `${base(missionId, dashboardId)}/versions/${version}/restore`,
     savedReply,

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { fieldErrors } from "@/api";
 import { ApButton, ApCallout, ApPanel, ApTextarea } from "@/ui";
@@ -12,7 +13,7 @@ import {
 } from "./lifecycle.ts";
 
 /** L2 Pause… / Resume… / Close…: each confirms with a required reason (as requirements' P4). */
-const props = defineProps<{ missionId: string; template: TemplateDetail }>();
+const props = defineProps<{ missionId: MissionId; template: TemplateDetail }>();
 const emit = defineEmits<{ moved: [] }>();
 const verb = ref<TemplateVerb | null>(null);
 const reason = ref("");

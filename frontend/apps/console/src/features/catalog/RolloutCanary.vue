@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fetchSpacecraftDirectory } from "@/features/spacecraft/index.ts";
 import { ApChip, ApRemote, ApSelect } from "@/ui";
 
 /** C3 a few spacecraft first: the Compose C1 pattern (chips plus an "Add spacecraft…" select). */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const ids = defineModel<readonly string[]>({ required: true });
 const missionId = computed(() => props.missionId);
 const { state, refetch } = useRemoteQuery(missionId, fetchSpacecraftDirectory);

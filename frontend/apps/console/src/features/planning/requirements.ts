@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   actor as sharedActor,
   decoders,
@@ -62,18 +63,18 @@ const detailReader = object({
 });
 export type RequirementDetail = Decoded<typeof detailReader>;
 
-const base = (missionId: string) =>
+const base = (missionId: MissionId) =>
   `/missions/${encodeURIComponent(missionId)}/contact-planning/requirements`;
 
 export function fetchRequirementSchema(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<TemplateSchema>> {
   return request(`${base(missionId)}/schema`, templateSchemaReader, { signal });
 }
 
 export type RequirementQuery = Readonly<{
-  missionId: string;
+  missionId: MissionId;
   source: "one_off" | "template" | null;
   page: number;
 }>;
@@ -88,7 +89,7 @@ export function fetchRequirements(
 }
 
 export function fetchRequirement(
-  key: Readonly<{ missionId: string; requirementId: string }>,
+  key: Readonly<{ missionId: MissionId; requirementId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<RequirementDetail>> {
   return request(`${base(key.missionId)}/${encodeURIComponent(key.requirementId)}`, detailReader, {
@@ -98,7 +99,7 @@ export function fetchRequirement(
 
 /** Create (id null) or a new version: an omitted key carries over, explicit null clears. */
 export function saveRequirement(
-  missionId: string,
+  missionId: MissionId,
   id: string | null,
   body: Readonly<{
     content: Record<string, unknown>;
@@ -127,7 +128,7 @@ export type EndAction = "close" | "cancel";
 
 /** Close (the need is over) or cancel (withdrawn): final, with a required reason. */
 export function endRequirement(
-  missionId: string,
+  missionId: MissionId,
   id: string,
   action: EndAction,
   body: Readonly<{ expected_version: number; reason: string }>,
@@ -260,7 +261,7 @@ export type TemplateDayCounts = Decoded<typeof byTemplateReader>;
 
 /** P4 "From templates" (api df98dcd3): per template, the requirements whose window opens that UTC day. */
 export function fetchByTemplate(
-  key: Readonly<{ missionId: string; day: string }>,
+  key: Readonly<{ missionId: MissionId; day: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<TemplateDayCounts>> {
   return request(

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApEmptyState, ApPanel, ApRemote, ApSegmented } from "@/ui";
@@ -13,7 +14,7 @@ import TemplateLinks from "./TemplateLinks.vue";
  * thousands a day, so "From templates" lists the templates, never their rows one by one.
  */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   templates: readonly TemplateRow[];
   canEdit: boolean;
 }>();

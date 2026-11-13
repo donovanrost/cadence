@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -22,7 +23,7 @@ const missionId = computed(() => scope.value.mission.id);
 const groups = useRemoteQuery(missionId, (m, signal) => fetchGroups(m, {}, signal));
 const stations = useStationCodes(missionId);
 useMissionInvalidation(
-  computed<string | null>(() => missionId.value),
+  computed<MissionId | null>(() => missionId.value),
   ["commanding"],
   groups.refetch,
 );

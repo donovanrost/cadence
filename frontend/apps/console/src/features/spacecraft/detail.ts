@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders,
   request,
@@ -72,7 +73,7 @@ export type RoutingRule = SpacecraftDetail["routing_rules"][number];
 export type ReadinessCheck = SpacecraftDetail["readiness"]["checks"][number];
 
 export function fetchSpacecraftDetail(
-  key: Readonly<{ missionId: string; spacecraftId: SpacecraftId }>,
+  key: Readonly<{ missionId: MissionId; spacecraftId: SpacecraftId }>,
   signal: AbortSignal,
 ): Promise<ApiResult<SpacecraftDetail>> {
   return request(

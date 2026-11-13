@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   fetchLibrary,
@@ -87,13 +88,13 @@ describe("dashboards library (slice 8)", () => {
       }),
       reply(200, { data: detail }),
     );
-    const l = await fetchLibrary("m", { q: "", page: 1 });
+    const l = await fetchLibrary(missionIdReader("m"), { q: "", page: 1 });
     expect(l.ok && l.value.items.map((r) => kindWord(r.kind))).toEqual([
       "Value tile",
       "sky plot",
       "acme.gauge",
     ]);
-    const item = await fetchLibraryItem("m", "lib-1", null);
+    const item = await fetchLibraryItem(missionIdReader("m"), "lib-1", null);
     expect(item.ok && item.value.used_by.dashboards[0]?.name).toBe("Bus overview");
   });
 
@@ -117,10 +118,10 @@ describe("dashboards library (slice 8)", () => {
       reply(204, null),
     );
     const at = "2026-11-12T03:10:00.123456Z";
-    const refused = await retireItem("m", "lib-1", 3, at);
+    const refused = await retireItem(missionIdReader("m"), "lib-1", 3, at);
     const used = refused.ok ? null : usedByOf(refused.error);
     expect(used && usedInWords(used)).toBe("Used in 2 dashboards: Bus overview, Night shift.");
-    expect((await retireItem("m", "lib-1", 3, at)).ok).toBe(true);
+    expect((await retireItem(missionIdReader("m"), "lib-1", 3, at)).ok).toBe(true);
     // Both guards ride along (dashboards/domain: a rename adds no version).
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
       "expected_version=3&expected_updated_at=2026-11-12T03%3A10%3A00.123456Z",
@@ -167,7 +168,7 @@ describe("dashboards library (slice 8)", () => {
 
   it("the picker emits the seam {library_item_id, version, name}", async () => {
     stub(reply(200, { data: list([row("a")]) }));
-    const w = mount(LibraryPicker, { props: { missionId: "m" } });
+    const w = mount(LibraryPicker, { props: { missionId: missionIdReader("m") } });
     await flushPromises();
     await w.get('button[aria-label="Insert Battery tile a"]').trigger("click");
     expect(w.emitted("pick")?.[0]).toEqual([

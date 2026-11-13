@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 
 /** Contract: docs/apogee/api/commanding.md (M17, the active command catalog). */
@@ -79,10 +80,10 @@ export const catalogReader = d.object({ ...basis, commands: d.array(commandSumma
 export type Catalog = Decoded<typeof catalogReader>;
 export const commandReader = d.object({ ...basis, command: d.nullable(commandDetail) });
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/commands`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/commands`;
 
 export function fetchCatalog(
-  missionId: string,
+  missionId: MissionId,
   q: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Catalog>> {
@@ -94,7 +95,7 @@ export function fetchCatalog(
   );
 }
 
-export function fetchCommand(missionId: string, commandId: string, signal?: AbortSignal) {
+export function fetchCommand(missionId: MissionId, commandId: string, signal?: AbortSignal) {
   return request(
     `${base(missionId)}/${encodeURIComponent(commandId)}`,
     commandReader,

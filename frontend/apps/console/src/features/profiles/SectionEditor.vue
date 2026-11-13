@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
@@ -24,7 +25,7 @@ import type { StagedField } from "./staged.ts";
 
 /** Profile.md P1 edit + P4 staged edit: one section's form, its dry run, and Stage edit. */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   profile: Readonly<{ id: string; name: string }>;
   section: ProfileSection;
   /** Fields already staged in the open change set (Profile.md States: Conflict). */

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders,
   isRecord,
@@ -31,11 +32,11 @@ export const templateSchemaReader = (value: unknown, path = "") => {
 };
 export type TemplateSchema = ReturnType<typeof templateSchemaReader>;
 
-const base = (missionId: string) =>
+const base = (missionId: MissionId) =>
   `/missions/${encodeURIComponent(missionId)}/contact-planning/templates`;
 
 export function fetchTemplateSchema(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<TemplateSchema>> {
   return request(`${base(missionId)}/schema`, templateSchemaReader, { signal });
@@ -58,7 +59,7 @@ export const previewReader = object({
 export type TemplatePreview = Decoded<typeof previewReader>;
 
 export function previewTemplate(
-  missionId: string,
+  missionId: MissionId,
   body: Readonly<{ target: Target; document: unknown; days?: number }>,
   signal: AbortSignal,
 ) {
@@ -66,7 +67,7 @@ export function previewTemplate(
 }
 
 export function saveTemplate(
-  missionId: string,
+  missionId: MissionId,
   id: string | null,
   body: Readonly<{
     name: string;

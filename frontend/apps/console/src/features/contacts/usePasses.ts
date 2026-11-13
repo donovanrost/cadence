@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, type Ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -11,13 +12,12 @@ export const WINDOW_SLIDE_MS = 5 * 60_000;
  * reservation change invalidates `contacts` (S10, db8c9953), so data refetches on that; a slow
  * timer moves the window so passes entering the horizon appear.
  */
-export function usePasses(missionId: Ref<string>, back: number, ahead: number | Ref<number>) {
+export function usePasses(missionId: Ref<MissionId>, back: number, ahead: number | Ref<number>) {
   const span = computed(() => (typeof ahead === "number" ? ahead : ahead.value));
-  const key = computed(() => `${missionId.value}|${span.value}`);
+  const key = computed(() => ({ m: missionId.value, ms: span.value }));
   const query = useRemoteQuery(key, (k, signal) => {
-    const [id = "", ms = "0"] = k.split("|");
     const t = Date.now();
-    return fetchPasses(id, { from: new Date(t - back), to: new Date(t + Number(ms)) }, signal);
+    return fetchPasses(k.m, { from: new Date(t - back), to: new Date(t + k.ms) }, signal);
   });
   useMissionInvalidation(missionId, ["contacts"], query.refetch);
   const slide = setInterval(query.refetch, WINDOW_SLIDE_MS);

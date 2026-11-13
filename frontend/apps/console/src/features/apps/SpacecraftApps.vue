@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery, type SpacecraftId } from "@/api";
 import { ApEmptyState, ApPanel, ApRemote } from "@/ui";
@@ -9,7 +10,7 @@ import { fetchScopedApps, SPACECRAFT_APPS_LIVE } from "./api.ts";
  * L19 (api b18dcf7b5): the apps that work per spacecraft (telemetry decom, spacecraft), installed,
  * disabled or removed for this spacecraft alone. Same rows as the mission's Apps.
  */
-const props = defineProps<{ missionId: string; spacecraftId: SpacecraftId }>();
+const props = defineProps<{ missionId: MissionId; spacecraftId: SpacecraftId }>();
 const apps = useRemoteQuery(
   () =>
     SPACECRAFT_APPS_LIVE ? { missionId: props.missionId, spacecraftId: props.spacecraftId } : null,

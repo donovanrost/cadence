@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   codeOf,
   decoders,
@@ -11,7 +12,7 @@ import {
 /** Change-set writes and the dry run. Contract: docs/apogee/api/changes.md. */
 const { array, integer, object, oneOf, string, token } = decoders;
 
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/config`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/config`;
 import { previewReader, type Preview, type PreviewItem } from "./preview.ts";
 import { changeSetStates, configKindText } from "./shapes.ts";
 export {
@@ -137,7 +138,7 @@ const submitReader = decoders.variant("state", {
 export type SubmitResult = Decoded<typeof submitReader>;
 
 export function previewChangeSet(
-  key: Readonly<{ missionId: string; changeSetId: string; version: number }>,
+  key: Readonly<{ missionId: MissionId; changeSetId: string; version: number }>,
   signal: AbortSignal,
 ): Promise<ApiResult<Preview>> {
   return request(
@@ -147,7 +148,7 @@ export function previewChangeSet(
   );
 }
 
-export function withdrawChange(missionId: string, changeId: string) {
+export function withdrawChange(missionId: MissionId, changeId: string) {
   return request(
     `${base(missionId)}/changes/${encodeURIComponent(changeId)}/withdraw`,
     versionResult,
@@ -158,7 +159,11 @@ export function withdrawChange(missionId: string, changeId: string) {
   );
 }
 
-export function discardChangeSet(missionId: string, changeSetId: string, expectedVersion: number) {
+export function discardChangeSet(
+  missionId: MissionId,
+  changeSetId: string,
+  expectedVersion: number,
+) {
   return request(
     `${base(missionId)}/change-sets/${encodeURIComponent(changeSetId)}/discard`,
     object({
@@ -172,7 +177,7 @@ export function discardChangeSet(missionId: string, changeSetId: string, expecte
 }
 
 export function submitChangeSet(
-  missionId: string,
+  missionId: MissionId,
   changeSetId: string,
   body: Readonly<{ reason: string; expected_version: number; acknowledged_holds: boolean }>,
 ): Promise<ApiResult<SubmitResult>> {
@@ -184,7 +189,7 @@ export function submitChangeSet(
 }
 
 export function reviewChangeSet(
-  missionId: string,
+  missionId: MissionId,
   changeSetId: string,
   body: Readonly<{ decision: "approve" | "send_back"; comment: string; expected_version: number }>,
 ): Promise<ApiResult<SubmitResult>> {
@@ -257,7 +262,7 @@ export type StageResult = Decoded<typeof stageResultReader>;
 
 /** Stage one change (any number of ops) into the mission's open change set. */
 export function stageChange(
-  missionId: string,
+  missionId: MissionId,
   body: Readonly<{
     summary: string;
     source: Readonly<Record<string, unknown>>;
@@ -337,7 +342,7 @@ export function failureOutcome(
 
 /** Dry run of unstaged ops (nothing written): per-op validation and conflicts, by op index. */
 export function previewOps(
-  key: Readonly<{ missionId: string; ops: readonly StageOp[] }>,
+  key: Readonly<{ missionId: MissionId; ops: readonly StageOp[] }>,
   signal: AbortSignal,
 ): Promise<ApiResult<Preview>> {
   return request(`${base(key.missionId)}/preview`, previewReader, {

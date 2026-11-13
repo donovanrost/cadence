@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useSession } from "@/shell";
@@ -6,7 +7,7 @@ import { ApButton, plural } from "@/ui";
 import { useConfigState } from "./useConfigState.ts";
 
 /** Staged bar under every Setup page (Changes.md §2). Hidden when nothing is staged. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const { state } = useConfigState(props.missionId);
 const session = useSession();
 const route = useRoute();

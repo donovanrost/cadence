@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery, type ApiError } from "@/api";
@@ -18,7 +19,7 @@ import { draftProblems, newRule, toDocument, toDrafts, type RuleDraft } from "./
 import { describePreview } from "./sectionEdit.ts";
 
 /** P2 edit: the whole rule list as one staged change at `routing_rules` (domain P2). */
-const props = defineProps<{ missionId: string; detail: ProfileDetail }>();
+const props = defineProps<{ missionId: MissionId; detail: ProfileDetail }>();
 const emit = defineEmits<{ close: [] }>();
 const router = useRouter();
 const stations = useRemoteQuery(() => props.missionId, fetchStations);

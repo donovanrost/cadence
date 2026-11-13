@@ -1,11 +1,16 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, formatShort, type ApColumn } from "@/ui";
 import { ACTION_LINES, runKindText, runTag, sourceFailure } from "./present.ts";
 import { runAction, type SourceRun } from "./writes.ts";
 
 /** S3 · TSDB jobs, newest 20. A failed run offers Retry, a stuck one Requeue (W7). */
-const props = defineProps<{ missionId: string; runs: readonly SourceRun[]; editable: boolean }>();
+const props = defineProps<{
+  missionId: MissionId;
+  runs: readonly SourceRun[];
+  editable: boolean;
+}>();
 const emit = defineEmits<{ done: [note: { tone: "nominal" | "crit"; text: string }] }>();
 const columns = computed<readonly ApColumn[]>(() => [
   { key: "kind", label: "Job" },

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
 import { failureOutcome, reviewChangeSet, type SubmitResult } from "./actions.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /** Independent review (mission policy): approve & apply, or send back with a comment. */
-const props = defineProps<{ missionId: string; config: ConfigState; changeSet: ChangeSet }>();
+const props = defineProps<{ missionId: MissionId; config: ConfigState; changeSet: ChangeSet }>();
 const emit = defineEmits<{ result: [result: SubmitResult]; changed: [] }>();
 const comment = ref("");
 const busy = ref(false);

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:id/data-sources` (D1). */
@@ -74,7 +75,7 @@ const listReader = object({
 export type SourceList = Readonly<{ sources: readonly DataSource[]; canManage: boolean }>;
 
 export async function fetchSources(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<SourceList>> {
   const result = await request(

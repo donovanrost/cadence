@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { errorCode, failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApPanel, formatShort } from "@/ui";
 import { decidePolicy, type Policy } from "./policy.ts";
 
 /** A pending policy version: approve or reject (reviewer ≠ author, enforced by the server). */
-const props = defineProps<{ missionId: string; policy: Policy }>();
+const props = defineProps<{ missionId: MissionId; policy: Policy }>();
 const emit = defineEmits<{ decided: [] }>();
 const comment = ref("");
 const busy = ref(false);

@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, type Ref } from "vue";
 import { useRemoteQuery, type ApiResult } from "@/api";
 import { useMissionInvalidation } from "@/live";
@@ -31,7 +32,7 @@ export type LiveOptions = Readonly<{
  * the data refetches.
  */
 export function useLiveRead<T>(
-  missionId: Readonly<Ref<string>>,
+  missionId: Readonly<Ref<MissionId>>,
   key: Readonly<Ref<string | null>>,
   fetch: (signal: AbortSignal) => Promise<ApiResult<T>>,
   options: LiveOptions,
@@ -49,7 +50,7 @@ export function useLiveRead<T>(
       query.refetch();
     }, wait);
   };
-  const mission = computed<string | null>(() => missionId.value);
+  const mission = computed<MissionId | null>(() => missionId.value);
   useMissionInvalidation(mission, ["dashboards"], query.refetch);
   useMissionInvalidation(mission, DATA, dataChanged, { throttleMs: 250 });
   onScopeDispose(() => {
@@ -60,7 +61,7 @@ export function useLiveRead<T>(
 
 /** The viewer's D5 read for the URL's runtime. */
 export function useDashboardView(
-  missionId: Readonly<Ref<string>>,
+  missionId: Readonly<Ref<MissionId>>,
   dashboardId: Readonly<Ref<string>>,
   runtime: Readonly<Ref<Runtime>>,
   options: LiveOptions,

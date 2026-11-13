@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { fieldErrors, useRemoteQuery } from "@/api";
@@ -25,7 +26,7 @@ import {
 import { alreadyCreated } from "./requirements.ts";
 
 /** New or edit a requirement template (CP3): form generated from the server's template schema. */
-const props = defineProps<{ missionId: string; template: TemplateDetail | null }>();
+const props = defineProps<{ missionId: MissionId; template: TemplateDetail | null }>();
 const emit = defineEmits<{ close: [] }>();
 const router = useRouter();
 const schema = useRemoteQuery(() => props.missionId, fetchTemplateSchema);

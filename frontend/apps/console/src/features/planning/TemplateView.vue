@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApKeyValue, ApPanel, ApTable, formatAbsolute, plural, type ApColumn } from "@/ui";
@@ -8,7 +9,7 @@ import TemplateLifecycle from "./TemplateLifecycle.vue";
 import { fetchTemplateSchema, maxGapFact } from "./templates.ts";
 
 /** CP3 read view: the rule, its last lifecycle move, Pause/Resume/Close (L2), and versions. */
-const props = defineProps<{ missionId: string; template: TemplateDetail; canEdit: boolean }>();
+const props = defineProps<{ missionId: MissionId; template: TemplateDetail; canEdit: boolean }>();
 // The form's schema gives the max-gap label and unit, so the page and the form say the same thing.
 const schema = useRemoteQuery(() => props.missionId, fetchTemplateSchema);
 const gap = computed(() => {

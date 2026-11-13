@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   decoders,
   request,
@@ -88,7 +89,7 @@ export const directoryReader: Reader<SpacecraftDirectory> = object({
 });
 
 export function fetchSpacecraftDirectory(
-  missionId: string,
+  missionId: MissionId,
   signal: AbortSignal,
 ): Promise<ApiResult<SpacecraftDirectory>> {
   return request(`/missions/${encodeURIComponent(missionId)}/spacecraft`, directoryReader, {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fetchSpacecraftDirectory } from "@/features/spacecraft/index.ts";
@@ -6,7 +7,7 @@ import { ApField, ApSelect } from "@/ui";
 import { rangePresets, type DefaultsForm } from "./defaults.ts";
 
 /** General › Defaults: the range and spacecraft the dashboard opens with (ux Dashboards.md). */
-const props = defineProps<{ missionId: string; errors: Readonly<Record<string, string>> }>();
+const props = defineProps<{ missionId: MissionId; errors: Readonly<Record<string, string>> }>();
 const form = defineModel<DefaultsForm>({ required: true });
 const directory = useRemoteQuery(() => props.missionId, fetchSpacecraftDirectory);
 const timeOptions = computed(() => [

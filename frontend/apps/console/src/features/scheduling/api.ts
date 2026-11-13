@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   actor,
   actorKinds,
@@ -10,7 +11,7 @@ import {
 } from "@/api";
 
 /** Contracts: docs/apogee/api/scheduling.md §4 (S3 drafts, S6 plans, plan detail with S2 demand). */
-const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/contact-plans`;
+const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/contact-plans`;
 
 export const planStates = [
   "draft",
@@ -432,7 +433,7 @@ const startReader = d.object({
 });
 
 export function fetchPlans(
-  missionId: string,
+  missionId: MissionId,
   day: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<PlanList>> {
@@ -444,7 +445,7 @@ export function fetchPlans(
 }
 
 export function fetchPlan(
-  missionId: string,
+  missionId: MissionId,
   planId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<PlanDetail>> {
@@ -456,7 +457,7 @@ export function fetchPlan(
 }
 
 export function fetchDraft(
-  missionId: string,
+  missionId: MissionId,
   runId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Draft>> {
@@ -468,14 +469,14 @@ export function fetchDraft(
 }
 
 /** S3: 202 with the run; the same operation_id replays the same run on any node. */
-export function startDraft(missionId: string, day: string, operationId: string) {
+export function startDraft(missionId: MissionId, day: string, operationId: string) {
   return request(`${base(missionId)}/drafts`, startReader, {
     method: "POST",
     body: { day, operation_id: operationId },
   });
 }
 
-export function continueDraft(missionId: string, runId: string) {
+export function continueDraft(missionId: MissionId, runId: string) {
   return request(
     `${base(missionId)}/drafts/${encodeURIComponent(runId)}/continue`,
     d.object({ run_id: d.token, state: d.known(runStates) }),
@@ -527,14 +528,14 @@ export const dayDemandReader = d.object({
 export type DayDemand = Decoded<typeof dayDemandReader>;
 
 export function fetchSetup(
-  missionId: string,
+  missionId: MissionId,
   signal?: AbortSignal,
 ): Promise<ApiResult<{ setup: PlanningSetup }>> {
   return request(`${base(missionId)}/setup`, setupReader, signal ? { signal } : {});
 }
 
 export function fetchDayDemand(
-  missionId: string,
+  missionId: MissionId,
   day: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<DayDemand>> {
@@ -556,7 +557,7 @@ export type SubmitResult = Decoded<typeof submitReader>;
 
 /** S5. Member → pending_approval; org admin → approve + execute off the request (202). */
 export function submitPlan(
-  missionId: string,
+  missionId: MissionId,
   plan: Readonly<{ id: string; version: number }>,
   operationId: string,
   acknowledgements: readonly Acknowledgement[],
@@ -575,7 +576,7 @@ export function submitPlan(
 }
 
 /** Resume an interrupted (or approved, never started) execution; items are idempotent. */
-export function executePlan(missionId: string, planId: string) {
+export function executePlan(missionId: MissionId, planId: string) {
   return request(
     `${base(missionId)}/${encodeURIComponent(planId)}/execute`,
     d.object({ plan_id: d.token, state: planState }),
@@ -593,7 +594,7 @@ export const REASON_MAX = 2000;
 /** S4 edit: next plan version with the selection changed; returns the new plan detail. */
 /** Send back (api c7c7b277): a pending_approval plan returns to draft with the reviewer's reason. */
 export function rejectPlan(
-  missionId: string,
+  missionId: MissionId,
   plan: Readonly<{ id: string; version: number }>,
   reason: string,
 ): Promise<ApiResult<PlanDetail>> {
@@ -604,7 +605,7 @@ export function rejectPlan(
 }
 
 export function editPlan(
-  missionId: string,
+  missionId: MissionId,
   plan: Readonly<{ id: string; version: number }>,
   change: Readonly<{ add?: readonly string[]; remove?: readonly string[] }>,
 ): Promise<ApiResult<PlanDetail>> {
@@ -645,7 +646,7 @@ export type Alternative = Alternatives["alternatives"][number];
 
 /** S4: unselected opportunities for one spacecraft with their effect (nothing is written). */
 export function fetchAlternatives(
-  missionId: string,
+  missionId: MissionId,
   planId: string,
   spacecraftId: string,
   signal?: AbortSignal,
@@ -721,7 +722,7 @@ export const repairableStates: readonly PlanState[] = [
  * which can exceed the policy's repair window (422 fleet_repair_horizon_exceeded).
  */
 export function startRepair(
-  missionId: string,
+  missionId: MissionId,
   planId: string,
   operationId: string,
   window?: Readonly<{ from: string; to: string }>,
@@ -733,7 +734,7 @@ export function startRepair(
 }
 
 export function fetchRepair(
-  missionId: string,
+  missionId: MissionId,
   runId: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<Repair>> {
@@ -795,7 +796,7 @@ export type AvailabilityWindow = Decoded<typeof availabilityWindow>;
 
 /** S7: every station's reported state with active and upcoming windows (7 d). 'up' = nothing reported. */
 export function fetchAvailability(
-  missionId: string,
+  missionId: MissionId,
   signal?: AbortSignal,
 ): Promise<ApiResult<Availability>> {
   return request(

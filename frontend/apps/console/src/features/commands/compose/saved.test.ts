@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { CommandDetail } from "../api.ts";
-import { decode } from "@/api/index.ts";
+import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import {
   changedBy,
   draftReplyReader,
@@ -110,17 +110,17 @@ describe("compose draft document", () => {
       value: { revision_id: "rev-3", catalog_revision: null, command: heater },
     });
     const doc = JSON.parse(JSON.stringify(toDocument(fields))) as unknown;
-    const r = await restoreDraft("m", stored(doc));
+    const r = await restoreDraft(missionIdReader("m"), stored(doc));
     expect(r.ok && r.value.fields.title).toBe("Heater trim");
     expect(r.ok && r.value.fields.stack[0]?.values).toEqual({ s: "abc" });
     expect(r.ok && r.value.fields.release.notBefore).toBe(Date.parse("2026-11-12T00:00:00Z"));
     expect(r.ok && r.value.fields.query.plane).toBe(7);
-    const lost = await restoreDraft("m", stored(doc, ["cmd-1"]));
+    const lost = await restoreDraft(missionIdReader("m"), stored(doc, ["cmd-1"]));
     expect(lost.ok && [lost.value.gone, lost.value.fields.stack.length]).toEqual([1, 0]);
   });
 
   it("refuses a document it can't read rather than guessing", async () => {
-    const r = await restoreDraft("m", stored({ schema_version: 2 }));
+    const r = await restoreDraft(missionIdReader("m"), stored({ schema_version: 2 }));
     expect(r.ok).toBe(false);
   });
 

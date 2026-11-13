@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api";
+import { missionId as missionIdReader, decode } from "@/api";
 import { settingsReader } from "./api.ts";
 import { settingsWire } from "./fixtures.test-support.ts";
 import {
@@ -43,7 +43,7 @@ describe("dashboard settings (slice 5, proposed D14)", () => {
       new Response(JSON.stringify({ data: diagnosticsWire }), { status: 200 })) as typeof fetch;
     try {
       const r = await fetchDiagnostics(
-        { missionId: "m", dashboardId: "d" },
+        { missionId: missionIdReader("m"), dashboardId: "d" },
         new AbortController().signal,
       );
       if (!r.ok) throw new Error("decode");

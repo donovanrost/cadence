@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   detailsOf,
   isError,
@@ -39,7 +40,7 @@ const unavailable = d.object({
 });
 
 export async function fetchEncoding(
-  missionId: string,
+  missionId: MissionId,
   requestId: string,
   signal?: AbortSignal,
 ): Promise<EncodingView> {

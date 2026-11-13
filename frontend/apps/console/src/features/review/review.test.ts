@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
 import { fetchSummary } from "./api.ts";
 import {
   byRealization,
@@ -63,7 +64,7 @@ async function summary() {
   globalThis.fetch = fetchMock as typeof fetch;
   try {
     const r = await fetchSummary(
-      { missionId: "m", day: "2026-11-09", span: "week" },
+      { missionId: missionIdReader("m"), day: "2026-11-09", span: "week" },
       new AbortController().signal,
     );
     if (!r.ok) throw new Error(JSON.stringify(r.error));

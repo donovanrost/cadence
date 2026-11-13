@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   scid as scidReader,
   decoders as d,
@@ -199,11 +200,11 @@ export const groupRow = d.object({
 });
 export type GroupRow = Decoded<typeof groupRow>;
 
-export const groupsBase = (missionId: string) =>
+export const groupsBase = (missionId: MissionId) =>
   `/missions/${encodeURIComponent(missionId)}/command-groups`;
 
 export function fetchPreflight(
-  missionId: string,
+  missionId: MissionId,
   draft: Draft,
   signal?: AbortSignal,
 ): Promise<ApiResult<Preflight>> {
@@ -225,7 +226,7 @@ const groupList = d.object({ groups: d.array(groupRow, 1_000) });
 
 /** `{data: {groups: [...]}}`; the screens want the rows. */
 export async function fetchGroups(
-  missionId: string,
+  missionId: MissionId,
   query: GroupListQuery,
   signal?: AbortSignal,
 ): Promise<ApiResult<readonly GroupRow[]>> {
@@ -265,7 +266,7 @@ const created = d.object({ id: d.token, state: d.oneOf(groupStates) });
 export type Created = Decoded<typeof created>;
 
 export async function submitGroup(
-  missionId: string,
+  missionId: MissionId,
   draft: Draft,
   digest: string,
   operationId: string,
@@ -307,7 +308,7 @@ export type TargetEndpoints = Decoded<typeof targetEndpoints>;
 const endpointList = d.object({ spacecraft: d.array(targetEndpoints, 1_000) });
 
 export async function fetchEndpoints(
-  missionId: string,
+  missionId: MissionId,
   spacecraftIds: readonly string[],
   signal?: AbortSignal,
 ): Promise<ApiResult<readonly TargetEndpoints[]>> {

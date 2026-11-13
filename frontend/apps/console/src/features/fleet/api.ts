@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import {
   spacecraftId as spacecraftIdReader,
   scid as scidReader,
@@ -127,7 +128,7 @@ export type FleetWorstPoint = NonNullable<FleetSpacecraft["worst_point"]>;
 export const FLEET_TIMEOUT_MS = 20_000;
 
 export async function fetchFleet(
-  missionId: string,
+  missionId: MissionId,
   signal?: AbortSignal,
 ): Promise<ApiResult<Fleet>> {
   const timeout = AbortSignal.timeout(FLEET_TIMEOUT_MS);

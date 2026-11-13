@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { describeApiError, isError } from "@/api/index.ts";
@@ -18,7 +19,7 @@ import {
  * D2 attention block (ux U32): the open conflict in words, the resolution record, the provider's
  * last answer, what to do, and Acknowledge / Resolve…. A write that didn't land says so (U20).
  */
-const props = defineProps<{ missionId: string; attention: Attention }>();
+const props = defineProps<{ missionId: MissionId; attention: Attention }>();
 const emit = defineEmits<{ changed: [] }>();
 
 const words = computed(() => attentionWords(props.attention));

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, formatShort } from "@/ui";
@@ -7,7 +8,7 @@ import { overrideOp, valueText } from "./overrides.ts";
 
 /** P3 rows: spacecraft · what differs · since · Reset (stages a spacecraft_override reset). */
 const props = defineProps<{
-  missionId: string;
+  missionId: MissionId;
   overrides: readonly ProfileOverride[];
   /** The profile's fields, so a row reads "Catalog revision rev 4 instead of rev 3", not ids. */
   fields: readonly ProfileField[];

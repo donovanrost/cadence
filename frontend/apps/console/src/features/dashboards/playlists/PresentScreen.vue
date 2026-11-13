@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -30,7 +31,7 @@ const playlist = useRemoteQuery(
 );
 // An edit or a delete reaches a running kiosk: playlist writes fire `dashboards` (§D23).
 useMissionInvalidation(
-  computed<string | null>(() => missionId.value),
+  computed<MissionId | null>(() => missionId.value),
   ["dashboards"],
   playlist.refetch,
 );

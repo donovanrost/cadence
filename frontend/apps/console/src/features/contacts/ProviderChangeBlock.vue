@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { organizationCapabilities, useConsoleScope, useSession } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApTextarea } from "@/ui";
@@ -19,7 +20,7 @@ import { decideProviderChange, type ChangeDecision } from "./attention.ts";
  * Reject before the deadline, or Acknowledge. Every decision needs a reason. Org admins decide
  * (`:approve_provider_changes`); members see the block without buttons.
  */
-const props = defineProps<{ missionId: string; attention: Attention; now: Date }>();
+const props = defineProps<{ missionId: MissionId; attention: Attention; now: Date }>();
 const emit = defineEmits<{ changed: [] }>();
 
 const session = useSession();

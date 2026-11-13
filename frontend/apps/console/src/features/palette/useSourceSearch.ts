@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, ref, watch, type Ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -15,11 +16,11 @@ const DEBOUNCE_MS = 120;
  * open palette and matched locally.
  */
 export function useSourceSearch(
-  missionId: Ref<string | null>,
+  missionId: Ref<MissionId | null>,
   raw: Ref<string>,
   canCommand: Ref<boolean>,
 ) {
-  const settled = ref<{ m: string; q: string } | null>(null);
+  const settled = ref<{ m: MissionId; q: string } | null>(null);
   const waiting = ref(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   watch(

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import type { ApiError } from "@/api";
@@ -6,7 +7,7 @@ import { ApButton, ApCallout, ApField, ApSheet } from "@/ui";
 import { duplicate, type DirectoryRow } from "./api.ts";
 
 /** Duplicate: a new dashboard from the current version, opened in edit mode. */
-const props = defineProps<{ missionId: string }>();
+const props = defineProps<{ missionId: MissionId }>();
 const router = useRouter();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const row = ref<DirectoryRow | null>(null);

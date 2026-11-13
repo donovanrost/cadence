@@ -19,12 +19,9 @@ onScopeDispose(() => {
   if (timer !== null) clearTimeout(timer);
 });
 const catalog = useRemoteQuery(
-  computed(() => JSON.stringify({ m: scope.value.mission.id, q: term.value })),
-  (k, signal) => {
-    // Sound: produced by JSON.stringify above.
-    const { m, q: text } = JSON.parse(k) as { m: string; q: string };
-    return fetchCatalog(m, text, signal);
-  },
+  // A typed key (§12 A4): compared by value, no JSON round trip or cast.
+  computed(() => ({ m: scope.value.mission.id, q: term.value })),
+  (k, signal) => fetchCatalog(k.m, k.q, signal),
 );
 function addFirst() {
   const s = catalog.state.value;

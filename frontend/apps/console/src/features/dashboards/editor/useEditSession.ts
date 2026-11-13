@@ -1,3 +1,4 @@
+import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import type { ApiError } from "@/api";
 import type { Runtime } from "../api.ts";
@@ -23,7 +24,7 @@ export type Notice =
  * server is stateless: every preview replays the draft onto its base version.
  */
 export function useEditSession(
-  missionId: Readonly<Ref<string>>,
+  missionId: Readonly<Ref<MissionId>>,
   dashboardId: Readonly<Ref<string>>,
   runtime: Readonly<Ref<Runtime>>,
   /** The dashboard's current version, from the viewer read (refreshed on `dashboards`). */
