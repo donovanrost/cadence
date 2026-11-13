@@ -98,7 +98,8 @@ export const createDashboard = (
     method: "POST",
     body: {
       name: input.name,
-      description: input.description || null,
+      // The server takes a string ("" for none); null is refused (qa, 422 on field name).
+      description: input.description,
       tags: input.tags,
       spacecraft: input.spacecraft,
     },
