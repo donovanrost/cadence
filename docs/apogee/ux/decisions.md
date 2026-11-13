@@ -667,3 +667,20 @@ more than 24 h old.
 - **Handled APIDs** (profile field next to the catalog revision, overridable like P3): label `Handled APIDs`, with
   the default value `All of the catalog's APIDs`. An override is a mono chip list in the catalog's notation:
   `Only 0x101, 0x102, 0x1A0`. Help: "Packets with other APIDs aren't decoded." (domain to confirm the effect).
+- **Switch help text** (api's L17 schema `help`, lead's ask 11-13; state-independent, shown under each label):
+  - Commanding: "Lets operators request and release commands to this spacecraft. Turning it off cancels commands
+    still waiting to be sent when the change is applied."
+  - Telemetry: "Cadence decodes this spacecraft's telemetry into live values, alarms and history. Turning it off
+    means no new live values, alarms or history until it's turned on again."
+- **HOLD acknowledgements** (the sentences are already in `SwitchCompatibility` and match (b) and (c)). They're
+  acknowledged on Changes with the "I've read the N holds" checkbox, plus a reason where a placeholder is given:
+  - `commanding_disabled_cancels_commands`: placeholder "Why it's safe to cancel them".
+  - `telemetry_disabled`: placeholder "Why decoding can stop for EARENDIL-312".
+- **Archive** (deleting a spacecraft archives it, #49/#50):
+  - Staging it opens a short sheet titled `Archive EARENDIL-312?`: "It leaves the mission's lists, fleet and
+    planning when the change is applied. Its history stays." Actions `Stage archive` and `Cancel`.
+  - HOLD `spacecraft_has_traffic` sentence: "EARENDIL-312 has had passes booked or commands requested. Archiving
+    it takes it out of the mission's lists, fleet and planning when this is applied. Its history stays."
+    Placeholder: "Why EARENDIL-312 is being archived". Say "passes booked" (reservations), not "contacts".
+  - Open, for api: what archiving does to future booked passes and requests still waiting. Until api says, no
+    sentence claims either way (U20).
