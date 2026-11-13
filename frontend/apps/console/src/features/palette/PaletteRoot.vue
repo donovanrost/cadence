@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onScopeDispose } from "vue";
-import { useRouter } from "vue-router";
-import { registerPalette, useConsoleScope, usePalette } from "@/shell/index.ts";
+import { onScopeDispose, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { registerPalette, useConsoleScope, usePalette, useSmallScreen } from "@/shell/index.ts";
+import MobileSearch from "./MobileSearch.vue";
 import PaletteDialog from "./PaletteDialog.vue";
 
 /**
@@ -13,6 +14,13 @@ registerPalette();
 const palette = usePalette();
 const scope = useConsoleScope();
 const router = useRouter();
+const route = useRoute();
+const small = useSmallScreen();
+// Any navigation closes it (a row opening, or Back on a phone, Mobile.md › Search).
+watch(
+  () => route.fullPath,
+  () => palette.hide(),
+);
 
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -40,5 +48,9 @@ onScopeDispose(() => window.removeEventListener("keydown", onKey));
 </script>
 
 <template>
-  <PaletteDialog v-if="palette.open.value" @close="palette.hide" />
+  <template v-if="palette.open.value">
+    <!-- Phones in a mission get the on-call search sheet (Mobile.md › Search); else the query line. -->
+    <MobileSearch v-if="small && scope.kind === 'mission'" @close="palette.hide" />
+    <PaletteDialog v-else @close="palette.hide" />
+  </template>
 </template>

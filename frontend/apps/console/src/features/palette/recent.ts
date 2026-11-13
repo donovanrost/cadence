@@ -6,7 +6,10 @@ import type { PaletteItem } from "./results.ts";
  * query. Kept in this browser only (a convenience); unreadable storage means no Recent group.
  */
 export const RECENT_MAX = 5;
-const key = (missionId: string) => `apogee.palette.recent.${missionId}`;
+/** `palette` (⌘K) and `phone` (the phone search sheet keeps its own, phone kinds only). */
+export type RecentList = "palette" | "phone";
+const key = (missionId: string, list: RecentList) =>
+  list === "palette" ? `apogee.palette.recent.${missionId}` : `apogee.phone.recent.${missionId}`;
 
 type Stored = Readonly<{
   key: string;
@@ -29,16 +32,16 @@ function isStored(v: unknown): v is Stored {
   );
 }
 
-function read(missionId: string): Stored[] {
+function read(missionId: string, list: RecentList): Stored[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(key(missionId)) ?? "[]");
+    const parsed: unknown = JSON.parse(localStorage.getItem(key(missionId, list)) ?? "[]");
     return Array.isArray(parsed) ? parsed.filter(isStored).slice(0, RECENT_MAX) : [];
   } catch {
     return [];
   }
 }
 
-export function rememberOpened(missionId: string, item: PaletteItem) {
+export function rememberOpened(missionId: string, item: PaletteItem, list: RecentList = "palette") {
   const base = item.key.startsWith("recent-") ? item.key.slice("recent-".length) : item.key;
   const entry: Stored = {
     key: base,
@@ -47,9 +50,9 @@ export function rememberOpened(missionId: string, item: PaletteItem) {
     hint: item.hint,
     to: item.to,
   };
-  const next = [entry, ...read(missionId).filter((r) => r.key !== base)].slice(0, RECENT_MAX);
+  const next = [entry, ...read(missionId, list).filter((r) => r.key !== base)].slice(0, RECENT_MAX);
   try {
-    localStorage.setItem(key(missionId), JSON.stringify(next));
+    localStorage.setItem(key(missionId, list), JSON.stringify(next));
   } catch {
     // Storage unavailable: Recent is a convenience only.
   }
@@ -59,8 +62,9 @@ export function rememberOpened(missionId: string, item: PaletteItem) {
 export function recentItems(
   missionId: string,
   resolves: (to: RouteLocationRaw) => boolean,
+  list: RecentList = "palette",
 ): PaletteItem[] {
-  return read(missionId)
+  return read(missionId, list)
     .filter((r) => resolves(r.to))
     .map((r, rank) => ({
       key: `recent-${r.key}`,

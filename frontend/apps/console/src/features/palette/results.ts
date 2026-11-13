@@ -4,12 +4,15 @@ import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/f
 
 /**
  * ⌘K results (Palette.md). v1 searches client-side over what the console already has: the fleet
- * read (spacecraft, profiles, per-spacecraft actions) and the router (pages). Telemetry comes
+ * read (spacecraft, profiles, per-spacecraft actions) and the router (pages). Alarms and
+ * Requests are phone-only groups (mobile.ts). Telemetry comes
  * from the M23 point search (telemetry.ts); Commands (M17 catalog) and Stations from sources.ts.
  */
 
 export const GROUPS = [
   "Recent",
+  "Alarms",
+  "Requests",
   "Spacecraft",
   "Telemetry",
   "Actions",
@@ -81,7 +84,7 @@ function spacecraftItem(sc: FleetSpacecraft, rank: number, canCommand: boolean):
 }
 
 /** SCID matches rank first (numeric queries), then name prefix, then name substring. */
-function spacecraftRank(sc: FleetSpacecraft, text: string): number | null {
+export function spacecraftRank(sc: FleetSpacecraft, text: string): number | null {
   if (text === "") return null;
   const scid = String(sc.scid);
   const name = sc.name.toLowerCase();
