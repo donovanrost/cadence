@@ -358,13 +358,14 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 | --- | --- | --- | --- |
 | A0 | ~~Raw word for unknown values~~ done (d9dc435a): `known()` unchanged (`"unrecognized"` literal; 50 adopted sites stay), plus `knownText()` → `T \| { unrecognized: string }` (an object, can't widen to `string`; a typo literal is TS2367, proven by a `@ts-expect-error` test), `isKnown`, `vocabularyText`. Owners move display fields to `knownText` in 12B | lead | done |
 | A1 | ~~`no-unsafe-type-assertion`~~ done (6e3a5f84): on for the console and kit (tests and legacy apps exempt); 45 hits fixed with `api/json.ts` guards; 3 scoped disables in decoder internals/adapters | lead | done |
-| A2 | `ErrorCode` union (codes from `docs/apogee/api`), `isError(e, kind, code)`, per-code details decoding, one `fieldErrors()`; ast-grep rule against `.code ===` / `"code" in` outside `api/` | lead | after A1 |
+| A2 | ~~Typed error codes~~ done (a7a1095e): `api/errors.ts` `ErrorCode`, `isError` (typo = compile error), `codeOf`, `knownErrorCode`, `detailsOf(e, reader)`, one `fieldErrors()`; ast-grep `error-code-compared-as-text` blocks new raw comparisons (29 offender files ignored until migrated) | lead | done |
 | A3 | Typed routes: `TypesConfig.RouteNamedMap` for the 66 routes (hand-written or by extending `generate-route-types.mjs`), `useRoute("name").params` instead of hand reads, the Investigate `tab` union; rename setup's `:scId` to `:spacecraftId`; fix the two dangling names (`ops.dashboard.settings`, `ops.dashboards.playlists`: register or rename) | **dashboards** (router area) | parallel with A0–A2 |
 | A4 | ~~`useRemoteQuery` compares keys structurally~~ done (6e3a5f84); the JSON reparse sites went with A1; owners drop their `split("\|")` keys in 12B | lead | done |
 | A5 | Shared entity decoders in a new `api/entities.ts`: actor, spacecraft ref, station ref, role, invitation | **fe-setup** (lead stays off that file) | in progress |
-| A6 | ast-grep `vocabulary-field-decoded-as-text` (blocking per directory as features migrate) and `requireDefaultForNonUnion` | lead | with A2 |
+| A6 | ~~Gates~~ done (a7a1095e): ast-grep `vocabulary-field-decoded-as-text` (178 sites in 59 files ignored until migrated; `// free-text:` opt-out); `requireDefaultForNonUnion` on the console and kit | lead | done |
 
 ### 12B. Owners migrate their own features (normal queue, gated by A's rules), worst first
+**How to migrate a file:** switch its enum-like fields to `known`/`knownText` (display the raw word with `vocabularyText`), its error checks to `isError`/`fieldErrors`/`detailsOf`, its word maps to `Record<Union, string>`, its query keys to typed objects; then delete the file from the `ignores` list in `frontend/ast-grep/rules/vocabulary-field-decoded-as-text.yml` and `error-code-compared-as-text.yml` so the gate holds it.
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |
 | 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |
