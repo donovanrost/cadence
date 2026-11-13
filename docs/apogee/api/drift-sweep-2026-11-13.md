@@ -72,10 +72,10 @@ Commit 4d92b1f5e.
 | Item | Owner | Direction | State |
 | --- | --- | --- | --- |
 | Routing groups `transport.name` null for a rule on an archived transport; the console's groups read fails | api | server→doc | **fixed** 6956b31e5 (falls back to the id), test |
-| PA2 `credential.version` / `status` null when the credential record is missing; the console's PA2 decode fails | api-ops (L13) | shape change | proposed by api-ops to fe-setup: `status: "missing"`, `version: null`; ships with their reader |
+| PA2 `credential.version` / `status` null when the credential record is missing; the console's PA2 decode fails | api-ops (L13) | shape change | **fixed** api-ops 8f054515c (`status: "missing"`, `version: null`), after fe-setup's reader 377e08c79 |
 | PA2 `grants[].mission.name` can be null; the console reads a string | api-ops | server→doc | **fixed** api-ops 4b203c504 (falls back to the id) |
 | Mission providers `policy_mode` null without `mode` | api-ops (L12) | server→doc | **fixed** api-ops 4b203c504 (`approval_required`) |
-| Mission providers `account.id` / `account.name` null for a direct provider; the console's list decode fails | api-ops (L12) | shape change | proposed by api-ops to fe-setup: `account: null`; ships with their reader |
+| Mission providers `account.id` / `account.name` null for a direct provider; the console's list decode fails | api-ops (L12) | shape change | **fixed** api-ops 8f054515c (`account: null`), after fe-setup's reader 377e08c79 |
 | Mission providers `grant.version` is the bound version, not the grant's current one | api-ops | doc→server | **fixed** api-ops (setup.md) |
 | PA1 create: a bad `base_url` answers `422 invalid_provider_account_base_url` with no details; a blank name answers `invalid_params {settings}`. The doc says `invalid_params` naming the field; the console maps `settings.base_url` and `name` | api | server→doc | **fixed** df82d460b (fe-setup OK'd; checked before the credential is registered), exact-shape test |
 | Revoke grant / credential: a missing expected version answers 422 naming it (undocumented) | api-ops | doc→server | **fixed** api-ops (setup.md) |
