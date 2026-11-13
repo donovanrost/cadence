@@ -192,6 +192,37 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
            ]
   end
 
+  test "a run id too long once namespaced is refused with a field error, recording nothing" do
+    {conn, _user, organization, mission} = signed_in(:member)
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-operations")
+
+    html =
+      view
+      |> form("#data-operation-request-form",
+        historical_workflow_request: %{
+          workflow: "backfill",
+          run_id: String.duplicate("r", 244),
+          realm: "flight",
+          data_source_id: "flight-telemetry",
+          source_binding_id: "flight-telemetry-binding",
+          point_ids: "HK.counter",
+          reason: "operator_requested_backfill",
+          confirmed: "true"
+        }
+      )
+      |> render_submit()
+
+    assert html =~ "run_id is too long."
+    assert Process.alive?(view.pid)
+
+    assert [] =
+             Cadence.list_telemetry_backfill_lifecycle_events(mission.mission_id,
+               organization_id: organization.organization_id
+             )
+  end
+
   test "grouped imports retain their workflow identity and independent progress" do
     {conn, _user, organization, mission} = signed_in(:member)
 

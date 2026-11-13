@@ -417,8 +417,8 @@ defmodule CadenceWeb.OpsDataOperationsLive do
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :any, required: true
+  attr(:label, :string, required: true)
+  attr(:value, :any, required: true)
 
   defp progress_cell(assigns) do
     ~H"""
@@ -563,6 +563,7 @@ defmodule CadenceWeb.OpsDataOperationsLive do
   defp error_text(:confirmation_required), do: "Confirm the request before recording it."
   defp error_text(:invalid_request), do: "Historical request parameters are invalid."
   defp error_text({:missing_field, field}), do: "#{field} is required."
+  defp error_text({:invalid_field, field, :too_large}), do: "#{field} is too long."
   defp error_text(reason), do: "Data operation failed: #{inspect(reason)}"
 
   defp text(value) when is_binary(value) do

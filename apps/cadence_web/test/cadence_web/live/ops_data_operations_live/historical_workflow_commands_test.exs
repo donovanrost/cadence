@@ -187,6 +187,36 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommandsTest do
   end
 
   describe "record_request/4" do
+    test "refuses a run id too long for its namespaced items, recording nothing" do
+      params = %{
+        "workflow" => "backfill",
+        "run_id" => String.duplicate("r", 240),
+        "realm" => "backfill",
+        "data_source_id" => "managed_questdb_backfill",
+        "source_binding_id" => "backfill_telemetry",
+        "point_ids" => "HK.counter HK.voltage"
+      }
+
+      assert {:error, {:invalid_field, :run_id, :too_large}} =
+               HistoricalWorkflowCommands.record_request(params, @scope, @mission, @opts)
+
+      assert {:error, {:invalid_field, :run_id, :too_large}} =
+               HistoricalWorkflowCommands.record_stage(
+                 Map.merge(params, %{
+                   "stage" => "requested",
+                   "run_id" => String.duplicate("r", 244)
+                 }),
+                 @scope,
+                 @mission,
+                 @opts
+               )
+
+      assert [] =
+               Storage.list_backfill_lifecycle_events("mission-dashboard-command",
+                 organization_id: "org-dashboard-command"
+               )
+    end
+
     test "records grouped requests and returns params with requested stage" do
       params = %{
         "workflow" => "backfill",

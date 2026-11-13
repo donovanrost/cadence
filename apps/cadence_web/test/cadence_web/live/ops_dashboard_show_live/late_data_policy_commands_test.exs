@@ -9,7 +9,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
   @scope %{organization_id: "org-dashboard-late-policy", user: %{id: "operator-late"}}
   @mission %{mission_id: "mission-dashboard-late-policy"}
 
+  # Late-data decisions name an existing run of this organization and mission.
+  defp own_run!(run_id, organization_id \\ @scope.organization_id) do
+    assert {:ok, _event} =
+             Cadence.record_telemetry_historical_data_workflow_event(
+               "backfill",
+               "requested",
+               %{
+                 backfill_run_id: run_id,
+                 organization_id: organization_id,
+                 mission_id: @mission.mission_id,
+                 realm: :flight,
+                 data_source_id: "managed_questdb_primary",
+                 binding_id: "default_flight_telemetry",
+                 reason: "operator_requested_backfill"
+               },
+               @opts
+             )
+  end
+
   test "records accepted late-data policy decisions as lifecycle events" do
+    own_run!("late-policy-run-1")
+
     params = %{
       "decision" => "accept",
       "execution_mode" => "sample_execution",
@@ -76,6 +97,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
   end
 
   test "records rejected late-data policy decisions as lifecycle events" do
+    own_run!("late-policy-run-2")
+
     params =
       LateDataPolicyParams.from_event(%{
         "decision" => "reject",
@@ -103,6 +126,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
   end
 
   test "records replay late-data policy decisions as event-only audit events" do
+    own_run!("late-policy-replay-run")
+
     params =
       LateDataPolicyParams.from_event(%{
         "decision" => "accept",
@@ -148,6 +173,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
   end
 
   test "does not fall back from sample execution to event-only recording" do
+    own_run!("late-policy-run-missing-point")
+
     params = %{
       "decision" => "accept",
       "execution_mode" => "sample_execution",
@@ -191,6 +218,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommandsTest do
              Storage.list_backfill_lifecycle_events(@mission.mission_id,
                organization_id: @scope.organization_id,
                event_type: :late_data_accepted
+             )
+  end
+
+  test "refuses a run id that is not a run of this organization and mission" do
+    # Another organization's run (same mission id, so only the organization tells them apart),
+    # with a job: a decision naming it would read that job back on this tenant's dashboard.
+    own_run!("other-tenant-run", "org-other-late-policy")
+
+    assert {:ok, _job} =
+             Cadence.Jobs.enqueue(
+               :telemetry_historical_data_workflow,
+               @mission.mission_id,
+               "other-tenant-run",
+               %{}
+             )
+
+    for run_id <- ["other-tenant-run", "no-such-run"] do
+      params = %{
+        "decision" => "reject",
+        "execution_mode" => "event_only",
+        "run_id" => run_id,
+        "realm" => "flight",
+        "data_source_id" => "managed_questdb_primary",
+        "source_binding_id" => "default_flight_telemetry",
+        "reason" => "operator_rejects_late_data"
+      }
+
+      assert {:error, {:backfill_run_not_found, ^run_id}} =
+               LateDataPolicyCommands.record_decision(params, @scope, @mission, @opts)
+    end
+
+    assert [] =
+             Storage.list_backfill_lifecycle_events(@mission.mission_id,
+               organization_id: @scope.organization_id
              )
   end
 end

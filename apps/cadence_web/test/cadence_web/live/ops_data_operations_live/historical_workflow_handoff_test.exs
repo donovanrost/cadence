@@ -15,6 +15,8 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
   @scope %{organization_id: "org-handoff", user: %{id: "operator-handoff"}}
   @mission %{mission_id: "mission-handoff"}
 
+  defp long_id(bytes), do: String.duplicate("r", bytes)
+
   defp tenant(run_id), do: Cadence.Jobs.tenant_run_id("org-handoff", "mission-handoff", run_id)
 
   describe "stage/3" do
@@ -243,6 +245,75 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoffTest do
       refute Map.has_key?(handoff.attrs, :stage)
       assert handoff.attrs.backfill_run_id == tenant("corrected-handoff")
       assert handoff.attrs.reason == "dashboard_backfill"
+    end
+  end
+
+  describe "client run id length" do
+    # The namespaced id (client id + 12 bytes) and every request item (`-001`) fit varchar(255).
+    test "one point: 243 bytes are accepted, 244 refused" do
+      params = %{"realm" => "backfill", "point_id" => "HK.counter"}
+
+      assert {:ok, %{attrs: %{backfill_run_id: run_id}}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", long_id(243)),
+                 @scope,
+                 @mission
+               )
+
+      assert byte_size(run_id) == 255
+
+      assert {:error, {:invalid_field, :run_id, :too_large}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", long_id(244)),
+                 @scope,
+                 @mission
+               )
+    end
+
+    test "several points: 239 bytes are accepted, 240 refused" do
+      params = %{"realm" => "backfill", "point_ids" => "HK.counter HK.voltage"}
+
+      assert {:ok, %{attrs: %{backfill_run_id: run_id}}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", long_id(239)),
+                 @scope,
+                 @mission
+               )
+
+      assert byte_size(run_id <> "-002") == 255
+
+      assert {:error, {:invalid_field, :run_id, :too_large}} =
+               HistoricalWorkflowHandoff.request(
+                 Map.put(params, "run_id", long_id(240)),
+                 @scope,
+                 @mission
+               )
+    end
+
+    test "corrections and stages without a source event: 243 accepted, 244 refused" do
+      for handoff <- [
+            &HistoricalWorkflowHandoff.correction_request/3,
+            &HistoricalWorkflowHandoff.stage/3
+          ] do
+        params = %{"workflow" => "backfill", "stage" => "requested", "realm" => "backfill"}
+
+        assert {:ok, _handoff} =
+                 handoff.(Map.put(params, "run_id", long_id(243)), @scope, @mission)
+
+        assert {:error, {:invalid_field, :run_id, :too_large}} =
+                 handoff.(Map.put(params, "run_id", long_id(244)), @scope, @mission)
+      end
+    end
+
+    test "an already-namespaced id at the limit passes through" do
+      run_id = tenant(long_id(243))
+
+      assert {:ok, %{attrs: %{backfill_run_id: ^run_id}}} =
+               HistoricalWorkflowHandoff.request(
+                 %{"realm" => "backfill", "run_id" => run_id},
+                 @scope,
+                 @mission
+               )
     end
   end
 

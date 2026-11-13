@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommands do
   @moduledoc false
 
   alias Cadence.Control.TelemetryDataManagement, as: DataManagement
+  alias Cadence.Telemetry.Storage
 
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyParams
 
@@ -11,7 +12,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommands do
 
     with {:ok, decision} <- require_param(params.decision, :decision),
          {:ok, execution_mode} <- require_param(params.execution_mode, :execution_mode),
-         :ok <- validate_execution_context(execution_mode, params) do
+         :ok <- validate_execution_context(execution_mode, params),
+         :ok <- require_own_run(params.run_id, scope, mission) do
       record_decision_for_mode(
         decision,
         execution_mode,
@@ -44,4 +46,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.LateDataPolicyCommands do
   end
 
   defp validate_execution_context(_execution_mode, _params), do: :ok
+
+  # The decision is recorded against an existing run of this organization and mission. A client
+  # run id naming another tenant's run would make its own dashboard read that run's job (id,
+  # status, failure) back through the global (job_type, run_id) lookup.
+  defp require_own_run(run_id, scope, mission) when is_binary(run_id) do
+    case Storage.list_backfill_lifecycle_events(mission.mission_id,
+           organization_id: scope.organization_id,
+           backfill_run_id: run_id,
+           limit: 1
+         ) do
+      [_event] -> :ok
+      [] -> {:error, {:backfill_run_not_found, run_id}}
+    end
+  end
+
+  defp require_own_run(_run_id, _scope, _mission), do: :ok
 end

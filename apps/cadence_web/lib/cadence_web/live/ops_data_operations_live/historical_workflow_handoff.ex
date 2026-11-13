@@ -16,12 +16,16 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
   }
 
   @requested_stage "requested"
+  # The lifecycle-event and job `run_id` columns are varchar(255).
+  @run_id_bytes 255
   @default_request_workflow "backfill"
   @job_recovery_actions [
     :retry_job,
     :inspect_stale_replacement_job,
     :requeue_stale_replacement_job
   ]
+
+  @type run_id_error :: {:invalid_field, :run_id, :too_large}
 
   @type t ::
           HistoricalWorkflowStageHandoff.t()
@@ -34,26 +38,26 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
           | HistoricalWorkflowStaleReplacementJobHandoff.t()
 
   @spec stage(HistoricalWorkflowParams.t() | map(), map(), map()) ::
-          {:ok, HistoricalWorkflowStageHandoff.t()}
+          {:ok, HistoricalWorkflowStageHandoff.t()} | {:error, run_id_error()}
   def stage(params, scope, mission) when is_map(params) do
     params = stage_params(params)
     workflow = params.workflow
     stage = params.stage
 
-    selection_params =
-      params
-      |> normalize_workflow_stage(workflow, stage)
-      |> new_event_run_id(scope, mission)
-
-    {:ok,
-     %HistoricalWorkflowStageHandoff{
-       workflow: workflow,
-       stage: stage,
-       attrs: HistoricalWorkflowParams.attrs(selection_params, scope, mission),
-       event_id: params.event_id,
-       correction_source_event_id: params.correction_source_event_id,
-       selection_params: HistoricalWorkflowParams.to_event_params(selection_params)
-     }}
+    with {:ok, selection_params} <-
+           params
+           |> normalize_workflow_stage(workflow, stage)
+           |> new_event_run_id(scope, mission) do
+      {:ok,
+       %HistoricalWorkflowStageHandoff{
+         workflow: workflow,
+         stage: stage,
+         attrs: HistoricalWorkflowParams.attrs(selection_params, scope, mission),
+         event_id: params.event_id,
+         correction_source_event_id: params.correction_source_event_id,
+         selection_params: HistoricalWorkflowParams.to_event_params(selection_params)
+       }}
+    end
   end
 
   @spec group_stage(HistoricalWorkflowParams.t() | map(), map(), map()) ::
@@ -87,46 +91,49 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
   end
 
   @spec request(HistoricalWorkflowParams.t() | map(), map(), map()) ::
-          {:ok, HistoricalWorkflowRequestHandoff.t()}
+          {:ok, HistoricalWorkflowRequestHandoff.t()} | {:error, run_id_error()}
   def request(params, scope, mission) when is_map(params) do
     params = request_params(params)
     workflow = params.workflow || @default_request_workflow
 
-    selection_params =
+    params =
       params
       |> HistoricalWorkflowParams.put(:workflow, workflow)
       |> HistoricalWorkflowParams.put(:stage, @requested_stage)
-      |> tenant_run_id(scope, mission)
 
-    {:ok,
-     %HistoricalWorkflowRequestHandoff{
-       workflow: workflow,
-       stage: @requested_stage,
-       attrs: HistoricalWorkflowParams.attrs(selection_params, scope, mission),
-       point_ids: HistoricalWorkflowParams.request_point_ids(selection_params),
-       selection_params: HistoricalWorkflowParams.to_event_params(selection_params)
-     }}
+    point_ids = HistoricalWorkflowParams.request_point_ids(params)
+
+    with {:ok, selection_params} <- tenant_run_id(params, scope, mission, length(point_ids)) do
+      {:ok,
+       %HistoricalWorkflowRequestHandoff{
+         workflow: workflow,
+         stage: @requested_stage,
+         attrs: HistoricalWorkflowParams.attrs(selection_params, scope, mission),
+         point_ids: point_ids,
+         selection_params: HistoricalWorkflowParams.to_event_params(selection_params)
+       }}
+    end
   end
 
   @spec correction_request(HistoricalWorkflowParams.t() | map(), map(), map()) ::
-          {:ok, HistoricalWorkflowCorrectionRequestHandoff.t()}
+          {:ok, HistoricalWorkflowCorrectionRequestHandoff.t()} | {:error, run_id_error()}
   def correction_request(params, scope, mission) when is_map(params) do
     params = correction_params(params)
     workflow = params.workflow
 
-    selection_params =
-      params
-      |> HistoricalWorkflowParams.put(:workflow, workflow)
-      |> tenant_run_id(scope, mission)
-
-    {:ok,
-     %HistoricalWorkflowCorrectionRequestHandoff{
-       workflow: workflow,
-       stage: @requested_stage,
-       attrs: HistoricalWorkflowParams.attrs(selection_params, scope, mission),
-       correction_params: HistoricalWorkflowParams.to_event_params(params),
-       selection_params: HistoricalWorkflowParams.to_event_params(selection_params)
-     }}
+    with {:ok, selection_params} <-
+           params
+           |> HistoricalWorkflowParams.put(:workflow, workflow)
+           |> tenant_run_id(scope, mission) do
+      {:ok,
+       %HistoricalWorkflowCorrectionRequestHandoff{
+         workflow: workflow,
+         stage: @requested_stage,
+         attrs: HistoricalWorkflowParams.attrs(selection_params, scope, mission),
+         correction_params: HistoricalWorkflowParams.to_event_params(params),
+         selection_params: HistoricalWorkflowParams.to_event_params(selection_params)
+       }}
+    end
   end
 
   @spec retry_job(String.t(), String.t(), map(), map()) ::
@@ -249,25 +256,32 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
   defp new_event_run_id(%HistoricalWorkflowParams{event_id: nil} = params, scope, mission),
     do: tenant_run_id(params, scope, mission)
 
-  defp new_event_run_id(params, _scope, _mission), do: params
+  defp new_event_run_id(params, _scope, _mission), do: {:ok, params}
 
   # Jobs are unique per run id across every organization, so a client-chosen run id that starts
   # a run is namespaced to the tenant (`Cadence.Jobs.tenant_run_id/3`). No run id: the server
-  # mints one.
-  defp tenant_run_id(params, scope, mission) do
+  # mints one. The namespaced id, and every request item derived from it (`<id>-001` when there
+  # is more than one point), must fit the run_id column: 243 bytes of client id for one point,
+  # 239 for up to 999 points.
+  defp tenant_run_id(params, scope, mission, item_count \\ 1) do
     case {params.run_id, Map.get(scope, :organization_id), Map.get(mission, :mission_id)} do
       {run_id, organization_id, mission_id}
       when is_binary(run_id) and is_binary(organization_id) and is_binary(mission_id) ->
-        HistoricalWorkflowParams.put(
-          params,
-          :run_id,
-          Jobs.tenant_run_id(organization_id, mission_id, run_id)
-        )
+        run_id = Jobs.tenant_run_id(organization_id, mission_id, run_id)
+
+        if byte_size(run_id) + item_suffix_bytes(item_count) <= @run_id_bytes,
+          do: {:ok, HistoricalWorkflowParams.put(params, :run_id, run_id)},
+          else: {:error, {:invalid_field, :run_id, :too_large}}
 
       _unscoped ->
-        params
+        {:ok, params}
     end
   end
+
+  defp item_suffix_bytes(item_count) when item_count <= 1, do: 0
+
+  defp item_suffix_bytes(item_count),
+    do: 1 + max(3, item_count |> Integer.to_string() |> byte_size())
 
   defp replacement_run_ids(value) when is_binary(value) do
     value
