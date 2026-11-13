@@ -150,6 +150,9 @@ export const errorCodes = [
   "requirement_not_found",
   "requirement_not_active",
   "requirement_rejected",
+  "template_transition_not_allowed",
+  "policy_changed",
+  "grant_changed",
   // Dashboards
   "dashboard_unavailable",
   "dashboard_not_ready",

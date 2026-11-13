@@ -75,6 +75,18 @@ const templateDetail = (value: unknown, path = "") => ({
       }),
       500,
     ),
+    /** L2 (api agreed 11-13): the last lifecycle move; null while active since create. */
+    state_changed: decoders.optional(
+      nullable(
+        object({
+          state: decoders.known(templateStates),
+          at: decoders.timestamp,
+          actor: orNull(actor),
+          // free-text: the reason a person gave for pausing, resuming or closing it.
+          reason: nullable(string),
+        }),
+      ),
+    ),
   })(value, path),
 });
 export type TemplateDetail = ReturnType<typeof templateDetail>;

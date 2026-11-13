@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ApButton, ApEmptyState, ApPanel, ApTable, type ApColumn } from "@/ui";
+import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, type ApColumn } from "@/ui";
 import { ruleText, sortedTemplates, type PlanningSummary } from "./api.ts";
 
 /** P2 Templates with the rule in words (ContactPlanning.md). */
@@ -43,6 +43,8 @@ const columns: readonly ApColumn[] = [
           class="font-semibold text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
           >{{ row.name }}</RouterLink
         >
+        <ApTag v-if="row.state === 'paused'" class="ml-2" state="caution" label="PAUSED" />
+        <ApTag v-else-if="row.state === 'closed'" class="ml-2" state="off" label="CLOSED" />
       </template>
       <template #cell-rule="{ row }">{{ ruleText(row.rule_summary) }}</template>
       <template #cell-priority="{ row }"

@@ -12,6 +12,7 @@ import {
   ApTabLinks,
   type ApTabLink,
 } from "@/ui";
+import GrantsPanel from "./GrantsPanel.vue";
 import PolicyTab from "./PolicyTab.vue";
 import RequirementsTab from "./RequirementsTab.vue";
 import { vocabularyText } from "@/api";
@@ -50,7 +51,10 @@ const subline = (s: PlanningSummary) =>
     </ApPageHeader>
     <ApTabLinks :links="links" :active="tab" label="Contact planning sections" />
     <!-- Tabs load independently: the policy (CP2) works while the summary (CP1) isn't served yet. -->
-    <PolicyTab v-if="tab === 'policy'" :mission-id="scope.mission.id" />
+    <template v-if="tab === 'policy'">
+      <PolicyTab :mission-id="scope.mission.id" />
+      <GrantsPanel :mission-id="scope.mission.id" />
+    </template>
     <ApPanel v-else-if="notProvided" index="P1" title="Requirements" flush>
       <ApEmptyState
         state="off"

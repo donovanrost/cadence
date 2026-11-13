@@ -2,22 +2,11 @@
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import {
-  ApBreadcrumb,
-  ApButton,
-  ApKeyValue,
-  ApPageHeader,
-  ApPanel,
-  ApRemote,
-  ApTable,
-  formatAbsolute,
-  plural,
-  type ApColumn,
-  type ApCrumb,
-} from "@/ui";
+import { useMissionScope } from "@/shell";
+import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, type ApCrumb } from "@/ui";
 import TemplateEditor from "./TemplateEditor.vue";
-import { fetchTemplate, ruleText, type TemplateDetail } from "./api.ts";
+import TemplateView from "./TemplateView.vue";
+import { fetchPlanning, fetchTemplate } from "./api.ts";
 
 /** Contact planning › one requirement template (CP3): read, edit (new version) or create. */
 const route = useRoute("setup.contact-planning.template");
@@ -33,9 +22,13 @@ const { state, refetch } = useRemoteQuery(
       : null,
   fetchTemplate,
 );
-const session = useSession();
-// Template writes need organization admin (api CP3).
-const canEdit = computed(() => canAdministerOrganization(session, scope.value.organization));
+// Template writes and lifecycle moves share one check (:manage_mission); CP1 says it as planning.edit.
+const planning = useRemoteQuery(() => scope.value.mission.id, fetchPlanning);
+const canEdit = computed(
+  () =>
+    planning.state.value.status === "ready" &&
+    planning.state.value.value.permissions.includes("planning.edit"),
+);
 const editing = ref(false);
 function closed() {
   editing.value = false;
@@ -51,27 +44,6 @@ const crumbs = computed((): readonly ApCrumb[] => [
         : "Template",
   },
 ]);
-const stateWords: Readonly<Record<TemplateDetail["state"], string>> = {
-  active: "Active",
-  paused: "Paused",
-  closed: "Closed",
-  unrecognized: "Not known",
-};
-const facts = (t: TemplateDetail) => [
-  { key: "rule", label: "Rule", value: ruleText(t.rule_summary), mono: true },
-  {
-    key: "applies",
-    label: "Applies to",
-    value: `${t.applies_to} · ${plural(t.applies_to_count, "spacecraft", "spacecraft")} now`,
-  },
-  { key: "priority", label: "Priority", value: t.priority.replaceAll("_", " ") },
-  { key: "state", label: "State", value: stateWords[t.state] },
-];
-const columns: readonly ApColumn[] = [
-  { key: "version", label: "Version", mono: true },
-  { key: "at", label: "Created", mono: true },
-  { key: "by", label: "By" },
-];
 </script>
 
 <template>
@@ -85,7 +57,13 @@ const columns: readonly ApColumn[] = [
         ><span class="font-mono text-sm text-text-3">v{{ state.value.version }}</span></template
       >
       <ApButton
-        v-if="canEdit && !isNew && !editing && state.status === 'ready'"
+        v-if="
+          canEdit &&
+          !isNew &&
+          !editing &&
+          state.status === 'ready' &&
+          state.value.state !== 'closed'
+        "
         @click="editing = true"
         >Edit</ApButton
       >
@@ -104,29 +82,13 @@ const columns: readonly ApColumn[] = [
           :template="value"
           @close="closed"
         />
-        <template v-else>
-          <ApPanel index="T1" title="Rule"
-            ><ApKeyValue :items="facts(value)" :columns="2"
-          /></ApPanel>
-          <ApPanel
-            index="T2"
-            title="History"
-            :meta="plural(value.versions.length, 'version')"
-            flush
-          >
-            <ApTable
-              :columns="columns"
-              :rows="value.versions"
-              :row-key="(v) => String(v.version)"
-              caption="Template versions"
-            >
-              <template #cell-version="{ row }">v{{ row.version }}</template>
-              <template #cell-at="{ row }">{{ formatAbsolute(new Date(row.created_at)) }}</template>
-              <template #cell-by="{ row }">{{ row.actor?.name ?? "Not recorded" }}</template>
-            </ApTable>
-          </ApPanel>
-          <p v-if="!canEdit" class="m-0 text-sm text-text-3">Org admins change contact planning.</p>
-        </template>
+        <TemplateView
+          v-else
+          :mission-id="scope.mission.id"
+          :template="value"
+          :can-edit="canEdit"
+          @moved="refetch"
+        />
       </template>
     </ApRemote>
   </div>
