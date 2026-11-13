@@ -5,7 +5,14 @@ defmodule Cadence.Dashboards.AuthoringErrors do
   def normalize({:error, {:invalid_dashboard_document, _}}), do: {:error, :invalid_document}
 
   def normalize({:error, {code, _}})
-      when code in [:invalid_type, :invalid_title, :invalid_options, :invalid_binding],
+      when code in [
+             :invalid_type,
+             :invalid_title,
+             :invalid_options,
+             :invalid_binding,
+             :library_item_unavailable,
+             :library_version_unavailable
+           ],
       do: {:error, code}
 
   def normalize({:error, code})

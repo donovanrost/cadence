@@ -1,6 +1,13 @@
 defmodule Cadence.Dashboards.AuthoringChanges do
   @moduledoc "Pure document transformations for already admitted authoring commands; no persistence."
-  alias Cadence.Dashboards.{AuthoringDefaults, AuthoringWidget, Document, Section}
+  alias Cadence.Dashboards.{
+    AuthoringDefaults,
+    AuthoringWidget,
+    Document,
+    LibraryLifecycle,
+    Placement,
+    Section
+  }
 
   def apply(document, "rename", fields),
     do:
@@ -57,6 +64,40 @@ defmodule Cadence.Dashboards.AuthoringChanges do
       length(document.placements) >= 1024 -> {:error, :capacity}
       id && Enum.any?(document.placements, &(&1.placement_id == id)) -> {:error, :duplicate_id}
       true -> put_widget(document, fields, nil)
+    end
+  end
+
+  # A reference to a live library item's version, not a copy, so the item's use count stays true.
+  def apply(document, "add_library_widget", fields) do
+    id = fields["placement_id"]
+
+    cond do
+      length(document.placements) >= 1024 ->
+        {:error, :capacity}
+
+      Enum.any?(document.placements, &(&1.placement_id == id)) ->
+        {:error, :duplicate_id}
+
+      true ->
+        with :ok <- optional_section(document, fields["section_id"]),
+             :ok <-
+               LibraryLifecycle.version_available(
+                 document.organization_id,
+                 document.mission_id,
+                 fields["library_item_id"],
+                 fields["version"]
+               ) do
+          placement = %Placement{
+            placement_id: id,
+            section_id: if(fields["section_id"] == "", do: nil, else: fields["section_id"]),
+            content_kind: :library,
+            library_widget_id: fields["library_item_id"],
+            library_version: fields["version"],
+            layout: %{x: nil, y: nil, w: min(4, document.grid.columns), h: 2}
+          }
+
+          {:ok, Document.put_placement(document, placement), %{placement_id: id}}
+        end
     end
   end
 

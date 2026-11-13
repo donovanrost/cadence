@@ -1,5 +1,7 @@
 defmodule Cadence.Reads.Dashboards.Settings do
   @moduledoc "Authorized persisted settings and bounded sharing metadata, independent of frontend delivery."
+  alias Cadence.Accounts
+
   alias Cadence.Dashboards.{
     Authoring,
     AuthoringDefaults,
@@ -85,11 +87,13 @@ defmodule Cadence.Reads.Dashboards.Settings do
       shares:
         org
         |> SettingsStore.shares(mission, dashboard, query["after_share"])
-        |> project_page(&share(&1, now)),
+        |> project_page(&share(&1, now))
+        |> with_creators(),
       snapshots:
         org
         |> SettingsStore.snapshots(mission, dashboard, query["after_snapshot"])
-        |> project_page(&snapshot/1),
+        |> project_page(&snapshot/1)
+        |> with_creators(),
       deployments:
         org
         |> SettingsStore.deployments(mission, dashboard, query["after_deployment"])
@@ -110,12 +114,46 @@ defmodule Cadence.Reads.Dashboards.Settings do
       data_visibility: share.data_visibility,
       state: state,
       expires_at: timestamp(share.expires_at),
-      created_at: timestamp(share.created_at)
+      created_at: timestamp(share.created_at),
+      created_by: share.created_by
     }
   end
 
-  defp snapshot(snapshot),
-    do: %{snapshot | created_at: timestamp(snapshot.created_at)}
+  # D16: the frozen window, or null for a snapshot taken without one (before Q5), never a guess.
+  defp snapshot(snapshot) do
+    context = snapshot.runtime_context || %{}
+
+    window =
+      if snapshot.data_semantics == "frozen_time_window" and is_binary(context["from"]) and
+           is_binary(context["to"]),
+         do: %{from: context["from"], to: context["to"]}
+
+    snapshot
+    |> Map.delete(:runtime_context)
+    |> Map.merge(%{created_at: timestamp(snapshot.created_at), window: window})
+  end
+
+  # D14-D16: who made a share or snapshot, `{id, name | null, kind: "user"}`, or null.
+  defp with_creators(%{rows: rows} = page) do
+    names =
+      rows
+      |> Enum.map(& &1.created_by)
+      |> Enum.filter(&is_binary/1)
+      |> Enum.uniq()
+      |> Map.new(fn id ->
+        case Accounts.fetch_user(id) do
+          {:ok, user} -> {id, user.display_name || user.email}
+          _not_a_user -> {id, nil}
+        end
+      end)
+
+    %{page | rows: Enum.map(rows, &%{&1 | created_by: creator(&1.created_by, names)})}
+  end
+
+  defp creator(id, names) when is_binary(id),
+    do: %{id: id, name: Map.get(names, id), kind: "user"}
+
+  defp creator(_none, _names), do: nil
 
   defp deployment(deployment) do
     unless SettingsInput.text?(deployment.environment, 120, false),

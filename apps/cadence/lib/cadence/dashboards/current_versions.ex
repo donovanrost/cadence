@@ -11,7 +11,14 @@ defmodule Cadence.Dashboards.CurrentVersions do
   Runtime invalidations are broadcast again after commit so subscribers that
   re-read on a pre-commit notice still observe the new version.
   """
-  alias Cadence.Dashboards.{Document, DocumentStore, RuntimeInvalidation, Version}
+  alias Cadence.Dashboards.{
+    Document,
+    DocumentStore,
+    LibraryLifecycle,
+    RuntimeInvalidation,
+    Version
+  }
+
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
@@ -19,7 +26,8 @@ defmodule Cadence.Dashboards.CurrentVersions do
   @spec create(binary(), Document.t(), keyword()) :: {:ok, Document.t()} | {:error, term()}
   def create(organization_id, %Document{} = document, opts \\ []) do
     transact(fn ->
-      with {:ok, created} <-
+      with :ok <- LibraryLifecycle.live_items(organization_id, document.mission_id, document),
+           {:ok, created} <-
              DocumentStore.persist_document(organization_id, document,
                created_by: Keyword.get(opts, :created_by)
              ),
@@ -37,7 +45,9 @@ defmodule Cadence.Dashboards.CurrentVersions do
           {:ok, Document.t()} | {:error, term()}
   def save(organization_id, mission_id, dashboard_id, %Document{} = document, opts) do
     transact(fn ->
-      with {:ok, saved} <-
+      # A placement of a retired library item is refused (Q10), under a share lock on the items.
+      with :ok <- LibraryLifecycle.live_items(organization_id, mission_id, document),
+           {:ok, saved} <-
              DocumentStore.update_document(organization_id, mission_id, dashboard_id, document,
                expected_version: Keyword.fetch!(opts, :expected_version),
                expected_revision: Keyword.get(opts, :expected_revision),

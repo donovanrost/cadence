@@ -6,6 +6,7 @@ defmodule Cadence.OperationalEvents.Event.Kind do
     :binding_set_activated,
     :catalog_revision_registered,
     :dashboard_archived,
+    :dashboard_config_changed,
     :dashboard_comparison_review_requested,
     :dashboard_comparison_review_resolved,
     :dashboard_health_snapshot_captured,

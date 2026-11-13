@@ -175,20 +175,23 @@ defmodule Cadence.Dashboards.Management do
     |> where(
       [snapshot],
       snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
-        snapshot.dashboard_id == ^dashboard_id
+        snapshot.dashboard_id == ^dashboard_id and is_nil(snapshot.deleted_at)
     )
     |> order_by([snapshot], desc: snapshot.inserted_at)
     |> Repo.all()
   end
 
   @spec fetch_snapshot(binary(), binary(), binary()) ::
-          {:ok, DashboardSnapshot.t()} | {:error, :dashboard_snapshot_not_found}
+          {:ok, DashboardSnapshot.t()}
+          | {:error, :dashboard_snapshot_not_found | :dashboard_snapshot_deleted}
   def fetch_snapshot(organization_id, mission_id, snapshot_id) do
     case Repo.get_by(DashboardSnapshot,
            dashboard_snapshot_id: snapshot_id,
            organization_id: organization_id,
            mission_id: mission_id
          ) do
+      # A deleted snapshot's tombstone (Q6): its link says it was deleted.
+      %DashboardSnapshot{deleted_at: %DateTime{}} -> {:error, :dashboard_snapshot_deleted}
       %DashboardSnapshot{} = snapshot -> {:ok, snapshot}
       nil -> {:error, :dashboard_snapshot_not_found}
     end
@@ -235,7 +238,8 @@ defmodule Cadence.Dashboards.Management do
     DashboardLibraryItem
     |> where(
       [item],
-      item.organization_id == ^organization_id and item.mission_id == ^mission_id
+      item.organization_id == ^organization_id and item.mission_id == ^mission_id and
+        is_nil(item.retired_at)
     )
     |> order_by([item], asc: item.name)
     |> Repo.all()
@@ -432,7 +436,7 @@ defmodule Cadence.Dashboards.Management do
     |> where(
       [item],
       item.dashboard_library_item_id == ^item_id and item.organization_id == ^organization_id and
-        item.mission_id == ^mission_id
+        item.mission_id == ^mission_id and is_nil(item.retired_at)
     )
     |> lock("FOR UPDATE")
     |> Repo.one()

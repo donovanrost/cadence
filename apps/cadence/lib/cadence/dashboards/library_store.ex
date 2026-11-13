@@ -8,7 +8,8 @@ defmodule Cadence.Dashboards.LibraryStore do
 
   def load(org, mission, query) do
     Repo.transaction(fn ->
-      items = scoped(DashboardLibraryItem, org, mission)
+      # Retired items leave the listing and read as unavailable (Q10).
+      items = DashboardLibraryItem |> scoped(org, mission) |> where([r], is_nil(r.retired_at))
       selected = selected(items, query)
 
       {item_page, next_item} =

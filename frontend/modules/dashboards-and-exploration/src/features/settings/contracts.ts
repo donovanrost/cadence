@@ -5,12 +5,14 @@ export type SettingsQuery = {
   after_snapshot: string | null;
   after_deployment: string | null;
 };
+export type SettingsCreator = { id: string; name: string | null; kind: "user" };
 export type SettingsShare = {
   id: string;
   data_visibility: Visibility;
   state: "active" | "expired" | "revoked";
   expires_at: string | null;
   created_at: string;
+  created_by: SettingsCreator | null;
 };
 export type SettingsSnapshot = {
   id: string;
@@ -18,6 +20,8 @@ export type SettingsSnapshot = {
   data_visibility: Visibility;
   data_semantics: "definition_at_version_current_data" | "frozen_time_window";
   created_at: string;
+  created_by: SettingsCreator | null;
+  window: { from: string; to: string } | null;
 };
 export type SettingsDeployment = {
   id: string;

@@ -46,6 +46,7 @@ defmodule Cadence.Reads.Dashboards.SharedViews do
          canvas: canvas
        }}
     else
+      {:error, :dashboard_snapshot_deleted} -> {:error, :snapshot_deleted}
       _ -> {:error, :unavailable}
     end
   rescue

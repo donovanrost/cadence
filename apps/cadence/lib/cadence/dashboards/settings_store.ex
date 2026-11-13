@@ -47,19 +47,23 @@ defmodule Cadence.Dashboards.SettingsStore do
       data_visibility: s.data_visibility,
       expires_at: s.expires_at,
       revoked_at: s.revoked_at,
-      created_at: s.inserted_at
+      created_at: s.inserted_at,
+      created_by: s.created_by
     })
     |> page(:dashboard_share_id, cursor)
   end
 
   def snapshots(org, mission, dashboard, cursor) do
     scoped(DashboardSnapshot, org, mission, dashboard)
+    |> where([s], is_nil(s.deleted_at))
     |> select([s], %{
       id: s.dashboard_snapshot_id,
       document_version: s.dashboard_version,
       data_visibility: s.data_visibility,
       data_semantics: s.data_semantics,
-      created_at: s.inserted_at
+      created_at: s.inserted_at,
+      created_by: s.created_by,
+      runtime_context: s.runtime_context
     })
     |> page(:dashboard_snapshot_id, cursor)
   end

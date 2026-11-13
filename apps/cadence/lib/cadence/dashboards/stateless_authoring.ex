@@ -337,6 +337,10 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
 
   defp normalize({:error, :dashboard_not_found}), do: {:error, :not_found}
 
+  # Retired between the command's check and the save (Q10): the placement's field error.
+  defp normalize({:error, {:library_item_retired, _item}}),
+    do: {:error, {:command, nil, :library_item_unavailable, "library_item_id"}}
+
   # A save is a publish, so a readiness failure names what to fix (api D9: the editor marks
   # failing placements).
   defp normalize({:error, {:invalid_dashboard_document, %ValidationResult{errors: errors}}}),

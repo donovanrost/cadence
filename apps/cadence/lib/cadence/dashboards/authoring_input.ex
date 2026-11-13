@@ -55,6 +55,17 @@ defmodule Cadence.Dashboards.AuthoringInput do
     do: map_size(input) == 2 and id?(id) and direction in ~w(up down)
 
   defp valid_payload?("add_widget", input), do: widget?(input, false)
+
+  # Places a library item's version by reference (the library plan's add_library_widget).
+  defp valid_payload?(
+         "add_library_widget",
+         %{"placement_id" => placement, "library_item_id" => item, "version" => version} = input
+       ),
+       do:
+         map_size(input) == 4 and client_id?(placement, "dash_widget_") and id?(item) and
+           is_integer(version) and version in 1..9_007_199_254_740_990 and
+           (input["section_id"] == "" or id?(input["section_id"]))
+
   defp valid_payload?("update_widget", input), do: widget?(input, true)
 
   defp valid_payload?("remove_widget", %{"placement_id" => id} = input),

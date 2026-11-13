@@ -47,6 +47,18 @@ function page(v: unknown, check: (value: unknown) => void) {
   if (p.next !== null && (ids.length !== 25 || p.next !== ids.at(-1))) fail();
 }
 const visibility = (v: unknown) => choice(v, ["authorized_runtime_data", "definition_only"]);
+// D14-D16: who made a share or snapshot, and a snapshot's frozen window.
+function creator(v: unknown) {
+  const c = exact(v, ["id", "name", "kind"]);
+  id(c.id);
+  optional(c.name, (name) => text(name, 512));
+  choice(c.kind, ["user"]);
+}
+function frozenWindow(v: unknown) {
+  const w = exact(v, ["from", "to"]);
+  timestamp(w.from);
+  timestamp(w.to);
+}
 
 export function readSettingsState(value: unknown, context: OpsPageContext): SettingsState {
   const s = exact(value, ["sequence", "phase", "model"]);
@@ -129,12 +141,20 @@ export function readSettingsModel(value: unknown, context: OpsPageContext): Sett
   const q = exact(m.query, ["after_share", "after_snapshot", "after_deployment"]);
   Object.values(q).forEach((v) => optional(v, id));
   page(m.shares, (value) => {
-    const s = exact(value, ["id", "data_visibility", "state", "expires_at", "created_at"]);
+    const s = exact(value, [
+      "id",
+      "data_visibility",
+      "state",
+      "expires_at",
+      "created_at",
+      "created_by",
+    ]);
     visibility(s.data_visibility);
     choice(s.state, ["active", "expired", "revoked"]);
     optional(s.expires_at, timestamp);
     if (s.state === "expired" && s.expires_at === null) fail();
     timestamp(s.created_at);
+    optional(s.created_by, creator);
   });
   page(m.snapshots, (value) => {
     const s = exact(value, [
@@ -143,11 +163,15 @@ export function readSettingsModel(value: unknown, context: OpsPageContext): Sett
       "data_visibility",
       "data_semantics",
       "created_at",
+      "created_by",
+      "window",
     ]);
     version(s.document_version, latest);
     visibility(s.data_visibility);
     choice(s.data_semantics, ["definition_at_version_current_data", "frozen_time_window"]);
     timestamp(s.created_at);
+    optional(s.created_by, creator);
+    optional(s.window, frozenWindow);
   });
   page(m.deployments, (value) => {
     const d = exact(value, [
