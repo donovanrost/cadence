@@ -993,6 +993,10 @@ defmodule CadenceWeb.Router do
       get("/catalog/imports/:import_run_id", CatalogController, :import_run)
       get("/catalog/revisions/:revision_id/rollout", CatalogController, :rollout)
       get("/catalog/revisions/:revision_id/apids", CatalogController, :apids)
+      # L18 source files (owner: api).
+      get("/catalog/artifacts/:artifact_id", CatalogController, :artifact)
+      post("/catalog/artifacts/:artifact_id/reimport", CatalogController, :reimport)
+      get("/catalog/artifacts/:artifact_id/download", CatalogController, :download)
       # L10 activation approvals (owner: api). Contract: docs/apogee/api/activations.md
       get("/activations", ActivationRequestController, :index)
       get("/activations/:request_id", ActivationRequestController, :show)

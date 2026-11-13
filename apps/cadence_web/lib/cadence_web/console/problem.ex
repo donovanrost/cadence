@@ -19,6 +19,8 @@ defmodule CadenceWeb.Console.Problem do
     spacecraft_not_found: {404, "Spacecraft not found."},
     profile_not_found: {404, "Profile not found."},
     catalog_revision_not_found: {404, "Catalog revision not found."},
+    artifact_not_found: {404, "Source file not found."},
+    import_running: {409, "An import of this file is still running."},
     transport_not_found: {404, "Transport not found."},
     plan_not_found: {404, "Contact plan not found."},
     draft_not_found: {404, "Draft not found."},

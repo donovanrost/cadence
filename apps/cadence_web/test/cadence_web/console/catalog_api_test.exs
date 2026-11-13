@@ -165,4 +165,43 @@ defmodule CadenceWeb.Console.CatalogAPITest do
     conn = c.user |> TestFixtures.member_conn() |> get("#{c.base}/revisions/nope/rollout")
     assert json_response(conn, 404)["error"]["code"] == "catalog_revision_not_found"
   end
+
+  test "L18: a source file's page, its download, and importing it again", c do
+    database = TestFixtures.persist_catalog_database!(c.mission)
+
+    database
+    |> TestFixtures.start_catalog_revision_import!(revision_label: "FSW 3.1.0")
+    |> TestFixtures.complete_catalog_import_run!()
+
+    [revision] = get_data(c, c.base)["database"]["revisions"]
+    artifact_id = revision["artifact"]["id"]
+    assert revision["artifact"]["download_url"] == "#{c.base}/artifacts/#{artifact_id}/download"
+
+    page = get_data(c, "#{c.base}/artifacts/#{artifact_id}")
+
+    assert %{"file_name" => "mission.yaml", "sha256" => _, "database" => %{"id" => _}} =
+             page["artifact"]
+
+    assert [%{"number" => 1, "label" => "FSW 3.1.0"}] = page["revisions"]
+    assert [%{"status" => "succeeded"}] = page["import_runs"]
+    assert page["permissions"] == ["catalog.import"]
+
+    download =
+      c.user |> TestFixtures.member_conn() |> get("#{c.base}/artifacts/#{artifact_id}/download")
+
+    assert download.status == 200
+    assert [disposition] = get_resp_header(download, "content-disposition")
+    assert disposition =~ "mission.yaml"
+
+    conn =
+      c.user
+      |> TestFixtures.member_conn()
+      |> post("#{c.base}/artifacts/#{artifact_id}/reimport", %{})
+
+    assert %{"import_run" => %{"id" => run_id}} = json_response(conn, 202)["data"]
+    assert is_binary(run_id)
+
+    missing = c.user |> TestFixtures.member_conn() |> get("#{c.base}/artifacts/nope")
+    assert json_response(missing, 404)["error"]["code"] == "artifact_not_found"
+  end
 end

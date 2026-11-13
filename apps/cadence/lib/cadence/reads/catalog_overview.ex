@@ -39,6 +39,68 @@ defmodule Cadence.Reads.CatalogOverview do
     end
   end
 
+  @doc """
+  K1 (L18): one source file, the revisions made from it and its import runs (newest first, 50).
+  """
+  @spec artifact(binary(), binary(), binary()) :: {:ok, map()} | {:error, :artifact_not_found}
+  def artifact(organization_id, mission_id, artifact_id) do
+    case Catalog.fetch_artifact(organization_id, mission_id, artifact_id) do
+      {:ok, %Artifact{} = artifact} ->
+        {:ok, artifact_detail(organization_id, mission_id, artifact)}
+
+      {:error, _not_found} ->
+        {:error, :artifact_not_found}
+    end
+  end
+
+  @doc "The console download link of a source file (K3)."
+  @spec download_url(binary(), binary() | nil) :: binary() | nil
+  def download_url(_mission_id, nil), do: nil
+
+  def download_url(mission_id, artifact_id),
+    do: "/api/console/v1/missions/#{mission_id}/catalog/artifacts/#{artifact_id}/download"
+
+  defp artifact_detail(organization_id, mission_id, artifact) do
+    labels = importer_labels()
+
+    runs =
+      Catalog.list_import_runs(organization_id, mission_id, artifact_id: artifact.artifact_id)
+
+    runs_by_id = Map.new(runs, &{&1.import_run_id, &1})
+    usage = usage_by_revision(organization_id, mission_id)
+
+    revisions =
+      organization_id
+      |> Catalog.list_revisions(mission_id, artifact.catalog_database_id)
+      |> Enum.filter(&(&1.artifact_id == artifact.artifact_id))
+      |> Enum.map(&revision(&1, Map.get(runs_by_id, &1.import_run_id), usage, labels, mission_id))
+
+    revision_by_run = Map.new(revisions, &{&1.import_run_id, &1})
+
+    database =
+      organization_id
+      |> Catalog.list_databases(mission_id)
+      |> Enum.find(&(&1.catalog_database_id == artifact.catalog_database_id))
+
+    %{
+      artifact: %{
+        id: artifact.artifact_id,
+        file_name: artifact.artifact_name,
+        format_label: Map.get(labels, artifact.format_key),
+        format_version: artifact.format_version,
+        media_type: artifact.media_type,
+        size_bytes: size(artifact.source_artifact),
+        sha256: artifact.content_sha256,
+        uploaded_at: artifact.uploaded_at,
+        uploaded_by: actor(artifact.uploaded_by),
+        database: database && %{id: database.catalog_database_id, name: database.name},
+        download_url: download_url(mission_id, artifact.artifact_id)
+      },
+      revisions: Enum.map(revisions, &Map.take(&1, [:id, :number, :label, :imported_at])),
+      import_runs: runs |> Enum.take(50) |> Enum.map(&run_row(&1, revision_by_run, labels))
+    }
+  end
+
   defp database(organization_id, mission_id, database) do
     id = database.catalog_database_id
     labels = importer_labels()
@@ -53,7 +115,7 @@ defmodule Cadence.Reads.CatalogOverview do
       organization_id
       |> Catalog.list_revisions(mission_id, id)
       |> Enum.take(@revision_limit)
-      |> Enum.map(&revision(&1, Map.get(runs_by_id, &1.import_run_id), usage, labels))
+      |> Enum.map(&revision(&1, Map.get(runs_by_id, &1.import_run_id), usage, labels, mission_id))
 
     revision_by_run = Map.new(revisions, &{&1.import_run_id, &1})
 
@@ -66,7 +128,7 @@ defmodule Cadence.Reads.CatalogOverview do
     }
   end
 
-  defp revision(%Revision{} = revision, run, usage, labels) do
+  defp revision(%Revision{} = revision, run, usage, labels, mission_id) do
     metadata = revision.metadata || %{}
 
     %{
@@ -78,7 +140,8 @@ defmodule Cadence.Reads.CatalogOverview do
         id: revision.artifact_id,
         file_name: metadata["source_artifact_name"],
         format_label: Map.get(labels, metadata["importer_key"]),
-        size_bytes: nil
+        size_bytes: nil,
+        download_url: download_url(mission_id, revision.artifact_id)
       },
       declaration_count: run && run.imported_definition_count,
       command_count: nil,
@@ -150,7 +213,13 @@ defmodule Cadence.Reads.CatalogOverview do
       file: %{
         name: artifact && artifact.artifact_name,
         format_label: Map.get(importer_labels(), run.importer_key),
-        size_bytes: artifact && size(artifact.source_artifact)
+        size_bytes: artifact && size(artifact.source_artifact),
+        artifact:
+          artifact &&
+            %{
+              id: artifact.artifact_id,
+              download_url: download_url(mission_id, artifact.artifact_id)
+            }
       },
       declaration_count: run.imported_definition_count,
       failure_reason: failure_reason(run.failure_reason),

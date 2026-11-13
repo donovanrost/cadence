@@ -380,6 +380,23 @@ The APIDs the revision defines, with their packets: the choices for `handled_api
   compiled yet", not "no APIDs".
 - Errors: `404 catalog_revision_not_found`.
 
+## Source files (§11 L18: K1-K3)
+
+Under `/api/console/v1/missions/:mission_id/catalog/artifacts/:artifact_id`.
+
+- **K1** `GET` → `{artifact: {id, file_name, format_label, format_version, media_type, size_bytes,
+  sha256, uploaded_at, uploaded_by {name} | null, database {id, name}, download_url}, revisions:
+  [{id, number, label, imported_at}] (made from this file), import_runs: [<the index's run row>]
+  (newest first, 50), permissions: ["catalog.import"] | []}`. `404 artifact_not_found`.
+- **K2** `POST /reimport` (empty body) → `202 {import_run: {id}}`: the importer runs again on the
+  stored file and makes a new candidate revision. `409 import_running {import_run_id}` while a run
+  on this file is still going, `403 forbidden`, `404 artifact_not_found`. todo(authz): any mission
+  operator, like an upload.
+- **K3** `GET /download` → the stored bytes as an attachment (`content-disposition` with the file
+  name). It's a plain link: the session cookie is enough. `404 artifact_not_found`.
+- `download_url` also appears on the catalog index's `revision.artifact` and on the import run's
+  `file.artifact {id, download_url}` (null when the run's file is gone).
+
 ## `POST /api/console/v1/missions/:mission_id/catalog/imports` (C2, multipart)
 
 Fields: `file` (at most 50 MiB), `database_id` (optional; when absent, `name` is required and creates
