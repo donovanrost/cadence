@@ -27,8 +27,59 @@ export class ChartEvents {
   renderEventMarkers() {
     if (!this.eventLayer || !this.surface.chart) return;
     this.eventLayer.replaceChildren();
-    for (const marker of this.surface.model.eventMarkers)
-      if (marker.marker_type === "mission_event") this.renderMissionEvent(marker);
+    for (const marker of this.surface.model.eventMarkers) {
+      if (marker.marker_type === "contact_interval") this.renderContactInterval(marker);
+      else if (marker.marker_type === "mission_event") this.renderMissionEvent(marker);
+    }
+  }
+
+  /**
+   * A contact behind the plot (ux Dashboards.md 'Overlays'): raised fill, the station code (or
+   * the contact's label) mono 11 top-left. Booked = dashed outline; realized = filled. Missed or
+   * partial is said in the title, never as a colour.
+   */
+  renderContactInterval(marker: ChartMarker) {
+    const interval = this.surface.intervalBounds(marker);
+    if (!interval) return;
+    const realized = marker.kind === "realized_contact";
+    const status = marker.status ? marker.status.replaceAll("_", " ") : null;
+    const name = marker.station || marker.label || "Contact";
+    const band = document.createElement("div");
+    band.title = [realized ? "Pass" : "Booked pass", name, status].filter(Boolean).join(" · ");
+    band.setAttribute("role", "img");
+    band.setAttribute("aria-label", band.title);
+    Object.assign(band.style, {
+      position: "absolute",
+      left: `${interval.left}px`,
+      top: `${this.surface.chart.bbox.top || 0}px`,
+      width: `${interval.width}px`,
+      height: `${this.surface.chart.bbox.height || this.surface.el.clientHeight}px`,
+      boxSizing: "border-box",
+      // As ApTimeSeries' pass band: a 5% readout tint with hairline edges (the plot shows through).
+      background: realized
+        ? `rgba(${this.surface.themeColor("--chart-color-foreground")}, 0.05)`
+        : "transparent",
+      border: realized ? "0" : `1px dashed ${this.surface.themeColor("--chart-border-30")}`,
+      borderLeft: `1px ${realized ? "solid" : "dashed"} ${this.surface.themeColor("--chart-border-30")}`,
+      borderRight: `1px ${realized ? "solid" : "dashed"} ${this.surface.themeColor("--chart-border-30")}`,
+      pointerEvents: "auto",
+      zIndex: "0",
+    });
+    const label = document.createElement("span");
+    label.textContent = name;
+    Object.assign(label.style, {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      font: this.surface.themeColor("--chart-font"),
+      color: this.surface.themeColor("--chart-label-90"),
+      background: this.surface.themeColor("--chart-surface-96"),
+      padding: "0 4px",
+      whiteSpace: "nowrap",
+      pointerEvents: "none",
+    });
+    band.appendChild(label);
+    this.eventLayer.appendChild(band);
   }
 
   renderMissionEvent(marker: ChartMarker) {
@@ -64,8 +115,8 @@ export class ChartEvents {
       width: "1px",
       height: "100%",
       margin: "0 auto",
-      background: this.surface.eventColor(marker),
-      boxShadow: `0 0 6px ${this.surface.eventColor(marker)}`,
+      // ux: a thin text-4 line, no glow; the event's words are in the title.
+      background: this.surface.themeColor("--chart-muted-62"),
     });
     button.appendChild(line);
 

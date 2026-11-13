@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import TelemetryChart from "../chart/TelemetryChart.vue";
 import type { ReadyPlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
+import { overlayMarkers } from "../model/overlay-markers.ts";
 import { snapshotSeries } from "../model/snapshot-series.ts";
 
 /** Time series on the ported uPlot engine, from the snapshot's decimated envelope frames. */
@@ -24,6 +25,8 @@ const series = computed(() => {
     return null;
   }
 });
+/** Limits and contacts from the placement's overlay frames (ux Dashboards.md 'Overlays'). */
+const overlay = computed(() => overlayMarkers(props.placement));
 const annotations = computed(() =>
   props.placement.annotations.map((a) => ({
     annotation_id: a.id,
@@ -75,6 +78,8 @@ const optional = computed(() => {
       :backfill="{ series: series.primary }"
       :compare_backfill="{ series: series.compare }"
       :annotations="annotations"
+      :limit_markers="[...overlay.limitMarkers]"
+      :event_markers="[...overlay.eventMarkers]"
       :time_mode="timeMode"
       :time_axis="placement.frames[0]?.time_axis ?? context.time_axis"
       :time_from="context.from ?? ''"

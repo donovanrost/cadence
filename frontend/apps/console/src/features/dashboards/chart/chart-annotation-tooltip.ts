@@ -38,7 +38,6 @@ export class ChartAnnotationTooltip {
       borderTop: `2px solid ${color}`,
       borderRadius: "4px",
       background: `${this.surface.themeColor("--chart-panel-98")}`,
-      boxShadow: `0 14px 34px ${this.surface.themeColor("--chart-shadow-38")}`,
       color: `${this.surface.themeColor("--chart-text-96")}`,
       font: "400 12px ui-sans-serif, system-ui, sans-serif",
       lineHeight: "1.4",

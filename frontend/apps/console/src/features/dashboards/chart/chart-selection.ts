@@ -238,7 +238,6 @@ export class ChartSelection {
           : `2px solid ${this.surface.themeColor("--chart-selection-95")}`,
       borderRadius: "999px",
       background: `${this.surface.themeColor("--chart-backfill-18")}`,
-      boxShadow: `0 0 0 1px ${this.surface.themeColor("--chart-shadow-35")}, 0 0 10px ${this.surface.themeColor("--chart-selection-75")}`,
     });
     this.selectionLayer.appendChild(marker);
   }
@@ -260,7 +259,6 @@ export class ChartSelection {
       height: `${this.surface.chart.bbox.height || this.surface.el.clientHeight}px`,
       width: "0",
       borderLeft: `1px dashed ${this.surface.themeColor("--chart-selection-68")}`,
-      boxShadow: `0 0 8px ${this.surface.themeColor("--chart-selection-42")}`,
     });
     this.selectionLayer.appendChild(cursor);
   }
@@ -310,7 +308,6 @@ export class ChartSelection {
       borderLeft: `3px solid ${this.surface.markerColor(marker)}`,
       borderRight: `3px solid ${this.surface.markerColor(marker)}`,
       background: `${this.surface.themeColor("--chart-highlight-8")}`,
-      boxShadow: `0 0 12px ${this.surface.markerColor(marker)}`,
     });
     this.selectionLayer.appendChild(selection);
   }
@@ -332,7 +329,6 @@ export class ChartSelection {
       height: `${this.surface.chart.bbox.height || this.surface.el.clientHeight}px`,
       border: `2px solid ${this.surface.markerColor(marker)}`,
       background: this.surface.limitAnalysisBucketSelectionFill(marker),
-      boxShadow: `0 0 12px ${this.surface.markerColor(marker)}`,
     });
     this.selectionLayer.appendChild(selection);
   }
@@ -354,7 +350,6 @@ export class ChartSelection {
       height: `${this.surface.chart.bbox.height || this.surface.el.clientHeight}px`,
       border: `1px solid ${this.surface.limitIntervalColor(marker)}`,
       background: `${this.surface.themeColor("--chart-caution-13")}`,
-      boxShadow: `0 0 10px ${this.surface.limitIntervalColor(marker)}`,
     });
     this.selectionLayer.appendChild(selection);
   }
@@ -378,7 +373,6 @@ export class ChartSelection {
       borderLeft: `2px solid ${this.surface.eventColor(marker)}`,
       borderRight: `2px solid ${this.surface.eventColor(marker)}`,
       background: `${this.surface.themeColor("--chart-highlight-6")}`,
-      boxShadow: `0 0 10px ${this.surface.eventColor(marker)}`,
     });
     this.selectionLayer.appendChild(selection);
   }

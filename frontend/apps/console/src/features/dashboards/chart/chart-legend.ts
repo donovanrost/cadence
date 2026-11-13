@@ -45,7 +45,6 @@ export class ChartLegend {
       border: `1px solid ${this.surface.themeColor("--chart-label-20")}`,
       borderRadius: "2px",
       background: `${this.surface.themeColor("--chart-tooltip-surface-96")}`,
-      boxShadow: `0 4px 12px ${this.surface.themeColor("--chart-shadow-35")}`,
       color: `${this.surface.themeColor("--chart-foreground-94")}`,
       font: this.surface.themeColor("--chart-font"),
       lineHeight: "1.45",
