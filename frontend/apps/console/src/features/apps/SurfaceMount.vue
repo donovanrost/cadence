@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef, type Component } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Component } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import {
   fullPageSurfaceProps,
@@ -10,6 +10,7 @@ import { createHttpHostBridge, loadFederatedApplication } from "@cadence/plugin-
 import { ApButton, ApCallout } from "@/ui";
 import type { SurfaceHost } from "./host.ts";
 import { lostText, repinningBridge, type RepinningBridge } from "./hostBridge.ts";
+import { surfaceLink, surfaceParams } from "./surfaces.ts";
 import { saveOutcome, type SaveOutcome } from "./saveOutcome.ts";
 
 /**
@@ -26,12 +27,11 @@ const props = defineProps<{
 const emit = defineEmits<{ outcome: [outcome: SaveOutcome] }>();
 const router = useRouter();
 const route = useRoute();
-/** ux U42 deep links: the URL's single-valued query is the surface's starting selection. */
-function selection(): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(route.query).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : [])),
-  );
-}
+/**
+ * ux U42 deep links: the URL's query, limited to the keys this app's surface query accepts, goes to
+ * the server as the host-captured params (plugin-sdk: a surface never sends its own).
+ */
+const params = computed(() => (app ? surfaceParams(app.applicationKey, route.query) : {}));
 const app = props.host.catalog.applications[0];
 const surface = shallowRef<{ component: Component; props: FullPageSurfaceProps } | null>(null);
 const failure = ref<string | null>(null);
@@ -45,10 +45,21 @@ onBeforeRouteLeave(() =>
 );
 let bridge: RepinningBridge | null = null;
 
-/** Console paths stay in the SPA (router base /console/); anything else is a full navigation. */
+/**
+ * Console paths stay in the SPA (router base /console/). So do the surface's own links (its legacy
+ * `/missions/:m/applications/…` paths): they re-open this route with their query. Anything else is a
+ * full navigation.
+ */
 function navigate(href: string) {
-  if (href.startsWith("/console/")) void router.push(href.replace(/^\/console/, ""));
-  else window.location.assign(href);
+  if (href.startsWith("/console/")) return void router.push(href.replace(/^\/console/, ""));
+  const own = surfaceLink(href, props.host.catalog.session.context.missionId ?? "");
+  if (!own) return window.location.assign(href);
+  const surfaceParam = { appKey: own.appKey, surface: own.surface };
+  void router.push(
+    route.name === "setup.spacecraft.app"
+      ? { name: route.name, params: { ...route.params, ...surfaceParam }, query: own.query }
+      : { name: "setup.app", params: surfaceParam, query: own.query },
+  );
 }
 
 async function load() {
@@ -61,7 +72,8 @@ async function load() {
     const module = await loadFederatedApplication(app);
     bridge = repinningBridge({
       session: props.host.catalog.session,
-      create: (session) => createHttpHostBridge(session, app, { navigate }),
+      create: (session) =>
+        createHttpHostBridge(session, app, { navigate, queryParams: params.value }),
       repin: props.repin,
       navigate,
       onReceipt: (actionId, receipt) => {
@@ -75,12 +87,7 @@ async function load() {
     });
     surface.value = {
       component: module.default,
-      props: fullPageSurfaceProps(
-        app,
-        props.host.catalog.session.context,
-        bridge.bridge,
-        selection(),
-      ),
+      props: fullPageSurfaceProps(app, props.host.catalog.session.context, bridge.bridge),
     };
   } catch (cause) {
     failure.value = cause instanceof Error ? cause.message : "it didn't answer.";
@@ -91,6 +98,11 @@ function onVisible() {
   if (document.visibilityState === "visible" && bridge)
     void bridge.repinNow().then((ok) => (lost.value = !ok));
 }
+// A new selection or page (a deep link, or the surface's own link) re-queries with the new params.
+watch(
+  () => JSON.stringify(params.value),
+  () => void load(),
+);
 onMounted(() => {
   void load();
   document.addEventListener("visibilitychange", onVisible);

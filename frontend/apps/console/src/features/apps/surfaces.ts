@@ -12,3 +12,55 @@ export function hostRefusal(e: ApiError): HostRefusal {
   if (e.kind === "not_found") return "unknown";
   return null;
 }
+
+/**
+ * The query keys each app's surface query accepts (ux U42; until the app descriptor lists them). The
+ * server refuses an unknown key and the surface fails, so only these go to the bridge as params.
+ */
+const SURFACE_QUERY_KEYS: Readonly<Record<string, readonly string[]>> = {
+  derived_telemetry: [
+    "definition",
+    "version",
+    "q",
+    "values_q",
+    "spacecraft",
+    "spacecraft_q",
+    "page",
+    "history_page",
+    "values_page",
+    "sources_page",
+    "spacecraft_page",
+  ],
+};
+
+/** The host-captured params for an app's surface query: its declared keys, single values only. */
+export function surfaceParams(
+  appKey: string,
+  query: Readonly<Record<string, unknown>>,
+): Record<string, string> {
+  return Object.fromEntries(
+    (SURFACE_QUERY_KEYS[appKey] ?? []).flatMap((k) => {
+      const v = query[k];
+      return typeof v === "string" ? [[k, v]] : [];
+    }),
+  );
+}
+
+/**
+ * A surface's own link (`/missions/:m/applications/:app/:surface?…`, the legacy host's paths) as a
+ * console target in this mission, so in-surface navigation stays in the SPA. Null for anything else.
+ */
+export function surfaceLink(
+  href: string,
+  missionId: string,
+): Readonly<{ appKey: string; surface: string; query: Record<string, string> }> | null {
+  const url = new URL(href, "http://console.invalid");
+  const [, mission, appKey, surface] =
+    /^\/missions\/([^/]+)\/applications\/([^/]+)\/([^/]+)\/?$/.exec(url.pathname) ?? [];
+  if (!mission || !appKey || !surface || decodeURIComponent(mission) !== missionId) return null;
+  return {
+    appKey: decodeURIComponent(appKey),
+    surface: decodeURIComponent(surface),
+    query: Object.fromEntries(url.searchParams),
+  };
+}
