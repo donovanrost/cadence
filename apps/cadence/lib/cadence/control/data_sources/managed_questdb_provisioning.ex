@@ -20,7 +20,9 @@ defmodule Cadence.Control.DataSources.ManagedQuestDBProvisioning do
     range_scan?: true,
     bounded_history?: true,
     watermarks?: true,
-    native_decimation?: false
+    # Provisioned through the Cadence QuestDB schema, which decimates natively (as the managed
+    # default, 2026-11-13); false made time-series dashboards on it fail publish readiness.
+    native_decimation?: true
   }
 
   @type plan :: %{
