@@ -778,6 +778,10 @@ then the fix:
   - Retire: "BATT_V has a red-limit alarm raised now. Retiring these limits clears it when this is applied."
     Placeholder: "Why it's safe to clear it".
   - With a named set: "BATT_V's ECLIPSE limits have a red-limit alarm raised now. …"
-  - One HOLD per point and set. The row links `Open alarm` (episode_id) to the alarm page.
+  - One HOLD per point and set. The row links `Open in Alarms` (Alarms filtered by `?point=<point_id>`). There's
+    no per-episode page, and limits are mission-wide, so every spacecraft raised on that point shows (fe-setup).
+- **Kind word** on Changes: `Limits`.
+- **Hold placeholders in Apply's one `Why` field** (also for U40's holds): with exactly one acknowledgeable hold,
+  the field uses that hold's placeholder. With several, it uses "Why it's safe to apply despite these holds".
 - **Field errors** keep today's direct-save messages. Two new ones: "Limits for BATT_V already exist. Edit them
   instead." (with a link to them) and "The point and limit set can't change after the limits are added."
