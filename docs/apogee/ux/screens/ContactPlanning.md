@@ -59,8 +59,10 @@ tabs: Requirements · Policy
   - **A template-generated occurrence** (fe-setup 11-13) has no Edit, because edits go to its template. It does
     offer `Close…` and `Cancel…` for that one day. The sheet's scope line comes first: "This closes only the
     11-15 occurrence of “Daily downlink”. The template's other days aren't affected." (Cancel: "This cancels
-    only…"). Then the same "Use this when…" sentence, and it ends "This is final for 11-15." It doesn't promise
-    the template will or won't regenerate that day (U20) until domain says.
+    only…"). Then the same "Use this when…" sentence, and it ends: "The template won't bring this day back, unless
+    the template is edited: an edit generates every remaining day afresh." (domain 11-13: occurrences are unique
+    per template version.) If domain changes that rule (it suspects edits duplicate open days), this sentence
+    changes with it.
 - **Template page:** the rule as a form generated from the requirement fields (contacts per day,
   window `earliest_start` → `latest_end` in UTC time-of-day, minimum and preferred duration,
   minimum separation (contacts at least this far apart; it's **not** a maximum gap, which isn't modelled), direction downlink / uplink / both, intent, priority, minimum data
