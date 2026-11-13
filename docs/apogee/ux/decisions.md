@@ -699,6 +699,9 @@ more than 24 h old.
     cancel the waiting requests first." Booked passes show a caution callout with the passes sentence and its
     link, and Stage stays enabled. When the dry run can't tell, the sheet keeps the plain line, and the HOLD
     catches it on Changes.
+  - **Already staged** (fe-setup 674a65a1b, qa's duplicate find): the sheet shows an info callout, not nominal
+    (it isn't an outcome): "Archiving EARENDIL-009 is already staged. It happens when the change set is applied."
+    with `Open Changes`. `Stage archive` is disabled with "Already staged." The two don't repeat each other.
   - **Refusal `spacecraft_archived`** (releasing or uplinking a command for an archived spacecraft): "EARENDIL-312
     is archived, so commands can't be released or sent to it." On a release it reads as the release outcome:
     "Not released: EARENDIL-312 is archived." In Compose, an archived target isn't offered.
