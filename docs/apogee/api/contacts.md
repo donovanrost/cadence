@@ -51,7 +51,7 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
   this read.
 - `state` is the reservation lifecycle: `requesting | pending | confirmed | active | completed |
   unknown | rejected | canceling | canceled | failed`. `pass_phase` and `delivery_state` are the
-  provider's pass and delivery progress. The UI's state model (Requested / Confirmed / In contact /
+  provider's pass and delivery progress, `null` until the provider reports them. The UI's state model (Requested / Confirmed / In contact /
   Realized / …) is a client decoding of these three fields (lead's `features/scheduling/contact.ts`).
 - `station`: from the reservation's newest snapshot (Cadence-accepted, then provider-confirmed,
   then requested). `ref` is the provider's station reference. `id`, `code` and `name` are filled
@@ -59,8 +59,9 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
   `metadata.provider_station_ref`), and are `null` otherwise. Show `ref` then.
 - `antenna`: `null` unless the provider names one. `label` is always `null` (providers only give a ref).
 - **Nothing is derived** (DECISIONS #4, no propagation): `max_elevation_deg`, `uplink_capable` and
-  `cost` are `null` unless the provider supplied them in the snapshot. `source.synthetic` is `true`
-  for the simulator's deterministic windows. Say so in the UI.
+  `cost` are `null` unless the provider supplied them in the snapshot (`cost` is then `{amount,
+  currency}`). `source.synthetic` is `true` for the simulator's deterministic windows. Say so in the
+  UI. `source.provider_name` and `source.synthetic` are `null` when the snapshot doesn't say.
 - `plan`: the contact plan revision that booked it, or `null` for direct bookings.
 - `ended_by` (qa #30): who ended a `canceled`, `rejected` or `failed` booking, else `null`.
   `{kind: "user", id, name}` for a cancel from the contact workspace or an operator's #53
@@ -125,8 +126,8 @@ per open change, `id` = the change id, `conflict`:
 
 The item carries the usual `contact_id`, `station`, `provider`, `starts_at` and `raised_at`, plus
 `deadline_at` and `provider_change: {id, classification, state, deadline_at, provider_revision,
-proposal_hash, already_effective, fields: [{field, label, before_json, after_json}]}`. Values are
-JSON text, so they're 64-bit safe.
+proposal_hash, already_effective, expired, fields: [{field, label, before_json, after_json}]}`
+(`expired`: pending when its pass ended, below). Values are JSON text, so they're 64-bit safe.
 - `label` is the server's word for the known keys: `starts_at` "AOS", `ends_at` "LOS", `ground_station_ref` "Station", `antenna_or_service_pool_ref` "Antenna",
   `service_profile_ref` "Service profile", `delivery_profile_ref` "Delivery profile",
   `spacecraft_ref` "Spacecraft", `pass_phase` "Pass phase", `status` "Status". It's null for any
@@ -140,8 +141,9 @@ JSON text, so they're 64-bit safe.
   after the pass ends.
 - `GET /passes/:id` adds `provider_changes`: the pass's history (ux U44). That's every change,
   newest first, at most 50, as `provider_change` plus `raised_at` and `resolution: {action:
-  approved | rejected | acknowledged | superseded | policy_accepted, by: {id, name} | null, at,
-  reason} | null` (null while open or expired). `state` is the lifecycle, or `expired`.
+  approved | rejected | acknowledged | superseded | policy_accepted | observed | apply_failed,
+  by: {id, name} | null, at, reason} | null` (null while open or expired; `action` is the change's
+  decided lifecycle state). `state` is the lifecycle, or `expired`.
 - **At the deadline Cadence does nothing by itself.** Approve and reject are refused from then on
   (`409 provider_change_deadline_passed`), and the change stays open until the provider's next
   revision supersedes it: the provider decides.
@@ -150,7 +152,7 @@ JSON text, so they're 64-bit safe.
   then a failed release.
 
 `POST …/attention/provider_change/:id/approve | reject | acknowledge {reason, proposal_hash}` →
-`200 {item: <the attention object> | null}` (null once decided). Organization admins only:
+`200 {data: {item: <the attention object> | null}}` (null once decided). Organization admins only:
 `:approve_provider_changes`.
 
 - `422 invalid_params`: `details.reason` ("Say why.") or `details.proposal_hash`.
@@ -165,8 +167,10 @@ provider decides then; ux U44). Acknowledgement and configuration-failure rows a
 
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
-`:source` and `:id` are the attention object's `source` and `id` (`pass_resolution`, the
-resolution id). Members who can operate the mission (`operate_mission`); the actor is always the
+`:source` and `:id` are the attention object's `source` and `id`: `pass_resolution` (the
+resolution id), or `contact_settlement` (only a lost-telemetry item, acknowledge only; see
+`domain/contact-settlement.md`). `POST …/attention/contact_settlement/:id/retry` starts a stopped
+replay again (`409 retry_not_manual` otherwise). Members who can operate the mission (`operate_mission`); the actor is always the
 signed-in user (#30).
 
 - `acknowledge`: no body. The item stays listed, sorted last (U21).
@@ -195,8 +199,9 @@ and `attention`.
     `> 0` crit, `0` caution. It's `null` for other states.
   - The whole field is `null` when the pass has no live uplink session: a future pass before its
     session starts, a downlink-only pass, or one that isn't booked. Show no tag then, as for `ready`.
-  - A pass row's `attention` holds only `pass_resolution` items (the drawer's resolution block).
-    A blocked uplink shows through `uplink_readiness`.
+  - A pass row's `attention` is its highest-ranked open item: `pass_resolution`, `pass_release` or
+    `provider_change` (precedence under Provider changes). A blocked uplink shows through
+    `uplink_readiness`, not `attention`.
 - **Command groups** (list rows and show) gain `uplink`, set on `queued` groups that aren't
   `finished`, otherwise `null`:
   `{pass: {reservation_id, contact_id, station {ref, id, code, name}, starts_at, ends_at},
@@ -214,7 +219,8 @@ and `attention`.
   - Returns `{data: {state: "ready", ready_at}}`.
   - Errors:
     - `409 uplink_recovery_refused` (`details.reason`, the key);
-    - `409 uplink_not_blocked`;
+    - `409 uplink_not_blocked` (the pass is already `ready`; a `qualifying` pass is qualified
+      again);
     - `403 forbidden`;
     - `404 pass_not_found` (also a pass with no scheduled contact);
     - `422 actor_not_assignable`.
@@ -262,6 +268,8 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
 - `booked_into_outage`: a live booking falls in a station outage or maintenance window (S7).
 - `coverage_gap`: a spacecraft has no live pass for longer than `max_gap_s`. A pass up to
   `max_gap_s` before the window counts, so a gap is measured from the last pass, not from `from`.
+- Every finding carries every key: `overlap_s` is `null` except on `station_double_booked`, and
+  `station` is `null` on `coverage_gap`.
 - `fix` is always `null` for now: proposals (another station, an opportunity) need a provider
   search. Show the problem and `Open in Plan`.
 - Header counts: `counts.conflicts` (double-bookings + outage bookings), `counts.gaps`.
@@ -432,8 +440,10 @@ volume, freshness[]}`:
 - `by_station[]` (R1): station identity, provider, planned, realized, partial, missed, failed,
   canceled, flown and planned seconds. There's no billing, so billed minutes are absent.
 - `by_cause[]` (R2): `{cause, cause_source, owner, missed, partial}`.
-- `freshness[]` (h1 meta): per provider `{provider {id, name}, last_report_at, pending_reports,
-  oldest_pending_los, cursor_healthy}`.
+- `freshness[]` (h1 meta): per provider `{provider_id, provider {id, name, account_id} | null,
+  last_report_at, pending_reports, oldest_pending_los, cursor_healthy}`. `cursor_healthy` is
+  `null` when the provider's account has no event cursor; `provider` is `null` for a provider the
+  mission no longer lists. Elsewhere in pass review `provider` is also `{id, name, account_id}`.
 
 ### `GET /pass-review/rows` (R4)
 
@@ -454,6 +464,7 @@ realized_contact_id, scheduled_contact_id}`.
 - `owner`: `provider | us | weather | unknown`. `disputable` = owner is the provider (show `Dispute`).
   A provider-reported station window counts as the provider's; an operator-declared one counts as ours.
 - `provisional`: no provider report yet.
+- `station` is all `null` (`ref` too) when the pass result has no ground station ref.
 
 ### `GET /pass-review/daily` (R3)
 

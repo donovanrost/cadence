@@ -389,7 +389,7 @@ shape). The passes come from existing reads, so the row logic isn't copied:
 ```json
 {"observed_at": "…",
  "coverage": {
-   "last_contact": {"pass_id": "…", "station": {"id", "code", "name"}, "los_at": "…"} | null,
+   "last_contact": {"pass_id": "…", "station": {"ref", "id", "code", "name"}, "los_at": "…"} | null,
    "next_contact": {"pass_id": "…", "station": {…}, "aos_at": "…"} | null,
    "passes_next_24h": 9,
    "longest_gap": {"seconds": 19860, "from": "…", "to": "…"} | null,

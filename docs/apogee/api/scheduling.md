@@ -47,6 +47,10 @@ S4 edits/alternatives and S8 re-plan (K2 v1: after provider changes) are also in
 
 ## 3. Proposed endpoints
 
+> **Superseded by §4** (drift sweep 2026-11-13): this was the first proposal. §4 is the contract;
+> the shapes below (`day_start/day_end`, `counts.selected`, a flat repair read, `GET /demand`
+> with `plan_id`/`run_id`) aren't what the server answers.
+
 - **S6** `GET /contact-plans?day=YYYY-MM-DD&state=` → `{plans: [{id, version, state, day_start, day_end,
   author, counts: {selected, conflicts, unsatisfied}, updated_at}]}` (≤ 100, newest first).
 - **S3** `POST /contact-plans/drafts {day, operation_id}` → `202 {run_id, state: queued}`. It runs
@@ -72,7 +76,7 @@ S4 edits/alternatives and S8 re-plan (K2 v1: after provider changes) are also in
 ### Live: `scheduling_progress` on `mission:<id>`
 
 `{kind: "draft" | "execute", id, state: "running" | "finished" | "failed", reason, at}`, sent when
-off-request work starts and ends. It also emits `invalidate` with `contacts`. Treat it as a hint and
+off-request work starts and ends. It also emits `invalidate` with `contacts` and `contact_plans`. Treat it as a hint and
 refetch the read. The read is the truth.
 
 ### `GET /contact-plans?day=YYYY-MM-DD&state=` (S6)
@@ -81,7 +85,8 @@ refetch the read. The read is the truth.
 unsatisfied}, ready_to_approve, updated_at}]}`, newest first, capped at 100. `window` spans the
 selected passes (`null` for an empty plan); `day` matches the window's start date (UTC). `state` is
 one of `draft, pending_approval, approved, executing, partially_reserved, reserved, failed,
-canceled, superseded`.
+canceled, superseded`, or the derived `interrupted` / `unconfirmed` (§Plan states). The `state`
+filter accepts only the stored states for now (`?state=interrupted` is a 422).
 
 ### `GET /contact-plans/:plan_id[?version=n]`
 
@@ -108,7 +113,8 @@ The list row, plus:
 **Times:** `created_at` is when the plan was first drafted, `version_created_at` when the shown
 version was made, and `updated_at` its last change.
 
-**Author** (`author` on rows and detail): `{kind: "user", id, name}` for a person (a repair
+**Author** (`author` on rows and detail): `{kind: "user", id, name}` for a person (`id` can be
+missing on older plans that recorded only a name) (a repair
 proposal's author is whoever started the repair), `{kind: "system", name: "Cadence"}` for an
 automatic run, or `null` when it isn't known.
 
@@ -153,6 +159,8 @@ runs the plan **off the request**.
   run (persisted, so it works on any node).
 - `422 planning_not_set_up` with `details.missing`: `["fleet_planning_policy"]` or
   `["contact_requirements"]`. `422 horizon_exceeds_policy`. `409 inputs_changed` (retry).
+  Other planning refusals answer `422 <code>`, among them `fleet_planning_requirement_not_active`
+  and `fleet_repair_horizon_exceeded`.
 
 The review evidence pins its instant (`evidence.as_of`, G1): which requirements count as still in
 the future (and so are superseded by a template) is decided at that instant, and the start reloads
@@ -162,7 +170,9 @@ hash. Later review pages pass `as_of` back; a review older than 15 minutes asks 
 ### `GET /contact-plans/drafts/:run_id`
 
 `{run: {id, state, phase, horizon: {from, to}, failure, started_at, updated_at, stopped_at}, plan:
-<plan detail> | null}`. `stopped_at` is `null` while the run is queued or running. For a
+<plan> | null}`. `plan` is the plan read with its derived state, not the full plan detail: it has
+no `passes[].booking`, `unconfirmed`, `execution`, `chain` or `chain_head` (a draft has none; read
+`GET /contact-plans/:id` for them). `stopped_at` is `null` while the run is queued or running. For a
 finished run (`completed | partial | failed | canceled`) it's the completion time. For an
 `interrupted` run it's the last time the run recorded progress: nothing records the moment a
 node stops, so say "stopped at or after".
@@ -182,7 +192,7 @@ Resumes an interrupted run off the request and returns `202 {run_id, state: "run
 ### `POST /contact-plans/:plan_id/submit` (S5)
 
 Body `{expected_version, operation_id, reason?, acknowledgements?: [{requirement_id,
-requirement_version?, reason}]}`. `reason` defaults to a console note; acknowledgement reasons are
+requirement_version?, reason}]}`. `operation_id` is 1–120 bytes. `reason` defaults to a console note; acknowledgement reasons are
 10–2000 characters. `requirement_version` is accepted and ignored, because the server pins the
 version from the plan.
 
@@ -217,8 +227,8 @@ requirement.
 Submitting a draft whose current version was sent back (its latest decision is `rejected`) is
 allowed as is: the server cuts the next version with the same selected and locked passes
 (`rationale: "Resubmitted after send back"`) and submits that. The rejection stays on the old
-version. Send the `expected_version` you were shown (the sent-back one); the reply's plan detail
-has the new `version`. Approved or undecided versions submit as before.
+version. Send the `expected_version` you were shown (the sent-back one); the reply is the usual
+`{plan_id, state, outcome}`, so re-read the plan for the new `version`. Approved or undecided versions submit as before.
 
 The lock, the version check, the cut, the submit and the round record are one transaction: a
 second click with the same `expected_version` gets `409 plan_changed` and never cuts another
@@ -324,7 +334,7 @@ Cadence re-reads the provider first. Reply `200 {outcome, provider_answer, resol
 {kind, id, name}, at, note, provider_reference}}`:
 
 - `outcome: "provider_answered"`: the provider answered on the re-read, so its answer settled the
-  booking and no operator claim was recorded. `provider_answer` is `"booked" | "not_booked"`.
+  booking. The resolution recorded says so (it's no operator claim about the booking). `provider_answer` is `"booked" | "not_booked"`.
 - `outcome: "attested"` (Mark booked) or `"not_booked"` (Cadence cancels first, then fails the
   item; repair treats it as lost). `provider_answer` is `null`.
 
@@ -563,12 +573,13 @@ within the active fleet planning policy. Under `/contact-planning`:
 - `GET /grants` (mission operators) → `{grants: [grant], service_identities: [{id, name, state:
   active | disabled}] (this mission's), policy_version: <active policy version> | null, limits:
   {maximum_horizon_seconds, maximum_contacts, maximum_execution_concurrency} (the active policy's
-  ceilings, for hints; null without a policy), permissions: ["grants.manage"] | []}`. A grant is
+  ceilings, for hints; each `null` without a policy, the object itself is always present), permissions: ["grants.manage"] | []}`. A grant is
   `{id, service_identity {id, name}, policy_version, allowed_actions: [plan | repair | execute |
   submit | approve], maximum_horizon_seconds, maximum_contacts, maximum_execution_concurrency,
   maximum_estimated_cost_micros, currency, valid_from, valid_until, state: active | revoked | expired,
-  approved_by {id, name}, approved_at, reason, revoked_by {id, name} | null, revoked_at,
-  revocation_reason, sha256}`. `expired` is computed (active past `valid_until`). Cost stays
+  approved_by {id, name}, approved_at, reason, revoked_by {id, name} | null, revoked_at | null,
+  revocation_reason | null, sha256}`. `service_identity.name`, `currency` and
+  `maximum_estimated_cost_micros` can be `null`. `expired` is computed (active past `valid_until`). Cost stays
   hidden in the console (#63).
 - `POST /grants` (organization admins) `{service_identity_id, maximum_horizon_seconds,
   maximum_contacts, maximum_execution_concurrency, valid_days (1–365), reason, policy_version}` →
