@@ -32,7 +32,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Port the lane fix (b7cc12de, 4ae3fd8e) to `develop`; then §8 8d (Now P3 stale-change-set source, Timeline `config` applied events), then 8e (K1 per-pass booking state). Done: C3 rollout read + profiles `catalog_revision` (34b8cc27). Done: #42 port to `develop` (f9d89f83). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
 | **api-ops** | §8 api-ops 8: sign-in and current-password attempt limit, then Audit entries for password change and session revoke. Done: qa #46 simulator Orchestrator survives Store timeouts (3ea527b2: ETS-mirrored Store reads, guarded tick steps, linked-stream sweep; live after qa's sim restart); flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live; #46: qa sim restart |
-| **domain** | §8 domain 7 + 8 (K1 demand measures and provider freeze, shapes OK'd, building); then 7b `max_gap_seconds` (director approved); then the UplinkQualification readiness reason cleanup. With qa after 11-14 LOS: #65 step 3 evidence queries | — (done: #36 catalog generations 0c615544, a01cf95f, 450369b9, 2ef4ca79, 7533d50a; monitoring fixture + end-to-end test 865d51fd; #71, mission_runtime, reconciler rescue) |
+| **domain** | §8 7b `max_gap_seconds` (DECISIONS #74, a2718c8a; shape sent to fe-setup): model, migration (on qa's go), evaluator, planner. With qa after 11-14 LOS: #65 step 3 evidence queries. Done: K1 plan measures + provider freeze + `expires_at` (c38bb5de), #36 catalog generations, monitoring fixture 865d51fd | — |
 
 ## 2. Ops
 
@@ -66,10 +66,10 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | ~~Compose layout: ux rules; default is to accept Command.md's C1–C5 as built (#64)~~ accepted as built (ux 198d12ca; fe-ops b8fe16e0) | ux | — |
 | ~~Draft autosave / `Save draft` / `DRAFT SAVED`~~ done (c0510343, e262c233; ux 601a32f9; api a4d19e69) | fe-ops | — |
-| Per-target values (Same for all / Per target, Paste CSV, Now column) | fe-ops | — |
+| Per-target values (Same for all / Per target, Paste CSV, Now column) | fe-ops | api: the group create body has one argument set per command (fe-ops sent api a proposal) |
 | ~~Verifier line / "No verifier: this command can't turn green"~~ done (b8fe16e0) | fe-ops | — |
 | Keep/Drop callout when a target leaves a live query | fe-ops | — |
-| Reorder by drag and Alt+↑/↓ | fe-ops | — |
+| Reorder: ~~move up / down~~ built (f2085bfd); drag and Alt+↑/↓ | fe-ops | — |
 | ~~`CATALOG rev N` meta~~ done (531715e4) | fe-ops | — |
 | `ABORT AVAILABLE UNTIL…` caption *(unverified)* | fe-ops | — |
 
@@ -232,7 +232,9 @@ missing endpoint or decision; an item with no blocker can start now.
 8. ~~qa #19: map domain's `:apply_interrupted` (33529f29)~~ done (config_json 503; fe copy c16546c4). qa closes.
 8c. Port the lane fix (b7cc12de, 4ae3fd8e: `protocol_recovery_required` is a bounded wait) to `develop`, in a develop worktree (lead, 11-12).
 8d. Now P3 "change set staged > 24 h" attention source, and Timeline `config` events for applied revisions ("Applied r6 · 2 changes", "Rolled back to r4"; the Audit read has them, organization_audit.ex). Check first what exists; send fe-ops the shape before shipping (lead, 11-12).
-8e. K1 per-contact booking state (lead, 11-12): plan detail `passes[]` gain `booking: {state: never_sent | sent | confirmed | uncertain | rejected | failed, reason, at} | null` (null before execution), matching the `execution` counts (cf3cd37a), so K1 draws Requested → Confirmed / Rejected per bar and rejections become Demand rows. Or name an existing read that joins on `snapshot_id`. Shape to lead first.
+8e. K1 per-contact booking state (lead OK 11-12, api building after 8d): plan detail `passes[].booking {state: never_sent | confirmed | uncertain | rejected | failed, reason, at} | null`; `sent` dropped (it's the umbrella in the counts); reason `sending` while requesting. Joined within the approved version.
+8f. Profile kind schema for New profile (fe-setup asked; api queued after 8e).
+8g. **Scope call (director):** a console requirement create / new-version endpoint. Requirements are authored only in the legacy ops pages, so fe-setup's `max_gap_seconds` field (#74) has no form to live in. Either api builds requirement writes and fe-setup a requirement form (more than 'one field'), or `max_gap_seconds` is set in legacy for now.
 8b. ~~qa #42 verify race~~ done (32b945f3, DECISIONS #72; api-ops reviewed; both follow-ups in: call-site lock tests and the global mission-then-attempt order). Ported to `develop` (f9d89f83). Waiting: qa's 'Accepted on board' rerun on 023's next pass. (#38 release targeting verified live 21:15Z, issues 3953f19e.)
 
 **api-ops** (director, in this order)
@@ -256,9 +258,9 @@ missing endpoint or decision; an item with no blocker can start now.
 1. ~~qa #34~~ done (#59, e683b3e2).
 2. ~~qa #19 server side~~ done (33529f29).
 3. ~~Catalog-path generations (#36)~~ done (0c615544, a01cf95f, 59a7433c, 450369b9; C3 2ef4ca79; >100 spacecraft 7533d50a; monitoring fixture and end-to-end test 865d51fd). #65 steps 3 and 4 are ops (qa 11-14 00:33Z; step 4 on the director's go).
-7. K1 demand measures (lead OK 11-12, building): plan `demand.spacecraft[].longest_gap {seconds, limit_seconds: null, from, to} | null` (day edges count) and `uplink_passes {have, need: null}` (requested, not confirmed); alternatives `effect.longest_gap_after_seconds` and top-level `longest_gap`.
+7. ~~K1 demand measures~~ done (c38bb5de): `longest_gap` (edges count), `uplink_passes` (requested), alternatives' `longest_gap` and `longest_gap_after_seconds`. Lead reads them (4d80d394).
 7b. `max_gap_seconds` on contact requirements (director approved 11-12, ~1 day): evaluator hard failure `max_gap_exceeded`, fills `limit_seconds`, counts in `rule_met`. Then K1 C's gap HOLD and S4 'closes gap to 6h10' become real (lead), and the Setup › Contact planning requirement form gets the field (fe-setup).
-8. Provider freeze (lead OK 11-12): plan `provider_freeze {at, provider {id, name}, snapshot_id} | null` + `by_provider`, the earliest `expires_at` among unsent passes (providers publish no day cutoff; on the simulator offers expire at AOS). Building with 7. Header wording: ux.
+8. ~~Provider freeze~~ done (c38bb5de): `provider_freeze {at, provider, snapshot_id, by_provider}` and `passes[].expires_at`. Lead builds the 'Next offer expires' clock.
 9. UplinkQualification readiness reason normalization (domain's deferred cleanup).
 4. ~~Spacecraft archive model (#50)~~ done (7dbd3994, e0232291, 5ee6d6e8; rollback of create verified c8526c57).
 4b. ~~Reconciler give-up~~ fixed (292c8e6b: a raising reconcile is rescued as `reconcile_crashed`, polling continues). Original: the mission runtime reconciler has crash-looped since the 22:14Z restart (`binary_to_existing_atom("criteria")` in `MissionModel.Reference.new`). No runtime spec, so no spacecraft ingress. No live remedy during the #65 pass (director). Then one qa restart, plus an `active_spec` check in the runbook.
