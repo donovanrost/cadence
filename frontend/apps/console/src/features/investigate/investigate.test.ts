@@ -9,7 +9,7 @@ import {
 } from "./history/api.ts";
 import { argsSummary, evidenceWords, releaseRule } from "./uplink/api.ts";
 import { byDay, bytesWords, causeWithOwner, rebooked, recentTag, ruleWords } from "./passes/api.ts";
-import { catalogCaution, jsonWords, routingWords } from "./configuration/api.ts";
+import { catalogCaution, jsonWords, protocolLine, routingWords } from "./configuration/api.ts";
 import { filterCounts, pointMark, pointsFrom, toCsv, visiblePoints } from "./telemetry/model.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftId as spacecraftIdReader, decode } from "@/api/index.ts";
@@ -532,5 +532,25 @@ describe("B4 drawing (§B4)", () => {
     expect(aosShort(sc("a", { next_aos_at: "2026-11-12T00:52:00Z" }), now)).toBe("AOS T−52m");
     expect(aosShort(sc("a", { next_aos_at: "2026-11-12T03:10:00Z" }), now)).toBe("AOS T−3h 10m");
     expect(aosShort(sc("a", { in_contact: true }), now)).toBe("IN CONTACT");
+  });
+});
+
+describe("G1 protocol line (§11c parity; api c61444ede)", () => {
+  const profile = (o: Record<string, unknown> = {}) => ({
+    id: "p",
+    name: "Block 1",
+    version: 6,
+    latest_version: 6,
+    lifecycle: "active" as const,
+    uplink_protocol: "tc" as const,
+    packet_protocol: "space_packet" as const,
+    ...o,
+  });
+  it("says what the pinned version runs, dropping what it doesn't say", () => {
+    expect(protocolLine(profile())).toBe("TC uplink · Space Packet");
+    expect(protocolLine(profile({ uplink_protocol: "uslp", packet_protocol: null }))).toBe(
+      "USLP uplink",
+    );
+    expect(protocolLine(profile({ uplink_protocol: null, packet_protocol: null }))).toBeNull();
   });
 });

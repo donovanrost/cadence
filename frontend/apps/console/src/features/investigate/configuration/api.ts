@@ -4,6 +4,7 @@ import {
   actor as sharedActor,
   decoders as d,
   request,
+  vocabularyText,
   type ApiResult,
   type Decoded,
 } from "@/api/index.ts";
@@ -33,6 +34,10 @@ const configurationReader = d.object({
       name: d.nullable(d.string),
       version: d.nullable(d.integer),
       latest_version: d.nullable(d.integer),
+      // §11c parity (api c61444ede): the pinned version's facts; null when it can't be read.
+      lifecycle: d.optional(d.nullable(d.knownText(["active", "deleted"] as const))),
+      uplink_protocol: d.optional(d.nullable(d.knownText(["tc", "uslp"] as const))),
+      packet_protocol: d.optional(d.nullable(d.knownText(["space_packet"] as const))),
     }),
   ),
   catalog: d.object({ running: catalogRev, profile: catalogRev }),
@@ -117,6 +122,21 @@ export function catalogCaution(c: SpacecraftConfiguration["catalog"]): string | 
   return run !== null && prof !== null && run !== prof
     ? `Running rev ${run}; the profile is on rev ${prof}.`
     : null;
+}
+
+const UPLINK: Readonly<Record<"tc" | "uslp", string>> = { tc: "TC uplink", uslp: "USLP uplink" };
+const PACKETS: Readonly<Record<"space_packet", string>> = { space_packet: "Space Packet" };
+
+/**
+ * G1's protocol fact line (§11c parity; api c61444ede): `TC uplink · Space Packet`, dropping what
+ * the pinned version doesn't say; null when it says nothing.
+ */
+export function protocolLine(p: NonNullable<SpacecraftConfiguration["profile"]>): string | null {
+  const parts = [
+    p.uplink_protocol ? vocabularyText(p.uplink_protocol, UPLINK) : null,
+    p.packet_protocol ? vocabularyText(p.packet_protocol, PACKETS) : null,
+  ].filter((x): x is string => x !== null);
+  return parts.length ? parts.join(" · ") : null;
 }
 
 /** G3: "SVB · primary · Primary downlink" (station or transport · role · rule). */

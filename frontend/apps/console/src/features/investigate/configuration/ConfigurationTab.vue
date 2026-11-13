@@ -19,6 +19,7 @@ import {
   catalogCaution,
   fetchConfiguration,
   jsonWords,
+  protocolLine,
   routingWords,
   type SpacecraftConfiguration,
 } from "./api.ts";
@@ -105,6 +106,16 @@ const facts = (c: SpacecraftConfiguration) => [
                   }}{{ c.profile.version !== null ? ` · v${c.profile.version}` : "" }}</RouterLink
                 >
                 <span v-else class="text-caution-text">No spacecraft profile</span>
+              </p>
+              <!-- §11c parity (api c61444ede): what the pinned profile version runs. -->
+              <p
+                v-if="c.profile && (protocolLine(c.profile) || c.profile.lifecycle === 'deleted')"
+                class="m-0 font-mono text-sm text-text-2"
+              >
+                {{ protocolLine(c.profile) ?? "" }}
+                <span v-if="c.profile.lifecycle === 'deleted'" class="text-caution-text">
+                  {{ protocolLine(c.profile) ? "· " : "" }}This profile version was deleted.</span
+                >
               </p>
               <ApCallout v-if="catalogCaution(c.catalog)" tone="caution">
                 {{ catalogCaution(c.catalog) }}
