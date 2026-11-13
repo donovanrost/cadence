@@ -88,6 +88,22 @@ defmodule Cadence.Applications.OpsConsoleDashboardWorkflowsTest do
              )
   end
 
+  test "sharing, snapshotting and archiving need dashboard authorship, like the deep actions (L3)" do
+    persist_mission_scope("org-dashboard-actions", "mission-dashboard-actions")
+
+    # A mission-bound service identity operates the mission but can't author dashboards.
+    for action <- ~w(save-settings create-share revoke-share create-snapshot archive-dashboard) do
+      assert {:error, :authenticated_user_required} =
+               DashboardWorkflows.execute(
+                 scope("org-dashboard-actions", "mission-dashboard-actions"),
+                 HostContext.mission("mission-dashboard-actions"),
+                 "dashboard_settings",
+                 request(action, %{"dashboard-id" => "dashboard-x"})
+               ),
+             action
+    end
+  end
+
   defp request(action_id, params) do
     %ActionRequest{
       application_key: "ops_console",

@@ -62,7 +62,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardWorkflows do
          :ok <- validate_host_context(host_context),
          :ok <- validate_params(params),
          :ok <- validate_mission_param(mission_id, params),
-         :ok <- authorize(scope, organization_id, mission_id),
+         :ok <- authorize(scope, organization_id, mission_id, action_id),
          {:ok, result} <-
            dispatch(
              scope,
@@ -789,8 +789,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardWorkflows do
     end
   end
 
-  defp authorize(scope, organization_id, mission_id) do
-    Policy.authorize(scope, :operate_mission, %{
+  # Changing a shared dashboard (its settings, shares, snapshots, archiving) needs dashboard
+  # authorship, as in DashboardDeepActions; the rest (star, present, validate) any mission operator
+  # (director L3). author_dashboards also refuses service identities (Policy).
+  # todo(authz): Cedar should decide who may share, snapshot or archive a dashboard.
+  @author_actions ~w(save-settings create-share revoke-share create-snapshot archive-dashboard)
+
+  defp authorize(scope, organization_id, mission_id, action_id) do
+    action = if action_id in @author_actions, do: :author_dashboards, else: :operate_mission
+
+    Policy.authorize(scope, action, %{
       organization_id: organization_id,
       mission_id: mission_id
     })
