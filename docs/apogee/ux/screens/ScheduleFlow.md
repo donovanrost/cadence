@@ -158,12 +158,14 @@ details.
 | provider_reservation_not_found | the provider has no record of the booking | `Re-plan` |
 | provider_configuration_failure | the provider setup failed | `Fix in Setup` |
 | operator_not_booked / rejected / not_sent | marked not booked / rejected / not sent by Mira K. at 10:52Z (U29; without an actor: "by an operator") | — |
+| provider_rejected, provider_failed, other provider_<status> (status-based answers, domain fix) | the provider rejected it / the provider couldn't book it / the provider answered "<status>", plus its detail | — |
 | null | the provider didn't say why | — |
 
 `Fix in Setup` → Setup › Ground stations › Providers. `Check provider account` → Organization › Provider
 accounts. `Re-plan` → K2. A next step shows only when the viewer can take it. A `(retry)` or `—` row says nothing
-about retrying until api sends `retryable` / `retry_after_seconds`. Then it adds "Cadence retries at 03:12Z." or
-"Retrying won't help."
+about retrying unless the read says so (api, after 8e): `retryable: true` with `retry_after_seconds` adds "Cadence
+retries at 03:12Z."; `true` without it adds "It can be retried."; `false` adds "Retrying won't help."; null adds
+nothing. `resolved {by, at}` supplies the actor and time for operator resolutions.
 
 ## K2 · A station goes down (`M/contacts/replan/:stationId`)
 Entered from Now (P2 station degraded), the Contacts station row or ⌘K. Takeover header: close ·
