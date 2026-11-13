@@ -301,9 +301,8 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   redirect.
 - `live/dashboard_author_auth.ex:38` redirects to `/ops/dashboards`, which the redirect covers.
 - `ExplorationPanel.vue:20` "Open source dashboard" is covered by the redirect.
-- **Explore's `add_to_dashboard`** (`ops_console/actions/telemetry_explore.ex:132-150, 273-275`) navigates to
-  `/edit?<widget candidate>`. The redirect drops the candidate. It's reachable only through the federated
-  `telemetry_explore` surface; confirm it's unreachable, or retire the action with L20.
+- **Explore's `add_to_dashboard`** (`ops_console/actions/telemetry_explore.ex`) links to `/edit?candidate_*`.
+  It's unreachable, and the editor ignores the candidate (lead 11-14), so it's retired with the federated batch.
 
 **Docs:** `ux/information-architecture.md:143`, `api/inventory.md:21`, `plans/dashboards.md:44,100`,
 `briefs/dashboards.md:11`, and this section.
@@ -313,7 +312,11 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   - `frontend/apps/ops-console/src/OpsDashboard*.vue` (11 files) and their tests;
   - `applications/ops_console/actions/dashboard_workflows.ex` (1175 lines) and `dashboard_deep_actions.ex`,
     trimming `action_provider.ex:11-12,26-27`;
-  - `Reads.Dashboards.Creation` (only `reads/application_surfaces/ops_console.ex:31,580` uses it).
+  - `Reads.Dashboards.Creation` (only `reads/application_surfaces/ops_console.ex:31,580` uses it);
+  - Explore's `add_to_dashboard` action: `telemetry_explore.ex:132-150` (dispatch) and `:244-275`
+    (`candidate_query`, `dashboard_path`). Also drop it from `federated-application.ts:215` and from the tests
+    (`telemetry_explore_test.exs`, `ops_console_test.exs`, `OpsConsoleApplication.test.ts`,
+    `first-party-manifest-parity.test.ts`).
 - **Trim:**
   - the surface specs and both ledgers in `applications/ops_console.ex` (:106-257, :425-435, :454-~480);
   - `reads/application_surfaces/ops_console.ex` (the dashboard read dispatch);
@@ -344,12 +347,11 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   `Playlists.present/search` can go.
 
 ### Answers (lead 11-14)
-- **Explore's `add_to_dashboard`:** api-ops exempts `/ops/dashboards/:id/edit?candidate_*` from the redirect,
-  so the legacy editor keeps serving that flow for now. Dashboards' queue: the console editor accepts the
-  candidate (`candidate_source=explore`, `candidate_point_id`, `_widget_type`, `_title`, `_spacecraft_id`,
-  `_realm`, `_data_view`, `_data_source_id`, `_source_binding_id`; built by
-  `telemetry_explore.ex` `candidate_query/4`) and stages it as a new widget in the draft. Then the exemption goes,
-  and L8a can delete the legacy editor.
+- **Explore's `add_to_dashboard`:** dead at both ends. Nothing dispatches it: it appears only in ops-console's
+  federated action list (`federated-application.ts:215`), and `OpsTelemetryExplore.vue` is just a redirect.
+  The legacy editor never reads `candidate_*`. So there's **no redirect exemption and no console `?candidate`
+  work**. Retire the action with the federated `ops_console` batch. A console "Add to dashboard" from Explore
+  would be a future console design (WidgetSheet prefilled from an observable).
 - **`RuntimeCoordinator` / `RuntimeInvalidationRelevance`:** delete them in L8a unless api-ops objects (asked).
 - **Federation smoke:** devops moves its canonical ops_console surface off `dashboard_directory` (asked).
 - **Gate:** L8a goes to the director once qa confirms New live.
