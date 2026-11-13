@@ -103,7 +103,7 @@ const tones = computed(
             <RouterLink
               :to="{
                 name: 'ops.spacecraft',
-                params: { scId: String(row.sc.scid), tab: 'investigate' },
+                params: { scId: row.sc.scid, tab: 'investigate' },
                 query: { alarm: row.alarm.id },
               }"
               class="max-md:hit-44 text-readout no-underline hover:text-bright hover:underline"

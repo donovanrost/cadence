@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { scidParam } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useMissionScope, useMobileHeader } from "@/shell";
@@ -42,7 +43,7 @@ const scope = useMissionScope();
 const now = useNow();
 const missionId = computed(() => scope.value.mission.id);
 const fleet = useFleet(missionId);
-const scid = computed(() => Number(route.params.scId));
+const scid = computed(() => scidParam(route.params.scId));
 const sc = computed(() => {
   const f = fleet.state.value;
   return f.status === "ready"

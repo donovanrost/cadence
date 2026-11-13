@@ -36,7 +36,7 @@ const now = useNow();
 
 const at = (sc: FleetSpacecraft): RouteLocationRaw => ({
   name: "ops.spacecraft",
-  params: { scId: String(sc.scid), tab: props.tab },
+  params: { scId: sc.scid, tab: props.tab },
 });
 usePrevNextKeys(
   () => (props.prev ? at(props.prev) : null),
@@ -92,7 +92,7 @@ const tabs = computed((): readonly ApTabLink[] =>
   spacecraftTabs.map((key) => ({
     key,
     label: key[0]?.toUpperCase() + key.slice(1),
-    to: { name: "ops.spacecraft", params: { scId: String(props.sc.scid), tab: key } },
+    to: { name: "ops.spacecraft", params: { scId: props.sc.scid, tab: key } },
   })),
 );
 </script>

@@ -54,7 +54,7 @@ describe("phone search (Mobile.md › Search)", () => {
       state: "crit",
       to: {
         name: "ops.spacecraft",
-        params: { scId: "312", tab: "investigate" },
+        params: { scId: 312, tab: "investigate" },
         query: { point: "pt-VBAT" },
       },
     });
@@ -93,7 +93,7 @@ describe("phone search (Mobile.md › Search)", () => {
     expect(sc[0]).toMatchObject({
       title: "EARENDIL-312",
       subtitle: "SCID 312 · P13 · critical",
-      to: { name: "ops.spacecraft", params: { scId: "312", tab: "investigate" } },
+      to: { name: "ops.spacecraft", params: { scId: 312, tab: "investigate" } },
       commandTo: null,
     });
     const items = [

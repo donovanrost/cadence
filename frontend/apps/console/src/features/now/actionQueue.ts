@@ -1,5 +1,12 @@
 import type { RouteLocationRaw } from "vue-router";
-import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  scid as scidReader,
+  actor,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import {
   conditionWords,
@@ -56,7 +63,7 @@ const lenient =
 const member = d.object({
   id: d.token,
   name: d.string,
-  scid: d.integer,
+  scid: scidReader,
   plane: d.nullable(d.integer),
   stale: d.boolean,
   last_received_at: d.nullable(d.timestamp),
@@ -206,7 +213,7 @@ const STATE: Readonly<Record<ServerItem["state"], OpState>> = {
 
 const investigate = (sc: Member): RouteLocationRaw => ({
   name: "ops.spacecraft",
-  params: { scId: String(sc.scid), tab: "investigate" },
+  params: { scId: sc.scid, tab: "investigate" },
 });
 
 function names(members: readonly { name: string }[], max = 4): string {

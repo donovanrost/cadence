@@ -72,9 +72,7 @@ function member(f: Finding): FindingMember {
     text: scName(f),
     detail: f.gap ? `no pass ${hhmm(f.gap.from)}–${hhmm(f.gap.to)}` : null,
     to:
-      scid == null
-        ? null
-        : { name: "ops.spacecraft", params: { scId: String(scid), tab: "investigate" } },
+      scid == null ? null : { name: "ops.spacecraft", params: { scId: scid, tab: "investigate" } },
   };
 }
 

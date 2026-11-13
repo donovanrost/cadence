@@ -66,9 +66,7 @@ function selectPlane(plane: number | null) {
     .catch(navigationFailed);
 }
 function openSpacecraft(sc: FleetSpacecraft) {
-  router
-    .push({ name: "ops.spacecraft", params: { scId: String(sc.scid) } })
-    .catch(navigationFailed);
+  router.push({ name: "ops.spacecraft", params: { scId: sc.scid } }).catch(navigationFailed);
 }
 function openById(id: string) {
   const sc = snapshot.value?.spacecraft.find((row) => row.id === id);

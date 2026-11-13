@@ -1,3 +1,4 @@
+import { scid as scidReader } from "@/api/index.ts";
 import type { Fleet, FleetSpacecraft } from "./api.ts";
 
 /** Typed test builders (code standard: fixtures through typed values, not assertions). */
@@ -10,7 +11,7 @@ export function spacecraftRow(
   return {
     id: `spacecraft-${name.toLowerCase()}`,
     name,
-    scid,
+    scid: scidReader(scid),
     profile: { id: "profile-earendil-block-1", name: "Earendil Block 1", version: 1 },
     plane: Math.floor((scid - 1) / 25) + 1,
     slot: ((scid - 1) % 25) + 1,

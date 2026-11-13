@@ -43,7 +43,7 @@ const tint = (row: AlarmListRow) =>
             v-if="row.sc"
             :to="{
               name: 'ops.spacecraft',
-              params: { scId: String(row.sc.scid) },
+              params: { scId: row.sc.scid },
               query: { point: row.episode.point.id },
             }"
             class="inline-flex min-h-11 items-center font-semibold whitespace-nowrap text-readout no-underline"

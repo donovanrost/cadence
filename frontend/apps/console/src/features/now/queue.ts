@@ -64,7 +64,7 @@ const spacecraftRoute = (
   tab: SpacecraftTab = "investigate",
 ): RouteLocationRaw => ({
   name: "ops.spacecraft",
-  params: { scId: String(sc.scid), tab },
+  params: { scId: sc.scid, tab },
 });
 
 function cause(sc: FleetSpacecraft): string {

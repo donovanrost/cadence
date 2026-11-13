@@ -1,3 +1,4 @@
+import type { Scid } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import type { CheckResult, Preflight, PreflightCheck, TwoPersonReason } from "./api.ts";
 import type { GroupEvent } from "./show.ts";
@@ -84,7 +85,7 @@ function sentence(check: PreflightCheck, pf: Preflight, nameOf: TargetName): str
   switch (check.key) {
     case "identity": {
       if (check.result === "go") {
-        const scids = pf.targets.map((t) => t.scid).filter((s): s is number => s !== null);
+        const scids = pf.targets.map((t) => t.scid).filter((s): s is Scid => s !== null);
         const n = pf.targets.length;
         return `${n === 1 ? "The target resolves" : `All ${n} targets resolve`} · SCID ${list(scids.map(String), 6)}`;
       }

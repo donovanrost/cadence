@@ -1,4 +1,5 @@
 import type { RouteLocationRaw, RouteRecordInfo } from "vue-router";
+import type { Scid } from "@/api/ids.ts";
 
 /**
  * Typed route names and params (typing audit Fix 4, BACKLOG §12 A3). Every route the console
@@ -123,7 +124,8 @@ export interface ConsoleRoutes {
   "ops.spacecraft": InMission<
     "ops.spacecraft",
     "/fleet/:scId(\\d+)/:tab?",
-    { scId: Raw; tab?: SpacecraftTab | null | undefined },
+    // The SCID, a number (scidParam reads it back); never the spacecraft id (§12C, audit §1.2).
+    { scId: Scid; tab?: SpacecraftTab | null | undefined },
     { scId: string; tab?: SpacecraftTab | "" }
   >;
   "ops.alarms": InMission<"ops.alarms", "/alarms">;

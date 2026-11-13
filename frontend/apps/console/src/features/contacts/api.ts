@@ -1,4 +1,11 @@
-import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  scid as scidReader,
+  actor,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 import { attentionReader } from "@/features/now/index.ts";
 import { passReadinessReader } from "./readiness.ts";
 
@@ -50,7 +57,7 @@ const pass = d.object({
   delivery_state: d.nullable(d.known(deliveryStates)),
   spacecraft_id: d.nullable(d.token),
   /** Identity on the row (5f02fd3d), so names never depend on a client join. */
-  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.nullable(d.integer) })),
+  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.nullable(scidReader) })),
   station: d.object({
     ref: d.nullable(d.string),
     id: d.nullable(d.token),

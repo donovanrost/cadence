@@ -107,7 +107,7 @@ const title = computed(() => {
               :selected-plane="filter.plane"
               :matches="test"
               no-plane-picker
-              @open="(sc) => go({ name: 'ops.spacecraft', params: { scId: String(sc.scid) } })"
+              @open="(sc) => go({ name: 'ops.spacecraft', params: { scId: sc.scid } })"
               @select-plane="(plane) => setFilter({ ...filter, plane })"
             />
           </div>

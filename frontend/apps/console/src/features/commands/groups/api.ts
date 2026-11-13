@@ -1,4 +1,5 @@
 import {
+  scid as scidReader,
   decoders as d,
   DecodeError,
   request,
@@ -122,7 +123,7 @@ export const preflightReader = d.object({
       spacecraft_id: d.token,
       source_endpoint_id: d.nullable(d.token),
       name: d.nullable(d.string),
-      scid: d.nullable(d.integer),
+      scid: d.nullable(scidReader),
       failure: d.nullable(d.token),
     }),
     1_000,
@@ -290,7 +291,7 @@ const targetEndpoints = d.object({
     d.object({
       id: d.token,
       name: d.nullable(d.string),
-      scid: d.nullable(d.integer),
+      scid: d.nullable(scidReader),
       managed: d.boolean,
     }),
     50,

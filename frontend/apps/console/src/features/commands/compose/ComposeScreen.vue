@@ -220,7 +220,7 @@ const context = computed(() => {
 });
 const close = computed((): RouteLocationRaw =>
   only.value
-    ? { name: "ops.spacecraft", params: { scId: String(only.value.scid) } }
+    ? { name: "ops.spacecraft", params: { scId: only.value.scid } }
     : { name: "ops.commands" },
 );
 </script>

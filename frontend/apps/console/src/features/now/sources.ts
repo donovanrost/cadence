@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { decoders as d, isKnown, vocabularyText, type Decoded } from "@/api/index.ts";
+import { decoders as d, isKnown, vocabularyText, type Decoded, type Scid } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 
@@ -85,7 +85,7 @@ export type MissedItem = Readonly<{
   state: OpState;
   scName: string;
   scId: string;
-  scid: number;
+  scid: Scid;
   missed: readonly MissedPass[];
   next: NextContact | null;
 }>;
@@ -109,7 +109,7 @@ function oneRow(m: MissedItem, horizonH: number): QueueItem {
     priority: m.priority,
     state: m.state,
     title: `${m.scName} · ${plural(m.missed.length, "missed pass", "missed passes")}${where}`,
-    titleTo: { name: "ops.spacecraft", params: { scId: String(m.scid), tab: "investigate" } },
+    titleTo: { name: "ops.spacecraft", params: { scId: m.scid, tab: "investigate" } },
     sentence: `${last ? `${last.outcome === "failed" ? "Failed" : "Missed"} at ${hhmm(last.planned_aos)}${owner ? ` (${owner})` : ""}. ` : ""}${next}`,
     meta: null,
     ...(m.next ? { due: { label: "AOS", at: m.next.aos } } : {}),

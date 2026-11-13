@@ -1,3 +1,4 @@
+import type { Scid } from "@/api/index.ts";
 import { readinessTag } from "./readiness.ts";
 import type { GanttBand, GanttBar, GanttRow } from "@/ui";
 import type { Availability } from "@/features/scheduling/index.ts";
@@ -45,7 +46,7 @@ export type GanttAxis = "station" | "spacecraft";
 
 export function passGantt(
   passes: readonly Pass[],
-  nameOf: (spacecraftId: string) => { name: string; scid: number } | null,
+  nameOf: (spacecraftId: string) => { name: string; scid: Scid | null } | null,
   now: number,
   selected: string | null = null,
   axis: GanttAxis = "station",
@@ -62,7 +63,7 @@ export function passGantt(
     if (kind === null) continue;
     const sc =
       (p.spacecraft_id ? nameOf(p.spacecraft_id) : null) ??
-      (p.spacecraft ? { name: p.spacecraft.name, scid: p.spacecraft.scid ?? 0 } : null);
+      (p.spacecraft ? { name: p.spacecraft.name, scid: p.spacecraft.scid } : null);
     const key = axis === "station" ? stationKey(p) : (p.spacecraft_id ?? "unknown");
     // A spacecraft the fleet doesn't know is still identified, never by a truncated raw id.
     const rowLabel = axis === "station" ? stationLabel(p) : (sc?.name ?? "Unknown spacecraft");
@@ -75,7 +76,11 @@ export function passGantt(
       to: Date.parse(p.ends_at),
       kind: selected === p.id ? "focused" : kind,
       label:
-        axis === "station" ? (sc ? String(sc.scid).padStart(3, "0") : undefined) : stationLabel(p),
+        axis === "station"
+          ? sc?.scid != null
+            ? String(sc.scid).padStart(3, "0")
+            : undefined
+          : stationLabel(p),
       description: `${sc?.name ?? "Unknown spacecraft"} at ${p.station.name ?? stationLabel(p)}, ${status}${evidence(p)}${p.source.synthetic ? " (synthetic window)" : ""}${marks.uplinks?.has(p.id) ? ", uplink queued" : ""}`,
       ...(marks.match && !marks.match(p) ? { dim: true } : {}),
       ...(marks.uplinks?.has(p.id) ? { notch: true } : {}),

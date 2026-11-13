@@ -56,7 +56,7 @@ const rowState = (sc: FleetSpacecraft) =>
   >
     <template #cell-name="{ row }">
       <RouterLink
-        :to="{ name: 'ops.spacecraft', params: { scId: String(row.scid) } }"
+        :to="{ name: 'ops.spacecraft', params: { scId: row.scid } }"
         class="max-md:hit-44 whitespace-nowrap text-readout no-underline hover:text-bright hover:underline"
         >{{ row.name }}</RouterLink
       >

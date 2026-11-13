@@ -176,7 +176,7 @@ function addOne(id: string) {
         <ul class="m-0 max-h-48 list-none overflow-auto p-0 pt-2">
           <li v-for="sc in targets" :key="sc.id" class="flex gap-3 py-0.5 font-mono text-sm">
             <RouterLink
-              :to="{ name: 'ops.spacecraft', params: { scId: String(sc.scid) } }"
+              :to="{ name: 'ops.spacecraft', params: { scId: sc.scid } }"
               class="text-readout no-underline hover:underline"
               >{{ sc.name }}</RouterLink
             >

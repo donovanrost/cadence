@@ -1,4 +1,10 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  scid as scidReader,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 import { formatHourMinute, formatShort } from "@/ui";
 import { reasonWords } from "@/features/scheduling/booking-state.ts";
 import { passReader } from "./api.ts";
@@ -46,7 +52,7 @@ const offerReader = d.object({
 export type Offer = Decoded<typeof offerReader>;
 
 const searchReader = d.object({
-  spacecraft: d.object({ id: d.token, name: d.string, scid: d.nullable(d.integer) }),
+  spacecraft: d.object({ id: d.token, name: d.string, scid: d.nullable(scidReader) }),
   window: d.object({ from: d.timestamp, to: d.timestamp }),
   offers: d.array(offerReader, 500),
   hidden: d.object({ no_uplink_route: d.integer }),

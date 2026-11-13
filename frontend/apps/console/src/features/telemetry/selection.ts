@@ -1,4 +1,5 @@
 import type { LocationQuery, LocationQueryRaw } from "vue-router";
+import { scidParam, type Scid } from "@/api/index.ts";
 import type { ComparisonSeries } from "@/features/investigate/index.ts";
 import { parseWindow, windowQuery, type WindowSel } from "./window.ts";
 
@@ -9,7 +10,7 @@ import { parseWindow, windowQuery, type WindowSel } from "./window.ts";
 export const MAX_SERIES = 6;
 
 export type Selection = Readonly<{
-  scids: readonly number[];
+  scids: readonly Scid[];
   points: readonly string[];
   window: WindowSel;
 }>;
@@ -25,9 +26,10 @@ export function parseSelection(query: LocationQuery): Selection {
   return {
     scids: [
       ...new Set(
-        list(query.sc)
-          .map(Number)
-          .filter((n) => Number.isInteger(n) && n > 0),
+        list(query.sc).flatMap((part) => {
+          const scid = scidParam(part);
+          return scid === null ? [] : [scid];
+        }),
       ),
     ],
     points: [...new Set(list(query.p))],
@@ -44,7 +46,7 @@ export function selectionQuery(selection: Selection, base: LocationQuery): Locat
   };
 }
 
-export type SeriesKey = Readonly<{ scid: number; pointId: string }>;
+export type SeriesKey = Readonly<{ scid: Scid; pointId: string }>;
 
 /** Spacecraft × point pairs in a stable order, capped at MAX_SERIES (the rest are reported). */
 export function seriesOf(selection: Selection): { series: SeriesKey[]; dropped: number } {

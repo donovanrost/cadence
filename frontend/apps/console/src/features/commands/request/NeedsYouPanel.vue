@@ -60,7 +60,7 @@ const resend = (ids: readonly string[]): RouteLocationRaw => ({
               variant="ghost"
               :to="{
                 name: 'ops.spacecraft',
-                params: { scId: String(c.target.scid), tab: 'investigate' },
+                params: { scId: c.target.scid, tab: 'investigate' },
               }"
               >Open</ApButton
             >

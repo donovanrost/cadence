@@ -1,4 +1,11 @@
-import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  scid as scidReader,
+  actor,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 import { memberStages } from "@/features/commands/groups/api.ts";
 import { passReadinessReader } from "@/features/contacts/readiness.ts";
 
@@ -25,7 +32,7 @@ const pass = d.object({
 const group = d.nullable(d.object({ id: d.token, title: d.string }));
 
 const uplinkReader = d.object({
-  spacecraft: d.object({ id: d.token, name: d.string, scid: d.integer }),
+  spacecraft: d.object({ id: d.token, name: d.string, scid: scidReader }),
   route: d.nullable(
     d.object({
       routing_rule_id: d.nullable(d.token),

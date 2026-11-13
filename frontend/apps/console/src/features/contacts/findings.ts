@@ -1,5 +1,6 @@
 import { computed, type Ref } from "vue";
 import {
+  scid as scidReader,
   decoders as d,
   isKnown,
   knownText,
@@ -42,7 +43,7 @@ const finding = d.object({
   passes: d.array(d.object({ id: d.token, starts_at: d.timestamp }), 100),
   /** Coverage gaps name the spacecraft and the gap; D4 folds same-cause gaps by them (ux §7). */
   spacecraft: d.optional(
-    d.nullable(d.object({ id: d.token, name: d.nullable(d.string), scid: d.nullable(d.integer) })),
+    d.nullable(d.object({ id: d.token, name: d.nullable(d.string), scid: d.nullable(scidReader) })),
   ),
   gap: d.optional(d.nullable(d.object({ from: d.timestamp, to: d.timestamp, seconds: d.integer }))),
 });

@@ -1,4 +1,10 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  scid as scidReader,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 
 /** Contracts: docs/apogee/api/ops.md, `GET …/events` and `…/events/density` (owner api, DECISIONS #26). */
 
@@ -37,7 +43,7 @@ const event = d.object({
   severity: d.oneOf(eventSeverities),
   text: d.string,
   detail: d.nullable(d.string),
-  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.integer })),
+  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: scidReader })),
   refs: d.object({
     alarm_id: d.nullable(d.token),
     point_id: d.nullable(d.token),

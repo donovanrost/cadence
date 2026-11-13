@@ -44,7 +44,7 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
             <RouterLink
               v-for="sc in spacecraftOf(members)"
               :key="sc.id"
-              :to="{ name: 'ops.spacecraft', params: { scId: String(sc.scid) } }"
+              :to="{ name: 'ops.spacecraft', params: { scId: sc.scid } }"
               class="max-md:hit-44 text-readout no-underline hover:underline"
               >{{ sc.name }}</RouterLink
             >
@@ -63,7 +63,7 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
         <template v-else>
           <template v-if="event.spacecraft && needsSpacecraftPrefix(event)"
             ><RouterLink
-              :to="{ name: 'ops.spacecraft', params: { scId: String(event.spacecraft.scid) } }"
+              :to="{ name: 'ops.spacecraft', params: { scId: event.spacecraft.scid } }"
               class="text-readout no-underline hover:underline"
               >{{ event.spacecraft.name }}</RouterLink
             >
@@ -77,7 +77,7 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
           >
           <RouterLink
             v-else-if="event.spacecraft"
-            :to="{ name: 'ops.spacecraft', params: { scId: String(event.spacecraft.scid) } }"
+            :to="{ name: 'ops.spacecraft', params: { scId: event.spacecraft.scid } }"
             class="text-readout no-underline hover:underline"
             >{{ event.text }}</RouterLink
           ><template v-else>{{ event.text }}</template

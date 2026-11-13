@@ -4,7 +4,7 @@ import { duration, findingRows } from "./findingRows.ts";
 import type { Availability, AvailabilityWindow } from "@/features/scheduling/index.ts";
 import { releaseErrorWords } from "./release.ts";
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { scid as scidReader, decode } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
 import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
 import type { Attention } from "@/features/now/index.ts";
@@ -39,7 +39,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   pass_phase: "scheduled",
   delivery_state: "pending",
   spacecraft_id: "sc-312",
-  spacecraft: { id: "sc-312", name: "EARENDIL-312", scid: 312 },
+  spacecraft: { id: "sc-312", name: "EARENDIL-312", scid: scidReader(312) },
   station: { ref: "SVL", id: "gs-svl", code: "SVB", name: "Svalbard" },
   antenna: null,
   starts_at: "2026-11-09T02:30:00Z",
@@ -94,7 +94,7 @@ describe("passes", () => {
         pass("b", { station: { ref: "XYZ", id: null, code: null, name: null } }),
         pass("c", { state: "canceled" }),
       ],
-      () => ({ name: "EARENDIL-312", scid: 312 }),
+      () => ({ name: "EARENDIL-312", scid: scidReader(312) }),
       now,
     );
     expect(rows.map((r) => r.label)).toEqual(["SVB", "XYZ"]);
@@ -420,7 +420,7 @@ describe("D4 findings (M22)", () => {
     id: `gap-${n}`,
     severity: "critical" as const,
     message: `EARENDIL-00${n} has no pass for 6h.`,
-    spacecraft: { id: `sc-${n}`, name: `EARENDIL-00${n}`, scid: n },
+    spacecraft: { id: `sc-${n}`, name: `EARENDIL-00${n}`, scid: scidReader(n) },
     gap: { from, to: "2026-11-13T06:04:34Z", seconds: 21_600 },
   });
   it("folds same-cause coverage gaps into one row with its members (ux §7)", () => {
@@ -437,7 +437,7 @@ describe("D4 findings (M22)", () => {
       key: "gap-1",
       text: "EARENDIL-001",
       detail: "no pass 00:04Z–06:04Z",
-      to: { name: "ops.spacecraft", params: { scId: "1", tab: "investigate" } },
+      to: { name: "ops.spacecraft", params: { scId: 1, tab: "investigate" } },
     });
     const two = findingRows([gap(1), gap(2, "2026-11-13T03:00:00Z")], now);
     expect(two.map((r) => r.sentence)).toEqual([

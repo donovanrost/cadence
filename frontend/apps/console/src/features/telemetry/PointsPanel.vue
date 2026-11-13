@@ -12,7 +12,7 @@ import {
   ApSelect,
   ApStatusMark,
 } from "@/ui";
-import { describeApiError } from "@/api/index.ts";
+import { describeApiError, type Scid } from "@/api/index.ts";
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { fetchPoints, latestMark, type TelemetryPoint } from "./api.ts";
@@ -24,12 +24,12 @@ import { fetchPoints, latestMark, type TelemetryPoint } from "./api.ts";
  */
 const props = defineProps<{
   fleet: readonly FleetSpacecraft[];
-  scids: readonly number[];
+  scids: readonly Scid[];
   points: readonly string[];
 }>();
 const emit = defineEmits<{
-  addSc: [scid: number];
-  removeSc: [scid: number];
+  addSc: [scid: Scid];
+  removeSc: [scid: Scid];
   addPoint: [pointId: string];
   removePoint: [pointId: string];
 }>();
@@ -43,10 +43,11 @@ const scOptions = computed(() => [
     .map((sc) => ({ value: String(sc.scid), label: sc.name })),
 ]);
 function onPick(value: string) {
-  if (value) emit("addSc", Number(value));
+  const sc = props.fleet.find((row) => String(row.scid) === value);
+  if (sc) emit("addSc", sc.scid);
   pick.value = "";
 }
-const nameOf = (scid: number) => props.fleet.find((sc) => sc.scid === scid)?.name ?? `SCID ${scid}`;
+const nameOf = (scid: Scid) => props.fleet.find((sc) => sc.scid === scid)?.name ?? `SCID ${scid}`;
 
 const q = ref("");
 /** Debounced query (120 ms, Palette.md); empty lists the mission's points. */

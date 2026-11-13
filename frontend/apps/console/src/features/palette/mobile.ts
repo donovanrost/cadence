@@ -76,7 +76,7 @@ export function alarmItems(
         state: SEVERITY[a.severity],
         to: {
           name: "ops.spacecraft",
-          params: { scId: String(sc.scid), tab: "investigate" },
+          params: { scId: sc.scid, tab: "investigate" },
           query: { point: a.point.id },
         },
         commandTo: null,
@@ -158,7 +158,7 @@ export function phoneSpacecraftItems(
         .join(" · "),
       hint: "",
       state: fleetOpState(sc.state),
-      to: { name: "ops.spacecraft", params: { scId: String(sc.scid), tab: "investigate" } },
+      to: { name: "ops.spacecraft", params: { scId: sc.scid, tab: "investigate" } },
       commandTo: null,
       rank,
     }));

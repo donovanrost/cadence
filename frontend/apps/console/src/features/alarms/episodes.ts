@@ -1,4 +1,5 @@
 import {
+  scid as scidReader,
   actor as sharedActor,
   decoders as d,
   request,
@@ -22,7 +23,7 @@ const episodeFields = {
   peak_severity: d.oneOf(["critical", "caution"] as const),
   source_state: d.nullable(d.known(sourceStates)),
   spacecraft_id: d.nullable(d.token),
-  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.integer })),
+  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: scidReader })),
   point: d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) }),
   thresholds: d.nullable(thresholdsReader),
   opened_at: d.timestamp,

@@ -1,7 +1,7 @@
 import { effectScope, nextTick, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { scid as scidReader, decode } from "@/api/index.ts";
 import { eventsReader, type MissionEvent } from "./api.ts";
 import {
   byHour,
@@ -77,7 +77,7 @@ describe("timeline", () => {
   });
 
   it("folds the same event across more than three spacecraft in one minute (ux 6)", () => {
-    const sc = (n: number) => ({ id: `sc-${n}`, name: `EARENDIL-${n}`, scid: n });
+    const sc = (n: number) => ({ id: `sc-${n}`, name: `EARENDIL-${n}`, scid: scidReader(n) });
     const realized = (n: number) => ({
       ...ev(`r${n}`, "2026-11-08T02:30:05Z"),
       kind: "contact" as const,
@@ -114,7 +114,7 @@ describe("timeline", () => {
 
 describe("event subjects (ux timeline #1)", () => {
   it("links the subject, and skips the spacecraft prefix the sentence already names", () => {
-    const sc = { id: "sc-4", name: "EARENDIL-004", scid: 4 };
+    const sc = { id: "sc-4", name: "EARENDIL-004", scid: scidReader(4) };
     const contact = {
       ...ev("c", "2026-11-09T10:23:52Z"),
       kind: "contact" as const,
@@ -148,7 +148,7 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
       kind: "operator" as const,
       raw_kind: "realized_contact_interval",
       text: `Contact with EARENDIL-00${n} completed`,
-      spacecraft: { id: `sc-${n}`, name: `EARENDIL-00${n}`, scid: n },
+      spacecraft: { id: `sc-${n}`, name: `EARENDIL-00${n}`, scid: scidReader(n) },
     });
     const [g] = byHour([1, 2, 3, 4].map(completed));
     expect(g?.rows).toHaveLength(1);
@@ -177,14 +177,14 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
 
 describe("timeline scope (backlog §2)", () => {
   const fleet = [
-    { id: "sc-4", scid: 4, name: "EARENDIL-004", plane: 1 },
-    { id: "sc-21", scid: 21, name: "EARENDIL-021", plane: 2 },
+    { id: "sc-4", scid: scidReader(4), name: "EARENDIL-004", plane: 1 },
+    { id: "sc-21", scid: scidReader(21), name: "EARENDIL-021", plane: 2 },
   ];
   it("reads ?sc= through the fleet, ?plane=, else the fleet", () => {
     expect(timelineScope({ sc: "4" }, fleet)).toEqual({
       kind: "spacecraft",
       id: "sc-4",
-      scid: 4,
+      scid: scidReader(4),
       name: "EARENDIL-004",
     });
     expect(timelineScope({ sc: "999" }, fleet)).toEqual({ kind: "fleet" });

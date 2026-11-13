@@ -1,4 +1,4 @@
-import { recordOf } from "@/api";
+import { decode, decoders as d, scid as scidReader, type Scid } from "@/api";
 import { computed, ref, watch, type Ref } from "vue";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { seriesOf, type Selection } from "./selection.ts";
@@ -8,20 +8,21 @@ import { seriesOf, type Selection } from "./selection.ts";
  * recently plotted by you. Kept per viewer and mission in localStorage (a convenience: a private
  * window or cleared storage simply has none).
  */
-export type RecentPlot = Readonly<{ scid: number; name: string; point: string }>;
+export type RecentPlot = Readonly<{ scid: Scid; name: string; point: string }>;
 const MAX = 10;
 const keyOf = (missionId: string) => `apogee:recent-plots:${missionId}`;
 
-function isRecent(v: unknown): v is RecentPlot {
-  const r = recordOf(v);
-  if (r === null) return false;
-  return typeof r.scid === "number" && typeof r.name === "string" && typeof r.point === "string";
-}
+const recentReader = d.object({ scid: scidReader, name: d.string, point: d.string });
+/** One stored entry, or none when it no longer reads (an older shape, hand-edited storage). */
+const recentOf = (v: unknown): RecentPlot[] => {
+  const r = decode(recentReader, v);
+  return r.ok ? [r.value] : [];
+};
 
 export function readRecent(missionId: string): RecentPlot[] {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(keyOf(missionId)) ?? "[]");
-    return Array.isArray(raw) ? raw.filter(isRecent).slice(0, MAX) : [];
+    return Array.isArray(raw) ? raw.flatMap(recentOf).slice(0, MAX) : [];
   } catch {
     return [];
   }

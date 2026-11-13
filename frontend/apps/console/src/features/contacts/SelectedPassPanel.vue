@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Scid } from "@/api/index.ts";
 import { computed } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 import {
@@ -41,7 +42,7 @@ import { stationLabel } from "./gantt.ts";
 const props = defineProps<{
   missionId: string;
   pass: Pass | null;
-  spacecraft: { name: string; scid: number } | null;
+  spacecraft: { name: string; scid: Scid | null } | null;
 }>();
 defineEmits<{ changed: [] }>();
 const now = useNow();
@@ -147,11 +148,14 @@ const countdown = computed(() => {
       />
       <div class="flex flex-wrap items-center gap-3">
         <RouterLink
-          v-if="spacecraft"
-          :to="{ name: 'ops.spacecraft', params: { scId: String(spacecraft.scid) } }"
+          v-if="spacecraft && spacecraft.scid !== null"
+          :to="{ name: 'ops.spacecraft', params: { scId: spacecraft.scid } }"
           class="max-md:hit-44 font-display text-lg font-semibold text-readout no-underline hover:underline"
           >{{ spacecraft.name }}</RouterLink
         >
+        <span v-else-if="spacecraft" class="font-display text-lg font-semibold text-readout">{{
+          spacecraft.name
+        }}</span>
         <ApTag v-if="tag" :state="tag.state" :label="tag.label" />
         <ApTag v-if="uplinkUnconfirmed" state="caution" label="Uplink unconfirmed" />
         <ApTag v-if="pass.off_plan" state="neutral" label="Off-plan" />

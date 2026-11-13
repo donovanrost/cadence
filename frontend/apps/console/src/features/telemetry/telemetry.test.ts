@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { scid as scidReader, decode } from "@/api/index.ts";
 import { latestMark, pointsReader } from "./api.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { History } from "@/features/investigate/index.ts";
@@ -56,7 +56,7 @@ const history = (buckets: [string, number][]): History => ({
   buckets: buckets.map(([t, v]) => ({ t, t_end: t, min: v - 1, mean: v, max: v + 1, count: 1 })),
 });
 const data = (scid: number, buckets: [string, number][]): SeriesData => ({
-  key: { scid, pointId: "EPS.VBAT" },
+  key: { scid: scidReader(scid), pointId: "EPS.VBAT" },
   sc: spacecraftRow(scid),
   history: history(buckets),
 });

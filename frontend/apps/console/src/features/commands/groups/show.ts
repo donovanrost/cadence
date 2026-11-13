@@ -1,4 +1,5 @@
 import {
+  scid as scidReader,
   decoders as d,
   DecodeError,
   request,
@@ -68,7 +69,7 @@ export type GroupMember = Decoded<typeof member>;
 const target = d.object({
   spacecraft_id: d.token,
   name: d.nullable(d.string),
-  scid: d.nullable(d.integer),
+  scid: d.nullable(scidReader),
   stage,
   members: d.array(member, 16),
   last_event_at: d.nullable(d.timestamp),

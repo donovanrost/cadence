@@ -1,4 +1,10 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  scid as scidReader,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /api/console/v1/missions/:mission_id/fleet`. */
 
@@ -36,7 +42,7 @@ const profile = d.object({
 const spacecraft = d.object({
   id: d.token,
   name: d.string,
-  scid: d.integer,
+  scid: scidReader,
   profile: d.nullable(profile),
   plane: d.nullable(d.integer),
   slot: d.nullable(d.integer),

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { scidParam } from "@/api/index.ts";
 import type { SpacecraftTab } from "@/shell";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
@@ -22,16 +23,17 @@ const route = useRoute("ops.spacecraft");
 const missionId = computed(() => scope.value.mission.id);
 const fleet = useFleet(missionId);
 
-const scid = computed(() => Number(route.params.scId));
+const scid = computed(() => scidParam(route.params.scId));
 const tab = computed((): SpacecraftTab => route.params.tab || "investigate");
-const scId = computed(() => {
+/** The spacecraft id (not the SCID in the route) for the alarm read. */
+const spacecraftId = computed(() => {
   const s = fleet.state.value;
   return s.status === "ready"
     ? (s.value.spacecraft.find((row) => row.scid === scid.value)?.id ?? null)
     : null;
 });
 /** Owned here so the header's status and the Investigate tab agree on one read. */
-const alarms = useSpacecraftAlarms(missionId, scId);
+const alarms = useSpacecraftAlarms(missionId, spacecraftId);
 const lookup = computed(() => {
   const state = fleet.state.value;
   if (state.status !== "ready") return null;

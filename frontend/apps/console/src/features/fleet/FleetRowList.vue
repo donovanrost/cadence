@@ -41,7 +41,7 @@ const tint = (sc: FleetSpacecraft) =>
       >
         <div class="flex min-h-11 items-center justify-between gap-3">
           <RouterLink
-            :to="{ name: 'ops.spacecraft', params: { scId: String(sc.scid) } }"
+            :to="{ name: 'ops.spacecraft', params: { scId: sc.scid } }"
             class="inline-flex min-h-11 items-center font-semibold whitespace-nowrap text-readout no-underline"
             >{{ sc.name }}</RouterLink
           >

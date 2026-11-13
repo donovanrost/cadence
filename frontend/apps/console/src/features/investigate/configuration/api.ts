@@ -1,4 +1,5 @@
 import {
+  scid as scidReader,
   actor as sharedActor,
   decoders as d,
   request,
@@ -19,7 +20,7 @@ const configurationReader = d.object({
   spacecraft: d.object({
     id: d.token,
     name: d.string,
-    scid: d.nullable(d.integer),
+    scid: d.nullable(scidReader),
     norad_id: d.nullable(d.integer),
     plane: d.nullable(d.integer),
     slot: d.nullable(d.integer),

@@ -42,9 +42,10 @@ const contactText = (row: AlarmListRow) => {
   const sc = contactOf(row);
   return (sc && nextContact(sc, now.value)) ?? "—";
 };
-const to = (row: AlarmListRow): RouteLocationRaw => ({
+/** Only rows with a spacecraft link (the template's v-else-if): no SCID, no link (§12C). */
+const to = (row: AlarmListRow, sc: NonNullable<AlarmListRow["sc"]>): RouteLocationRaw => ({
   name: "ops.spacecraft",
-  params: { scId: String(row.sc?.scid ?? ""), tab: "investigate" },
+  params: { scId: sc.scid, tab: "investigate" },
   query: { point: row.episode.point.id },
 });
 </script>
@@ -81,7 +82,7 @@ const to = (row: AlarmListRow): RouteLocationRaw => ({
       <RouterLink
         v-else-if="row.sc"
         :class="{ 'pl-5': row.member }"
-        :to="to(row)"
+        :to="to(row, row.sc)"
         class="max-md:hit-44 whitespace-nowrap text-readout no-underline hover:text-bright hover:underline"
         >{{ row.sc.name }}</RouterLink
       >

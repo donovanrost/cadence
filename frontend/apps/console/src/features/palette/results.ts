@@ -78,7 +78,7 @@ function spacecraftItem(sc: FleetSpacecraft, rank: number, canCommand: boolean):
     subtitle: parts.join(" · "),
     hint: `SCID ${sc.scid}`,
     state: fleetOpState(sc.state),
-    to: { name: "ops.spacecraft", params: { scId: String(sc.scid) } },
+    to: { name: "ops.spacecraft", params: { scId: sc.scid } },
     commandTo: canCommand ? { name: "ops.commands.new", query: { targets: `sc:${sc.id}` } } : null,
     rank,
   };
