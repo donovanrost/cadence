@@ -1,23 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { diffEdits, SchemaForm, type FormValues } from "@/features/changes/index.ts";
-import { useConsoleScope } from "@/shell";
 import { ApButton, ApCallout, ApPanel, ApTag, formatShort } from "@/ui";
-import SettingsUseOrg from "./SettingsUseOrg.vue";
+import MissionSettingsSection from "./MissionSettingsSection.vue";
 import SettingsValues from "./SettingsValues.vue";
-import {
-  initialValues,
-  sectionSource,
-  sectionTag,
-  type SettingsScope,
-  type SettingsSection,
-} from "./api.ts";
+import { initialValues, sectionTag, type SettingsScope, type SettingsSection } from "./api.ts";
 import { useSectionSave } from "./useSectionSave.ts";
 
 /**
- * One settings section (ux 823e4f7a1, section-level overrides): the source tag on the header. A
- * mission's inherited section reads as text until `Override for this mission`; an overridden one is
- * editable and can go back to the organization's settings.
+ * One settings section. A mission's is per field (ux SettingsAuditProviders.md › Settings: each field
+ * its own source, Override / Reset to inherited); the organization's is one form, its source on the
+ * header.
  */
 const props = defineProps<{ scope: SettingsScope; section: SettingsSection; canEdit: boolean }>();
 const emit = defineEmits<{ saved: [] }>();
@@ -37,25 +30,10 @@ const { busy, note, save } = useSectionSave(
   () => props.section,
   () => emit("saved"),
 );
-const where = useConsoleScope();
-const names = computed(() => ({
-  org:
-    where.value.kind === "organization" || where.value.kind === "mission"
-      ? where.value.organization.name
-      : "the organization",
-  mission: where.value.kind === "mission" ? where.value.mission.name : "This mission",
-}));
-const inherited = computed(
-  () => props.scope.kind === "mission" && sectionSource(props.section) !== "mission",
-);
-const overriding = ref(false);
-watch(
-  () => props.section,
-  () => (overriding.value = false),
-);
+const mission = computed(() => props.scope.kind === "mission");
 const canChange = computed(() => props.canEdit && props.section.locked !== true);
-/** The form shows for the org, for an overridden mission section, or once Override is chosen. */
-const editable = computed(() => canChange.value && (!inherited.value || overriding.value));
+/** The organization's form; a mission's fields edit one at a time. */
+const editable = computed(() => !mission.value && canChange.value);
 const meta = computed(() => {
   const v = props.section.version;
   return v
@@ -75,17 +53,11 @@ function submit() {
     return void (note.value = { tone: "caution", text: "Nothing changed yet." });
   void save(Object.fromEntries(edits.changes.map((c) => [c.path, c.value])));
 }
-/** All nulls clear the mission's copy: the section inherits again (ConsoleSettings.save). */
-const useOrg = () =>
-  void save(
-    Object.fromEntries(props.section.fields.map((f) => [f.path, null])),
-    `${props.section.title} follows the organization again. Saved`,
-  );
 </script>
 
 <template>
   <ApPanel index="S1" :title="section.title" :meta="meta" :flush="!editable">
-    <template v-if="sectionTag(section, scope.kind)" #header
+    <template v-if="!mission && sectionTag(section, scope.kind)" #header
       ><ApTag state="off" :label="sectionTag(section, scope.kind) ?? ''"
     /></template>
     <p
@@ -98,18 +70,15 @@ const useOrg = () =>
     <ApCallout v-if="section.locked" tone="info"
       >The organization sets these and doesn't allow missions to override them.</ApCallout
     >
-    <template v-if="!editable">
-      <SettingsValues :fields="section.fields" :inherited="inherited" />
-      <div v-if="inherited && canChange" class="px-4 py-3">
-        <ApButton size="compact" @click="overriding = true">Override for this mission</ApButton>
-      </div>
-    </template>
+    <MissionSettingsSection
+      v-if="mission"
+      :scope="scope"
+      :section="section"
+      :can-change="canChange"
+      @saved="$emit('saved')"
+    />
+    <SettingsValues v-else-if="!editable" :fields="section.fields" />
     <div v-else class="flex flex-col gap-4">
-      <ApCallout v-if="inherited" tone="info"
-        >Overriding copies all of this section's organization values to {{ names.mission }}. They
-        stop following organization changes until you go back to the organization's
-        settings.</ApCallout
-      >
       <SchemaForm
         v-model="values"
         :schema="{ kind: 'settings', fields: section.fields }"
@@ -120,15 +89,6 @@ const useOrg = () =>
         <ApButton variant="primary" :disabled="busy" disabled-reason="Saving…" @click="submit"
           >Save</ApButton
         >
-        <ApButton v-if="inherited" variant="ghost" @click="overriding = false">Cancel</ApButton>
-        <SettingsUseOrg
-          v-if="scope.kind === 'mission' && !inherited"
-          :mission-name="names.mission"
-          :org-name="names.org"
-          :section="section.title"
-          :busy="busy"
-          @confirm="useOrg"
-        />
       </div>
     </div>
   </ApPanel>

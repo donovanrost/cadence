@@ -76,14 +76,16 @@ export function valueText(f: SettingsField, v: unknown = f.value): string {
 }
 
 /**
- * Where a section's values come from (ux 823e4f7a1: section-level overrides). The server overrides a
- * whole section, so every field shares one source; the tag sits on the section header.
+ * Where a section's values come from, for the section-level tag (ux 823e4f7a1) until per-field
+ * overrides replace it. api's per-field storage (14455857d) lets one section mix sources, so any
+ * field set for the mission makes the section "mission"; otherwise the first field that says.
  */
 export type SectionSource = "mission" | "organization" | "default";
 /** Only what the server says; null when no field says, or says something unrecognized (U20). */
 export function sectionSource(s: SettingsSection): SectionSource | null {
+  if (s.fields.some((f) => f.source === "mission")) return "mission";
   const src = s.fields.find((f) => f.source !== null && f.source !== undefined)?.source;
-  return src === "mission" || src === "organization" || src === "default" ? src : null;
+  return src === "organization" || src === "default" ? src : null;
 }
 /** The header tag, or null for no tag when the source is unknown. */
 export function sectionTag(s: SettingsSection, scope: SettingsScope["kind"]): string | null {
@@ -99,8 +101,25 @@ export function sectionTag(s: SettingsSection, scope: SettingsScope["kind"]): st
   }
 }
 
+/**
+ * ux (SettingsAuditProviders.md › Settings, per field): at mission scope each field carries its own
+ * source tag, like a profile override (P3). Null when the server doesn't say (U20).
+ */
+export function fieldTag(f: SettingsField): string | null {
+  switch (f.source) {
+    case "mission":
+      return "Set for this mission";
+    case "organization":
+      return "Inherited from org";
+    case "default":
+      return "Default";
+    default:
+      return null;
+  }
+}
+
 /** Form text for each field's effective value. */
-export function initialValues(s: SettingsSection): FormValues {
+export function initialValues(s: Pick<SettingsSection, "fields">): FormValues {
   const values: FormValues = {};
   for (const f of s.fields)
     values[f.path] = f.value === null || f.value === undefined ? "" : displayValue(f, f.value);

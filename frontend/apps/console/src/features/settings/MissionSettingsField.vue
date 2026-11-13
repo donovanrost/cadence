@@ -1,0 +1,75 @@
+<script setup lang="ts">
+import { computed, ref } from "vue";
+import { diffEdits, SchemaForm, type FormValues } from "@/features/changes/index.ts";
+import { ApButton, ApTag } from "@/ui";
+import { fieldTag, initialValues, valueText, type SettingsField } from "./api.ts";
+
+/**
+ * One mission setting (ux per-field overrides, the Profile P3 pattern): its value and source tag;
+ * an inherited one can be overridden; one set here can change or reset to inherited.
+ */
+const props = defineProps<{ field: SettingsField; canChange: boolean; busy: boolean }>();
+const emit = defineEmits<{
+  save: [values: Readonly<Record<string, unknown>>];
+  reset: [];
+  unchanged: [];
+}>();
+const setHere = computed(() => props.field.source === "mission");
+const schema = computed(() => ({ kind: "settings", fields: [props.field] }));
+const editing = ref(false);
+const before = ref<FormValues>({});
+const values = ref<FormValues>({});
+const errors = ref<Readonly<Record<string, string>>>({});
+function start() {
+  before.value = initialValues({ fields: [props.field] });
+  values.value = { ...before.value };
+  errors.value = {};
+  editing.value = true;
+}
+function save() {
+  const edits = diffEdits(schema.value, before.value, values.value);
+  if (!edits.ok) return void (errors.value = edits.errors);
+  if (edits.changes.length === 0) return void emit("unchanged");
+  emit("save", Object.fromEntries(edits.changes.map((c) => [c.path, c.value])));
+  editing.value = false;
+}
+</script>
+
+<template>
+  <div class="flex flex-col gap-2 bg-panel px-4 py-3">
+    <div class="flex items-start justify-between gap-3">
+      <span class="ap-label">{{ field.label }}</span>
+      <ApTag v-if="fieldTag(field)" state="off" :label="fieldTag(field) ?? ''" />
+    </div>
+    <SchemaForm v-if="editing" v-model="values" :schema="schema" :errors="errors" />
+    <span v-else class="font-mono text-md" :class="setHere ? 'text-readout' : 'text-text-4'">{{
+      valueText(field)
+    }}</span>
+    <span v-if="field.help && !editing" class="text-sm text-text-3">{{ field.help }}</span>
+    <div v-if="canChange" class="flex flex-wrap gap-2">
+      <template v-if="editing">
+        <ApButton
+          size="compact"
+          variant="primary"
+          :disabled="busy"
+          disabled-reason="Saving…"
+          @click="save"
+          >Save</ApButton
+        >
+        <ApButton size="compact" variant="ghost" @click="editing = false">Cancel</ApButton>
+      </template>
+      <template v-else>
+        <ApButton size="compact" @click="start">{{ setHere ? "Change" : "Override" }}</ApButton>
+        <ApButton
+          v-if="setHere"
+          size="compact"
+          variant="ghost"
+          :disabled="busy"
+          disabled-reason="Saving…"
+          @click="emit('reset')"
+          >Reset to inherited</ApButton
+        >
+      </template>
+    </div>
+  </div>
+</template>
