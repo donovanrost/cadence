@@ -618,3 +618,31 @@ more than 24 h old.
 - **Singular:** `1 staged change isn't applied` / `is waiting for review`.
 - **Timeline `config_revision`:** `Applied r6 · 2 changes`, plus the actor when the event has one. It links to
   Setup › Revisions r6.
+
+### U40 · Per-spacecraft Commanding and Telemetry switches; handled APIDs (§11 L22) (domain / api / fe-setup / fe-ops)
+- **Spacecraft page** (Setup › Spacecraft › EARENDIL-312) gets an `Operation` panel with two switch rows. Each has
+  a label, a state sentence and the switch:
+  - `Commanding`. On: "Operators can request and release commands to EARENDIL-312." Off: "No new requests or
+    releases for EARENDIL-312."
+  - `Telemetry`. On: "Cadence decodes telemetry from EARENDIL-312." Off: "Cadence doesn't decode telemetry from
+    EARENDIL-312: no live values, alarms or new history." What happens to incoming frames (kept raw or dropped) is
+    for domain to confirm; add it to the sentence when known.
+- **Changing a switch stages it** (L17 spacecraft kind). The switch shows the staged target with a caution tag
+  `STAGED · APPLIES WITH r7` until it's applied. Changes line: `EARENDIL-312 · turn commanding off` / `turn
+  commanding on` / `turn telemetry off` / `turn telemetry on`.
+- **No typed confirm.** It's reversible, and the change-set review is the confirmation. Staging off opens a short
+  sheet that states the consequence from the dry run: "Turning commanding off stops new requests and releases for
+  EARENDIL-312. 3 queued commands won't be released." (only if the dry run counts them), or for telemetry "No
+  live values, alarms or new history from EARENDIL-312 until it's turned on again." Actions `Stage` and `Cancel`.
+- **While commanding is off:**
+  - The spacecraft header (Investigate, Fleet row) shows the off tag `COMMANDING OFF`. `Command` is disabled with
+    "Commanding is off for EARENDIL-312."
+  - In Compose, the target is excluded with that reason.
+  - The refusal `spacecraft_commanding_not_active` reads "Commanding is off for EARENDIL-312." plus "Turn it on in
+    Setup › Spacecraft." with a link for people with `config.stage`.
+  - On release: "Not released: commanding is off for EARENDIL-312."
+- **Telemetry off:** the header tag `TELEMETRY OFF`. Its live values read "Telemetry is off for this spacecraft." in
+  place of stale hatching, so it doesn't look like a fault.
+- **Handled APIDs** (profile field next to the catalog revision, overridable like P3): label `Handled APIDs`, with
+  the default value `All of the catalog's APIDs`. An override is a mono chip list in the catalog's notation:
+  `Only 0x101, 0x102, 0x1A0`. Help: "Packets with other APIDs aren't decoded." (domain to confirm the effect).
