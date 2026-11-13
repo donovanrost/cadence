@@ -198,18 +198,29 @@ export function fetchActivity(
 }
 
 export const severities = ["info", "warning", "error"] as const;
+/** api fc222221: widget and source status are a closed four; the engine's outcome is `status_code`. */
+export const diagnosticStates = ["ok", "degraded", "failed", "not_run"] as const;
+/** Detail rows are display key/values, so a flag may arrive as text ("true") or a boolean. */
+const flag: Reader<boolean | null> = (value, path = "") => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === "false") return value === "true";
+  throw new d.DecodeError(path, "boolean");
+};
 const source = d.object({
-  logical_source: d.string,
-  // Open: the domain's execution words (planned, executed, …), shown only in Technical details.
-  status: d.string,
-  // Open: the raw cache result, shown only in Technical details; `cache` is the verdict the tab reads.
-  cache_status: d.nullable(d.string),
-  /** Asked of api: the cache verdict in two words; null when unknown. */
+  // free-text: the logical source's name (a data source key), shown in Technical details.
+  logical_source: d.nullable(d.string),
+  status: d.known(diagnosticStates),
+  // free-text: the engine's raw outcome (SourceExecutionSemantics), for Technical details only.
+  status_code: d.nullable(d.string),
   cache: d.nullable(d.known(["fresh", "cached"] as const)),
+  // free-text: the raw cache result, for Technical details only.
+  cache_status: d.nullable(d.string),
   severity: d.nullable(d.known(severities)),
-  retryable: d.nullable(d.boolean),
+  retryable: flag,
+  // free-text: what the operator can do, as the server's sentence.
   operator_action: d.nullable(d.string),
-  // Open: domain warning codes, shown only in Technical details (the words come from `message`).
+  // free-text: domain warning codes, for Technical details (the tab shows `message`).
   warning_codes: d.array(d.string, 50),
   // Not recorded yet (gap 5): stay null; the console shows no numbers (ux, U20).
   duration_ms: d.nullable(d.integer),
@@ -222,16 +233,16 @@ const diagnosticsReader = d.object({
   widgets: d.array(
     d.object({
       placement_id: d.token,
-      title: d.string,
-      status: d.known(["ok", "degraded", "failed", "planned"] as const),
+      title: d.nullable(d.string),
+      status: d.known(diagnosticStates),
       sources: d.array(source, 50),
       warnings: d.array(
         d.object({
-          // Open: domain warning codes; the tab shows `message` and keeps the code for details.
+          // free-text: domain warning codes; the tab shows `message` and keeps the code for details.
           code: d.string,
           severity: d.known(severities),
           field_name: d.nullable(d.string),
-          /** Asked of api: the warning in words. */
+          /** The warning in words; null until api has words for it. */
           message: d.nullable(d.string),
         }),
         100,
@@ -241,9 +252,10 @@ const diagnosticsReader = d.object({
   ),
   refresh: d.nullable(
     d.object({
-      observed_at: d.timestamp,
-      // Open: the refresh decision's domain word, for Technical details only.
+      observed_at: d.nullable(d.string),
+      // free-text: the refresh decision's domain word, for Technical details only.
       decision_status: d.string,
+      // free-text: the domain's reason for the decision, for Technical details only.
       context_reason: d.nullable(d.string),
     }),
   ),

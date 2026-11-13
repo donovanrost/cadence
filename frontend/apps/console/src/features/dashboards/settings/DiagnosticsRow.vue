@@ -15,7 +15,9 @@ defineProps<{ widget: WidgetDiagnostics }>();
           statusMark[widget.status].word
         }}</span
       >
-      <span class="text-md font-semibold text-readout">{{ widget.title }}</span>
+      <span class="text-md font-semibold text-readout">{{
+        widget.title ?? "Untitled widget"
+      }}</span>
       <span v-if="cacheText(widget)" class="text-sm text-text-3">{{ cacheText(widget) }}</span>
     </div>
     <p v-for="a in actionText(widget)" :key="a" class="m-0 text-md text-text-2">{{ a }}</p>
@@ -28,8 +30,8 @@ defineProps<{ widget: WidgetDiagnostics }>();
     >
       <summary class="cursor-pointer">Technical details</summary>
       <ul class="m-0 mt-1 list-none p-0 font-mono text-xs">
-        <li v-for="s in widget.sources" :key="s.logical_source">
-          {{ s.logical_source }} · {{ s.status
+        <li v-for="(s, i) in widget.sources" :key="`s-${i}`">
+          {{ s.logical_source ?? "source" }} · {{ s.status_code ?? "not run"
           }}<template v-if="s.severity"> · {{ s.severity }}</template
           ><template v-if="s.retryable !== null">
             · {{ s.retryable ? "retryable" : "not retryable" }}</template

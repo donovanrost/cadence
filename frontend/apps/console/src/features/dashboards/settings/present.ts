@@ -1,4 +1,4 @@
-import type { ApiError } from "@/api";
+import { actor, actorName, decoders, detailsOf, isError, orNull, type ApiError } from "@/api";
 import { formatShort, type OpState } from "@/ui";
 import type { ActivityEvent, ActivityKind, Share, Snapshot, WidgetDiagnostics } from "./api.ts";
 
@@ -64,7 +64,7 @@ const statusRank: Readonly<Record<WidgetDiagnostics["status"], number>> = {
   failed: 0,
   unrecognized: 1,
   degraded: 1,
-  planned: 2,
+  not_run: 2,
   ok: 3,
 };
 
@@ -77,7 +77,7 @@ export const statusMark: Readonly<
 > = {
   failed: { state: "crit", word: "FAILED" },
   degraded: { state: "caution", word: "DEGRADED" },
-  planned: { state: "neutral", word: "NOT RUN YET" },
+  not_run: { state: "neutral", word: "NOT RUN YET" },
   ok: { state: "nominal", word: "OK" },
   unrecognized: { state: "stale", word: "NOT KNOWN" },
 };
@@ -122,34 +122,33 @@ export function parseTags(
 
 /** D15 409 version_conflict: `Mira K. saved v8 at 22:41Z. Reload to see it, then save again.` */
 export function conflictText(e: ApiError): string | null {
-  if (e.kind !== "conflict" || e.code !== "version_conflict") return null;
-  const det: unknown = e.details;
-  const get = (k: string): unknown =>
-    det !== null && typeof det === "object" && k in det ? Reflect.get(det, k) : null;
-  const v = get("current_version");
-  const by = get("saved_by");
-  const at = get("saved_at");
-  const who =
-    by !== null && typeof by === "object" && "name" in by && typeof by.name === "string"
-      ? by.name
-      : "Someone";
-  const when = typeof at === "string" ? ` at ${formatShort(new Date(at)).slice(6)}` : "";
-  return `${who} saved ${typeof v === "number" ? `v${v}` : "a newer version"}${when}. Reload to see it, then save again.`;
+  if (!isError(e, "version_conflict")) return null;
+  const det = detailsOf(
+    e,
+    decoders.object({
+      current_version: orNull(decoders.integer),
+      saved_by: orNull(actor),
+      saved_at: orNull(decoders.timestamp),
+    }),
+  );
+  const who = actorName(det?.saved_by, "Someone");
+  const when = det?.saved_at ? ` at ${formatShort(new Date(det.saved_at)).slice(6)}` : "";
+  const v = det?.current_version;
+  return `${who} saved ${v != null ? `v${v}` : "a newer version"}${when}. Reload to see it, then save again.`;
 }
 
 /** D3 409 dashboard_in_use (api-ops 3e2a6632): the playlists' names, or null for any other error. */
 export function usedByPlaylists(e: ApiError): readonly string[] | null {
-  if (e.kind !== "conflict" || e.code !== "dashboard_in_use") return null;
-  const det: unknown = e.details;
-  const used = det !== null && typeof det === "object" && "used_by" in det ? det.used_by : null;
-  const lists =
-    used !== null && typeof used === "object" && "playlists" in used ? used.playlists : null;
-  if (!Array.isArray(lists)) return [];
-  return lists.flatMap((p: unknown) =>
-    p !== null && typeof p === "object" && "name" in p && typeof p.name === "string"
-      ? [p.name]
-      : [],
+  if (!isError(e, "dashboard_in_use")) return null;
+  const det = detailsOf(
+    e,
+    decoders.object({
+      used_by: decoders.object({
+        playlists: decoders.array(decoders.object({ name: decoders.string }), 500),
+      }),
+    }),
   );
+  return det ? det.used_by.playlists.map((p) => p.name) : [];
 }
 
 /** The server's `/console/…` url as a router path (the router's base is `/console/`). */

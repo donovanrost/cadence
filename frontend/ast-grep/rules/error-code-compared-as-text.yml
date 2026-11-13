@@ -41,7 +41,6 @@
       "apps/console/src/features/dashboards/library/api.ts",
       "apps/console/src/features/dashboards/library/RenameSheet.vue",
       "apps/console/src/features/dashboards/library/RetireSheet.vue",
-      "apps/console/src/features/dashboards/settings/present.ts",
       "apps/console/src/features/dashboards/shared/api.ts",
       "apps/console/src/features/mobile/YourGoBlock.vue",
       "apps/console/src/features/now/useQueueCommand.ts",

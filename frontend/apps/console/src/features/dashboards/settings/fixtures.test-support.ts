@@ -72,7 +72,8 @@ export const activityWire = {
 
 const src = (cache: "fresh" | "cached" | null, action: string | null) => ({
   logical_source: "telemetry",
-  status: "executed",
+  status: "ok",
+  status_code: "executed",
   cache,
   cache_status: cache,
   severity: null,
