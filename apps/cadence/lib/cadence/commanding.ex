@@ -965,13 +965,13 @@ defmodule Cadence.Commanding do
 
   @doc false
   def release_success_multi(
-         %CommandReleaseAttemptRow{} = release_attempt_row,
-         %CommandQueueEntryRow{} = queue_entry_row,
-         %CommandRequestRow{} = request_row,
-         %CommandReleaseAttempt{} = completed_release_attempt,
-         verifier_instances,
-         initial_verification_state
-       ) do
+        %CommandReleaseAttemptRow{} = release_attempt_row,
+        %CommandQueueEntryRow{} = queue_entry_row,
+        %CommandRequestRow{} = request_row,
+        %CommandReleaseAttempt{} = completed_release_attempt,
+        verifier_instances,
+        initial_verification_state
+      ) do
     Multi.new()
     # DECISIONS #72: held to commit, so a concurrent evaluation of this attempt's transport
     # records waits for the verifiers below, and the catch-up reads records it committed.
