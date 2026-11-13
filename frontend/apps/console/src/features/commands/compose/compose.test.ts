@@ -146,11 +146,11 @@ describe("Compose reorder and the live query (Command.md C1/C2)", () => {
   it("says who left the query and why", () => {
     const back = spacecraftRow(318, { name: "EARENDIL-318", state: "nominal" });
     expect(leftQueryWords([back])).toBe(
-      "1 spacecraft left the query since you started: EARENDIL-318 is back in limits. Keep it?",
+      "1 spacecraft no longer matches your targets: EARENDIL-318 is back in limits. Keep it in this request?",
     );
     const stale = spacecraftRow(2, { name: "B", state: "stale" });
     expect(leftQueryWords([back, stale])).toBe(
-      "2 spacecraft left the query since you started: EARENDIL-318, B. Keep them?",
+      "2 spacecraft no longer match your targets: EARENDIL-318, B. Keep them?",
     );
     expect(leftQueryWords([])).toBeNull();
   });

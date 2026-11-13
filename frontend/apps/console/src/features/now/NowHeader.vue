@@ -37,13 +37,19 @@ const meta = computed(() => {
     const age = (now.value.getTime() - Date.parse(fleet.last_received_at)) / 1000;
     parts.push(`last pkt ${formatDuration(age)}`);
   }
-  if (stationIssue.value) parts.push(stationIssue.value);
+  if (stationIssue.value) parts.push(stationIssue.value.line);
   return parts.join(" · ");
 });
 </script>
 
 <template>
   <ApPageHeader :label="`${missionName} · constellation status`" :title="headline">
-    <p v-if="meta" class="m-0 font-mono text-sm text-text-3 uppercase">{{ meta }}</p>
+    <p
+      v-if="meta"
+      class="m-0 font-mono text-sm text-text-3 uppercase"
+      :title="stationIssue && stationIssue.all.length > 1 ? stationIssue.all.join('\n') : undefined"
+    >
+      {{ meta }}
+    </p>
   </ApPageHeader>
 </template>

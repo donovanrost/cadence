@@ -71,15 +71,15 @@ function leftReason(sc: FleetSpacecraft): string {
 }
 
 /**
- * Command.md C1: "1 spacecraft left the query since you started: EARENDIL-318 is back in limits.
- * Keep it?"; several are named, up to four.
+ * Command.md C1 (ux wording): "1 spacecraft no longer matches your targets: EARENDIL-318 is back
+ * in limits. Keep it in this request?"; several are named, up to four.
  */
 export function leftQueryWords(left: readonly FleetSpacecraft[]): string | null {
   const [one] = left;
   if (!one) return null;
   if (left.length === 1)
-    return `1 spacecraft left the query since you started: ${one.name} ${leftReason(one)}. Keep it?`;
+    return `1 spacecraft no longer matches your targets: ${one.name} ${leftReason(one)}. Keep it in this request?`;
   const names = left.slice(0, 4).map((sc) => sc.name);
   const more = left.length > 4 ? ` and ${left.length - 4} more` : "";
-  return `${left.length} spacecraft left the query since you started: ${names.join(", ")}${more}. Keep them?`;
+  return `${left.length} spacecraft no longer match your targets: ${names.join(", ")}${more}. Keep them?`;
 }

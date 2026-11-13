@@ -209,7 +209,10 @@ describe("Now header: worst station issue (L49)", () => {
         st("fbk", "up", null),
       ],
     };
-    expect(worstStationIssue(a, code, now)).toBe("SVA down since 01:10Z (+1)");
+    expect(worstStationIssue(a, code, now)).toEqual({
+      line: "SVA down since 01:10Z · 1 more station issue",
+      all: ["SVA down since 01:10Z", "KIR degraded since 11-12 20:00Z"],
+    });
     expect(worstStationIssue({ ...a, stations: [st("fbk", "up", null)] }, code, now)).toBeNull();
   });
 });
