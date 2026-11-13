@@ -682,9 +682,20 @@ more than 24 h old.
   - HOLD `spacecraft_has_traffic` sentence: "EARENDIL-312 has had passes booked or commands requested. Archiving
     it takes it out of the mission's lists, fleet and planning when this is applied. Its history stays."
     Placeholder: "Why EARENDIL-312 is being archived". Say "passes booked" (reservations), not "contacts".
-  - Archiving leaves future booked passes and waiting requests as they are (api, 11-13: it only changes the
-    lifecycle state, and nothing stops a waiting request from being released later). Lead and domain are deciding
-    whether archive should refuse, warn or release. Until then, no sentence claims either way (U20). ux's
-    preference: a waiting request is a hard HOLD ("EARENDIL-312 has 1 command request waiting. Release or cancel
-    it first."); future booked passes are acknowledged with their count ("3 booked passes from 11-15 stay booked
-    after it's archived. Release them in Contacts if they're not needed.").
+  - **Pending traffic** (lead's ruling, 11-13). The counts and the earliest pass time are in the HOLD's detail:
+    - **Waiting command requests block** (hard HOLD): "EARENDIL-312 has 1 command request waiting. Release or
+      cancel it first." Plural: "…has 2 command requests waiting. Release or cancel them first." The row links
+      `Open in Uplink` (this spacecraft, waiting).
+    - **Future booked passes are acknowledged:** "3 booked passes from 11-15 03:00Z stay booked after EARENDIL-312
+      is archived. Release them in Contacts if they're not needed." Singular: "1 booked pass on 11-15 03:00Z stays
+      booked after EARENDIL-312 is archived. Release it in Contacts if it isn't needed." The time is §4 short time;
+      drop "from …" / "on …" when the server doesn't give it. Ack placeholder: "Why the passes stay booked". The row
+      links `Open in Contacts` (this spacecraft, booked, from now).
+  - **The archive sheet** shows the same check from the dry run, under its "It leaves…" line. Waiting requests
+    show a crit callout with the blocking sentence and its link, and `Stage archive` is disabled with "Release or
+    cancel the waiting requests first." Booked passes show a caution callout with the passes sentence and its
+    link, and Stage stays enabled. When the dry run can't tell, the sheet keeps the plain line, and the HOLD
+    catches it on Changes.
+  - **Refusal `spacecraft_archived`** (releasing or uplinking a command for an archived spacecraft): "EARENDIL-312
+    is archived, so commands can't be released or sent to it." On a release it reads as the release outcome:
+    "Not released: EARENDIL-312 is archived." In Compose, an archived target isn't offered.
