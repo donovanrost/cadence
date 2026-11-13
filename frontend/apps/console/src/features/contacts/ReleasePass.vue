@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
-import { ApButton, ApCallout } from "@/ui";
+import { computed, ref } from "vue";
+import { ApButton, ApCallout, ApSheet } from "@/ui";
 import { fetchQueuedGroups, type Pass, type QueuedGroups } from "./api.ts";
 import { releasePass, type ReleaseOutcome } from "./release.ts";
 import { stationLabel } from "./gantt.ts";
@@ -12,8 +12,7 @@ import { stationLabel } from "./gantt.ts";
 const props = defineProps<{ missionId: string; pass: Pass; spacecraft: string; now: Date }>();
 const emit = defineEmits<{ changed: [] }>();
 const provider = computed(() => props.pass.source.provider_name ?? "the provider");
-const dialog = ref<HTMLDialogElement | null>(null);
-const titleId = `ap-release-${Math.random().toString(36).slice(2, 9)}`;
+const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const busy = ref(false);
 const outcome = ref<ReleaseOutcome | null>(null);
 
@@ -45,8 +44,7 @@ function open() {
       if (r.ok) queued.value = r.value.queued_command_groups ?? null;
     })
     .catch((e: unknown) => console.error("Queued groups read failed", e));
-  dialog.value?.showModal();
-  void nextTick(() => dialog.value?.querySelector<HTMLElement>("footer button")?.focus());
+  sheet.value?.open();
 }
 async function release() {
   const rev = props.pass.provider_revision;
@@ -54,7 +52,7 @@ async function release() {
   busy.value = true;
   try {
     outcome.value = await releasePass(props.missionId, props.pass.id, rev, provider.value);
-    dialog.value?.close();
+    sheet.value?.close();
     emit("changed");
   } finally {
     busy.value = false;
@@ -80,29 +78,22 @@ async function release() {
       Org admins can release a booking.
     </p>
     <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
-    <dialog
-      ref="dialog"
-      :aria-labelledby="titleId"
-      aria-modal="true"
-      class="m-auto w-[min(560px,calc(100vw-32px))] border border-line bg-panel p-0 text-readout backdrop:bg-[rgba(5,7,10,0.72)]"
+    <ApSheet
+      ref="sheet"
+      :title="`Release ${spacecraft} · ${stationLabel(pass)} · ${short(pass.starts_at)}?`"
     >
-      <div class="flex flex-col gap-3 p-5">
-        <h2 :id="titleId" class="m-0 font-display text-xl font-semibold tracking-tag uppercase">
-          Release {{ spacecraft }} · {{ stationLabel(pass) }} · {{ short(pass.starts_at) }}?
-        </h2>
-        <p class="m-0 text-text-2">
-          Cadence asks {{ provider }} to cancel this booking. If it accepts, the pass leaves the
-          plan and Re-plan can fill the gap.
-        </p>
-        <ApCallout v-if="inProgress" tone="caution">
-          This pass is in progress. Releasing it ends the contact now.
-        </ApCallout>
-        <ApCallout v-if="queuedLine" tone="caution">{{ queuedLine }}</ApCallout>
-      </div>
-      <footer class="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
-        <ApButton variant="ghost" @click="dialog?.close()">Cancel</ApButton>
+      <p class="m-0 text-text-2">
+        Cadence asks {{ provider }} to cancel this booking. If it accepts, the pass leaves the plan
+        and Re-plan can fill the gap.
+      </p>
+      <ApCallout v-if="inProgress" tone="caution">
+        This pass is in progress. Releasing it ends the contact now.
+      </ApCallout>
+      <ApCallout v-if="queuedLine" tone="caution">{{ queuedLine }}</ApCallout>
+      <template #footer>
+        <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
         <ApButton variant="danger" :disabled="busy" @click="release">Release pass</ApButton>
-      </footer>
-    </dialog>
+      </template>
+    </ApSheet>
   </div>
 </template>

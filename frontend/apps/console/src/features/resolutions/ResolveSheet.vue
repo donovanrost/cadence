@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
-import { ApButton, ApCallout } from "@/ui";
+import { computed, ref } from "vue";
+import { ApButton, ApCallout, ApSheet } from "@/ui";
 import ResolveFields from "./ResolveFields.vue";
 import { failureText, outcomeText, resolveUnconfirmed, type ResolveAction } from "./api.ts";
 import type { ResolvablePass } from "./types.ts";
@@ -19,8 +19,7 @@ const errors = ref<Record<string, string>>({});
 const failure = ref<string | null>(null);
 const outcome = ref<string | null>(null);
 const busy = ref(false);
-const dialog = ref<HTMLDialogElement | null>(null);
-const titleId = `ap-resolve-${Math.random().toString(36).slice(2, 9)}`;
+const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 
 const provider = computed(() => props.pass.provider.name ?? "the provider");
 const booked = computed(() => action.value === "booked");
@@ -37,7 +36,6 @@ const primary = computed(() =>
   booked.value ? "Mark booked" : `Cancel at ${provider.value} and mark not booked`,
 );
 
-let opener: HTMLElement | null = null;
 function open(next: ResolveAction) {
   action.value = next;
   note.value = "";
@@ -45,13 +43,7 @@ function open(next: ResolveAction) {
   errors.value = {};
   failure.value = null;
   outcome.value = null;
-  opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  dialog.value?.showModal();
-  void nextTick(() => dialog.value?.querySelector<HTMLElement>("input, textarea")?.focus());
-}
-function onClosed() {
-  opener?.focus();
-  opener = null;
+  sheet.value?.open();
 }
 defineExpose({ open });
 
@@ -87,17 +79,9 @@ async function submit() {
 </script>
 
 <template>
-  <dialog
-    ref="dialog"
-    :aria-labelledby="titleId"
-    aria-modal="true"
-    class="m-auto w-[min(560px,calc(100vw-32px))] border border-line bg-panel p-0 text-readout backdrop:bg-[rgba(5,7,10,0.72)]"
-    @close="onClosed"
-  >
-    <form class="flex flex-col gap-4 p-5" @submit.prevent="submit">
-      <h2 :id="titleId" class="m-0 font-display text-xl font-semibold tracking-tag uppercase">
-        {{ title }}
-      </h2>
+  <!-- Kit ApSheet (focus return, Escape); the first field takes focus, Enter submits. -->
+  <ApSheet ref="sheet" :title="title" initial-focus="input, textarea">
+    <form class="flex flex-col gap-4" @submit.prevent="submit">
       <ApCallout v-if="outcome" tone="info">{{ outcome }}</ApCallout>
       <ResolveFields
         v-else
@@ -110,19 +94,19 @@ async function submit() {
       />
       <!-- The provider re-ask takes seconds (qa: 4-6 s); say what's happening, not just disable. -->
       <p v-if="busy" class="m-0 text-sm text-text-2" role="status">{{ busyText }}</p>
-      <footer class="flex items-center justify-end gap-3 border-t border-hairline pt-3">
-        <ApButton variant="ghost" @click="dialog?.close()">{{
-          outcome ? "Close" : "Cancel"
-        }}</ApButton>
-        <ApButton
-          v-if="!outcome"
-          type="submit"
-          :variant="booked ? 'primary' : 'danger'"
-          :disabled="busy"
-          disabled-reason="Waiting for the provider's answer"
-          >{{ primary }}</ApButton
-        >
-      </footer>
     </form>
-  </dialog>
+    <template #footer>
+      <ApButton variant="ghost" @click="sheet?.close()">{{
+        outcome ? "Close" : "Cancel"
+      }}</ApButton>
+      <ApButton
+        v-if="!outcome"
+        :variant="booked ? 'primary' : 'danger'"
+        :disabled="busy"
+        disabled-reason="Waiting for the provider's answer"
+        @click="submit"
+        >{{ primary }}</ApButton
+      >
+    </template>
+  </ApSheet>
 </template>
