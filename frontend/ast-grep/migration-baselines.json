@@ -23,7 +23,6 @@
     "apps/console/src/features/resolutions/api.ts"
   ],
   "vocabulary-field-decoded-as-text": [
-    "apps/console/src/api/http.ts",
     "apps/console/src/features/alarms/api.ts",
     "apps/console/src/features/alarms/episodes.ts",
     "apps/console/src/features/commands/api.ts",

@@ -19,7 +19,13 @@ export type ApiError =
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: ApiError };
 
 const errorBody = object({
-  error: object({ code: token, message: string, details: optional((value) => value) }),
+  error: object({
+    // free-text: an open vocabulary on purpose (typing §12 A2): checked with isError(e, code)
+    // and knownErrorCode() against the ErrorCode list, so a new server code never fails a read.
+    code: token,
+    message: string,
+    details: optional((value) => value),
+  }),
 });
 
 let csrfToken: string | null = null;

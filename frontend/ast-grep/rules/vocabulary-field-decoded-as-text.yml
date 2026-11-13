@@ -47,7 +47,6 @@
       "**/*.test.ts",
       "ast-grep/fixtures/**",
       # Not migrated yet (BACKLOG §12B, 178 sites on 11-13): each owner removes their file as they migrate.
-      "apps/console/src/api/http.ts",
       "apps/console/src/features/alarms/api.ts",
       "apps/console/src/features/alarms/episodes.ts",
       "apps/console/src/features/commands/api.ts",
