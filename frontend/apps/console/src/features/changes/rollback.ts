@@ -1,3 +1,4 @@
+import { configKind, opActions } from "./shapes.ts";
 import { decoders, request, type ApiError, type ApiResult, type Decoded } from "@/api";
 import {
   errorCode,
@@ -8,15 +9,18 @@ import {
 } from "./actions.ts";
 
 /** Contract: docs/apogee/api/changes.md § Rollback (DECISIONS #49). */
-const { array, integer, nullable, object, string, token } = decoders;
+const { array, integer, nullable, object, string } = decoders;
 
 export const rollbackReader = object({
   target: integer,
   head: integer,
   reverts: array(integer, 1000),
   summary: string,
-  ops: array(object({ kind: token, entity_id: nullable(string), action: token }), 5000),
-  outside: array(object({ kind: token, entity_id: nullable(string) }), 5000),
+  ops: array(
+    object({ kind: configKind, entity_id: nullable(string), action: decoders.known(opActions) }),
+    5000,
+  ),
+  outside: array(object({ kind: configKind, entity_id: nullable(string) }), 5000),
   preview: nullable(previewReader),
 });
 export type RollbackPreview = Decoded<typeof rollbackReader>;

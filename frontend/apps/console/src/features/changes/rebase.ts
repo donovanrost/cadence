@@ -1,10 +1,15 @@
+import { changeSetStates } from "./shapes.ts";
 import { decoders as d, request, type ApiResult } from "@/api";
 import { valueText, type Preview, type PreviewItem } from "./actions.ts";
 
 /** Changes.md K1: a conflicting staged op is rebased onto the live revision: keep mine / take live. */
 export type RebaseChoice = "keep_mine" | "take_live";
 
-const rebased = d.object({ change_set_id: d.token, version: d.integer, state: d.token });
+const rebased = d.object({
+  change_set_id: d.token,
+  version: d.integer,
+  state: d.known(changeSetStates),
+});
 
 export function rebaseOp(
   missionId: string,

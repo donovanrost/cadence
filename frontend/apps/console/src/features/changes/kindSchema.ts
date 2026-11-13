@@ -28,7 +28,11 @@ export const schemaFieldReader = object({
   visible_when: nullable(object({ path: string, equals: raw })),
   pattern: optional(nullable(string)),
 });
-export const kindSchemaReader = object({ kind: token, fields: array(schemaFieldReader, 500) });
+export const kindSchemaReader = object({
+  // free-text: the schema's own kind name, echoed back; templates, requirements and settings build theirs locally.
+  kind: token,
+  fields: array(schemaFieldReader, 500),
+});
 export type KindSchema = Decoded<typeof kindSchemaReader>;
 export type SchemaField = Decoded<typeof schemaFieldReader>;
 export type EditableKind = "ground_station" | "transport" | "spacecraft_profile";

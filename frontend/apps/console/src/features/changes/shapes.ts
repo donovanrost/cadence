@@ -1,11 +1,52 @@
-import { actor, decoders, type Decoded, type Reader } from "@/api";
+import { actor, decoders, type Decoded, type Reader, type Unrecognized } from "@/api";
 
 /**
  * Change-set wire shapes. Requested: docs/apogee/plans/setup-shapes.md §K (a JSON passthrough
  * of Cadence.Control.Configuration, docs/apogee/api/domain.md). Final contract: api/setup.md.
  */
-const { array, boolean, integer, nullable, object, oneOf, optional, string, timestamp, token } =
-  decoders;
+const {
+  array,
+  boolean,
+  integer,
+  known,
+  nullable,
+  object,
+  oneOf,
+  optional,
+  string,
+  timestamp,
+  token,
+} = decoders;
+
+/** Change-set kinds the server registers (config.exs `configuration_kinds`). */
+export const configKinds = [
+  "ground_station",
+  "transport",
+  "spacecraft",
+  "spacecraft_profile",
+  "spacecraft_override",
+  "spacecraft_routes",
+  "framing_compatibility",
+  "catalog_compatibility",
+  "switch_compatibility",
+] as const;
+export type ConfigKind = (typeof configKinds)[number];
+const configKindWords: Readonly<Record<ConfigKind, string>> = {
+  ground_station: "Ground station",
+  transport: "Transport",
+  spacecraft: "Spacecraft",
+  spacecraft_profile: "Profile",
+  spacecraft_override: "Override",
+  spacecraft_routes: "Spacecraft routes",
+  framing_compatibility: "Framing compatibility",
+  catalog_compatibility: "Catalog compatibility",
+  switch_compatibility: "Commanding and telemetry switches",
+};
+export const configKind = decoders.knownText(configKinds);
+/** A kind in words, or the server's word for a kind the console doesn't know yet. */
+export const configKindText = (k: ConfigKind | Unrecognized) =>
+  decoders.vocabularyText(k, configKindWords);
+export const opActions = ["create", "update", "delete"] as const;
 
 const raw: Reader<unknown> = (value) => value;
 
@@ -24,6 +65,7 @@ export const revisionSummary = object({
   live: boolean,
   applied_at: timestamp,
   applied_by: nullable(actor),
+  // free-text: the reason a person gave for the revision.
   reason: nullable(string),
   summary: nullable(string),
   entry_count: integer,
@@ -34,7 +76,7 @@ export const revisionSummary = object({
 
 const op = object({
   id: token,
-  kind: token,
+  kind: configKind,
   entity_id: nullable(token),
   action: oneOf(["create", "update", "delete"]),
   paths: array(string, 500),
@@ -47,7 +89,7 @@ export const change = object({
   author: actor,
   staged_at: timestamp,
   source: raw,
-  state: token,
+  state: known(["staged", "withdrawn"] as const),
   ops: array(op, 1000),
 });
 
@@ -66,6 +108,7 @@ export const changeSet = object({
   authors: array(actor, 100),
   submitted_by: nullable(actor),
   submitted_at: nullable(timestamp),
+  // free-text: the reason given when submitting the change set.
   reason: nullable(string),
   approval_required: nullable(boolean),
   reviews: array(
@@ -132,7 +175,7 @@ export const field = object({
 });
 export const entry = object({
   revision: revisionNumber,
-  kind: token,
+  kind: configKind,
   entity_id: nullable(token),
   entity_name: optional(nullable(string)),
   op: token,

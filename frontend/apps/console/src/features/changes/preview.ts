@@ -1,3 +1,4 @@
+import { configKind, opActions } from "./shapes.ts";
 import { decoders, type Decoded } from "@/api";
 
 /** The change-set dry run's shape. Contract: docs/apogee/api/changes.md (preview). */
@@ -9,7 +10,7 @@ const verdict = oneOf(["go", "hold", "no_go"]);
 const previewItem = object({
   op_id: decoders.optional(nullable(token)),
   change_id: decoders.optional(nullable(token)),
-  kind: token,
+  kind: configKind,
   entity_id: decoders.optional(nullable(token)),
   reason: decoders.optional(nullable(token)),
   errors: decoders.optional(array(object({ path: string, message: string }), 200)),
@@ -67,10 +68,10 @@ export const diffField = object({
   after: (v: unknown) => (v === undefined ? null : v),
 });
 export const diffEntry = object({
-  kind: token,
+  kind: configKind,
   entity_id: decoders.optional(nullable(string)),
   entity_name: decoders.optional(nullable(string)),
-  action: token,
+  action: decoders.known(opActions),
   fields: decoders.optional(array(diffField, 2000)),
 });
 export type DiffEntry = Decoded<typeof diffEntry>;
@@ -95,6 +96,7 @@ export const previewReader = object({
       keeps: array(
         object({
           spacecraft: object({ id: token, name: string }),
+          // free-text: the server's sentence for why this spacecraft keeps its value.
           reason: string,
           /** domain 2ef4ca79: older_profile_version | catalog_override | framing_governed. */
           code: decoders.optional(nullable(token)),

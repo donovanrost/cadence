@@ -28,7 +28,6 @@
       "apps/console/src/features/apps/surfaces.ts",
       "apps/console/src/features/auth/InvitationScreen.vue",
       "apps/console/src/features/auth/SignInScreen.vue",
-      "apps/console/src/features/changes/actions.ts",
       "apps/console/src/features/commands/compose/useComposeDraft.ts",
       "apps/console/src/features/commands/compose/useSubmit.ts",
       "apps/console/src/features/commands/groups/encoding.ts",

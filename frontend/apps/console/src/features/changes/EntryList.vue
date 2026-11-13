@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ApPanel, plural } from "@/ui";
 import { humanize } from "./actions.ts";
+import { configKindText } from "./shapes.ts";
 import { showValue } from "./api.ts";
 import type { RevisionEntry } from "./shapes.ts";
 
@@ -28,7 +29,7 @@ const verb = (op: string) => verbs[op] ?? humanize(op);
           :title="`${entry.op} ${entry.kind} ${entry.entity_id ?? ''}`"
         >
           <span class="text-text-3"
-            >{{ verb(entry.op) }} {{ humanize(entry.kind).toLowerCase() }}</span
+            >{{ verb(entry.op) }} {{ configKindText(entry.kind).toLowerCase() }}</span
           >
           {{ " "
           }}<span class="text-readout">{{ entry.entity_name ?? entry.entity_id ?? "new" }}</span>

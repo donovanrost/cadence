@@ -1,4 +1,5 @@
 import {
+  codeOf,
   decoders,
   outcomeUnknown,
   request,
@@ -12,6 +13,7 @@ const { array, integer, object, oneOf, string, token } = decoders;
 
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/config`;
 import { previewReader, type Preview, type PreviewItem } from "./preview.ts";
+import { changeSetStates, configKindText } from "./shapes.ts";
 export {
   diffEntry,
   diffField,
@@ -35,7 +37,7 @@ export function valueText(v: unknown, unit?: string | null, format?: string | nu
  */
 export function conflictSentences(item: PreviewItem, leftBy?: string): string | null {
   if (!item.paths || item.paths.length === 0) return null;
-  const who = item.entity_name ?? item.entity_id ?? humanize(item.kind);
+  const who = item.entity_name ?? item.entity_id ?? configKindText(item.kind);
   return item.paths
     .map((p) => {
       const since =
@@ -99,10 +101,14 @@ export function itemLine(item: PreviewItem, leftBy?: string): string {
   if (item.sentence) return item.sentence;
   if (item.errors && item.errors.length > 0)
     return item.errors.map((e) => `${e.path}: ${e.message}`).join("; ");
-  return humanize(item.reason ?? item.kind);
+  return item.reason ? humanize(item.reason) : configKindText(item.kind);
 }
 
-const versionResult = object({ change_set_id: token, version: integer, state: token });
+const versionResult = object({
+  change_set_id: token,
+  version: integer,
+  state: decoders.known(changeSetStates),
+});
 
 const submitReader = decoders.variant("state", {
   applied: object({
@@ -150,7 +156,7 @@ export function discardChangeSet(missionId: string, changeSetId: string, expecte
     object({
       change_set_id: token,
       version: integer,
-      state: token,
+      state: decoders.known(changeSetStates),
       remaining: decoders.optional(integer),
     }),
     { method: "POST", body: { expected_version: expectedVersion } },
@@ -183,7 +189,7 @@ export function reviewChangeSet(
 
 /** The server's error tag (docs/apogee/api/changes.md § Errors), when the error carries one. */
 export function errorCode(error: ApiError): string | null {
-  return "code" in error && typeof error.code === "string" ? error.code : null;
+  return codeOf(error);
 }
 
 /** People-facing sentence for a change-set rejection, keyed by the facade tag. */

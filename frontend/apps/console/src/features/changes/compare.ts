@@ -1,3 +1,4 @@
+import { configKind } from "./shapes.ts";
 import { decoders as d, request, type ApiResult } from "@/api";
 import { field, type RevisionEntry } from "./shapes.ts";
 
@@ -7,7 +8,7 @@ const compareReader = d.object({
   to: d.integer,
   entries: d.array(
     d.object({
-      kind: d.token,
+      kind: configKind,
       entity_id: d.nullable(d.token),
       entity_name: d.optional(d.nullable(d.string)),
       op: d.token,

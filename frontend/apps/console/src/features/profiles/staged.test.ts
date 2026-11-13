@@ -7,11 +7,11 @@ const change = (authorId: string, name: string, entity: string, changes: unknown
   author: { kind: "user" as const, id: authorId, name },
   staged_at: "2026-11-13T00:00:00Z",
   source: null,
-  state: "staged",
+  state: "staged" as const,
   ops: [
     {
       id: "o1",
-      kind: "spacecraft_profile",
+      kind: "spacecraft_profile" as const,
       entity_id: entity,
       action: "update" as const,
       paths: [],

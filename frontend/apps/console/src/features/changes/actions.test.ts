@@ -11,7 +11,7 @@ import {
 const base: PreviewItem = {
   op_id: null,
   change_id: null,
-  kind: "x",
+  kind: "transport",
   entity_id: null,
   reason: undefined,
   errors: undefined,
