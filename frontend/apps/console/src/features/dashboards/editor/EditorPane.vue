@@ -18,6 +18,9 @@ const emit = defineEmits<{ saved: [version: number] }>();
 const widgetSheet = ref<InstanceType<typeof WidgetSheet> | null>(null);
 const saveSheet = ref<InstanceType<typeof SaveSheet> | null>(null);
 const staged = computed(() => props.session.staged.value);
+const retiredLibrary = computed(
+  () => staged.value?.outline.placements.some((p) => p.library?.retired === true) ?? false,
+);
 const sections = computed(
   () => staged.value?.outline.sections.map((s) => ({ id: s.id, title: s.title })) ?? [],
 );
@@ -39,6 +42,7 @@ defineExpose({
     :notice="session.notice.value"
     :busy="session.busy.value"
     :resumed="session.resumed.value"
+    :retired-library="retiredLibrary"
     @continue="session.continueEditing"
     @discard-mine="session.discardMine"
   />

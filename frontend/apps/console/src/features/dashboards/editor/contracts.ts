@@ -125,6 +125,10 @@ export const outline = d.object({
       section_id: d.nullable(id),
       title: d.string,
       editable: d.boolean,
+      // Asked of domain (plans/dashboards.md › Retired library items): absent until it ships.
+      library: d.optional(
+        d.nullable(d.object({ item_id: id, version: d.integer, retired: d.boolean })),
+      ),
       fields: d.nullable(widgetFields),
       observables: d.array(id, 24),
       layout: d.object({

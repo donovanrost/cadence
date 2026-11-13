@@ -13,6 +13,8 @@ const props = defineProps<{
   notice: Notice | null;
   busy: boolean;
   resumed: boolean;
+  /** The board places a retired library item (after a restore): say it before Save refuses. */
+  retiredLibrary: boolean;
 }>();
 const emit = defineEmits<{ continue: []; discardMine: [] }>();
 const savedLine = computed(() => {
@@ -74,6 +76,10 @@ const noticeText = computed(() => {
       </span>
     </template>
   </ApCallout>
+  <!-- Not alongside a notice: Save's refusal already says the same sentence. -->
+  <ApCallout v-if="retiredLibrary && !noticeText" tone="caution"
+    >That library widget was retired or removed. Remove it from this dashboard to save.</ApCallout
+  >
   <ApCallout
     v-if="noticeText"
     :tone="notice?.kind === 'skipped' || notice?.kind === 'too_many_commands' ? 'caution' : 'crit'"
