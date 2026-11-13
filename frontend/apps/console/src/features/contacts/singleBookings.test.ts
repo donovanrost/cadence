@@ -117,7 +117,8 @@ describe("BookPassSheet", () => {
       props: { missionId: "m", fleet: [spacecraftRow(1)], stations: [] },
       attachTo: document.body,
     });
-    (w.vm as unknown as { open: (p: object) => void }).open({ spacecraftId: spacecraftRow(1).id });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
+    w.vm.open({ spacecraftId: spacecraftRow(1).id });
     await flushPromises();
     await w
       .findAll("button")
