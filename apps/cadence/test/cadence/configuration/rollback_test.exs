@@ -90,6 +90,7 @@ defmodule Cadence.Configuration.RollbackTest do
   defmodule BusyTraffic do
     @moduledoc false
     def with_traffic(_org, _mission, ids), do: MapSet.new(ids)
+    def archive_blockers(_org, _mission, _ids), do: %{}
   end
 
   test "rolling back a spacecraft's creation archives it; with traffic that's a HOLD", ctx do

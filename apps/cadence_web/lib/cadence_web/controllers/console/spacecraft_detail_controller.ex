@@ -3,7 +3,7 @@ defmodule CadenceWeb.Console.SpacecraftDetailController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.Reads.SpacecraftDetail
+  alias Cadence.Reads.{SpacecraftDetail, SpacecraftSwitches}
   alias CadenceWeb.Console.Problem
 
   def show(conn, %{"spacecraft_id" => spacecraft_id}) do
@@ -12,8 +12,12 @@ defmodule CadenceWeb.Console.SpacecraftDetailController do
            conn.assigns.current_mission.mission_id,
            spacecraft_id
          ) do
-      {:ok, detail} -> json(conn, %{data: Map.put(detail, :configuration, nil)})
-      {:error, :spacecraft_not_found} -> Problem.respond(conn, :spacecraft_not_found)
+      {:ok, detail} ->
+        switches = SpacecraftSwitches.running(conn.assigns.current_mission, spacecraft_id)
+        json(conn, %{data: detail |> Map.put(:configuration, nil) |> Map.merge(switches)})
+
+      {:error, :spacecraft_not_found} ->
+        Problem.respond(conn, :spacecraft_not_found)
     end
   end
 end

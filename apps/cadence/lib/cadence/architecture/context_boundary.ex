@@ -55,6 +55,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/planning_policy.ex" => :composition,
     "lib/cadence/control/planning_templates.ex" => :composition,
     "lib/cadence/control/planning_grants.ex" => :composition,
+    "lib/cadence/control/spacecraft_ops.ex" => :composition,
     "lib/cadence/control/planning_requirements.ex" => :composition,
     "lib/cadence/control/planning_requirements/schema.ex" => :composition,
     "lib/cadence/control/uplink_qualification.ex" => :composition,

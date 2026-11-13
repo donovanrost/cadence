@@ -6,7 +6,7 @@ defmodule CadenceWeb.Console.CatalogController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.Reads.{CatalogOverview, CatalogRollout}
+  alias Cadence.Reads.{CatalogApids, CatalogOverview, CatalogRollout}
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   def index(conn, params) do
@@ -26,6 +26,14 @@ defmodule CadenceWeb.Console.CatalogController do
   def rollout(conn, %{"revision_id" => revision_id}) do
     case CatalogRollout.load(org_id(conn), mission_id(conn), revision_id) do
       {:ok, rollout} -> json(conn, %{data: rollout})
+      {:error, :catalog_revision_not_found} -> Problem.respond(conn, :catalog_revision_not_found)
+    end
+  end
+
+  @doc "`GET …/catalog/revisions/:revision_id/apids` (L17): `{revision_id, available, apids}`."
+  def apids(conn, %{"revision_id" => revision_id}) do
+    case CatalogApids.load(org_id(conn), mission_id(conn), revision_id) do
+      {:ok, apids} -> json(conn, %{data: apids})
       {:error, :catalog_revision_not_found} -> Problem.respond(conn, :catalog_revision_not_found)
     end
   end

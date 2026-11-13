@@ -8,8 +8,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   configuration read shows that running value). Setting one is a runtime generation (the
   configuration follows, `Cadence.Control.ConfigurationSwitches`), with the HOLDs in
   `SwitchCompatibility`. Deleting a spacecraft archives it (#49/#50): it leaves the mission's lists, fleet
-  and planning but keeps its id, SCID and history. Archiving one that has had traffic (provider
-  reservations or command requests) raises a `spacecraft_has_traffic` HOLD.
+  and planning but keeps its id, SCID and history. Archiving raises the HOLDs in `ArchiveHolds`
+  (waiting command requests block; booked passes and past traffic are acknowledged).
 
   Rules carried over from `Cadence.Spacecraft.Identity`: a pin names an existing, active profile
   version; synthetic configuration profiles can't be chosen; a spacecraft whose framing is
@@ -22,6 +22,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft, as: SpacecraftAsset
+  alias Cadence.Spacecraft.ConfigKinds.ArchiveHolds
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
@@ -111,35 +112,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
     end
   end
 
+  # Archiving (#49/#50, L22): what's still ahead of it, and whether it has had traffic.
   @impl true
-  def holds(organization_id, mission_id, entries) do
-    archived =
-      for %{kind: "spacecraft", op: :delete, entity_id: id} <- entries, do: id
-
-    case {archived, Application.get_env(:cadence, :spacecraft_traffic)} do
-      {[], _traffic} ->
-        []
-
-      {_ids, nil} ->
-        []
-
-      {ids, traffic} ->
-        busy = traffic.with_traffic(organization_id, mission_id, ids)
-
-        for id <- ids, MapSet.member?(busy, id) do
-          %{
-            op_id: nil,
-            change_id: nil,
-            kind: "spacecraft",
-            entity_id: id,
-            reason: :spacecraft_has_traffic,
-            sentence:
-              "This spacecraft has had contacts or commands; it will be archived, not removed, " <>
-                "and its history stays."
-          }
-        end
-    end
-  end
+  defdelegate holds(organization_id, mission_id, entries), to: ArchiveHolds
 
   @impl true
   def summary(:delete, previous, nil), do: "Archive spacecraft #{previous["display_name"]}"

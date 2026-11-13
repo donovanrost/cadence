@@ -14,8 +14,8 @@ defmodule Cadence.Reads.CommandGroups do
 
   `end_reason` says why a member ended without radiating (`aborted`,
   `release_basis_changed`, `earlier_command_failed`, `expired`, `catalog_changed`,
-  `excluded_at_review`, `canceled`, `rejected`). A target's `stage` is the stage of its first
-  unfinished member, or of its last member when all are finished.
+  `spacecraft_archived`, `excluded_at_review`, `canceled`, `rejected`). A target's `stage` is the
+  stage of its first unfinished member, or of its last member when all are finished.
   """
 
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
@@ -261,6 +261,8 @@ defmodule Cadence.Reads.CommandGroups do
       "expired" -> :expired
       # DECISIONS #65: a catalog change set canceled it before release.
       "catalog_changed" <> _ -> :catalog_changed
+      # L22: its spacecraft was archived before it released; it never goes out.
+      "spacecraft_archived" -> :spacecraft_archived
       _other -> :canceled
     end
   end

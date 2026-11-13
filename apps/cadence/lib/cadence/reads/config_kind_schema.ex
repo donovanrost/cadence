@@ -12,12 +12,26 @@ defmodule Cadence.Reads.ConfigKindSchema do
   `spacecraft_profile` (fe-setup, New profile) is the name plus the profile sections of
   `Cadence.SpacecraftType.Schema` (framing, catalog), each field carrying its `section`; routing
   rules, applications and metadata have their own editors.
+  `spacecraft` (L17/L22) is identity (`section: "identity"`) plus the commanding and telemetry
+  switches (`section: "switches"`, help is ux's U40). Profile choices are the mission's shared
+  profiles; a version left empty means the profile's latest (`Cadence.Control.SpacecraftOps`).
   """
 
   alias Cadence.Catalog
   alias Cadence.Comms.TransportKind
   alias Cadence.Reads.ProfileDetail
   alias Cadence.SpacecraftType.Schema, as: ProfileSchema
+  alias Cadence.SpacecraftTypeStore
+
+  @synthetic_profile "spacecraft_configuration_profile_"
+
+  @commanding_help "Lets operators request and release commands to this spacecraft. Turning " <>
+                     "it off cancels commands still waiting to be sent when the change is " <>
+                     "applied."
+
+  @telemetry_help "Cadence decodes this spacecraft's telemetry into live values, alarms and " <>
+                    "history. Turning it off means no new live values, alarms or history " <>
+                    "until it's turned on again."
 
   # A profile can't be framed without both transfer frames.
   @profile_required ~w(downlink_protocol uplink_protocol)
@@ -73,6 +87,36 @@ defmodule Cadence.Reads.ConfigKindSchema do
       |> Map.put(:section, "profile")
 
     {:ok, [name | Enum.flat_map(ProfileSchema.sections(), &profile_section(&1, choices))]}
+  end
+
+  def fields("spacecraft", organization_id, mission_id) do
+    profiles =
+      organization_id
+      |> SpacecraftTypeStore.list_spacecraft_types(mission_id)
+      |> Enum.reject(&String.starts_with?(&1.spacecraft_type_id, @synthetic_profile))
+      |> Enum.map(&%{value: &1.spacecraft_type_id, label: &1.display_name})
+
+    identity = [
+      field("display_name", "Name", :string, required: true, range: %{min: 1, max: 200}),
+      field("scid", "SCID", :integer,
+        range: %{min: 0, max: 1023},
+        help: "The spacecraft ID its frames carry, unique in the mission."
+      ),
+      field("spacecraft_type_id", "Profile", :enum, enum: profiles),
+      field("spacecraft_type_version", "Profile version", :integer,
+        range: %{min: 1, max: 1_000_000},
+        help: "Leave empty for the profile's latest version."
+      )
+    ]
+
+    switches = [
+      field("commanding_enabled", "Commanding", :boolean, help: @commanding_help),
+      field("telemetry_enabled", "Telemetry", :boolean, help: @telemetry_help)
+    ]
+
+    {:ok,
+     Enum.map(identity, &Map.put(&1, :section, "identity")) ++
+       Enum.map(switches, &Map.put(&1, :section, "switches"))}
   end
 
   def fields(kind, _organization_id, _mission_id), do: fields(kind)

@@ -227,8 +227,10 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
 - Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
   | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
-  earlier_command_failed | expired | catalog_changed | excluded_at_review | canceled | rejected` (or
-  null). `catalog_changed` (DECISIONS #65): a catalog change set canceled it before release.
+  earlier_command_failed | expired | catalog_changed | spacecraft_archived | excluded_at_review |
+  canceled | rejected` (or null). `catalog_changed` (DECISIONS #65): a catalog change set canceled
+  it before release. `spacecraft_archived` (L22): its spacecraft was archived before it released,
+  so it never went out.
 - `…/preflight` re-runs preflight on the submitted inputs for Approve (A2) and adds
   `changed_since_submit` (`hold` when the result no longer matches what was submitted). Its
   `conflicts` check leaves out the group's own members, so only other work on the lanes counts.

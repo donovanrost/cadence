@@ -955,6 +955,7 @@ defmodule CadenceWeb.Router do
       get("/catalog", CatalogController, :index)
       get("/catalog/imports/:import_run_id", CatalogController, :import_run)
       get("/catalog/revisions/:revision_id/rollout", CatalogController, :rollout)
+      get("/catalog/revisions/:revision_id/apids", CatalogController, :apids)
       post("/catalog/imports", CatalogImportController, :create)
       get("/catalog/importers", CatalogImportController, :importers)
       get("/ground-stations", CommsController, :stations)

@@ -45,6 +45,7 @@ defmodule Cadence.Configuration.ConfigKindsTest do
     defmodule BusyTraffic do
       @moduledoc false
       def with_traffic(_org, _mission, ids), do: MapSet.new(ids)
+      def archive_blockers(_org, _mission, _ids), do: %{}
     end
 
     test "deleting a spacecraft archives it: gone from lists, still found by id", ctx do

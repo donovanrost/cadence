@@ -21,6 +21,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | O4 | command policies (as text) | with api-ops (commanding policy, D7) |
 | G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
+| catalog APIDs | `GET /missions/:mission_id/catalog/revisions/:revision_id/apids` | **implemented** (L17) |
 
 ## `GET /api/console/v1/missions/:mission_id/spacecraft`
 
@@ -120,8 +121,55 @@ Refetch on `invalidate` with `spacecraft`.
   `identity`, `profile` and `routing` are not blockers (`telemetry` is informational), the same rule
   as the directory's `ready`.
 - `configuration`: `null` in v1, for the same reason as the directory (DECISIONS #1 change sets).
+- `commanding_enabled`, `telemetry_enabled` (top level, §11 L17): what the active configuration
+  does now, `true | false`, or `null` when the mission has no active configuration for it. Show
+  these as the switches' current values in the edit form.
 
 Errors: `404 mission_not_found`, `404 spacecraft_not_found`.
+
+## Spacecraft edits (§11 L17, L22): the `spacecraft` change-set kind
+
+Staged through change sets (changes.md) with `kind: "spacecraft"`. The form comes from
+`GET …/config/kinds/spacecraft/schema`: `display_name`, `scid` (0–1023), `spacecraft_type_id`
+(enum of the mission's shared profiles, by name), `spacecraft_type_version` (section
+`identity`), then `commanding_enabled` and `telemetry_enabled` (booleans, section `switches`, with
+ux's U40 help).
+
+- **Create**: `{kind: "spacecraft", action: "create", document: {display_name, scid?,
+  spacecraft_type_id?, spacecraft_type_version?, commanding_enabled?, telemetry_enabled?}}`.
+- **Update**: `{kind, action: "update", entity_id, changes: [{path, value}]}`. **Unchanged means
+  absent**: send only the paths that change. An explicit `null` for a switch is `422
+  invalid_params` with `details["ops.<i>.changes.<switch>"]` (create:
+  `details["ops.<i>.document.<switch>"]`), on both preview and stage.
+- **Profile without a version** means that profile's latest version: the server fills
+  `spacecraft_type_version` before validating. A version without a profile stays `422` ("Choose a
+  profile and its version together"). To keep the current pin, leave both out. Sending
+  `spacecraft_type_id` alone re-pins to the latest even if it's the current profile.
+- **An unchanged pin passes** even when that profile version is no longer active (the domain's
+  `same_pin?`). The form shows the current value as `<name> (inactive)` from this detail read's
+  `profile`.
+- **Archive** is `action: "delete"` on the wire. The console says "Archive". It leaves the
+  mission's lists, fleet and planning when applied; its id, SCID and history stay.
+
+HOLDs on the preview's `compatibility` check (`items[]`: `{kind: "spacecraft", entity_id,
+reason, blocking, sentence, details?}`; sentences are ux's U40):
+
+| reason | blocking | when | details |
+|---|---|---|---|
+| `spacecraft_commands_waiting` | **yes** | archiving one with command requests still waiting to release | `{waiting_requests, booked_passes, earliest_pass_at}` |
+| `spacecraft_passes_booked` | no (acknowledge) | archiving one with passes still booked to start later | same |
+| `spacecraft_has_traffic` | no (acknowledge) | archiving one that has ever had passes booked or commands requested | none |
+| `commanding_disabled_cancels_commands` | no | turning commanding off with commands waiting | `requests` |
+| `commanding_command_in_flight` | **yes** | turning commanding off while one is being sent | `requests` |
+| `telemetry_disabled` | no | turning telemetry off | none |
+| `telemetry_packet_inputs_required` | **yes** | turning telemetry on without handled APIDs | none |
+
+`earliest_pass_at` is ISO 8601 UTC or null. The sentences already carry the counts and the §4
+short time. A blocking item can't be acknowledged away: submit answers `409 holds_blocking`.
+
+Defence in depth: a request whose spacecraft was archived anyway (queued between preview and
+apply) is never sent. At release it's canceled with `end_reason: spacecraft_archived`
+(commanding.md) and its lane moves on.
 
 ## `GET /api/console/v1/missions/:mission_id/readiness`
 
@@ -316,6 +364,21 @@ server-computed effect counts.
 - Profiles: active ones, sorted by name. Spacecraft pinned to a deleted profile aren't counted.
 - Errors: `404 catalog_revision_not_found`.
 - Live: refetch on `invalidate` with `catalog` or `spacecraft`.
+
+## `GET /api/console/v1/missions/:mission_id/catalog/revisions/:revision_id/apids` (§11 L17)
+
+The APIDs the revision defines, with their packets: the choices for `handled_apids`.
+
+```json
+{"data": {"revision_id": "catalog_revision_…", "available": true,
+  "apids": [{"apid": 100, "packets": ["HK_FAST", "HK_SLOW"]}]}}
+```
+
+- Sorted by APID, packets by name. Read from the revision's executable telemetry plan, so it's
+  exactly what decode can handle.
+- `available: false` (with `apids: []`) when the revision has no telemetry plan yet. Say "not
+  compiled yet", not "no APIDs".
+- Errors: `404 catalog_revision_not_found`.
 
 ## `POST /api/console/v1/missions/:mission_id/catalog/imports` (C2, multipart)
 
@@ -751,8 +814,8 @@ the provider's own record; there is no inferred health.
 ## `GET /api/console/v1/missions/:mission_id/config/kinds/:kind/schema`
 
 `{kind, fields: [{path, label, type, unit, enum, range, default, required, help, visible_when}]}`
-for generating change-set edit forms. `kind` is `ground_station`, `transport` or
-`spacecraft_profile`; anything else gets `422 invalid_params`.
+for generating change-set edit forms. `kind` is `ground_station`, `transport`,
+`spacecraft_profile` or `spacecraft`; anything else gets `422 invalid_params`.
 
 - `ground_station`: `display_name` (required), `code` (required for new stations, `pattern`
   `^[A-Z0-9]{2,8}$`, unique per mission), `provider` (an `enum` of the mission's provider names when
@@ -772,6 +835,11 @@ for generating change-set edit forms. `kind` is `ground_station`, `transport` or
   catalog`). Labels, units, ranges and help match the profile detail's. Routing rules,
   applications and metadata aren't in it (their own editors). The kind still validates on stage
   (e.g. frame lengths per protocol).
+- `spacecraft` (§11 L17): `display_name` (required), `scid` (integer 0–1023), `spacecraft_type_id`
+  (`enum` of the mission's shared profiles, labelled by name), `spacecraft_type_version` (integer;
+  empty means the profile's latest), all with `section: "identity"`. Then `commanding_enabled`
+  and `telemetry_enabled` (boolean, `section: "switches"`, `help` = ux's U40 text). See "Spacecraft
+  edits" above for the staging rules.
 - `visible_when: {path, equals}` says when to show a field (for example `frame_size` only when
   `configuration.framing_mode` is `fixed_size`, and each kind's fields only for its
   `transport_kind`).

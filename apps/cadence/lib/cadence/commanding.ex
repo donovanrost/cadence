@@ -447,7 +447,8 @@ defmodule Cadence.Commanding do
       )
       |> case do
         # The head failed closed; the lane's next entry may still release in this contact.
-        {:error, reason} when reason in [:release_basis_changed, :earlier_command_failed] ->
+        {:error, reason}
+        when reason in [:release_basis_changed, :earlier_command_failed, :spacecraft_archived] ->
           dispatch_queue_lane(organization_id, mission_id, queue_lane_key, released_by, opts)
 
         result ->
@@ -733,6 +734,7 @@ defmodule Cadence.Commanding do
            ),
          :ok <- LifecyclePolicy.ensure_request_releasable(request_row),
          :ok <- group_still_going(organization_id, mission_id, request_row),
+         :ok <- target_live(organization_id, mission_id, request_row),
          {:ok, %RealizedContact{} = realized_contact} <-
            ReleaseTargetSelection.fetch_realized_contact(
              organization_id,
@@ -845,6 +847,23 @@ defmodule Cadence.Commanding do
         )
 
         {:error, :earlier_command_failed}
+    end
+  end
+
+  # L22: an archived spacecraft is never sent to; a request queued before the archive fails
+  # closed instead of holding its lane.
+  defp target_live(organization_id, mission_id, request_row) do
+    case ReleaseTargetGuard.live_request(
+           organization_id,
+           mission_id,
+           request_row.source_endpoint_ref
+         ) do
+      :ok ->
+        :ok
+
+      {:error, {:spacecraft_archived, _id}} ->
+        fail_closed(organization_id, mission_id, request_row, "spacecraft_archived")
+        {:error, :spacecraft_archived}
     end
   end
 

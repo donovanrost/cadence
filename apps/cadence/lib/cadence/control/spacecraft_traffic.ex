@@ -2,7 +2,8 @@ defmodule Cadence.Control.SpacecraftTraffic do
   @moduledoc """
   Which spacecraft have had traffic (#49/#50): any provider reservation, or any command request
   on one of their source endpoints. A change set that archives such a spacecraft raises a HOLD
-  (`spacecraft_has_traffic`). Configured as `:spacecraft_traffic` so the spacecraft kind needs
+  (`spacecraft_has_traffic`). `archive_blockers/3` is what is still ahead of one (L22): requests
+  waiting to release and passes still booked. Configured as `:spacecraft_traffic` so the spacecraft kind needs
   no compile-time edge to contacts or commanding.
   """
 
@@ -41,5 +42,41 @@ defmodule Cadence.Control.SpacecraftTraffic do
       MapSet.member?(booked, id) or Enum.any?(endpoints[id], &MapSet.member?(commanded, &1))
     end)
     |> MapSet.new()
+  end
+
+  @doc """
+  What archiving these spacecraft would leave behind: `%{id => %{waiting_requests,
+  booked_passes, earliest_pass_at}}`, only for spacecraft with any.
+  """
+  @spec archive_blockers(binary(), binary(), [binary()]) :: %{binary() => map()}
+  def archive_blockers(_organization_id, _mission_id, []), do: %{}
+
+  def archive_blockers(organization_id, mission_id, spacecraft_ids) do
+    booked =
+      ReservationActivity.upcoming(
+        organization_id,
+        mission_id,
+        spacecraft_ids,
+        DateTime.utc_now()
+      )
+
+    spacecraft_ids
+    |> Enum.map(fn id ->
+      refs =
+        mission_id
+        |> SourceEndpoints.list_source_endpoints(spacecraft_id: id)
+        |> Enum.map(& &1.source_endpoint_id)
+
+      passes = Map.get(booked, id, %{count: 0, earliest: nil})
+
+      {id,
+       %{
+         waiting_requests: length(RequestActivity.waiting(organization_id, mission_id, refs)),
+         booked_passes: passes.count,
+         earliest_pass_at: passes.earliest
+       }}
+    end)
+    |> Enum.reject(fn {_id, b} -> b.waiting_requests == 0 and b.booked_passes == 0 end)
+    |> Map.new()
   end
 end

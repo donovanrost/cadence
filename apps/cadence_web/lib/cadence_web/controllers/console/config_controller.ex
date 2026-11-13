@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.ConfigController do
   use CadenceWeb, :controller
 
   alias Cadence.Configuration.Kinds
-  alias Cadence.Control.{Configuration, ConfigurationRollback}
+  alias Cadence.Control.{Configuration, ConfigurationRollback, SpacecraftOps}
   alias Cadence.Reads.{ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
@@ -25,6 +25,8 @@ defmodule CadenceWeb.Console.ConfigController do
 
   def stage(conn, body) do
     with {:ok, attrs, ops} <- params(ConfigParams.stage(body)),
+         {:ok, ops} <-
+           params(SpacecraftOps.prepare(scope(conn).organization_id, mission_id(conn), ops)),
          {:ok, result} <- Configuration.stage(scope(conn), mission_id(conn), attrs, ops) do
       conn |> put_status(:created) |> ok(result)
     end
@@ -51,6 +53,8 @@ defmodule CadenceWeb.Console.ConfigController do
 
   def preview_ops(conn, body) do
     with {:ok, ops} <- params(ConfigParams.ops(body)),
+         {:ok, ops} <-
+           params(SpacecraftOps.prepare(scope(conn).organization_id, mission_id(conn), ops)),
          {:ok, preview} <-
            labelled(Configuration.preview(scope(conn), mission_id(conn), {:ops, ops}), conn) do
       ok(conn, preview)
