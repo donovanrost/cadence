@@ -183,4 +183,23 @@ defmodule Cadence.Applications.HistoricalWorkflowRequestTest do
       }
     }
   end
+
+  describe "tenant_run_id/3 (director L1)" do
+    alias Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest, as: Request
+
+    test "the same client run id never collides across organizations or missions" do
+      a = Request.tenant_run_id("org-a", "mission-1", "backfill-2026-11-13")
+      b = Request.tenant_run_id("org-b", "mission-1", "backfill-2026-11-13")
+      c = Request.tenant_run_id("org-a", "mission-2", "backfill-2026-11-13")
+
+      assert a != b and a != c and b != c
+      assert String.starts_with?(a, "backfill-2026-11-13--")
+    end
+
+    test "it is stable for the same tenant and never double-namespaced" do
+      once = Request.tenant_run_id("org-a", "mission-1", "run")
+      assert Request.tenant_run_id("org-a", "mission-1", "run") == once
+      assert Request.tenant_run_id("org-a", "mission-1", once) == once
+    end
+  end
 end
