@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApListRow, ApPanel } from "@/ui";
+import { ApListRow, ApPanel, useNow } from "@/ui";
 import { reasonText, type PlanDetail } from "./api.ts";
 import { rejectedRows } from "./booking-state.ts";
+import { expiredRows } from "./offer-clock.ts";
 import { contactsShortText, coverage } from "./coverage.ts";
 import type { SpacecraftName } from "./names.ts";
 
@@ -15,8 +16,13 @@ const props = defineProps<{
 defineEmits<{ focus: [spacecraftId: string] }>();
 
 const unmet = computed(() => props.plan.demand.spacecraft.filter((s) => !s.rule_met));
-/** Rejected or failed bookings lead the list (ScheduleFlow K1: rejections become A rows). */
-const rejected = computed(() => rejectedRows(props.plan.passes));
+/** Rejected or failed bookings and expired offers lead the list (ScheduleFlow K1: rejections become A rows). */
+const now = useNow();
+/** Expired unsent offers lead too (ux: they can't be booked; re-plan to replace them). */
+const rejected = computed(() => [
+  ...rejectedRows(props.plan.passes),
+  ...expiredRows(props.plan, now.value),
+]);
 const ruleText = computed(() =>
   [...new Set(props.plan.demand.rules.map((r) => r.text))].slice(0, 2),
 );
