@@ -161,6 +161,11 @@ goes red in `test-web` too. I'll find out on the first run (open question 6).
 
 ## Credo gate
 
+**Update 2026-11-12:** 08d5c2ac (#47) fixed the 46 out-of-scope findings and widened
+`.credo.exs` to `plane_test/`, `browser_test/` and `dev/`. Repo-wide strict credo is at 0, so
+**no baseline is needed**. The gate is steps 1 and 2 below: `mix credo --strict` plus
+`scripts/ci/credo_suppressions.sh` (19 suppressions today). Step 3 is moot.
+
 **Measured 2026-11-11 on develop f9d89f83:** `mix credo --strict` reports **0 issues** within
 `.credo.exs`'s scope (`apps/*/{lib,test}`, `packages/*/{lib,test}`, `mix.exs` files,
 `dev/otp_cluster/`). The violations still to burn down are elsewhere:
@@ -327,7 +332,9 @@ should be visible) and 1 for `setup`, as configured today.
 
 1. `ci.yml` with `changes`, `quality` (credo gate steps 1+2), `test-packages`, `test-core`,
    `ci-ok`, composite setup and caches. First run cold, second warm, then report timings.
-2. `publication` + `test-web`, then the credo baseline scope widening if approved.
+   **Written 2026-11-12** (0d8aa9e6, after the mise.toml pin df9b3c11 and the
+   `Cadence.Commanding` format fix be530feb); awaiting its first run.
+2. `publication` + `test-web`, plus diagnosing the federation `integrity_failure`.
 3. Fold `frontend.yml` in, plus the producer-contract and federation-browser cache work.
 4. After `ui/apogee-spa` merges: `console-build`, `e2e` shards, `e2e-report`. Measure, tune N,
    then make it required.
