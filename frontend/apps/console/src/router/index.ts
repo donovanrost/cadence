@@ -26,6 +26,40 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/features/auth/NoOrganizationScreen.vue"),
     meta: { public: true, title: "No organization" },
   },
+  // L7 platform admin (ux screens/Admin.md): outside org and mission scope, behind admin mode (L6).
+  // mode 'account' (reading layout) until lead's 'admin' shell mode lands.
+  {
+    path: "/admin",
+    component: () => import("@/features/admin/AdminLayout.vue"),
+    meta: { mode: "account", title: "Platform admin" },
+    children: [
+      { path: "", name: "admin", redirect: { name: "admin.organizations" } },
+      {
+        path: "organizations",
+        name: "admin.organizations",
+        component: () => import("@/features/admin/OrganizationsScreen.vue"),
+        meta: { mode: "account", title: "Organizations" },
+      },
+      {
+        path: "organizations/:orgId",
+        name: "admin.organization",
+        component: () => import("@/features/admin/OrganizationScreen.vue"),
+        meta: { mode: "account", title: "Organization" },
+      },
+      {
+        path: "service-identities",
+        name: "admin.service-identities",
+        component: () => import("@/features/admin/ServiceIdentitiesScreen.vue"),
+        meta: { mode: "account", title: "Service identities" },
+      },
+      {
+        path: "runtime",
+        name: "admin.runtime",
+        component: () => import("@/features/admin/RuntimeScreen.vue"),
+        meta: { mode: "account", title: "Runtime" },
+      },
+    ],
+  },
   {
     path: "/account",
     name: "account",
