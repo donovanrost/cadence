@@ -145,6 +145,16 @@ describe("dashboards library (slice 8)", () => {
       reads: ["EPS.VBAT for the dashboard's spacecraft"],
       settings: ["precision: 2", "sampling: latest"],
     });
+    const scoped = (mode: string) =>
+      previewOf(
+        JSON.stringify({
+          widget_type_id: "cadence.time_series",
+          binding: { observables: ["EPS.VBAT"], scope_mode: mode },
+        }),
+      )?.reads;
+    expect(scoped("override")).toEqual(["EPS.VBAT on the spacecraft chosen where it's placed"]);
+    expect(scoped("repeat")).toEqual(["EPS.VBAT for each spacecraft or resource it repeats over"]);
+    expect(scoped("brand_new")).toEqual(["EPS.VBAT"]);
     expect(previewOf("not json")).toBeNull();
   });
 

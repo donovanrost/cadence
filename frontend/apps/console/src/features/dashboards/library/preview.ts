@@ -26,6 +26,17 @@ const lines = (o: Readonly<Record<string, unknown>> | null, skip: readonly strin
     .filter(([k, v]) => !skip.includes(k) && scalar(v) && v !== "")
     .map(([k, v]) => `${k.replaceAll("_", " ")}: ${String(v)}`);
 
+/**
+ * Widgets.WidgetDef scope_mode, as a clause after each point (lead; dashboards' editor calls them
+ * Follow dashboard / One spacecraft / Repeat). A library definition doesn't carry the spacecraft or
+ * what it repeats over (the placement does), so those clauses can't name it.
+ */
+const SCOPE_WORDS: ReadonlyMap<string, string> = new Map([
+  ["context", " for the dashboard's spacecraft"],
+  ["override", " on the spacecraft chosen where it's placed"],
+  ["repeat", " for each spacecraft or resource it repeats over"],
+]);
+
 function pointNames(observables: unknown): string[] {
   if (!Array.isArray(observables)) return [];
   return observables.flatMap((o): string[] => {
@@ -49,8 +60,8 @@ export function previewOf(definitionJson: string): DefinitionPreview | null {
   const kind = typeof type === "string" ? widgetTypeWord(type) : "Widget";
   const title = typeof def.title === "string" && def.title.trim() ? def.title : null;
   const binding = recordOf(def.binding);
-  // scope_mode context: the points are read for whichever spacecraft the dashboard shows (lead).
-  const scope = binding?.scope_mode === "context" ? " for the dashboard's spacecraft" : "";
+  const mode = binding?.scope_mode;
+  const scope = typeof mode === "string" ? (SCOPE_WORDS.get(mode) ?? "") : "";
   const reads = pointNames(binding?.observables).map((name) => `${name}${scope}`);
   const settings = [
     ...lines(recordOf(def.options), []),
