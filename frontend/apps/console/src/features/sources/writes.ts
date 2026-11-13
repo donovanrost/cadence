@@ -49,8 +49,7 @@ const binding = d.object({
   // free-text: a logical source key, an open set R1 lists (the key, not a vocabulary).
   logical_source: d.token,
   data_source_id: d.token,
-  // free-text: until api-ops lists binding statuses; shown as words.
-  status: d.string,
+  status: d.known(["active", "disabled", "superseded"] as const),
 });
 export type SourceBinding = Decoded<typeof binding>;
 

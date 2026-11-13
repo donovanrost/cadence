@@ -18,8 +18,19 @@ export function kindText(kind: DataSource["kind"]): string {
 
 export const SHARED_LINE = "Shared by the platform. Platform admins change it in admin mode.";
 
-/** Writes are off for platform-shared sources (403 platform_source otherwise). */
-export const editable = (s: DataSource) => s.shared !== true;
+/**
+ * Who may write (api-ops L11): `data_sources.manage`, and for a platform-shared source also a
+ * platform admin in admin mode (403 platform_source otherwise). `line` says why it's read-only.
+ */
+export function access(
+  s: DataSource,
+  canManage: boolean,
+  adminMode: boolean,
+): { editable: boolean; line: string | null } {
+  if (s.shared === true && !adminMode) return { editable: false, line: SHARED_LINE };
+  if (!canManage) return { editable: false, line: "Mission operators change data sources." };
+  return { editable: true, line: null };
+}
 
 export function enabledTag(s: DataSource): { state: OpState; label: string } | null {
   if (s.state === undefined || s.state === "unrecognized") return null;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { ApiError } from "@/api";
 import type { DataSource } from "./api.ts";
-import { editable, runsActive, sourceFacts, sourceFailure, SHARED_LINE } from "./present.ts";
+import { access, runsActive, sourceFacts, sourceFailure, SHARED_LINE } from "./present.ts";
 import { blankDraft, blockedReason, registerBody } from "./register.ts";
 import type { SourceDetail, SourceOptions } from "./writes.ts";
 
@@ -71,8 +71,17 @@ describe("register source (W1)", () => {
 
 describe("source page", () => {
   it("keeps shared sources read-only and says why on 403 platform_source", () => {
-    expect(editable(source)).toBe(true);
-    expect(editable({ ...source, shared: true })).toBe(false);
+    expect(access(source, true, false)).toEqual({ editable: true, line: null });
+    expect(access({ ...source, shared: true }, true, false)).toEqual({
+      editable: false,
+      line: SHARED_LINE,
+    });
+    // A platform admin in admin mode may change a shared source.
+    expect(access({ ...source, shared: true }, true, true).editable).toBe(true);
+    expect(access(source, false, false)).toEqual({
+      editable: false,
+      line: "Mission operators change data sources.",
+    });
     expect(sourceFailure(refused("platform_source"))).toBe(SHARED_LINE);
   });
   it("words state and binding conflicts", () => {

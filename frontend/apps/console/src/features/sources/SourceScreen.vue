@@ -2,10 +2,10 @@
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { useMissionScope } from "@/shell";
+import { useAdminMode, useMissionScope } from "@/shell";
 import { ApBreadcrumb, ApCallout, ApPageHeader, ApRemote, ApTag, type ApCrumb } from "@/ui";
 import { fetchSources } from "./api.ts";
-import { editable, enabledTag, kindText, runsActive, SHARED_LINE } from "./present.ts";
+import { access, enabledTag, kindText, runsActive } from "./present.ts";
 import SourceActions from "./SourceActions.vue";
 import SourceBindings from "./SourceBindings.vue";
 import SourceFacts from "./SourceFacts.vue";
@@ -22,6 +22,12 @@ const detail = useRemoteQuery(
 );
 /** Every source, for a binding's switch choices. */
 const sources = useRemoteQuery(missionId, fetchSources);
+const list = computed(() =>
+  sources.state.value.status === "ready" ? sources.state.value.value : null,
+);
+const adminMode = useAdminMode(() => new Date()).active;
+const rights = (s: Parameters<typeof access>[0]) =>
+  access(s, list.value?.canManage ?? false, adminMode.value);
 useMissionInvalidation(missionId, ["data_sources"], () => {
   detail.refetch();
   sources.refetch();
@@ -69,21 +75,23 @@ const crumbs: readonly ApCrumb[] = [
             :label="enabledTag(value.source)?.label ?? ''"
           />
         </ApPageHeader>
-        <ApCallout v-if="!editable(value.source)" tone="info">{{ SHARED_LINE }}</ApCallout>
+        <ApCallout v-if="rights(value.source).line" tone="info">{{
+          rights(value.source).line
+        }}</ApCallout>
         <SourceActions v-else :mission-id="missionId" :source="value.source" @done="done" />
         <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
         <SourceFacts :source="value.source" />
         <SourceBindings
           :mission-id="missionId"
           :bindings="value.bindings"
-          :sources="sources.state.value.status === 'ready' ? sources.state.value.value : []"
-          :editable="editable(value.source)"
+          :sources="list?.sources ?? []"
+          :editable="rights(value.source).editable"
           @done="done"
         />
         <SourceRuns
           :mission-id="missionId"
           :runs="value.runs"
-          :editable="editable(value.source)"
+          :editable="rights(value.source).editable"
           @done="done"
         />
       </template>

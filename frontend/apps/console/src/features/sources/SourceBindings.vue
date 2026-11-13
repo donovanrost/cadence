@@ -28,6 +28,12 @@ const columns = computed<readonly ApColumn[]>(() => [
   { key: "status", label: "Status" },
   ...(props.editable ? [{ key: "switch", label: "Switch", hiddenLabel: true }] : []),
 ]);
+const BINDING_WORDS: Readonly<Record<SourceBinding["status"], string>> = {
+  active: "Active",
+  disabled: "Disabled",
+  superseded: "Superseded",
+  unrecognized: "Unknown",
+};
 const nameOf = (id: string) => props.sources.find((s) => s.id === id)?.display_name ?? id;
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const picked = ref<SourceBinding | null>(null);
@@ -77,7 +83,7 @@ async function submit() {
     <ApTable v-else :columns="columns" :rows="bindings" :row-key="(b) => b.id" caption="Bindings">
       <template #cell-reads="{ row }">{{ nameOf(row.data_source_id) }}</template>
       <template #cell-status="{ row }"
-        ><span class="text-text-2">{{ row.status.replaceAll("_", " ") }}</span></template
+        ><span class="text-text-2">{{ BINDING_WORDS[row.status] }}</span></template
       >
       <template #cell-switch="{ row }"
         ><ApButton size="compact" variant="ghost" @click="open(row)">Switch…</ApButton></template

@@ -23,10 +23,17 @@ const register = ref<InstanceType<typeof RegisterSheet> | null>(null);
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApPageHeader
       :label="`${scope.mission.name} · data sources`"
-      :title="state.status === 'ready' ? plural(state.value.length, 'source') : 'Data sources'"
+      :title="
+        state.status === 'ready' ? plural(state.value.sources.length, 'source') : 'Data sources'
+      "
       size="reading"
     >
-      <ApButton variant="primary" @click="register?.open()">Register source</ApButton>
+      <ApButton
+        v-if="state.status === 'ready' && state.value.canManage"
+        variant="primary"
+        @click="register?.open()"
+        >Register source</ApButton
+      >
     </ApPageHeader>
     <ApPanel index="D1" title="Sources" flush>
       <ApEmptyState
@@ -38,12 +45,12 @@ const register = ref<InstanceType<typeof RegisterSheet> | null>(null);
       <ApRemote v-else :state="state" loading-label="Loading data sources…" @retry="refetch">
         <template #default="{ value }">
           <ApEmptyState
-            v-if="value.length === 0"
+            v-if="value.sources.length === 0"
             state="off"
             headline="No data sources"
             sentence="Telemetry is stored in the mission's data sources."
           />
-          <SourcesTable v-else :sources="value" />
+          <SourcesTable v-else :sources="value.sources" />
         </template>
       </ApRemote>
     </ApPanel>

@@ -58,14 +58,29 @@ const source = object({
 export type DataSource = Decoded<typeof source>;
 export const sourceReader = source;
 
+const listReader = object({
+  sources: array(source, 1000),
+  /** api-ops L11: ["data_sources.manage"] when the caller passes the writes' check; absent before L11. */
+  permissions: optional(array(known(["data_sources.manage"] as const), 10)),
+});
+export type SourceList = Readonly<{ sources: readonly DataSource[]; canManage: boolean }>;
+
 export async function fetchSources(
   missionId: string,
   signal: AbortSignal,
-): Promise<ApiResult<readonly DataSource[]>> {
+): Promise<ApiResult<SourceList>> {
   const result = await request(
     `/missions/${encodeURIComponent(missionId)}/data-sources`,
-    object({ sources: array(source, 1000) }),
+    listReader,
     { signal },
   );
-  return result.ok ? { ok: true, value: result.value.sources } : result;
+  return result.ok
+    ? {
+        ok: true,
+        value: {
+          sources: result.value.sources,
+          canManage: result.value.permissions?.includes("data_sources.manage") ?? false,
+        },
+      }
+    : result;
 }
