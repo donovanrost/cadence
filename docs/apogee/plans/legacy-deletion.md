@@ -333,8 +333,9 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   - the ops_console tests (`ops_console_test`, `_action_provider_test`, `_action_adapters_test`,
     `ops_route_action_ledger_test`, `ops_console_dashboard_workflows_test`, `dashboard_legacy_test`).
 - **Blocker, being cleared:** the federation smoke used `dashboard_directory` as its canonical ops_console surface.
-  devops moved it to `commands` (branch `ci/smoke-canonical-surface`, 9f0927b4c, waiting on the director's push).
-  The batch can go once that merges.
+  devops moved it to `commands` (9f0927b4c on `ci/smoke-canonical-surface`). That commit doesn't merge on its
+  own: lead/fe-setup cherry-pick it onto `ui/apogee-spa` **in the same batch** as this deletion, so the smoke keeps
+  covering the dashboards until they're gone.
 
 ### L8b library, playlists, settings (+ activity, diagnostics), shares, snapshots, export (blocked)
 - **Blocked on:** slice 6 (api D20/D23/D24 after L10; domain's Q6 functions are being built), the library (D21/
@@ -362,7 +363,8 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   work**. Retire the action with the federated `ops_console` batch. A console "Add to dashboard" from Explore
   would be a future console design (WidgetSheet prefilled from an observable).
 - **`RuntimeCoordinator` / `RuntimeInvalidationRelevance`:** api-ops confirms they aren't needed. Listed in L8a.
-- **Federation smoke:** devops moved it to `commands` (9f0927b4c on `ci/smoke-canonical-surface`; merges with the director's push).
+- **Federation smoke:** devops moved it to `commands` (9f0927b4c). It's cherry-picked together with the
+  federated batch, not merged separately (devops 11-14).
 - **Gate:** L8a goes to the director once qa confirms New live.
 - Still open: the storybook `dashboard-directory-study/` is ux's call.
 
