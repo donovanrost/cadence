@@ -37,8 +37,9 @@ with Profile/People.
   - Section text: "Who has to agree before configuration changes and app activations take effect."
   - Field `approval_requirement`, label `Approval for changes and app activations`.
   - Options: `direct` `Applies without approval` · `independent` `Needs a second person's approval`.
-  - Help: "Covers change sets in Setup › Changes and app settings that need activation, such as decom. App
-    settings that save immediately, such as limits, aren't covered."
+  - Help: "Covers change sets in Setup › Changes, spacecraft configuration reviews, and app settings that need
+    activation, such as decom. App settings that save immediately, such as limits, aren't covered." (fe-setup
+    found the third reader.)
 - **Read-only** without the capability: values as text plus "Org admins change settings."
 - **Empty section** (an app with no settings): don't list it.
 
