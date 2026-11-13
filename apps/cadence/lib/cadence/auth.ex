@@ -86,9 +86,11 @@ defmodule Cadence.Auth do
     end
   end
 
-  @spec sign_in(binary(), binary()) :: {:ok, Accounts.issued_user_session()} | {:error, term()}
-  def sign_in(email, password) when is_binary(email) and is_binary(password) do
-    Accounts.sign_in(email, password)
+  @doc "Throttled per account and address (`ip:` option); see `Cadence.Accounts.AttemptLimit`."
+  @spec sign_in(binary(), binary(), keyword()) ::
+          {:ok, Accounts.issued_user_session()} | {:error, term()}
+  def sign_in(email, password, opts \\ []) when is_binary(email) and is_binary(password) do
+    Accounts.sign_in(email, password, opts)
   end
 
   @spec login_environment_admin(binary(), binary()) ::
@@ -103,11 +105,11 @@ defmodule Cadence.Auth do
     Accounts.login_user(email, password)
   end
 
-  @spec verify_user_password(Cadence.Accounts.User.t(), binary()) ::
-          :ok | {:error, :invalid_credentials}
-  def verify_user_password(%Cadence.Accounts.User{} = user, password)
+  @spec verify_user_password(Cadence.Accounts.User.t(), binary(), keyword()) ::
+          :ok | {:error, :invalid_credentials | {:too_many_attempts, pos_integer()}}
+  def verify_user_password(%Cadence.Accounts.User{} = user, password, opts \\ [])
       when is_binary(password) do
-    Accounts.verify_user_password(user, password)
+    Accounts.verify_user_password(user, password, opts)
   end
 
   @spec reconcile_environment_admin() ::
@@ -133,10 +135,11 @@ defmodule Cadence.Auth do
     Accounts.fetch_organization_invitation(invitation_token)
   end
 
-  @spec accept_organization_invitation(binary(), map()) :: {:ok, map()} | {:error, term()}
-  def accept_organization_invitation(invitation_token, attrs)
+  @spec accept_organization_invitation(binary(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def accept_organization_invitation(invitation_token, attrs, opts \\ [])
       when is_binary(invitation_token) and is_map(attrs) do
-    Accounts.accept_organization_invitation(invitation_token, attrs)
+    Accounts.accept_organization_invitation(invitation_token, attrs, opts)
   end
 
   defp browser_organization_context(user, organization_id, true)
