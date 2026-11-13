@@ -129,6 +129,17 @@ function applyDraft(r: Restored) {
   openKey.value = null;
 }
 const saved = useComposeDraft(missionId, fields, applyDraft, route.query.draft === "resume");
+/**
+ * Palette `>` (lead): `?command=<catalog id>` adds that command once, as if picked in the catalog
+ * search, with no targets. A resend or a resumed draft wins. The param is dropped so a reload
+ * doesn't add it twice.
+ */
+const fromPalette = typeof route.query.command === "string" ? route.query.command : null;
+if (fromPalette !== null) {
+  const { command: _used, ...rest } = route.query;
+  router.replace({ query: rest }).catch((e: unknown) => console.error("Navigation failed", e));
+  if (resendFrom(route.query.from) === null && route.query.draft !== "resume") onAdd(fromPalette);
+}
 // ux (1): a resend's prefill is the origin's values, not the operator's first edit.
 watch(resend.sentBackFrom, (id) => {
   if (id !== null) void nextTick(saved.rebase);
