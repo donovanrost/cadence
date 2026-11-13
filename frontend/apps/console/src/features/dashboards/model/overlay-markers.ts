@@ -77,7 +77,7 @@ function contactInterval(row: Row, key: string): MarkerInput | null {
     status: text(row.status),
     /** scheduled_contact (booked: dashed) vs realized_contact (flown: filled), ux. */
     kind: text(row.kind),
-    /** Ground-station code, when the server sends it (asked of api); the band falls back to label. */
+    /** Ground-station code (api 3d4c70d21; null when the contact has no transport); the band falls back to label. */
     station: text(row.station),
   };
 }

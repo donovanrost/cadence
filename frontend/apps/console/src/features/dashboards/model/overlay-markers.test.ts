@@ -86,4 +86,25 @@ describe("overlay frames as chart markers", () => {
       }),
     ]);
   });
+
+  it("carries the contact's ground-station code for the band (api 3d4c70d21)", () => {
+    const p = placementWith([
+      frame(
+        "intervals",
+        [
+          field("starts_at", "time", [1_000, 3_000]),
+          field("ends_at", "time", [2_000, 4_000]),
+          field("kind", "enum", ["realized_contact", "scheduled_contact"]),
+          field("label", "string", ["NL-ABC123", "NL-DEF456"]),
+          field("contact_id", "string", ["c-1", "c-2"]),
+          field("station", "string", ["SVL", null]),
+        ],
+        "events",
+      ),
+    ]);
+    expect(overlayMarkers(p).eventMarkers.map((m) => [m.marker_id, m.station, m.label])).toEqual([
+      ["c-1", "SVL", "NL-ABC123"],
+      ["c-2", null, "NL-DEF456"],
+    ]);
+  });
 });
