@@ -6,6 +6,7 @@ defmodule Cadence.Accounts.Authentication do
   alias Ecto.Changeset
 
   alias Cadence.Accounts.{
+    AttemptLimit,
     EnvironmentAdminPolicy,
     OrganizationMembershipRow,
     Password,
@@ -64,52 +65,84 @@ defmodule Cadence.Accounts.Authentication do
     Repo.transaction(fn -> reconcile_environment_admin_transaction(policy) end)
   end
 
-  @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
-  def sign_in(email, password) when is_binary(email) and is_binary(password) do
-    with {:ok, %User{} = user} <- fetch_active_user_by_email(email) do
-      case user do
-        %User{user_id: @environment_admin_user_id} ->
+  @doc """
+  Signs in with an email and password. Every password check here and in
+  `verify_user_password/3` is throttled (`AttemptLimit`): `{:error, {:too_many_attempts,
+  retry_after_s}}` before the password is checked. Options: `ip`, the client's address.
+  """
+  @spec sign_in(binary(), binary(), keyword()) :: {:ok, issued_user_session()} | {:error, term()}
+  def sign_in(email, password, opts \\ []) when is_binary(email) and is_binary(password) do
+    throttled(email, opts[:ip], fn ->
+      case fetch_active_user_by_email(email) do
+        {:ok, %User{user_id: @environment_admin_user_id} = user} ->
           login_environment_admin_user(user, password)
 
-        %User{} ->
+        {:ok, %User{} = user} ->
           login_durable_user(user, password)
+
+        {:error, _reason} = error ->
+          # Same work as a wrong password, so timing doesn't say whether the account exists.
+          _cost = Password.hash_password(password)
+          error
       end
-    end
+    end)
   end
 
   @spec login_environment_admin(binary(), binary()) ::
           {:ok, issued_user_session()} | {:error, term()}
   def login_environment_admin(email, password)
       when is_binary(email) and is_binary(password) do
-    case fetch_active_user_by_email(email) do
-      {:ok, %User{user_id: @environment_admin_user_id} = user} ->
-        login_environment_admin_user(user, password)
+    throttled(email, nil, fn ->
+      case fetch_active_user_by_email(email) do
+        {:ok, %User{user_id: @environment_admin_user_id} = user} ->
+          login_environment_admin_user(user, password)
 
-      _other ->
-        {:error, :invalid_credentials}
-    end
+        _other ->
+          {:error, :invalid_credentials}
+      end
+    end)
   end
 
   @spec login_user(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   def login_user(email, password) when is_binary(email) and is_binary(password) do
-    case fetch_active_user_by_email(email) do
-      {:ok, %User{} = user} -> login_durable_user(user, password)
-      {:error, _reason} = error -> error
-    end
+    throttled(email, nil, fn ->
+      case fetch_active_user_by_email(email) do
+        {:ok, %User{} = user} -> login_durable_user(user, password)
+        {:error, _reason} = error -> error
+      end
+    end)
   end
 
-  @spec verify_user_password(User.t(), binary()) :: :ok | {:error, :invalid_credentials}
-  def verify_user_password(%User{user_id: @environment_admin_user_id} = user, password)
-      when is_binary(password) do
-    verify_environment_admin_password(user, password)
+  @doc "Checks a signed-in user's password (Account, admin mode); throttled like `sign_in/3`."
+  @spec verify_user_password(User.t(), binary(), keyword()) ::
+          :ok | {:error, :invalid_credentials | {:too_many_attempts, pos_integer()}}
+  def verify_user_password(%User{} = user, password, opts \\ []) when is_binary(password) do
+    throttled(user.email, opts[:ip], fn -> check_user_password(user, password) end)
   end
 
-  def verify_user_password(%User{} = user, password) when is_binary(password) do
+  defp check_user_password(%User{user_id: @environment_admin_user_id} = user, password),
+    do: verify_environment_admin_password(user, password)
+
+  defp check_user_password(%User{} = user, password) do
     case ensure_durable_login_user(user) do
       :ok -> verify_durable_password(user, password)
       {:error, :invalid_credentials} = error -> error
     end
   end
+
+  # Held back before the password is checked; a wrong password counts, a right one clears.
+  defp throttled(email, ip, check) do
+    with :ok <- AttemptLimit.check(email, ip) do
+      check.() |> tap(&count_attempt(&1, email, ip))
+    end
+  end
+
+  defp count_attempt({:error, :invalid_credentials}, email, ip),
+    do: AttemptLimit.failed(email, ip)
+
+  defp count_attempt(:ok, email, ip), do: AttemptLimit.succeeded(email, ip)
+  defp count_attempt({:ok, _session}, email, ip), do: AttemptLimit.succeeded(email, ip)
+  defp count_attempt(_other, _email, _ip), do: :ok
 
   @spec authenticate_user_session(binary()) ::
           {:ok, %{user: User.t(), session_context: user_session_context()}} | {:error, term()}
