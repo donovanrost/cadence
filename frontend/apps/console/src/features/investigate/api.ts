@@ -47,7 +47,11 @@ const interval = d.object({
   limit_set_name: d.nullable(d.string),
   limit_definition_id: d.nullable(d.token),
   limit_definition_version: d.nullable(d.integer),
-  scope: d.object({ type: d.token, ref: d.nullable(d.token) }),
+  // A limit definition's scope_type is an open string column; these are the ones in use.
+  scope: d.object({
+    type: d.knownText(["mission", "spacecraft", "link", "transport"] as const),
+    ref: d.nullable(d.token),
+  }),
   thresholds: thresholdsReader,
 });
 

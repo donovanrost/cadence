@@ -15,7 +15,12 @@ import { causeText, outcomeTag, ownerWord } from "@/features/review/format.ts";
  * P1 coverage and P3's queued counts. P2/P3 rows come from /passes and P4 from pass-review rows.
  */
 const station = d.nullable(
-  d.object({ id: d.nullable(d.token), code: d.nullable(d.string), name: d.nullable(d.string) }),
+  d.object({
+    id: d.nullable(d.token),
+    // free-text: the station's short code, an identifier shown as is.
+    code: d.nullable(d.string),
+    name: d.nullable(d.string),
+  }),
 );
 /** `{<pass id>: count}`, only passes with groups queued. */
 const queuedCounts: Reader<Readonly<Record<string, number>>> = (value, path = "") => {
@@ -35,7 +40,8 @@ const coverageReader = d.object({
     longest_gap: d.nullable(d.object({ seconds: d.integer, from: d.timestamp, to: d.timestamp })),
     none_within_6h: d.boolean,
     contact_rule: d.object({
-      state: d.token,
+      /** Reads.SpacecraftPasses: none (no rule today) | met | short. */
+      state: d.known(["none", "met", "short"] as const),
       have: d.integer,
       need: d.integer,
       rules: d.array(
@@ -68,7 +74,13 @@ export function fetchCoverage(
 
 const recentRow = d.object({
   id: d.token,
-  station: d.nullable(d.object({ code: d.nullable(d.string), name: d.nullable(d.string) })),
+  station: d.nullable(
+    d.object({
+      // free-text: the station's short code, an identifier shown as is.
+      code: d.nullable(d.string),
+      name: d.nullable(d.string),
+    }),
+  ),
   planned_aos: d.timestamp,
   planned_los: d.timestamp,
   actual_aos: d.nullable(d.timestamp),

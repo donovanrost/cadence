@@ -26,7 +26,7 @@ import {
   occurrenceSummary,
   peakFrom,
   shortTime,
-  SOURCE_TAG,
+  sourceTag,
   valueWords,
   type Occurrence,
 } from "./api.ts";
@@ -225,7 +225,7 @@ const live = (o: Occurrence) => `OPEN · ${formatRelative(new Date(o.opened_at),
                 >
                   {{ conditionLine(o) }}
                 </button>
-                <ApTag class="ml-2" :label="SOURCE_TAG[o.source] ?? o.source" />
+                <ApTag class="ml-2" :label="sourceTag(o)" />
               </template>
             </ApListRow>
           </ul>

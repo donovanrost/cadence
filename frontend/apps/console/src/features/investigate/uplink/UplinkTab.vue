@@ -55,11 +55,10 @@ useMissionInvalidation(missionId, ["commanding", "contacts", "attention"], uplin
 const code = (s: { code: string | null; name: string | null }) => s.code ?? s.name ?? "—";
 const tagOf = (r: Parameters<typeof readinessTag>[0] | null) =>
   r ? readinessTag(r, "drawer") : null;
-const STAGES = new Set<string>(Object.keys(STAGE_WORDS));
 /** U4: delivery and verification in C3's words (member stage vocabulary). */
-const stageTag = (state: string | null) =>
-  state && STAGES.has(state)
-    ? { label: STAGE_WORDS[state as MemberStage], state: STAGE_STATE[state as MemberStage] }
+const stageTag = (state: MemberStage | "unrecognized" | null) =>
+  state !== null && state !== "unrecognized"
+    ? { label: STAGE_WORDS[state], state: STAGE_STATE[state] }
     : { label: "Sent", state: "neutral" as const };
 /** U3: when the pass the lane waits for is blocked, the U33 group line. */
 const blockedLine = (u: SpacecraftUplink) =>

@@ -1,4 +1,5 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import { memberStages } from "@/features/commands/groups/api.ts";
 import { passReadinessReader } from "@/features/contacts/readiness.ts";
 
 /**
@@ -8,6 +9,7 @@ import { passReadinessReader } from "@/features/contacts/readiness.ts";
 const station = d.object({
   ref: d.nullable(d.string),
   id: d.nullable(d.token),
+  // free-text: the station's short code, an identifier shown as is.
   code: d.nullable(d.string),
   name: d.nullable(d.string),
 });
@@ -46,13 +48,7 @@ const uplinkReader = d.object({
       ends_at: d.timestamp,
       uplink_evidence: d.token,
       uplink_confirmed: d.nullable(d.boolean),
-      attested_by: d.nullable(
-        d.object({
-          kind: d.optional(d.token),
-          id: d.nullable(d.string),
-          name: d.nullable(d.string),
-        }),
-      ),
+      attested_by: d.nullable(actor),
     }),
     10,
   ),
@@ -78,8 +74,8 @@ const uplinkReader = d.object({
       group,
       released_at: d.timestamp,
       contact_id: d.nullable(d.token),
-      status: d.token,
-      verification_state: d.nullable(d.token),
+      /** The member stage (Reads.CommandGroups.row_stage); null before a status row exists. */
+      verification_state: d.nullable(d.known(memberStages)),
     }),
     1_000,
   ),

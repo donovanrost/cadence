@@ -1,8 +1,17 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  actor as sharedActor,
+  decoders as d,
+  isKnown,
+  request,
+  vocabularyText,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 import {
   conditionWords,
   engineeringValue,
   formatValue,
+  sourceStates,
   withUnit,
 } from "@/features/alarms/index.ts";
 
@@ -11,20 +20,18 @@ import {
  * alarm episodes over 90 days, and prior occurrences of one alarm. Optional fields are ones asked
  * of api after ux's spec (counts, retention, peak, cleared_by); the UI says less without them.
  */
-const actor = d.object({
-  kind: d.optional(d.token),
-  id: d.nullable(d.token),
-  name: d.nullable(d.string),
-});
+/** The shared entity (typing §12 A5). */
+const actor = sharedActor;
+const sources = ["catalog_monitoring", "ground_limit"] as const;
 
 export const occurrenceReader = d.object({
   id: d.token,
-  source: d.token,
-  status: d.token,
+  source: d.knownText(sources),
+  status: d.known(["new", "acknowledged", "cleared"] as const),
   severity: d.oneOf(["critical", "caution"] as const),
   peak_severity: d.nullable(d.oneOf(["critical", "caution"] as const)),
   /** ground: yellow_low | yellow_high | red_low | red_high; catalog: watch | warning | … */
-  condition: d.nullable(d.token),
+  condition: d.nullable(d.knownText(sourceStates)),
   /** low | high for ground limits (the PEAK side); null for catalog alarms (no PEAK). */
   direction: d.nullable(d.oneOf(["low", "high"] as const)),
   point: d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) }),
@@ -89,14 +96,20 @@ export function fetchEpisodeHistory(
   );
 }
 
-export const SOURCE_TAG: Readonly<Record<string, string>> = {
+const SOURCE_TAG: Readonly<Record<(typeof sources)[number], string>> = {
   catalog_monitoring: "Catalog",
   ground_limit: "Ground limits",
 };
 
+/** "Catalog" / "Ground limits"; the server's text for a source this console doesn't know. */
+export const sourceTag = (o: Occurrence) => vocabularyText(o.source, SOURCE_TAG);
+
 /** "VBAT below red low" (U16 words; the raw state when unknown). */
-export const conditionLine = (o: Occurrence) =>
-  `${o.point.name} ${conditionWords(o.condition) ?? o.condition?.replaceAll("_", " ") ?? "out of limits"}`;
+export function conditionLine(o: Occurrence): string {
+  const raw =
+    o.condition === null ? null : isKnown(o.condition) ? o.condition : o.condition.unrecognized;
+  return `${o.point.name} ${conditionWords(raw) ?? raw?.replaceAll("_", " ") ?? "out of limits"}`;
+}
 
 /** "38m", "2h 14m", "<1m" (minutes are enough for episode durations; ux). */
 export function minutes(seconds: number): string {

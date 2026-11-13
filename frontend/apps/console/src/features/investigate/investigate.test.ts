@@ -67,7 +67,7 @@ describe("limitSegments", () => {
       limit_set_name: "DEFAULT",
       limit_definition_id: "def",
       limit_definition_version: 1,
-      scope: { type: "mission", ref: null },
+      scope: { type: "mission" as const, ref: null },
       thresholds: { red_low: redLow, yellow_low: null, yellow_high: null, red_high: null },
     });
     const intervals: LimitIntervals = {
@@ -238,7 +238,7 @@ describe("event log lines (B2)", () => {
   const acked = {
     id: "e2",
     kind: "acknowledged" as const,
-    actor: { kind: "user", id: "u", name: "Mira K." },
+    actor: { kind: "user" as const, id: "u", name: "Mira K." },
     at: "2026-11-08T02:10:00Z",
     payload: {},
   };

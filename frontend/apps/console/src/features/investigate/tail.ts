@@ -18,7 +18,8 @@ const sample = d.object({
   value_json: d.nullable(d.string),
   generation_time: d.timestamp,
   received_at: d.nullable(d.timestamp),
-  limit_state: d.nullable(d.token),
+  /** Reads.SpacecraftLive: red → critical, yellow → caution, green/blue → nominal. */
+  limit_state: d.nullable(d.known(["critical", "caution", "nominal"] as const)),
 });
 export const pointsPush = d.object({ seq: d.integer, samples: d.array(sample, 2_000) });
 export type TailSample = Decoded<typeof sample>;

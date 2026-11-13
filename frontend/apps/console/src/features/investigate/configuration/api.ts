@@ -1,13 +1,18 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
-import { change, revisionDetailReader } from "@/features/changes/shapes.ts";
+import {
+  actor as sharedActor,
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
+import { change, changeSetStates, revisionDetailReader } from "@/features/changes/shapes.ts";
 
 /**
  * Investigate › Configuration (Investigate.md §Configuration; ops.md, api-ops 8d8f5c83): what is
  * this spacecraft running, and what changed? Read-only; changes and revisions use Setup's shapes.
  */
-const actor = d.nullable(
-  d.object({ kind: d.optional(d.token), id: d.nullable(d.string), name: d.nullable(d.string) }),
-);
+/** The shared entity (typing §12 A5). */
+const actor = d.nullable(sharedActor);
 const catalogRev = d.nullable(d.object({ id: d.token, revision_number: d.nullable(d.integer) }));
 
 const configurationReader = d.object({
@@ -37,6 +42,7 @@ const configurationReader = d.object({
       unit: d.nullable(d.string),
       profile_value_json: d.nullable(d.string),
       spacecraft_value_json: d.nullable(d.string),
+      // free-text: the reason a person gave for the override.
       reason: d.nullable(d.string),
       set_at: d.nullable(d.timestamp),
       actor,
@@ -49,13 +55,14 @@ const configurationReader = d.object({
       name: d.nullable(d.string),
       purpose: d.nullable(d.string),
       direction: d.nullable(d.token),
-      role: d.nullable(d.token),
+      role: d.nullable(d.known(["primary", "candidate", "contributing"] as const)),
       enabled: d.boolean,
       active: d.boolean,
       transport: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
       station: d.nullable(
         d.object({
           id: d.nullable(d.token),
+          // free-text: the station's short code, an identifier shown as is.
           code: d.nullable(d.string),
           name: d.nullable(d.string),
         }),
@@ -66,7 +73,7 @@ const configurationReader = d.object({
   pending: d.array(
     d.object({
       change_set_id: d.token,
-      state: d.token,
+      state: d.known(changeSetStates),
       base_revision: d.nullable(d.integer),
       changes: d.array(change, 500),
     }),
@@ -114,7 +121,7 @@ export function catalogCaution(c: SpacecraftConfiguration["catalog"]): string | 
 export function routingWords(r: SpacecraftConfiguration["routing_rules"][number]): string {
   const where = r.station?.code ?? r.station?.name ?? r.transport?.name ?? "No station";
   // Say the role once: skip it when the rule's name already carries it ("Primary downlink").
-  const role =
-    r.role && !(r.name ?? "").toLowerCase().includes(r.role.toLowerCase()) ? r.role : null;
+  const known = r.role === "unrecognized" ? null : r.role;
+  const role = known && !(r.name ?? "").toLowerCase().includes(known) ? known : null;
   return [where, role, r.name].filter(Boolean).join(" · ");
 }
