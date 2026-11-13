@@ -24,7 +24,7 @@ const emptyReader = (value: unknown) => value;
 
 export type EnterOutcome =
   | { ok: true }
-  | { ok: false; reason: "wrong_password" | "throttled" | "other"; error: ApiError };
+  | { ok: false; reason: "wrong_password" | "throttled" | "forbidden" | "other"; error: ApiError };
 
 export async function enterAdminMode(password: string): Promise<EnterOutcome> {
   const result = await request("/session/admin-mode", enterReader, {
@@ -42,7 +42,9 @@ export async function enterAdminMode(password: string): Promise<EnterOutcome> {
       ? "wrong_password"
       : e.kind === "invalid" && e.code === "too_many_attempts"
         ? "throttled"
-        : "other";
+        : e.kind === "forbidden"
+          ? "forbidden"
+          : "other";
   return { ok: false, reason, error: e };
 }
 

@@ -40,6 +40,9 @@ async function submit() {
       emit("entered");
     } else if (outcome.reason === "wrong_password") wrong.value = true;
     else if (outcome.reason === "throttled") retry.block(retryAfterOf(outcome.error) ?? 60);
+    // api-ops a3cf61b0: refused before any password check when the account isn't eligible.
+    else if (outcome.reason === "forbidden")
+      failed.value = "Your account can't use platform administration.";
     else failed.value = "Couldn't reach Cadence. Try again.";
   } finally {
     busy.value = false;

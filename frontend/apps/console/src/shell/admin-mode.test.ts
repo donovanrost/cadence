@@ -54,6 +54,8 @@ describe("L6 admin mode (Auth.md)", () => {
       error: { code: "too_many_attempts", message: "x", details: { retry_after: 40 } },
     });
     expect(await enterAdminMode("nope")).toMatchObject({ ok: false, reason: "throttled" });
+    reply(403, { error: { code: "forbidden", message: "x", details: {} } });
+    expect(await enterAdminMode("right")).toMatchObject({ ok: false, reason: "forbidden" });
     reply(200, { data: { expires_at: "2026-11-13T03:00:00Z" } });
     expect(await enterAdminMode("right")).toEqual({ ok: true });
     expect(useAdminMode(now).remaining.value).toBe("01:00:00");
