@@ -1,0 +1,69 @@
+<script setup lang="ts">
+import { ref } from "vue";
+import { describeApiError } from "@/api";
+import { ApButton, ApCallout, ApField, ApSheet, ApTextarea } from "@/ui";
+import { renameItem } from "./api.ts";
+
+/** Rename a library widget (D22 PATCH): name and description, against the version on screen. */
+const props = defineProps<{ missionId: string }>();
+const emit = defineEmits<{ done: [] }>();
+const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
+const target = ref<{ id: string; version: number } | null>(null);
+const name = ref("");
+const description = ref("");
+const error = ref<string | null>(null);
+const busy = ref(false);
+
+function open(item: {
+  id: string;
+  name: string;
+  description: string | null;
+  latest_version: number;
+}) {
+  target.value = { id: item.id, version: item.latest_version };
+  name.value = item.name;
+  description.value = item.description ?? "";
+  error.value = null;
+  sheet.value?.open();
+}
+async function save() {
+  const t = target.value;
+  if (!t || busy.value) return;
+  if (!name.value.trim()) {
+    error.value = "Give it a name.";
+    return;
+  }
+  busy.value = true;
+  const r = await renameItem(props.missionId, t.id, {
+    name: name.value.trim(),
+    description: description.value.trim(),
+    expected_version: t.version,
+  });
+  busy.value = false;
+  if (r.ok) {
+    sheet.value?.close();
+    emit("done");
+  } else
+    error.value =
+      r.error.kind === "conflict" && r.error.code === "library_item_changed"
+        ? "Someone changed this widget meanwhile. Close and open it again to rename the current one."
+        : r.error.kind === "forbidden"
+          ? "Dashboard editors manage the library."
+          : describeApiError(r.error);
+}
+defineExpose({ open });
+</script>
+
+<template>
+  <ApSheet ref="sheet" title="Rename library widget" initial-focus="input">
+    <ApField v-model="name" label="Name" required />
+    <ApTextarea v-model="description" label="Description" :rows="3" />
+    <ApCallout v-if="error" tone="caution">{{ error }}</ApCallout>
+    <template #footer>
+      <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
+      <ApButton variant="primary" :disabled="busy" disabled-reason="Saving…" @click="save"
+        >Rename</ApButton
+      >
+    </template>
+  </ApSheet>
+</template>
