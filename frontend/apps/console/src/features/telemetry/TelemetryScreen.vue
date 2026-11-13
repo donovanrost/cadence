@@ -20,6 +20,7 @@ import {
   type Selection,
 } from "./selection.ts";
 import { useSeries } from "./useSeries.ts";
+import { useRecentPlots } from "./recent.ts";
 
 /** Telemetry explore (OpsLists §Telemetry): plot points for spacecraft over a window. */
 const scope = useMissionScope();
@@ -33,6 +34,8 @@ const fleetRows = computed(() =>
 
 const selection = computed(() => parseSelection(route.query));
 const picked = computed(() => seriesOf(selection.value));
+/** The empty state's three suggestions: the spacecraft × points you plotted most recently. */
+const recent = useRecentPlots(missionId, selection, fleetRows);
 function update(patch: Partial<Selection>) {
   router
     .replace({ query: selectionQuery({ ...selection.value, ...patch }, route.query) })
@@ -109,7 +112,15 @@ const rows = computed(() =>
             :view="view"
             :empty="picked.series.length === 0"
             :dropped="picked.dropped"
+            :suggested="recent.suggested.value"
             @retry="data.refetch"
+            @suggest="
+              (r) =>
+                update({
+                  scids: addTo(selection.scids, r.scid),
+                  points: addTo(selection.points, r.point),
+                })
+            "
           />
           <ValuesTable v-if="rows.length" :rows="rows" />
         </div>

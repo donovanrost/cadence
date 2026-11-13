@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import { formatClock, ApEmptyState, ApPanel, ApRemote, ApTimeRange, type TimeRange } from "@/ui";
+import {
+  formatClock,
+  ApButton,
+  ApEmptyState,
+  ApPanel,
+  ApRemote,
+  ApTimeRange,
+  type TimeRange,
+} from "@/ui";
 import type { RemoteState } from "@/api/index.ts";
 import { formatValue } from "@/features/alarms/index.ts";
 import { TrendChart } from "@/features/investigate/index.ts";
 import { windowPresets } from "./window.ts";
+import type { RecentPlot } from "./recent.ts";
 import type { PlotView } from "./plot.ts";
 import type { SeriesData } from "./useSeries.ts";
 
@@ -21,8 +30,10 @@ defineProps<{
   empty: boolean;
   dropped: number;
   windowLabel: string;
+  /** Most recently plotted by you (OpsLists §Telemetry empty state), up to three. */
+  suggested?: readonly RecentPlot[];
 }>();
-defineEmits<{ retry: [] }>();
+defineEmits<{ retry: []; suggest: [plot: RecentPlot] }>();
 const window = defineModel<TimeRange>("window", { required: true });
 /** Presets resolve when the picker opens; choosing one goes back through the owner (sliding). */
 const presets = windowPresets(new Date());
@@ -58,6 +69,16 @@ const toneClass = {
         headline="Pick a point to plot"
         sentence="Add a spacecraft and search for a point. Each spacecraft × point is one series."
       >
+        <div v-if="suggested?.length" class="flex flex-wrap justify-center gap-2 pb-2">
+          <ApButton
+            v-for="r in suggested"
+            :key="`${r.scid}|${r.point}`"
+            size="compact"
+            variant="secondary"
+            @click="$emit('suggest', r)"
+            >{{ r.name }} · {{ r.point }}</ApButton
+          >
+        </div>
         <!-- Legacy canned questions (L20) are parked (DECISIONS #75); each has a console home. -->
         <ul class="m-0 flex list-none flex-col gap-1 p-0" aria-label="Other questions">
           <li v-for="q in QUESTIONS" :key="q.label">
