@@ -126,18 +126,6 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
     import("@cadence/dashboards-and-exploration/execution-diagnostics").then(
       (module) => module.executionDiagnosticsContribution,
     ),
-  "dashboards.directory": () =>
-    import("@cadence/dashboards-and-exploration/directory").then(
-      (module) => module.directoryContribution,
-    ),
-  "dashboards.creation": () =>
-    import("@cadence/dashboards-and-exploration/creation").then(
-      (module) => module.creationContribution,
-    ),
-  "dashboards.workspace": () =>
-    import("@cadence/dashboards-and-exploration/workspace").then(
-      (module) => module.dashboardContribution,
-    ),
   "dashboards.activity": () =>
     import("@cadence/dashboards-and-exploration/activity").then(
       (module) => module.activityContribution,

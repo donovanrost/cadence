@@ -433,60 +433,6 @@ test("compiled diagnostics selects through host URLs, restores history and keeps
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   expect(view().get("#diagnostics-loaded-at").attributes("datetime")).toBe(data.model.loaded_at);
 });
-test("dashboard creation uses the token-bound Ops port and retains its lock on host refresh", async () => {
-  const state = {
-    ...snapshot("/missions/mission-1/ops/dashboards/new?mode=import", "mission-1"),
-    ops_page: {
-      id: "dashboards.creation",
-      slot: "ops.page",
-      version: 1,
-      status: "ready",
-      token: "11111111-1111-4111-8111-111111111111",
-      context: { organizationId: "org-1", missionId: "mission-1" },
-      data: {
-        sequence: 0,
-        phase: "editing",
-        model: { version: 1, mission_id: "mission-1", mode: "import", source: null },
-      },
-    },
-  };
-  wrapper = mount(BrowserHost, {
-    props: { snapshot: state },
-  });
-  await flushHostUpdates();
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  const rail = view().get("#ops-nav-rail").element;
-  const name = view().get<HTMLInputElement>("#dashboard-name").element;
-  await view().get("#dashboard-name").setValue("Imported");
-  await view().get("#dashboard-document-json").setValue("{}");
-  await view().get("#dashboard-new-form").trigger("submit");
-  expect(required(transport.requests[0]).payload).toEqual({
-    id: "dashboards.creation",
-    token: state.ops_page.token,
-    path: state.path,
-    event: "create",
-    input: {
-      sequence: 1,
-      source_version: null,
-      dashboard: { name: "Imported", description: "", document_json: "{}" },
-    },
-  });
-  await reply(0, { status: "unknown", sequence: 1 });
-  await view().get("#dashboard-creation-refresh").trigger("click");
-  await reply(1, {
-    ...state,
-    ops_page: {
-      ...state.ops_page,
-      data: { ...state.ops_page.data, sequence: 1, phase: "submitted" },
-    },
-  });
-  expect(view().get("#ops-nav-rail").element).toBe(rail);
-  expect(view().get("#dashboard-name").element).toBe(name);
-  expect(name.value).toBe("Imported");
-  expect(view().get("#dashboard-new-submit").attributes("disabled")).toBeDefined();
-  expect(transport.requests).toHaveLength(2);
-});
-
 test("provider creation and detail share the mission host port without loading a remote", async () => {
   const state = {
     ...snapshot("/missions/mission-1/comms/providers/new", "mission-1"),
