@@ -105,7 +105,7 @@ async function preview() {
     note.value = r.ok
       ? {
           tone: r.value.warnings.length > 0 ? "caution" : "nominal",
-          text: `${plural(r.value.spacecraft_count, "spacecraft", "spacecraft")} · ${r.value.contacts_per_day !== null ? `${formatCount(Math.round(r.value.contacts_per_day))} contacts a day on average` : `${formatCount(r.value.contacts)} contacts in the next day`}${r.value.warnings.length ? ` · ${r.value.warnings.map((w) => warningText[w.code] ?? w.code).join(" ")}` : ""}`,
+          text: `${plural(r.value.spacecraft_count, "spacecraft", "spacecraft")} · ${r.value.contacts_per_day !== null ? `${formatCount(Math.round(r.value.contacts_per_day))} contacts a day on average` : `${formatCount(r.value.contacts)} contacts in the next day`}${r.value.warnings.length ? ` · ${r.value.warnings.map((w) => warningText(w.code)).join(" ")}` : ""}`,
         }
       : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
   } finally {

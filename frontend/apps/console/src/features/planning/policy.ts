@@ -20,6 +20,8 @@ import {
 const { array, boolean, integer, nullable, object, string, timestamp, token } = decoders;
 
 const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
+/** What a policy save or decision answers (Control.PlanningPolicy). */
+export const policyVersionStates = ["pending_approval", "active", "rejected"] as const;
 const fieldMeta = object({ path: string, group: token, advanced: boolean });
 
 export const policyReader = (value: unknown, path = "") => {
@@ -62,10 +64,14 @@ export function savePolicy(
 ) {
   const payload =
     body.expected_version === null ? { document: body.document, reason: body.reason } : body;
-  return request(base(missionId), object({ version: integer, state: string }), {
-    method: "POST",
-    body: payload,
-  });
+  return request(
+    base(missionId),
+    object({ version: integer, state: decoders.known(policyVersionStates) }),
+    {
+      method: "POST",
+      body: payload,
+    },
+  );
 }
 
 export function decidePolicy(
@@ -75,7 +81,7 @@ export function decidePolicy(
 ) {
   return request(
     `${base(missionId)}/${version}/decision`,
-    object({ version: integer, state: string }),
+    object({ version: integer, state: decoders.known(policyVersionStates) }),
     { method: "POST", body },
   );
 }

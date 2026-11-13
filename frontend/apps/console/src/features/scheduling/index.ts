@@ -32,6 +32,7 @@ export {
   type Availability,
   type AvailabilityWindow,
   type PlanDetail,
+  planStates,
   type PlanState,
   type Repair,
   type StationRef,

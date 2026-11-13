@@ -1,4 +1,5 @@
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { planStates } from "@/features/scheduling/index.ts";
 
 /** Contract: docs/apogee/api/scheduling.md, "Dry run before saving" (writes nothing). */
 const { array, integer, nullable, object, optional, string, token } = decoders;
@@ -9,7 +10,7 @@ const reader = object({
       plan: object({ id: token, version: integer }),
       day: string,
       author: nullable(object({ id: optional(nullable(token)), name: string })),
-      state: token,
+      state: decoders.known(planStates),
     }),
     500,
   ),

@@ -48,7 +48,6 @@
       "apps/console/src/features/now/useQueueCommand.ts",
       "apps/console/src/features/people/admin.ts",
       "apps/console/src/features/people/services.ts",
-      "apps/console/src/features/planning/requirements.ts",
       "apps/console/src/features/replan/errors.ts",
       "apps/console/src/features/resolutions/api.ts",
     ],

@@ -45,7 +45,7 @@ describe("step 03 routing summary", () => {
       name: `S${i}`,
       transport_id: null,
     })),
-    legs: Array.from({ length: legs }, () => ({ direction: "downlink" as const, role: "primary" })),
+    legs: Array.from({ length: legs }, () => ({ direction: "downlink" as const, role: "primary" as const })),
     route_count: 0,
     samples: [],
   });

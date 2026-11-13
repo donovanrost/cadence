@@ -6,7 +6,7 @@ describe("supersede sentence (ux ContactPlanning.md)", () => {
     plan: { id: `p-${day}`, version: 1 },
     day,
     author: { id, name },
-    state: "draft",
+    state: "draft" as const,
   });
   it("lists day, revision and author, with 'you' for the reader", () => {
     expect(

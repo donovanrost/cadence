@@ -14,7 +14,8 @@ import {
 } from "@/ui";
 import PolicyTab from "./PolicyTab.vue";
 import RequirementsTab from "./RequirementsTab.vue";
-import { fetchPlanning, situation, type PlanningSummary } from "./api.ts";
+import { vocabularyText } from "@/api";
+import { automationWords, fetchPlanning, situation, type PlanningSummary } from "./api.ts";
 
 /** Setup › Contact planning (DECISIONS #27). Spec: docs/apogee/ux/screens/ContactPlanning.md. */
 const route = useRoute();
@@ -32,7 +33,7 @@ const links: readonly ApTabLink[] = [
 ];
 const subline = (s: PlanningSummary) =>
   s.policy
-    ? `Policy v${s.policy.version} · mode ${s.policy.mode.replaceAll("_", " ")} · ${s.templates.length} templates cover ${s.coverage.covered} of ${s.coverage.spacecraft_total} spacecraft`
+    ? `Policy v${s.policy.version} · ${vocabularyText(s.policy.mode, automationWords)} · ${s.templates.length} templates cover ${s.coverage.covered} of ${s.coverage.spacecraft_total} spacecraft`
     : null;
 </script>
 

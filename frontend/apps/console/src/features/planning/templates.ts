@@ -45,12 +45,14 @@ export type Target =
   | Readonly<{ kind: "plane"; plane: number }>
   | Readonly<{ kind: "spacecraft_ids"; spacecraft_ids: readonly string[] }>;
 
+/** Template preview warnings (api CP3). */
+export const previewWarnings = ["applies_to_nobody", "excluded_outside_target"] as const;
 export const previewReader = object({
   spacecraft_count: integer,
   occurrences: integer,
   contacts: integer,
   contacts_per_day: nullable(decoders.number),
-  warnings: array(object({ code: token }), 20),
+  warnings: array(object({ code: decoders.knownText(previewWarnings) }), 20),
 });
 export type TemplatePreview = Decoded<typeof previewReader>;
 
@@ -108,7 +110,10 @@ export function buildNested(
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, document };
 }
 
-export const warningText: Readonly<Record<string, string>> = {
+export const warningWords: Readonly<Record<(typeof previewWarnings)[number], string>> = {
   applies_to_nobody: "This target matches no spacecraft right now.",
   excluded_outside_target: "Some excluded spacecraft aren't in the target anyway.",
 };
+/** A preview warning in words, or the server's own code for one the console doesn't know. */
+export const warningText = (w: TemplatePreview["warnings"][number]["code"]) =>
+  decoders.vocabularyText(w, warningWords);

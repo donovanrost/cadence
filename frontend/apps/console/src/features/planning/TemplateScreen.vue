@@ -51,6 +51,12 @@ const crumbs = computed((): readonly ApCrumb[] => [
         : "Template",
   },
 ]);
+const stateWords: Readonly<Record<TemplateDetail["state"], string>> = {
+  active: "Active",
+  paused: "Paused",
+  closed: "Closed",
+  unrecognized: "Not known",
+};
 const facts = (t: TemplateDetail) => [
   { key: "rule", label: "Rule", value: ruleText(t.rule_summary), mono: true },
   {
@@ -59,7 +65,7 @@ const facts = (t: TemplateDetail) => [
     value: `${t.applies_to} · ${plural(t.applies_to_count, "spacecraft", "spacecraft")} now`,
   },
   { key: "priority", label: "Priority", value: t.priority.replaceAll("_", " ") },
-  { key: "state", label: "State", value: t.state.replaceAll("_", " ") },
+  { key: "state", label: "State", value: stateWords[t.state] },
 ];
 const columns: readonly ApColumn[] = [
   { key: "version", label: "Version", mono: true },

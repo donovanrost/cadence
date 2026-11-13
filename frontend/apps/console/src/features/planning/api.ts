@@ -6,11 +6,20 @@ const { array, integer, nullable, object, string, token } = decoders;
 
 const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
 
+/** Template lifecycle (ContactRequirementTemplateRow). */
+export const templateStates = ["active", "paused", "closed"] as const;
+/** The policy's repair automation (FleetPlanningPolicySchema `automation.mode`), in its labels. */
+export const automationModes = ["advisory", "approval_required", "bounded_automatic"] as const;
+export const automationWords: Readonly<Record<(typeof automationModes)[number], string>> = {
+  advisory: "advise only",
+  approval_required: "propose for approval",
+  bounded_automatic: "repair automatically (bounded)",
+};
 /** CP3 template row (also the CP1 summary's `templates`); applies_to / rule_summary are server-made. */
 export const templateRow = object({
   id: token,
   name: string,
-  state: token,
+  state: decoders.known(templateStates),
   version: integer,
   target: raw,
   applies_to: string,
@@ -21,7 +30,7 @@ export const templateRow = object({
 export type TemplateRow = Decoded<typeof templateRow>;
 
 const summary = object({
-  policy: nullable(object({ version: integer, mode: token })),
+  policy: nullable(object({ version: integer, mode: decoders.knownText(automationModes) })),
   coverage: object({
     spacecraft_total: integer,
     covered: integer,

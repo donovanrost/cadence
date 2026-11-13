@@ -1,6 +1,8 @@
 import {
   actor as sharedActor,
   decoders,
+  detailsOf,
+  isError,
   jsonObject,
   orNull,
   request,
@@ -11,6 +13,7 @@ import {
 } from "@/api";
 import { displayValue } from "@/features/changes/index.ts";
 import { formatCount, formatShort } from "@/ui";
+import { templateStates } from "./api.ts";
 import { readPath, templateSchemaReader, type TemplateSchema } from "./templates.ts";
 
 /** Contract: docs/apogee/api/scheduling.md "Requirements (one-off; BACKLOG §8 8g)", api fb7510be. */
@@ -19,7 +22,14 @@ const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
 
 /** The shared entity (typing §12 A5). */
 const actor = orNull(sharedActor);
-const stateChanged = nullable(object({ at: timestamp, by: actor, reason: nullable(string) }));
+const stateChanged = nullable(
+  object({
+    at: timestamp,
+    by: actor,
+    // free-text: the reason a person typed when closing or canceling.
+    reason: nullable(string),
+  }),
+);
 
 export const requirementStates = ["active", "closed", "canceled"] as const;
 const requirementRowShape = {
@@ -109,7 +119,7 @@ export function endRequirement(
 ) {
   return request(
     `${base(missionId)}/${encodeURIComponent(id)}/${action}`,
-    object({ id: token, state: token, version: integer }),
+    object({ id: token, state: decoders.known(["closed", "canceled"] as const), version: integer }),
     { method: "POST", body },
   );
 }
@@ -137,13 +147,13 @@ export function endedLine(r: Pick<RequirementRow, "state" | "state_changed">): s
 
 /** 409 requirement_not_active: who ended it, from details, without a refetch (api's ask (a)). */
 export function notActiveLine(error: ApiError): string | null {
-  if (error.kind !== "conflict" || error.code !== "requirement_not_active") return null;
-  const parsed = decoders.decode(
-    object({ state: decoders.oneOf(["closed", "canceled"] as const), state_changed: stateChanged }),
-    error.details,
+  if (!isError(error, "requirement_not_active")) return null;
+  const details = detailsOf(
+    error,
+    object({ state: decoders.known(["closed", "canceled"] as const), state_changed: stateChanged }),
   );
-  if (!parsed.ok) return "It already ended.";
-  return `Already ${endedLine(parsed.value)?.replace(/^\w/, (c) => c.toLowerCase()) ?? "ended"}.`;
+  if (!details) return "It already ended.";
+  return `Already ${endedLine(details)?.replace(/^\w/, (c) => c.toLowerCase()) ?? "ended"}.`;
 }
 
 /** The schema's groups in order (Window, then Requirement), advanced fields apart (ux P4). */
@@ -212,7 +222,6 @@ export function requirementFacts(
   return facts;
 }
 
-export const templateStates = ["active", "paused", "closed"] as const;
 const templateStateWord: Readonly<
   Record<(typeof templateStates)[number] | "unrecognized", string>
 > = {

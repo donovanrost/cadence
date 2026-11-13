@@ -33,7 +33,7 @@ const source = {
       name_template: "{sc}-ttc",
       enabled: true,
       stations: [{ id: "gs1", code: "SVB", name: "Svalbard", transport_id: null }],
-      legs: [{ direction: "downlink" as const, role: "primary" }],
+      legs: [{ direction: "downlink" as const, role: "primary" as const }],
       route_count: 3,
       samples: [],
     },

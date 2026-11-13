@@ -29,10 +29,22 @@ const rule = object({
   name_template: string,
   enabled: boolean,
   stations: array(
-    object({ id: token, code: nullable(string), name: string, transport_id: nullable(token) }),
+    object({
+      id: token,
+      // free-text: a station's short code, an identifier shown as is.
+      code: nullable(string),
+      name: string,
+      transport_id: nullable(token),
+    }),
     500,
   ),
-  legs: array(object({ direction: oneOf(["downlink", "uplink"]), role: token }), 20),
+  legs: array(
+    object({
+      direction: oneOf(["downlink", "uplink"]),
+      role: decoders.known(["primary", "candidate", "contributing"] as const),
+    }),
+    20,
+  ),
   route_count: integer,
   samples: array(string, 10),
 });
@@ -44,6 +56,7 @@ const override = object({
   path: string,
   profile_value: raw,
   spacecraft_value: raw,
+  // free-text: the reason a person gave for the override.
   reason: nullable(string),
   since_revision: nullable(integer),
   set_at: nullable(timestamp),
