@@ -4,6 +4,7 @@ import { useRemoteQuery, describeApiError } from "@/api";
 import type { Session } from "@/api/session.ts";
 import { ApButton, ApCallout } from "@/ui";
 import InvitationRow from "@/features/account/InvitationRow.vue";
+import AdminModeSheet from "@/shell/AdminModeSheet.vue";
 import { fetchMyInvitations } from "@/features/account/invitations.ts";
 import { goTo, optionalSession, signOutHere } from "./api.ts";
 
@@ -23,6 +24,9 @@ onMounted(async () => {
 });
 const list = useRemoteQuery(() => (session.value ? (true as const) : null), fetchMyInvitations);
 const note = ref<string | null>(null);
+/** L6 (lead): the shell's step-up sheet works without AppShell; then the admin area (L7: /admin). */
+const adminSheet = ref<InstanceType<typeof AdminModeSheet> | null>(null);
+const adminOn = ref(false);
 function changed(text: string | null) {
   note.value = text;
   list.refetch();
@@ -64,14 +68,15 @@ function changed(text: string | null) {
           {{ session.user.email }}.
         </p>
       </template>
-      <!-- L6/L7: the admin area isn't in the console yet; this enters the current admin path. -->
-      <ApButton
-        v-if="session.platform_admin_eligible"
-        variant="secondary"
-        class="w-full"
-        @click="goTo('/admin')"
-        >Enter admin mode</ApButton
-      >
+      <template v-if="session.platform_admin_eligible">
+        <ApButton v-if="adminOn" variant="secondary" class="w-full" @click="goTo('/admin')"
+          >Admin area</ApButton
+        >
+        <ApButton v-else variant="secondary" class="w-full" @click="adminSheet?.open()"
+          >Enter admin mode</ApButton
+        >
+        <AdminModeSheet ref="adminSheet" @entered="adminOn = true" />
+      </template>
       <ApButton variant="ghost" class="w-full" @click="signOutHere(session.csrf_token)"
         >Sign out</ApButton
       >

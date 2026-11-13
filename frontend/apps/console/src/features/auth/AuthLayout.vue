@@ -10,7 +10,8 @@ const now = useNow();
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col items-center bg-vacuum px-4 py-10">
+  <!-- Transparent: the body paints the grid over vacuum (apogee.css --apogee-grid). -->
+  <div class="flex min-h-screen flex-col items-center px-4 py-10">
     <main id="main" class="flex w-full max-w-[400px] flex-1 flex-col justify-center gap-6">
       <p class="ap-label m-0 text-center">Cadence</p>
       <div class="flex flex-col gap-4 border border-hairline bg-panel p-6">

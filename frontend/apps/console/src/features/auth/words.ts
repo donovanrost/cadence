@@ -67,7 +67,18 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
       };
     }
     case "accepted":
+    case "used":
       return { h1: null, callout: { tone: "off", text: "This invitation was already accepted." } };
+    case "declined":
+      return { h1: null, callout: { tone: "off", text: "This invitation was declined." } };
+    case "unavailable":
+      return {
+        h1: null,
+        callout: {
+          tone: "off",
+          text: "This invitation isn't available any more. Ask for a new one.",
+        },
+      };
     case "unrecognized":
       return {
         h1: null,

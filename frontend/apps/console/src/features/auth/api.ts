@@ -15,6 +15,7 @@ export function signIn(email: string, password: string, returnTo: string | null)
   });
 }
 
+/** api-ops (L5): GET's cases; `used`, `declined` and `unavailable` also come as invitation_unavailable. */
 export const invitationCases = [
   "new_account",
   "existing_account",
@@ -23,6 +24,9 @@ export const invitationCases = [
   "expired",
   "withdrawn",
   "accepted",
+  "used",
+  "declined",
+  "unavailable",
 ] as const;
 /** Typing rule (1): a new server case reads as "unrecognized", never a failed page. */
 export type InvitationCase = (typeof invitationCases)[number] | "unrecognized";

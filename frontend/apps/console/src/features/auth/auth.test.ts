@@ -46,6 +46,12 @@ describe("auth words (ux Auth.md)", () => {
     expect(invitationView(inv({ case: "accepted" }), null).callout?.text).toBe(
       "This invitation was already accepted.",
     );
+    expect(invitationView(inv({ case: "used" }), null).callout?.text).toBe(
+      "This invitation was already accepted.",
+    );
+    expect(invitationView(inv({ case: "declined" }), null).callout?.text).toBe(
+      "This invitation was declined.",
+    );
   });
   it("only honours a same-origin return_to", () => {
     expect(safeReturn("/console/acme/earendil/now")).toBe("/console/acme/earendil/now");
