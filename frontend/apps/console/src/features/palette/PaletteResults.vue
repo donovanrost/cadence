@@ -20,7 +20,7 @@ const emit = defineEmits<{ open: [to: RouteLocationRaw]; expand: [group: Group] 
   >
     <p v-if="groups.length === 0" class="m-0 px-4 py-6 text-md text-text-3">
       <span class="block font-semibold text-readout">No matches</span>
-      Try a spacecraft name or SCID like 312, or a page like Contacts.
+      Try a spacecraft number like 312, a command like SET_ or a station code like FBK.
     </p>
     <div v-for="g in groups" :key="g.group" role="group" :aria-label="g.group">
       <p class="ap-label m-0 flex items-center gap-3 px-4 pt-3 pb-1">

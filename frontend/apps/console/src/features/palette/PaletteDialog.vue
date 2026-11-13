@@ -16,6 +16,7 @@ import { useFleet } from "@/features/fleet/index.ts";
 import PaletteResults from "./PaletteResults.vue";
 import { grouped, groupJump, rowsOf, search, type Group, type PageEntry } from "./results.ts";
 import { usePointSearch } from "./usePointSearch.ts";
+import { useSourceSearch } from "./useSourceSearch.ts";
 
 /** The modal query line: combobox input + grouped listbox. Esc closes and restores focus. */
 const emit = defineEmits<{ close: [] }>();
@@ -48,9 +49,18 @@ const spacecraft = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
 );
 const points = usePointSearch(missionId, query, spacecraft);
+const sources = useSourceSearch(
+  missionId,
+  query,
+  computed(() => access.value.request),
+);
 const groups = computed(() =>
   grouped(
-    [...search(query.value, spacecraft.value, pages.value, access.value.request), ...points.value],
+    [
+      ...search(query.value, spacecraft.value, pages.value, access.value.request),
+      ...points.value,
+      ...sources.items.value,
+    ],
     expanded.value,
   ),
 );
@@ -58,9 +68,16 @@ const rows = computed(() => rowsOf(groups.value));
 const strip = computed(() => {
   const s = scope.value;
   if (s.kind !== "mission") return "";
-  return fleet.state.value.status === "ready"
-    ? `${s.mission.name} · ${fleet.state.value.value.counts.total} SC`
-    : s.mission.name;
+  // Real counts only; an unknown count is left out (Palette.md strip).
+  const sc = fleet.state.value.status === "ready" ? fleet.state.value.value.counts.total : null;
+  const stations = sources.stationCount.value;
+  return [
+    s.mission.name,
+    sc === null ? null : `${sc} SC`,
+    stations === null ? null : `${stations} ${stations === 1 ? "station" : "stations"}`,
+  ]
+    .filter((p): p is string => p !== null)
+    .join(" · ");
 });
 
 function go(to: RouteLocationRaw | null) {
@@ -130,7 +147,11 @@ onBeforeUnmount(() => returnFocus?.focus());
           aria-autocomplete="list"
           :aria-activedescendant="rows[active] ? `palette-${rows[active]?.key}` : undefined"
           autocomplete="off"
-          placeholder="Spacecraft, SCID, pages…  (# spacecraft only)"
+          :placeholder="
+            access.request
+              ? 'Spacecraft, telemetry, commands, stations…  (# > @)'
+              : 'Spacecraft, telemetry, stations…  (# @)'
+          "
           class="h-14 min-w-0 flex-1 bg-transparent text-lg text-readout outline-none placeholder:text-text-4"
           @input="onInput"
           @keydown="onKey"

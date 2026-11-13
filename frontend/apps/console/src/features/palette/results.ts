@@ -5,10 +5,18 @@ import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/f
 /**
  * ⌘K results (Palette.md). v1 searches client-side over what the console already has: the fleet
  * read (spacecraft, profiles, per-spacecraft actions) and the router (pages). Telemetry comes
- * from the M23 point search (telemetry.ts); Commands and Stations appear when wired (M17/M21).
+ * from the M23 point search (telemetry.ts); Commands (M17 catalog) and Stations from sources.ts.
  */
 
-export const GROUPS = ["Spacecraft", "Telemetry", "Actions", "Profiles", "Pages"] as const;
+export const GROUPS = [
+  "Spacecraft",
+  "Telemetry",
+  "Actions",
+  "Commands",
+  "Stations",
+  "Profiles",
+  "Pages",
+] as const;
 export type Group = (typeof GROUPS)[number];
 export const PER_GROUP = 5;
 
@@ -28,7 +36,7 @@ export type PaletteItem = Readonly<{
 
 export type PageEntry = Readonly<{ name: string; title: string; mode: string }>;
 
-/** `#` spacecraft only, `>` commands only (not searchable yet), `@` stations only (not yet). */
+/** `#` spacecraft only, `>` commands only, `@` stations only. */
 export function parseQuery(raw: string): {
   text: string;
   only: "spacecraft" | "commands" | "stations" | null;
