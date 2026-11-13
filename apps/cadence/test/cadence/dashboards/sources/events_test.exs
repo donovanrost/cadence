@@ -120,6 +120,7 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
                kind: :string,
                values: ["contact-scheduled-1", "contact-realized-1"]
              },
+             %Field{name: "station", kind: :string, values: [nil, nil]},
              %Field{name: "source_event_id", kind: :string, values: [nil, nil]}
            ] = contacts.fields
 
