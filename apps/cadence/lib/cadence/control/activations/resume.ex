@@ -12,7 +12,8 @@ defmodule Cadence.Control.Activations.Resume do
   operational event naming who resumed it.
 
   Errors: `{:nothing_to_resume, state}` (`"succeeded"`, `"in_progress"`, or the request's state
-  when it isn't approved), `:activation_execution_in_progress` (an executor holds the lock),
+  when it isn't approved), `{:not_resumable, error_code}` (a stale review or content mismatch:
+  request activation again), `:activation_execution_in_progress` (an executor holds the lock),
   `:activation_request_not_found`, `:forbidden`; otherwise `execute/2`'s own result.
   """
 
@@ -68,10 +69,22 @@ defmodule Cadence.Control.Activations.Resume do
 
   defp approved(request), do: {:error, {:nothing_to_resume, to_string(request.state)}}
 
+  @doc """
+  Whether a failed execution's code can apply on a retry. A stale review or content that no
+  longer matches its approval fails the same way every time: those need a new request (ux U41).
+  """
+  def retryable_code?(code),
+    do:
+      code not in [
+        "spacecraft_configuration_review_stale",
+        "approved_activation_content_mismatch"
+      ]
+
   defp resumable(request, now) do
     case ControlActivations.fetch_execution(request.activation_request_id) do
-      {:ok, %{status: :failed}} ->
-        :ok
+      {:ok, %{status: :failed, error_document: error}} ->
+        code = (error || %{})["code"]
+        if retryable_code?(code), do: :ok, else: {:error, {:not_resumable, code}}
 
       {:ok, %{status: :succeeded}} ->
         {:error, {:nothing_to_resume, "succeeded"}}

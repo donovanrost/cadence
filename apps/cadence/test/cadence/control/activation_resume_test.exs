@@ -58,7 +58,8 @@ defmodule Cadence.Control.ActivationResumeTest do
            } = item
 
     assert id == c.id
-    assert is_binary(error) and not String.contains?(error, "injected")
+    assert error == "Applying was cut off: Cadence lost its database connection partway."
+    assert item.retryable
 
     assert {:ok, %{status: :succeeded}} = ControlActivations.resume(c.scope, @mid, c.id)
     assert ApplyAttention.items(@org, @mid) == []
@@ -114,6 +115,58 @@ defmodule Cadence.Control.ActivationResumeTest do
     assert {:ok, %{status: :succeeded}} = ControlActivations.resume(c.scope, @mid, c.id)
   end
 
+  test "the lock dies with its executor, so a killed execution can be resumed", c do
+    interrupt_apply!()
+    assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
+    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+
+    # An executor holding the lock, killed mid-way (a crashed node or a killed task).
+    test_pid = self()
+
+    executor =
+      spawn(fn ->
+        ExecutionLock.run(c.id, fn ->
+          send(test_pid, :locked)
+          Process.sleep(:infinity)
+        end)
+      end)
+
+    assert_receive :locked, 5_000
+    refute ExecutionLock.free?(c.id)
+
+    assert {:error, :activation_execution_in_progress} =
+             ControlActivations.resume(c.scope, @mid, c.id)
+
+    Process.exit(executor, :kill)
+
+    # Its own connection closes with it, and Postgres releases the session lock.
+    assert eventually(fn -> ExecutionLock.free?(c.id) end)
+    assert {:ok, %{status: :succeeded}} = ControlActivations.resume(c.scope, @mid, c.id)
+  end
+
+  test "a stale review isn't retried: it needs a new request", c do
+    interrupt_apply!()
+    assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
+    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+
+    {1, _} =
+      from(e in ActivationExecutionRow, where: e.activation_request_id == ^c.id)
+      |> Repo.update_all(
+        set: [
+          error_document: %{
+            "code" => "spacecraft_configuration_review_stale",
+            "reason" => ":spacecraft_configuration_review_stale"
+          }
+        ]
+      )
+
+    assert [%{retryable: false, error: error}] = ApplyAttention.items(@org, @mid)
+    assert error =~ "A spacecraft's configuration changed after it was reviewed"
+
+    assert {:error, {:not_resumable, "spacecraft_configuration_review_stale"}} =
+             ControlActivations.resume(c.scope, @mid, c.id)
+  end
+
   test "a resume is refused outside the approver's mission and for an unknown request", c do
     other_mission = %{c.scope | mission_id: "mission-elsewhere"}
 
@@ -121,6 +174,14 @@ defmodule Cadence.Control.ActivationResumeTest do
 
     assert {:error, :activation_request_not_found} =
              ControlActivations.resume(c.scope, @mid, "activation_request_missing")
+  end
+
+  defp eventually(fun, attempts \\ 50) do
+    cond do
+      fun.() -> true
+      attempts == 0 -> false
+      true -> Process.sleep(100) && eventually(fun, attempts - 1)
+    end
   end
 
   defp interrupt_apply! do
