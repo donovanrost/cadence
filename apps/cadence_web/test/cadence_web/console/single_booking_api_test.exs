@@ -99,10 +99,11 @@ defmodule CadenceWeb.Console.SingleBookingAPITest do
 
     events = json_response(get_json(c, "/events?" <> window), 200)["data"]["events"]
 
-    assert %{"kind" => "contact", "detail" => "Eclipse test", "text" => text} =
+    assert %{"kind" => "contact", "detail" => detail, "text" => text} =
              Enum.find(events, &(&1["raw_kind"] == "contact_booked_off_plan"))
 
-    assert text =~ "Booked outside a plan by Mira K.: "
+    assert detail == "“Eclipse test” Doesn't count toward contact rules."
+    assert text =~ ~r/ booked outside a plan by Mira K\.$/
 
     stale =
       post_json(c, "/passes/#{id}/release", %{

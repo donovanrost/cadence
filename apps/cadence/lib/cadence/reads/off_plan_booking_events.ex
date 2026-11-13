@@ -1,8 +1,8 @@
 defmodule Cadence.Reads.OffPlanBookingEvents do
   @moduledoc """
-  Off-plan bookings as mission timeline entries (L15, DECISIONS #78): a `contact` event "Booked
-  outside a plan by Mira K.: EARENDIL-312 · SVA 03:10Z" with the booker as actor and the note as
-  the event's `detail`. Reservations aren't projected into the mission-events table, so
+  Off-plan bookings as mission timeline entries (L15, DECISIONS #78): a `contact` event
+  "EARENDIL-312 · SVA 03:10Z booked outside a plan by Mira K." with the booker as actor and the
+  note in the event's `detail`. Reservations aren't projected into the mission-events table, so
   `Cadence.Reads.MissionTimeline` merges these in when asked (`off_plan_bookings: true`).
   """
 
@@ -38,12 +38,16 @@ defmodule Cadence.Reads.OffPlanBookingEvents do
       |> Enum.reject(&(&1 in [nil, ""]))
       |> Enum.join(" · ")
 
-    "Booked outside a plan#{by}: #{where}"
+    # ux (Contacts.md): lead with the pass, so the time reads as its AOS; U29 without an actor.
+    "#{where} booked outside a plan#{if by == "", do: " by an operator", else: by}"
   end
 
-  @doc "The event's `detail`: the booker's note."
-  @spec detail(Entry.t()) :: binary() | nil
-  def detail(%Entry{metadata: metadata}), do: metadata["note"]
+  @doc "The event's `detail`: the booker's note in quotes, then that it doesn't count."
+  @spec detail(Entry.t()) :: binary()
+  def detail(%Entry{metadata: %{"note" => note}}) when is_binary(note) and note != "",
+    do: "“#{note}” Doesn't count toward contact rules."
+
+  def detail(_entry), do: "Doesn't count toward contact rules."
 
   defp entry(mission_id, pass, off_plan) do
     Entry.new(%{
