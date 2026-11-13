@@ -373,11 +373,11 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 | Rule | Files left | Baseline 11-13 |
 | --- | --- | --- |
 | `error-code-compared-as-text` | 28 (fe-setup: planning/requirements off, 11-13) | 29 |
-| `vocabulary-field-decoded-as-text` | 53 (fe-setup: planning ×5, profiles/detail off, 11-13) | 59 |
+| `vocabulary-field-decoded-as-text` | 49 (fe-setup: planning ×5, profiles/detail; lead: scheduling ×2, shell/counts, api/session; 11-13) | 59 |
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |
 | 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |
-| 2 | `features/scheduling/*` (booking state and reason, plan issue codes, actor kinds) | lead |
+| 2 | ~~`features/scheduling/*` (booking state and reason, plan issue codes, actor kinds)~~ done (95f07ecc, with runtime status and session role) | lead |
 | 3 | `features/dashboards/chart/*` (the `ChartMarker` string bag; Fix 10 marker union) | dashboards |
 | 4 | Router link sites (comes with A3) | dashboards |
 | 5 | `features/commands/groups/*` | fe-ops |
