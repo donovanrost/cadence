@@ -5,7 +5,9 @@ import { ApButton, ApCallout, ApTextarea } from "@/ui";
 import {
   changeEvidence,
   changeTitle,
+  fieldKey,
   fieldLabel,
+  pastDeadline,
   valueWords,
   type Attention,
 } from "@/features/now/index.ts";
@@ -36,14 +38,18 @@ watch(
 );
 const change = computed(() => current.value.provider_change ?? null);
 const deadline = computed(() => current.value.deadline_at ?? change.value?.deadline_at ?? null);
-const pastDeadline = ref(false);
+/** A 409 that raced the deadline counts as past it (ux U44). */
+const refusedPast = ref(false);
 const approval = computed(() => current.value.conflict === "approval_required");
-const canReject = computed(
-  () =>
-    approval.value &&
-    !pastDeadline.value &&
-    !(deadline.value && Date.parse(deadline.value) <= props.now.getTime()),
+/** api 84f58b73d / ux U44: past the deadline neither decision lands; the provider's next update replaces it. */
+const expired = computed(
+  () => approval.value && (refusedPast.value || pastDeadline(current.value, props.now)),
 );
+const expiredLine = computed(() => {
+  const d = deadline.value;
+  const at = d ? ` at ${d.slice(11, 16)}Z` : "";
+  return `The deadline passed${at}. This change stays until ${current.value.provider?.name ?? "the provider"}'s next update replaces it.`;
+});
 
 const PLACEHOLDER: Readonly<Record<ChangeDecision, string>> = {
   approve: "Why the pass can take this change",
@@ -94,11 +100,13 @@ async function submit() {
       reasonError.value = o.reasonError;
       return;
     }
-    notice.value = { tone: "caution", text: o.text };
     if (o.deadlinePassed) {
-      pastDeadline.value = true;
-      if (d === "reject") deciding.value = null;
+      // The block's own past-deadline state says it; no second notice.
+      refusedPast.value = true;
+      deciding.value = null;
+      return;
     }
+    notice.value = { tone: "caution", text: o.text };
     if (o.item) {
       current.value = o.item;
       deciding.value = null;
@@ -137,6 +145,14 @@ async function submit() {
         >
           <th scope="row" class="py-1 pr-3 text-left font-normal text-text-2">
             {{ fieldLabel(f) }}
+            <!-- ux U44: an unnamed field's raw key and values live here, never in visible text. -->
+            <details v-if="!f.label && fieldLabel(f) === 'Other'" class="text-xs text-text-3">
+              <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
+              <span class="block font-mono">{{ fieldKey(f) }}</span>
+              <span class="block font-mono"
+                >{{ f.before_json ?? "null" }} → {{ f.after_json ?? "null" }}</span
+              >
+            </details>
           </th>
           <td class="py-1 pr-3 font-mono text-text-2">{{ valueWords(f, f.before_json, now) }}</td>
           <td class="py-1 font-mono text-readout">{{ valueWords(f, f.after_json, now) }}</td>
@@ -144,7 +160,8 @@ async function submit() {
       </tbody>
     </table>
     <ApCallout v-if="notice" :tone="notice.tone">{{ notice.text }}</ApCallout>
-    <template v-if="current.conflict !== 'configuration_failure'">
+    <p v-if="expired" class="m-0 text-sm text-text-2">{{ expiredLine }}</p>
+    <template v-else-if="current.conflict !== 'configuration_failure'">
       <p v-if="!isAdmin" class="m-0 text-sm text-text-2">Org admins decide provider changes.</p>
       <template v-else-if="deciding">
         <ApTextarea
@@ -171,9 +188,7 @@ async function submit() {
       <div v-else class="flex flex-wrap gap-2">
         <template v-if="approval">
           <ApButton size="compact" variant="primary" @click="start('approve')">Approve…</ApButton>
-          <ApButton v-if="canReject" size="compact" variant="secondary" @click="start('reject')"
-            >Reject…</ApButton
-          >
+          <ApButton size="compact" variant="secondary" @click="start('reject')">Reject…</ApButton>
         </template>
         <ApButton
           v-else-if="current.conflict === 'acknowledgment_required'"

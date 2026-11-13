@@ -137,7 +137,7 @@ export type ChangeOutcome =
       text: string;
       item?: Attention | null;
       reasonError?: string;
-      /** 409 deadline passed: Reject goes, Approve stays (U44). */
+      /** 409 deadline passed: both decisions go (api 84f58b73d). */
       deadlinePassed?: boolean;
     }
   | { status: "unclear"; text: string };
@@ -171,10 +171,12 @@ export async function decideProviderChange(
   }
   if (isError(e, "attention_item_not_found"))
     return { status: "refused", text: "This change was already decided or replaced.", item: null };
+  // api 84f58b73d: past the deadline neither approve nor reject lands; the provider's next
+  // revision replaces the change (ux U44 re-ruling pending).
   if (isError(e, "provider_change_deadline_passed"))
     return {
       status: "refused",
-      text: `The deadline passed${deadline ? ` at ${hhmm(deadline)}` : ""}, so it can't be rejected any more.`,
+      text: `The deadline passed${deadline ? ` at ${hhmm(deadline)}` : ""}. This change stays until ${a.provider?.name ?? "the provider"}'s next update replaces it.`,
       deadlinePassed: true,
     };
   if (e.kind === "forbidden")

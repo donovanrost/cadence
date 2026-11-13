@@ -29,7 +29,7 @@ import { GROUP_AT, type QueueItem } from "./queue.ts";
 import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settlement.ts";
 import { runtimeRow } from "./runtime.ts";
 import { activationRow } from "./activation.ts";
-import { changeEvidence, changeTitle } from "./providerChange.ts";
+import { changeEvidence, changeTitle, pastDeadline } from "./providerChange.ts";
 import { changeSetReader, changeSetRow } from "./changeSet.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
@@ -395,7 +395,7 @@ function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueI
             titleTo: to,
             sentence: changeEvidence(a, now),
             meta: attentionMeta(a),
-            ...(a.conflict === "approval_required" && deadline
+            ...(a.conflict === "approval_required" && deadline && !pastDeadline(a, now)
               ? { due: { label: "Decide", at: deadline } }
               : {}),
             action: { label: "Review", to },

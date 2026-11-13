@@ -82,13 +82,27 @@ describe("provider changes in Now (U44)", () => {
     const row = rowOf("approval_required");
     expect(row?.title).toBe("Spacecraft · Northlight wants to change the SVA 03:10Z pass");
     expect(row?.sentence).toBe(
-      "Start 03:10Z → 03:12Z · Antenna ant-2 → ant-4 · Delivery profile none → dp-9 · and 2 more. Decide by 02:40Z.",
+      "AOS 03:10Z → 03:12Z · Antenna ant-2 → ant-4 · Delivery profile none → dp-9 · and 2 more. Decide by 02:40Z.",
     );
     expect(row?.due).toEqual({ label: "Decide", at: "2026-11-13T02:40:00Z" });
     expect(row?.action).toEqual({
       label: "Review",
       to: { name: "ops.contacts", query: { contact: "res-1" } },
     });
+  });
+
+  it("past the deadline: no countdown, and says so (api 84f58b73d; U44)", () => {
+    const r = decode(actionQueueReader, {
+      observed_at: "2026-11-13T03:00:00Z",
+      stale_after_s: 900,
+      failure_lookback_s: 86400,
+      counts: { p1: 0, p2: 0, p3: 1, spacecraft_p1: 0 },
+      items: [change("approval_required")],
+    });
+    if (!r.ok) throw new Error(r.error.message);
+    const row = presentQueue(r.value, new Date("2026-11-13T03:00:00Z"), "EARENDIL")[0];
+    expect(row?.due).toBeUndefined();
+    expect(row?.sentence).toMatch(/· and 2 more\. The deadline passed at 02:40Z\.$/);
   });
 
   it("words an applied change and Cadence's own failure", () => {
@@ -128,6 +142,6 @@ describe("provider change values (U44)", () => {
     expect(valueWords(delivery, delivery.before_json, NOW)).toBe("none");
     expect(valueWords(delivery, delivery.after_json, NOW)).toBe("dp-9");
     expect(valueWords(big, big.before_json, NOW)).toBe("9007199254740993");
-    expect(fieldLabel(big)).toBe("Brand new thing");
+    expect(fieldLabel(big)).toBe("Other");
   });
 });

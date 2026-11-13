@@ -11,31 +11,28 @@ import { short, type Attention, type ProviderChange } from "./attention.ts";
 type Field = ProviderChange["fields"][number];
 type KnownField = Exclude<Field["field"], Readonly<{ unrecognized: string }>>;
 
-/** U44: the server's label, else these words, else the key in sentence case. */
+/** U44: the server's label (api b5ecefaa2 fills the known keys), else these words, else Other. */
 const FIELD_WORDS: Readonly<Record<KnownField, string>> = {
-  starts_at: "Start",
-  ends_at: "End",
+  starts_at: "AOS",
+  ends_at: "LOS",
   ground_station_ref: "Station",
   antenna_or_service_pool_ref: "Antenna",
   service_profile_ref: "Service profile",
   delivery_profile_ref: "Delivery profile",
   spacecraft_ref: "Spacecraft",
-  pass_phase: "Phase",
+  pass_phase: "Pass phase",
   status: "Status",
 };
 const TIME_FIELDS: readonly string[] = ["starts_at", "ends_at"];
 
-const sentenceCase = (key: string) => {
-  const words = key.replaceAll("_", " ").trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-};
-
 export function fieldLabel(f: Field): string {
   if (f.label) return f.label;
-  return isKnown(f.field) ? FIELD_WORDS[f.field] : sentenceCase(f.field.unrecognized);
+  // ux U44: a field nobody has named shows as Other; its raw key stays in Technical details.
+  return isKnown(f.field) ? FIELD_WORDS[f.field] : "Other";
 }
 
-const fieldKey = (f: Field) => (isKnown(f.field) ? f.field : f.field.unrecognized);
+/** The raw key, for Technical details only (never visible text, ux U44). */
+export const fieldKey = (f: Field) => (isKnown(f.field) ? f.field : f.field.unrecognized);
 
 /** A JSON-text value in words: §4 times, plain strings and numbers, `none`; never JSON quoting. */
 export function valueWords(f: Field, json: string | null, now: Date): string {
@@ -96,13 +93,25 @@ export function changeTitle(a: Attention, now: Date): string {
   }
 }
 
+/** The approval's deadline, if any. */
+export const changeDeadline = (a: Attention) =>
+  a.deadline_at ?? a.provider_change?.deadline_at ?? null;
+
+/** api 84f58b73d: past it, neither approve nor reject is possible; the item waits for the provider. */
+export const pastDeadline = (a: Attention, now: Date) => {
+  const d = changeDeadline(a);
+  return d !== null && Date.parse(d) <= now.getTime();
+};
+
 /** The changed fields, then "Decide by 02:40Z." / "Northlight already made this change." */
 export function changeEvidence(a: Attention, now: Date): string {
   const pc = a.provider_change;
-  const deadline = a.deadline_at ?? pc?.deadline_at ?? null;
+  const deadline = changeDeadline(a);
+  const approval = a.conflict === "approval_required" && deadline !== null;
   const parts = [
     pc && pc.fields.length ? `${changeLine(pc, now)}.` : null,
-    a.conflict === "approval_required" && deadline ? `Decide by ${short(deadline, now)}.` : null,
+    approval && !pastDeadline(a, now) ? `Decide by ${short(deadline, now)}.` : null,
+    approval && pastDeadline(a, now) ? `The deadline passed at ${short(deadline, now)}.` : null,
     a.conflict === "acknowledgment_required"
       ? `${a.provider?.name ?? "The provider"} already made this change.`
       : null,
