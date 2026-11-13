@@ -36,6 +36,20 @@ defmodule CadenceWeb.LegacySetupRedirectControllerTest do
              c.console <> "/contact-planning/policy"
   end
 
+  test "L11: data sources and registration go to the list; one source and its settings to it",
+       c do
+    assert redirected_to(get(c.conn, c.legacy <> "/data-sources")) == c.console <> "/data-sources"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/data-sources/registration/new")) ==
+             c.console <> "/data-sources"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/data-sources/src_1")) ==
+             c.console <> "/data-sources/src_1"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/data-sources/src_1/settings")) ==
+             c.console <> "/data-sources/src_1"
+  end
+
   test "another organization's mission falls back to the console's home", c do
     assert redirected_to(get(c.conn, c.other <> "/requirements")) == "/console"
   end

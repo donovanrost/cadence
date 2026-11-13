@@ -227,6 +227,27 @@ defmodule CadenceWeb.Router do
     get("/admin/organizations/:org_id", LegacyAdminRedirectController, :organization)
     get("/admin/organizations/:org_id/invite", LegacyAdminRedirectController, :organization)
 
+    # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
+    get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
+
+    get(
+      "/missions/:mission_id/ops/data-sources/registration/new",
+      LegacySetupRedirectController,
+      :data_sources
+    )
+
+    get(
+      "/missions/:mission_id/ops/data-sources/:data_source_id",
+      LegacySetupRedirectController,
+      :data_source
+    )
+
+    get(
+      "/missions/:mission_id/ops/data-sources/:data_source_id/settings",
+      LegacySetupRedirectController,
+      :data_source
+    )
+
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
@@ -387,14 +408,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/ops", HostPageLive, :index, metadata: %{host_policy: :ops})
 
-      live("/missions/:mission_id/ops/data-sources", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/data-sources/:data_source_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
       live("/missions/:mission_id/ops/data-operations", HostPageLive, :index,
         metadata: %{host_policy: :ops}
       )
@@ -483,17 +496,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/ops/activations", HostPageLive, :index,
         metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/data-sources/registration/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops_admin}
-      )
-
-      live(
-        "/missions/:mission_id/ops/data-sources/:data_source_id/settings",
-        HostPageLive,
-        :settings,
-        metadata: %{host_policy: :ops_admin}
       )
 
       live("/missions/:mission_id/ops/data-operations/manage", HostPageLive, :manage,
