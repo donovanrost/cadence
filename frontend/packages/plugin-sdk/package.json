@@ -19,14 +19,16 @@
     "./routes": "./src/routes/index.ts",
     "./page-header": "./src/page-header.ts",
     "./page-header-validation": "./src/page-header-validation.ts",
-    "./page-header-testing": "./src/page-header-testing.ts"
+    "./page-header-testing": "./src/page-header-testing.ts",
+    "./host": "./src/host/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vp test --run"
   },
   "dependencies": {
-    "@cadence/ui": "workspace:*"
+    "@cadence/ui": "workspace:*",
+    "@module-federation/runtime": "catalog:"
   },
   "devDependencies": {
     "@vue/test-utils": "catalog:",
