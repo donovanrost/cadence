@@ -922,8 +922,9 @@ for generating change-set edit forms. `kind` is `ground_station`, `transport`,
   - Ordering rule: red low ≤ yellow low < yellow high ≤ red high where present. Errors come back on
     `thresholds`.
   - A create gets a deterministic `entity_id` (`limit_definition:<hash of point + set>`), so leave
-    `entity_id` out. A create for a point and set that are live now is the `entity_exists`
-    conflict (Edit them instead).
+    `entity_id` out. A create for a point and set that are live now is refused at staging, as a
+    `point_id` field error ("Limits for BATT_V already exist. Edit them instead."; domain 63206b13d).
+    If they become live after staging, apply reports the `entity_exists` conflict.
   - Delete = **retire**: evaluation stops and the history stays; re-adding continues it.
   - HOLD `limit_alarm_active` (acknowledge): `details {point_id, limit_set_name, severity:
     critical | caution, episode_id}` (U43 sentence).
