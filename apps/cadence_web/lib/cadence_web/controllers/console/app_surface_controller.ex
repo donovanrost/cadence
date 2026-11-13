@@ -7,9 +7,9 @@ defmodule CadenceWeb.Console.AppSurfaceController do
   (`ApplicationHostCatalog.build/3`; the console checks it with `assertFrontendApplicationCatalog`),
   except `session.context.actor.permissions`, which is the actor's real permissions (closed
   vocabulary below). Like the bridge's own `GET /catalog`, it mints or reuses the host session id
-  and pins the host scope, so the bridge's query and actions then work for this surface. One
-  scope at a time per browser session: a surface that gets `host_session_mismatch` re-requests
-  this to re-pin.
+  and pins the host scope, so the bridge's query and actions then work for this surface. The
+  session keeps the 16 most recent scopes (L19b); a surface that still gets
+  `host_session_mismatch` re-requests this to pin its scope again.
 
   Permissions: `applications:view` (always), `applications:operate` (the actor passes the policy
   of every action the surface declares, as `ActionDispatcher` enforces it), `activations:request`

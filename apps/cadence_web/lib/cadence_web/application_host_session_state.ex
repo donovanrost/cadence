@@ -6,9 +6,10 @@ defmodule CadenceWeb.ApplicationHostSessionState do
 
   - the host session id (`x-cadence-poc-session` on non-GET bridge calls), one per cookie
     session;
-  - the pinned host scope: the scope document and mission of the most recently loaded catalog.
-    The bridge's query and actions must match it, so one scope at a time per browser session
-    (a second scope re-pins; the other surface re-requests its catalog).
+  - the pinned host scopes (§11 L19b): the scope document and mission of each catalog this
+    session loaded, the 16 most recent, as digests (the cookie stays small). The bridge's
+    query and actions must name one of them, so surfaces at several scopes stay open at once;
+    a scope this session never loaded (or one pushed out) still gets `host_session_mismatch`.
   """
 
   import Plug.Conn
@@ -16,6 +17,8 @@ defmodule CadenceWeb.ApplicationHostSessionState do
   @session_key :application_host_session_id
   @host_context_key :application_host_context
   @host_mission_key :application_host_mission_id
+  @scopes_key :application_host_scopes
+  @max_scopes 16
 
   @spec session_key() :: atom()
   def session_key, do: @session_key
@@ -43,13 +46,34 @@ defmodule CadenceWeb.ApplicationHostSessionState do
     end
   end
 
-  @doc "Pins the host scope the bridge's query and actions must match."
+  @doc "Pins a host scope the bridge's query and actions may name (the most recent first)."
   @spec pin_scope(Plug.Conn.t(), map(), binary() | nil) :: Plug.Conn.t()
   def pin_scope(conn, scope_document, mission_id) do
-    conn = put_session(conn, @host_context_key, scope_document)
+    digest = digest(scope_document, mission_id)
+    pinned = conn |> pinned() |> List.delete(digest)
 
-    if is_binary(mission_id),
-      do: put_session(conn, @host_mission_key, mission_id),
-      else: delete_session(conn, @host_mission_key)
+    conn
+    # The single-scope keys before L19b.
+    |> delete_session(@host_context_key)
+    |> delete_session(@host_mission_key)
+    |> put_session(@scopes_key, Enum.take([digest | pinned], @max_scopes))
   end
+
+  @doc "Whether this browser session loaded a catalog at the scope (and mission)."
+  @spec pinned?(Plug.Conn.t(), map(), binary() | nil) :: boolean()
+  def pinned?(conn, scope_document, mission_id),
+    do: digest(scope_document, mission_id) in pinned(conn)
+
+  defp pinned(conn) do
+    case get_session(conn, @scopes_key) do
+      list when is_list(list) -> Enum.filter(list, &is_binary/1)
+      _none -> []
+    end
+  end
+
+  defp digest(scope_document, mission_id),
+    do:
+      :sha256
+      |> :crypto.hash(:erlang.term_to_binary({scope_document, mission_id}, [:deterministic]))
+      |> Base.url_encode64(padding: false)
 end

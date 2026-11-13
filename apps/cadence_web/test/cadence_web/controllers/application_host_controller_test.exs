@@ -509,6 +509,32 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert Jason.decode!(Jason.encode!(presentation)) == response["presentation"]
   end
 
+  test "L19b: a session keeps every scope it loaded, so two surfaces stay open at once" do
+    {member_conn, organization, mission, _scope} = signed_in_scope_and_mission()
+    second = TestFixtures.persist_mission!(organization, display_name: "Second Mission")
+    never_loaded = TestFixtures.persist_mission!(organization, display_name: "Third Mission")
+
+    {first_conn, _first_catalog} = fetch_catalog(member_conn, mission)
+    {second_conn, catalog} = fetch_catalog(recycle(first_conn), second)
+
+    query = fn target ->
+      post_bridge(catalog, second_conn, target.mission_id, %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.comms.overview",
+        "version" => 1,
+        "scope" => scope_document(organization, target)
+      })
+    end
+
+    # The first mission's surface still answers after the second's catalog loaded.
+    assert %{"queryVersion" => 1} = json_response(query.(mission), 200)
+    assert %{"queryVersion" => 1} = json_response(query.(second), 200)
+    assert %{"code" => "invalid_scope"} = json_response(query.(never_loaded), 400)
+  end
+
   test "scoped Comms queries preserve the core read contract and identity", %{conn: _conn} do
     {member_conn, organization, mission, scope} = signed_in_scope_and_mission()
     {catalog_conn, catalog} = fetch_catalog(member_conn, mission)

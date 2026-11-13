@@ -767,10 +767,11 @@ talk to the server: `{catalog, status, surfaces}`.
   actor may). Without `applications:operate`, render read-only. Under today's Policy whoever loads
   a surface may also operate it (todo(authz): read-only becomes real with Cedar).
 - `status` and `surfaces` are the A1 row's.
-- **One scope at a time:** like the bridge's `GET /catalog`, this pins the browser session's host
-  scope (mission, or one spacecraft). Loading another scope (another tab) re-pins, and the older
-  surface's next query answers `host_session_mismatch`: re-request `/host` on focus or on that
-  error, then retry once. Per-scope binding is a follow-up after L19.
+- **Several scopes at once (L19b):** like the bridge's `GET /catalog`, this pins the host scope
+  (mission, or one spacecraft) in the browser session, which keeps the 16 most recently loaded
+  scopes. Surfaces at any of them work side by side, so you don't need to re-pin on focus.
+  `host_session_mismatch` now only means this session never loaded that scope (or 16 newer ones
+  pushed it out): re-request `/host` on that error, then retry once.
 - Errors: `404 application_not_found | surface_not_found | spacecraft_not_found`;
   `409 application_not_installed` with `details.status` (`not_installed` or `disabled`; the host
   shows "<App> isn't installed on <mission>." with `Install` for admins); `403 forbidden`;
