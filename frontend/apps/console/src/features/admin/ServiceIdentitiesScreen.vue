@@ -18,7 +18,11 @@ import PlatformCaption from "./PlatformCaption.vue";
 import IdentityActions from "./IdentityActions.vue";
 
 /** Admin › Service identities (Admin.md): Name · Organization · Created · Last used · Revoke; Issue. */
-const list = useRemoteQuery(() => null as string | null, fetchServiceIdentities);
+// A constant key: a null key pauses useRemoteQuery, and this list is every organization's (qa 11-13).
+const list = useRemoteQuery(
+  () => ({ scope: "platform" as const }),
+  (_key, signal) => fetchServiceIdentities(null, signal),
+);
 const issue = ref<InstanceType<typeof ServiceIdentityIssue> | null>(null);
 const note = ref<{ tone: "nominal" | "crit"; text: string } | null>(null);
 const columns: readonly ApColumn[] = [
