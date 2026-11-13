@@ -28,6 +28,10 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     %{org: org, mission: mission, scope: scope, first: first, revision: revision}
   end
 
+  # About 20 s on CI. On a heavily loaded dev machine (load 50-100) this and the 550-spacecraft
+  # test can run 5-15 minutes and fail with DBConnection "tcp recv: closed" (a sandbox connection
+  # held past its limit), with or without recent changes (2026-11-13 A/B baseline). Rerun at low
+  # load or trust CI before suspecting a regression.
   @tag timeout: 180_000
   test "500 spacecraft activate together and retain usable command and telemetry bases", c do
     fleet = [
