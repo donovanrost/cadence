@@ -32,6 +32,26 @@ tabs: Requirements · Policy
   `critical`) · Version `v2` · Spacecraft count. Primary `New template`.
 - **P3 Not covered** (only when > 0): spacecraft with no rule, grouped by profile/plane ("12 in
   Earendil Block 2 have no contact rule"), action `Add a template for Block 2`.
+- **P4 Requirements** (one-off requirements; §11 L1, #74; fe-setup builds, api fb7510be):
+  - Filter segmented: `One-off` (default) · `From templates` · `All`. Template-generated requirements can number
+    thousands a day, so `From templates` groups them by template (`Block 1 daily · 1,500 for 11-14`) and links to
+    P2. They're never listed one per row by default.
+  - Columns: Spacecraft (link) · Window (`11-14 00:00Z → 11-15 00:00Z`, §4) · Rule in words (P2's mono format) ·
+    State (`ACTIVE` nominal, `CLOSED` and `CANCELED` off) · Source (`One-off` / the template's name as a link) ·
+    Updated (by, when). Primary `New requirement`.
+  - **Requirement page** `…/contact-planning/requirements/:requirementId` (`new` for create): a form generated
+    from `GET /requirements/schema`, in the groups `Window` then `Requirement`. Advanced fields are collapsed,
+    including `Longest time without a contact` (`max_gap_seconds`, #74; empty reads "No limit"). Save creates a
+    new version and shows the supersedes sentence first (as for templates). Template-generated requirements are
+    read-only, with "Change it in its template: Block 1 daily." and a link.
+  - **Close… / Cancel…** (secondary, each confirms with a required reason). Each sheet says what it does, in the
+    server's terms:
+    - Close: "Cadence stops planning for it from now. Passes already booked stay booked."
+    - Cancel: "It's withdrawn as if it was never needed. Nothing more is planned for it."
+    - Both end with "This is final: declare a new requirement to plan it again."
+    - fe-setup confirms with domain what each does to passes already booked, and the sentences follow the answer
+      (U20).
+  - Ended rows read `Closed by Mira K. on 11-12: <reason>` / `Canceled by …`.
 - **Template page:** the rule as a form generated from the requirement fields (contacts per day,
   window `earliest_start` → `latest_end` in UTC time-of-day, minimum and preferred duration,
   minimum separation (contacts at least this far apart; it's **not** a maximum gap, which isn't modelled), direction downlink / uplink / both, intent, priority, minimum data
