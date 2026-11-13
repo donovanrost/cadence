@@ -99,9 +99,32 @@ defmodule CadenceWeb.MixProject do
       ],
       "test.browser.federation": [
         "cmd --cd ../../frontend corepack pnpm@11.22.0 run test:browser:contract",
-        "cmd node ../../frontend/tools/phoenix/run_federation_publication_build.mjs assets.deploy",
+        &build_federation_assets/1,
         "cmd env CADENCE_BROWSER_PROPS_DIFF=true MIX_ENV=test mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/federation_browser_smoke_test.exs browser_test/cadence_web/assets/admin_mode_browser_smoke_test.exs browser_test/cadence_web/assets/command_workspace_browser_test.exs browser_test/cadence_web/assets/spacecraft_configuration_browser_test.exs browser_test/cadence_web/assets/settings_browser_test.exs test/cadence_web/ops_contact_scheduling_page_test.exs"
       ]
     ]
+  end
+
+  # CI builds these assets once (its browser-assets job) and hands them to the browser jobs,
+  # which set CADENCE_BROWSER_ASSETS_PREBUILT=1. Everywhere else the alias builds them itself.
+  defp build_federation_assets(_args) do
+    if System.get_env("CADENCE_BROWSER_ASSETS_PREBUILT") == "1" do
+      unless File.regular?("priv/static/cache_manifest.json") do
+        Mix.raise(
+          "CADENCE_BROWSER_ASSETS_PREBUILT=1 but priv/static has no digested assets " <>
+            "(cache_manifest.json); build them with mix assets.deploy"
+        )
+      end
+
+      Mix.shell().info("Using prebuilt browser assets (CADENCE_BROWSER_ASSETS_PREBUILT=1)")
+    else
+      Mix.Task.reenable("cmd")
+
+      Mix.Task.run("cmd", [
+        "node",
+        "../../frontend/tools/phoenix/run_federation_publication_build.mjs",
+        "assets.deploy"
+      ])
+    end
   end
 end
