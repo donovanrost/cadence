@@ -3,6 +3,7 @@ import {
   decoders,
   detailsOf,
   isError,
+  isRecord,
   jsonObject,
   orNull,
   request,
@@ -265,4 +266,21 @@ export function templateCountLine(
   const active = row.active_count === row.count ? "" : ` · ${formatCount(row.active_count)} active`;
   const retired = templateStateWord[row.template.state];
   return `${formatCount(row.count)} for ${day.slice(5)}${active}${retired}`;
+}
+
+/**
+ * qa (P4): a constraints document left untouched in Advanced is `{allowed: null, excluded: null}`,
+ * which older servers refuse (422 constraints). Untouched means no constraint, so it's left out.
+ */
+export function withoutBlankConstraints(
+  document: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const blank = (v: unknown) =>
+    isRecord(v) &&
+    Object.keys(v).every((k) => k === "allowed" || k === "excluded") &&
+    v["allowed"] == null &&
+    v["excluded"] == null;
+  return Object.fromEntries(
+    Object.entries(document).filter(([k, v]) => !(k.endsWith("_constraints_document") && blank(v))),
+  );
 }

@@ -7,6 +7,7 @@ import {
   notActiveLine,
   requirementFacts,
   withSpacecraftChoices,
+  withoutBlankConstraints,
 } from "./requirements.ts";
 import { templateSchemaReader } from "./templates.ts";
 
@@ -128,5 +129,20 @@ describe("From templates counts (api df98dcd3)", () => {
     expect(
       templateCountLine({ ...row, template: { ...row.template, state: "paused" } }, "2026-11-14"),
     ).toBe("1,500 for 11-14 · 1,480 active · paused");
+  });
+});
+
+describe("blank constraints (qa P4)", () => {
+  it("leaves out an untouched constraints document, keeps a set one", () => {
+    expect(
+      withoutBlankConstraints({
+        station_constraints_document: { allowed: null, excluded: null },
+        provider_constraints_document: { allowed: ["p1"], excluded: null },
+        max_gap_seconds: null,
+      }),
+    ).toEqual({
+      provider_constraints_document: { allowed: ["p1"], excluded: null },
+      max_gap_seconds: null,
+    });
   });
 });

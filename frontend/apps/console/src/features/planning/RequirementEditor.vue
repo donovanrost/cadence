@@ -17,6 +17,7 @@ import {
 } from "./requirements.ts";
 import { fetchRequirementSupersedes, supersedeSentence } from "./supersedes.ts";
 import { buildNested } from "./templates.ts";
+import { withoutBlankConstraints } from "./requirements.ts";
 
 /** P4 one-off requirement: new, or a new version (ux ContactPlanning.md; api fb7510be). */
 const props = defineProps<{ missionId: string; requirement: RequirementDetail | null }>();
@@ -86,7 +87,7 @@ async function save() {
   busy.value = true;
   try {
     const r = await saveRequirement(props.missionId, props.requirement?.id ?? null, {
-      content: built.document,
+      content: withoutBlankConstraints(built.document),
       ...(props.requirement ? { expected_version: props.requirement.version } : {}),
     });
     if (!r.ok) {
