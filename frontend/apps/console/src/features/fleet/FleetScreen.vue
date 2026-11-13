@@ -15,6 +15,7 @@ import {
   describeFilter,
   filterQuery,
   matches,
+  NO_FILTER,
   parseFilter,
   type FleetFilter,
 } from "./filters.ts";
@@ -86,11 +87,7 @@ const title = computed(() => {
             v-if="narrowed(value).rows.length === 0"
             :headline="`No spacecraft match ${describeFilter(filter, profileName(value))}`"
           >
-            <ApButton
-              size="compact"
-              @click="setFilter({ plane: null, states: [], profile: null, q: '' })"
-              >Clear filters</ApButton
-            >
+            <ApButton size="compact" @click="setFilter(NO_FILTER)">Clear filters</ApButton>
           </ApEmptyState>
           <template v-else-if="view === 'table'">
             <FleetTable

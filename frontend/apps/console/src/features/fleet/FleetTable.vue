@@ -2,6 +2,7 @@
 import { RouterLink } from "vue-router";
 import { formatCount, formatDuration, useNow, ApStatusMark, ApTable, type ApColumn } from "@/ui";
 import type { FleetSpacecraft } from "./api.ts";
+import { nextContact } from "./filters.ts";
 import { fleetOpState, fleetStateWord } from "./matrix.ts";
 
 /** Fleet table: Name links to the spacecraft (Investigate); state is mark + word (+ worst point). */
@@ -15,6 +16,7 @@ const columns: readonly ApColumn[] = [
   { key: "orbit", label: "Plane · slot", mono: true },
   { key: "profile", label: "Profile" },
   { key: "tlm", label: "Last TLM", mono: true, align: "end" },
+  { key: "contact", label: "Next contact", mono: true, align: "end" },
 ];
 const orbit = (sc: FleetSpacecraft) =>
   sc.plane === null
@@ -69,6 +71,11 @@ const rowState = (sc: FleetSpacecraft) =>
     >
     <template #cell-tlm="{ row }"
       ><span :class="row.stale ? 'text-stale-text' : 'text-text-3'">{{ age(row) }}</span></template
+    >
+    <template #cell-contact="{ row }"
+      ><span :class="row.in_contact ? 'text-readout' : 'text-text-3'">{{
+        nextContact(row, now) ?? "—"
+      }}</span></template
     >
     <template #footer>
       <p class="m-0 px-4 py-2.5 font-mono text-xs text-text-4 uppercase">

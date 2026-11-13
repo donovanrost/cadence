@@ -31,3 +31,4 @@ export { fleetSubset, statTiles, type StatTile } from "./stats.ts";
 /** Typed test builders for fleet snapshots (used by other features' tests). */
 export { fleetOf, spacecraftRow } from "./fixtures.ts";
 export { default as TelemetryDegraded } from "./TelemetryDegraded.vue";
+export { nextContact } from "./filters.ts";

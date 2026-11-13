@@ -7,7 +7,7 @@ import { isFiltered, NO_FILTER, type FleetFilter } from "./filters.ts";
 import PlanePicker from "./PlanePicker.vue";
 import StateToggles from "./StateToggles.vue";
 
-/** Filter row: plane · profile · state · search, plus Clear filters. Owner keeps them in the URL. */
+/** Filter row: plane · profile · state · in contact · search, plus Clear filters. Owner keeps them in the URL. */
 const props = defineProps<{ filter: FleetFilter; spacecraft: readonly FleetSpacecraft[] }>();
 const emit = defineEmits<{ change: [filter: FleetFilter] }>();
 const set = (patch: Partial<FleetFilter>) => emit("change", { ...props.filter, ...patch });
@@ -71,6 +71,19 @@ const q = computed({ get: () => props.filter.q, set: (value: string) => set({ q:
         />
       </div>
     </details>
+    <button
+      type="button"
+      class="inline-flex h-11 cursor-pointer items-center border px-3 font-display text-md font-semibold tracking-tag uppercase"
+      :class="
+        filter.contact
+          ? 'border-readout bg-raised text-readout'
+          : 'border-line text-text-3 hover:text-readout'
+      "
+      :aria-pressed="filter.contact"
+      @click="set({ contact: !filter.contact })"
+    >
+      In contact
+    </button>
     <div class="w-56 max-md:w-full">
       <ApField
         v-model="q"

@@ -8,6 +8,7 @@ import {
   ApTable,
   type ApColumn,
 } from "@/ui";
+import { nextContact } from "@/features/fleet/index.ts";
 import { conditionWords } from "./api.ts";
 import { formatLimitLike, formatValue, withUnit } from "./format.ts";
 import type { AlarmListRow } from "./list.ts";
@@ -22,6 +23,7 @@ const columns: readonly ApColumn[] = [
   { key: "value", label: "Last / limit", mono: true, align: "end" },
   { key: "since", label: "Opened", mono: true },
   { key: "owner", label: "Owner · source" },
+  { key: "contact", label: "Next contact", mono: true, align: "end" },
 ];
 const tint = (row: AlarmListRow) =>
   row.episode.severity === "critical" ? "text-crit-text" : "text-caution-text";
@@ -100,5 +102,10 @@ const to = (row: AlarmListRow) => ({
         }}</span>
       </span>
     </template>
+    <template #cell-contact="{ row }"
+      ><span :class="row.sc?.in_contact ? 'text-readout' : 'text-text-3'">{{
+        (row.sc && nextContact(row.sc, now)) ?? "—"
+      }}</span></template
+    >
   </ApTable>
 </template>

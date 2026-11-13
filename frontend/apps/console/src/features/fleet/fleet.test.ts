@@ -11,6 +11,7 @@ import {
   matches,
   NO_FILTER,
   parseFilter,
+  nextContact,
 } from "./filters.ts";
 import { fleetSubset } from "./stats.ts";
 
@@ -169,7 +170,15 @@ describe("fleet filters", () => {
       q: " 31 ",
       view: "matrix",
     });
-    expect(filter).toEqual({ plane: 7, states: ["critical", "caution"], profile: null, q: "31" });
+    expect(filter).toEqual({
+      plane: 7,
+      states: ["critical", "caution"],
+      profile: null,
+      contact: false,
+      q: "31",
+    });
+    expect(parseFilter({ contact: "1" }).contact).toBe(true);
+    expect(filterQuery({ ...NO_FILTER, contact: true }, {})).toEqual({ contact: "1" });
     expect(filterQuery(filter, { view: "matrix", plane: "3" })).toEqual({
       view: "matrix",
       plane: "7",
@@ -177,6 +186,20 @@ describe("fleet filters", () => {
       q: "31",
     });
     expect(filterQuery(NO_FILTER, { plane: "3", view: "matrix" })).toEqual({ view: "matrix" });
+  });
+
+  it("filters to in contact and says the next contact", () => {
+    const now = new Date("2026-11-12T00:00:00Z");
+    const live = spacecraftRow(1, { in_contact: true });
+    const later = spacecraftRow(2, { in_contact: false, next_aos_at: "2026-11-12T00:38:00Z" });
+    expect([live, later].filter((sc) => matches(sc, { ...NO_FILTER, contact: true }))).toEqual([
+      live,
+    ]);
+    expect([
+      nextContact(live, now),
+      nextContact(later, now),
+      nextContact(spacecraftRow(3), now),
+    ]).toEqual(["In contact", "T−38m", null]);
   });
 
   it("matches plane, state, profile and name or SCID prefix", () => {
