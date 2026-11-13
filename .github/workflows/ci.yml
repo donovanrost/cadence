@@ -143,6 +143,18 @@ jobs:
       - name: mix test --partitions 4
         working-directory: apps/cadence
         run: mix test --partitions 4 --slowest-modules 10
+        env:
+          # Producer tests run their real frontend consumers; each consumer that reads its
+          # producer's fixture appends itself here. producer-coverage checks all of them ran.
+          CADENCE_PRODUCER_FIXTURE_LEDGER: ${{ runner.temp }}/producer-ledger.txt
+      - name: Upload the producer-fixture ledger
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: producer-ledger-core-${{ matrix.partition }}
+          path: ${{ runner.temp }}/producer-ledger.txt
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Save pnpm store
         if: github.event_name == 'push' && matrix.partition == 1
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -195,6 +207,18 @@ jobs:
       - name: mix test --partitions 2
         working-directory: apps/cadence_web
         run: mix test --partitions 2 --exclude frontend_publication --slowest-modules 10
+        env:
+          # Producer tests run their real frontend consumers; each consumer that reads its
+          # producer's fixture appends itself here. producer-coverage checks all of them ran.
+          CADENCE_PRODUCER_FIXTURE_LEDGER: ${{ runner.temp }}/producer-ledger.txt
+      - name: Upload the producer-fixture ledger
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: producer-ledger-web-${{ matrix.partition }}
+          path: ${{ runner.temp }}/producer-ledger.txt
+          if-no-files-found: ignore
+          retention-days: 1
 
   test-web-publication:
     name: Web tests needing the federation publication
@@ -304,9 +328,32 @@ jobs:
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: mix test.cluster
 
+  producer-coverage:
+    name: Producer-contract coverage
+    needs: [changes, test-core, test-web]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.16.0"
+      - name: Download the shards' producer-fixture ledgers
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: producer-ledger-*
+          path: ${{ runner.temp }}/producer-ledgers
+      # Every consumer in frontend/tools/producer-contracts.json must have executed with its
+      # producer's fixture in some shard (replaces the Frontend workflow's test:producers rerun).
+      - name: Check every producer consumer executed
+        run: node scripts/ci/producer_coverage.mjs "$RUNNER_TEMP/producer-ledgers"
+
   ci-ok:
     name: ci-ok
-    needs: [changes, quality, test-core, test-web, test-web-publication, test-packages]
+    needs: [changes, quality, test-core, test-web, test-web-publication, test-packages, producer-coverage]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
