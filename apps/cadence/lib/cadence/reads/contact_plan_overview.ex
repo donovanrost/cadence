@@ -15,14 +15,16 @@ defmodule Cadence.Reads.ContactPlanOverview do
   alias Cadence.ContactPlanning.{
     ContactOpportunitySnapshot,
     ContactPlan,
+    ContactPlanExecutions,
     ContactPlanVersion,
     FleetPlanningRuns,
     PlanSupersession,
     StationConflicts
   }
 
+  alias Cadence.GroundNetworks.MissionProviders
   alias Cadence.Management.Contacts
-  alias Cadence.Reads.{PlanApproval, PlanRounds}
+  alias Cadence.Reads.{PlanApproval, PlanMeasures, PlanRounds}
 
   @list_cap 100
 
@@ -107,8 +109,9 @@ defmodule Cadence.Reads.ContactPlanOverview do
          counts: %{summary.counts | conflicts: length(conflicts)},
          ready_to_approve: summary.ready_to_approve and availability.conflicts == [],
          passes: Enum.map(passes, &pass(&1, version, stations)),
-         demand: demand(organization_id, mission_id, version),
+         demand: demand(organization_id, mission_id, version, passes),
          unmet: unmet(organization_id, mission_id, version),
+         provider_freeze: provider_freeze(organization_id, mission_id, plan, version, passes),
          conflicts: conflicts,
          at_risk: availability.at_risk,
          approval: approval
@@ -120,9 +123,13 @@ defmodule Cadence.Reads.ContactPlanOverview do
     end
   end
 
-  @doc "Per-spacecraft rule evaluation from a plan version's coverage, plus the rules."
-  @spec demand(binary(), binary(), ContactPlanVersion.t()) :: map()
-  def demand(organization_id, mission_id, %ContactPlanVersion{} = version) do
+  @doc """
+  Per-spacecraft rule evaluation from a plan version's coverage, plus the rules, with each
+  spacecraft's measures over the version's selected `passes` (`PlanMeasures`).
+  """
+  @spec demand(binary(), binary(), ContactPlanVersion.t(), [ContactOpportunitySnapshot.t()]) ::
+          map()
+  def demand(organization_id, mission_id, %ContactPlanVersion{} = version, passes) do
     evaluations = (version.coverage_document || %{})["requirements"] || []
 
     rules =
@@ -138,10 +145,22 @@ defmodule Cadence.Reads.ContactPlanOverview do
         end
       end)
 
+    day = PlanMeasures.day(passes)
+    by_craft = Enum.group_by(passes, &(&1.route_binding_document || %{})["spacecraft_id"])
+
     spacecraft =
       rules
       |> Enum.group_by(fn {requirement, _evaluation} -> requirement.spacecraft_id end)
-      |> Enum.map(fn {spacecraft_id, items} -> spacecraft_demand(spacecraft_id, items) end)
+      |> Enum.map(fn {spacecraft_id, items} ->
+        mine = Map.get(by_craft, spacecraft_id, [])
+
+        spacecraft_id
+        |> spacecraft_demand(items)
+        |> Map.merge(%{
+          longest_gap: PlanMeasures.longest_gap(mine, day),
+          uplink_passes: PlanMeasures.uplink_passes(organization_id, mission_id, mine)
+        })
+      end)
       |> Enum.sort_by(&{&1.rule_met, &1.spacecraft_id})
 
     %{
@@ -151,6 +170,48 @@ defmodule Cadence.Reads.ContactPlanOverview do
       rules: Enum.map(rules, fn {requirement, _evaluation} -> rule(requirement) end)
     }
   end
+
+  # K1's freeze clock: the earliest offer expiry among passes not yet sent to a provider. Before
+  # the version is approved or executed that's every selected pass; after, the unplaced items.
+  defp provider_freeze(organization_id, mission_id, plan, version, passes) do
+    unsent = unsent(organization_id, mission_id, plan, version, passes)
+
+    names =
+      if unsent == [],
+        do: %{},
+        else:
+          organization_id
+          |> MissionProviders.list_providers(mission_id)
+          |> Map.new(&{&1.provider_id, &1.display_name})
+
+    PlanMeasures.provider_freeze(unsent, names)
+  end
+
+  defp unsent(
+         organization_id,
+         mission_id,
+         %ContactPlan{approved_version: v} = plan,
+         version,
+         passes
+       )
+       when v == version.version do
+    case ContactPlanExecutions.list(organization_id, mission_id, plan.contact_plan_id, v) do
+      [] ->
+        passes
+
+      items ->
+        ids =
+          for item <- items,
+              item.lifecycle_state in [:pending, :requesting],
+              item.provider_reservation_id in [nil, ""],
+              into: MapSet.new(),
+              do: item.contact_opportunity_snapshot_id
+
+        Enum.filter(passes, &MapSet.member?(ids, &1.contact_opportunity_snapshot_id))
+    end
+  end
+
+  defp unsent(_organization_id, _mission_id, _plan, _version, passes), do: passes
 
   # Requirements the version leaves unsatisfied (what an approver must acknowledge).
   defp unmet(organization_id, mission_id, version) do
@@ -287,6 +348,8 @@ defmodule Cadence.Reads.ContactPlanOverview do
       station: StationRefs.of_snapshot(snapshot, stations),
       starts_at: snapshot.starts_at,
       ends_at: snapshot.ends_at,
+      # When the provider stops honouring the offer (K1 'offers expire' count).
+      expires_at: snapshot.expires_at,
       synthetic: snapshot.synthetic,
       locked: snapshot.contact_opportunity_snapshot_id in (version.locked_snapshot_ids || [])
     }

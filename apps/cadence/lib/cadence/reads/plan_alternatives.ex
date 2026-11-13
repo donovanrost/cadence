@@ -6,13 +6,17 @@ defmodule Cadence.Reads.PlanAlternatives do
   is persisted). Callers authorize first.
 
   Effect: `rule_met_after` (every requirement of the spacecraft satisfied with
-  the pass added), `contacts_after` (`%{have, need}` for the spacecraft), and
-  `clashes_with` (selected passes of the same spacecraft that overlap it).
+  the pass added), `contacts_after` (`%{have, need}` for the spacecraft),
+  `clashes_with` (selected passes of the same spacecraft that overlap it), and
+  `longest_gap_after_seconds` (`PlanMeasures.longest_gap/2` over the plan's day with
+  the pass added; clashing passes stay in). The top-level `longest_gap` is the
+  spacecraft's today.
   """
 
   alias Cadence.Comms.StationRefs
   alias Cadence.ContactPlanning.{ContactOpportunitySnapshot, Planner, RequirementEvaluator}
   alias Cadence.Management.Contacts
+  alias Cadence.Reads.PlanMeasures
 
   @spec load(binary(), binary(), binary(), binary()) :: {:ok, map()} | {:error, :plan_not_found}
   def load(organization_id, mission_id, plan_id, spacecraft_id) do
@@ -42,6 +46,8 @@ defmodule Cadence.Reads.PlanAlternatives do
 
     requirements = requirements(organization_id, mission_id, mine ++ candidates)
     stations = StationRefs.index(organization_id, mission_id)
+    # The plan's day; a plan with nothing selected yet takes it from the candidates.
+    day = PlanMeasures.day(if selected == [], do: candidates, else: selected)
 
     %{
       plan_id: plan_id,
@@ -49,6 +55,7 @@ defmodule Cadence.Reads.PlanAlternatives do
       spacecraft_id: spacecraft_id,
       rule_met: rule_met?(requirements, mine),
       contacts: contacts(requirements, mine),
+      longest_gap: PlanMeasures.longest_gap(mine, day),
       alternatives:
         Enum.map(candidates, fn candidate ->
           after_selection = [candidate | mine]
@@ -66,12 +73,17 @@ defmodule Cadence.Reads.PlanAlternatives do
               clashes_with:
                 mine
                 |> Enum.filter(&overlap?(&1, candidate))
-                |> Enum.map(& &1.contact_opportunity_snapshot_id)
+                |> Enum.map(& &1.contact_opportunity_snapshot_id),
+              longest_gap_after_seconds:
+                gap_seconds(PlanMeasures.longest_gap(after_selection, day))
             }
           }
         end)
     }
   end
+
+  defp gap_seconds(%{seconds: seconds}), do: seconds
+  defp gap_seconds(nil), do: nil
 
   defp requirements(organization_id, mission_id, snapshots) do
     snapshots

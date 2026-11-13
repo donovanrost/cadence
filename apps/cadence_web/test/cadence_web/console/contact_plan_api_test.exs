@@ -83,6 +83,35 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
            } = demand
 
     assert rule["text"] =~ "at least 1 min"
+
+    # K1 C panel (lead): the pass is 01:00-01:15Z, so the day's longest gap is 01:15Z to 24:00Z
+    # (the edges count). No rule carries a limit or an uplink count yet.
+    assert demand["longest_gap"] == %{
+             "seconds" => 81_900,
+             "limit_seconds" => nil,
+             "from" => "2027-01-01T01:15:00Z",
+             "to" => "2027-01-02T00:00:00Z"
+           }
+
+    assert demand["uplink_passes"] == %{"have" => 0, "need" => nil}
+
+    # K1's offer clock: a draft has sent nothing, so its one pass's expiry sets it.
+    [%{"snapshot_id" => snapshot_id, "expires_at" => expires_at}] = detail["passes"]
+    assert instant(expires_at) == ~U[2027-01-01 05:00:00Z]
+
+    assert %{
+             "at" => freeze_at,
+             "snapshot_id" => ^snapshot_id,
+             "provider" => %{"id" => "provider-review"},
+             "by_provider" => [%{"provider" => %{"id" => "provider-review"}, "at" => _}]
+           } = detail["provider_freeze"]
+
+    assert instant(freeze_at) == ~U[2027-01-01 05:00:00Z]
+  end
+
+  defp instant(iso) do
+    {:ok, at, 0} = DateTime.from_iso8601(iso)
+    DateTime.truncate(at, :second)
   end
 
   test "setup says what is missing before drafting, and demand counts the day", c do
@@ -262,9 +291,13 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
     assert %{
              "rule_met_after" => true,
              "contacts_after" => %{"have" => 1, "need" => 1},
-             "clashes_with" => []
+             "clashes_with" => [],
+             # The whole day without a pass; with it, 01:15Z to 24:00Z.
+             "longest_gap_after_seconds" => 81_900
            } =
              alternative["effect"]
+
+    assert %{"seconds" => 86_400, "from" => "2027-01-01T00:00:00Z"} = alternatives["longest_gap"]
 
     post_edit = fn body ->
       c.user

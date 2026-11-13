@@ -338,8 +338,36 @@ code, e.g. a snapshot that doesn't belong to the plan's runs), `422 invalid_para
 requirement_id, station: {ref, id, code, name}, starts_at, ends_at, synthetic, effect: {rule_met_after, contacts_after:
 {have, need}, clashes_with: [snapshot_id]}}]}`: eligible opportunities the plan's runs found for that
 spacecraft but didn't select, oldest first. Effects come from the same requirement evaluator the
-plan uses, and nothing is written. The "closes gap to 6h10" phrasing isn't computed (the rules
-have no gap measure); `rule_met_after` and `clashes_with` are.
+plan uses, and nothing is written. The top level also carries `longest_gap` (as in plan detail's
+demand, below), and each effect `longest_gap_after_seconds`: the same measure with that pass
+added (clashing passes stay in), so D can say "6h10 → 3h05". A plan with nothing selected takes
+its day from the candidates. `limit_seconds` is `null` until requirements carry
+`max_gap_seconds` (director go, 2026-11-13), so no gap verdict yet.
+
+### Plan detail measures (K1 C panel, lead; `GET /contact-plans/:id`)
+
+Additive, optional fields:
+
+- `demand.spacecraft[].longest_gap`: `{seconds, limit_seconds, from, to} | null`. The longest
+  stretch of the plan's UTC day (00:00Z–24:00Z of the earliest pass's date) without one of this
+  spacecraft's selected passes. A gap runs LOS → next AOS; the day's edges count (00:00Z → first
+  AOS, last LOS → 24:00Z). Only this plan's passes count (not earlier chain bookings or the
+  previous day's last pass). No pass all day reads 86400; `null` when the plan has no passes.
+  `from`/`to` are ISO timestamps (whole seconds), `null` only when the day is fully covered
+  (`seconds: 0`). `limit_seconds` is `null` today.
+- `demand.spacecraft[].uplink_passes`: `{have, need}`. `have` counts selected passes whose
+  booking will **request** an uplink leg (the spacecraft's primary uplink route lands at that
+  station on the same provider); confirmation shows later as the passes read's
+  `uplink_confirmed`. `need` is `null` (no rule carries an uplink count, and uplink requirements
+  aren't plannable yet).
+- `provider_freeze`: `{at, provider: {id, name}, snapshot_id, by_provider: [{provider, at}]} |
+  null`. The earliest offer `expires_at` (the last moment the provider honours that offer) among
+  passes **not yet sent** to a provider: every selected pass for a draft, review or an approved
+  plan not yet executed; once executing, only the unplaced (`pending`/`requesting`) items. It may
+  be in the past (an expired offer, which approval refuses). `null` when nothing is left to send.
+  Providers publish no day-level cutoff, so this is the honest freeze. The simulator's offers
+  expire at AOS.
+- `passes[].expires_at`: that offer's expiry (ux: "3 more offers expire in the next hour").
 
 ### `POST /contact-plans/:plan_id/repairs` (S8, K2 v1 "Re-plan after provider changes")
 
