@@ -39,11 +39,12 @@ defmodule CadenceWeb.Console.ContactChangesTest do
     assert_push("invalidate", %{resources: ["contacts"]}, 2_000)
   end
 
-  test "a contacts_changed read update invalidates contacts", c do
+  # A settled booking can close a pass_release attention item with no attention event of its own.
+  test "a contacts_changed read update invalidates contacts and attention", c do
     :ok =
       ScopedReadUpdates.publish(:contacts_changed, c.org.organization_id, c.mission.mission_id)
 
-    assert_push("invalidate", %{resources: ["contacts"]}, 2_000)
+    assert_push("invalidate", %{resources: ["attention", "contacts"]}, 2_000)
   end
 
   test "contact plan and run changes invalidate contact_plans (S10)", c do
