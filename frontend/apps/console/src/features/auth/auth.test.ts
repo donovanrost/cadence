@@ -20,8 +20,8 @@ const inv = (over: Partial<Invitation> = {}): Invitation => ({
 describe("auth words (ux Auth.md)", () => {
   it("heads every case with who invited whom, and words each case", () => {
     expect(invitationHeader(inv())).toBe("Mira K. invited you to Acme Space as Member on 11-10.");
-    expect(invitationHeader(inv({ role: "unrecognized" }))).toBe(
-      "Mira K. invited you to Acme Space on 11-10.",
+    expect(invitationHeader(inv({ role: { unrecognized: "observer" } }))).toBe(
+      "Mira K. invited you to Acme Space as observer on 11-10.",
     );
     expect(invitationView(inv({ case: "unrecognized" }), null).callout?.tone).toBe("off");
     expect(invitationHeader(inv({ invited_by: null, invited_at: null }))).toBe(

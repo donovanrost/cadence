@@ -1,14 +1,10 @@
-import type { Invitation, InvitationRole } from "./api.ts";
+import { roleText } from "@/api";
+import type { Invitation } from "./api.ts";
 
 /** Auth.md wording (L5). Actor and time only when the server gives them (U29). */
 
-/** People's words for the roles; an unrecognized role drops the "as …" clause (U29 spirit). */
-const ROLE: Readonly<Record<InvitationRole, string | null>> = {
-  organization_admin: "Org admin",
-  member: "Member",
-  unrecognized: null,
-};
-export const roleWord = (role: InvitationRole | null) => (role ? ROLE[role] : null);
+/** The shared role words (api/entities.ts); a role the console doesn't know shows the server's word. */
+export const roleWord = (role: Invitation["role"]) => (role === null ? null : roleText(role));
 
 /** MM-DD (§4 short date). */
 const day = (iso: string) => iso.slice(5, 10);

@@ -1,4 +1,4 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
+import { decoders as d, request, role, type ApiResult, type Decoded } from "@/api";
 import { fetchSession, type Session } from "@/api/session.ts";
 
 /**
@@ -31,8 +31,6 @@ export const invitationCases = [
 ] as const;
 /** Typing rule (1): a new server case reads as "unrecognized", never a failed page. */
 export type InvitationCase = (typeof invitationCases)[number] | "unrecognized";
-export const invitationRoles = ["member", "organization_admin"] as const;
-export type InvitationRole = (typeof invitationRoles)[number] | "unrecognized";
 
 /** session.md L5: people and organizations come as `{name} | null` (no ids on this public read). */
 const person = d.nullable(d.object({ name: d.nullable(d.string) }));
@@ -40,7 +38,7 @@ const org = d.nullable(d.object({ name: d.string }));
 const invitationReader = d.object({
   case: d.known(invitationCases),
   organization: org,
-  role: d.nullable(d.known(invitationRoles)),
+  role: d.nullable(role),
   invited_by: person,
   invited_at: d.nullable(d.timestamp),
   email: d.nullable(d.string),
@@ -57,7 +55,7 @@ export type Invitation = Decoded<typeof invitationReader>;
 export const unavailableReader = d.object({
   case: d.known(invitationCases),
   organization: d.optional(org),
-  role: d.optional(d.nullable(d.known(invitationRoles))),
+  role: d.optional(d.nullable(role)),
   invited_by: d.optional(person),
   invited_at: d.optional(d.nullable(d.timestamp)),
   email: d.optional(d.nullable(d.string)),
