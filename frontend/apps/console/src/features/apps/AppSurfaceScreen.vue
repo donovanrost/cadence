@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { useMissionScope } from "@/shell";
+import { paramText, useMissionScope } from "@/shell";
 import {
   ApBreadcrumb,
   ApPageHeader,
@@ -13,7 +13,7 @@ import {
 } from "@/ui";
 import AppStatusLine from "./AppStatusLine.vue";
 import AppSurfaceNotice from "./AppSurfaceNotice.vue";
-import { fetchApps } from "./api.ts";
+import { fetchScopedApps } from "./api.ts";
 import { fetchSurfaceHost } from "./host.ts";
 import type { SaveOutcome } from "./saveOutcome.ts";
 import { hostRefusal, setupSurfaces } from "./surfaces.ts";
@@ -21,23 +21,27 @@ import SurfaceMount from "./SurfaceMount.vue";
 
 /**
  * L9 app surface host (ux screens/AppSurfaces.md, DECISIONS #75/#77): the host draws the label,
- * status, title, tabs, notices and states; the app renders only its body.
+ * status, title, tabs, notices and states; the app renders only its body. With `spacecraftId`
+ * (L19, `setup.spacecraft.app`) it hosts the app's spacecraft-scope surfaces for that spacecraft.
  */
-const route = useRoute("setup.app");
+const props = defineProps<{ spacecraftId?: string }>();
+const route = useRoute();
+const spacecraftId = computed(() => props.spacecraftId || null);
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
-const appKey = computed(() => (typeof route.params.appKey === "string" ? route.params.appKey : ""));
-const apps = useRemoteQuery(missionId, fetchApps);
+const appKey = computed(() => paramText(route.params, "appKey"));
+const apps = useRemoteQuery(
+  () => ({ missionId: missionId.value, spacecraftId: spacecraftId.value }),
+  fetchScopedApps,
+);
 const app = computed(() =>
   apps.state.value.status === "ready"
     ? (apps.state.value.value.apps.find((a) => a.key === appKey.value) ?? null)
     : null,
 );
 const surfaces = computed(() => setupSurfaces(app.value?.surfaces ?? []));
-const surfaceId = computed(() =>
-  typeof route.params.surface === "string" && route.params.surface
-    ? route.params.surface
-    : (surfaces.value[0]?.surface_id ?? null),
+const surfaceId = computed(
+  () => paramText(route.params, "surface") || (surfaces.value[0]?.surface_id ?? null),
 );
 const key = computed(() =>
   surfaceId.value
@@ -45,7 +49,7 @@ const key = computed(() =>
         missionId: missionId.value,
         appKey: appKey.value,
         surfaceId: surfaceId.value,
-        spacecraftId: null,
+        spacecraftId: spacecraftId.value,
       }
     : null,
 );
@@ -82,13 +86,26 @@ const links = computed((): readonly ApTabLink[] =>
   surfaces.value.map((s) => ({
     key: s.surface_id,
     label: s.label,
-    to: { name: "setup.app", params: { appKey: appKey.value, surface: s.surface_id } },
+    to: spacecraftId.value
+      ? {
+          name: "setup.spacecraft.app",
+          params: { spacecraftId: spacecraftId.value, appKey: appKey.value, surface: s.surface_id },
+        }
+      : { name: "setup.app", params: { appKey: appKey.value, surface: s.surface_id } },
   })),
 );
-const crumbs = computed((): readonly ApCrumb[] => [
-  { label: "Apps", to: { name: "setup.apps" } },
-  { label: name.value },
-]);
+const crumbs = computed((): readonly ApCrumb[] =>
+  spacecraftId.value
+    ? [
+        { label: "Spacecraft", to: { name: "setup.spacecraft" } },
+        {
+          label: spacecraftId.value,
+          to: { name: "setup.spacecraft.one", params: { spacecraftId: spacecraftId.value } },
+        },
+        { label: name.value },
+      ]
+    : [{ label: "Apps", to: { name: "setup.apps" } }, { label: name.value }],
+);
 </script>
 
 <template>

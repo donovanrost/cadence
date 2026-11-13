@@ -217,6 +217,12 @@ export interface ConsoleRoutes {
     { spacecraftId: Raw },
     { spacecraftId: string }
   >;
+  "setup.spacecraft.app": InMission<
+    "setup.spacecraft.app",
+    "/setup/spacecraft/:spacecraftId/apps/:appKey/:surface?",
+    { spacecraftId: Raw; appKey: Raw; surface?: RawOpt },
+    { spacecraftId: string; appKey: string; surface?: string }
+  >;
   "setup.profiles": InMission<"setup.profiles", "/setup/profiles">;
   "setup.profile.new": InMission<"setup.profile.new", "/setup/profiles/new">;
   "setup.profile": InMission<
@@ -382,6 +388,7 @@ export const consoleRouteNames: Readonly<Record<ConsoleRouteName, true>> = {
   "setup.spacecraft": true,
   "setup.spacecraft.new": true,
   "setup.spacecraft.one": true,
+  "setup.spacecraft.app": true,
   "setup.profiles": true,
   "setup.profile.new": true,
   "setup.profile": true,

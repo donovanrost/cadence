@@ -33,6 +33,14 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "spacecraft", title: "Spacecraft" },
   },
   {
+    // L19 (ux AppSurfaces.md; plans/spacecraft-apps.md): a spacecraft-scope app in the L9 host frame.
+    path: "setup/spacecraft/:spacecraftId/apps/:appKey/:surface?",
+    name: "setup.spacecraft.app",
+    component: () => import("@/features/apps/AppSurfaceScreen.vue"),
+    props: (to) => ({ spacecraftId: paramText(to.params, "spacecraftId") }),
+    meta: { mode: "setup", nav: "spacecraft", title: "App" },
+  },
+  {
     path: "setup/profiles",
     name: "setup.profiles",
     component: () => import("@/features/profiles/ProfilesListScreen.vue"),

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { SpacecraftApps } from "@/features/apps/index.ts";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
@@ -56,5 +57,10 @@ const crumbs = computed((): readonly ApCrumb[] => [
     <ApRemote :state="state" loading-label="Loading spacecraft…" @retry="refetch">
       <template #default="{ value }"><SpacecraftPanels :detail="value" /></template>
     </ApRemote>
+    <SpacecraftApps
+      v-if="spacecraftId"
+      :mission-id="scope.mission.id"
+      :spacecraft-id="spacecraftId"
+    />
   </div>
 </template>
