@@ -1,5 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { decode } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import BookPassSheet from "./BookPassSheet.vue";
 import {
@@ -8,6 +9,8 @@ import {
   offerBlocked,
   offPlanLine,
   outcomeWords,
+  reserveReader,
+  searchReader,
   type Offer,
   type Reserve,
 } from "./singleBookings.ts";
@@ -33,7 +36,7 @@ const now = new Date("2026-11-13T03:00:00Z");
 const reserve = (over: Partial<Reserve>): Reserve => ({
   outcome: "confirmed",
   reason: null,
-  reason_message: null,
+  reservation_id: "res-1",
   provider_reference: null,
   pass: null,
   ...over,
@@ -69,10 +72,10 @@ describe("Book a pass words (ux Contacts.md § Book a pass)", () => {
       "Requested. Waiting for Northlight to confirm.",
     );
     expect(
-      outcomeWords(reserve({ outcome: "rejected", reason_message: "no antenna free" }), offer("a")),
+      outcomeWords(reserve({ outcome: "rejected", reason: "no_capacity" }), offer("a")),
     ).toEqual({
       tone: "crit",
-      text: "Northlight rejected it: no antenna free.",
+      text: "Northlight rejected it: the station has no capacity then.",
     });
     expect(
       offPlanLine(
@@ -141,5 +144,47 @@ describe("BookPassSheet", () => {
     expect(w.text()).toContain("Requested. Waiting for Northlight to confirm.");
     w.unmount();
     vi.useRealTimers();
+  });
+});
+
+describe("L15 replies as api 1ef9e85ef sends them", () => {
+  it("reads an offer with a provider cost object, no antenna label and availability unavailable", () => {
+    const raw = {
+      spacecraft: { id: "sc-1", name: "EARENDIL-001", scid: 1 },
+      window: { from: "2026-11-13T03:00:00Z", to: "2026-11-13T09:00:00Z" },
+      offers: [
+        {
+          id: "o-1",
+          token: "signed",
+          expires_at: "2026-11-13T03:15:00Z",
+          starts_at: "2026-11-13T04:00:00Z",
+          ends_at: "2026-11-13T04:09:00Z",
+          station: { ref: "prov-svb", id: null, code: null, name: null },
+          antenna: { id: "ant-1", label: null },
+          provider: { id: "northlight", name: "Northlight" },
+          availability: "unavailable",
+          uplink_capable: false,
+          synthetic: false,
+          cost: { amount: 12, currency: "EUR" },
+          overlaps: null,
+        },
+      ],
+      hidden: { no_uplink_route: 0 },
+      not_ready: [{ code: "search_unavailable", message: "Kestrel didn't answer the search." }],
+      truncated: false,
+    };
+    const r = decode(searchReader, raw);
+    expect(r.ok && r.value.offers[0]?.cost).toBeNull();
+    expect(r.ok && r.value.offers[0]?.availability).toBe("unavailable");
+  });
+  it("reads a booking reply without reason_message", () => {
+    const r = decode(reserveReader, {
+      outcome: "requested",
+      reason: null,
+      reservation_id: "res-9",
+      provider_reference: null,
+      pass: null,
+    });
+    expect(r.ok && r.value.reservation_id).toBe("res-9");
   });
 });

@@ -125,6 +125,9 @@ async function book() {
   if (isError(e, "opportunity_expired")) searchError.value = "That offer expired. Search again.";
   else if (isError(e, "route_changed"))
     searchError.value = "The route to that station changed. Search again.";
+  // Nothing was booked: the signed offer didn't check out (tampered, or for another mission).
+  else if (isError(e, "token_invalid"))
+    searchError.value = "That offer can't be booked any more. Search again.";
   else if (e.kind === "forbidden") searchError.value = "Operators book passes.";
   else unclear.value = `It's unclear whether it was booked (${describeApiError(e)}).`;
 }

@@ -4,6 +4,7 @@ import {
   request,
   type ApiResult,
   type Decoded,
+  type Reader,
 } from "@/api/index.ts";
 import { formatHourMinute, formatShort } from "@/ui";
 import { reasonWords } from "@/features/scheduling/booking-state.ts";
@@ -16,6 +17,9 @@ import { passReader } from "./api.ts";
  * off until the endpoints exist.
  */
 export const SINGLE_BOOKINGS_LIVE = false;
+
+/** The provider's own cost, passed through (search.ex); anything but a number reads as unknown. */
+const costReader: Reader<number | null> = (value) => (typeof value === "number" ? value : null);
 
 const offerReader = d.object({
   id: d.token,
@@ -34,10 +38,11 @@ const offerReader = d.object({
   }),
   antenna: d.nullable(d.object({ id: d.token, label: d.nullable(d.string) })),
   provider: d.object({ id: d.token, name: d.nullable(d.string) }),
-  availability: d.knownText(["available", "limited"] as const),
+  // GroundNetworks.Opportunity: available | limited | unavailable.
+  availability: d.knownText(["available", "limited", "unavailable"] as const),
   uplink_capable: d.boolean,
   synthetic: d.boolean,
-  cost: d.nullable(d.number),
+  cost: costReader,
   overlaps: d.nullable(
     d.object({
       reservation_id: d.token,
@@ -51,7 +56,7 @@ const offerReader = d.object({
 });
 export type Offer = Decoded<typeof offerReader>;
 
-const searchReader = d.object({
+export const searchReader = d.object({
   spacecraft: d.object({ id: d.token, name: d.string, scid: d.nullable(scidReader) }),
   window: d.object({ from: d.timestamp, to: d.timestamp }),
   offers: d.array(offerReader, 500),
@@ -68,11 +73,12 @@ const searchReader = d.object({
 });
 export type Search = Decoded<typeof searchReader>;
 
-const reserveReader = d.object({
+export const reserveReader = d.object({
   outcome: d.oneOf(["confirmed", "requested", "unconfirmed", "rejected"] as const),
   // free-text: the provider's category or code, worded by K1's reasonWords (which has a fallback)
   reason: d.nullable(d.token),
-  reason_message: d.nullable(d.string),
+  // api 1ef9e85ef: the reservation asked for (null only if the provider job hasn't written it).
+  reservation_id: d.nullable(d.token),
   provider_reference: d.nullable(d.string),
   pass: d.nullable(passReader),
 });
@@ -164,7 +170,7 @@ export function outcomeWords(
     case "rejected":
       return {
         tone: "crit",
-        text: `${who} rejected it: ${r.reason_message ?? reasonWords(r.reason).text}.`,
+        text: `${who} rejected it: ${reasonWords(r.reason).text}.`,
       };
   }
 }
