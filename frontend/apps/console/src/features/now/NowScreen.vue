@@ -79,7 +79,12 @@ function openById(id: string) {
 <template>
   <!-- Console layout from the `console` breakpoint up (holds still); below, the page scrolls. -->
   <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
-    <NowHeader :mission-name="scope.mission.name" :headline="headline" :fleet="snapshot" />
+    <NowHeader
+      :mission-id="scope.mission.id"
+      :mission-name="scope.mission.name"
+      :headline="headline"
+      :fleet="snapshot"
+    />
     <LiveStatusCallout />
     <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
       <template #default="{ value }">

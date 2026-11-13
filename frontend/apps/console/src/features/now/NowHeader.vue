@@ -1,11 +1,33 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRemoteQuery } from "@/api/index.ts";
+import { useMissionInvalidation } from "@/live/index.ts";
 import { formatCount, formatDuration, useNow, ApPageHeader } from "@/ui";
+import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
 import type { Fleet } from "@/features/fleet/index.ts";
+import { fetchAvailability } from "@/features/scheduling/index.ts";
+import { worstStationIssue } from "./stationMeta.ts";
 
 /** Header: computed situation h1 + freshness meta. Unknown parts are omitted, never guessed. */
-const props = defineProps<{ missionName: string; headline: string; fleet: Fleet | null }>();
+const props = defineProps<{
+  missionId: string;
+  missionName: string;
+  headline: string;
+  fleet: Fleet | null;
+}>();
 const now = useNow();
+/** S7 station availability for the worst station issue (Now.md Header). */
+const mission = computed(() => props.missionId);
+const availability = useRemoteQuery(mission, (id, signal) => fetchAvailability(id, signal));
+useMissionInvalidation(mission, ["stations"], availability.refetch);
+const stations = useStationCodes(mission);
+const stationIssue = computed(() =>
+  worstStationIssue(
+    availability.state.value.status === "ready" ? availability.state.value.value : null,
+    (id) => stations.code(id),
+    now.value,
+  ),
+);
 
 const meta = computed(() => {
   const fleet = props.fleet;
@@ -15,6 +37,7 @@ const meta = computed(() => {
     const age = (now.value.getTime() - Date.parse(fleet.last_received_at)) / 1000;
     parts.push(`last pkt ${formatDuration(age)}`);
   }
+  if (stationIssue.value) parts.push(stationIssue.value);
   return parts.join(" · ");
 });
 </script>

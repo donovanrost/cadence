@@ -5,12 +5,13 @@ import type { RemoteState } from "@/api/index.ts";
 import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
 import type { QueueItem } from "./queue.ts";
 import QueueListSheet from "./QueueListSheet.vue";
+import { useFreshFlash } from "./useFreshFlash.ts";
 import { useQueueCommand, type RetryOutcome } from "./useQueueCommand.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 
 /** A2 · Action queue: the server-ranked queue (M6), in server order. */
-defineProps<{ state: RemoteState<QueueItem[]>; nominal: number }>();
+const props = defineProps<{ state: RemoteState<QueueItem[]>; nominal: number }>();
 const emit = defineEmits<{ retry: []; retried: [row: QueueItem, outcome: RetryOutcome] }>();
 const now = useNow();
 const sheet = ref<InstanceType<typeof QueueListSheet> | null>(null);
@@ -21,6 +22,19 @@ const command = useQueueCommand(
   computed(() => scope.value.mission.id),
   (row, outcome) => emit("retried", row, outcome),
 );
+/**
+ * A newly arrived crit P1 flashes once (design-language §6): the wash comes on at once and fades
+ * out (≤600 ms in all); reduced motion gets a 2 s `raised` wash and no fade.
+ */
+const flash = useFreshFlash(
+  computed(() => (props.state.status === "ready" ? props.state.value : null)),
+);
+const flashClass = (key: string) =>
+  flash.flashing.value.has(key)
+    ? flash.reduced
+      ? "bg-raised"
+      : "bg-[var(--apogee-wash-crit)]"
+    : "transition-colors duration-[450ms] motion-reduce:transition-none";
 /** Static meta, then the live countdown when the row has a consequence time. */
 function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Record<string, never> {
   const due = item.due
@@ -48,6 +62,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
           <ApListRow
             v-for="(item, i) in items"
             :key="item.key"
+            :class="flashClass(item.key)"
             :priority="`P${item.priority}`"
             :state="item.state"
             :sentence="command.sentenceFor(item, access.abort)"

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { fleetOf, spacecraftRow, statTiles } from "@/features/fleet/index.ts";
 import { constellation } from "./constellation.ts";
 import { deriveQueue, GROUP_AT, nowHeadline } from "./queue.ts";
+import { freshKeys } from "./useFreshFlash.ts";
+import { worstStationIssue } from "./stationMeta.ts";
 
 const vbat = (raw: string) =>
   ({
@@ -160,5 +162,54 @@ describe("statTiles (U13)", () => {
       value: null,
       caption: "not tracked yet",
     });
+  });
+});
+
+describe("fresh crit flash (design-language §6)", () => {
+  const row = (key: string, priority: 1 | 2 | 3, state: "crit" | "caution") => ({
+    key,
+    priority,
+    state,
+    title: key,
+    titleTo: null,
+    sentence: "",
+    meta: null,
+    action: { label: "Open", to: "/" },
+    spacecraftIds: [],
+  });
+  it("flashes only crit P1 rows that weren't there on the last read", () => {
+    const items = [
+      row("a", 1, "crit"),
+      row("b", 1, "crit"),
+      row("c", 2, "caution"),
+      row("d", 1, "caution"),
+    ];
+    expect(freshKeys(null, items)).toEqual([]);
+    expect(freshKeys(new Set(["a"]), items)).toEqual(["b"]);
+  });
+});
+
+describe("Now header: worst station issue (L49)", () => {
+  const st = (id: string, state: "up" | "degraded" | "down", since: string | null) => ({
+    ground_station_id: id,
+    state,
+    since,
+    eta: null,
+    basis: null,
+    windows: [],
+  });
+  const code = (id: string) => id.toUpperCase();
+  const now = new Date("2026-11-13T02:00:00Z");
+  it("names down before degraded, then the longest-running, with the count of others", () => {
+    const a = {
+      at: "2026-11-13T02:00:00Z",
+      stations: [
+        st("kir", "degraded", "2026-11-12T20:00:00Z"),
+        st("sva", "down", "2026-11-13T01:10:00Z"),
+        st("fbk", "up", null),
+      ],
+    };
+    expect(worstStationIssue(a, code, now)).toBe("SVA down since 01:10Z (+1)");
+    expect(worstStationIssue({ ...a, stations: [st("fbk", "up", null)] }, code, now)).toBeNull();
   });
 });
