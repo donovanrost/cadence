@@ -6,9 +6,10 @@ defmodule Cadence.ContactPlanning.OpportunityCapability do
   @default_max_age 15 * 60
   @minimum_secret_bytes 32
 
-  @spec sign(map()) :: binary()
-  def sign(payload) when is_map(payload) do
-    issued_at = System.system_time(:second)
+  @doc "Signs `payload`. `issued_at:` (Unix seconds, default now) dates it, for tests of expiry."
+  @spec sign(map(), keyword()) :: binary()
+  def sign(payload, opts \\ []) when is_map(payload) do
+    issued_at = Keyword.get_lazy(opts, :issued_at, fn -> System.system_time(:second) end)
     body = canonical_json!(Map.put(payload, "issued_at", issued_at))
     signature = authenticate(body)
 
@@ -28,6 +29,8 @@ defmodule Cadence.ContactPlanning.OpportunityCapability do
          :ok <- valid_age(payload, Keyword.get(opts, :max_age, @default_max_age)) do
       {:ok, payload}
     else
+      # A genuine token that's too old says so: the console offers a new search (L15, qa).
+      {:error, :expired_opportunity_capability} = expired -> expired
       _invalid -> {:error, :invalid_opportunity_capability}
     end
   end

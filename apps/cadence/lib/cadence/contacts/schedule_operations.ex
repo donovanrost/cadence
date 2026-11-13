@@ -276,6 +276,7 @@ defmodule Cadence.Contacts.ScheduleOperations do
               :provider_reservation_not_found,
               :opportunity_expired_or_unavailable,
               :invalid_opportunity_capability,
+              :expired_opportunity_capability,
               :opportunity_scope_mismatch,
               :route_changed,
               :provider_scheduling_route_not_ready

@@ -3,6 +3,7 @@ defmodule CadenceWeb.SingleBookingsTest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Auth.Scope
+  alias Cadence.ContactPlanning.OpportunityCapability
   alias Cadence.Contacts.{ProviderReservations, SingleBookings}
   alias Cadence.ContactScheduleFixtures, as: Fixtures
   alias Cadence.Jobs
@@ -129,6 +130,29 @@ defmodule CadenceWeb.SingleBookingsTest do
              })
 
     assert {:error, :not_found} = SingleBookings.cancel(c.booker, c.mission_id, "nope", 1)
+  end
+
+  test "an offer older than its capability's age says it expired", c do
+    from = DateTime.utc_now() |> DateTime.add(3_600) |> DateTime.truncate(:second)
+
+    {:ok, %{offers: [%{token: token}]}} =
+      SingleBookings.search(c.booker, c.mission_id, %{
+        "spacecraft_id" => c.spacecraft.spacecraft_id,
+        "from" => DateTime.to_iso8601(from),
+        "to" => DateTime.to_iso8601(DateTime.add(from, 86_400)),
+        "direction" => "downlink"
+      })
+
+    # The same genuine offer, issued 1,000 s ago (the limit is 900).
+    {:ok, payload} = OpportunityCapability.verify(token)
+
+    stale =
+      payload
+      |> Map.delete("issued_at")
+      |> OpportunityCapability.sign(issued_at: System.system_time(:second) - 1_000)
+
+    assert {:error, :opportunity_expired} =
+             SingleBookings.reserve(c.booker, c.mission_id, %{"token" => stale})
   end
 
   defp run_jobs do
