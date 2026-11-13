@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
-import { ClockCluster, useMissionScope } from "@/shell";
+import { useMissionScope } from "@/shell";
 import { useFleet } from "@/features/fleet/index.ts";
 import { ApStatusMark, stateTextClass } from "@/ui";
 
 /**
  * The cockpit cluster (ux): fleet health counts (critical and caution link to Alarms, stale to
- * Fleet), then UTC. One fleet read per open dashboard, refreshed by invalidations (lead).
+ * Fleet). The takeover header draws UTC itself (qa: it showed twice inside ClockCluster). One
+ * fleet read per open dashboard, refreshed by invalidations (lead).
  */
 const scope = useMissionScope();
 const fleet = useFleet(
@@ -29,7 +30,7 @@ const chips = computed(() => {
 </script>
 
 <template>
-  <ClockCluster>
+  <span v-if="chips.length" class="flex items-center gap-5">
     <RouterLink
       v-for="chip in chips"
       :key="chip.state"
@@ -40,5 +41,5 @@ const chips = computed(() => {
     >
       <ApStatusMark :state="chip.state" />{{ chip.count }}
     </RouterLink>
-  </ClockCluster>
+  </span>
 </template>
