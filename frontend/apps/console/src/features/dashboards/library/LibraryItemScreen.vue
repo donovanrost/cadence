@@ -112,7 +112,9 @@ function retired() {
                       :key="r.point"
                       class="block"
                       ><span class="font-mono text-readout">{{ r.point }}</span
-                      ><template v-if="r.on"> {{ r.on }}</template></span
+                      ><!-- A real space (qa: innerText and screen readers), not template whitespace. -->{{
+                        r.on ? ` ${r.on}` : ""
+                      }}</span
                     >
                   </template>
                 </ApKeyValue>
