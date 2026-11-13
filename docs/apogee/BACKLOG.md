@@ -197,7 +197,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~Settings: section-level override~~ done (ux 823e4f7a1): the source tag on the section header, `Override for this mission` on an inherited section, `Use the organization's settings` on an overridden one | fe-setup | — |
-| Settings per-field override (ux: no per-field Override / Reset to inherited until this lands): the mission document stores only the overridden paths; effective = the org value merged with them; each field's source is mission, organization or default; null removes the path. Plus a migration of today's full-copy overrides to sparse ones (a diff against the org value). api's estimate: half a day plus the migration | api | lead to schedule |
+| Settings per-field override (**director 11-13: after api's three items; governance/approval fields stay explicit overrides in the migration, never auto-collapsed; a dry-run report per mission for qa and the director before the real run**; ux: no per-field Override / Reset to inherited until this lands): the mission document stores only the overridden paths; effective = the org value merged with them; each field's source is mission, organization or default; null removes the path. Plus a migration of today's full-copy overrides to sparse ones (a diff against the org value). api's estimate: half a day plus the migration | api | lead to schedule |
 | Audit: ~~actor filter~~ done (d21aad0b); kind chips (a Kind select exists), `Export CSV` | fe-setup | export: api or client-side |
 | ~~Provider accounts: version history~~ done (2fdd2692, dded6585) | fe-setup | — |
 
