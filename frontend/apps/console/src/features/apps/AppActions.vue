@@ -2,10 +2,11 @@
 import { ref } from "vue";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout } from "@/ui";
+import type { SpacecraftId } from "@/api";
 import { changeApp, type App, type AppAction } from "./api.ts";
 
 /** Install / disable / uninstall for one app, through the app-change seam. */
-const props = defineProps<{ missionId: string; app: App }>();
+const props = defineProps<{ missionId: string; app: App; spacecraftId?: SpacecraftId | null }>();
 const emit = defineEmits<{ changed: [] }>();
 const busy = ref(false);
 const note = ref<string | null>(null);
@@ -14,7 +15,12 @@ async function run(action: AppAction) {
   busy.value = true;
   note.value = null;
   try {
-    const outcome = await changeApp(props.missionId, props.app.key, action);
+    const outcome = await changeApp(
+      props.missionId,
+      props.app.key,
+      action,
+      props.spacecraftId ?? null,
+    );
     if (outcome.kind === "failed") note.value = failureOutcome(outcome.error, "changed").sentence;
     else if (outcome.kind === "staged") note.value = "Staged. It applies with the change set.";
     emit("changed");

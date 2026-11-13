@@ -1,10 +1,17 @@
 <script setup lang="ts">
+import type { SpacecraftId } from "@/api";
 import { ApListRow, ApTag } from "@/ui";
 import AppActions from "./AppActions.vue";
 import type { App } from "./api.ts";
 
 /** One app: name (a link to its pages once installed, L9), what it does or what's off without it. */
-defineProps<{ missionId: string; app: App; canInstall: boolean }>();
+/** `spacecraftId`: the row is that spacecraft's (L19): its pages and verbs are the spacecraft's. */
+defineProps<{
+  missionId: string;
+  app: App;
+  canInstall: boolean;
+  spacecraftId?: SpacecraftId | null;
+}>();
 defineEmits<{ changed: [] }>();
 const word = (a: App) =>
   a.platform
@@ -29,7 +36,11 @@ const word = (a: App) =>
   >
     <template v-if="app.surfaces.length > 0 && app.installed" #title>
       <RouterLink
-        :to="{ name: 'setup.app', params: { appKey: app.key } }"
+        :to="
+          spacecraftId
+            ? { name: 'setup.spacecraft.app', params: { spacecraftId, appKey: app.key } }
+            : { name: 'setup.app', params: { appKey: app.key } }
+        "
         class="font-semibold text-readout hover:underline"
         >{{ app.name }}</RouterLink
       >
@@ -41,6 +52,7 @@ const word = (a: App) =>
           v-if="!app.platform && canInstall"
           :mission-id="missionId"
           :app="app"
+          :spacecraft-id="spacecraftId ?? null"
           @changed="$emit('changed')"
         />
       </div>

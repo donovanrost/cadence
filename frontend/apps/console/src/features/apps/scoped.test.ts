@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftId } from "@/api";
-import { fetchScopedApps } from "./api.ts";
+import { changeApp, fetchScopedApps } from "./api.ts";
 
 /** L19 (plans/spacecraft-apps.md): one spacecraft's apps come from its own path, same rows as A1. */
 describe("scoped apps (L19)", () => {
@@ -20,5 +20,25 @@ describe("scoped apps (L19)", () => {
     }
     expect(urls[0]).toMatch(/\/missions\/m1\/apps$/);
     expect(urls[1]).toMatch(/\/missions\/m1\/spacecraft\/sc%204\/apps$/);
+  });
+
+  it("sends a spacecraft's install / disable / uninstall to its own path (api b18dcf7b5)", async () => {
+    const calls: string[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      return new Response("{}", { status: 500 });
+    };
+    try {
+      await changeApp("m1", "telemetry_decom", "install", spacecraftId("sc 4"));
+      await changeApp("m1", "limits", "disable");
+    } finally {
+      globalThis.fetch = original;
+    }
+    expect(calls[0]).toMatch(
+      /^POST .*\/missions\/m1\/spacecraft\/sc%204\/apps\/telemetry_decom\/install$/,
+    );
+    expect(calls[1]).toMatch(/^POST .*\/missions\/m1\/apps\/limits\/disable$/);
   });
 });

@@ -28,7 +28,7 @@ export function fetchApps(missionId: string, signal: AbortSignal): Promise<ApiRe
   return request(`/missions/${encodeURIComponent(missionId)}/apps`, appsReader, { signal });
 }
 
-/** Off until api serves L19's read (a 404 on the spacecraft page trips qa's e2e diagnostics guard). */
+/** api serves L19 (b18dcf7b5); on after the live check (a 404 on the spacecraft page trips qa's guard). */
 export const SPACECRAFT_APPS_LIVE = false;
 
 /** Mission apps (A1), or one spacecraft's (L19, plans/spacecraft-apps.md: the same row shape). */
@@ -57,12 +57,15 @@ export async function changeApp(
   missionId: string,
   key: string,
   action: AppAction,
+  /** L19: installations are per spacecraft, so a spacecraft's verbs go under its path. */
+  spacecraftId: SpacecraftId | null = null,
 ): Promise<AppChangeOutcome> {
-  const result = await request(
-    `/missions/${encodeURIComponent(missionId)}/apps/${encodeURIComponent(key)}/${action}`,
-    app,
-    { method: "POST", body: {} },
-  );
+  const m = `/missions/${encodeURIComponent(missionId)}`;
+  const scope = spacecraftId ? `${m}/spacecraft/${encodeURIComponent(spacecraftId)}` : m;
+  const result = await request(`${scope}/apps/${encodeURIComponent(key)}/${action}`, app, {
+    method: "POST",
+    body: {},
+  });
   return result.ok
     ? { kind: "applied", app: result.value }
     : { kind: "failed", error: result.error };
