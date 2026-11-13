@@ -1,5 +1,5 @@
 import { computed, onScopeDispose, type Ref } from "vue";
-import { useRemoteQuery } from "@/api";
+import { useRemoteQuery, type ApiResult } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { fetchDashboard, type Runtime } from "../api.ts";
 
@@ -17,29 +17,26 @@ export type RefreshChoice = (typeof refreshChoices)[number]["value"];
 
 const DATA = ["telemetry", "limits", "alarms", "events"] as const;
 
-/**
- * The viewer's snapshot (plan, live step 1): read D5 for the URL's runtime, refetch when the
- * mission channel says the document changed, and, for a sliding range, when its data changed,
- * at most once per refresh interval. No invalidation, no refetch: nothing polls. Reconnects
- * refetch at once (useMissionInvalidation). `paused` (editing, later) stops the data refetches.
- */
-export function useDashboardView(
-  missionId: Readonly<Ref<string>>,
-  dashboardId: Readonly<Ref<string>>,
-  runtime: Readonly<Ref<Runtime>>,
-  options: Readonly<{
-    refreshMs: Readonly<Ref<number | null>>;
-    sliding: Readonly<Ref<boolean>>;
-    paused: Readonly<Ref<boolean>>;
-  }>,
-) {
-  const key = computed(() =>
-    JSON.stringify({ m: missionId.value, id: dashboardId.value, r: runtime.value }),
-  );
-  const query = useRemoteQuery(key, (_key, signal) =>
-    fetchDashboard(missionId.value, dashboardId.value, runtime.value, signal),
-  );
+export type LiveOptions = Readonly<{
+  refreshMs: Readonly<Ref<number | null>>;
+  sliding: Readonly<Ref<boolean>>;
+  paused: Readonly<Ref<boolean>>;
+}>;
 
+/**
+ * A live dashboard read (plan, live step 1), shared by the viewer, share links and present mode:
+ * read for the key, refetch when the mission channel says dashboards changed, and, for a sliding
+ * range, when its data changed, at most once per refresh interval. No invalidation, no refetch:
+ * nothing polls. Reconnects refetch at once (useMissionInvalidation). `paused` (editing) stops
+ * the data refetches.
+ */
+export function useLiveRead<T>(
+  missionId: Readonly<Ref<string>>,
+  key: Readonly<Ref<string | null>>,
+  fetch: (signal: AbortSignal) => Promise<ApiResult<T>>,
+  options: LiveOptions,
+) {
+  const query = useRemoteQuery(key, (_key, signal) => fetch(signal));
   let last = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const dataChanged = () => {
@@ -59,4 +56,24 @@ export function useDashboardView(
     if (timer !== null) clearTimeout(timer);
   });
   return query;
+}
+
+/** The viewer's D5 read for the URL's runtime. */
+export function useDashboardView(
+  missionId: Readonly<Ref<string>>,
+  dashboardId: Readonly<Ref<string>>,
+  runtime: Readonly<Ref<Runtime>>,
+  options: LiveOptions,
+) {
+  const key = computed(() =>
+    dashboardId.value
+      ? JSON.stringify({ m: missionId.value, id: dashboardId.value, r: runtime.value })
+      : null,
+  );
+  return useLiveRead(
+    missionId,
+    key,
+    (signal) => fetchDashboard(missionId.value, dashboardId.value, runtime.value, signal),
+    options,
+  );
 }
