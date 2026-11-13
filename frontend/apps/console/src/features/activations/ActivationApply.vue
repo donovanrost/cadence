@@ -50,7 +50,7 @@ async function retry() {
       </template>
     </ApCallout>
     <p v-if="line.next" class="m-0 text-md text-text-2">{{ line.next }}</p>
-    <p v-else-if="!mayRetry" class="m-0 text-md text-text-2">
+    <p v-else-if="line.retry && !mayRetry" class="m-0 text-md text-text-2">
       Someone who can approve activations can retry it.
     </p>
     <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>

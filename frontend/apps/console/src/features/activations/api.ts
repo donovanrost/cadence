@@ -9,7 +9,7 @@ import {
   type Decoded,
 } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
-import { formatHourMinute, formatShort, type OpState } from "@/ui";
+import { formatShort, type OpState } from "@/ui";
 
 /**
  * L10 app activation approvals (plans/activations.md, proposed to api 11-13): a save that needs
@@ -176,12 +176,13 @@ export function notApplied(
   const e = r.execution;
   if (r.state !== "approved" || !e) return null;
   if (e.state !== "failed" && e.error_code !== "apply_stalled") return null;
-  const since = e.since ? ` Since ${formatHourMinute(new Date(e.since))}.` : "";
+  const since = e.since ? ` Since ${formatShort(new Date(e.since))}.` : "";
+  // ux: unknown retryability (api hasn't sent it) offers neither Retry nor the request-again step (U20).
   const retry = e.retryable === true;
   return {
     text: `Approved, but it didn't apply. ${applySentence(e)}${since}`,
     retry,
-    next: retry ? null : REQUEST_AGAIN,
+    next: e.retryable === false ? REQUEST_AGAIN : null,
   };
 }
 

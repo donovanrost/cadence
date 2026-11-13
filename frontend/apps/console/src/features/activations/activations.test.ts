@@ -94,7 +94,7 @@ describe("app activation approvals (L10)", () => {
       },
     });
     expect(notApplied(exec("activation_execution_interrupted", null))).toEqual({
-      text: "Approved, but it didn't apply. Applying was cut off: Cadence lost its database connection partway. Since 02:14Z.",
+      text: "Approved, but it didn't apply. Applying was cut off: Cadence lost its database connection partway. Since 11-13 02:14Z.",
       retry: true,
       next: null,
     });
@@ -109,6 +109,14 @@ describe("app activation approvals (L10)", () => {
     expect(stale?.next).toBe("Request activation again so the current version can be approved.");
     expect(applySentence(exec("unrecognized", "SQL error 42").execution)).toBe("Applying failed.");
     expect(notApplied(request)).toBeNull();
+    // ux: unknown retryability says neither Retry nor "Request activation again".
+    const unknown = exec("apply_stalled", null);
+    expect(
+      notApplied({ ...unknown, execution: { ...unknown.execution, retryable: undefined } }),
+    ).toMatchObject({
+      retry: false,
+      next: null,
+    });
     expect(
       resumeFailure({
         kind: "conflict",
