@@ -41,12 +41,9 @@ page.on("response", (response) => {
 const prefix = base + "/missions/" + mission;
 const routes = [
   "/ops",
-  "/ops/dashboards",
-  "/ops/dashboards/new",
+  // L8a: the directory, viewer, editor and New redirect to the console (DECISIONS #79).
   "/ops/dashboards/library",
   "/ops/dashboards/playlists",
-  "/ops/dashboards/draft-dashboard",
-  "/ops/dashboards/draft-dashboard/edit",
   "/ops/dashboards/draft-dashboard/settings",
   "/ops/dashboards/draft-dashboard/activity",
   "/ops/dashboards/draft-dashboard/diagnostics",
@@ -132,16 +129,7 @@ try {
     assert.equal(generic, false, route + " must have useful content or setup guidance");
     assert.equal(failure, null, route + " must render");
     assert.deepEqual(item.errors, [], route + " must not crash");
-    if (route === "/ops/dashboards") {
-      assert.equal(
-        await page.locator("#open-draft-dashboard").getAttribute("href"),
-        "/missions/" + mission + "/ops/dashboards/draft-dashboard/edit",
-      );
-    }
-    if (
-      route === "/ops/dashboards/draft-dashboard" ||
-      route.endsWith("/draft-dashboard/diagnostics")
-    ) {
+    if (route.endsWith("/draft-dashboard/diagnostics")) {
       assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
       assert.equal(
         await page.locator("#dashboard-publication-editor").getAttribute("href"),
@@ -153,19 +141,6 @@ try {
         return button instanceof HTMLButtonElement && !button.disabled;
       });
       assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
-      if (!route.endsWith("/diagnostics")) {
-        await page.screenshot({ path: out + "/publication-desktop.png" });
-        await page.setViewportSize({ width: 390, height: 844 });
-        await page.screenshot({ path: out + "/publication-mobile.png" });
-        assert.equal(
-          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-          true,
-        );
-        await page.setViewportSize({ width: 1366, height: 900 });
-        await page.locator("#dashboard-publication-editor").click();
-        await page.waitForURL(prefix + "/ops/dashboards/draft-dashboard/edit");
-        await page.locator("#dashboard-editor-feature").waitFor();
-      }
     }
   }
   console.log(
