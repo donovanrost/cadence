@@ -1,9 +1,21 @@
 # Dashboards plan (L8)
 
-Owner: dashboards (w0R:pG). Status: draft 1, 2026-11-13. Reports to lead; scope questions go to the director.
+Owner: dashboards (w0R:pG). Status: draft 2, 2026-11-13 (director rulings Q1, Q2, Q5, Q6 folded in). Reports to lead; scope questions go to the director.
 Binding inputs: DECISIONS #75 (reverses #11), `briefs/dashboards.md` (the user's 2026-10-08 product decisions),
 ux `screens/Dashboards.md` (aed431cb). Missing server pieces are numbered **D1…** (endpoints) and **C1…**
 (channel) and collected in the [ask list](#ask-list-for-api--api-ops-via-lead). Questions are in [Open questions](#open-questions).
+
+## Rulings (director, 2026-11-13)
+
+- **Q1:** settings save and library add-to-draft go through `CurrentVersions`, so every save is current. This is a
+  domain fix, routed by lead.
+- **Q2:** same-browser autosave for now. Keep the `{base_version, commands}` shape so a server-held draft can come
+  later.
+- **Q5:** a snapshot taken from the viewer freezes the current time window (`frozen_time_window`), so it shows
+  what you saw. ux has the final say on presentation.
+- **Q6:** add update and delete for playlists and library items. Delete must say where the item is used and refuse
+  or warn instead of leaving dangling references. My proposal is in [Delete and references](#delete-and-references).
+- Start slice 1 once lead has routed the endpoints.
 
 ## What exists today (inventory, 2026-11-13)
 
@@ -95,19 +107,19 @@ functions named above. Nothing is reimplemented.
 
 | Screen | Read | Writes | Today |
 | --- | --- | --- | --- |
-| Directory | **D1** `GET /dashboards?q&tags&starred&archived&sort&page` → rows `{id, name, description, tags, starred, archived, binding_summary, current_version, updated_at, updated_by}`, `available_tags`, `shortcuts {starred, recent}`, paging | **D2** `PUT/DELETE /:id/star`; **D3** `POST /:id/archive`, `POST /:id/restore` | LiveView only (`Directory.load`, `DirectoryActions`). `binding_summary` ("Bound to") is missing: derive from defaults + placements (context / fixed SC / constellation) |
+| Directory | **D1** `GET /dashboards?q&tags&starred&archived&sort&page` → rows `{id, name, description, tags, starred, archived, binding_summary, current_version, updated_at, updated_by}`, `available_tags`, `shortcuts {starred, recent}`, paging | **D2** `PUT/DELETE /:id/star`; **D3** `POST /:id/archive` (409 `used_by` unless `confirm: true`, see below), `POST /:id/restore` | LiveView only (`Directory.load`, `DirectoryActions`). `binding_summary` ("Bound to") is missing: derive from defaults + placements (context / fixed SC / constellation) |
 | New | — | **D4** `POST /dashboards {name, description, document_json?}` (new/import), `POST /:id/duplicate {name}` → `{id, version}` | LiveView only (`Creation.create`, `clone_document`) |
 | Viewer | **D5** `GET /:id?from&to&spacecraft_id` → `{dashboard {id, name, description, tags, current_version, updated_at, updated_by}, can_edit, scope_options, runtime {time, scope, refresh_ms}, snapshot, resolved_at}`; **D6** `POST /:id/views` (recent; fire-and-forget) | — | LiveView only (`DashboardPage.load/4`) |
 | Editor | **D7** `POST /:id/preview {base_version, commands[], runtime}` → `{snapshot, changes[], outline, current_version}`, or 422 `{index, code, field}` for the first bad command; **D8** `GET /observables?q&source&spacecraft_id` (binding picker) | **D9** `POST /:id/save {base_version, commands[], message?, defaults {time?, scope?}, runtime}` → `{version}`, 409 `{current_version, saved_by, saved_at}`, 422 readiness failures; **D10** `POST /:id/rebase {base_version, commands[]}` → `{base_version, applied[], skipped[{index, event, reason}]}` + preview payload; **D11** `POST /:id/copy {name, base_version, commands[]}` | Domain exists (`AuthoringChanges`, `AuthoringDraft.replay/save/rebase`, `ObservableChoices.staged`, `copy_for_scope`); needs a stateless entry point (see save model) |
 | Versions sheet | **D12** `GET /:id/versions`, `GET /:id/versions/compare?from&to` (`{changes, from_json, to_json}`); staged compare comes from D7 | **D13** `POST /:id/restore {version, expected_version}` | LiveView only (`Versions.*`, `CurrentVersions.restore`) |
 | Settings › General | **D14** `GET /:id/settings` | **D15** `PATCH /:id {name, description, tags, defaults, expected_version}`. **Must create a current version** via `CurrentVersions.save` (fixes today's bypass, Q1) | LiveView only |
-| Settings › Sharing | in D14 (`shares`, `snapshots`) | **D16** `POST /:id/shares {data_visibility, expires_at?}`, `DELETE /:id/shares/:sid`, `POST /:id/snapshots {runtime?}` | LiveView only. A snapshot taken from the viewer carries the current range, so it can freeze a time window (Q5) |
+| Settings › Sharing | in D14 (`shares`, `snapshots`) | **D16** `POST /:id/shares {data_visibility, expires_at?}`, `DELETE /:id/shares/:sid`, `POST /:id/snapshots {runtime}` | LiveView only. A snapshot from the viewer posts the current range, so it's `frozen_time_window` (Q5 ruling) |
 | Settings › Activity | **D17** `GET /:id/activity` (lifecycle events: saves, restores, archive, shares, exports) | — | LiveView only (`Activity.load`) |
 | Settings › Diagnostics | **D18** `GET /:id/diagnostics` | — | LiveView only (`ExecutionDiagnostics.load`) |
 | Export | **D19** `GET /:id/export` (attachment, records the deployment) under the console scope | — | Plain controller exists at the legacy path; move it so the legacy router entries can go |
 | Shared view | **D20** `GET /shares/:sid?from&to`, `GET /snapshots/:sid` → `{kind, dashboard_id, data_visibility, data_semantics, expires_at, definition, snapshot}` | — | LiveView only (`SharedViews.load`) |
-| Library | **D21** `GET /library?q`, `GET /library/:item` (versions, widget JSON) | **D22** `POST /library`, `POST /library/:item/versions`. "Add to dashboard" becomes an editor command (`add_widget` from a library ref, staged and saved like any edit) instead of `Documents.update` | LiveView only; no update/delete (Q6) |
-| Playlists | **D23** `GET /playlists`, `GET /playlists/:pid/present?index` | **D24** `POST /playlists`; update/delete **missing in the domain** (Q6) | LiveView only |
+| Library | **D21** `GET /library?q`, `GET /library/:item` (versions, widget JSON) | **D22** `POST /library`, `POST /library/:item/versions`, `PATCH /library/:item {name, description}`, `DELETE /library/:item` (see below). "Add to dashboard" becomes an editor command (`add_widget` from a library ref, staged and saved like any edit) | LiveView only. Update/delete are **new** domain functions (Q6 ruling) |
+| Playlists | **D23** `GET /playlists`, `GET /playlists/:pid/present?index` | **D24** `POST /playlists`, `PATCH /playlists/:pid {name, description, dwell_seconds, wallboard_mode, dashboard_ids}`, `DELETE /playlists/:pid` | LiveView only. Update/delete are **new** domain functions (Q6 ruling) |
 | Capability | **D0** dashboard authoring capability in the session bootstrap (`dashboard.author` per organization, from the `:author_dashboards` policy, like `command.*`) | — | Missing. Until it lands, `can_edit` on D5 gates Edit |
 
 ## Save, version and conflict model
@@ -153,9 +165,24 @@ browser**:
   the command list (bounded: 1024 placements, so a few hundred commands at most). If drafts must follow the user
   across devices (Q2), the same `{base_version, commands}` moves into a per-user draft row with no client change
   besides where it's stored.
-- **Two writes that break "every save is current":** settings save and library add-to-draft. The console routes
-  both through `CurrentVersions` (D15, and library as an editor command). Q1 asks api to fix the domain functions
-  themselves, so the legacy pages stop producing non-current versions.
+- **Two writes that broke "every save is current":** settings save and library add-to-draft. Per the Q1 ruling the
+  domain functions themselves go through `CurrentVersions` (domain fix, lead routes). The console also sends
+  settings through D15 and library inserts as editor commands.
+
+## Delete and references
+
+A proposal for the Q6 ruling. The rule: **refuse when deleting would break something people rely on now; warn
+when the reference degrades honestly.**
+
+| Delete | Referenced by | Behaviour |
+| --- | --- | --- |
+| Library item | Placements in dashboards (`library_widget_id` + `library_version`) | **Refuse while any dashboard's current version uses it.** 409 `{used_by: {dashboards: [{id, name, placements: n}]}}`. The sheet lists them as links ("Used by 3 dashboards: Bus overview, …"). You replace or detach the widget there first; detaching copies it in as an embedded widget (a normal editor command). Once unused, delete **retires** the item: it's hidden from the library, and its versions stay stored, so older dashboard versions still render and restore. Never a hard delete |
+| Playlist | Nothing in the model (only URLs and kiosks) | Hard delete after a confirm that names it. A kiosk presenting it shows "This playlist was deleted." on its next advance |
+| Dashboard (archive) | Playlists | **Warn, don't refuse.** D3 returns 409 `{used_by: {playlists: [{id, name}]}}` unless `confirm: true`; the dialog lists them. Present mode skips archived dashboards and says so on the slide counter ("1 archived dashboard skipped"). Restore puts it back in rotation. Shares and snapshots of an archived dashboard keep working (snapshots are copies; shares say "archived") |
+| Dashboard version | — | Versions are never deleted (restore is a new version) |
+
+`used_by` is computed server-side over current versions (library) or playlist rows (dashboards). It's the same
+shape on every 409, so the client renders one "Used by" list.
 
 ## Live data over the Channel
 
@@ -221,9 +248,11 @@ Priority order. Each one wraps an existing domain function unless marked **new**
 3. **D7, D9, D8** preview, save, observable search: a **new stateless entry** over `AuthoringDraft`
    (open-at-version + `replay`), see the save model.
 4. **D10–D13** rebase, copy, versions list/compare, restore.
-5. **D14–D19** settings, shares, snapshots, activity, diagnostics, export. **Domain fix** (Q1): settings save
-   goes through `CurrentVersions`.
-6. **D20–D24** shared views, playlists (update/delete are **new** domain functions if Q6 says yes), library.
+5. **D14–D19** settings, shares, snapshots, activity, diagnostics, export. **Domain fix** (Q1 ruling): settings
+   save and library add-to-draft go through `CurrentVersions`. Snapshots take a posted runtime (Q5).
+6. **D20–D24** shared views, playlists, library. Update/delete for playlists and library items are **new** domain
+   functions (Q6 ruling), with `used_by` and retire-not-delete for library items (see Delete and references).
+   D3 archive returns `used_by.playlists`.
 7. **C1** `dashboard:<m>:<d>` channel (step 2). C2 appends only if needed.
 8. Legacy route redirects to console URLs at each cutover.
 
@@ -238,21 +267,18 @@ Priority order. Each one wraps an existing domain function unless marked **new**
 
 ## Open questions
 
-- **Q1 (director/api):** settings save and library add-to-draft write non-current versions today. Fix them in the
-  domain so both go through `CurrentVersions`? (My recommendation: yes, it's the user's model.)
-- **Q2 (director/user):** should unsaved edits follow the user across devices (server-held per-user draft) or is
-  same-browser autosave enough for now? (My recommendation: same browser now; the shape allows moving it later.)
+Resolved by the director (see Rulings): Q1, Q2, Q5 (ux owns presentation), Q6.
+
 - **Q3 (ux):** dashboards use uPlot, while Investigate uses `ApTimeSeries` (SVG). Should the chart grammar match:
   envelope, limit segments, crit wash, now-line, legend?
 - **Q4 (ux):** ux's directory has a **Folder** column, but there's no folder model, only tags. Show tags until a
   folder model exists, or should tags be presented as folders? Also confirm the "Bound to" wording.
-- **Q5 (ux/director):** snapshot semantics. Today they're effectively "definition at version, current data". Taken
-  from the viewer, should a snapshot freeze the current time window (the domain supports `frozen_time_window`)?
-- **Q6 (director):** playlists have no update/delete and library items have no update/delete. Is parity enough
-  for deleting the legacy pages, or should the console add them? (New domain functions.)
-- **Q7 (ux):** spec sections still to come: playlists + present, shares/snapshots, export, library, settings tabs,
-  and New (I propose a small page, not a sheet).
+- **Q7 (ux):** spec sections still to come: playlists + present, shares/snapshots (with the frozen window), export,
+  library (with the "Used by" refusal), settings tabs, and New (I propose a small page, not a sheet).
 - **Q8 (lead):** for the `ops.dashboards` name change and the Telemetry tab strip, I'd like to touch fe-ops's
   `TelemetryScreen.vue`, `TelemetryTab.vue` and `timeline/model.ts`, or have fe-ops do it.
 - **Q9 (api):** the live window cap is 24 h (backfill cost not measured). Keep it, so the range picker offers
   ≤24 h sliding ranges plus absolute ranges up to 31 d?
+- **Q10 (director, confirm):** the delete proposal above: refuse library deletes while a current version uses the
+  item and retire instead of hard-deleting; hard-delete playlists; warn on archiving a dashboard that's in
+  playlists.
