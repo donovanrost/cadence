@@ -135,7 +135,11 @@ defmodule Cadence.Reads.CommandGroups do
         group.commands
         |> Enum.sort_by(& &1["position"])
         |> Enum.map(
-          &%{command_id: &1["command_id"], argument_values: &1["argument_values"] || %{}}
+          &%{
+            command_id: &1["command_id"],
+            argument_values: &1["argument_values"] || %{},
+            per_target: &1["per_target"] || %{}
+          }
         ),
       not_before: parse_time(group.release["not_before"]),
       expires_at: parse_time(group.release["expires_at"]),

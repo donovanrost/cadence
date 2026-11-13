@@ -46,8 +46,10 @@ defmodule CadenceWeb.Console.CommandGroupParams do
   @spec draft_revision(map()) :: {:ok, pos_integer() | nil} | {:error, term()}
   def draft_revision(%{"draft_revision" => n}) when is_integer(n) and n > 0, do: {:ok, n}
   def draft_revision(%{"draft_revision" => nil}), do: {:ok, nil}
+
   def draft_revision(%{"draft_revision" => _other}),
     do: invalid("draft_revision", "must be a positive integer or null")
+
   def draft_revision(_params), do: {:ok, nil}
 
   @max_ack_note 1_000
@@ -149,13 +151,46 @@ defmodule CadenceWeb.Console.CommandGroupParams do
   defp commands(_list), do: invalid("commands", "must be a non-empty list")
 
   defp command(%{"command_id" => id} = command) when is_binary(id) and id != "" do
-    case ArgumentDocument.decode(Map.get(command, "argument_values_json", "{}")) do
-      {:ok, values} -> {:ok, %{command_id: id, argument_values: values}}
-      _invalid -> {:error, "argument_values_json must be a JSON object of scalar values"}
+    with {:ok, values} <- values(Map.get(command, "argument_values_json", "{}")),
+         {:ok, per_target} <- per_target(Map.get(command, "per_target")) do
+      {:ok, %{command_id: id, argument_values: values, per_target: per_target}}
     end
   end
 
   defp command(_command), do: {:error, "must be {command_id, argument_values_json}"}
+
+  defp values(json) do
+    case ArgumentDocument.decode(json) do
+      {:ok, values} -> {:ok, values}
+      _invalid -> {:error, "argument_values_json must be a JSON object of scalar values"}
+    end
+  end
+
+  # Compose "Per target" (CommandFlow B2): values for some targets, overriding the command's own.
+  defp per_target(nil), do: {:ok, %{}}
+
+  defp per_target(list) when is_list(list),
+    do: Enum.reduce_while(list, {:ok, %{}}, &per_target_entry/2)
+
+  defp per_target(_value),
+    do: {:error, "per_target must be [{spacecraft_id, argument_values_json}]"}
+
+  defp per_target_entry(%{"spacecraft_id" => sc} = entry, {:ok, acc})
+       when is_binary(sc) and sc != "" do
+    if Map.has_key?(acc, sc),
+      do: {:halt, {:error, "per_target names #{sc} twice"}},
+      else: per_target_values(sc, entry, acc)
+  end
+
+  defp per_target_entry(_entry, _acc),
+    do: {:halt, {:error, "per_target must be [{spacecraft_id, argument_values_json}]"}}
+
+  defp per_target_values(sc, entry, acc) do
+    case values(Map.get(entry, "argument_values_json", "{}")) do
+      {:ok, values} -> {:cont, {:ok, Map.put(acc, sc, values)}}
+      error -> {:halt, error}
+    end
+  end
 
   defp time(params, key) do
     case params[key] do

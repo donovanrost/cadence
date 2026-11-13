@@ -127,6 +127,11 @@ the organization's missions (#38), so an organization with no missions reports n
   profile's routing. Setting `source_endpoint_id` is an explicit override, stored as evidence on the
   group target (`resolution.via: "override"`). `target_query` is stored as evidence too.
 - `argument_values_json`: a JSON object string, the same rules as single requests (64-bit safe).
+- `commands[].per_target` (optional, Compose "Per target"): `[{spacecraft_id,
+  argument_values_json}]`, which overrides the command's `argument_values_json` for those targets.
+  Each member is validated with its own values, and the preflight digest covers them, so changing
+  one needs a new preflight. A spacecraft named twice is `422`. The show read echoes it on each
+  command (`per_target: []` when none), and so does the resend clone.
 - Bounds: N ≤ 1,000, K ≤ 16, N×K ≤ 5,000.
 
 ### `POST /command-groups/preflight` (M18)

@@ -11,7 +11,7 @@ defmodule Cadence.Commanding.Groups.Validation do
   draft is:
 
       %{targets: [%{spacecraft_id, source_endpoint_id: nil | id}],
-        commands: [%{command_id, argument_values}],
+        commands: [%{command_id, argument_values, per_target?: %{spacecraft_id => values}}],
         not_before, expires_at, priority}
   """
 
@@ -204,7 +204,11 @@ defmodule Cadence.Commanding.Groups.Validation do
       source_endpoint_ref: target.source_endpoint_id,
       command_id: command.command_id,
       mission_model_revision_id: nil,
-      argument_values: Map.get(command, :argument_values, %{}),
+      # Compose "Per target": a target's own values override the command's.
+      argument_values:
+        command
+        |> Map.get(:per_target, %{})
+        |> Map.get(target.spacecraft_id, Map.get(command, :argument_values, %{})),
       priority: Map.get(draft, :priority, 3),
       not_before: Map.get(draft, :not_before),
       expires_at: Map.get(draft, :expires_at),

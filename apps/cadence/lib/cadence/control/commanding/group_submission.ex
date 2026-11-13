@@ -105,7 +105,8 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
     with {:ok, group} <- GroupStore.insert_group(group),
          :ok <- GroupStore.insert_members(members),
-         :ok <- Drafts.consume({org, mission, actor["user_id"]}, Keyword.get(opts, :draft_revision)) do
+         :ok <-
+           Drafts.consume({org, mission, actor["user_id"]}, Keyword.get(opts, :draft_revision)) do
       queued =
         if second_go?, do: [], else: Admission.enqueue(members, actor, &auto_approved_hash/1)
 
@@ -186,7 +187,8 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
       |> Map.get(command.command_id, %{"command_id" => command.command_id})
       |> Map.merge(%{
         "position" => position,
-        "argument_values" => Map.get(command, :argument_values, %{})
+        "argument_values" => Map.get(command, :argument_values, %{}),
+        "per_target" => Map.get(command, :per_target, %{})
       })
     end)
   end

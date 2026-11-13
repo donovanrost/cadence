@@ -328,6 +328,39 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     assert is_binary(data["review_token"])
   end
 
+  test "per-target values override the command's for those targets and are echoed back", c do
+    [{first, _}, {second, _}] = c.crafts
+    same = body(c, "SET_SIGNED", %{"counter" => 1})
+
+    per_target =
+      update_in(same, ["commands", Access.at(0)], fn command ->
+        Map.put(command, "per_target", [
+          %{"spacecraft_id" => second, "argument_values_json" => ~s({"counter":2})}
+        ])
+      end)
+
+    # The digest covers each member's values, so the override changes it.
+    refute preflight(c, same)["data"]["digest"] == preflight(c, per_target)["data"]["digest"]
+
+    data = c |> create(per_target) |> json_response(201) |> Map.fetch!("data")
+
+    assert [%{"argument_values_json" => ~s({"counter":1}), "per_target" => [override]}] =
+             data["commands"]
+
+    assert override == %{"spacecraft_id" => second, "argument_values_json" => ~s({"counter":2})}
+    refute override["spacecraft_id"] == first
+
+    duplicate =
+      put_in(per_target, ["commands", Access.at(0), "per_target"], [
+        %{"spacecraft_id" => second, "argument_values_json" => "{}"},
+        %{"spacecraft_id" => second, "argument_values_json" => "{}"}
+      ])
+
+    assert as(c.requester)
+           |> post(base(c) <> "/command-groups/preflight", duplicate)
+           |> json_response(422)
+  end
+
   test "a hazardous group goes through the second operator's GO", c do
     data =
       c

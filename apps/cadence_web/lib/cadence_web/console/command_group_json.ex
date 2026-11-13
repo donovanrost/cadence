@@ -67,7 +67,16 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
 
   defp command(command) do
     {values, rest} = Map.pop(command, "argument_values", %{})
-    Map.put(rest, "argument_values_json", Jason.encode!(values))
+    {per_target, rest} = Map.pop(rest, "per_target", %{})
+
+    rest
+    |> Map.put("argument_values_json", Jason.encode!(values))
+    |> Map.put(
+      "per_target",
+      Enum.map(per_target || %{}, fn {sc, target_values} ->
+        %{"spacecraft_id" => sc, "argument_values_json" => Jason.encode!(target_values)}
+      end)
+    )
   end
 
   # JSON-safe encoding: atoms to strings (keeping nil/booleans), structs other than DateTime
