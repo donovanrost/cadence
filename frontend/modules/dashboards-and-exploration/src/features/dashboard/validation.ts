@@ -130,11 +130,19 @@ function readSection(value: unknown): OutlineSection {
   };
 }
 
+function readLibraryRef(value: unknown): OutlinePlacement["library"] {
+  if (value === null) return null;
+  const r = exact(value, ["item_id", "version", "retired"]);
+  return { item_id: id(r.item_id), version: integer(r.version, 1), retired: bool(r.retired) };
+}
+
 function readPlacement(
   value: unknown,
   sections: readonly string[],
   columns: number,
 ): OutlinePlacement {
+  // `library` (domain): null for embedded placements; absent from servers before it shipped.
+  const hasLibrary = Object.hasOwn(record(value), "library");
   const p = exact(value, [
     "id",
     "section_id",
@@ -144,7 +152,9 @@ function readPlacement(
     "observables",
     "layout",
     "constraints",
+    ...(hasLibrary ? ["library"] : []),
   ]);
+  const library = hasLibrary ? readLibraryRef(p.library) : null;
   const editable = bool(p.editable);
   const sectionId = p.section_id === null ? null : id(p.section_id);
   if (sectionId !== null && !sections.includes(sectionId)) fail();
@@ -163,6 +173,7 @@ function readPlacement(
     section_id: sectionId,
     title,
     editable,
+    library,
     fields,
     observables,
     layout: {

@@ -7,7 +7,8 @@ defmodule Cadence.Reads.Dashboards.Editor do
     AuthoringInput,
     AuthoringWidget,
     Document,
-    Documents
+    Documents,
+    LibraryLifecycle
   }
 
   alias Cadence.Reads.Dashboards.Workspace
@@ -62,6 +63,7 @@ defmodule Cadence.Reads.Dashboards.Editor do
 
   defp project(document, preview) do
     {:ok, defaults_json} = AuthoringDefaults.encode(document.defaults)
+    library = placed_library_items(document)
 
     %{
       version: 3,
@@ -84,12 +86,23 @@ defmodule Cadence.Reads.Dashboards.Editor do
             collapsed_by_default: &1.collapsed_by_default?
           }
         ),
-      placements: Enum.map(document.placements, &placement(document, &1)),
+      placements: Enum.map(document.placements, &placement(document, &1, library)),
       preview: preview
     }
   end
 
-  defp placement(document, placement) do
+  # One lookup for every library item the document places (dashboards' retired caution).
+  defp placed_library_items(document) do
+    ids =
+      for %{content_kind: :library, library_widget_id: id} <- document.placements,
+          is_binary(id),
+          uniq: true,
+          do: id
+
+    LibraryLifecycle.placed_items(document.organization_id, document.mission_id, ids)
+  end
+
+  defp placement(document, placement, library) do
     fields = AuthoringWidget.fields(placement)
 
     editable =
@@ -99,11 +112,8 @@ defmodule Cadence.Reads.Dashboards.Editor do
     %{
       id: placement.placement_id,
       section_id: placement.section_id,
-      title:
-        if(placement.widget_def,
-          do: placement.widget_def.title || "Untitled widget",
-          else: "Library widget"
-        ),
+      title: title(placement, library),
+      library: library_ref(placement, library),
       editable: editable,
       fields: if(editable, do: fields, else: nil),
       observables: if(editable, do: AuthoringWidget.observables(placement), else: []),
@@ -111,6 +121,24 @@ defmodule Cadence.Reads.Dashboards.Editor do
       constraints: Document.layout_constraints(document, placement)
     }
   end
+
+  defp title(%{widget_def: %{} = widget_def}, _library), do: widget_def.title || "Untitled widget"
+
+  defp title(%{content_kind: :library, library_widget_id: id}, library),
+    do: get_in(library, [id, :name]) || "Library widget"
+
+  defp title(_placement, _library), do: "Library widget"
+
+  # Null for embedded placements; `retired` means a save would be refused for it.
+  defp library_ref(%{content_kind: :library, library_widget_id: id} = placement, library)
+       when is_binary(id),
+       do: %{
+         item_id: id,
+         version: placement.library_version,
+         retired: get_in(library, [id, :retired]) != false
+       }
+
+  defp library_ref(_placement, _library), do: nil
 
   defp preview(scope, mission, dashboard, document, opts) do
     case Workspace.load(scope, mission, dashboard, :edit, opts) do

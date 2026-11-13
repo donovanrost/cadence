@@ -21,7 +21,7 @@ defmodule CadenceWeb.DashboardQ6Test do
     WidgetDef
   }
 
-  alias Cadence.Reads.Dashboards.{Settings, SharedViews}
+  alias Cadence.Reads.Dashboards.{Editor, Settings, SharedViews}
   alias CadenceWeb.TestFixtures
 
   @fixture Path.expand(
@@ -108,6 +108,32 @@ defmodule CadenceWeb.DashboardQ6Test do
 
       assert [%{action: "Retired library widget Power", target: %{kind: "library_item"}}] =
                ConfigAudit.list(c.org, c.mission)
+    end
+
+    test "the editor outline names placed items and says when a save would refuse a retired one",
+         c do
+      {:ok, %{item_id: item}} = library(c, "create_item", creation(c))
+      assert {:ok, %{version: 2}} = save(c, 1, [place(item, 1, "dash_widget_lib")])
+      {:ok, placing} = Documents.fetch_for_mode(c.org, c.mission, c.document.dashboard_id, :edit)
+
+      assert %{title: "Power", library: %{item_id: ^item, version: 1, retired: false}} =
+               outline_placement(placing, "dash_widget_lib")
+
+      embedded =
+        placing |> Editor.outline() |> Map.fetch!(:placements) |> Enum.reject(& &1.library)
+
+      assert [_ | _] = embedded
+
+      # Unplaced and retired: the version that placed it (a restore) now shows it retired.
+      assert {:ok, _} =
+               save(c, 2, [
+                 %{"event" => "remove_widget", "input" => %{"placement_id" => "dash_widget_lib"}}
+               ])
+
+      assert :ok = LibraryLifecycle.retire_item(c.scope, c.mission, item, 1)
+
+      assert %{title: "Power", library: %{retired: true}} =
+               outline_placement(placing, "dash_widget_lib")
     end
 
     test "rename guards on the latest version; an unknown version is the command's field error",
@@ -325,6 +351,9 @@ defmodule CadenceWeb.DashboardQ6Test do
                )
     end
   end
+
+  defp outline_placement(document, id),
+    do: document |> Editor.outline() |> Map.fetch!(:placements) |> Enum.find(&(&1.id == id))
 
   defp place(item, version, placement),
     do: %{

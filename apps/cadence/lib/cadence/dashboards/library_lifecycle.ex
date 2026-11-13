@@ -134,6 +134,27 @@ defmodule Cadence.Dashboards.LibraryLifecycle do
     end
   end
 
+  @doc """
+  The editor outline's view of the items a document places, in one query: `%{item_id => %{name,
+  retired}}`. `retired` is true exactly when `live_items/3` would refuse the save: the item is
+  retired or gone (a gone id has no name).
+  """
+  def placed_items(_organization_id, _mission_id, []), do: %{}
+
+  def placed_items(organization_id, mission_id, ids) do
+    found =
+      from(i in DashboardLibraryItem,
+        where:
+          i.organization_id == ^organization_id and i.mission_id == ^mission_id and
+            i.dashboard_library_item_id in ^ids,
+        select: {i.dashboard_library_item_id, %{name: i.name, retired: not is_nil(i.retired_at)}}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    Map.new(ids, &{&1, Map.get(found, &1, %{name: nil, retired: true})})
+  end
+
   @doc "Library items that haven't been retired (the listing's and reads' scope)."
   def live_query(organization_id, mission_id) do
     from(i in DashboardLibraryItem,

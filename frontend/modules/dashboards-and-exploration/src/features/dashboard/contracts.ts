@@ -39,6 +39,8 @@ export type OutlinePlacement = Readonly<{
   section_id: string | null;
   title: string;
   editable: boolean;
+  /** A library placement's item (domain); null for embedded ones. `retired`: a save would refuse it. */
+  library: Readonly<{ item_id: string; version: number; retired: boolean }> | null;
   fields: WidgetFields | null;
   observables: readonly string[];
   layout: Readonly<{ x: number | null; y: number | null; w: number; h: number }>;

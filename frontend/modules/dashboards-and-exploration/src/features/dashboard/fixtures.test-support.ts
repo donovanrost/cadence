@@ -40,6 +40,7 @@ export function outline(): DashboardOutline {
         section_id: "power",
         title: "Battery",
         editable: true,
+        library: null,
         fields: { ...widgetDefaults, title: "Battery", section_id: "power" },
         observables: ["battery_voltage"],
         layout: { x: 0, y: 0, w: 6, h: 3 },
