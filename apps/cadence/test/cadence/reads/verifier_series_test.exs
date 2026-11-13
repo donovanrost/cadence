@@ -24,6 +24,15 @@ defmodule Cadence.Reads.VerifierSeriesTest do
     })
   end
 
+  @semantic "semantic:parameter:0123abcd"
+  @therm %{
+    point_id: "THERM.setpoint",
+    parameter_id: @semantic,
+    field_name: "setpoint",
+    unit: "degC",
+    data_type: :float
+  }
+
   defp sample(spacecraft_id, value, seconds),
     do: %Sample{
       spacecraft_id: spacecraft_id,
@@ -32,12 +41,12 @@ defmodule Cadence.Reads.VerifierSeriesTest do
       generation_time: DateTime.add(~U[2026-11-11 12:00:00Z], seconds)
     }
 
-  defp opts(c, extra \\ []) do
+  defp opts(c, extra \\ [], subject \\ "telemetry:THERM.setpoint") do
     plan = %VerifierPlan{
       phase: :completion,
       success_criteria:
         MatchCriteria.new(%{
-          subject_ref: "telemetry:THERM.setpoint",
+          subject_ref: subject,
           comparison: :equal,
           value: 8.0
         })
@@ -52,8 +61,9 @@ defmodule Cadence.Reads.VerifierSeriesTest do
             &%{command_request_id: &1.command_request_id, released_at: ~U[2026-11-11 12:00:00Z]}
           )
         end,
+        catalog_fun: fn -> [@therm] end,
         # Each read also returns another spacecraft's sample, which must never be plotted (#38).
-        history_fun: fn spacecraft_id ->
+        history_fun: fn "THERM.setpoint", spacecraft_id ->
           [
             sample(spacecraft_id, 5.0, 10),
             sample(spacecraft_id, 8.0, 40),
@@ -69,7 +79,7 @@ defmodule Cadence.Reads.VerifierSeriesTest do
     {:ok, series} = VerifierSeries.load(c.org, c.mission, c.group.command_group_id, opts(c))
 
     assert %{
-             point: %{id: "THERM.setpoint"},
+             point: %{id: "THERM.setpoint", name: "setpoint", unit: "degC"},
              reason: nil,
              commanded: %{value_json: "8.0", comparison: :equal},
              verifier: %{position: 0, command_name: "SET_SIGNED"},
@@ -95,12 +105,33 @@ defmodule Cadence.Reads.VerifierSeriesTest do
   end
 
   test "a slow history store degrades instead of holding the read", c do
-    slow = fn _spacecraft_id -> Process.sleep(10_000) end
+    slow = fn _point_id, _spacecraft_id -> Process.sleep(10_000) end
 
     {:ok, series} =
       VerifierSeries.load(c.org, c.mission, c.group.command_group_id, opts(c, history_fun: slow))
 
     assert series.telemetry == :degraded
     assert Enum.all?(series.targets, &(&1.samples == []))
+  end
+
+  test "a mission-model verifier (semantic parameter id) plots its catalog point", c do
+    {:ok, series} =
+      VerifierSeries.load(c.org, c.mission, c.group.command_group_id, opts(c, [], @semantic))
+
+    # The history read is keyed by the catalog point (the fun only matches "THERM.setpoint").
+    assert %{id: "THERM.setpoint", name: "setpoint", unit: "degC"} = series.point
+    assert [%{samples: [_, _]}, %{samples: [_, _]}] = series.targets
+  end
+
+  test "a subject no active point has keeps its id, with unit and type null", c do
+    {:ok, series} =
+      VerifierSeries.load(
+        c.org,
+        c.mission,
+        c.group.command_group_id,
+        opts(c, [catalog_fun: fn -> [] end, history_fun: fn _point, _sc -> [] end], @semantic)
+      )
+
+    assert series.point == %{id: @semantic, name: @semantic, unit: nil, type: nil}
   end
 end

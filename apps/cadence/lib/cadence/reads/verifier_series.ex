@@ -14,6 +14,7 @@ defmodule Cadence.Reads.VerifierSeries do
 
   alias Cadence.Commanding
   alias Cadence.Commanding.Groups.GroupStore
+  alias Cadence.Ops.PointCatalog
   alias Cadence.Commanding.RequestValidation
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.{SpacecraftLive, Telemetry}
@@ -44,10 +45,11 @@ defmodule Cadence.Reads.VerifierSeries do
       nil ->
         not_plottable(org, mission, group, members, verifiers, opts)
 
-      {position, point_id, plan} ->
+      {position, subject, plan} ->
         plotted_members = Enum.filter(members, &(&1.metadata["group"]["position"] == position))
+        point = point(org, mission, subject, opts)
 
-        series(org, mission, group, plotted_members, by_request, {position, point_id, plan}, opts)
+        series(org, mission, group, plotted_members, by_request, {position, point, plan}, opts)
     end
   end
 
@@ -123,7 +125,7 @@ defmodule Cadence.Reads.VerifierSeries do
     }
   end
 
-  defp series(org, mission, group, members, by_request, {position, point_id, plan}, opts) do
+  defp series(org, mission, group, members, by_request, {position, point, plan}, opts) do
     instances =
       Enum.map(members, &telemetry_instance(Map.get(by_request, &1.command_request_id, [])))
 
@@ -138,7 +140,7 @@ defmodule Cadence.Reads.VerifierSeries do
     window = window(org, mission, members, instances, opts)
 
     {samples, telemetry} =
-      history(org, mission, point_id, Enum.map(targets, & &1["spacecraft_id"]), window, opts)
+      history(org, mission, point.id, Enum.map(targets, & &1["spacecraft_id"]), window, opts)
 
     by_target =
       Map.new(
@@ -146,11 +148,9 @@ defmodule Cadence.Reads.VerifierSeries do
         &{elem(&1, 0).metadata["group"]["target_index"], elem(&1, 1)}
       )
 
-    [point] = SpacecraftLive.points(org, mission, [point_id])
-
     %{
       verifier: verifier_ref(hd(members)) |> Map.put(:position, position),
-      point: Map.merge(point, %{id: point_id, name: point_id}),
+      point: point,
       reason: nil,
       commanded: criteria && commanded(criteria),
       band: criteria && band(criteria),
@@ -170,6 +170,32 @@ defmodule Cadence.Reads.VerifierSeries do
       truncated: length(targets) < length(group.targets),
       summary: summary(instances),
       telemetry: telemetry
+    }
+  end
+
+  # A verifier's subject is a point id (`telemetry:THERM.setpoint`) or, from the mission model, the
+  # parameter's semantic id (`semantic:parameter:…`). Samples, units and types are keyed by the
+  # catalog point (`PACKET.field`), so resolve to it first. A subject no active point has stays
+  # as is, with unit and type null. `:catalog_fun` (tests): `(-> [point catalog entry])`.
+  defp point(org, mission, subject, opts) do
+    catalog =
+      case Keyword.get(opts, :catalog_fun) do
+        nil -> PointCatalog.list_points(org, mission)
+        fun -> fun.()
+      end
+
+    entry =
+      Enum.find(catalog, &(&1.point_id == subject)) ||
+        Enum.find(catalog, &(&1.parameter_id == subject))
+
+    id = if entry, do: entry.point_id, else: subject
+    [described] = SpacecraftLive.points(org, mission, [id])
+
+    %{
+      id: id,
+      name: (entry && (entry.field_name || entry.point_id)) || subject,
+      unit: described.unit || (entry && entry.unit),
+      type: described.type
     }
   end
 
@@ -225,17 +251,21 @@ defmodule Cadence.Reads.VerifierSeries do
 
   defp history(_org, _mission, _point_id, _spacecraft_ids, nil, _opts), do: {%{}, :ok}
 
-  # `:history_fun` (tests): `(spacecraft_id -> [Sample])`.
+  # `:history_fun` (tests): `(point_id, spacecraft_id -> [Sample])`.
   defp history(org, mission, point_id, spacecraft_ids, window, opts) do
     read =
-      Keyword.get(opts, :history_fun, fn spacecraft_id ->
-        Telemetry.sample_history(org, mission, point_id,
-          spacecraft_id: spacecraft_id,
-          from_observed_at: window.from,
-          to_observed_at: window.to,
-          limit: 10_000
-        )
-      end)
+      case Keyword.get(opts, :history_fun) do
+        nil ->
+          &Telemetry.sample_history(org, mission, point_id,
+            spacecraft_id: &1,
+            from_observed_at: window.from,
+            to_observed_at: window.to,
+            limit: 10_000
+          )
+
+        fun ->
+          &fun.(point_id, &1)
+      end
 
     task =
       Task.async(fn ->
