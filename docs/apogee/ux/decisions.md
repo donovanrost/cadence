@@ -808,15 +808,15 @@ configuration failure P3. The amendments to fe-ops' drafts:
   - Approve (primary): "Why the pass can take this change".
   - Reject: "Why the pass can't take this change".
   - **After the deadline**, both Approve and Reject are refused, so both go. The block reads "The deadline passed
-    at 02:40Z. Northlight decides now. This closes when they send their next change." The row drops to P3,
-    because there's nothing left to do here.
+    at 02:40Z. This change stays until Northlight's next update replaces it." (fe-ops' words). The Now row
+    swaps "Decide by …" for "The deadline passed at 02:40Z." and drops to P3, because there's nothing left to do
+    here.
   - Acknowledge: "What you checked".
   - Members see the block without buttons and the line "Org admins decide provider changes."
 - **Refusals:**
   - 409 stale with an item: "Northlight changed it again. Here's the current change." The block reloads.
   - 409 stale with a null item: "This change was already decided or replaced." The row resolves.
-  - 409 deadline passed: "The deadline passed at 02:40Z, so it can't be decided here any more." The block then
-    shows its after-deadline state.
+  - 409 deadline passed (a decision racing the deadline): the block switches to its after-deadline state and line.
   - 403: "Org admins decide provider changes."
 - **Resolved** (U29, actor and time): "Approved by Mira K. at 02:31Z: <reason>." / "Rejected by …" /
   "Acknowledged by …" / "Replaced by a newer change." The last matches U41's "Replaced by a newer request."
