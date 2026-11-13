@@ -67,6 +67,18 @@ defmodule Cadence.Control.Activations.ActivationExecutionRow do
     |> validate_required([:status, :error_document, :completed_at])
   end
 
+  @doc "Starts a failed or stalled execution again (a resume): in progress, by `executor`."
+  def restart_changeset(%__MODULE__{} = row, executor_actor_document, started_at) do
+    row
+    |> change(%{
+      status: :in_progress,
+      executor_actor_document: JsonDocument.wrap_value(executor_actor_document),
+      error_document: JsonDocument.wrap_value(%{}),
+      started_at: started_at,
+      completed_at: nil
+    })
+  end
+
   def to_domain(%__MODULE__{} = row) do
     %ActivationExecution{
       activation_execution_id: row.activation_execution_id,
