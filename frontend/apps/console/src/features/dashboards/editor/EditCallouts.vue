@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApButton, ApCallout, formatClock } from "@/ui";
+import type { SkippedEvent } from "./contracts.ts";
 import type { Conflict, Notice } from "./useEditSession.ts";
 
 /**
@@ -21,15 +22,18 @@ const savedLine = computed(() => {
   const at = c.savedAt ? ` at ${formatClock(new Date(c.savedAt)).slice(0, 5)}Z` : "";
   return `Saved by ${who}${at} while you were editing (now v${c.currentVersion}).`;
 });
-const EVENT_LABEL: Readonly<Record<string, string>> = {
+const EVENT_LABEL: Readonly<Record<SkippedEvent, string>> = {
   update_widget: "Update widget",
   remove_widget: "Remove widget",
   add_widget: "Add widget",
   layout: "Move or resize",
+  add_section: "Add section",
   update_section: "Update section",
   remove_section: "Remove section",
   move_section: "Move section",
   rename: "Rename",
+  runtime_defaults: "Defaults",
+  unrecognized: "Another edit",
 };
 const noticeText = computed(() => {
   const n = props.notice;
@@ -39,7 +43,7 @@ const noticeText = computed(() => {
     case "failed":
       return n.message;
     case "skipped":
-      return `${n.events.length} ${n.events.length === 1 ? "edit no longer applies" : "edits no longer apply"}: ${n.events.map((e) => EVENT_LABEL[e] ?? e).join(", ")}.`;
+      return `${n.events.length} ${n.events.length === 1 ? "edit no longer applies" : "edits no longer apply"}: ${n.events.map((e) => EVENT_LABEL[e]).join(", ")}.`;
     case "too_many_commands":
       return "Save to keep going. This draft has as many changes as one save can take.";
     case "not_ready":

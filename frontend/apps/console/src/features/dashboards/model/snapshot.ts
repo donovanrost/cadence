@@ -4,7 +4,9 @@ import { DecodeError, decoders as d, type Decoded, type Reader } from "@/api/ind
  * Readers for the resolved dashboard snapshot: `Cadence.Reads.Dashboards.WorkspaceSnapshot`
  * (version 1), passed through unchanged by D5 (viewer) and D7 (preview). Ported from the module's
  * `workspace/validation.ts`, with the same bounds and relationships: aligned frame columns, unique
- * ids, sections that exist, and ready vs unavailable placements.
+ * ids, sections that exist, and ready vs unavailable placements. Vocabularies use `known`
+ * (typing rule 1): a value the server adds reads as `unrecognized` and degrades one widget or
+ * one label instead of failing the whole dashboard.
  */
 
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
@@ -40,11 +42,11 @@ const warning = d.object({
     if (!/^[a-z][a-z0-9_]{0,127}$/.test(code)) throw new DecodeError(path, "warning code");
     return code;
   },
-  severity: d.oneOf(["info", "warning", "error"] as const),
+  severity: d.known(["info", "warning", "error"] as const),
 });
 const warnings = d.array(warning, 128);
 
-const fieldKinds = d.oneOf(["time", "number", "string", "boolean", "enum"] as const);
+const fieldKinds = d.known(["time", "number", "string", "boolean", "enum"] as const);
 type FieldKind = Decoded<typeof fieldKinds>;
 type FieldValue = number | string | boolean | null;
 
@@ -65,6 +67,11 @@ function cell(kind: FieldKind): Reader<FieldValue> {
       case "string":
       case "enum":
         return text(4096)(value, path);
+      case "unrecognized":
+        // A column kind this console doesn't know: keep any JSON scalar, render it as text.
+        if (typeof value === "string") return text(4096)(value, path);
+        if (typeof value === "boolean") return value;
+        return d.number(value, path);
     }
   };
 }
@@ -89,9 +96,9 @@ const field: Reader<{
 };
 
 const frameShape = d.object({
-  role: d.oneOf(["primary", "compare", "limits", "quality", "events", "annotations"] as const),
-  shape: d.oneOf(["scalar", "wide", "long", "events", "intervals", "matrix"] as const),
-  time_axis: d.nullable(d.oneOf(["generation_time", "receipt_time", "occurred_at"] as const)),
+  role: d.known(["primary", "compare", "limits", "quality", "events", "annotations"] as const),
+  shape: d.known(["scalar", "wide", "long", "events", "intervals", "matrix"] as const),
+  time_axis: d.nullable(d.known(["generation_time", "receipt_time", "occurred_at"] as const)),
   fields: unique(d.array(field, 64), (f) => f.name),
 });
 const frame: Reader<Decoded<typeof frameShape>> = (value, path = "") => {
@@ -113,8 +120,8 @@ const annotation: Reader<Decoded<typeof annotationShape>> = (value, path = "") =
 const annotationShape = d.object({
   id: d.token,
   title: text(4096),
-  severity: d.oneOf(["info", "warning", "error", "critical"] as const),
-  kind: d.oneOf(["point", "interval"] as const),
+  severity: d.known(["info", "warning", "error", "critical"] as const),
+  kind: d.known(["point", "interval"] as const),
   starts_at_ms: bounded(-MAX_SAFE, MAX_SAFE),
   ends_at_ms: d.nullable(bounded(-MAX_SAFE, MAX_SAFE)),
 });
@@ -130,7 +137,7 @@ export const widgetTypes = [
 ] as const;
 
 const widget = d.object({
-  type: d.oneOf(widgetTypes),
+  type: d.known(widgetTypes),
   version: d.literal(1),
   title: text(4096),
   options: d.object({
@@ -138,12 +145,12 @@ const widget = d.object({
     window_seconds: bounded(1, 86_400),
     show_unit: d.optional(d.boolean),
     show_min_max_band: d.optional(d.boolean),
-    legend_mode: d.optional(d.oneOf(["auto", "always", "hidden"] as const)),
-    line_width: d.optional(d.oneOf(["thin", "normal", "bold"] as const)),
+    legend_mode: d.optional(d.known(["auto", "always", "hidden"] as const)),
+    line_width: d.optional(d.known(["thin", "normal", "bold"] as const)),
     fill_opacity: d.optional(bounded(0, 30)),
     span_gaps: d.optional(d.boolean),
     show_points: d.optional(d.boolean),
-    axis_mode: d.optional(d.oneOf(["unit", "shared"] as const)),
+    axis_mode: d.optional(d.known(["unit", "shared"] as const)),
     shared_tooltip: d.optional(d.boolean),
   }),
 });
@@ -173,7 +180,7 @@ const readyPlacement = d.object({
 const unavailablePlacement = d.object({
   ...placementBase,
   status: d.literal("unavailable"),
-  reason: d.oneOf(["unsupported_widget", "missing_result", "invalid_frame"] as const),
+  reason: d.known(["unsupported_widget", "missing_result", "invalid_frame"] as const),
   widget: nullValue,
   frames: emptyList,
   annotations: emptyList,
@@ -193,17 +200,17 @@ export const placement = d.variant("status", {
 });
 
 export const context = d.object({
-  time_mode: d.oneOf(["live", "range", "archive", "replay_run"] as const),
-  time_axis: d.oneOf(["generation_time", "receipt_time"] as const),
+  time_mode: d.known(["live", "range", "archive", "replay_run"] as const),
+  time_axis: d.known(["generation_time", "receipt_time"] as const),
   from: d.nullable(text(128)),
   to: d.nullable(text(128)),
   window_seconds: d.nullable(bounded(1, 86_400)),
   relative_duration_ms: d.nullable(bounded(1, 86_400_000)),
   refresh_ms: d.nullable(bounded(0, 86_400_000)),
-  realm: d.oneOf(["flight", "rehearsal", "replay", "simulation"] as const),
-  data_view: d.oneOf(["canonical", "as_recorded", "all_revisions", "recomputed"] as const),
-  limit_mode: d.oneOf(["observed", "current", "recomputed", "compare"] as const),
-  scope_kind: d.oneOf([
+  realm: d.known(["flight", "rehearsal", "replay", "simulation"] as const),
+  data_view: d.known(["canonical", "as_recorded", "all_revisions", "recomputed"] as const),
+  limit_mode: d.known(["observed", "current", "recomputed", "compare"] as const),
+  scope_kind: d.known([
     "mission",
     "spacecraft",
     "contact",
@@ -228,7 +235,7 @@ const snapshotShape = d.object({
   mission_id: d.token,
   dashboard_id: d.token,
   document_version: bounded(1, MAX_SAFE),
-  document_mode: d.oneOf(["published", "draft", "draft_preview", "snapshot"] as const),
+  document_mode: d.known(["published", "draft", "draft_preview", "snapshot"] as const),
   author: d.boolean,
   name: text(4096),
   description: d.nullable(text(16_384)),

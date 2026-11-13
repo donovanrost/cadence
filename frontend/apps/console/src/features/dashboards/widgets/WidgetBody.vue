@@ -17,14 +17,18 @@ const props = defineProps<{
   group: string;
   chartId: string;
 }>();
-const unavailable = {
+const unavailable: Readonly<
+  Record<Extract<WorkspacePlacement, { status: "unavailable" }>["reason"], string>
+> = {
   unsupported_widget: "This widget type isn't supported here.",
   missing_result: "This widget didn't resolve. Check its bindings.",
   invalid_frame: "This widget's data can't be displayed.",
-} as const;
+  unrecognized: "This widget isn't available.",
+};
 const ready = computed(() => (props.placement.status === "ready" ? props.placement : null));
 const message = computed(() => {
   if (props.placement.status === "unavailable") return unavailable[props.placement.reason];
+  if (props.placement.widget.type === "unrecognized") return unavailable.unsupported_widget;
   if (!hasData(props.placement)) return "No data in this range.";
   return null;
 });

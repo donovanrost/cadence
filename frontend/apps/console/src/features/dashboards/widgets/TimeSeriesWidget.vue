@@ -44,12 +44,19 @@ const optional = computed(() => {
   const o = options.value;
   return {
     ...(o.show_min_max_band === undefined ? {} : { show_min_max_band: o.show_min_max_band }),
-    ...(o.legend_mode === undefined ? {} : { legend_mode: o.legend_mode }),
-    ...(o.line_width === undefined ? {} : { line_width: o.line_width }),
+    // An option value this console doesn't know falls back to the chart's default.
+    ...(o.legend_mode === undefined || o.legend_mode === "unrecognized"
+      ? {}
+      : { legend_mode: o.legend_mode }),
+    ...(o.line_width === undefined || o.line_width === "unrecognized"
+      ? {}
+      : { line_width: o.line_width }),
     ...(o.fill_opacity === undefined ? {} : { fill_opacity: o.fill_opacity }),
     ...(o.span_gaps === undefined ? {} : { span_gaps: o.span_gaps }),
     ...(o.show_points === undefined ? {} : { show_points: o.show_points }),
-    ...(o.axis_mode === undefined ? {} : { axis_mode: o.axis_mode }),
+    ...(o.axis_mode === undefined || o.axis_mode === "unrecognized"
+      ? {}
+      : { axis_mode: o.axis_mode }),
     ...(o.shared_tooltip === undefined ? {} : { shared_tooltip: o.shared_tooltip }),
   };
 });

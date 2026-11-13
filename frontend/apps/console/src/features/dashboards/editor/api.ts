@@ -11,6 +11,7 @@ import {
   versionConflict,
   versionsReply,
   type Command,
+  type CommandCode,
   type Preview,
   type Rebase,
   type Versions,
@@ -116,7 +117,13 @@ export function restore(missionId: string, dashboardId: string, version: number,
 
 /** What an editor write's failure means for the draft. Unknown failures stay generic. */
 export type EditFailure =
-  | { kind: "command"; index: number; command: Command | null; code: string; field: string | null }
+  | {
+      kind: "command";
+      index: number;
+      command: Command | null;
+      code: CommandCode;
+      field: string | null;
+    }
   | {
       kind: "conflict";
       currentVersion: number;

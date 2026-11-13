@@ -5,7 +5,8 @@ import type { VersionRow } from "../editor/contracts.ts";
 /** Version history rows, newest first. Pick two to compare; Restore copies one forward. */
 defineProps<{ rows: readonly VersionRow[]; selected: readonly number[]; canRestore: boolean }>();
 const emit = defineEmits<{ toggle: [version: number]; restore: [version: number] }>();
-const KIND: Readonly<Record<string, string>> = {
+const KIND: Readonly<Record<VersionRow["kind"], string>> = {
+  unrecognized: "Changed",
   create: "Created",
   save: "Saved",
   revert: "Restored",
@@ -34,7 +35,7 @@ const who = (r: VersionRow) =>
           <span class="font-mono">v{{ r.version }}</span>
           <ApTag v-if="r.current" state="live" label="Current" />
           <span class="text-text-3">
-            {{ KIND[r.kind] ?? r.kind
+            {{ KIND[r.kind]
             }}<template v-if="r.kind === 'revert' && r.based_on_version">
               from v{{ r.based_on_version }}</template
             >

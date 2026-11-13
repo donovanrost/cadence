@@ -1,4 +1,5 @@
 import { DecodeError, decoders as d, type Decoded, type Reader } from "@/api";
+import { actor } from "../editor/contracts.ts";
 import { context, placement, workspaceSnapshot, type WorkspaceSnapshot } from "./snapshot.ts";
 
 /**
@@ -30,9 +31,7 @@ export const viewPush: Reader<ViewPush> = (value, path = "") => {
 
 export const versionEvent = d.object({
   current_version: d.integer,
-  saved_by: d.nullable(
-    d.object({ kind: d.string, id: d.nullable(d.string), name: d.nullable(d.string) }),
-  ),
+  saved_by: d.nullable(actor),
   saved_at: d.nullable(d.timestamp),
   archived: d.optional(d.boolean),
 });

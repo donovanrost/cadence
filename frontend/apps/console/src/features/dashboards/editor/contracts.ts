@@ -144,12 +144,47 @@ const staged = {
 export const previewReply = d.object(staged);
 export type Preview = Decoded<typeof previewReply>;
 
+/** `AuthoringErrors.normalize` codes (domain): why an edit can't apply. */
+export const commandCodes = [
+  "invalid_type",
+  "invalid_title",
+  "invalid_options",
+  "invalid_binding",
+  "forbidden",
+  "invalid_input",
+  "invalid_defaults",
+  "conflict",
+  "missing_section",
+  "missing_placement",
+  "unsupported_widget",
+  "invalid_widget",
+  "capacity",
+  "duplicate_id",
+  "unavailable",
+  "unknown",
+] as const;
+const commandCode = d.known(commandCodes);
+export type CommandCode = Decoded<typeof commandCode>;
+const commandEvent = d.known([
+  "rename",
+  "add_section",
+  "update_section",
+  "remove_section",
+  "move_section",
+  "add_widget",
+  "update_widget",
+  "remove_widget",
+  "layout",
+  "runtime_defaults",
+] as const);
+export type SkippedEvent = Decoded<typeof commandEvent>;
+
 export const rebaseReply = d.object({
   ...staged,
   base_version: d.integer,
   applied: d.array(commandReader, 256),
   skipped: d.array(
-    d.object({ index: d.integer, event: d.string, reason: d.nullable(d.string) }),
+    d.object({ index: d.integer, event: commandEvent, reason: d.nullable(commandCode) }),
     256,
   ),
 });
@@ -158,13 +193,17 @@ export type Rebase = Decoded<typeof rebaseReply>;
 export const savedReply = d.object({ version: d.integer });
 export const copiedReply = d.object({ id, version: d.integer });
 
-const actor = d.object({ kind: d.string, id: d.nullable(d.string), name: d.nullable(d.string) });
+export const actor = d.object({
+  kind: d.known(["user", "system"] as const),
+  id: d.nullable(d.string),
+  name: d.nullable(d.string),
+});
 export const versionsReply = d.object({
   current_version: d.integer,
   versions: d.array(
     d.object({
       version: d.integer,
-      kind: d.string,
+      kind: d.known(["create", "save", "revert", "migration"] as const),
       based_on_version: d.nullable(d.integer),
       saved_by: d.nullable(actor),
       saved_at: d.timestamp,
@@ -181,7 +220,7 @@ export const compareReply = d.object({ changes, from_json: d.string, to_json: d.
 /** Error details the editor acts on (console envelope `details`, decoded per code). */
 export const commandFailure = d.object({
   index: d.integer,
-  code: d.string,
+  code: commandCode,
   field: d.nullable(d.string),
 });
 export const versionConflict = d.object({
@@ -192,6 +231,7 @@ export const versionConflict = d.object({
 export const notReady = d.object({
   // domain 124c1d6f: a dashboard-level issue has no placement.
   placements: d.array(
+    // Readiness codes are open (domain PublishReadiness grows them); the UI shows `message`.
     d.object({ placement_id: d.nullable(id), code: d.string, message: d.string }),
     1024,
   ),

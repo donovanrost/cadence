@@ -2,7 +2,7 @@ import { computed, onScopeDispose, ref, shallowRef, type Ref } from "vue";
 import type { ApiError } from "@/api";
 import type { Runtime } from "../api.ts";
 import * as api from "./api.ts";
-import type { Command, Preview } from "./contracts.ts";
+import type { Command, CommandCode, Preview, SkippedEvent } from "./contracts.ts";
 import { append, clearDraft, loadDraft, storeDraft, type Draft } from "./draft.ts";
 
 export type Conflict = Readonly<{
@@ -12,7 +12,7 @@ export type Conflict = Readonly<{
 }>;
 export type Notice =
   | { kind: "rejected"; message: string }
-  | { kind: "skipped"; events: readonly string[] }
+  | { kind: "skipped"; events: readonly SkippedEvent[] }
   | { kind: "too_many_commands" }
   | { kind: "not_ready"; placements: readonly { placement_id: string | null; message: string }[] }
   | { kind: "failed"; message: string };
@@ -206,13 +206,26 @@ function failureText(error: ApiError): string {
   return error.kind === "unauthenticated" ? "Signed out." : error.message;
 }
 
-const REJECTION: Readonly<Record<string, string>> = {
-  not_found: "That widget or section no longer exists.",
-  capacity: "This dashboard is at its widget or section limit.",
+const REJECTION: Readonly<Record<CommandCode, string>> = {
+  invalid_type: "That widget type isn't valid.",
+  invalid_title: "The title isn't valid.",
+  invalid_options: "One of the display options isn't valid.",
+  invalid_binding: "The widget's binding isn't valid.",
+  forbidden: "You can't edit this dashboard.",
   invalid_input: "That change isn't valid.",
+  invalid_defaults: "Those defaults aren't valid.",
+  conflict: "The dashboard changed meanwhile.",
+  missing_section: "That section no longer exists.",
+  missing_placement: "That widget no longer exists.",
+  unsupported_widget: "That widget type isn't supported.",
+  invalid_widget: "That widget isn't valid.",
+  capacity: "This dashboard is at its widget or section limit.",
   duplicate_id: "That widget already exists.",
+  unavailable: "The dashboard isn't available.",
+  unknown: "The server didn't accept that change.",
+  unrecognized: "The server didn't accept that change.",
 };
-function rejectionText(code: string, field: string | null): string {
-  const base = REJECTION[code] ?? "The server didn't accept that change.";
+function rejectionText(code: CommandCode, field: string | null): string {
+  const base = REJECTION[code];
   return field ? `${base} (${field.replaceAll("_", " ")})` : base;
 }
