@@ -3,6 +3,7 @@ defmodule CadenceWeb.AdminModeController do
 
   import Phoenix.LiveView.Controller, only: [live_render: 3]
 
+  alias Cadence.Administration.ConsoleAdmin
   alias Cadence.Auth.Scope
   alias CadenceWeb.AdminMode
 
@@ -29,8 +30,16 @@ defmodule CadenceWeb.AdminModeController do
     with true <- Scope.platform_admin_eligible?(current_scope),
          :ok <-
            Cadence.Auth.verify_user_password(current_scope.user, password, ip: conn.remote_ip) do
+      expires_at = AdminMode.expires_at()
+
+      ConsoleAdmin.record_admin_mode(
+        current_scope.user.user_id,
+        :entered,
+        expires_at |> DateTime.from_unix!() |> DateTime.to_iso8601()
+      )
+
       conn
-      |> put_session(:admin_mode_expires_at, AdminMode.expires_at())
+      |> put_session(:admin_mode_expires_at, expires_at)
       |> put_flash(:info, "Admin mode enabled.")
       |> redirect(to: ~p"/admin")
     else
@@ -58,6 +67,11 @@ defmodule CadenceWeb.AdminModeController do
   end
 
   def delete(conn, _params) do
+    with %{user: %{user_id: user_id}} <- conn.assigns[:current_scope],
+         true <- is_integer(get_session(conn, :admin_mode_expires_at)) do
+      ConsoleAdmin.record_admin_mode(user_id, :left, nil)
+    end
+
     conn
     |> delete_session(:admin_mode_expires_at)
     |> put_flash(:info, "Admin mode disabled.")

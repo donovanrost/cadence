@@ -102,6 +102,7 @@ defmodule CadenceWeb.Console.Problem do
     service_identity_not_found: {404, "That service identity isn't active in this organization."},
     current_password_incorrect: {422, "The current password isn't right."},
     password_incorrect: {422, "That password isn't right."},
+    admin_mode_required: {403, "Admin mode has ended. Enter it again to continue."},
     credentials_incorrect: {422, "That email and password don't match."},
     account_disabled: {403, "This account is disabled. Ask an administrator to enable it."},
     invitation_unavailable: {409, "This invitation can't be used any more."},

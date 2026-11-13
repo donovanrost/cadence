@@ -15,13 +15,14 @@ defmodule Cadence.Reads.OrganizationAudit do
 
   alias Cadence.{Accounts, Missions}
   alias Cadence.Accounts.MembershipAdministration
+  alias Cadence.Administration.PlatformAudit
   alias Cadence.Alarms.Queries, as: Alarms
   alias Cadence.Configuration.Status
   alias Cadence.Management.{Commanding, Contacts, DataSources}
   alias Cadence.Platform.ScopedSettings
   alias Cadence.Reads.OrganizationAudit.{AccountEvents, DashboardEvents, ProviderAccountEvents}
 
-  @included ~w(config commanding access alarms contacts data provider_accounts account)
+  @included ~w(config commanding access alarms contacts data provider_accounts account platform)
   @missing []
   @plan_cap 100
   @settings [
@@ -51,7 +52,8 @@ defmodule Cadence.Reads.OrganizationAudit do
          settings_events(organization_id, nil, nil) ++
          access_events(organization_id) ++
          ProviderAccountEvents.list(organization_id) ++
-         AccountEvents.list(organization_id))
+         AccountEvents.list(organization_id) ++
+         PlatformAudit.for_organization(organization_id))
       |> Enum.filter(&keep?(&1, opts))
       |> Enum.sort_by(& &1.at, {:desc, DateTime})
 

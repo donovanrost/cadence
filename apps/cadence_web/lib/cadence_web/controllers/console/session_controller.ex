@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.SessionController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Administration.ConsoleAdmin
   alias Cadence.Auth.Scope
   alias CadenceWeb.AdminMode
   alias CadenceWeb.Console.Access
@@ -65,6 +66,7 @@ defmodule CadenceWeb.Console.SessionController do
     with true <- Scope.platform_admin_eligible?(scope),
          :ok <- Cadence.Auth.verify_user_password(scope.user, password, ip: conn.remote_ip) do
       expires_at = AdminMode.expires_at()
+      ConsoleAdmin.record_admin_mode(scope.user.user_id, :entered, iso(expires_at))
 
       conn
       |> put_session(:admin_mode_expires_at, expires_at)
@@ -88,6 +90,9 @@ defmodule CadenceWeb.Console.SessionController do
 
   @doc "Leaves admin mode (idempotent)."
   def leave_admin_mode(conn, _params) do
+    if is_integer(get_session(conn, :admin_mode_expires_at)),
+      do: ConsoleAdmin.record_admin_mode(conn.assigns.current_scope.user.user_id, :left, nil)
+
     conn
     |> delete_session(:admin_mode_expires_at)
     |> send_resp(:no_content, "")

@@ -48,7 +48,8 @@ defmodule CadenceWeb.Console.AuditAPITest do
                "contacts",
                "data",
                "provider_accounts",
-               "account"
+               "account",
+               "platform"
              ],
              "missing" => []
            }

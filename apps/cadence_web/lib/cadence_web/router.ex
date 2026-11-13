@@ -786,6 +786,22 @@ defmodule CadenceWeb.Router do
     post("/session/admin-mode", SessionController, :enter_admin_mode)
     delete("/session/admin-mode", SessionController, :leave_admin_mode)
 
+    # L7 platform admin area (owner: api-ops). Contract: docs/apogee/api/admin.md
+    scope "/admin" do
+      get("/organizations", AdminController, :organizations)
+      get("/organizations/slug", AdminController, :slug)
+      post("/organizations", AdminController, :create_organization)
+      get("/organizations/:id", AdminController, :organization)
+      post("/organizations/:id/invitations", AdminController, :invite)
+      delete("/organizations/:id/invitations/:invitation_id", AdminController, :withdraw)
+      get("/service-identities", AdminController, :service_identities)
+      post("/service-identities", AdminController, :issue)
+      post("/service-identities/:id/rotate", AdminController, :rotate)
+      delete("/service-identities/:id", AdminController, :revoke)
+      get("/runtime", AdminController, :runtime)
+      get("/audit", AdminController, :audit)
+    end
+
     # -- Account (owner: api): the signed-in user's own password and sessions.
     put("/account/password", AccountController, :change_password)
     get("/account/sessions", AccountController, :sessions)
