@@ -926,6 +926,29 @@ defmodule CadenceWeb.Router do
         :requirement_supersedes
       )
 
+      get("/contact-planning/requirements", ContactRequirementController, :index)
+      post("/contact-planning/requirements", ContactRequirementController, :create)
+      get("/contact-planning/requirements/schema", ContactRequirementController, :schema)
+      get("/contact-planning/requirements/:requirement_id", ContactRequirementController, :show)
+
+      post(
+        "/contact-planning/requirements/:requirement_id/close",
+        ContactRequirementController,
+        :close
+      )
+
+      post(
+        "/contact-planning/requirements/:requirement_id/cancel",
+        ContactRequirementController,
+        :cancel
+      )
+
+      post(
+        "/contact-planning/requirements/:requirement_id",
+        ContactRequirementController,
+        :update
+      )
+
       get("/contact-planning/templates/:template_id", ContactTemplateController, :show)
       post("/contact-planning/templates/:template_id", ContactTemplateController, :update)
 

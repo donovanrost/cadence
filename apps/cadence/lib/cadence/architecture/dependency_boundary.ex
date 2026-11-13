@@ -49,6 +49,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/contact_planning/contact_plans.ex",
     "lib/cadence/contact_planning/contact_requirement_templates.ex",
     "lib/cadence/contact_planning/contact_requirements.ex",
+    "lib/cadence/contact_planning/requirement_listing.ex",
     "lib/cadence/contact_planning/fleet_planning_policies.ex",
     "lib/cadence/contact_planning/fleet_planning_runs.ex",
     "lib/cadence/contact_planning/repair_links.ex",

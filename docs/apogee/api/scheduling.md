@@ -539,3 +539,49 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
   each draft keeps the policy snapshot it was made with.
 - Templates aren't change sets: edits are versioned and audited on the template (planning policy,
   not mission configuration).
+
+### Requirements (one-off; BACKLOG §8 8g)
+
+A one-off **contact requirement** is one spacecraft's need in one window. Templates generate them
+too; these endpoints list both and write the one-off kind. The wire **content** uses the
+requirement's own field names: `spacecraft_id, earliest_start, latest_end, service_direction,
+contact_intent, success_measure, minimum_duration_seconds, preferred_duration_seconds,
+minimum_data_volume_bytes, contact_count, minimum_separation_seconds, max_gap_seconds, priority,
+rationale, provider_constraints_document {allowed, excluded}, station_constraints_document
+{allowed, excluded}`.
+
+- `GET /requirements/schema` → `{fields, defaults}` in the template schema's field shape: the
+  template's `requirement.*` fields without the prefix, plus `spacecraft_id` (`reference`,
+  required), `earliest_start` / `latest_end` (`datetime`, required) and `max_gap_seconds`
+  (DECISIONS #74: `integer | null`, unit `s`, 600–604800, optional, `advanced`; "Longest time
+  without a contact"). `group` is `window` or `requirement`.
+- `GET /requirements?spacecraft_id=&state=&source=&page=&limit=` → `{requirements: [row], page,
+  next_page}`. Each row is a requirement at its **current version**, most recently changed first.
+  `state` is `active | closed | canceled`; `source` is `one_off | template`; `limit` 1–200
+  (default 50); `next_page` is `null` on the last page. A row is `{id, state, version, spacecraft
+  {id, name}, template_id | null, content, updated_at}`. `updated_at` is the current version's
+  time.
+- `GET /requirements/:id` → the row plus `versions: [{version, created_at, actor {kind, id,
+  name}}]` (newest first). `404 requirement_not_found`.
+- `POST /requirements` `{content}` → `201 {id, version: 1}`. Omitted fields take the schema's
+  `defaults`.
+- `POST /requirements/:id` `{content, expected_version}` → `201 {id, version}`. An **omitted** key
+  carries over from the current version; an explicit **`null` clears** a nullable field
+  (`max_gap_seconds: null` = no limit). `409 version_conflict` with `details.expected_version` =
+  the current version. `409 requirement_not_active` for a closed or canceled requirement. Run
+  `GET /requirements/:id/supersedes` first for the drafts a new version supersedes.
+- Errors: `422 invalid_params` keyed by field (`details.latest_end`, `details.max_gap_seconds` =
+  "must be between 600 and 604800 seconds" or "must not be longer than the window",
+  `details.spacecraft_id` = "unknown spacecraft", `details["content.<key>"]` = "unknown field",
+  `details.constraints`, `details.expected_version`); `403 forbidden`; anything else the domain
+  refuses is `422 requirement_rejected`. Writes publish the `contact_plans` invalidation.
+- `POST /requirements/:id/close` and `POST /requirements/:id/cancel` `{expected_version, reason}` →
+  `200 {id, state: "closed" | "canceled", version}`. Close = the need is over or met; cancel =
+  withdrawn. Both are **final** (nothing reopens a requirement; declare a new one). `reason` is
+  required, at most 2000 characters (`422 details.reason`). `409 version_conflict`
+  (`details.expected_version` = current), `409 requirement_not_active` with `details {state,
+  state_changed}` when it already ended (also on a new version), `404 requirement_not_found`.
+  Drafts that reference it go superseded (`requirement_closed`); `GET /requirements/:id/supersedes`
+  lists them first, in the same row shape as the templates' supersedes read.
+- List and show rows carry `state_changed: {at, by {kind, id, name}, reason}`, `null` while
+  active.

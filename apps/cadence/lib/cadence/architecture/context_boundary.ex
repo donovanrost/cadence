@@ -52,6 +52,8 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/scheduling.ex" => :composition,
     "lib/cadence/control/planning_policy.ex" => :composition,
     "lib/cadence/control/planning_templates.ex" => :composition,
+    "lib/cadence/control/planning_requirements.ex" => :composition,
+    "lib/cadence/control/planning_requirements/schema.ex" => :composition,
     "lib/cadence/control/uplink_qualification.ex" => :composition,
     "lib/cadence/control/uplink_qualification/booking.ex" => :composition,
     "lib/cadence/control/uplink_session_qualification.ex" => :composition,

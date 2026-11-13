@@ -1,0 +1,309 @@
+defmodule Cadence.Control.PlanningRequirements do
+  @moduledoc """
+  Console one-off contact requirements (BACKLOG §8 8g): list, show, create and new version.
+  Writes go through `ContactRequirements`, which authorizes, validates and versions them.
+
+  The wire `content` holds the requirement's fields (`Schema.content_keys/0`). On a new version,
+  an omitted key carries over from the current version and an explicit `null` clears a nullable
+  field (`max_gap_seconds: null` is no limit), as `ContactRequirements` merges them.
+  """
+
+  alias Cadence.Accounts
+  alias Cadence.Auth.Scope
+  alias Cadence.ContactPlanning.{ContactRequirements, RequirementListing}
+  alias Cadence.Control.PlanningRequirements.Schema
+  alias Cadence.SpacecraftStore
+
+  @states ~w(active closed canceled)
+  @sources ~w(one_off template)
+  @default_limit 50
+  @max_limit 200
+  @max_reason 2_000
+
+  @doc "`{fields, defaults}` for the requirement form."
+  @spec schema() :: map()
+  def schema, do: %{fields: Schema.fields(), defaults: Schema.defaults()}
+
+  @doc """
+  A page of requirements at their current version, most recently changed first. Params:
+  `spacecraft_id`, `state`, `source`, `page` (1-based), `limit` (1–#{@max_limit}).
+  """
+  @spec list(binary(), binary(), map()) :: {:ok, map()} | {:error, term()}
+  def list(organization_id, mission_id, params) do
+    with {:ok, filters} <- filters(params) do
+      %{entries: entries, next_page: next_page} =
+        RequirementListing.page(organization_id, mission_id, filters)
+
+      names = names(organization_id, mission_id, Enum.map(entries, &elem(&1, 1).spacecraft_id))
+
+      {:ok,
+       %{
+         requirements: Enum.map(entries, fn {req, version} -> row(req, version, names) end),
+         page: filters.page,
+         next_page: next_page
+       }}
+    end
+  end
+
+  @doc "One requirement with its content and version history."
+  @spec get(binary(), binary(), binary()) :: {:ok, map()} | {:error, :requirement_not_found}
+  def get(organization_id, mission_id, requirement_id) do
+    case ContactRequirements.fetch(organization_id, mission_id, requirement_id) do
+      {:ok, requirement, version} ->
+        names = names(organization_id, mission_id, [version.spacecraft_id])
+
+        versions =
+          organization_id
+          |> ContactRequirements.list_versions(mission_id, requirement_id)
+          |> Enum.map(&%{version: &1.version, created_at: &1.created_at, actor: actor(&1)})
+
+        {:ok, requirement |> row(version, names) |> Map.put(:versions, versions)}
+
+      {:error, _not_found} ->
+        {:error, :requirement_not_found}
+    end
+  end
+
+  @doc "Creates (`requirement_id` nil) or versions a requirement: `{:ok, %{id, version}}`."
+  @spec save(Scope.t(), binary(), binary() | nil, map()) :: {:ok, map()} | {:error, term()}
+  def save(%Scope{} = scope, mission_id, requirement_id, params) do
+    with {:ok, content} <- content(params["content"]),
+         {:ok, requirement, version} <- write(scope, mission_id, requirement_id, content, params) do
+      {:ok, %{id: requirement.contact_requirement_id, version: version.version}}
+    else
+      {:error, :stale_contact_requirement_version} ->
+        {:error, {:version_conflict, current_version(scope, mission_id, requirement_id)}}
+
+      {:error, :contact_requirement_not_active} ->
+        {:error, {:requirement_not_active, ended(scope, mission_id, requirement_id)}}
+
+      {:error, reason} ->
+        {:error, error(reason)}
+    end
+  end
+
+  @doc """
+  Closes (the need is over) or cancels (withdrawn) a requirement at `expected_version`, with a
+  required `reason`. Both are final: `{:ok, %{id, state, version}}`.
+  """
+  @spec end_requirement(Scope.t(), binary(), binary(), :close | :cancel, map()) ::
+          {:ok, map()} | {:error, term()}
+  def end_requirement(%Scope{} = scope, mission_id, requirement_id, action, params)
+      when action in [:close, :cancel] do
+    with {:ok, expected} <- expected_version(params["expected_version"]),
+         {:ok, reason} <- reason(params["reason"]),
+         {:ok, requirement} <-
+           apply(ContactRequirements, action, [
+             scope,
+             mission_id,
+             requirement_id,
+             expected,
+             reason
+           ]) do
+      {:ok,
+       %{
+         id: requirement.contact_requirement_id,
+         state: requirement.lifecycle_state,
+         version: requirement.current_version
+       }}
+    else
+      {:error, :stale_contact_requirement_version} ->
+        {:error, {:version_conflict, current_version(scope, mission_id, requirement_id)}}
+
+      {:error, :contact_requirement_not_active} ->
+        {:error, {:requirement_not_active, ended(scope, mission_id, requirement_id)}}
+
+      {:error, reason} ->
+        {:error, error(reason)}
+    end
+  end
+
+  defp expected_version(n) when is_integer(n) and n > 0, do: {:ok, n}
+
+  defp expected_version(_n),
+    do: {:error, {:invalid_params, %{expected_version: "is required (positive integer)"}}}
+
+  defp reason(reason) when is_binary(reason) do
+    trimmed = String.trim(reason)
+
+    cond do
+      trimmed == "" ->
+        reason(nil)
+
+      String.length(trimmed) > @max_reason ->
+        {:error, {:invalid_params, %{reason: "must be at most #{@max_reason} characters"}}}
+
+      true ->
+        {:ok, trimmed}
+    end
+  end
+
+  defp reason(_reason), do: {:error, {:invalid_params, %{reason: "is required"}}}
+
+  # fe-setup: "Already closed by Mira K." without a refetch.
+  defp ended(scope, mission_id, requirement_id) do
+    case ContactRequirements.fetch(scope.organization_id, mission_id, requirement_id) do
+      {:ok, requirement, _version} ->
+        %{state: requirement.lifecycle_state, state_changed: state_changed(requirement)}
+
+      {:error, _reason} ->
+        %{}
+    end
+  end
+
+  defp current_version(scope, mission_id, requirement_id) do
+    case ContactRequirements.fetch(scope.organization_id, mission_id, requirement_id) do
+      {:ok, requirement, _version} -> requirement.current_version
+      {:error, _reason} -> nil
+    end
+  end
+
+  # On create, omitted fields take the schema's defaults (`schema/0`'s `defaults`).
+  defp write(scope, mission_id, nil, content, _params),
+    do: ContactRequirements.create(scope, mission_id, Map.merge(Schema.defaults(), content))
+
+  defp write(scope, mission_id, requirement_id, content, params) do
+    with {:ok, expected} <- expected_version(params["expected_version"]) do
+      ContactRequirements.version(scope, mission_id, requirement_id, expected, content)
+    end
+  end
+
+  defp content(content) when is_map(content) do
+    case Map.keys(content) -- Schema.content_keys() do
+      [] ->
+        {:ok, content}
+
+      unknown ->
+        {:error, {:invalid_params, Map.new(unknown, &{"content.#{&1}", "unknown field"})}}
+    end
+  end
+
+  defp content(_content), do: {:error, {:invalid_params, %{content: "must be an object"}}}
+
+  defp row(requirement, version, names) do
+    %{
+      id: requirement.contact_requirement_id,
+      state: requirement.lifecycle_state,
+      version: version.version,
+      spacecraft: %{id: version.spacecraft_id, name: Map.get(names, version.spacecraft_id)},
+      template_id: RequirementListing.template_id(version),
+      content: version |> Map.from_struct() |> Map.take(content_atoms()),
+      updated_at: version.created_at,
+      state_changed: state_changed(requirement)
+    }
+  end
+
+  defp state_changed(%{lifecycle_state: :active}), do: nil
+
+  defp state_changed(requirement) do
+    %{
+      at: requirement.lifecycle_changed_at,
+      by: actor(%{created_by: requirement.lifecycle_changed_by}),
+      reason: requirement.lifecycle_reason
+    }
+  end
+
+  defp content_atoms, do: Enum.map(Schema.content_keys(), &String.to_existing_atom/1)
+
+  defp filters(params) do
+    with {:ok, state} <- choice(params["state"], @states, :state),
+         {:ok, source} <- choice(params["source"], @sources, :source),
+         {:ok, page} <- positive(params["page"], 1, nil, :page),
+         {:ok, limit} <- positive(params["limit"], @default_limit, @max_limit, :limit) do
+      {:ok,
+       %{
+         spacecraft_id: blank(params["spacecraft_id"]),
+         state: state,
+         source: source,
+         page: page,
+         limit: limit
+       }}
+    end
+  end
+
+  # String → atom only from the fixed lists above.
+  defp choice(nil, _allowed, _key), do: {:ok, nil}
+
+  defp choice(value, allowed, key) do
+    if value in allowed,
+      do: {:ok, String.to_existing_atom(value)},
+      else: {:error, {:invalid_params, %{key => "must be one of #{Enum.join(allowed, ", ")}"}}}
+  end
+
+  defp positive(nil, default, _max, _key), do: {:ok, default}
+
+  defp positive(value, default, max, key) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, ""} -> positive(n, default, max, key)
+      _other -> positive(:invalid, default, max, key)
+    end
+  end
+
+  defp positive(n, _default, max, _key)
+       when is_integer(n) and n > 0 and (is_nil(max) or n <= max),
+       do: {:ok, n}
+
+  defp positive(_value, _default, max, key),
+    do:
+      {:error, {:invalid_params, %{key => "must be a positive integer#{max && " up to #{max}"}"}}}
+
+  defp blank(""), do: nil
+  defp blank(value), do: value
+
+  defp names(organization_id, mission_id, ids) do
+    case SpacecraftStore.fetch_spacecrafts_in_batches(organization_id, mission_id, Enum.uniq(ids)) do
+      {:ok, found} -> Map.new(found, fn {id, craft} -> {id, craft.display_name} end)
+      {:error, _reason} -> %{}
+    end
+  end
+
+  defp actor(%{created_by: id}) when is_binary(id) do
+    name =
+      case Accounts.fetch_user(id) do
+        {:ok, user} -> user.display_name || user.email
+        _service_or_missing -> nil
+      end
+
+    %{kind: if(name, do: "user", else: "actor"), id: id, name: name}
+  end
+
+  defp actor(_version), do: nil
+
+  # Domain errors → console problems. Field validation becomes 422 details keyed by field.
+  defp error({:invalid_params, _details} = invalid), do: invalid
+
+  defp error({:invalid_contact_requirement, message}),
+    do: {:invalid_params, %{field_of(message) => message}}
+
+  defp error({:contact_requirement_field_invalid, field, message}),
+    do: {:invalid_params, %{to_string(field) => message}}
+
+  defp error({:contact_requirement_field_too_large, field, maximum}),
+    do: {:invalid_params, %{to_string(field) => "must be at most #{maximum} characters"}}
+
+  defp error(:contact_requirement_document_too_large),
+    do: {:invalid_params, %{content: "is too large"}}
+
+  defp error(:invalid_contact_requirement_constraints),
+    do: {:invalid_params, %{constraints: "allowed and excluded must be lists of ids"}}
+
+  defp error(:conflicting_contact_requirement_constraints),
+    do: {:invalid_params, %{constraints: "an id can't be both allowed and excluded"}}
+
+  defp error(:contact_requirement_spacecraft_not_found),
+    do: {:invalid_params, %{spacecraft_id: "unknown spacecraft"}}
+
+  defp error(:contact_requirement_not_found), do: :requirement_not_found
+
+  defp error(:contact_requirement_transition_reason_required),
+    do: {:invalid_params, %{reason: "is required"}}
+
+  defp error(reason), do: reason
+
+  # The domain's messages name the field first ("latest_end must be after earliest_start",
+  # "unsupported success_measure: …").
+  defp field_of(message) do
+    words = message |> String.split([" ", ":"], trim: true) |> Enum.take(2)
+    Enum.find(words, "content", &(&1 in Schema.content_keys()))
+  end
+end

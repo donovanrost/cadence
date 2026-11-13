@@ -48,6 +48,8 @@ defmodule CadenceWeb.Console.Problem do
     reviewer_is_author: {409, "You can't approve a version you saved."},
     policy_not_found: {404, "Policy or version not found."},
     template_not_found: {404, "Template not found."},
+    requirement_not_found: {404, "Contact requirement not found."},
+    requirement_not_active: {409, "That requirement is closed or canceled, so it can't change."},
     app_not_found: {404, "App not found."},
     settings_section_not_found: {404, "Settings section not found."},
     provider_account_not_found: {404, "Provider account not found."},
@@ -58,6 +60,7 @@ defmodule CadenceWeb.Console.Problem do
       {409, "The organization doesn't let missions change this setting."},
     app_action_failed: {422, "The app change was refused."},
     template_rejected: {422, "The template change was refused."},
+    requirement_rejected: {422, "The requirement change was refused."},
     policy_rejected: {422, "The policy change was refused."},
     plan_not_repairable:
       {409,

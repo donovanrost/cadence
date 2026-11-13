@@ -353,6 +353,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/contact_planning/contact_plans.ex" => :management,
     "lib/cadence/contact_planning/contact_requirement_templates.ex" => :management,
     "lib/cadence/contact_planning/contact_requirements.ex" => :management,
+    "lib/cadence/contact_planning/requirement_listing.ex" => :management,
     "lib/cadence/contact_planning/fleet_automation_actions.ex" => :control,
     "lib/cadence/contact_planning/fleet_planning_policies.ex" => :management,
     "lib/cadence/contact_planning/fleet_planning_runs.ex" => :management,
