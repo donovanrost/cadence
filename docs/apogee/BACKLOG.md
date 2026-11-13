@@ -389,7 +389,7 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 
 **A5 shared entity decoders: sites left for their owners** (fe-setup's survey 11-13; `api/entities.ts` makes name / scid / code nullable, so rendering sites need a fallback):
 - **fe-ops:** actor in investigate/configuration/api.ts:8, investigate/history/api.ts:14, alarms/episodes.ts:12, contacts/api.ts:49,67, now/actionQueue.ts:70, now/attention.ts:13, now/changeSet.ts:20, commands/request/brief.ts:37, timeline/api.ts:36, resolutions/api.ts:17 (commands/groups `actor_kind`/`user_id` is a different wire shape: keep, or ask api to align); spacecraft ref in investigate/uplink/api.ts:26, contacts/api.ts:28, contacts/findings.ts:34, contacts/singleBookings.ts:30,40, alarms/episodes.ts:23, timeline/api.ts:28; station ref in contacts/api.ts, contacts/readiness.ts (+ the hand-written StationRef), contacts/singleBookings.ts, contacts/findings.ts, investigate/uplink, investigate/passes, now/sources.ts.
-- **dashboards:** actor in dashboards/editor/contracts.ts:197.
+- **dashboards:** ~~actor in dashboards/editor/contracts.ts:197~~ done (91568857).
 - **lead:** role in api/session.ts:21, auth/api.ts:33, auth/words.ts (four guessed keys → `roleText`); StationRef in scheduling/api.ts:38.
 
 ### 12C. Branded ids, last and phased
