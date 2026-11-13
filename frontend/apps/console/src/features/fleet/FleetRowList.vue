@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import { formatCount, formatDuration, useNow, ApStatusMark } from "@/ui";
+import { formatCount, formatDuration, ApStatusMark } from "@/ui";
+import { useCoarseNow } from "./coarseClock.ts";
 import type { FleetSpacecraft } from "./api.ts";
 import { fleetOpState, fleetStateWord } from "./matrix.ts";
 
@@ -9,14 +10,15 @@ import { fleetOpState, fleetStateWord } from "./matrix.ts";
  * Line 1: name (the link, ≥44px tall) + state; line 2: SCID · plane · slot · last TLM in mono.
  */
 defineProps<{ rows: readonly FleetSpacecraft[]; total: number }>();
-const now = useNow();
+/** §2: Last TLM and Next contact move on the fleet's 10 s tick, not the 1 Hz clock. */
+const now = useCoarseNow();
 const pad = (n: number) => String(n).padStart(2, "0");
 const meta = (sc: FleetSpacecraft) =>
   [
     `SCID ${sc.scid}`,
     sc.plane === null ? null : `P${pad(sc.plane)}${sc.slot === null ? "" : ` · ${pad(sc.slot)}`}`,
     sc.last_received_at
-      ? formatDuration((now.value.getTime() - Date.parse(sc.last_received_at)) / 1000)
+      ? formatDuration((now.value - Date.parse(sc.last_received_at)) / 1000)
       : "never heard",
   ]
     .filter((part): part is string => part !== null)

@@ -2,7 +2,8 @@
 import { spacecraftIdParam } from "@/api/index.ts";
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from "vue";
 import { RouterLink } from "vue-router";
-import { formatDuration, plural, useNow, ApStatusMark } from "@/ui";
+import { formatDuration, plural, ApStatusMark } from "@/ui";
+import { useCoarseNow } from "./coarseClock.ts";
 import type { FleetSpacecraft } from "./api.ts";
 import { fitMatrix, fleetOpState, fleetStateWord, layoutMatrix, splitRows } from "./matrix.ts";
 import PlanePicker from "./PlanePicker.vue";
@@ -44,7 +45,8 @@ onMounted(() => {
 });
 onBeforeUnmount(() => observer?.disconnect());
 
-const now = useNow();
+/** §2: ages move on the fleet's 10 s tick, not the 1 Hz clock. */
+const now = useCoarseNow();
 const layout = computed(() => layoutMatrix(props.spacecraft));
 const planes = computed(() =>
   layout.value.rows.flatMap((row) => (row.plane === null ? [] : [row.plane])),
@@ -107,7 +109,7 @@ const inspector = computed(() => {
   const parts = [sc.name, `SCID ${sc.scid}`, fleetStateWord(sc.state)];
   if (sc.worst_point) parts.push(sc.worst_point.point_name);
   if (sc.last_received_at) {
-    const age = (now.value.getTime() - Date.parse(sc.last_received_at)) / 1000;
+    const age = (now.value - Date.parse(sc.last_received_at)) / 1000;
     parts.push(`last TLM ${formatDuration(age)}`);
   }
   return { state: fleetOpState(sc.state), text: parts.join(" · ") };
