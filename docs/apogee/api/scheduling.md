@@ -279,7 +279,9 @@ report it the same way:
   by checking that reservation with the provider. Execute answers `409 plan_not_resumable`.
 
 Plan detail (`GET /contact-plans/:id`, and the S4 edit response) carries `unconfirmed` (U30):
-`{window_ms, booked, passes: [{snapshot_id, provider: {id, name}, sent_at}]} | null`. It's non-null
+`{window_ms, booked, passes: [{snapshot_id, provider: {id, name | null} | null, sent_at}]} | null`.
+`provider` is `null` when Cadence holds no reservation for the booking (nothing came back to
+name the provider), and `name` is `null` for a provider the mission no longer lists. It's non-null
 whenever a placed booking is unanswered past the window. `booked` counts reserved passes; `passes`
 are the unconfirmed ones, soonest first (join `snapshot_id` to `passes[]` for spacecraft, station
 and times); `sent_at` is when the booking was placed.

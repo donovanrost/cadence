@@ -50,7 +50,7 @@ Commit 4d92b1f5e.
 
 | Item | Direction | State |
 | --- | --- | --- |
-| Plan detail `unconfirmed.passes[].provider` null when the reservation lookup fails; the console's K1 decode fails (`api.ts:209`) | server→doc | **HOLD** (reservation read in plan_confirmation) |
+| Plan detail `unconfirmed.passes[].provider` null when the reservation lookup fails; the console's K1 decode failed | doc→server | **fixed**: K1 reads null (lead ce69ef978); the null is genuine (no reservation record), so documented in scheduling.md, server unchanged |
 | Supersedes `day` null for a draft with no passes; the console decoded non-null | console | **fixed** by fe-setup 05cb18eb7 (nullable; the server keeps null) |
 | `POST …/reject` answers the bare plan read, not plan detail (no booking/unconfirmed/execution/chain) | server→doc | **HOLD** |
 | Template update stale write: `409 version_conflict` without `details.expected_version` | server→doc | **HOLD** (no template edits tonight) |
