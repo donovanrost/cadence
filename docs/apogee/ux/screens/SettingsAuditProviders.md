@@ -26,9 +26,16 @@ with Profile/People.
     will use Acme Space's <Section> settings. This mission's own values for it are discarded." It saves
     immediately with the version line.
   - **Org lock:** `allow_override` false keeps the section locked, as built.
-  - **Per field, later:** once api stores only the overridden paths, each field gets its own source tag and
-    `Override` / `Reset to inherited` (the Profile override pattern). Until then, don't show either control per
-    field.
+  - **Per field, chosen** (lead asked, 11-13; api has capacity). Once api stores only the overridden paths, each
+    field gets its own source tag and `Override` / `Reset to inherited` (the Profile override pattern), and the
+    section-level controls go. Why:
+    - A section copy silently freezes every other field in the section. They stop following the organization,
+      and nobody chose that.
+    - Per-field matches how profile overrides already work, so there's one model for "inherited unless
+      overridden".
+    - The section-level UI stays until then. Migration keeps only the fields that differ from the organization's
+      value at that moment; the rest inherit again. Record that as one audit entry per mission: "Settings now
+      follow the organization except the fields set for this mission."
 - **Saving:** settings that are change-set kinds (when domain adds them) stage (`Stage change`);
   everything else saves immediately with a version line (`v4 · 01:12Z by Donovan R.`). Governance
   changes that need approval follow the server's policy (ApDecision, reviewer ≠ author). Errors follow U20.
