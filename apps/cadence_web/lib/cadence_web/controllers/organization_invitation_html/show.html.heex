@@ -81,38 +81,55 @@
       action={~p"/invitations/#{@invitation_token}"}
       class="space-y-4"
     >
-      <.input
-        field={@form[:display_name]}
-        type="text"
-        label="Display Name"
-        placeholder="Flight Operator"
-        required
-        autofocus
-      />
-      <.input
-        field={@form[:password]}
-        type="password"
-        label="Password"
-        placeholder="Create a durable account password"
-        required
-        autocomplete="new-password"
-      />
-      <.input
-        field={@form[:password_confirmation]}
-        type="password"
-        label="Confirm Password"
-        placeholder="Re-enter your password"
-        required
-        autocomplete="new-password"
-      />
+      <%= if @existing_account? do %>
+        <.input
+          field={@form[:password]}
+          type="password"
+          label="Your current password"
+          required
+          autofocus
+          autocomplete="current-password"
+        />
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <.button type="submit" size={:md}>Accept Invitation</.button>
+          <p class="text-sm text-base-content/70">
+            You already have a Cadence account. Enter its password to join; accepting signs you in.
+          </p>
+        </div>
+      <% else %>
+        <.input
+          field={@form[:display_name]}
+          type="text"
+          label="Display Name"
+          placeholder="Flight Operator"
+          required
+          autofocus
+        />
+        <.input
+          field={@form[:password]}
+          type="password"
+          label="Password"
+          placeholder="Create a durable account password"
+          required
+          autocomplete="new-password"
+        />
+        <.input
+          field={@form[:password_confirmation]}
+          type="password"
+          label="Confirm Password"
+          placeholder="Re-enter your password"
+          required
+          autocomplete="new-password"
+        />
 
-      <div class="flex items-center justify-between gap-4 flex-wrap">
-        <.button type="submit" size={:md}>Accept Invitation</.button>
-        <p class="text-sm text-base-content/70">
-          Passwords must be at least 12 characters. Accepting this invitation signs you into the
-          durable operator session immediately.
-        </p>
-      </div>
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <.button type="submit" size={:md}>Accept Invitation</.button>
+          <p class="text-sm text-base-content/70">
+            Passwords must be at least 12 characters. Accepting this invitation signs you into the
+            durable operator session immediately.
+          </p>
+        </div>
+      <% end %>
     </.form>
   <% end %>
 </section>

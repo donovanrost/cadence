@@ -57,8 +57,8 @@ defmodule Cadence.Accounts do
           {:ok, User.t() | nil} | {:error, term()}
   defdelegate reconcile_environment_admin(policy), to: Authentication
 
-  @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
-  defdelegate sign_in(email, password), to: Authentication
+  @spec sign_in(binary(), binary(), keyword()) :: {:ok, issued_user_session()} | {:error, term()}
+  defdelegate sign_in(email, password, opts \\ []), to: Authentication
 
   @spec login_environment_admin(binary(), binary()) ::
           {:ok, issued_user_session()} | {:error, term()}
@@ -67,8 +67,9 @@ defmodule Cadence.Accounts do
   @spec login_user(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   defdelegate login_user(email, password), to: Authentication
 
-  @spec verify_user_password(User.t(), binary()) :: :ok | {:error, :invalid_credentials}
-  defdelegate verify_user_password(user, password), to: Authentication
+  @spec verify_user_password(User.t(), binary(), keyword()) ::
+          :ok | {:error, :invalid_credentials | {:too_many_attempts, pos_integer()}}
+  defdelegate verify_user_password(user, password, opts \\ []), to: Authentication
 
   @spec authenticate_user_session(binary()) ::
           {:ok, %{user: User.t(), session_context: user_session_context()}} | {:error, term()}
@@ -361,7 +362,20 @@ defmodule Cadence.Accounts do
     end
   end
 
-  @spec accept_organization_invitation(binary(), map()) ::
+  @doc """
+  Accepts an invitation by its emailed token and signs the person in.
+
+  - **No account** for the invited email: creates one with `display_name` and `password` (at
+    least 12 characters).
+  - **An account exists**: `password` must be that account's current password, checked through
+    the attempt limit like sign-in (`{:error, :invalid_credentials}` or `{:error,
+    {:too_many_attempts, retry_after}}`). The account's password, name and other sessions are
+    left alone. A disabled account gets `{:error, :account_disabled}`, and only after a right
+    password, so the answer never says whether the account exists or is disabled.
+
+  Options: `ip`, the client's address (attempt limit).
+  """
+  @spec accept_organization_invitation(binary(), map(), keyword()) ::
           {:ok,
            %{
              user: User.t(),
@@ -372,23 +386,17 @@ defmodule Cadence.Accounts do
              current_organization_id: binary()
            }}
           | {:error, term()}
-  def accept_organization_invitation(invitation_token, attrs)
+  def accept_organization_invitation(invitation_token, attrs, opts \\ [])
       when is_binary(invitation_token) and is_map(attrs) do
-    with {:ok, acceptance_attrs} <- validate_invitation_acceptance_attrs(attrs) do
+    with {:ok, invitation} <- fetch_organization_invitation(invitation_token),
+         {:ok, account} <- invited_account(invitation, attrs, opts) do
       token_digest = Token.digest(invitation_token)
 
       Repo.transaction(fn ->
         with {:ok, invitation_row, invitation} <- lock_usable_invitation(Repo, token_digest),
-             {:ok, user} <- upsert_invited_user(Repo, invitation, acceptance_attrs),
+             {:ok, user} <- join_invited_user(Repo, invitation, account),
              {:ok, user} <-
                grant_platform_admin_if_requested(Repo, user, invitation.grant_platform_admin),
-             :ok <-
-               Authentication.upsert_password_credential(
-                 Repo,
-                 user.user_id,
-                 acceptance_attrs.password,
-                 %{}
-               ),
              {:ok, membership} <-
                upsert_membership(
                  Repo,
@@ -402,7 +410,6 @@ defmodule Cadence.Accounts do
                ),
              {:ok, accepted_invitation} <-
                mark_invitation_accepted(Repo, invitation_row, user.user_id),
-             :ok <- Authentication.revoke_all_user_sessions(Repo, user.user_id),
              {:ok, issued_session} <-
                Authentication.issue_browser_session(user, membership.organization_id) do
           %{
@@ -420,6 +427,26 @@ defmodule Cadence.Accounts do
       |> unwrap_transaction_result()
     end
   end
+
+  # Who accepts: a new account (validated attrs) or the existing one, proven by its password.
+  defp invited_account(%OrganizationInvitation{email: email}, attrs, opts) do
+    case Repo.get_by(UserRow, email: email) do
+      nil ->
+        with {:ok, new_account} <- validate_invitation_acceptance_attrs(attrs),
+             do: {:ok, {:new, new_account}}
+
+      %UserRow{} = row ->
+        user = UserRow.to_domain(row)
+        password = attrs |> Map.get(:password, Map.get(attrs, "password")) |> to_string()
+
+        with :ok <- Authentication.verify_account_password(user, password, opts),
+             :ok <- ensure_active_account(user),
+             do: {:ok, {:existing, user}}
+    end
+  end
+
+  defp ensure_active_account(%User{lifecycle_state: :active}), do: :ok
+  defp ensure_active_account(%User{}), do: {:error, :account_disabled}
 
   @spec accept_invitation_as_user(binary(), binary()) ::
           {:ok,
@@ -788,42 +815,44 @@ defmodule Cadence.Accounts do
     end
   end
 
-  defp upsert_invited_user(repo, %OrganizationInvitation{} = invitation, acceptance_attrs)
-       when is_map(acceptance_attrs) do
-    email = invitation.email
-    display_name = Map.fetch!(acceptance_attrs, :display_name)
+  defp join_invited_user(repo, %OrganizationInvitation{email: email}, {:new, acceptance_attrs}) do
+    # Someone created the account since the password check: start over rather than overwrite it.
+    if repo.get_by(UserRow, email: email) do
+      {:error, :organization_invitation_unavailable}
+    else
+      user =
+        User.new(%{
+          email: email,
+          display_name: acceptance_attrs.display_name,
+          capabilities: [],
+          confirmed_at: DateTime.utc_now(),
+          lifecycle_state: :active,
+          metadata: %{}
+        })
 
-    case repo.get_by(UserRow, email: email) do
-      nil ->
-        user =
-          User.new(%{
-            email: email,
-            display_name: display_name,
-            capabilities: [],
-            confirmed_at: DateTime.utc_now(),
-            lifecycle_state: :active,
-            metadata: %{}
-          })
-
-        Authentication.upsert_user(repo, user)
-
-      %UserRow{} = row ->
-        existing_user = UserRow.to_domain(row)
-
-        updated_user =
-          User.new(%{
-            user_id: existing_user.user_id,
-            email: existing_user.email,
-            display_name: display_name,
-            capabilities: existing_user.capabilities,
-            confirmed_at: existing_user.confirmed_at || DateTime.utc_now(),
-            lifecycle_state: :active,
-            metadata: existing_user.metadata
-          })
-
-        Authentication.upsert_user(repo, updated_user)
+      with {:ok, user} <- Authentication.upsert_user(repo, user),
+           :ok <-
+             Authentication.upsert_password_credential(
+               repo,
+               user.user_id,
+               acceptance_attrs.password,
+               %{}
+             ),
+           do: {:ok, user}
     end
   end
+
+  # The emailed token proves the address, so an unconfirmed account becomes confirmed; nothing
+  # else about the account changes.
+  defp join_invited_user(
+         _repo,
+         _invitation,
+         {:existing, %User{confirmed_at: %DateTime{}} = user}
+       ),
+       do: {:ok, user}
+
+  defp join_invited_user(repo, _invitation, {:existing, %User{} = user}),
+    do: Authentication.upsert_user(repo, %User{user | confirmed_at: DateTime.utc_now()})
 
   defp mark_invitation_accepted(repo, %OrganizationInvitationRow{} = row, accepted_by_user_id)
        when is_binary(accepted_by_user_id) do

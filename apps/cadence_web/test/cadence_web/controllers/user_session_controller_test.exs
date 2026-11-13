@@ -21,6 +21,26 @@ defmodule CadenceWeb.UserSessionControllerTest do
       assert is_binary(get_session(conn, :user_session_token))
       assert get_session(conn, :current_organization_id) == org.organization_id
     end
+
+    test "wrong passwords are held back, alike for a known and an unknown email", %{conn: conn} do
+      user = TestFixtures.persist_user!()
+      unknown = "nobody-#{System.unique_integer([:positive])}@example.com"
+      sign_in = &post(%{conn | remote_ip: {10, 9, 9, 9}}, "/sign-in", %{"user" => &1})
+
+      for email <- [user.email, unknown] do
+        for _ <- 1..6, do: sign_in.(%{"email" => email, "password" => "wrong"})
+
+        held = sign_in.(%{"email" => email, "password" => TestFixtures.default_password()})
+
+        assert redirected_to(held) == "/sign-in"
+        assert get_resp_header(held, "retry-after") == ["1"]
+
+        assert Phoenix.Flash.get(held.assigns.flash, :error) ==
+                 "Too many wrong passwords. Try again in 1 second."
+
+        refute get_session(held, :user_session_token)
+      end
+    end
   end
 
   describe "PUT /session/organization" do

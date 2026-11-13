@@ -24,7 +24,8 @@ defmodule CadenceWeb.AdminModeController do
     current_scope = conn.assigns.current_scope
 
     with true <- Scope.platform_admin_eligible?(current_scope),
-         :ok <- Cadence.Auth.verify_user_password(current_scope.user, password) do
+         :ok <-
+           Cadence.Auth.verify_user_password(current_scope.user, password, ip: conn.remote_ip) do
       conn
       |> put_session(:admin_mode_expires_at, AdminMode.expires_at())
       |> put_flash(:info, "Admin mode enabled.")
@@ -38,6 +39,11 @@ defmodule CadenceWeb.AdminModeController do
       {:error, :invalid_credentials} ->
         conn
         |> put_flash(:error, "The supplied password was rejected.")
+        |> redirect(to: ~p"/admin-mode")
+
+      {:error, {:too_many_attempts, retry_after}} ->
+        conn
+        |> put_flash(:error, CadenceWeb.UserSessionController.too_many_attempts(retry_after))
         |> redirect(to: ~p"/admin-mode")
     end
   end
