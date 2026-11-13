@@ -81,6 +81,15 @@ filters: actor (select) · mission (select) · kind as a one-of segmented contro
   this account (link to Setup › Ground stations › Providers).
 - **Removal:** not available yet (no account retirement in the domain). Hide `Remove`, and say "Accounts
   can't be removed yet." in the detail's Technical details, rather than a disabled dead button.
+- **Mission provider detail, `Account grant` row** (Setup › Ground stations › Providers, L12; fe-setup 2e899643c).
+  Label `Account grant`, not `Grant`. Values come from a word map over the grant's `state`, never the raw state:
+  - active: `Active · v3`.
+  - revoked: `Revoked · v3` in crit text. The detail also shows a crit callout: "The organization revoked this
+    mission's grant to <account name>, so this provider can't be used until it's added again from an active
+    grant." Without the account name (members): "…revoked this mission's grant, so…".
+  - unrecognized: `v3`, with the state left out (U20).
+  - `null` (an older provider bound without a grant): `None: set up before account grants`. Not "bound
+    directly", which is model wording.
 - Health is real only: if the server doesn't check credentials, the status is `NOT CHECKED` (hatched),
   not connected.
 
