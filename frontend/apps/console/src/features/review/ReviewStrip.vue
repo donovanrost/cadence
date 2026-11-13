@@ -25,7 +25,7 @@ const volumeTile = computed(() => {
     caption:
       v.provider_bytes === null
         ? "No provider reports"
-        : `of ${bytes(v.provider_bytes)} provider-reported`,
+        : `provider reported ${bytes(v.provider_bytes)}`,
     state:
       v.received_bytes !== null && v.provider_bytes !== null && v.received_bytes < v.provider_bytes
         ? ("caution" as const)

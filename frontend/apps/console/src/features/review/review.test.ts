@@ -78,7 +78,7 @@ describe("pass review summary", () => {
     const s = await summary();
     expect(s.failed).toBe(0);
     expect(s.missed_by_owner).toEqual({ provider: 0, us: 0, weather: 0, unknown: 0 });
-    expect(ownerCaption(s.partial_by_owner)).toBe("10 us");
+    expect(ownerCaption(s.partial_by_owner)).toBe("10 on our side");
     expect(ownerCaption(s.missed_by_owner)).toBeUndefined();
   });
   it("says the verdict against the target, and freshness in words", async () => {

@@ -135,8 +135,12 @@ export function fieldErrors(details: unknown): Record<string, string> {
 export function statusTag(a: ProviderAccount): { state: OpState; label: string } {
   switch (a.status) {
     case "connected":
-      // The server's check only resolves the reference today (ux): never claim the provider.
-      return { state: "off", label: "Reference OK · provider not contacted" };
+      // The server's check only resolves the reference today (ux): never claim the provider. With a
+      // last successful call, that column carries the contact (ux §7 #10).
+      return {
+        state: "off",
+        label: a.last_success_at ? "Reference OK" : "Reference OK · provider not contacted",
+      };
     case "expiring":
       return { state: "caution", label: "Credentials expiring" };
     case "auth_failed":

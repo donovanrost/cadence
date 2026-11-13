@@ -39,7 +39,7 @@ const meta = computed(() => {
   const v = props.section.version;
   return v
     ? `v${v.version} · ${formatShort(new Date(v.at))}${v.actor ? ` by ${v.actor.name}` : ""}`
-    : props.section.key;
+    : undefined; // ux §7 #11: raw keys belong in Technical details, not the header.
 });
 
 function submit() {

@@ -66,11 +66,11 @@ export const ownerWord: Readonly<Record<Owner, string>> = {
   unknown: "Unknown",
 };
 
-/** Strip caption: "5 provider · 3 us" (zeros left out). */
+/** Strip caption: "5 provider · 3 on our side" (zeros left out; ux §7 #5). */
 export function ownerCaption(counts: Readonly<Record<Owner, number>>): string | undefined {
   const parts = (Object.keys(ownerWord) as Owner[])
     .filter((o) => counts[o] > 0)
-    .map((o) => `${counts[o]} ${o === "us" ? "us" : ownerWord[o].toLowerCase()}`);
+    .map((o) => `${counts[o]} ${o === "us" ? "on our side" : ownerWord[o].toLowerCase()}`);
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 

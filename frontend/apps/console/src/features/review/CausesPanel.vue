@@ -4,7 +4,7 @@ import { ApEmptyState, ApPanel } from "@/ui";
 import type { CauseLine } from "./api.ts";
 import { causeText, ownerWord } from "./format.ts";
 
-/** R2 · Why passes were lost: one bar per cause, missed (crit) then partial (caution). */
+/** R2 · Why passes were lost (or fell short, when none were missed): one bar per cause. */
 const props = defineProps<{ causes: readonly CauseLine[] }>();
 const lines = computed(() =>
   [...props.causes]
@@ -13,10 +13,14 @@ const lines = computed(() =>
 );
 const max = computed(() => Math.max(1, ...lines.value.map((c) => c.missed + c.partial)));
 const width = (n: number) => `${(n / max.value) * 100}%`;
+/** ux §7 #2: "lost" only when a pass was missed; partial-only reads "fell short". */
+const title = computed(() =>
+  props.causes.some((c) => c.missed > 0) ? "Why passes were lost" : "Why passes fell short",
+);
 </script>
 
 <template>
-  <ApPanel index="R2" title="Why passes were lost" meta="Owner decides who pays">
+  <ApPanel index="R2" :title="title" meta="By who owns the cause">
     <ApEmptyState
       v-if="lines.length === 0"
       state="off"
