@@ -126,9 +126,8 @@ defmodule CadenceWeb.Router do
 
     delete("/session", UserSessionController, :delete)
     put("/session/organization", UserSessionController, :update)
-    get("/admin-mode", AdminModeController, :new)
-    post("/admin-mode", AdminModeController, :create)
-    delete("/admin-mode", AdminModeController, :delete)
+    # L6: the admin-mode page is gone (DECISIONS #79); the console's account menu holds it.
+    get("/admin-mode", AuthRedirectController, :admin_mode)
 
     get("/missions/:mission_id/ops/contact-workspace", ContactWorkspaceController, :show)
 

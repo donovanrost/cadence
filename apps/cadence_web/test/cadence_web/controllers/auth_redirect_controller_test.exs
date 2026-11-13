@@ -25,4 +25,9 @@ defmodule CadenceWeb.AuthRedirectControllerTest do
     conn = post(conn, "/invitations/tok-123", %{})
     assert redirected_to(conn, 303) == "/console/invitations/tok-123"
   end
+
+  test "the old admin-mode page goes to the console (L6; the account menu holds admin mode)" do
+    conn = CadenceWeb.TestFixtures.persist_user!() |> CadenceWeb.TestFixtures.member_conn()
+    assert redirected_to(get(conn, "/admin-mode")) == "/console"
+  end
 end

@@ -69,13 +69,4 @@ defmodule CadenceWeb.UserSessionController do
     |> configure_session(renew: true)
     |> clear_session()
   end
-
-  @doc "The admin-mode words for a held-back password check."
-  def too_many_attempts(retry_after),
-    do: "Too many wrong passwords. Try again in #{wait(retry_after)}."
-
-  defp wait(1), do: "1 second"
-  defp wait(seconds) when seconds < 60, do: "#{seconds} seconds"
-  defp wait(seconds) when seconds < 120, do: "a minute"
-  defp wait(seconds), do: "#{div(seconds + 59, 60)} minutes"
 end

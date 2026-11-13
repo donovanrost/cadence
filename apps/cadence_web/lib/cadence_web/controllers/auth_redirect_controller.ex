@@ -25,6 +25,9 @@ defmodule CadenceWeb.AuthRedirectController do
 
   def no_organization(conn, _params), do: redirect(conn, to: "/console/no-organization")
 
+  @doc "L6: the old admin-mode page; the console's account menu holds admin mode now."
+  def admin_mode(conn, _params), do: redirect(conn, to: "/console")
+
   @doc "A legacy sign-in form POSTed from an old tab: 303 to the console's sign-in (DECISIONS #79)."
   def sign_in_form(conn, _params),
     do: conn |> put_status(:see_other) |> redirect(to: "/console/sign-in")
