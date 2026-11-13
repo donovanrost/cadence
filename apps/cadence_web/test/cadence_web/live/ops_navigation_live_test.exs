@@ -87,8 +87,8 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
     })
   end
 
-  test "legacy Explore bookmarks retain their complete query string" do
-    {conn, mission} = signed_in()
+  test "legacy Explore bookmarks go to the console's Telemetry with the point and range" do
+    {conn, _user, organization, mission} = signed_in_user_org_and_mission()
 
     conn =
       get(
@@ -99,7 +99,7 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
     assert conn.status == 301
 
     assert get_resp_header(conn, "location") == [
-             "/missions/#{mission.mission_id}/ops/explore?point_id=HK.temp&time_mode=historical&from=2026-08-01T12%3A00%3A00Z"
+             "/console/#{organization.slug}/#{mission.slug}/telemetry?from=2026-08-01T12%3A00%3A00Z&p=HK.temp"
            ]
   end
 

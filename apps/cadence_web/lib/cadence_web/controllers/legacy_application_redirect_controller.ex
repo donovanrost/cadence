@@ -1,27 +1,21 @@
 defmodule CadenceWeb.LegacyApplicationRedirectController do
   @moduledoc """
-  Redirects retired application URLs to their canonical generic destinations.
+  Redirects retired application URLs to the console (DECISIONS #79): a spacecraft's telemetry
+  decom pages go to the spacecraft's decom app in Setup.
 
   Legacy mappings are compatibility policy, not application-host dispatch.
-  Keeping them here prevents the generic host from acquiring one `live_action`
-  branch for every historical application URL.
   """
 
   use CadenceWeb, :controller
 
-  def telemetry_decom(conn, %{
-        "mission_id" => mission_id,
-        "spacecraft_id" => spacecraft_id
-      }) do
-    redirect_301(
-      conn,
-      ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/applications/telemetry_decom"
-    )
-  end
+  alias CadenceWeb.ConsolePaths
 
-  defp redirect_301(conn, path) do
+  def telemetry_decom(conn, %{"mission_id" => mission_id, "spacecraft_id" => spacecraft_id}) do
+    org = conn.assigns.current_scope && conn.assigns.current_scope.organization_id
+    rest = "/setup/spacecraft/#{ConsolePaths.segment(spacecraft_id)}/apps/telemetry_decom"
+
     conn
     |> put_status(:moved_permanently)
-    |> redirect(to: path)
+    |> redirect(to: ConsolePaths.mission(org, mission_id, rest))
   end
 end
