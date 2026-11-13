@@ -11,6 +11,7 @@ import {
   ApEmptyState,
   ApKeyValue,
   ApPanel,
+  ApStateTrail,
   ApTag,
 } from "@/ui";
 import {
@@ -26,13 +27,15 @@ import SettlementBlock from "./SettlementBlock.vue";
 import { noRecoverText, readinessTag, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
+import PassUplinks from "./PassUplinks.vue";
+import { contactTrail } from "./trail.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import { stationLabel } from "./gantt.ts";
 
 /**
  * D2 · Selected pass (Contacts.md): spacecraft + state, station and countdown, window, duration,
- * source. Max elevation, sky plot and downlink estimates are omitted (no propagation, DECISIONS #4);
- * Swap station / Release stay hidden until their endpoints exist.
+ * source, the contact's state trail and the requests queued on it. Max elevation, sky plot and
+ * downlink estimates are omitted (no propagation, DECISIONS #4); Swap station is out (#68).
  */
 const props = defineProps<{
   missionId: string;
@@ -188,7 +191,9 @@ const countdown = computed(() => {
           <p class="m-0 pt-1 font-mono">reason: {{ readiness.reason }}</p>
         </details>
       </div>
+      <ApStateTrail v-if="state" :steps="contactTrail(state)" label="Contact state" />
       <ApKeyValue :items="facts" />
+      <PassUplinks :mission-id="missionId" :pass-id="pass.id" />
       <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>
       <ReleasePass
         :mission-id="missionId"

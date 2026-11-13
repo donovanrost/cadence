@@ -1,4 +1,5 @@
 import { findingTitle, findingsMeta } from "./findings.ts";
+import { contactTrail } from "./trail.ts";
 import { duration, findingRows } from "./findingRows.ts";
 import type { Availability, AvailabilityWindow } from "@/features/scheduling/index.ts";
 import { releaseErrorWords } from "./release.ts";
@@ -442,5 +443,20 @@ describe("D2 Release words (50c5e572, ux)", () => {
       tone: "caution",
       text: "It's unclear whether Northlight canceled it (Window locked). The pass reads Unknown until Northlight answers.",
     });
+  });
+});
+
+describe("D2 state trail (Contacts.md, ScheduleFlow M1)", () => {
+  it("walks the path to where the contact is, marking only outcomes", () => {
+    expect(contactTrail("in_contact")).toEqual([
+      { label: "Requested" },
+      { label: "Confirmed" },
+      { label: "In contact" },
+    ]);
+    expect(contactTrail("rejected")).toEqual([
+      { label: "Requested" },
+      { label: "Rejected", outcome: "caution" },
+    ]);
+    expect(contactTrail("ended")).toContainEqual({ label: "Ended · not verified" });
   });
 });
