@@ -7,10 +7,5 @@ import_config "../../cadence/config/config.exs"
 
 config :cadence_simulator,
   provider_http: [enabled: false],
-  provider_store: [
-    path:
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_simulator_provider_test_#{System.get_env("MIX_TEST_PARTITION", "0")}.dets"
-      )
-  ]
+  # provider_store.path is per partition: set in runtime.exs (#50).
+  provider_store: []
