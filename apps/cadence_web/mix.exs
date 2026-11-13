@@ -98,11 +98,85 @@ defmodule CadenceWeb.MixProject do
         "test.browser.federation"
       ],
       "test.browser.federation": [
-        "cmd --cd ../../frontend corepack pnpm@11.22.0 run test:browser:contract",
+        &run_browser_contract_tests/1,
         &build_federation_assets/1,
-        "cmd env CADENCE_BROWSER_PROPS_DIFF=true MIX_ENV=test mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/federation_browser_smoke_test.exs browser_test/cadence_web/assets/admin_mode_browser_smoke_test.exs browser_test/cadence_web/assets/command_workspace_browser_test.exs browser_test/cadence_web/assets/spacecraft_configuration_browser_test.exs browser_test/cadence_web/assets/settings_browser_test.exs test/cadence_web/ops_contact_scheduling_page_test.exs"
+        &run_federation_browser_tests/1
       ]
     ]
+  end
+
+  # The federation browser tests. With CADENCE_BROWSER_SHARD=k/n (CI's parallel browser jobs)
+  # only every n-th file from the k-th runs, so the order balances the shards: the two
+  # federation-fixture suites, which build every plugin, are the heaviest and alternate.
+  @federation_browser_tests [
+    "browser_test/cadence_web/assets/federation_browser_smoke_test.exs",
+    "test/cadence_web/ops_contact_scheduling_page_test.exs",
+    "browser_test/cadence_web/assets/command_workspace_browser_test.exs",
+    "browser_test/cadence_web/assets/admin_mode_browser_smoke_test.exs",
+    "browser_test/cadence_web/assets/spacecraft_configuration_browser_test.exs",
+    "browser_test/cadence_web/assets/settings_browser_test.exs"
+  ]
+
+  # The node contract tests for the browser harness run once: unsharded, or in shard 1.
+  defp run_browser_contract_tests(_args) do
+    case browser_shard() do
+      {k, _n} when k > 1 ->
+        Mix.shell().info("Browser contract tests run in shard 1")
+
+      _unsharded_or_first ->
+        Mix.Task.reenable("cmd")
+
+        Mix.Task.run("cmd", [
+          "--cd",
+          "../../frontend",
+          "corepack",
+          "pnpm@11.22.0",
+          "run",
+          "test:browser:contract"
+        ])
+    end
+  end
+
+  defp run_federation_browser_tests(_args) do
+    files =
+      case browser_shard() do
+        nil -> @federation_browser_tests
+        {k, n} -> shard_files(@federation_browser_tests, k, n)
+      end
+
+    Mix.Task.reenable("cmd")
+
+    Mix.Task.run(
+      "cmd",
+      ~w(env CADENCE_BROWSER_PROPS_DIFF=true MIX_ENV=test mix test --include browser_smoke
+         --only browser_smoke --slowest-modules 10) ++ files
+    )
+  end
+
+  defp shard_files(files, k, n) do
+    case for({file, index} <- Enum.with_index(files), rem(index, n) == k - 1, do: file) do
+      # mix test without files would run every browser_smoke test instead of none.
+      [] -> Mix.raise("CADENCE_BROWSER_SHARD=#{k}/#{n} selects no browser test files")
+      selected -> selected
+    end
+  end
+
+  defp browser_shard do
+    case System.get_env("CADENCE_BROWSER_SHARD") do
+      nil ->
+        nil
+
+      shard ->
+        with [k, n] <- String.split(shard, "/"),
+             {k, ""} <- Integer.parse(k),
+             {n, ""} <- Integer.parse(n),
+             true <- k in 1..n//1 do
+          {k, n}
+        else
+          _invalid ->
+            Mix.raise("CADENCE_BROWSER_SHARD must be k/n with 1 <= k <= n, got #{shard}")
+        end
+    end
   end
 
   # CI builds these assets once (its browser-assets job) and hands them to the browser jobs,

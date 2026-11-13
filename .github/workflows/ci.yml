@@ -314,11 +314,15 @@ jobs:
 
   # Not in ci-ok yet: joins after a week without flakes (docs/ci/browser-in-ci-ok.md).
   browser:
-    name: Federation browser
+    name: Federation browser (${{ matrix.shard }}/2)
     needs: [changes, browser-assets]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       postgres:
         # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
@@ -375,11 +379,14 @@ jobs:
         working-directory: apps/cadence_web
         env:
           CADENCE_BROWSER_ASSETS_PREBUILT: "1"
+          # Which of the alias's browser test files run here (apps/cadence_web/mix.exs).
+          CADENCE_BROWSER_SHARD: ${{ matrix.shard }}/2
           # Screenshots and failure.png/failure.txt land here; uploaded below when a step fails.
           CADENCE_COMMAND_WORKSPACE_ARTIFACTS: ${{ runner.temp }}/browser-artifacts/command-workspace
-      # Runs even when the federation tests fail, so one run reports every browser failure.
+      # Shard 2 only (it has the lighter federation files). Runs even when the federation tests
+      # fail, so one run reports every browser failure.
       - name: Exercise the lazy Ops pages in the production browser
-        if: ${{ !cancelled() && steps.federation.conclusion != 'skipped' }}
+        if: ${{ !cancelled() && matrix.shard == 2 && steps.federation.conclusion != 'skipped' }}
         run: mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/ops_initial_state_browser_test.exs
         working-directory: apps/cadence_web
         env:
@@ -389,7 +396,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-artifacts
+          name: browser-artifacts-${{ matrix.shard }}
           path: ${{ runner.temp }}/browser-artifacts
           if-no-files-found: ignore
           retention-days: 7
