@@ -1,5 +1,12 @@
-import type { MissionId } from "@/api/index.ts";
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  decoders as d,
+  request,
+  spacecraftId as spacecraftIdReader,
+  type ApiResult,
+  type Decoded,
+  type MissionId,
+  type SpacecraftId,
+} from "@/api/index.ts";
 import type { OpState } from "@/ui";
 import { engineeringValue } from "@/features/alarms/index.ts";
 
@@ -68,5 +75,41 @@ export function fetchPoints(
     `/missions/${encodeURIComponent(missionId)}/telemetry/points?${params.toString()}`,
     pointsReader,
     signal ? { signal } : {},
+  );
+}
+
+/**
+ * POST /telemetry/latest (api, per-target values): each spacecraft's current value of a few
+ * points, from the current-value cache. Values are JSON text (64-bit safe); stale per the fleet
+ * rule; a spacecraft with no value yet has value_json null.
+ */
+export const latestValuesReader = d.object({
+  values: d.array(
+    d.object({
+      spacecraft_id: spacecraftIdReader,
+      point_id: d.token,
+      value_json: d.nullable(d.string),
+      received_at: d.nullable(d.timestamp),
+      stale: d.boolean,
+    }),
+    5_000,
+  ),
+});
+export type LatestValues = Decoded<typeof latestValuesReader>;
+
+export function fetchLatestValues(
+  missionId: MissionId,
+  pointIds: readonly string[],
+  spacecraftIds: readonly SpacecraftId[],
+  signal?: AbortSignal,
+): Promise<ApiResult<LatestValues>> {
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/telemetry/latest`,
+    latestValuesReader,
+    {
+      method: "POST",
+      body: { point_ids: [...pointIds], spacecraft_ids: [...spacecraftIds] },
+      ...(signal ? { signal } : {}),
+    },
   );
 }

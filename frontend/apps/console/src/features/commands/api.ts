@@ -54,6 +54,13 @@ const argument = d.object({
     d.object({ minimum_json: d.nullable(d.string), maximum_json: d.nullable(d.string) }),
   ),
   unit: d.nullable(d.string),
+  /**
+   * B2's Now column (api, per-target values): the point whose value is this argument's current
+   * setting, from the verifier that compares a point with this argument; null when none.
+   */
+  current_point: d.optional(
+    d.nullable(d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) })),
+  ),
 });
 export type CommandArgument = Decoded<typeof argument>;
 

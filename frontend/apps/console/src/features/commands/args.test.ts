@@ -14,6 +14,7 @@ const arg = (overrides: Partial<CommandArgument>): CommandArgument => ({
   choices: [],
   valid_range: null,
   unit: null,
+  current_point: undefined,
   ...overrides,
 });
 

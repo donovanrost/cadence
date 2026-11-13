@@ -193,3 +193,49 @@ export function verifierLine(
   const within = longest > 0 ? ` within ${Math.round(longest / 1000)} s` : "";
   return { text: `Verifies ${shown.map((v) => v.name).join(", ")}${within}`, verifiable: true };
 }
+
+const decimals = (text: string) => (text.includes(".") ? (text.split(".")[1]?.length ?? 0) : 0);
+
+/**
+ * `Current + 2.0` (B2): a target's current value plus the form's, kept to the inputs' precision.
+ * Null when either isn't a plain number.
+ */
+export function addToCurrent(currentJson: string, deltaText: string): string | null {
+  const a = currentJson.trim();
+  const b = deltaText.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(a) || !/^-?\d+(\.\d+)?$/.test(b)) return null;
+  const places = Math.max(decimals(a), decimals(b));
+  return (Number(a) + Number(b)).toFixed(places);
+}
+
+/** Each target's current value of an argument's point: argument id → spacecraft id → JSON text. */
+export type CurrentValues = ReadonlyMap<string, ReadonlyMap<string, string | null>>;
+
+/**
+ * `Current + <form value>`: every Per-target argument with a current point in the same unit gets
+ * each target's current value plus the form's; others are left as they are.
+ */
+export function fillFromCurrent(
+  item: StackItem,
+  targetIds: readonly string[],
+  current: CurrentValues,
+): StackItem["perTarget"] {
+  const out: Record<string, Readonly<Record<string, string>>> = { ...item.perTarget };
+  for (const arg of item.command.arguments) {
+    if (!(arg.id in item.perTarget) || !sameUnit(arg)) continue;
+    const byTarget = current.get(arg.id);
+    if (!byTarget) continue;
+    const next: Record<string, string> = { ...item.perTarget[arg.id] };
+    for (const id of targetIds) {
+      const now = byTarget.get(id);
+      const sum = now == null ? null : addToCurrent(now, item.values[arg.id] ?? "");
+      if (sum !== null) next[id] = sum;
+    }
+    out[arg.id] = next;
+  }
+  return out;
+}
+
+/** The argument's current point reads in its own unit, so adding to it is meaningful. */
+export const sameUnit = (arg: StackItem["command"]["arguments"][number]) =>
+  arg.current_point != null && (arg.current_point.unit ?? null) === (arg.unit ?? null);

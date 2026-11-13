@@ -5,8 +5,10 @@ import type { CommandArgument, CommandDetail } from "../api.ts";
 import { argumentValuesJson, buildDraft } from "../compose/draft.ts";
 import { splitArgs } from "../compose/resend.ts";
 import {
+  addToCurrent,
   checkItem,
   clearPerTarget,
+  fillFromCurrent,
   fillFromForm,
   newItem,
   pastePerTargetCsv,
@@ -37,6 +39,7 @@ function arg(overrides: Partial<CommandArgument>): CommandArgument {
     choices: [],
     valid_range: null,
     unit: null,
+    current_point: undefined,
     ...overrides,
   };
 }
@@ -489,5 +492,48 @@ describe("B2 per-target values (CommandFlow.md C1)", () => {
     expect(Object.keys(check.targetErrors.n ?? {})).toEqual(["spacecraft-earendil-002"]);
     // A target outside the request doesn't count.
     expect(checkItem(on, ["spacecraft-earendil-001"]).ok).toBe(true);
+  });
+});
+
+describe("B2 Now column and Current + (api, per-target values)", () => {
+  it("adds to the current value at the inputs' precision; non-numbers don't add", () => {
+    expect(addToCurrent("7.5", "2.0")).toBe("9.5");
+    expect(addToCurrent("20", "-0.25")).toBe("19.75");
+    expect(addToCurrent('"SAFE"', "1")).toBeNull();
+  });
+  it("fills each target from its current value, only where the units match", () => {
+    const base = newItem(
+      command([
+        arg({ id: "t", name: "setpoint", type: "float", unit: "degC" }),
+        arg({ id: "r", name: "rate", type: "float", unit: "Hz" }),
+      ]),
+    );
+    const item = {
+      ...base,
+      command: {
+        ...base.command,
+        arguments: base.command.arguments.map((a) =>
+          a.id === "t"
+            ? { ...a, current_point: { id: "THERM.sp", name: "THERM.sp", unit: "degC" } }
+            : { ...a, current_point: { id: "X.rate", name: "X.rate", unit: "rpm" } },
+        ),
+      },
+      values: { t: "2.0", r: "1" },
+      perTarget: { t: {}, r: {} },
+    };
+    const current = new Map([
+      [
+        "t",
+        new Map([
+          ["sc-1", "7.5"],
+          ["sc-2", null],
+        ]),
+      ],
+      ["r", new Map([["sc-1", "3"]])],
+    ]);
+    expect(fillFromCurrent(item, ["sc-1", "sc-2"], current)).toEqual({
+      t: { "sc-1": "9.5" },
+      r: {},
+    });
   });
 });

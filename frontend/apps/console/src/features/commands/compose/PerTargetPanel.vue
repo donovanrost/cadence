@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useRemoteQuery } from "@/api/index.ts";
+import { useMissionInvalidation } from "@/live/index.ts";
+import { useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApNumberField, ApTextarea } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
+import { fetchLatestValues } from "@/features/telemetry/index.ts";
 import { argInput } from "../args.ts";
 import {
   checkItem,
   clearPerTarget,
+  fillFromCurrent,
   fillFromForm,
   pastePerTargetCsv,
+  sameUnit,
   setTargetValue,
+  type CurrentValues,
   type StackItem,
 } from "./stack.ts";
 
@@ -25,6 +32,59 @@ const args = computed(() =>
 );
 const ids = computed(() => props.targets.map((t) => t.id));
 const check = computed(() => checkItem(props.item, ids.value));
+
+/** B2 Now column (api, per-target values): each target's current value of an argument's point. */
+const scope = useMissionScope();
+const missionId = computed(() => scope.value.mission.id);
+const pointArgs = computed(() =>
+  args.value.flatMap((a) => (a.current_point ? [{ arg: a, point: a.current_point }] : [])),
+);
+const latest = useRemoteQuery(
+  computed(() =>
+    pointArgs.value.length && ids.value.length
+      ? {
+          m: missionId.value,
+          p: [...new Set(pointArgs.value.map((x) => x.point.id))],
+          sc: ids.value,
+        }
+      : null,
+  ),
+  (k, signal) => fetchLatestValues(k.m, k.p, k.sc, signal),
+);
+useMissionInvalidation(missionId, ["telemetry"], latest.refetch, { throttleMs: 10_000 });
+const current = computed((): CurrentValues => {
+  const s = latest.state.value;
+  const values = s.status === "ready" ? s.value.values : [];
+  return new Map(
+    pointArgs.value.map(({ arg, point }) => [
+      arg.id,
+      new Map(
+        values.filter((v) => v.point_id === point.id).map((v) => [v.spacecraft_id, v.value_json]),
+      ),
+    ]),
+  );
+});
+const staleOf = computed(() => {
+  const s = latest.state.value;
+  const values = s.status === "ready" ? s.value.values : [];
+  return new Set(values.filter((v) => v.stale).map((v) => `${v.point_id}|${v.spacecraft_id}`));
+});
+const nowWords = (argId: string, scId: string) => {
+  const x = pointArgs.value.find((p) => p.arg.id === argId);
+  const v = current.value.get(argId)?.get(scId) ?? null;
+  return v === null || !x ? "—" : `${v}${x.point.unit ? ` ${x.point.unit}` : ""}`;
+};
+const isStale = (argId: string, scId: string) => {
+  const x = pointArgs.value.find((p) => p.arg.id === argId);
+  return x ? staleOf.value.has(`${x.point.id}|${scId}`) : false;
+};
+/** `Current + 2.0`: only for arguments whose current point reads in their own unit. */
+const addable = computed(() => args.value.filter((a) => sameUnit(a)));
+const addWords = computed(() =>
+  addable.value
+    .map((a) => `${props.item.values[a.id] || "0"}${a.unit ? ` ${a.unit}` : ""}`)
+    .join(", "),
+);
 const formWords = computed(() =>
   args.value
     .map((a) => `${props.item.values[a.id] || "—"}${a.unit ? ` ${a.unit}` : ""}`)
@@ -73,6 +133,14 @@ function paste() {
           @click="emit('change', fillFromForm(item, ids))"
           >All from form · {{ formWords }}</ApButton
         >
+        <ApButton
+          v-if="addable.length"
+          size="compact"
+          variant="secondary"
+          :disabled="latest.state.value.status !== 'ready'"
+          @click="emit('change', fillFromCurrent(item, ids, current))"
+          >Current + {{ addWords }}</ApButton
+        >
         <ApButton size="compact" variant="secondary" @click="pasting = !pasting"
           >Paste CSV</ApButton
         >
@@ -100,9 +168,12 @@ function paste() {
         <thead>
           <tr class="text-left text-text-3">
             <th scope="col" class="py-1 pr-3 font-normal">Target</th>
-            <th v-for="a in args" :key="a.id" scope="col" class="py-1 pr-3 font-normal">
-              {{ a.name }}
-            </th>
+            <template v-for="a in args" :key="a.id">
+              <th scope="col" class="py-1 pr-3 font-normal">{{ a.name }}</th>
+              <th v-if="a.current_point" scope="col" class="py-1 pr-3 font-normal">
+                Now · {{ a.current_point.name }}
+              </th>
+            </template>
           </tr>
         </thead>
         <tbody>
@@ -110,29 +181,38 @@ function paste() {
             <th scope="row" class="py-1 pr-3 text-left font-mono font-normal text-readout">
               {{ t.name }}
             </th>
-            <td v-for="a in args" :key="a.id" class="py-1 pr-3">
-              <!-- Empty inherits the form's value (B2: inherited reads faint, as the hint). -->
-              <ApNumberField
-                :model-value="item.perTarget[a.id]?.[t.id] ?? ''"
-                :label="`${a.name} for ${t.name}`"
-                hidden-label
-                v-bind="{
-                  ...numberProps(a.id),
-                  ...(item.perTarget[a.id]?.[t.id] === undefined
-                    ? { hint: `Form: ${item.values[a.id] || '—'}` }
-                    : {}),
-                }"
-                @update:model-value="
-                  (v: string) => emit('change', setTargetValue(item, a.id, t.id, v))
-                "
-              />
-              <p
-                v-if="check.targetErrors[a.id]?.[t.id]"
-                class="m-0 pt-0.5 text-xs text-caution-text"
+            <template v-for="a in args" :key="a.id">
+              <td class="py-1 pr-3">
+                <!-- Empty inherits the form's value (B2: inherited reads faint, as the hint). -->
+                <ApNumberField
+                  :model-value="item.perTarget[a.id]?.[t.id] ?? ''"
+                  :label="`${a.name} for ${t.name}`"
+                  hidden-label
+                  v-bind="{
+                    ...numberProps(a.id),
+                    ...(item.perTarget[a.id]?.[t.id] === undefined
+                      ? { hint: `Form: ${item.values[a.id] || '—'}` }
+                      : {}),
+                  }"
+                  @update:model-value="
+                    (v: string) => emit('change', setTargetValue(item, a.id, t.id, v))
+                  "
+                />
+                <p
+                  v-if="check.targetErrors[a.id]?.[t.id]"
+                  class="m-0 pt-0.5 text-xs text-caution-text"
+                >
+                  {{ check.targetErrors[a.id]?.[t.id] }}
+                </p>
+              </td>
+              <td
+                v-if="a.current_point"
+                class="py-1 pr-3 font-mono"
+                :class="isStale(a.id, t.id) ? 'text-stale-text' : 'text-text-2'"
               >
-                {{ check.targetErrors[a.id]?.[t.id] }}
-              </p>
-            </td>
+                {{ nowWords(a.id, t.id) }}<span v-if="isStale(a.id, t.id)"> · stale</span>
+              </td>
+            </template>
           </tr>
         </tbody>
       </table>

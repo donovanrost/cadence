@@ -54,6 +54,7 @@ function command(overrides: Partial<CommandDetail> = {}): CommandDetail {
         choices: [{ label: "1", value_json: "1" }],
         valid_range: null,
         unit: null,
+        current_point: undefined,
       },
       {
         id: "s",
@@ -67,6 +68,7 @@ function command(overrides: Partial<CommandDetail> = {}): CommandDetail {
         choices: [],
         valid_range: { minimum_json: "-40.0", maximum_json: "60.0" },
         unit: "degC",
+        current_point: undefined,
       },
     ],
     verifiers: [],
