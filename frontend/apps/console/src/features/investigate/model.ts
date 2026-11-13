@@ -36,6 +36,20 @@ export function pickAlarm(
   return alarms.find((alarm) => alarm.active) ?? null;
 }
 
+/** §B1 no active alarm: the spacecraft's most recently cleared episode (it's shown back in limits). */
+export function lastCleared<E extends Readonly<{ cleared_at: string | null }>>(
+  episodes: readonly E[],
+): E | null {
+  let best: E | null = null;
+  for (const e of episodes)
+    if (
+      e.cleared_at &&
+      (!best?.cleared_at || Date.parse(e.cleared_at) > Date.parse(best.cleared_at))
+    )
+      best = e;
+  return best;
+}
+
 export const toSeries = (history: History): SeriesPoint[] =>
   history.buckets.map((b) => ({ t: Date.parse(b.t), min: b.min, mean: b.mean, max: b.max }));
 

@@ -25,6 +25,7 @@ import {
   ratePerHour,
   sisters,
   trendSentence,
+  lastCleared,
 } from "./model.ts";
 
 const thresholds = { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 };
@@ -481,5 +482,20 @@ describe("Telemetry tab (Investigate.md §Telemetry)", () => {
     expect(toCsv("P", [{ t: 0, min: 1, mean: 2, max: 3 }])).toBe(
       "time,point,min,mean,max\n1970-01-01T00:00:00.000Z,P,1,2,3",
     );
+  });
+});
+
+describe("B1 no active alarm (§B1)", () => {
+  it("picks the most recently cleared episode", () => {
+    const e = (id: string, cleared_at: string | null) => ({ id, cleared_at });
+    expect(
+      lastCleared([
+        e("a", "2026-11-12T01:00:00Z"),
+        e("b", null),
+        e("c", "2026-11-12T02:31:07Z"),
+        e("d", "2026-11-11T23:00:00Z"),
+      ])?.id,
+    ).toBe("c");
+    expect(lastCleared([e("b", null)])).toBeNull();
   });
 });

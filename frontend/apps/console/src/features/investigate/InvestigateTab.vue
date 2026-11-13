@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import type { RemoteState } from "@/api/index.ts";
+import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
+import { useMissionInvalidation } from "@/live/index.ts";
 import { ApKeyValue } from "@/ui";
-import { episodeFor, type Alarms } from "@/features/alarms/index.ts";
+import { episodeFor, fetchEpisodes, type Alarms } from "@/features/alarms/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import AlarmTrendPanel from "./AlarmTrendPanel.vue";
@@ -12,7 +13,7 @@ import EpisodeBar from "./EpisodeBar.vue";
 import SistersPanel from "./SistersPanel.vue";
 import { logLines } from "./eventLog.ts";
 import { useEpisodeDetail, useSpacecraftEpisodes, useSpacecraftEvents } from "./useInvestigate.ts";
-import { DEFAULT_RANGE, pickAlarm, type RangeKey } from "./model.ts";
+import { DEFAULT_RANGE, lastCleared, pickAlarm, type RangeKey } from "./model.ts";
 
 /** J2 · Investigate tab: B1 trend, B2 events, B4 same point in limits, technical details. */
 const props = defineProps<{
@@ -48,6 +49,24 @@ const episodeId = computed(() => {
 const detail = useEpisodeDetail(missionId, episodeId);
 const episode = computed(() =>
   episodeId.value && detail.state.value.status === "ready" ? detail.state.value.value : null,
+);
+/** §B1: with no active alarm, the latest cleared one shows "back in limits" (read only then). */
+const clearedRead = useRemoteQuery(
+  computed(() =>
+    props.alarms.status === "ready" && alarm.value === null
+      ? `${missionId.value}|${props.sc.id}`
+      : null,
+  ),
+  (k, signal) => {
+    const [m = "", sc = ""] = k.split("|");
+    return fetchEpisodes(m, { spacecraftId: sc, state: "cleared" }, signal);
+  },
+);
+useMissionInvalidation(missionId, ["alarms"], clearedRead.refetch);
+const resolved = computed(() =>
+  alarm.value === null && clearedRead.state.value.status === "ready"
+    ? lastCleared(clearedRead.state.value.value.episodes)
+    : null,
 );
 const permissions = computed(() =>
   episodes.state.value.status === "ready" ? episodes.state.value.value.permissions : [],
@@ -93,6 +112,7 @@ const details = computed(() => [
         :limits-configured="limitsConfigured"
         :alarm="alarm"
         :episode="episode"
+        :resolved="resolved"
         @retry="$emit('retry')"
       >
         <template v-if="episode" #lifecycle>
