@@ -38,7 +38,7 @@ envelope (`{error: {code, message, details}}`). Invalidation: `dashboards`.
  can_edit}
 ```
 - `version` defaults to the latest. `definition_json` is the widget definition as text (64-bit safe), the
-  same shape a placement embeds, so the editor's `add_widget` takes it as is.
+  same shape a placement embeds; the row page previews it.
 - A retired item is `404 library_item_not_found` (its versions stay stored for old dashboard versions).
 
 ### D22 writes (author: the editor's `:edit` access)
@@ -54,8 +54,10 @@ envelope (`{error: {code, message, details}}`). Invalidation: `dashboards`.
 - `403 forbidden` for viewers: "Dashboard editors manage the library."
 
 ### Not here
-- **Add to dashboard** is the editor's `add_widget` command with a library ref (Q1), staged and saved like
-  any edit. The console seam is `LibraryPicker.vue` (emits `{library_item_id, version}`) mounted in
+- **Add to dashboard** places a library **reference**, not a copy, so "Used in N dashboards" stays true:
+  the editor stages a new authoring command `add_library_widget {placement_id, library_item_id, version,
+  section_id}` (dashboards is asking domain; this proposal assumes it), saved through `CurrentVersions` (Q1).
+  The console seam is `LibraryPicker.vue`, emitting `{library_item_id, version, name}`, mounted in
   WidgetSheet's `From library` tab by dashboards.
 - **Live preview.** v1 previews the definition (kind, title, bound points, display options) from
   `definition_json`. A rendered preview needs the widget evaluated at a context, so it would be a later read
