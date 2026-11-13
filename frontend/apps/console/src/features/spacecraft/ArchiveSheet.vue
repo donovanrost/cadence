@@ -38,7 +38,7 @@ const already = computed(() => {
 });
 const blocked = computed((): string | null => {
   if (busy.value) return "Staging…";
-  if (already.value) return "Already staged. Review it in Changes.";
+  if (already.value) return "Already staged.";
   if (holds.value.waiting) return "Release or cancel the waiting requests first.";
   return null;
 });
@@ -103,8 +103,9 @@ defineExpose({ open });
         >
       </template>
     </ApCallout>
-    <ApCallout v-if="already" tone="nominal">
-      Archiving {{ detail.spacecraft.name }} is staged. Review it in Changes.
+    <ApCallout v-if="already" tone="info">
+      Archiving {{ detail.spacecraft.name }} is already staged. It happens when the change set is
+      applied.
       <template #action>
         <ApButton size="compact" :to="{ name: 'setup.changes' }">Open Changes</ApButton>
       </template>
