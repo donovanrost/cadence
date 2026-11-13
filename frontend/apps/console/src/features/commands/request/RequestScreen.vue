@@ -46,8 +46,13 @@ const queueRows = computed(() =>
         close-label="Close"
         title-as="p"
       >
+        <!-- Seven stations don't fit a phone; the status tag below says where it is. -->
         <template #steps
-          ><ApStationBar :steps="STATIONS" :current="station(g)" label="Request stations"
+          ><ApStationBar
+            class="max-md:hidden"
+            :steps="STATIONS"
+            :current="station(g)"
+            label="Request stations"
         /></template>
       </TakeoverHeader>
       <ApPageHeader

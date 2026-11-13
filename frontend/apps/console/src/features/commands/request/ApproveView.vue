@@ -10,7 +10,11 @@ import DecisionPanel from "./DecisionPanel.vue";
 import QueuePanel from "./QueuePanel.vue";
 import RequestBrief from "./RequestBrief.vue";
 
-/** C2 · Approve: Q waiting on you · the request with A2 re-checked now · D your call. */
+/**
+ * C2 · Approve: Q waiting on you · the request with A2 re-checked now · D your call. Under 768
+ * (Mobile.md, GO polls → mobile Approve) it's one column: header, What changes (A1), Re-checked
+ * (A2), then the decision; the queue is the GO polls tab there, so Q hides.
+ */
 const props = defineProps<{
   group: Group;
   review: RemoteState<Preflight>;
@@ -32,7 +36,13 @@ const reviewValue = computed(() => (props.review.status === "ready" ? props.revi
   <div
     class="grid min-h-0 flex-1 grid-cols-1 gap-3 max-console:overflow-auto console:grid-cols-[280px_minmax(0,1fr)_340px]"
   >
-    <QueuePanel :rows="queue" :current-id="group.id" :viewer-id="viewerId" :name-of="nameOf" />
+    <QueuePanel
+      class="max-md:hidden"
+      :rows="queue"
+      :current-id="group.id"
+      :viewer-id="viewerId"
+      :name-of="nameOf"
+    />
     <div class="flex min-h-0 flex-col gap-3 console:overflow-auto">
       <RequestBrief :group="group" :name-of="nameOf">
         <template #checks>
