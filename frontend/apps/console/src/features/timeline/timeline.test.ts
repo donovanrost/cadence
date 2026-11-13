@@ -138,6 +138,12 @@ describe("event subjects (ux timeline #1)", () => {
       refs: { ...contact.refs, subject: { kind: "config_revision" as const, id: "6", name: "r6" } },
     };
     expect(subjectLink(applied)).toEqual({ name: "setup.revisions" });
+    // L15 (api dc68a1cb4): an off-plan booking opens its pass in Contacts.
+    const booked = {
+      ...contact,
+      refs: { ...contact.refs, subject: { kind: "pass" as const, id: "res-9", name: null } },
+    };
+    expect(subjectLink(booked)).toEqual({ name: "ops.contacts", query: { contact: "res-9" } });
   });
 });
 

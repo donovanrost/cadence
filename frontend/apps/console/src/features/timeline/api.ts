@@ -31,6 +31,8 @@ export const subjectKinds = [
   "contact",
   "dashboard",
   "data_source",
+  // L15 (api dc68a1cb4): an off-plan booking; id is the pass row (reservation) id.
+  "pass",
 ] as const;
 
 const event = d.object({

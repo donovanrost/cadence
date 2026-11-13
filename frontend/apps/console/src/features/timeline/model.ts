@@ -28,6 +28,8 @@ export function subjectLink(event: MissionEvent): RouteLocationRaw | null {
     case "data_source":
       return { name: "setup.data-sources", params: { sourceId: s.id } };
     case "contact":
+    // The Contacts drawer selects on the pass row id (api dc68a1cb4).
+    case "pass":
       return { name: "ops.contacts", query: { contact: s.id } };
     case "dashboard":
       return { name: "ops.dashboard", params: { dashboardId: s.id } };

@@ -81,6 +81,7 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
             class="text-readout no-underline hover:underline"
             >{{ event.text }}</RouterLink
           ><template v-else>{{ event.text }}</template
+          ><span v-if="event.detail" class="text-text-3">: “{{ event.detail }}”</span
           ><span v-if="count > 1" class="font-mono text-text-3">
             × {{ count }} since {{ formatClock(new Date(firstAt)) }}Z</span
           >
