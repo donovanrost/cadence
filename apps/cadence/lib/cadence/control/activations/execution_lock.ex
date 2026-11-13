@@ -4,11 +4,13 @@ defmodule Cadence.Control.Activations.ExecutionLock do
   holds a session advisory lock keyed by the request for its whole run, so two resumes, or a
   resume racing a live execute, can't interleave.
 
-  The lock lives on its own connection, linked to the executor, not on one checked out from the
-  pool: the execution itself uses the pool as usual (and the runtime processes it calls need
-  connections of their own). If the executor dies, its linked connection closes, and if the
-  database drops, the session ends; either way the database releases the lock, which is what lets
-  a stalled execution be resumed.
+  The lock lives on its own Postgres session, held by a small process that monitors the executor,
+  not on a connection checked out from the pool: the execution itself uses the pool as usual (and
+  the runtime processes it calls need connections of their own). If the executor dies, the holder
+  ends its session; if the database drops, the session ends; either way Postgres releases the
+  lock, which is what lets a stalled execution be resumed. A session that can't start (the
+  database at max connections, say) raises `DBConnection.ConnectionError` in the executor, never
+  an exit signal.
   """
 
   alias Cadence.Repo
@@ -16,6 +18,7 @@ defmodule Cadence.Control.Activations.ExecutionLock do
 
   # Repo settings that aren't the database session's.
   @pool_keys [:name, :pool, :pool_size, :queue_target, :queue_interval, :telemetry_prefix]
+  @connect_ms 30_000
 
   @doc """
   Runs `fun` holding the request's lock, or returns `{:error, :activation_execution_in_progress}`
@@ -26,20 +29,67 @@ defmodule Cadence.Control.Activations.ExecutionLock do
         when result: term()
   def run(activation_request_id, fun) when is_binary(activation_request_id) do
     key = key(activation_request_id)
-    conn = connect!()
+    caller = self()
+    {holder, ref} = spawn_monitor(fn -> hold(caller, key) end)
 
-    try do
-      if acquire?(conn, key) do
+    receive do
+      {^holder, :locked} ->
         try do
           fun.()
         after
-          release(conn, key)
+          send(holder, :release)
+          await_down(ref)
         end
-      else
+
+      {^holder, :busy} ->
+        await_down(ref)
         {:error, :activation_execution_in_progress}
-      end
+
+      {:DOWN, ^ref, :process, _holder, reason} ->
+        raise DBConnection.ConnectionError, "activation lock session failed: #{inspect(reason)}"
     after
-      GenServer.stop(conn)
+      @connect_ms ->
+        Process.exit(holder, :kill)
+        raise DBConnection.ConnectionError, "activation lock session timed out"
+    end
+  end
+
+  # The holder owns the lock's session: unlinked from the executor (so a session that can't
+  # start is an error for the executor, not an exit signal), monitoring it (so the session, and
+  # the lock, end when the executor does).
+  defp hold(caller, key) do
+    Process.flag(:trap_exit, true)
+    watched = Process.monitor(caller)
+    {:ok, conn} = Postgrex.start_link(session_opts())
+
+    if acquire?(conn, key) do
+      send(caller, {self(), :locked})
+      held(watched, conn, key)
+    else
+      send(caller, {self(), :busy})
+    end
+  end
+
+  defp held(watched, conn, key) do
+    receive do
+      :release ->
+        release(conn, key)
+        GenServer.stop(conn)
+
+      # The executor died: ending this process ends the linked session, and Postgres frees the lock.
+      {:DOWN, ^watched, :process, _caller, _reason} ->
+        exit(:executor_down)
+
+      {:EXIT, ^conn, reason} ->
+        exit({:lock_session_closed, reason})
+    end
+  end
+
+  defp await_down(ref) do
+    receive do
+      {:DOWN, ^ref, :process, _holder, _reason} -> :ok
+    after
+      5_000 -> :ok
     end
   end
 
@@ -75,17 +125,10 @@ defmodule Cadence.Control.Activations.ExecutionLock do
     _exception in [DBConnection.ConnectionError, Postgrex.Error] -> :ok
   end
 
-  defp connect! do
-    opts =
-      Repo.config()
-      |> Keyword.drop(@pool_keys)
-      |> Keyword.merge(pool_size: 1, backoff_type: :stop, sync_connect: true)
-
-    case Postgrex.start_link(opts) do
-      {:ok, conn} -> conn
-      {:error, %DBConnection.ConnectionError{} = error} -> raise error
-      {:error, reason} -> raise DBConnection.ConnectionError, inspect(reason)
-    end
+  defp session_opts do
+    Repo.config()
+    |> Keyword.drop(@pool_keys)
+    |> Keyword.merge(pool_size: 1, backoff_type: :stop, sync_connect: true)
   end
 
   @doc false
