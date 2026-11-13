@@ -19,6 +19,18 @@ class FakeSocket {
   onClose(h: Hook) {
     this.close.push(h);
   }
+  joined: Hook[] = [];
+  channel() {
+    return {
+      state: "joining",
+      leave: () => {},
+      join: () => ({
+        receive: (status: string, h: Hook) => {
+          if (status === "ok") this.joined.push(h);
+        },
+      }),
+    };
+  }
   connect() {}
   disconnect() {}
   isConnected() {
@@ -30,7 +42,7 @@ class FakeSocket {
 }
 vi.mock("phoenix", () => ({ Socket: FakeSocket }));
 
-const { HEAL_MS, onReconnect, startSocket, stopSocket, useConnection } =
+const { HEAL_MS, acquireChannel, onReconnect, startSocket, stopSocket, useConnection } =
   await import("./socket.ts");
 
 describe("socket connection state (qa 11-13: a stuck 'Live connection lost')", () => {
@@ -71,5 +83,16 @@ describe("socket connection state (qa 11-13: a stuck 'Live connection lost')", (
     vi.advanceTimersByTime(HEAL_MS);
     expect(useConnection().value).toBe("live");
     expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("a joined channel marks the socket live without waiting for the heal", () => {
+    const s = sockets[0];
+    if (!s) throw new Error("no socket");
+    const handle = acquireChannel("mission:m-1");
+    expect(useConnection().value).toBe("connecting");
+    s.connected = true; // open event lost; the join still succeeds
+    for (const h of s.joined) h();
+    expect(useConnection().value).toBe("live");
+    handle.release();
   });
 });

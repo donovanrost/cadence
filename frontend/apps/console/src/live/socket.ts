@@ -82,6 +82,9 @@ export function acquireChannel(topic: string): ChannelHandle {
     const joinListeners = new Set<() => void>();
     // The join push keeps its receive hooks across rejoins (reconnects), so this fires every time.
     channel.join().receive("ok", () => {
+      // A joined channel proves the socket is up, whatever the open/close events said (qa 11-13:
+      // 'Live connection lost' shown while every channel had joined).
+      if (connection.value !== "live") markLive();
       for (const listener of joinListeners) listener();
     });
     entry = { channel, users: 0, joinListeners };
