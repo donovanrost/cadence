@@ -1,6 +1,8 @@
 defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
   @moduledoc false
 
+  alias Cadence.Jobs
+
   alias CadenceWeb.OpsDataOperationsLive.{
     HistoricalWorkflowCorrectionRequestHandoff,
     HistoricalWorkflowGroupStageHandoff,
@@ -37,7 +39,11 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
     params = stage_params(params)
     workflow = params.workflow
     stage = params.stage
-    selection_params = normalize_workflow_stage(params, workflow, stage)
+
+    selection_params =
+      params
+      |> normalize_workflow_stage(workflow, stage)
+      |> new_event_run_id(scope, mission)
 
     {:ok,
      %HistoricalWorkflowStageHandoff{
@@ -90,6 +96,7 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
       params
       |> HistoricalWorkflowParams.put(:workflow, workflow)
       |> HistoricalWorkflowParams.put(:stage, @requested_stage)
+      |> tenant_run_id(scope, mission)
 
     {:ok,
      %HistoricalWorkflowRequestHandoff{
@@ -108,7 +115,9 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
     workflow = params.workflow
 
     selection_params =
-      HistoricalWorkflowParams.put(params, :workflow, workflow)
+      params
+      |> HistoricalWorkflowParams.put(:workflow, workflow)
+      |> tenant_run_id(scope, mission)
 
     {:ok,
      %HistoricalWorkflowCorrectionRequestHandoff{
@@ -233,6 +242,31 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowHandoff do
     params
     |> HistoricalWorkflowParams.put(:workflow, workflow)
     |> HistoricalWorkflowParams.put(:stage, stage)
+  end
+
+  # A stage without a source event records a new event under the client's run id; with one, the
+  # run id comes from that event.
+  defp new_event_run_id(%HistoricalWorkflowParams{event_id: nil} = params, scope, mission),
+    do: tenant_run_id(params, scope, mission)
+
+  defp new_event_run_id(params, _scope, _mission), do: params
+
+  # Jobs are unique per run id across every organization, so a client-chosen run id that starts
+  # a run is namespaced to the tenant (`Cadence.Jobs.tenant_run_id/3`). No run id: the server
+  # mints one.
+  defp tenant_run_id(params, scope, mission) do
+    case {params.run_id, Map.get(scope, :organization_id), Map.get(mission, :mission_id)} do
+      {run_id, organization_id, mission_id}
+      when is_binary(run_id) and is_binary(organization_id) and is_binary(mission_id) ->
+        HistoricalWorkflowParams.put(
+          params,
+          :run_id,
+          Jobs.tenant_run_id(organization_id, mission_id, run_id)
+        )
+
+      _unscoped ->
+        params
+    end
   end
 
   defp replacement_run_ids(value) when is_binary(value) do

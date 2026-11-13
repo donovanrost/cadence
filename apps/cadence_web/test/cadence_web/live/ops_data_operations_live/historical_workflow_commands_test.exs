@@ -8,6 +8,9 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommandsTest do
   @scope %{organization_id: "org-dashboard-command", user: %{id: "operator-command"}}
   @mission %{mission_id: "mission-dashboard-command"}
 
+  defp tenant(run_id),
+    do: Cadence.Jobs.tenant_run_id("org-dashboard-command", "mission-dashboard-command", run_id)
+
   describe "record_stage/4" do
     test "records a direct historical workflow stage event with dashboard actor context" do
       params = %{
@@ -28,7 +31,7 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommandsTest do
                HistoricalWorkflowCommands.record_stage(params, @scope, @mission, @opts)
 
       assert event.event_type == :backfill_requested
-      assert event.backfill_run_id == "dashboard-command-stage"
+      assert event.backfill_run_id == tenant("dashboard-command-stage")
       assert event.organization_id == "org-dashboard-command"
       assert event.mission_id == "mission-dashboard-command"
       assert event.actor_id == "operator-command"
@@ -39,7 +42,7 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommandsTest do
       assert [listed] =
                Storage.list_backfill_lifecycle_events("mission-dashboard-command",
                  organization_id: "org-dashboard-command",
-                 backfill_run_id: "dashboard-command-stage"
+                 backfill_run_id: tenant("dashboard-command-stage")
                )
 
       assert listed.backfill_lifecycle_event_id == event.backfill_lifecycle_event_id
@@ -203,14 +206,16 @@ defmodule CadenceWeb.OpsDataOperationsLive.HistoricalWorkflowCommandsTest do
       assert returned_params["workflow"] == "backfill"
       assert returned_params["stage"] == "requested"
 
-      assert Enum.map(events, & &1.backfill_run_id) == [
-               "dashboard-command-request-001",
-               "dashboard-command-request-002"
-             ]
+      # A client-chosen run id is namespaced to the tenant: jobs are unique per run id across
+      # every organization.
+      group_id = tenant("dashboard-command-request")
+      assert group_id != "dashboard-command-request"
+      assert returned_params["run_id"] == group_id
+      assert Enum.map(events, & &1.backfill_run_id) == [group_id <> "-001", group_id <> "-002"]
 
       assert Enum.map(events, & &1.point_id) == ["HK.counter", "HK.voltage"]
       assert Enum.all?(events, &(&1.actor_id == "operator-command"))
-      assert Enum.all?(events, &(&1.payload["request_group_id"] == "dashboard-command-request"))
+      assert Enum.all?(events, &(&1.payload["request_group_id"] == group_id))
     end
   end
 

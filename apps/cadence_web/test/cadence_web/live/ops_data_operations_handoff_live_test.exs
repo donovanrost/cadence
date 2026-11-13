@@ -73,9 +73,17 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
     )
     |> render_submit()
 
+    # The client's run id is namespaced to the tenant (jobs are unique per run id everywhere).
+    group_id =
+      Cadence.Jobs.tenant_run_id(
+        organization.organization_id,
+        mission.mission_id,
+        "data-operation-handoff-1"
+      )
+
     assert has_element?(
              view,
-             ~s(#data-operation-data-operation-handoff-1[data-operation-state="requested"])
+             ~s(#data-operation-#{group_id}[data-operation-state="requested"])
            )
 
     assert has_element?(view, "#data-operation-group-id")
@@ -97,7 +105,7 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
       )
 
     assert length(events) == 2
-    assert Enum.all?(events, &(&1.payload["request_group_id"] == "data-operation-handoff-1"))
+    assert Enum.all?(events, &(&1.payload["request_group_id"] == group_id))
 
     assert Enum.all?(
              events,
@@ -109,7 +117,7 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
     assert {:error, {:redirect, %{to: "/"}}} =
              live(
                conn,
-               ~p"/missions/#{mission.mission_id}/ops/data-operations/manage?#{%{group: "data-operation-handoff-1"}}"
+               ~p"/missions/#{mission.mission_id}/ops/data-operations/manage?#{%{group: group_id}}"
              )
   end
 
@@ -207,9 +215,16 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
     )
     |> render_submit()
 
+    group_id =
+      Cadence.Jobs.tenant_run_id(
+        organization.organization_id,
+        mission.mission_id,
+        "managed-import-1"
+      )
+
     assert has_element?(
              view,
-             ~s(#data-operation-managed-import-1[data-operation-state="requested"][data-operation-workflow="import"])
+             ~s(#data-operation-#{group_id}[data-operation-state="requested"][data-operation-workflow="import"])
            )
 
     events =
