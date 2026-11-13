@@ -1,0 +1,43 @@
+import type { LayoutEdit, OutlinePlacement } from "./contracts.ts";
+
+const STEP: Readonly<Record<string, readonly [number, number]>> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+
+/**
+ * The keyboard way to lay out a widget (qa a11y: the drag handle was mouse-only). Arrows move one
+ * cell, Shift+arrows resize, within the outline's constraints and the grid's columns. Returns the
+ * one layout edit to stage, or null when the key isn't a layout key or nothing would change.
+ */
+export function keyboardLayout(
+  p: Pick<OutlinePlacement, "id" | "layout" | "constraints">,
+  key: string,
+  shift: boolean,
+  columns: number,
+): LayoutEdit | null {
+  const step = STEP[key];
+  if (!step) return null;
+  const [dx, dy] = step;
+  const x = p.layout.x ?? 0;
+  const y = p.layout.y ?? 0;
+  const c = p.constraints;
+  const next = shift
+    ? {
+        x,
+        y,
+        w: clamp(p.layout.w + dx, c.min_w, Math.min(c.max_w, columns - x)),
+        h: clamp(p.layout.h + dy, c.min_h, c.max_h),
+      }
+    : {
+        x: clamp(x + dx, 0, columns - p.layout.w),
+        y: clamp(y + dy, 0, c.max_y),
+        w: p.layout.w,
+        h: p.layout.h,
+      };
+  const same = next.x === x && next.y === y && next.w === p.layout.w && next.h === p.layout.h;
+  return same ? null : { placement_id: p.id, ...next };
+}

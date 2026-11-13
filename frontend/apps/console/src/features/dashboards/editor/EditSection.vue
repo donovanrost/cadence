@@ -4,6 +4,7 @@ import { ApButton, ApPanel } from "@/ui";
 import type { WorkspacePlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import WidgetBody from "../widgets/WidgetBody.vue";
 import { BoardGrid } from "./board-grid.ts";
+import { keyboardLayout } from "./keyboard-layout.ts";
 import type { LayoutEdit, OutlinePlacement } from "./contracts.ts";
 import "./editor.css";
 
@@ -38,6 +39,12 @@ const items = computed(() =>
   props.placements.map((p) => ({ p, preview: props.previews.get(p.id) ?? null })),
 );
 const at = (v: number | null) => (v === null ? undefined : String(v));
+function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
+  const edit = keyboardLayout(p, event.key, event.shiftKey, props.snapshot.grid.columns);
+  if (!edit) return;
+  event.preventDefault();
+  emit("layout", [edit]);
+}
 </script>
 
 <template>
@@ -65,13 +72,17 @@ const at = (v: number | null) => (v === null ? undefined : String(v));
         >
           <template #meta>
             <span class="flex items-center gap-1">
-              <span
+              <button
+                type="button"
                 data-drag-handle
-                class="cursor-move px-1 font-mono text-text-4"
+                class="cursor-move border-0 bg-transparent px-1 font-mono text-text-4"
                 :aria-label="`Move ${p.title}`"
-                title="Drag to move"
-                >⠿</span
+                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowRight Shift+ArrowDown"
+                title="Drag to move. Arrow keys move; Shift+arrow keys resize."
+                @keydown="onHandleKey(p, $event)"
               >
+                ⠿
+              </button>
               <ApButton
                 v-if="p.editable"
                 variant="ghost"

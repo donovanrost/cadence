@@ -277,7 +277,12 @@ const REJECTION: Readonly<Record<CommandCode, string>> = {
   unknown: "The server didn't accept that change.",
   unrecognized: "The server didn't accept that change.",
 };
+/** Codes whose sentence already says what's wrong: no "(field name)" after it (qa). */
+const FIELD_IMPLIED: ReadonlySet<CommandCode> = new Set([
+  "library_item_unavailable",
+  "library_version_unavailable",
+]);
 function rejectionText(code: CommandCode, field: string | null): string {
   const base = REJECTION[code];
-  return field ? `${base} (${field.replaceAll("_", " ")})` : base;
+  return field && !FIELD_IMPLIED.has(code) ? `${base} (${field.replaceAll("_", " ")})` : base;
 }
