@@ -8,7 +8,9 @@ const props = defineProps<{ selection: TimeSelection }>();
 const emit = defineEmits<{ pick: [selection: TimeSelection] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const now = useNow();
-const custom = ref<TimeRange>({ from: 0, to: 0 });
+// Seeded valid: the closed sheet's ApTimeRange is mounted, and a 0–0 range announced
+// "To must be after From." (qa rerun 10:32Z).
+const custom = ref<TimeRange>(frozenBounds(props.selection, now.value.getTime()));
 const error = ref<string | null>(null);
 const MAX_RANGE_MS = 31 * 86_400_000;
 

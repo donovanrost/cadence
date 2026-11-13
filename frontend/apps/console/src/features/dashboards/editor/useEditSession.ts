@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref, shallowRef, type Ref } from "vue";
+import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import type { ApiError } from "@/api";
 import type { Runtime } from "../api.ts";
 import * as api from "./api.ts";
@@ -51,7 +51,12 @@ export function useEditSession(
   /** Someone saved over the version this draft is based on (ux's callout). */
   const conflict = computed<Conflict | null>(() => {
     const d = draft.value;
-    const current = Math.max(currentVersion.value ?? 0, staged.value?.current_version ?? 0);
+    // A refused save's 409 knows the newest version even when the re-read is slow (qa rerun).
+    const current = Math.max(
+      currentVersion.value ?? 0,
+      staged.value?.current_version ?? 0,
+      conflictBy.value?.currentVersion ?? 0,
+    );
     if (!d || !dirty.value || current <= d.baseVersion) return null;
     return {
       currentVersion: current,
@@ -100,7 +105,8 @@ export function useEditSession(
       persist(kept);
       notice.value = { kind: "rejected", message: rejectionText(failure.code, failure.field) };
       void refresh(kept);
-    } else if (failure.kind === "too_many_commands") notice.value = { kind: "too_many_commands" };
+    } else if (failure.kind === "conflict") conflictBy.value = failure;
+    else if (failure.kind === "too_many_commands") notice.value = { kind: "too_many_commands" };
     else if (failure.kind === "other")
       notice.value = { kind: "failed", message: failureText(failure.error) };
   }
@@ -203,6 +209,11 @@ export function useEditSession(
     enter();
   }
 
+  // Another dashboard (Save as copy pushes the same route): this draft and preview aren't its.
+  // The screen re-enters once the new dashboard's view loads.
+  watch([missionId, dashboardId], () => {
+    if (draft.value !== null) leave();
+  });
   onScopeDispose(() => controller?.abort());
   return {
     draft,

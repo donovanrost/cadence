@@ -4,9 +4,13 @@ import { useEditSession } from "./useEditSession.ts";
 
 type Call = { signal: AbortSignal; resolve: (value: unknown) => void };
 const calls = vi.hoisted((): Call[] => []);
+const saves = vi.hoisted((): unknown[] => []);
 
-// The preview request rejects with AbortError when its signal aborts, as `request` does.
-vi.mock("./api.ts", () => ({
+// The preview request rejects with AbortError when its signal aborts, as `request` does. `save`
+// answers from `saves`; editFailure stays real.
+vi.mock("./api.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./api.ts")>()),
+  save: () => Promise.resolve(saves.shift()),
   preview: (_m: string, _d: string, _draft: unknown, _r: unknown, signal: AbortSignal) =>
     new Promise((resolve, reject) => {
       calls.push({ signal, resolve });
@@ -33,15 +37,17 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 function session() {
   const scope = effectScope();
+  const dashboardId = ref("dash-1");
   const s = scope.run(() =>
-    useEditSession(ref("m-1"), ref("dash-1"), ref({ from: "", to: "", spacecraftId: "" }), ref(1)),
+    useEditSession(ref("m-1"), dashboardId, ref({ from: "", to: "", spacecraftId: "" }), ref(1)),
   );
   if (!s) throw new Error("scope");
-  return { s, stop: () => scope.stop() };
+  return { s, dashboardId, stop: () => scope.stop() };
 }
 
 afterEach(() => {
   calls.length = 0;
+  saves.length = 0;
   localStorage.clear();
 });
 
@@ -67,6 +73,39 @@ describe("edit session previews", () => {
     calls[2]?.resolve(previewWith("Section B"));
     await settle();
     expect(s.changes.value?.map((c) => c.label)).toEqual(["Section B"]);
+    stop();
+  });
+
+  it("shows the conflict from a refused save even when the re-read hasn't caught up (qa rerun)", async () => {
+    const { s, stop } = session();
+    s.enter();
+    s.stage(removeSection(1));
+    saves.push({
+      ok: false,
+      error: {
+        kind: "conflict",
+        code: "version_conflict",
+        message: "Someone saved.",
+        details: {
+          current_version: 4,
+          saved_by: { kind: "user", id: "u-2", name: "Ana P." },
+          saved_at: null,
+        },
+      },
+    });
+    expect((await s.save({ message: "", defaults: { time: false, scope: false } })).ok).toBe(false);
+    expect(s.conflict.value).toEqual({ currentVersion: 4, savedBy: "Ana P.", savedAt: null });
+    stop();
+  });
+
+  it("drops the draft when the screen moves to another dashboard (Save as copy)", async () => {
+    const { s, dashboardId, stop } = session();
+    s.enter();
+    s.stage(removeSection(1));
+    dashboardId.value = "dash-2";
+    await settle();
+    expect(s.editing.value).toBe(false);
+    expect(s.staged.value).toBeNull();
     stop();
   });
 });
