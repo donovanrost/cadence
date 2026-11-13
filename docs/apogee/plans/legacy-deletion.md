@@ -313,8 +313,10 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   - `applications/ops_console/actions/dashboard_workflows.ex` (1175 lines) and `dashboard_deep_actions.ex`,
     trimming `action_provider.ex:11-12,26-27`;
   - `Reads.Dashboards.Creation` (only `reads/application_surfaces/ops_console.ex:31,580` uses it);
-  - Explore's `add_to_dashboard` action: `telemetry_explore.ex:132-150` (dispatch) and `:244-275`
-    (`candidate_query`, `dashboard_path`). Also drop it from `federated-application.ts:215` and from the tests
+  - Explore's `add_to_dashboard` action in `telemetry_explore.ex`: its dispatch (:132-150) and the helpers only it
+    uses: `widget_type/1` (:177-180), `dashboard_target/3` (:192+), `candidate_query/4` (:244-260),
+    `default_title/1` (:263) and `dashboard_path/3`. Keep `explore_path`, `navigation_result` and
+    `compact_query`, which the other Explore actions use. Re-grep each helper first. Also drop it from `federated-application.ts:215` and from the tests
     (`telemetry_explore_test.exs`, `ops_console_test.exs`, `OpsConsoleApplication.test.ts`,
     `first-party-manifest-parity.test.ts`).
 - **Trim:**
