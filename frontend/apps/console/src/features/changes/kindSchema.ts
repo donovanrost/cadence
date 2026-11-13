@@ -240,3 +240,20 @@ function safeTest(pattern: string, text: string): boolean {
     return true;
   }
 }
+
+/**
+ * ux (percent fields): a percent typed as a fraction (0.9 for 90%). Shown inline as a caution, with
+ * a one-tap fix; Save stays enabled, so 0.9% can still be meant. Null when it doesn't apply.
+ */
+export function ratioSlip(
+  f: SchemaField,
+  text: string,
+): Readonly<{ line: string; fix: string; label: string }> | null {
+  if (f.unit !== "ratio") return null;
+  const t = text.trim();
+  if (!/^\d*\.?\d+$/.test(t)) return null;
+  const n = Number(t);
+  if (!(n > 0 && n <= 1)) return null;
+  const fix = trimNumber(n * 100);
+  return { line: `That's ${t}%. Did you mean ${fix}%?`, fix, label: `Use ${fix}%` };
+}

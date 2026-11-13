@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ApField, ApSegmented, ApSelect, ApTextarea } from "@/ui";
+import { ApSegmented, ApSelect, ApTextarea } from "@/ui";
+import SchemaTextField from "./SchemaTextField.vue";
 import {
   displayValue,
   visible,
@@ -21,27 +22,10 @@ const isCurrency = (f: SchemaField) => f.type === "string" && /(^|\.)currency$/.
 /** Enums, currencies, and reference fields the server offers choices for (e.g. catalog revisions). */
 const isSelect = (f: SchemaField) =>
   f.type === "enum" || isCurrency(f) || (f.type === "reference" && (f.enum?.length ?? 0) > 0);
-const unitLabel = (f: SchemaField) =>
-  f.unit === "s"
-    ? "duration"
-    : f.unit === "micros"
-      ? "amount"
-      : f.unit === "ratio"
-        ? "%"
-        : (f.unit ?? undefined);
 const selectOptions = (f: SchemaField) =>
   isCurrency(f)
     ? currencies.map((c) => ({ value: c, label: c }))
     : (f.enum ?? []).map((o) => ({ value: option(o.value), label: o.label }));
-/** Numbers, times and lists read in mono (ids and figures). */
-const isMono = (f: SchemaField) =>
-  ["integer", "number", "datetime", "time", "list"].includes(f.type);
-const inputMode = (f: SchemaField) =>
-  f.unit === "micros" || f.type === "number"
-    ? ("decimal" as const)
-    : f.type === "integer" && f.unit !== "s"
-      ? ("numeric" as const)
-      : undefined;
 const yesNo = (f: SchemaField) => {
   const def = f.default === true ? "true" : f.default === false ? "false" : null;
   return [
@@ -95,16 +79,12 @@ const hint = (f: SchemaField) =>
           :required="f.required"
           @update:model-value="set(f.path, $event)"
         />
-        <ApField
+        <SchemaTextField
           v-else
-          :label="f.label"
+          :field="f"
           :model-value="values[f.path] ?? ''"
-          :mono="isMono(f)"
-          :unit="unitLabel(f)"
-          :inputmode="inputMode(f)"
           :hint="hint(f)"
           :error="errors[f.path] ?? null"
-          :required="f.required"
           @update:model-value="set(f.path, $event)"
         />
       </template>

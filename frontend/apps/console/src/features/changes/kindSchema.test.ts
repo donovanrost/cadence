@@ -6,6 +6,7 @@ import {
   fromDocument,
   kindSchemaReader,
   parseDuration,
+  ratioSlip,
   toValue,
   visible,
   type SchemaField,
@@ -161,5 +162,33 @@ describe("number fields (ST1 pass review)", () => {
       ["string", true],
       ["text", undefined],
     ]);
+  });
+});
+
+describe("percent typed as a fraction (ux)", () => {
+  const base = {
+    path: "pass_realized_threshold",
+    label: "A pass counts as realized at",
+    type: "number" as const,
+    unit: "ratio",
+    enum: null,
+    range: { min: 0, max: 1 },
+    default: null,
+    required: false,
+    help: null,
+    visible_when: null,
+    pattern: undefined,
+    create_only: undefined,
+  };
+  it("flags 0 < value ≤ 1 with a one-tap fix, and nothing else", () => {
+    expect(ratioSlip(base, "0.9")).toEqual({
+      line: "That's 0.9%. Did you mean 90%?",
+      fix: "90",
+      label: "Use 90%",
+    });
+    expect(ratioSlip(base, "1")?.label).toBe("Use 100%");
+    expect(ratioSlip(base, "5")).toBeNull();
+    expect(ratioSlip(base, "0")).toBeNull();
+    expect(ratioSlip({ ...base, unit: null }, "0.9")).toBeNull();
   });
 });
