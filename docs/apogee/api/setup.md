@@ -347,6 +347,19 @@ the worst fleet state any of the mission's spacecraft is in (the fleet read's st
 `critical | caution | stale | nominal | never_heard`), or `null` when it has no spacecraft. Visible
 to every member.
 
+### Mission create (§11 L4; organization admins and platform admins)
+
+Under `/organizations/:organization_id`, in the organization the path names:
+
+- **M1** `GET /missions/slug?slug=` → `{slug, available, suggestion | null}`. A slug is unique within
+  its organization; when it's taken, `suggestion` is a free variant (`earendil-2`).
+- **M2** `POST /missions {name, slug}` → `201 {mission: {id, name, slug}}`. `name` 1–120
+  characters; `slug` lowercase letters, numbers and hyphens, starting with a letter or digit, at
+  most 64. Errors: `422 invalid_params` with **flat** field details, as AD1's (`{name: msg}`,
+  `{slug: msg, suggestion}` for a clash, including one that loses a race); `403 forbidden` for
+  anyone else (Policy `:create_missions`, todo(authz)). The new mission joins the session's
+  missions on the next bootstrap. Creation isn't in the organization Audit yet (no store for it).
+
 ### Provider accounts (PA1, organization admins)
 
 - `GET /provider-accounts` → `{accounts: [{id, name, provider: {key, label}, status: "connected" |

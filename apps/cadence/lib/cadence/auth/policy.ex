@@ -69,6 +69,12 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
 
+  # §11 L4: creating a mission in an organization. todo(authz): Cedar should decide this; today
+  # it's the organization's admins and platform admins.
+  def authorize(%Scope{} = current_scope, :create_missions, %{organization_id: organization_id}) do
+    authorize_organization_capability(current_scope, organization_id, :organization_admin)
+  end
+
   def authorize(%Scope{} = current_scope, :manage_provider_accounts, %{
         organization_id: organization_id
       }) do
