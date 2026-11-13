@@ -2,13 +2,16 @@ defmodule CadenceWeb.Console.AccountAPITest do
   @moduledoc "The signed-in user's own password and sessions (backlog: Account)."
   use CadenceWeb.ConnCase, async: false
 
+  @moduletag :capture_log
+
+  alias Cadence.Accounts.AttemptLimit
   alias CadenceWeb.TestFixtures
 
   setup do
     org = TestFixtures.persist_org!()
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
-    %{user: user}
+    %{user: user, org: org}
   end
 
   defp conn_for(token),
@@ -94,5 +97,80 @@ defmodule CadenceWeb.Console.AccountAPITest do
              |> get("/api/console/v1/account/sessions")
              |> json_response(200)
              |> get_in(["data", "sessions"])
+  end
+
+  test "wrong current passwords are held back with 429 and retry_after; an operator can clear it",
+       c do
+    mine = TestFixtures.member_session_token!(c.user)
+    put_password = &(mine |> conn_for() |> put("/api/console/v1/account/password", &1))
+    wrong = %{"current_password" => "wrong", "new_password" => "a-new-password-1"}
+    right = %{wrong | "current_password" => TestFixtures.default_password()}
+
+    for _ <- 1..6, do: assert(put_password.(wrong) |> json_response(422))
+
+    held = put_password.(right)
+
+    assert %{"error" => %{"code" => "too_many_attempts", "details" => %{"retry_after" => 1}}} =
+             json_response(held, 429)
+
+    assert get_resp_header(held, "retry-after") == ["1"]
+
+    # The check is shared with sign-in for the same account.
+    assert {:error, {:too_many_attempts, _}} =
+             Cadence.Auth.sign_in(c.user.email, TestFixtures.default_password(),
+               ip: {127, 0, 0, 1}
+             )
+
+    AttemptLimit.clear(c.user.email)
+    assert put_password.(right) |> response(204)
+  end
+
+  test "password changes and session sign-outs reach the organization audit, without secrets",
+       c do
+    admin = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(admin, c.org, role: :organization_admin)
+    mine = TestFixtures.member_session_token!(c.user)
+    other = TestFixtures.member_session_token!(c.user)
+    _third = TestFixtures.member_session_token!(c.user)
+
+    other_id =
+      other
+      |> conn_for()
+      |> get("/api/console/v1/account/sessions")
+      |> json_response(200)
+      |> get_in(["data", "sessions"])
+      |> Enum.find(& &1["current"])
+      |> Map.fetch!("id")
+
+    assert mine
+           |> conn_for()
+           |> delete("/api/console/v1/account/sessions/#{other_id}")
+           |> response(204)
+
+    assert mine
+           |> conn_for()
+           |> put("/api/console/v1/account/password", %{
+             "current_password" => TestFixtures.default_password(),
+             "new_password" => "a-new-password-1"
+           })
+           |> response(204)
+
+    body =
+      admin
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/organizations/#{c.org.organization_id}/audit?kinds=account")
+      |> response(200)
+
+    events = body |> Jason.decode!() |> get_in(["data", "events"])
+
+    assert [
+             %{"action" => "Changed their password and signed out 1 other session"} = changed,
+             %{"action" => "Signed out one of their other sessions"}
+           ] = events
+
+    assert %{"kind" => "account", "actor" => %{"id" => actor_id}, "target" => nil} = changed
+    assert actor_id == c.user.user_id
+    refute body =~ "a-new-password-1"
+    refute body =~ mine
   end
 end

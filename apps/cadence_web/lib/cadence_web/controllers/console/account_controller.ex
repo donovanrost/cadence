@@ -10,9 +10,14 @@ defmodule CadenceWeb.Console.AccountController do
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   def change_password(conn, params) do
-    case AccountSecurity.change_password(user(conn), token(conn), params) do
+    case AccountSecurity.change_password(user(conn), token(conn), params, ip: conn.remote_ip) do
       :ok ->
         send_resp(conn, :no_content, "")
+
+      {:error, {:too_many_attempts, retry_after}} ->
+        conn
+        |> put_resp_header("retry-after", Integer.to_string(retry_after))
+        |> Problem.respond(:too_many_attempts, %{retry_after: retry_after})
 
       {:error, {:invalid, details}} ->
         Problem.respond(conn, :invalid_params, details)
@@ -39,17 +44,16 @@ defmodule CadenceWeb.Console.AccountController do
   end
 
   def revoke_session(conn, %{"session_id" => session_id}) do
-    current? =
-      Enum.any?(
-        AccountSecurity.list_sessions(user(conn).user_id, token(conn)),
-        &(&1.id == session_id and &1.current)
-      )
-
-    case AccountSecurity.revoke_session(user(conn).user_id, session_id) do
+    case AccountSecurity.revoke_session(user(conn).user_id, session_id, token(conn)) do
       # Revoking the session you're using signs you out here too.
-      :ok when current? -> conn |> configure_session(drop: true) |> send_resp(:no_content, "")
-      :ok -> send_resp(conn, :no_content, "")
-      {:error, :session_not_found} -> Problem.respond(conn, :session_not_found)
+      {:ok, %{current: true}} ->
+        conn |> configure_session(drop: true) |> send_resp(:no_content, "")
+
+      {:ok, %{current: false}} ->
+        send_resp(conn, :no_content, "")
+
+      {:error, :session_not_found} ->
+        Problem.respond(conn, :session_not_found)
     end
   end
 

@@ -8,7 +8,8 @@ defmodule Cadence.Reads.OrganizationAudit do
   `commanding` (command requests and approval decisions), `access` (members
   joining, invitations sent), `alarms` (people acknowledging, assigning,
   handing off and annotating episodes), `contacts` (contact plan approval
-  decisions) and `data` (data source definition changes). `sources.missing`
+  decisions), `data` (data source definition changes), `provider_accounts` and `account`
+  (members' own password and session changes). `sources.missing`
   is empty; it stays so the console can say when a source is absent.
   """
 
@@ -18,9 +19,9 @@ defmodule Cadence.Reads.OrganizationAudit do
   alias Cadence.Configuration.Status
   alias Cadence.Management.{Commanding, Contacts, DataSources}
   alias Cadence.Platform.ScopedSettings
-  alias Cadence.Reads.OrganizationAudit.ProviderAccountEvents
+  alias Cadence.Reads.OrganizationAudit.{AccountEvents, ProviderAccountEvents}
 
-  @included ~w(config commanding access alarms contacts data provider_accounts)
+  @included ~w(config commanding access alarms contacts data provider_accounts account)
   @missing []
   @plan_cap 100
   @settings [
@@ -49,7 +50,8 @@ defmodule Cadence.Reads.OrganizationAudit do
       (Enum.flat_map(missions, &mission_events(organization_id, &1, opts)) ++
          settings_events(organization_id, nil, nil) ++
          access_events(organization_id) ++
-         ProviderAccountEvents.list(organization_id))
+         ProviderAccountEvents.list(organization_id) ++
+         AccountEvents.list(organization_id))
       |> Enum.filter(&keep?(&1, opts))
       |> Enum.sort_by(& &1.at, {:desc, DateTime})
 

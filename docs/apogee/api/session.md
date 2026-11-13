@@ -107,10 +107,43 @@ The signed-in user's own account, under `/api/console/v1/account` (no organizati
   least 12 characters and must differ from the current one. Every **other** session of the user is
   signed out; this one stays signed in. Errors: `422 current_password_incorrect`, `422
   invalid_params` (`details.new_password`), `409 password_managed_externally` (the environment
-  admin's password comes from the environment).
+  admin's password comes from the environment), `429 too_many_attempts` (below).
 - `GET /account/sessions` → `{sessions: [{id, started_at, expires_at, current}]}`: the user's
   unexpired sessions, newest first; `current` marks the one making the request. Sessions record no
   device or address.
 - `DELETE /account/sessions/:id` → `204`: signs that session out. Revoking the current one signs
   you out here too (the session cookie is dropped). Errors: `404 session_not_found`.
 - `DELETE /account/sessions` → `{revoked: n}`: signs out every session except the current one.
+
+### Attempt limit (api-ops)
+
+Every password check (sign-in, the current password here, admin mode) is throttled
+(`Cadence.Accounts.AttemptLimit`). There's no lockout, only waits:
+
+- Failures count per account from one address (5 free), per account from anywhere (20 free) and
+  per address (50 free). Past its free failures, a bucket makes the next check wait 1 s,
+  doubling per failure up to **5 min**. A check that has to wait doesn't count, so waiting always
+  works. A bucket forgets its failures 15 min after the last one, and a right password clears
+  the account's buckets.
+- The account bucket is keyed by email whether or not an account has it, so a wait never says
+  whether the account exists. An unknown email also takes as long as a wrong password.
+- Here: `429 too_many_attempts` with `details.retry_after` (seconds, an integer ≥ 1) and a
+  `Retry-After` header. The password wasn't checked, so even the right one gets the 429 until
+  the wait is over. Suggested words: "Too many wrong passwords. Try again in N seconds."
+- `/sign-in` and admin mode are server-rendered forms: they redirect back with the flash "Too
+  many wrong passwords. Try again in N seconds" (or "N minutes") and a `Retry-After` header.
+- **Unlock:** waits are capped, so anyone, the environment admin included, gets in after at
+  most 5 min. To let someone in sooner, an operator runs
+  `Cadence.Accounts.AttemptLimit.clear("person@example.com")` on the node's remote console. A
+  restart also forgets everything (the counts are in memory, per node).
+- Addresses are `conn.remote_ip`. Behind a proxy that doesn't pass the client address on, every
+  client shares one address bucket. Deploy with the client address forwarded.
+
+### Audit
+
+Each change is an organization audit entry (`kind: "account"`, setup.md §AU1), recorded in the
+same transaction: "Changed their password" (with "and signed out N other sessions" when it
+did), "Signed out one of their other sessions", "Signed out of the session they were using",
+"Signed out N other sessions" (`DELETE /account/sessions`, only when N > 0). The actor is the
+member and `target` is `null`. Entries hold ids and counts, never a password, token or digest.
+They show in every organization the person is or was a member of.

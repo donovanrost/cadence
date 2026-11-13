@@ -386,7 +386,7 @@ to every member.
 ### `GET /audit` (AU1, organization admins)
 
 Query: `from`, `to` (ISO; default the last 7 days), `actor_id`, `mission_id`, `kinds` (comma
-list of `config, commanding, access, alarms, contacts, data, provider_accounts`), `limit` 1–200 (default 100), and
+list of `config, commanding, access, alarms, contacts, data, provider_accounts, account`), `limit` 1–200 (default 100), and
 `cursor` (from `next_cursor`).
 
 `{events: [{id, at, actor: {kind, id, name} | null, kind, action, target: {kind, id, label} |
@@ -408,6 +408,8 @@ first.
   - `provider_accounts`: account added, settings changed (a new version), renamed, retired;
     credential reference set / rotated / revoked; mission access granted / removed. Named by the
     account's current name (a rename says both names); the credential only as its reference.
+  - `account`: members changing their own password and signing out sessions (session.md
+    §Account, Audit). The actor is the member; `target` is `null`.
 - `sources.missing` is empty now. Keep handling it generically.
 - Actions are server-made sentences.
 - Settings history carries only the actor's name, so its `actor.id` is `null`.
