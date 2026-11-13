@@ -530,6 +530,52 @@ defmodule Cadence.ContactPlanning.FleetOptimizerTest do
              )
   end
 
+  describe "single bookings are fixed occupancy (DECISIONS #78)" do
+    test "an opportunity a live single booking holds is ineligible, with the booking and why" do
+      requirement = requirement("held", contact_count: 1)
+      [a, b, c] = gap_snapshots(requirement)
+
+      occupied = [
+        # Same spacecraft over A; another spacecraft on C's antenna (pool-c).
+        %{
+          reservation_id: "single-1",
+          spacecraft_id: requirement.spacecraft_id,
+          antenna_ref: "pool-other",
+          starts_at: a.starts_at,
+          ends_at: a.ends_at
+        },
+        %{
+          reservation_id: "single-2",
+          spacecraft_id: "spacecraft-else",
+          antenna_ref: "pool-c",
+          starts_at: c.starts_at,
+          ends_at: c.ends_at
+        }
+      ]
+
+      assert {:ok, result} =
+               FleetOptimizer.optimize([requirement], [a, b, c], policy(),
+                 now: @now,
+                 occupied: occupied
+               )
+
+      assert result.selected_snapshot_ids == ["snapshot-b"]
+
+      assert %{"reservation_id" => "single-1", "reason" => "same_spacecraft"} =
+               held(decision(result, "snapshot-a"))
+
+      assert %{"reservation_id" => "single-2", "reason" => "same_antenna"} =
+               held(decision(result, "snapshot-c"))
+    end
+  end
+
+  defp held(decision),
+    do:
+      Enum.find(
+        decision.hard_constraint_document["failures"],
+        &(&1["code"] == "held_by_single_booking")
+      )
+
   describe "max_gap_seconds (DECISIONS #74)" do
     test "without a limit, selection is unchanged: score order, exactly the contact count" do
       requirement = requirement("gap")

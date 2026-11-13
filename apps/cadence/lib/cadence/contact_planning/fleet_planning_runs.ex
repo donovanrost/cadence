@@ -485,7 +485,9 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
               "requirement_count" => length(refs),
               "policy_content_sha256" => policy.content_sha256,
               "template_materialization" => value(attrs, :template_materialization_document, %{}),
-              "repair" => value(attrs, :repair_input_document, %{})
+              "repair" => value(attrs, :repair_input_document, %{}),
+              # DECISIONS #78: live single bookings the run plans around (from its starter).
+              "occupied" => value(attrs, :occupied_document, [])
             },
             attrs
           ),

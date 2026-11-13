@@ -16,6 +16,7 @@ defmodule Cadence.Control.Scheduling do
   """
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Contacts.SingleBookings
   alias Cadence.Control.Contacts, as: ControlContacts
   alias Cadence.Control.PlanResubmission
   alias Cadence.Management.Contacts, as: ManagementContacts
@@ -336,7 +337,10 @@ defmodule Cadence.Control.Scheduling do
              scope,
              mission_id,
              %{"fleet_run" => fleet_run, "evidence" => evidence},
-             operation_id: operation_id
+             operation_id: operation_id,
+             # DECISIONS #78: the day's live single bookings are fixed occupancy.
+             occupied:
+               SingleBookings.occupancy_document(scope.organization_id, mission_id, fleet_run)
            ) do
       {:ok, run, :created}
     else

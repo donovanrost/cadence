@@ -292,6 +292,14 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     |> Map.put(:source_contact_plan_id, source_plan_id)
     |> Map.put(:source_contact_plan_version, source_plan_version)
     |> Map.put(:requirement_refs, requirements)
+    |> Map.put(
+      :occupied_document,
+      SingleBookings.occupancy_document(
+        source.plan.organization_id,
+        source.plan.mission_id,
+        attrs
+      )
+    )
     |> Map.put(:repair_input_document, %{
       "repair_attempt" => source.repair_attempt,
       "source_plan_content_sha256" => source.plan_version.content_sha256,

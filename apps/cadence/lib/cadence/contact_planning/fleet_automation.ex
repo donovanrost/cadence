@@ -8,6 +8,7 @@ defmodule Cadence.ContactPlanning.FleetAutomation do
   """
 
   alias Cadence.Auth.Scope
+  alias Cadence.Contacts.SingleBookings
   alias Cadence.Control.Contacts, as: ControlContacts
 
   alias Cadence.ContactPlanning.{
@@ -34,6 +35,12 @@ defmodule Cadence.ContactPlanning.FleetAutomation do
              :plan,
              %{horizon_seconds: horizon_seconds},
              opts
+           ),
+         attrs =
+           Map.put(
+             attrs,
+             :occupied_document,
+             SingleBookings.occupancy_document(scope.organization_id, mission_id, attrs)
            ),
          {:ok, run, _refs} <- FleetPlanner.start(scope, mission_id, attrs, opts) do
       run(scope, mission_id, run.fleet_planning_run_id, grant_id, opts)

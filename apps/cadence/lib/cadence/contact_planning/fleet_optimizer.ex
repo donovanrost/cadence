@@ -48,7 +48,15 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
          {:ok, snapshots} <- normalize_snapshots(snapshots ++ locked_commitments, policy),
          {:ok, locked_ids} <-
            normalize_locked_ids(snapshots, locked_commitments, requested_locked_ids),
-         {:ok, initial} <- initialize(snapshots, requirements, policy, locked_ids, now) do
+         {:ok, initial} <-
+           initialize(
+             snapshots,
+             requirements,
+             policy,
+             locked_ids,
+             now,
+             Keyword.get(opts, :occupied, [])
+           ) do
       scarcity = scarcity(initial.feasible)
 
       state =
@@ -172,7 +180,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
       else: {:error, :fleet_optimizer_locked_snapshot_not_found}
   end
 
-  defp initialize(snapshots, requirements, policy, locked_ids, now) do
+  defp initialize(snapshots, requirements, policy, locked_ids, now, occupied) do
     initial = %{
       all: Map.new(snapshots, &{&1.contact_opportunity_snapshot_id, &1}),
       feasible: [],
@@ -187,7 +195,7 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     snapshots
     |> Enum.reduce_while(
       {:ok, initial},
-      &initialize_snapshot(&1, &2, requirements, policy, locked_ids, now)
+      &initialize_snapshot(&1, &2, requirements, policy, locked_ids, now, occupied)
     )
     |> case do
       {:ok, state} -> {:ok, %{state | feasible: Enum.reverse(state.feasible)}}
@@ -195,7 +203,15 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
     end
   end
 
-  defp initialize_snapshot(snapshot, {:ok, state}, requirements, policy, locked_ids, now) do
+  defp initialize_snapshot(
+         snapshot,
+         {:ok, state},
+         requirements,
+         policy,
+         locked_ids,
+         now,
+         occupied
+       ) do
     requirement = requirements[snapshot_key(snapshot)]
     locked? = MapSet.member?(locked_ids, snapshot.contact_opportunity_snapshot_id)
 
@@ -213,9 +229,42 @@ defmodule Cadence.ContactPlanning.FleetOptimizer do
         {:cont, {:ok, add_locked_snapshot(state, snapshot)}}
 
       {requirement, false} ->
-        {:cont, {:ok, classify_snapshot(state, requirement, snapshot, policy, now)}}
+        case held_by_single_booking(snapshot, occupied) do
+          nil -> {:cont, {:ok, classify_snapshot(state, requirement, snapshot, policy, now)}}
+          failure -> {:cont, {:ok, put_ineligible(state, snapshot, [failure])}}
+        end
     end
   end
+
+  # DECISIONS #78: a live single booking is fixed occupancy. An opportunity overlapping one of the
+  # same spacecraft, or of another spacecraft on the same antenna, can't be planned.
+  defp held_by_single_booking(_snapshot, []), do: nil
+
+  defp held_by_single_booking(snapshot, occupied) do
+    spacecraft = (snapshot.route_binding_document || %{})["spacecraft_id"]
+    antenna = (snapshot.normalized_opportunity_document || %{})["antenna_or_service_pool_ref"]
+
+    occupied
+    |> Enum.filter(fn o ->
+      DateTime.before?(o.starts_at, snapshot.ends_at) and
+        DateTime.after?(o.ends_at, snapshot.starts_at)
+    end)
+    |> Enum.find_value(fn o ->
+      cond do
+        o.spacecraft_id == spacecraft -> held(o, "same_spacecraft")
+        is_binary(antenna) and o.antenna_ref == antenna -> held(o, "same_antenna")
+        true -> nil
+      end
+    end)
+  end
+
+  defp held(occupied, reason),
+    do: %{
+      "code" => "held_by_single_booking",
+      "message" => "A pass booked outside any plan holds this window.",
+      "reservation_id" => occupied.reservation_id,
+      "reason" => reason
+    }
 
   defp missing_requirement_failures(snapshot) do
     [

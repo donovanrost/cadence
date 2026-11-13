@@ -29,7 +29,14 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     with :ok <- authorize(scope, mission_id),
          {:ok, window, _, evidence} <- admit(params, :create) do
       Repo.transaction(fn ->
-        claim(scope, mission_id, window, evidence, Keyword.get(opts, :operation_id))
+        claim(
+          scope,
+          mission_id,
+          window,
+          evidence,
+          Keyword.get(opts, :operation_id),
+          Keyword.get(opts, :occupied, [])
+        )
       end)
       |> case do
         {:ok, {run, refs}} -> {:ok, run, refs}
@@ -41,7 +48,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
   # A review older than this is stale: its `as_of` no longer says what "future" means.
   @review_max_age_s 15 * 60
 
-  defp claim(scope, mission_id, window, evidence, operation_id) do
+  defp claim(scope, mission_id, window, evidence, operation_id, occupied) do
     with {:ok, as_of} <- review_as_of(evidence),
          {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true, as_of),
          true <- inputs.evidence === evidence,
@@ -55,7 +62,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
              trigger_kind: :manual,
              requirement_refs: refs,
              creation_review_document: evidence,
-             template_materialization_document: materialization
+             template_materialization_document: materialization,
+             occupied_document: occupied
            }),
          :ok <- record_operation(scope, mission_id, run, operation_id) do
       {run, refs}

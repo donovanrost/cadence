@@ -298,15 +298,18 @@ defmodule Cadence.Contacts.ProviderBooking do
              uplink && Map.put(provider_uplink(uplink), "status", "requested")
            ),
          request_document: request_document,
-         metadata: %{
-           "ground_station_ref" => string_attrs["ground_station_ref"],
-           "antenna_or_service_pool_ref" => string_attrs["antenna_or_service_pool_ref"],
-           "provider_display_name" => provider.display_name,
-           "transport_display_name" => string_attrs["transport_display_name"],
-           "service_display_name" => string_attrs["service_display_name"],
-           "delivery_display_name" => string_attrs["delivery_display_name"],
-           "delivery_operator_summary" => string_attrs["delivery_operator_summary"]
-         }
+         metadata:
+           %{
+             "ground_station_ref" => string_attrs["ground_station_ref"],
+             "antenna_or_service_pool_ref" => string_attrs["antenna_or_service_pool_ref"],
+             "provider_display_name" => provider.display_name,
+             "transport_display_name" => string_attrs["transport_display_name"],
+             "service_display_name" => string_attrs["service_display_name"],
+             "delivery_display_name" => string_attrs["delivery_display_name"],
+             "delivery_operator_summary" => string_attrs["delivery_operator_summary"]
+           }
+           # DECISIONS #78: a booking made outside any plan says who booked it and why.
+           |> put_present("off_plan", string_attrs["off_plan"])
        })}
     end
   rescue

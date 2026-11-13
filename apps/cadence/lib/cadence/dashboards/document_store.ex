@@ -677,7 +677,7 @@ defmodule Cadence.Dashboards.DocumentStore do
     end)
   end
 
-  defp insert_version(%Document{} = document, opts \\ []) do
+  defp insert_version(%Document{} = document, opts) do
     version = %Version{
       organization_id: document.organization_id,
       mission_id: document.mission_id,

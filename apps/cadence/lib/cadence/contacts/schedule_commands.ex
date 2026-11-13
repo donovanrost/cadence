@@ -9,6 +9,7 @@ defmodule Cadence.Contacts.ScheduleCommands do
     ProviderReservations,
     ProviderScheduling,
     ScheduleCancellations,
+    SingleBookings,
     UplinkLegs
   }
 
@@ -18,7 +19,17 @@ defmodule Cadence.Contacts.ScheduleCommands do
   @opportunity_max_age_seconds 900
 
   def execute(scope, mission, action, input) when action in ["search", "reserve", "cancel"] do
-    permission = if action == "cancel", do: :manage_missions, else: :operate_mission
+    # DECISIONS #78: the booker of a single booking may cancel it.
+    permission =
+      if action == "cancel",
+        do:
+          SingleBookings.cancel_permission(
+            scope.organization_id,
+            mission,
+            SingleBookings.cancel_target(input),
+            scope.user && scope.user.user_id
+          ),
+        else: :operate_mission
 
     with true <- scope.mission_id in [nil, mission],
          :ok <-
@@ -55,7 +66,7 @@ defmodule Cadence.Contacts.ScheduleCommands do
   end
 
   defp dispatch(scope, mission_id, "reserve", params) do
-    with {:ok, %{"token" => token}} <- exact_ids(params, ["token"]),
+    with {:ok, %{"token" => token}, note} <- reserve_input(params),
          {:ok, payload} <- verify_opportunity(token),
          :ok <- token_scope(payload, scope.organization_id, mission_id),
          :ok <- opportunity_current(payload),
@@ -63,6 +74,7 @@ defmodule Cadence.Contacts.ScheduleCommands do
          :ok <- validate_token_route(route, payload["route"]),
          {:ok, attrs} <- reservation_attrs(payload, route),
          attrs = put_uplink_leg(attrs, scope.organization_id, mission_id, route),
+         attrs = Map.put(attrs, "off_plan", off_plan(scope, note)),
          {:ok, booking} <-
            ProviderBooking.reserve(scope.organization_id, mission_id, route.provider_id, attrs) do
       {:ok, booking_result(booking)}
@@ -189,9 +201,9 @@ defmodule Cadence.Contacts.ScheduleCommands do
   defp opportunity_current(_), do: {:error, :opportunity_expired_or_unavailable}
 
   @doc false
-  def reservation_identity(scope, mission, %{"token" => token} = input)
-      when map_size(input) == 1 do
-    with {:ok, payload} <- verify_opportunity(token),
+  def reservation_identity(scope, mission, %{"token" => _token} = input) do
+    with {:ok, %{"token" => token}, _note} <- reserve_input(input),
+         {:ok, payload} <- verify_opportunity(token),
          :ok <- token_scope(payload, scope.organization_id, mission),
          :ok <- opportunity_current(payload),
          {:ok, route} <- token_route(payload, scope.organization_id, mission),
@@ -202,6 +214,31 @@ defmodule Cadence.Contacts.ScheduleCommands do
   end
 
   def reservation_identity(_, _, _), do: {:error, :malformed_input}
+
+  # A reserve is `{token}` or `{token, note}` (the console's Book a pass, DECISIONS #78).
+  defp reserve_input(%{"token" => token, "note" => note} = params) when map_size(params) == 2 do
+    with {:ok, ids} <- exact_ids(%{"token" => token}, ["token"]),
+         true <- is_nil(note) or (is_binary(note) and String.length(note) <= 500) do
+      {:ok, ids, note && blank_nil(String.trim(note))}
+    else
+      _invalid -> {:error, :malformed_input}
+    end
+  end
+
+  defp reserve_input(params) do
+    with {:ok, ids} <- exact_ids(params, ["token"]), do: {:ok, ids, nil}
+  end
+
+  defp blank_nil(""), do: nil
+  defp blank_nil(text), do: text
+
+  # A booking made here belongs to no plan: who booked it, when, and why (DECISIONS #78).
+  defp off_plan(scope, note),
+    do: %{
+      "booked_by" => scope.user && %{"kind" => "user", "id" => scope.user.user_id},
+      "booked_at" => DateTime.to_iso8601(DateTime.utc_now()),
+      "note" => note
+    }
 
   # A single booking asks for the uplink leg exactly as plan execution does (#44, DECISIONS #46).
   defp put_uplink_leg(attrs, organization_id, mission_id, route) do
