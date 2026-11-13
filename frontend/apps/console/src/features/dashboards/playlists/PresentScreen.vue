@@ -94,7 +94,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         <h2 class="m-0 font-display text-sm uppercase tracking-title text-text-2">
           {{ show.current.value?.name }}
         </h2>
-        <ViewerBody :state="shown" :stale="connection !== 'live'" @retry="view.refetch" />
+        <ViewerBody :state="shown" :stale="connection === 'offline'" @retry="view.refetch" />
       </section>
     </template>
   </ApRemote>

@@ -166,7 +166,7 @@ const onRange = (s: TimeSelection) =>
     </template>
     <template #clocks><CockpitStatus /></template>
   </TakeoverHeader>
-  <ApCallout v-if="connection !== 'live'" tone="stale">
+  <ApCallout v-if="connection === 'offline'" tone="stale">
     Live connection lost. Values may be out of date; they'll refresh when it's back.
   </ApCallout>
   <ApCallout v-else-if="live.stalled.value && !editing" tone="stale">
@@ -180,7 +180,7 @@ const onRange = (s: TimeSelection) =>
     :mission-id="missionId"
     @saved="onSaved"
   />
-  <ViewerBody v-else :state="shown" :stale="connection !== 'live'" @retry="query.refetch" />
+  <ViewerBody v-else :state="shown" :stale="connection === 'offline'" @retry="query.refetch" />
   <VersionsSheet
     ref="versions"
     :mission-id="missionId"
