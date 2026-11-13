@@ -9,8 +9,6 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   @behaviour CadenceSimulator.DynamicsProvider
 
-  import Bitwise
-
   require Logger
 
   alias Cadence.Catalog.Command.Compiler.RuntimeDefinition
@@ -18,21 +16,13 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   alias Cadence.Catalog.MissionModel.Declaration
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
   alias CadenceSimulator.CatalogDatabase
+  alias CadenceSimulator.Providers.DatabaseDynamics.Ranges
 
   @boolean_toggle_rate 20
   @default_noise_amplitude 1.0
   @float_step_divisor 20.0
   @int_step_divisor 15.0
   @state_cycle_rate 10
-
-  @float_range_keywords [
-    {["temp"], {-40.0, 85.0}},
-    {["voltage"], {0.0, 50.0}},
-    {["current"], {-10.0, 10.0}},
-    {["percent", "soc"], {0.0, 100.0}},
-    {["rate"], {-5.0, 5.0}},
-    {["angle", "roll", "pitch", "yaw"], {-180.0, 180.0}}
-  ]
 
   defstruct [
     :catalog_database,
@@ -162,7 +152,7 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   defp extract_definitions(%CatalogDatabase{} = database) do
     declarations = database.compilation.revision.declarations
-    limits_by_parameter = limits_by_parameter(database.compilation.plans.monitoring.plan)
+    limits_by_parameter = Ranges.limits_by_parameter(database.compilation.plans.monitoring.plan)
 
     Enum.reduce(database.packet_definitions, {[], 0}, fn %PacketDefinition{} = packet,
                                                          {packets, item_count} ->
@@ -234,12 +224,6 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
     end
   end
 
-  defp limits_by_parameter(plan) do
-    plan
-    |> value(:policies, [])
-    |> Map.new(&{value(&1, :parameter_id), value(&1, :rules, %{})})
-  end
-
   defp build_packet_values(packet_specs, step, noise_amplitude, overrides) do
     Enum.map(packet_specs, fn %{name: packet_name, items: item_specs} ->
       values =
@@ -297,7 +281,7 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   end
 
   defp build_typed_generator(_packet_name, item_name, "uint", bit_size, limits, phase) do
-    {_min_val, max_val} = get_int_range(limits, bit_size, false)
+    {_min_val, max_val} = Ranges.int_range(limits, bit_size, false)
 
     if counter_name?(item_name) do
       {:uint_counter, max_val}
@@ -327,14 +311,14 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   end
 
   defp build_float_generator(item_name, limits, phase) do
-    {min_val, max_val} = get_float_range(limits, item_name)
+    {min_val, max_val} = Ranges.float_range(limits, item_name)
     mid = (min_val + max_val) / 2
     amplitude = (max_val - min_val) / 2 * 0.8
     {:float_wave, phase, mid, amplitude, amplitude * 0.1}
   end
 
   defp build_integer_wave_generator(limits, bit_size, signed, phase) do
-    {min_val, max_val} = get_int_range(limits, bit_size, signed)
+    {min_val, max_val} = Ranges.int_range(limits, bit_size, signed)
     mid = (min_val + max_val) / 2
     amplitude = (max_val - min_val) / 2 * 0.8
     {:integer_wave, phase, min_val, max_val, mid, amplitude}
@@ -585,63 +569,7 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   defp value(map, key, default \\ nil),
     do: Map.get(map, key, Map.get(map, Atom.to_string(key), default))
 
-  defp get_float_range(limits, item_name) do
-    case range_from_limits(limits) do
-      {:ok, range} -> range
-      :error -> infer_float_range(item_name)
-    end
-  end
-
-  defp range_from_limits(limits) do
-    min_from_limits = limits["red_low"] || limits["yellow_low"]
-    max_from_limits = limits["red_high"] || limits["yellow_high"]
-
-    if min_from_limits && max_from_limits do
-      {:ok, {min_from_limits, max_from_limits}}
-    else
-      :error
-    end
-  end
-
-  defp infer_float_range(name) do
-    Enum.find_value(@float_range_keywords, fn {keywords, range} ->
-      if String.contains?(name, keywords), do: range, else: nil
-    end) || {0.0, 100.0}
-  end
-
   defp counter_name?(name) do
     String.contains?(name, ["count", "uptime", "seq"])
   end
-
-  defp get_int_range(limits, bit_size, signed) do
-    case int_range_from_limits(limits) do
-      {:ok, range} -> range
-      :error -> default_int_range(bit_size, signed)
-    end
-  end
-
-  defp int_range_from_limits(limits) do
-    min_from_limits = limits["red_low"] || limits["yellow_low"]
-    max_from_limits = limits["red_high"] || limits["yellow_high"]
-
-    if min_from_limits && max_from_limits do
-      {:ok, {round(min_from_limits), round(max_from_limits)}}
-    else
-      :error
-    end
-  end
-
-  defp default_int_range(bit_size, signed) when is_integer(bit_size) and bit_size > 0 do
-    max_val = (1 <<< bit_size) - 1
-
-    if signed do
-      half = div(max_val + 1, 2)
-      {-half, half - 1}
-    else
-      {0, max_val}
-    end
-  end
-
-  defp default_int_range(_bit_size, true), do: {-1000, 1000}
-  defp default_int_range(_bit_size, false), do: {0, 1000}
 end
