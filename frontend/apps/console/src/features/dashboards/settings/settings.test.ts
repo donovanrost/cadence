@@ -69,3 +69,17 @@ describe("dashboard settings (slice 5, proposed D14)", () => {
     expect(parseTags("toolong", limits).ok).toBe(false);
   });
 });
+
+describe("D3 archive in use (api-ops 3e2a6632)", () => {
+  it("names the playlists from a 409 dashboard_in_use, and nothing else", async () => {
+    const { usedByPlaylists } = await import("./present.ts");
+    const conflict = (code: string) => ({
+      kind: "conflict" as const,
+      code,
+      message: "x",
+      details: { used_by: { playlists: [{ id: "pl1", name: "Wallboard" }] } },
+    });
+    expect(usedByPlaylists(conflict("dashboard_in_use"))).toEqual(["Wallboard"]);
+    expect(usedByPlaylists(conflict("in_use"))).toBeNull();
+  });
+});

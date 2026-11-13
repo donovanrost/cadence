@@ -126,9 +126,9 @@ export function conflictText(e: ApiError): string | null {
   return `${who} saved ${typeof v === "number" ? `v${v}` : "a newer version"}${when}. Reload to see it, then save again.`;
 }
 
-/** D3 409 in_use: the playlists' names, or null for any other error. */
+/** D3 409 dashboard_in_use (api-ops 3e2a6632): the playlists' names, or null for any other error. */
 export function usedByPlaylists(e: ApiError): readonly string[] | null {
-  if (e.kind !== "conflict" || e.code !== "in_use") return null;
+  if (e.kind !== "conflict" || e.code !== "dashboard_in_use") return null;
   const det: unknown = e.details;
   const used = det !== null && typeof det === "object" && "used_by" in det ? det.used_by : null;
   const lists =
