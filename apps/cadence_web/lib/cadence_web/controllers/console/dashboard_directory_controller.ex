@@ -69,7 +69,7 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
   def create(conn, params) do
     input =
       params
-      |> Map.take(~w(name description tags))
+      |> Map.take(~w(name description tags spacecraft))
       |> Map.put_new("description", "")
 
     case Creation.create(scope(conn), mission(conn), %{mode: "new"}, input) do
@@ -80,6 +80,9 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
 
       {:error, :forbidden} ->
         Problem.respond(conn, :forbidden)
+
+      {:invalid, :spacecraft} ->
+        Problem.respond(conn, :invalid_params, %{field: "spacecraft"})
 
       {:invalid, _reason} ->
         Problem.respond(conn, :invalid_params, %{field: "name"})

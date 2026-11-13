@@ -136,12 +136,16 @@ dashboard.
   "dashboard", id, label}`, the actor, and the mission. Creating a dashboard (its first version)
   reads "Created dashboard …".
 
-## D4: `POST /dashboards {name, description?, tags?}` · `POST /dashboards/:id/duplicate {name}`
+## D4: `POST /dashboards {name, description?, tags?, spacecraft?}` · `POST /dashboards/:id/duplicate {name}`
 
-- `201 {id, version}`. `tags`: at most 10, each 1–64 characters. A spacecraft default and
-  library templates come later (plan slice 8).
-- Errors: `422 invalid_params` `details.field: "name"`, `403 forbidden` (not an author), `404
-  not_found` (duplicating an unknown dashboard).
+- `201 {id, version}`. `tags`: at most 10, each 1–64 characters.
+- `spacecraft`: `{mode: "fixed", spacecraft_id}` makes that spacecraft (one of this mission's)
+  the dashboard's default scope (`defaults.scope`, as the viewer's `spacecraft_id` admits it).
+  `{mode: "context"}` and `{mode: "fleet"}` set no default. Absent: no default. Library templates
+  come later (plan slice 8).
+- Errors: `422 invalid_params` with `details.field` `name` or `spacecraft` (not this mission's,
+  missing id, unknown mode); `403 forbidden` (not an author); `404 not_found` (duplicating an
+  unknown dashboard).
 
 ## D6: `POST /dashboards/:id/views`
 

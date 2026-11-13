@@ -4,7 +4,7 @@ defmodule CadenceWeb.Console.DashboardDirectoryAPITest do
 
   import CadenceWeb.OpsDashboardPageTestSupport
 
-  alias Cadence.Dashboards.{Document, PlaylistStore}
+  alias Cadence.Dashboards.{Document, Documents, Placement, PlaylistStore, WidgetDef}
   alias Cadence.Reads.Dashboards.BindingSummary
   alias CadenceWeb.TestFixtures
 
@@ -126,10 +126,59 @@ defmodule CadenceWeb.Console.DashboardDirectoryAPITest do
     assert copy != c.document.dashboard_id
   end
 
+  test "D4 sets a fixed spacecraft as the default scope; context and fleet set none", c do
+    craft = TestFixtures.persist_spacecraft!(c.mission)
+    fixed = %{"mode" => "fixed", "spacecraft_id" => craft.spacecraft_id}
+
+    assert %{"data" => %{"id" => id}} =
+             c
+             |> conn()
+             |> post(base(c), %{"name" => "SC view", "spacecraft" => fixed})
+             |> json_response(201)
+
+    {:ok, document} =
+      Documents.fetch_published(
+        c.org.organization_id,
+        c.mission.mission_id,
+        id
+      )
+
+    assert get_in(document.defaults, ["scope", "spacecraft_id"]) == craft.spacecraft_id
+
+    assert %{"data" => %{"id" => context_id}} =
+             c
+             |> conn()
+             |> post(base(c), %{"name" => "Pick one", "spacecraft" => %{"mode" => "context"}})
+             |> json_response(201)
+
+    {:ok, context} =
+      Documents.fetch_published(
+        c.org.organization_id,
+        c.mission.mission_id,
+        context_id
+      )
+
+    assert context.defaults == %{}
+
+    for bad <- [
+          %{"mode" => "fixed", "spacecraft_id" => "someone-elses"},
+          %{"mode" => "fixed"},
+          %{"mode" => "orbit"}
+        ] do
+      assert %{"error" => %{"code" => "invalid_params", "details" => %{"field" => field}}} =
+               c
+               |> conn()
+               |> post(base(c), %{"name" => "Bad", "spacecraft" => bad})
+               |> json_response(422)
+
+      assert field in ["spacecraft", "name"]
+    end
+  end
+
   describe "BindingSummary.summarize/2" do
     defp placement(type, scope \\ nil),
-      do: %Cadence.Dashboards.Placement{
-        widget_def: %Cadence.Dashboards.WidgetDef{widget_type_id: type},
+      do: %Placement{
+        widget_def: %WidgetDef{widget_type_id: type},
         scope_override: scope
       }
 
