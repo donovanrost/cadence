@@ -26,6 +26,7 @@ defmodule Cadence.SpacecraftTypeStore.SpacecraftTypeRow do
     field(:applications, :map, default: %{})
     field(:metadata, :map, default: %{})
     field(:catalog_revision_id, :string)
+    field(:handled_apids, {:array, :integer})
     field(:routing_rules, {:array, :map}, default: [])
 
     timestamps()
@@ -73,6 +74,7 @@ defmodule Cadence.SpacecraftTypeStore.SpacecraftTypeRow do
       applications: JsonDocument.unwrap_value(row.applications),
       metadata: JsonDocument.unwrap_value(row.metadata),
       catalog_revision_id: row.catalog_revision_id,
+      handled_apids: row.handled_apids,
       routing_rules: row.routing_rules || []
     })
   end
@@ -92,6 +94,7 @@ defmodule Cadence.SpacecraftTypeStore.SpacecraftTypeRow do
       applications: JsonDocument.wrap_value(type.applications),
       metadata: JsonDocument.wrap_value(type.metadata),
       catalog_revision_id: type.catalog_revision_id,
+      handled_apids: type.handled_apids,
       routing_rules: type.routing_rules
     }
   end
@@ -105,6 +108,7 @@ defmodule Cadence.SpacecraftTypeStore.SpacecraftTypeRow do
       :lifecycle_state,
       :display_name,
       :catalog_revision_id,
+      :handled_apids,
       :routing_rules,
       :downlink_protocol,
       :uplink_protocol,

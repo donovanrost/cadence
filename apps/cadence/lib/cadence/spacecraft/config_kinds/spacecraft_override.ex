@@ -15,6 +15,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   alias Cadence.Spacecraft.ConfigKinds.SpacecraftProfile
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
+  alias Cadence.SpacecraftType.Effective
+  alias Cadence.SpacecraftTypeStore
 
   @impl true
   def kind, do: "spacecraft_override"
@@ -73,7 +75,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   @impl true
   # DECISIONS #36/#65: a catalog override moves the spacecraft's catalog through a generation;
   # it must name a catalog revision that exists.
-  def validate(organization_id, mission_id, _action, _entity_id, _previous, proposed)
+  def validate(organization_id, mission_id, _action, entity_id, _previous, proposed)
       when is_map(proposed) do
     errors =
       Enum.flat_map(proposed, fn {key, value} ->
@@ -85,7 +87,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
         else
           _ok -> []
         end
-      end)
+      end) ++ apids_errors(organization_id, mission_id, entity_id, proposed)
 
     if errors == [], do: :ok, else: {:error, errors}
   end
@@ -133,4 +135,55 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
 
   @impl true
   def runtime_impact(_action, _previous, _proposed), do: :none
+
+  # L22: an override's handled APIDs must be ones the spacecraft's catalog defines: its own
+  # catalog override in the same op, else the catalog its profile (with overrides) sets.
+  defp apids_errors(organization_id, mission_id, spacecraft_id, proposed) do
+    case proposed["handled_apids"] do
+      %{"value" => apids} ->
+        path = "handled_apids.value"
+
+        with [] <- SpacecraftProfile.apids_shape(apids, path),
+             catalog = override_catalog(organization_id, mission_id, spacecraft_id, proposed),
+             :ok <-
+               SpacecraftProfile.apids_in_catalog(
+                 organization_id,
+                 mission_id,
+                 catalog,
+                 apids,
+                 path
+               ) do
+          []
+        else
+          {:error, errors} -> errors
+          errors when is_list(errors) -> errors
+        end
+
+      _not_set ->
+        []
+    end
+  end
+
+  defp override_catalog(organization_id, mission_id, spacecraft_id, proposed) do
+    with nil <- get_in(proposed, ["catalog_revision_id", "value"]),
+         {:ok, sc} <- SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id),
+         true <- is_binary(sc.spacecraft_type_id),
+         {:ok, profile} <-
+           SpacecraftTypeStore.fetch_spacecraft_type_version(
+             organization_id,
+             mission_id,
+             sc.spacecraft_type_id,
+             sc.spacecraft_type_version
+           ) do
+      overrides =
+        organization_id
+        |> Overrides.list(mission_id, [spacecraft_id])
+        |> Map.get(spacecraft_id, %{})
+
+      Effective.resolve(profile, overrides)["catalog_revision_id"]
+    else
+      catalog when is_binary(catalog) -> catalog
+      _no_profile -> nil
+    end
+  end
 end

@@ -9,7 +9,7 @@ defmodule Cadence.SpacecraftType.Schema do
 
   Each field: `%{path, label, type, unit, enum, range, default, overridable,
   runtime_impact, help}` with `type` in `integer | boolean | enum | string |
-  reference` and `runtime_impact` in `generation | routes | none`.
+  reference | list` and `runtime_impact` in `generation | routes | none`.
   """
 
   alias Cadence.SpacecraftType
@@ -26,7 +26,7 @@ defmodule Cadence.SpacecraftType.Schema do
   def sections do
     [
       %{key: :framing, label: "Framing", fields: framing_fields()},
-      %{key: :catalog, label: "Catalog", fields: [catalog_field()]}
+      %{key: :catalog, label: "Catalog", fields: [catalog_field(), apids_field()]}
     ]
   end
 
@@ -42,6 +42,7 @@ defmodule Cadence.SpacecraftType.Schema do
   def value(%SpacecraftType{} = profile, "packet_protocol"), do: string(profile.packet_protocol)
 
   def value(%SpacecraftType{} = profile, "catalog_revision_id"), do: profile.catalog_revision_id
+  def value(%SpacecraftType{} = profile, "handled_apids"), do: profile.handled_apids
 
   def value(%SpacecraftType{}, _path), do: nil
 
@@ -118,6 +119,16 @@ defmodule Cadence.SpacecraftType.Schema do
       default: nil,
       runtime_impact: :generation,
       help: "The command and telemetry catalog revision this profile decodes with."
+    )
+  end
+
+  # L22: null = all of the catalog's APIDs; a change in what a spacecraft decodes is a HOLD.
+  defp apids_field do
+    field("handled_apids", "Handled APIDs", :list,
+      range: %{min: 0, max: 2047},
+      default: nil,
+      runtime_impact: :generation,
+      help: "Which of the catalog's packets to decode. Empty means all of the catalog's APIDs."
     )
   end
 

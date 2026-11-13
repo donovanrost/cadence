@@ -29,9 +29,10 @@ defmodule Cadence.Control.ConfigurationGeneration do
   alias Cadence.Catalog
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Commanding.{Cancellation, RequestActivity}
-  alias Cadence.Control.ConfigurationSwitches
+  alias Cadence.Control.{ConfigurationApids, ConfigurationSwitches}
   alias Cadence.Governance
   alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.MissionModels.CatalogApids
   alias Cadence.Missions
   alias Cadence.Platform.{ConfigurationSettings, ContentHash}
   alias Cadence.SourceEndpoints
@@ -90,7 +91,9 @@ defmodule Cadence.Control.ConfigurationGeneration do
          :ok <- nothing_in_flight(org, set.mission_id, Map.keys(targets)),
          :ok <- nothing_in_flight(org, set.mission_id, commanding_off, :commanding),
          :ok <- telemetry_inputs(switches, active.entries),
-         derivations = derivations(targets, switches),
+         apids = apid_changes(mission, touched, active.entries),
+         :ok <- apids_defined(apids),
+         derivations = derivations(targets, switches, ConfigurationApids.derivations(apids)),
          {:ok, items} <- derive_configurations(mission, active.entries, derivations, input),
          {:ok, binding_set} <- next_binding_set(mission, active, items) do
       base = Map.merge(active.entries, Map.new(items, &{&1.id, &1.entry}))
@@ -153,10 +156,91 @@ defmodule Cadence.Control.ConfigurationGeneration do
     end
   end
 
-  # One derived configuration per spacecraft, with its new catalog and switches together.
-  defp derivations(targets, switches) do
-    catalogs = Map.new(targets, fn {id, to} -> {id, %{"catalog_revision_id" => to}} end)
-    Map.merge(catalogs, switches, fn _id, catalog, switch -> Map.merge(catalog, switch) end)
+  # One derived configuration per spacecraft, with its new catalog, switches and APIDs together.
+  defp derivations(targets, switches, apids) do
+    targets
+    |> Map.new(fn {id, to} -> {id, %{"catalog_revision_id" => to}} end)
+    |> Map.merge(switches, fn _id, left, right -> Map.merge(left, right) end)
+    |> Map.merge(apids, fn _id, left, right -> Map.merge(left, right) end)
+  end
+
+  ## Handled APIDs (L22)
+
+  @doc """
+  What an apply would change in these spacecraft's decoded APIDs (the L22 HOLDs):
+  `%{changes: %{id => %{from, to, stray}}, names: %{id => name}, labels: %{catalog => "rev N"},
+  catalogs: %{id => catalog}}`.
+  """
+  @spec apid_impact(String.t(), String.t(), [String.t()]) :: map()
+  def apid_impact(organization_id, mission_id, ids) do
+    with {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
+         {:ok, %{activation: %{}} = active} <- Active.load(mission) do
+      {effective, changes} = apid_state(mission, ids, active.entries)
+
+      {:ok, spacecraft} =
+        SpacecraftStore.fetch_spacecrafts_in_batches(
+          organization_id,
+          mission_id,
+          Map.keys(changes)
+        )
+
+      catalogs =
+        Map.new(changes, fn {id, _change} -> {id, effective[id]["catalog_revision_id"]} end)
+
+      %{
+        changes: changes,
+        names: Map.new(spacecraft, fn {id, sc} -> {id, sc.display_name} end),
+        catalogs: catalogs,
+        labels:
+          revision_labels(
+            organization_id,
+            mission_id,
+            Map.new(catalogs, fn {id, catalog} -> {id, %{from: nil, to: catalog}} end)
+          )
+      }
+    else
+      _no_active_activation -> %{changes: %{}, names: %{}, catalogs: %{}, labels: %{}}
+    end
+  end
+
+  defp apid_changes(mission, ids, entries), do: mission |> apid_state(ids, entries) |> elem(1)
+
+  # Effective catalog and handled APIDs for spacecraft whose profile sets their catalog (#65).
+  defp apid_state(mission, ids, entries) do
+    ids = Enum.filter(ids, &Map.has_key?(entries, &1))
+    org = mission.organization_id
+    overrides = Overrides.list(org, mission.mission_id, ids)
+    {:ok, spacecraft} = SpacecraftStore.fetch_spacecrafts_in_batches(org, mission.mission_id, ids)
+
+    effective =
+      for {id, sc} <- spacecraft,
+          {:ok, profile} <- [pinned_profile(org, mission.mission_id, sc)],
+          values = Effective.resolve(profile, Map.get(overrides, id, %{})),
+          is_binary(values["catalog_revision_id"]),
+          into: %{},
+          do: {id, Map.take(values, ["catalog_revision_id", "handled_apids"])}
+
+    catalog_apids =
+      effective
+      |> Map.values()
+      |> Enum.map(& &1["catalog_revision_id"])
+      |> Enum.uniq()
+      |> Map.new(fn catalog ->
+        case CatalogApids.apids(org, mission.mission_id, catalog) do
+          {:ok, apids} -> {catalog, apids}
+          {:error, _reason} -> {catalog, []}
+        end
+      end)
+
+    {effective, ConfigurationApids.changes(effective, entries, catalog_apids)}
+  end
+
+  # A list naming APIDs the catalog doesn't define refuses the apply (a blocking HOLD).
+  defp apids_defined(changes) do
+    case for({id, %{stray: [_ | _]}} <- changes, do: id) do
+      [] -> :ok
+      ids -> {:error, {:handled_apids_not_in_catalog, ids}}
+    end
   end
 
   @doc "What an apply would do to these spacecraft's switches (L22 HOLDs)."

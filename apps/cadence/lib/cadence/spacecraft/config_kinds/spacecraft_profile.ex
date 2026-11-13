@@ -26,7 +26,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   alias Cadence.SpacecraftTypeStore
 
   @fields ~w(display_name downlink_protocol uplink_protocol packet_protocol frame_parameters
-             applications metadata catalog_revision_id routing_rules)
+             applications metadata catalog_revision_id handled_apids routing_rules)
   # `fecf` (frame error control field present) is carried by existing profiles and read by the
   # TM frame codec.
   @frame_fields ~w(frame_size secondary_header_length insert_zone_length ocf_length
@@ -89,7 +89,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
           label: "TC transfer frame"
         ) ++
         F.one_of(document, "packet_protocol", ~w(space_packet), label: "Packet protocol") ++
-        F.map(document, "applications") ++ F.map(document, "metadata") ++ framing(document)
+        F.map(document, "applications") ++
+        F.map(document, "metadata") ++
+        framing(document) ++
+        apids_shape(document["handled_apids"], "handled_apids")
 
     F.result(document, errors)
   end
@@ -135,9 +138,20 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       when is_map(proposed) do
     catalog = proposed["catalog_revision_id"]
 
-    if catalog == Map.get(previous || %{}, "catalog_revision_id") or is_nil(catalog),
-      do: :ok,
-      else: catalog_exists(organization_id, mission_id, catalog, "catalog_revision_id")
+    catalog_check =
+      if catalog == Map.get(previous || %{}, "catalog_revision_id") or is_nil(catalog),
+        do: :ok,
+        else: catalog_exists(organization_id, mission_id, catalog, "catalog_revision_id")
+
+    with :ok <- catalog_check,
+         do:
+           apids_in_catalog(
+             organization_id,
+             mission_id,
+             catalog,
+             proposed["handled_apids"],
+             "handled_apids"
+           )
   end
 
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
@@ -283,6 +297,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         applications: document["applications"],
         metadata: document["metadata"],
         catalog_revision_id: document["catalog_revision_id"],
+        handled_apids: document["handled_apids"],
         routing_rules: document["routing_rules"] || []
       })
 
@@ -376,6 +391,59 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       "catalog_revision_id" => profile.catalog_revision_id,
       "routing_rules" => profile.routing_rules || []
     }
+    # L22: in the document once set, so documents recorded before it compare equal.
+    |> then(fn document ->
+      if profile.handled_apids,
+        do: Map.put(document, "handled_apids", profile.handled_apids),
+        else: document
+    end)
+  end
+
+  @doc false
+  # A handled_apids value: nil (all of the catalog's APIDs) or a list of distinct APIDs.
+  def apids_shape(nil, _path), do: []
+
+  def apids_shape(apids, path) when is_list(apids) do
+    cond do
+      apids == [] ->
+        [F.error(path, "Choose at least one APID, or all of the catalog's")]
+
+      not Enum.all?(apids, &(is_integer(&1) and &1 in 0..2047)) ->
+        [F.error(path, "APIDs are 0 to 2047")]
+
+      length(Enum.uniq(apids)) != length(apids) ->
+        [F.error(path, "List each APID once")]
+
+      true ->
+        []
+    end
+  end
+
+  def apids_shape(_apids, path), do: [F.error(path, "List the APIDs, or leave it empty for all")]
+
+  @doc false
+  # Every listed APID must be one the catalog defines (422 naming the strays).
+  def apids_in_catalog(_organization_id, _mission_id, _catalog, nil, _path), do: :ok
+  def apids_in_catalog(_organization_id, _mission_id, nil, _apids, _path), do: :ok
+
+  def apids_in_catalog(organization_id, mission_id, catalog, apids, path) do
+    # Configured, so this kind has no compile-time edge to the mission-model context; until the
+    # key is configured, the apply's blocking HOLD still refuses strays.
+    with reader when reader != nil <- Application.get_env(:cadence, :catalog_apids),
+         {:ok, defined} <- reader.apids(organization_id, mission_id, catalog),
+         stray when stray != [] <- reader.stray(apids, defined) do
+      {:error,
+       [
+         F.error(
+           path,
+           "The catalog doesn't define APIDs " <> Enum.map_join(stray, ", ", &Integer.to_string/1)
+         )
+       ]}
+    else
+      [] -> :ok
+      nil -> :ok
+      {:error, _reason} -> :ok
+    end
   end
 
   @doc false

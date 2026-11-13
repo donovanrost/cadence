@@ -18,7 +18,8 @@ defmodule Cadence.SpacecraftType.Effective do
       "uplink_protocol" => Atom.to_string(profile.uplink_protocol),
       "packet_protocol" => Atom.to_string(profile.packet_protocol),
       "frame_parameters" => profile.frame_parameters || %{},
-      "catalog_revision_id" => profile.catalog_revision_id
+      "catalog_revision_id" => profile.catalog_revision_id,
+      "handled_apids" => profile.handled_apids
     }
 
     values =
