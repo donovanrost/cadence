@@ -68,7 +68,10 @@ defmodule Cadence.Management.DataSources.Store do
         bounded_history?: true,
         latest?: true,
         watermarks?: true,
-        native_decimation?: false
+        # The managed QuestDB source decimates natively (TelemetryReads.decimated_sample_history_result;
+        # the adapter probe reports it too). Declaring false made every time-series widget, whose
+        # history sampling is decimated_envelope, fail publish readiness (2026-11-13, lead/qa).
+        native_decimation?: true
       },
       metadata: %{storage: :questdb, bootstrap_default?: true}
     }
