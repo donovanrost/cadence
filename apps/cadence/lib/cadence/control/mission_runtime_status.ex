@@ -13,8 +13,8 @@ defmodule Cadence.Control.MissionRuntimeStatus do
   - `%{state: "applied", ...}` otherwise, with `applied_at`, when the runtime last applied.
 
   Recorded only on change, so a 30 s poll doesn't rewrite the term. When the visible state
-  flips, the reconciler publishes `:attention_changed` (the `mission_runtime` attention item and
-  `/counts` both follow it).
+  flips, or the desired or applied generation moves (a catch-up ends CONVERGING), it publishes
+  `:attention_changed` (the `mission_runtime` attention item and `/counts` both follow it).
   """
 
   alias Cadence.Persistence.OrganizationScope
@@ -89,17 +89,22 @@ defmodule Cadence.Control.MissionRuntimeStatus do
   defp activation_field(activation, _previous, :change_set_id),
     do: get_in(activation.metadata || %{}, ["change_set", "id"])
 
-  # The visible state can flip at a poll after the debounce, so announce on what readers see.
+  # The visible state can flip at a poll after the debounce, so announce on what readers see; a
+  # generation step (catching up to desired, lead 2026-11-13) changes /counts' runtime too.
   defp maybe_announce(mission_id, previous, record) do
     now = DateTime.utc_now()
 
-    if visible(previous, now) != visible(record, now) do
+    if visible(previous, now) != visible(record, now) or
+         generations(previous) != generations(record) do
       case OrganizationScope.organization_id_for_mission(mission_id) do
         nil -> :ok
         org -> ScopedReadUpdates.publish(:attention_changed, org, mission_id)
       end
     end
   end
+
+  defp generations(nil), do: nil
+  defp generations(record), do: {record.desired_generation, record.applied_generation}
 
   defp visible(nil, _now), do: nil
 
