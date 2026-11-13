@@ -56,6 +56,12 @@ defmodule Cadence.Reads.RoutingRuleGroupsTest do
            ]
   end
 
+  # Lead's drift sweep: the console reads transport.name as a string.
+  test "a group on a transport missing from the active list is named by its id" do
+    assert [%{transport: %{id: "t-gone", name: "t-gone"}}] =
+             CommsDirectory.group_rules([rule("r1", "sc-1", "t-gone")], %{})
+  end
+
   test "a mission's worst state is the worst one with any spacecraft" do
     assert OrganizationMissions.worst(%{critical: 0, caution: 2, stale: 5, nominal: 9}) ==
              :caution

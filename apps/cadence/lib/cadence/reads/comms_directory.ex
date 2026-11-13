@@ -249,7 +249,8 @@ defmodule Cadence.Reads.CommsDirectory do
       enabled = Enum.count(rules, & &1.enabled?)
 
       %{
-        transport: %{id: transport_id, name: transports[transport_id]},
+        # An archived transport has no name in the active list; its id keeps `name` non-null.
+        transport: %{id: transport_id, name: transports[transport_id] || transport_id},
         direction: direction,
         role: role,
         enabled_count: enabled,
