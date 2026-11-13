@@ -56,6 +56,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 49 | **Preview 500s for any change touching >100 spacecraft** (blocks #65 step 4) | C3 Roll out to on catalog_import_run_ieeplt7lvu_2LQPG, Block 1 + 'Also move the 499 on older versions' → POST /config/preview {spacecraft_profile update catalog_revision_id rev 4, options.rollout all_versions} → 500: MatchError {:error, :batch_bounds_exceeded} at Control.ConfigurationGeneration.changed_entries/5 (configuration_generation.ex:340) ← changed_spacecraft/3 ← Comms.ConfigKinds.FramingCompatibility.holds/3 ← Configuration.Pipeline.holds. Same class as #43 (a fetch larger than SpacecraftStore's 100 batch). The UI then says 'it isn't clear whether anything was changed', which overstates a dry run (nothing staged, checked) | domain (ConfigurationGeneration); copy: fe-setup | **verified** 11-12 01:40Z: 7533d50a (fetch_spacecrafts_in_batches; callers swept: SpacecraftOverride load, PassReview names, AttentionItems; Comms routing names only defensive, that page reads ≤100 rules per page). Block 1 all_versions preview → 200 HOLD, catalog_change 499 (rev 3→4), 001 kept (catalog_override), no catalog_cancels_commands. Copy: 'The dry run failed; nothing was staged.' (fe-setup) |
 | 50 | C3 Stage enabled for a rollout that moves nobody | Block 1 alone (without 'Also move the older'): dry run reads 'Moves 0 spacecraft to rev 4. 499 keep their catalog: they're on an older version of the profile. 1 keeps its own catalog (override).', yet 'Stage rev 4 for Earendil Block 1 — Demo' is enabled | fe-setup | **verified** 11-12 01:39Z: Block 1 alone → 'Nothing to stage: no spacecraft would move to rev 4.' (disabled); with all_versions → 'Moves 499 spacecraft to rev 4. 1 keeps its own catalog (override).' and Stage enabled |
 | 51 | **Org Audit 500s after 31–73 s** (S5 Audit unusable) | GET /organizations/org-reflect-orbital-demo/audit: 500 after 31 s (11-12 23:55Z) and 73 s (23:56Z), DBConnection closed in `ProviderAudit.list_entries` (provider_account_events.ex:23); qa's probe at 00:31Z hung > 30 s. `provider_audit_entries` is 4.1M rows / 4.7 GB, nearly all `provider_credential.resolved` (about 12/s since 11-08 21:54Z): every credential resolve writes an audit row (a354846a). See §51 | api-ops | **verified** 11-13 04:15Z after the :4011 restart: Audit 200 in 1.5 s (was 500 after 31–73 s); no `provider_credential.resolved` rows since boot (only `provider_event.page_ingested`); prune 2,785,598 rows (24 h kept) + `provider_audit_entries_org_action_time_idx` (CONCURRENTLY). Second prune of the remaining <24 h rows after the freeze |
+| 52 | K1 on a booked plan still reads as a draft | 11-15 (partially_reserved, 38/40, 2 failed): the header correctly reads 'R1 · 38 OF 40 BOOKED' and Demand lists 008 'Lost · SVA 00:13Z' and 010 'Failed · PUQ 00:19Z', yet Demand's head says 'ALL SPACECRAFT COVERED' / 'Every spacecraft meets its rule in this draft.' and the footer 'RULE MET 10/10'. On every booked day (11-09, 11-14, 11-17 reserved) the stepper marks 03 DRAFT current and 04 RESERVE not done, and panel B is titled 'DRAFT · BY STATION'. See §52 | lead | open |
 
 ## Details
 
@@ -347,6 +348,24 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   resolve rows in dev.
 - Side effect: 1 UPDATE plus 1 INSERT per resolve is steady write load on the shared DB.
 - No qa write was made; reads only, with statement_timeout.
+
+
+### 52. K1 on a booked plan still reads as a draft
+
+- Seen 2026-11-13 05:08Z, :4011, admin and member alike (k1-header.mjs). Screenshots:
+  scratchpad `console/k1-orgAdmin-2026-11-15.png`, `k1-orgAdmin-2026-11-14.png`.
+- **The header and primary action are right** (the cf3cd37a execution header): 11-09, 11-14 and 11-17
+  read 'R1 · BOOKED' with 'Open Contacts'; 11-10 reads 'R1 · 35 OF 40 BOOKED' with 'Open the re-plan
+  proposal' (a proposal is open); 11-15 reads 'R1 · 38 OF 40 BOOKED' with 'Re-plan after provider
+  changes'. Failed and lost passes are amber on the Gantt and become Demand rows with RE-PLAN.
+- **Wrong:**
+  1. On 11-15, Demand's head says 'ALL SPACECRAFT COVERED' and 'Every spacecraft meets its rule in
+     this draft.', and the footer says 'RULE MET 10/10', directly above two rows saying 008 and 010
+     lost their bookings. Once a plan is booked, coverage and Rule met should count what the provider
+     booked, not what was drafted. Or they should say they describe the draft.
+  2. The stepper marks '03 DRAFT' as current and '04 RESERVE' as not started on reserved and
+     partially reserved plans. Panel B is titled 'DRAFT · BY STATION'. Expected: Reserve done
+     (or current while confirmations arrive), and a panel title that names what it shows.
 
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
