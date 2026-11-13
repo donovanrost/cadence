@@ -3,7 +3,10 @@ import {
   array,
   DecodeError,
   decode,
+  isKnown,
   known,
+  knownText,
+  vocabularyText,
   nullable,
   object,
   oneOf,
@@ -40,6 +43,19 @@ describe("readers", () => {
     expect(state("closed")).toBe("closed");
     expect(state("archived")).toBe("unrecognized");
     expect(() => state(3)).toThrow(DecodeError);
+  });
+
+  it("knownText keeps a new value's raw text and can't widen back to string", () => {
+    const state = knownText(["active", "closed"]);
+    expect(state("archived")).toEqual({ unrecognized: "archived" });
+    const words = { active: "Active", closed: "Closed" } as const;
+    expect(vocabularyText(state("closed"), words)).toBe("Closed");
+    expect(vocabularyText(state("archived"), words)).toBe("archived");
+    const value = state("closed");
+    expect(isKnown(value) ? value : null).toBe("closed");
+    // A misspelled literal is a compile error, not a silent false (the point of the object form).
+    // @ts-expect-error TS2367: no overlap between the vocabulary and "clossed"
+    expect(value === "clossed").toBe(false);
   });
 
   it("reports each unrecognized value once per field, and keeps the type closed", () => {

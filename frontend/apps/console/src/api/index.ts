@@ -13,3 +13,5 @@ export {
 export type { Session, SessionMission, SessionOrganization } from "./session.ts";
 export { type RemoteState } from "./remote-state.ts";
 export { useRemoteQuery } from "./use-remote-query.ts";
+/** Closed vocabularies that keep the raw server word (typing plan §12 A0). */
+export { isKnown, knownText, vocabularyText, type Unrecognized } from "./decode.ts";

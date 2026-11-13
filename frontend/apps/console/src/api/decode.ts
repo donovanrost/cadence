@@ -76,10 +76,9 @@ export const oneOf =
 
 /**
  * A closed vocabulary that tolerates the server growing it: known values decode to the union,
- * anything else (a string) to `"unrecognized"`, so one new server value never fails a whole
- * read (the chain_head / #71 lesson). Non-strings still fail. Prefer this over `oneOf` for
- * state / status / kind / reason fields the server may extend; use `oneOf` only where an
- * unknown value must be an error. Callers switch exhaustively, with `unrecognized` handled.
+ * any other string to the literal `"unrecognized"`, so one new server value never fails a whole
+ * read (the chain_head / #71 lesson). Non-strings still fail. Use `knownText` instead when the
+ * screen should show the server's raw word for a value it doesn't know (typing plan §12 A0).
  */
 export const known =
   <const T extends readonly string[]>(values: T): Reader<T[number] | "unrecognized"> =>
@@ -90,6 +89,36 @@ export const known =
     reportUnrecognized(path, text);
     return "unrecognized";
   };
+
+/**
+ * A server value outside a closed vocabulary, with its raw text kept for display. An object, so a
+ * `knownText()` result can never widen back to `string`: comparing it with a misspelled literal
+ * is a compile error, and a switch over the known values must handle this case too.
+ */
+export type Unrecognized = Readonly<{ unrecognized: string }>;
+
+/** Like `known`, but an unknown value keeps its raw text: `{ unrecognized: "<raw>" }`. */
+export const knownText =
+  <const T extends readonly string[]>(values: T): Reader<T[number] | Unrecognized> =>
+  (value, path = "") => {
+    const text = string(value, path);
+    const found = values.find((candidate) => candidate === text);
+    if (found !== undefined) return found;
+    reportUnrecognized(path, text);
+    return Object.freeze({ unrecognized: text });
+  };
+
+/** True for a value in the vocabulary; narrows away `Unrecognized`. */
+export const isKnown = <T extends string>(value: T | Unrecognized): value is T =>
+  typeof value === "string";
+
+/** The word for a known value, or the server's raw text for an unrecognized one. */
+export function vocabularyText<T extends string>(
+  value: T | Unrecognized,
+  words: Readonly<Record<T, string>>,
+): string {
+  return isKnown(value) ? words[value] : value.unrecognized;
+}
 
 /** Each new server value is reported once per field path (console.warn), so we notice it. */
 const reported = new Set<string>();
