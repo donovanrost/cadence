@@ -252,7 +252,7 @@ const latest = (p: (typeof all.value)[number]) =>
               <RouterLink
                 :to="{ name: 'ops.dashboards' }"
                 class="max-md:hit-44 text-text-3 no-underline hover:text-readout"
-                >Dashboards ↗</RouterLink
+                >Dashboards</RouterLink
               >
             </span>
           </template>

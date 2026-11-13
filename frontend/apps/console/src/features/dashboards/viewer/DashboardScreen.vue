@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
 import { TakeoverHeader, useMissionScope } from "@/shell";
 import { useConnection } from "@/live";
 import { ApCallout } from "@/ui";
 import type { Runtime } from "../api.ts";
+import { recordView } from "../directory/api.ts";
 import {
   selectionFromQuery,
   selectionLabel,
@@ -48,6 +49,15 @@ const query = useDashboardView(missionId, dashboardId, runtime, {
 });
 const view = computed(() =>
   query.state.value.status === "ready" ? query.state.value.value : null,
+);
+// D6: each open feeds the directory's "Recent". `request` resolves to a result (it never rejects),
+// and a failed record changes nothing on this page, so the outcome is ignored on purpose.
+watch(
+  dashboardId,
+  (id) => {
+    if (id) void recordView(missionId.value, id);
+  },
+  { immediate: true },
 );
 const connection = useConnection();
 /** Kiosk (ux): `?kiosk=1` or ⋯ › Kiosk; the header collapses to a status line. */

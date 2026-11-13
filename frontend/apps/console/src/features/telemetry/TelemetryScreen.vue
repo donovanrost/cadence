@@ -3,7 +3,8 @@ import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { ApButton, ApPageHeader, ApRemote, type TimeRange } from "@/ui";
+import { ApPageHeader, ApRemote, type TimeRange } from "@/ui";
+import { TelemetryTabs } from "@/features/dashboards/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
 import { fetchLimitIntervals } from "@/features/investigate/index.ts";
 import { resolveWindow, windowFromRange, windowLabel, type WindowSel } from "./window.ts";
@@ -84,11 +85,8 @@ const rows = computed(() =>
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
-    <ApPageHeader :label="`${scope.mission.name} · telemetry`" title="Explore">
-      <ApButton size="compact" variant="ghost" :to="{ name: 'ops.dashboards' }"
-        >Dashboards ↗</ApButton
-      >
-    </ApPageHeader>
+    <ApPageHeader :label="`${scope.mission.name} · telemetry`" title="Explore" />
+    <TelemetryTabs active="explore" />
     <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
       <div
         class="grid grid-cols-1 gap-3 console:min-h-0 console:flex-1 console:grid-cols-[320px_minmax(0,1fr)]"
