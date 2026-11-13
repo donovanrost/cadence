@@ -3,6 +3,7 @@ import type {
   HostActionRequest,
   HostBridge,
   HostSessionDescriptor,
+  HostSurfaceReport,
 } from "@cadence/plugin-sdk";
 import { HostBridgeError, type HttpHostBridge } from "@cadence/plugin-sdk/host";
 
@@ -13,6 +14,11 @@ import { HostBridgeError, type HttpHostBridge } from "@cadence/plugin-sdk/host";
  * Every action receipt goes to `onReceipt` (the save-outcome seam).
  */
 export const LOST_TEXT = "This page lost its connection to the app. Reload the page to continue.";
+/** ux: when the surface reported unsaved changes, say they're lost before asking for a reload. */
+export const lostText = (dirty: boolean) =>
+  dirty
+    ? "This page lost its connection to the app. Changes you haven't saved here will be lost. Reload the page to continue."
+    : LOST_TEXT;
 
 export const isMismatch = (e: unknown) =>
   e instanceof HostBridgeError && e.code === "host_session_mismatch";
@@ -31,6 +37,8 @@ export function repinningBridge(options: {
   navigate: (href: string) => void;
   onReceipt: (actionId: string, receipt: HostActionReceipt) => void;
   onLost: () => void;
+  /** The surface's optional `report({dirty})` (plugin-sdk HostBridge.report). */
+  onReport?: (state: HostSurfaceReport) => void;
 }): RepinningBridge {
   let current = options.create(options.session);
 
@@ -61,6 +69,7 @@ export function repinningBridge(options: {
     navigate: options.navigate,
     query: (request) => withRepin((b) => b.query(request)),
     subscribe: (listener) => current.subscribe(listener),
+    report: (state) => options.onReport?.(state),
     async execute<TInput, TResult>(
       request: HostActionRequest<TInput>,
     ): Promise<HostActionReceipt<TResult>> {

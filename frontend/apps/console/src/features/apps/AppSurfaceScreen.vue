@@ -3,10 +3,11 @@ import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
-import { ApBreadcrumb, ApPageHeader, ApRemote, ApTabLinks, ApTag } from "@/ui";
+import { ApBreadcrumb, ApPageHeader, ApRemote, ApTabLinks } from "@/ui";
+import AppStatusLine from "./AppStatusLine.vue";
 import AppSurfaceNotice from "./AppSurfaceNotice.vue";
 import { fetchApps } from "./api.ts";
-import { fetchSurfaceHost, statusTag } from "./host.ts";
+import { fetchSurfaceHost } from "./host.ts";
 import type { SaveOutcome } from "./saveOutcome.ts";
 import { hostRefusal, setupSurfaces } from "./surfaces.ts";
 import SurfaceMount from "./SurfaceMount.vue";
@@ -87,11 +88,7 @@ const crumbs = computed(() => [
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApBreadcrumb :crumbs="crumbs" />
     <ApPageHeader :label="`${scope.mission.name} · apps · ${name}`" :title="title" size="reading">
-      <ApTag
-        v-if="status"
-        :state="statusTag[status.state].state"
-        :label="`${statusTag[status.state].label}${status.version ? ` · v${status.version}` : ''}`"
-      />
+      <AppStatusLine :app-key="appKey" :status="status" />
     </ApPageHeader>
     <ApTabLinks
       v-if="links.length > 1"

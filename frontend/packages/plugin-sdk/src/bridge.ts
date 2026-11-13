@@ -188,6 +188,15 @@ export interface HostBridge {
   query<TResult>(request: HostQueryRequest): Promise<TResult>;
   execute<TInput, TResult>(request: HostActionRequest<TInput>): Promise<HostActionReceipt<TResult>>;
   subscribe(listener: HostActivityListener): () => void;
+  /**
+   * Optional (console L9 host): the surface tells the host it has unsaved changes, so the host can
+   * guard leaving and warn before a reload. Older hosts don't offer it; surfaces call it only if present.
+   */
+  report?(this: void, state: HostSurfaceReport): void;
+}
+
+export interface HostSurfaceReport {
+  dirty?: boolean;
 }
 
 export interface FederatedApplicationProps {

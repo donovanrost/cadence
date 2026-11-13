@@ -8,7 +8,7 @@ describe("L9 save-outcome seam (DECISIONS #77)", () => {
   it("says what each app's own save did, never 'staged'", () => {
     expect(saveOutcome("limits", "save_limit_definition", receipt)).toEqual({
       kind: "saved",
-      text: "Saved.",
+      text: "Saved. It applies now.",
     });
     expect(saveOutcome("telemetry_decom", "request_activation", receipt)).toEqual({
       kind: "activation_requested",
@@ -50,5 +50,37 @@ describe("L9 host frame helpers", () => {
       "unknown",
     );
     expect(hostRefusal({ kind: "unavailable", status: 500, message: "" })).toBeNull();
+  });
+});
+
+describe("L9 status line (ux #77)", () => {
+  it("says who requested the pending activation and when", async () => {
+    const { pendingLine } = await import("./host.ts");
+    const { saveMode } = await import("./saveOutcome.ts");
+    const { lostText } = await import("./hostBridge.ts");
+    const at = (iso: string) => iso.slice(11, 16) + "Z";
+    const base = { state: "activation_pending" as const, label: null, version: "3" };
+    expect(
+      pendingLine(
+        {
+          ...base,
+          activation_request: {
+            requested_by: { name: "Mira K." },
+            requested_at: "2026-11-13T02:10:00Z",
+          },
+        },
+        at,
+      ),
+    ).toBe("Waiting for activation approval · requested by Mira K. at 02:10Z");
+    expect(pendingLine({ ...base, activation_request: null }, at)).toBe(
+      "Waiting for activation approval",
+    );
+    expect(pendingLine({ ...base, state: "active", activation_request: null }, at)).toBeNull();
+    expect([saveMode("limits"), saveMode("telemetry_decom"), saveMode("x")]).toEqual([
+      "immediate",
+      "activation",
+      null,
+    ]);
+    expect(lostText(true)).toContain("Changes you haven't saved here will be lost.");
   });
 });

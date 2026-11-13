@@ -18,6 +18,16 @@ export const appStates = [
 export const appStatus = d.object({
   state: d.oneOf(appStates),
   label: d.nullable(d.string),
+  /** Asked of api (ux #77): the open activation request, for "Waiting for activation approval · …". */
+  activation_request: (v: unknown, path = "") =>
+    v === undefined
+      ? null
+      : d.nullable(
+          d.object({
+            requested_by: d.nullable(d.object({ name: d.string })),
+            requested_at: d.timestamp,
+          }),
+        )(v, path),
   version: (v: unknown, path = "") =>
     typeof v === "number" ? String(v) : d.nullable(d.string)(v === undefined ? null : v, path),
 });
@@ -77,3 +87,12 @@ export const statusTag: Readonly<
   activation_pending: { state: "caution", label: "Activation pending" },
   failed: { state: "crit", label: "Failed" },
 };
+
+/** ux #77: `Waiting for activation approval · requested by Mira K. at 02:10Z`. */
+export function pendingLine(status: AppStatus, at: (iso: string) => string): string | null {
+  if (status.state !== "activation_pending") return null;
+  const r = status.activation_request;
+  if (!r) return "Waiting for activation approval";
+  const by = r.requested_by ? ` by ${r.requested_by.name}` : "";
+  return `Waiting for activation approval · requested${by} at ${at(r.requested_at)}`;
+}

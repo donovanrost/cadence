@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, type Component } from "vue";
-import { useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRouter } from "vue-router";
 import {
   fullPageSurfaceProps,
   type FullPageSurfaceProps,
@@ -9,7 +9,7 @@ import {
 import { createHttpHostBridge, loadFederatedApplication } from "@cadence/plugin-sdk/host";
 import { ApButton, ApCallout } from "@/ui";
 import type { SurfaceHost } from "./host.ts";
-import { LOST_TEXT, repinningBridge, type RepinningBridge } from "./hostBridge.ts";
+import { lostText, repinningBridge, type RepinningBridge } from "./hostBridge.ts";
 import { saveOutcome, type SaveOutcome } from "./saveOutcome.ts";
 
 /**
@@ -29,6 +29,13 @@ const app = props.host.catalog.applications[0];
 const surface = shallowRef<{ component: Component; props: FullPageSurfaceProps } | null>(null);
 const failure = ref<string | null>(null);
 const lost = ref(false);
+/** The surface's own report (plugin-sdk HostBridge.report); surfaces that don't report never block. */
+const dirty = ref(false);
+onBeforeRouteLeave(() =>
+  dirty.value
+    ? window.confirm("Leave this page? Changes you haven't saved here will be lost.")
+    : true,
+);
 let bridge: RepinningBridge | null = null;
 
 /** Console paths stay in the SPA (router base /console/); anything else is a full navigation. */
@@ -55,6 +62,9 @@ async function load() {
         if (outcome) emit("outcome", outcome);
       },
       onLost: () => (lost.value = true),
+      onReport: (state) => {
+        if (state.dirty !== undefined) dirty.value = state.dirty;
+      },
     });
     surface.value = {
       component: module.default,
@@ -87,7 +97,7 @@ onBeforeUnmount(() => {
     </ApCallout>
     <p class="m-0 text-sm text-text-3">{{ appName }} v{{ app?.applicationVersion }}</p>
   </template>
-  <ApCallout v-if="lost && !failure" tone="caution">{{ LOST_TEXT }}</ApCallout>
+  <ApCallout v-if="lost && !failure" tone="caution">{{ lostText(dirty) }}</ApCallout>
   <p v-if="!failure && !surface" class="m-0 font-mono text-xs text-text-3 uppercase">
     Loading {{ appName }}…
   </p>
