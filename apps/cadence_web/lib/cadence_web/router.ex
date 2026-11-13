@@ -941,6 +941,8 @@ defmodule CadenceWeb.Router do
       post("/apps/:key/install", AppController, :install)
       post("/apps/:key/disable", AppController, :disable)
       post("/apps/:key/uninstall", AppController, :uninstall)
+      # L9 surface host: one surface's application-host catalog, status and surfaces.
+      get("/apps/:key/surfaces/:surface_id/host", AppSurfaceController, :host)
 
       # -- Events and scheduling (owner: api, DECISIONS #26). Contracts: ops.md, scheduling.md
       get("/events", EventController, :index)

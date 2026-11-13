@@ -3,7 +3,9 @@ defmodule CadenceWeb.Plugs.ApplicationHostSession do
 
   import Plug.Conn
 
-  @session_key :application_host_session_id
+  alias CadenceWeb.ApplicationHostSessionState
+
+  @session_key ApplicationHostSessionState.session_key()
   @session_header "x-cadence-poc-session"
   @problem_schema "cadence.application-host-problem.v1"
 
@@ -35,10 +37,7 @@ defmodule CadenceWeb.Plugs.ApplicationHostSession do
   end
 
   defp issue_session(conn) do
-    session_id =
-      32
-      |> :crypto.strong_rand_bytes()
-      |> Base.url_encode64(padding: false)
+    session_id = ApplicationHostSessionState.mint_session_id()
 
     conn
     |> put_session(@session_key, session_id)

@@ -19,8 +19,8 @@ defmodule CadenceWeb.ApplicationHostController do
 
   @problem_schema "cadence.application-host-problem.v1"
   @json_content_type "application/json; charset=utf-8"
-  @host_context_key :application_host_context
-  @host_mission_key :application_host_mission_id
+  @host_context_key CadenceWeb.ApplicationHostSessionState.host_context_key()
+  @host_mission_key CadenceWeb.ApplicationHostSessionState.host_mission_key()
 
   @spec federated(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def federated(conn, %{"application_key" => application_key} = params) do
@@ -538,17 +538,11 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   defp put_host_session(conn, current_scope, route_context) do
-    conn =
-      put_session(
-        conn,
-        @host_context_key,
-        ApplicationHostCatalog.scope_document(current_scope, route_context)
-      )
-
-    case route_context.host_context.mission_id do
-      mission_id when is_binary(mission_id) -> put_session(conn, @host_mission_key, mission_id)
-      _generic -> delete_session(conn, @host_mission_key)
-    end
+    CadenceWeb.ApplicationHostSessionState.pin_scope(
+      conn,
+      ApplicationHostCatalog.scope_document(current_scope, route_context),
+      route_context.host_context.mission_id
+    )
   end
 
   defp requested_scope(%{"host_scope" => scope}) when is_binary(scope), do: scope
