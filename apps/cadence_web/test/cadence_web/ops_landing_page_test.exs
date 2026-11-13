@@ -31,7 +31,7 @@ defmodule CadenceWeb.OpsLandingPageTest do
            }
 
     assert page(view)["can_administer"] == false
-    render_hook(view, "host:context", %{"path" => path(c) <> "/dashboards"})
+    render_hook(view, "host:context", %{"path" => path(c) <> "/dashboards/library"})
     assert page(view) == nil
     render_hook(view, "host:context", %{"path" => path(c)})
     assert page(view)["context"]["mission_id"] == c.mission.mission_id
@@ -47,6 +47,17 @@ defmodule CadenceWeb.OpsLandingPageTest do
 
     assert {:error, {:redirect, %{to: "/missions"}}} =
              render_hook(view, "host:context", %{"path" => destination})
+  end
+
+  test "the dashboards directory is no longer a client-side hop: it redirects to the console",
+       c do
+    {:ok, view, _} = live(c.conn, path(c))
+    render_hook(view, "host:context", %{"path" => path(c) <> "/dashboards"})
+    assert_reply(view, %{ok: false})
+    assert page(view)["context"]["mission_id"] == c.mission.mission_id
+
+    assert redirected_to(get(c.conn, path(c) <> "/dashboards"), 302) ==
+             "/console/#{c.org.slug}/#{c.mission.slug}/telemetry/dashboards"
   end
 
   test "anonymous entry and revoked refresh do not expose navigation", c do
