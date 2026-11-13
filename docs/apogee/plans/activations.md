@@ -69,3 +69,15 @@ POST /:id/withdraw {reason} → 200 {request: <row>}                 (requester 
   request reads its decision line instead of the form.
 - The app host's caution line ("Waiting for activation approval · requested by Mira K. at 02:10Z", L9) links to
   the review page.
+
+## Addition (lead, director-approved 2026-11-13): resume a stalled or failed apply
+Domain adds a manual resume for an activation whose apply failed or stalled midway: the activation committed,
+decom state rolled back, execution stuck.
+- **Execution on every row** (`<row>.execution`): `{state: in_progress | succeeded | failed, since, error_code|null,
+  error|null}`. `error_code` includes the new `activation_execution_interrupted`; `error` is the reason in words.
+- **`POST /:id/resume`** (empty body) → `200 {request: <row>, outcome: applied | needs_review}`. Behind the approval
+  permission (`activations.approve`, the same gate as approve), audited. `409 nothing_to_resume {state}` when the
+  execution isn't failed or stalled.
+- **Console:** the review page shows a caution line for a failed or stalled apply ("Approved, but it didn't
+  apply: <reason>. Since 02:14Z.") with `Retry apply` for people who may approve. Now (fe-ops) can list these as
+  needing attention, from the same rows.
