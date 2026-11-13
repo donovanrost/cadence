@@ -586,24 +586,41 @@ defmodule Cadence.Catalog.Importers.Xtce13.Translator do
     )
   end
 
+  # Only the type's DefaultAlarm lowers to default rules. Context alarms (ContextAlarmList) and
+  # change alarms (ChangeAlarmRanges, rate of change) are different rules and aren't lowered here;
+  # before 2026-11-13 their ranges were swept in as value ranges.
   defp alarm_rules(type_element) do
-    numeric =
-      type_element
-      |> Element.descendants(fn element -> String.ends_with?(element.name, "Range") end)
-      |> Enum.flat_map(&numeric_alarm_rule/1)
+    case Element.descendants(type_element, "DefaultAlarm") do
+      [default | _] -> static_range_rules(default) ++ enumeration_rules(default)
+      [] -> []
+    end
+  end
 
-    enumerated =
-      type_element
-      |> Element.descendants("EnumerationAlarm")
-      |> Enum.map(fn alarm ->
-        %{
-          kind: :enumerated,
-          values: [Element.attr(alarm, "enumerationLabel")],
-          severity: alarm_severity(Element.attr(alarm, "alarmLevel"), :warning)
-        }
-      end)
+  # XTCE 1.2 AlarmRangesType: with rangeForm "outside" (the default) each range is the acceptable
+  # band and a value outside it is in that alarm; less severe ranges nest inside more severe
+  # ones, so the evaluator's most severe match is the right level. "inside" alarms on values
+  # inside the range.
+  defp static_range_rules(default) do
+    case Element.child(default, "StaticAlarmRanges") do
+      nil ->
+        []
 
-    numeric ++ enumerated
+      ranges ->
+        outside? = Element.attr(ranges, "rangeForm", "outside") != "inside"
+        Enum.flat_map(ranges.children, &numeric_alarm_rule(&1, outside?))
+    end
+  end
+
+  defp enumeration_rules(default) do
+    default
+    |> Element.descendants("EnumerationAlarm")
+    |> Enum.map(fn alarm ->
+      %{
+        kind: :enumerated,
+        values: [Element.attr(alarm, "enumerationLabel")],
+        severity: alarm_severity(Element.attr(alarm, "alarmLevel"), :warning)
+      }
+    end)
   end
 
   defp alarm_definition(type_element) do
@@ -621,7 +638,7 @@ defmodule Cadence.Catalog.Importers.Xtce13.Translator do
     }
   end
 
-  defp numeric_alarm_rule(element) do
+  defp numeric_alarm_rule(element, outside?) do
     severity = severity_from_range_name(element.name)
 
     if severity do
@@ -638,6 +655,7 @@ defmodule Cadence.Catalog.Importers.Xtce13.Translator do
             ),
           lower_closed: not is_nil(Element.attr(element, "minInclusive")),
           upper_closed: not is_nil(Element.attr(element, "maxInclusive")),
+          outside: outside?,
           severity: severity
         }
       ]
