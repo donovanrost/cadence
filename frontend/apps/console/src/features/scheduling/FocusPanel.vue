@@ -51,7 +51,7 @@ const contactsMet = computed(() => {
       }}</span>
     </template>
     <p v-if="!view" class="m-0 text-md text-text-3">
-      Pick a spacecraft in Demand to see its day: passes, and the gaps between them.
+      Pick a spacecraft in Demand to see its passes that day and the gaps between them.
     </p>
     <div v-else class="flex flex-col gap-3">
       <ul class="m-0 flex list-none flex-wrap items-center gap-x-4 gap-y-2 p-0">

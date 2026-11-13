@@ -189,6 +189,7 @@ onBeforeUnmount(() => returnFocus?.focus());
       <PaletteResults
         :groups="groups"
         :active-key="rows[active]?.key ?? null"
+        :can-command="access.request"
         @open="go"
         @expand="expand"
       />

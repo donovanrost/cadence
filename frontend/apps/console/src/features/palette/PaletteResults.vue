@@ -4,7 +4,12 @@ import { ApStatusMark } from "@/ui";
 import type { Group, GroupView, PaletteItem } from "./results.ts";
 
 /** Grouped listbox. Rows are options; the active row is tracked by the input's activedescendant. */
-const props = defineProps<{ groups: readonly GroupView[]; activeKey: string | null }>();
+const props = defineProps<{
+  groups: readonly GroupView[];
+  activeKey: string | null;
+  /** Commands are only searchable with request access, so the hint names them only then. */
+  canCommand: boolean;
+}>();
 const total = computed(() => props.groups.reduce((n, g) => n + g.items.length + g.more, 0));
 const emit = defineEmits<{ open: [item: PaletteItem]; expand: [group: Group] }>();
 </script>
@@ -19,7 +24,12 @@ const emit = defineEmits<{ open: [item: PaletteItem]; expand: [group: Group] }>(
   >
     <p v-if="groups.length === 0" class="m-0 px-4 py-6 text-md text-text-3">
       <span class="block font-semibold text-readout">No matches</span>
-      Try a spacecraft number like 312, a command like SET_ or a station code like FBK.
+      <!-- No example values: the mission may not have them (ux, U25). -->
+      {{
+        canCommand
+          ? "Try a spacecraft name or number, a command name, or a station code."
+          : "Try a spacecraft name or number, or a station code."
+      }}
     </p>
     <div v-for="g in groups" :key="g.group" role="group" :aria-label="g.group">
       <p class="ap-label m-0 flex items-center gap-3 px-4 pt-3 pb-1">
