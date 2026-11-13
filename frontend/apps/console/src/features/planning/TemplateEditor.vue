@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { useRemoteQuery } from "@/api";
+import { fieldErrors, useRemoteQuery } from "@/api";
 import {
   failureOutcome,
   fromDocument,
@@ -131,11 +131,14 @@ async function save() {
     };
     const r = await saveTemplate(props.missionId, props.template?.id ?? null, body);
     const replayed = r.ok ? null : alreadyCreated(r.error, "template_id");
-    if (!r.ok && !replayed)
+    if (!r.ok && !replayed) {
+      // A 422 names schema paths (e.g. requirement.max_gap_seconds): show them on their fields.
+      errors.value = fieldErrors(r.error);
       return void (note.value = {
         tone: "crit",
         text: failureOutcome(r.error, "changed").sentence,
       });
+    }
     if (props.template) emit("close");
     else
       await router.push({
