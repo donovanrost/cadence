@@ -42,7 +42,29 @@ acknowledge or hand off.** Building new uplinks stays on the console, on purpose
 - **Alarms:** list of active alarms (mark, spacecraft, point, now vs limit, age), tap → alarm page.
 - **GO polls:** requests awaiting your GO, tap → mobile Approve: header, What changes (A1),
   Re-checked (A2), decision options, `Sign GO`.
-- **Search:** the ⌘K query as a full-screen sheet; results limited to spacecraft, alarms, requests.
+- **Search** (lead builds; BACKLOG §5): a full-screen sheet over the current tab.
+  - **Entry:** the `Search` tab in the bottom bar. It opens with the input focused and the keyboard up. There's no
+    ⌘K or prefix legend on a phone. Close with `Cancel` (text button right of the input, ≥ 48px) or back; it
+    returns to the tab you came from.
+  - **Empty query:** `Recent` (the last 5 opened from this sheet, phone kinds only). With nothing recent, the hint
+    "Search spacecraft by name or number, alarms by point, requests by title." Then nothing else, no page list.
+  - **Groups, in order:** `Alarms` (active only; matches the spacecraft name or the point) → `Requests` (awaiting
+    your GO first, then other open ones; matches the title, mnemonic or request id) → `Spacecraft` (name or
+    SCID). Alarms lead because a paged person is looking for the alarm. Typing a spacecraft name shows its alarms
+    first.
+  - **Rows:** ≥ 56px, with a status mark, a title and one subtitle line.
+    - Alarm: `EARENDIL-312 · VBAT below limit` / `23.1 V · red 24.0 V · T+3m`.
+    - Request: `Low power safe · 4 SC` / `Your GO · Mira K. · T+12m`, or its state.
+    - Spacecraft: `EARENDIL-312` / `SCID 312 · P07 · stale 2h`.
+  - At most 5 per group, then `Show all 23` expands in place.
+  - **A row opens:**
+    - an alarm → the alarm page (`M/fleet/:id/investigate?alarm=…`);
+    - a request awaiting your GO → mobile Approve (`…/review`); any other request → its status (Uplink,
+      read-only);
+    - a spacecraft → its Investigate page.
+    - There's no "command it" action on a phone.
+  - **States:** `Searching…` keeps the last results (no flicker). No match: `Nothing matches "xyz".` A group whose
+    read failed shows one row "Alarms couldn't load." with `Try again`; the other groups still show.
 
 ## Acceptance (for qa)
 - At 390×844 nothing scrolls horizontally; targets ≥ 48px; the tab bar clears the home indicator.
