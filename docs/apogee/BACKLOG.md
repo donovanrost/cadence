@@ -147,8 +147,8 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Add spacecraft (`AddSpacecraft.md`, S2): mostly built
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Step 03 routing: transport/station pick, "generates N routes" summary (A4 says "added later") | fe-setup | — profile routing exists *(unverified)* |
-| NORAD id on the profile path; `New profile` link in the picker | fe-setup | — |
+| ~~Step 03 routing summary from the profile's rules~~ done (a935be0b) | fe-setup | — |
+| ~~NORAD id on the profile path~~ done (a935be0b); `New profile` link in the picker | fe-setup | — |
 
 ### Catalog (`Catalog.md`, S3): partial
 | Item | Owner | Blocked on |
@@ -156,7 +156,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~`setup/catalog/:databaseId` route (pending)~~ redirects (fe-setup, ux §7 pass 1: b42b2358, 7fe01991, 02e87cee) | fe-setup | — |
 | ~~C1 diff + stat strip~~ done (30b69efc, live on r3) | fe-setup | — |
 | ~~C3 Roll out to~~ built (96256074, 1d5335e6, 0391a9a5; api 34b8cc27, domain 2ef4ca79). 'Request activation' is gone after #65 (ux re-spec: 'Stage rev N for <profiles>') | fe-setup | qa: live check (no catalog change touching 001 before the 11-14 00:33Z pass) |
-| ~~Commands vs Telemetry split~~ done (30b69efc); `Replace file`; warnings disclosure *(unverified)* | fe-setup | — |
+| ~~Commands vs Telemetry split~~ done (30b69efc); ~~`Replace file`; warnings disclosure~~ done (e343f9d3: import verdict, 'Show N warnings', failed → Diagnostics) | fe-setup | — |
 
 ### Profile (`Profile.md`, S4): partial
 | Item | Owner | Blocked on |
@@ -171,7 +171,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | ~~Compare revisions (`r4...r6`)~~ done (8b58f513) | fe-setup | — |
 | ~~`Keep mine` / `Take live` on conflicts~~ done (3ced6cea, 433bcd0f) | fe-setup | — |
-| Staged bar conflict / applying / apply-failed states; top bar `CONVERGING` / `RUNTIME DEGRADED`; live apply steps | fe-setup | apply progress source *(unverified)* |
+| Staged bar conflict / applying / apply-failed states; top bar `CONVERGING` / `RUNTIME DEGRADED`; live apply steps | fe-setup | source now exists: `/counts.runtime` {state, desired_generation, applied_generation, reason} (api-ops c69f0578, domain 292c8e6b) + the U38 banner; ux to confirm wording |
 | ~~qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now"~~ copy done (c16546c4; domain 33529f29) | qa closes | — |
 | Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | api: §8 8d |
 
