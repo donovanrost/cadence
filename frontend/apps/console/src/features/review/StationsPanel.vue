@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { ApPanel, ApTable, type ApColumn } from "@/ui";
 import type { StationLine } from "./api.ts";
-import { byRealization, minutes, percent, stationRatio } from "./format.ts";
+import { byRealization, minutes, percent, stationRatio, stationText } from "./format.ts";
 
 /** R1 · By station, worst realization first. No billing, so no billed minutes. */
 const props = defineProps<{ lines: readonly StationLine[] }>();
@@ -29,7 +29,7 @@ const meta = computed(() =>
     <ApTable
       :columns="columns"
       :rows="byRealization(lines)"
-      :row-key="(l) => l.station.ref"
+      :row-key="(l) => l.station.id ?? l.station.ref ?? stationText(l.station)"
       caption="Realization by station"
     >
       <template #cell-station="{ row }">

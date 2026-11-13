@@ -28,8 +28,10 @@ export function headline(s: ReviewSummary): { text: string; tone: "nominal" | "c
 /** Why the % is provisional, in words (never a final % while a report is missing). */
 export function provisionalText(s: ReviewSummary): string | null {
   if (!s.provisional) return null;
-  const waiting = s.freshness.filter((f) => f.pending_reports > 0).map((f) => f.provider.name);
-  const broken = s.freshness.filter((f) => !f.cursor_healthy).map((f) => f.provider.name);
+  // provider and cursor_healthy can be null (api drift sweep 11-13): unknown isn't broken.
+  const who = (f: ReviewSummary["freshness"][number]) => f.provider?.name ?? "a provider";
+  const waiting = s.freshness.filter((f) => f.pending_reports > 0).map(who);
+  const broken = s.freshness.filter((f) => f.cursor_healthy === false).map(who);
   const parts = [
     s.pending_count > 0
       ? `${s.pending_count} ${s.pending_count === 1 ? "pass awaits" : "passes await"} a provider report${waiting.length > 0 ? ` (${waiting.join(", ")})` : ""}`
@@ -109,7 +111,7 @@ export function outcomeTag(o: Outcome): { state: OpState; label: string } {
 
 /** Confirmed code, else name, else the provider's ref (U25: never a suggestion). */
 export function stationText(s: ReviewStation): string {
-  return s.code ?? s.name ?? s.ref;
+  return s.code ?? s.name ?? s.ref ?? "Unknown station";
 }
 
 /** realized / (planned − canceled), null when nothing counts. */

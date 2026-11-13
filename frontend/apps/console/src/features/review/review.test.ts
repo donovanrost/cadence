@@ -58,8 +58,8 @@ const payload = {
   ],
 };
 
-async function summary() {
-  const fetchMock = async () => new Response(JSON.stringify({ data: payload }), { status: 200 });
+async function summary(body: unknown = payload) {
+  const fetchMock = async () => new Response(JSON.stringify({ data: body }), { status: 200 });
   const original = globalThis.fetch;
   globalThis.fetch = fetchMock as typeof fetch;
   try {
@@ -136,5 +136,23 @@ describe("format", () => {
     expect(days[0]?.day).toBe("2026-10-11");
     expect(days.at(-1)?.entry?.planned).toBe(10);
     expect(days[0]?.entry).toBeNull();
+  });
+});
+
+describe("pass review nulls (api drift sweep 11-13)", () => {
+  it("reads a provider-less freshness row, an unknown cursor and a station without a ref", async () => {
+    const [line] = payload.by_station;
+    const [fresh] = payload.freshness;
+    if (!line || !fresh) throw new Error("fixture");
+    const s = await summary({
+      ...payload,
+      provisional: true,
+      pending_count: 1,
+      by_station: [{ ...line, station: { ...line.station, ref: null } }],
+      freshness: [{ ...fresh, provider: null, cursor_healthy: null, pending_reports: 1 }],
+    });
+    expect(s.by_station[0]?.station.ref).toBeNull();
+    // Unknown cursor health isn't called broken; the provider is named generically.
+    expect(provisionalText(s)).toBe("Provisional: 1 pass awaits a provider report (a provider).");
   });
 });

@@ -128,7 +128,8 @@ const scMatch = computed(() => {
     const sc = (p.spacecraft_id ? byId.value.get(p.spacecraft_id) : undefined) ?? p.spacecraft;
     return (
       !!sc &&
-      (sc.name.toLowerCase().includes(q) || (sc.scid != null && String(sc.scid).startsWith(q)))
+      ((sc.name ?? "").toLowerCase().includes(q) ||
+        (sc.scid != null && String(sc.scid).startsWith(q)))
     );
   };
 });
@@ -202,7 +203,10 @@ const selectedSpacecraft = computed(() => {
   if (!p) return null;
   const known = p.spacecraft_id ? byId.value.get(p.spacecraft_id) : undefined;
   if (known) return known;
-  return p.spacecraft?.scid != null ? { name: p.spacecraft.name, scid: p.spacecraft.scid } : null;
+  // A deleted spacecraft keeps its pass rows with a null name (contacts.md).
+  return p.spacecraft?.scid != null
+    ? { name: p.spacecraft.name ?? "Deleted spacecraft", scid: p.spacecraft.scid }
+    : null;
 });
 const view = computed(() => {
   const s = passes.state.value;

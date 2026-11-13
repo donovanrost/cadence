@@ -28,7 +28,8 @@ const byOwner = (v: unknown, path = ""): Readonly<Record<Owner, number>> => {
 };
 const provider = object({ id: token, name: string });
 const station = object({
-  ref: string,
+  // null for a pass result with no ground station ref (api drift sweep 11-13).
+  ref: nullable(string),
   id: nullable(token),
   // free-text: the station's short code, an identifier.
   code: nullable(string),
@@ -89,11 +90,12 @@ const summary = object({
   ),
   freshness: array(
     object({
-      provider,
+      // Both null when the account has no provider or no event cursor (api drift sweep 11-13).
+      provider: nullable(provider),
       last_report_at: nullable(timestamp),
       pending_reports: count,
       oldest_pending_los: nullable(timestamp),
-      cursor_healthy: boolean,
+      cursor_healthy: nullable(boolean),
     }),
     100,
   ),

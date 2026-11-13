@@ -60,7 +60,10 @@ const pass = d.object({
   delivery_state: d.nullable(d.known(deliveryStates)),
   spacecraft_id: d.nullable(spacecraftIdReader),
   /** Identity on the row (5f02fd3d), so names never depend on a client join. */
-  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.nullable(scidReader) })),
+  // name is null for a deleted spacecraft (contacts.md; api drift sweep 11-13).
+  spacecraft: d.nullable(
+    d.object({ id: d.token, name: d.nullable(d.string), scid: d.nullable(scidReader) }),
+  ),
   station: d.object({
     ref: d.nullable(d.string),
     id: d.nullable(d.token),

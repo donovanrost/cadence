@@ -140,7 +140,8 @@ export const attentionReader = d.object({
   source: d.knownText(attentionSources),
   /** null on uplink_blocked (U33). */
   conflict: d.nullable(d.knownText(attentionConflicts)),
-  state: d.oneOf(["open", "acknowledged"] as const),
+  // contacts.md: resolve answers the item in state resolved (api drift sweep 11-13).
+  state: d.oneOf(["open", "acknowledged", "resolved"] as const),
   acknowledged_by: d.nullable(who),
   // d2632794: cancel_failed/late_confirmation may have no contact; reservation_id is the pass
   // row id, which the Contacts drawer selects on.
