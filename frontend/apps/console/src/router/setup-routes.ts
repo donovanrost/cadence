@@ -150,10 +150,17 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "data-sources", title: "Data sources" },
   },
   {
-    path: "setup/apps/:appKey?",
+    path: "setup/apps",
     name: "setup.apps",
     component: () => import("@/features/apps/AppsScreen.vue"),
     meta: { mode: "setup", nav: "apps", title: "Apps" },
+  },
+  {
+    // L9 (ux screens/AppSurfaces.md): the app's surface in the console host; no :surface opens its first.
+    path: "setup/apps/:appKey/:surface?",
+    name: "setup.app",
+    component: () => import("@/features/apps/AppSurfaceScreen.vue"),
+    meta: { mode: "setup", nav: "apps", title: "App" },
   },
   {
     path: "setup/settings/:section?",

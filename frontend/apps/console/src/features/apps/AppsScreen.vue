@@ -3,9 +3,9 @@ import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApEmptyState, ApListRow, ApPageHeader, ApPanel, ApRemote, ApTag } from "@/ui";
-import AppActions from "./AppActions.vue";
-import { fetchApps, type App } from "./api.ts";
+import { ApEmptyState, ApPageHeader, ApPanel, ApRemote } from "@/ui";
+import AppRow from "./AppRow.vue";
+import { fetchApps } from "./api.ts";
 
 /** Setup › Apps (rail 08): what's installed and what's off because an app is missing. */
 const scope = useMissionScope();
@@ -18,14 +18,6 @@ const notProvided = computed(
 const installedCount = computed(() =>
   state.value.status === "ready" ? state.value.value.apps.filter((a) => a.installed).length : null,
 );
-const word = (a: App) =>
-  a.platform
-    ? "Platform · always on"
-    : a.state === "installed"
-      ? "Installed"
-      : a.state === "disabled"
-        ? "Disabled"
-        : "Not set up";
 </script>
 
 <template>
@@ -49,30 +41,14 @@ const word = (a: App) =>
       <ApRemote v-else :state="state" loading-label="Loading apps…" @retry="refetch">
         <template #default="{ value }">
           <ul class="m-0 list-none p-0">
-            <ApListRow
+            <AppRow
               v-for="a in value.apps"
               :key="a.key"
-              :state="a.state === 'installed' ? 'nominal' : 'off'"
-              :title="a.name"
-              :sentence="
-                a.installed
-                  ? (a.description ?? undefined)
-                  : (a.consequence_if_missing ?? a.description ?? undefined)
-              "
-              :meta="a.version ? `v${a.version}` : undefined"
-            >
-              <template #action>
-                <div class="flex flex-col items-end gap-2">
-                  <ApTag :state="a.state === 'installed' ? 'nominal' : 'off'" :label="word(a)" />
-                  <AppActions
-                    v-if="!a.platform && value.permissions.includes('apps.install')"
-                    :mission-id="missionId"
-                    :app="a"
-                    @changed="refetch"
-                  />
-                </div>
-              </template>
-            </ApListRow>
+              :mission-id="missionId"
+              :app="a"
+              :can-install="value.permissions.includes('apps.install')"
+              @changed="refetch"
+            />
           </ul>
         </template>
       </ApRemote>

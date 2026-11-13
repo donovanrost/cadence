@@ -1,4 +1,5 @@
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { appStatus, surfaceRow } from "./host.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:id/apps` (A1). */
 const { array, boolean, nullable, object, oneOf, string, token } = decoders;
@@ -15,6 +16,9 @@ const app = object({
   version: (v: unknown, path = "") =>
     typeof v === "number" ? String(v) : nullable(string)(v === undefined ? null : v, path),
   consequence_if_missing: nullable(string),
+  /** L9 (A1 extension, asked of api): the app's status and its surfaces; absent on older servers. */
+  status: (v: unknown, path = "") => (v === undefined ? null : nullable(appStatus)(v, path)),
+  surfaces: (v: unknown, path = "") => (v === undefined ? [] : array(surfaceRow, 50)(v, path)),
 });
 export const appsReader = object({ apps: array(app, 200), permissions: array(token, 50) });
 export type Apps = Decoded<typeof appsReader>;
