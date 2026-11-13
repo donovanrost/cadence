@@ -55,6 +55,8 @@ defmodule CadenceWeb.Console.CommandCatalogAPITest do
       assert counter["choices"] == []
       assert Map.has_key?(counter, "valid_range")
       assert Map.has_key?(counter, "unit")
+      # Compose B2: no verifier ties these arguments to a point, so there's no Now column.
+      assert counter["current_point"] == nil
       assert is_list(data["command"]["verifiers"])
 
       enum =

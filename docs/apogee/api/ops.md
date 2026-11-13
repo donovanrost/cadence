@@ -619,6 +619,16 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
   the nearest place).
 - `refs.subject` is the link target `{kind: "data_source" | "contact" | "dashboard" |
   "catalog_revision" | "activation" | "config_revision" | "pass", id, name}`, or `null` when there is none.
+- **`POST /telemetry/latest {point_ids, spacecraft_ids}`** (Compose B2 "Now", fe-ops) →
+  `{values: [{spacecraft_id, point_id, value_json | null, received_at | null, stale}]}`: one entry
+  per spacecraft × point, spacecraft first, in the asked order.
+  - Limits: at most 10 points and 500 spacecraft (5,000 values). Every spacecraft must be the
+    mission's (`422 details.spacecraft_ids` plus `unknown`).
+  - `value_json` is the engineering value as JSON text (64-bit safe); null when there's no value
+    yet.
+  - `stale` uses the point's stale timeout, else the fleet's (`stale_after_s`); false when there's
+    no value.
+  - Refetch on `invalidate` with `telemetry` (throttle it).
 - **Off-plan bookings** (L15, DECISIONS #78) are `contact` events: `raw_kind`
   `contact_booked_off_plan`, "EARENDIL-312 · SVA 11-15 03:10Z booked outside a plan by Mira K." (the
   pass's AOS, dated when it isn't on the booking's UTC day, else time only; "by an operator"

@@ -15,6 +15,7 @@ defmodule Cadence.Reads.CommandCatalog do
 
   alias Cadence.Commanding.RequestValidation
   alias Cadence.MissionModels
+  alias Cadence.Ops.PointCatalog
   alias Cadence.Reads.CatalogDeclarations
   alias Cadence.Reads.MissionModels.ActiveBasis
 
@@ -159,6 +160,8 @@ defmodule Cadence.Reads.CommandCatalog do
       end
 
     declarations = CatalogDeclarations.closure(organization_id, mission_id, revision_id, ids)
+    plans = Enum.filter(catalog.verifier_plans, &(&1.command_id == definition.command_id))
+    current = current_points(organization_id, mission_id, plans)
 
     definition
     |> entry(binding)
@@ -168,11 +171,12 @@ defmodule Cadence.Reads.CommandCatalog do
       service_type: definition.service_type,
       service_subtype: definition.service_subtype,
       release_policy_hint: binding && binding.release_policy_hint,
-      arguments: Enum.map(definition.argument_specs, &argument(&1, choices, declarations)),
-      verifiers:
-        catalog.verifier_plans
-        |> Enum.filter(&(&1.command_id == definition.command_id))
-        |> Enum.map(&verifier/1),
+      arguments:
+        Enum.map(
+          definition.argument_specs,
+          &Map.put(argument(&1, choices, declarations), :current_point, current[&1.argument_id])
+        ),
+      verifiers: Enum.map(plans, &verifier/1),
       constraints:
         catalog.constraint_plans
         |> Enum.filter(&(&1.command_id == definition.command_id))
@@ -198,6 +202,40 @@ defmodule Cadence.Reads.CommandCatalog do
       unit: facts.unit || blank_to_nil(display_unit)
     }
   end
+
+  # Compose B2 "Now" (fe-ops): the point whose value is an argument's current setting, from a
+  # verifier that checks the point equals the value sent (SET_MODE: HK.sc_mode == mode).
+  defp current_points(_org, _mission, []), do: %{}
+
+  defp current_points(org, mission, plans) do
+    pairs =
+      plans
+      |> Enum.flat_map(&[&1.success_criteria, &1.failure_criteria])
+      |> Enum.flat_map(&argument_points/1)
+      |> Enum.reverse()
+      |> Map.new()
+
+    if pairs == %{} do
+      %{}
+    else
+      units = Map.new(PointCatalog.list_points(org, mission), &{&1.point_id, &1.unit})
+
+      Map.new(pairs, fn {arg, point} ->
+        {arg, %{id: point, name: point, unit: Map.get(units, point)}}
+      end)
+    end
+  end
+
+  defp argument_points(
+         %{value_from_argument: arg, subject_ref: point, comparison: :equal} = criteria
+       )
+       when is_binary(arg) and is_binary(point),
+       do: [{arg, point} | Enum.flat_map(criteria.conditions || [], &argument_points/1)]
+
+  defp argument_points(%{conditions: conditions}) when is_list(conditions),
+    do: Enum.flat_map(conditions, &argument_points/1)
+
+  defp argument_points(_criteria), do: []
 
   defp verifier(plan) do
     %{

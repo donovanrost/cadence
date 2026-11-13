@@ -94,6 +94,12 @@ The list entry plus:
 
 Errors: `404 command_not_found`, `503 catalog_unavailable`, `404 mission_not_found`.
 
+- `arguments[].current_point: {id, name, unit} | null` (Compose B2's "Now" column): the point
+  whose value is this argument's current setting. It comes from a verifier that checks the point
+  equals the value sent (e.g. SET_MODE's `HK.sc_mode == mode`); the first such verifier wins.
+  It's null when no verifier ties the argument to a point. Read values with `POST
+  …/telemetry/latest` (ops.md).
+
 ## Command groups (M16 · M18 · M20 · O4)
 
 Design: [`domain/group-requests.md`](../domain/group-requests.md) (DECISIONS #29–#31). A group is
