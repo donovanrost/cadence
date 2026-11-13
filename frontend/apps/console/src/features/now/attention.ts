@@ -77,7 +77,7 @@ export const changeFields = [
   "pass_phase",
   "status",
 ] as const;
-const providerChangeReader = d.object({
+const providerChangeFields = {
   id: d.token,
   classification: d.knownText([
     "approval_required",
@@ -85,16 +85,19 @@ const providerChangeReader = d.object({
     "configuration_failure",
     "policy_accept",
   ] as const),
+  // Domain's lifecycle plus expired (api, L14 flown passes); an unknown one reads as evidence only.
   state: d.knownText([
-    "observed",
     "pending_approval",
     "acknowledgment_required",
-    "policy_accepted",
+    "configuration_failure",
+    "expired",
     "approved",
     "rejected",
     "acknowledged",
-    "applied",
     "superseded",
+    "policy_accepted",
+    "observed",
+    "apply_failed",
   ] as const),
   deadline_at: d.nullable(d.timestamp),
   provider_revision: d.nullable(d.integer),
@@ -111,8 +114,26 @@ const providerChangeReader = d.object({
     }),
     50,
   ),
-});
+} as const;
+export const providerChangeReader = d.object(providerChangeFields);
+
 export type ProviderChange = Decoded<typeof providerChangeReader>;
+/** GET /passes/:id provider_changes[] (api, L14 flown passes): the change plus when it was raised. */
+export const passChangeReader = d.object({
+  ...providerChangeFields,
+  raised_at: d.timestamp,
+  resolution: d.nullable(
+    d.object({
+      // free-text: the decision's own key; the state carries the outcome (ux U44)
+      action: d.string,
+      by: d.nullable(d.object({ id: d.nullable(d.token), name: d.nullable(d.string) })),
+      at: d.timestamp,
+      // free-text: the decider's reason
+      reason: d.nullable(d.string),
+    }),
+  ),
+});
+export type PassChange = Decoded<typeof passChangeReader>;
 
 export const attentionReader = d.object({
   id: d.token,

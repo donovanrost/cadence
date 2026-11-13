@@ -136,6 +136,8 @@ export const errorCodes = [
   // §11 L14 provider-change decisions (api 30b3f60b9).
   "provider_change_stale",
   "provider_change_deadline_passed",
+  // L14 flown passes: a pending change whose pass has ended can't be decided.
+  "provider_change_expired",
   "retry_not_manual",
   "history_unavailable",
   // Contacts, planning, bookings

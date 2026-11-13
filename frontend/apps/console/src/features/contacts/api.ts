@@ -9,7 +9,7 @@ import {
   type ApiResult,
   type Decoded,
 } from "@/api/index.ts";
-import { attentionReader } from "@/features/now/index.ts";
+import { attentionReader, passChangeReader } from "@/features/now/index.ts";
 import { passReadinessReader } from "./readiness.ts";
 
 /** Contract: docs/apogee/api/contacts.md, `GET /missions/:mission_id/passes` (M7 / S1). */
@@ -120,6 +120,8 @@ const pass = d.object({
       }),
     ),
   ),
+  /** GET /passes/:id only (api, L14 flown passes): the pass's open changes, newest first. */
+  provider_changes: d.optional(d.array(passChangeReader, 100)),
 });
 export const passReader = pass;
 

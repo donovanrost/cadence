@@ -6,6 +6,8 @@ export { deriveQueue, GROUP_AT, nowHeadline, type QueueAction, type QueueItem } 
 export {
   attentionMeta,
   attentionReader,
+  passChangeReader,
+  type PassChange,
   attentionWords,
   serverKey,
   type Attention,

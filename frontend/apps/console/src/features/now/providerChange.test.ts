@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
-import { attentionReader, resolvedWords } from "./attention.ts";
+import { attentionReader, passChangeReader, resolvedWords } from "./attention.ts";
 import { valueWords, fieldLabel } from "./providerChange.ts";
 
 /** §11 L14 provider changes (api 30b3f60b9; ux U44), decoded as api sends them. */
@@ -143,5 +143,30 @@ describe("provider change values (U44)", () => {
     expect(valueWords(delivery, delivery.after_json, NOW)).toBe("dp-9");
     expect(valueWords(big, big.before_json, NOW)).toBe("9007199254740993");
     expect(fieldLabel(big)).toBe("Other");
+  });
+});
+
+describe("a pass's change history (api, L14 flown passes)", () => {
+  it("reads every state, the resolution and an unknown state", () => {
+    const entry = (state: string, resolution: unknown = null) => ({
+      ...change("approval_required").attention.provider_change,
+      state,
+      raised_at: "2026-11-13T02:00:00Z",
+      resolution,
+    });
+    const approved = decode(
+      passChangeReader,
+      entry("approved", {
+        action: "approved",
+        by: { id: "u-1", name: "Mira K." },
+        at: "2026-11-13T02:31:00Z",
+        reason: "Clears the eclipse.",
+      }),
+    );
+    expect(approved.ok && approved.value.resolution?.by?.name).toBe("Mira K.");
+    const expired = decode(passChangeReader, entry("expired"));
+    expect(expired.ok && expired.value.state).toBe("expired");
+    const later = decode(passChangeReader, entry("brand_new_state"));
+    expect(later.ok && later.value.state).toEqual({ unrecognized: "brand_new_state" });
   });
 });
