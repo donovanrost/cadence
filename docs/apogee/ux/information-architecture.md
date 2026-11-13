@@ -39,7 +39,7 @@ org and mission (decision U1): `O = /console/:orgId`, `M = O/:missionId` (e.g.
 | | replan | `M/contacts/replan/:stationId` | Replan (K2) | Entered from a station outage (action queue, station row, ⌘K). |
 | | review | `M/contacts/review?day=…` | PassReview (K3) | Planned vs flown; reading view, scrolls. |
 | | contact | `M/contacts/:contactId` | – | One contact with its state trail; drawer over the Gantt, deep-linkable. |
-| 06 | **Telemetry** | `M/telemetry` (Explore) | – | Point search + plots with the ApTimePicker range. `Dashboards ↗` links to the existing pages (DECISIONS #11, last). |
+| 06 | **Telemetry** | `M/telemetry` (Explore) | – | Point search + plots with the ApTimePicker range. Explore · Dashboards tabs; dashboards are rebuilt in the console (L8, screens/Dashboards.md). |
 | 07 | **Timeline** | `M/timeline` | – | Fleet-wide event log (ApEventLine), filter by spacecraft/plane/kind, time-picker range. |
 | ·· | Setup | → `M/setup` | | Cross-mode link at the rail foot. |
 | ·· | Organization | → `O/org/people` | | |
@@ -152,7 +152,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 | `M/ops/contacts/**`, `M/ops/contact-workspace/**` | Ops › Contacts (live), contact drawer | Four separate lists become one contact with one state model. |
 | `M/settings/**` | Setup › Mission settings | |
 | `/settings/**` | Org › Settings | |
-| `M/applications`, `M/applications/:key/:surface` | Setup › Apps; app surfaces open in the existing host (↗) in phase 1 | |
+| `M/applications`, `M/applications/:key/:surface` | Setup › Apps; app surfaces in the console surface host (L9, screens/AppSurfaces.md) | |
 | `/notifications` | stays on the existing page (DECISIONS #64: no console route) | |
 | `/admin/**`, `/admin-mode` | Unchanged (existing host) | Linked from the account menu. |
 | Service identities (today in platform admin org detail) | Org › People & access › Service identities | Per S5 step 03. |
@@ -163,14 +163,14 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 
 | Feature | Proposal | Needs decision? |
 | --- | --- | --- |
-| **Dashboards** (authoring, playlists, sharing, snapshots, diagnostics) | **Last, after everything else ships.** For now Ops › Telemetry has a plain `Dashboards ↗` link to the existing pages; no Apogee design or build work. | Decided: DECISIONS #11 |
+| **Dashboards** (authoring, playlists, sharing, snapshots, diagnostics) | **Rebuilt in the console now** (user, L8): Ops › Telemetry › Dashboards, viewer as a takeover (screens/Dashboards.md). | Decided: DECISIONS #11 |
 | **Telemetry explore** | Ops › Telemetry, built on ApTimeSeries + ApTimePicker range. | No |
 | **Data operations** (backfill/replay) | Setup › Data sources › Operations tab. | No |
 | **Activation approvals** | Setup › Changes as approvals; Now action-queue item when it awaits *your* GO. | No |
 | **Provider accounts** (org) | Org › Provider accounts. | No |
 | **Mission settings** (governance etc.) | Setup › 09 Mission settings. | No |
 | **Notifications** | Dropped (#64): the Now attention queue is the console's notification surface. | No |
-| **Federated app surfaces** | Setup › Apps lists apps; their surfaces open in the existing host (↗) until rebuilt. | No |
+| **Federated app surfaces** | Setup › Apps lists apps; their surfaces open in the console surface host (L9, screens/AppSurfaces.md). | No |
 | **Mission creation** | Org › Missions › New. Not on the canvas; build as a reading-layout form. | No |
 | **Platform admin** | Stays on the existing host, linked from the account menu for `platform_admin`. | Decided: DECISIONS #12 |
 | **Fleet, Alarms list, Telemetry, Timeline, Spacecraft tabs other than Investigate** | In the canvas nav but not drawn. ux writes screen specs composed from existing components (stat strip, matrix, table, event line, time series) before they're built. | No |
