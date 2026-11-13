@@ -173,8 +173,20 @@ defmodule Cadence.Control.UplinkQualification do
     end
   end
 
-  defp readiness({:skipped, reason}, _pid), do: {:qualifying, reason}
-  defp readiness({:error, reason}, _pid), do: {:blocked, reason}
+  defp readiness({:skipped, reason}, _pid), do: {:qualifying, reason_key(reason)}
+  defp readiness({:error, reason}, _pid), do: {:blocked, reason_key(reason)}
+
+  @doc false
+  # Recorded readiness reasons are keys (§8 domain 9; api-ops' reason_key, normalized at the
+  # source): an atom as is, a provider error as provider_<category>, {reason, detail} as its
+  # reason, anything else unknown. The detail stays in this driver's log line.
+  def reason_key(reason) when is_atom(reason) or is_binary(reason), do: reason
+
+  def reason_key(%{category: category}) when is_atom(category) and not is_nil(category),
+    do: String.to_atom("provider_" <> Atom.to_string(category))
+
+  def reason_key({reason, _detail}) when is_atom(reason), do: reason
+  def reason_key(_other), do: :unknown
 
   defp pass(booking) do
     Map.take(booking, [
