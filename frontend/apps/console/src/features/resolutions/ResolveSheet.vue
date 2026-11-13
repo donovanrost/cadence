@@ -22,7 +22,7 @@ const outcome = ref<string | null>(null);
 const busy = ref(false);
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 
-const provider = computed(() => props.pass.provider.name ?? "the provider");
+const provider = computed(() => props.pass.provider?.name ?? "the provider");
 const booked = computed(() => action.value === "booked");
 const title = computed(
   () => `Mark ${props.pass.text} as ${booked.value ? "booked" : "not booked"}`,

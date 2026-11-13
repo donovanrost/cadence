@@ -206,7 +206,8 @@ const unconfirmedReader = d.nullable(
     passes: d.array(
       d.object({
         snapshot_id: d.token,
-        provider: d.object({ id: d.token, name: d.nullable(d.string) }),
+        // null when the booking has no provider recorded yet (api drift sweep 11-13)
+        provider: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
         sent_at: d.timestamp,
       }),
       5_000,

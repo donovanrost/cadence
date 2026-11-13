@@ -23,7 +23,7 @@ defineExpose({ open });
         class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-hairline pt-2"
       >
         <span class="font-mono text-sm text-text-2 tabular">{{ pass.text }}</span>
-        <span class="font-mono text-xs text-text-3">{{ pass.provider.name ?? "" }}</span>
+        <span class="font-mono text-xs text-text-3">{{ pass.provider?.name ?? "" }}</span>
         <slot name="row-actions" :pass="pass" />
       </li>
     </ul>

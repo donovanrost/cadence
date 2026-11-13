@@ -55,6 +55,19 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
 const names = (id: string | null) => (id ? { name: `EARENDIL-${id.slice(3)}`, scid: 1 } : null);
 
 describe("U30 unconfirmed", () => {
+  it("words a pass with no provider recorded yet (api drift sweep 11-13)", () => {
+    const p = plan("unconfirmed", ["Northlight"]);
+    const first = p.unconfirmed?.passes[0];
+    if (!p.unconfirmed || !first) throw new Error("fixture");
+    const withNull: PlanDetail = {
+      ...p,
+      unconfirmed: { ...p.unconfirmed, passes: [{ ...first, provider: null }] },
+    };
+    expect(unconfirmedView(withNull, names, "2026-11-10")?.headline).toContain(
+      "an unnamed provider hasn't confirmed",
+    );
+  });
+
   it("names the one provider, the window, and lists passes soonest first", () => {
     const v = unconfirmedView(
       plan("unconfirmed", ["Northlight", "Northlight"]),

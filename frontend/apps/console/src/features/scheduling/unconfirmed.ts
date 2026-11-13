@@ -5,7 +5,7 @@ import type { SpacecraftName } from "./names.ts";
 /** One unconfirmed pass, as listed and as handed to the `row-actions` slot (U32, fe-setup). */
 export type UnconfirmedPass = Readonly<{
   snapshot_id: string;
-  provider: Readonly<{ id: string; name: string | null }>;
+  provider: Readonly<{ id: string; name: string | null }> | null;
   sent_at: string;
   /** Spacecraft name (or id when unnamed), station code, AOS: what the row shows. */
   spacecraft: string;
@@ -37,7 +37,7 @@ export function unconfirmedView(
   const n = u.passes.length;
   const byProvider = new Map<string, number>();
   for (const p of u.passes) {
-    const name = p.provider.name ?? "an unnamed provider";
+    const name = p.provider?.name ?? "an unnamed provider";
     byProvider.set(name, (byProvider.get(name) ?? 0) + 1);
   }
   const minutes = Math.max(Math.round(u.window_ms / 60_000), 1);
