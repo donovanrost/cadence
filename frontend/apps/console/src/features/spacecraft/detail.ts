@@ -58,6 +58,9 @@ export const detailReader = (value: unknown, path = "") => {
       }),
     ),
     configuration: nullOnly,
+    /** L22 (api 8243895f1): the running switches from the active configuration; null = unknown. */
+    commanding_enabled: decoders.optional(nullable(boolean)),
+    telemetry_enabled: decoders.optional(nullable(boolean)),
     telemetry: telemetryFreshness,
     routing_rules: array(rule, 1000),
     readiness: object({ ready: boolean, checks: array(check, 20) }),

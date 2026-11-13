@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ApButton, ApEmptyState, ApKeyValue, ApPanel, useNow } from "@/ui";
 import ChecksPanel from "./ChecksPanel.vue";
+import OperationPanel from "./OperationPanel.vue";
 import RoutingRulesPanel from "./RoutingRulesPanel.vue";
 import { identityFacts, type SpacecraftDetail } from "./detail.ts";
 
-/** Readiness, identity, pinned profile, routing and configuration for one spacecraft. */
+/** Readiness, identity, pinned profile, routing and operation switches for one spacecraft. */
 defineProps<{ detail: SpacecraftDetail }>();
 const now = useNow();
 </script>
@@ -46,11 +47,6 @@ const now = useNow();
       </ApPanel>
     </div>
     <RoutingRulesPanel :rules="detail.routing_rules" class="xl:col-span-2" />
-    <ApPanel index="D5" title="Configuration" class="xl:col-span-2">
-      <ApEmptyState
-        headline="Configuration arrives with change sets"
-        sentence="Active and draft configuration (catalog revision, telemetry and commanding) will show here once mission revisions land."
-      />
-    </ApPanel>
+    <OperationPanel :detail="detail" class="xl:col-span-2" />
   </div>
 </template>

@@ -70,19 +70,27 @@ const blockingNext: Readonly<Record<string, string>> = {
   catalog_configuration_pending: "Activate or discard the pending configuration first.",
 };
 
+/** A blocking item's "can't apply yet" line: #65 catalog holds by reason, L17/L22 by `blocking`. */
+function blockingLine(item: PreviewItem): string | null {
+  const said = item.sentence ?? humanize(item.reason ?? "");
+  const next = item.reason ? blockingNext[item.reason] : undefined;
+  if (next) return `Can't apply yet: ${said} ${next}`;
+  return item.blocking === true ? `Can't apply yet: ${said}` : null;
+}
+
 /** The first blocking item's "can't apply yet" line, or null when nothing blocks. */
 export function blockingReason(preview: Preview): string | null {
   for (const check of preview.checks)
     for (const item of check.items) {
-      const next = item.reason ? blockingNext[item.reason] : undefined;
-      if (next) return `Can't apply yet: ${item.sentence ?? humanize(item.reason ?? "")} ${next}`;
+      const line = blockingLine(item);
+      if (line) return line;
     }
   return null;
 }
 
 export function itemLine(item: PreviewItem, leftBy?: string): string {
-  const next = item.reason ? blockingNext[item.reason] : undefined;
-  if (next) return `Can't apply yet: ${item.sentence ?? humanize(item.reason ?? "")} ${next}`;
+  const blocked = blockingLine(item);
+  if (blocked) return blocked;
   const conflict = conflictSentences(item, leftBy);
   if (conflict) return conflict;
   // A plain sentence with its raw detail split off reads on its own (ux rollback review #7).

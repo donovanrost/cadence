@@ -28,6 +28,8 @@ const previewItem = object({
     ),
   ),
   sentence: decoders.optional(nullable(string)),
+  /** L17/L22 holds (api setup.md): true when it can't be acknowledged away; the sentence says what to do. */
+  blocking: decoders.optional(boolean),
   /** #65 catalog holds (catalog-generations.md): who moves from → to, and the requests involved. */
   spacecraft_ids: decoders.optional(array(token, 20_000)),
   from: decoders.optional(nullable(token)),

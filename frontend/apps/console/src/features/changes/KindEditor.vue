@@ -10,6 +10,7 @@ import {
   fromDocument,
   type EditableKind,
   type FormValues,
+  type KindSchema,
 } from "./kindSchema.ts";
 import SchemaForm from "./SchemaForm.vue";
 import { refreshConfigState } from "./useConfigState.ts";
@@ -27,12 +28,25 @@ const props = defineProps<{
   index: string;
   surface: string;
   done: RouteLocationRaw;
+  /** Kind-specific form tweaks, e.g. the spacecraft's inactive pinned profile as a choice (L17). */
+  prepare?: (schema: KindSchema) => KindSchema;
+  /** Kind-specific change rules, e.g. a profile version is staged with its profile (L17). */
+  finish?: (
+    changes: readonly { path: string; value: unknown }[],
+  ) => readonly { path: string; value: unknown }[];
 }>();
 const router = useRouter();
-const schema = useRemoteQuery(
+const fetched = useRemoteQuery(
   () => ({ missionId: props.missionId, kind: props.kind }),
   fetchKindSchema,
 );
+const schema = {
+  refetch: fetched.refetch,
+  state: computed(() => {
+    const s = fetched.state.value;
+    return s.status === "ready" && props.prepare ? { ...s, value: props.prepare(s.value) } : s;
+  }),
+};
 const before = ref<FormValues>({});
 const values = ref<FormValues>({});
 const errors = ref<Readonly<Record<string, string>>>({});
@@ -75,6 +89,7 @@ async function stage() {
   if (!edits.ok) return void (errors.value = edits.errors);
   errors.value = {};
   if (edits.changes.length === 0) return void (failure.value = "Nothing changed yet.");
+  const changes = props.finish ? props.finish(edits.changes) : edits.changes;
   busy.value = true;
   failure.value = null;
   try {
@@ -83,12 +98,12 @@ async function stage() {
           kind: props.kind,
           action: "update" as const,
           entity_id: props.entityId,
-          changes: edits.changes,
+          changes,
         }
-      : { kind: props.kind, action: "create" as const, document: toDocument(edits.changes) };
+      : { kind: props.kind, action: "create" as const, document: toDocument(changes) };
     const label = props.entityId ? props.name : (values.value.display_name ?? props.name);
     const summary = props.entityId
-      ? `${label} · ${edits.changes.map((c) => `${c.path} → ${show(c.value)}`).join(", ")}`
+      ? `${label} · ${changes.map((c) => `${c.path} → ${show(c.value)}`).join(", ")}`
       : `Add ${label}`;
     const result = await stageChange(props.missionId, {
       summary,

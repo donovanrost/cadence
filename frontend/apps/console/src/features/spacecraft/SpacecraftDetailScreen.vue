@@ -4,14 +4,20 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { spacecraftIdParam, useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { useMissionScope } from "@/shell";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTag, type ApCrumb } from "@/ui";
+import SpacecraftAdmin from "./SpacecraftAdmin.vue";
+import SpacecraftEditor from "./SpacecraftEditor.vue";
 import SpacecraftPanels from "./SpacecraftPanels.vue";
 import { fetchSpacecraftDetail } from "./detail.ts";
 
 /** Setup › Spacecraft › one (ux U6: Profile layout, `Open in Ops →`). */
 const route = useRoute("setup.spacecraft.one");
 const scope = useMissionScope();
+const session = useSession();
+/** L17: Edit and Archive stage into the change set (the same gate as stations' edits). */
+const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const editing = computed(() => canStage.value && route.query.edit === "1");
 /** The spacecraft's id (not its SCID): a branded SpacecraftId (typing §12C). */
 const spacecraftId = computed(() => spacecraftIdParam(route.params.spacecraftId));
 const key = computed(() =>
@@ -49,12 +55,21 @@ const crumbs = computed((): readonly ApCrumb[] => [
         <ApTag v-if="state.value.readiness.ready" state="nominal" label="Ready" />
         <ApTag v-else state="caution" label="Incomplete" />
       </template>
+      <SpacecraftAdmin
+        v-if="canStage && state.status === 'ready'"
+        :mission-id="scope.mission.id"
+        :detail="state.value"
+        :editing="editing"
+      />
       <ApButton v-if="opsScid !== null" :to="{ name: 'ops.spacecraft', params: { scId: opsScid } }"
         >Open in Ops →</ApButton
       >
     </ApPageHeader>
     <ApRemote :state="state" loading-label="Loading spacecraft…" @retry="refetch">
-      <template #default="{ value }"><SpacecraftPanels :detail="value" /></template>
+      <template #default="{ value }">
+        <SpacecraftEditor v-if="editing" :mission-id="scope.mission.id" :detail="value" />
+        <SpacecraftPanels v-else :detail="value" />
+      </template>
     </ApRemote>
     <SpacecraftApps
       v-if="spacecraftId"

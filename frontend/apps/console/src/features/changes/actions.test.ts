@@ -27,6 +27,7 @@ const base: PreviewItem = {
   from: undefined,
   to: undefined,
   requests: undefined,
+  blocking: undefined,
 };
 
 describe("preview compatibility HOLD (DECISIONS #33)", () => {
