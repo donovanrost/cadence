@@ -173,13 +173,29 @@ function refetchPass() {
 /** Default selection: the pass named in the URL, else the next AOS fleet-wide. */
 const selected = computed(() => {
   const t = now.value.getTime();
+  const named = all.value.find((p) => p.id === selectedId.value) ?? outsidePass.value;
+  if (named) return named;
+  // A pass named in the URL that hasn't resolved yet: show it loading, not another pass (qa).
+  if (selectedId.value !== null) return null;
   return (
-    all.value.find((p) => p.id === selectedId.value) ??
-    outsidePass.value ??
-    list.value.find((p) => Date.parse(p.starts_at) > t && passStatus(p, t) === "scheduled") ??
-    null
+    list.value.find((p) => Date.parse(p.starts_at) > t && passStatus(p, t) === "scheduled") ?? null
   );
 });
+/** The URL's pass is still being read: the window first, then the pass on its own. */
+const selectedLoading = computed(
+  () =>
+    selectedId.value !== null &&
+    selected.value === null &&
+    (passes.state.value.status !== "ready" ||
+      (outsideKey.value !== null && outside.state.value.status === "loading")),
+);
+const selectedMissing = computed(
+  () =>
+    selectedId.value !== null &&
+    selected.value === null &&
+    !selectedLoading.value &&
+    outside.state.value.status === "failed",
+);
 /** D2 identity: the fleet row (has state) else the pass's own {name, scid}. */
 const selectedSpacecraft = computed(() => {
   const p = selected.value;
@@ -373,6 +389,8 @@ const tabs: readonly ApTabLink[] = [
             :class="selectedId === null ? 'max-md:hidden' : undefined"
             :mission-id="missionId"
             :pass="selected"
+            :loading="selectedLoading"
+            :missing="selectedMissing"
             :spacecraft="selectedSpacecraft"
             @changed="refetchPass"
           />

@@ -47,6 +47,10 @@ const props = defineProps<{
   missionId: MissionId;
   pass: Pass | null;
   spacecraft: { name: string; scid: Scid | null } | null;
+  /** The pass named in the URL is still being read (qa: never "No pass selected" meanwhile). */
+  loading?: boolean;
+  /** The pass named in the URL couldn't be read (gone, or not this mission's). */
+  missing?: boolean;
 }>();
 defineEmits<{ changed: [] }>();
 const now = useNow();
@@ -151,8 +155,16 @@ const countdown = computed(() => {
 
 <template>
   <ApPanel index="D2" title="Selected pass" pane flush>
+    <p v-if="!pass && loading" role="status" class="m-0 p-4 font-mono text-xs text-text-4">
+      LOADING PASS…
+    </p>
     <ApEmptyState
-      v-if="!pass"
+      v-else-if="!pass && missing"
+      headline="Pass not found"
+      sentence="It isn't on this mission's schedule any more. Choose a bar in the schedule."
+    />
+    <ApEmptyState
+      v-else-if="!pass"
       headline="No pass selected"
       sentence="Choose a bar in the schedule."
     />
