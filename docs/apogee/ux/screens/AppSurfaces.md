@@ -19,20 +19,28 @@ h1  <surface title from the app descriptor>
 local nav: the app's surfaces as tabs (Definitions · Rules · History)
 ┌ surface body (full width; the app renders this) ┐
 └──────────────────────────────────────────────────┘
-staged-changes bar (host) when the surface has staged changes
+save outcome / activation line (host, #77)
 ```
 - **Status tag:** `■ ACTIVE` / `○ NOT INSTALLED` (off) / `▲ ACTIVATION PENDING` (caution) / `◆ FAILED` (crit), plus
   the app version.
 - **The host owns:** title, breadcrumb, tabs, the read-only notice ("Org admins change app configuration."), the
-  loading, error and unavailable states, the leave guard for unsaved changes, staging and activation, and audit.
+  loading, error and unavailable states, the leave guard for unsaved changes, save outcomes and activation
+  requests (#77), and audit.
 - **The surface gets** `{mission, scope (mission | spacecraft id), capabilities, theme tokens, locale/time
   format}` and reports `{dirty, staged_count, title?}`, plus navigation requests. It uses the console kit and
   tokens, so status colours, §4 time formats and U20 apply inside it too. It doesn't draw its own page header.
 
-## Saving and activation
-Changes that need activation go through the change set (Changes.md). The host bar reads "2 changes staged in
-Limits & Alarming" with `Review` → Setup › Changes. Activation approvals (L10) appear there as approvals, and on
-Now as "awaits your GO" when they need you. There's no app-local Apply button.
+## Saving and activation (DECISIONS #77)
+For now the host honours each app's own save semantics. Change-set kinds for app config come later (domain); the
+host then gains the staged bar, and the surface doesn't change.
+- **Apps that save immediately** (limits, derived telemetry): the surface's save takes effect at once. The host
+  shows the outcome in its frame: nominal "Saved. It applies now." or the server's error (U20). It records nothing
+  in Changes and shows no staged bar.
+- **Apps that need activation** (decom): saving creates a request for activation that a second person approves
+  (L10). The host shows a caution line "Waiting for activation approval · requested by Mira K. at 02:10Z". The
+  approval appears on Setup › Changes as an approval, and on Now as "awaits your GO" for the approver.
+- The status tag says which kind the app is: `SAVES IMMEDIATELY` in text-3 beside the version, so nobody expects a
+  review step that isn't there.
 
 ## States
 - **Loading:** `LOADING LIMITS & ALARMING…` in the body. The frame is already drawn.
