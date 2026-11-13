@@ -27,10 +27,11 @@ defmodule Cadence.Contacts.ProviderChangeAttention do
   }
   @decided ~w(approved rejected acknowledged superseded)
 
-  # Draft words for the fields a provider changes (ux U44 may reword them); unknown keys read nil.
+  # ux U44: the fields a provider changes, as Contacts names them; unknown keys read nil (shown as
+  # "Other" with the key).
   @labels %{
-    "starts_at" => "Start (AOS)",
-    "ends_at" => "End (LOS)",
+    "starts_at" => "AOS",
+    "ends_at" => "LOS",
     "ground_station_ref" => "Station",
     "antenna_or_service_pool_ref" => "Antenna",
     "service_profile_ref" => "Service profile",

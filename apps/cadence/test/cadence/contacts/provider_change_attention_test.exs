@@ -30,7 +30,7 @@ defmodule Cadence.Contacts.ProviderChangeAttentionTest do
 
     assert Enum.any?(
              fields,
-             &(&1.field == "starts_at" and &1.label == "Start (AOS)" and is_binary(&1.after_json))
+             &(&1.field == "starts_at" and &1.label == "AOS" and is_binary(&1.after_json))
            )
 
     assert %{open: 1} = ProviderChangeAttention.counts(c.organization_id, c.mission_id)

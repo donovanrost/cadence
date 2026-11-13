@@ -195,4 +195,36 @@ defmodule Cadence.Reads.ActionQueue.AttentionItemsTest do
              starts_at: nil
            } = down.attention
   end
+
+  test "a provider change: approval P2 until its deadline, then P3; acknowledgement P3" do
+    change = fn conflict, deadline ->
+      %{
+        id: "change-#{conflict}",
+        source: "provider_change",
+        conflict: conflict,
+        state: "open",
+        spacecraft_id: "sc-1",
+        contact_id: nil,
+        ground_station_ref: nil,
+        provider_id: nil,
+        starts_at: at(7200),
+        raised_at: at(-60),
+        deadline_at: deadline,
+        provider_change: %{id: "change-#{conflict}"}
+      }
+    end
+
+    %{items: items} =
+      build(
+        [
+          change.("approval_required", at(600)),
+          change.("approval_required", at(-600)),
+          change.("acknowledgment_required", at(600))
+        ],
+        []
+      )
+
+    assert Enum.map(items, & &1.priority) == [2, 3, 3]
+    assert hd(items).due_at == at(600)
+  end
 end

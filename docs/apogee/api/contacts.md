@@ -127,8 +127,7 @@ The item carries the usual `contact_id`, `station`, `provider`, `starts_at` and 
 `deadline_at` and `provider_change: {id, classification, state, deadline_at, provider_revision,
 proposal_hash, already_effective, fields: [{field, label, before_json, after_json}]}`. Values are
 JSON text, so they're 64-bit safe.
-- `label` is the server's word for the known keys: `starts_at` "Start (AOS)", `ends_at` "End
-  (LOS)", `ground_station_ref` "Station", `antenna_or_service_pool_ref` "Antenna",
+- `label` is the server's word for the known keys: `starts_at` "AOS", `ends_at` "LOS", `ground_station_ref` "Station", `antenna_or_service_pool_ref` "Antenna",
   `service_profile_ref` "Service profile", `delivery_profile_ref` "Delivery profile",
   `spacecraft_ref` "Spacecraft", `pass_phase` "Pass phase", `status` "Status". It's null for any
   other key.
@@ -152,8 +151,8 @@ JSON text, so they're 64-bit safe.
 - `403 forbidden` ("Org admins decide provider changes.").
 - `404 attention_item_not_found`: not an open change of this mission.
 
-Now (ops.md): approval rows are P2, due at `deadline_at`. Acknowledgement and configuration-failure
-rows are P3.
+Now (ops.md): approval rows are P2, due at `deadline_at`, and drop to P3 once it passes (the
+provider decides then; ux U44). Acknowledgement and configuration-failure rows are P3.
 
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 

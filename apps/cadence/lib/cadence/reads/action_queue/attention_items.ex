@@ -121,7 +121,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
 
     Item.new(%{
       id: item_id(attention),
-      priority: priority(p1?, attention),
+      priority: priority(p1?, attention, now),
       kind: :attention,
       state: if(p1?, do: :critical, else: :caution),
       source: attention.source,
@@ -253,14 +253,19 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp due_at(%{source: "provider_change", deadline_at: %DateTime{} = deadline}), do: deadline
   defp due_at(attention), do: Map.get(attention, :starts_at)
 
-  # fe-ops (L14): a provider change to acknowledge, or one that failed, is P3; an approval P2.
-  defp priority(true, _attention), do: 1
+  # fe-ops (L14): a provider change to acknowledge, or one that failed, is P3; an approval P2
+  # until its deadline passes (ux U44: the provider decides then), then P3.
+  defp priority(true, _attention, _now), do: 1
 
-  defp priority(false, %{source: "provider_change", conflict: conflict})
-       when conflict != "approval_required",
-       do: 3
+  defp priority(false, %{source: "provider_change", conflict: "approval_required"} = item, now) do
+    case Map.get(item, :deadline_at) do
+      %DateTime{} = deadline -> if DateTime.compare(deadline, now) == :gt, do: 2, else: 3
+      _none -> 2
+    end
+  end
 
-  defp priority(false, _attention), do: 2
+  defp priority(false, %{source: "provider_change"}, _now), do: 3
+  defp priority(false, _attention, _now), do: 2
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{source: "contact_settlement"}, _now), do: false
