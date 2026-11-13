@@ -12,10 +12,11 @@ and contract) and fe-setup (host). L10 activation approvals and L19 spacecraft-s
   Ops rail. They're reached from the palette and from the app's Setup page. There's no rail item until an app needs
   one (ux decides then).
 
-- **Deep links into a surface** (U42): the console links to one item with a query on the surface route, for
-  example `M/setup/apps/derived_telemetry/manage?point=<id>`. The host passes the query to the surface as its
-  starting selection. A surface that doesn't support it just opens. There's no separate console page per app
-  item: the editor is the app's surface.
+- **Deep links into a surface** (U42, lead 11-13): the console links to one item with a query on the surface route.
+  The query keys belong to the app (server-owned), and an unknown key fails the surface, so the console only uses
+  keys the app declares and never invents one. Derived telemetry:
+  `M/setup/apps/derived_telemetry/manage?definition=<derived_definition_id>`. There's no separate console page per
+  app item: the editor is the app's surface.
 
 ## Frame (reading layout inside the shell)
 ```

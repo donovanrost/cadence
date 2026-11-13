@@ -758,9 +758,9 @@ then the fix:
 - Several: "BATT_SOC_PCT can't be retired: 3 derived points use it in their expressions (BATT_HEALTH, PWR_MARGIN,
   EPS_FLAG). Change or retire them in this change set too." List at most 5 names, then "and 2 more".
 - Names are the points' names as the server gives them, in mono. On Changes each dependent links to its
-  definition in the Derived telemetry app (from `used_by[].point_id`). The link goes to the app's surface,
-  `M/setup/apps/derived_telemetry/manage?point=<point_id>` (AppSurfaces.md › Deep links). Until the surface
-  selects by `point`, the link opens the surface and the name still shows in mono. The plain sentence is fine
+  definition in the Derived telemetry app: `M/setup/apps/derived_telemetry/manage?definition=<derived_definition_id>`
+  (AppSurfaces.md › Deep links; the app's own query key, lead 11-13). That needs the definition id per dependent in
+  `used_by` (domain). Without it, there's no link and the name still shows in mono. The plain sentence is fine
   until the kind ships.
 - It doesn't fire when every dependent is retired or changed in the same change set. If domain makes it
   acknowledgeable instead, the first clause becomes "Retiring BATT_SOC_PCT breaks BATT_HEALTH, whose expression
