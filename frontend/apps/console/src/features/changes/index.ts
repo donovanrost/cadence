@@ -32,3 +32,4 @@ export {
   type FormValues,
   type KindSchema,
 } from "./kindSchema.ts";
+export type { ChangeSet } from "./shapes.ts";

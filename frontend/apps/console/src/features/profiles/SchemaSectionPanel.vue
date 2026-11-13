@@ -1,17 +1,27 @@
 <script setup lang="ts">
 import { ApButton, ApCallout, ApChip, ApPanel, ApTag, formatCount } from "@/ui";
-import { fieldText, type ProfileSection } from "./detail.ts";
+import { fieldText, type ProfileField, type ProfileSection } from "./detail.ts";
 import { generationNote } from "./present.ts";
+import { stagedText, type StagedField } from "./staged.ts";
 
 /** P1: one schema section as a key/value grid, with Edit when the section can be staged. */
-defineProps<{
+const props = defineProps<{
   section: ProfileSection;
   inheritCount: number;
   canEdit: boolean;
   /** The mission turned profile framing off in ST1 (#45), so framing doesn't reach ingress. */
   framingOff: boolean;
+  /** Fields already staged in the open change set (Profile.md States: Conflict). */
+  staged: ReadonlyMap<string, StagedField>;
 }>();
 defineEmits<{ edit: [] }>();
+/** Conflict chip (Profile.md States): caution when someone else staged this field. */
+const chip = (f: ProfileField) => {
+  const s = props.staged.get(f.path);
+  return s
+    ? { state: s.mine ? ("neutral" as const) : ("caution" as const), label: stagedText(f, s) }
+    : null;
+};
 </script>
 
 <template>
@@ -40,6 +50,7 @@ defineEmits<{ edit: [] }>();
         <dt class="ap-label flex items-center gap-2">
           {{ f.label }}
           <ApChip v-if="f.overridden_by > 0">{{ f.overridden_by }} override</ApChip>
+          <ApTag v-if="chip(f)" v-bind="chip(f)" />
           <ApTag
             v-if="f.runtime_impact === 'generation'"
             state="caution"

@@ -20,12 +20,15 @@ import {
   type PreviewCounts,
 } from "./sectionEdit.ts";
 import StagedEditAside from "./StagedEditAside.vue";
+import type { StagedField } from "./staged.ts";
 
 /** Profile.md P1 edit + P4 staged edit: one section's form, its dry run, and Stage edit. */
 const props = defineProps<{
   missionId: string;
   profile: Readonly<{ id: string; name: string }>;
   section: ProfileSection;
+  /** Fields already staged in the open change set (Profile.md States: Conflict). */
+  staged: ReadonlyMap<string, StagedField>;
 }>();
 const emit = defineEmits<{ cancel: [] }>();
 const router = useRouter();
@@ -45,7 +48,14 @@ const labels = Object.fromEntries(fields.map((f) => [f.path, f.label]));
 /** ux: Stage edit is disabled while the last Check said NO-GO, with that line as the reason. */
 const noGo = computed(() => (outcome.value?.tone === "crit" ? outcome.value.text : null));
 const invalid = computed(() => (edits.value.ok ? null : "Fix the fields first"));
-const blocked = computed(() => invalid.value ?? noGo.value);
+/** Profile.md States: Stage is blocked while someone else's staged value for a dirty field stands. */
+const conflict = computed(() => {
+  const other = dirty.value.map((f) => props.staged.get(f.path)).find((s) => s && !s.mine);
+  return other
+    ? `${other.by} already staged ${labels[other.path] ?? other.path}. Resolve it on Staged changes first.`
+    : null;
+});
+const blocked = computed(() => invalid.value ?? conflict.value ?? noGo.value);
 watch(
   values,
   () => {

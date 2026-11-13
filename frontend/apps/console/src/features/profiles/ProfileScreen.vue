@@ -8,12 +8,11 @@ import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTabLinks } from "@/ui
 import LimitsNotice from "./LimitsNotice.vue";
 import ProfileHistoryPanel from "./ProfileHistoryPanel.vue";
 import ProfileRoutingPanel from "./ProfileRoutingPanel.vue";
-import SchemaSectionPanel from "./SchemaSectionPanel.vue";
-import SectionEditor from "./SectionEditor.vue";
-import { editableSection } from "./sectionEdit.ts";
+import ProfileSectionView from "./ProfileSectionView.vue";
 import { fetchProfileDetail, type ProfileDetail } from "./detail.ts";
 import { profileSubline } from "./present.ts";
 import { useFramingOff } from "./useFramingOff.ts";
+import { useStagedFields } from "./staged.ts";
 
 /** S4 · Profile. Spec: docs/apogee/ux/screens/Profile.md. */
 const route = useRoute();
@@ -57,6 +56,10 @@ const framingOff = useFramingOff(
   computed(() => scope.value.mission.id),
   computed(() => (state.value.status === "ready" ? active(state.value.value) : null)),
 );
+const staged = useStagedFields(
+  computed(() => scope.value.mission.id),
+  computed(() => profileId.value ?? ""),
+);
 const title = computed(() =>
   state.value.status === "ready" ? state.value.value.profile.name : "Profile",
 );
@@ -90,26 +93,17 @@ const crumbs = computed(() => [
           :part="active(value) === 'routing' ? 'routing' : 'overrides'"
         />
         <template v-else>
-          <template
+          <ProfileSectionView
             v-for="section in value.sections.filter((s) => s.key === active(value))"
             :key="section.key"
-          >
-            <SectionEditor
-              v-if="editing === section.key"
-              :mission-id="scope.mission.id"
-              :profile="value.profile"
-              :section="section"
-              @cancel="editing = null"
-            />
-            <SchemaSectionPanel
-              v-else
-              :section="section"
-              :inherit-count="value.inherit_count"
-              :framing-off="framingOff"
-              :can-edit="canStage && editableSection(section.key)"
-              @edit="editing = section.key"
-            />
-          </template>
+            v-model:editing="editing"
+            :mission-id="scope.mission.id"
+            :detail="value"
+            :section="section"
+            :can-stage="canStage"
+            :framing-off="framingOff"
+            :staged="staged"
+          />
         </template>
       </template>
     </ApRemote>
