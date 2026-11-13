@@ -19,6 +19,7 @@ import {
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settlement.ts";
 import { runtimeRow } from "./runtime.ts";
+import { changeSetReader, changeSetRow } from "./changeSet.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
 
@@ -115,6 +116,7 @@ const itemReader = d.object({
     "missed_pass",
     "station",
     "flight_event",
+    "change_set_stale",
   ] as const),
   state: d.oneOf(["critical", "caution", "stale", "off"] as const),
   source: d.nullable(
@@ -157,6 +159,8 @@ const itemReader = d.object({
   station_issue: d.optional(d.nullable(stationIssueReader)),
   /** flight_event (02cdde37): the state the spacecraft entered, and when (spacecraft time). */
   event: d.optional(d.nullable(d.object({ value_json: d.string, entered_at: d.timestamp }))),
+  /** U39 change_set_stale (api 8d): null on other kinds; unreadable drops its own row. */
+  change_set: d.optional(d.nullable(lenient(changeSetReader))),
 });
 type ServerItem = Decoded<typeof itemReader>;
 
@@ -346,6 +350,8 @@ function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueI
           action: { label: "Set up", to: { name: "setup.apps" } },
         },
       ];
+    case "change_set_stale":
+      return item.change_set ? [changeSetRow(base(item), item.id, item.change_set, now)] : [];
     case "attention": {
       const a = item.attention;
       if (!a) return [];

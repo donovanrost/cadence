@@ -129,6 +129,14 @@ describe("event subjects (ux timeline #1)", () => {
       refs: { ...contact.refs, subject: { kind: "activation", id: "a", name: null } },
     };
     expect(subjectLink(activation)).toBeNull();
+    // api 8d: 'Applied r6 · 2 changes' links to Setup's revisions.
+    const applied = {
+      ...contact,
+      kind: "config" as const,
+      spacecraft: null,
+      refs: { ...contact.refs, subject: { kind: "config_revision", id: "6", name: "r6" } },
+    };
+    expect(subjectLink(applied)).toEqual({ name: "setup.revisions" });
   });
 });
 
