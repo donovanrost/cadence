@@ -35,7 +35,9 @@ function showAll(row: FindingRow) {
         :sentence="r.sentence"
       >
         <template #action>
-          <span class="flex gap-1">
+          <!-- qa 11-13: in the narrow D4 pane a row of three buttons squeezed the title until it
+               overflowed into them; stacked, the column is only as wide as the widest button. -->
+          <span class="flex flex-col items-end gap-1">
             <ApButton
               v-if="canBook && r.book"
               size="compact"

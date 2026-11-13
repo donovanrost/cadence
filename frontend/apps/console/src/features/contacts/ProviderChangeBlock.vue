@@ -98,7 +98,9 @@ async function submit() {
   try {
     const o = await decideProviderChange(props.missionId, props.target, d, why);
     if (o.status === "done") {
-      decided.value = `${DONE[d]} at ${short(new Date().toISOString(), props.now)}: ${why.replace(/[.!?]+$/, "")}.`;
+      // U44's grammar with the signed-in user (qa: Acknowledge read without "by …").
+      const by = session.user.display_name ?? session.user.email;
+      decided.value = `${DONE[d]} by ${by} at ${short(new Date().toISOString(), props.now)}: ${why.replace(/[.!?]+$/, "")}.`;
       deciding.value = null;
       emit("changed");
       return;
