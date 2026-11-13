@@ -247,11 +247,41 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
       ends. `invalidate` `contacts` also invalidates `attention`, because that settle publishes
       only `contacts`.
   - Other errors:
-    - `409 pass_changed`: revision mismatch, reload.
+    - `409 pass_changed`: revision mismatch; `details.pass` is the current row, so D2 reloads it.
     - `409 pass_not_releasable`: not `pending | confirmed | active`, or no provider contact ref.
     - `403 forbidden`, `404 pass_not_found`.
     - `422 invalid_params` (`details.expected_provider_revision`), `422 actor_not_assignable`.
   - Refetch on `invalidate` `contacts`.
+  - An **off-plan** booking (L15) may be released by its booker as well as by organization admins
+    (`releasable` says which, per viewer; todo(authz)).
+
+### Book a pass: single bookings (§11 L15, DECISIONS #78)
+
+Passes booked outside any plan. They're fixed occupancy: drafts and repairs plan around them and
+never count them toward a requirement.
+
+- `POST /single-bookings/search` `{spacecraft_id, from, to, direction: "downlink" | "uplink",
+  station_ids?}` → `{spacecraft {id, name, scid}, window {from, to}, offers: [{id, token,
+  expires_at, starts_at, ends_at, station {ref, id, code, name}, antenna {id, label} | null,
+  provider {id, name}, availability, uplink_capable, synthetic, cost, overlaps {reservation_id,
+  spacecraft {id, name}, station_code, starts_at, reason: same_spacecraft | same_antenna} |
+  null}], hidden {no_uplink_route}, not_ready: [{code, message}], truncated}`. The server fans out
+  over the spacecraft's ready routes; route keys and evidence ride inside the signed `token`.
+  `station.id`, `code` and `name` are `null` when the provider's station matches no Cadence
+  station (`ref` is always set). `overlaps` covers every live booking, plan or not. No ready route
+  is `offers: []` with `not_ready` saying why, not an error. Errors: `422 invalid_params` on the
+  field (window in the past, over 7 days, end before start), `404 spacecraft_not_found`, `503
+  search_unavailable` (every route's provider search failed).
+- `POST /single-bookings` `{token, note?}` (note ≤ 500) → `{outcome: confirmed | requested |
+  unconfirmed | rejected, reason, reservation_id, provider_reference, pass}`. Idempotent per booker
+  and token: a retry returns the booking already asked for. It waits up to 3 s for the provider's
+  first answer; `requested` settles over the `contacts` invalidation. `reason` is the K1 reason
+  code. `pass` is the `/passes` row with `off_plan`, or `null` when rejected **or** while the
+  provider job hasn't written the reservation yet (the bar appears on the next `contacts`
+  invalidation). Errors: `409 opportunity_expired` ("Search again."), `409 route_changed`, `422
+  token_invalid`, `422 invalid_params` (`note`), `403 forbidden`.
+- Pass rows carry `off_plan: {booked_by {kind, id, name}, booked_at, note} | null` (`null` for
+  plan bookings). Release is `POST /passes/:id/release` above.
 
 ## S10: `contacts` invalidation
 

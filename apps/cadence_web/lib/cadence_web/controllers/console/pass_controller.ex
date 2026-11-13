@@ -68,17 +68,49 @@ defmodule CadenceWeb.Console.PassController do
     |> with_attention(conn, resolutions)
     |> with_readiness(conn, Map.new(blocked, &{&1.contact_id, &1}))
     |> with_releasable(conn)
+    |> with_bookers()
+  end
+
+  # L15: an off-plan booking names its booker (one batch of names per page).
+  defp with_bookers(%{passes: passes} = result) do
+    names =
+      for %{off_plan: %{booked_by: %{id: id}}} <- passes, is_binary(id), uniq: true, into: %{} do
+        case Cadence.Accounts.fetch_user(id) do
+          {:ok, user} -> {id, user.display_name || user.email}
+          _missing -> {id, nil}
+        end
+      end
+
+    %{
+      result
+      | passes:
+          Enum.map(passes, fn
+            %{off_plan: %{booked_by: %{id: id}}} = pass when is_binary(id) ->
+              put_in(pass, [:off_plan, :booked_by, :name], Map.get(names, id))
+
+            pass ->
+              pass
+          end)
+    }
   end
 
   @releasable_states ~w(pending confirmed active)
 
-  # D2: org admins may release a live booking (the contact workspace's cancel rule).
+  # D2: org admins may release a live booking (the contact workspace's cancel rule); an off-plan
+  # booking also by its booker (L15, DECISIONS #78).
   defp with_releasable(%{passes: passes} = result, conn) do
     admin? = may_release?(conn)
+    viewer = conn.assigns.current_scope.user && conn.assigns.current_scope.user.user_id
 
     %{
       result
-      | passes: Enum.map(passes, &%{&1 | releasable: admin? and &1.state in @releasable_states})
+      | passes:
+          Enum.map(passes, fn pass ->
+            booker? =
+              match?(%{off_plan: %{booked_by: %{id: ^viewer}}}, pass) and is_binary(viewer)
+
+            %{pass | releasable: (admin? or booker?) and pass.state in @releasable_states}
+          end)
     }
   end
 
@@ -159,14 +191,26 @@ defmodule CadenceWeb.Console.PassController do
   end
 
   defp release_problem(conn, reason)
-       when reason in [:pass_not_found, :pass_not_releasable, :pass_changed],
+       when reason in [:pass_not_found, :pass_not_releasable],
        do: Problem.respond(conn, reason)
 
-  defp release_problem(conn, :invalid_reservation_cancellation_evidence),
-    do: Problem.respond(conn, :pass_changed)
+  # The booking changed since the viewer opened it: send its current row so D2 can reload.
+  defp release_problem(conn, :pass_changed), do: pass_changed(conn)
+
+  defp release_problem(conn, :invalid_reservation_cancellation_evidence), do: pass_changed(conn)
 
   defp release_problem(conn, reason) when reason in [:forbidden, :scope_mismatch],
     do: Problem.respond(conn, :forbidden)
+
+  defp pass_changed(conn) do
+    pass =
+      case Passes.fetch(org_id(conn), mission_id(conn), conn.path_params["id"]) do
+        {:ok, pass} -> hd(decorate(conn, %{passes: [pass]}).passes)
+        _missing -> nil
+      end
+
+    Problem.respond(conn, :pass_changed, %{pass: pass})
+  end
 
   # U32: each booking's open or acknowledged pass-resolution item (the drawer's attention block),
   # for viewers who operate the mission. A blocked uplink shows in `uplink_readiness` instead.

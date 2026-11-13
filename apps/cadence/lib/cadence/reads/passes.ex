@@ -157,9 +157,21 @@ defmodule Cadence.Reads.Passes do
       # D2 Release: the revision the client sends back, and whether this viewer may release it
       # (the controller fills `releasable`).
       provider_revision: reservation.provider_revision,
-      releasable: nil
+      releasable: nil,
+      # L15: booked outside a plan (`booked_by.name` is filled by the controller), else nil.
+      off_plan: off_plan(reservation.metadata)
     }
   end
+
+  defp off_plan(%{"off_plan" => %{"booked_by" => %{"id" => id} = by} = off_plan}) do
+    %{
+      booked_by: %{kind: by["kind"], id: id, name: nil},
+      booked_at: off_plan["booked_at"],
+      note: text(off_plan, "note")
+    }
+  end
+
+  defp off_plan(_metadata), do: nil
 
   # U32 / DECISIONS #53: the provider's word wins; an operator's attestation counts only while the
   # provider is silent.

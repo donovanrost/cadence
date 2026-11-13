@@ -68,6 +68,10 @@ defmodule CadenceWeb.Console.Problem do
       {409, "The planning policy changed since you loaded it. Review it, then try again."},
     grant_changed: {409, "This grant changed since you loaded it."},
     grant_not_found: {404, "Automation grant not found."},
+    route_changed: {409, "The route to that station changed. Search again."},
+    opportunity_expired: {409, "That offer has gone. Search again."},
+    token_invalid: {422, "That offer can't be booked. Search again."},
+    search_unavailable: {503, "The providers couldn't be searched right now."},
     template_transition_not_allowed:
       {409, "The template can't move to that state from where it is."},
     requirement_rejected: {422, "The requirement change was refused."},

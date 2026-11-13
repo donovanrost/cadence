@@ -854,6 +854,7 @@ defmodule CadenceWeb.Router do
         DashboardAuthoringController,
         :restore
       )
+
       # Dashboard settings D14-D19 (owner: api).
       get("/dashboards/:dashboard_id/activity", DashboardSettingsController, :activity)
       get("/dashboards/:dashboard_id/diagnostics", DashboardSettingsController, :diagnostics)
@@ -864,6 +865,9 @@ defmodule CadenceWeb.Router do
       get("/passes/:id", PassController, :show)
       post("/passes/:id/recover-uplink", PassController, :recover_uplink)
       post("/passes/:id/release", PassController, :release)
+      # L15 single bookings (owner: api).
+      post("/single-bookings/search", SingleBookingController, :search)
+      post("/single-bookings", SingleBookingController, :create)
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/command-policies", CommandGroupController, :policies)
