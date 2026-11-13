@@ -4,7 +4,7 @@ import { ApButton, ApPanel } from "@/ui";
 import type { WorkspacePlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import WidgetBody from "../widgets/WidgetBody.vue";
 import { BoardGrid } from "./board-grid.ts";
-import { keyboardLayout } from "./keyboard-layout.ts";
+import { keyboardLayout, positionText } from "./keyboard-layout.ts";
 import type { LayoutEdit, OutlinePlacement } from "./contracts.ts";
 import "./editor.css";
 
@@ -39,15 +39,19 @@ const items = computed(() =>
   props.placements.map((p) => ({ p, preview: props.previews.get(p.id) ?? null })),
 );
 const at = (v: number | null) => (v === null ? undefined : String(v));
+/** Spoken after a keyboard move or resize (qa: screen readers heard nothing). */
+const announcement = ref("");
 function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
   const edit = keyboardLayout(p, event.key, event.shiftKey, props.snapshot.grid.columns);
   if (!edit) return;
   event.preventDefault();
   emit("layout", [edit]);
+  announcement.value = `${p.title || "Widget"}: ${positionText(edit)}.`;
 }
 </script>
 
 <template>
+  <p class="sr-only" aria-live="polite">{{ announcement }}</p>
   <div ref="el" class="grid-stack dashboard-edit-grid">
     <div
       v-for="{ p, preview } in items"
@@ -77,6 +81,8 @@ function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
                 data-drag-handle
                 class="cursor-move border-0 bg-transparent px-1 font-mono text-text-4"
                 :aria-label="`Move ${p.title}`"
+                :aria-description="positionText(p.layout)"
+                :data-layout="`${p.layout.x ?? ''},${p.layout.y ?? ''},${p.layout.w},${p.layout.h}`"
                 aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowRight Shift+ArrowDown"
                 title="Drag to move. Arrow keys move; Shift+arrow keys resize."
                 @keydown="onHandleKey(p, $event)"

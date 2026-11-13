@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { keyboardLayout } from "./keyboard-layout.ts";
+import { keyboardLayout, positionText } from "./keyboard-layout.ts";
 
 const p = {
   id: "w1",
@@ -36,5 +36,10 @@ describe("keyboard layout (a11y: the drag handle's keys)", () => {
 
   it("ignores other keys", () => {
     expect(keyboardLayout(p, "Enter", false, 12)).toBeNull();
+  });
+
+  it("says the position 1-based, or that it's automatic", () => {
+    expect(positionText({ x: 2, y: 0, w: 4, h: 3 })).toBe("column 3, row 1, 4 × 3");
+    expect(positionText({ x: null, y: null, w: 4, h: 3 })).toBe("placed automatically, 4 × 3");
   });
 });

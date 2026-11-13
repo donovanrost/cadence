@@ -8,6 +8,15 @@ const STEP: Readonly<Record<string, readonly [number, number]>> = {
 };
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
 
+/** "column 2, row 3, 4 × 3" (1-based), for the Move button's description and announcements. */
+export function positionText(
+  l: Readonly<{ x: number | null; y: number | null; w: number; h: number }>,
+) {
+  const at =
+    l.x === null || l.y === null ? "placed automatically" : `column ${l.x + 1}, row ${l.y + 1}`;
+  return `${at}, ${l.w} × ${l.h}`;
+}
+
 /**
  * The keyboard way to lay out a widget (qa a11y: the drag handle was mouse-only). Arrows move one
  * cell, Shift+arrows resize, within the outline's constraints and the grid's columns. Returns the
