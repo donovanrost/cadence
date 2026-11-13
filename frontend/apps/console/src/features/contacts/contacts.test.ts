@@ -1,4 +1,5 @@
 import { findingTitle, findingsMeta } from "./findings.ts";
+import { duration, findingRows } from "./findingRows.ts";
 import type { Availability, AvailabilityWindow } from "@/features/scheduling/index.ts";
 import { releaseErrorWords } from "./release.ts";
 import { describe, expect, it } from "vite-plus/test";
@@ -368,6 +369,43 @@ describe("D4 findings (M22)", () => {
     station: code ? { ref: null, id: null, code, name: null } : null,
     message: "m",
     passes: [],
+    spacecraft: undefined,
+    gap: undefined,
+  });
+  const gap = (n: number, from = "2026-11-13T00:04:34Z") => ({
+    ...f("coverage_gap", null, from),
+    id: `gap-${n}`,
+    severity: "critical" as const,
+    message: `EARENDIL-00${n} has no pass for 6h.`,
+    spacecraft: { id: `sc-${n}`, name: `EARENDIL-00${n}`, scid: n },
+    gap: { from, to: "2026-11-13T06:04:34Z", seconds: 21_600 },
+  });
+  it("folds same-cause coverage gaps into one row with its members (ux §7)", () => {
+    const now = new Date("2026-11-13T00:04:40Z");
+    const rows = findingRows(
+      [gap(1), gap(2), f("station_double_booked", "SVB", null), gap(3)],
+      now,
+    );
+    expect(rows.map((r) => [r.title, r.sentence, r.members?.length ?? null])).toEqual([
+      ["Coverage gap 00:04Z", "3 spacecraft have no pass in the next 6 h.", 3],
+      ["SVB double-booked", "m", null],
+    ]);
+    expect(rows[0]?.members?.[0]).toEqual({
+      key: "gap-1",
+      text: "EARENDIL-001",
+      detail: "no pass 00:04Z–06:04Z",
+      to: { name: "ops.spacecraft", params: { scId: "1", tab: "investigate" } },
+    });
+    const two = findingRows([gap(1), gap(2, "2026-11-13T03:00:00Z")], now);
+    expect(two.map((r) => r.sentence)).toEqual([
+      "EARENDIL-001 has no pass in the next 6 h.",
+      "EARENDIL-002 has no pass for 6 h from 03:00Z.",
+    ]);
+    expect([duration(2_400), duration(5_400), duration(21_600)]).toEqual([
+      "40 min",
+      "1.5 h",
+      "6 h",
+    ]);
   });
   it("titles rows by station, kind and time", () => {
     expect(findingTitle(f("station_double_booked", "SVB", "2026-11-10T03:20:00Z"))).toBe(
