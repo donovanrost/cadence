@@ -89,6 +89,8 @@ defmodule CadenceWeb.Console.PeopleWritesAPITest do
              c.member |> conn() |> get(c.base <> "/people") |> json_response(404)
   end
 
+  defp pending(c), do: Enum.filter(people(c)["invitations"], &(&1["status"] == "pending"))
+
   test "resend issues a fresh invitation; revoke ends it", c do
     %{"data" => %{"id" => first}} =
       c.admin
@@ -103,7 +105,9 @@ defmodule CadenceWeb.Console.PeopleWritesAPITest do
              |> json_response(201)
 
     refute second == first
-    assert [%{"id" => ^second}] = people(c)["invitations"]
+    # The replaced one stays listed as revoked for 30 days (the inviter sees what happened).
+    assert [%{"id" => ^second}] = pending(c)
+    assert %{"status" => "revoked"} = Enum.find(people(c)["invitations"], &(&1["id"] == first))
 
     # The old link is gone.
     assert %{"error" => %{"code" => "invitation_not_found"}} =
@@ -113,7 +117,7 @@ defmodule CadenceWeb.Console.PeopleWritesAPITest do
              |> json_response(404)
 
     assert c.admin |> conn() |> delete(c.base <> "/invitations/#{second}") |> response(204)
-    assert people(c)["invitations"] == []
+    assert pending(c) == []
 
     assert %{"error" => %{"code" => "invitation_not_found"}} =
              c.admin |> conn() |> delete(c.base <> "/invitations/#{second}") |> json_response(404)

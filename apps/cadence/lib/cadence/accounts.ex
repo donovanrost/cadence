@@ -198,17 +198,31 @@ defmodule Cadence.Accounts do
     |> Repo.all()
   end
 
-  @doc "Pending, unexpired invitations with inviter names, newest first (no tokens)."
-  @spec list_invitation_directory(binary()) :: [map()]
-  def list_invitation_directory(organization_id) when is_binary(organization_id) do
+  @doc """
+  Invitations with inviter names, newest first (no tokens): pending and unexpired, or with
+  `include_recent: true` also those decided or lapsed in the last 30 days, with their `status`.
+  """
+  @spec list_invitation_directory(binary(), keyword()) :: [map()]
+  def list_invitation_directory(organization_id, opts \\ []) when is_binary(organization_id) do
     now = DateTime.utc_now()
+    # include_recent: also what was decided or lapsed in the last 30 days (the inviter sees
+    # "Declined"); without it, live pending invitations only (the already-invited check).
+    since = DateTime.add(now, -30, :day)
 
     OrganizationInvitationRow
     |> join(:left, [i], u in UserRow, on: i.invited_by_user_id == u.user_id)
-    |> where(
-      [i, _u],
-      i.organization_id == ^organization_id and i.status == "pending" and i.expires_at > ^now
-    )
+    |> where([i, _u], i.organization_id == ^organization_id)
+    |> then(fn query ->
+      if Keyword.get(opts, :include_recent, false),
+        do:
+          where(
+            query,
+            [i, _u],
+            (i.status == "pending" and i.expires_at > ^since) or
+              (i.status != "pending" and i.updated_at > ^since)
+          ),
+        else: where(query, [i, _u], i.status == "pending" and i.expires_at > ^now)
+    end)
     |> order_by([i, _u], desc: i.inserted_at)
     |> select([i, u], %{
       id: i.organization_invitation_id,
@@ -216,7 +230,9 @@ defmodule Cadence.Accounts do
       role: i.membership_role,
       invited_by_name: u.display_name,
       sent_at: i.inserted_at,
-      expires_at: i.expires_at
+      expires_at: i.expires_at,
+      status: i.status,
+      decided_at: i.updated_at
     })
     |> Repo.all()
   end

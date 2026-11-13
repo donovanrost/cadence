@@ -444,7 +444,7 @@ first.
                "role": "member", "capabilities": [],
                "joined_at": "2026-10-19T02:29:00Z"}],
   "invitations": [{"id": "…", "email": "ana@…", "role": "member", "invited_by": {"name": "Ada Admin"},
-                   "sent_at": "…", "expires_at": "…", "status": "pending"}],
+                   "sent_at": "…", "expires_at": "…", "status": "pending", "decided_at": null}],
   "permissions": ["org.invite", "org.manage_members"]
 }}
 ```
@@ -463,8 +463,11 @@ first.
 
   When the server policy changes, these follow with no client change. The session reports the same
   names per organization (session.md).
-- `invitations` holds only pending, unexpired ones, so `status` is always `pending`. Members are
-  sorted by name; invitations newest first. There is no presence or last-seen yet.
+- `invitations` holds the pending, unexpired ones **and** those decided or lapsed in the last 30
+  days, so the inviter sees what happened: `status` is `pending | accepted | declined | revoked |
+  expired` (a pending one past `expires_at` reads `expired`; a resend revokes the old one).
+  `decided_at` is when it left pending (`null` while pending). Count only `pending` for the header.
+  Members are sorted by name; invitations newest first. There is no presence or last-seen yet.
 
 ### `POST /invitations` (O2)
 

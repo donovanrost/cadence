@@ -39,7 +39,9 @@ defmodule Cadence.Administration.OrganizationPeople do
              member(row, Map.get(scopes, row.user_id), extra)
            end),
          invitations:
-           Enum.map(Accounts.list_invitation_directory(organization_id), &invitation/1),
+           organization_id
+           |> Accounts.list_invitation_directory(include_recent: true)
+           |> Enum.map(&invitation(&1, DateTime.utc_now())),
          permissions: permissions(scope, organization_id)
        }}
     end
@@ -227,7 +229,23 @@ defmodule Cadence.Administration.OrganizationPeople do
   defp member_capabilities(member_scope, extra),
     do: extra.(member_scope) ++ permissions(member_scope, member_scope.organization_id)
 
-  defp invitation(row) do
+  # Explicit map, never to_existing_atom (qa #53). A pending one past its expiry reads expired.
+  @invitation_status %{
+    "pending" => :pending,
+    "accepted" => :accepted,
+    "declined" => :declined,
+    "revoked" => :revoked,
+    "expired" => :expired
+  }
+
+  defp invitation(row, now) do
+    status = Map.get(@invitation_status, row.status, :expired)
+
+    status =
+      if status == :pending and DateTime.compare(row.expires_at, now) != :gt,
+        do: :expired,
+        else: status
+
     %{
       id: row.id,
       email: row.email,
@@ -235,7 +253,8 @@ defmodule Cadence.Administration.OrganizationPeople do
       invited_by: row.invited_by_name && %{name: row.invited_by_name},
       sent_at: row.sent_at,
       expires_at: row.expires_at,
-      status: :pending
+      status: status,
+      decided_at: if(status == :pending, do: nil, else: row.decided_at)
     }
   end
 

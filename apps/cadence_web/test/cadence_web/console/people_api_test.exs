@@ -33,6 +33,31 @@ defmodule CadenceWeb.Console.PeopleAPITest do
     assert data["permissions"] == []
   end
 
+  test "the inviter sees a declined invitation with its status; pending still blocks a duplicate",
+       c do
+    invitee = TestFixtures.persist_user!(display_name: "Ivy")
+
+    invite =
+      c.admin
+      |> call(:post, c.base <> "/invitations", %{"email" => invitee.email, "role" => "member"})
+      |> json_response(201)
+      |> Map.fetch!("data")
+
+    assert {:ok, _} = Cadence.Accounts.decline_invitation_as_user(invitee.user_id, invite["id"])
+
+    listed = c.admin |> call(:get, c.base <> "/people") |> json_response(200)
+    assert [%{"status" => "declined", "decided_at" => decided}] = listed["data"]["invitations"]
+    assert is_binary(decided)
+
+    # A declined invitation doesn't block inviting them again.
+    assert c.admin
+           |> call(:post, c.base <> "/invitations", %{
+             "email" => invitee.email,
+             "role" => "member"
+           })
+           |> json_response(201)
+  end
+
   test "an organization admin invites; duplicates are refused", c do
     admin_view = c.admin |> call(:get, c.base <> "/people") |> json_response(200)
     assert "org.invite" in admin_view["data"]["permissions"]
