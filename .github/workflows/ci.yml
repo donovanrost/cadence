@@ -81,10 +81,16 @@ jobs:
       - name: Architecture check
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: mix workspace.run -t cadence.architecture.check -p cadence --order postorder --early-stop --env-var MIX_ENV=test -- --summary
-      - name: Hex audit (advisory, non-blocking)
+      # Every project: child locks hold deps the root lock lacks (e.g. ccsds/xtce's ex_doc).
+      # Advisory until develop is clean (api-ops' dependency bumps); then drop continue-on-error.
+      - name: Hex audit, every project (advisory until develop is clean)
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         continue-on-error: true
-        run: mix hex.audit
+        run: |
+          status=0
+          mix hex.audit || status=1
+          mix workspace.run -t hex.audit --order postorder || status=1
+          exit "$status"
 
       # Only develop/main pushes save caches; PRs restore the latest one and never churn the quota.
       # This job compiles every project, so it alone saves _build.
@@ -474,10 +480,54 @@ jobs:
       - name: Check every producer consumer executed
         run: node scripts/ci/producer_coverage.mjs "$RUNNER_TEMP/producer-ledgers"
 
+  # Lockfile-only, so no install. A new HIGH/CRITICAL advisory in a production dependency fails
+  # the PR; dev tooling is reported but doesn't block (docs/ci: audit gating, 2026-11-13).
+  js-audit:
+    name: JS dependency audit
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.16.0"
+      - run: corepack enable
+      - name: frontend (pnpm), production deps, HIGH and above
+        working-directory: frontend
+        run: corepack pnpm audit --prod --audit-level high
+      - name: apps/cadence_web (npm), production deps, HIGH and above
+        if: ${{ !cancelled() }}
+        working-directory: apps/cadence_web
+        run: npm audit --omit=dev --audit-level=high
+      - name: All dependencies incl. dev tooling (reported, not blocking)
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### JS advisories, all dependencies (not blocking)"
+            echo '```'
+            (cd frontend && corepack pnpm audit --audit-level moderate 2>&1 | tail -3) || true
+            (cd apps/cadence_web && npm audit --audit-level=moderate 2>&1 | tail -3) || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   ci-ok:
     name: ci-ok
     needs:
-      [changes, quality, test-core, test-web, browser-assets, test-web-publication, test-packages, producer-coverage]
+      [
+        changes,
+        quality,
+        test-core,
+        test-web,
+        browser-assets,
+        test-web-publication,
+        test-packages,
+        producer-coverage,
+        js-audit,
+      ]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
