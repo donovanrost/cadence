@@ -15,6 +15,7 @@ class FakePush {
 class FakeChannel {
   state = "joining";
   pushes: string[] = [];
+  payloads: unknown[] = [];
   joinPush = new FakePush();
   left = false;
   constructor(readonly topic: string) {
@@ -28,8 +29,9 @@ class FakeChannel {
     this.state = "joined";
     for (const hook of this.joinPush.hooks) hook();
   }
-  push(event: string) {
+  push(event: string, payload?: unknown) {
     this.pushes.push(event);
+    this.payloads.push(payload);
     return new FakePush();
   }
   on() {
@@ -103,6 +105,29 @@ describe("useChannelSubscription", () => {
     created[0]?.joinOk();
     handle?.resubscribe();
     expect(created[0]?.pushes).toEqual(["fleet:subscribe", "fleet:unsubscribe", "fleet:subscribe"]);
+    scope.stop();
+  });
+
+  it("sends a getter payload's current value on (re)join and pushes `update` when it changes while joined", async () => {
+    const range = ref({ from: "a", to: "b" });
+    const scope = effectScope();
+    scope.run(() =>
+      useChannelSubscription(ref("dashboard:m1:d1"), {
+        subscribe: ["view:subscribe", () => ({ runtime: range.value })],
+        unsubscribe: ["view:unsubscribe", {}],
+        update: "view:set",
+      }),
+    );
+    const channel = created[0];
+    range.value = { from: "a", to: "c" }; // not joined yet: nothing pushed
+    await nextTick();
+    expect(channel?.pushes).toEqual([]);
+    channel?.joinOk();
+    expect(channel?.payloads[0]).toEqual({ runtime: { from: "a", to: "c" } });
+    range.value = { from: "x", to: "y" };
+    await nextTick();
+    expect(channel?.pushes).toEqual(["view:subscribe", "view:set"]);
+    expect(channel?.payloads[1]).toEqual({ runtime: { from: "x", to: "y" } });
     scope.stop();
   });
 });
