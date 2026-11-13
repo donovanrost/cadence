@@ -85,7 +85,9 @@ const useOrg = () =>
 
 <template>
   <ApPanel index="S1" :title="section.title" :meta="meta" :flush="!editable">
-    <template #header><ApTag state="off" :label="sectionTag(section, scope.kind)" /></template>
+    <template v-if="sectionTag(section, scope.kind)" #header
+      ><ApTag state="off" :label="sectionTag(section, scope.kind) ?? ''"
+    /></template>
     <p
       v-if="section.purpose"
       class="m-0 mb-3 text-md text-text-3"

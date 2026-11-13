@@ -7,13 +7,13 @@ import {
 } from "@/features/changes/index.ts";
 
 /** Contract: docs/apogee/api/setup.md, Settings (ST1), mission and organization. */
-const { array, boolean, integer, nullable, object, oneOf, optional, string, timestamp, token } =
-  decoders;
+const { array, boolean, integer, nullable, object, optional, string, timestamp, token } = decoders;
 const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
 
 const where = object({
   value: raw,
-  source: optional(nullable(oneOf(["mission", "organization", "default"]))),
+  // known: one new server value mustn't fail the whole settings read (ux, typing rules).
+  source: optional(nullable(decoders.known(["mission", "organization", "default"] as const))),
   inherited_value: raw,
 });
 /** A kind-schema field plus its effective value and where that value comes from. */
@@ -80,16 +80,23 @@ export function valueText(f: SettingsField, v: unknown = f.value): string {
  * whole section, so every field shares one source; the tag sits on the section header.
  */
 export type SectionSource = "mission" | "organization" | "default";
-export function sectionSource(s: SettingsSection): SectionSource {
-  const src = s.fields.find((f) => f.source)?.source;
-  return src === "mission" ? "mission" : src === "organization" ? "organization" : "default";
+/** Only what the server says; null when no field says, or says something unrecognized (U20). */
+export function sectionSource(s: SettingsSection): SectionSource | null {
+  const src = s.fields.find((f) => f.source !== null && f.source !== undefined)?.source;
+  return src === "mission" || src === "organization" || src === "default" ? src : null;
 }
-export function sectionTag(s: SettingsSection, scope: SettingsScope["kind"]): string {
-  const src = sectionSource(s);
-  if (src === "mission") return "Set for this mission";
-  if (src === "organization")
-    return scope === "mission" ? "Inherited from org" : "Set for this organization";
-  return "Default";
+/** The header tag, or null for no tag when the source is unknown. */
+export function sectionTag(s: SettingsSection, scope: SettingsScope["kind"]): string | null {
+  switch (sectionSource(s)) {
+    case "mission":
+      return "Set for this mission";
+    case "organization":
+      return scope === "mission" ? "Inherited from org" : "Set for this organization";
+    case "default":
+      return "Default";
+    case null:
+      return null;
+  }
 }
 
 /** Form text for each field's effective value. */
