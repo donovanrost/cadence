@@ -28,6 +28,17 @@ import {
  * follows the server's redirect_to with a full navigation.
  */
 const route = useRoute("auth.invitation");
+/** Cases with nothing to fill in: they still offer a way on (qa, lead). */
+const TERMINAL: readonly Invitation["case"][] = [
+  "accepted",
+  "used",
+  "unknown",
+  "unrecognized",
+  "expired",
+  "withdrawn",
+  "declined",
+  "unavailable",
+];
 const token = computed(() => String(route.params.token ?? ""));
 const invitation = shallowRef<Invitation | null>(null);
 const unknown = ref(false);
@@ -171,7 +182,7 @@ const reason = computed(
       >
     </template>
     <template v-else-if="view">
-      <h1 v-if="view.h1" class="m-0 font-display text-[24px] font-semibold tracking-head uppercase">
+      <h1 class="m-0 font-display text-[24px] font-semibold tracking-head uppercase">
         {{ view.h1 }}
       </h1>
       <p v-if="invitationHeader(invitation)" class="m-0 text-text-2">
@@ -258,13 +269,15 @@ const reason = computed(
         @click="run(() => signOutHere(csrf))()"
         >Sign out and continue</ApButton
       >
-      <ApButton
-        v-else-if="['accepted', 'used', 'unknown', 'unrecognized'].includes(invitation.case)"
-        variant="primary"
-        class="w-full"
-        :to="{ name: 'auth.sign-in' }"
-        >Sign in</ApButton
-      >
+      <!-- qa/lead: no dead ends. Signed in: on to Cadence; signed out: sign in. -->
+      <template v-else-if="TERMINAL.includes(invitation.case)">
+        <ApButton v-if="signedInAs" variant="primary" class="w-full" @click="goTo('/console/')"
+          >Continue to Cadence</ApButton
+        >
+        <ApButton v-else variant="primary" class="w-full" :to="{ name: 'auth.sign-in' }"
+          >Sign in</ApButton
+        >
+      </template>
     </template>
   </div>
 </template>

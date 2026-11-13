@@ -24,6 +24,9 @@ describe("auth words (ux Auth.md)", () => {
       "Mira K. invited you to Acme Space as observer on 11-10.",
     );
     expect(invitationView(inv({ case: "unrecognized" }), null).callout?.tone).toBe("off");
+    // One h1 per screen (qa): terminal cases have one too.
+    expect(invitationView(inv({ case: "expired" }), null).h1).toBe("Invitation expired");
+    expect(invitationView(inv({ case: "signed_in_other" }), null).h1).toBe("Different account");
     expect(invitationHeader(inv({ invited_by: null, invited_at: null }))).toBe(
       "You're invited to Acme Space as Member.",
     );

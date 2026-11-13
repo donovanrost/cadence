@@ -23,7 +23,8 @@ export function invitationHeader(i: Invitation): string | null {
 }
 
 export type InvitationView = Readonly<{
-  h1: string | null;
+  /** One h1 per screen (shell contract #3, qa): every case has one. */
+  h1: string;
   callout: { tone: "caution" | "off"; text: string } | null;
 }>;
 
@@ -40,7 +41,7 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
       return { h1: `Join ${org}?`, callout: null };
     case "signed_in_other":
       return {
-        h1: null,
+        h1: "Different account",
         callout: {
           tone: "caution",
           text: `This invitation is for ${i.email ?? "another account"}.${signedInAs ? ` You're signed in as ${signedInAs}.` : ""}`,
@@ -48,7 +49,7 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
       };
     case "expired":
       return {
-        h1: null,
+        h1: "Invitation expired",
         callout: {
           tone: "off",
           text: `This invitation expired${i.expires_at ? ` on ${day(i.expires_at)}` : ""}.${who ? ` Ask ${who} for a new one.` : " Ask for a new one."}`,
@@ -57,7 +58,7 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
     case "withdrawn": {
       const by = i.withdrawn_by?.name ?? who;
       return {
-        h1: null,
+        h1: "Invitation withdrawn",
         callout: {
           tone: "off",
           text: by ? `${by} withdrew this invitation.` : "This invitation was withdrawn.",
@@ -66,10 +67,13 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
     }
     case "accepted":
     case "used":
-      return { h1: null, callout: { tone: "off", text: "This invitation was already accepted." } };
+      return {
+        h1: "Already accepted",
+        callout: { tone: "off", text: "This invitation was already accepted." },
+      };
     case "declined":
       return {
-        h1: null,
+        h1: "Invitation declined",
         callout: {
           tone: "off",
           text: "This invitation was declined. Ask for a new one if you want to join.",
@@ -77,17 +81,17 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
       };
     case "unavailable":
       return {
-        h1: null,
+        h1: "Invitation unavailable",
         callout: {
           tone: "off",
           text: "This invitation isn't available any more. Ask for a new one.",
         },
       };
     case "unknown":
-      return { h1: null, callout: { tone: "off", text: UNKNOWN_INVITATION } };
+      return { h1: "Invitation not valid", callout: { tone: "off", text: UNKNOWN_INVITATION } };
     case "unrecognized":
       return {
-        h1: null,
+        h1: "Invitation unavailable",
         callout: { tone: "off", text: "This invitation can't be used here. Ask for a new one." },
       };
     default: {
