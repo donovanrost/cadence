@@ -155,7 +155,41 @@ open, not on refresh. `404 not_found` for an unknown or archived dashboard.
 ## D14-D19: settings, sharing, activity, diagnostics, export (owner: api)
 
 From fe-setup's proposal (docs/apogee/plans/dashboards-settings.md). Under
-`/api/console/v1/missions/:mission_id/dashboards/:dashboard_id`. D14-D17 follow.
+`/api/console/v1/missions/:mission_id/dashboards/:dashboard_id`.
+
+- **D14** `GET /settings?shares_after=&snapshots_after=` (author) → `{dashboard: {id, name,
+  description, tags, lifecycle, current_version, published_version}, defaults: {time, scope},
+  limits: {name: 120, description: 500, tags: 32, tag: 64}, shares: {rows: [share], next},
+  snapshots: {rows: [snapshot], next}}`.
+  - `share = {id, url, data_visibility: with_data | definition_only, state: active | expired |
+    revoked, expires_at, created_at, created_by: {id, name, kind: "user"} | null}`.
+  - `snapshot = {id, url, version, data_visibility, window: {from, to} | null, created_at,
+    created_by}`. `window` is null for snapshots taken before frozen windows (never a guess).
+  - `url` is the console path (`/console/:org/:mission/telemetry/dashboards/shares/:id` or
+    `…/snapshots/:id`).
+  - Pages are 25 rows, in the store's id order (not by time yet); pass `next` back as
+    `shares_after` / `snapshots_after`.
+  - `defaults.time`: `{mode: "relative", range: "now-6h"}`, `{mode: "absolute", from, to}` or
+    null. `defaults.scope`: `{mode: "fixed", spacecraft_id}` or null. Stored modes the console
+    doesn't edit read as null.
+- **D15** `PATCH /settings {name, description, tags, defaults, expected_version}` (author) → `200
+  {version}`: a new current version, "Updated dashboard settings".
+  - `defaults` absent means unchanged. Within it, `time` / `scope` absent means unchanged, and
+    null clears. `scope.mode` `context` or `fleet` stores no spacecraft (reads back as null).
+  - `409 version_conflict {current_version, saved_by, saved_at}` (as D9).
+  - `422 invalid_params` with `details.name | description | tags | defaults`.
+- **D16** (author):
+  - `POST /shares {data_visibility, expires_at | null}` → `201 <share>`. `expires_at` is
+    rounded up to whole hours from now. A past one, or one over 365 days, is `422
+    details.expires_at`.
+  - `DELETE /shares/:share_id` → `200 <share>` (state `revoked`). It's `409 share_not_active`
+    when it's already revoked.
+  - `POST /snapshots {data_visibility, runtime: {from, to, spacecraft_id | null}}` → `201
+    <snapshot>`. The window is frozen (ISO 8601, from < to). A missing or bad one is `422` with
+    `details["runtime.from" | "runtime.to" | …]`, never a silent definition-only snapshot.
+  - `DELETE /snapshots/:snapshot_id` → `204`. Audited ("Deleted snapshot of <dashboard>"). Its
+    link then reads `snapshot_deleted` (D20). `404` when it's unknown or already deleted.
+  - `403 forbidden` for non-authors; `404 not_found` for an unknown dashboard.
 
 - **D17** `GET /activity?before=` (operator) → `{events: [{id, kind, at, actor {id, name} | null,
   version, detail}], next}`: one feed, newest first, 25 per page; pass `next` back as `before`

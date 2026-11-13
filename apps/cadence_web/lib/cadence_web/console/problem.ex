@@ -142,6 +142,7 @@ defmodule CadenceWeb.Console.Problem do
     invalid_params: {422, "The request parameters are invalid."},
     history_unavailable: {503, "Telemetry history is unavailable right now."},
     dashboard_unavailable: {503, "This dashboard couldn't be resolved right now."},
+    share_not_active: {409, "That share is already revoked or expired."},
     invalid_command: {422, "One of the edits can't be applied."},
     too_many_commands: {422, "Too many unsaved edits. Save to keep going."},
     dashboard_not_ready: {422, "Some widgets aren't ready to save."},

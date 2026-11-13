@@ -863,6 +863,23 @@ defmodule CadenceWeb.Router do
       get("/dashboards/:dashboard_id/activity", DashboardSettingsController, :activity)
       get("/dashboards/:dashboard_id/diagnostics", DashboardSettingsController, :diagnostics)
       get("/dashboards/:dashboard_id/export", DashboardSettingsController, :export)
+      get("/dashboards/:dashboard_id/settings", DashboardSharingController, :show)
+      patch("/dashboards/:dashboard_id/settings", DashboardSharingController, :update)
+      post("/dashboards/:dashboard_id/shares", DashboardSharingController, :create_share)
+
+      delete(
+        "/dashboards/:dashboard_id/shares/:share_id",
+        DashboardSharingController,
+        :revoke_share
+      )
+
+      post("/dashboards/:dashboard_id/snapshots", DashboardSharingController, :create_snapshot)
+
+      delete(
+        "/dashboards/:dashboard_id/snapshots/:snapshot_id",
+        DashboardSharingController,
+        :delete_snapshot
+      )
 
       get("/passes", PassController, :index)
       get("/contact-findings", ContactFindingsController, :index)
