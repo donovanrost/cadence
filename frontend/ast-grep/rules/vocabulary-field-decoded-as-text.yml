@@ -61,6 +61,5 @@
       "apps/console/src/features/now/changeSet.ts",
       "apps/console/src/features/now/sources.ts",
       "apps/console/src/features/resolutions/api.ts",
-      "apps/console/src/features/timeline/api.ts",
     ],
 }

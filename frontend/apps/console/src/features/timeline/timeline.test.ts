@@ -120,14 +120,14 @@ describe("event subjects (ux timeline #1)", () => {
       kind: "contact" as const,
       text: "Contact with EARENDIL-004 completed, 10:22:54Z–10:23:52Z",
       spacecraft: sc,
-      refs: { ...ev("c", "x").refs, subject: { kind: "contact", id: "ct-1", name: null } },
+      refs: { ...ev("c", "x").refs, subject: { kind: "contact" as const, id: "ct-1", name: null } },
     };
     expect(subjectLink(contact)).toEqual({ name: "ops.contacts", query: { contact: "ct-1" } });
     expect(needsSpacecraftPrefix(contact)).toBe(false);
     expect(needsSpacecraftPrefix({ ...contact, text: "Limit violation" })).toBe(true);
     const activation = {
       ...contact,
-      refs: { ...contact.refs, subject: { kind: "activation", id: "a", name: null } },
+      refs: { ...contact.refs, subject: { kind: "activation" as const, id: "a", name: null } },
     };
     expect(subjectLink(activation)).toBeNull();
     // api 8d: 'Applied r6 · 2 changes' links to Setup's revisions.
@@ -135,7 +135,7 @@ describe("event subjects (ux timeline #1)", () => {
       ...contact,
       kind: "config" as const,
       spacecraft: null,
-      refs: { ...contact.refs, subject: { kind: "config_revision", id: "6", name: "r6" } },
+      refs: { ...contact.refs, subject: { kind: "config_revision" as const, id: "6", name: "r6" } },
     };
     expect(subjectLink(applied)).toEqual({ name: "setup.revisions" });
   });

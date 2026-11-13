@@ -37,7 +37,8 @@ export function subjectLink(event: MissionEvent): RouteLocationRaw | null {
     // no per-revision page yet, so the list (ux U39).
     case "config_revision":
       return { name: "setup.revisions" };
-    default:
+    case "activation":
+    case "unrecognized":
       return null;
   }
 }

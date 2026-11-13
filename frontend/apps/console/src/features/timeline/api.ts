@@ -17,10 +17,22 @@ export const DEFAULT_KINDS: readonly EventKind[] = eventKinds.filter((k) => k !=
 export const eventSeverities = ["critical", "caution", "nominal", "info"] as const;
 export type EventSeverity = (typeof eventSeverities)[number];
 
+/** Cadence.Reads.EventSentences subject kinds; only some have a page to link to (subjectLink). */
+export const subjectKinds = [
+  "activation",
+  "catalog_revision",
+  "config_revision",
+  "contact",
+  "dashboard",
+  "data_source",
+] as const;
+
 const event = d.object({
   id: d.token,
   at: d.timestamp,
   kind: d.oneOf(eventKinds),
+  // kindLabel words the common entry kinds and sentence-cases the rest.
+  // free-text: the event log's own entry kind, an open set that grows with each producer.
   raw_kind: d.nullable(d.string),
   severity: d.oneOf(eventSeverities),
   text: d.string,
@@ -33,7 +45,9 @@ const event = d.object({
     contact_id: d.nullable(d.token),
     /** What the sentence is about, as a link target (ux timeline review #1); null when none. */
     subject: d.optional(
-      d.nullable(d.object({ kind: d.token, id: d.token, name: d.nullable(d.string) })),
+      d.nullable(
+        d.object({ kind: d.known(subjectKinds), id: d.token, name: d.nullable(d.string) }),
+      ),
     ),
   }),
 });
