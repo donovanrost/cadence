@@ -91,6 +91,21 @@ defmodule Cadence.Alarms.Queries do
     end
   end
 
+  @doc "A point's raised ground-limit alarms: the limit_definition change-set HOLD (#77, U43)."
+  @spec active_limit_alarms(String.t(), String.t()) :: [
+          %{episode_id: String.t(), severity: String.t()}
+        ]
+  def active_limit_alarms(mission_id, point_id) do
+    EpisodeRow
+    |> where(
+      [e],
+      e.mission_id == ^mission_id and e.source == "ground_limit" and e.parameter_ref == ^point_id and
+        e.state == "active"
+    )
+    |> select([e], %{episode_id: e.episode_id, severity: e.severity})
+    |> Repo.all()
+  end
+
   @doc "Active episode counts by severity and status."
   @spec summary(String.t()) :: map()
   def summary(mission_id) do

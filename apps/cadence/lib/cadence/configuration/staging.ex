@@ -152,6 +152,7 @@ defmodule Cadence.Configuration.Staging do
     entity_id = Map.get(op, :entity_id) || Ids.new(kind.id_prefix())
 
     with {:ok, document} <- kind.normalize(:create, entity_id, Document.normalize(op[:document])) do
+      entity_id = Map.get(op, :entity_id) || create_entity_id(kind, document, entity_id)
       {:ok, op_attrs(kind, "create", entity_id, %{"document" => document}, %{}, [])}
     end
   end
@@ -162,6 +163,13 @@ defmodule Cadence.Configuration.Staging do
     with {:ok, current} <- current(kind, organization_id, mission_id, entity_id) do
       prepare_existing(kind, action, entity_id, current, op)
     end
+  end
+
+  # A kind whose ids follow from the document (a limit definition's point and set) names it.
+  defp create_entity_id(kind, document, minted) do
+    if function_exported?(kind, :create_entity_id, 1),
+      do: kind.create_entity_id(document),
+      else: minted
   end
 
   defp prepare_existing(kind, "delete", entity_id, current, _op) do

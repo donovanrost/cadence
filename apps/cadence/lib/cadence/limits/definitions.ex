@@ -195,7 +195,8 @@ defmodule Cadence.Limits.Definitions do
   defp scoped(org, mission),
     do: from(d in Row, where: d.organization_id == ^org and d.mission_id == ^mission)
 
-  defp definition_id(point, set) do
+  @doc "A point and limit set's definition id: the same for every version, and after a retire."
+  def definition_id(point, set) do
     digest = :crypto.hash(:sha256, point <> ":" <> set) |> Base.url_encode64(padding: false)
     "limit_definition:#{binary_part(digest, 0, 16)}"
   end

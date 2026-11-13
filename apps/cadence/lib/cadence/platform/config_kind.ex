@@ -106,5 +106,25 @@ defmodule Cadence.Platform.ConfigKind do
   """
   @callback holds(organization_id :: String.t(), mission_id :: String.t(), [entry()]) :: [map()]
 
-  @optional_callbacks effect: 7, normalize_options: 2, finalize: 3, holds: 3
+  @doc """
+  Runs after the change set has committed, with this kind's entries of the applied run: the
+  place to announce what changed outside the database (e.g. limit facts), since `write/7` and
+  `finalize/3` run inside the transaction (and a preview rolls it back). Never runs for a
+  preview. A failure leaves the revision applied and the runtime reported degraded.
+  """
+  @callback after_commit(organization_id :: String.t(), mission_id :: String.t(), [entry()]) ::
+              :ok
+
+  @doc """
+  The entity id a create gets, when the kind's ids follow from the document (a limit
+  definition's is its point and limit set's). Without it, creates get a fresh `id_prefix/0` id.
+  """
+  @callback create_entity_id(document()) :: String.t()
+
+  @optional_callbacks effect: 7,
+                      normalize_options: 2,
+                      finalize: 3,
+                      holds: 3,
+                      after_commit: 3,
+                      create_entity_id: 1
 end

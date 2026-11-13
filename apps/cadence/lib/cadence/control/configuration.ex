@@ -16,7 +16,18 @@ defmodule Cadence.Control.Configuration do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Commanding.Groups
-  alias Cadence.Configuration.{Access, Editing, Ledger, Preview, Staging, Status, Submission}
+
+  alias Cadence.Configuration.{
+    Access,
+    Editing,
+    Kinds,
+    Ledger,
+    Preview,
+    Staging,
+    Status,
+    Submission
+  }
+
   alias Cadence.Configuration.ChangeSetStore
   alias Cadence.Contacts.Scheduler
   alias Cadence.Control.MissionRuntimeReconciler
@@ -243,7 +254,7 @@ defmodule Cadence.Control.Configuration do
     progress(change_set_id, "verify", if(result.runtime == :degraded, do: :failed, else: :done))
     broadcast_runtime(mission, result)
     publish_entity_updates(mission, result.kinds)
-    changed({:ok, Map.drop(result, [:impacts, :kinds, :activation_payload])}, mission)
+    changed({:ok, Map.drop(result, [:impacts, :kinds, :activation_payload, :committed])}, mission)
   end
 
   defp after_apply({:ok, _result} = ok, mission, change_set_id) do
@@ -278,6 +289,7 @@ defmodule Cadence.Control.Configuration do
   # and reports the runtime degraded; the mission reconciler keeps retrying.
   defp post_commit(mission, change_set_id, result) do
     notify_runtime(mission, result.impacts)
+    after_commit_kinds(mission, Map.get(result, :committed, []))
     announce_canceled(mission, result)
     converge(mission, result)
   rescue
@@ -337,6 +349,18 @@ defmodule Cadence.Control.Configuration do
   end
 
   defp converge(_mission, result), do: result
+
+  # A kind that announces outside the database does it here, once the revision has committed.
+  defp after_commit_kinds(mission, entries) do
+    entries
+    |> Enum.group_by(& &1.kind)
+    |> Enum.each(fn {kind, kind_entries} ->
+      with {:ok, module} <- Kinds.fetch(kind),
+           true <- function_exported?(module, :after_commit, 3) do
+        module.after_commit(mission.organization_id, mission.mission_id, kind_entries)
+      end
+    end)
+  end
 
   defp notify_runtime(mission, impacts) do
     if :contacts in impacts, do: Scheduler.notify_contact_changed(mission.mission_id)

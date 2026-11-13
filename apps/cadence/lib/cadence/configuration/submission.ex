@@ -170,7 +170,9 @@ defmodule Cadence.Configuration.Submission do
         activation_payload: generation,
         degraded_partitions: [],
         impacts: MapSet.to_list(result.impacts),
-        kinds: result.entries |> Enum.map(& &1.kind) |> Enum.uniq()
+        kinds: result.entries |> Enum.map(& &1.kind) |> Enum.uniq(),
+        # For kinds' after_commit/3 (dropped before the response).
+        committed: result.entries
       }
     else
       {:error, reason} -> Repo.rollback(reason)
