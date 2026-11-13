@@ -92,7 +92,8 @@ defmodule CadenceWeb.OpsSettingsPageTest do
     assert saved["status"] == "ok"
     assert saved["state"]["model"]["document_version"] == 2
     assert saved["state"]["model"]["name"] == "Saved through host"
-    assert saved["state"]["model"]["published_version"] == nil
+    # Q1 (DECISIONS #76, c8100ded7): a settings save goes through CurrentVersions, so it is current.
+    assert saved["state"]["model"]["published_version"] == 2
   end
 
   test "invalid commands remain editable; stale revisions require explicit reload", c do
