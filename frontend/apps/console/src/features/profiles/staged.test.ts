@@ -4,7 +4,7 @@ import { stagedFields, stagedText } from "./staged.ts";
 const change = (authorId: string, name: string, entity: string, changes: unknown) => ({
   id: `c-${authorId}`,
   summary: "x",
-  author: { kind: "user", id: authorId, name },
+  author: { kind: "user" as const, id: authorId, name },
   staged_at: "2026-11-13T00:00:00Z",
   source: null,
   state: "staged",

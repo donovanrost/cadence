@@ -1,4 +1,5 @@
 import { computed, type Ref } from "vue";
+import { actorName } from "@/api";
 import { useConfigState, type ChangeSet } from "@/features/changes/index.ts";
 import { useSession } from "@/shell";
 import { fieldText, type ProfileField } from "./detail.ts";
@@ -30,7 +31,7 @@ export function stagedFields(
           continue;
         out.set(c.path, {
           path: c.path,
-          by: change.author.name,
+          by: actorName(change.author, "Someone"),
           mine: change.author.id === userId,
           value: "value" in c ? c.value : null,
         });

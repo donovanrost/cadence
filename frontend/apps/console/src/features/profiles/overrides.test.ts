@@ -94,7 +94,7 @@ describe("override text", () => {
     reason: "canary for rev 4",
     since_revision: 9,
     set_at: null,
-    actor: { name: "Mira K." },
+    actor: { kind: "user" as const, id: "u1", name: "Mira K." },
     redundant: false,
   };
 

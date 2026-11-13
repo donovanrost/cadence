@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import { actor, decoders, request, type ApiResult, type Decoded, type Reader, orNull } from "@/api";
 import { formatCount } from "@/ui";
 
 /** Requested shape: docs/apogee/plans/setup-shapes.md §CP1 (final contract in api/setup.md). */
@@ -62,9 +62,7 @@ const templateDetail = (value: unknown, path = "") => ({
       object({
         version: integer,
         created_at: decoders.timestamp,
-        actor: nullable(
-          object({ kind: decoders.optional(token), id: decoders.optional(token), name: string }),
-        ),
+        actor: orNull(actor),
       }),
       500,
     ),

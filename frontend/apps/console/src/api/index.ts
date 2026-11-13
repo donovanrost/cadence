@@ -29,6 +29,7 @@ export {
 export {
   actor,
   actorKinds,
+  actorKindWord,
   actorName,
   invitationCore,
   invitationState,

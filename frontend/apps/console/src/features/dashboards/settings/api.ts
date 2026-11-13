@@ -1,4 +1,13 @@
-import { API_BASE, decoders as d, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import {
+  actor as sharedActor,
+  API_BASE,
+  decoders as d,
+  orNull,
+  request,
+  type ApiResult,
+  type Decoded,
+  type Reader,
+} from "@/api";
 
 /**
  * Dashboard settings (slice 5, L8): D14–D19 as proposed in docs/apogee/plans/dashboards-settings.md
@@ -7,10 +16,8 @@ import { API_BASE, decoders as d, request, type ApiResult, type Decoded, type Re
 const base = (missionId: string, dashboardId: string) =>
   `/missions/${encodeURIComponent(missionId)}/dashboards/${encodeURIComponent(dashboardId)}`;
 
-/** The domain sends a null name when the user is gone (dashboards). */
-const actor = d.nullable(
-  d.object({ id: d.optional(d.nullable(d.token)), name: d.nullable(d.string) }),
-);
+/** Who did it: the shared entity (typing §12 A5); the name is null when the user is gone. */
+const actor = orNull(sharedActor);
 
 /** api sends `with_data | definition_only`; the domain's `authorized_runtime_data` reads as `with_data`. */
 const visibilityWire = d.known([

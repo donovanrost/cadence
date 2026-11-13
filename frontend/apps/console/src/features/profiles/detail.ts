@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import { actor, decoders, request, type ApiResult, type Decoded, type Reader, orNull } from "@/api";
 import { formatCount } from "@/ui";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:mission_id/profiles/:profile_id`. */
@@ -47,14 +47,13 @@ const override = object({
   reason: nullable(string),
   since_revision: nullable(integer),
   set_at: nullable(timestamp),
-  actor: nullable(object({ name: string })),
+  actor: orNull(actor),
   redundant: boolean,
 });
 export type ProfileOverride = Decoded<typeof override>;
 
-const actorName = nullable(
-  object({ kind: decoders.optional(token), id: decoders.optional(token), name: string }),
-);
+/** The shared entity (typing §12 A5). */
+const actorName = orNull(actor);
 
 export const profileDetailReader = object({
   profile: object({

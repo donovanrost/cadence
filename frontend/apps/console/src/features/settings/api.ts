@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import { actor, decoders, request, type ApiResult, type Decoded, type Reader, orNull } from "@/api";
 import {
   displayValue,
   schemaFieldReader,
@@ -29,9 +29,7 @@ const section = object({
   purpose: nullable(string),
   fields: array(field, 200),
   locked: optional(boolean),
-  version: nullable(
-    object({ version: integer, at: timestamp, actor: nullable(object({ name: string })) }),
-  ),
+  version: nullable(object({ version: integer, at: timestamp, actor: orNull(actor) })),
 });
 export type SettingsSection = Decoded<typeof section>;
 export const settingsReader = object({

@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { actor, decoders, orNull, request, type ApiResult, type Decoded } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /organizations/:id/audit` (AU1). */
 const { array, nullable, object, string, timestamp, token } = decoders;
@@ -13,7 +13,8 @@ const event = object({
   id: token,
   at: timestamp,
   // Settings history carries only the actor's name (id null); some records have no actor.
-  actor: nullable(object({ kind: token, id: nullable(token), name: string })),
+  // The shared entity (typing §12 A5); settings history sends only a name, some records none.
+  actor: orNull(actor),
   // A source the console doesn't know yet (api is adding more) decodes; kindText labels it.
   kind: token,
   action: string,

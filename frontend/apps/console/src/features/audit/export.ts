@@ -1,3 +1,4 @@
+import { actorKindWord } from "@/api";
 import type { ApiResult } from "@/api";
 import { kindText, type AuditEvent, type AuditPage, type AuditQuery } from "./api.ts";
 
@@ -19,7 +20,7 @@ export function auditCsv(events: readonly AuditEvent[]): string {
   const lines = events.map((e) => [
     new Date(e.at).toISOString().replace(/\.\d{3}Z$/, "Z"),
     e.actor?.name ?? null,
-    e.actor?.kind ?? null,
+    actorKindWord(e.actor?.kind ?? null),
     kindText(e.kind),
     e.action,
     e.target?.label ?? null,

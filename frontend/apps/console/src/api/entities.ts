@@ -37,6 +37,10 @@ export const actor = object({
 });
 export type Actor = Decoded<typeof actor>;
 
+/** The actor kind as the server's word (`user`, `service`, …), for exports and technical text. */
+export const actorKindWord = (k: Actor["kind"]): string | null =>
+  k === null ? null : typeof k === "string" ? k : k.unrecognized;
+
 /** The actor's name for a sentence, or `fallback` ("Not recorded") when nobody is known. */
 export const actorName = (a: Actor | null | undefined, fallback = "Not recorded") =>
   a?.name ?? fallback;

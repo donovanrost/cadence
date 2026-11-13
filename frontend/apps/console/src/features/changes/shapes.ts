@@ -1,4 +1,4 @@
-import { decoders, type Decoded, type Reader } from "@/api";
+import { actor, decoders, type Decoded, type Reader } from "@/api";
 
 /**
  * Change-set wire shapes. Requested: docs/apogee/plans/setup-shapes.md §K (a JSON passthrough
@@ -9,7 +9,8 @@ const { array, boolean, integer, nullable, object, oneOf, optional, string, time
 
 const raw: Reader<unknown> = (value) => value;
 
-export const actor = object({ kind: token, id: token, name: string });
+/** The shared entity (typing §12 A5). */
+export { actor };
 
 const revisionNumber: Reader<number> = (value, path = "") => {
   const n = integer(value, path);
