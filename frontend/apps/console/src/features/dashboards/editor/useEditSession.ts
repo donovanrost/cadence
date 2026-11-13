@@ -42,6 +42,8 @@ export function useEditSession(
 
   /** Who saved over this draft and when, once a save or a rebase learned it (409 details). */
   const conflictBy = shallowRef<Conflict | null>(null);
+  /** The newest channel `version` push, kept even before a draft exists (noteSaved). */
+  const lastSaved = shallowRef<Conflict | null>(null);
   const editing = computed(() => draft.value !== null);
   const dirty = computed(() => (draft.value?.commands.length ?? 0) > 0);
   /** What this save changes; null while the preview for the current draft is pending or failed. */
@@ -51,18 +53,19 @@ export function useEditSession(
   /** Someone saved over the version this draft is based on (ux's callout). */
   const conflict = computed<Conflict | null>(() => {
     const d = draft.value;
-    // A refused save's 409 knows the newest version even when the re-read is slow (qa rerun).
+    if (!d || !dirty.value) return null;
+    // Who saved: a refused save's 409, else the push, when it is newer than this draft's base.
+    const pushed = lastSaved.value;
+    const by =
+      conflictBy.value ?? (pushed && pushed.currentVersion > d.baseVersion ? pushed : null);
+    // The 409 or the push knows the newest version even when the re-read is slow (qa rerun).
     const current = Math.max(
       currentVersion.value ?? 0,
       staged.value?.current_version ?? 0,
-      conflictBy.value?.currentVersion ?? 0,
+      by?.currentVersion ?? 0,
     );
-    if (!d || !dirty.value || current <= d.baseVersion) return null;
-    return {
-      currentVersion: current,
-      savedBy: conflictBy.value?.savedBy ?? null,
-      savedAt: conflictBy.value?.savedAt ?? null,
-    };
+    if (current <= d.baseVersion) return null;
+    return { currentVersion: current, savedBy: by?.savedBy ?? null, savedAt: by?.savedAt ?? null };
   });
 
   function persist(next: Draft) {
@@ -207,8 +210,7 @@ export function useEditSession(
    * them before any save of mine is refused (qa: the pushed callout said "Someone").
    */
   function noteSaved(saved: Conflict) {
-    const d = draft.value;
-    if (d && saved.currentVersion > d.baseVersion) conflictBy.value = saved;
+    lastSaved.value = saved;
   }
 
   /** Discard mine: drop the draft and keep editing on the newest version. */
@@ -221,6 +223,7 @@ export function useEditSession(
   // Another dashboard (Save as copy pushes the same route): this draft and preview aren't its.
   // The screen re-enters once the new dashboard's view loads.
   watch([missionId, dashboardId], () => {
+    lastSaved.value = null;
     if (draft.value !== null) leave();
   });
   onScopeDispose(() => controller?.abort());

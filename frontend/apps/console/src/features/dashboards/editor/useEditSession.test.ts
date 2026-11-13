@@ -123,4 +123,13 @@ describe("edit session previews", () => {
     });
     stop();
   });
+
+  it("uses a push that arrived before editing began, once the draft is older than it", () => {
+    const { s, stop } = session();
+    s.noteSaved({ currentVersion: 4, savedBy: "Ana P.", savedAt: null }); // no draft yet
+    s.enter(); // based on a stale read: v1
+    s.stage(removeSection(1));
+    expect(s.conflict.value?.savedBy).toBe("Ana P.");
+    stop();
+  });
 });
