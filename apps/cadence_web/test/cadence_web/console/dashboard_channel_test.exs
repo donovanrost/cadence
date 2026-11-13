@@ -87,11 +87,21 @@ defmodule CadenceWeb.Console.DashboardChannelTest do
 
     save(c, %{c.document | name: "Next version"}, 1)
 
+    saver = c.user.user_id
+
+    # The callout names who saved (qa smoke: it said "Saved by Someone").
     assert_push(
       "version",
-      %{current_version: 2, archived: false, saved_by: %{kind: "user"}},
+      %{
+        current_version: 2,
+        archived: false,
+        saved_by: %{kind: "user", id: ^saver, name: name},
+        saved_at: %DateTime{}
+      },
       3_000
     )
+
+    assert name in [c.user.display_name, c.user.email]
 
     assert_push(
       "view",
