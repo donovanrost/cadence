@@ -26,7 +26,7 @@ with Profile/People.
 **Question:** "Who changed what, when, and why?"
 ```
 lbl "REFLECT ORBITAL · AUDIT LOG"   h1 "Last 7 days"        range: ApTimeRange (presets 24h · 7d · 30d)
-filters: actor (select) · mission (select) · kind chips (Config · Commanding · Access · Alarms · Contacts · Data)
+filters: actor (select) · mission (select) · kind as a one-of segmented control (`All` · Config · Commanding · Access · Alarms · Contacts · Data, plus kinds the server adds, e.g. Account; `All` first and the default). It's single-choice, with no multi-select chip. Past 8 kinds, or under 1100px, it becomes a `Kind` select
 ┌ L1 Audit table (scrolls) ───────────────────────────────────────────────────────────────┐
 ```
 - **Row:** time (mono, `11-09 01:12:07Z`) · actor (name; service identities in mono with a `SERVICE`
