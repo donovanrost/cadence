@@ -34,7 +34,7 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.9
   vite-plus: 0.2.9
   vitest: 4.1.10
-  vue: ^3.5.40
+  vue: ^3.5.42
   vue-tsc: ^3.3.8
 overrides:
   vite: "catalog:"
