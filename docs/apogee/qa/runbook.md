@@ -183,7 +183,16 @@ Ecto.Migrator.run(Cadence.Repo, path, :up, to: 20261113040000, log: :info)
 Ecto.Migrator.migrations(Cadence.Repo, path)   # status before and after
 ```
 
-Or qa folds them into a planned restart. Then the schema save follows seconds later, and qa runs the
+Or qa folds them into a planned restart.
+
+**When a save breaks the compile** (11-13 09:59-10:03Z: an uncommitted controller edit with an
+undefined function made `CadenceWeb.Router` "not available", so every request 500'd), the dev
+reloader doesn't retry after the fix is saved. Once the file compiles (`MIX_ENV=test
+scripts/check-slot.sh mix compile` passes), trigger it in-node:
+`:rpc.call(:"cadence_apogee@<host>", Phoenix.CodeReloader, :reload, [CadenceWeb.Endpoint])`
+(scratchpad `reload-now.exs`), then sign-in 200, `active_spec`, `modified_modules` = [] and armed
+groups still queued. The same applies when a save just doesn't look live (06:14Z router save,
+11-13). Then the schema save follows seconds later, and qa runs the
 post-restart checks above. Never during the freeze. Big tables: CREATE INDEX CONCURRENTLY and a
 `lock_timeout` on ALTERs of hot tables (`mission_spacecraft`, `provider_audit_entries`).
 `cadence_dev` is left alone (it belongs to the main checkout).
