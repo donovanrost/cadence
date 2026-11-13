@@ -45,7 +45,7 @@ const drafts = computed(() =>
 );
 const values = ref<FormValues>({});
 const errors = ref<Readonly<Record<string, string>>>({});
-const note = ref<{ tone: "caution" | "crit"; text: string } | null>(null);
+const note = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
 const busy = ref(false);
 watch(
   () => rawSchema.state.value,
