@@ -128,7 +128,8 @@ defmodule Cadence.Dashboards.LibraryLifecycle do
   end
 
   # Dashboards whose current version places the item (the used_by_count rule).
-  defp used_by(organization_id, mission_id, item_id) do
+  @doc "Active dashboards placing the item: `[%{id, name, placements, pinned_versions}]` (D21)."
+  def used_by(organization_id, mission_id, item_id) do
     match = %{
       "placements" => [%{"content" => %{"kind" => "library", "library_widget_id" => item_id}}]
     }

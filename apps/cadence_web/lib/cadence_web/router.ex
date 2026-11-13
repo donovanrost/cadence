@@ -872,6 +872,13 @@ defmodule CadenceWeb.Router do
       get("/dashboard-playlists/:playlist_id", DashboardPlaylistController, :show)
       patch("/dashboard-playlists/:playlist_id", DashboardPlaylistController, :update)
       delete("/dashboard-playlists/:playlist_id", DashboardPlaylistController, :delete)
+      # D21/D22 library (owner: api).
+      get("/dashboard-library", DashboardLibraryController, :index)
+      post("/dashboard-library", DashboardLibraryController, :create)
+      get("/dashboard-library/:item_id", DashboardLibraryController, :show)
+      patch("/dashboard-library/:item_id", DashboardLibraryController, :update)
+      delete("/dashboard-library/:item_id", DashboardLibraryController, :delete)
+      post("/dashboard-library/:item_id/versions", DashboardLibraryController, :add_version)
       get("/dashboards/:dashboard_id/settings", DashboardSharingController, :show)
       patch("/dashboards/:dashboard_id/settings", DashboardSharingController, :update)
       post("/dashboards/:dashboard_id/shares", DashboardSharingController, :create_share)

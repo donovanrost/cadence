@@ -238,6 +238,35 @@ Mission operators read; authors (`dashboard.author`) write. Refetch on `invalida
 - `409 version_conflict {current: <the D23 playlist>}` on a stale `expected_updated_at`.
 - `404 playlist_not_found` ("This playlist was deleted."), `403 forbidden`.
 
+## D21/D22: the widget library (owner: api)
+
+From fe-ops' slice 8 (docs/apogee/plans/dashboards-library.md). Under
+`/api/console/v1/missions/:mission_id/dashboard-library`. Mission operators read; authors write.
+Refetch on `invalidate` with `dashboards`.
+
+- **D21** `GET /?q=&page=` → `{items: [{id, name, description, kind, latest_version,
+  used_by_count, updated_at, updated_by {id, name} | null}], total, page, pages, page_size: 25,
+  can_edit}`.
+  - Sorted by name. Retired items are left out, and `q` matches name and description.
+  - `kind` is the latest version's `widget_type_id` (read it tolerantly).
+  - `used_by_count` counts active dashboards that place it (the retire rule).
+- **D21** `GET /:item_id?version=n` → `{item: <list row without used_by_count>, version: {version,
+  definition_json, summary, saved_at, saved_by}, versions: [{version, summary, saved_at,
+  saved_by}] (newest first, ≤ 100), used_by: {dashboards: [{id, name, placements,
+  pinned_versions}]}, can_edit}`. `version` defaults to the latest. A retired item is `404
+  library_item_not_found`.
+- **D22** writes. A viewer gets `403 forbidden` ("Dashboard editors manage the library.").
+  - `POST / {name, description, definition_json, summary}` → `201 {id, version: 1}`.
+  - `POST /:item_id/versions {definition_json, summary, expected_version}` → `{version}`.
+  - `PATCH /:item_id {name?, description?, expected_version}` → the D21 item.
+  - `DELETE /:item_id?expected_version=n` → `204`. This **retires** the item: its versions stay
+    for old dashboard versions. Audited ("Retired library widget Battery tile").
+  - `409 library_item_changed {latest_version}` when it moved.
+  - `409 library_item_in_use {used_by: {dashboards: [{id, name, placements, pinned_versions}]},
+    consumer_count}` while an active dashboard places it.
+  - `422 invalid_params` with `details.definition_json` (not a valid widget), `details.request`
+    (bad name or shape) or `details.expected_version`.
+
 - **D17** `GET /activity?before=` (operator) → `{events: [{id, kind, at, actor {id, name} | null,
   version, detail}], next}`: one feed, newest first, 25 per page; pass `next` back as `before`
   (opaque; `null` on the last page; `422 details.before` for a bad one). `kind` is the closed
