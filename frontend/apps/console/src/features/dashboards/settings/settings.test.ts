@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vite-plus/test";
+import { decode } from "@/api";
+import { settingsReader } from "./api.ts";
+import { settingsWire } from "./fixtures.test-support.ts";
+import {
+  activityText,
+  cacheText,
+  parseTags,
+  shareStateText,
+  snapshotWindow,
+  visibilityWord,
+  warningText,
+  worstFirst,
+} from "./present.ts";
+
+describe("dashboard settings (slice 5, proposed D14)", () => {
+  it("reads the settings with either data-visibility word", () => {
+    const r = decode(settingsReader, settingsWire);
+    if (!r.ok) throw r.error;
+    const share = r.value.shares.rows[0];
+    if (!share) throw new Error("fixture");
+    expect(visibilityWord(share.data_visibility)).toBe("With data");
+    expect(shareStateText(share)).toBe("Expires 11-20");
+    expect(shareStateText({ state: "active", expires_at: null })).toBe("No expiry");
+    expect(shareStateText({ state: "revoked", expires_at: null })).toBe("Revoked");
+    const snap = r.value.snapshots.rows[0];
+    if (!snap) throw new Error("fixture");
+    expect(snapshotWindow(snap)).toBe("11-12 21:00Z–23:00Z");
+  });
+
+  it("says activity in words", () => {
+    expect(activityText({ kind: "saved", version: 8, detail: "Updated dashboard settings" })).toBe(
+      "Saved v8 · Updated dashboard settings",
+    );
+    expect(activityText({ kind: "health_checked", version: null, detail: null })).toBe(
+      "Health checked",
+    );
+  });
+
+  it("orders diagnostics worst first, with cache and warnings in words", async () => {
+    const { diagnosticsWire } = await import("./fixtures.test-support.ts");
+    const { fetchDiagnostics } = await import("./api.ts");
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ data: diagnosticsWire }), { status: 200 })) as typeof fetch;
+    try {
+      const r = await fetchDiagnostics(
+        { missionId: "m", dashboardId: "d" },
+        new AbortController().signal,
+      );
+      if (!r.ok) throw new Error("decode");
+      const rows = worstFirst(r.value.widgets);
+      expect(rows.map((w) => w.title)).toEqual(["Downlink rate", "Bus voltage"]);
+      const worst = rows[0];
+      if (!worst) throw new Error("fixture");
+      expect(cacheText(worst)).toBe("From cache");
+      expect(warningText(worst.warnings[0] ?? { code: "x", message: null })).toBe(
+        "Source unavailable",
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("parses tags", () => {
+    const limits = { tags: 2, tag: 5 };
+    expect(parseTags(" ops, power ,ops,", limits)).toEqual({ ok: true, tags: ["ops", "power"] });
+    expect(parseTags("a,b,c", limits)).toEqual({ ok: false, message: "At most 2 tags." });
+    expect(parseTags("toolong", limits).ok).toBe(false);
+  });
+});
