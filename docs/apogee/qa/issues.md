@@ -387,4 +387,24 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   error for admin and member.
 
 
+### 54. Reservation window fix failed shifted reservations (cfe2e95fa, reverted 40873a5a2)
+
+- 11-13 14:50Z/14:53Z: after cfe2e95fa projected the accepted window onto `provider_reservations`, two 008
+  reservations whose window moved +60 s went `failed` (`delivery_descriptor_conflicts_with_transport`):
+  the sim's timing_shift moves the pass but not `delivery.activation_window`. Reverted 15:12Z (director);
+  007 repro after the revert stays confirmed. Re-land after the pass with the snapshot's own window.
+
+### 55. Admin service identities: list never loaded; issue/rotate replies undecodable
+
+- `ServiceIdentitiesScreen` used a null query key, so it never fetched (fixed fe-setup 7fa0edbd8).
+- Issue (201) and Rotate succeed server-side, but the console can't decode the reply, so the one-time
+  token is never shown (admin_controller `issued/1` shape vs api.ts identity). Admin › Audit failed on a
+  null `target.label` (hardened fe-setup 02f5c203b). Server shape fix: api-ops. QA identity revoked.
+
+### 56. Orphan `defined` realized contacts for EARENDIL-001 (11-09/11-10)
+
+- `scheduled_contact_bp7lvyewsq_181LV_run`, `…naf4iny7uy_8CTT_run`, `…naf4iny7uy_8D9Z_run` stay `defined`:
+  a failed runtime start after `persist_realization` leaves them, and the expiry sweeps cover `active` only.
+  Downlink-only paths, so not P9CS release targets (precise query 0 rows, 15:34Z). domain's sweep lands after the pass.
+
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
