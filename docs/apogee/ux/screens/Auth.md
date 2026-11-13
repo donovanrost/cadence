@@ -50,6 +50,11 @@ The header line for every case is "Mira K. invited you to Acme Space as Member o
 | Unavailable | off callout "This invitation isn't available any more. Ask for a new one." | — |
 | A case the console doesn't know | off callout "This invitation can't be used here. Ask for a new one." | `Sign in` |
 Use the actor and time the server gives (U29). Without them, drop the clause and keep the sentence.
+- **h1 for the terminal cases** (fe-ops f58d4e53): `Invitation not valid` · `Already accepted` · `Invitation
+  expired` · `Invitation withdrawn` · `Invitation declined` · `Invitation unavailable` (also for unrecognized cases)
+  · signed in as someone else: `Invitation for another account`. The callout sentence sits under the h1.
+- **No dead ends:** every case with nothing to fill in offers `Continue to Cadence` when signed in, else
+  `Sign in`.
 
 ## Admin mode step-up (L6)
 - **Entry:** account menu `Enter admin mode`, shown only with the `platform_admin` capability. It opens a dialog
