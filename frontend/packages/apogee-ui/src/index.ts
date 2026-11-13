@@ -18,6 +18,7 @@ export { default as ApPageHeader } from "./ApPageHeader.vue";
 export { default as ApPanel } from "./ApPanel.vue";
 export { default as ApSegmented, type ApSegment } from "./ApSegmented.vue";
 export { default as ApSelect, type ApSelectOption } from "./ApSelect.vue";
+export { default as ApSheet } from "./ApSheet.vue";
 export { default as ApStateTrail, type ApTrailStep } from "./ApStateTrail.vue";
 export { default as ApStatStrip } from "./ApStatStrip.vue";
 export { default as ApStationBar } from "./ApStationBar.vue";

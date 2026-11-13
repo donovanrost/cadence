@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import type { ApiError } from "@/api";
-import { ApButton, ApCallout, ApField, ApTextarea, plural } from "@/ui";
+import { ApButton, ApCallout, ApField, ApSheet, ApTextarea, plural } from "@/ui";
 import {
   reasonText,
   REASON_MAX,
@@ -37,7 +37,7 @@ const noteError = computed(() =>
 );
 const error = defineModel<ApiError | null>("error", { default: null });
 
-const dialog = ref<HTMLDialogElement | null>(null);
+const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const groups = computed(() => gapGroups(props.plan.unmet));
 const keyOf = (id: string | null) => id ?? "—";
 /** Reason per spacecraft group, and optional overrides per requirement. */
@@ -89,8 +89,6 @@ const requirementCount = computed(() => groups.value.reduce((n, g) => n + g.unme
 const causeText = (why: readonly string[]) =>
   [...new Set(why.map(reasonText))].join(" · ") || "rule not met";
 
-let opener: HTMLElement | null = null;
-const titleId = `ap-submit-${Math.random().toString(36).slice(2, 9)}`;
 /** U36: the reasons the author gave last round, per spacecraft (same text) or per requirement. */
 function prefill() {
   const before = new Map(
@@ -115,23 +113,10 @@ function prefill() {
 function open() {
   error.value = null;
   if (again.value) prefill();
-  opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  dialog.value?.showModal();
-  // Focus the first reason (or the commit when nothing is unmet) rather than the first control.
-  void nextTick(() =>
-    (
-      dialog.value?.querySelector<HTMLElement>("textarea") ??
-      dialog.value?.querySelector<HTMLElement>("footer button:last-child")
-    )?.focus(),
-  );
+  sheet.value?.open();
 }
 function close() {
-  dialog.value?.close();
-}
-function onClosed() {
-  opener?.focus();
-  opener = null;
-  emit("close");
+  sheet.value?.close();
 }
 function submit() {
   if (missing.value > 0 || noteError.value) return;
@@ -171,107 +156,103 @@ defineExpose({ open, close });
 </script>
 
 <template>
-  <dialog
-    ref="dialog"
-    :aria-labelledby="titleId"
-    aria-modal="true"
-    class="m-auto w-[min(760px,calc(100vw-32px))] border border-line bg-panel p-0 text-readout backdrop:bg-[rgba(5,7,10,0.72)]"
-    @close="onClosed"
+  <!-- Focus the first reason (or the commit when nothing is unmet) rather than the first control. -->
+  <ApSheet
+    ref="sheet"
+    :title="title"
+    width="wide"
+    initial-focus="textarea, footer button:last-child"
+    @closed="emit('close')"
   >
-    <div class="flex max-h-[70vh] flex-col gap-3 overflow-auto p-5">
-      <h2 :id="titleId" class="m-0 font-display text-xl font-semibold tracking-tag uppercase">
-        {{ title }}
-      </h2>
-      <p v-if="groups.length === 0" class="m-0 text-base text-text-3">{{ confirm }}</p>
-      <template v-else>
-        <label class="flex items-center gap-2 text-md text-text-2">
-          <input
-            v-model="sameForAll"
-            type="checkbox"
-            class="accent-[var(--color-readout)] [color-scheme:dark]"
-          />
-          Same reason for all
-        </label>
+    <p v-if="groups.length === 0" class="m-0 text-base text-text-3">{{ confirm }}</p>
+    <template v-else>
+      <label class="flex items-center gap-2 text-md text-text-2">
+        <input
+          v-model="sameForAll"
+          type="checkbox"
+          class="accent-[var(--color-readout)] [color-scheme:dark]"
+        />
+        Same reason for all
+      </label>
+      <ApTextarea
+        v-if="sameForAll"
+        v-model="shared"
+        :label="`Reason for accepting all ${plural(groups.length, 'gap')}`"
+        :rows="2"
+        :maxlength="REASON_MAX"
+        :hint="`At least ${REASON_MIN} characters. Recorded for each of the ${plural(requirementCount, 'requirement')}.`"
+      />
+      <div
+        v-for="group in groups"
+        :key="keyOf(group.spacecraftId)"
+        class="flex flex-col gap-2 border-t border-hairline pt-3"
+      >
+        <p class="m-0 font-mono text-sm font-semibold text-readout">
+          {{
+            nameOf(group.spacecraftId)?.name ??
+            group.spacecraftId ??
+            "Requirements without a spacecraft"
+          }}
+        </p>
+        <ul class="m-0 list-none p-0 font-mono text-xs text-text-3">
+          <li v-for="u in group.unmet" :key="u.requirement_id">
+            {{ requirementLine(u.requirement_id) }} ·
+            {{ causeText(u.why) }}
+          </li>
+        </ul>
         <ApTextarea
-          v-if="sameForAll"
-          v-model="shared"
-          :label="`Reason for accepting all ${plural(groups.length, 'gap')}`"
+          v-if="!sameForAll"
+          :model-value="reasons[keyOf(group.spacecraftId)] ?? ''"
+          :label="`Reason for accepting this gap`"
           :rows="2"
           :maxlength="REASON_MAX"
-          :hint="`At least ${REASON_MIN} characters. Recorded for each of the ${plural(requirementCount, 'requirement')}.`"
+          :hint="`At least ${REASON_MIN} characters. Recorded for each of its ${plural(group.unmet.length, 'requirement')}.`"
+          @update:model-value="reasons[keyOf(group.spacecraftId)] = $event"
         />
-        <div
-          v-for="group in groups"
-          :key="keyOf(group.spacecraftId)"
-          class="flex flex-col gap-2 border-t border-hairline pt-3"
+        <details
+          v-if="!sameForAll && group.unmet.length > 1"
+          :open="split[keyOf(group.spacecraftId)]"
+          @toggle="split[keyOf(group.spacecraftId)] = ($event.target as HTMLDetailsElement).open"
         >
-          <p class="m-0 font-mono text-sm font-semibold text-readout">
-            {{
-              nameOf(group.spacecraftId)?.name ??
-              group.spacecraftId ??
-              "Requirements without a spacecraft"
-            }}
-          </p>
-          <ul class="m-0 list-none p-0 font-mono text-xs text-text-3">
-            <li v-for="u in group.unmet" :key="u.requirement_id">
-              {{ requirementLine(u.requirement_id) }} ·
-              {{ causeText(u.why) }}
-            </li>
-          </ul>
-          <ApTextarea
-            v-if="!sameForAll"
-            :model-value="reasons[keyOf(group.spacecraftId)] ?? ''"
-            :label="`Reason for accepting this gap`"
-            :rows="2"
-            :maxlength="REASON_MAX"
-            :hint="`At least ${REASON_MIN} characters. Recorded for each of its ${plural(group.unmet.length, 'requirement')}.`"
-            @update:model-value="reasons[keyOf(group.spacecraftId)] = $event"
-          />
-          <details
-            v-if="!sameForAll && group.unmet.length > 1"
-            :open="split[keyOf(group.spacecraftId)]"
-            @toggle="split[keyOf(group.spacecraftId)] = ($event.target as HTMLDetailsElement).open"
-          >
-            <summary class="max-md:hit-44 cursor-pointer text-sm text-text-3">
-              Different reason per requirement
-            </summary>
-            <div class="mt-2 flex flex-col gap-2">
-              <ApTextarea
-                v-for="u in group.unmet"
-                :key="u.requirement_id"
-                :model-value="overrides[u.requirement_id] ?? ''"
-                :label="requirementLine(u.requirement_id)"
-                :rows="1"
-                :maxlength="REASON_MAX"
-                hint="Leave empty to use the reason above."
-                @update:model-value="overrides[u.requirement_id] = $event"
-              />
-            </div>
-          </details>
-        </div>
-      </template>
-      <ApField
-        v-if="again"
-        v-model="note"
-        label="What changed for the reviewer"
-        hint="Optional. One line, shown to the reviewer with this round."
-        :error="noteError"
-      />
-      <ApCallout v-if="atRisk.length > 0" tone="caution">
-        <span class="flex flex-col gap-1">
-          <span
-            >{{ plural(atRisk.length, "pass", "passes") }} on a degraded station may lose data.
-            Booking them is still allowed.</span
-          >
-          <span v-for="r in atRisk" :key="r.id" class="font-mono text-sm text-text-2">{{
-            r.text
-          }}</span>
-        </span>
-      </ApCallout>
-      <ApCallout v-if="errorText" tone="caution">{{ errorText }}</ApCallout>
-    </div>
-    <footer class="flex flex-wrap items-center gap-3 border-t border-hairline px-5 py-3">
-      <span v-if="groups.length > 0" class="font-mono text-xs text-text-4 uppercase"
+          <summary class="max-md:hit-44 cursor-pointer text-sm text-text-3">
+            Different reason per requirement
+          </summary>
+          <div class="mt-2 flex flex-col gap-2">
+            <ApTextarea
+              v-for="u in group.unmet"
+              :key="u.requirement_id"
+              :model-value="overrides[u.requirement_id] ?? ''"
+              :label="requirementLine(u.requirement_id)"
+              :rows="1"
+              :maxlength="REASON_MAX"
+              hint="Leave empty to use the reason above."
+              @update:model-value="overrides[u.requirement_id] = $event"
+            />
+          </div>
+        </details>
+      </div>
+    </template>
+    <ApField
+      v-if="again"
+      v-model="note"
+      label="What changed for the reviewer"
+      hint="Optional. One line, shown to the reviewer with this round."
+      :error="noteError"
+    />
+    <ApCallout v-if="atRisk.length > 0" tone="caution">
+      <span class="flex flex-col gap-1">
+        <span
+          >{{ plural(atRisk.length, "pass", "passes") }} on a degraded station may lose data.
+          Booking them is still allowed.</span
+        >
+        <span v-for="r in atRisk" :key="r.id" class="font-mono text-sm text-text-2">{{
+          r.text
+        }}</span>
+      </span>
+    </ApCallout>
+    <ApCallout v-if="errorText" tone="caution">{{ errorText }}</ApCallout>
+    <template #footer>
+      <span v-if="groups.length > 0" class="mr-auto font-mono text-xs text-text-4 uppercase"
         >Audited · visible to the approver</span
       >
       <span class="ml-auto flex flex-wrap items-center gap-2">
@@ -293,6 +274,6 @@ defineExpose({ open, close });
           >{{ commitLabel }}</ApButton
         >
       </span>
-    </footer>
-  </dialog>
+    </template>
+  </ApSheet>
 </template>

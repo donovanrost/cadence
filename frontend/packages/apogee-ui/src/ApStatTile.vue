@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 import { formatCount } from "./lib/format.ts";
 import { stateInsetClass, stateTextClass, type OpState } from "./status.ts";
 
 /**
  * One stat. `value: null` means unknown and renders an em dash with "unknown" for assistive
- * tech: every number is real or the tile says it doesn't know.
+ * tech: every number is real or the tile says it doesn't know. With `to`, the whole tile is one
+ * link (Now: Critical → Alarms, In contact → Contacts); its text is the link's name.
  */
 const props = withDefaults(
   defineProps<{
@@ -23,6 +25,8 @@ const props = withDefaults(
     /** Tint the caption with a different state than the value, e.g. "2 await your GO" in caution. */
     captionState?: OpState | undefined;
     compact?: boolean | undefined;
+    /** Makes the tile a RouterLink to the list behind the number. */
+    to?: RouteLocationRaw | undefined;
   }>(),
   { state: "neutral", captionTinted: false, compact: true },
 );
@@ -38,9 +42,15 @@ const valueTone = computed(() =>
 </script>
 
 <template>
-  <div
+  <component
+    :is="to === undefined ? 'div' : RouterLink"
+    v-bind="to === undefined ? {} : { to }"
     class="flex flex-col bg-panel"
-    :class="[compact ? 'gap-1 px-3.5 py-2.5' : 'gap-1.5 px-4 py-3.5', stateInsetClass(state)]"
+    :class="[
+      compact ? 'gap-1 px-3.5 py-2.5' : 'gap-1.5 px-4 py-3.5',
+      stateInsetClass(state),
+      to === undefined ? '' : 'no-underline hover:bg-raised',
+    ]"
   >
     <span class="ap-label">{{ label }}</span>
     <span
@@ -88,5 +98,5 @@ const valueTone = computed(() =>
       "
       >{{ caption }}</span
     >
-  </div>
+  </component>
 </template>

@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
+import { createMemoryHistory, createRouter } from "vue-router";
 import ApBreadcrumb from "./ApBreadcrumb.vue";
 import ApButton from "./ApButton.vue";
 import ApCheckRows from "./ApCheckRows.vue";
@@ -80,6 +81,28 @@ describe("ApPageHeader", () => {
     });
     expect(wrapper.findAll("h1")).toHaveLength(1);
     expect(wrapper.get("h1 span.font-mono").text()).toBe("r6");
+  });
+});
+
+describe("ApStatTile link", () => {
+  it("is one link to the list behind the number when `to` is set, and a plain tile otherwise", () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/alarms", name: "alarms", component: { render: () => null } }],
+    });
+    const linked = mount(ApStatTile, {
+      props: { label: "Critical", value: 3, state: "crit", to: { name: "alarms" } },
+      global: { plugins: [router] },
+    });
+    const link = linked.get("a");
+    expect(link.attributes("href")).toBe("/alarms");
+    expect(link.text()).toContain("Critical");
+    expect(link.text()).toContain("3");
+    expect(
+      mount(ApStatTile, { props: { label: "Critical", value: 3 } })
+        .find("a")
+        .exists(),
+    ).toBe(false);
   });
 });
 
