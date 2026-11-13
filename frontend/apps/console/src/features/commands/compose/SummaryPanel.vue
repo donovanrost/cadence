@@ -133,6 +133,10 @@ const notBefore = computed({
       <SubmitOutcome :state="submit" @check="$emit('check')" />
       <p v-if="blocked" class="m-0 text-md text-text-3">{{ blocked }}</p>
       <p class="m-0 font-mono text-xs text-text-4 uppercase">Nothing radiates without a GO</p>
+      <!-- Command.md C3 caption, now that abort exists (M20): it stops what hasn't started. -->
+      <p class="m-0 font-mono text-xs text-text-4 uppercase">
+        Abort available until each uplink starts
+      </p>
     </div>
   </ApPanel>
 </template>

@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { CommandDetail } from "../api.ts";
-import { verifierLine, argSummary, checkItem, move, newItem, secondGoReasons } from "./stack.ts";
-import { chipWords, EMPTY_QUERY, queryFromRoute, resolveTargets } from "./targets.ts";
+import {
+  verifierLine,
+  argSummary,
+  checkItem,
+  move,
+  moveTo,
+  newItem,
+  secondGoReasons,
+} from "./stack.ts";
+import {
+  chipWords,
+  EMPTY_QUERY,
+  leftQueryWords,
+  queryFromRoute,
+  resolveTargets,
+} from "./targets.ts";
 
 const fleet = [
   spacecraftRow(1),
@@ -120,5 +134,24 @@ describe("verifier line (ux Compose ruling #3)", () => {
       text: "No verifier: this command can't turn green",
       verifiable: false,
     });
+  });
+});
+
+describe("Compose reorder and the live query (Command.md C1/C2)", () => {
+  it("drags an item to a new place", () => {
+    expect(moveTo(["a", "b", "c", "d"], 0, 2)).toEqual(["b", "c", "a", "d"]);
+    expect(moveTo(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
+    expect(moveTo(["a", "b"], 0, 5)).toEqual(["a", "b"]);
+  });
+  it("says who left the query and why", () => {
+    const back = spacecraftRow(318, { name: "EARENDIL-318", state: "nominal" });
+    expect(leftQueryWords([back])).toBe(
+      "1 spacecraft left the query since you started: EARENDIL-318 is back in limits. Keep it?",
+    );
+    const stale = spacecraftRow(2, { name: "B", state: "stale" });
+    expect(leftQueryWords([back, stale])).toBe(
+      "2 spacecraft left the query since you started: EARENDIL-318, B. Keep them?",
+    );
+    expect(leftQueryWords([])).toBeNull();
   });
 });

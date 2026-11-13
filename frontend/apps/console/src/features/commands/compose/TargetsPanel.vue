@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { plural, ApChip, ApPanel, ApSelect } from "@/ui";
+import { plural, ApButton, ApCallout, ApChip, ApPanel, ApSelect } from "@/ui";
 import {
   FleetMatrix,
   fleetStates,
   fleetStateWord,
   type FleetSpacecraft,
 } from "@/features/fleet/index.ts";
-import { chipWords, type TargetQuery } from "./targets.ts";
+import { chipWords, leftQueryWords, type TargetQuery } from "./targets.ts";
 
 /** C1 · Targets by live query (R02); identity on every line (R01). */
 const props = defineProps<{
@@ -18,6 +18,34 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ change: [query: TargetQuery] }>();
 const set = (patch: Partial<TargetQuery>) => emit("change", { ...props.query, ...patch });
+
+/**
+ * The query stays live until release (Command.md C1): a spacecraft that was a target and left it
+ * (e.g. back in limits) is offered back with Keep / Drop. Editing the query starts over.
+ */
+const seen = ref<ReadonlySet<string>>(new Set());
+const dropped = ref<ReadonlySet<string>>(new Set());
+watch(
+  () => [props.query, props.targets] as const,
+  ([q, now], before) => {
+    const ids = now.map((sc) => sc.id);
+    if (!before || before[0] !== q) {
+      seen.value = new Set(ids);
+      dropped.value = new Set();
+    } else seen.value = new Set([...seen.value, ...ids]);
+  },
+  { immediate: true },
+);
+const left = computed(() => {
+  const now = new Set(props.targets.map((sc) => sc.id));
+  return props.fleet.filter(
+    (sc) => seen.value.has(sc.id) && !now.has(sc.id) && !dropped.value.has(sc.id),
+  );
+});
+const keepLeft = () =>
+  set({ explicit: [...props.query.explicit, ...left.value.map((sc) => sc.id)] });
+const dropLeft = () =>
+  (dropped.value = new Set([...dropped.value, ...left.value.map((sc) => sc.id)]));
 
 const planes = computed(() =>
   [...new Set(props.fleet.flatMap((sc) => (sc.plane === null ? [] : [sc.plane])))].sort(
@@ -60,6 +88,15 @@ function addOne(id: string) {
 <template>
   <ApPanel index="C1" title="Targets · live query" :meta="plural(targets.length, 'target')" flush>
     <div class="flex flex-col gap-3 p-4">
+      <ApCallout v-if="left.length" tone="caution">
+        {{ leftQueryWords(left) }}
+        <template #action>
+          <span class="flex gap-1">
+            <ApButton size="compact" @click="keepLeft">Keep</ApButton>
+            <ApButton size="compact" variant="ghost" @click="dropLeft">Drop</ApButton>
+          </span>
+        </template>
+      </ApCallout>
       <div class="flex flex-wrap items-end gap-2">
         <ApSelect
           v-model="planeModel"

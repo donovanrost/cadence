@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { ApButton, ApEmptyState, ApPanel, ApTag } from "@/ui";
 import CatalogSearch from "./CatalogSearch.vue";
 import CommandForm from "./CommandForm.vue";
 import { argSummary, checkItem, type StackItem } from "./stack.ts";
 
-/** C2 · Command stack: ordered commands from the catalog; one row open for editing. */
-defineProps<{
+/**
+ * C2 · Command stack: ordered commands from the catalog; one row open for editing. Reorder by
+ * the ↑/↓ buttons, the ⠿ drag handle, or Alt+↑/↓ in a row (Command.md C2).
+ */
+const props = defineProps<{
   items: readonly StackItem[];
   revision: string | null;
   /** "Catalog rev 14" when the catalog revision is recorded (backlog §2). */
@@ -16,10 +20,27 @@ const emit = defineEmits<{
   add: [commandId: string];
   change: [key: string, values: Record<string, string>];
   move: [index: number, by: -1 | 1];
+  reorder: [from: number, to: number];
   remove: [key: string];
 }>();
 /** The row whose form is open (owned by Compose so a newly added command opens itself). */
 const open = defineModel<string | null>("open", { required: true });
+/** Command.md C2 reorder: drag the ⠿ handle, or Alt+↑/↓ anywhere in a row. */
+const dragFrom = ref<number | null>(null);
+const dragOver = ref<number | null>(null);
+function drop(to: number) {
+  const from = dragFrom.value;
+  dragFrom.value = null;
+  dragOver.value = null;
+  if (from !== null && from !== to) emit("reorder", from, to);
+}
+function altMove(e: KeyboardEvent, i: number) {
+  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+  const by = e.key === "ArrowUp" ? -1 : 1;
+  if (i + by < 0 || i + by >= props.items.length) return;
+  e.preventDefault();
+  emit("move", i, by);
+}
 </script>
 
 <template>
@@ -39,8 +60,22 @@ const open = defineModel<string | null>("open", { required: true });
         v-for="(item, i) in items"
         :key="item.key"
         class="border-t border-hairline first:border-t-0"
+        :class="{ 'border-t-readout': dragOver === i && dragFrom !== i }"
+        @keydown="altMove($event, i)"
+        @dragover.prevent="dragOver = i"
+        @drop.prevent="drop(i)"
       >
         <div class="flex flex-wrap items-center gap-3 px-4 py-2">
+          <span
+            v-if="items.length > 1"
+            draggable="true"
+            class="cursor-grab font-mono text-text-4 select-none max-md:hidden"
+            aria-hidden="true"
+            title="Drag to reorder (or Alt+↑/↓)"
+            @dragstart="dragFrom = i"
+            @dragend="dragFrom = dragOver = null"
+            >⠿</span
+          >
           <span class="font-mono text-xs text-text-4">{{ String(i + 1).padStart(2, "0") }}</span>
           <button
             type="button"

@@ -19,6 +19,16 @@ export function newItem(command: CommandDetail): StackItem {
   };
 }
 
+/** Drag reorder (Command.md C2): the item at `from` lands at `to`; out of range changes nothing. */
+export function moveTo<T>(items: readonly T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length)
+    return [...items];
+  const next = [...items];
+  const [item] = next.splice(from, 1);
+  if (item !== undefined) next.splice(to, 0, item);
+  return next;
+}
+
 export function move<T>(items: readonly T[], index: number, by: -1 | 1): T[] {
   const next = [...items];
   const to = index + by;

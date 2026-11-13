@@ -16,7 +16,7 @@ import StackPanel from "./StackPanel.vue";
 import type { Release } from "./draft.ts";
 import SummaryPanel from "./SummaryPanel.vue";
 import TargetsPanel from "./TargetsPanel.vue";
-import { checkItem, move, newItem, type StackItem } from "./stack.ts";
+import { checkItem, move, moveTo, newItem, type StackItem } from "./stack.ts";
 import { queryFromRoute, resolveTargets, type TargetQuery } from "./targets.ts";
 import type { ComposeFields, Restored } from "./saved.ts";
 import { closeLabel, draftLine, savedWhen, useComposeDraft } from "./useComposeDraft.ts";
@@ -308,6 +308,7 @@ const close = computed(() =>
             @add="onAdd"
             @change="setValues"
             @move="(i, by) => (stack = move(stack, i, by))"
+            @reorder="(from, to) => (stack = moveTo(stack, from, to))"
             @remove="(key) => (stack = stack.filter((s) => s.key !== key))"
           />
         </div>

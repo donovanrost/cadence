@@ -1,5 +1,5 @@
 import type { LocationQuery } from "vue-router";
-import type { FleetSpacecraft, FleetState } from "@/features/fleet/index.ts";
+import { fleetStateWord, type FleetSpacecraft, type FleetState } from "@/features/fleet/index.ts";
 
 /**
  * Compose targets (Command.md C1, CommandFlow R02 "target by query, not by card"): a live query of
@@ -55,3 +55,31 @@ export function chipWords(q: TargetQuery, profileName: (id: string) => string): 
 
 /** DECISIONS #31: a fleet-reach request (this many targets or more) needs a second GO. */
 export const FLEET_REACH = 10;
+
+/** Why a spacecraft left a state-chip query, in words (Command.md C1). */
+function leftReason(sc: FleetSpacecraft): string {
+  switch (sc.state) {
+    case "nominal":
+      return "is back in limits";
+    case "stale":
+      return "went stale";
+    case "caution":
+    case "critical":
+    case "never_heard":
+      return `is now ${fleetStateWord(sc.state).toLowerCase()}`;
+  }
+}
+
+/**
+ * Command.md C1: "1 spacecraft left the query since you started: EARENDIL-318 is back in limits.
+ * Keep it?"; several are named, up to four.
+ */
+export function leftQueryWords(left: readonly FleetSpacecraft[]): string | null {
+  const [one] = left;
+  if (!one) return null;
+  if (left.length === 1)
+    return `1 spacecraft left the query since you started: ${one.name} ${leftReason(one)}. Keep it?`;
+  const names = left.slice(0, 4).map((sc) => sc.name);
+  const more = left.length > 4 ? ` and ${left.length - 4} more` : "";
+  return `${left.length} spacecraft left the query since you started: ${names.join(", ")}${more}. Keep them?`;
+}
