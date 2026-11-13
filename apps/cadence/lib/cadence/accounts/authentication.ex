@@ -120,6 +120,21 @@ defmodule Cadence.Accounts.Authentication do
     throttled(user.email, opts[:ip], fn -> check_user_password(user, password) end)
   end
 
+  @doc """
+  Checks an account's own password whatever its lifecycle state, throttled like `sign_in/3`
+  (invitation acceptance by an existing account; the caller decides what a disabled or
+  unconfirmed account may do after a right password).
+  """
+  @spec verify_account_password(User.t(), binary(), keyword()) ::
+          :ok | {:error, :invalid_credentials | {:too_many_attempts, pos_integer()}}
+  def verify_account_password(%User{} = user, password, opts \\ []) when is_binary(password) do
+    throttled(user.email, opts[:ip], fn ->
+      if user.user_id == @environment_admin_user_id,
+        do: {:error, :invalid_credentials},
+        else: verify_durable_password(user, password)
+    end)
+  end
+
   defp check_user_password(%User{user_id: @environment_admin_user_id} = user, password),
     do: verify_environment_admin_password(user, password)
 
