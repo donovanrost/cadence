@@ -75,7 +75,11 @@ async function release() {
       "
       class="m-0 text-sm text-text-2"
     >
-      Org admins can release a booking.
+      {{
+        pass.off_plan?.booked_by?.name
+          ? `${pass.off_plan.booked_by.name} or an org admin can release this booking.`
+          : "Org admins can release a booking."
+      }}
     </p>
     <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
     <ApSheet

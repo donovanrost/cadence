@@ -37,6 +37,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   uplink_readiness: null,
   provider_revision: null,
   releasable: undefined,
+  off_plan: undefined,
   ...overrides,
 });
 

@@ -16,6 +16,8 @@ export type FindingRow = Readonly<{
   day: string;
   /** The folded members, for the Show all sheet; null on a single row. */
   members: readonly FindingMember[] | null;
+  /** A single coverage gap: Book a pass prefilled with its spacecraft and window (L15). */
+  book: Readonly<{ spacecraftId: string; from: number; to: number }> | null;
 }>;
 export type FindingMember = Readonly<{
   key: string;
@@ -56,6 +58,10 @@ function single(f: Finding, now: Date): FindingRow {
     sentence: gap ? `${scName(f)} has no pass ${span(gap, now)}.` : f.message,
     day: day(f.at, now),
     members: null,
+    book:
+      gap && f.spacecraft
+        ? { spacecraftId: f.spacecraft.id, from: Date.parse(gap.from), to: Date.parse(gap.to) }
+        : null,
   };
 }
 
@@ -104,6 +110,7 @@ export function findingRows(findings: readonly Finding[], now: Date = new Date()
         sentence: `${plural(g.length, "spacecraft", "spacecraft")} have no pass ${gap ? span(gap, now) : ""}.`,
         day: day(first.at, now),
         members: g.map(member),
+        book: null,
       },
     ];
   });

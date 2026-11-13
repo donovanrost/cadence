@@ -33,6 +33,7 @@ import {
   type RecentPass,
   type SpacecraftCoverage,
 } from "./api.ts";
+import { SINGLE_BOOKINGS_LIVE } from "@/features/contacts/singleBookings.ts";
 
 /** Tab · Passes (Investigate.md): when is it heard, and how did its recent passes go? */
 const props = defineProps<{ sc: FleetSpacecraft }>();
@@ -239,7 +240,14 @@ const days = computed(() =>
             state="off"
             :headline="`No passes booked for ${sc.name} in the next 24 h.`"
           >
-            <ApButton size="compact" :to="{ name: 'ops.contacts' }">Open Contacts</ApButton>
+            <!-- L15: the empty state links to Book a pass for this spacecraft (ux Contacts.md). -->
+            <ApButton
+              v-if="SINGLE_BOOKINGS_LIVE"
+              size="compact"
+              :to="{ name: 'ops.contacts', query: { book: sc.id } }"
+              >Book a pass</ApButton
+            >
+            <ApButton v-else size="compact" :to="{ name: 'ops.contacts' }">Open Contacts</ApButton>
           </ApEmptyState>
           <ul v-else class="m-0 list-none p-0">
             <ApListRow

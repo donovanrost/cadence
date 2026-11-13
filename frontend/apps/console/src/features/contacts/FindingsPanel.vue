@@ -10,7 +10,8 @@ import type { Findings } from "./findings.ts";
  * Plan` (no fix proposals yet). Same-cause coverage gaps fold into one row with Show all (ux §7).
  * Hidden by the screen when M22 isn't available.
  */
-const props = defineProps<{ findings: Findings; label: string }>();
+const props = defineProps<{ findings: Findings; label: string; canBook?: boolean }>();
+defineEmits<{ book: [prefill: { spacecraftId: string; from: number; to: number }] }>();
 const rows = computed(() => findingRows(props.findings.findings));
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const shown = shallowRef<FindingRow | null>(null);
@@ -35,6 +36,13 @@ function showAll(row: FindingRow) {
       >
         <template #action>
           <span class="flex gap-1">
+            <ApButton
+              v-if="canBook && r.book"
+              size="compact"
+              variant="secondary"
+              @click="r.book && $emit('book', r.book)"
+              >Book a pass</ApButton
+            >
             <ApButton v-if="r.members" size="compact" variant="ghost" @click="showAll(r)"
               >Show all {{ r.members.length }}</ApButton
             >

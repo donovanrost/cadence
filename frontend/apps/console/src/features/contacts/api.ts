@@ -75,6 +75,19 @@ const pass = d.object({
   /** Release (50c5e572): the booking revision to send back, and whether the viewer may release. */
   provider_revision: d.optional(d.nullable(d.integer)),
   releasable: d.optional(d.nullable(d.boolean)),
+  /**
+   * L15 (plans/single-bookings.md): a booking made outside a plan, by whom and why; null for plan
+   * bookings. Optional until the endpoints ship.
+   */
+  off_plan: d.optional(
+    d.nullable(
+      d.object({
+        booked_by: d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) })),
+        booked_at: d.timestamp,
+        note: d.nullable(d.string),
+      }),
+    ),
+  ),
 });
 export const passReader = pass;
 

@@ -29,6 +29,7 @@ import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
 import PassUplinks from "./PassUplinks.vue";
 import { contactTrail } from "./trail.ts";
+import { offPlanLine } from "./singleBookings.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import { stationLabel } from "./gantt.ts";
 
@@ -153,7 +154,11 @@ const countdown = computed(() => {
         >
         <ApTag v-if="tag" :state="tag.state" :label="tag.label" />
         <ApTag v-if="uplinkUnconfirmed" state="caution" label="Uplink unconfirmed" />
+        <ApTag v-if="pass.off_plan" state="neutral" label="Off-plan" />
       </div>
+      <p v-if="pass.off_plan" class="m-0 text-sm text-text-2">
+        {{ offPlanLine(pass.off_plan, now) }}
+      </p>
       <p class="m-0 font-mono text-md text-text-2 uppercase">
         {{ pass.station.name ?? stationLabel(pass) }} ·
         <span class="text-readout">{{ countdown }}</span>

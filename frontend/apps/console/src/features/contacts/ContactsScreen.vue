@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import {
@@ -22,6 +22,9 @@ import { fetchGroups } from "@/features/commands/index.ts";
 import { availabilityBands, passGantt, passStatus, type GanttAxis } from "./gantt.ts";
 import { fetchAvailability } from "@/features/scheduling/index.ts";
 import SelectedPassPanel from "./SelectedPassPanel.vue";
+import BookPassSheet from "./BookPassSheet.vue";
+import { SINGLE_BOOKINGS_LIVE } from "./singleBookings.ts";
+import { useCommandAccess } from "@/features/commands/index.ts";
 import FindingsPanel from "./FindingsPanel.vue";
 import { findingsMeta, useFindings } from "./findings.ts";
 import { usePasses } from "./usePasses.ts";
@@ -213,6 +216,27 @@ const meta = computed(() => {
   const issues = findingsMeta(findingsReady.value);
   return `${plural(ahead, "pass", "passes")} next ${rangeWords.value} · ${live} AOS now${issues ? ` · ${issues}` : ""}`;
 });
+/**
+ * Book a pass (§11 L15, ux Contacts.md): header entry (operate_mission), D4 gap rows prefilled, and
+ * `?book=<spacecraft id>` from Investigate › Passes. Off until the single-booking endpoints exist.
+ */
+const access = useCommandAccess();
+const bookSheet = ref<InstanceType<typeof BookPassSheet> | null>(null);
+const stationRows = computed(() =>
+  stationsQuery.state.value.status === "ready" ? stationsQuery.state.value.value.stations : [],
+);
+function openBook(prefill: { spacecraftId?: string; from?: number; to?: number } = {}) {
+  bookSheet.value?.open(prefill);
+}
+watch(
+  () => route.query.book,
+  (b) => {
+    if (!SINGLE_BOOKINGS_LIVE || typeof b !== "string") return;
+    void nextTick(() => openBook({ spacecraftId: b }));
+    go({ book: undefined });
+  },
+  { immediate: true },
+);
 const tabs = [
   { key: "live", label: "Live", to: { name: "ops.contacts" } },
   { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
@@ -234,6 +258,13 @@ const tabs = [
         <p class="m-0 font-mono text-sm text-text-3 uppercase">{{ meta }}</p>
         <!-- Contacts.md: Book passes is a shortcut to Plan (single bookings come with L15). -->
         <ApButton size="compact" :to="{ name: 'ops.contacts.plan' }">Book passes</ApButton>
+        <ApButton
+          v-if="SINGLE_BOOKINGS_LIVE && access.abort"
+          size="compact"
+          variant="secondary"
+          @click="openBook()"
+          >Book a pass</ApButton
+        >
       </div>
     </ApPageHeader>
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -347,9 +378,22 @@ const tabs = [
             :spacecraft="selectedSpacecraft"
             @changed="refetchPass"
           />
-          <FindingsPanel v-if="findingsReady" :findings="findingsReady" :label="rangeWords" />
+          <FindingsPanel
+            v-if="findingsReady"
+            :findings="findingsReady"
+            :label="rangeWords"
+            :can-book="SINGLE_BOOKINGS_LIVE && access.abort"
+            @book="openBook"
+          />
         </div>
       </div>
     </template>
+    <BookPassSheet
+      ref="bookSheet"
+      :mission-id="missionId"
+      :fleet="[...byId.values()]"
+      :stations="stationRows"
+      @booked="(p) => go({ contact: p.id })"
+    />
   </div>
 </template>
