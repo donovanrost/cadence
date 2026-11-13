@@ -23,6 +23,7 @@ defmodule Cadence.Control.Scheduling do
   alias Cadence.ContactPlanning.{
     ConfirmationWindow,
     ContactPlan,
+    ContactPlanExecutions,
     ContactPlans,
     FleetPlanner,
     FleetPlanningRun,
@@ -317,7 +318,7 @@ defmodule Cadence.Control.Scheduling do
   defp reason(_reason), do: "Submitted from the console contact plan"
 
   defp execution_key(organization_id, mission_id, plan_id),
-    do: ["cadence.contact_plan.execute", organization_id, mission_id, plan_id]
+    do: ContactPlanExecutions.execution_key(organization_id, mission_id, plan_id)
 
   defp create_draft(scope, mission_id, day, operation_id) do
     fleet_run = %{

@@ -250,7 +250,10 @@ defmodule Cadence.Contacts.ProviderReservations do
           last_error_document:
             JsonDocument.wrap_value(%{
               "source" => "attempt_resolution",
-              "reason" => evidence["outcome"]
+              "reason" => evidence["outcome"],
+              # ux U29 "by <name> at <time>": who recorded the evidence, and when.
+              "resolved_by" => Map.take(evidence["actor"] || %{}, ["kind", "id"]),
+              "resolved_at" => evidence["recorded_at"]
             })
         })
       )
@@ -585,12 +588,34 @@ defmodule Cadence.Contacts.ProviderReservations do
         provider_confirmed_snapshot_document: JsonDocument.wrap_value(snapshot),
         cadence_accepted_snapshot_document:
           accepted_snapshot(reservation, snapshot, initial_response?),
-        last_error_document: JsonDocument.wrap_value(%{}),
+        last_error_document: JsonDocument.wrap_value(status_error(lifecycle_state, response)),
         attempt_count: reservation.attempt_count + 1,
         last_reconciled_at: DateTime.utc_now()
       })
     end
   end
+
+  # A provider that turns a booking down by status (2xx, status rejected/failed/terminated_early)
+  # keeps its reason, in the error path's shape (`reason.category`, `reason.detail`), so the plan
+  # item and the console can say why (api 2026-11-13). Any other status clears the error.
+  defp status_error(state, response) when state in [:rejected, :failed] do
+    status = to_string(Map.get(response, "status", Map.get(response, :status)))
+
+    case Map.get(response, "status_reason") do
+      %{} = reason ->
+        %{
+          "reason" => %{
+            "category" => reason["category"] || status,
+            "detail" => reason["detail"] || reason["message"]
+          }
+        }
+
+      reason ->
+        %{"reason" => %{"category" => status, "detail" => if(is_binary(reason), do: reason)}}
+    end
+  end
+
+  defp status_error(_state, _response), do: %{}
 
   @spec record_provider_error(binary(), binary(), binary(), map()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}

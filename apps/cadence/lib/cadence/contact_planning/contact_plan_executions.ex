@@ -8,6 +8,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   alias Cadence.ContactPlanning.{
     ContactPlanExecutionItem,
     ContentHash,
+    FleetRunLock,
     Planner,
     PlanUpdates
   }
@@ -66,6 +67,19 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
           {:ok, %{plan: struct(), items: [ContactPlanExecutionItem.t()]}} | {:error, term()}
   def execute(%Scope{} = current_scope, mission_id, plan_id, opts \\ [])
       when is_binary(mission_id) and is_binary(plan_id) and is_list(opts) do
+    # Every path (console, automation, legacy) runs under the plan's execution lock, so two
+    # runs never claim the same items (api 2026-11-13). Re-entrant for a caller holding it.
+    FleetRunLock.with_key(execution_key(current_scope.organization_id, mission_id, plan_id), fn ->
+      execute_locked(current_scope, mission_id, plan_id, opts)
+    end)
+  end
+
+  @doc "The advisory lock key a plan's execution holds (`Control.Scheduling` reads it too)."
+  @spec execution_key(binary(), binary(), binary()) :: [binary()]
+  def execution_key(organization_id, mission_id, plan_id),
+    do: ["cadence.contact_plan.execute", organization_id, mission_id, plan_id]
+
+  defp execute_locked(current_scope, mission_id, plan_id, opts) do
     with :ok <- authorize_execution(current_scope, mission_id, opts),
          {:ok, plan} <- begin_execution(current_scope.organization_id, mission_id, plan_id, opts),
          items <-
@@ -195,12 +209,17 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
            {:ok, route} <- resolve_exact_route(snapshot, opts) do
         reserve(claimed, snapshot, route, opts)
       else
+        # Someone else moved the item on since it was read: theirs to finish, never ours to fail.
+        {:error, :contact_plan_execution_item_not_processable} -> fetch_item_state(item)
         {:error, reason} -> finish_without_reservation(item, :failed, reason, opts)
       end
     else
       {:ok, item}
     end
   end
+
+  defp fetch_item_state(item),
+    do: fetch_item(item.organization_id, item.mission_id, item.contact_plan_execution_item_id)
 
   defp process_items(items, opts) do
     items
@@ -313,6 +332,17 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
 
       {:error, {:provider_reservation_not_confirmed, %ProviderReservation{} = reservation}} ->
         finish_with_reservation(item, reservation, opts)
+
+      # The provider was called and refused on configuration: the item is placed (it has its
+      # reservation) and keeps the category, instead of a generic never-sent failure (api).
+      {:error, {:provider_configuration_failure, %ProviderReservation{} = reservation, reason}} ->
+        finish_item(
+          item,
+          :failed,
+          reservation.provider_reservation_id,
+          Map.put(safe_error(:provider_configuration_failure), "reason", safe_reason(reason)),
+          opts
+        )
 
       {:error, reason} ->
         finish_without_reservation(item, :failed, reason, opts)
@@ -520,7 +550,32 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
 
   defp safe_error(reason) when is_atom(reason), do: %{"code" => Atom.to_string(reason)}
   defp safe_error({reason, _detail}) when is_atom(reason), do: %{"code" => Atom.to_string(reason)}
+
+  defp safe_error({reason, _first, _second}) when is_atom(reason),
+    do: %{"code" => Atom.to_string(reason)}
+
   defp safe_error(_reason), do: %{"code" => "provider_booking_failed"}
+
+  # A provider reason's category and detail only (no evidence blobs or terms).
+  defp safe_reason(%{} = reason) do
+    reason = Map.get(reason, "reason", Map.get(reason, :reason, reason))
+
+    if is_map(reason),
+      do: %{
+        "category" => text(reason["category"] || reason[:category]),
+        "detail" => text(reason["detail"] || reason[:detail])
+      },
+      else: %{"category" => nil, "detail" => nil}
+  end
+
+  defp safe_reason(reason) when is_atom(reason),
+    do: %{"category" => Atom.to_string(reason), "detail" => nil}
+
+  defp safe_reason(_reason), do: %{"category" => nil, "detail" => nil}
+
+  defp text(value) when is_binary(value), do: String.slice(value, 0, 500)
+  defp text(value) when is_atom(value) and not is_nil(value), do: Atom.to_string(value)
+  defp text(_value), do: nil
 
   defp normalize_transaction({:ok, result}), do: {:ok, result}
   defp normalize_transaction({:error, reason}), do: {:error, reason}

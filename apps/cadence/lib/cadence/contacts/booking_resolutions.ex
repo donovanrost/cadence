@@ -250,7 +250,9 @@ defmodule Cadence.Contacts.BookingResolutions do
                reservation.provider_reservation_id,
                %{
                  "evidence" => "operator_attested",
-                 "resolution_id" => inserted.booking_resolution_id
+                 "resolution_id" => inserted.booking_resolution_id,
+                 "resolved_by" => Map.take(inserted.actor_document || %{}, ["kind", "id"]),
+                 "resolved_at" => DateTime.to_iso8601(inserted.inserted_at)
                },
                opts
              ),
@@ -286,7 +288,13 @@ defmodule Cadence.Contacts.BookingResolutions do
   end
 
   defp finish_not_booked(item, inserted, canceled, opts) do
-    error = %{"code" => "operator_not_booked", "resolution_id" => inserted.booking_resolution_id}
+    error = %{
+      "code" => "operator_not_booked",
+      "resolution_id" => inserted.booking_resolution_id,
+      # ux U29 "by <name> at <time>".
+      "resolved_by" => Map.take(inserted.actor_document || %{}, ["kind", "id"]),
+      "resolved_at" => DateTime.to_iso8601(inserted.inserted_at)
+    }
 
     Repo.transaction(fn ->
       with {:ok, current} <-

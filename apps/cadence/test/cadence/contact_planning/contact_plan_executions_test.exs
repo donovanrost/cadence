@@ -11,6 +11,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     ContactPlanExecutions,
     ContactPlans,
     ContactRequirements,
+    FleetRunLock,
     Planner
   }
 
@@ -561,6 +562,135 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     assert_received {:provider_mutation, _unplaced}
     refute_received {:provider_mutation, _uncertain}
     assert Enum.all?(resumed, &(&1.lifecycle_state == :uncertain))
+  end
+
+  describe "api's booking findings (2026-11-13)" do
+    test "a provider that rejects by status keeps its reason on the item", context do
+      reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->
+        response =
+          attrs
+          |> provider_response("rejected")
+          |> Map.put("status_reason", %{"category" => "no_capacity", "detail" => "antenna busy"})
+
+        reserve_with_response(organization_id, mission_id, provider_id, attrs, {:ok, response})
+      end
+
+      assert {:ok, result} = execute(context, reserve)
+
+      for item <- result.items do
+        assert item.lifecycle_state == :rejected
+
+        assert %{"reason" => %{"category" => "no_capacity", "detail" => "antenna busy"}} =
+                 item.last_error_document
+      end
+    end
+
+    test "an item another run moved on is skipped, never marked failed", context do
+      test_pid = self()
+
+      reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->
+        send(test_pid, {:provider_mutation, attrs["opportunity_ref"]})
+
+        # As if a concurrent run had already booked every other pending item.
+        ContactPlanExecutionItemRow
+        |> Ecto.Query.where(
+          [row],
+          row.contact_plan_id == ^context.plan.contact_plan_id and
+            row.lifecycle_state == "pending"
+        )
+        |> Cadence.Repo.update_all(set: [lifecycle_state: "reserved"])
+
+        reserve_with_response(
+          organization_id,
+          mission_id,
+          provider_id,
+          attrs,
+          {:ok, provider_response(attrs, "confirmed")}
+        )
+      end
+
+      assert {:ok, result} = execute(context, reserve)
+
+      assert_received {:provider_mutation, _first}
+      refute_received {:provider_mutation, _second}
+      assert Enum.all?(result.items, &(&1.lifecycle_state == :reserved))
+    end
+
+    test "a provider configuration failure leaves the item placed, with its category", context do
+      reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->
+        {:error, {:provider_reservation_not_confirmed, reservation}} =
+          reserve_with_response(
+            organization_id,
+            mission_id,
+            provider_id,
+            attrs,
+            {:error, ProviderError.ambiguous(%{"reason" => "connection_closed"})}
+          )
+
+        {:error,
+         {:provider_configuration_failure, reservation,
+          %{"reason" => %{"category" => "credentials_rejected", "detail" => "bad key"}}}}
+      end
+
+      assert {:ok, result} = execute(context, reserve)
+
+      for item <- result.items do
+        assert item.lifecycle_state == :failed
+        assert is_binary(item.provider_reservation_id)
+
+        assert item.last_error_document == %{
+                 "code" => "provider_configuration_failure",
+                 "reason" => %{"category" => "credentials_rejected", "detail" => "bad key"}
+               }
+      end
+
+      assert %{never_sent: 0} =
+               PlanConfirmation.execution(
+                 ContactPlanExecutions.list(
+                   context.organization_id,
+                   context.mission_id,
+                   context.plan.contact_plan_id,
+                   context.plan.approved_version || 1
+                 )
+               )
+    end
+
+    test "every execute path holds the plan's execution lock", context do
+      test_pid = self()
+
+      key =
+        ContactPlanExecutions.execution_key(
+          context.organization_id,
+          context.mission_id,
+          context.plan.contact_plan_id
+        )
+
+      holder =
+        spawn(fn ->
+          FleetRunLock.with_key(key, fn ->
+            send(test_pid, :held)
+
+            receive do
+              :release -> :ok
+            end
+          end)
+        end)
+
+      assert_receive :held, 5_000
+
+      assert {:error, :fleet_planning_run_busy} =
+               ControlContacts.execute_approved_plan(
+                 context.member_scope,
+                 context.mission_id,
+                 context.plan.contact_plan_id,
+                 reserve: successful_reserver(test_pid),
+                 resolve_route: context.resolve_route,
+                 now: DateTime.add(@now, 2, :second)
+               )
+
+      refute_received {:provider_mutation, _any}
+      send(holder, :release)
+    end
   end
 
   defp execute(context, reserve) do
