@@ -12,7 +12,8 @@ defmodule Cadence.Control.Activations do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
-  alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow}
+  alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow, ExecutionLock}
+  alias Cadence.Control.Activations.Resume
   alias Cadence.Control.Activations.Review
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntimeReconciler
@@ -27,10 +28,28 @@ defmodule Cadence.Control.Activations do
   @spec execute(ApprovedActivation.t(), keyword()) ::
           {:ok, ActivationExecution.t()} | {:error, term()}
   def execute(%ApprovedActivation{} = approved_activation, opts \\ []) when is_list(opts) do
-    started_at = now(opts)
+    approved_activation.activation_request_id
+    |> ExecutionLock.run(fn -> execute_locked(approved_activation, opts) end)
+    |> settle(opts)
+  rescue
+    # No connection to run on, or the database dropped before the execution was recorded.
+    _exception in [DBConnection.ConnectionError, Postgrex.Error] ->
+      {:error, :activation_execution_interrupted}
+  end
+
+  @doc """
+  Resumes an approved activation whose apply failed or stalled midway (L10): the approver's
+  `Retry apply`. See `Cadence.Control.Activations.Resume`.
+  """
+  def resume(%Scope{} = scope, mission_id, request_id, opts \\ []),
+    do: Resume.run(scope, mission_id, request_id, opts)
+
+  defp execute_locked(approved_activation, opts) do
+    # A resume records itself here, once it holds the lock (Resume's audit).
+    :ok = Keyword.get(opts, :on_locked, fn -> :ok end).()
 
     with {:ok, execution_row, already_succeeded?} <-
-           begin_execution(approved_activation, opts, started_at) do
+           begin_execution(approved_activation, opts, now(opts)) do
       if already_succeeded? do
         {:ok, ActivationExecutionRow.to_domain(execution_row)}
       else
@@ -38,6 +57,14 @@ defmodule Cadence.Control.Activations do
       end
     end
   end
+
+  # Recorded after the lock's connection is given back: it may be the one that dropped.
+  defp settle({:interrupted, execution_row, exception}, opts) do
+    _ = record_interrupted(execution_row, exception, opts)
+    {:error, :activation_execution_interrupted}
+  end
+
+  defp settle(result, _opts), do: result
 
   @doc "Reviews one mission-bound activation request through the host's human approval workflow."
   def review(%Scope{} = scope, mission_id, input), do: Review.decide(scope, mission_id, input)
@@ -139,6 +166,23 @@ defmodule Cadence.Control.Activations do
         _ = fail_execution(execution_row, reason, now(opts))
         {:error, reason}
     end
+  rescue
+    # The database dropped mid-way (a connection closed or timed out). Each step is idempotent, so
+    # the execution is recorded failed (by `settle/2`) and can be resumed; never left silently in
+    # progress.
+    exception in [DBConnection.ConnectionError, Postgrex.Error] ->
+      {:interrupted, execution_row, exception}
+  end
+
+  defp record_interrupted(execution_row, exception, opts) do
+    fail_execution(
+      execution_row,
+      {:activation_execution_interrupted, Exception.message(exception)},
+      now(opts)
+    )
+  rescue
+    # Still unreachable: the row stays in progress, which a resume treats as stalled.
+    _exception in [DBConnection.ConnectionError, Postgrex.Error] -> :error
   end
 
   defp begin_execution(approved_activation, opts, started_at) do
@@ -148,8 +192,15 @@ defmodule Cadence.Control.Activations do
       %ActivationExecutionRow{status: :succeeded} = row ->
         {:ok, row, true}
 
+      # Failed or stalled, and this executor holds the lock: start it again.
       %ActivationExecutionRow{} = row ->
-        {:ok, row, false}
+        row
+        |> ActivationExecutionRow.restart_changeset(executor_actor(opts), started_at)
+        |> Repo.update()
+        |> case do
+          {:ok, row} -> {:ok, row, false}
+          {:error, changeset} -> {:error, changeset}
+        end
 
       nil ->
         execution =
@@ -194,11 +245,16 @@ defmodule Cadence.Control.Activations do
     execution_row
     |> ActivationExecutionRow.completion_changeset(%{
       status: :failed,
-      error_document: %{"reason" => inspect(reason)},
+      error_document: %{"reason" => inspect(reason), "code" => error_code(reason)},
       completed_at: completed_at
     })
     |> Repo.update()
   end
+
+  # A stable code for the console (the reason's atom), beside the inspected reason.
+  defp error_code(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp error_code({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
+  defp error_code(_reason), do: nil
 
   defp exact_approved_content(approved_activation, binding_set) do
     if ContentHash.term_sha256(binding_set) == approved_activation.binding_set_content_sha256 do

@@ -26,6 +26,8 @@ defmodule Cadence.Dashboards.SourceRequestExecution do
     SourceResultPreflight
   }
 
+  alias Cadence.Dashboards.SourceRegistry.ExecutionMonitoring
+
   @type execution_result :: %{
           source_results: [{PlannedSourceRequest.t(), SourceResult.t()}],
           source_result_cache_entries: map(),
@@ -230,9 +232,19 @@ defmodule Cadence.Dashboards.SourceRequestExecution do
         execute_source_request(resolve_request, plan_result, source_request, freshness_now, opts)
       end)
 
-    case Task.yield(task, source_policy.timeout_ms) || Task.shutdown(task, :brutal_kill) do
+    case Task.yield(task, source_policy.timeout_ms) || shutdown(task, source_policy.timeout_ms) do
       {:ok, source_execution} ->
         source_execution
+
+      {:timed_out, reason} ->
+        failed_source_execution(
+          resolve_request,
+          plan_result,
+          source_request,
+          freshness_now,
+          opts,
+          reason
+        )
 
       {:exit, reason} ->
         failed_source_execution(
@@ -243,16 +255,22 @@ defmodule Cadence.Dashboards.SourceRequestExecution do
           opts,
           {:source_execution_exit, reason}
         )
+    end
+  end
+
+  # Where the task waited decides whose timeout it was: Cadence's Postgres, or the source.
+  defp shutdown(task, timeout_ms) do
+    blocked_on = ExecutionMonitoring.blocked_on(task.pid)
+
+    case Task.shutdown(task, :brutal_kill) do
+      nil when blocked_on == :platform_store ->
+        {:timed_out, {:platform_store_timeout, timeout_ms}}
 
       nil ->
-        failed_source_execution(
-          resolve_request,
-          plan_result,
-          source_request,
-          freshness_now,
-          opts,
-          {:timeout, source_policy.timeout_ms}
-        )
+        {:timed_out, {:timeout, timeout_ms}}
+
+      finished ->
+        finished
     end
   end
 
@@ -313,6 +331,7 @@ defmodule Cadence.Dashboards.SourceRequestExecution do
   end
 
   defp source_execution_failure_reason({:timeout, _timeout_ms}), do: :timeout
+  defp source_execution_failure_reason({:platform_store_timeout, _timeout_ms}), do: :timeout
 
   defp source_execution_failure_reason({:source_execution_exit, _reason}),
     do: :source_execution_exit

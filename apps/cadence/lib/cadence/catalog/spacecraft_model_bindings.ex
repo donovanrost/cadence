@@ -2,10 +2,17 @@ defmodule Cadence.Catalog.SpacecraftModelBindings do
   @moduledoc "Finite immutable per-spacecraft model evidence; contains no persistence or activation operations."
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
 
-  @max_spacecraft 500
-  @max_metadata_bytes 4_194_304
+  # The fleet snapshot (every spacecraft's active entry) is bounded separately from one review
+  # batch: a 550-spacecraft fleet must stay activatable when 50 are added. These bounds are the
+  # interim fix; per-spacecraft entries move out of activation metadata next
+  # (docs/apogee/domain/fleet-snapshot.md).
+  @max_fleet_spacecraft 2_000
+  @max_fleet_sources 8_000
+  @max_review_batch 500
+  @max_metadata_bytes 16_777_216
 
-  def max_spacecraft, do: @max_spacecraft
+  def max_fleet_spacecraft, do: @max_fleet_spacecraft
+  def max_review_batch, do: @max_review_batch
   def max_metadata_bytes, do: @max_metadata_bytes
 
   def review_for(metadata, spacecraft_id) do
@@ -30,7 +37,7 @@ defmodule Cadence.Catalog.SpacecraftModelBindings do
         {:ok, [id]}
 
       %{"spacecraft_reviews" => reviews}
-      when is_map(reviews) and map_size(reviews) in 1..@max_spacecraft ->
+      when is_map(reviews) and map_size(reviews) in 1..@max_review_batch ->
         if Enum.all?(Map.keys(reviews), &is_binary/1),
           do: {:ok, Enum.sort(Map.keys(reviews))},
           else: {:error, :spacecraft_configuration_review_stale}
@@ -41,7 +48,7 @@ defmodule Cadence.Catalog.SpacecraftModelBindings do
   end
 
   def entries(%{"spacecraft_configurations" => entries, "spacecraft_configuration_version" => 1})
-      when is_map(entries) and map_size(entries) in 1..@max_spacecraft do
+      when is_map(entries) and map_size(entries) in 1..@max_fleet_spacecraft do
     if Enum.all?(entries, &valid_entry?/1) and unique_endpoints?(entries),
       do: {:ok, entries},
       else: {:error, :invalid_spacecraft_model_bindings}
@@ -89,6 +96,6 @@ defmodule Cadence.Catalog.SpacecraftModelBindings do
 
   defp unique_endpoints?(entries) do
     ids = Enum.flat_map(entries, fn {_id, entry} -> entry["source_endpoint_ids"] end)
-    length(ids) <= 1000 and length(ids) == length(Enum.uniq(ids))
+    length(ids) <= @max_fleet_sources and length(ids) == length(Enum.uniq(ids))
   end
 end

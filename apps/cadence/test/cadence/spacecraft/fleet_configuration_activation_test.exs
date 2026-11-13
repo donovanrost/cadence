@@ -28,6 +28,10 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     %{org: org, mission: mission, scope: scope, first: first, revision: revision}
   end
 
+  # About 20 s on CI. Before 2026-11-13 the decom apply reloaded the mission's bindings once per
+  # spacecraft inside its configuration lock; under load it held the connection past the 15 s
+  # transaction timeout and failed with DBConnection "tcp recv: closed". The query and row bounds
+  # below keep that from coming back quietly.
   @tag timeout: 180_000
   test "500 spacecraft activate together and retain usable command and telemetry bases", c do
     fleet = [
@@ -41,8 +45,18 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
     assert byte_size(Jason.encode!(request.metadata)) > 65_536
     assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
-    assert {:ok, execution} = ControlActivations.execute(approved)
+
+    {{:ok, execution}, queries, rows} =
+      count_queries(fn -> ControlActivations.execute(approved) end)
+
     assert execution.status == :succeeded
+
+    # Linear in the fleet: about 19 queries and 26 rows per spacecraft (2026-11-13). Reloading the
+    # mission's bindings per spacecraft made rows quadratic and held the configuration lock past
+    # its timeout ('tcp recv: closed'); a per-spacecraft lookup added inside the lock shows here.
+    assert queries <= 20 * 500 + 200, "#{queries} queries for 500 spacecraft"
+    assert rows <= 30 * 500 + 500, "#{rows} rows for 500 spacecraft"
+
     assert {:ok, active} = Active.load(c.mission)
     assert map_size(active.entries) == 500
 
@@ -82,6 +96,71 @@ defmodule Cadence.Activations.FleetConfigurationTest do
 
     assert {:ok, %{review: %{state: "active"}}} =
              ConfigurationRead.load(c.scope, c.mission, last.spacecraft_id, "changes")
+  end
+
+  @tag timeout: 300_000
+  test "a 550-spacecraft fleet activates in two review batches", c do
+    fleet = [
+      c.first
+      | Enum.map(2..550, fn i ->
+          Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet #{i}")
+        end)
+    ]
+
+    {block1, block2} = Enum.split(fleet, 500)
+
+    for batch <- [block1, block2] do
+      tokens = Map.new(batch, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
+      assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
+      assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+      assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
+    end
+
+    assert {:ok, active} = Active.load(c.mission)
+    assert map_size(active.entries) == 550
+
+    last = List.last(block2)
+    source = hd(active.entries[last.spacecraft_id]["source_endpoint_ids"])
+
+    assert {:ok, _basis} =
+             Cadence.Activations.with_locked_command_basis(
+               c.org,
+               c.mission.mission_id,
+               &SpacecraftModelBindings.command_basis(&1, source)
+             )
+  end
+
+  test "a database failure mid-apply records the execution failed, and a retry completes it", c do
+    second = Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet 2")
+    tokens = Map.new([c.first, second], fn craft -> {craft.spacecraft_id, save(c, craft)} end)
+    assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
+    assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+
+    # The decom apply's stamp is the first write to application bindings after admission.
+    Repo.query!("""
+    CREATE FUNCTION pg_temp.interrupt_apply() RETURNS trigger AS $$
+    BEGIN RAISE EXCEPTION 'connection lost (injected)'; END $$ LANGUAGE plpgsql
+    """)
+
+    Repo.query!("""
+    CREATE TRIGGER interrupt_apply BEFORE UPDATE ON spacecraft_application_bindings
+    FOR EACH ROW EXECUTE FUNCTION pg_temp.interrupt_apply()
+    """)
+
+    assert {:error, :activation_execution_interrupted} = ControlActivations.execute(approved)
+
+    assert {:ok, %{status: :failed, error_document: %{"code" => code, "reason" => reason}}} =
+             ControlActivations.fetch_execution(request.activation_request_id)
+
+    assert code == "activation_execution_interrupted"
+    assert reason =~ "injected"
+
+    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+
+    # Every step is idempotent, so the same approved request completes on a retry.
+    assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
+    assert {:ok, active} = Active.load(c.mission)
+    assert map_size(active.entries) == 2
   end
 
   test "fleet review retains independent approval and rejects self approval", c do
@@ -138,6 +217,38 @@ defmodule Cadence.Activations.FleetConfigurationTest do
 
     assert {:error, :spacecraft_configuration_review_unavailable} =
              Review.request_many(c.scope, c.mission.mission_id, tokens)
+  end
+
+  # Queries the calling process runs inside `fun`, and the rows they return.
+  defp count_queries(fun) do
+    test_pid = self()
+    handler = "fleet-activation-queries-#{System.unique_integer([:positive])}"
+    counter = :counters.new(2, [])
+
+    :telemetry.attach(
+      handler,
+      [:cadence, :repo, :query],
+      fn _event, _measurements, metadata, _config ->
+        if self() == test_pid, do: count_query(counter, metadata[:result])
+      end,
+      nil
+    )
+
+    try do
+      result = fun.()
+      {result, :counters.get(counter, 1), :counters.get(counter, 2)}
+    after
+      :telemetry.detach(handler)
+    end
+  end
+
+  defp count_query(counter, result) do
+    :counters.add(counter, 1, 1)
+
+    case result do
+      {:ok, %{num_rows: rows}} when is_integer(rows) -> :counters.add(counter, 2, rows)
+      _other -> :ok
+    end
   end
 
   defp save(c, craft, commanding \\ true) do

@@ -344,6 +344,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     case DataSourceRegistry.resolve(request, opts) do
       {:ok, resolved_binding} ->
         source_policy = SourceExecutionPolicy.resolve(request, resolved_binding, opts)
+        reason = ExecutionMonitoring.failure_reason(reason, resolved_binding)
         result = source_unavailable(request, resolved_binding, reason)
 
         ExecutionMonitoring.record_result(
@@ -756,7 +757,8 @@ defmodule Cadence.Dashboards.SourceRegistry do
     end
   rescue
     exception ->
-      source_unavailable(request, resolved_binding, {:exception, exception}, opts)
+      reason = ExecutionMonitoring.exception_reason(exception, resolved_binding)
+      source_unavailable(request, resolved_binding, reason, opts)
   catch
     kind, reason ->
       source_unavailable(request, resolved_binding, {kind, reason}, opts)
@@ -814,7 +816,8 @@ defmodule Cadence.Dashboards.SourceRegistry do
       message: "Source adapter failed while resolving dashboard data",
       details:
         Provenance.details(request, resolved_binding)
-        |> Map.put(:reason, inspect_source_failure(reason)),
+        |> Map.put(:reason, inspect_source_failure(reason))
+        |> ExecutionMonitoring.put_cause(reason),
       links: DataLinks.request_observable_links(request, source: :warning)
     }
   end
@@ -905,9 +908,12 @@ defmodule Cadence.Dashboards.SourceRegistry do
 
   defp maybe_mark_source_health_degraded(meta), do: meta
 
-  defp inspect_source_failure({:exception, exception}) do
+  defp inspect_source_failure({kind, exception}) when kind in [:exception, :platform_store] do
     Exception.message(exception)
   end
+
+  defp inspect_source_failure({:platform_store_timeout, ms}),
+    do: "timeout after #{ms}ms waiting on Cadence's database"
 
   defp inspect_source_failure({:timeout, timeout_ms}) when is_integer(timeout_ms) do
     "timeout after #{timeout_ms}ms"

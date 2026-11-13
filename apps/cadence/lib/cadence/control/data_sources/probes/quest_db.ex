@@ -117,19 +117,12 @@ defmodule Cadence.Control.DataSources.Probes.QuestDB do
            }}
         end
 
+      # The schema query itself failed: what the source supports is unknown, not false. Reporting
+      # capabilities here would let a transient failure overwrite the source's (all false) when an
+      # operator's probe materializes them.
       {:error, reason} ->
         {:schema_error, reason,
-         %{
-           questdb_schema_probe?: false,
-           questdb_schema_table: "telemetry_observations",
-           adapter_reported_capabilities: %{
-             latest?: false,
-             range_scan?: false,
-             bounded_history?: false,
-             native_decimation?: false,
-             watermarks?: false
-           }
-         }}
+         %{questdb_schema_probe?: false, questdb_schema_table: "telemetry_observations"}}
     end
   end
 
