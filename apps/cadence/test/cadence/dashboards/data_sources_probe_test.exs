@@ -249,6 +249,7 @@ defmodule Cadence.Dashboards.DataSourcesProbeTest do
                questdb_probe?: true,
                data_source_probe_policy: QuestDB.policy([]),
                questdb_exec_fun: questdb_probe_exec_fun(self(), :schema_error),
+               materialize_adapter_capabilities?: true,
                event_bus: @event_bus,
                invalidate_runtime_cache?: false
              )
@@ -264,10 +265,19 @@ defmodule Cadence.Dashboards.DataSourcesProbeTest do
     assert metadata["probe_diagnostic_kind"] == "schema_unavailable"
     assert metadata["probe_diagnostic_stage"] == "schema_query"
     assert metadata["probe_remediation"] == "check_questdb_schema_access"
-    assert metadata["adapter_reported_capabilities"]["range_scan?"] == false
-    assert metadata["source_reported_capability_mismatch?"] == true
-    assert metadata["source_reported_supports_watermarks?"] == false
+    # A failed schema query says nothing about capabilities: none reported, none overwritten.
+    refute Map.has_key?(metadata, "adapter_reported_capabilities")
+    refute Map.has_key?(metadata, "source_reported_capability_mismatch?")
+
+    assert {:ok, %DataSource{capabilities: capabilities}} =
+             DataSources.fetch_data_source("questdb-schema-missing")
+
+    assert capability(capabilities, :range_scan?) == true
+    assert capability(capabilities, :watermarks?) == true
   end
+
+  defp capability(capabilities, key),
+    do: Map.get(capabilities, key, Map.get(capabilities, Atom.to_string(key)))
 
   test "QuestDB telemetry probes mark connection failures unavailable with diagnostics" do
     data_source = %DataSource{
