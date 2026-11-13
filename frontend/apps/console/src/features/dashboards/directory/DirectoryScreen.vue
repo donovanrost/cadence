@@ -50,11 +50,13 @@ async function onAction(
 
 <template>
   <ApPageHeader :label="`${scope.mission.name} · telemetry`" title="Dashboards" size="reading">
-    <!-- Playlists' way in (pending ux's ruling; the spec names the page, not its entry point). -->
-    <ApButton variant="secondary" :to="{ name: 'ops.dashboards.playlists' }">Playlists</ApButton>
-    <ApButton v-if="canEdit" variant="primary" :to="{ name: 'ops.dashboards.new' }"
-      >New dashboard</ApButton
-    >
+    <!-- ux § Where it sits: Library · Playlists · New dashboard; wraps under the h1 on a phone. -->
+    <span class="flex flex-wrap gap-2">
+      <ApButton variant="secondary" :to="{ name: 'ops.dashboards.playlists' }">Playlists</ApButton>
+      <ApButton v-if="canEdit" variant="primary" :to="{ name: 'ops.dashboards.new' }"
+        >New dashboard</ApButton
+      >
+    </span>
   </ApPageHeader>
   <TelemetryTabs active="dashboards" />
   <DirectoryToolbar

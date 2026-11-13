@@ -4,6 +4,7 @@ import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
 import {
+  ApBreadcrumb,
   ApButton,
   ApEmptyState,
   ApPageHeader,
@@ -11,6 +12,7 @@ import {
   ApTable,
   formatShort,
   type ApColumn,
+  type ApCrumb,
 } from "@/ui";
 import TelemetryTabs from "../directory/TelemetryTabs.vue";
 import MoreMenu from "../viewer/MoreMenu.vue";
@@ -20,6 +22,11 @@ import PlaylistSheet from "./PlaylistSheet.vue";
 
 /** Playlists (ux): Name · Dashboards · Dwell · Updated · Present; editor and delete in sheets. */
 const scope = useMissionScope();
+/** ux § Where it sits: Playlists belongs to Dashboards, so it crumbs back to the directory. */
+const crumbs: readonly ApCrumb[] = [
+  { label: "Dashboards", to: { name: "ops.dashboards" } },
+  { label: "Playlists" },
+];
 const missionId = computed(() => scope.value.mission.id);
 const list = useRemoteQuery(missionId, (id, signal) => fetchPlaylists(id, "", signal));
 useMissionInvalidation(missionId, ["dashboards"], list.refetch);
@@ -46,6 +53,7 @@ function onAction(id: "edit" | "delete", p: PlaylistSummary) {
 </script>
 
 <template>
+  <ApBreadcrumb :crumbs="crumbs" />
   <ApPageHeader :label="`${scope.mission.name} · dashboards`" title="Playlists" size="reading">
     <ApButton v-if="canEdit" variant="primary" @click="editor?.open(null)">New playlist</ApButton>
   </ApPageHeader>
