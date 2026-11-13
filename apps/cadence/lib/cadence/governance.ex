@@ -227,6 +227,15 @@ defmodule Cadence.Governance do
 
   defdelegate list_derived_definitions(mission), to: DerivedDefinitions, as: :list
   defdelegate list_derived_definitions(org, mission), to: DerivedDefinitions, as: :list
+
+  defdelegate retire_derived_definition(org, mission, id, actor_id),
+    to: DerivedDefinitions,
+    as: :retire
+
+  defdelegate derived_point_used?(org, mission, point_id),
+    to: DerivedDefinitions,
+    as: :point_used?
+
   defdelegate derived_definitions_page(org, mission, opts), to: DerivedDefinitions, as: :page
 
   defdelegate derived_definition_history(org, mission, id, page),

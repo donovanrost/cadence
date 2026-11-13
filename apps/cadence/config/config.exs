@@ -37,6 +37,8 @@ config :cadence,
     Cadence.Spacecraft.ConfigKinds.Spacecraft,
     Cadence.Spacecraft.ConfigKinds.SpacecraftProfile,
     Cadence.Spacecraft.ConfigKinds.SpacecraftOverride,
+    # App configuration through change sets (DECISIONS #77): derived telemetry points.
+    Cadence.Governance.DerivedTelemetryKind,
     # Derived: re-materializes profile routes after the ops above (finalize/3).
     Cadence.Comms.ConfigKinds.SpacecraftRoutes,
     # Derived: framing compatibility HOLDs when the profile becomes framing authority.
@@ -48,6 +50,9 @@ config :cadence,
   ],
   # Which spacecraft have had traffic, for the archive HOLD (#49/#50).
   spacecraft_traffic: Cadence.Control.SpacecraftTraffic,
+  # The mission's catalog points for the derived_telemetry kind's checks (#77), configured so
+  # governance has no compile-time edge to projections.
+  derived_point_catalog: Cadence.Ops.PointCatalog,
   # Catalog revision lookup for profile/override catalog changes (#36/#65), configured so the
   # spacecraft kinds have no compile-time edge to the catalog context.
   catalog_revisions: Cadence.Catalog,
