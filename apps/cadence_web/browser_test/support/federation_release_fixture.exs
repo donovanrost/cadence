@@ -56,7 +56,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   @spec prepare_and_activate!(binary(), keyword()) :: map()
   def prepare_and_activate!(app_root, opts \\ []) when is_binary(app_root) do
     sandbox_owner = Keyword.fetch!(opts, :sandbox_owner)
-    ops_surface = Keyword.get(opts, :ops_console_surface, "dashboard_directory")
+    ops_surface = Keyword.get(opts, :ops_console_surface, "commands")
     temp_root = temporary_root!()
 
     try do
@@ -594,7 +594,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   end
 
   defp ops_console_metadata(slot, surface)
-       when surface in ["dashboard_directory", "contact_schedule"] do
+       when surface in ["commands", "contact_schedule"] do
     metadata(
       "ops_console",
       "cadence.ops_console",

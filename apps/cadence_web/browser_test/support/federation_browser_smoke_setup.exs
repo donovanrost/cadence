@@ -85,13 +85,13 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
              CadenceWeb.ApplicationHostCatalog.build(
                context.scope,
                mission_route_context,
-               catalog_opts ++ [application_key: "ops_console", surface_id: "dashboard_directory"]
+               catalog_opts ++ [application_key: "ops_console", surface_id: "commands"]
              ),
            "fixture mission catalog build failed after release activation"
 
     assert Enum.map(mission_catalog["applications"], & &1["applicationKey"]) == ["ops_console"]
 
-    assert [%{"surface" => %{"surfaceId" => "dashboard_directory"}}] =
+    assert [%{"surface" => %{"surfaceId" => "commands"}}] =
              mission_catalog["applications"]
 
     args = [
@@ -103,7 +103,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "--mission-catalog-url",
       "#{base_url}/applications/mission_catalog/mission_list/federated",
       "--ops-url",
-      "#{base_url}/missions/#{context.mission.mission_id}/applications/ops_console/dashboard_directory/federated",
+      "#{base_url}/missions/#{context.mission.mission_id}/applications/ops_console/commands/federated",
       "--organization-admin-url",
       "#{base_url}/applications/organization_admin/organization_home/federated",
       "--spacecraft-url",

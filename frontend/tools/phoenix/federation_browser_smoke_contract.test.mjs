@@ -3206,16 +3206,10 @@ void test("the Ops representative browser gate pins the scoped compatibility des
   const opsConfigEnd = source.indexOf("catalogPath:", opsConfigStart);
   assert.ok(opsConfigStart >= 0 && opsConfigEnd > opsConfigStart);
   const opsConfig = source.slice(opsConfigStart, opsConfigEnd);
-  assert.equal(
-    opsConfig.includes("document.querySelector('#dashboard-directory-destination-open')"),
-    true,
-  );
+  assert.equal(opsConfig.includes("document.querySelector('#commands-open-workspace')"), true);
   assert.equal(opsConfig.includes("destination.origin === location.origin"), true);
-  assert.equal(
-    opsConfig.includes("/missions/${encodeURIComponent(missionId)}/ops/dashboards"),
-    true,
-  );
-  assert.equal(opsConfig.includes("#ops-dashboards-page"), false);
+  assert.equal(opsConfig.includes("/missions/${encodeURIComponent(missionId)}/ops/commands"), true);
+  assert.equal(opsConfig.includes("#ops-commands-component"), false);
 });
 
 void test("the shared host body is read on the first load and reused by later 304 checks", async () => {

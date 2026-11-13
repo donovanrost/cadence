@@ -5208,22 +5208,22 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     },
     {
       argName: "--ops-url",
-      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/dashboard_directory/federated`,
+      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/commands/federated`,
       applicationKey: "ops_console",
-      surfaceId: "dashboard_directory",
+      surfaceId: "commands",
       expectedScope: "mission",
       readyExpression: `(() => {
-        const link = document.querySelector('#dashboard-directory-destination-open');
+        const link = document.querySelector('#commands-open-workspace');
         if (!(link instanceof HTMLAnchorElement)) return false;
         const destination = new URL(link.href);
-        return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="dashboard_directory"]') &&
+        return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="commands"]') &&
           destination.origin === location.origin &&
-          destination.pathname === ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/dashboards`)} &&
+          destination.pathname === ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/commands`)} &&
           !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'));
       })()`,
       catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
       queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
-      queryId: "cadence.ops.dashboard_directory",
+      queryId: "cadence.ops.commands",
       expectedReleaseId: releases.nMinus1.ops_console,
     },
     {
