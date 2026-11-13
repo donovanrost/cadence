@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ApButton, ApStatStrip, ApStatTile } from "@/ui";
 import type { PlanDetail } from "./api.ts";
+import { isBooking, rejectedRows } from "./booking-state.ts";
 import { planPrimary } from "./plan-primary.ts";
 
 /**
@@ -31,6 +32,8 @@ const primary = computed(() =>
   }),
 );
 const conflicts = computed(() => props.plan.conflicts.length);
+const booking = computed(() => isBooking(props.plan.state));
+const lost = computed(() => rejectedRows(props.plan.passes).length);
 const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).length);
 </script>
 
@@ -39,12 +42,15 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
     <ApStatStrip :columns="4" label="Plan totals" class="min-w-[min(100%,520px)] flex-1">
       <ApStatTile label="Passes" :value="plan.counts.passes" />
       <ApStatTile label="Minutes" :value="plan.counts.minutes" />
+      <!-- qa #52: once booking, the rule figure is the draft's; lost bookings say so beside it. -->
       <ApStatTile
-        label="Rule met"
+        :label="booking ? 'Rule met as drafted' : 'Rule met'"
         :value="plan.demand.rule_met"
         :denominator="plan.demand.rule_total"
         unit="spacecraft"
-        :state="plan.demand.rule_met < plan.demand.rule_total ? 'caution' : 'nominal'"
+        :state="plan.demand.rule_met < plan.demand.rule_total || lost > 0 ? 'caution' : 'nominal'"
+        :caption="lost > 0 ? `${lost} ${lost === 1 ? 'pass' : 'passes'} not booked` : undefined"
+        :caption-state="lost > 0 ? 'caution' : undefined"
       />
       <ApStatTile
         label="Conflicts"

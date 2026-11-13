@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanPass } from "./api.ts";
 import { booking } from "./fixtures.ts";
-import { bookingLook, reasonWords, rejectedRows } from "./booking-state.ts";
+import { bookingLook, isBooking, reasonWords, rejectedRows } from "./booking-state.ts";
 
 const pass = (id: string, b: PlanPass["booking"]): PlanPass => ({
   snapshot_id: id,
@@ -102,5 +102,14 @@ describe("K1 per-contact booking (api 8e)", () => {
       }).text,
     ).toBe("marked not booked by Mira K. at 10:52Z");
     expect(reasonWords("provider_declined").text).toBe('the provider answered "declined"');
+  });
+
+  it("treats a plan that has gone out for booking as booking, not a draft (qa #52)", () => {
+    expect(isBooking("reserved")).toBe(true);
+    expect(isBooking("partially_reserved")).toBe(true);
+    expect(isBooking("executing")).toBe(true);
+    expect(isBooking("draft")).toBe(false);
+    expect(isBooking("pending_approval")).toBe(false);
+    expect(isBooking("unrecognized")).toBe(false);
   });
 });

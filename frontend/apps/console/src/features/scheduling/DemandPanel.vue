@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { ApListRow, ApPanel, useNow } from "@/ui";
 import { reasonText, type PlanDetail } from "./api.ts";
 import BookingIssues from "./BookingIssues.vue";
-import { rejectedRows } from "./booking-state.ts";
+import { isBooking, rejectedRows } from "./booking-state.ts";
 import { expiredRows } from "./offer-clock.ts";
 import { contactsShortText, coverage } from "./coverage.ts";
 import { gapSentence } from "./focus-day.ts";
@@ -63,11 +63,17 @@ function acceptedText(spacecraftId: string): string | null {
   const by = props.plan.approval?.actor.name;
   return `Gap accepted${by ? ` by ${by}` : ""} · ${reasons.join(" · ")}`;
 }
+const booking = computed(() => isBooking(props.plan.state));
 const meta = computed(() => {
   const c = coverage(props.plan);
+  const lost = rejected.value.length;
+  // qa #52: after booking, coverage is the draft's; lost or rejected bookings come first.
+  if (lost > 0) return `${lost} ${lost === 1 ? "pass" : "passes"} not booked`;
   return c.spacecraft > 0
     ? `${c.spacecraft} spacecraft · ${contactsShortText(c.contactsShort)}`
-    : "All spacecraft covered";
+    : booking.value
+      ? "All spacecraft covered as drafted"
+      : "All spacecraft covered";
 });
 </script>
 
@@ -102,7 +108,11 @@ const meta = computed(() => {
       </ApListRow>
     </ul>
     <p v-else class="m-0 px-4 py-3 text-md text-text-3">
-      Every spacecraft meets its rule in this draft.
+      {{
+        booking
+          ? "Every spacecraft met its rule when the plan was drafted."
+          : "Every spacecraft meets its rule in this draft."
+      }}
     </p>
     <p
       v-for="text in ruleText"

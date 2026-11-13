@@ -1,5 +1,5 @@
 import { formatHourMinute, type GanttBarKind } from "@/ui";
-import { stationCode, type PlanPass } from "./api.ts";
+import { stationCode, type PlanPass, type PlanState } from "./api.ts";
 
 /**
  * K1 executing: each drafted bar shows its own booking (api 8e), Requested → Confirmed /
@@ -161,4 +161,27 @@ export function rejectedRows(passes: readonly PlanPass[]) {
       },
     ];
   });
+}
+
+/**
+ * qa #52: once a plan has gone out for booking, the screen describes the booking, not the draft:
+ * step 04 Reserve, panel B "Plan", and coverage labelled as drafted.
+ */
+export function isBooking(state: PlanState): boolean {
+  switch (state) {
+    case "approved":
+    case "executing":
+    case "partially_reserved":
+    case "reserved":
+    case "failed":
+    case "unconfirmed":
+    case "interrupted":
+      return true;
+    case "draft":
+    case "pending_approval":
+    case "canceled":
+    case "superseded":
+    case "unrecognized":
+      return false;
+  }
 }

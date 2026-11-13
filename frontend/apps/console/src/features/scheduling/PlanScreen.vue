@@ -10,6 +10,7 @@ import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import FocusPanel from "./FocusPanel.vue";
 import OfferClock from "./OfferClock.vue";
+import { isBooking } from "./booking-state.ts";
 import { offerClock } from "./offer-clock.ts";
 import DraftGantt from "./DraftGantt.vue";
 import { dayLabel, useSpacecraftNames } from "./names.ts";
@@ -151,8 +152,15 @@ const nameOf = useSpacecraftNames(missionId);
 const selected = ref<string | null>(null);
 
 const STEPS = ["Demand", "Opportunities", "Draft", "Reserve"];
+/** qa #52: a plan that has gone out for booking is at 04 Reserve. */
 const step = computed(() =>
-  view.value.kind === "drafting" ? 2 : view.value.kind === "plan" ? 2 : 0,
+  view.value.kind === "drafting"
+    ? 2
+    : view.value.kind === "plan"
+      ? isBooking(view.value.plan.state)
+        ? 3
+        : 2
+      : 0,
 );
 /** Header mono line per state (ScheduleFlow "K1 plan states"). */
 function headerFor(v: PlanView, d: string): string {
@@ -258,6 +266,7 @@ const clock = computed(() =>
           :alternatives="alternatives"
           :availability="availability"
           :muted="view.plan.superseded !== null"
+          :title="isBooking(view.plan.state) ? 'Plan · by station' : undefined"
           class="min-h-0 flex-1"
           @select="selected = $event"
         />
