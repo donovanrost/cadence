@@ -138,7 +138,8 @@ defmodule Cadence.Catalog.FleetSnapshot do
         []
 
       query ->
-        query |> select([m], m.spacecraft_id) |> order_by([m], asc: m.spacecraft_id) |> Repo.all()
+        # Sorted in Elixir (bytewise), whatever the database's text collation (#56).
+        query |> select([m], m.spacecraft_id) |> Repo.all() |> Enum.sort()
     end
   end
 

@@ -37,6 +37,19 @@ defmodule Cadence.Catalog.FleetSnapshotTest do
     assert %{"sc-2" => "cat-2"} = FleetSnapshot.catalog_usage(metadata)
   end
 
+  # #56: bytewise, whatever the database's collation (en_US would give sc-a, sc-A, SC-b).
+  test "a stored fleet's spacecraft ids are sorted bytewise", %{mission: mission} do
+    entries =
+      fleet(3)
+      |> Enum.zip(["SC-b", "sc-a", "sc-A"])
+      |> Map.new(fn {{_id, entry}, id} -> {id, entry} end)
+
+    {:ok, fleet} = FleetSnapshot.store(mission, entries)
+    metadata = FleetSnapshot.metadata(fleet, %{"spacecraft_id" => "sc-a"})
+
+    assert FleetSnapshot.spacecraft_ids(metadata) == ["SC-b", "sc-A", "sc-a"]
+  end
+
   test "an unchanged spacecraft re-uses its stored entry", %{mission: mission} do
     {:ok, _} = FleetSnapshot.store(mission, fleet(3))
     changed = put_in(fleet(3), ["sc-1", "catalog_revision_id"], "cat-9")
