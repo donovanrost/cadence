@@ -25,12 +25,11 @@ Problem envelope (`{error: {code, message, details}}`), never LiveView statuses.
 2. **Rows lack who and what:** share rows have no `created_by`; snapshot rows have neither `created_by` nor the
    frozen window. Actor fields everywhere are ids; the console shows names.
 3. **Q1:** settings save must go through `CurrentVersions.save` (a current version, `{version}`), like D9.
-4. **Snapshot delete:** ux specs `Delete`; snapshots are immutable and nothing deletes them. Either domain adds
-   `delete_snapshot` (DECISIONS #76 Q6 added deletes for playlists/library), or ux drops the button. **Asked of
-   ux + domain**; until then the console shows no Delete.
-5. **Diagnostics timing:** ux's `OK 120 ms` / `Timed out after 5 s` needs per-request duration and outcome,
-   which aren't recorded. Until domain records them, the tab shows status, cache, severity and the warning
-   codes only, never an invented number (U20). **Asked of ux + domain.**
+4. **Snapshot delete:** dropped (ux): snapshots are immutable and the list is read-only. Shared views need
+   `:operate_mission` and the only access policy is `mission_member`, so nothing opens outside the mission.
+5. **Diagnostics timing:** not recorded, so no numbers (ux, U20): one row per widget, worst first, status word
+   (OK / DEGRADED / NOT RUN YET), cache (Fresh / From cache), the operator action as a sentence, warnings in
+   words; codes, severity and retryable under Technical details.
 
 ## Proposed shapes
 
@@ -47,8 +46,10 @@ share    = {id, url, data_visibility: "with_data"|"definition_only", state: "act
             expires_at|null, created_at, created_by {id, name}|null}
 snapshot = {id, url, version, data_visibility, window: {from, to}|null, created_at, created_by {id, name}|null}
 ```
-- `defaults` in the same shape as D9's `defaults {time?, scope?}` (not `defaults_json`), so General and the Save
-  drawer write one thing. `url` is the console path of the shared view (see D20) so the row can copy it.
+- `defaults` carries the values (not `defaults_json`). D9's `defaults` are booleans (save the current range/scope
+  as the default), so the two are different shapes on purpose (dashboards). `url` is the console path of the shared
+  view: `/console/:org/:mission/telemetry/dashboards/shares/:share_id` and `…/snapshots/:snapshot_id` (dashboards'
+  routes `ops.dashboards.share` / `.snapshot`, D20).
 - `data_visibility`: the wire uses `with_data` for the domain's `authorized_runtime_data` (or keep the domain
   word; say which).
 - `?shares_after=` / `?snapshots_after=` page each table (25, newest first, please: the newest share is the one
@@ -103,9 +104,10 @@ kind ∈ saved | restored | published | archived | unarchived | share_created | 
 - The bundle as an attachment (`<slug>.cadence-dashboard.json`), recording the deployment as today. Errors as
   Problems (403/404), not text. The legacy route goes with the legacy pages.
 
-### D20 (not mine to build, flagged) shared views
+### D20 shared views (dashboards builds them: the viewer without Edit)
 - `GET /dashboard-shares/:share_id` and `GET /dashboard-snapshots/:snapshot_id` (operator): `SharedViews.load` as
-  console reads, for the viewer's `SHARED · …` / `SNAPSHOT · …` headers. Owner to settle with dashboards.
+  console reads, for the viewer's `SHARED · …` / `SNAPSHOT · …` headers.
+- The viewer's `⋯ › Snapshot` calls fe-setup's `postSnapshot(missionId, dashboardId, runtime)` (settings/api.ts).
 
 ## Console (fe-setup)
 - `features/dashboards/settings/` with its own `api.ts` readers; route `ops.dashboard.settings`
