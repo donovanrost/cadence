@@ -14,6 +14,7 @@ defmodule Cadence.Control.PlanningRequirements do
   alias Cadence.ContactPlanning.{
     ContactRequirements,
     ContactRequirementTemplates,
+    ContactRequirementVersion,
     RequirementListing,
     TemplateDescriptions
   }
@@ -21,8 +22,10 @@ defmodule Cadence.Control.PlanningRequirements do
   alias Cadence.Control.PlanningRequirements.Schema
   alias Cadence.SpacecraftStore
 
-  @states ~w(active closed canceled)
-  @sources ~w(one_off template)
+  # Explicit string -> atom maps, never String.to_existing_atom: an atom may not exist yet when its
+  # module hasn't loaded (qa #53, the 11-11 'criteria' class).
+  @states %{"active" => :active, "closed" => :closed, "canceled" => :canceled}
+  @sources %{"one_off" => :one_off, "template" => :template}
   @default_limit 50
   @max_limit 200
   @max_reason 2_000
@@ -277,7 +280,11 @@ defmodule Cadence.Control.PlanningRequirements do
     }
   end
 
-  defp content_atoms, do: Enum.map(Schema.content_keys(), &String.to_existing_atom/1)
+  # The version struct's own keys whose names are the content keys (no atom creation).
+  defp content_atoms do
+    keys = Schema.content_keys()
+    for field <- Map.keys(%ContactRequirementVersion{}), Atom.to_string(field) in keys, do: field
+  end
 
   defp filters(params) do
     with {:ok, state} <- choice(params["state"], @states, :state),
@@ -295,13 +302,19 @@ defmodule Cadence.Control.PlanningRequirements do
     end
   end
 
-  # String → atom only from the fixed lists above.
+  # String → atom only through the explicit maps above.
   defp choice(nil, _allowed, _key), do: {:ok, nil}
 
   defp choice(value, allowed, key) do
-    if value in allowed,
-      do: {:ok, String.to_existing_atom(value)},
-      else: {:error, {:invalid_params, %{key => "must be one of #{Enum.join(allowed, ", ")}"}}}
+    case Map.fetch(allowed, value) do
+      {:ok, atom} ->
+        {:ok, atom}
+
+      :error ->
+        {:error,
+         {:invalid_params,
+          %{key => "must be one of #{allowed |> Map.keys() |> Enum.sort() |> Enum.join(", ")}"}}}
+    end
   end
 
   defp positive(nil, default, _max, _key), do: {:ok, default}
