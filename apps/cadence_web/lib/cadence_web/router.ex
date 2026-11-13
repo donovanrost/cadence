@@ -866,6 +866,12 @@ defmodule CadenceWeb.Router do
       # D20 shared views (owner: api): the link of a share or a snapshot.
       get("/dashboard-shares/:share_id", DashboardSharedViewController, :share)
       get("/dashboard-snapshots/:snapshot_id", DashboardSharedViewController, :snapshot)
+      # D23/D24 playlists (owner: api).
+      get("/dashboard-playlists", DashboardPlaylistController, :index)
+      post("/dashboard-playlists", DashboardPlaylistController, :create)
+      get("/dashboard-playlists/:playlist_id", DashboardPlaylistController, :show)
+      patch("/dashboard-playlists/:playlist_id", DashboardPlaylistController, :update)
+      delete("/dashboard-playlists/:playlist_id", DashboardPlaylistController, :delete)
       get("/dashboards/:dashboard_id/settings", DashboardSharingController, :show)
       patch("/dashboards/:dashboard_id/settings", DashboardSharingController, :update)
       post("/dashboards/:dashboard_id/shares", DashboardSharingController, :create_share)

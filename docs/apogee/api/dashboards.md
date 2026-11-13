@@ -214,6 +214,30 @@ definition: <editor outline, version 3> | null, snapshot: <WorkspaceSnapshot> | 
   - `not_found` (unknown, or another mission's).
 - `503 dashboard_unavailable` when a link that should open can't be resolved right now.
 
+## D23/D24: playlists (owner: api)
+
+From dashboards' slice 6. Under `/api/console/v1/missions/:mission_id/dashboard-playlists`.
+Mission operators read; authors (`dashboard.author`) write. Refetch on `invalidate` with
+`dashboards`.
+
+- **D23** `GET /?q=` → `{playlists: [{id, name, description, dwell_seconds, wallboard_mode,
+  dashboard_count, updated_at, updated_by {id, name} | null}], can_edit}`, by name (at most 200).
+- **D23** `GET /:playlist_id` → `{playlist: {id, name, description, dwell_seconds, wallboard_mode,
+  updated_at, updated_by, dashboards: [{id, name, archived}]}, can_edit}`. `dashboards` are in
+  playlist order, archived ones kept and flagged (present mode skips them). Present mode reads each
+  dashboard through D5.
+- **D24** `POST / {name, description?, dwell_seconds, wallboard_mode, dashboard_ids}` → `201 {id}`.
+- **D24** `PATCH /:playlist_id {any of those, expected_updated_at}` → `200 {id}`. Absent fields are
+  unchanged, and `dashboard_ids` replaces the list. `expected_updated_at` is the row's `updated_at`
+  as read (microseconds).
+- **D24** `DELETE /:playlist_id` → `204` (hard; audited).
+- Validation is the domain's: `name` 1–120, `dwell_seconds` **5–900**, `dashboard_ids` **1–100**,
+  each an **active** dashboard of this mission. (The plan said 10–3600 and 1–50; tell domain if
+  those matter.) `422 invalid_params`: `details.dashboard_ids` plus `unknown: [ids]` for
+  dashboards that aren't active or aren't the mission's, else `details.playlist`.
+- `409 version_conflict {current: <the D23 playlist>}` on a stale `expected_updated_at`.
+- `404 playlist_not_found` ("This playlist was deleted."), `403 forbidden`.
+
 - **D17** `GET /activity?before=` (operator) → `{events: [{id, kind, at, actor {id, name} | null,
   version, detail}], next}`: one feed, newest first, 25 per page; pass `next` back as `before`
   (opaque; `null` on the last page; `422 details.before` for a bad one). `kind` is the closed
