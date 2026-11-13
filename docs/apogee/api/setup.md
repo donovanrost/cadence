@@ -742,6 +742,15 @@ audited lifecycle events.
   comes from the surface placement (`application_workspace` is Setup, `ops_*` Ops); administration
   surfaces aren't listed. Spacecraft-scope apps aren't in this list yet (L19).
 
+### `GET /missions/:mission_id/spacecraft/:spacecraft_id/apps` (§11 L19)
+
+The apps installable on one spacecraft (today `spacecraft` and `telemetry_decom`) with **this
+spacecraft's** installations: `{apps: [<A1 row>], permissions}`. `surfaces` holds only the
+spacecraft-scope ones (open them with S1's `?spacecraft_id=`), and `status` is the app's status
+at this spacecraft. Installations are per spacecraft, so the A1 verbs apply under this path: `POST
+…/spacecraft/:spacecraft_id/apps/:key/install | disable | uninstall` → the row. `404
+spacecraft_not_found` and A1's errors.
+
 ### `GET /missions/:mission_id/apps/:key/surfaces/:surface_id/host?spacecraft_id=` (§11 L9, S1)
 
 Everything the console needs to load one app surface (a Module Federation component) and let it

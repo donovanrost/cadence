@@ -986,6 +986,11 @@ defmodule CadenceWeb.Router do
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
       get("/spacecraft/:spacecraft_id/uplink", SpacecraftUplinkController, :show)
       get("/spacecraft/:spacecraft_id/configuration", SpacecraftConfigController, :show)
+      # L19 spacecraft-scope apps (owner: api).
+      get("/spacecraft/:spacecraft_id/apps", SpacecraftAppController, :index)
+      post("/spacecraft/:spacecraft_id/apps/:key/install", SpacecraftAppController, :install)
+      post("/spacecraft/:spacecraft_id/apps/:key/disable", SpacecraftAppController, :disable)
+      post("/spacecraft/:spacecraft_id/apps/:key/uninstall", SpacecraftAppController, :uninstall)
       get("/profiles", ProfileController, :index)
       get("/profiles/:profile_id", ProfileDetailController, :show)
       get("/readiness", ReadinessController, :show)

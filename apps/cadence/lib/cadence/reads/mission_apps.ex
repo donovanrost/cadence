@@ -25,17 +25,27 @@ defmodule Cadence.Reads.MissionApps do
   alias Cadence.Reads.AppStatus
 
   @spec load(Scope.t(), binary()) :: {:ok, map()} | {:error, term()}
-  def load(%Scope{} = scope, mission_id) do
-    with {:ok, installations} <-
-           ApplicationInstallations.list(scope, HostContext.mission(mission_id)) do
+  def load(%Scope{} = scope, mission_id),
+    do: load_at(scope, mission_id, HostContext.mission(mission_id))
+
+  @doc """
+  The apps at a host context (L19): `HostContext.mission/1`, or `HostContext.spacecraft/2` for
+  the apps installable on one spacecraft, with that spacecraft's installations and only the
+  surfaces of that scope.
+  """
+  @spec load_at(Scope.t(), binary(), HostContext.t()) :: {:ok, map()} | {:error, term()}
+  def load_at(%Scope{} = scope, mission_id, context) do
+    level = context.placement
+
+    with {:ok, installations} <- ApplicationInstallations.list(scope, context) do
       by_key = Map.new(installations, &{&1.application_key, &1})
 
       {:ok,
        %{
          apps:
-           :mission
+           level
            |> Registry.available_for_scope()
-           |> Enum.map(&row(scope, mission_id, &1, Map.get(by_key, &1.application_key)))
+           |> Enum.map(&row(scope, context, &1, Map.get(by_key, &1.application_key)))
            |> Enum.sort_by(&{not &1.platform, &1.name}),
          permissions: permissions(scope, mission_id)
        }}
@@ -43,9 +53,11 @@ defmodule Cadence.Reads.MissionApps do
   end
 
   @doc "One app's row after an action."
-  @spec app(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, :app_not_found}
-  def app(%Scope{} = scope, mission_id, key) do
-    with {:ok, %{apps: apps}} <- load(scope, mission_id) do
+  @spec app(Scope.t(), binary(), binary(), HostContext.t() | nil) ::
+          {:ok, map()} | {:error, :app_not_found}
+  def app(%Scope{} = scope, mission_id, key, context \\ nil) do
+    with {:ok, %{apps: apps}} <-
+           load_at(scope, mission_id, context || HostContext.mission(mission_id)) do
       case Enum.find(apps, &(&1.key == key)) do
         nil -> {:error, :app_not_found}
         row -> {:ok, row}
@@ -85,12 +97,18 @@ defmodule Cadence.Reads.MissionApps do
   defp area(placement) when placement in [:ops_workspace, :ops_dock], do: :ops
   defp area(_administration), do: nil
 
-  defp row(scope, mission_id, %ApplicationDefinition{} = definition, installation) do
+  defp row(scope, context, %ApplicationDefinition{} = definition, installation) do
+    level = context.placement
+
     definition
     |> row(installation)
     |> Map.merge(%{
-      status: AppStatus.status(scope, definition, installation, HostContext.mission(mission_id)),
-      surfaces: surfaces(definition)
+      status: AppStatus.status(scope, definition, installation, context),
+      surfaces:
+        if(level == :mission,
+          do: surfaces(definition),
+          else: Enum.filter(surfaces(definition), &(&1.scope == level))
+        )
     })
   end
 
