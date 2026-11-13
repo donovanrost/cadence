@@ -10,7 +10,12 @@ defmodule Cadence.Management.BootIsolationTest do
     supervisor = start_supervised!(Cadence.Management.Supervisor)
 
     assert Process.whereis(Cadence.Management.Supervisor) == supervisor
-    assert Supervisor.which_children(supervisor) == []
+    # Only the in-memory password-check throttle (Accounts.AttemptLimit): no Repo, control or
+    # data services.
+    assert [{Cadence.Accounts.AttemptLimit, pid, :worker, _modules}] =
+             Supervisor.which_children(supervisor)
+
+    assert is_pid(pid)
     assert_unstarted(Cadence.Control.Supervisor)
     assert_unstarted(Cadence.Runtime.Supervisor)
   end
