@@ -851,3 +851,9 @@ configuration failure P3. The amendments to fe-ops' drafts:
       change, and history should say so (U20).
     - Open states keep their block (approve, acknowledge). An unknown state shows the evidence alone.
     - At 50: "Showing the latest 50 changes."
+  - **A booking's own confirmation isn't a provider change** (qa's find, api 11-13). When a status-only pending →
+    confirmed transition is the provider confirming the booking, it isn't listed as "…changed this pass". Domain
+    stops classifying it as a provider change at the source; api doesn't filter on field shape. When the pass
+    history shows the confirmation, it's the booking's own line: "Confirmed by Earendil Demo Ground Network at
+    02:12Z." Any other status change by the provider (for example confirmed → cancelled) is a real change and
+    stays.
