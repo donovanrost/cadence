@@ -3,10 +3,16 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.Commanding.ProcessNamespace
   alias Cadence.Control.Commanding
 
   @default_safety_poll_interval_ms 60_000
+  # A session that just attached finishes protocol recovery about a second later: the lane
+  # retries at this cadence, for at most session_recovery_wait_ms, before the safety poll.
+  @session_recovery_retry_ms 500
+  @default_session_recovery_wait_ms 30_000
   @event_prefix [:cadence, :commanding, :lane_dispatcher]
 
   @type quiescence_status ::
@@ -86,7 +92,11 @@ defmodule Cadence.Commanding.LaneDispatcher do
       reference_time_fun: Keyword.get(opts, :reference_time_fun, &DateTime.utc_now/0),
       dispatch_fun: Keyword.get(opts, :dispatch_fun, &Commanding.dispatch_queue_lane/5),
       run_on_boot?: Keyword.get(opts, :run_on_boot?, true),
+      session_recovery_wait_ms:
+        Keyword.get(opts, :session_recovery_wait_ms, @default_session_recovery_wait_ms),
       dispatch_timer: nil,
+      # {:waiting | :stalled, since} while the uplink session recovers, so each is logged once.
+      session_recovery: nil,
       released_by:
         Keyword.get_lazy(opts, :released_by, fn ->
           %{
@@ -153,6 +163,7 @@ defmodule Cadence.Commanding.LaneDispatcher do
     attempted_at = state.reference_time_fun.()
 
     emit(:dispatch_attempt, state, %{count: 1}, %{reason: reason})
+    {recovery, state} = Map.get_and_update!(state, :session_recovery, &{&1, nil})
 
     case state.dispatch_fun.(
            state.organization_id,
@@ -191,10 +202,57 @@ defmodule Cadence.Commanding.LaneDispatcher do
         {:quiescent, quiescence_summary(:waiting_for_release_target, released_count), state}
 
       {:error, reason} ->
-        emit(:dispatch_result, state, %{count: 1}, %{result: :error})
-        state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
-        {:error, %{released_count: released_count, reason: reason}, state}
+        failed_or_waiting(state, reason, released_count, {recovery, attempted_at})
     end
+  end
+
+  # Expected right after a session attaches, not a failure: retried every 500 ms and logged
+  # once at info. Past session_recovery_wait_ms it falls back to the safety poll and warns once,
+  # so a session that never recovers doesn't spin.
+  defp failed_or_waiting(
+         state,
+         {:uplink_session_blocked, :protocol_recovery_required},
+         released_count,
+         {recovery, attempted_at}
+       ) do
+    emit(:dispatch_result, state, %{count: 1}, %{result: :session_recovering})
+    since = recovery_since(recovery, attempted_at)
+
+    state =
+      if datetime_diff_ms(attempted_at, since) < state.session_recovery_wait_ms do
+        state
+        |> log_recovery(recovery, {:waiting, since}, :info, fn ->
+          "command lane #{state.queue_lane_key}: waiting, uplink session recovering its " <>
+            "protocol state; retrying every #{@session_recovery_retry_ms}ms"
+        end)
+        |> schedule_dispatch(@session_recovery_retry_ms, :session_recovery)
+      else
+        state
+        |> log_recovery(recovery, {:stalled, since}, :warning, fn ->
+          "command lane #{state.queue_lane_key}: uplink session still recovering after " <>
+            "#{div(state.session_recovery_wait_ms, 1_000)}s; retrying on the safety poll"
+        end)
+        |> schedule_dispatch(state.safety_poll_interval_ms, :safety)
+      end
+
+    {:quiescent, quiescence_summary(:waiting_for_release_target, released_count), state}
+  end
+
+  defp failed_or_waiting(state, reason, released_count, _recovery) do
+    emit(:dispatch_result, state, %{count: 1}, %{result: :error})
+    state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
+    {:error, %{released_count: released_count, reason: reason}, state}
+  end
+
+  defp recovery_since({_phase, since}, _attempted_at), do: since
+  defp recovery_since(nil, attempted_at), do: attempted_at
+
+  defp log_recovery(state, recovery, recovery, _level, _message),
+    do: %{state | session_recovery: recovery}
+
+  defp log_recovery(state, _previous, recovery, level, message) do
+    Logger.log(level, message.())
+    %{state | session_recovery: recovery}
   end
 
   defp quiescence_summary(status, released_count, next_not_before \\ nil) do

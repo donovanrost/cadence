@@ -80,6 +80,70 @@ defmodule Cadence.Commanding.LaneDispatcherTest do
     assert Process.alive?(lane_dispatcher)
   end
 
+  test "a recovering uplink session is a short wait, logged once at info, not a failure" do
+    recovering = {:error, {:uplink_session_blocked, :protocol_recovery_required}}
+    test_pid = self()
+
+    dispatch_fun =
+      dispatch_sequence([
+        recovering,
+        recovering,
+        {:ok, %{command_request_id: "command-1"}},
+        {:error, :command_queue_lane_empty}
+      ])
+
+    previous = Logger.level()
+    Logger.configure(level: :info)
+    on_exit(fn -> Logger.configure(level: previous) end)
+
+    log =
+      ExUnit.CaptureLog.capture_log([level: :info], fn ->
+        lane_dispatcher =
+          start_lane_dispatcher!(
+            dispatch_fun: fn org, mission, lane, released_by, opts ->
+              send(test_pid, :dispatch_attempt)
+              dispatch_fun.(org, mission, lane, released_by, opts)
+            end
+          )
+
+        monitor = Process.monitor(lane_dispatcher)
+
+        assert {:ok, %{status: :waiting_for_release_target}} =
+                 LaneDispatcher.drain(lane_dispatcher)
+
+        # Retried at the 500 ms cadence (not the 60 s safety poll), then released.
+        for _ <- 1..4, do: assert_receive(:dispatch_attempt, 2_000)
+        assert_receive {:DOWN, ^monitor, :process, ^lane_dispatcher, :normal}, 2_000
+      end)
+
+    assert length(Regex.scan(~r/uplink session recovering its protocol state/, log)) == 1
+  end
+
+  test "an uplink session that never recovers falls back to the safety poll and warns once" do
+    test_pid = self()
+
+    lane_dispatcher =
+      start_lane_dispatcher!(
+        session_recovery_wait_ms: 700,
+        dispatch_fun: fn _org, _mission, _lane, _released_by, _opts ->
+          send(test_pid, :dispatch_attempt)
+          {:error, {:uplink_session_blocked, :protocol_recovery_required}}
+        end
+      )
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:ok, %{status: :waiting_for_release_target}} =
+                 LaneDispatcher.drain(lane_dispatcher)
+
+        # 0, 500 and 1,000 ms; past the 700 ms bound it waits for the 60 s safety poll.
+        for _ <- 1..3, do: assert_receive(:dispatch_attempt, 2_000)
+        refute_receive :dispatch_attempt, 1_000
+      end)
+
+    assert length(Regex.scan(~r/uplink session still recovering after/, log)) == 1
+  end
+
   defp start_lane_dispatcher!(opts) do
     suffix = System.unique_integer([:positive]) |> Integer.to_string()
 
