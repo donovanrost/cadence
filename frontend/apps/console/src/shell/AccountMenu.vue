@@ -80,8 +80,9 @@ const itemClass =
       >
       <template v-if="eligible">
         <template v-if="admin.active.value">
-          <!-- The console admin area is §11 L7; until it ships, the existing one. -->
-          <a href="/admin" :class="itemClass">Admin area ↗</a>
+          <RouterLink :to="{ name: 'admin' }" :class="itemClass" @click="close"
+            >Admin area</RouterLink
+          >
           <button
             type="button"
             :class="[itemClass, 'cursor-pointer border-0 bg-transparent text-left']"

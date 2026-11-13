@@ -48,8 +48,7 @@ async function leave() {
       id="admin-mode-menu"
       class="absolute top-full right-0 z-30 min-w-[220px] border border-line bg-raised py-1.5"
     >
-      <!-- The console admin area is §11 L7; until it ships, the existing one. -->
-      <a href="/admin" :class="itemClass" @click="close">Admin area ↗</a>
+      <RouterLink :to="{ name: 'admin' }" :class="itemClass" @click="close">Admin area</RouterLink>
       <button type="button" :class="itemClass" @click="leave">Leave admin mode</button>
     </div>
   </div>
