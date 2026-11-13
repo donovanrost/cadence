@@ -48,6 +48,22 @@ defmodule Cadence.Dashboards.PublishReadinessTest do
            ] = validation.errors
   end
 
+  # 2026-11-13 (lead, qa): every seeded dashboard with a time-series widget failed readiness,
+  # because the managed source declared no native decimation and history samples decimated.
+  test "a telemetry time series publishes on the default managed source (native decimation)" do
+    document = load_fixture!("partial_data_time_series.v1.json")
+
+    assert DataSources.default_managed_data_source().capabilities.native_decimation? == true
+
+    assert %{valid?: true, errors: []} =
+             Dashboards.validate_publish_readiness(
+               document.organization_id,
+               document.mission_id,
+               document,
+               registry_opts()
+             )
+  end
+
   test "blocks publish when physical source capabilities cannot satisfy widget sampling" do
     document = load_fixture!("value_tile_latest.v1.json")
     %DataSource{} = telemetry_source = DataSources.default_managed_data_source()

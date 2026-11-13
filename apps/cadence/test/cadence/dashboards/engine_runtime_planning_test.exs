@@ -411,13 +411,35 @@ defmodule Cadence.Dashboards.EngineRuntimePlanningTest do
   test "plans temporal limits overlays while warning on unsupported telemetry sampling" do
     document = load_fixture!("time_series_with_limits.v1.json")
 
+    # A telemetry source without native decimation (the managed default has it since 2026-11-13).
+    managed = DataSources.default_managed_data_source()
+
+    no_decimation = %{
+      managed
+      | capabilities: Map.put(managed.capabilities, :native_decimation?, false)
+    }
+
     result =
-      Engine.plan(%DashboardResolveRequest{
-        organization_id: document.organization_id,
-        mission_id: document.mission_id,
-        dashboard_id: document.dashboard_id,
-        document: document
-      })
+      Engine.plan(
+        %DashboardResolveRequest{
+          organization_id: document.organization_id,
+          mission_id: document.mission_id,
+          dashboard_id: document.dashboard_id,
+          document: document
+        },
+        data_sources: [
+          no_decimation,
+          DataSources.default_limits_data_source(),
+          DataSources.default_operational_observables_data_source(),
+          DataSources.default_events_data_source()
+        ],
+        data_bindings: [
+          DataSources.default_flight_telemetry_binding(),
+          DataSources.default_flight_limits_binding(),
+          DataSources.default_flight_operational_observables_binding(),
+          DataSources.default_flight_events_binding()
+        ]
+      )
 
     limits_analysis_request =
       request_by_source_product(result.planned_source_requests, :limits, :analysis_buckets)

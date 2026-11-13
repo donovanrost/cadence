@@ -242,7 +242,8 @@ defmodule Cadence.Dashboards.SourceRegistryFixtures do
           bounded_history?: true,
           latest?: true,
           watermarks?: true,
-          native_decimation?: true
+          # The variant differs from the managed default (which decimates natively).
+          native_decimation?: false
         }
     }
   end
