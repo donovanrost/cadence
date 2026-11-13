@@ -38,6 +38,12 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "profiles", title: "Profiles" },
   },
   {
+    path: "setup/profiles/new",
+    name: "setup.profile.new",
+    component: () => import("@/features/profiles/ProfileNewScreen.vue"),
+    meta: { mode: "setup", nav: "profiles", title: "New profile", board: "Profile (S4)" },
+  },
+  {
     path: "setup/profiles/:profileId/:section?",
     name: "setup.profile",
     component: () => import("@/features/profiles/ProfileScreen.vue"),

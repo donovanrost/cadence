@@ -31,7 +31,7 @@ export const schemaFieldReader = object({
 export const kindSchemaReader = object({ kind: token, fields: array(schemaFieldReader, 500) });
 export type KindSchema = Decoded<typeof kindSchemaReader>;
 export type SchemaField = Decoded<typeof schemaFieldReader>;
-export type EditableKind = "ground_station" | "transport";
+export type EditableKind = "ground_station" | "transport" | "spacecraft_profile";
 
 export function fetchKindSchema(
   key: Readonly<{ missionId: string; kind: EditableKind }>,

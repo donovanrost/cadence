@@ -2,8 +2,8 @@
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { useMissionScope } from "@/shell";
-import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, plural } from "@/ui";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, plural } from "@/ui";
 import ProfilesTable from "./ProfilesTable.vue";
 import { fetchProfiles } from "./api.ts";
 
@@ -12,6 +12,9 @@ const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const { state, refetch } = useRemoteQuery(missionId, fetchProfiles);
 useMissionInvalidation(missionId, ["spacecraft"], refetch);
+const session = useSession();
+/** Profile.md: read-only without config.stage (same gate as the profile editors). */
+const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
 
 const title = computed(() =>
   state.value.status === "ready" ? plural(state.value.value.length, "profile") : "Profiles",
@@ -26,6 +29,9 @@ const title = computed(() =>
           >A profile holds the configuration a block of spacecraft shares.</span
         >
       </template>
+      <ApButton v-if="canStage" variant="primary" :to="{ name: 'setup.profile.new' }"
+        >New profile</ApButton
+      >
     </ApPageHeader>
     <ApPanel index="A1" title="Profiles" flush>
       <ApRemote :state="state" loading-label="Loading profiles…" @retry="refetch">

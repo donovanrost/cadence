@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import { ApBreadcrumb, ApPageHeader, ApRemote, ApTabLinks } from "@/ui";
+import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTabLinks } from "@/ui";
 import ProfileHistoryPanel from "./ProfileHistoryPanel.vue";
 import ProfileRoutingPanel from "./ProfileRoutingPanel.vue";
 import SchemaSectionPanel from "./SchemaSectionPanel.vue";
@@ -71,6 +71,11 @@ const crumbs = computed(() => [
       <template v-if="state.status === 'ready'" #subtitle>
         <span class="text-md text-text-3">{{ profileSubline(state.value) }}</span>
       </template>
+      <ApButton
+        v-if="canStage && profileId"
+        :to="{ name: 'setup.profile.new', query: { from: profileId } }"
+        >Duplicate as new profile</ApButton
+      >
     </ApPageHeader>
     <ApRemote :state="state" loading-label="Loading profile…" @retry="refetch">
       <template #default="{ value }">
