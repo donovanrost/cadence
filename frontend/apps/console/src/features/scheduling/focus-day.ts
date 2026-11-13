@@ -95,3 +95,15 @@ export function focusDay(
     longestGapSeconds: server ? server.seconds : clientMax,
   };
 }
+
+/**
+ * S4 effect on the focused spacecraft's longest gap: "Longest gap 6h10 → 3h05" (domain c38bb5de).
+ * Null unless both numbers are known and the pass shortens it; a measure, not a verdict.
+ */
+export function gapEffect(
+  before: number | null | undefined,
+  after: number | null | undefined,
+): string | null {
+  if (before === null || before === undefined || after === null || after === undefined) return null;
+  return after < before ? `Longest gap ${gapText(before)} → ${gapText(after)}` : null;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { focusDay, gapText } from "./focus-day.ts";
+import { focusDay, gapEffect, gapText } from "./focus-day.ts";
 
 const day = { from: Date.parse("2026-11-13T00:00:00Z"), to: Date.parse("2026-11-14T00:00:00Z") };
 const station = { ref: "svb", id: "gs_svb", code: "SVB", name: "Svalbard" };
@@ -87,6 +87,13 @@ describe("K1 C · focused spacecraft day", () => {
     expect(f.gapLimitSeconds).toBe(36_000);
     expect(f.gaps.filter((g) => g.longest).map((g) => g.text)).toEqual(["5h50"]);
     expect(f.uplink).toEqual({ have: 1, need: null });
+  });
+
+  it("says how a window shortens the longest gap, and nothing when it doesn't or isn't known", () => {
+    expect(gapEffect(22_200, 11_100)).toBe("Longest gap 6h10 → 3h05");
+    expect(gapEffect(11_100, 11_100)).toBeNull();
+    expect(gapEffect(undefined, 3_600)).toBeNull();
+    expect(gapEffect(3_600, null)).toBeNull();
   });
 
   it("writes short gaps in minutes", () => {
