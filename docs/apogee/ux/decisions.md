@@ -828,12 +828,12 @@ configuration failure P3. The amendments to fe-ops' drafts:
   Technical details.
 - **After the pass has flown** (lead 11-13: these leave Now).
   - **An unapproved change expires.** On the pass detail its block keeps the Before → After table, read-only,
-    with the off tag `EXPIRED` and the line "Northlight's change wasn't decided before the pass flew, so it
+    with the off tag `EXPIRED` and the line "Northlight's change wasn't decided before the pass ended, so it
     expired." It doesn't say whether Northlight applied it (U20); the pass's own times show what flew. There are
     no buttons.
-    - 409 when a decision races the pass: "The pass has flown, so this change can't be decided any more." The
+    - 409 when a decision races the pass: "The pass has ended, so this change can't be decided any more." The
       block then shows the expired state.
-    - Pass history line: "Northlight's change expired: not decided before the pass flew."
+    - Pass history line: "Not decided: the pass ended first." (domain's words, lead 11-13)
   - **An unacknowledged change stays acknowledgeable** in the pass history. Its entry shows the caution tag
     `NOT ACKNOWLEDGED` and "Northlight changed this pass: AOS 03:10Z → 03:12Z · Antenna 2 → 4." (the same
     evidence rules), plus `Acknowledge` with a required reason (placeholder "What you checked"). After that:
@@ -845,7 +845,7 @@ configuration failure P3. The amendments to fe-ops' drafts:
       operator" (U29).
     - policy_accepted (`by` null): "Accepted by the mission's policy at 02:31Z."
     - superseded: "Replaced by a newer change."
-    - expired: "Expired: not decided before the pass flew."
+    - expired: "Not decided: the pass ended first."
     - configuration_failure / apply_failed: "Cadence couldn't apply it." (crit mark).
     - observed: no outcome line and no tag; the evidence alone. It's shown, not hidden, because the pass did
       change, and history should say so (U20).
