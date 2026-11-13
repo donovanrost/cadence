@@ -4,7 +4,7 @@ import type { SessionOrganization } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApPanel } from "@/ui";
 import AccountEditForm from "./AccountEditForm.vue";
-import AccountMissions from "./AccountMissions.vue";
+import AccountGrants from "./AccountGrants.vue";
 import AccountStatusLine from "./AccountStatusLine.vue";
 import RemoveAccount from "./RemoveAccount.vue";
 import { testAccount, testSentence, type ProviderAccount } from "./api.ts";
@@ -65,7 +65,12 @@ async function test() {
           @cancel="editing = false"
         />
       </div>
-      <AccountMissions :organization="organization" :missions="account.missions" />
+      <AccountGrants
+        :organization="organization"
+        :account-id="account.id"
+        :missions="account.missions"
+        @changed="emit('changed')"
+      />
       <details>
         <summary class="ap-label cursor-pointer">Technical details</summary>
         <p class="m-0 mt-2 font-mono text-sm text-text-3">{{ account.id }}</p>
