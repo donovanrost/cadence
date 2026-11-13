@@ -293,7 +293,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 | L2 | Requirement templates (`/ops/requirement-templates`): pause, activate, close | Lifecycle verbs (create/edit exist) | api + fe-setup → `setup.contact-planning.template` | open |
 | L3 | Fleet planning policy (`/ops/planning/policy`): automation grant issue/revoke | Grant verbs (policy save/decide exist) | api + fe-setup → `setup.contact-planning.policy` | open |
 | L4 | Mission creation (`/missions/new`) | Console endpoint + screen (`org.missions` links out today) | api (endpoint; `POST /api/organizations/:id/missions` exists outside the console API) + fe-setup → `org.missions.new` | open |
-| L5 | Sign-in (`/sign-in`), invitation acceptance (`/invitations/:token`), no-organization landing | Still LiveView; the SPA redirects to them | lead (SPA auth screens) + api-ops (JSON sign-in / invitation-accept with the attempt limit, 2ba5cd57) | open. ux: `/invitations/:token` stays server-rendered for people not signed in (a plain controller page or the SPA, not LiveView) |
+| L5 | Sign-in (`/sign-in`), invitation acceptance (`/invitations/:token`), no-organization landing | Still LiveView | **fe-ops** (screens, handed over by lead 11-13; architecture: public routes `/console/sign-in`, `/console/invitations/:token`, `/console/no-organization` outside SessionProvider) + api-ops (JSON under `/api/console/v1/auth`, attempt limit; serves the SPA unauthenticated at those paths and 302s the old ones) | open (fe-ops building on agreed shapes; api-ops after L6) |
 | L6 | Admin mode step-up (`/admin-mode`) | Enter/leave admin mode | api-ops (endpoint) + lead (shell) | open |
 | L7 | Platform admin (`/admin/**`): create org, invite into any org, service identity, runtime diagnostics | Whole area | **User (DECISIONS #75): console admin area behind admin mode.** api (admin endpoints) + fe-setup (screens); needs L6 admin mode | open |
 | L8 | Dashboards (spec `ux/Dashboards.md`; `/ops/dashboards/**`, shares, snapshots, playlists, export) | Everything | **User (#75, reverses #11): rebuild in the console, starting now.** Owner: **dashboards** (w0R:pG, brief `briefs/dashboards.md`). Plans first, reports to lead; endpoints via api/api-ops, layout via ux | in progress (planning) |
@@ -318,8 +318,8 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 - **api-ops:** qa #51 → M26 → L6 admin-mode step-up → L5 SPA sign-in / invitation accept (JSON, with the attempt limit) → L7 admin endpoints → L11 data-source writes → L12 mission-provider writes → L13 provider-account grants.
 - **domain:** ~~#74~~, ~~booking fixes~~, ~~dashboards StatelessAuthoring + Q1~~ (done) → ~~XTCE alarm-range importer bug~~ (050dfacf) → L22 (1)–(4) → L15 single bookings → dashboards Q6 (playlist/library update/delete, snapshot delete) → **L9 B: change-set kinds for app config** (limits, derived telemetry, decom bindings; DECISIONS #77; plan to the director first) (search, reserve, cancel outside plans; reuse the contact workflow).
 - **fe-setup:** each screen as its endpoint lands: L21, L9 host frame + Setup › Apps routes (`ux/AppSurfaces.md`) → L10 → L19, L4, L2/L3, L17 + L22, L18, L11–L13, L7.
-- **fe-ops:** L14 decisions UI, L15 single bookings in `ops.contacts`, L20 empty-state links.
-- **lead:** L5 SPA auth screens (sign-in, invitation accept, no-organization), L6 admin-mode step-up in the shell, the switcher footer for L21.
+- **fe-ops:** L5 SPA auth screens (from lead), L14 decisions UI, ~~L15 single bookings UI~~ (9b71bbc5, behind a flag), ~~L20 empty-state links~~ (5d7e882d).
+- **lead:** ~~L6 admin-mode client~~ (3b819ce1), ~~L21 switcher footer~~ (0bb33f80); L5 screens handed to fe-ops (lead owns the architecture).
 - **dashboards:** L8 (plan 6dc7421b approved; slices in §11e).
 
 ### 11e. L8 dashboards: endpoint routing (lead, 11-13; plan `plans/dashboards.md`, DECISIONS #76)
