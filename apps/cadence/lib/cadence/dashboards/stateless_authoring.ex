@@ -9,7 +9,9 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
 
   `commands` is a list of `%{"event" => event, "input" => map}`, at most #{256}. The first
   command that fails is reported as `{:error, {:command, index, code, field}}`; more than the
-  cap is `{:error, :too_many_commands}` (the client says "Save to keep going").
+  cap is `{:error, :too_many_commands}` (the client says "Save to keep going"). A save, copy or
+  restore that fails publish readiness is `{:error, {:not_ready, [%{placement_id, code,
+  message}]}}`.
   """
 
   alias Cadence.Accounts
@@ -24,6 +26,8 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
     DocumentCodec,
     Documents,
     DocumentStore,
+    PublishReadinessPresentation,
+    ValidationResult,
     Version,
     VersionDiff
   }
@@ -332,6 +336,12 @@ defmodule Cadence.Dashboards.StatelessAuthoring do
   defp field(_error), do: nil
 
   defp normalize({:error, :dashboard_not_found}), do: {:error, :not_found}
+
+  # A save is a publish, so a readiness failure names what to fix (api D9: the editor marks
+  # failing placements).
+  defp normalize({:error, {:invalid_dashboard_document, %ValidationResult{errors: errors}}}),
+    do: {:error, {:not_ready, PublishReadinessPresentation.editor_issues(errors)}}
+
   defp normalize({:error, {:dashboard_version_conflict, _}}), do: {:error, :conflict}
   defp normalize({:ok, _} = ok), do: ok
 

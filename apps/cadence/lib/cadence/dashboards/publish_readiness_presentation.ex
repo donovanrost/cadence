@@ -29,6 +29,22 @@ defmodule Cadence.Dashboards.PublishReadinessPresentation do
     }
   end
 
+  @doc """
+  Readiness errors as the console editor marks them (api D9): `[%{placement_id, code, message}]`,
+  `placement_id` nil for a dashboard-wide issue.
+  """
+  def editor_issues(errors) when is_list(errors) do
+    Enum.map(errors, fn %{code: code} = issue ->
+      details = Map.get(issue, :details) || %{}
+
+      %{
+        placement_id: details[:placement_id] || details["placement_id"],
+        code: code,
+        message: issue_message(issue)
+      }
+    end)
+  end
+
   def issue_message(%{code: :unsupported_widget_frame_contract, details: details})
       when is_map(details) do
     cond do
