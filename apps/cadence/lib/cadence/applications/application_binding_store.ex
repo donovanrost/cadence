@@ -48,6 +48,7 @@ defmodule Cadence.Applications.ApplicationBindingStore do
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
     |> maybe_filter(:spacecraft_id, Keyword.get(opts, :spacecraft_id))
+    |> maybe_filter_in(:spacecraft_id, Keyword.get(opts, :spacecraft_ids))
     |> maybe_filter(
       :application_key,
       normalize_optional_application_key(Keyword.get(opts, :application_key))
@@ -122,6 +123,11 @@ defmodule Cadence.Applications.ApplicationBindingStore do
       end)
     end)
   end
+
+  defp maybe_filter_in(query, _field, nil), do: query
+
+  defp maybe_filter_in(query, field, values) when is_list(values),
+    do: where(query, [row], field(row, ^field) in ^values)
 
   defp maybe_filter(query, _field, nil), do: query
 

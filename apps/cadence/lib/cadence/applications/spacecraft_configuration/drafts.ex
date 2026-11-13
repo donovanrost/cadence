@@ -71,6 +71,21 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     |> Repo.one()
   end
 
+  @doc "`latest/3` for many spacecraft in one query: `%{spacecraft_id => row}` (absent if none)."
+  def latest_many(_organization_id, _mission_id, []), do: %{}
+
+  def latest_many(organization_id, mission_id, spacecraft_ids) when is_list(spacecraft_ids) do
+    from(row in ConfigurationRevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^spacecraft_ids,
+      distinct: row.spacecraft_id,
+      order_by: [asc: row.spacecraft_id, desc: row.version]
+    )
+    |> Repo.all()
+    |> Map.new(&{&1.spacecraft_id, &1})
+  end
+
   @doc "Catalog references from each spacecraft’s latest saved configuration in this mission."
   def catalog_usage_entries(organization_id, mission_id) do
     latest =

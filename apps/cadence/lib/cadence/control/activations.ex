@@ -139,6 +139,23 @@ defmodule Cadence.Control.Activations do
         _ = fail_execution(execution_row, reason, now(opts))
         {:error, reason}
     end
+  rescue
+    # The database dropped mid-way (a connection closed or timed out). Each step is idempotent, so
+    # the execution is recorded failed and can be resumed; never left silently in progress.
+    exception in [DBConnection.ConnectionError, Postgrex.Error] ->
+      _ = record_interrupted(execution_row, exception, opts)
+      {:error, :activation_execution_interrupted}
+  end
+
+  defp record_interrupted(execution_row, exception, opts) do
+    fail_execution(
+      execution_row,
+      {:activation_execution_interrupted, Exception.message(exception)},
+      now(opts)
+    )
+  rescue
+    # Still unreachable: the row stays in progress, which a resume treats as stalled.
+    _exception in [DBConnection.ConnectionError, Postgrex.Error] -> :error
   end
 
   defp begin_execution(approved_activation, opts, started_at) do
@@ -194,11 +211,16 @@ defmodule Cadence.Control.Activations do
     execution_row
     |> ActivationExecutionRow.completion_changeset(%{
       status: :failed,
-      error_document: %{"reason" => inspect(reason)},
+      error_document: %{"reason" => inspect(reason), "code" => error_code(reason)},
       completed_at: completed_at
     })
     |> Repo.update()
   end
+
+  # A stable code for the console (the reason's atom), beside the inspected reason.
+  defp error_code(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp error_code({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
+  defp error_code(_reason), do: nil
 
   defp exact_approved_content(approved_activation, binding_set) do
     if ContentHash.term_sha256(binding_set) == approved_activation.binding_set_content_sha256 do

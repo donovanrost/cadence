@@ -154,6 +154,7 @@ defmodule Cadence.Applications.PacketBindings do
     )
     |> maybe_filter_application(Keyword.get(opts, :application_key))
     |> maybe_filter_enabled(Keyword.get(opts, :enabled))
+    |> maybe_filter_spacecraft_ids(Keyword.get(opts, :spacecraft_ids))
     |> order_by([row], asc: row.application_key, asc: row.spacecraft_id, asc: row.input_id)
     |> Repo.all()
     |> hydrate_configurations()
@@ -794,31 +795,52 @@ defmodule Cadence.Applications.PacketBindings do
     end
   end
 
-  defp hydrate_configurations(rows), do: Enum.map(rows, &hydrate_configuration/1)
+  defp hydrate_configuration(%ConfigurationRow{} = row),
+    do: row |> List.wrap() |> hydrate_configurations() |> hd()
 
-  defp hydrate_configuration(%ConfigurationRow{} = row) do
+  # Two queries for any number of configurations (bindings, then their resources), each
+  # configuration's bindings in (apid, packet_name) order and resources in (offset_bits,
+  # resource_id) order, as one configuration at a time loaded them.
+  defp hydrate_configurations([]), do: []
+
+  defp hydrate_configurations(rows) do
+    configuration_ids = Enum.map(rows, & &1.packet_binding_configuration_id)
+
     binding_rows =
       BindingRow
-      |> where(
-        [binding],
-        binding.packet_binding_configuration_id == ^row.packet_binding_configuration_id
+      |> where([binding], binding.packet_binding_configuration_id in ^configuration_ids)
+      |> order_by([binding],
+        asc: binding.packet_binding_configuration_id,
+        asc: binding.apid,
+        asc: binding.packet_name
       )
-      |> order_by([binding], asc: binding.apid, asc: binding.packet_name)
       |> Repo.all()
 
-    resources =
-      if binding_rows == [] do
-        %{}
-      else
-        binding_ids = Enum.map(binding_rows, & &1.packet_binding_id)
+    resources = resources_by_binding(binding_rows)
+    bindings = Enum.group_by(binding_rows, & &1.packet_binding_configuration_id)
 
-        ResourceRow
-        |> where([resource], resource.packet_binding_id in ^binding_ids)
-        |> order_by([resource], asc: resource.offset_bits, asc: resource.resource_id)
-        |> Repo.all()
-        |> Enum.group_by(& &1.packet_binding_id)
-      end
+    Enum.map(rows, fn row ->
+      configuration_from_row(
+        row,
+        Map.get(bindings, row.packet_binding_configuration_id, []),
+        resources
+      )
+    end)
+  end
 
+  defp resources_by_binding([]), do: %{}
+
+  defp resources_by_binding(binding_rows) do
+    binding_ids = Enum.map(binding_rows, & &1.packet_binding_id)
+
+    ResourceRow
+    |> where([resource], resource.packet_binding_id in ^binding_ids)
+    |> order_by([resource], asc: resource.offset_bits, asc: resource.resource_id)
+    |> Repo.all()
+    |> Enum.group_by(& &1.packet_binding_id)
+  end
+
+  defp configuration_from_row(row, binding_rows, resources) do
     PacketBindingConfiguration.new(%{
       packet_binding_configuration_id: row.packet_binding_configuration_id,
       organization_id: row.organization_id,
@@ -882,6 +904,11 @@ defmodule Cadence.Applications.PacketBindings do
 
   defp maybe_filter_application(query, application_key),
     do: where(query, [row], row.application_key == ^application_key)
+
+  defp maybe_filter_spacecraft_ids(query, nil), do: query
+
+  defp maybe_filter_spacecraft_ids(query, ids) when is_list(ids),
+    do: where(query, [row], row.spacecraft_id in ^ids)
 
   defp maybe_filter_enabled(query, nil), do: query
   defp maybe_filter_enabled(query, enabled), do: where(query, [row], row.enabled == ^enabled)
