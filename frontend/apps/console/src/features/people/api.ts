@@ -128,3 +128,31 @@ export function keyAgeWarning(
   const days = Math.floor((now.getTime() - Date.parse(keyCreatedAt)) / 86_400_000);
   return days > policyDays ? `Key is ${days} days old; rotation policy is ${policyDays}.` : null;
 }
+
+/**
+ * An invitation's status as a tag (qa: accepted and withdrawn read "Pending"). Exhaustive: a new
+ * status won't compile until it has words. `revoked` is an admin's withdraw (U32 "Withdrawn").
+ */
+export function invitationTag(status: Invitation["status"]): {
+  state: "neutral" | "nominal" | "caution" | "off";
+  label: string;
+} {
+  if (typeof status !== "string") return { state: "off", label: status.unrecognized };
+  switch (status) {
+    case "pending":
+      return { state: "neutral", label: "Pending" };
+    case "accepted":
+      return { state: "nominal", label: "Accepted" };
+    case "expired":
+      return { state: "caution", label: "Expired" };
+    case "declined":
+      return { state: "off", label: "Declined" };
+    case "revoked":
+    case "withdrawn":
+      return { state: "off", label: "Withdrawn" };
+    default: {
+      const never: never = status;
+      return never;
+    }
+  }
+}

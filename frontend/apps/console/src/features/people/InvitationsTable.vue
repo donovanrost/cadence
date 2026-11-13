@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ApTable, ApTag, formatShort, type ApColumn } from "@/ui";
-import { roleLabel, type Invitation } from "./api.ts";
+import { invitationTag, roleLabel, type Invitation } from "./api.ts";
 
 /** Invitations tab. */
 defineProps<{ rows: readonly Invitation[] }>();
@@ -26,9 +26,7 @@ const columns: readonly ApColumn[] = [
     <template #cell-by="{ row }">{{ row.invited_by?.name ?? "—" }}</template>
     <template #cell-sent="{ row }">{{ formatShort(new Date(row.sent_at)) }}</template>
     <template #cell-status="{ row }">
-      <ApTag v-if="row.status === 'expired'" state="caution" label="Expired" />
-      <ApTag v-else-if="row.status === 'declined'" state="off" label="Declined" />
-      <span v-else class="text-text-3">Pending</span>
+      <ApTag :state="invitationTag(row.status).state" :label="invitationTag(row.status).label" />
     </template>
   </ApTable>
 </template>
