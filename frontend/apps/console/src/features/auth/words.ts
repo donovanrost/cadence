@@ -41,7 +41,7 @@ export function invitationView(i: Invitation, signedInAs: string | null): Invita
       return { h1: `Join ${org}?`, callout: null };
     case "signed_in_other":
       return {
-        h1: "Different account",
+        h1: "Invitation for another account",
         callout: {
           tone: "caution",
           text: `This invitation is for ${i.email ?? "another account"}.${signedInAs ? ` You're signed in as ${signedInAs}.` : ""}`,
