@@ -72,6 +72,42 @@ gap." / `Request opportunity`. Fix proposals come from the server (M22); without
 shows the problem and `Open in Plan`. **Empty:** nominal callout "No conflicts or gaps in the next
 6 h." **Unavailable (no M22):** hide D4 and let D3 take the width.
 
+## Book a pass (single bookings outside a plan, §11 L15; fe-ops builds, domain `SingleBookings`)
+- **Entries:**
+  - The Contacts header gets the secondary `Book a pass` (with `operate_mission`).
+  - D4 coverage-gap rows offer `Book a pass`, prefilled with the spacecraft and the gap window.
+  - Investigate › Passes P3's empty state links to the same sheet.
+- **Sheet** (ApSheet `wide`), titled `Book a pass`:
+  1. **Search:** Spacecraft (select, prefilled) · Window (ApTimeRange, default the next 24 h) · Direction
+     (segmented `Downlink` / `With uplink`) · Stations (`Any`, or chips). Primary `Search`.
+  2. **Offers**, sorted by AOS. Each row: station code + name · provider · `03:10Z–03:19Z` (§4) · `9m 12s` · `UP`
+     tag when uplink-capable · the offer's countdown `EXPIRES T−14:32` (the 15-min token; caution under 2 min).
+     - An offer that overlaps a booked pass of the same spacecraft or antenna is shown disabled, with "Overlaps
+       EARENDIL-312's KIR 03:00Z pass."
+     - Empty: "No passes for EARENDIL-312 between 03:00Z and 09:00Z."
+     - An expired offer row turns off with "Offer expired. Search again." and can't be chosen.
+  3. **Confirm** (under the chosen row): "Book EARENDIL-312 · SVA 03:10Z–03:19Z with Northlight, with an uplink."
+     plus an optional note `Why`. Primary `Book this pass`, with the caption "Outside a plan: it doesn't count
+     toward contact rules, and plans work around it."
+- **Outcomes** (in the sheet; then the bar appears in D3 and D2 opens on it):
+  - Confirmed: nominal "Booked. Northlight confirmed SVA 03:10Z (ref NL-48213)."
+  - Requested: "Requested. Waiting for Northlight to confirm." The bar shows as requested.
+  - Unconfirmed: caution "Northlight didn't say whether it's booked. It's marked unconfirmed; resolve it on the
+    pass." (U30/U32).
+  - Rejected: crit "Northlight rejected it: <reason words, K1 table>." The offers stay so you can pick another.
+  - Unclear (network): caution "It's unclear whether it was booked." with `Try again`. Reserving is idempotent,
+    so the button says "it won't book twice" in its caption.
+- **In D2 and D3:** off-plan bookings carry the tag `OFF-PLAN`. D2 adds "Booked outside a plan by Mira K. at
+  02:10Z · doesn't count toward contact rules."
+- **Release** (same action and label as plan bookings, so there's one verb):
+  - Who: for an off-plan booking, its booker or an org admin. Others see "Mira K. or an org admin can release
+    this booking." (todo(authz) per lead).
+  - Confirm (danger): "Release EARENDIL-312 · SVA 03:10Z? Cadence asks Northlight to cancel it."
+  - 409 `booking_changed`: caution "This booking changed since you opened it. Review it, then release again." D2
+    reloads.
+  - Outcome: "Releasing… asking Northlight", then "Released. Northlight confirmed.", or the provider's refusal
+    in words.
+
 ## States
 Loading `LOADING…` per pane. Live: bars move along (the now-line advances; the axis scrolls once a
 minute), state changes apply in place; a newly lost contact flashes once. No stations configured:
