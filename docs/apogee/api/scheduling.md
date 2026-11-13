@@ -285,6 +285,28 @@ provider failed or lost after they were placed. Header example: "booking · `con
 `requested`"; bookingStopped: "`sent` requests went out; `never_sent` didn't". It changes with
 `contact_plans` invalidations (contacts.md S10).
 
+Each of plan detail's `passes[]` carries `booking` (lead, K1 8e): `{state, reason, at}`, or `null`
+when the approved version doesn't book that pass (and for every pass before approval). It is
+joined on `snapshot_id` within the approved version only. `state` is `confirmed | uncertain |
+rejected | failed | never_sent`, and per-pass states add up to `execution`'s counts (there's no
+`sent` state: `sent` is the umbrella of the first four). `failed` = the provider failed or lost a
+placed booking; `never_sent` = waiting, sending, or failed before the provider call. `reason` is
+`sending` while the provider call is in flight, else a short code from the last error
+(`provider_timeout`, `rejected`, `snapshot_expired`, …), or `null`. `at` is when the booking last
+changed. K1 draws Requested → Confirmed / Rejected per bar from it; rejected passes become Demand
+rows.
+
+`booking` also carries (ux ScheduleFlow f05d68e9 'K1 booking reasons'): `detail` (the provider's
+own words, e.g. "Station full", or `null`), `retryable` (`true | false`, `null` when the provider
+didn't say), `retry_after_seconds` (or `null`), and `resolved: {by {kind, id, name}, at} | null`
+for an operator's resolution (U29: not booked, rejected or not sent, and "Mark booked" on a
+confirmed pass). Older resolutions predate `resolved` and read `null`. Provider categories
+(`reason`): `no_capacity`, `conflict`, `invalid_request` (rejected); `provider_unavailable`
+(failed); `authentication_failed`, `authorization_failed`, `unsupported_capability`,
+`not_found`, `provider_not_ready`, `rate_limited`, `known_timeout`, `ambiguous_outcome`,
+`malformed_response`, `provider_error` (uncertain). A status-path rejection carries the
+provider's status reason, else the raw status (`rejected`, `terminated_early`).
+
 Plan detail also carries the day's **repair chain** (qa #30): `chain: [{id, version}]` (the root
 plan first, then each applied repair in order; versions are the approved ones) and
 `chain_head`: the **plan id as a bare string** (not `{id, version}`), naming the plan a new

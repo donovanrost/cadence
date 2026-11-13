@@ -67,6 +67,8 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
     assert %{"chain" => [%{"id" => ^plan_id}], "chain_head" => ^plan_id} = detail
     # A draft hasn't executed: no execution summary yet.
     assert detail["execution"] == nil
+    # ...and no pass has a booking yet (K1 8e).
+    assert [%{"booking" => nil}] = detail["passes"]
     assert is_binary(detail["created_at"]) and is_binary(detail["version_created_at"])
     assert %{"kind" => "user", "name" => name} = detail["author"]
     assert name == c.user.display_name

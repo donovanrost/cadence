@@ -6,6 +6,7 @@ defmodule Cadence.Control.PlanConfirmation do
   say which passes wait on which provider instead of guessing from reservation states.
   """
 
+  alias Cadence.Accounts
   alias Cadence.Control.Contacts, as: ControlContacts
   alias Cadence.GroundNetworks.MissionProviders
   alias Cadence.Management.Contacts, as: ManagementContacts
@@ -24,11 +25,13 @@ defmodule Cadence.Control.PlanConfirmation do
 
   @doc """
   Plan detail's execution fields from one read of the approved version's items:
-  `%{unconfirmed: unconfirmed/4's value, execution: execution summary | nil}`.
+  `%{unconfirmed: unconfirmed/4's value, execution: execution summary | nil, bookings:
+  bookings/1's map}` (`bookings` is `%{}` before the plan is approved).
   """
   @spec detail(binary(), binary(), binary(), keyword()) :: %{
           unconfirmed: map() | nil,
-          execution: map() | nil
+          execution: map() | nil,
+          bookings: %{binary() => map()}
         }
   def detail(organization_id, mission_id, plan_id, opts \\ []) do
     case ManagementContacts.fetch_approved_plan(organization_id, mission_id, plan_id) do
@@ -43,11 +46,12 @@ defmodule Cadence.Control.PlanConfirmation do
 
         %{
           unconfirmed: unconfirmed_of(organization_id, mission_id, items, opts),
-          execution: execution(items)
+          execution: execution(items),
+          bookings: bookings(items, resolver_names(items))
         }
 
       _not_approved ->
-        %{unconfirmed: nil, execution: nil}
+        %{unconfirmed: nil, execution: nil, bookings: %{}}
     end
   end
 
@@ -72,9 +76,8 @@ defmodule Cadence.Control.PlanConfirmation do
   def execution([]), do: nil
 
   def execution(items) do
-    placed? = &(is_binary(&1.provider_reservation_id) and &1.provider_reservation_id != "")
     count = fn state -> Enum.count(items, &(&1.lifecycle_state == state)) end
-    failed = Enum.count(items, &(&1.lifecycle_state == :failed and placed?.(&1)))
+    failed = Enum.count(items, &(&1.lifecycle_state == :failed and placed?(&1)))
 
     summary = %{
       requested: length(items),
@@ -87,6 +90,106 @@ defmodule Cadence.Control.PlanConfirmation do
     sent = summary.confirmed + summary.uncertain + summary.rejected + failed
     Map.merge(summary, %{sent: sent, never_sent: summary.requested - sent})
   end
+
+  @doc """
+  Each pass's booking, by snapshot id (lead, K1 8e): `%{state, reason, at, detail, retryable,
+  retry_after_seconds, resolved}`. `state` adds up to
+  `execution/1`'s counts: `confirmed` (reserved), `uncertain`, `rejected`, `failed` (the
+  provider failed or lost a placed booking), else `never_sent` (waiting, sending, or failed
+  before the provider call). `reason` is `sending` while the provider call is in flight, else
+  a short code from the last error (`nil` when there is none). `at` is when it last changed.
+  `detail`, `retryable` and `retry_after_seconds` are the provider's, when its error said
+  (ux ScheduleFlow f05d68e9). `resolved` is `%{by, at}` for an operator's resolution (U29), from
+  `resolved_by` / `resolved_at` on the error document; `names` maps actor ids to display names.
+  """
+  @spec bookings([struct()], %{binary() => binary()}) :: %{binary() => map()}
+  def bookings(items, names \\ %{}),
+    do: Map.new(items, &{&1.contact_opportunity_snapshot_id, booking(&1, names)})
+
+  defp booking(item, names) do
+    error = error_document(item)
+    provider = provider_error(error)
+
+    %{
+      state: booking_state(item),
+      reason: booking_reason(item),
+      at: item.completed_at || item.started_at || item.updated_at,
+      detail: text(provider["detail"] || error["detail"]),
+      retryable: boolean(provider["retryable"]),
+      retry_after_seconds: positive(provider["retry_after_seconds"]),
+      resolved: resolved(item.last_error_document || %{}, names)
+    }
+  end
+
+  # A reserved item's document is evidence (an operator's "Mark booked"), not an error: it gives
+  # `resolved`, never a reason or detail.
+  defp error_document(%{lifecycle_state: :reserved}), do: %{}
+  defp error_document(%{last_error_document: %{} = error}), do: error
+  defp error_document(_item), do: %{}
+
+  # ProviderError.to_map nests under `reason`.
+  defp provider_error(%{"reason" => %{"category" => _} = provider}), do: provider
+  defp provider_error(_error), do: %{}
+
+  defp resolved(%{"resolved_by" => %{"id" => id} = by, "resolved_at" => at}, names)
+       when is_binary(id) do
+    %{by: %{kind: by["kind"], id: id, name: Map.get(names, id)}, at: at}
+  end
+
+  defp resolved(_error, _names), do: nil
+
+  defp resolver_names(items) do
+    for item <- items,
+        %{"resolved_by" => %{"kind" => "user", "id" => id}} <- [item.last_error_document],
+        is_binary(id),
+        uniq: true,
+        into: %{} do
+      {id, user_name(id)}
+    end
+  end
+
+  defp user_name(id) do
+    case Accounts.fetch_user(id) do
+      {:ok, user} -> user.display_name || user.email
+      _missing -> nil
+    end
+  end
+
+  defp text(value) when is_binary(value) and value != "", do: value
+  defp text(_value), do: nil
+  defp boolean(value) when is_boolean(value), do: value
+  defp boolean(_value), do: nil
+  defp positive(value) when is_integer(value) and value > 0, do: value
+  defp positive(_value), do: nil
+
+  defp booking_state(%{lifecycle_state: :reserved}), do: "confirmed"
+  defp booking_state(%{lifecycle_state: :uncertain}), do: "uncertain"
+  defp booking_state(%{lifecycle_state: :rejected}), do: "rejected"
+
+  defp booking_state(%{lifecycle_state: :failed} = item),
+    do: if(placed?(item), do: "failed", else: "never_sent")
+
+  defp booking_state(_pending_or_requesting), do: "never_sent"
+
+  defp booking_reason(%{lifecycle_state: :requesting}), do: "sending"
+  defp booking_reason(%{lifecycle_state: :reserved}), do: nil
+  defp booking_reason(%{last_error_document: %{} = error}), do: error_code(error)
+  defp booking_reason(_item), do: nil
+
+  # Error documents differ by source: executions write `code`, reservation validation
+  # `category`, attempt resolution a string `reason`, and a provider error (ProviderError.to_map)
+  # its normalized category under `reason.category` (no_capacity, conflict, …).
+  defp error_code(error) do
+    nested = with %{"category" => category} <- error["reason"], do: category
+
+    Enum.find(
+      [error["code"], error["category"], nested, error["reason"]],
+      &(is_binary(&1) and &1 != "")
+    )
+  end
+
+  defp placed?(item),
+    do: is_binary(item.provider_reservation_id) and item.provider_reservation_id != ""
 
   defp unconfirmed_of(organization_id, mission_id, items, opts) do
     window = Keyword.get_lazy(opts, :window_ms, &window_ms/0)

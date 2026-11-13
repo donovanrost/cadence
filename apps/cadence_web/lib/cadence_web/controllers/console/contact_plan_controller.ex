@@ -279,12 +279,22 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   # U30: which placed bookings the provider hasn't confirmed past the window (null otherwise).
   defp detail(conn, plan) do
+    # U30 unconfirmed, the execution summary and each pass's booking (lead), from one read.
+    {bookings, confirmation} =
+      conn |> org_id() |> PlanConfirmation.detail(mission_id(conn), plan.id) |> Map.pop(:bookings)
+
     conn
     |> effective_state(plan)
-    # U30 unconfirmed and the execution summary (lead), from one read of the items.
-    |> Map.merge(PlanConfirmation.detail(org_id(conn), mission_id(conn), plan.id))
+    |> with_bookings(bookings)
+    |> Map.merge(confirmation)
     |> Map.merge(chain(conn, plan.id))
   end
+
+  # K1 8e: passes[].booking, null for a pass the approved version doesn't book (or before approval).
+  defp with_bookings(%{passes: passes} = plan, bookings) when is_list(passes),
+    do: %{plan | passes: Enum.map(passes, &Map.put(&1, :booking, bookings[&1.snapshot_id]))}
+
+  defp with_bookings(plan, _bookings), do: plan
 
   # qa #30: the day's repair chain (root first, then applied repairs) and its head.
   defp chain(conn, plan_id) do
