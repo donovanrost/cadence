@@ -47,6 +47,9 @@ fleet health counts (crit · caution · stale chips, each linking to Alarms or F
 
 ## Phone (< 768px)
 View only. Widgets stack in grid order, one column. There's no Edit, and the header is the mobile header.
+- **Directory** (dashboards 9b9a99649): Mobile rows, at least 56px. The name link (with ★ and `ARCHIVED`) sits over
+  one subtitle line, `EARENDIL-312 · 11-12 02:51Z · Mira K.`. Tags are left off the row; the tag filter stays in
+  the toolbar. The `⋯` offers Star only. An unknown part is dropped from the subtitle, never shown as `—`.
 
 ## Chart grammar (Q3): uPlot follows ApTimeSeries
 The rendering engine differs, but the look is the same.
