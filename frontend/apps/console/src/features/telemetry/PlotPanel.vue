@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RouterLink } from "vue-router";
 import { formatClock, ApEmptyState, ApPanel, ApRemote, ApTimeRange, type TimeRange } from "@/ui";
 import type { RemoteState } from "@/api/index.ts";
 import { formatValue } from "@/features/alarms/index.ts";
@@ -8,6 +9,12 @@ import type { PlotView } from "./plot.ts";
 import type { SeriesData } from "./useSeries.ts";
 
 /** T2 · Plot: one series per spacecraft × point (max 6), grays and dashes, never status hues. */
+const QUESTIONS = [
+  { label: "Recent anomalies", to: { name: "ops.alarms", query: { tab: "cleared" } } },
+  { label: "What changed", to: { name: "ops.timeline", query: { kind: "config" } } },
+  { label: "Missing telemetry", to: { name: "setup.data-sources" } },
+  { label: "Link health", to: { name: "ops.contacts" } },
+] as const;
 defineProps<{
   state: RemoteState<SeriesData[]>;
   view: PlotView | null;
@@ -50,7 +57,18 @@ const toneClass = {
         v-if="empty"
         headline="Pick a point to plot"
         sentence="Add a spacecraft and search for a point. Each spacecraft × point is one series."
-      />
+      >
+        <!-- Legacy canned questions (L20) are parked (DECISIONS #75); each has a console home. -->
+        <ul class="m-0 flex list-none flex-col gap-1 p-0" aria-label="Other questions">
+          <li v-for="q in QUESTIONS" :key="q.label">
+            <RouterLink
+              :to="q.to"
+              class="max-md:hit-44 text-md text-readout no-underline hover:text-bright hover:underline"
+              >{{ q.label }} →</RouterLink
+            >
+          </li>
+        </ul>
+      </ApEmptyState>
       <ApEmptyState
         v-else-if="state.status === 'failed' && state.error.kind === 'unavailable'"
         state="off"
