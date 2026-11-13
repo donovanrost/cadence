@@ -457,6 +457,9 @@ defmodule CadenceWeb.FrontendReleaseActivation do
         {_check, {:error, {:transient, _reason} = failure}} ->
           {:halt, {:error, failure}}
 
+        {:artifact_object, {:error, {:integrity, detail}}} ->
+          {:halt, reread_mismatch({:artifact_object, artifact.path, detail}, path, release_id)}
+
         {check, _mismatch} ->
           {:halt, reread_mismatch({check, artifact.path}, path, release_id)}
       end
@@ -467,18 +470,22 @@ defmodule CadenceWeb.FrontendReleaseActivation do
     end
   end
 
+  # Integrity failures say why ({:integrity, detail}), for reread_artifact_rows to log.
   defp reread_object(sha256, size) do
     case Repo.get(ReleaseObject, sha256) do
       %ReleaseObject{sha256: ^sha256, size: ^size, bytes: bytes} when is_binary(bytes) ->
         if FrontendReleaseCatalog.digest(bytes) == "sha256:" <> sha256,
           do: {:ok, %{sha256: sha256, size: size}},
-          else: {:error, :integrity}
+          else: {:error, {:integrity, :inline_digest_mismatch}}
 
       %ReleaseObject{sha256: ^sha256, size: ^size, bytes: nil} ->
         verify_chunk_backed_object(sha256, size)
 
-      _ ->
-        {:error, :integrity}
+      %ReleaseObject{size: stored_size} ->
+        {:error, {:integrity, {:object_size_mismatch, stored_size}}}
+
+      nil ->
+        {:error, {:integrity, :object_missing}}
     end
   end
 
@@ -491,11 +498,11 @@ defmodule CadenceWeb.FrontendReleaseActivation do
         if transient_artifact_store_failure?(reason) do
           {:error, {:transient, reason}}
         else
-          {:error, :integrity}
+          {:error, {:integrity, {:chunk_store, reason}}}
         end
 
-      _other ->
-        {:error, :integrity}
+      other ->
+        {:error, {:integrity, {:chunk_store, other}}}
     end
   end
 
