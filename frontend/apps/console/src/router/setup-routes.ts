@@ -1,3 +1,4 @@
+import { spacecraftIdParam } from "@/api/ids.ts";
 import { paramText } from "@/shell/route-params.ts";
 import type { RouteRecordRaw } from "vue-router";
 
@@ -37,7 +38,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     path: "setup/spacecraft/:spacecraftId/apps/:appKey/:surface?",
     name: "setup.spacecraft.app",
     component: () => import("@/features/apps/AppSurfaceScreen.vue"),
-    props: (to) => ({ spacecraftId: paramText(to.params, "spacecraftId") }),
+    props: (to) => ({ spacecraftId: spacecraftIdParam(paramText(to.params, "spacecraftId")) }),
     meta: { mode: "setup", nav: "spacecraft", title: "App" },
   },
   {

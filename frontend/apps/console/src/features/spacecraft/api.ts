@@ -1,4 +1,13 @@
-import { decoders, request, type ApiResult, type Reader } from "@/api/index.ts";
+import {
+  decoders,
+  request,
+  scid as scidReader,
+  spacecraftId as spacecraftIdReader,
+  type ApiResult,
+  type Reader,
+  type Scid,
+  type SpacecraftId,
+} from "@/api/index.ts";
 
 /**
  * The Setup spacecraft directory.
@@ -9,9 +18,9 @@ const { array, boolean, integer, nullable, object, string, timestamp, token } = 
 export type ProfileRef = Readonly<{ id: string; name: string | null; version: number }>;
 
 export type SpacecraftRow = Readonly<{
-  id: string;
+  id: SpacecraftId;
   name: string;
-  scid: number | null;
+  scid: Scid | null;
   noradId: number | null;
   plane: number | null;
   slot: number | null;
@@ -42,9 +51,9 @@ const count: Reader<number> = (value, path = "") => {
 
 const directoryRow: Reader<SpacecraftRow> = (value, path = "") => {
   const raw = object({
-    id: token,
+    id: spacecraftIdReader,
     name: string,
-    scid: nullable(integer),
+    scid: nullable(scidReader),
     norad_id: nullable(integer),
     plane: nullable(integer),
     slot: nullable(integer),

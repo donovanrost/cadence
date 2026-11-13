@@ -1,4 +1,11 @@
-import { decoders as d, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import {
+  decoders as d,
+  request,
+  type ApiResult,
+  type Decoded,
+  type Reader,
+  type SpacecraftId,
+} from "@/api";
 import {
   assertFrontendApplicationCatalog,
   type FrontendApplicationCatalog,
@@ -69,7 +76,7 @@ export type SurfaceKey = Readonly<{
   missionId: string;
   appKey: string;
   surfaceId: string;
-  spacecraftId: string | null;
+  spacecraftId: SpacecraftId | null;
 }>;
 
 export function fetchSurfaceHost(

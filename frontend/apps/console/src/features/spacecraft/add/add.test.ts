@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { scid as scidOf, spacecraftId } from "@/api";
 import type { SpacecraftRow } from "../api.ts";
 import { checkClashes, generateRows, manifestRows, nextFreeScid, rangeLabel } from "./batch.ts";
 import { guessMapping, parseCsv, readRows } from "./manifest.ts";
@@ -11,9 +12,9 @@ const pattern = (source: string) => {
 };
 
 const existing = (name: string, scid: number | null): SpacecraftRow => ({
-  id: `sc-${name}`,
+  id: spacecraftId(`sc-${name}`),
   name,
-  scid,
+  scid: scid === null ? null : scidOf(scid),
   noradId: null,
   plane: null,
   slot: null,

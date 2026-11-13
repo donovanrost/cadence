@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { useRemoteQuery } from "@/api";
+import { useRemoteQuery, type SpacecraftId } from "@/api";
 import { paramText, useMissionScope } from "@/shell";
 import {
   ApBreadcrumb,
@@ -24,9 +24,9 @@ import SurfaceMount from "./SurfaceMount.vue";
  * status, title, tabs, notices and states; the app renders only its body. With `spacecraftId`
  * (L19, `setup.spacecraft.app`) it hosts the app's spacecraft-scope surfaces for that spacecraft.
  */
-const props = defineProps<{ spacecraftId?: string }>();
+const props = defineProps<{ spacecraftId?: SpacecraftId | null }>();
 const route = useRoute();
-const spacecraftId = computed(() => props.spacecraftId || null);
+const spacecraftId = computed(() => props.spacecraftId ?? null);
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const appKey = computed(() => paramText(route.params, "appKey"));

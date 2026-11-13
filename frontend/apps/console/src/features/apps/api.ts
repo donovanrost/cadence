@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { decoders, request, type ApiResult, type Decoded, type SpacecraftId } from "@/api";
 import { appStatus, surfaceRow } from "./host.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:id/apps` (A1). */
@@ -32,7 +32,7 @@ export function fetchApps(missionId: string, signal: AbortSignal): Promise<ApiRe
 export const SPACECRAFT_APPS_LIVE = false;
 
 /** Mission apps (A1), or one spacecraft's (L19, plans/spacecraft-apps.md: the same row shape). */
-export type AppsKey = Readonly<{ missionId: string; spacecraftId: string | null }>;
+export type AppsKey = Readonly<{ missionId: string; spacecraftId: SpacecraftId | null }>;
 export function fetchScopedApps(k: AppsKey, signal: AbortSignal): Promise<ApiResult<Apps>> {
   const m = `/missions/${encodeURIComponent(k.missionId)}`;
   const path = k.spacecraftId

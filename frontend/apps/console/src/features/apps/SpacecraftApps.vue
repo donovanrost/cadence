@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRemoteQuery } from "@/api";
+import { useRemoteQuery, type SpacecraftId } from "@/api";
 import { ApEmptyState, ApPanel, ApRemote, ApTable, ApTag, type ApColumn } from "@/ui";
 import { fetchScopedApps, SPACECRAFT_APPS_LIVE } from "./api.ts";
 import { statusTag } from "./host.ts";
 import { setupSurfaces } from "./surfaces.ts";
 
 /** L19 · the apps that work per spacecraft (telemetry decom, spacecraft), for this spacecraft. */
-const props = defineProps<{ missionId: string; spacecraftId: string }>();
+const props = defineProps<{ missionId: string; spacecraftId: SpacecraftId }>();
 const apps = useRemoteQuery(
   () =>
     SPACECRAFT_APPS_LIVE ? { missionId: props.missionId, spacecraftId: props.spacecraftId } : null,

@@ -1,4 +1,13 @@
-import { actor, decoders, request, type ApiResult, type Decoded, type Reader, orNull } from "@/api";
+import {
+  actor,
+  decoders,
+  request,
+  spacecraftId,
+  type ApiResult,
+  type Decoded,
+  type Reader,
+  orNull,
+} from "@/api";
 import { formatCount } from "@/ui";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:mission_id/profiles/:profile_id`. */
@@ -52,7 +61,7 @@ const rule = object({
 export type ProfileRule = Decoded<typeof rule>;
 
 const override = object({
-  spacecraft: object({ id: token, name: string }),
+  spacecraft: object({ id: spacecraftId, name: string }),
   section: token,
   path: string,
   profile_value: raw,

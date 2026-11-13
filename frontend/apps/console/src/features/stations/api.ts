@@ -1,10 +1,10 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { decoders, request, stationId, type ApiResult, type Decoded } from "@/api";
 
 /** Requested shape: docs/apogee/plans/setup-shapes.md §G1 (final contract in api/setup.md). */
 const { array, integer, known, nullable, object, oneOf, string, token } = decoders;
 
 const station = object({
-  id: token,
+  id: stationId,
   display_name: string,
   // free-text: the station's short code, an identifier.
   code: nullable(string),

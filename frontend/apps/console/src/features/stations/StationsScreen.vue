@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { useRemoteQuery } from "@/api";
+import { stationIdParam, useRemoteQuery, type StationId } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, paramText, useMissionScope, useSession } from "@/shell";
 import {
@@ -30,10 +30,10 @@ const route = useRoute();
 const session = useSession();
 const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
 /** `new` = add; an id = edit that station; none = list only. */
-const editing = computed(() =>
-  typeof paramText(route.params, "stationId") === "string" && paramText(route.params, "stationId")
-    ? paramText(route.params, "stationId")
-    : null,
+const editing = computed((): "new" | StationId | null =>
+  paramText(route.params, "stationId") === "new"
+    ? "new"
+    : stationIdParam(paramText(route.params, "stationId")),
 );
 const tab = computed(() => (route.name === "setup.stations.providers" ? "providers" : "stations"));
 const tabs: readonly ApTabLink[] = [

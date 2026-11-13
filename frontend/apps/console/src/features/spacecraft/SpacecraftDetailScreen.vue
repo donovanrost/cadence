@@ -2,7 +2,7 @@
 import { SpacecraftApps } from "@/features/apps/index.ts";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { useRemoteQuery } from "@/api";
+import { spacecraftIdParam, useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
 import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTag, type ApCrumb } from "@/ui";
@@ -12,9 +12,8 @@ import { fetchSpacecraftDetail } from "./detail.ts";
 /** Setup › Spacecraft › one (ux U6: Profile layout, `Open in Ops →`). */
 const route = useRoute("setup.spacecraft.one");
 const scope = useMissionScope();
-const spacecraftId = computed(() =>
-  typeof route.params.spacecraftId === "string" ? route.params.spacecraftId : null,
-);
+/** The spacecraft's id (not its SCID): a branded SpacecraftId (typing §12C). */
+const spacecraftId = computed(() => spacecraftIdParam(route.params.spacecraftId));
 const key = computed(() =>
   spacecraftId.value
     ? { missionId: scope.value.mission.id, spacecraftId: spacecraftId.value }
@@ -33,7 +32,7 @@ const title = computed(() =>
 // Ops addresses a spacecraft by SCID (fe-ops `ops.spacecraft`).
 const opsScid = computed(() =>
   state.value.status === "ready" && state.value.value.spacecraft.scid !== null
-    ? String(state.value.value.spacecraft.scid)
+    ? state.value.value.spacecraft.scid
     : null,
 );
 const crumbs = computed((): readonly ApCrumb[] => [
@@ -50,7 +49,7 @@ const crumbs = computed((): readonly ApCrumb[] => [
         <ApTag v-if="state.value.readiness.ready" state="nominal" label="Ready" />
         <ApTag v-else state="caution" label="Incomplete" />
       </template>
-      <ApButton v-if="opsScid" :to="{ name: 'ops.spacecraft', params: { scId: opsScid } }"
+      <ApButton v-if="opsScid !== null" :to="{ name: 'ops.spacecraft', params: { scId: opsScid } }"
         >Open in Ops →</ApButton
       >
     </ApPageHeader>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { spacecraftId } from "@/api";
 import { fetchScopedApps } from "./api.ts";
 
 /** L19 (plans/spacecraft-apps.md): one spacecraft's apps come from its own path, same rows as A1. */
@@ -13,7 +14,7 @@ describe("scoped apps (L19)", () => {
     try {
       const signal = new AbortController().signal;
       await fetchScopedApps({ missionId: "m1", spacecraftId: null }, signal);
-      await fetchScopedApps({ missionId: "m1", spacecraftId: "sc 4" }, signal);
+      await fetchScopedApps({ missionId: "m1", spacecraftId: spacecraftId("sc 4") }, signal);
     } finally {
       globalThis.fetch = original;
     }

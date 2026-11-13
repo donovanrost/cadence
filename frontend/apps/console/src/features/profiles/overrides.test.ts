@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { spacecraftId } from "@/api";
 import type { ProfileField, ProfileSection } from "./detail.ts";
 import {
   existingLine,
@@ -86,7 +87,7 @@ describe("override text", () => {
     ],
   };
   const held = {
-    spacecraft: { id: "sc_1", name: "EARENDIL-001" },
+    spacecraft: { id: spacecraftId("sc_1"), name: "EARENDIL-001" },
     section: "other",
     path: "catalog_revision_id",
     profile_value: "cat_3",

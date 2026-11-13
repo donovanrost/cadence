@@ -1,4 +1,12 @@
-import { decoders, request, type ApiResult, type Reader } from "@/api";
+import {
+  decoders,
+  request,
+  scid as scidReader,
+  spacecraftId as spacecraftIdReader,
+  type ApiResult,
+  type Reader,
+  type SpacecraftId,
+} from "@/api";
 import type { ApKeyValueItem } from "@/ui";
 import type { ApCheckRow as CheckRow } from "@/ui";
 import { telemetryFreshness } from "./api.ts";
@@ -33,9 +41,9 @@ const check = object({ key: token, status: oneOf(checkStatuses), title: string, 
 export const detailReader = (value: unknown, path = "") => {
   const raw = object({
     spacecraft: object({
-      id: token,
+      id: spacecraftIdReader,
       name: string,
-      scid: nullable(integer),
+      scid: nullable(scidReader),
       norad_id: nullable(integer),
       plane: nullable(integer),
       slot: nullable(integer),
@@ -68,7 +76,7 @@ export type RoutingRule = SpacecraftDetail["routing_rules"][number];
 export type ReadinessCheck = SpacecraftDetail["readiness"]["checks"][number];
 
 export function fetchSpacecraftDetail(
-  key: Readonly<{ missionId: string; spacecraftId: string }>,
+  key: Readonly<{ missionId: string; spacecraftId: SpacecraftId }>,
   signal: AbortSignal,
 ): Promise<ApiResult<SpacecraftDetail>> {
   return request(
