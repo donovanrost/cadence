@@ -180,3 +180,9 @@ Feature engineers compose these; ask lead before adding a new shared primitive.
 - UI: compose `@/ui`. Need a new shared primitive (ApListRow, ApFactStrip, ApEventLine, ApKeyValue,
   ApStepBar, ApStateTrail, ApChip, ApField, ApBreadcrumb, …)? Ask lead; don't build a local copy.
   Feature-only components stay in the feature dir.
+
+- **Load (director, 2026-11-13):** ~12 agents share one 8-core machine. Run a single targeted heavy
+  process (one `vue-tsc`, one `mix compile` / architecture check, one test file) through
+  `scripts/check-slot.sh <command…>`: it waits for one of 3 shared slots and runs the command under
+  `nice -n 10`. Full suites, builds and parallel runs stay gated on load < 16. Save full output to a
+  file; never judge a check through `| tail` (the pipe hides the exit status). Freezes still win.
