@@ -20,8 +20,9 @@ export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: ApiError
 
 const errorBody = object({
   error: object({
-    // free-text: an open vocabulary on purpose (typing §12 A2): checked with isError(e, code)
-    // and knownErrorCode() against the ErrorCode list, so a new server code never fails a read.
+    // Checked with isError(e, code) and knownErrorCode() against the ErrorCode list, so a new
+    // server code never fails a read (typing §12 A2).
+    // free-text: an open vocabulary on purpose
     code: token,
     message: string,
     details: optional((value) => value),
