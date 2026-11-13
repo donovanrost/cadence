@@ -106,10 +106,11 @@ export function fetchOrganization(
   return request(`/admin/organizations/${encodeURIComponent(id)}`, orgDetail, { signal });
 }
 
+/** api-ops f50da0b2: the invitation comes back flat, with `delivery` beside its fields. */
 export function inviteInto(orgId: string, body: Readonly<{ email: string; role: Role }>) {
   return request(
     `/admin/organizations/${encodeURIComponent(orgId)}/invitations`,
-    d.object({ invitation: d.object({ id: d.token, email: d.string }), delivery }),
+    d.object({ id: d.token, email: d.string, delivery }),
     { method: "POST", body },
   );
 }
@@ -170,9 +171,9 @@ export function issueServiceIdentity(
   );
 }
 
-export function revokeServiceIdentity(id: string) {
+export function revokeServiceIdentity(id: string, organizationId: string) {
   return request(
-    `/admin/service-identities/${encodeURIComponent(id)}`,
+    `/admin/service-identities/${encodeURIComponent(id)}?organization_id=${encodeURIComponent(organizationId)}`,
     d.object({ id: d.token, state: d.known(["revoked"] as const) }),
     { method: "DELETE" },
   );
@@ -188,15 +189,17 @@ export const runtimeReasons = [
 const runtimeRow = d.object({
   organization: d.object({ id: d.token, name: d.string, slug: d.token }),
   mission: d.object({ id: d.token, name: d.string, slug: d.token }),
-  runtime: d.nullable(
+  // The /counts runtime object (U38); keys a node doesn't know may be absent.
+  runtime: orNull(
     d.object({
       state: d.known(["applied", "not_applied"] as const),
-      reason: d.nullable(d.known(runtimeReasons)),
-      failure_message: d.nullable(d.string),
-      desired_generation: d.nullable(d.integer),
-      applied_generation: d.nullable(d.integer),
-      since: d.nullable(d.timestamp),
-      applied_at: d.nullable(d.timestamp),
+      reason: orNull(d.known(runtimeReasons)),
+      // free-text: the runtime's own failure message, for Technical details only.
+      failure_message: orNull(d.string),
+      desired_generation: orNull(d.integer),
+      applied_generation: orNull(d.integer),
+      since: orNull(d.timestamp),
+      applied_at: orNull(d.timestamp),
     }),
   ),
   telemetry_last_received_at: d.nullable(d.timestamp),
@@ -211,11 +214,11 @@ export function fetchRuntime(_key: true, signal: AbortSignal): Promise<ApiResult
 }
 
 /** api-ops: issue and rotate share ServiceIdentityAdministration; rotating shows the new token once. */
-export function rotateServiceIdentity(id: string) {
+export function rotateServiceIdentity(id: string, organizationId: string) {
   return request(
     `/admin/service-identities/${encodeURIComponent(id)}/rotate`,
     d.object({ service_identity: identity, token: d.string }),
-    { method: "POST", body: {} },
+    { method: "POST", body: { organization_id: organizationId } },
   );
 }
 

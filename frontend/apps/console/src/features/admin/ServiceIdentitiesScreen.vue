@@ -30,7 +30,7 @@ const columns: readonly ApColumn[] = [
   { key: "actions", label: "", align: "end" },
 ];
 async function revoke(s: AdminServiceIdentity) {
-  const r = await revokeServiceIdentity(s.id);
+  const r = await revokeServiceIdentity(s.id, s.organization.id);
   note.value = r.ok
     ? { tone: "nominal", text: `Revoked ${s.name}. Anything using its token stops working now.` }
     : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };

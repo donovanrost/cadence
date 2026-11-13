@@ -32,10 +32,10 @@ async function send() {
     emit(
       "changed",
       r.value.delivery === "submitted"
-        ? { tone: "nominal", text: `Invitation sent to ${r.value.invitation.email}.` }
+        ? { tone: "nominal", text: `Invitation sent to ${r.value.email}.` }
         : {
             tone: "caution",
-            text: `The invitation to ${r.value.invitation.email} exists, but no email went out.`,
+            text: `The invitation to ${r.value.email} exists, but no email went out.`,
           },
     );
   } finally {

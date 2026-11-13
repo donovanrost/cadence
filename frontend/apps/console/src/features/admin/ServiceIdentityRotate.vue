@@ -6,7 +6,7 @@ import { rotateServiceIdentity } from "./api.ts";
 import TokenShown from "./TokenShown.vue";
 
 /** Rotate (api-ops): confirms, then shows the new token once; the old one stops working now. */
-const props = defineProps<{ id: string; name: string }>();
+const props = defineProps<{ id: string; name: string; organizationId: string }>();
 const emit = defineEmits<{ rotated: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const token = ref<string | null>(null);
@@ -21,7 +21,7 @@ function open() {
 async function rotate() {
   busy.value = true;
   try {
-    const r = await rotateServiceIdentity(props.id);
+    const r = await rotateServiceIdentity(props.id, props.organizationId);
     if (!r.ok) return void (failure.value = failureOutcome(r.error, "changed").sentence);
     token.value = r.value.token;
     emit("rotated");

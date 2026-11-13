@@ -10,7 +10,12 @@ defineEmits<{ rotated: []; revoke: [] }>();
 
 <template>
   <span class="inline-flex gap-1">
-    <ServiceIdentityRotate :id="identity.id" :name="identity.name" @rotated="$emit('rotated')" />
+    <ServiceIdentityRotate
+      :id="identity.id"
+      :organization-id="identity.organization.id"
+      :name="identity.name"
+      @rotated="$emit('rotated')"
+    />
     <ServiceIdentityRevoke :name="identity.name" @revoke="$emit('revoke')" />
   </span>
 </template>
