@@ -36,6 +36,13 @@ with Profile/People.
     - The section-level UI stays until then. Migration keeps only the fields that differ from the organization's
       value at that moment; the rest inherit again. Record that as one audit entry per mission: "Settings now
       follow the organization except the fields set for this mission."
+    - **Built** (fe-setup 424a17138, api 14455857d). Buttons: `Override` (inherited), `Change` and `Reset to
+      inherited` (set here). Reset saves at once, with an outcome line that keeps the old value, so it can be
+      put back: "Command shelf follows the organization again (was Minimized). Saved as v5." Governance and
+      approval fields confirm first: "Approval for changes and app activations will follow Acme Space: Applies
+      without approval."
+    - The section header no longer carries a source tag. Fields carry their own. The header shows a count when
+      any field is set here: `2 SET FOR THIS MISSION`.
     - Director's condition: governance and approval fields always stay set for the mission, even when they equal
       the organization's value. Where the migration kept one that matches, the entry adds: "Approval settings
       stay set for this mission, even where they match the organization." They show `SET FOR THIS MISSION`
