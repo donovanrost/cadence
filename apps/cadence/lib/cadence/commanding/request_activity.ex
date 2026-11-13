@@ -54,6 +54,26 @@ defmodule Cadence.Commanding.RequestActivity do
     |> Repo.all()
   end
 
+  @doc "How many requests wait on each endpoint (`waiting/3`'s rule): `%{endpoint_ref => count}`."
+  @spec waiting_counts(binary(), binary(), [binary()]) :: %{binary() => pos_integer()}
+  def waiting_counts(_organization_id, _mission_id, []), do: %{}
+
+  def waiting_counts(organization_id, mission_id, endpoint_refs) do
+    from(r in CommandRequestRow,
+      left_join: q in CommandQueueEntryRow,
+      on: q.command_request_id == r.command_request_id and q.mission_id == r.mission_id,
+      where:
+        r.organization_id == ^organization_id and r.mission_id == ^mission_id and
+          r.source_endpoint_ref in ^endpoint_refs and
+          (r.lifecycle_state in ^@not_yet_queued or
+             (r.lifecycle_state == "queued" and q.lifecycle_state == "pending")),
+      group_by: r.source_endpoint_ref,
+      select: {r.source_endpoint_ref, count(r.command_request_id)}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
   @doc """
   Requests on these endpoints releasing or radiating right now: a queue entry mid-release, or a
   released request still waiting on its verification.

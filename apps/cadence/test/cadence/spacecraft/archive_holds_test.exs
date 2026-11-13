@@ -4,7 +4,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.ArchiveHoldsTest do
   import Cadence.ConfigurationFixtures
 
   alias Cadence.Commanding.ReleaseTargetGuard
-  alias Cadence.Control.Configuration
+  alias Cadence.Control.{Configuration, SpacecraftTraffic}
   alias Cadence.Spacecraft.ConfigKinds.ArchiveHolds
   alias Cadence.SpacecraftStore
 
@@ -95,6 +95,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.ArchiveHoldsTest do
       })
 
     [id] = staged.entity_ids
+    # The real adapter's queries: nothing waits on, or is booked for, a new spacecraft.
+    assert SpacecraftTraffic.archive_blockers(org, mission, [id]) == %{}
+    assert SpacecraftTraffic.with_traffic(org, mission, [id]) == MapSet.new()
     assert ReleaseTargetGuard.live(org, mission, id) == :ok
 
     assert {:ok, _archived} =
