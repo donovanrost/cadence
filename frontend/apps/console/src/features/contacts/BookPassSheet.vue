@@ -186,12 +186,13 @@ const outcome = computed(() =>
       </p>
       <p v-if="search.offers.length === 0" class="m-0 text-text-3">{{ emptyWords(search) }}</p>
       <ul v-else class="m-0 flex list-none flex-col p-0" aria-label="Offers">
-        <li v-for="o in search.offers" :key="o.id" class="border-t border-hairline py-2">
+        <!-- By token: the same opportunity can come back once per ready route (qa 11-13). -->
+        <li v-for="o in search.offers" :key="o.token" class="border-t border-hairline py-2">
           <button
             type="button"
             class="flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 border-0 bg-transparent p-0 text-left disabled:cursor-not-allowed disabled:opacity-60"
             :disabled="offerBlocked(o, now) !== null || result !== null"
-            :aria-pressed="chosen?.id === o.id"
+            :aria-pressed="chosen?.token === o.token"
             @click="chosen = o"
           >
             <span class="font-mono text-readout">{{ stationWords(o) }}</span>
@@ -210,7 +211,7 @@ const outcome = computed(() =>
           <p v-if="offerBlocked(o, now)" class="m-0 pt-1 text-sm text-text-3">
             {{ offerBlocked(o, now) }}
           </p>
-          <div v-if="chosen?.id === o.id && !result" class="flex flex-col gap-2 pt-2">
+          <div v-if="chosen?.token === o.token && !result" class="flex flex-col gap-2 pt-2">
             <p class="m-0 text-readout">{{ confirmLine(scName, o, direction) }}</p>
             <ApTextarea v-model="note" label="Why" :rows="2" placeholder="Optional" />
             <ApCallout v-if="unclear" tone="caution">{{ unclear }}</ApCallout>
