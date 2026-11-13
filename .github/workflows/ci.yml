@@ -94,6 +94,9 @@ jobs:
         with:
           path: ${{ env.CADENCE_DEPS_PATHS }}
           key: ${{ env.CADENCE_DEPS_KEY }}
+      - name: Index the sources this _build was compiled from
+        if: ${{ github.event_name == 'push' && steps.setup.outcome == 'success' }}
+        run: scripts/ci/source_index.sh write "$CADENCE_SOURCE_INDEX"
       - name: Save _build
         if: ${{ github.event_name == 'push' && steps.setup.outcome == 'success' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
