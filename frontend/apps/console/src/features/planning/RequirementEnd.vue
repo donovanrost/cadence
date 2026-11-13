@@ -22,16 +22,19 @@ const reason = ref("");
 const error = ref<string | null>(null);
 const failure = ref<string | null>(null);
 const busy = ref(false);
-/** What each does, in the server's terms (ux; wording pending domain's answer, U20). */
+/**
+ * What each does, in the server's terms (U20, domain): today both stop planning and keep booked
+ * passes; only the recorded state differs. Drafts and pending plans using it read superseded.
+ */
 const what: Readonly<Record<EndAction, { title: string; sentence: string; confirm: string }>> = {
   close: {
     title: "Close requirement",
-    sentence: "Cadence stops planning for it from now. Passes already booked stay booked.",
+    sentence: "Cadence stops planning for it. Passes already booked stay booked.",
     confirm: "Close it",
   },
   cancel: {
     title: "Cancel requirement",
-    sentence: "It's withdrawn as if it was never needed. Nothing more is planned for it.",
+    sentence: "Withdraws it: nothing more is planned for it. Passes already booked stay booked.",
     confirm: "Cancel it",
   },
 };
