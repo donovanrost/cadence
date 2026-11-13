@@ -13,8 +13,15 @@ defmodule Cadence.Comms.StationAvailability.ProviderReports do
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
+  # The inventory is the provider's own data: a malformed station or window is skipped (and so
+  # cleared like any window it stopped reporting), never raised on; an inventory that isn't a list
+  # is refused and clears nothing.
   @spec sync(String.t(), String.t(), String.t(), [map()]) ::
           {:ok, %{recorded: non_neg_integer(), cleared: non_neg_integer()}}
+          | {:error, :invalid_provider_inventory}
+  def sync(_organization_id, _mission_id, _provider_id, stations) when not is_list(stations),
+    do: {:error, :invalid_provider_inventory}
+
   def sync(organization_id, mission_id, provider_id, stations) do
     known =
       organization_id
@@ -24,7 +31,8 @@ defmodule Cadence.Comms.StationAvailability.ProviderReports do
     recorded =
       for %{"id" => station_id} = station <- stations,
           MapSet.member?(known, station_id),
-          window <- Map.get(station, "availability_windows") || [],
+          %{"id" => window_id, "kind" => kind} = window
+          when is_binary(window_id) and is_binary(kind) <- windows(station),
           report = report(provider_id, station_id, window),
           match?(
             {:ok, _view},
@@ -47,9 +55,12 @@ defmodule Cadence.Comms.StationAvailability.ProviderReports do
       kind: window["kind"],
       starts_at: timestamp(window["starts_at"]),
       ends_at: timestamp(window["ends_at"]),
-      reason: window["reason"]
+      reason: if(is_binary(window["reason"]), do: window["reason"])
     }
   end
+
+  defp windows(%{"availability_windows" => windows}) when is_list(windows), do: windows
+  defp windows(_station), do: []
 
   defp timestamp(value) when is_binary(value) do
     case DateTime.from_iso8601(value) do

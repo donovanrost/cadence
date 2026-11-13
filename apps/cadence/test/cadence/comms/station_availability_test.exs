@@ -143,6 +143,35 @@ defmodule Cadence.Comms.StationAvailabilityTest do
              StationAvailability.status(ctx.alice, ctx.mission, ctx.station, at(2))
   end
 
+  test "a provider sync skips malformed windows and refuses a malformed inventory (L12 defect 2)",
+       ctx do
+    malformed = [
+      "not-a-window",
+      %{window("map-kind", 1, 2) | "kind" => %{"x" => 1}},
+      %{window("map-id", 1, 2) | "id" => %{"x" => 1}}
+    ]
+
+    # A window whose only fault is a non-text reason is kept without the reason.
+    bad_reason = Map.put(window("map-reason", 4, 5), "reason", %{"x" => 1})
+
+    assert {:ok, %{recorded: 2}} =
+             ProviderReports.sync(ctx.org, ctx.mission, "provider-a", [
+               %{
+                 "id" => ctx.station,
+                 "availability_windows" => [window("a", 1, 3), bad_reason | malformed]
+               },
+               %{"id" => ctx.station, "availability_windows" => %{"not" => "a list"}},
+               "not-a-station"
+             ])
+
+    assert {:error, :invalid_provider_inventory} =
+             ProviderReports.sync(ctx.org, ctx.mission, "provider-a", %{"not" => "a list"})
+
+    # A refused inventory clears nothing.
+    assert {:ok, %{state: :down}} =
+             StationAvailability.status(ctx.alice, ctx.mission, ctx.station, at(2))
+  end
+
   defp window(id, from, to) do
     %{
       "id" => id,

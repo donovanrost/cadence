@@ -159,7 +159,14 @@ defmodule Cadence.GroundNetworks do
          {:ok, spacecraft} <- client.list_spacecraft(context, %{}, call_opts),
          {:ok, ground_stations} <- client.list_ground_stations(context, %{}, call_opts),
          {:ok, service_profiles} <- client.list_service_profiles(context, %{}, call_opts),
-         {:ok, delivery_profiles} <- client.list_delivery_profiles(context, %{}, call_opts) do
+         {:ok, delivery_profiles} <- client.list_delivery_profiles(context, %{}, call_opts),
+         {:ok, _availability} <-
+           ProviderReports.sync(
+             provider.organization_id,
+             provider.mission_id,
+             provider.provider_id,
+             ground_stations
+           ) do
       sync_document =
         build_sync_document(
           spacecraft,
@@ -175,14 +182,6 @@ defmodule Cadence.GroundNetworks do
           "status" => "healthy",
           "checked_at" => DateTime.to_iso8601(synced_at)
         })
-
-      {:ok, _availability} =
-        ProviderReports.sync(
-          provider.organization_id,
-          provider.mission_id,
-          provider.provider_id,
-          ground_stations
-        )
 
       MissionProviders.update_operational_state(provider, %{
         capabilities_document: capabilities.evidence,
