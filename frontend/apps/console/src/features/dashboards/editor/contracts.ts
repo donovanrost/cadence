@@ -77,6 +77,11 @@ export const commandReader = d.variant("event", {
   add_widget: command("add_widget", d.object({ placement_id: id, ...widget })),
   update_widget: command("update_widget", d.object({ placement_id: id, ...widget })),
   remove_widget: command("remove_widget", d.object({ placement_id: id })),
+  // A library item's version placed by reference (domain a594da7ec; the library plan).
+  add_library_widget: command(
+    "add_library_widget",
+    d.object({ placement_id: id, library_item_id: id, version: d.integer, section_id: d.string }),
+  ),
   layout: command("layout", d.object({ layouts: d.array(layoutEdit, 1024) })),
   runtime_defaults: command("runtime_defaults", d.object({ defaults_json: text(32_768) })),
 });
@@ -162,6 +167,9 @@ export const commandCodes = [
   "capacity",
   "duplicate_id",
   "unavailable",
+  // add_library_widget (domain a594da7ec): retired or unknown item; a version it doesn't have.
+  "library_item_unavailable",
+  "library_version_unavailable",
   "unknown",
 ] as const;
 const commandCode = d.known(commandCodes);
@@ -175,6 +183,7 @@ const commandEvent = d.known([
   "add_widget",
   "update_widget",
   "remove_widget",
+  "add_library_widget",
   "layout",
   "runtime_defaults",
 ] as const);
@@ -215,7 +224,8 @@ export const compareReply = d.object({ changes, from_json: d.string, to_json: d.
 
 /** Error details the editor acts on (console envelope `details`, decoded per code). */
 export const commandFailure = d.object({
-  index: d.integer,
+  // null: an item retired between the check and the save (Q10) names no command.
+  index: d.nullable(d.integer),
   code: commandCode,
   field: d.nullable(d.string),
 });

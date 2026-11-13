@@ -119,7 +119,7 @@ export function restore(missionId: string, dashboardId: string, version: number,
 export type EditFailure =
   | {
       kind: "command";
-      index: number;
+      index: number | null;
       command: Command | null;
       code: CommandCode;
       field: string | null;
@@ -151,7 +151,7 @@ export function editFailure(error: ApiError, draft: Draft): EditFailure {
     return {
       kind: "command",
       index: refused.index,
-      command: draft.commands[refused.index] ?? null,
+      command: refused.index === null ? null : (draft.commands[refused.index] ?? null),
       code: refused.code,
       field: refused.field,
     };

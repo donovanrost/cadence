@@ -102,7 +102,9 @@ export function useEditSession(
       return;
     }
     const failure = api.editFailure(result.error, next);
-    if (failure.kind === "command") {
+    if (failure.kind === "command" && failure.index === null) {
+      notice.value = { kind: "rejected", message: rejectionText(failure.code, failure.field) };
+    } else if (failure.kind === "command") {
       // The command the server refused is dropped; the rest of the draft stays.
       const kept = { ...next, commands: next.commands.filter((_, i) => i !== failure.index) };
       persist(kept);
@@ -269,6 +271,9 @@ const REJECTION: Readonly<Record<CommandCode, string>> = {
   capacity: "This dashboard is at its widget or section limit.",
   duplicate_id: "That widget already exists.",
   unavailable: "The dashboard isn't available.",
+  library_item_unavailable:
+    "That library widget was retired or removed. Remove it from this dashboard to save.",
+  library_version_unavailable: "That library widget doesn't have this version any more.",
   unknown: "The server didn't accept that change.",
   unrecognized: "The server didn't accept that change.",
 };

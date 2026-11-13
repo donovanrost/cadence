@@ -25,6 +25,7 @@ const savedLine = computed(() => {
 const EVENT_LABEL: Readonly<Record<SkippedEvent, string>> = {
   update_widget: "Update widget",
   remove_widget: "Remove widget",
+  add_library_widget: "Add library widget",
   add_widget: "Add widget",
   layout: "Move or resize",
   add_section: "Add section",

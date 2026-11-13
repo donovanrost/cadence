@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { widgetDefaults, type Command } from "./contracts.ts";
+import { commandReader, widgetDefaults, type Command } from "./contracts.ts";
 import { editFailure } from "./api.ts";
 import {
   MAX_COMMANDS,
@@ -125,7 +125,41 @@ describe("edit failures", () => {
     expect(f.kind === "command" && f.command?.event).toBe("update_widget");
   });
 
+  it("reads a library item retired before the save, which names no command (Q10)", () => {
+    const f = editFailure(
+      {
+        kind: "invalid",
+        code: "invalid_command",
+        message: "",
+        details: { index: null, code: "library_item_unavailable", field: "library_item_id" },
+      },
+      draft,
+    );
+    expect(f).toMatchObject({
+      kind: "command",
+      index: null,
+      command: null,
+      code: "library_item_unavailable",
+      field: "library_item_id",
+    });
+  });
+
   it("keeps unknown failures generic", () => {
     expect(editFailure({ kind: "malformed", message: "x" }, draft).kind).toBe("other");
+  });
+});
+
+describe("library placements (add_library_widget)", () => {
+  it("round-trips through the command reader, as a stored draft replays it", () => {
+    const command = {
+      event: "add_library_widget",
+      input: {
+        placement_id: `dash_widget_${"a".repeat(32)}`,
+        library_item_id: "lib-1",
+        version: 3,
+        section_id: "",
+      },
+    };
+    expect(commandReader(command, "")).toEqual(command);
   });
 });
