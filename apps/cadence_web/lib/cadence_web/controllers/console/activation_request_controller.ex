@@ -21,6 +21,9 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   def reject(conn, %{"request_id" => id} = params),
     do: respond(conn, ActivationRequests.reject(scope(conn), mission_id(conn), id, params))
 
+  def withdraw(conn, %{"request_id" => id} = params),
+    do: respond(conn, ActivationRequests.withdraw(scope(conn), mission_id(conn), id, params))
+
   def resume(conn, %{"request_id" => id}),
     do: respond(conn, ActivationRequests.resume(scope(conn), mission_id(conn), id))
 
@@ -43,6 +46,7 @@ defmodule CadenceWeb.Console.ActivationRequestController do
        when reason in [
               :activation_request_not_found,
               :self_approval_forbidden,
+              :not_requester,
               :activation_policy_changed,
               :activation_execution_in_progress
             ],

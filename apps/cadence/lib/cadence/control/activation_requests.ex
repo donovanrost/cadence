@@ -65,6 +65,17 @@ defmodule Cadence.Control.ActivationRequests do
     end
   end
 
+  @doc "The requester withdraws a pending request: `{:ok, %{request}}`."
+  @spec withdraw(Scope.t(), binary(), binary(), map()) :: {:ok, map()} | {:error, term()}
+  def withdraw(%Scope{} = scope, mission_id, request_id, params) do
+    with {:ok, reason} <- reason(params["reason"]),
+         {:ok, _request} <- pending(scope, mission_id, request_id),
+         {:ok, _request, _decision} <-
+           decision_result(ManagementActivations.withdraw(scope, request_id, reason)) do
+      reply(scope, mission_id, request_id, nil)
+    end
+  end
+
   @doc "Retry apply (domain's resume): `{:ok, %{request, outcome}}` or a refusal."
   @spec resume(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
   def resume(%Scope{} = scope, mission_id, request_id) do
@@ -118,6 +129,9 @@ defmodule Cadence.Control.ActivationRequests do
 
   defp decision_result({:error, :activation_request_not_pending_approval}),
     do: {:error, {:not_pending, nil}}
+
+  defp decision_result({:error, :invalid_reason}),
+    do: {:error, {:invalid_params, %{reason: "Say why."}}}
 
   defp decision_result({:error, reason})
        when reason in [:invalid_activation_scope, :human_activation_approver_required],

@@ -13,8 +13,14 @@ defmodule Cadence.Control.ActivationRequests.Rows do
   alias Cadence.Management.Activations.Directory
   alias Cadence.SpacecraftStore
 
-  @states %{approval_pending: "approval_pending", approved: "approved", rejected: "rejected"}
-  @decisions %{approved: "approved", rejected: "rejected"}
+  @states %{
+    approval_pending: "approval_pending",
+    approved: "approved",
+    rejected: "rejected",
+    withdrawn: "withdrawn",
+    superseded: "superseded"
+  }
+  @decisions %{approved: "approved", rejected: "rejected", withdrawn: "withdrawn"}
   @shown_spacecraft 5
 
   @spec rows(map(), binary(), list()) :: [map()]
@@ -47,6 +53,8 @@ defmodule Cadence.Control.ActivationRequests.Rows do
         requested_by: actor(request.requester_actor_document, names),
         requested_at: request.requested_at,
         state: Map.fetch!(@states, request.state),
+        superseded_by: Map.get(request, :superseded_by),
+        superseded_at: Map.get(request, :superseded_at),
         decision: decision(decision, names),
         execution: execution(request, now),
         can_decide:

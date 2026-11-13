@@ -25,12 +25,13 @@ that fails or stalls shows on Now).
 - `kind`: `telemetry_decom | spacecraft_configuration | null` (null: a mission activation with
   neither). `app` is null except for decom. `summary` is the same sentence the Now item shows
   (`Control.Activations.Description`).
-- `state`: `approval_pending | approved | rejected`. **Not yet:** `withdrawn` and `superseded`
-  (asks 1 and 3) need domain support. They'll join this closed set when it lands, and the shape
-  diff comes first.
-- `decision`: the latest human decision, `{state: approved | rejected, by {kind, id, name}, at,
-  reason}`, or null. A request approved by policy alone (no reviewer) is `approved` with a null
-  decision.
+- `state`: `approval_pending | approved | rejected | withdrawn | superseded` (domain 444c6126b).
+  `superseded`: a newer request for the same binding set (or, for spacecraft configuration, the
+  same reviewed spacecraft) arrived. `superseded_by` (that request's id) and `superseded_at` are set
+  then, else null.
+- `decision`: the latest human decision, `{state: approved | rejected | withdrawn, by {kind, id,
+  name}, at, reason}`, or null. A request approved by policy alone (no reviewer) is `approved`
+  with a null decision. A superseded one has no decision (the system did it).
 - `execution`: null until an apply starts, then `{state: in_progress | succeeded | failed, since,
   error_code, error, retryable}`.
   - `error_code` (closed set): `activation_execution_interrupted |
@@ -48,7 +49,7 @@ that fails or stalls shows on Now).
 ## Endpoints
 
 - `GET /?state=pending|decided&before=` → `{requests: [<row>], next, permissions}`. `pending` (the
-  default) is `approval_pending`; `decided` is `approved | rejected`. Newest first, 25 a page; pass
+  default) is `approval_pending`; `decided` is the rest. Newest first, 25 a page; pass
   `next` back as `before` (null on the last page). `permissions`: `["activations.approve"]` for
   people who may approve, decide and retry, else `[]`. `422 invalid_params` for an unknown `state`
   or a bad cursor.
@@ -59,16 +60,19 @@ that fails or stalls shows on Now).
   applies at once. `needs_review`: approved, but the apply didn't finish; the row's
   `execution.error` says why, and `retryable` says whether `Retry apply` can help.
 - `POST /:id/reject {reason}` → `200 {request: <row>}`.
+- `POST /:id/withdraw {reason}` (the requester only) → `200 {request: <row>}`.
 - `POST /:id/resume` (empty body, **Retry apply**) → `200 {request: <row>, outcome: applied |
   needs_review}`. Same permission as approve; audited (`activation_resumed`).
 
 Errors:
-- `422 invalid_params {reason: "Say why."}`: approve and reject need a reason (1–4096 bytes).
+- `422 invalid_params {reason: "Say why."}`: approve, reject and withdraw need a reason (1–4096
+  bytes).
+- `403 not_requester` (withdraw): "Only the person who requested it can withdraw it."
 - `409 not_pending {state}`: already decided (`state` is the request's state, or null when it
   changed under you).
 - `403 self_approval_forbidden`: you requested it.
-- `409 activation_policy_changed`: the activation policy changed since the request; request it
-  again. (It's not `policy_changed`, which is the planning policy's code.)
+- `409 activation_policy_changed` (approve only; reject always works): the activation policy
+  changed since the request; request it again. (It's not `policy_changed`, which is the planning policy's code.)
 - `409 nothing_to_resume {state}` (resume): `succeeded` ("It already applied."), `in_progress`
   ("It's applying now.", not stalled yet), or the request's state when it isn't approved
   (`approval_pending | rejected`): "There's nothing to retry."

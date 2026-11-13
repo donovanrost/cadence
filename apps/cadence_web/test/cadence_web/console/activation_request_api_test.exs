@@ -139,6 +139,39 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
     assert is_boolean(retryable)
   end
 
+  test "the requester withdraws; nobody else can; a newer request supersedes an older one", c do
+    id = request(c).activation_request_id
+
+    assert %{"code" => "not_requester"} =
+             c.approver
+             |> post_conn(c.base <> "/#{id}/withdraw", %{"reason" => "Not mine"})
+             |> json_response(403)
+             |> Map.fetch!("error")
+
+    data =
+      c.requester
+      |> post_conn(c.base <> "/#{id}/withdraw", %{"reason" => "Wrong basis"})
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert %{"state" => "withdrawn", "decision" => %{"state" => "withdrawn"}} = data["request"]
+
+    older = request(c)
+    newer = request(c, older.binding_set_id)
+
+    decided =
+      c.approver
+      |> get_conn(c.base <> "?state=decided")
+      |> json_response(200)
+      |> get_in(["data", "requests"])
+
+    assert %{"state" => "superseded", "superseded_by" => superseded_by} =
+             Enum.find(decided, &(&1["id"] == older.activation_request_id))
+
+    assert superseded_by == newer.activation_request_id
+    assert Enum.any?(decided, &(&1["id"] == id and &1["state"] == "withdrawn"))
+  end
+
   test "another mission's request is not found here", c do
     id = request(c).activation_request_id
     other = TestFixtures.persist_mission!(c.org)
@@ -162,17 +195,23 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
   defp get_conn(user, path), do: user |> TestFixtures.member_conn() |> get(path)
   defp post_conn(user, path, body), do: user |> TestFixtures.member_conn() |> post(path, body)
 
-  defp request(c) do
-    binding =
-      BindingSet.new(%{
-        organization_id: c.org.organization_id,
-        mission_id: c.mission.mission_id,
-        binding_set_id: Cadence.Ids.new("review-basis"),
-        version: 1
-      })
+  defp request(c, binding_set_id \\ nil) do
+    id =
+      binding_set_id ||
+        (
+          binding =
+            BindingSet.new(%{
+              organization_id: c.org.organization_id,
+              mission_id: c.mission.mission_id,
+              binding_set_id: Cadence.Ids.new("review-basis"),
+              version: 1
+            })
 
-    {:ok, binding} = Cadence.Governance.persist_binding_set(c.org.organization_id, binding)
-    {:ok, request} = Activations.request(c.scope, c.mission.mission_id, binding.binding_set_id, 1)
+          {:ok, binding} = Cadence.Governance.persist_binding_set(c.org.organization_id, binding)
+          binding.binding_set_id
+        )
+
+    {:ok, request} = Activations.request(c.scope, c.mission.mission_id, id, 1)
     request
   end
 end

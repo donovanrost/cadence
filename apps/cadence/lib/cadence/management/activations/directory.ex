@@ -1,7 +1,8 @@
 defmodule Cadence.Management.Activations.Directory do
   @moduledoc """
   Console reads of a mission's activation requests (L10, docs/apogee/api/activations.md): one
-  page of a tab (`:pending` waiting for approval, `:decided` approved or rejected), newest first
+  page of a tab (`:pending` waiting for approval, `:decided` approved, rejected, withdrawn or
+  superseded), newest first
   on a `{requested_at, id}` cursor, a mission-checked fetch, and each request's latest human
   decision.
   """
@@ -75,7 +76,9 @@ defmodule Cadence.Management.Activations.Directory do
   end
 
   defp tab(query, :pending), do: where(query, [r], r.state == :approval_pending)
-  defp tab(query, :decided), do: where(query, [r], r.state in [:approved, :rejected])
+
+  defp tab(query, :decided),
+    do: where(query, [r], r.state in [:approved, :rejected, :withdrawn, :superseded])
 
   defp before(query, nil), do: query
 

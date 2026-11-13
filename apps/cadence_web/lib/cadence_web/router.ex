@@ -966,6 +966,7 @@ defmodule CadenceWeb.Router do
       post("/activations/:request_id/approve", ActivationRequestController, :approve)
       post("/activations/:request_id/reject", ActivationRequestController, :reject)
       post("/activations/:request_id/resume", ActivationRequestController, :resume)
+      post("/activations/:request_id/withdraw", ActivationRequestController, :withdraw)
       post("/catalog/imports", CatalogImportController, :create)
       get("/catalog/importers", CatalogImportController, :importers)
       get("/ground-stations", CommsController, :stations)

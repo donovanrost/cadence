@@ -160,6 +160,7 @@ defmodule CadenceWeb.Console.Problem do
     activation_request_not_found: {404, "Activation request not found."},
     not_pending: {409, "That request has already been decided."},
     self_approval_forbidden: {403, "You can't approve your own request."},
+    not_requester: {403, "Only the person who requested it can withdraw it."},
     activation_policy_changed:
       {409, "The activation policy changed since this was requested. Request it again."},
     nothing_to_resume: {409, "There's nothing to retry."},
