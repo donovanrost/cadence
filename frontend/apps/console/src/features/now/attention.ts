@@ -376,7 +376,7 @@ const ACTION_WORDS: Readonly<Record<string, string>> = {
 export function resolvedWords(r: Resolved): string {
   // U41: a stuck activation closes by applying, or by a newer activation replacing it.
   if (r.id.startsWith("attention:activation_apply:")) {
-    if (r.action === "superseded") return "A newer activation replaced this one.";
+    if (r.action === "superseded") return "Replaced by a newer request.";
     if (r.action === "applied") return `Applied at ${hhmm(r.resolved_at)}.`;
   }
   const said = r.action ? (ACTION_WORDS[r.action] ?? r.action.replaceAll("_", " ")) : null;

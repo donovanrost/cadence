@@ -934,6 +934,6 @@ describe("activation_apply (domain 9b8456132; ux U41)", () => {
         resolved_at: "2026-11-13T02:20:00Z",
       });
     expect(closed("applied")).toBe("Applied at 02:20Z.");
-    expect(closed("superseded")).toBe("A newer activation replaced this one.");
+    expect(closed("superseded")).toBe("Replaced by a newer request.");
   });
 });
