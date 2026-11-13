@@ -142,3 +142,34 @@ These are the shapes I plan to build, revised with fe-ops' comments (plans/ops.m
   - B2 (event log) has no stream of its own: refetch `/events` on the mission channel's
     `invalidate` (`alarms`, `contacts`, `commanding`, `telemetry`).
 - (Done as `command_group:<mission_id>:<command_group_id>`, above.)
+
+## `dashboard:<mission_id>:<dashboard_id>` (dashboards C1, api-ops)
+
+Live pushes for one dashboard. The full proposal and client notes are in
+`docs/apogee/plans/dashboards-live.md`; this is what the server does.
+
+- **Join `{}`** (the shared-channel join). Authorization is D5's (`operate_mission`, active
+  dashboard). Reply: `{dashboard_id, current_version}`. Errors `{reason}`: `mission_not_found`,
+  `dashboard_not_found`, `dashboard_archived`, `unauthenticated`. Joined alone, only `version`
+  events arrive.
+- **`view:subscribe` / `view:set {runtime: {from, to, spacecraft_id}, refresh_ms}`**: `runtime` uses
+  D5's grammar (null or absent fields mean the dashboard's defaults). `refresh_ms` is 1000–60000,
+  or null for Off.
+  - Reply: `ok {seq: 0}`, or `error {reason: "invalid_params", field: "range" | "spacecraft_id" |
+    "refresh_ms"}` or `error {reason: "dashboard_unavailable"}`. The subscription is resolved
+    before the reply, so a spacecraft from another mission is refused here.
+  - Send it after every (re)join.
+- **`view:unsubscribe {}`**: stops data pushes and stays joined.
+- **`view {seq, full, version, resolved_at, context, snapshot | null, placements, removed}`**:
+  - `full: true` with `seq: 1` after each subscribe or set and after a version change. `snapshot` is
+    D5's, `placements` and `removed` are `[]`.
+  - Otherwise `full: false`. `placements` holds only the placements whose DTO changed (replace them
+    by `id`), `removed` the placement ids that are gone, and `context` is the new context.
+  - `seq` goes up by one per push. On a gap, send `view:subscribe` again.
+  - Data pushes happen only for a sliding (live) range with a `refresh_ms`. The server re-resolves
+    every `refresh_ms` after the previous resolve and pushes only when something changed. Frozen
+    ranges and Off get the full view only.
+- **`version {current_version, saved_by: {kind, id, name} | null, saved_at, archived}`**: sent to
+  every joined client when the dashboard is saved, restored or archived elsewhere (seen within
+  about 250 ms). A subscriber then gets a `full` view, unless `archived: true`, which stops
+  pushes.

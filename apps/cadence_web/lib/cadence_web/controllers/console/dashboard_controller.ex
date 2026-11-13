@@ -11,15 +11,14 @@ defmodule CadenceWeb.Console.DashboardController do
 
   alias Cadence.Dashboards.Documents
   alias Cadence.Reads.Dashboards.DashboardPage
-  alias CadenceWeb.Console.Problem
-  alias CadenceWeb.OpsWorkspaceURL
+  alias CadenceWeb.Console.{DashboardRuntime, Problem}
 
   def show(conn, %{"dashboard_id" => dashboard_id} = params) do
     scope = conn.assigns.current_scope
     mission_id = conn.assigns.current_mission.mission_id
 
     with {:ok, summary} <- summary(scope, mission_id, dashboard_id),
-         {:ok, runtime} <- runtime(params),
+         {:ok, runtime} <- DashboardRuntime.admit(params),
          {:ok, view} <- DashboardPage.load(scope, mission_id, dashboard_id, runtime) do
       json(conn, %{data: body(summary, view)})
     else
@@ -45,31 +44,6 @@ defmodule CadenceWeb.Console.DashboardController do
       _missing_or_archived -> {:error, :not_found}
     end
   end
-
-  # Only the viewer's range and spacecraft enter the runtime. A spacecraft that isn't this
-  # mission's is refused by DashboardPage (:invalid_scope).
-  defp runtime(params) do
-    spacecraft_id = params["spacecraft_id"]
-
-    with :ok <- spacecraft_param(spacecraft_id),
-         {:ok, runtime} <-
-           params
-           |> Map.take(~w(from to))
-           |> maybe_put("spacecraft", spacecraft_id)
-           |> OpsWorkspaceURL.admit() do
-      {:ok, runtime}
-    else
-      {:error, :invalid_scope} -> {:error, :invalid_scope}
-      {:error, _invalid_context} -> {:error, :invalid_range}
-    end
-  end
-
-  defp spacecraft_param(nil), do: :ok
-  defp spacecraft_param(id) when is_binary(id) and byte_size(id) in 1..256, do: :ok
-  defp spacecraft_param(_invalid), do: {:error, :invalid_scope}
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp body(summary, view) do
     %{
