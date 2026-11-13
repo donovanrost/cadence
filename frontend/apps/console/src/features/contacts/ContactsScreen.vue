@@ -8,6 +8,7 @@ import {
   ApButton,
   ApCallout,
   ApChip,
+  ApField,
   ApEmptyState,
   ApGantt,
   ApPageHeader,
@@ -17,6 +18,7 @@ import {
   ApTabLinks,
 } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
+import { fetchGroups } from "@/features/commands/index.ts";
 import { availabilityBands, passGantt, passStatus, type GanttAxis } from "./gantt.ts";
 import { fetchAvailability } from "@/features/scheduling/index.ts";
 import SelectedPassPanel from "./SelectedPassPanel.vue";
@@ -106,6 +108,42 @@ const stationId = computed(() =>
 const atStation = (p: Pass) =>
   stationId.value === null || p.station.id === stationId.value || p.station.ref === stationId.value;
 const list = computed(() => all.value.filter(atStation));
+/**
+ * D3 chips (Contacts.md): `sc any` (?sc=, name or SCID) highlights that spacecraft's passes in
+ * place and dims the rest; `highlight queued uplinks` (?uplinks=1) notches bars with requests
+ * queued on them (a group's U33 uplink.pass).
+ */
+const scText = computed({
+  get: () => (typeof route.query.sc === "string" ? route.query.sc : ""),
+  set: (v: string) => go({ sc: v.trim() || undefined }),
+});
+const scMatch = computed(() => {
+  const q = scText.value.toLowerCase();
+  if (!q) return null;
+  return (p: Pass) => {
+    const sc = (p.spacecraft_id ? byId.value.get(p.spacecraft_id) : undefined) ?? p.spacecraft;
+    return (
+      !!sc &&
+      (sc.name.toLowerCase().includes(q) || (sc.scid != null && String(sc.scid).startsWith(q)))
+    );
+  };
+});
+const showUplinks = computed(() => route.query.uplinks === "1");
+const queuedGroups = useRemoteQuery(
+  computed(() => (showUplinks.value ? missionId.value : null)),
+  (m, signal) => fetchGroups(m, { states: ["queued", "approval_pending"] }, signal),
+);
+useMissionInvalidation(missionId, ["commanding"], queuedGroups.refetch);
+const uplinkPasses = computed<ReadonlySet<string>>(() => {
+  const g = queuedGroups.state.value;
+  return new Set(
+    g.status === "ready" && showUplinks.value
+      ? g.value.flatMap((row) =>
+          row.finished !== true && row.uplink ? [row.uplink.pass.reservation_id] : [],
+        )
+      : [],
+  );
+});
 const stationName = computed(() => {
   const id = stationId.value;
   const s = stationsQuery.state.value;
@@ -162,6 +200,7 @@ const view = computed(() => {
       now.value.getTime(),
       selected.value?.id ?? null,
       axis.value,
+      { match: scMatch.value, uplinks: uplinkPasses.value },
     ),
   };
 });
@@ -196,6 +235,29 @@ const tabs = [
     <div class="flex flex-wrap items-center justify-between gap-3">
       <ApTabLinks :links="tabs" active="live" label="Contacts sections" />
       <div class="flex flex-wrap items-center gap-3">
+        <div class="w-40">
+          <ApField
+            v-model="scText"
+            label="Spacecraft"
+            hidden-label
+            type="search"
+            mono
+            placeholder="sc any"
+          />
+        </div>
+        <button
+          type="button"
+          class="inline-flex h-11 cursor-pointer items-center border px-3 font-display text-md font-semibold tracking-tag uppercase"
+          :class="
+            showUplinks
+              ? 'border-readout bg-raised text-readout'
+              : 'border-line text-text-3 hover:text-readout'
+          "
+          :aria-pressed="showUplinks"
+          @click="go({ uplinks: showUplinks ? undefined : '1' })"
+        >
+          Highlight queued uplinks
+        </button>
         <ApChip
           v-if="stationId !== null"
           name="STATION"

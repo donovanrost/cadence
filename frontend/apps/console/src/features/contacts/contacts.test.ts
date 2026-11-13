@@ -83,6 +83,16 @@ describe("passes", () => {
     ]);
     expect(bars[0]?.description).toBe("EARENDIL-312 at Svalbard, scheduled (synthetic window)");
     // Without a fleet match, the row's own identity names it.
+    // D3 chips: a match dims the rest in place; queued uplinks notch their bar.
+    const marked = passGantt([pass("a"), pass("b")], () => null, now, null, "station", {
+      match: (p) => p.id === "a",
+      uplinks: new Set(["b"]),
+    }).bars;
+    expect(marked.map((b) => [b.id, b.dim ?? false, b.notch ?? false])).toEqual([
+      ["a", false, false],
+      ["b", true, true],
+    ]);
+    expect(marked[1]?.description).toMatch(/uplink queued$/);
     const own = passGantt([pass("x")], () => null, now, null, "spacecraft");
     expect(own.rows[0]?.label).toBe("EARENDIL-312");
   });

@@ -49,6 +49,11 @@ export function passGantt(
   now: number,
   selected: string | null = null,
   axis: GanttAxis = "station",
+  /**
+   * D3 header chips (Contacts.md): `match` highlights one spacecraft's passes in place (the rest
+   * dim, never hidden); `uplinks` notches bars with command requests queued on them.
+   */
+  marks: Readonly<{ match?: ((p: Pass) => boolean) | null; uplinks?: ReadonlySet<string> }> = {},
 ): { rows: GanttRow[]; bars: GanttBar[] } {
   const rows = new Map<string, GanttRow>();
   const bars: GanttBar[] = [];
@@ -71,7 +76,9 @@ export function passGantt(
       kind: selected === p.id ? "focused" : kind,
       label:
         axis === "station" ? (sc ? String(sc.scid).padStart(3, "0") : undefined) : stationLabel(p),
-      description: `${sc?.name ?? "Unknown spacecraft"} at ${p.station.name ?? stationLabel(p)}, ${status}${evidence(p)}${p.source.synthetic ? " (synthetic window)" : ""}`,
+      description: `${sc?.name ?? "Unknown spacecraft"} at ${p.station.name ?? stationLabel(p)}, ${status}${evidence(p)}${p.source.synthetic ? " (synthetic window)" : ""}${marks.uplinks?.has(p.id) ? ", uplink queued" : ""}`,
+      ...(marks.match && !marks.match(p) ? { dim: true } : {}),
+      ...(marks.uplinks?.has(p.id) ? { notch: true } : {}),
     });
   }
   return { rows: [...rows.values()].sort((a, b) => a.label.localeCompare(b.label)), bars };
