@@ -125,6 +125,12 @@ defmodule CadenceWeb.DashboardStatelessAuthoringTest do
     assert copy.placements == []
     assert Document.version(fetch(c)) == 1
 
+    # The copy's first version names who made it (qa smoke: it read "Someone").
+    assert {:ok, [%{version: 1, kind: "create", created_by: copied_by}]} =
+             StatelessAuthoring.versions(scope, mission, copy.dashboard_id)
+
+    assert copied_by == %{id: c.user.user_id, name: c.user.display_name || c.user.email}
+
     assert {:ok, _} = StatelessAuthoring.save(scope, mission, id, 1, [rename("Two")], nil)
     assert {:ok, _restored} = StatelessAuthoring.restore(scope, mission, id, 1, 2)
 

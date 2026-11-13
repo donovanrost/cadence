@@ -19,7 +19,10 @@ defmodule Cadence.Dashboards.CurrentVersions do
   @spec create(binary(), Document.t(), keyword()) :: {:ok, Document.t()} | {:error, term()}
   def create(organization_id, %Document{} = document, opts \\ []) do
     transact(fn ->
-      with {:ok, created} <- DocumentStore.persist_document(organization_id, document),
+      with {:ok, created} <-
+             DocumentStore.persist_document(organization_id, document,
+               created_by: Keyword.get(opts, :created_by)
+             ),
            {:ok, _} <- publish(created, opts) do
         created
       end
