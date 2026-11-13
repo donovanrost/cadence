@@ -67,7 +67,8 @@ defmodule Cadence.Management.Settings do
       slot: "settings.section",
       version: 1,
       title: "Governance",
-      description: "How configuration changes become active.",
+      description:
+        "Who has to agree before configuration changes and app activations take effect.",
       provider: ActivationPolicy,
       scopes: ["organization", "mission"],
       owner: %{kind: "host", label: "Cadence"}

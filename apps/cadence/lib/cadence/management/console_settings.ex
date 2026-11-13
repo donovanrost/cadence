@@ -74,10 +74,18 @@ defmodule Cadence.Management.ConsoleSettings do
   defp fields do
     %{
       "cadence.governance" => [
-        enum("approval_requirement", "Applying a change set", [
-          {"direct", "Applies directly"},
-          {"independent", "Needs a second person's approval"}
-        ])
+        enum(
+          "approval_requirement",
+          "Approval for changes and app activations",
+          [
+            {"direct", "Applies without approval"},
+            {"independent", "Needs a second person's approval"}
+          ],
+          help:
+            "Covers change sets in Setup › Changes, spacecraft configuration reviews, and app " <>
+              "settings that need activation, such as decom. App settings that save " <>
+              "immediately, such as limits, aren't covered."
+        )
       ],
       "commanding.defaults" => [
         enum("shelf", "Command shelf", [{"expanded", "Expanded"}, {"minimized", "Minimized"}])
@@ -118,10 +126,11 @@ defmodule Cadence.Management.ConsoleSettings do
     end
   end
 
-  defp enum(path, label, options),
+  defp enum(path, label, options, opts \\ []),
     do:
       field(path, label, :enum,
-        enum: Enum.map(options, fn {value, text} -> %{value: value, label: text} end)
+        enum: Enum.map(options, fn {value, text} -> %{value: value, label: text} end),
+        help: Keyword.get(opts, :help)
       )
 
   # Shares between 0 and 1: the console shows and accepts percentages (unit "ratio").
