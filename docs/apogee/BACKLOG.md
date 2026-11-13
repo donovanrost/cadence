@@ -289,7 +289,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 ### 11a. Missing or partial in the console, with owners
 | # | Capability (legacy route) | What's missing in the console | Owner → console home | Status |
 | --- | --- | --- | --- | --- |
-| L1 | Contact requirements (`/ops/requirements…`): declare, edit, plan from one | Writes, list, form; close/cancel | api 8g (writes + list), then close/cancel → fe-setup requirement form under `setup.contact-planning` | in progress (api 8g, #74) |
+| L1 | Contact requirements (`/ops/requirements…`): declare, edit, plan from one | ~~Writes, list, form, close/cancel~~ built (api fb7510be; fe-setup f6abf785, with `max_gap_seconds`; live with qa's next restart). Left: api `rule_summary` on list rows + grouped per-template counts for 'From templates'; domain's close vs cancel effects for the sheet wording | api (two small reads) · domain (answer) | built |
 | L2 | Requirement templates (`/ops/requirement-templates`): pause, activate, close | Lifecycle verbs (create/edit exist) | api + fe-setup → `setup.contact-planning.template` | open |
 | L3 | Fleet planning policy (`/ops/planning/policy`): automation grant issue/revoke | Grant verbs (policy save/decide exist) | api + fe-setup → `setup.contact-planning.policy` | open |
 | L4 | Mission creation (`/missions/new`) | Console endpoint + screen (`org.missions` links out today) | api (endpoint; `POST /api/organizations/:id/missions` exists outside the console API) + fe-setup → `org.missions.new` | open |
