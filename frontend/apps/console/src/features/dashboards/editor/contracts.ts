@@ -1,4 +1,4 @@
-import { decoders as d, type Decoded, type Reader } from "@/api";
+import { decoders as d, type Decoded, type Reader, actor } from "@/api";
 import { workspaceSnapshot } from "../model/snapshot.ts";
 
 /**
@@ -194,11 +194,6 @@ export type Rebase = Decoded<typeof rebaseReply>;
 export const savedReply = d.object({ version: d.integer });
 export const copiedReply = d.object({ id, version: d.integer });
 
-export const actor = d.object({
-  kind: d.known(["user", "system"] as const),
-  id: d.nullable(d.string),
-  name: d.nullable(d.string),
-});
 export const versionsReply = d.object({
   current_version: d.integer,
   versions: d.array(

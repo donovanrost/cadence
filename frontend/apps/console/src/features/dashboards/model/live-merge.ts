@@ -1,5 +1,4 @@
-import { DecodeError, decoders as d, type Decoded, type Reader } from "@/api";
-import { actor } from "../editor/contracts.ts";
+import { DecodeError, decoders as d, type Decoded, type Reader, actor } from "@/api";
 import { context, placement, workspaceSnapshot, type WorkspaceSnapshot } from "./snapshot.ts";
 
 /**
