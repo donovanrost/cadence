@@ -69,7 +69,7 @@ describe("nowHeadline", () => {
         spacecraftRow(1, { state: "critical", worst_point: vbat("red_low") }),
         spacecraftRow(2),
       ]),
-    ).toBe("1 spacecraft need you");
+    ).toBe("1 spacecraft needs you");
   });
 
   it("never calls a fleet with stale members nominal", () => {

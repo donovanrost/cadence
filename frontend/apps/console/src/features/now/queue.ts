@@ -216,7 +216,9 @@ export function nowHeadline(fleet: Fleet, queue: readonly QueueItem[]): string {
   const needYou = new Set(
     queue.filter((item) => item.priority === 1).flatMap((item) => item.spacecraftIds),
   );
-  if (needYou.size > 0) return `${plural(needYou.size, "spacecraft", "spacecraft")} need you`;
+  // ux §7: "1 spacecraft needs you", "3 spacecraft need you".
+  if (needYou.size > 0)
+    return `${plural(needYou.size, "spacecraft", "spacecraft")} ${needYou.size === 1 ? "needs" : "need"} you`;
   const watch = c.caution + c.stale;
   if (watch > 0) return `${plural(watch, "spacecraft", "spacecraft")} to watch`;
   if (c.never_heard === c.total) return "No telemetry yet";
