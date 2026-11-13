@@ -75,11 +75,11 @@ export async function archiveProvider(missionId: string, id: string, reason: str
 /** "Validated: the provider answered." / "Sync failed: <provider's message>". */
 export function checkSentence(what: "validate" | "sync", c: ProviderCheck): string {
   const r = c.result;
+  // api-ops' messages are sentences ("The provider didn't answer in time."): one period, not two.
+  const why = `${(r.message ?? "no reason given").replace(/\.$/, "")}.`;
   if (what === "validate")
-    return r.ok
-      ? "Validated: the provider answered."
-      : `Validation failed: ${r.message ?? "no reason given"}.`;
-  if (!r.ok) return `Sync failed: ${r.message ?? "no reason given"}.`;
+    return r.ok ? "Validated: the provider answered." : `Validation failed: ${why}`;
+  if (!r.ok) return `Sync failed: ${why}`;
   return typeof r.stations === "number" ? `Synced ${r.stations} stations.` : "Synced.";
 }
 

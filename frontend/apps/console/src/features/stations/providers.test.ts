@@ -91,6 +91,9 @@ describe("mission providers (L12)", () => {
       "Validated: the provider answered.",
     );
     expect(checkSentence("sync", check(true, 12, null))).toBe("Synced 12 stations.");
+    expect(
+      checkSentence("validate", check(false, null, "The provider didn't answer in time.")),
+    ).toBe("Validation failed: The provider didn't answer in time.");
     expect(checkSentence("sync", check(false, null, "unsupported_capability"))).toBe(
       "Sync failed: unsupported_capability.",
     );
