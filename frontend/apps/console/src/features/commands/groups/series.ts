@@ -11,7 +11,14 @@ const seriesReader = d.object({
     d.object({ position: d.integer, command_id: d.token, command_name: d.nullable(d.string) }),
   ),
   point: d.nullable(
-    d.object({ id: d.token, name: d.string, unit: d.nullable(d.string), type: d.token }),
+    // Live sends type null for a point the catalog doesn't type (commanding.md says numeric | enum
+    // | text): read it, and plot only if the samples are numbers.
+    d.object({
+      id: d.token,
+      name: d.string,
+      unit: d.nullable(d.string),
+      type: d.nullable(d.token),
+    }),
   ),
   reason: d.optional(d.nullable(d.token)),
   commanded: d.nullable(d.object({ value_json: d.string, comparison: d.nullable(d.string) })),
@@ -50,14 +57,25 @@ const num = (j: string | null | undefined) => {
   return Number.isFinite(v) ? v : null;
 };
 
+/** The point's name; live falls back to its id when the catalog has none, which reads as noise. */
+export function pointName(s: VerifierSeries | null): string {
+  const p = s?.point;
+  return p && p.name !== p.id ? p.name : "the verifier point";
+}
+
+const hasNumbers = (s: VerifierSeries) =>
+  s.targets.some((t) => t.samples.some((p) => num(p.value_json) !== null));
+
 /** Why there's no plot, in words; null when there is one. */
 export function notPlottable(s: VerifierSeries): string | null {
   if (!s.point)
     return s.reason === "no_verifier"
       ? "Not plottable: this command has no verifier"
       : "Not plottable: verified by uplink acknowledgement only";
-  if (s.point.type !== "numeric") return `Not plottable: ${s.point.name} isn't numeric`;
+  if (s.point.type !== null && s.point.type !== "numeric")
+    return `Not plottable: ${pointName(s)} isn't numeric`;
   if (!s.window) return "Nothing to plot until the first uplink is released";
+  if (!hasNumbers(s)) return `No readings of ${pointName(s)} in the verify window`;
   return null;
 }
 

@@ -45,6 +45,10 @@ const target = d.object({
   stage,
   members: d.array(member, 16),
   last_event_at: d.nullable(d.timestamp),
+  /** Waiting on its contact behind a release whose outcome is unknown: "Needs you" shows it. */
+  blocked: d.optional(
+    d.nullable(d.object({ reason: d.token, command_request_id: d.optional(d.token) })),
+  ),
 });
 export type GroupTarget = Decoded<typeof target>;
 

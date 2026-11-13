@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApButton, ApListRow, ApPanel } from "@/ui";
+import { ApButton, ApCallout, ApListRow, ApPanel } from "@/ui";
+import { needsYouCards } from "../groups/needsYou.ts";
+import type { VerifierSeries } from "../groups/series.ts";
 import type { Group } from "../groups/show.ts";
-import { memberStageWord, NEEDS_YOU, STAGE_STATE } from "../groups/words.ts";
 
 /**
- * N · Needs you (CommandFlow C3): targets whose uplink failed or is unclear. No automatic retry
- * (DECISIONS #69): `Re-send` opens Compose cloned from this group, narrowed to those targets,
- * through the normal GO. Hidden when nothing needs a human.
+ * N · Needs you (CommandFlow C3): one card per target a human has to look at, with what happened
+ * in a sentence. No automatic retry (DECISIONS #69): `Re-send` opens Compose cloned from this group,
+ * narrowed to those targets, through the normal GO. A released request with nothing to do says so.
  */
-const props = defineProps<{ group: Group }>();
-const failed = computed(() => props.group.targets.filter((t) => NEEDS_YOU.includes(t.stage)));
+const props = defineProps<{ group: Group; series: VerifierSeries | null }>();
+const cards = computed(() => needsYouCards(props.group, props.series));
+const resendable = computed(() => cards.value.filter((c) => c.resend));
 const resend = (ids: readonly string[]) => ({
   name: "ops.commands.new",
   query: { from: `group:${props.group.id}`, only: ids.join(",") },
@@ -19,35 +21,46 @@ const resend = (ids: readonly string[]) => ({
 
 <template>
   <ApPanel
-    v-if="failed.length"
+    v-if="cards.length"
     index="N"
     title="Needs you"
-    :meta="`${failed.length} ${failed.length === 1 ? 'target' : 'targets'}`"
+    :meta="`${cards.length} ${cards.length === 1 ? 'target' : 'targets'}`"
     flush
   >
-    <template v-if="failed.length > 1" #meta>
-      <ApButton size="compact" variant="secondary" :to="resend(failed.map((t) => t.spacecraft_id))"
-        >Re-send to all {{ failed.length }}</ApButton
+    <template v-if="resendable.length > 1" #meta>
+      <ApButton
+        size="compact"
+        variant="secondary"
+        :to="resend(resendable.map((c) => c.target.spacecraft_id))"
+        >Re-send to all {{ resendable.length }}</ApButton
       >
     </template>
     <ul class="m-0 list-none p-0">
       <ApListRow
-        v-for="t in failed"
-        :key="t.spacecraft_id"
-        :state="STAGE_STATE[t.stage]"
-        :title="t.name ?? 'Unknown spacecraft'"
-        :sentence="memberStageWord(t.stage, group.state)"
+        v-for="c in cards"
+        :key="c.target.spacecraft_id"
+        :state="c.state"
+        :title="c.target.name ?? 'Unknown spacecraft'"
+        :meta="c.tag"
+        :sentence="c.explanation"
       >
         <template #action>
           <span class="flex gap-1">
-            <ApButton size="compact" variant="secondary" :to="resend([t.spacecraft_id])"
+            <ApButton
+              v-if="c.resend"
+              size="compact"
+              variant="secondary"
+              :to="resend([c.target.spacecraft_id])"
               >Re-send</ApButton
             >
             <ApButton
-              v-if="t.scid !== null"
+              v-if="c.target.scid !== null"
               size="compact"
               variant="ghost"
-              :to="{ name: 'ops.spacecraft', params: { scId: String(t.scid), tab: 'investigate' } }"
+              :to="{
+                name: 'ops.spacecraft',
+                params: { scId: String(c.target.scid), tab: 'investigate' },
+              }"
               >Open</ApButton
             >
           </span>
@@ -55,4 +68,5 @@ const resend = (ids: readonly string[]) => ({
       </ApListRow>
     </ul>
   </ApPanel>
+  <ApCallout v-else-if="group.state === 'queued'" tone="nominal">Nothing needs you.</ApCallout>
 </template>

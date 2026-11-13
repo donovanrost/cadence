@@ -26,10 +26,11 @@ import AbortPanel from "./AbortPanel.vue";
 import NeedsYouPanel from "./NeedsYouPanel.vue";
 import VerifierPanel from "./VerifierPanel.vue";
 import { abortable, pipeline } from "./uplink.ts";
+import { useVerifierSeries } from "./useVerifierSeries.ts";
 
 /**
  * C3 · Uplink & verify v1: pipeline tiles, each target's trail, the request log, and Abort
- * remaining. Waves, the verifier plot and Needs-you cards come with their data (#8, M24).
+ * remaining, N Needs you and the U2 verifier plot (one M26 read for both). Waves come with #8.
  */
 const props = defineProps<{
   group: Group;
@@ -41,6 +42,10 @@ const props = defineProps<{
 }>();
 defineEmits<{ changed: [] }>();
 const tiles = computed(() => pipeline(props.group));
+const series = useVerifierSeries(
+  computed(() => props.missionId),
+  computed(() => props.group.id),
+);
 const events = computed(() =>
   [...props.group.events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)),
 );
@@ -103,8 +108,8 @@ const blocked = computed(() =>
         :state="t.value ? t.state : undefined"
       />
     </ApStatStrip>
-    <NeedsYouPanel :group="group" />
-    <VerifierPanel :mission-id="missionId" :group-id="group.id" />
+    <NeedsYouPanel :group="group" :series="series.ready.value" />
+    <VerifierPanel :series="series" />
     <ApPanel index="U1" title="Targets" :meta="`${group.target_count}`" flush>
       <ul class="m-0 list-none p-0">
         <li
