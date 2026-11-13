@@ -12,7 +12,13 @@ import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
 import { createOp, type NewProfileForm } from "./newProfile.ts";
 
 /** Profile.md New profile: name + the generated fields, staged as one create in a change set. */
-const props = defineProps<{ missionId: string; form: NewProfileForm; initialName: string }>();
+const props = defineProps<{
+  missionId: string;
+  form: NewProfileForm;
+  initialName: string;
+  /** Duplicate: the source, so the form says what was copied (ux). */
+  copiedFrom?: Readonly<{ name: string; version: number }> | undefined;
+}>();
 const router = useRouter();
 const name = ref(props.initialName);
 const values = ref({ ...props.form.values });
@@ -47,6 +53,11 @@ async function stage() {
 <template>
   <ApPanel index="N1" title="New profile">
     <form class="flex flex-col gap-4" @submit.prevent="stage">
+      <!-- A create moves no spacecraft (spacecraft_profile write :create), so the last clause holds. -->
+      <p v-if="copiedFrom" class="m-0 text-md text-text-3">
+        Copied from {{ copiedFrom.name }} v{{ copiedFrom.version }}: its fields, routing rules and
+        app settings. No spacecraft use it until you assign them.
+      </p>
       <ApField v-model="name" label="Name" required />
       <SchemaForm v-model="values" :schema="form.schema" :errors="errors" />
       <ApCallout v-if="failure" tone="caution">{{ failure }}</ApCallout>

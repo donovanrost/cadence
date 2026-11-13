@@ -43,6 +43,7 @@ const crumbs = [{ label: "Profiles", to: { name: "setup.profiles" } }, { label: 
           :mission-id="missionId"
           :form="duplicateForm(value)"
           :initial-name="`${value.profile.name} (copy)`"
+          :copied-from="{ name: value.profile.name, version: value.profile.version }"
         />
       </template>
     </ApRemote>
