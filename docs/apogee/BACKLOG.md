@@ -293,7 +293,7 @@ missing endpoint or decision; an item with no blocker can start now.
 
 ## 11. Legacy-parity inventory (director 11-13: the old pages get deleted)
 
-Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy host app (`frontend/apps/host`, served by `HostPageLive` and `ApplicationHostLive`, writes in `*_page.ex` and `ops_console/actions/*.ex`) and the console's routes and `/api/console/v1` endpoints; plus ux's six "existing page" handoffs. **Rule:** no new features in the legacy pages; bug fixes only if something live depends on them. A page is deleted only when its row is done or explicitly dropped. Rulings: DECISIONS #75 (user, 11-13). Owned rows are handed out as queues empty.
+Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy host app (`frontend/apps/host`, served by `HostPageLive` and `ApplicationHostLive`, writes in `*_page.ex` and `ops_console/actions/*.ex`) and the console's routes and `/api/console/v1` endpoints; plus ux's six "existing page" handoffs. **Rule:** no new features in the legacy pages; bug fixes only if something live depends on them. A page is deleted only when its row is done or explicitly dropped. **Deletion manifest:** `plans/legacy-deletion.md` (fe-setup 4722cb1b0): deletable now L5, L6, L21; after qa's live checks L1+L2+L3 (one batch), L4, L7, L11; blocked L10, L12/L13, L19. Next: covered-already host pages (§11c) added; first batch waits on the director's go (and an apps/host exception). Rulings: DECISIONS #75 (user, 11-13). Owned rows are handed out as queues empty.
 
 ### 11a. Missing or partial in the console, with owners
 | # | Capability (legacy route) | What's missing in the console | Owner → console home | Status |
