@@ -11,7 +11,8 @@ defmodule Cadence.Reads.ActionQueue do
       requests waiting on the viewer (not requested by them); stale spacecraft,
       grouped by plane.
     * **P3, when you can:** setup gaps (readiness `blocker` / `not_set_up`
-      findings), ground limits not configured, spacecraft never heard from.
+      findings), ground limits not configured, spacecraft never heard from, a change set
+      staged for more than 24 h (`ActionQueue.ChangeSetItems`).
 
   Identical causes are grouped into one item: alarms by `{source, severity,
   point, condition}` on each spacecraft's worst active episode (see
@@ -29,7 +30,7 @@ defmodule Cadence.Reads.ActionQueue do
   """
 
   alias Cadence.Auth.Scope
-  alias Cadence.Reads.ActionQueue.{AlarmItems, AttentionItems, ContactItems, Item}
+  alias Cadence.Reads.ActionQueue.{AlarmItems, AttentionItems, ChangeSetItems, ContactItems, Item}
 
   alias Cadence.Reads.{
     AlarmEpisodes,
@@ -58,6 +59,7 @@ defmodule Cadence.Reads.ActionQueue do
           | :attention
           | :missed_pass
           | :station
+          | :change_set_stale
 
   @doc "Loads every input and builds the queue for the scope's user."
   @spec load(Scope.t(), binary(), keyword()) :: map()
@@ -79,6 +81,7 @@ defmodule Cadence.Reads.ActionQueue do
       fleet: fleet,
       attention: AttentionItems.load(scope, mission_id, fleet, now),
       contact_items: ContactItems.load(scope, mission_id, fleet, now, lookback_s),
+      change_set_items: ChangeSetItems.load(organization_id, mission_id, now),
       episodes: episodes,
       alarms_truncated: truncated?,
       command_rows: commands.rows,
@@ -130,7 +133,8 @@ defmodule Cadence.Reads.ActionQueue do
         setup_items(input),
         never_heard_items(fleet.spacecraft),
         attention_input(input).items,
-        Map.get(input, :contact_items, [])
+        Map.get(input, :contact_items, []),
+        Map.get(input, :change_set_items, [])
       ]
       |> List.flatten()
       |> Enum.sort_by(&sort_key/1)

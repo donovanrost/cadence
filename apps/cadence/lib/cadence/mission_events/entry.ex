@@ -21,6 +21,7 @@ defmodule Cadence.MissionEvents.Entry do
           | :managed_action_request
           | :combined_downlink_record
           | :downlink_diagnostic
+          | :config_revision
   @type subject_kind ::
           :scheduled_contact
           | :realized_contact
@@ -28,6 +29,7 @@ defmodule Cadence.MissionEvents.Entry do
           | :telemetry_point
           | :capability_instance
           | :downlink_observation
+          | :config_revision
 
   @type t :: %__MODULE__{
           mission_event_id: binary(),

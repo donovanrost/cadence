@@ -10,7 +10,8 @@ defmodule Cadence.Reads.EventLog do
     (derived from the timeline entry's source and category; the original kind
     is kept as `raw_kind`). `flight_event` is reserved for what the spacecraft itself
     reports (docs/apogee/domain/flight-events.md); no timeline entry is one yet. Ground
-    health entries are `data`, limit-definition lifecycle entries `config`.
+    health entries are `data`; limit-definition lifecycle entries and applied configuration
+    revisions (`Cadence.Reads.ConfigRevisionEvents`) are `config`.
   - `severity`: `critical | caution | nominal | info` (timeline `critical`/`error`
     → critical, `warning` → caution, cleared/resolved statuses and a source's health
     recovering → nominal).
@@ -65,6 +66,7 @@ defmodule Cadence.Reads.EventLog do
         from_occurred_at: opts.from,
         to_occurred_at: opts.to,
         spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
+        config_revisions: true,
         limit: remaining,
         cursor: cursor
       )
@@ -97,6 +99,7 @@ defmodule Cadence.Reads.EventLog do
         from_occurred_at: opts.from,
         to_occurred_at: opts.to,
         spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
+        config_revisions: true,
         limit: @density_cap
       )
 
@@ -190,6 +193,7 @@ defmodule Cadence.Reads.EventLog do
        when source in [:combined_downlink_record, :downlink_diagnostic], do: "contact"
 
   defp classify(%Entry{kind: :binding_set_activated}), do: "config"
+  defp classify(%Entry{source_record_kind: :config_revision}), do: "config"
   defp classify(%Entry{category: :transport}), do: "contact"
   defp classify(%Entry{category: :runtime}), do: "config"
   defp classify(%Entry{category: :health}), do: "data"

@@ -41,7 +41,8 @@ defmodule CadenceWeb.Console.ActionQueueJSON do
       missed_passes: item.missed_passes,
       next_contact: item.next_contact,
       station_issue: station_issue(item.station_issue),
-      event: item.event
+      event: item.event,
+      change_set: item.change_set
     }
   end
 

@@ -10,7 +10,7 @@ defmodule Cadence.Reads.MissionTimeline do
   alias Cadence.MissionEvents.Entry
   alias Cadence.OperationalEvents
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
-  alias Cadence.Reads.MissionEvents
+  alias Cadence.Reads.{ConfigRevisionEvents, MissionEvents}
   alias Cadence.SourceEndpoints
 
   @spec list_for_mission(binary(), binary(), keyword()) :: [Entry.t()]
@@ -19,7 +19,12 @@ defmodule Cadence.Reads.MissionTimeline do
     page_for_mission(organization_id, mission_id, opts).entries
   end
 
-  @doc "Reads a bounded portion of canonical history with a stable exclusive continuation."
+  @doc """
+  Reads a bounded portion of canonical history with a stable exclusive continuation.
+
+  `config_revisions: true` also merges applied configuration revisions
+  (`Cadence.Reads.ConfigRevisionEvents`; mission-wide, so not with a `spacecraft_id` filter).
+  """
   def page_for_mission(organization_id, mission_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
     source_limit = max(limit * 4, 1_000)
@@ -59,7 +64,8 @@ defmodule Cadence.Reads.MissionTimeline do
       )
 
     entries =
-      (operational_entries ++ overrides ++ projected)
+      (operational_entries ++
+         overrides ++ projected ++ config_revisions(organization_id, mission_id, opts))
       |> Map.new(&{&1.mission_event_id, &1})
       |> Map.values()
 
@@ -85,6 +91,17 @@ defmodule Cadence.Reads.MissionTimeline do
       end
 
     %{entries: visible, next_cursor: next_cursor}
+  end
+
+  defp config_revisions(organization_id, mission_id, opts) do
+    if Keyword.get(opts, :config_revisions, false) and is_nil(Keyword.get(opts, :spacecraft_id)),
+      do:
+        ConfigRevisionEvents.entries(
+          organization_id,
+          mission_id,
+          Keyword.take(opts, [:from_occurred_at, :to_occurred_at])
+        ),
+      else: []
   end
 
   defp portion(entries, limit, to_cursor) do

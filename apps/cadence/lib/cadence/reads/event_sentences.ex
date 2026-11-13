@@ -15,6 +15,7 @@ defmodule Cadence.Reads.EventSentences do
   """
 
   alias Cadence.MissionEvents.Entry
+  alias Cadence.Reads.ConfigRevisionEvents
 
   @type context :: %{
           spacecraft: %{optional(binary()) => {binary() | nil, integer() | nil}},
@@ -111,6 +112,9 @@ defmodule Cadence.Reads.EventSentences do
     {"Catalog rev #{doc["revision_number"] || "?"}#{label} registered#{by(entry, ctx)}",
      %{kind: "catalog_revision", id: entry.subject_id, name: doc["revision_label"]}, nil}
   end
+
+  defp sentence("config_revision_" <> _applied_or_rolled_back, entry, _ctx),
+    do: {ConfigRevisionEvents.sentence(entry), ConfigRevisionEvents.subject(entry), nil}
 
   defp sentence("binding_set_activated", entry, ctx) do
     {"#{configuration(entry.summary)} activated#{by(entry, ctx)}",

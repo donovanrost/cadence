@@ -269,6 +269,7 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 | `setup` | 3 | `off` | one per readiness finding with severity `blocker` or `not_set_up` | `finding` (the readiness finding: `id, area, severity, cause, title, body, affected_count, fix`) |
 | `limits_not_configured` | 3 | `off` | — (omitted when the limits app itself isn't installed; that is a `setup` item) | none |
 | `never_heard` | 3 | `off` | one item | `spacecraft` |
+| `change_set_stale` (BACKLOG 8d) | 3 | `off` | at most one: the mission's active change set (open or in review) when its oldest staged change was staged more than 24 h ago (a set with nothing staged raises nothing) | `change_set {id, state: open \| in_review, staged_count, base_revision, opened_at, oldest_staged_at, submitted_at, authors [{kind, id, name}]}` (link: Setup's staged review); `count` = staged changes; `since` = `oldest_staged_at`. `change_set` is `null` on every other kind |
 | `flight_event` (built, flight-events.md) | 1 critical, 2 caution | `critical` / `caution` | `{severity, point name, value}` of active `catalog_monitoring` episodes on a state rule (`enumerated`/`boolean`/`string`) | as `alarm` (`source` always `catalog_monitoring`; `spacecraft[].first_crossed_at` = the spacecraft-time `entered_at`), plus `event {value_json, entered_at}` (`entered_at` = earliest in the group) |
 
 - `id` is stable across refetches (use it as the list key and for "seen" state).
@@ -276,7 +277,8 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
   that priority, then `due_at` (soonest first), then `since` (oldest first, `null` last), then `id`.
   The server returns the order; don't re-sort.
 - `since`: alarm = earliest `first_crossed_at` in the group; command = oldest failure / request time;
-  stale = the oldest `last_received_at` (silent the longest); setup / never-heard = `null`.
+  stale = the oldest `last_received_at` (silent the longest); change_set_stale = the oldest staged
+  change; setup / never-heard = `null`.
 - `due_at` (time to consequence: next AOS, umbra entry, release time) is **always `null` for now**.
   It fills in with M7 (passes) and D1 (propagation).
 - Groups can have one member. The server groups every identical cause; the UI may show small
@@ -602,7 +604,15 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
 - `activation` subjects have no console page yet; leave them unlinked (Setup's change history is
   the nearest place).
 - `refs.subject` is the link target `{kind: "data_source" | "contact" | "dashboard" |
-  "catalog_revision" | "activation", id, name}`, or `null` when there is none.
+  "catalog_revision" | "activation" | "config_revision", id, name}`, or `null` when there is none.
+- **Applied configuration revisions** (BACKLOG 8d) are `config` events: `raw_kind`
+  `config_revision_applied` ("Applied r6 · 2 changes") or `config_revision_rolled_back`
+  ("Rolled back to r4"), severity `info`, `at` = applied time, `spacecraft` `null`,
+  `refs.subject` `{kind: "config_revision", id: "6", name: "r6"}` (`id` is the revision number;
+  Setup has no per-revision route yet, so link to `setup.revisions`). The baseline revision (r1)
+  isn't listed. They're mission-wide, so a `spacecraft_id` or `plane` filter leaves them out;
+  `/events/density` counts them as `info`. An apply that changes the runtime also shows its
+  "… activated" row.
 - A watermark retreat is `caution` only when it means something for the operator (a replay or
   late data), and the sentence says so ("… went back to 22:28:30Z (data replay)"); otherwise
   it's `info` (#3).
