@@ -125,10 +125,8 @@ export const outline = d.object({
       section_id: d.nullable(id),
       title: d.string,
       editable: d.boolean,
-      // domain 73e5f126e: null for embedded placements; optional so an older node still reads.
-      library: d.optional(
-        d.nullable(d.object({ item_id: id, version: d.integer, retired: d.boolean })),
-      ),
+      // domain 73e5f126e (api passes it through): null for embedded placements.
+      library: d.nullable(d.object({ item_id: id, version: d.integer, retired: d.boolean })),
       fields: d.nullable(widgetFields),
       observables: d.array(id, 24),
       layout: d.object({
