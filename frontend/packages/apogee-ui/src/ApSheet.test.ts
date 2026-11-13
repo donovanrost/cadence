@@ -66,4 +66,23 @@ describe("ApSheet", () => {
     expect(dialog.element.open).toBe(false);
     wrapper.unmount();
   });
+
+  it("refuses Escape when not dismissible, but still closes from the caller", async () => {
+    const wrapper = mount(ApSheet, {
+      attachTo: document.body,
+      props: { title: "Your token", dismissible: false },
+      slots: { default: "<p>secret</p>", footer: "<button>Done</button>" },
+    });
+    const sheet = wrapper.vm as { open: () => void; close: () => void };
+    sheet.open();
+    await nextTick();
+    const dialog = wrapper.get("dialog");
+    const cancel = new Event("cancel", { cancelable: true });
+    dialog.element.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    sheet.close();
+    await nextTick();
+    expect(dialog.element.open).toBe(false);
+    wrapper.unmount();
+  });
 });

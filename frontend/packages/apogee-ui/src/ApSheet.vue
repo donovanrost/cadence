@@ -20,8 +20,10 @@ const props = withDefaults(
     initialFocus?: string | undefined;
     /** `center` (modal, the default) or `side` (400px, right-anchored, non-modal). */
     placement?: "center" | "side" | undefined;
+    /** False: Escape doesn't close it; only the caller's own close() does (e.g. a show-once secret). */
+    dismissible?: boolean | undefined;
   }>(),
-  { width: "narrow", initialFocus: "footer button", placement: "center" },
+  { width: "narrow", initialFocus: "footer button", placement: "center", dismissible: true },
 );
 const emit = defineEmits<{ closed: [] }>();
 defineSlots<{ default(): unknown; footer?(): unknown }>();
@@ -43,9 +45,13 @@ function open() {
 function close() {
   dialog.value?.close();
 }
+/** A modal dialog's Escape fires `cancel`; a non-dismissible sheet refuses it. */
+function onCancel(event: Event) {
+  if (!props.dismissible) event.preventDefault();
+}
 /** A non-modal dialog gets no native Escape; the side sheet adds it. */
 function onKeydown(event: KeyboardEvent) {
-  if (props.placement === "side" && event.key === "Escape") {
+  if (props.placement === "side" && event.key === "Escape" && props.dismissible) {
     event.stopPropagation();
     close();
   }
@@ -75,6 +81,7 @@ defineExpose({ open, close });
           ]
     "
     @close="onClose"
+    @cancel="onCancel"
     @keydown="onKeydown"
   >
     <div

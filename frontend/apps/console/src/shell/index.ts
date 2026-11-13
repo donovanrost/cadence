@@ -17,3 +17,6 @@ export { useOpsCounts, type OpsCounts } from "./counts.ts";
 export { useRuntimeStatus } from "./runtime-status.ts";
 export { outageText } from "./runtime-banner.ts";
 export type { RuntimeStatus } from "./counts.ts";
+/** L6 admin mode for features (L7 admin pages): state, enter/leave, and the step-up form. */
+export { enterAdminMode, leaveAdminMode, useAdminMode } from "./admin-mode.ts";
+export { default as AdminModeForm } from "./AdminModeForm.vue";
