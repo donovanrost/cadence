@@ -10,8 +10,10 @@ Route `/console/admin/**`, outside org and mission scope.
 - **Rail:** `Organizations` · `Service identities` · `Runtime`.
 - **Layout:** reading layout. Outside admin mode every route shows the step-up form inline (Auth.md); nothing
   renders behind it.
-- **Footer caption on every page:** "Admin actions are recorded in the audit log." Show it only once api confirms
-  where they're recorded, and name it ("…in each organization's audit log").
+- **Footer caption** (api-ops): on an organization's page, "Changes to Acme Space's members and invitations are
+  recorded in its audit log (Access)." with a link to that org's Audit filtered to Access. On the platform pages
+  (create organization, service identities), the caption waits until api-ops names where those actions are
+  recorded. Until then there's no caption (U20).
 
 ## Organizations (`/console/admin/organizations`)
 - h1 `12 organizations`. ApTable: Name (link) · Slug (mono) · Members · Missions · Created (by, when). There's a
