@@ -11,7 +11,12 @@ quality come from the ground definitions, never from panel config. Binding modes
   rail item. `Dashboards ↗` links become in-console links (IA, OpsLists, Investigate).
 - **Directory** `M/telemetry/dashboards`: a normal reading page in the shell, with search, a tag filter, starred,
   an ApTable (Name link · Tags (chips) · Spacecraft · Updated by/when) and the primary `New dashboard`. There's no
-  folder model, so there's no Folder column (Q4). Spacecraft reads `EARENDIL-312` (fixed), `Chosen when viewing`
+  folder model, so there's no Folder column (Q4).
+- **Entry points for Playlists and Library** (dashboards 178a6c9e4): secondary header buttons left of the primary,
+  in the order `Library` · `Playlists` · `New dashboard`. Both are visible to everyone, because anyone can read
+  them. They aren't tabs: Explore and Dashboards are views of telemetry, while these belong to dashboards. Their
+  pages carry the breadcrumb `DASHBOARDS / PLAYLISTS` (or `/ LIBRARY`) back to the directory. On a phone, the
+  buttons wrap under the h1. Spacecraft reads `EARENDIL-312` (fixed), `Chosen when viewing`
   (context) or `Whole fleet` (constellation).
 - **Viewer** `M/telemetry/dashboards/:id`: a **console takeover**, like Compose and K1. The rail and top bar give
   way to a takeover header, so the grid gets the full viewport. That's how the cockpit "breaks" the management
