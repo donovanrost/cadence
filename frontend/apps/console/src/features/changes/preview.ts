@@ -6,8 +6,12 @@ const { array, boolean, integer, nullable, object, oneOf, string, token } = deco
 
 const verdict = oneOf(["go", "hold", "no_go"]);
 
-/** U42 derived_point_in_use (domain 5504322a8): the live points whose expressions read it. */
-const dependentsDetails = object({
+/**
+ * HOLD details the console reads: U42 derived_point_in_use's dependents (domain 5504322a8) and U43
+ * limit_alarm_active's point (its alarms link).
+ */
+const holdDetails = object({
+  point_id: decoders.optional(nullable(string)),
   used_by: decoders.optional(
     array(object({ point_id: string, name: nullable(string), definition_id: token }), 200),
   ),
@@ -38,7 +42,7 @@ const previewItem = object({
   /** L17/L22 holds (api setup.md): true when it can't be acknowledged away; the sentence says what to do. */
   blocking: decoders.optional(boolean),
   // Lenient: each hold sends details of its own shape; only an object is read, for its used_by.
-  details: (v: unknown, path = "") => (isRecord(v) ? dependentsDetails(v, path) : null),
+  details: (v: unknown, path = "") => (isRecord(v) ? holdDetails(v, path) : null),
   /** #65 catalog holds (catalog-generations.md): who moves from → to, and the requests involved. */
   spacecraft_ids: decoders.optional(array(token, 20_000)),
   from: decoders.optional(nullable(token)),

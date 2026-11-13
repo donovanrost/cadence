@@ -9,6 +9,7 @@ import {
   type Preview,
   type SubmitResult,
 } from "./actions.ts";
+import { whyPlaceholder } from "./holds.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K3 Apply: why (required), holds acknowledgement, apply or request review (mission policy). */
@@ -33,6 +34,12 @@ const verdict = computed(() =>
 /** #65: a blocking hold can't be acknowledged away, so the checkbox doesn't show for it. */
 const blocking = computed(() =>
   props.preview.status === "ready" ? blockingReason(props.preview.value) : null,
+);
+/** ux U40/U43: one acknowledgeable HOLD names what to justify; several share one placeholder. */
+const placeholder = computed(
+  () =>
+    (props.preview.status === "ready" ? whyPlaceholder(props.preview.value) : null) ??
+    "Goes in the revision and the audit log",
 );
 const blocked = computed((): string | null => {
   if (props.changeSet.state === "in_review")
@@ -75,7 +82,7 @@ async function apply() {
         <ApStatTile label="Changes" :value="changeSet.staged_count" />
         <ApStatTile label="Authors" :value="changeSet.authors.length" />
       </div>
-      <ApField v-model="why" label="Why" placeholder="Goes in the revision and the audit log" />
+      <ApField v-model="why" label="Why" :placeholder="placeholder" />
       <label
         v-if="verdict === 'hold' && !blocking"
         class="flex items-center gap-2 text-md text-readout"
