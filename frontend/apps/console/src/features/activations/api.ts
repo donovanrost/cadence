@@ -19,8 +19,8 @@ const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/
 
 /** api serves L10 (be59d4f32); on since qa's go 11-13. */
 export const ACTIVATIONS_LIVE = true;
-/** Withdraw waits on domain; api's shape is agreed: POST /:id/withdraw {reason} → {request}. */
-export const WITHDRAW_LIVE = false;
+/** Withdraw: api 6e289aa35 (domain 444c6126b), live on :4011 since 11-13. */
+export const WITHDRAW_LIVE = true;
 
 /** U41: why an approved activation didn't apply. */
 export const applyCodes = [
