@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useRoute } from "vue-router";
 import { useConsoleScope } from "@/shell";
 import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import AuditFilters from "./AuditFilters.vue";
 import AuditResults from "./AuditResults.vue";
 import { auditKinds, kindText } from "./api.ts";
+import { useAuditActor } from "./useAuditActor.ts";
 import { useAuditLog } from "./useAuditLog.ts";
 
 /** Organization › Audit log. Says which sources are missing until the read is unified (ux spec). */
@@ -25,14 +25,8 @@ const setKind = (v: string) => {
   kind.value = kindOptions.value.some((o) => o.value === v) ? v : "all";
 };
 const missionId = ref("");
-/** `?actor=<user_id>&who=<name>`: one person's events (People › person › Activity links here). */
-const route = useRoute();
-const actorId = computed(() =>
-  typeof route.query["actor"] === "string" ? route.query["actor"] : null,
-);
-const actorName = computed(() =>
-  typeof route.query["who"] === "string" ? route.query["who"] : actorId.value,
-);
+/** One actor (Actor select, or People › person › Activity's link), in the query. */
+const actor = useAuditActor(computed(() => organization.value?.id ?? null));
 const query = computed(() =>
   organization.value
     ? {
@@ -40,7 +34,7 @@ const query = computed(() =>
         days: Number(days.value),
         kinds: kind.value === "all" ? [] : [kind.value],
         missionId: missionId.value || null,
-        ...(actorId.value ? { actorId: actorId.value } : {}),
+        ...(actor.id.value ? { actorId: actor.id.value } : {}),
         to: new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString(),
       }
     : null,
@@ -92,8 +86,10 @@ const missionOptions = computed(() => [
       :kind="kind"
       :kind-options="kindOptions"
       :mission-options="missionOptions"
-      :actor-name="actorId ? actorName : null"
+      :actor="actor.id.value ?? ''"
+      :actor-options="actor.options.value"
       @kind="setKind"
+      @actor="actor.set"
     />
     <ApPanel v-if="notProvided" index="L1" title="Audit log" flush>
       <ApEmptyState
