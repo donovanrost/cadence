@@ -107,6 +107,18 @@ describe("statTiles (U13)", () => {
   const tile = (fleet: Parameters<typeof statTiles>[0], label: string) =>
     statTiles(fleet).find((t) => t.label === label);
 
+  it("links each tile to the list behind its number (Now)", () => {
+    const fleet = fleetOf([spacecraftRow(1)]);
+    expect(statTiles(fleet).map((t) => [t.label, t.to])).toEqual([
+      ["Nominal", { name: "ops.fleet", query: { state: "nominal" } }],
+      ["Caution", { name: "ops.alarms" }],
+      ["Critical", { name: "ops.alarms" }],
+      ["Stale", { name: "ops.fleet", query: { state: "stale" } }],
+      ["In contact", { name: "ops.contacts" }],
+      ["Uplinks queued", { name: "ops.commands" }],
+    ]);
+  });
+
   it("shows unknown, not 0, when nothing is fresh", () => {
     const fleet = fleetOf([spacecraftRow(1, { state: "never_heard", last_received_at: null })]);
     expect(tile(fleet, "Critical")).toMatchObject({ value: null, caption: "no telemetry yet" });

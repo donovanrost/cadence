@@ -1,3 +1,4 @@
+import type { RouteLocationRaw } from "vue-router";
 import { plural, type OpState } from "@/ui";
 import type { Fleet, FleetSpacecraft } from "./api.ts";
 
@@ -11,6 +12,8 @@ export type StatTile = Readonly<{
   state: OpState;
   /** Tints only the caption: the call to action under an un-accented value. */
   captionState?: OpState;
+  /** The list behind the number (Now links its tiles; Fleet's own strip doesn't). */
+  to: RouteLocationRaw;
 }>;
 
 const NOT_TRACKED = "not tracked yet";
@@ -54,16 +57,19 @@ export function statTiles(fleet: Fleet): StatTile[] {
       caption:
         c.never_heard > 0 ? `+${c.never_heard} awaiting first contact` : "fresh and in limits",
       state: "neutral",
+      to: { name: "ops.fleet", query: { state: "nominal" } },
     },
     {
       label: "Caution",
       ...knowable(c.caution, limitsUnknown, "near a limit"),
       state: accent(c.caution, "caution"),
+      to: { name: "ops.alarms" },
     },
     {
       label: "Critical",
       ...knowable(c.critical, limitsUnknown, critCaption),
       state: accent(c.critical, "crit"),
+      to: { name: "ops.alarms" },
     },
     {
       label: "Stale",
@@ -73,6 +79,7 @@ export function statTiles(fleet: Fleet): StatTile[] {
         `no TLM over ${plural(minutes, "min", "min")}`,
       ),
       state: accent(c.stale, "stale"),
+      to: { name: "ops.fleet", query: { state: "stale" } },
     },
     {
       label: "In contact",
@@ -82,12 +89,17 @@ export function statTiles(fleet: Fleet): StatTile[] {
           ? NOT_TRACKED
           : `${plural(c.passes_next_2h, "pass", "passes")} next 2 h`,
       state: accent(c.in_contact, "live"),
+      to: { name: "ops.contacts" },
     },
     {
       label: "Uplinks queued",
       value: cmd.queued,
       caption: `${cmd.awaiting_viewer} await your GO`,
       state: "neutral",
+      to:
+        cmd.awaiting_viewer > 0
+          ? { name: "ops.commands", query: { awaiting: "me" } }
+          : { name: "ops.commands" },
       ...(cmd.awaiting_viewer > 0 ? { captionState: "caution" as const } : {}),
     },
   ];

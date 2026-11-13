@@ -4,8 +4,11 @@ import { ApStatStrip, ApStatTile } from "@/ui";
 import type { Fleet } from "./api.ts";
 import { statTiles } from "./stats.ts";
 
-/** Six stat tiles (Now spec, Stat strip). Counts partition the fleet; unknowns render `—`. */
-const props = defineProps<{ fleet: Fleet }>();
+/**
+ * Six stat tiles (Now spec, Stat strip). Counts partition the fleet; unknowns render `—`. `linked`
+ * (Now): each tile opens the list behind its number.
+ */
+const props = defineProps<{ fleet: Fleet; linked?: boolean }>();
 const tiles = computed(() => statTiles(props.fleet));
 </script>
 
@@ -21,6 +24,7 @@ const tiles = computed(() => statTiles(props.fleet));
       v-bind="{
         ...(tile.denominator === undefined ? {} : { denominator: tile.denominator }),
         ...(tile.captionState === undefined ? {} : { captionState: tile.captionState }),
+        ...(linked ? { to: tile.to } : {}),
       }"
     />
   </ApStatStrip>
