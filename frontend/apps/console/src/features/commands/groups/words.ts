@@ -43,10 +43,15 @@ export function memberStageWord(
   stage: MemberStage,
   group: GroupState,
   endReason: GroupMember["end_reason"] = null,
+  /** The target's name, for reasons that name it (U40). */
+  name: string | null = null,
 ): string {
   // #65: a catalog change set canceled it before release.
   if (stage === "canceled" && endReason === "catalog_changed")
     return "Canceled: the catalog changed";
+  // L22 / U40: nothing is sent to an archived spacecraft.
+  if (stage === "canceled" && endReason === "spacecraft_archived")
+    return `Not released: ${name ?? "the spacecraft"} is archived`;
   if (stage === "rejected" && group === "sent_back") return "Sent back";
   if (stage === "rejected" && group === "rejected") return "NO-GO";
   return STAGE_WORDS[stage];

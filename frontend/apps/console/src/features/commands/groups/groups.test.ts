@@ -8,6 +8,7 @@ import { newItem } from "../compose/stack.ts";
 import { resendFrom } from "../compose/useResend.ts";
 import { EMPTY_QUERY } from "../compose/targets.ts";
 import { fetchGroups, groupRow, preflightReader, type Preflight } from "./api.ts";
+import { memberStageWord } from "./words.ts";
 import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
 import { showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
@@ -366,5 +367,16 @@ describe("M26 verifier series (U2)", () => {
   it("Re-send narrows to ?only=", () => {
     expect(onlyFrom("a,b")).toEqual(["a", "b"]);
     expect(onlyFrom(undefined)).toEqual([]);
+  });
+});
+
+describe("L22 archived spacecraft (ux U40)", () => {
+  it("words a member canceled because its spacecraft was archived, by name", () => {
+    expect(memberStageWord("canceled", "queued", "spacecraft_archived", "EARENDIL-004")).toBe(
+      "Not released: EARENDIL-004 is archived",
+    );
+    expect(memberStageWord("canceled", "queued", "spacecraft_archived")).toBe(
+      "Not released: the spacecraft is archived",
+    );
   });
 });
