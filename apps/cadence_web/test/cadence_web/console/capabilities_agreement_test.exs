@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.CapabilitiesAgreementTest do
 
   alias Cadence.Accounts
   alias Cadence.Administration.OrganizationPeople
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Control.Commanding.GroupAbort
   alias Cadence.Management.Commanding.ReviewAccess
   alias CadenceWeb.Console.Capabilities
@@ -65,7 +65,16 @@ defmodule CadenceWeb.Console.CapabilitiesAgreementTest do
         {:error, {:invalid, _}} -> ["org.invite", "org.manage_members"]
       end
 
-    Enum.sort(commanding ++ abort ++ members)
+    dashboards =
+      case Policy.authorize(scope, :author_dashboards, %{
+             organization_id: c.org.organization_id,
+             mission_id: c.mission.mission_id
+           }) do
+        :ok -> ["dashboard.author"]
+        {:error, _} -> []
+      end
+
+    Enum.sort(commanding ++ abort ++ members ++ dashboards)
   end
 
   defp reported(scope) do
@@ -88,11 +97,12 @@ defmodule CadenceWeb.Console.CapabilitiesAgreementTest do
     end
 
     assert reported(scope(c.admin, c.org)) ==
-             ~w(command.abort command.approve command.request org.invite org.manage_members)
+             ~w(command.abort command.approve command.request dashboard.author org.invite org.manage_members)
 
     # Any mission operator may request, approve and abort commands (DECISIONS #42, #62); the
     # two-person rule (no self-approval) is enforced per request, not by the capability.
-    assert reported(scope(c.member, c.org)) == ~w(command.abort command.approve command.request)
+    assert reported(scope(c.member, c.org)) ==
+             ~w(command.abort command.approve command.request dashboard.author)
   end
 
   test "People member capabilities match enforcement for each member", c do
@@ -103,7 +113,9 @@ defmodule CadenceWeb.Console.CapabilitiesAgreementTest do
 
     for row <- people.members do
       user = Enum.find([c.admin, c.member], &(&1.user_id == row.user_id))
-      assert Enum.sort(row.capabilities) == enforced(scope(user, c.org), c), row.display_name
+      # People rows carry the contributed capabilities, not dashboard authoring.
+      expected = enforced(scope(user, c.org), c) -- ["dashboard.author"]
+      assert Enum.sort(row.capabilities) == expected, row.display_name
     end
   end
 end

@@ -105,6 +105,7 @@ defmodule CadenceWeb.Console.Problem do
       {409, "An organization needs at least one admin. Make someone else an admin first."},
     invalid_params: {422, "The request parameters are invalid."},
     history_unavailable: {503, "Telemetry history is unavailable right now."},
+    dashboard_unavailable: {503, "This dashboard couldn't be resolved right now."},
     catalog_unavailable: {503, "The command catalog is unavailable right now."},
     alarms_unavailable: {503, "Alarms are unavailable right now."},
     commanding_unavailable: {503, "Commanding is unavailable right now."},

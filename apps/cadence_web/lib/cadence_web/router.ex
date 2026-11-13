@@ -779,6 +779,8 @@ defmodule CadenceWeb.Router do
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
       get("/action-queue", ActionQueueController, :show)
       get("/counts", OpsCountsController, :show)
+      # Dashboards (owner: api-ops). Contract: docs/apogee/api/dashboards.md
+      get("/dashboards/:dashboard_id", DashboardController, :show)
       get("/passes", PassController, :index)
       get("/contact-findings", ContactFindingsController, :index)
       get("/passes/:id", PassController, :show)
@@ -933,6 +935,13 @@ defmodule CadenceWeb.Router do
       get("/contact-planning/requirements", ContactRequirementController, :index)
       post("/contact-planning/requirements", ContactRequirementController, :create)
       get("/contact-planning/requirements/schema", ContactRequirementController, :schema)
+
+      get(
+        "/contact-planning/requirements/by-template",
+        ContactRequirementController,
+        :by_template
+      )
+
       get("/contact-planning/requirements/:requirement_id", ContactRequirementController, :show)
 
       post(

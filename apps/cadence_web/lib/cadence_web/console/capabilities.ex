@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.Capabilities do
     `ReviewAccess.authorize/2` enforces).
   - `command.abort`: `GroupAbort.capabilities/1`, any mission operator (DECISIONS #42).
   - `org.invite`, `org.manage_members`: `OrganizationPeople.permissions/2`.
+  - `dashboard.author`: `Cadence.Dashboards.Capabilities.list/1` (Policy `:author_dashboards`).
 
   The session's per-organization list also keeps the scope capabilities
   (`organization_admin`, `platform_admin`) it has always reported.
@@ -16,6 +17,7 @@ defmodule CadenceWeb.Console.Capabilities do
   alias Cadence.Administration.OrganizationPeople
   alias Cadence.Auth.Scope
   alias Cadence.Control.Commanding.GroupAbort
+  alias Cadence.Dashboards.Capabilities, as: DashboardCapabilities
   alias Cadence.Management.Commanding
 
   @doc "Capabilities other contexts evaluate, for People members (`OrganizationPeople.load/3`)."
@@ -29,7 +31,9 @@ defmodule CadenceWeb.Console.Capabilities do
 
   def organization(%Scope{organization_id: organization_id} = scope) do
     scope_capabilities(scope) ++
-      contributed(scope) ++ OrganizationPeople.permissions(scope, organization_id)
+      contributed(scope) ++
+      OrganizationPeople.permissions(scope, organization_id) ++
+      DashboardCapabilities.list(scope)
   end
 
   defp scope_capabilities(scope),
