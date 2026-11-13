@@ -157,6 +157,13 @@ open, not on refresh. `404 not_found` for an unknown or archived dashboard.
 From fe-setup's proposal (docs/apogee/plans/dashboards-settings.md). Under
 `/api/console/v1/missions/:mission_id/dashboards/:dashboard_id`. D14-D17 follow.
 
+- **D17** `GET /activity?before=` (operator) → `{events: [{id, kind, at, actor {id, name} | null,
+  version, detail}], next}`: one feed, newest first, 25 per page; pass `next` back as `before`
+  (opaque; `null` on the last page; `422 details.before` for a bad one). `kind` is the closed
+  `saved | restored | archived | unarchived` for now. `detail` is the save's message, or "Restored
+  from v9". Share, snapshot and export rows (`share_created | share_revoked | snapshot_taken |
+  exported`) join with D14-D16, once domain projects their creator and time. A `published` or
+  `reverted` lifecycle event repeats its version row (every save is current), so it isn't listed.
 - **D18** `GET /diagnostics` (operator) → `{version, loaded_at, widgets: [{placement_id, title,
   status, sources: [{logical_source, status, status_code, cache, cache_status, severity, retryable,
   operator_action, warning_codes: [string], duration_ms, outcome, error}], warnings: [{code,

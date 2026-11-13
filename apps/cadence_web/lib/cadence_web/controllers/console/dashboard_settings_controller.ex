@@ -1,8 +1,8 @@
 defmodule CadenceWeb.Console.DashboardSettingsController do
   @moduledoc """
   Dashboard slice 5 for the console (owner: api; fe-setup's proposal
-  docs/apogee/plans/dashboards-settings.md, contract dashboards.md §D14-D19): diagnostics (D18)
-  and export (D19) so far.
+  docs/apogee/plans/dashboards-settings.md, contract dashboards.md §D14-D19): activity (D17),
+  diagnostics (D18) and export (D19) so far.
   """
 
   use CadenceWeb, :controller
@@ -10,7 +10,21 @@ defmodule CadenceWeb.Console.DashboardSettingsController do
   alias Cadence.Dashboards
   alias Cadence.Dashboards.{Document, Documents, Management}
   alias Cadence.Reads.Dashboards.{Editor, ExecutionDiagnostics}
-  alias CadenceWeb.Console.{ConfigJSON, DashboardDiagnostics, Problem}
+  alias CadenceWeb.Console.{ConfigJSON, DashboardActivity, DashboardDiagnostics, Problem}
+
+  # D17 (operator): versions and lifecycle events, one feed, newest first.
+  def activity(conn, %{"dashboard_id" => id} = params) do
+    case DashboardActivity.load(conn.assigns.current_scope, mission(conn), id, params["before"]) do
+      {:ok, page} ->
+        json(conn, %{data: ConfigJSON.encode(page)})
+
+      {:error, :invalid_cursor} ->
+        Problem.respond(conn, :invalid_params, %{before: "is not a cursor from this feed"})
+
+      {:error, _unavailable} ->
+        Problem.respond(conn, :not_found)
+    end
+  end
 
   # D18 (operator): the published version's diagnostics, one row per widget, worst first.
   def diagnostics(conn, %{"dashboard_id" => id}) do
@@ -45,7 +59,9 @@ defmodule CadenceWeb.Console.DashboardSettingsController do
              mission,
              document,
              artifact,
-             "portable_json", created_by: user_id) do
+             "portable_json",
+             created_by: user_id
+           ) do
       conn
       |> put_resp_content_type("application/json")
       |> put_resp_header(

@@ -4,6 +4,7 @@ defmodule CadenceWeb.Console.DashboardSettingsAPITest do
   import CadenceWeb.DashboardAuthoringDraftTestSupport
 
   alias Cadence.Dashboards.StatelessAuthoring
+  alias CadenceWeb.Console.DashboardActivity
   alias CadenceWeb.TestFixtures
 
   setup do: authoring_draft_setup()
@@ -42,6 +43,85 @@ defmodule CadenceWeb.Console.DashboardSettingsAPITest do
     end
 
     assert json_response(get_path(c, "/../nope/diagnostics"), 404)
+  end
+
+  test "D17 activity: saves newest first in closed kinds, paged by an opaque cursor", c do
+    rename = fn name ->
+      %{"event" => "rename", "input" => %{"name" => name, "description" => ""}}
+    end
+
+    for {name, base} <- [{"Two", 1}, {"Three", 2}] do
+      assert {:ok, _} =
+               StatelessAuthoring.save(
+                 c.scope,
+                 c.mission.mission_id,
+                 c.document.dashboard_id,
+                 base,
+                 [rename.(name)],
+                 "Named #{name}"
+               )
+    end
+
+    assert {:ok, _} =
+             StatelessAuthoring.restore(
+               c.scope,
+               c.mission.mission_id,
+               c.document.dashboard_id,
+               2,
+               3
+             )
+
+    data = c |> get_path("/activity") |> json_response(200) |> Map.fetch!("data")
+
+    assert [%{"kind" => "restored", "version" => 4, "detail" => "Restored from v2"} | rest] =
+             data["events"]
+
+    assert [
+             %{"kind" => "saved", "version" => 3, "detail" => "Named Three"},
+             %{"kind" => "saved", "version" => 2} | _
+           ] = rest
+
+    assert Enum.all?(data["events"], &(&1["kind"] in ~w(saved restored archived unarchived)))
+    assert data["next"] == nil
+
+    assert %{"details" => %{"before" => _}} =
+             json_response(get_path(c, "/activity?before=nope"), 422)["error"]
+  end
+
+  test "D17 paging is exact across versions and lifecycle events" do
+    at = fn s -> "2026-11-13T00:00:#{String.pad_leading(Integer.to_string(s), 2, "0")}Z" end
+
+    versions =
+      for v <- 30..6//-1,
+          do: %{
+            version: v,
+            kind: "save",
+            based_on_version: nil,
+            summary: "",
+            actor_id: nil,
+            saved_at: at.(v)
+          }
+
+    events = [
+      %{id: "e1", event_type: "archived", document_version: 6, actor_id: nil, occurred_at: at.(5)}
+    ]
+
+    history = %{
+      versions: versions,
+      next_version: 6,
+      events: events,
+      next_event: nil,
+      query: %{before_version: nil, before_event: nil}
+    }
+
+    page = DashboardActivity.page(history, %{})
+
+    # Versions have more pages, so the page stops at the oldest fetched version (v6) and the
+    # older event waits for the next page.
+    assert length(page.events) == 25
+    assert List.last(page.events).version == 6
+    refute Enum.any?(page.events, &(&1.kind == "archived"))
+    assert is_binary(page.next)
   end
 
   test "D19 export: the portable bundle as an attachment", c do
