@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   array,
   DecodeError,
@@ -40,6 +40,17 @@ describe("readers", () => {
     expect(state("closed")).toBe("closed");
     expect(state("archived")).toBe("unrecognized");
     expect(() => state(3)).toThrow(DecodeError);
+  });
+
+  it("reports each unrecognized value once per field, and keeps the type closed", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const state = known(["active", "closed"]);
+    const read: "active" | "closed" | "unrecognized" = state("archived", "plans[0].state");
+    expect(read).toBe("unrecognized");
+    state("archived", "plans[0].state");
+    state("paused", "plans[0].state");
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 
   it("dispatches discriminated unions on the tag", () => {

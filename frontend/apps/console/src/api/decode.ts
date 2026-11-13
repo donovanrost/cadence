@@ -85,8 +85,20 @@ export const known =
   <const T extends readonly string[]>(values: T): Reader<T[number] | "unrecognized"> =>
   (value, path = "") => {
     const text = string(value, path);
-    return values.find((candidate) => candidate === text) ?? "unrecognized";
+    const found = values.find((candidate) => candidate === text);
+    if (found !== undefined) return found;
+    reportUnrecognized(path, text);
+    return "unrecognized";
   };
+
+/** Each new server value is reported once per field path (console.warn), so we notice it. */
+const reported = new Set<string>();
+function reportUnrecognized(path: string, value: string) {
+  const key = `${path}=${value}`;
+  if (reported.has(key)) return;
+  reported.add(key);
+  console.warn(`Unrecognized server value ${JSON.stringify(value)} at ${path || "(root)"}`);
+}
 
 export const nullable =
   <T>(read: Reader<T>): Reader<T | null> =>
