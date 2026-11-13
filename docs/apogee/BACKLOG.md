@@ -164,7 +164,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~P1 edit + P4 staged aside (`Stage edit`, `Changes N / Keeps M`)~~ done (217feb23, b136754d) | fe-setup | — |
 | The #19 read-only framing callout is stale: #19 is lifted (domain: `profile_framing_generations` defaults on, #45). Drop it; show a note only when a mission has turned that setting off in ST1 (profile framing then doesn't reach ingress) | fe-setup | — |
 | `New profile`, `Duplicate as new profile` (create op exists) | fe-setup | — |
-| List: ~~Overrides, Last changed columns~~ built (2646dcf5; show when api's read carries them, api queue); ~~Limits notice~~ done (2646dcf5); History field diffs and per-version counts (api queue item 3); ~~`Compare`~~; ~~pin~~ dropped (ux); ~~conflict chip~~ done (2f0d5d08) | fe-setup | api: override_count/last_change, revisions by entity |
+| List: ~~Overrides, Last changed columns~~ done (2646dcf5 on api 890412a6); ~~Limits notice~~ done (2646dcf5); History field diffs and per-version counts (api queue item 3); ~~`Compare`~~; ~~pin~~ dropped (ux); ~~conflict chip~~ done (2f0d5d08) | fe-setup | api: revisions by entity (History field diffs) |
 
 ### Staged changes / revisions (`Changes.md`): mostly built
 | Item | Owner | Blocked on |
@@ -289,7 +289,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 ### 11a. Missing or partial in the console, with owners
 | # | Capability (legacy route) | What's missing in the console | Owner → console home | Status |
 | --- | --- | --- | --- | --- |
-| L1 | Contact requirements (`/ops/requirements…`): declare, edit, plan from one | ~~Writes, list, form, close/cancel~~ built (api fb7510be; fe-setup f6abf785, with `max_gap_seconds`; live with qa's next restart). Left: api `rule_summary` on list rows + grouped per-template counts for 'From templates'; domain's close vs cancel effects for the sheet wording | api (two small reads) · domain (answer) | built |
+| L1 | Contact requirements (`/ops/requirements…`): declare, edit, plan from one | ~~Writes, list, form, close/cancel, rule_summary, by-template counts~~ built (api fb7510be, df98dcd3; fe-setup f6abf785, da9ca3a7; close/cancel copy 0dace065, 3d660167). Live with qa's next restart | — | done |
 | L2 | Requirement templates (`/ops/requirement-templates`): pause, activate, close | Lifecycle verbs (create/edit exist) | api + fe-setup → `setup.contact-planning.template` | open |
 | L3 | Fleet planning policy (`/ops/planning/policy`): automation grant issue/revoke | Grant verbs (policy save/decide exist) | api + fe-setup → `setup.contact-planning.policy` | open |
 | L4 | Mission creation (`/missions/new`) | Console endpoint + screen (`org.missions` links out today) | api (endpoint; `POST /api/organizations/:id/missions` exists outside the console API) + fe-setup → `org.missions.new` | open |
