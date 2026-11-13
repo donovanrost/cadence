@@ -55,6 +55,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 48 | Ingress journal disabled in dev: failed TM is dropped, and settlement still reads settled | :4011 runs with ingress_journal enabled?: false (config.exs default; only test.exs enables it), so frames that fail processing are logged and dropped (#47 lost 001's and 005's TM for the 11-12 00:04Z pass). Both contacts read settlement 'settled' 20–70 ms after LOS, which looks safe though their TM never landed. #71's 'nothing dropped' holds only with the journal on | domain; decision: director (enable the journal in dev/qa, confirm prod) | dev/qa: journal ON since the 11-12 00:57Z restart (runbook 6ea4e4ca; var/ingress_journal, 2 GB cap); 007's pass wrote a stream segment. Settlement records journal state (96307ac5); console 'lost' wording (171ecd43). Open: prod confirmation (director) |
 | 49 | **Preview 500s for any change touching >100 spacecraft** (blocks #65 step 4) | C3 Roll out to on catalog_import_run_ieeplt7lvu_2LQPG, Block 1 + 'Also move the 499 on older versions' → POST /config/preview {spacecraft_profile update catalog_revision_id rev 4, options.rollout all_versions} → 500: MatchError {:error, :batch_bounds_exceeded} at Control.ConfigurationGeneration.changed_entries/5 (configuration_generation.ex:340) ← changed_spacecraft/3 ← Comms.ConfigKinds.FramingCompatibility.holds/3 ← Configuration.Pipeline.holds. Same class as #43 (a fetch larger than SpacecraftStore's 100 batch). The UI then says 'it isn't clear whether anything was changed', which overstates a dry run (nothing staged, checked) | domain (ConfigurationGeneration); copy: fe-setup | **verified** 11-12 01:40Z: 7533d50a (fetch_spacecrafts_in_batches; callers swept: SpacecraftOverride load, PassReview names, AttentionItems; Comms routing names only defensive, that page reads ≤100 rules per page). Block 1 all_versions preview → 200 HOLD, catalog_change 499 (rev 3→4), 001 kept (catalog_override), no catalog_cancels_commands. Copy: 'The dry run failed; nothing was staged.' (fe-setup) |
 | 50 | C3 Stage enabled for a rollout that moves nobody | Block 1 alone (without 'Also move the older'): dry run reads 'Moves 0 spacecraft to rev 4. 499 keep their catalog: they're on an older version of the profile. 1 keeps its own catalog (override).', yet 'Stage rev 4 for Earendil Block 1 — Demo' is enabled | fe-setup | **verified** 11-12 01:39Z: Block 1 alone → 'Nothing to stage: no spacecraft would move to rev 4.' (disabled); with all_versions → 'Moves 499 spacecraft to rev 4. 1 keeps its own catalog (override).' and Stage enabled |
+| 51 | **Org Audit 500s after 31–73 s** (S5 Audit unusable) | GET /organizations/org-reflect-orbital-demo/audit: 500 after 31 s (11-12 23:55Z) and 73 s (23:56Z), DBConnection closed in `ProviderAudit.list_entries` (provider_account_events.ex:23); qa's probe at 00:31Z hung > 30 s. `provider_audit_entries` is 4.1M rows / 4.7 GB, nearly all `provider_credential.resolved` (about 12/s since 11-08 21:54Z): every credential resolve writes an audit row (a354846a). See §51 | api-ops / domain (ground networks): lead to route | open |
 
 ## Details
 
@@ -327,5 +328,25 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   acknowledged; an informational conflict should say so and require the acknowledgement.
 - Also: the Contact HOLD is wrong. 004 has 11-11 01:09:34Z KIR booked (provider_reservation_siZKKEGcheAy7WsC8FArvRR4,
   command_window) after the not-before time, and 11-10 20:18:34Z before it.
+
+### 51. Org Audit times out: credential resolves flood provider_audit_entries
+
+- Repro (2026-11-12 23:55Z to 11-13 00:32Z, :4011): `GET /api/console/v1/organizations/org-reflect-orbital-demo/audit`
+  answers 500 after 31 486 ms (request GOdxdoA8GzrbQXwA0Gch) and 72 991 ms (GOdxgL1W6BuGdeEABl0H),
+  `DBConnection.ConnectionError tcp recv (idle): closed` at `ProviderAudit.list_entries/2`
+  (ground_networks/provider_audit.ex:73) via `OrganizationAudit.ProviderAccountEvents.list/1`.
+- Cause: `provider_audit_entries` holds ~4.1M rows (4.7 GB). The newest rows are all
+  `provider_credential.resolved | succeeded`, several a second. `ProviderCredentials.do_resolve/2` runs
+  `persist_mutation(:resolved)`, which updates `last_resolved_at` and inserts an audit row in one
+  transaction on every resolve (since a354846a, 2026-07-15). Audit asks for 9 rare
+  `provider_account.*` / `provider_credential.*` actions ordered by `recorded_at desc limit 500`. The only
+  usable index is `(organization_id, recorded_at)`, so Postgres walks the resolved rows backwards to find
+  them. Even `order by recorded_at desc limit 20000` hit a 20 s statement timeout under tonight's load.
+- Expected: Audit loads in about a second. Options for the owner: don't audit routine resolves (or
+  sample or aggregate them); an index that covers `(organization_id, action, recorded_at)`; prune old
+  resolve rows in dev.
+- Side effect: 1 UPDATE plus 1 INSERT per resolve is steady write load on the shared DB.
+- No qa write was made; reads only, with statement_timeout.
+
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
