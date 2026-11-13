@@ -348,9 +348,94 @@ which the console uses.
 
 **Redirect:** `/notifications` → `/console/account`.
 
-## Open questions for lead
-1. Can `frontend/apps/host` go whole once these rows are gone, or do other legacy pages still need it?
-2. Do external clients use the bearer `POST /api/organizations/:id/missions`? It's kept until someone knows.
-3. Does `ApplicationHostController.admin_federated` (R:212-222) serve anything but the admin surfaces?
-4. Can the comms provider and organization-admin provider-account surfaces also be reached through the generic
-   `/applications/:key` host? If so, trimming their entries changes that host's catalog too.
+## Covered-already host pages (BACKLOG §11c; lead 11-13)
+Every other legacy browser route that HPL or ApplicationHostLive serves. Dispatch goes through `routes.json`
+(`kind` / `contribution`) to a `CadenceWeb.*Page` module. Surface specs live in
+`applications/{organization_admin,mission_catalog,spacecraft,comms,ops_console}.ex`. **No legacy URL redirects to
+the console yet**: each target below is where the old URL should go (with the slug lookup).
+
+| R | Legacy | Page / surface | Console | Status |
+| --- | --- | --- | --- | --- |
+| 239 | `/` | AdministrationPage, organization_home | `org.home` | covered |
+| 242-243 | `/settings[/:section]` | SettingsPage | `org.settings` | covered |
+| 245, 249 | `/missions/:id/settings[/:section]` | SettingsPage | `setup.settings` | covered |
+| 265 | `/missions/:id` | MissionPage, mission_overview | `mission.home` (→ `ops.now`) | covered |
+| 267, 271 | `…/spacecraft`, `/new` | SpacecraftPage | `setup.spacecraft`, `.new` | covered |
+| 275-283 | `…/spacecraft/profiles[/new\|/:id]` | SpacecraftPage | `setup.profiles`, `setup.profile.new`, `setup.profile` | covered |
+| 287 | `…/spacecraft/:sid` | SpacecraftPage + SpacecraftConfigurationPage | `setup.spacecraft.one` | **partly (L22):** switches and handled_apids |
+| 291, 295 | `…/spacecraft/:sid/identity`, `/edit` | SpacecraftPage, edit | `setup.spacecraft.one` | **not covered (L17)** |
+| 299 | `…/spacecraft/:sid/readiness` | SpacecraftPage | `setup.spacecraft.one` | covered |
+| 303 | `…/spacecraft/:sid/routing` | SpacecraftModulePage | `setup.profile` (replacement model) | covered |
+| 307 | `…/spacecraft/:sid/commanding` | SpacecraftModulePage | `ops.spacecraft` (configuration tab) | covered (§11c) |
+| 311-331 | `…/catalog[/new\|/databases/:id\|/revisions/:id\|/imports/:id]` | CatalogPage | `setup.catalog`, `.import[/:importId]` | covered |
+| 327 | `…/catalog/artifacts/:id` | CatalogPage, catalog_artifact_show | `setup.catalog.artifact` | **partly (L18)** |
+| 335-380 | `…/comms`, `/transports…`, `/ground-stations…`, `/routing…`, `/validation` | MissionModulePage | `setup.comms`, `setup.comms.transports`, `setup.stations`, `setup.readiness` | covered |
+| 582 | `…/applications` | application_management | `setup.apps` | covered |
+| 609, 615 | `…/applications/:key[/:surface]` | ApplicationHostLive | `setup.app` | covered (L9) |
+| 396 | `…/ops` | OpsLandingPage | `ops.now` | covered |
+| 449-461, 481 | `…/ops/planning[…]`, `/ops/plans/:id` | OpsFleetDirectoryPage, OpsFleetWorkflowPage, OpsPlanReviewPage | `ops.contacts.plan` | covered |
+| 485, 489 | `…/ops/contacts`, `/records/:id` | OpsContactSchedulingPage | `ops.contacts`, `ops.contact` | covered (**L15** single bookings off) |
+| 493 | `…/ops/contacts/:reservation_id` | OpsContactSchedulingPage, reservation-review | `ops.contacts` | **not covered (L14)** |
+| 497, 501 | `…/ops/alarms`, `/timeline` | OpsAlarmConditionsPage, OpsTimelinePage | `ops.alarms`, `ops.timeline` | covered |
+| 505-543 | `…/ops/commands[…]` (workspace, new, stages, requests, history, queue) | OpsCommand*Page | `ops.commands[.new\|.request]` | covered (stages not needed, §11c) |
+| 147, 149 | `…/ops/contact-workspace[/records/:id]` | ContactWorkspaceController (HTML) | `ops.contacts`, `ops.contact` | covered |
+| 547 | `…/ops/explore` | OpsExplorationPage | `ops.telemetry` | **parked (L20)** |
+| 445, 578 | `…/ops/data-operations[/manage]` | OpsHistoricalWorkflowsPage | none | **parked (L16)** |
+
+**Legacy dashboards are host-served.** Each `dashboards.*` contribution renders
+`frontend/modules/dashboards-and-exploration` through `ops-workspace/features/module-pages`; the surfaces are
+`ops_console.ex` :106-251.
+- **Live in the console, so covered:** R:418 directory, :398 new, :559 view, :410 edit.
+- **Console routes still pending (L8):** R:402 library, :406 and :430 playlists, :414 settings, :551 activity,
+  :555 diagnostics, and :422 and :426 shares and snapshots.
+- **Downloads to keep** until L8 and L18 decide: R:230 export and R:155 artifact download.
+
+**Redirect-only controllers.** All of them still point at legacy pages:
+- `LegacyOpsRedirect` R:224 goes to `/ops/explore` (L20).
+- `LegacyApplicationRedirect` R:646 and :652 go to the L19 spacecraft applications.
+- The 18 `LegacyCommsRedirect` aliases (R:660-766) go to `/comms` and `/comms/transports`.
+
+Repoint each to its console target (`setup.comms`, `setup.comms.transports`, `setup.spacecraft.app`,
+`ops.telemetry`) when its target page goes. `AuthRedirectController` (R:109-111) already points at the console.
+
+**Not covered: these block deleting the host app.**
+- **Rows not built yet:** L17 (R:291, :295), L22 (R:287), L14 (R:493), L15 (R:485, built but off), L18 (R:327,
+  :155) and L8's pending dashboard routes.
+- **Rows already blocked in this manifest:** L10, L12, L13 and L19.
+- **Parked:** L16 (R:445, :578) and L20 (R:547).
+
+## Answers (lead 11-13)
+1. **Can `frontend/apps/host` go whole? No**, not while L16 and L20 are parked and the not-covered rows above are
+   open. Even then, four things still depend on it:
+   - LiveVue's `vue_root` points at `frontend/apps/host/src/shell` (`cadence_web.ex:57`).
+   - `host_routes.ex`, `catalog_page.ex` and HPL compile its `routes.json`.
+   - It is the package `@cadence/plugin-host`, which `frontend/apps/{ops-console,spacecraft,organization-admin,
+     mission-catalog,storybook}` depend on.
+   - ApplicationHostLive and the federated shells mount through it.
+
+   The console doesn't import it; the federated bundles the console loads use only `@cadence/plugin-sdk`.
+   Deleting it whole needs L16 and L20 decided, every row done, and those four moved off it.
+2. **The bearer `POST /api/organizations/:id/missions`: keep it** (lead; the director has been asked).
+3. **`ApplicationHostController.admin_federated`** (R:213-215, :219-221) serves only `organization_admin`'s six
+   `scope: :admin` surfaces. `organization_admin.ex:288` is the only `:admin` installable scope, and nothing links
+   to those URLs. **It goes with L7**, along with the bridge's `scope=admin` branches, `OrganizationAdminQuery`
+   :150-171, and `OrganizationAdminAction`'s admin branches (:372).
+4. **The generic host reaches the provider surfaces, so trimming changes what's reachable:**
+   - **Comms provider surfaces** (`provider_list`, `provider_new`, `provider_show`: `scope: :mission`,
+     `placement: :application_workspace`) are reachable through:
+     - ApplicationHostLive (`/missions/:m/applications/comms/provider_*`) and the mission federated route (R:168);
+     - the bridge (R:1158, :1168, :1176);
+     - **the console's own L9 host.** Setup › Apps › Comms lists them as Setup surfaces (`MissionApps.surfaces`,
+       `AppSurfaceController.host`).
+
+     So L12's trim also removes those tabs from the console's Comms app page. That's intended, but do it in the
+     same batch as L12's console writes, and tell qa.
+   - **Provider-account surfaces** (`provider_accounts`, `provider_account_new`, `provider_account_show`:
+     `scope: :organization`) are reachable through `organization_federated` (R:189-197) and the bridge with
+     `scope=organization`. They aren't reachable through ApplicationHostLive or the console's L9 host, which only
+     use mission or spacecraft context. Removing them also means editing `OrganizationAdmin.validate/0`
+     (`organization_admin.ex:361-396`), which checks that every surface has a query and an action binding.
+
+**Invitation email (L5):** move `user_notifier.ex:7` to `/console/invitations/<token>`, and keep the
+`/invitations/:token` 302 for links already sent. The first batch (L5 + L6 + L21) waits on the director's go and
+the apps/host exception; lead proposed fe-setup does it.
