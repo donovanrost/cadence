@@ -23,6 +23,8 @@ missing endpoint or decision; an item with no blocker can start now.
 
 - **Legacy pages (director 11-13):** the old LiveView pages are being deleted. No new features in them; bug fixes only if something live depends on them. §11 lists what still exists only there.
 
+- **:4011 outage 11-13 03:45:59Z → 04:12:48Z** (dev-env mix builds in the shared tree purged `Cadence.Repo`). Back with gen 8, `modified_modules` [], P9CS still queued. Rules since: Elixir checks only with `MIX_ENV=test` (check-slot enforces it); dev-DB migrations through qa (in-node `Ecto.Migrator` or a planned restart). Runbook e53a9c00. The queued commits went live early with that restart; qa #51 verified (Audit 1.5 s).
+
 ## 1. Next up, per person (the short version)
 
 | Who | Start now (unblocked) | Waiting on |
