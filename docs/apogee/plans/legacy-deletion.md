@@ -133,6 +133,23 @@ them at the console.
 - `/missions` → `/console/:org/org/missions`
 - `/missions/new` → `…/org/missions/new`
 
+
+## L1–L4 federated surfaces (own batch; owner fe-ops, after their L8 federated batch)
+Batch 2 (fe-setup, `fe-setup/legacy-batch2`: 7172308b5 L1–L3, 8f6b8ce0e L4) deletes only what nothing else uses.
+Building it found federated surfaces this manifest missed, which keep these alive (lead, 11-14):
+- **ops_console surfaces:** `contact_requirement_list`, `contact_requirement_new`, `contact_requirement_show`,
+  `contact_requirement_template` and `fleet_planning_policy` (spec in `applications/ops_console.ex`, dispatch in
+  `reads/application_surfaces/ops_console.ex`, frontends in `frontend/apps/ops-console` and their modules).
+  - **Reads kept for them:** `ContactRequirementList`, `ContactRequirementNew`, `ContactRequirementShow`,
+    `Planning.RequirementTemplates`, `Planning.FleetPolicy`, `Planning.Form`.
+  - **Actions kept for them:** `RequirementDecisions`, `FleetPolicyEditing`, `FleetPlanningFormDuration`.
+- **mission_catalog surfaces:** `mission_list` and `mission_new`, with their validate/save bindings. They keep
+  `Missions.Creation`, `Reads.Missions.CreationForm` and `Reads.Missions.Directory`. The bearer REST
+  `POST /api/organizations/:id/missions` stays regardless.
+- **Delete with the surfaces:** the specs, dispatch clauses, frontend modules, the federated manifests'
+  entries, `first-party-manifest-parity.test.ts` rows (deletion-only in `frontend/apps/host`), then the reads,
+  actions and modules above once nothing calls them. Re-grep each first.
+
 ## L5 sign-in, invitation acceptance, no-organization (deletable now)
 **Keep:** the GETs R:109-111 (`AuthRedirectController`'s 302s to `/console/*`).
 
