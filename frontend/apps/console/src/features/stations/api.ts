@@ -35,6 +35,14 @@ export async function fetchStations(
   return result.ok ? { ok: true, value: result.value.stations } : result;
 }
 
+/** A provider check's result (L12 proposal): the row's last validate / sync. */
+const check = object({
+  status: nullable(known(["healthy", "failed"] as const)),
+  checked_at: nullable(decoders.timestamp),
+  // free-text: the provider's own error message, shown as is.
+  error: nullable(string),
+});
+
 const provider = object({
   id: token,
   name: string,
@@ -47,17 +55,42 @@ const provider = object({
     last_synced_at: nullable(decoders.timestamp),
   }),
   station_count: integer,
+  // L12 additions (plans/providers.md); optional until api-ops ships them.
+  version: decoders.optional(integer),
+  policy_mode: decoders.optional(known(["approval_required", "bounded_automatic"] as const)),
+  grant: decoders.optional(
+    object({ id: token, version: integer, state: known(["active", "revoked"] as const) }),
+  ),
+  health: decoders.optional(object({ validate: check, sync: check })),
 });
 export type MissionProvider = Decoded<typeof provider>;
+export const providerReader = provider;
 
+export type MissionProviders = Readonly<{
+  providers: readonly MissionProvider[];
+  canManage: boolean;
+}>;
+
+/** `GET /missions/:id/providers` sends `{providers}`; L12 adds `permissions: ["providers.manage"]`. */
 export async function fetchProviders(
   missionId: string,
   signal: AbortSignal,
-): Promise<ApiResult<readonly MissionProvider[]>> {
+): Promise<ApiResult<MissionProviders>> {
   const result = await request(
     `/missions/${encodeURIComponent(missionId)}/providers`,
-    array(provider, 500),
+    object({
+      providers: array(provider, 500),
+      permissions: decoders.optional(array(known(["providers.manage"] as const), 10)),
+    }),
     { signal },
   );
-  return result;
+  return result.ok
+    ? {
+        ok: true,
+        value: {
+          providers: result.value.providers,
+          canManage: result.value.permissions?.includes("providers.manage") ?? false,
+        },
+      }
+    : result;
 }

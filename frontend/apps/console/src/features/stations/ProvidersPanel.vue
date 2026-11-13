@@ -1,27 +1,30 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { ApEmptyState, ApPanel, ApRemote, ApTable, formatShort, type ApColumn } from "@/ui";
+import { paramText } from "@/shell";
+import { ApButton, ApEmptyState, ApPanel, ApRemote } from "@/ui";
 import { fetchProviders } from "./api.ts";
+import ProviderAddSheet from "./ProviderAddSheet.vue";
+import ProviderDetail from "./ProviderDetail.vue";
+import ProvidersTable from "./ProvidersTable.vue";
 
-/** Stations · Providers (ux U4): the ground networks that supply this mission's stations. */
+/** Stations · Providers (ux U4): the ground networks that supply this mission's stations (L12). */
 const props = defineProps<{ missionId: string }>();
+const route = useRoute();
+const providerId = computed(() => paramText(route.params, "providerId") || null);
 const { state, refetch } = useRemoteQuery(() => props.missionId, fetchProviders);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
-const columns: readonly ApColumn[] = [
-  { key: "name", label: "Provider" },
-  { key: "account", label: "Account" },
-  { key: "stations", label: "Stations", mono: true, align: "end" },
-  { key: "validated", label: "Last validated", mono: true },
-  { key: "synced", label: "Last synced", mono: true },
-];
-const when = (at: string | null) => (at ? formatShort(new Date(at)) : "never");
+const add = ref<InstanceType<typeof ProviderAddSheet> | null>(null);
 </script>
 
 <template>
   <ApPanel index="G3" title="Providers" flush>
+    <template v-if="state.status === 'ready' && state.value.canManage && !providerId" #header>
+      <ApButton size="compact" variant="primary" @click="add?.open()">Add provider</ApButton>
+    </template>
     <ApEmptyState
       v-if="notProvided"
       state="off"
@@ -29,26 +32,25 @@ const when = (at: string | null) => (at ? formatShort(new Date(at)) : "never");
     />
     <ApRemote v-else :state="state" loading-label="Loading providers…" @retry="refetch">
       <template #default="{ value }">
+        <ProviderDetail
+          v-if="providerId"
+          :mission-id="missionId"
+          :provider="value.providers.find((p) => p.id === providerId) ?? null"
+          :can-manage="value.canManage"
+          @changed="refetch"
+        />
         <ApEmptyState
-          v-if="value.length === 0"
+          v-else-if="value.providers.length === 0"
           state="off"
           headline="No ground-network providers"
           sentence="Providers supply stations, antennas and pass opportunities."
         />
-        <ApTable v-else :columns="columns" :rows="value" :row-key="(p) => p.id" caption="Providers">
-          <template #cell-name="{ row }">
-            <span class="font-semibold text-readout">{{ row.name }}</span>
-            <span class="font-mono text-xs text-text-4"> {{ row.provider_type }}</span>
-            <span v-if="row.status.lifecycle_state !== 'active'" class="text-xs text-text-4">
-              · {{ row.status.lifecycle_state }}</span
-            >
-          </template>
-          <template #cell-account="{ row }">{{ row.account.name ?? "Org admins only" }}</template>
-          <template #cell-stations="{ row }">{{ row.station_count }}</template>
-          <template #cell-validated="{ row }">{{ when(row.status.last_validated_at) }}</template>
-          <template #cell-synced="{ row }">{{ when(row.status.last_synced_at) }}</template>
-        </ApTable>
+        <ProvidersTable v-else :providers="value.providers" />
+        <p v-if="!value.canManage" class="m-0 px-4 py-3 text-sm text-text-3">
+          Mission admins change providers.
+        </p>
       </template>
     </ApRemote>
+    <ProviderAddSheet ref="add" :mission-id="missionId" @added="refetch" />
   </ApPanel>
 </template>
