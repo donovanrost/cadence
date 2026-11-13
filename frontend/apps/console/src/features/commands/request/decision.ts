@@ -1,6 +1,8 @@
 import { plural } from "@/ui";
 import type { Preflight } from "../groups/api.ts";
+import { checkLabel } from "../groups/checks.ts";
 import type { DecisionKind, Group } from "../groups/show.ts";
+import type { PersonName } from "../groups/words.ts";
 
 /**
  * Approve D · Your call (CommandFlow C2). Options follow what the re-check found: `GO, excluding`
@@ -44,7 +46,8 @@ export function noGoAfter(review: Preflight | null, excluded: ReadonlySet<string
       (t) => t.result === "no_go" && !excluded.has(t.spacecraft_id),
     );
     if (check.per_target.length === 0 || left.length > 0)
-      return `The ${check.key.replaceAll("_", " ")} re-check is NO-GO.`;
+      // ux §7 #13: the check's label as A2 shows it, never its key.
+      return `The ${checkLabel(check.key)} re-check is NO-GO.`;
   }
   return null;
 }
@@ -59,11 +62,14 @@ export function decisionOptions(group: Group, flagged: readonly Flagged[]): Deci
       commitLabel: `Sign GO · ${plural(n, "target")}`,
     },
   ];
+  // ux §7 #14: up to 3 names in the title; more read as a count, with the names below.
+  const names = flagged.map((f) => f.name).join(", ");
+  const many = flagged.length > 3;
   if (flagged.length && flagged.length < n)
     options.push({
       value: "go_excluding",
-      title: `GO, excluding ${flagged.map((f) => f.name).join(", ")}`,
-      description: `${plural(n - flagged.length, "target")}; the rest are rejected as excluded at review.`,
+      title: many ? `GO, excluding ${flagged.length} flagged targets` : `GO, excluding ${names}`,
+      description: `${many ? `Excludes ${names}. ` : ""}${plural(n - flagged.length, "target")}; the rest are rejected as excluded at review.`,
       needsNote: true,
       commitLabel: `Sign GO · ${plural(n - flagged.length, "target")}`,
     });
@@ -113,3 +119,52 @@ const ERROR_WORDS: Readonly<Record<string, string>> = {
     "A HOLD isn't acknowledged against the latest checks. They've been re-run; read them and acknowledge again.",
 };
 export const decisionErrorWords = (code: string, message: string) => ERROR_WORDS[code] ?? message;
+
+/** §4 short: `03:10Z` today, `11-10 03:10Z` otherwise. */
+function at(iso: string | null, now: Date): string {
+  if (!iso) return "";
+  const today = iso.slice(0, 10) === now.toISOString().slice(0, 10);
+  return ` at ${today ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
+}
+
+/**
+ * ux §7 #15: what was decided, by whom and when, with the note; null while it's still open.
+ * "GO signed by Ana P. at 03:10Z", "Sent back by Ana P. at 03:10Z: “…”".
+ */
+export function decisionRecord(
+  group: Group,
+  nameOf: PersonName,
+  now: Date = new Date(),
+): Readonly<{ tone: "info" | "off"; text: string }> | null {
+  if (group.state === "approval_pending") return null;
+  if (group.state === "aborted")
+    return {
+      tone: "off",
+      text: `Aborted by ${nameOf(group.aborted_by?.user_id ?? null)}${at(group.aborted_at, now)}${group.abort_reason ? `: “${group.abort_reason}”` : "."}`,
+    };
+  const d = group.decision;
+  const who = nameOf(group.decided_by?.user_id ?? null);
+  const when = at(group.decided_at, now);
+  const note = d?.note ? `: “${d.note}”` : ".";
+  if (!d)
+    return group.state === "queued"
+      ? { tone: "info", text: "No second GO was needed; it was released at submit." }
+      : { tone: "off", text: "Decided; the record has no details." };
+  switch (d.kind) {
+    case "go":
+      return { tone: "info", text: `GO signed by ${who}${when}${note}` };
+    case "go_excluding": {
+      const n = d.excluded?.length ?? 0;
+      return {
+        tone: "info",
+        text: `GO signed by ${who}${when}, excluding ${plural(n, "target")}${note}`,
+      };
+    }
+    case "send_back":
+      return { tone: "off", text: `Sent back by ${who}${when}${note}` };
+    case "no_go":
+      return { tone: "off", text: `NO-GO signed by ${who}${when}${note}` };
+    default:
+      return { tone: "off", text: `Decided by ${who}${when}${note}` };
+  }
+}

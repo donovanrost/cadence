@@ -2,15 +2,17 @@
 import { computed, ref, shallowRef } from "vue";
 import { describeApiError } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { formatClock, ApButton, ApCallout, ApDecision, ApEventLine, ApPanel } from "@/ui";
+import { ApButton, ApCallout, ApDecision, ApPanel } from "@/ui";
 import type { Preflight } from "../groups/api.ts";
 import { goAcksToSend, goHoldReason, reviewHolds, type HoldAcks } from "../groups/checks.ts";
 import HoldAckFields from "../compose/HoldAckFields.vue";
 import { decide, type DecisionKind, type Group } from "../groups/show.ts";
-import { eventText, type PersonName } from "../groups/words.ts";
+import type { PersonName } from "../groups/words.ts";
+import RequestLogList from "./RequestLogList.vue";
 import {
   cannotDecide,
   decisionErrorWords,
+  decisionRecord,
   decisionOptions,
   flaggedTargets,
   noGoAfter,
@@ -55,9 +57,8 @@ const blocked = computed(() => {
     ? goHoldReason(props.review, props.group.events, acks.value, props.targetName)
     : null;
 });
-const events = computed(() =>
-  [...props.group.events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)),
-);
+/** ux §7 #15: a decided request shows its record and the log, not disabled options. */
+const record = computed(() => decisionRecord(props.group, props.nameOf));
 
 async function commit({ value, note }: { value: DecisionKind; note: string }) {
   busy.value = true;
@@ -105,7 +106,13 @@ const onCommit = (d: { value: DecisionKind; note: string }) =>
 </script>
 
 <template>
-  <ApPanel index="D" title="Your call" pane flush>
+  <ApPanel v-if="record" index="D" title="Decision" pane flush>
+    <div class="flex flex-col gap-3 p-3">
+      <ApCallout :tone="record.tone">{{ record.text }}</ApCallout>
+      <div><RequestLogList :group="group" :name-of="nameOf" /></div>
+    </div>
+  </ApPanel>
+  <ApPanel v-else index="D" title="Your call" pane flush>
     <ApCallout v-if="outcome" :tone="outcome.tone">
       {{ outcome.text }}
       <template v-if="outcome.reload" #action
@@ -129,17 +136,7 @@ const onCommit = (d: { value: DecisionKind; note: string }) =>
       @commit="onCommit"
     >
       <template #log>
-        <p class="ap-label m-0 pb-1.5">Request log</p>
-        <ol class="m-0 list-none p-0">
-          <ApEventLine
-            v-for="e in events"
-            :key="e.id"
-            :time="formatClock(new Date(e.at))"
-            :datetime="e.at"
-            state="neutral"
-            >{{ eventText(e, nameOf) }}</ApEventLine
-          >
-        </ol>
+        <RequestLogList :group="group" :name-of="nameOf" />
       </template>
     </ApDecision>
   </ApPanel>

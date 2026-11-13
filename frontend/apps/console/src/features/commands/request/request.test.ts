@@ -5,7 +5,13 @@ import { groupOf, showBody } from "../groups/fixtures.ts";
 import { eventState, eventText, memberStageWord, statusTag } from "../groups/words.ts";
 import { inTab } from "../list/list.ts";
 import type { GroupRow } from "../groups/api.ts";
-import { cannotDecide, decisionOptions, flaggedTargets, noGoAfter } from "./decision.ts";
+import {
+  cannotDecide,
+  decisionOptions,
+  decisionRecord,
+  flaggedTargets,
+  noGoAfter,
+} from "./decision.ts";
 import { argChanges, overwriteCallouts } from "./brief.ts";
 import { abortable, headline, pipeline } from "./uplink.ts";
 import {
@@ -70,6 +76,14 @@ describe("approve decision", () => {
       ["no_go", "Sign NO-GO"],
     ]);
     expect(decisionOptions(two, []).map((o) => o.value)).toEqual(["go", "send_back", "no_go"]);
+    // ux §7 #14: more than 3 flagged read as a count; the names move to the description.
+    const many = groupOf({ target_count: 20, member_count: 20 });
+    const four = ["A", "B", "C", "D"].map((n) => ({ spacecraftId: n, name: n }));
+    const excl = decisionOptions(many, four).find((o) => o.value === "go_excluding");
+    expect([excl?.title, excl?.description]).toEqual([
+      "GO, excluding 4 flagged targets",
+      "Excludes A, B, C, D. 16 targets; the rest are rejected as excluded at review.",
+    ]);
   });
 
   it("blocks GO on a NO-GO unless excluding clears every failing target", () => {
@@ -80,9 +94,43 @@ describe("approve decision", () => {
       evidence: {},
     };
     const r = review([catalog]);
-    expect(noGoAfter(r, new Set())).toBe("The catalog re-check is NO-GO.");
+    expect(noGoAfter(r, new Set())).toBe("The Catalog re-check is NO-GO.");
+    expect(noGoAfter(review([{ ...catalog, key: "two_person" }]), new Set())).toBe(
+      "The Two-person re-check is NO-GO.",
+    );
     expect(noGoAfter(r, new Set(["sc-2"]))).toBeNull();
     expect(noGoAfter(review([{ ...catalog, per_target: [] }]), new Set(["sc-2"]))).not.toBeNull();
+  });
+
+  it("shows a decided request's record (ux §7 #15)", () => {
+    const now = new Date("2026-11-12T12:00:00Z");
+    const ana = (id: string | null) => (id === "user-2" ? "Ana P." : "Someone");
+    const by = { decided_by: { actor_kind: "user", user_id: "user-2" } };
+    expect(decisionRecord(groupOf(), ana, now)).toBeNull();
+    expect(
+      decisionRecord(
+        groupOf({
+          ...by,
+          state: "queued",
+          decision: { kind: "go", note: null },
+          decided_at: "2026-11-12T03:10:00Z",
+        }),
+        ana,
+        now,
+      ),
+    ).toEqual({ tone: "info", text: "GO signed by Ana P. at 03:10Z." });
+    expect(
+      decisionRecord(
+        groupOf({
+          ...by,
+          state: "sent_back",
+          decision: { kind: "send_back", note: "Wrong value" },
+          decided_at: "2026-11-11T03:10:00Z",
+        }),
+        ana,
+        now,
+      )?.text,
+    ).toBe("Sent back by Ana P. at 11-11 03:10Z: “Wrong value”");
   });
 
   it("explains who may decide; never your own request", () => {
