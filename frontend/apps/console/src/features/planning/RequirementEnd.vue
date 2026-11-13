@@ -9,13 +9,19 @@ import {
   endRequirement,
   fieldErrors,
   notActiveLine,
+  occurrenceScope,
   type EndAction,
   type RequirementDetail,
 } from "./requirements.ts";
 import { fetchRequirementSupersedes, supersedeSentence } from "./supersedes.ts";
 
 /** ux P4 Close… / Cancel…: each confirms with a required reason; both are final. */
-const props = defineProps<{ missionId: MissionId; requirement: RequirementDetail }>();
+const props = defineProps<{
+  missionId: MissionId;
+  requirement: RequirementDetail;
+  /** A template's occurrence: the sheet leads with its scope (ux). */
+  occurrence?: Readonly<{ day: string; template: string }> | null;
+}>();
 const emit = defineEmits<{ ended: [] }>();
 const session = useSession();
 const action = ref<EndAction | null>(null);
@@ -85,7 +91,14 @@ async function confirm() {
   <ApPanel v-else index="Q9" :title="what[action].title">
     <div class="flex max-w-[640px] flex-col gap-3">
       <p class="m-0 text-md text-text-2">
-        {{ what[action].sentence }} This is final: declare a new requirement to plan it again.
+        <template v-if="occurrence"
+          >{{ occurrenceScope(action, occurrence).lead }} {{ what[action].sentence }}
+          {{ occurrenceScope(action, occurrence).final }}</template
+        >
+        <template v-else
+          >{{ what[action].sentence }} This is final: declare a new requirement to plan it
+          again.</template
+        >
       </p>
       <ApCallout v-if="drafts.length > 0" tone="caution">{{
         supersedeSentence(

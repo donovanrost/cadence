@@ -5,6 +5,8 @@ import {
   fetchRequirements,
   fieldErrors,
   notActiveLine,
+  occurrenceDay,
+  occurrenceScope,
   requirementFacts,
   withSpacecraftChoices,
   withoutBlankConstraints,
@@ -144,5 +146,20 @@ describe("blank constraints (qa P4)", () => {
       provider_constraints_document: { allowed: ["p1"], excluded: null },
       max_gap_seconds: null,
     });
+  });
+});
+
+describe("closing one template occurrence (ux, ContactPlanning.md)", () => {
+  it("names the occurrence's day and template, and says when the template brings it back", () => {
+    expect(occurrenceDay({ earliest_start: "2026-11-15T00:00:00Z" })).toBe("11-15");
+    expect(occurrenceDay({})).toBeNull();
+    expect(occurrenceScope("close", { day: "11-15", template: "Daily downlink" })).toEqual({
+      lead: "This closes only the 11-15 occurrence of “Daily downlink”. The template's other days aren't affected.",
+      final:
+        "The template won't bring this day back, unless the template is edited: an edit generates every remaining day afresh.",
+    });
+    expect(occurrenceScope("cancel", { day: "11-15", template: "Daily downlink" }).lead).toMatch(
+      /^This cancels only the 11-15 occurrence/,
+    );
   });
 });

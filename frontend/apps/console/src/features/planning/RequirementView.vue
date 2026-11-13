@@ -9,6 +9,7 @@ import RequirementEnd from "./RequirementEnd.vue";
 import {
   endedLine,
   fetchRequirementSchema,
+  occurrenceDay,
   requirementFacts,
   type RequirementDetail,
 } from "./requirements.ts";
@@ -17,7 +18,7 @@ import {
 const props = defineProps<{
   missionId: MissionId;
   requirement: RequirementDetail;
-  editable: boolean;
+  endable: boolean;
   canEdit: boolean;
 }>();
 defineEmits<{ ended: [] }>();
@@ -32,6 +33,11 @@ const template = useRemoteQuery(
 const templateName = computed(() =>
   template.state.value.status === "ready" ? template.state.value.value.name : "its template",
 );
+/** A template's occurrence closes or cancels alone (ux): the sheet names its day and template. */
+const occurrence = computed(() => {
+  const day = props.requirement.template_id ? occurrenceDay(props.requirement.content) : null;
+  return day ? { day, template: templateName.value } : null;
+});
 const columns: readonly ApColumn[] = [
   { key: "version", label: "Version", mono: true },
   { key: "at", label: "Created", mono: true },
@@ -60,9 +66,10 @@ const columns: readonly ApColumn[] = [
     </ApRemote>
   </ApPanel>
   <RequirementEnd
-    v-if="editable"
+    v-if="endable"
     :mission-id="missionId"
     :requirement="requirement"
+    :occurrence="occurrence"
     @ended="$emit('ended')"
   />
   <ApPanel index="Q2" title="History" :meta="plural(requirement.versions.length, 'version')" flush>

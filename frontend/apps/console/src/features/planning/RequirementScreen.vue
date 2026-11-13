@@ -42,13 +42,13 @@ const crumbs = computed((): readonly ApCrumb[] => [
   { label: "Contact planning", to: { name: "setup.contact-planning" } },
   { label: isNew.value ? "New requirement" : "Requirement" },
 ]);
-/** Only an active one-off requirement changes here; a template's changes in its template. */
+/** Any active requirement can be closed or canceled (ux: a template's occurrence too, alone). */
+const endable = computed(
+  () => canEdit.value && state.value.status === "ready" && state.value.value.state === "active",
+);
+/** Only a one-off is edited here; a template's occurrence changes in its template. */
 const editable = computed(
-  () =>
-    canEdit.value &&
-    state.value.status === "ready" &&
-    state.value.value.state === "active" &&
-    state.value.value.template_id === null,
+  () => endable.value && state.value.status === "ready" && state.value.value.template_id === null,
 );
 </script>
 
@@ -84,7 +84,7 @@ const editable = computed(
           v-else
           :mission-id="missionId"
           :requirement="value"
-          :editable="editable"
+          :endable="endable"
           :can-edit="canEdit"
           @ended="refetch"
         />

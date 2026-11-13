@@ -140,6 +140,33 @@ export function endRequirement(
   );
 }
 
+/** A template occurrence's day, `11-15` (UTC, from its window's start); null when it has none. */
+export function occurrenceDay(content: Readonly<Record<string, unknown>>): string | null {
+  const v = content["earliest_start"];
+  if (typeof v !== "string") return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+/**
+ * ux (ContactPlanning.md): closing or canceling ONE template occurrence leads with its scope and
+ * ends with what domain confirmed: the same template version never regenerates that day; an edit
+ * (a new version) generates every remaining day afresh.
+ */
+export function occurrenceScope(
+  action: EndAction,
+  o: Readonly<{ day: string; template: string }>,
+): Readonly<{ lead: string; final: string }> {
+  const verb = action === "close" ? "closes" : "cancels";
+  return {
+    lead: `This ${verb} only the ${o.day} occurrence of “${o.template}”. The template's other days aren't affected.`,
+    final:
+      "The template won't bring this day back, unless the template is edited: an edit generates every remaining day afresh.",
+  };
+}
+
 /** `11-14 00:00Z → 11-15 00:00Z` (ContactPlanning.md P4, §4). */
 export function windowText(content: Readonly<Record<string, unknown>>): string {
   const at = (v: unknown) => (typeof v === "string" ? formatShort(new Date(v)) : "—");
