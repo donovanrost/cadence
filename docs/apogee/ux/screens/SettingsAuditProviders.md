@@ -36,6 +36,10 @@ with Profile/People.
     - The section-level UI stays until then. Migration keeps only the fields that differ from the organization's
       value at that moment; the rest inherit again. Record that as one audit entry per mission: "Settings now
       follow the organization except the fields set for this mission."
+    - Director's condition: governance and approval fields always stay set for the mission, even when they equal
+      the organization's value. Where the migration kept one that matches, the entry adds: "Approval settings
+      stay set for this mission, even where they match the organization." They show `SET FOR THIS MISSION`
+      afterwards, as any override does.
 - **Saving:** settings that are change-set kinds (when domain adds them) stage (`Stage change`);
   everything else saves immediately with a version line (`v4 · 01:12Z by Donovan R.`). Governance
   changes that need approval follow the server's policy (ApDecision, reviewer ≠ author). Errors follow U20.
