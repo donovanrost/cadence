@@ -57,9 +57,9 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~Telemetry, Uplink, Passes, Configuration, History tabs link to the existing pages (#64)~~ done (0d05d195); build later | fe-ops | — |
-| B1 add points (chips, max 3, search this spacecraft's points) | fe-ops | — (M23 point search) |
-| No active alarm: show the latest resolved alarm "back in limits" | fe-ops | — |
-| B4 sisters: plane ring, sparklines, next AOS | fe-ops | — |
+| ~~B1 add points (chips, max 3, search this spacecraft's points)~~ done (e12c5111) | fe-ops | — |
+| ~~No active alarm: show the latest resolved alarm "back in limits"~~ done (193a6816) | fe-ops | — |
+| ~~B4 sisters: plane ring, sparklines, next AOS~~ done (e6865967) | fe-ops | — |
 | ~~Live chart tail~~ done (f38a4dfb); ~~live event log~~ done (e62f05fe: refetches on the `events` and `alarms` invalidations) | fe-ops | — |
 | ~~`FULL TIMELINE →` carries `?sc=`~~ done (cb5767c9) | fe-ops | — |
 
