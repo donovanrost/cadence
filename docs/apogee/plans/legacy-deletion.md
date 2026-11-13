@@ -34,6 +34,11 @@ the tree moves.
     (read dispatch) and the shared action adapters, listed per row.
 - **Redirects need a slug lookup.** Console URLs carry org and mission slugs (`shell/scope.ts`); legacy URLs carry
   ids. Follow `AuthRedirectController`'s pattern: look the slugs up from the id, and fall back to `/console`.
+- **api's redirects ride with each deletion (lead, 11-14).** api built them on `api/legacy-redirects` (worktree
+  `…/cadence/api-legacy-redirects`, unpushed), one commit per row: `53c6cb123` L1+L2+L3 (adds
+  `CadenceWeb.ConsolePaths`), `9fb865e63` L4, `78b406a26` L7, `a072ae6cb` L11; `db58dfa61` (legacy nav repointed)
+  is independent. A row's legacy LiveView tests fail once its routes redirect, so `git cherry-pick -x` api's commit
+  into the same batch as that row's deletion and run the touched tests together. Batch 1 (L5, L6, L21) has none.
 - **Legacy frontend.** Each row's Vue pages live under `frontend/apps/host`, `frontend/apps/{mission-catalog,
   organization-admin,ops-console}` and `frontend/modules/*`. They go with their routes. Whether `frontend/apps/host`
   can go whole is open (lead).
