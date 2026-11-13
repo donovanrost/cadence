@@ -9,6 +9,7 @@ const reasonWords: Readonly<Record<Reason, string>> = {
   apply_failed: "applying the configuration failed",
   spec_mismatch: "it needs a configuration fix",
   reconcile_crashed: "it needs a configuration fix",
+  runtime_not_running: "the runtime isn't running",
   unrecognized: "the reason isn't known to the console",
 };
 
@@ -84,7 +85,7 @@ export function createdText(r: {
     return { tone: "nominal", text: `${made} Invitation sent to ${r.invitation.email}.` };
   return {
     tone: "caution",
-    text: `${made} The invitation to ${r.invitation.email} exists, but no email went out; share the link from the organization's page.`,
+    text: `Created ${r.organization.name}, but no email went out. Share the invitation link from its page.`,
   };
 }
 

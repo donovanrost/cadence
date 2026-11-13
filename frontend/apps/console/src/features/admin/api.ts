@@ -174,7 +174,12 @@ export function revokeServiceIdentity(id: string) {
 }
 
 /** U38's reasons (domain MissionRuntimeStatus); a new reason reads as unrecognized. */
-export const runtimeReasons = ["apply_failed", "spec_mismatch", "reconcile_crashed"] as const;
+export const runtimeReasons = [
+  "apply_failed",
+  "spec_mismatch",
+  "reconcile_crashed",
+  "runtime_not_running",
+] as const;
 const runtimeRow = d.object({
   organization: d.object({ id: d.token, name: d.string, slug: d.token }),
   mission: d.object({ id: d.token, name: d.string, slug: d.token }),

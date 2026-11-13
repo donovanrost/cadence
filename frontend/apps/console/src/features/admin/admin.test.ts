@@ -56,3 +56,23 @@ describe("create organization (Admin.md)", () => {
     ).toBe("caution");
   });
 });
+
+describe("ux a3587d62 follow-ups", () => {
+  it("names a stopped runtime and the no-email create", () => {
+    expect(
+      runtimeText({
+        ...applied,
+        state: "not_applied",
+        reason: "runtime_not_running",
+        since: "2026-11-13T23:10:00Z",
+      }).text,
+    ).toBe("NOT APPLIED since 23:10Z: the runtime isn't running");
+    expect(
+      createdText({
+        organization: { name: "Acme Space" },
+        invitation: { email: "ana@acme.space", delivery: "unavailable" },
+        invitation_error: null,
+      }).text,
+    ).toBe("Created Acme Space, but no email went out. Share the invitation link from its page.");
+  });
+});
