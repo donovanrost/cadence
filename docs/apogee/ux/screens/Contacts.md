@@ -102,6 +102,10 @@ shows the problem and `Open in Plan`. **Empty:** nominal callout "No conflicts o
 - **In D2 and D3:** off-plan bookings carry the tag `OFF-PLAN`. D2 adds "Booked outside a plan by Mira K. at
   02:10Z: “<Why note>” · doesn't count toward contact rules." (the note only when given; it also goes in the
   Timeline event).
+- **Timeline event** (api dc68a1cb4): "EARENDIL-312 · SVA 03:10Z booked outside a plan by Mira K." The pass leads,
+  using the same identifier as the release confirm, so 03:10Z reads as the pass, not as the booking time. The
+  event's own time is on the axis. Without an actor: "by an operator" (U29). Detail line: the note in quotes when
+  given, then "Doesn't count toward contact rules."
 - **Release** (same action and label as plan bookings, so there's one verb):
   - Who: for an off-plan booking, its booker or an org admin. Others see "Mira K. or an org admin can release
     this booking." (todo(authz) per lead).
