@@ -31,9 +31,47 @@ defmodule Cadence.Dashboards.SourceRegistry.ExecutionMonitoring do
        else: {:exception, exception}
   end
 
+  @doc """
+  The failure a timed-out or exited source execution stands for: a read task killed while it
+  waited on Cadence's own Postgres (`{:platform_store_timeout, ms}`, see `blocked_on/1`) under a
+  source that isn't Postgres-backed stays a platform-store failure; under a Postgres-backed one
+  it's the source timing out.
+  """
+  @spec failure_reason(term(), ResolvedSourceBinding.t()) :: term()
+  def failure_reason({:platform_store_timeout, ms}, %ResolvedSourceBinding{data_source: source}) do
+    if to_string(source.kind) in @postgres_backed_kinds,
+      do: {:timeout, ms},
+      else: {:platform_store_timeout, ms}
+  end
+
+  def failure_reason(reason, _resolved_binding), do: reason
+
+  @doc """
+  What a still-running read task is blocked on: `:platform_store` while it waits on a Cadence
+  Postgres connection or query (DBConnection/Postgrex on its stack; QuestDB is read over HTTP),
+  else `:source`. Read just before the task is killed for its timeout.
+  """
+  @spec blocked_on(pid()) :: :platform_store | :source
+  def blocked_on(pid) when is_pid(pid) do
+    case Process.info(pid, :current_stacktrace) do
+      {:current_stacktrace, stack} ->
+        if Enum.any?(stack, &platform_store_frame?/1), do: :platform_store, else: :source
+
+      nil ->
+        :source
+    end
+  end
+
+  defp platform_store_frame?({module, _fun, _arity, _location}) do
+    name = Atom.to_string(module)
+
+    String.starts_with?(name, "Elixir.DBConnection") or
+      String.starts_with?(name, "Elixir.Postgrex")
+  end
+
   @doc "Marks a source-unavailable warning's details with the platform-store cause."
   @spec put_cause(map(), term()) :: map()
-  def put_cause(details, {:platform_store, _exception}),
+  def put_cause(details, {kind, _detail}) when kind in [:platform_store, :platform_store_timeout],
     do: Map.put(details, :cause, :platform_store)
 
   def put_cause(details, _reason), do: details
