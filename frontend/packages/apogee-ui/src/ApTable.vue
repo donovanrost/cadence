@@ -1,4 +1,7 @@
 <script setup lang="ts" generic="Row">
+import { ref } from "vue";
+import { useScrollable } from "./lib/scrollable.ts";
+
 /**
  * Data table. Columns declare alignment and mono; cells render through `#cell-<key>` slots
  * (default: the row's value as text). The Name cell is the row link; never whole-row click.
@@ -12,7 +15,7 @@ export type ApColumn<K extends string = string> = Readonly<{
   hiddenLabel?: boolean;
 }>;
 
-defineProps<{
+const props = defineProps<{
   columns: readonly ApColumn[];
   rows: readonly Row[];
   rowKey: (row: Row) => string;
@@ -27,6 +30,10 @@ function cellText(row: Row, key: string): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
+/** A table wider than the screen scrolls sideways: keyboard reachable and named then (qa §6). */
+const wrapper = ref<HTMLElement | null>(null);
+const scrolls = useScrollable(wrapper);
+
 defineSlots<
   {
     [K in `cell-${string}`]?: (props: { row: Row }) => unknown;
@@ -38,7 +45,13 @@ defineSlots<
 </script>
 
 <template>
-  <div class="overflow-x-auto">
+  <div
+    ref="wrapper"
+    class="overflow-x-auto"
+    :tabindex="scrolls ? 0 : undefined"
+    :role="scrolls ? 'region' : undefined"
+    :aria-label="scrolls ? (props.caption ?? 'Table') : undefined"
+  >
     <table class="w-full border-collapse text-md">
       <caption v-if="caption" class="sr-only">
         {{

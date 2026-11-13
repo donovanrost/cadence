@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 import { useNow } from "./lib/clock.ts";
 import { formatClock } from "./lib/format.ts";
+import { useScrollable } from "./lib/scrollable.ts";
 
 /**
  * Header for takeover screens (commanding, multi-step wizards): close/back · mono context line
@@ -19,6 +21,9 @@ withDefaults(
   { closeLabel: "Close", titleAs: "p" },
 );
 const now = useNow();
+/** Under 768 the steps row scrolls sideways: keyboard reachable and named then (qa §6). */
+const steps = ref<HTMLElement | null>(null);
+const stepsScroll = useScrollable(steps);
 </script>
 
 <template>
@@ -62,7 +67,11 @@ const now = useNow();
     </div>
     <!-- Under 768: one 56px row; the station bar scrolls on its own row below (U19). -->
     <div
+      ref="steps"
       class="flex md:flex-none max-md:order-last max-md:w-full max-md:overflow-x-auto max-md:border-t max-md:border-hairline"
+      :tabindex="stepsScroll ? 0 : undefined"
+      :role="stepsScroll ? 'region' : undefined"
+      :aria-label="stepsScroll ? 'Progress' : undefined"
     >
       <slot name="steps" />
     </div>
