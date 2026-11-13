@@ -66,6 +66,11 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
 `config.rollback`, `config.discard_any`). Gate staged-bar actions on them; the server enforces
 them anyway.
 
+**A delete you already staged adds nothing.** Staging a `delete` of an entity you have already
+staged for deletion in the open set doesn't add a second change. If every op in the stage is such a
+delete, the response is the existing change (`change_id`, `version` and `staged_count`
+unchanged). Another author's delete of the same entity is still `409 path_already_staged`.
+
 ## Batch spacecraft creation
 
 There are no dedicated batch endpoints. Stage N `spacecraft` create ops in one `POST /stage`. Use

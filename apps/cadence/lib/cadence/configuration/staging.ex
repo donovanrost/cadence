@@ -5,7 +5,9 @@ defmodule Cadence.Configuration.Staging do
   Staging validates each op's shape and fields through its kind (no cross-entity checks; those
   run in the preview), records the live values of the paths it touches as its base, and refuses
   a path another author already staged. A re-stage by the same author replaces that author's
-  earlier value.
+  earlier value; the same author staging a delete they already staged adds nothing (fe-setup, qa:
+  a double-submitted Archive made two changes), and a stage of only such deletes answers with the
+  change that holds them.
   """
 
   import Ecto.Query
@@ -46,7 +48,13 @@ defmodule Cadence.Configuration.Staging do
     with :ok <- not_frozen(set),
          :ok <- rollback_alone(set, source),
          :ok <- resolve_overlaps(set, actor, prepared) do
-      insert_change(set, actor, summary, source, prepared)
+      entity_ids = Enum.map(prepared, & &1.entity_id)
+      held = Enum.map(prepared, &staged_delete(&1, set, actor))
+
+      case for {op, nil} <- Enum.zip(prepared, held), do: op do
+        [] -> result(set, set.version, hd(held), entity_ids)
+        fresh -> insert_change(set, actor, summary, source, fresh, entity_ids)
+      end
     else
       {:error, reason} -> Repo.rollback(reason)
     end
@@ -323,7 +331,31 @@ defmodule Cadence.Configuration.Staging do
 
   defp staged_value(_other, _path), do: nil
 
-  defp insert_change(set, actor, summary, source, prepared) do
+  # The change holding this author's identical staged delete, if any.
+  defp staged_delete(%{action: "delete"} = op, set, actor) do
+    key = actor_key(actor)
+
+    set.change_set_id
+    |> ChangeSetStore.staged_ops()
+    |> Enum.find_value(fn other ->
+      if other.author_key == key and other.action == "delete" and same_entity?(op, other),
+        do: other.change_id
+    end)
+  end
+
+  defp staged_delete(_op, _set, _actor), do: nil
+
+  defp result(set, version, change_id, entity_ids),
+    do: %{
+      change_set_id: set.change_set_id,
+      change_id: change_id,
+      version: version,
+      staged_count: length(ChangeSetStore.changes(set.change_set_id)),
+      base_revision: set.base_revision_number,
+      entity_ids: entity_ids
+    }
+
+  defp insert_change(set, actor, summary, source, prepared, entity_ids) do
     now = DateTime.utc_now()
     change_id = Ids.new("config_change")
 
@@ -357,15 +389,7 @@ defmodule Cadence.Configuration.Staging do
 
     rows |> Enum.chunk_every(500) |> Enum.each(&Repo.insert_all(OpRow, &1))
     updated = ChangeSetStore.update_set(set, [])
-
-    %{
-      change_set_id: set.change_set_id,
-      change_id: change_id,
-      version: updated.version,
-      staged_count: length(ChangeSetStore.changes(set.change_set_id)),
-      base_revision: set.base_revision_number,
-      entity_ids: Enum.map(prepared, & &1.entity_id)
-    }
+    result(set, updated.version, change_id, entity_ids)
   end
 
   defp actor_key(%{"kind" => kind, "id" => id}), do: kind <> ":" <> id
