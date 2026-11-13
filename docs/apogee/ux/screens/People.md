@@ -72,6 +72,11 @@ organization` danger button with typed-confirm). Your own row: role change disab
 can't change your own role."
 
 ## Account (`/console/account`) — review #18
+**Pending invitations (legacy L21; Notifications is dropped, #64):** when the signed-in user has invitations
+to other organizations, Account shows them first: `Acme Space · Member · invited by Mira K. on 11-10` with
+[Accept] [Decline] (Decline confirms first). Accept adds the org to the switcher and opens it. The org switcher
+shows `1 invitation` at its foot, linking here. Not on Now (mission-scoped) or org People (that's the inviting
+org's admin view). The email link `/invitations/:token` stays server-rendered (IA) for people who aren't signed in.
 Your profile (name, email), password change (current + new + confirm, `<.input>`-equivalent
 fields), active sessions (device, last seen, `Sign out`), notification preferences (later). Reading
 layout, no rail; reached from the account menu.

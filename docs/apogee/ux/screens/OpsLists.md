@@ -64,6 +64,13 @@ lbl "EARENDIL · TELEMETRY"   h1 "Explore"                  [Dashboards ↗] (DE
   spacecraft (T1 lists its points; no spacecraft chips).
 - **Empty:** "Pick a point to plot" with three suggested points (most recently plotted by you).
 
+- **Canned questions (legacy L20): dropped as a feature.** Each one already has a console home. Explore's empty
+  state (no points chosen) lists them as four links, with no query engine:
+  - `Recent anomalies` → Alarms (Cleared · 24 h tab);
+  - `What changed` → Timeline filtered to config;
+  - `Missing telemetry` → Readiness › Data sources;
+  - `Link health` → Contacts by station.
+
 ## Timeline (`M/timeline`, rail 07)
 **Question:** "What happened, in order?" (fleet-wide event log + shift handover.)
 ```
