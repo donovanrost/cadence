@@ -16,6 +16,13 @@
           "dev/"
         ],
         excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", ~r"/cover/"]
+      },
+      checks: %{
+        extra: [
+          # `# todo(authz): …` marks where Cedar should decide later (the owner's convention).
+          # Keep them listed, but don't fail the build on them.
+          {Credo.Check.Design.TagTODO, [exit_status: 0]}
+        ]
       }
     }
   ]

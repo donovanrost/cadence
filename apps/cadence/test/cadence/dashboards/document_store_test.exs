@@ -287,6 +287,33 @@ defmodule Cadence.Dashboards.DocumentStoreTest do
              )
   end
 
+  # 2026-11-13: a telemetry time series samples its history decimated; the managed QuestDB source
+  # must declare native decimation, or publish readiness refuses every time-series dashboard.
+  test "publishes a telemetry time-series dashboard on the default managed source" do
+    persist_mission_scope("org-doc-publish-series", "mission-doc-publish-series")
+
+    document =
+      "partial_data_time_series.v1.json"
+      |> load_fixture!()
+      |> scope_document(
+        "org-doc-publish-series",
+        "mission-doc-publish-series",
+        "dashboard-doc-publish-series"
+      )
+
+    assert {:ok, %Document{}} = Dashboards.persist_document("org-doc-publish-series", document)
+
+    assert {:ok, %Version{version: 1}} =
+             Dashboards.publish_document(
+               "org-doc-publish-series",
+               "mission-doc-publish-series",
+               "dashboard-doc-publish-series",
+               1,
+               expected_version: 1,
+               published_by: "user-publisher"
+             )
+  end
+
   test "publishes the latest canonical document version" do
     persist_mission_scope("org-doc-publish-latest", "mission-doc-publish-latest")
 
