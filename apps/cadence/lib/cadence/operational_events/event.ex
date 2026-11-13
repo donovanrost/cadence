@@ -73,6 +73,7 @@ defmodule Cadence.OperationalEvents.Event do
   ]
 
   @source_record_kinds [
+    :activation_request,
     :binding_set_activation,
     :catalog_revision,
     :data_source_binding_event,

@@ -3,8 +3,11 @@ defmodule Cadence.Reads.Attention do
   A mission's "needs acknowledgment" items (DECISIONS #54), across sources: `pass_resolution`
   (booking-resolution conflicts, #53), `uplink_blocked` (a blocked pass holding command
   groups back, #58), `pass_release` (a pass whose cancel failed, so it may still be booked) and
-  `contact_settlement` (an ended contact whose telemetry isn't stored yet, #71) and
-  `mission_runtime` (the active generation isn't applied; 2026-11-12). Other
+  `contact_settlement` (an ended contact whose telemetry isn't stored yet, #71),
+  `mission_runtime` (the active generation isn't applied; 2026-11-12) and `activation_apply` (an
+  approved activation whose apply failed or stalled, to retry; 2026-11-13). While an
+  `activation_apply` item is open it carries the cause, so `mission_runtime` stays out of the list
+  and those items say `runtime_not_applied: true` instead (fe-ops: one row for one cause). Other
   mission-level sources (provider changes, for example) join by implementing the same four
   functions:
   `source/0`, `items/2`, `resolved_since/3` and `counts/2`.
@@ -17,10 +20,18 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
   alias Cadence.Contacts.ContactSettlementAttention, as: ContactSettlement
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
+  alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
   alias Cadence.Control.UplinkReadiness.Attention, as: UplinkBlocked
   alias Cadence.Reads.MissionRuntimeAttention, as: MissionRuntime
 
-  @sources [PassResolutions, UplinkBlocked, PassRelease, ContactSettlement, MissionRuntime]
+  @sources [
+    PassResolutions,
+    UplinkBlocked,
+    PassRelease,
+    ContactSettlement,
+    MissionRuntime,
+    ActivationApply
+  ]
   @resolved_window_s 60
 
   @doc """
@@ -36,7 +47,7 @@ defmodule Cadence.Reads.Attention do
 
       {:ok,
        %{
-         items: Enum.flat_map(@sources, & &1.items(org, mission_id)),
+         items: @sources |> Enum.flat_map(& &1.items(org, mission_id)) |> one_row_per_cause(),
          resolved: Enum.flat_map(@sources, & &1.resolved_since(org, mission_id, since)),
          counts: counts(org, mission_id)
        }}
@@ -46,10 +57,36 @@ defmodule Cadence.Reads.Attention do
   @doc "Open and acknowledged counts across sources; cheap enough for `/counts`."
   @spec counts(binary(), binary()) :: %{open: non_neg_integer(), acknowledged: non_neg_integer()}
   def counts(org, mission_id) do
-    Enum.reduce(@sources, %{open: 0, acknowledged: 0}, fn source, acc ->
-      Map.merge(acc, source.counts(org, mission_id), fn _key, a, b -> a + b end)
+    by_source = Map.new(@sources, &{&1, &1.counts(org, mission_id)})
+
+    by_source
+    |> Map.drop(if by_source[ActivationApply].open > 0, do: [MissionRuntime], else: [])
+    |> Map.values()
+    |> Enum.reduce(%{open: 0, acknowledged: 0}, fn counts, acc ->
+      Map.merge(acc, counts, fn _key, a, b -> a + b end)
     end)
   end
+
+  @doc false
+  def one_row_per_cause(items) do
+    runtime = MissionRuntime.source()
+    apply = ActivationApply.source()
+
+    if Enum.any?(items, &(&1.source == apply)) do
+      runtime_not_applied? = Enum.any?(items, &(&1.source == runtime))
+
+      items
+      |> Enum.reject(&(&1.source == runtime))
+      |> Enum.map(&flag_runtime(&1, apply, runtime_not_applied?))
+    else
+      items
+    end
+  end
+
+  defp flag_runtime(%{source: source} = item, source, runtime_not_applied?),
+    do: Map.put(item, :runtime_not_applied, runtime_not_applied?)
+
+  defp flag_runtime(item, _apply, _runtime_not_applied?), do: item
 
   defp authorize(scope, mission_id),
     do:
