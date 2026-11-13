@@ -192,7 +192,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Settings, Audit log, Provider accounts (`SettingsAuditProviders.md`): built; gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Settings: `Override` on inherited fields *(unverified)* | fe-setup | — |
+| Settings: `Override` on inherited fields: checked (fe-setup 11-13): overrides are section-level today (a mission override copies the whole section); per-field needs api storage. ux picks per-field (api) or a section-level UI | fe-setup | ux's pick |
 | Audit: ~~actor filter~~ done (d21aad0b); kind chips (a Kind select exists), `Export CSV` | fe-setup | export: api or client-side |
 | ~~Provider accounts: version history~~ done (2fdd2692, dded6585) | fe-setup | — |
 
@@ -325,7 +325,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 - **api:** L1 (8g + close/cancel) → L21 invitations → L9 surface context + token endpoint, staging/activation through Changes (director 11-13; ux spec `ux/AppSurfaces.md`, aed431cb) → L4 mission create → ~~L2 template verbs + L3 grant verbs~~ (002e3ed7e, 12562f5ca) → L17 spacecraft edit/archive kind, with L22's two switches → L18 catalog reimport/download → L14 provider-change decisions.
 - **api-ops:** qa #51 → M26 → L6 admin-mode step-up → L5 SPA sign-in / invitation accept (JSON, with the attempt limit) → L7 admin endpoints → ~~L11 data-source writes~~ → security batch → L12 mission-provider writes → L13 provider-account grants.
 - **domain:** ~~#74~~, ~~booking fixes~~, ~~dashboards StatelessAuthoring + Q1~~ (done) → ~~XTCE alarm-range importer bug~~ (050dfacf) → L22 (1)–(4) → L15 single bookings → dashboards Q6 (playlist/library update/delete, snapshot delete) → **L9 B: change-set kinds for app config** (limits, derived telemetry, decom bindings; DECISIONS #77; plan to the director first) (search, reserve, cancel outside plans; reuse the contact workflow).
-- **fe-setup:** ~~L21~~, ~~L9 frame~~, ~~L7~~ done; now proposing shapes and building against fixtures for ~~L4~~ → ~~L2/L3 UI~~ (48d652840) → ~~L11~~ (3eb56be4c), ~~L18 against fixtures~~ (d72327020, waits on api's review); ~~L12+L13 shapes + fixtures~~ (bc785ad6a, 06db9359c, 9c96febab) → ~~L10 UI~~ (1165841d8) → ~~qa §6 (3)+(5)~~ (1fdae0866: a 403 is an access state in ApRemote, members keep their rail) → ~~L19 UI~~ (704960442, waits on api's read) → now: §12C branded ids in setup features (on lead's api/ids.ts), Settings `Override` verification; L17 + L22 UI when api's kind schema lands.
+- **fe-setup:** ~~L21~~, ~~L9 frame~~, ~~L7~~ done; now proposing shapes and building against fixtures for ~~L4~~ → ~~L2/L3 UI~~ (48d652840) → ~~L11~~ (3eb56be4c), ~~L18 against fixtures~~ (d72327020, waits on api's review); ~~L12+L13 shapes + fixtures~~ (bc785ad6a, 06db9359c, 9c96febab) → ~~L10 UI~~ (1165841d8) → ~~qa §6 (3)+(5)~~ (1fdae0866: a 403 is an access state in ApRemote, members keep their rail) → ~~L19 UI~~ (704960442, waits on api's read) → ~~§12C setup adoption~~ (c32bc2db6), ~~Settings Override check~~ (with ux) → now: legacy deletion manifest (plans/legacy-deletion.md); L17 + L22 UI when api's kind schema lands.
 - **fe-ops:** L5 SPA auth screens (from lead), L14 decisions UI, ~~L15 single bookings UI~~ (9b71bbc5, behind a flag), ~~L20 empty-state links~~ (5d7e882d).
 - **lead:** ~~L6 admin-mode client~~ (3b819ce1), ~~L21 switcher footer~~ (0bb33f80); L5 screens handed to fe-ops (lead owns the architecture).
 - **dashboards:** L8 (plan 6dc7421b approved; slices in §11e).
