@@ -250,6 +250,10 @@ defmodule Cadence.GroundNetworks.MissionProviders do
 
   defp validate_account_binding(%MissionProvider{provider_account_id: nil}), do: :ok
 
+  # An archived version retires the Provider and binds nothing new, so it needn't re-prove a live
+  # grant: a revoked grant is the main reason to archive one. Bookings keep their pinned version.
+  defp validate_account_binding(%MissionProvider{lifecycle_state: :archived}), do: :ok
+
   defp validate_account_binding(%MissionProvider{} = provider) do
     with {:ok, account_version} <-
            ProviderAccounts.fetch_version(
