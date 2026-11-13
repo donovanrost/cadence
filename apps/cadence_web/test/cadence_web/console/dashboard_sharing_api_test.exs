@@ -3,6 +3,7 @@ defmodule CadenceWeb.Console.DashboardSharingAPITest do
   use CadenceWeb.ConnCase, async: false
   import CadenceWeb.DashboardAuthoringDraftTestSupport
 
+  alias Cadence.Dashboards.StatelessAuthoring
   alias CadenceWeb.TestFixtures
 
   setup do: authoring_draft_setup()
@@ -113,5 +114,72 @@ defmodule CadenceWeb.Console.DashboardSharingAPITest do
 
     assert c |> call(:delete, "/snapshots/" <> snapshot["id"]) |> response(204)
     assert c |> call(:delete, "/snapshots/" <> snapshot["id"]) |> json_response(404)
+  end
+
+  test "D20: a share's link opens until revoked; a snapshot's says who deleted it", c do
+    base = "/api/console/v1/missions/#{c.mission.mission_id}"
+    open = fn suffix -> c.user |> TestFixtures.member_conn() |> get(base <> suffix) end
+
+    # A share shows the current version: save once so the fixture has one.
+    rename = %{"event" => "rename", "input" => %{"name" => "Current", "description" => ""}}
+
+    assert {:ok, _saved} =
+             StatelessAuthoring.save(
+               c.scope,
+               c.mission.mission_id,
+               c.document.dashboard_id,
+               1,
+               [rename],
+               nil
+             )
+
+    share =
+      c
+      |> call(:post, "/shares", %{"data_visibility" => "definition_only", "expires_at" => nil})
+      |> json_response(201)
+      |> Map.fetch!("data")
+
+    view = open.("/dashboard-shares/" <> share["id"]) |> json_response(200) |> Map.fetch!("data")
+
+    assert %{"kind" => "share", "snapshot_row" => nil, "snapshot" => nil} = view
+    assert view["share"]["id"] == share["id"]
+    assert view["dashboard"]["id"] == c.document.dashboard_id
+    assert %{"version" => 3} = view["definition"]
+
+    c |> call(:delete, "/shares/" <> share["id"]) |> json_response(200)
+
+    assert %{"code" => "share_revoked", "message" => "Revoked " <> _} =
+             open.("/dashboard-shares/" <> share["id"])
+             |> json_response(404)
+             |> Map.fetch!("error")
+
+    runtime = %{"from" => "2026-11-12T21:00:00Z", "to" => "2026-11-12T23:00:00Z"}
+
+    snapshot =
+      c
+      |> call(:post, "/snapshots", %{"data_visibility" => "definition_only", "runtime" => runtime})
+      |> json_response(201)
+      |> Map.fetch!("data")
+
+    view =
+      open.("/dashboard-snapshots/" <> snapshot["id"]) |> json_response(200) |> Map.fetch!("data")
+
+    assert %{
+             "kind" => "snapshot",
+             "share" => nil,
+             "snapshot_row" => %{"window" => %{"from" => _}}
+           } = view
+
+    c |> call(:delete, "/snapshots/" <> snapshot["id"]) |> response(204)
+
+    assert %{"code" => "snapshot_deleted", "message" => "Deleted by " <> _, "details" => details} =
+             open.("/dashboard-snapshots/" <> snapshot["id"])
+             |> json_response(404)
+             |> Map.fetch!("error")
+
+    assert %{"deleted_by" => %{"id" => _}, "deleted_at" => _} = details
+
+    assert open.("/dashboard-snapshots/nope") |> json_response(404) |> get_in(["error", "code"]) ==
+             "not_found"
   end
 end

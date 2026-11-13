@@ -191,6 +191,29 @@ From fe-setup's proposal (docs/apogee/plans/dashboards-settings.md). Under
     link then reads `snapshot_deleted` (D20). `404` when it's unknown or already deleted.
   - `403 forbidden` for non-authors; `404 not_found` for an unknown dashboard.
 
+## D20: shared views (owner: api)
+
+From dashboards' slice 6 (docs/apogee/plans/dashboards-slice6.md). `GET
+/api/console/v1/missions/:mission_id/dashboard-shares/:share_id` and `GET
+…/dashboard-snapshots/:snapshot_id` (mission operators) → `{kind: share | snapshot, share: <D14
+share> | null, snapshot_row: <D14 snapshot> | null, dashboard: {id, name, description},
+definition: <editor outline, version 3> | null, snapshot: <WorkspaceSnapshot> | null}`.
+
+- A share shows the dashboard's **current** version. `definition` is null when there isn't one
+  yet. A snapshot shows its stored version over its frozen window.
+- `snapshot` is null for `definition_only` links; each widget then says "Data isn't shared in this
+  link."
+- Not yet: a share's `from`/`to`/`spacecraft_id` runtime params. The domain read takes the share's
+  stored context only (asked of domain).
+- Errors, all 404, each with the page's sentence as the `message`:
+  - `share_revoked` "Revoked 11-14 02:10Z.", `details {revoked_at}`. Shares don't record who
+    revoked them.
+  - `share_expired` "Expired 11-20 00:00Z.", `details {expires_at}`.
+  - `snapshot_deleted` "Deleted by Mira K. on 11-14.", `details {deleted_by {id, name} | null,
+    deleted_at}`.
+  - `not_found` (unknown, or another mission's).
+- `503 dashboard_unavailable` when a link that should open can't be resolved right now.
+
 - **D17** `GET /activity?before=` (operator) → `{events: [{id, kind, at, actor {id, name} | null,
   version, detail}], next}`: one feed, newest first, 25 per page; pass `next` back as `before`
   (opaque; `null` on the last page; `422 details.before` for a bad one). `kind` is the closed

@@ -173,7 +173,9 @@ defmodule CadenceWeb.Console.DashboardSettings do
       created_by: snapshot.created_by
     }
 
-  defp base_url(organization_id, mission_id) do
+  @doc "The console path dashboards' shared views hang off, or nil."
+  @spec base_url(binary(), binary()) :: binary() | nil
+  def base_url(organization_id, mission_id) do
     with {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
          {:ok, organization} <- Organizations.fetch_organization(organization_id) do
       "/console/#{segment(organization.slug)}/#{segment(mission.slug)}/telemetry/dashboards"
