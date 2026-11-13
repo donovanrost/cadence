@@ -8,6 +8,7 @@ import { ApButton, ApCallout, ApStationBar } from "@/ui";
 import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
+import FocusPanel from "./FocusPanel.vue";
 import DraftGantt from "./DraftGantt.vue";
 import { dayLabel, useSpacecraftNames } from "./names.ts";
 import PlanFooter from "./PlanFooter.vue";
@@ -236,17 +237,29 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
         :focused="focused"
         @focus="focused = focused === $event ? null : $event"
       />
-      <DraftGantt
-        :plan="view.plan"
-        :day="day"
-        :name-of="nameOf"
-        :focused="focused"
-        :selected="selected"
-        :alternatives="alternatives"
-        :availability="availability"
-        :muted="view.plan.superseded !== null"
-        @select="selected = $event"
-      />
+      <div class="flex min-h-0 flex-col gap-3">
+        <DraftGantt
+          :plan="view.plan"
+          :day="day"
+          :name-of="nameOf"
+          :focused="focused"
+          :selected="selected"
+          :alternatives="alternatives"
+          :availability="availability"
+          :muted="view.plan.superseded !== null"
+          class="min-h-0 flex-1"
+          @select="selected = $event"
+        />
+        <FocusPanel
+          :plan="view.plan"
+          :day="day"
+          :focused="focused"
+          :selected="selected"
+          :name-of="nameOf"
+          :muted="view.plan.superseded !== null"
+          @select="selected = $event"
+        />
+      </div>
       <SelectedPanel
         :plan="view.plan"
         :selected="selected"
