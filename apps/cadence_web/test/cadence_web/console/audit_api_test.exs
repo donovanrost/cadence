@@ -61,8 +61,22 @@ defmodule CadenceWeb.Console.AuditAPITest do
 
     settings = Enum.find(data["events"], &(&1["action"] == "Changed Configuration settings"))
 
-    assert %{"kind" => "config", "actor" => %{"name" => "Ada"}, "mission" => %{"id" => _}} =
-             settings
+    assert %{"id" => "config:settings:cadence.configuration:" <> _, "at" => _} = settings
+
+    assert Map.drop(settings, ["id", "at", "mission"]) == %{
+             "kind" => "config",
+             "action" => "Changed Configuration settings",
+             "actor" => %{"kind" => "user", "id" => nil, "name" => "Ada"},
+             "target" => %{
+               "kind" => "settings",
+               "id" => "cadence.configuration",
+               "label" => "Configuration"
+             },
+             "reason" => nil
+           }
+
+    assert %{"id" => mission_id, "name" => _} = settings["mission"]
+    assert mission_id == c.mission.mission_id
 
     ats = Enum.map(data["events"], & &1["at"])
     assert ats == Enum.sort(ats, :desc)

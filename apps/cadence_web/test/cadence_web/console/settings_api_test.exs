@@ -88,6 +88,58 @@ defmodule CadenceWeb.Console.SettingsAPITest do
              )
   end
 
+  test "exact shape of a section, a field and the organization's allow_override", c do
+    section =
+      read(c.admin, c.mission_base)["sections"]
+      |> Enum.find(&(&1["key"] == "cadence.pass_review"))
+
+    assert section |> Map.keys() |> Enum.sort() ==
+             ~w(fields key locked purpose title version)
+
+    assert %{"title" => "Pass review", "locked" => false, "version" => nil} = section
+    assert is_binary(section["purpose"])
+
+    assert [threshold, target] = section["fields"]
+
+    assert threshold == %{
+             "path" => "pass_realized_threshold",
+             "label" => "A pass counts as realized at",
+             "type" => "number",
+             "unit" => "ratio",
+             "enum" => nil,
+             "range" => %{"min" => 0, "max" => 1},
+             "required" => false,
+             "help" => "The share of its planned window it must fly.",
+             "visible_when" => nil,
+             "value" => 0.95,
+             "source" => "organization",
+             "inherited_value" => 0.95
+           }
+
+    assert target["path"] == "realization_target"
+
+    allow =
+      read(c.admin, c.org_base)["sections"]
+      |> Enum.find(&(&1["key"] == "cadence.pass_review"))
+      |> Map.fetch!("fields")
+      |> List.last()
+
+    assert allow == %{
+             "path" => "allow_override",
+             "label" => "Missions may override",
+             "type" => "boolean",
+             "unit" => nil,
+             "enum" => nil,
+             "range" => nil,
+             "required" => false,
+             "help" => nil,
+             "visible_when" => nil,
+             "value" => true,
+             "source" => "organization",
+             "inherited_value" => nil
+           }
+  end
+
   test "a mission sets single fields; the others follow the organization (per-field)", c do
     put =
       put_json(c.admin, c.mission_base <> "/cadence.pass_review", %{

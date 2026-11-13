@@ -28,7 +28,7 @@ defmodule Cadence.Management.ConsoleSettings do
       sections =
         (registered ++ [@configuration])
         |> Enum.filter(&Map.has_key?(fields(), &1.id))
-        |> Enum.map(&section(scope, mission_id, &1))
+        |> Enum.flat_map(&section(scope, mission_id, &1))
 
       {:ok,
        %{
@@ -65,11 +65,23 @@ defmodule Cadence.Management.ConsoleSettings do
              input(snapshot, values, mission_id)
            ) do
       {:ok, %{version: snapshot.version + 1, state: :active}}
+    else
+      # A concurrent save moved the section between the read and the write: the same 409 as a
+      # stale expected_version, with the version it is now.
+      {:error, :settings_changed} -> changed(scope, mission_id, section_id)
+      other -> other
     end
   end
 
   def save(_scope, _mission_id, _section_id, _values, _expected),
     do: {:error, {:invalid_params, %{values: "must be an object"}}}
+
+  defp changed(scope, mission_id, section_id) do
+    case snapshot(scope, mission_id, section_id) do
+      {:ok, %{version: version}} -> {:error, {:version_conflict, version}}
+      _unreadable -> {:error, :settings_changed}
+    end
+  end
 
   # -- fields --------------------------------------------------------------------------------
 
@@ -161,8 +173,15 @@ defmodule Cadence.Management.ConsoleSettings do
 
   # -- read ----------------------------------------------------------------------------------
 
+  # A section whose provider can't be read is left out (Settings logs the failure), not a 500.
   defp section(scope, mission_id, %{id: id} = section) do
-    {:ok, snapshot} = snapshot(scope, mission_id, id)
+    case snapshot(scope, mission_id, id) do
+      {:ok, snapshot} -> [section_view(scope, mission_id, section, snapshot)]
+      {:error, _reason} -> []
+    end
+  end
+
+  defp section_view(scope, mission_id, %{id: id} = section, snapshot) do
     effective = snapshot.effective || %{}
     inherited = snapshot.organization_default || %{}
     set_here = if snapshot.source == "overridden", do: snapshot.saved || %{}, else: %{}

@@ -527,8 +527,10 @@ provider_account_not_found`. A stale view answers which thing changed, with its 
 ### `GET /audit` (AU1, organization admins)
 
 Query: `from`, `to` (ISO; default the last 7 days), `actor_id`, `mission_id`, `kinds` (comma
-list of `config, commanding, access, alarms, contacts, data, provider_accounts, account`), `limit` 1–200 (default 100), and
-`cursor` (from `next_cursor`).
+list of `config, commanding, access, alarms, contacts, data, provider_accounts, account,
+platform`), `limit` (default 100; clamped to 1–200), and `cursor` (from `next_cursor`).
+`mission_id` narrows the per-mission sources; organization-level events (organization settings,
+access, provider accounts, account, platform) are always included.
 
 `{events: [{id, at, actor: {kind, id, name} | null, kind, action, target: {kind, id, label} |
 null, mission: {id, name} | null, reason}], sources: {included, missing}, next_cursor}`, newest
@@ -555,7 +557,17 @@ first.
     §Account, Audit). The actor is the member; `target` is `null`.
 - `sources.missing` is empty now. Keep handling it generically.
 - Actions are server-made sentences.
-- Settings history carries only the actor's name, so its `actor.id` is `null`.
+- Settings entries: `{kind: "config", action: "Changed <Section> settings", target: {kind:
+  "settings", id: <section key>, label}}`, with " (organization default)" and `mission: null` for
+  the organization's own. Settings history carries only the actor's name, so `actor` is `{kind:
+  "user", id: null, name}` and `actor_id` doesn't find a person's settings changes. The log holds
+  each section's 10 most recent changes per scope, for the Governance, Commanding, Configuration
+  and Pass review sections.
+- The per-field settings migration shows as one entry per mission it rewrote: `actor: null`,
+  `target: null`, action "Settings now follow the organization except the fields set for this
+  mission." (plus " Approval settings stay set for this mission, even where they match the
+  organization." when it kept approval fields equal to the organization's).
+- `platform` events (platform admin actions on the organization) also carry `organization`.
 - `403 forbidden` for non-admins; `422 invalid_params` (`kinds`, `from`/`to`, `limit`, `cursor`).
 
 ### `GET /people` (O1)
@@ -784,22 +796,39 @@ talk to the server: `{catalog, status, surfaces}`.
 inherited_value}], locked, version: {version, at, actor: {name}} | null}], permissions:
 ["settings.edit"]}`.
 
-- Sections come from the server's settings registry (Governance, Commanding, Pass review when
-  it lands, and `cadence.configuration`, the profile framing generations flag). A section with no
-  console fields is left out.
+- Sections come from the server's settings registry (Governance, Commanding, Pass review and
+  `cadence.configuration`, the profile framing generations flag). A section with no console fields
+  is left out, and so is a section whose owner can't be read (logged on the server).
 - Fields use the kind-schema shape, with paths inside the section's value. Shares between 0 and 1
-  (Pass review) have `unit: "ratio"`. At organization level
-  each section adds `allow_override` ("Missions may override").
+  (Pass review) have `unit: "ratio"`. At organization level each section's `fields` ends with an
+  `allow_override` field ("Missions may override", boolean, `source: "organization"`,
+  `inherited_value: null`).
+- **Per field** (a85b1799e): at mission level a field's `source` is `"mission"` only when the
+  mission's override sets that path; every other field is `"organization"` and its `value` is the
+  organization's (the override is merged over it, so unset fields follow later organization
+  changes). At organization level every field is `"organization"`. Governance fields the
+  per-field migration kept read `"mission"` even where they equal the organization's.
 - `inherited_value` is the organization's value (mission level only). `locked: true` means the
-  organization doesn't allow an override.
-- `version` is per section: there's no single settings version.
+  organization doesn't allow an override: the fields then read the organization's values, all
+  `"organization"`, whatever the mission stored.
+- `version` is per section: there's no single settings version (`null` before the first save).
 
 `PUT …/settings/:section_key` with `{values: {path: value | null}, expected_version}` saves
-directly and returns `201 {version, state: "active"}`. For a mission, `null` inherits that field,
-and all-`null` clears the override. Errors: `422 invalid_params` (an unknown path in `details`,
-or `details.values` for a value the section refuses), `409 version_conflict` (with
-`details.expected_version`), `409 settings_enforced_by_organization`, `404
-settings_section_not_found`, `403 forbidden`. Edit needs `settings.edit` (any mission operator
+directly and returns `201 {version, state: "active"}`. `expected_version` is the section's
+`version.version`, or `null` (or left out) to skip the check, as on a first save.
+
+- **Mission:** only the paths sent change. A value sets that field for the mission; `null`
+  removes it, so it follows the organization again. Paths not sent keep what's stored. When no
+  field is left set, the section inherits entirely.
+- **Organization:** the paths sent replace the stored ones; the rest keep their values. `null`
+  isn't accepted (`422 invalid_params`, `details.values`). `allow_override` is sent as a path.
+
+Errors: `422 invalid_params` (an unknown path in `details`, or `details.values` for a value the
+section refuses), `409 version_conflict` (with `details.expected_version`, the section's current
+version; also when another save lands between the read and the write), `409
+settings_enforced_by_organization`, `404 settings_section_not_found`, `403 forbidden`, and
+`422 settings_write_unconfirmed` / `422 settings_unavailable` when the section's owner fails or
+can't be read (retry). Edit needs `settings.edit` (any mission operator
 today, from the enforcing check).
 
 ### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
