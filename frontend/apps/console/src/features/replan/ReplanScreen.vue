@@ -26,6 +26,7 @@ import { lostWindow } from "./impact.ts";
 import { bookingRequests } from "./applied.ts";
 import { useLostBookings } from "./useLostBookings.ts";
 import ImpactPanel from "./ImpactPanel.vue";
+import ReplanLanding from "./ReplanLanding.vue";
 import UnconfirmedBlock from "./UnconfirmedBlock.vue";
 import StationImpactPanel from "./StationImpactPanel.vue";
 import { useStationEntry } from "./useStationEntry.ts";
@@ -103,6 +104,8 @@ const proposal = computed(() =>
 const footerPlan = computed(() => proposal.value?.plan ?? null);
 /** Apply is the current step once the proposal has left draft / pending approval. */
 const step = computed(() => {
+  // ux §7 #6: no source chosen yet, so no step has started (every station ○).
+  if (!planId.value && !station.stationId.value) return -1;
   const state = footerPlan.value?.state;
   if (!state) return 0;
   return state === "draft" || state === "pending_approval" ? 1 : 2;
@@ -222,12 +225,11 @@ async function onApply(acks: Acknowledgement[]) {
       </template>
     </ApRemote>
   </template>
-  <ApPanel v-else-if="!planId" index="A" title="Impact">
-    <ApCallout tone="info"
-      >Open a re-plan from a contact plan that has rejected or failed bookings, or from a station
-      that's down.</ApCallout
-    >
-  </ApPanel>
+  <ReplanLanding
+    v-else-if="!planId"
+    :mission-id="missionId"
+    :availability="availability.state.value"
+  />
   <ApRemote v-else :state="source" loading-label="Loading the live plan…">
     <template #default="{ value: live }">
       <PlanStatePanel v-if="runView" :view="runView" />

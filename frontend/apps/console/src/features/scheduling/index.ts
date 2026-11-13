@@ -19,6 +19,7 @@ export {
   executePlan,
   fetchAvailability,
   fetchPlan,
+  fetchPlans,
   fetchRepair,
   reasonText,
   repairableStates,
