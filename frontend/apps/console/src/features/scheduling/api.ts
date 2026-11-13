@@ -1,12 +1,13 @@
-import type { MissionId } from "@/api/index.ts";
 import {
   actor,
   actorKinds,
   decoders as d,
   request,
+  stationId as stationIdReader,
   stationRef,
   type ApiResult,
   type Decoded,
+  type MissionId,
   type Reader,
 } from "@/api";
 
@@ -138,7 +139,7 @@ const planIssue = d.object({
   code: d.known(["selected_contacts_overlap", "station_unavailable", "station_degraded"]),
   snapshot_ids: d.array(d.token),
   spacecraft_id: d.optional(d.nullable(d.token)),
-  ground_station_id: d.optional(d.token),
+  ground_station_id: d.optional(stationIdReader),
   window_id: d.optional(d.token),
   kind: d.optional(d.known(["outage", "maintenance", "degraded"])),
 });
@@ -765,7 +766,7 @@ export const stationName = (s: StationRef) => s?.name ?? s?.code ?? s?.ref ?? "u
 
 const availabilityWindow = d.object({
   id: d.token,
-  ground_station_id: d.token,
+  ground_station_id: stationIdReader,
   kind: d.oneOf(["outage", "maintenance", "degraded"]),
   from: d.timestamp,
   to: d.nullable(d.timestamp),
@@ -781,7 +782,8 @@ export const availabilityReader = d.object({
   at: d.timestamp,
   stations: d.array(
     d.object({
-      ground_station_id: d.token,
+      // §12C: a StationId, so it can't be confused with a code or a provider ref.
+      ground_station_id: stationIdReader,
       state: d.oneOf(["up", "degraded", "down"]),
       since: d.nullable(d.timestamp),
       eta: d.nullable(d.timestamp),

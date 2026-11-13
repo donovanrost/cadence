@@ -1,3 +1,4 @@
+import type { StationId } from "@/api/index.ts";
 import type { Availability } from "@/features/scheduling/index.ts";
 
 /**
@@ -7,7 +8,7 @@ import type { Availability } from "@/features/scheduling/index.ts";
  */
 export function worstStationIssue(
   availability: Availability | null,
-  codeOf: (stationId: string) => string | null,
+  codeOf: (stationId: StationId) => string | null,
   now: Date,
 ): Readonly<{ line: string; all: string[] }> | null {
   const issues = (availability?.stations ?? []).filter((s) => s.state !== "up");

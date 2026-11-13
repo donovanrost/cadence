@@ -4,7 +4,12 @@ import { duration, findingRows } from "./findingRows.ts";
 import type { Availability, AvailabilityWindow } from "@/features/scheduling/index.ts";
 import { releaseErrorWords } from "./release.ts";
 import { describe, expect, it } from "vite-plus/test";
-import { spacecraftId as spacecraftIdReader, scid as scidReader, decode } from "@/api/index.ts";
+import {
+  stationId as stationIdReader,
+  spacecraftId as spacecraftIdReader,
+  scid as scidReader,
+  decode,
+} from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
 import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
 import type { Attention } from "@/features/now/index.ts";
@@ -369,7 +374,7 @@ describe("D3 station bands (S7)", () => {
   it("draws uncleared windows on station rows that are shown", () => {
     const window = (over: Partial<AvailabilityWindow>): AvailabilityWindow => ({
       id: "w",
-      ground_station_id: "gs-svl",
+      ground_station_id: stationIdReader("gs-svl"),
       kind: "outage",
       from: "2026-11-09T02:00:00Z",
       to: "2026-11-09T03:00:00Z",
@@ -384,7 +389,7 @@ describe("D3 station bands (S7)", () => {
       id: string,
       windows: AvailabilityWindow[],
     ): Availability["stations"][number] => ({
-      ground_station_id: id,
+      ground_station_id: stationIdReader(id),
       state: "down",
       since: null,
       eta: null,
@@ -399,7 +404,7 @@ describe("D3 station bands (S7)", () => {
           window({ to: null, kind: "maintenance", reason: null }),
           window({ cleared_at: "2026-11-09T02:10:00Z" }),
         ]),
-        station("gs-other", [window({ ground_station_id: "gs-other" })]),
+        station("gs-other", [window({ ground_station_id: stationIdReader("gs-other") })]),
       ],
     };
     const bands = availabilityBands(av, [{ id: "gs-svl", label: "SVB" }], 99);

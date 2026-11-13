@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { stationId as stationIdReader } from "@/api/index.ts";
 import type { Availability } from "@/features/scheduling/index.ts";
 import { replanDays, replanSources } from "./sources.ts";
 
@@ -6,14 +7,21 @@ const availability = {
   at: "2026-11-12T23:00:00Z",
   stations: [
     {
-      ground_station_id: "gs-sval",
+      ground_station_id: stationIdReader("gs-sval"),
       state: "down",
       since: "2026-11-12T22:10:00Z",
       eta: null,
       basis: null,
       windows: [],
     },
-    { ground_station_id: "gs-ksat", state: "up", since: null, eta: null, basis: null, windows: [] },
+    {
+      ground_station_id: stationIdReader("gs-ksat"),
+      state: "up",
+      since: null,
+      eta: null,
+      basis: null,
+      windows: [],
+    },
   ],
 } satisfies Availability;
 

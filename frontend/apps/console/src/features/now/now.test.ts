@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { stationId as stationIdReader } from "@/api/index.ts";
 import { fleetOf, spacecraftRow, statTiles, type RawLimitState } from "@/features/fleet/index.ts";
 import { constellation } from "./constellation.ts";
 import { deriveQueue, GROUP_AT, nowHeadline } from "./queue.ts";
@@ -191,7 +192,7 @@ describe("fresh crit flash (design-language §6)", () => {
 
 describe("Now header: worst station issue (L49)", () => {
   const st = (id: string, state: "up" | "degraded" | "down", since: string | null) => ({
-    ground_station_id: id,
+    ground_station_id: stationIdReader(id),
     state,
     since,
     eta: null,

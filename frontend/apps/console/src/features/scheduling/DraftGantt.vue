@@ -130,8 +130,9 @@ const rangeText = computed(() =>
 const stations = computed(() =>
   props.availability?.status === "ready" ? props.availability.value.stations : [],
 );
+// Looked up by stationKey (the id, else the provider's ref), which is text.
 const stationState = computed(
-  () => new Map(stations.value.map((st) => [st.ground_station_id, st.state])),
+  () => new Map<string, string>(stations.value.map((st) => [st.ground_station_id, st.state])),
 );
 const bands = computed<GanttBand[]>(() =>
   stations.value.flatMap((st) =>

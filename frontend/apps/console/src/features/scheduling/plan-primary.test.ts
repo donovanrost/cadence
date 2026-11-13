@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { stationId as stationIdReader } from "@/api/index.ts";
 import type { PlanDetail } from "./api.ts";
 import { planHeaderTail, planPrimary } from "./plan-primary.ts";
 
@@ -40,7 +41,7 @@ describe("planPrimary", () => {
             code: "station_unavailable",
             spacecraft_id: undefined,
             snapshot_ids: ["c"],
-            ground_station_id: "gs-sva",
+            ground_station_id: stationIdReader("gs-sva"),
             window_id: "w1",
             kind: "outage",
           },

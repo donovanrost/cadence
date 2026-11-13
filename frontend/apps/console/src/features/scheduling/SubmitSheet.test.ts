@@ -1,4 +1,5 @@
 import { nextTick } from "vue";
+import { stationId as stationIdReader } from "@/api/index.ts";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
@@ -192,7 +193,7 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
           code: "station_degraded" as const,
           snapshot_ids: ["p1"],
           spacecraft_id: undefined,
-          ground_station_id: "gs-kir",
+          ground_station_id: stationIdReader("gs-kir"),
           window_id: "w",
           kind: "degraded" as const,
         },
