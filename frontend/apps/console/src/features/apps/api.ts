@@ -28,8 +28,8 @@ export function fetchApps(missionId: string, signal: AbortSignal): Promise<ApiRe
   return request(`/missions/${encodeURIComponent(missionId)}/apps`, appsReader, { signal });
 }
 
-/** api serves L19 (b18dcf7b5); on after the live check (a 404 on the spacecraft page trips qa's guard). */
-export const SPACECRAFT_APPS_LIVE = false;
+/** api serves L19 (b18dcf7b5); on since the live check 11-13. */
+export const SPACECRAFT_APPS_LIVE = true;
 
 /** Mission apps (A1), or one spacecraft's (L19, plans/spacecraft-apps.md: the same row shape). */
 export type AppsKey = Readonly<{ missionId: string; spacecraftId: SpacecraftId | null }>;

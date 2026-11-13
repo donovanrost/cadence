@@ -92,9 +92,14 @@ async function again() {
         </ApCallout>
         <ArtifactRevisions :revisions="value.revisions" />
         <ImportRunsPanel :runs="value.import_runs" />
-        <ApPanel index="F3" title="Technical details"
-          ><ApKeyValue :items="details(value.artifact)" :columns="2"
-        /></ApPanel>
+        <ApPanel index="F3" title="Technical details">
+          <ApKeyValue :items="details(value.artifact)" :columns="2">
+            <!-- A hash has no break points: let it wrap inside its column. -->
+            <template #value-sha
+              ><span class="[overflow-wrap:anywhere]">{{ value.artifact.sha256 }}</span></template
+            >
+          </ApKeyValue>
+        </ApPanel>
       </template>
     </ApRemote>
   </div>
