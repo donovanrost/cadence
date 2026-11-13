@@ -137,7 +137,10 @@ describe("M23 points reader", () => {
 });
 
 describe("M23 latest.source (551cb796, b8181eb9)", () => {
-  const latest = (limit_state: "critical" | "nominal" | "no_data", source?: string) => ({
+  const latest = (
+    limit_state: "critical" | "nominal" | "no_data",
+    source?: "live" | "history",
+  ) => ({
     value: 1,
     received_at: "2026-11-10T21:00:00Z",
     limit_state,

@@ -27,8 +27,8 @@ const point = d.object({
         value: d.nullable(engineeringValue),
         received_at: d.nullable(d.timestamp),
         limit_state: limitState,
-        /** b8181eb9: live | history (newest stored sample, maybe days old). Unknown reads as is. */
-        source: d.optional(d.token),
+        /** b8181eb9: live | history (newest stored sample, maybe days old). */
+        source: d.optional(d.known(["live", "history"] as const)),
       }),
     ),
   ),
