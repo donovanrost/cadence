@@ -47,6 +47,14 @@ defmodule CadenceWeb.Router do
     plug(CadenceWeb.Console.Plugs.APISession)
   end
 
+  # L5: sign-in and invitation links, which work signed out (CSRF still enforced).
+  pipeline :console_auth_api do
+    plug(:accepts, ["json"])
+    plug(:fetch_session)
+    plug(:put_secure_browser_headers)
+    plug(CadenceWeb.Console.Plugs.AuthAPISession)
+  end
+
   pipeline :console_mission do
     plug(CadenceWeb.Console.Plugs.MissionScope)
   end
@@ -98,6 +106,15 @@ defmodule CadenceWeb.Router do
 
   # Apogee console SPA document. Every client-side route returns the same
   # shell; unauthenticated GETs redirect to /sign-in and come back here.
+  # L5: the auth screens, served without a console session (the SPA routes them).
+  scope "/console", CadenceWeb.Console do
+    pipe_through(:browser)
+
+    get("/sign-in", SPAController, :index)
+    get("/invitations/:token", SPAController, :index)
+    get("/no-organization", SPAController, :index)
+  end
+
   scope "/console", CadenceWeb.Console do
     pipe_through([:browser, :require_authenticated_scope])
 
@@ -748,6 +765,16 @@ defmodule CadenceWeb.Router do
     pipe_through(:api)
 
     get("/health", HealthController, :show)
+  end
+
+  # L5 auth JSON (owner: api-ops). Contract: docs/apogee/api/session.md
+  scope "/api/console/v1/auth", CadenceWeb.Console do
+    pipe_through(:console_auth_api)
+
+    post("/sign-in", SignInController, :create)
+    get("/invitations/:token", InvitationLinkController, :show)
+    post("/invitations/:token/accept", InvitationLinkController, :accept)
+    post("/invitations/:token/decline", InvitationLinkController, :decline)
   end
 
   scope "/api/console/v1", CadenceWeb.Console do

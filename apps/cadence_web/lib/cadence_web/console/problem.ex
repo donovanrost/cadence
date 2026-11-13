@@ -98,6 +98,11 @@ defmodule CadenceWeb.Console.Problem do
     service_identity_not_found: {404, "That service identity isn't active in this organization."},
     current_password_incorrect: {422, "The current password isn't right."},
     password_incorrect: {422, "That password isn't right."},
+    credentials_incorrect: {422, "That email and password don't match."},
+    account_disabled: {403, "This account is disabled. Ask an administrator to enable it."},
+    invitation_unavailable: {409, "This invitation can't be used any more."},
+    invitation_for_another_account: {409, "This invitation is for another account."},
+    invitation_case_changed: {409, "This invitation changed while you were on it. Reload it."},
     too_many_attempts: {429, "Too many wrong passwords. Wait, then try again."},
     password_managed_externally:
       {409, "This account's password is set by the environment and can't be changed here."},

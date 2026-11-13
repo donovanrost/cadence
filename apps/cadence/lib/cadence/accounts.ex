@@ -654,6 +654,11 @@ defmodule Cadence.Accounts do
 
   defdelegate list_pending_invitations_for_user(user_id), to: Cadence.Accounts.InvitationResponses
 
+  @doc "What an emailed invitation token refers to, in any state (console L5)."
+  defdelegate inspect_invitation_token(token),
+    to: Cadence.Accounts.InvitationTokens,
+    as: :inspect_token
+
   defp validate_email_match(%User{email: user_email}, %OrganizationInvitation{email: inv_email}) do
     if User.normalize_email(user_email) == User.normalize_email(inv_email) do
       :ok

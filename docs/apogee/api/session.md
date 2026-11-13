@@ -185,3 +185,40 @@ did), "Signed out one of their other sessions", "Signed out of the session they 
 "Signed out N other sessions" (`DELETE /account/sessions`, only when N > 0). The actor is the
 member and `target` is `null`. Entries hold ids and counts, never a password, token or digest.
 They show in every organization the person is or was a member of.
+
+## Sign-in and invitation links (L5, api-ops)
+
+The SPA serves the auth screens itself: `GET /console/sign-in`, `/console/invitations/:token` and
+`/console/no-organization` return the SPA document **without** a console session, with the
+`csrf-token` meta. The JSON lives under `/api/console/v1/auth`. It works signed out, but every
+write still needs `x-csrf-token` from that meta. After a successful sign-in or accept the session
+is renewed (against fixation), so the CSRF token changes: refetch `GET /session`.
+
+- `POST /auth/sign-in {email, password, return_to?}` → `200 {redirect_to}` and the session
+  cookie. `redirect_to` is `return_to` when it's a same-origin relative path (not `//…`, no
+  scheme or host, not an auth page), else the target stored when `/console` bounced the browser,
+  else `/console`. Errors:
+  - `422 credentials_incorrect` for any wrong pair, unknown email or disabled account. It never
+    says which.
+  - `429 too_many_attempts {retry_after}`.
+  - `422 invalid_params`.
+- `GET /auth/invitations/:token` → `{case, organization: {name} | null, role | null, invited_by:
+  {name} | null, invited_at | null, email | null, expires_at | null}`.
+  - `case`: `new_account`, `existing_account` (signed out, by whether the invited email has an
+    account), `signed_in_match`, `signed_in_other`, `expired`, `withdrawn`, `used`, `declined`
+    or `unknown`. Decode it with `known()`.
+  - `email` is set only for the four open cases. `unknown` has every field `null`.
+  - Account existence is told only to a valid token's holder, never by email lookup.
+- `POST /auth/invitations/:token/accept {kind, …}` → `200 {organization_id, redirect_to:
+  "/console"}`, plus a session when signed out.
+  - `kind`: `new_account {name, password}` (12+ characters), `existing_account {password}` (the
+    account's current password, through the attempt limit; the account is never changed) or
+    `signed_in_match {}`. The server works out the case itself. When `kind` differs from it:
+    `409 invitation_case_changed {case}`; refetch.
+  - Errors: `422 credentials_incorrect`, `429 too_many_attempts {retry_after}`, `403
+    account_disabled` (only after a right password), `422 invalid_params` (`details.name`,
+    `details.password`), `409 invitation_unavailable {case: expired | withdrawn | used | declined
+    | unavailable}`, `409 invitation_for_another_account`, `404 invitation_not_found`.
+- `POST /auth/invitations/:token/decline` → `204`, signed in as the addressee only. It uses
+  `Accounts.decline_invitation_as_user` (L21), so the status becomes `declined`. Signed out:
+  `401 unauthenticated`. Someone else: `409 invitation_for_another_account`.
