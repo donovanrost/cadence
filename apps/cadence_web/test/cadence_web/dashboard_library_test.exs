@@ -170,7 +170,7 @@ defmodule CadenceWeb.DashboardLibraryTest do
     assert Jason.decode!(model.selected.widget_json) == Jason.decode!(c.json)
   end
 
-  test "adding an exact pin changes only the draft and consumers do not auto-upgrade", c do
+  test "adding an exact pin saves a current version and consumers do not auto-upgrade", c do
     {:ok, item} = execute(c, "create_item", creation(c))
 
     {:ok, _} =
@@ -214,7 +214,9 @@ defmodule CadenceWeb.DashboardLibraryTest do
     {:ok, published} =
       Documents.fetch_published(c.org.organization_id, c.mission.mission_id, dashboard)
 
-    assert published.placements == c.document.placements
+    # Q1 (#76): adding a pin saves a version, and every saved version is current.
+    assert Document.version(published) == 2
+    assert Enum.any?(published.placements, &(&1.placement_id == pin))
     {:ok, saved} = Documents.fetch(c.org.organization_id, c.mission.mission_id, dashboard)
     assert Document.version(saved) == 2
     assert hd(saved.placements) == hd(c.document.placements)

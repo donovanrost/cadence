@@ -28,7 +28,7 @@ defmodule Cadence.Dashboards.CurrentVersions do
 
   @doc """
   Saves `document` as the next version, observed at `expected_version`, and
-  makes it current. Options: `:created_by`, `:change_summary`.
+  makes it current. Options: `:expected_revision`, `:created_by`, `:change_summary`.
   """
   @spec save(binary(), binary(), binary(), Document.t(), keyword()) ::
           {:ok, Document.t()} | {:error, term()}
@@ -37,6 +37,7 @@ defmodule Cadence.Dashboards.CurrentVersions do
       with {:ok, saved} <-
              DocumentStore.update_document(organization_id, mission_id, dashboard_id, document,
                expected_version: Keyword.fetch!(opts, :expected_version),
+               expected_revision: Keyword.get(opts, :expected_revision),
                created_by: Keyword.get(opts, :created_by),
                change_summary: Keyword.get(opts, :change_summary)
              ),

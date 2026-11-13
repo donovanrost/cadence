@@ -1,6 +1,14 @@
 defmodule Cadence.Dashboards.LibraryAuthoring do
   @moduledoc "Authorized immutable library version creation and exact-version draft placement."
-  alias Cadence.Dashboards.{Authoring, Document, Documents, LibraryInput, Management, Placement}
+  alias Cadence.Dashboards.{
+    Authoring,
+    CurrentVersions,
+    Document,
+    Documents,
+    LibraryInput,
+    Management,
+    Placement
+  }
 
   def execute(scope, mission, event, input) do
     with :ok <- Authoring.authorize(scope, mission),
@@ -79,7 +87,8 @@ defmodule Cadence.Dashboards.LibraryAuthoring do
   end
 
   defp save_placement(scope, document, placement, command) do
-    case Documents.update(
+    # Q1 (#76): adding a pinned widget saves a version, which becomes current at once.
+    case CurrentVersions.save(
            scope.organization_id,
            document.mission_id,
            document.dashboard_id,

@@ -79,7 +79,7 @@ defmodule CadenceWeb.DashboardSettingsTest do
              )
   end
 
-  test "persisted settings saves retain publication, widgets and metadata with actor attribution",
+  test "persisted settings saves publish, and retain widgets and metadata with actor attribution",
        c do
     {:ok, _} =
       Documents.publish(
@@ -99,7 +99,8 @@ defmodule CadenceWeb.DashboardSettingsTest do
     assert after_save.description == "Updated description"
     assert after_save.tags == ["power", "ops"]
     assert Jason.decode!(after_save.defaults_json) == %{"extension" => %{"retained" => true}}
-    assert after_save.published_version == 1
+    # Q1 (#76): a settings save is a version like any other, current at once.
+    assert after_save.published_version == 2
 
     {:ok, saved} =
       Documents.fetch(c.org.organization_id, c.mission.mission_id, c.document.dashboard_id)
@@ -124,7 +125,7 @@ defmodule CadenceWeb.DashboardSettingsTest do
         c.document.dashboard_id
       )
 
-    assert published.name == c.document.name
+    assert published.name == "Power settings"
   end
 
   test "all commands require exact bounded inputs and observed revisions", c do
@@ -214,7 +215,8 @@ defmodule CadenceWeb.DashboardSettingsTest do
     assert snapshot.data_semantics == "definition_at_version_current_data"
     assert snapshot.data_visibility == "definition_only"
     model = read(c)
-    assert model.published_version == nil
+    # The settings save published version 2 (Q1, #76); the snapshot stays at version 1.
+    assert model.published_version == 2
     assert [%{document_version: 1}] = model.snapshots.rows
     refute Map.has_key?(hd(model.snapshots.rows), :document)
     refute Map.has_key?(hd(model.snapshots.rows), :runtime_context)
