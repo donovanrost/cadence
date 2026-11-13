@@ -18,8 +18,5 @@
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^29.0.3"
-  },
-  "overrides": {
-    "source-map-js": "1.2.2"
   }
 }

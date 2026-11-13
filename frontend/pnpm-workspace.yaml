@@ -37,8 +37,6 @@ catalog:
   vue: ^3.5.42
   vue-tsc: ^3.3.8
 overrides:
-  # HIGH advisory (devops audit): no parent update pulls source-map-js past 1.2.1 yet.
-  source-map-js: ">=1.2.2"
   vite: "catalog:"
 peerDependencyRules:
   allowAny:
