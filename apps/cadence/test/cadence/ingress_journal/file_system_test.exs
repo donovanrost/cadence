@@ -20,6 +20,9 @@ defmodule Cadence.IngressJournal.FileSystemTest do
           name: name,
           provider_binding_id: provider_binding_id,
           base_path: tmp_dir,
+          # Production's durability (fsync per append). config/test.exs uses :page_cache for the
+          # runtime, so these tests are where seal, torn-tail recovery and crash-before-checkpoint
+          # replay run under :sync (director's follow-up 4, 11-14; docs/apogee/plans/ingress-time-tags.md).
           durability: :sync,
           max_bytes: 4_096,
           segment_bytes: 512,
