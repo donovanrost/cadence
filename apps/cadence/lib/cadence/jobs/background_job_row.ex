@@ -109,6 +109,7 @@ defmodule Cadence.Jobs.BackgroundJobRow do
   defp status("running"), do: :running
   defp status("completed"), do: :completed
   defp status("failed"), do: :failed
+  defp status("outcome_unknown"), do: :outcome_unknown
 
   defp maybe_wrap_failure_reason(nil), do: nil
   defp maybe_wrap_failure_reason(reason), do: JsonDocument.wrap_value(reason)
