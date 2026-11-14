@@ -1258,7 +1258,8 @@ it or closes the item.
   AOS can lose the pass.
 - **Actions:** `Retry…` and `Close without retry…`. Operators only; otherwise "Operators decide what happens to
   jobs whose outcome is unknown." Both are audited with the actor, time, job and note.
-  - **Retry sheet** (danger): title `Retry: Booking at Northlight`, body "Retry only if you've checked <place>
+  - **Retry sheet** (danger): title `Retry this job?` (fe-ops' option c: the noun is a title and can't take
+    "the"), body first the noun as its own line ("Booking at Northlight"), then "Retry only if you've checked <place>
     that it didn't happen. If it did, retrying could <consequence>." A required checkbox: "I've checked <place>:
     it didn't happen." Note optional. `Retry` (danger) is enabled once the box is ticked;
     `Cancel` takes the default focus.
