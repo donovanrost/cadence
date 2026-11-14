@@ -40,7 +40,7 @@ defmodule Cadence.Commanding.ConstraintEvaluation do
   def latest_values(samples) when is_list(samples) do
     Enum.reduce(samples, %{}, fn %Sample{} = sample, values ->
       sample
-      |> sample_subjects()
+      |> Sample.subject_refs()
       |> Enum.reduce(values, &Map.put_new(&2, &1, sample_value(sample)))
     end)
   end
@@ -69,23 +69,12 @@ defmodule Cadence.Commanding.ConstraintEvaluation do
 
   defp matches?(%MatchCriteria{}, _values), do: false
 
-  defp sample_subjects(%Sample{} = sample) do
-    [sample.semantic_id, sample.qualified_name, sample.point_id, sample.point_name]
-    |> Enum.filter(&is_binary/1)
-    |> Enum.map(&normalize_subject/1)
-    |> Enum.uniq()
-  end
-
   defp sample_value(%Sample{} = sample),
     do: if(is_nil(sample.engineering_value), do: sample.raw_value, else: sample.engineering_value)
 
   defp normalize_subject(nil), do: nil
 
-  defp normalize_subject(subject) do
-    subject
-    |> String.trim()
-    |> String.trim_leading("telemetry:")
-  end
+  defp normalize_subject(subject), do: Sample.normalize_subject_ref(subject)
 
   defp compare(_actual, nil, _expected), do: false
   defp compare(actual, :equal, expected), do: actual == expected

@@ -52,4 +52,25 @@ defmodule Cadence.Telemetry.Sample do
     :receipt_time,
     provenance: %{}
   ]
+
+  @doc """
+  The names a command verifier or transmission constraint may give this sample's subject: the
+  parameter's semantic id (`semantic:parameter:…`, as mission-model plans name it), its qualified
+  name, and the catalog point (`PACKET.field`), each as `normalize_subject_ref/1` leaves it.
+  """
+  @spec subject_refs(t()) :: [binary()]
+  def subject_refs(%__MODULE__{} = sample) do
+    [sample.semantic_id, sample.qualified_name, sample.point_id, sample.point_name]
+    |> Enum.filter(&is_binary/1)
+    |> Enum.map(&normalize_subject_ref/1)
+    |> Enum.uniq()
+  end
+
+  @doc "A subject reference without surrounding space or a `telemetry:` prefix."
+  @spec normalize_subject_ref(binary()) :: binary()
+  def normalize_subject_ref(subject_ref) when is_binary(subject_ref) do
+    subject_ref
+    |> String.trim()
+    |> String.trim_leading("telemetry:")
+  end
 end
