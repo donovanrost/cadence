@@ -994,18 +994,21 @@ a station, the spacecraft alone.
 A day an operator closed or canceled stays that way across a template edit. A day already planned or started keeps
 its requirement, and no second one is added. Reopening a day is its own explicit action, never a side effect of an
 edit. This replaces ContactPlanning's "an edit generates every remaining day afresh".
-- **Edit preview count line** (from the save dry run). It's a neutral info line above the caution "supersedes N
-  drafts" callout, which stays as it is:
-  - "v3 applies to every day that's still open. 3 days already planned or started keep v2's requirement. 2 closed
-    days stay closed, and 1 canceled day stays canceled."
+- **Edit preview count line** (api: `POST …/templates/preview` with `template_id`, `effect.groups`). It's a
+  neutral info line above the caution "supersedes N drafts" callout, which stays as it is:
+  - "v3 applies to every day that's still open. 3 days already planned or started keep their requirement: 11-14,
+    11-15, 11-16. 2 closed days stay closed, and 1 canceled day stays canceled."
+  - "Keep their requirement", not "keep v2's": kept days can come from older versions, so no single version
+    describes them (U20). `current_version` isn't needed for this line.
   - Not "from the next open day": planned and open days can alternate, so there's no single day it starts from.
-  - Drop any part whose count is 0, and use singulars ("1 day … keeps"). When every count is 0, the first sentence
-    stands alone. With 3 dates or fewer in a group, name them after a colon (§4 dates): "…keep v2's
-    requirement: 11-14, 11-15."
-  - **A template for many spacecraft** counts requirements (one per spacecraft and day), not days, with the dates
-    in brackets: "1,500 requirements already planned or started keep v2's version (11-14, 11-15). 2 closed
-    requirements stay closed (11-15)." With more than 3 dates, give the span: "(11-14 to 11-20)". When every item
-    is the same spacecraft, use the "days" form above.
+  - Drop any group whose count is 0, and use singulars ("1 day … keeps its requirement"). When every group is 0,
+    the first sentence stands alone. `groups: null` (a new template) shows no line.
+  - **Dates:** with `count` ≤ 3, list `dates` after a colon (§4, `11-14`). Above 3, add "between 11-14 and 11-20",
+    using the first and last date, because the days needn't be consecutive.
+  - **Days or requirements:** when `requirements` equals `count` (one spacecraft), the noun is "days". Otherwise
+    lead with requirements: "1,500 requirements on 3 days already planned or started keep their requirement…"
+    becomes "1,500 requirements on 3 days, already planned or started, stay as they are: 11-14, 11-15, 11-16." The
+    closed and canceled groups follow the same rule: "2 closed requirements on 1 day stay closed: 11-15."
   - **Definitions** (domain 11-13):
     - **Planned:** a plan in pending_approval, approved, executing, partially_reserved or reserved holds the
       requirement. Booked passes come from those plans, so they're covered. A day with only a draft isn't
@@ -1013,9 +1016,10 @@ edit. This replaces ContactPlanning's "an edit generates every remaining day afr
     - **Started:** the requirement's window has begun.
     - **Closed / canceled:** done by an operator. Requirements canceled by supersession, or by a spacecraft leaving
       the target, are regenerated and not counted.
-  - The dry run groups items as kept {planned | started} and done {closed | canceled}, each with occurrence_at and
-    the spacecraft. The line merges planned and started.
 - **Template-generated occurrence, Close/Cancel sheet ending:** "This is final for this day: the template won't
   bring it back, even when the template is edited. To plan 11-15 again, add a one-off requirement for it." Once a
-  reopen action exists: "To plan it again, reopen it."
-- **Requirement rows:** template-generated rows show the version in Source (`Block 1 daily · v2`).
+  reopen action exists: "To plan it again, reopen it." **Timing** (fe-setup): today's sentence ("unless the
+  template is edited") stays until domain's template-version fix is live, and switches in that fix's slot, because
+  until then it's the true one.
+- **Requirement rows:** template-generated rows show the version in Source (`Block 1 daily · v2`), from api's
+  `template_version`. Without it, show the template name alone.

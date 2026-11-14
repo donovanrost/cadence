@@ -61,8 +61,9 @@ tabs: Requirements · Policy
     11-15 occurrence of “Daily downlink”. The template's other days aren't affected." (Cancel: "This cancels
     only…"). Then the same "Use this when…" sentence, and it ends: "This is final for this day: the template won't
     bring it back, even when the template is edited. To plan 11-15 again, add a one-off requirement for it." (U48:
-    closed stays closed. Once domain adds an explicit reopen, the last sentence becomes "To plan it again, reopen
-    it.")
+    closed stays closed. Until domain's template-version fix is live, the old ending stays: "The template won't bring
+    this day back, unless the template is edited." Once domain adds an explicit reopen, the last sentence becomes
+    "To plan it again, reopen it.")
   - Template-generated rows show their version in Source (`Block 1 daily · v2`), because days from different
     versions sit side by side after an edit (U48).
 - **Template page:** the rule as a form generated from the requirement fields (contacts per day,
@@ -73,9 +74,9 @@ tabs: Requirements · Policy
   spacecraft = 1,500 passes a day". Before saving, show what it supersedes (from a server dry-run): a caution callout "Saving v3 supersedes 2 open
   drafts: Wed 11 Nov (R1, Mira K.), Thu 12 Nov (R1, you). They'll need drafting again." Above it, the dry run's
   count line (U48), as a neutral info line: "v3 applies to every day that's still open. 3 days already planned or
-  started keep v2's requirement. 2 closed days stay closed, and 1 canceled day stays canceled." For a template on
-  many spacecraft it counts requirements, with dates: "1,500 requirements already planned or started keep v2's
-  version (11-14, 11-15)." Save then reads
+  started keep their requirement: 11-14, 11-15, 11-16. 2 closed days stay closed, and 1 canceled day stays
+  canceled." For a template on many spacecraft it leads with requirements: "1,500 requirements on 3 days, already
+  planned or started, stay as they are: …". Save then reads
   `Save v3 · supersede 2 drafts`. Booked plans are untouched (they go to K2 if needed). Save makes **template v3** (versions are immutable), and the history
   lists the versions with who/when/why.
 
