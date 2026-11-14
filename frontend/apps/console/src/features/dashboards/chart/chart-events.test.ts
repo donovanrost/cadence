@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { chained, mergedSpans } from "./chart-events.ts";
+import { chained, mergedSpans, overlapsAny } from "./chart-events.ts";
 import type { ChartMarker } from "./chart-input.ts";
 
 describe("contact tints (qa's overlay look)", () => {
@@ -37,5 +37,14 @@ describe("mission event marks", () => {
       [10, 4],
       [40, 1],
     ]);
+  });
+});
+
+describe("booked vs flown", () => {
+  it("drops a booking a flown pass overlaps, keeps one with no pass", () => {
+    const flown = [{ left: 100, width: 50 }];
+    expect(overlapsAny({ left: 98, width: 54 }, flown)).toBe(true);
+    expect(overlapsAny({ left: 300, width: 40 }, flown)).toBe(false);
+    expect(overlapsAny({ left: 150, width: 20 }, flown)).toBe(false);
   });
 });

@@ -82,10 +82,14 @@ export class ChartEvents {
       const bounds = this.surface.intervalBounds(marker);
       return bounds ? [{ marker, ...bounds, realized: marker.kind === "realized_contact" }] : [];
     });
-    for (const span of mergedSpans(bands.filter((b) => b.realized))) this.renderTint(span);
-    for (const band of bands) this.renderBandEdges(band);
+    const flown = mergedSpans(bands.filter((b) => b.realized));
+    for (const span of flown) this.renderTint(span);
+    // A booking a flown pass overlaps says nothing the pass doesn't: the flown pass's solid edges
+    // win (qa: 003's pair read dashed); a booking with no pass keeps its dashed outline.
+    const shown = bands.filter((b) => b.realized || !overlapsAny(b, flown));
+    for (const band of shown) this.renderBandEdges(band);
     const labelled = new Set<string>();
-    for (const band of bands) {
+    for (const band of shown) {
       const name = band.marker.station || band.marker.label || "Contact";
       const key = `${Math.round(band.left)}:${name}`;
       if (labelled.has(key)) continue;
@@ -211,6 +215,14 @@ export class ChartEvents {
 
     this.eventLayer.appendChild(button);
   }
+}
+
+/** Whether a span overlaps any of `spans` (touching isn't overlapping). */
+export function overlapsAny(
+  span: { left: number; width: number },
+  spans: readonly { left: number; width: number }[],
+) {
+  return spans.some((s) => span.left < s.left + s.width && s.left < span.left + span.width);
 }
 
 /** Pixel spans merged where they overlap or touch: one tint per run of passes. */
