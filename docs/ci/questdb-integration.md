@@ -1,6 +1,8 @@
 # CI proposal: QuestDB integration job
 
-Status: **proposal only**, nothing built (director via lead, 2026-11-14). Owner: devops.
+Status: **P0 built** (`questdb-integration` in `ci.yml`, outside ci-ok for its first clean week).
+P1 is approved in principle; lead schedules it after api-ops' and domain's current fixes (BACKLOG).
+Director, 2026-11-14. Owner: devops.
 
 ## Why
 
@@ -29,10 +31,13 @@ One new job, `questdb-integration`, in `ci.yml`, in two phases.
 | --- | --- | --- |
 | Service | `questdb/questdb:9.4.3` (same pin as `docker-compose.yml`), health on :9003 | same |
 | Runs | `mix cadence.questdb.migrate`, then `mix cadence.questdb.smoke` (migrations via `/exec`; write one observation; read history, native decimation and watermark; fails if not visible) | P0 + `mix test --only questdb` |
-| Covers | Schema and migrations, writer, history reader, decimation, watermark | **Ingest:** journal → processing → `Writers.QuestDB` → `HistoryStore.QuestDB`. **Verifier:** command verifiers reading samples from QuestDB (semantic-id matching #88, target-spacecraft filter #38). **Constraints:** duplicate and retried writes (DEDUP upsert vs Postgres unique error), out-of-order samples, NULLs |
-| Who writes it | devops: ~½ day | Tests: api-ops (ingest) and domain (verifier, constraints), who know the two incidents; ~1–2 days of owner time. devops: config switch, job and flake tracking |
+| Covers | Schema and migrations, writer, history reader, decimation, watermark | **Ingest:** journal → processing → `Writers.QuestDB`. **History and plot reads:** `HistoryStore.QuestDB` and the dashboard reads behind it. **Constraint check:** today it reads Postgres samples, which are empty in prod-like setups; duplicate and retried writes (DEDUP upsert vs a Postgres unique error), out-of-order samples, NULLs. (Command verifiers read in-process samples, not QuestDB: domain's analysis, via lead.) |
+| Who writes it | devops: ~½ day | Tests: api-ops (ingest) and domain (reads, constraint check), who know the two incidents; ~1–2 days of owner time. devops: job and flake tracking |
 
-**How the P1 suite runs:** `@moduletag :questdb`, excluded by default (like `:browser`).
+**How the P1 suite runs:** `@moduletag :questdb` (the job's grep gate looks for exactly
+`@moduletag :questdb` or `@tag :questdb`). `apps/cadence/test/test_helper.exs` excludes it by
+default, so tagged tests skip `test-core` and run in this job with no workflow change. The job sets
+`CADENCE_QUESTDB_HTTP_ENDPOINT`/`_HOST`/`_PORT` and has a Postgres service.
 It's `async: false` and points `telemetry_storage`/`telemetry_history_store` at the QuestDB
 modules in setup, restoring them on exit. Postgres stays on the sandbox. QuestDB has no
 transactions, so tests isolate with unique org, mission and point ids per test. The container is
@@ -54,15 +59,16 @@ thrown away after each run, so there's no cleanup. Every read-after-write uses b
 - **Flake risk: medium, from WAL visibility.** It's mitigated by polling, and the job stays
   **outside ci-ok** for its first clean week, tracked like the browser shards, then joins.
 
-## Recommendation
+## Decision (director, 2026-11-14)
 
-Build P0 now: it's half a day, catches migration, dialect and decimation breakage on every PR,
-and needs nobody else. Start P1 when api-ops and domain can write the ingest, verifier and
-constraint tests. Each phase gets its own small PR.
+P0 is built now, outside ci-ok for a clean week. P1 waits for the owners. Concurrency is fine at 18
+jobs; if runs ever queue behind the 20-job cap, devops reports it and we merge jobs.
 
 ## Related: item (1), ingest suite with the journal on and off
 
 Separate from this job. The test env runs `ingress_journal: [enabled?: true]` and prod's default
-is `false`. Once api-ops' tag or parameter lands, I'll add one parallel job (or a step in a core
-shard) that reruns the tagged ingest tests with the journal off. About 100 of the 506 core test
+is `false`. api-ops' planned shape (names final when it lands, after their ingest fix):
+`@moduletag :ingest_journal_matrix`, with the journal toggled at boot by
+`CADENCE_TEST_INGRESS_JOURNAL=off|on` (default on) in `apps/cadence/config/test.exs`. Then CI adds a
+parallel rerun: `CADENCE_TEST_INGRESS_JOURNAL=off mix test --only ingest_journal_matrix`. About 100 of the 506 core test
 files touch ingest, so expect ~1–2 min of job time and no added wall clock.
