@@ -1164,6 +1164,21 @@ defmodule Cadence.CommandingTest do
                )
 
       assert uplinks_sent_38(attempt_id) == 0
+
+      # main: the refusal closes the command; it doesn't go back to pending to be refused again.
+      assert {:ok, %{lifecycle_state: :canceled}} =
+               Cadence.Commanding.fetch_command_queue_entry(
+                 @organization_id,
+                 @mission_id,
+                 c.entry.command_queue_entry_id
+               )
+
+      assert {:ok, %{lifecycle_state: :canceled}} =
+               Cadence.Commanding.fetch_command_request(
+                 @organization_id,
+                 @mission_id,
+                 c.request.command_request_id
+               )
     end
 
     test "qa's 001-on-009: the contact is the target's but its uplink path belongs to another spacecraft",
