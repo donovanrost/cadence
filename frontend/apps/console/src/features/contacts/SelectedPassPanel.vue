@@ -44,6 +44,8 @@ import { passAttentions, passAttentionTag } from "./passAttention.ts";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
+import ContactEndAction from "./ContactEndAction.vue";
+import { endedLine, endedTag } from "./contactEnd.ts";
 import PassUplinks from "./PassUplinks.vue";
 import { contactTrail } from "./trail.ts";
 import { offPlanLine } from "./singleBookings.ts";
@@ -103,6 +105,9 @@ const state = computed(() => (props.pass ? contactState(props.pass) : null));
 const tag = computed(() => {
   if (state.value === null) return null;
   const p = props.pass;
+  // U55: once Cadence's side stopped, the tag says so (the booking itself is unchanged).
+  const ended = endedTag(p?.contact_ended);
+  if (ended) return ended;
   const label =
     p?.booking_evidence === "operator_attested"
       ? `Booked · attested by ${p.attested_by?.name ?? "an operator"}`
@@ -293,6 +298,9 @@ const countdown = computed(() => {
       <p v-if="pass.off_plan" class="m-0 text-sm text-text-2">
         {{ offPlanLine(pass.off_plan, now) }}
       </p>
+      <p v-if="pass.contact_ended" class="m-0 text-sm text-text-2">
+        {{ endedLine(pass.contact_ended, pass.source.provider_name, now) }}
+      </p>
       <p class="m-0 font-mono text-md text-text-2 uppercase">
         {{ pass.station.name ?? stationLabel(pass) }} ·
         <span class="text-readout">{{ countdown }}</span>
@@ -339,6 +347,13 @@ const countdown = computed(() => {
       <PassTechnical :mission-id="missionId" :pass-id="pass.id" />
       <PassUplinks :mission-id="missionId" :pass-id="pass.id" />
       <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>
+      <ContactEndAction
+        :mission-id="missionId"
+        :pass="pass"
+        :spacecraft="spacecraft?.name ?? pass.spacecraft?.name ?? 'Unknown spacecraft'"
+        :now="now"
+        @changed="$emit('changed')"
+      />
       <ReleasePass
         :mission-id="missionId"
         :pass="pass"

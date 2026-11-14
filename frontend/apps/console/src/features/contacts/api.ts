@@ -51,9 +51,28 @@ const passEnder = d.object({
 });
 export type PassEnder = Decoded<typeof passEnder>;
 
+/** U55 (api): how Cadence's side of the contact was stopped; the booking itself is unchanged. */
+export const contactEndCauses = ["operator", "provider_failed", "provider_canceled"] as const;
+const contactEnded = d.object({
+  kind: d.known(["canceled", "ended_early"] as const),
+  cause: d.knownText(contactEndCauses),
+  by: d.object({
+    kind: d.knownText(["user", "system"] as const),
+    id: d.nullable(d.token),
+    name: d.nullable(d.string),
+  }),
+  at: d.timestamp,
+  // free-text: the operator's reason, or the provider's own text for a Cadence cancel
+  reason: d.nullable(d.string),
+});
+export type ContactEnded = Decoded<typeof contactEnded>;
+
 const pass = d.object({
   id: d.token,
   kind: d.literal("contact"),
+  /** U55: which of Cancel contact… / End contact now… applies now (never both), or none. */
+  contact_action: d.optional(d.nullable(d.known(["cancel", "end"] as const))),
+  contact_ended: d.optional(d.nullable(contactEnded)),
   state: d.oneOf(reservationStates),
   // The provider's progress (domain KnownAtom); an unknown value reads "unrecognized".
   pass_phase: d.nullable(d.known(passPhases)),
@@ -154,6 +173,42 @@ const queuedReader = d.object({
   ),
 });
 export type QueuedGroups = NonNullable<Decoded<typeof queuedReader>["queued_command_groups"]>;
+
+/**
+ * GET /passes/:id only (U55): the spacecraft's queued command requests, how many expire before its
+ * next contact (by the corrected window, skipping canceled ones), and that contact.
+ */
+const queuedCommandsReader = d.object({
+  queued_commands: d.optional(
+    d.nullable(
+      d.object({
+        count: d.integer,
+        expiring_before_next: d.nullable(d.object({ count: d.integer, earliest_at: d.timestamp })),
+        next_contact: d.nullable(
+          d.object({
+            station: d.object({
+              ref: d.nullable(d.string),
+              id: d.nullable(d.token),
+              // free-text: a station call sign
+              code: d.nullable(d.string),
+              name: d.nullable(d.string),
+            }),
+            starts_at: d.timestamp,
+          }),
+        ),
+      }),
+    ),
+  ),
+});
+export type QueuedCommands = NonNullable<Decoded<typeof queuedCommandsReader>["queued_commands"]>;
+
+export function fetchQueuedCommands(missionId: MissionId, passId: string, signal?: AbortSignal) {
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/passes/${encodeURIComponent(passId)}`,
+    queuedCommandsReader,
+    signal ? { signal } : {},
+  );
+}
 
 export function fetchQueuedGroups(missionId: MissionId, passId: string, signal?: AbortSignal) {
   return request(

@@ -91,6 +91,9 @@ const FOLD_WORDS: Readonly<Record<string, string>> = {
   realized_contact_interval: "Contacts ended (not verified)",
   scheduled_contact_interval: "Contacts scheduled",
   scheduled_contact_canceled: "Contacts canceled by the provider",
+  // U55: Cadence's side of a contact stopped by an operator (or by Cadence, U56).
+  contact_canceled: "Contacts canceled",
+  contact_ended_early: "Contacts ended early",
   limit_violation: "Limit violations",
   binding_set_activated: "Configurations activated",
   source_watermark_advanced: "Data sources caught up",

@@ -67,6 +67,8 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   releasable: undefined,
   off_plan: undefined,
   provider_changes: undefined,
+  contact_action: undefined,
+  contact_ended: undefined,
   ...overrides,
 });
 
