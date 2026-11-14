@@ -9,21 +9,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
 
-  alias Cadence.Applications.OpsConsole.Actions.{
-    PlanDecisions,
-    ProviderChangeDecisions,
-    RequirementDecisions,
-    RequirementDeclarationInput,
-    RequirementTemplateInput
-  }
+  alias Cadence.Applications.OpsConsole.Actions.{PlanDecisions, ProviderChangeDecisions}
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions
-
-  alias Cadence.ContactPlanning.{
-    ContactRequirements,
-    ContactRequirementTemplates
-  }
 
   alias Cadence.Contacts.{
     ScheduleCommands,
@@ -34,15 +23,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   @application_version 1
 
   @bindings [
-    {"contact_requirement_new", "validate"},
-    {"contact_requirement_new", "save"},
-    {"contact_requirement_show", "plan"},
-    {"contact_requirement_show", "create-plan"},
-    {"contact_requirement_template", "validate-template"},
-    {"contact_requirement_template", "create-template"},
-    {"contact_requirement_template", "pause-template"},
-    {"contact_requirement_template", "activate-template"},
-    {"contact_requirement_template", "close-template"},
     {"contact_schedule", "validate"},
     {"contact_schedule", "search"},
     {"contact_schedule", "reserve"},
@@ -55,21 +35,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     {"contact_detail", "reject-provider-change"},
     {"contact_detail", "acknowledge-provider-change"}
   ]
-
-  @requirement_fields ~w(
-    spacecraft_id contact_intent earliest_start latest_end success_measure
-    minimum_duration_seconds preferred_duration_seconds minimum_data_volume_bytes
-    contact_count minimum_separation_seconds priority allowed_providers
-    excluded_providers allowed_stations excluded_stations rationale
-  )
-
-  @template_fields ~w(
-    spacecraft_id schedule_type anchor_at time_utc interval_minutes
-    window_offset_minutes window_duration_minutes contact_intent success_measure
-    minimum_duration_seconds preferred_duration_seconds minimum_data_volume_bytes
-    contact_count minimum_separation_seconds priority approval_mode
-    maximum_occurrences_per_run maximum_lookback_hours rationale
-  )
 
   @search_fields ~w(spacecraft_id route_key starts_at ends_at)
 
@@ -185,13 +150,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   defp authorize(scope, action_id, mission_id) do
     policy =
       cond do
-        action_id in [
-          "create-template",
-          "pause-template",
-          "activate-template",
-          "close-template",
-          "cancel"
-        ] ->
+        action_id == "cancel" ->
           :manage_missions
 
         action_id in ["approve-plan", "reject-plan"] ->
@@ -216,98 +175,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
 
       _policy ->
         Policy.authorize(scope, policy, policy_params)
-    end
-  end
-
-  defp dispatch(_scope, _mission_id, "contact_requirement_new", "validate", params) do
-    with {:ok, form} <- form_params(params, "contact_requirement", @requirement_fields) do
-      {:ok, %{"contact_requirement" => form}}
-    end
-  end
-
-  defp dispatch(scope, mission_id, "contact_requirement_new", "save", params) do
-    with {:ok, form} <- form_params(params, "contact_requirement", @requirement_fields),
-         {:ok, attrs} <- requirement_attrs(form),
-         {:ok, requirement, version} <- ContactRequirements.create(scope, mission_id, attrs) do
-      {:ok, versioned_result("contactRequirement", requirement.contact_requirement_id, version)}
-    end
-  end
-
-  defp dispatch(scope, mission_id, "contact_requirement_show", "plan", params) do
-    with {:ok, planning} <- RequirementDecisions.plan(scope, mission_id, params) do
-      {:ok,
-       %{
-         "contactRequirementId" => planning.run.contact_requirement_id,
-         "planningRunId" => planning.run.contact_planning_run_id,
-         "searchCount" => length(planning.searches),
-         "opportunityCount" => length(planning.snapshots),
-         "navigation" => %{
-           "href" =>
-             "/missions/#{URI.encode(mission_id, &URI.char_unreserved?/1)}/ops/requirements/#{URI.encode(planning.run.contact_requirement_id, &URI.char_unreserved?/1)}?" <>
-               URI.encode_query(%{
-                 "version" => planning.run.contact_requirement_version,
-                 "planning_run_id" => planning.run.contact_planning_run_id
-               })
-         }
-       }}
-    end
-  end
-
-  defp dispatch(scope, mission_id, "contact_requirement_show", "create-plan", params) do
-    with {:ok, plan, version} <- RequirementDecisions.create_plan(scope, mission_id, params) do
-      result = versioned_result("contactPlan", plan.contact_plan_id, version)
-
-      {:ok,
-       Map.merge(result, %{
-         "actorId" => scope.user.user_id,
-         "requirementEvidence" => params["requirement_evidence"],
-         "planningRunId" => params["planning_run_id"],
-         "navigation" => %{
-           "href" =>
-             "/missions/#{URI.encode(mission_id, &URI.char_unreserved?/1)}/ops/plans/#{URI.encode(plan.contact_plan_id, &URI.char_unreserved?/1)}"
-         }
-       })}
-    end
-  end
-
-  defp dispatch(_scope, _mission_id, "contact_requirement_template", "validate-template", params) do
-    with {:ok, form} <- form_params(params, "template", @template_fields) do
-      {:ok, %{"template" => form}}
-    end
-  end
-
-  defp dispatch(scope, mission_id, "contact_requirement_template", "create-template", params) do
-    with {:ok, form} <- form_params(params, "template", @template_fields),
-         {:ok, attrs} <- template_attrs(form),
-         {:ok, template, version} <- ContactRequirementTemplates.create(scope, mission_id, attrs) do
-      {:ok,
-       versioned_result(
-         "contactRequirementTemplate",
-         template.contact_requirement_template_id,
-         version
-       )}
-    end
-  end
-
-  defp dispatch(scope, mission_id, "contact_requirement_template", action, params)
-       when action in ["pause-template", "activate-template", "close-template"] do
-    with {:ok, %{"id" => template_id}} <- exact_ids(params, ["id"]),
-         {:ok, template, _version} <-
-           ContactRequirementTemplates.fetch(scope.organization_id, mission_id, template_id),
-         {:ok, updated} <-
-           apply_template_transition(
-             action,
-             scope,
-             mission_id,
-             template_id,
-             template.current_version
-           ) do
-      {:ok,
-       %{
-         "contactRequirementTemplateId" => updated.contact_requirement_template_id,
-         "currentVersion" => updated.current_version,
-         "lifecycleState" => Atom.to_string(updated.lifecycle_state)
-       }}
     end
   end
 
@@ -387,36 +254,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp exact_map(_value, _keys), do: {:error, :malformed_input}
-
-  defp exact_ids(params, keys) do
-    with {:ok, params} <- exact_map(params, keys),
-         true <- Enum.all?(Map.values(params), &(is_binary(&1) and &1 != "")) do
-      {:ok, params}
-    else
-      _invalid -> {:error, :malformed_input}
-    end
-  end
-
-  defp requirement_attrs(params),
-    do: RequirementDeclarationInput.parse(params)
-
-  defp template_attrs(params), do: RequirementTemplateInput.parse(params)
-
-  defp apply_template_transition("pause-template", scope, mission_id, id, version),
-    do: ContactRequirementTemplates.pause(scope, mission_id, id, version, "Paused by Ops Console")
-
-  defp apply_template_transition("activate-template", scope, mission_id, id, version),
-    do:
-      ContactRequirementTemplates.activate(
-        scope,
-        mission_id,
-        id,
-        version,
-        "Activated by Ops Console"
-      )
-
-  defp apply_template_transition("close-template", scope, mission_id, id, version),
-    do: ContactRequirementTemplates.close(scope, mission_id, id, version, "Closed by Ops Console")
 
   defp execution_result(%{plan: plan, items: items}) do
     %{

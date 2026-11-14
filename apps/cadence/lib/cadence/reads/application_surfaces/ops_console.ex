@@ -6,7 +6,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   alias Cadence.Applications.{HostContext, JSONBoundary, SurfaceQueryRequest}
   alias Cadence.Applications.OpsConsole, as: OpsDefinition
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.ContactPlanning.ContactRequirements
   alias Cadence.Reads.ActivationApprovals
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation
 
@@ -14,15 +13,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     ContactDetail,
     ContactPlanShow,
     ContactRecord,
-    ContactRequirementList,
-    ContactRequirementNew,
-    ContactRequirementShow,
     ContactSchedule,
     FleetDirectory,
-    FleetPolicy,
     FleetRun,
-    FleetStart,
-    RequirementTemplates
+    FleetStart
   }
 
   alias Cadence.Reads.CommandMonitor
@@ -34,7 +28,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   @surface_version 1
   @exploration_query_keys ~w(point_id spacecraft_id scope_kind scope_id time_mode time_axis from to replay_run_id order limit selection_view data_view validity_state realm logical_source data_source_id source_binding_id source_dashboard_id sample_id selected_time question limit_mode)
   @subject_param_keys %{
-    "contact_requirement_show" => "contact_requirement_id",
     "contact_plan_show" => "contact_plan_id",
     "contact_detail" => "provider_reservation_id",
     "contact_record" => "contact_id",
@@ -120,13 +113,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     end
   end
 
-  defp validate_params(%{id: "contact_requirement_list"}, params) do
-    case ContactRequirementList.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
   defp validate_params(%{id: "fleet_planning"}, params) do
     case FleetDirectory.admit_query(Map.delete(params, "mission_id")) do
       {:ok, _} -> :ok
@@ -157,13 +143,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp validate_params(%{id: "contact_plan_show"}, params) do
     case ContactPlanShow.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
-  defp validate_params(%{id: "contact_requirement_show"}, params) do
-    case ContactRequirementShow.admit_query(Map.delete(params, "mission_id")) do
       {:ok, _} -> :ok
       {:error, _} = error -> error
     end
@@ -262,17 +241,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp validate_scope_mission(%Scope{mission_id: nil}, _mission_id), do: :ok
   defp validate_scope_mission(%Scope{mission_id: mission_id}, mission_id), do: :ok
   defp validate_scope_mission(%Scope{}, _mission_id), do: {:error, :scope_mismatch}
-
-  defp validate_subject("contact_requirement_show", organization_id, mission_id, params) do
-    case ContactRequirements.fetch(
-           organization_id,
-           mission_id,
-           params["contact_requirement_id"]
-         ) do
-      {:ok, _requirement, _version} -> :ok
-      _ -> {:error, :subject_not_found}
-    end
-  end
 
   defp validate_subject("contact_plan_show", organization_id, mission_id, params) do
     case Cadence.Management.Contacts.fetch_plan(
@@ -386,16 +354,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     end
   end
 
-  defp dispatch("contact_requirement_list", scope, mission, params) do
-    case ContactRequirementList.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsContactRequirementList", model)
-      {:error, _} -> throw(:requirement_list_unavailable)
-    end
-  end
-
-  defp dispatch("contact_requirement_new", scope, mission, _params),
-    do: envelope("OpsContactRequirementNew", ContactRequirementNew.load(scope, mission))
-
   defp dispatch("contact_schedule", scope, mission, params) do
     case ContactSchedule.load(scope, mission, params) do
       {:ok, model} -> envelope("OpsContactSchedule", model)
@@ -424,16 +382,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     end
   end
 
-  defp dispatch("contact_requirement_show", scope, mission, params) do
-    case ContactRequirementShow.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsContactRequirementShow", model)
-      {:error, _} -> throw(:requirement_detail_unavailable)
-    end
-  end
-
-  defp dispatch("contact_requirement_template", scope, mission, _params),
-    do: envelope("OpsContactRequirementTemplate", RequirementTemplates.load(scope, mission))
-
   defp dispatch("fleet_planning", scope, mission, params) do
     case FleetDirectory.load(scope, mission, params) do
       {:ok, model} -> envelope("OpsFleetPlanning", model)
@@ -454,9 +402,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       {:error, _} -> throw(:fleet_run_unavailable)
     end
   end
-
-  defp dispatch("fleet_planning_policy", scope, mission, _params),
-    do: envelope("OpsFleetPlanningPolicy", FleetPolicy.load(scope, mission))
 
   defp dispatch(surface_id, _scope, mission, params), do: generic(surface_id, mission, params)
 
@@ -527,18 +472,13 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       "subject" => Map.values(params) |> Enum.find(&is_binary/1)
     }
 
-  defp component_name("contact_requirement_list"), do: "OpsContactRequirementList"
   defp component_name("workspace"), do: "OpsConsoleLanding"
-  defp component_name("contact_requirement_new"), do: "OpsContactRequirementNew"
-  defp component_name("contact_requirement_show"), do: "OpsContactRequirementShow"
-  defp component_name("contact_requirement_template"), do: "OpsContactRequirementTemplate"
   defp component_name("contact_schedule"), do: "OpsContactSchedule"
   defp component_name("contact_plan_show"), do: "OpsContactPlanShow"
   defp component_name("contact_detail"), do: "OpsContactDetail"
   defp component_name("contact_record"), do: "OpsContactRecord"
   defp component_name("fleet_planning"), do: "OpsFleetPlanning"
   defp component_name("fleet_planning_new"), do: "OpsFleetPlanningNew"
-  defp component_name("fleet_planning_policy"), do: "OpsFleetPlanningPolicy"
   defp component_name("fleet_planning_run"), do: "OpsFleetPlanningRun"
   defp component_name("activation_requests"), do: "OpsActivationRequests"
   defp component_name("commands"), do: "OpsCommands"

@@ -34,43 +34,6 @@ defmodule Cadence.Applications.OpsConsole do
       actions: []
     },
     %{
-      id: "contact_requirement_list",
-      purpose: :collection,
-      label: "Contact Requirements",
-      path: "/missions/:mission_id/ops/requirements",
-      query_params: ["page", "state"],
-      actions: []
-    },
-    %{
-      id: "contact_requirement_new",
-      purpose: :configuration,
-      label: "New Contact Requirement",
-      path: "/missions/:mission_id/ops/requirements/new",
-      actions: ["validate", "save"]
-    },
-    %{
-      id: "contact_requirement_show",
-      purpose: :subject_detail,
-      label: "Contact Requirement",
-      path: "/missions/:mission_id/ops/requirements/:contact_requirement_id",
-      query_params:
-        ~w(version planning_run_id versions_page runs_page searches_page opportunities_page),
-      actions: ["plan", "create-plan"]
-    },
-    %{
-      id: "contact_requirement_template",
-      purpose: :configuration,
-      label: "Requirement Templates",
-      path: "/missions/:mission_id/ops/requirement-templates",
-      actions: [
-        "validate-template",
-        "create-template",
-        "pause-template",
-        "activate-template",
-        "close-template"
-      ]
-    },
-    %{
       id: "contact_schedule",
       purpose: :operations,
       label: "Contact Schedule",
@@ -116,20 +79,6 @@ defmodule Cadence.Applications.OpsConsole do
       label: "New Fleet Run",
       path: "/missions/:mission_id/ops/planning/new",
       actions: ["validate-fleet-run", "create-fleet-run"]
-    },
-    %{
-      id: "fleet_planning_policy",
-      purpose: :configuration,
-      label: "Fleet Planning Policy",
-      path: "/missions/:mission_id/ops/planning/policy",
-      actions: [
-        "validate-policy",
-        "save-policy",
-        "approve-policy",
-        "validate-grant",
-        "issue-grant",
-        "revoke-grant"
-      ]
     },
     %{
       id: "fleet_planning_run",
@@ -262,17 +211,12 @@ defmodule Cadence.Applications.OpsConsole do
   # intentional: every declared surface participates in the partition.
   @residual_action_ledger %{
     "workspace" => [],
-    "contact_requirement_list" => [],
-    "contact_requirement_new" => [],
-    "contact_requirement_show" => [],
-    "contact_requirement_template" => [],
     "contact_schedule" => [],
     "contact_plan_show" => [],
     "contact_detail" => [],
     "contact_record" => [],
     "fleet_planning" => [],
     "fleet_planning_new" => [],
-    "fleet_planning_policy" => [],
     "fleet_planning_run" => [],
     "activation_requests" => [],
     "commands" => [],
