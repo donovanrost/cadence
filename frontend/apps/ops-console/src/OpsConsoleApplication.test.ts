@@ -167,44 +167,6 @@ const telemetryResponse = {
 const expectedSurfaceTable = [
   ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
   [
-    "contact_requirement_list",
-    "collection",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_requirement_list",
-    [],
-  ],
-  [
-    "contact_requirement_new",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_requirement_new",
-    ["validate", "save"],
-  ],
-  [
-    "contact_requirement_show",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_requirement_show",
-    ["plan", "create-plan"],
-  ],
-  [
-    "contact_requirement_template",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_requirement_template",
-    [
-      "validate-template",
-      "create-template",
-      "pause-template",
-      "activate-template",
-      "close-template",
-    ],
-  ],
-  [
     "contact_schedule",
     "operations",
     "mission",
@@ -251,21 +213,6 @@ const expectedSurfaceTable = [
     "ops_workspace",
     "cadence.ops.fleet_planning_new",
     ["validate-fleet-run", "create-fleet-run"],
-  ],
-  [
-    "fleet_planning_policy",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.fleet_planning_policy",
-    [
-      "validate-policy",
-      "save-policy",
-      "approve-policy",
-      "validate-grant",
-      "issue-grant",
-      "revoke-grant",
-    ],
   ],
   [
     "fleet_planning_run",
@@ -664,10 +611,6 @@ describe("Ops Console federated application", () => {
       "OpsContactDetail",
       "OpsContactPlanShow",
       "OpsContactRecord",
-      "OpsContactRequirementList",
-      "OpsContactRequirementNew",
-      "OpsContactRequirementShow",
-      "OpsContactRequirementTemplate",
       "OpsContactSchedule",
       "OpsDataOperations",
       "OpsDataOperationsManage",
@@ -676,7 +619,6 @@ describe("Ops Console federated application", () => {
       "OpsDataSources",
       "OpsFleetPlanning",
       "OpsFleetPlanningNew",
-      "OpsFleetPlanningPolicy",
       "OpsFleetPlanningRun",
       "OpsTelemetryExplore",
       "OpsTimeline",
@@ -706,17 +648,17 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(23);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(23);
-    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(70);
+    expect(surfaceContracts).toHaveLength(18);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(18);
+    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(55);
     expect(
       new Set(
         surfaceContracts.flatMap((surface) =>
           surface.actions.map((action) => `${surface.surfaceId}:${action}`),
         ),
       ).size,
-    ).toBe(70);
-    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(53);
+    ).toBe(55);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(39);
     expect(
       surfaceContracts.slice(2).every((surface) => {
         const componentName = `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_: string, _prefix: string, letter: string) => letter.toUpperCase())}`;

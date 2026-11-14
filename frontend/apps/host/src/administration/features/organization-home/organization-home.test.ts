@@ -37,12 +37,12 @@ test("scoped totals and producer-ordered recent missions have canonical links wi
     "/missions/mission-z",
     "/missions/mission-a",
   ]);
-  expect(wrapper.get("#organization-new-mission").attributes("href")).toBe("/missions/new");
-  expect(wrapper.get("#organization-all-missions").attributes("href")).toBe("/missions");
+  expect(wrapper.find("#organization-new-mission").exists()).toBe(false);
+  expect(wrapper.find("#organization-all-missions").exists()).toBe(false);
   expect(wrapper.text()).not.toContain("Ready");
   wrapper.unmount();
 });
-test("empty organization keeps a reachable mission creation action", () => {
+test("empty organization shows the empty mission state", () => {
   const doc = fixture();
   doc.counts.missions = 0;
   doc.counts.spacecraft = 0;
@@ -51,7 +51,6 @@ test("empty organization keeps a reachable mission creation action", () => {
     props: { model: readOrganizationHome(doc, "org-a") },
   });
   expect(wrapper.find("#organization-missions-empty").exists()).toBe(true);
-  expect(wrapper.get("#organization-new-mission").attributes("href")).toBe("/missions/new");
   wrapper.unmount();
 });
 test("invalid context, forged identities, overfull and duplicate rows cannot become home content", () => {

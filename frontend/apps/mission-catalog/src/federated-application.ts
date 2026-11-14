@@ -7,28 +7,6 @@ import MissionCatalogApplication from "./MissionCatalogApplication.vue";
 
 const pageSurfaces = [
   {
-    surfaceId: "mission_list",
-    version: 1,
-    purpose: "overview",
-    scope: "organization",
-    placement: "application_workspace",
-    navigation: { label: "Missions", order: 10 },
-    dataContract: { id: "cadence.mission_catalog.mission_list", version: 1 },
-    actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./Application" },
-  },
-  {
-    surfaceId: "mission_new",
-    version: 1,
-    purpose: "configuration",
-    scope: "organization",
-    placement: "application_workspace",
-    navigation: { label: "New mission", order: 20 },
-    dataContract: { id: "cadence.mission_catalog.mission_new", version: 1 },
-    actions: ["validate", "save"],
-    renderer: { kind: "federated-vue", exposedModule: "./Application" },
-  },
-  {
     surfaceId: "mission_overview",
     version: 1,
     purpose: "overview",
@@ -137,7 +115,7 @@ export const manifest = defineApplicationManifest({
     version: 1,
     displayName: "Mission & Catalog",
     description: "Manage missions and the immutable catalog records they use.",
-    installableScopes: ["organization", "mission"],
+    installableScopes: ["mission"],
   },
   surfaces: pageSurfaces,
 });

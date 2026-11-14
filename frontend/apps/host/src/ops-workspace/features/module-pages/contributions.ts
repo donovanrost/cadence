@@ -44,26 +44,6 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
     import("@cadence/planning-and-contacts/contact-plans").then(
       (module) => module.planReviewContribution,
     ),
-  "planning.requirement-templates": () =>
-    import("@cadence/planning-and-contacts/contact-requirements").then(
-      (module) => module.requirementTemplateContribution,
-    ),
-  "planning.requirement-declaration": () =>
-    import("@cadence/planning-and-contacts/contact-requirements").then(
-      (module) => module.requirementDeclarationContribution,
-    ),
-  "planning.requirement-directory": () =>
-    import("@cadence/planning-and-contacts/contact-requirements").then(
-      (module) => module.requirementDirectoryContribution,
-    ),
-  "planning.requirement-review": () =>
-    import("@cadence/planning-and-contacts/contact-requirements").then(
-      (module) => module.requirementReviewContribution,
-    ),
-  "planning.fleet-policy": () =>
-    import("@cadence/planning-and-contacts/fleet-planning").then(
-      (module) => module.fleetPolicyContribution,
-    ),
   "planning.fleet-start": () =>
     import("@cadence/planning-and-contacts/fleet-planning").then(
       (module) => module.fleetStartContribution,

@@ -2,12 +2,9 @@
 import { computed, onErrorCaptured, ref, watch } from "vue";
 import { missionPages } from "./pages";
 import { record } from "./shared/validation";
-import MissionCreationPage from "./features/mission-creation/MissionCreationPage.vue";
-import type { CreateMission } from "./features/mission-creation/contracts";
 const props = defineProps<{
   page: string;
   snapshot: unknown;
-  execute: CreateMission;
   refresh: () => Promise<void>;
 }>();
 const crashed = ref(false);
@@ -55,11 +52,6 @@ const admitted = computed(() => {
         Retry
       </button>
     </div>
-    <MissionCreationPage
-      v-else-if="page === 'mission_new'"
-      :data="admitted.data"
-      :execute="execute"
-    />
     <component :is="admitted.component" v-else v-bind="admitted.data" />
   </section>
 </template>

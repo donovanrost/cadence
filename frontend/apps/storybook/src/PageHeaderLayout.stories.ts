@@ -22,23 +22,23 @@ const breadcrumbs = [
   { label: "SRE Telemetry Exercise", href: href("/missions/:mission_id", mission) },
   { label: "Mission Operations", href: href("/missions/:mission_id/ops", mission) },
   {
-    label: "Contact Requirements",
-    href: href("/missions/:mission_id/ops/requirements", mission),
+    label: "Fleet Planning",
+    href: href("/missions/:mission_id/ops/planning", mission),
   },
-  { label: "Declare Contact Need" },
+  { label: "Plan Fleet Horizon" },
 ];
 
 const CollectionBody = defineComponent(() => {
-  useOpsHeader("/missions/:mission_id/ops/requirements", {
-    description: "Describe recurring contact demand and track fulfillment across the mission.",
+  useOpsHeader("/missions/:mission_id/ops/planning", {
+    description: "Plan contact coverage across the fleet and review each planning run.",
     primary: {
-      id: "declare",
-      label: "Declare Need",
-      href: href("/missions/:mission_id/ops/requirements/new", mission),
+      id: "plan-horizon",
+      label: "Plan Horizon",
+      href: href("/missions/:mission_id/ops/planning/new", mission),
     },
     refresh: { run: () => {} },
   });
-  return () => h("p", "Requirements content");
+  return () => h("p", "Fleet planning content");
 });
 
 const constrainedLayout: Story = {
@@ -49,7 +49,7 @@ const constrainedLayout: Story = {
     // At phone widths test the header itself; mobile shell behavior is separate.
     template: `
       <section id="header-container">
-        <HostPage title="Declare Contact Need" route="/missions/:mission_id/ops/requirements/new" :breadcrumbs="breadcrumbs" workspace />
+        <HostPage title="Plan Fleet Horizon" route="/missions/:mission_id/ops/planning/new" :breadcrumbs="breadcrumbs" workspace />
       </section>`,
   }),
   play: async ({ canvasElement }) => {
@@ -82,7 +82,7 @@ const constrainedLayout: Story = {
             within(trail).getByRole("link", { name: "SRE Telemetry Exercise" }),
           ).toHaveAttribute("href", href("/missions/:mission_id", mission));
 
-          const action = within(header).queryByRole("link", { name: "Declare Need" });
+          const action = within(header).queryByRole("link", { name: "Plan Horizon" });
           if (action) {
             const actionBounds = action.getBoundingClientRect();
             const descriptionBounds = description.getBoundingClientRect();
@@ -111,6 +111,6 @@ export const ConstrainedActions: Story = {
   render: () => ({
     components: { HostPage, CollectionBody },
     setup: () => ({ breadcrumbs }),
-    template: `<section id="header-container"><HostPage title="Contact Requirements" route="/missions/:mission_id/ops/requirements" :breadcrumbs="breadcrumbs.slice(0, -1)" workspace><CollectionBody /></HostPage></section>`,
+    template: `<section id="header-container"><HostPage title="Fleet Planning" route="/missions/:mission_id/ops/planning" :breadcrumbs="breadcrumbs.slice(0, -1)" workspace><CollectionBody /></HostPage></section>`,
   }),
 };

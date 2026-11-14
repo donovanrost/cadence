@@ -73,11 +73,8 @@ if (fleetRunPort) provide(FLEET_RUN_PORT, fleetRunPort);
 
 const draftPreservingActions = new Set([
   "validate",
-  "validate-template",
   "validate-request",
   "validate-fleet-run",
-  "validate-policy",
-  "validate-grant",
   "filter",
   "reset_filters",
   "search",

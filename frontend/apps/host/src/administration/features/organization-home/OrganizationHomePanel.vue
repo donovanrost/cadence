@@ -1,18 +1,11 @@
 <script setup lang="ts">
 import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
-import { href } from "@cadence/plugin-sdk/routes";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import { missionHref, type OrganizationHomeModel } from "./contracts";
 const props = defineProps<{ model: OrganizationHomeModel }>();
 useManagementHeader("/", () => ({
   title: props.model.organization.name,
   identifier: props.model.organization.slug,
-  primary: {
-    id: "organization-new-mission",
-    label: "New mission",
-    icon: "hero-plus",
-    href: href("/missions/new"),
-  },
 }));
 const createdDate = (value: string) =>
   new Intl.DateTimeFormat("en", {
@@ -55,16 +48,11 @@ const createdDate = (value: string) =>
       class="card bg-base-200 border border-base-300"
       body-class="p-6 space-y-5"
     >
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 class="text-lg font-semibold">Recently created missions</h2>
-          <p class="mt-1 text-sm text-base-content/70">
-            The three newest missions in this organization.
-          </p>
-        </div>
-        <a id="organization-all-missions" href="/missions" class="btn btn-ghost btn-sm"
-          >All missions</a
-        >
+      <div>
+        <h2 class="text-lg font-semibold">Recently created missions</h2>
+        <p class="mt-1 text-sm text-base-content/70">
+          The three newest missions in this organization.
+        </p>
       </div>
       <div
         v-if="!model.recent_missions.length"

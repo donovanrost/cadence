@@ -125,7 +125,7 @@ test("the read adapter rejects other presentations and does not exist outside it
   const port = required(createPlanDetailPort(props, () => true));
   query.mockResolvedValue({
     queryVersion: 1,
-    presentation: { component: "OpsContactRequirementShow", props: { detail: {} } },
+    presentation: { component: "OpsContactRecord", props: { detail: {} } },
   });
   await expect(port.refresh()).rejects.toThrow("Unavailable");
   expect(

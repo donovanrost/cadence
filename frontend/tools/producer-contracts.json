@@ -65,21 +65,6 @@
     "producer": "apps/cadence_web/test/cadence_web/ops_plan_review_page_test.exs"
   },
   {
-    "consumer": "modules/planning-and-contacts/src/features/contact-requirements/declaration.test.ts",
-    "environment": "CADENCE_DECLARATION",
-    "producer": "apps/cadence_web/test/cadence_web/ops_requirement_declaration_page_test.exs"
-  },
-  {
-    "consumer": "modules/planning-and-contacts/src/features/contact-requirements/requirement-workflow.test.ts",
-    "environment": "CADENCE_REQUIREMENT_WORKFLOW",
-    "producer": "apps/cadence_web/test/cadence_web/ops_requirement_page_test.exs"
-  },
-  {
-    "consumer": "modules/planning-and-contacts/src/features/contact-requirements/templates.test.ts",
-    "environment": "CADENCE_TEMPLATE_WORKFLOW",
-    "producer": "apps/cadence_web/test/cadence_web/ops_requirement_template_page_test.exs"
-  },
-  {
     "consumer": "modules/planning-and-contacts/src/features/contact-scheduling/contact-scheduling.test.ts",
     "environment": "CADENCE_SCHEDULE_MODEL",
     "producer": "apps/cadence/test/cadence/applications/ops_console/actions/contact_schedule_workflow_test.exs"
@@ -108,11 +93,6 @@
     "consumer": "modules/planning-and-contacts/src/features/fleet-planning/fleet-start.test.ts",
     "environment": "CADENCE_FLEET_START",
     "producer": "apps/cadence/test/cadence/reads/application_surfaces/trusted_surface_contract_test.exs"
-  },
-  {
-    "consumer": "modules/planning-and-contacts/src/features/fleet-planning/policy-workflow.test.ts",
-    "environment": "CADENCE_POLICY_WORKFLOW",
-    "producer": "apps/cadence_web/test/cadence_web/ops_fleet_policy_page_test.exs"
   },
   {
     "consumer": "modules/planning-and-contacts/src/features/fleet-planning/workflow.contribution.test.ts",

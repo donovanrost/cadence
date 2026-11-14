@@ -6,10 +6,6 @@ import OpsConsoleLanding from "./OpsConsoleLanding.vue";
 import OpsContactDetail from "./OpsContactDetail.vue";
 import OpsContactPlanShow from "./OpsContactPlanShow.vue";
 import OpsContactRecord from "./OpsContactRecord.vue";
-import OpsContactRequirementList from "./OpsContactRequirementList.vue";
-import OpsContactRequirementNew from "./OpsContactRequirementNew.vue";
-import OpsContactRequirementShow from "./OpsContactRequirementShow.vue";
-import OpsContactRequirementTemplate from "./OpsContactRequirementTemplate.vue";
 import OpsContactSchedule from "./OpsContactSchedule.vue";
 import OpsDataOperations from "./OpsDataOperations.vue";
 import OpsDataOperationsManage from "./OpsDataOperationsManage.vue";
@@ -18,7 +14,6 @@ import OpsDataSourceSettings from "./OpsDataSourceSettings.vue";
 import OpsDataSources from "./OpsDataSources.vue";
 import OpsFleetPlanning from "./OpsFleetPlanning.vue";
 import OpsFleetPlanningNew from "./OpsFleetPlanningNew.vue";
-import OpsFleetPlanningPolicy from "./OpsFleetPlanningPolicy.vue";
 import OpsFleetPlanningRun from "./OpsFleetPlanningRun.vue";
 import OpsTelemetryExplore from "./OpsTelemetryExplore.vue";
 import OpsTimeline from "./OpsTimeline.vue";
@@ -34,10 +29,6 @@ export const OPS_COMPONENTS: Record<string, Component> = {
   OpsContactDetail,
   OpsContactPlanShow,
   OpsContactRecord,
-  OpsContactRequirementList,
-  OpsContactRequirementNew,
-  OpsContactRequirementShow,
-  OpsContactRequirementTemplate,
   OpsContactSchedule,
   OpsDataOperations,
   OpsDataOperationsManage,
@@ -46,7 +37,6 @@ export const OPS_COMPONENTS: Record<string, Component> = {
   OpsDataSources,
   OpsFleetPlanning,
   OpsFleetPlanningNew,
-  OpsFleetPlanningPolicy,
   OpsFleetPlanningRun,
   OpsTelemetryExplore,
   OpsTimeline,

@@ -49,29 +49,9 @@ const expected = [
     package: { packageId: "cadence.mission-catalog", version: 1 },
     displayName: "Mission & Catalog",
     description: "Manage missions and the immutable catalog records they use.",
-    installableScopes: ["organization", "mission"] as const,
+    installableScopes: ["mission"] as const,
     releaseId: (surfaceId: string) => `mission-catalog-${surfaceId}-v1`,
     surfaces: [
-      [
-        "mission_list",
-        "overview",
-        "organization",
-        "application_workspace",
-        "Missions",
-        10,
-        "cadence.mission_catalog.mission_list",
-        [],
-      ],
-      [
-        "mission_new",
-        "configuration",
-        "organization",
-        "application_workspace",
-        "New mission",
-        20,
-        "cadence.mission_catalog.mission_new",
-        ["validate", "save"],
-      ],
       [
         "mission_overview",
         "overview",
@@ -174,52 +154,6 @@ const expected = [
         [],
       ],
       [
-        "contact_requirement_list",
-        "collection",
-        "mission",
-        "ops_workspace",
-        "Contact Requirements",
-        10,
-        "cadence.ops.contact_requirement_list",
-        [],
-      ],
-      [
-        "contact_requirement_new",
-        "configuration",
-        "mission",
-        "ops_workspace",
-        "New Contact Requirement",
-        10,
-        "cadence.ops.contact_requirement_new",
-        ["validate", "save"],
-      ],
-      [
-        "contact_requirement_show",
-        "subject_detail",
-        "mission",
-        "ops_workspace",
-        "Contact Requirement",
-        10,
-        "cadence.ops.contact_requirement_show",
-        ["plan", "create-plan"],
-      ],
-      [
-        "contact_requirement_template",
-        "configuration",
-        "mission",
-        "ops_workspace",
-        "Requirement Templates",
-        10,
-        "cadence.ops.contact_requirement_template",
-        [
-          "validate-template",
-          "create-template",
-          "pause-template",
-          "activate-template",
-          "close-template",
-        ],
-      ],
-      [
         "contact_schedule",
         "operations",
         "mission",
@@ -278,23 +212,6 @@ const expected = [
         10,
         "cadence.ops.fleet_planning_new",
         ["validate-fleet-run", "create-fleet-run"],
-      ],
-      [
-        "fleet_planning_policy",
-        "configuration",
-        "mission",
-        "ops_workspace",
-        "Fleet Planning Policy",
-        10,
-        "cadence.ops.fleet_planning_policy",
-        [
-          "validate-policy",
-          "save-policy",
-          "approve-policy",
-          "validate-grant",
-          "issue-grant",
-          "revoke-grant",
-        ],
       ],
       [
         "fleet_planning_run",
@@ -713,6 +630,6 @@ describe("first-party federated manifest parity", () => {
       }
     }
 
-    expect(surfaceCount).toBe(51);
+    expect(surfaceCount).toBe(44);
   });
 });

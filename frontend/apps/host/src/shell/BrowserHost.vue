@@ -367,25 +367,6 @@ async function catalogAction(event: "reimport") {
 function cancelCatalogUpload(params: Record<string, unknown>) {
   live.pushEvent("catalog:upload:cancel", params);
 }
-async function missionAction(event: string, input: Record<string, unknown>) {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const token = currentPage().snapshot.mission_page?.creation_token;
-  const result = requireRecord(await request("host:mission", { event, input, path, token }));
-  if (
-    !stopped &&
-    generation === requestGeneration &&
-    currentPage().snapshot.path === path &&
-    event === "save" &&
-    result?.status === "ok"
-  ) {
-    const href = field(result, "data", "mission", "href");
-    if (typeof href !== "string" || !/^\/missions\/[^/\\\s?#]+$/.test(href))
-      throw new Error("Invalid mission destination.");
-    navigate(href);
-  }
-  return result;
-}
 async function spacecraftAction(event: string, input: Record<string, unknown>) {
   const path = currentPage().snapshot.path;
   const requestGeneration = generation;
@@ -736,7 +717,6 @@ onBeforeUnmount(() => {
           :page="route.missionPage"
           :class="route.viewClass"
           :snapshot="committed.snapshot.mission_page"
-          :execute="missionAction"
           :refresh="reconnect"
         />
         <CatalogPage

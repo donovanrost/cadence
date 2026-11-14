@@ -22,13 +22,6 @@ useOpsHeader("/missions/:mission_id/ops/planning", () => {
   const params = { mission_id: current.context.mission_id };
   return {
     description: "Review mission horizons, exact policy inputs and durable planning progress.",
-    actions: [
-      {
-        id: "policy",
-        label: "Policy",
-        href: href("/missions/:mission_id/ops/planning/policy", params),
-      },
-    ],
     ...(current.active_policy
       ? {
           primary: {

@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./contact-requirements": "./src/contact-requirements.ts",
     "./contact-plans": "./src/contact-plans.ts",
     "./contact-scheduling": "./src/contact-scheduling.ts",
     "./fleet-planning": "./src/fleet-planning.ts"

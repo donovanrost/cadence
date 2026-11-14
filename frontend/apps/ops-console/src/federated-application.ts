@@ -10,40 +10,6 @@ const renderer = { kind: "federated-vue", exposedModule: "./Application" } as co
 
 const routeSurfaces = [
   [
-    "contact_requirement_list",
-    "collection",
-    "Contact Requirements",
-    "cadence.ops.contact_requirement_list",
-    [],
-  ],
-  [
-    "contact_requirement_new",
-    "configuration",
-    "New Contact Requirement",
-    "cadence.ops.contact_requirement_new",
-    ["validate", "save"],
-  ],
-  [
-    "contact_requirement_show",
-    "subject_detail",
-    "Contact Requirement",
-    "cadence.ops.contact_requirement_show",
-    ["plan", "create-plan"],
-  ],
-  [
-    "contact_requirement_template",
-    "configuration",
-    "Requirement Templates",
-    "cadence.ops.contact_requirement_template",
-    [
-      "validate-template",
-      "create-template",
-      "pause-template",
-      "activate-template",
-      "close-template",
-    ],
-  ],
-  [
     "contact_schedule",
     "operations",
     "Contact Schedule",
@@ -78,20 +44,6 @@ const routeSurfaces = [
     "New Fleet Run",
     "cadence.ops.fleet_planning_new",
     ["validate-fleet-run", "create-fleet-run"],
-  ],
-  [
-    "fleet_planning_policy",
-    "configuration",
-    "Fleet Planning Policy",
-    "cadence.ops.fleet_planning_policy",
-    [
-      "validate-policy",
-      "save-policy",
-      "approve-policy",
-      "validate-grant",
-      "issue-grant",
-      "revoke-grant",
-    ],
   ],
   [
     "fleet_planning_run",
