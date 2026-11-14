@@ -19,7 +19,7 @@ import { templateStates } from "./api.ts";
 import { readPath, templateSchemaReader, type TemplateSchema } from "./templates.ts";
 
 /** Contract: docs/apogee/api/scheduling.md "Requirements (one-off; BACKLOG §8 8g)", api fb7510be. */
-const { array, integer, nullable, object, string, timestamp, token } = decoders;
+const { array, integer, nullable, object, optional, string, timestamp, token } = decoders;
 const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
 
 /** The shared entity (typing §12 A5). */
@@ -40,6 +40,8 @@ const requirementRowShape = {
   version: integer,
   spacecraft: object({ id: token, name: nullable(string) }),
   template_id: nullable(token),
+  /** ux U48: the template version that generated it (api); null for one-offs, absent until api ships. */
+  template_version: optional(nullable(integer)),
   content: doc,
   updated_at: timestamp,
   state_changed: stateChanged,

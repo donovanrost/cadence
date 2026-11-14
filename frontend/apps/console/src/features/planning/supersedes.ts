@@ -1,11 +1,12 @@
 import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
 import { planStates } from "@/features/scheduling/index.ts";
+import { decidedReader, type Decided } from "./decided.ts";
 
 /** Contract: docs/apogee/api/scheduling.md, "Dry run before saving" (writes nothing). */
 const { array, integer, nullable, object, optional, string, token } = decoders;
 
-const reader = object({
+const draftsShape = {
   drafts: array(
     object({
       plan: object({ id: token, version: integer }),
@@ -16,19 +17,24 @@ const reader = object({
     }),
     500,
   ),
-});
+};
+const reader = object(draftsShape);
+/** A template's read also carries the days an edit leaves alone (U48); absent until api ships it. */
+const templateReader = object({ ...draftsShape, decided: optional(decidedReader) });
 export type SupersededDraft = Decoded<typeof reader>["drafts"][number];
 
 export async function fetchTemplateSupersedes(
   key: Readonly<{ missionId: MissionId; templateId: string }>,
   signal: AbortSignal,
-): Promise<ApiResult<readonly SupersededDraft[]>> {
+): Promise<ApiResult<Readonly<{ drafts: readonly SupersededDraft[]; decided: Decided | null }>>> {
   const r = await request(
     `/missions/${encodeURIComponent(key.missionId)}/contact-planning/templates/${encodeURIComponent(key.templateId)}/supersedes`,
-    reader,
+    templateReader,
     { signal },
   );
-  return r.ok ? { ok: true, value: r.value.drafts } : r;
+  return r.ok
+    ? { ok: true, value: { drafts: r.value.drafts, decided: r.value.decided ?? null } }
+    : r;
 }
 
 /** One-off requirements: the drafts a new version, close or cancel supersedes (same row shape). */

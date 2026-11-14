@@ -20,6 +20,11 @@ const stateWord: Readonly<Record<RequirementRow["state"], string>> = {
   unrecognized: "Not known",
 };
 const templateName = (id: string) => props.templates.find((t) => t.id === id)?.name ?? "Template";
+/** ux U48: `Block 1 daily · v2`; the name alone until api sends the version. */
+const sourceText = (id: string, version: number | null | undefined) =>
+  version === null || version === undefined
+    ? templateName(id)
+    : `${templateName(id)} · v${version}`;
 </script>
 
 <template>
@@ -44,7 +49,7 @@ const templateName = (id: string) => props.templates.find((t) => t.id === id)?.n
         v-if="row.template_id"
         :to="{ name: 'setup.contact-planning.template', params: { templateId: row.template_id } }"
         class="text-readout hover:underline"
-        >{{ templateName(row.template_id) }}</RouterLink
+        >{{ sourceText(row.template_id, row.template_version) }}</RouterLink
       >
       <span v-else class="text-text-2">One-off</span>
     </template>

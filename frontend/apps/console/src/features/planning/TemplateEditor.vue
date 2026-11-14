@@ -12,6 +12,7 @@ import {
 import { ApButton, ApCallout, ApField, ApPanel, ApRemote, formatCount, plural } from "@/ui";
 import { useSession } from "@/shell";
 import TargetPicker from "./TargetPicker.vue";
+import { decidedLine } from "./decided.ts";
 import { fetchTemplateSupersedes, supersedeSentence } from "./supersedes.ts";
 import type { TemplateDetail } from "./api.ts";
 import { asRecord, draftFromTarget, targetFromDraft, type TargetDraft } from "./targets.ts";
@@ -39,9 +40,15 @@ const supersedes = useRemoteQuery(
 const drafts = computed(() =>
   // Already-superseded drafts aren't changed by this save; count only the open ones.
   supersedes.state.value.status === "ready"
-    ? supersedes.state.value.value.filter((d) => d.state !== "superseded")
+    ? supersedes.state.value.value.drafts.filter((d) => d.state !== "superseded")
     : [],
 );
+/** ux U48: the days this edit leaves alone; none on a create (no dry run) or before api ships it. */
+const decided = computed(() => {
+  const s = supersedes.state.value;
+  const d = s.status === "ready" ? s.value.decided : null;
+  return d && props.template ? decidedLine(d, props.template.version + 1) : null;
+});
 const saveLabel = computed(() => {
   if (!props.template) return "Create template";
   const next = `Save v${props.template.version + 1}`;
@@ -188,6 +195,7 @@ async function save() {
           </div>
         </details>
       </ApPanel>
+      <ApCallout v-if="decided" tone="info">{{ decided }}</ApCallout>
       <ApCallout v-if="template && drafts.length > 0" tone="caution">{{
         supersedeSentence(drafts, template.version + 1, session.user.id)
       }}</ApCallout>
