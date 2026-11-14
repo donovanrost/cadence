@@ -12,7 +12,8 @@ import {
 /**
  * U50 pass block (listener_refusal): connections a listener this pass shares were refused. Same
  * sentences as Now, with the title minus the spacecraft and pass label. Nothing to act on; the
- * address, keys and the count's liveness live in Technical details. Not connected: crit (api's P1).
+ * address, keys and the count's liveness live in Technical details. Caution in both states: not
+ * connected ranks P1, but nothing is known to be lost (ux, U20).
  */
 const props = defineProps<{ attention: Attention; spacecraft: string | null; now: Date }>();
 const title = computed(() =>
@@ -22,11 +23,10 @@ const title = computed(() =>
     props.now,
   ),
 );
-const tone = computed(() => (props.attention.connected === true ? "caution" : "crit"));
 </script>
 
 <template>
-  <ApCallout :tone="tone">
+  <ApCallout tone="caution">
     <p class="m-0 font-semibold">{{ title }}</p>
     <p class="m-0 text-text-2">{{ listenerEvidence(attention, spacecraft) }}</p>
     <p class="m-0 font-mono text-xs text-text-3">{{ listenerMeta(attention, now) }}</p>

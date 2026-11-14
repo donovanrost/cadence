@@ -164,15 +164,18 @@ describe("listener_refusal on Now (ux U50)", () => {
   });
 
   it("says how it closed", () => {
-    const closed = (action: string) =>
+    const closed = (action: string, booked?: boolean) =>
       resolvedWords({
         id: "attention:listener_refusal:rc-8",
         resolved_by: { kind: "system", id: null, name: null },
         action,
         resolved_at: "2026-11-14T03:19:00Z",
         note: null,
+        ...(booked === undefined ? {} : { booked }),
       });
     expect(closed("accepted")).toBe("Connected at 03:19Z.");
-    expect(closed("ended")).toBe("The pass ended at LOS 03:19Z.");
+    expect(closed("ended", true)).toBe("The pass ended at LOS 03:19Z.");
+    expect(closed("ended", false)).toBe("The contact ended at 03:19Z.");
+    expect(closed("ended")).toBe("Ended at 03:19Z.");
   });
 });

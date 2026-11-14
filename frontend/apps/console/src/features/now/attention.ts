@@ -402,6 +402,8 @@ export const resolvedReader = d.object({
   // free-text: an open phrase or key ("uplink recovered", "replayed"); known keys get words (U32)
   action: d.optional(d.nullable(d.string)),
   resolved_at: d.timestamp,
+  /** api (U50): false for a hand-started contact; absent from older reads and other sources. */
+  booked: d.optional(d.nullable(d.boolean)),
 });
 
 const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
@@ -591,6 +593,9 @@ export function attentionMeta(a: Attention, now: Date = new Date()): string | nu
 }
 
 export type Resolved = Decoded<typeof resolvedReader>;
+/** What the words read of a resolved entry; `booked` is only on newer reads. */
+export type ResolvedEntry = Omit<Resolved, "booked"> &
+  Readonly<{ booked?: boolean | null | undefined }>;
 
 /** Server actions that read better in words: U37's system 'replayed' = the telemetry got stored. */
 const ACTION_WORDS: Readonly<Record<string, string>> = {
@@ -610,7 +615,7 @@ const CHANGE_DECIDED: ReadonlyMap<string, string> = new Map([
   ["acknowledged", "Acknowledged"],
 ]);
 
-export function resolvedWords(r: Resolved): string {
+export function resolvedWords(r: ResolvedEntry): string {
   // U41: a stuck activation closes by applying, or by a newer activation replacing it.
   // U44: a provider change says who decided, when and why; a newer change replaces it.
   if (r.id.startsWith("attention:provider_change:")) {
@@ -643,7 +648,13 @@ export function resolvedWords(r: Resolved): string {
   if (r.id.startsWith("attention:listener_refusal:")) {
     // U50: the pass got its own connection, or its window closed.
     if (r.action === "accepted") return `Connected at ${hhmm(r.resolved_at)}.`;
-    if (r.action === "ended") return `The pass ended at LOS ${hhmm(r.resolved_at)}.`;
+    // ux: without the booked flag, "Ended at" is true of a pass and a hand-started contact.
+    if (r.action === "ended")
+      return r.booked === true
+        ? `The pass ended at LOS ${hhmm(r.resolved_at)}.`
+        : r.booked === false
+          ? `The contact ended at ${hhmm(r.resolved_at)}.`
+          : `Ended at ${hhmm(r.resolved_at)}.`;
   }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";
@@ -670,7 +681,7 @@ export type Fading = Readonly<{ item: QueueItem; index: number; until: number }>
 export function newlyResolved(
   previous: readonly QueueItem[],
   current: readonly QueueItem[],
-  resolved: readonly Resolved[],
+  resolved: readonly ResolvedEntry[],
   already: readonly Fading[],
   now: number,
 ): Fading[] {
