@@ -16,7 +16,7 @@ Problem envelope (`{error: {code, message, details}}`), never LiveView statuses.
 - `Activity.load` (operator): version rows (`draft_save | publish | revert | migration`, actor_id, saved_at,
   summary) and lifecycle events (`published, archived, restored, reverted, …`) without payloads.
 - `ExecutionDiagnostics.load` (operator, published document): collections `plan, requests, frames, cache,
-  source_execution, refresh, invalidation` as key/value rows. **No durations or per-request errors.**
+  source_execution` as key/value rows (`refresh` and `invalidation` went with L8c, 11-14). **No durations or per-request errors.**
 - Export: `dashboard_export_controller.ex` (legacy path), records a `portable_json` deployment.
 
 ## Gaps the console needs closed
@@ -91,12 +91,15 @@ kind ∈ saved | restored | published | archived | unarchived | share_created | 
 ```
 {version, loaded_at,
  widgets: [{placement_id, title, status: "ok"|"degraded"|"failed"|"planned",
-            sources: [{logical_source, status, cache_status|null, severity|null, retryable|null,
+            sources: [{logical_source, status, cache: "fresh"|"cached"|null, cache_status|null,
+                       severity|null, retryable|null,
                        operator_action|null, warning_codes: [string],
                        duration_ms|null, outcome: "ok"|"timed_out"|"failed"|null, error|null}],
-            warnings: [{code, severity, field_name|null}]}],
- refresh: {observed_at, decision_status, context_reason|null} | null}
+            warnings: [{code, severity, field_name|null, message|null}]}]}
 ```
+- `cache` is the two-word verdict the tab shows (Fresh / From cache); `message` is the warning in words. The
+  console doesn't map raw codes to words itself.
+- No `refresh` block: nothing records invalidation decisions any more (L8c, live 11-14).
 - Grouped by widget (ux: "so you can see which widget is slow or failing"), built from `plan`, `requests`,
   `source_execution` and `plan_warning`. `duration_ms` / `outcome` / `error` stay null until recorded (gap 5).
 
