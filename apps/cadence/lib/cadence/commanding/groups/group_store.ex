@@ -142,6 +142,22 @@ defmodule Cadence.Commanding.Groups.GroupStore do
     |> Enum.map(&CommandRequestRow.to_domain/1)
   end
 
+  @doc "`%{command_request_id => command_queue_entry_id}` for the requests' pending queue entries."
+  @spec pending_entry_ids(binary(), binary(), [binary()]) :: %{binary() => binary()}
+  def pending_entry_ids(_org, _mission, []), do: %{}
+
+  def pending_entry_ids(org, mission, request_ids) do
+    CommandQueueEntryRow
+    |> where(
+      [q],
+      q.organization_id == ^org and q.mission_id == ^mission and
+        q.command_request_id in ^request_ids and q.lifecycle_state == "pending"
+    )
+    |> select([q], {q.command_request_id, q.command_queue_entry_id})
+    |> Repo.all()
+    |> Map.new()
+  end
+
   @doc "Members of several groups at once, `%{command_group_id => [request]}`."
   @spec members_of(binary(), binary(), [binary()]) :: %{binary() => [CommandRequest.t()]}
   def members_of(_org, _mission, []), do: %{}
