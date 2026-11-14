@@ -106,6 +106,17 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   defp acceptor_ending?({:shutdown, _detail}), do: true
   defp acceptor_ending?(_reason), do: false
 
+  @doc """
+  The registrations an acceptor holds (`[%{adapter, realized_contact_id, path_id, scid, ...}]`);
+  `[]` once it has gone.
+  """
+  @spec registrations(pid()) :: [map()]
+  def registrations(acceptor) do
+    GenServer.call(acceptor, :routing).registrations
+  catch
+    :exit, _gone -> []
+  end
+
   @doc "The running acceptor of `{mission_id, profile_id}`, if any (adapters monitor it)."
   @spec whereis(ProcessNamespace.t(), binary(), binary()) :: pid() | nil
   def whereis(namespace, mission_id, profile_id) do

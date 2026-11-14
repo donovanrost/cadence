@@ -268,16 +268,19 @@ defmodule Cadence.Contacts.ContactSettlement do
 
   @doc """
   Records the settler's outcome on the contact as it reads now. `backlog` is the runtime's
-  `%{journals, persistence_errors}`; `stop` is how stopping its runtime went.
+  `%{journals, persistence_errors}`; `stop` is how stopping its runtime went. `listener_refusal`
+  (ux U50, `ListenerRefusalAttention.settlement_document/2`) is kept in
+  `metadata["listener_refusal"]` when the contact had a shared listener.
   """
   @spec record(
           RealizedContact.t(),
           :settled | :absent | {:unsettled, binary(), term()},
           map(),
-          term()
+          term(),
+          map() | nil
         ) ::
           {:ok, RealizedContact.t()} | {:error, term()}
-  def record(%RealizedContact{} = contact, outcome, backlog, stop) do
+  def record(%RealizedContact{} = contact, outcome, backlog, stop, listener_refusal \\ nil) do
     with {:ok, current} <-
            ContactStore.fetch_realized(contact.mission_id, contact.realized_contact_id) do
       settlement =
@@ -286,9 +289,12 @@ defmodule Cadence.Contacts.ContactSettlement do
         |> Map.merge(outcome_fields(outcome, backlog, DateTime.utc_now()))
         |> put_stop(stop)
 
-      ContactStore.update_realized_lifecycle(current, current.lifecycle_state, %{
-        "settlement" => settlement
-      })
+      metadata =
+        if listener_refusal,
+          do: %{"settlement" => settlement, "listener_refusal" => listener_refusal},
+          else: %{"settlement" => settlement}
+
+      ContactStore.update_realized_lifecycle(current, current.lifecycle_state, metadata)
     end
   end
 

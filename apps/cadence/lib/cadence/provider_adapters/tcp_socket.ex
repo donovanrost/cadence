@@ -88,6 +88,14 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     GenServer.call(provider_runtime, :snapshot)
   end
 
+  @doc """
+  A shared-listener adapter's refusal state (#87, ux U50), without the full snapshot:
+  `{:ok, %{connected?, refusals, second_connections_refused, peers_refused}}`. `refusals` is the
+  refusal window (nil until a refusal opens one).
+  """
+  @spec refusals(GenServer.server()) :: {:ok, map()}
+  def refusals(provider_runtime), do: GenServer.call(provider_runtime, :refusals)
+
   @impl true
   def quiesce(provider_runtime) do
     GenServer.call(provider_runtime, :quiesce, :infinity)
@@ -315,6 +323,17 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       {:error, reason, next_state} ->
         {:reply, {:error, reason}, next_state}
     end
+  end
+
+  def handle_call(:refusals, _from, state) do
+    {:reply,
+     {:ok,
+      %{
+        connected?: match?({:ok, _socket}, current_socket(state)),
+        refusals: state.refusals,
+        second_connections_refused: state.second_connections_refused,
+        peers_refused: state.peers_refused
+      }}, state}
   end
 
   def handle_call(:snapshot, _from, state) do

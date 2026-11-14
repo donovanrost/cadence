@@ -6,6 +6,7 @@ defmodule Cadence.Control.Contacts do
 
   alias Cadence.Contacts.{
     ContactStore,
+    ListenerRefusalAttention,
     ProviderReservation,
     ProviderReservations,
     RealizedContact,
@@ -247,6 +248,27 @@ defmodule Cadence.Control.Contacts do
 
   @spec stored_ingress_journals(binary()) :: [map()]
   def stored_ingress_journals(mission_id), do: RuntimeContacts.stored_journals(mission_id)
+
+  @doc "The mission's shared-listener adapters and their refusals (Runtime.Contacts, ux U50)."
+  @spec listener_refusals(binary()) :: [map()]
+  def listener_refusals(mission_id), do: RuntimeContacts.listener_refusals(mission_id)
+
+  @spec listener_refusals(binary(), binary()) :: [map()]
+  def listener_refusals(mission_id, realized_contact_id),
+    do: RuntimeContacts.listener_refusals(mission_id, realized_contact_id)
+
+  @doc """
+  Second connections refused for a contact (ux U50 Technical details): live while it runs, else
+  what its settler recorded at LOS, else nil.
+  """
+  @spec second_connections_refused(binary(), binary(), binary()) :: non_neg_integer() | nil
+  def second_connections_refused(organization_id, mission_id, realized_contact_id),
+    do:
+      ListenerRefusalAttention.second_connections_refused(
+        organization_id,
+        mission_id,
+        realized_contact_id
+      )
 
   @spec ingress_journal_open?(binary(), binary()) :: boolean()
   def ingress_journal_open?(mission_id, realized_contact_id),

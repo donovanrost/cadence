@@ -2,8 +2,16 @@ defmodule Cadence.Runtime.Contacts do
   @moduledoc "Public data-plane command and observation boundary for realized Contacts."
 
   alias Cadence.IngressJournal.FileSystem, as: JournalFileSystem
+  alias Cadence.ProviderAdapters.TCPSocket
   alias Cadence.Runtime
-  alias Cadence.Runtime.{Cluster, ContactBacklog, ProcessNamespace, RealizedContactRuntimeSpec}
+
+  alias Cadence.Runtime.{
+    Cluster,
+    ContactBacklog,
+    ProcessNamespace,
+    ProfileAcceptor,
+    RealizedContactRuntimeSpec
+  }
 
   @spec start(RealizedContactRuntimeSpec.t()) :: {:ok, pid()} | {:error, term()}
   def start(%RealizedContactRuntimeSpec{} = spec), do: Runtime.start_realized_contact(spec)
@@ -64,6 +72,51 @@ defmodule Cadence.Runtime.Contacts do
         |> JournalFileSystem.stored_stream_directories()
         |> Enum.filter(&(&1.context.mission_id == mission_id))
     end
+  end
+
+  @doc """
+  The mission's shared-listener adapters (#87) and their refusal state (ux U50), from each profile
+  acceptor's registrations, cluster-wide: `[%{realized_contact_id, path_id, provider_binding_id,
+  connected?, refusals, second_connections_refused, shared_with}]`. `refusals` is the adapter's
+  refusal window (nil until a refusal opens one); `shared_with` the other contacts registered on
+  the same listener. Starts nothing; an adapter or acceptor that has gone is left out.
+  """
+  @spec listener_refusals(binary()) :: [map()]
+  def listener_refusals(mission_id) do
+    ProcessNamespace.default()
+    |> Cluster.select([
+      {{{:profile_acceptor, mission_id, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}
+    ])
+    |> Enum.flat_map(fn {profile_id, acceptor} -> acceptor_refusals(profile_id, acceptor) end)
+  end
+
+  @doc "`listener_refusals/1` for one contact (its settler reads it at LOS)."
+  @spec listener_refusals(binary(), binary()) :: [map()]
+  def listener_refusals(mission_id, realized_contact_id) do
+    mission_id
+    |> listener_refusals()
+    |> Enum.filter(&(&1.realized_contact_id == realized_contact_id))
+  end
+
+  defp acceptor_refusals(profile_id, acceptor) do
+    registrations = ProfileAcceptor.registrations(acceptor)
+    contacts = registrations |> Enum.map(& &1.realized_contact_id) |> Enum.uniq()
+
+    for registration <- registrations,
+        {:ok, state} <- [adapter_refusals(registration.adapter)] do
+      Map.merge(state, %{
+        realized_contact_id: registration.realized_contact_id,
+        path_id: registration.path_id,
+        provider_binding_id: profile_id,
+        shared_with: List.delete(contacts, registration.realized_contact_id)
+      })
+    end
+  end
+
+  defp adapter_refusals(adapter) do
+    TCPSocket.refusals(adapter)
+  catch
+    :exit, _gone -> :error
   end
 
   @doc "Whether any ingress journal of the contact is open (a runtime or a replay writes it)."

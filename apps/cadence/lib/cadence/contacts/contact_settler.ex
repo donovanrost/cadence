@@ -28,6 +28,7 @@ defmodule Cadence.Contacts.ContactSettler do
   use GenServer, restart: :temporary
 
   alias Cadence.Contacts.ContactSettlement
+  alias Cadence.Contacts.ListenerRefusalAttention
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.Scheduler
   alias Cadence.Control.Contacts, as: Runtime
@@ -184,12 +185,19 @@ defmodule Cadence.Contacts.ContactSettler do
         _settled_or_absent -> %{}
       end
 
+    # Its listener refusals (ux U50) live in its adapters: read them before they stop.
+    refusals =
+      ListenerRefusalAttention.settlement_document(
+        Runtime.listener_refusals(mission_id, id),
+        DateTime.utc_now()
+      )
+
     stop = Runtime.terminate_realized_contact(mission_id, id)
 
     _ =
       if state.mode == :replay,
         do: ContactSettlement.record_replay(contact, outcome, backlog, stop),
-        else: ContactSettlement.record(contact, outcome, backlog, stop)
+        else: ContactSettlement.record(contact, outcome, backlog, stop, refusals)
 
     # Its runtime is gone, listener included: a pass that couldn't start (ux U45) starts now.
     :ok = Scheduler.retry_starts(mission_id)

@@ -7,7 +7,9 @@ defmodule Cadence.Reads.Attention do
   `mission_runtime` (the active generation isn't applied; 2026-11-12) and `activation_apply` (an
   approved activation whose apply failed or stalled, to retry; 2026-11-13) and `provider_change`
   (a provider changed a booked pass: approve, reject or acknowledge; §11 L14) and
-  `ingress_backpressure` (a contact's ingest buffer filling, or frames dropped; #83). While an
+  `ingress_backpressure` (a contact's ingest buffer filling, or frames dropped; #83),
+  `archive_quarantine` (archive entries that can never be indexed; #88) and `listener_refusal`
+  (connections refused on a pass's shared listener; #87, U50). While an
   `activation_apply` item is open it carries the cause, so `mission_runtime` stays out of the list
   and those items say `runtime_not_applied: true` instead (fe-ops: one row for one cause). Other
   mission-level sources (provider changes, for example) join by implementing the same four
@@ -25,6 +27,7 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.ContactStartAttention, as: ContactStart
   alias Cadence.Contacts.IngressBackpressureAttention, as: IngressBackpressure
   alias Cadence.Contacts.JobOutcomeUnknownAttention, as: JobOutcomeUnknown
+  alias Cadence.Contacts.ListenerRefusalAttention, as: ListenerRefusal
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
   alias Cadence.Contacts.ProviderChangeAttention, as: ProviderChange
   alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
@@ -42,7 +45,8 @@ defmodule Cadence.Reads.Attention do
     ProviderChange,
     IngressBackpressure,
     ArchiveQuarantine,
-    JobOutcomeUnknown
+    JobOutcomeUnknown,
+    ListenerRefusal
   ]
   @resolved_window_s 60
 
