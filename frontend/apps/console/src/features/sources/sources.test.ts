@@ -8,7 +8,7 @@ import {
   runTag,
   sourceFacts,
   sourceFailure,
-  tsdbJobsOffered,
+  tsdbJobs,
   SHARED_LINE,
 } from "./present.ts";
 import { blankDraft, blockedReason, registerBody } from "./register.ts";
@@ -43,6 +43,7 @@ const source: DataSource = {
   storage: "questdb",
   credentials_ref: "secret://…/primary",
   shared: false,
+  tsdb_actions: undefined,
 };
 const refused = (code: string, details?: unknown): ApiError => ({
   kind: "conflict",
@@ -146,13 +147,23 @@ describe("source page", () => {
 });
 
 describe("TSDB jobs (api-ops L11 finding 1)", () => {
-  it("are offered only on a dedicated bring-your-own TSDB, never a managed or customer-owned one", () => {
-    expect(tsdbJobsOffered({ kind: "byo_tsdb", isolation_level: "mission_isolated" })).toBe(true);
-    expect(tsdbJobsOffered({ kind: "byo_tsdb", isolation_level: "org_isolated" })).toBe(true);
-    expect(tsdbJobsOffered(source)).toBe(false);
-    expect(tsdbJobsOffered({ kind: "managed_tsdb", isolation_level: "mission_isolated" })).toBe(
-      false,
-    );
+  it("follow the source's tsdb_actions, and the server's rule when a read lacks them", () => {
+    expect(tsdbJobs({ ...source, tsdb_actions: ["provision", "reconcile"] })).toEqual([
+      "provision",
+      "reconcile",
+    ]);
+    expect(tsdbJobs({ ...source, tsdb_actions: [] })).toEqual([]);
+    expect(
+      tsdbJobs({ kind: "byo_tsdb", isolation_level: "mission_isolated", tsdb_actions: undefined }),
+    ).toEqual(["provision", "reconcile", "deprovision"]);
+    expect(tsdbJobs(source)).toEqual([]);
+    expect(
+      tsdbJobs({
+        kind: "managed_tsdb",
+        isolation_level: "mission_isolated",
+        tsdb_actions: undefined,
+      }),
+    ).toEqual([]);
   });
   it("says why a refused job wasn't run", () => {
     expect(sourceFailure(refused("data_source_state", { state: "managed" }))).toBe(

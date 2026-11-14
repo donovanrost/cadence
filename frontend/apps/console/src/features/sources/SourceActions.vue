@@ -5,7 +5,7 @@ import type { ApiResult } from "@/api";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import type { DataSource } from "./api.ts";
 import CredentialSheet from "./CredentialSheet.vue";
-import { health, sourceFailure, tsdbJobsOffered } from "./present.ts";
+import { health, sourceFailure, tsdbJobs } from "./present.ts";
 import { probeSource, setSourceEnabled, startTsdbJob } from "./writes.ts";
 
 /** L11 W2 enable/disable, W4 probe, W5 rotate, W6 TSDB jobs (dedicated BYO TSDBs only). */
@@ -15,7 +15,7 @@ const key = computed(() => ({ missionId: props.missionId, sourceId: props.source
 const busy = ref(false);
 const credential = ref<InstanceType<typeof CredentialSheet> | null>(null);
 const confirm = ref<InstanceType<typeof ApSheet> | null>(null);
-const jobs = computed(() => tsdbJobsOffered(props.source));
+const jobs = computed(() => tsdbJobs(props.source));
 const enabled = computed(() => props.source.state !== "disabled");
 
 async function run<T>(call: () => Promise<ApiResult<T>>, said: (v: T) => string) {
@@ -67,21 +67,28 @@ const job = (kind: "provision" | "reconcile" | "deprovision") => {
       @click="credential?.open()"
       >Rotate credential…</ApButton
     >
-    <template v-if="jobs">
-      <ApButton :disabled="busy" disabled-reason="Working…" @click="job('provision')"
-        >Provision</ApButton
-      >
-      <ApButton :disabled="busy" disabled-reason="Working…" @click="job('reconcile')"
-        >Reconcile</ApButton
-      >
-      <ApButton
-        variant="danger"
-        :disabled="busy"
-        disabled-reason="Working…"
-        @click="confirm?.open()"
-        >Deprovision…</ApButton
-      >
-    </template>
+    <ApButton
+      v-if="jobs.includes('provision')"
+      :disabled="busy"
+      disabled-reason="Working…"
+      @click="job('provision')"
+      >Provision</ApButton
+    >
+    <ApButton
+      v-if="jobs.includes('reconcile')"
+      :disabled="busy"
+      disabled-reason="Working…"
+      @click="job('reconcile')"
+      >Reconcile</ApButton
+    >
+    <ApButton
+      v-if="jobs.includes('deprovision')"
+      variant="danger"
+      :disabled="busy"
+      disabled-reason="Working…"
+      @click="confirm?.open()"
+      >Deprovision…</ApButton
+    >
   </div>
   <CredentialSheet
     ref="credential"

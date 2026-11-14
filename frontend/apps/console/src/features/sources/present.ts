@@ -1,7 +1,7 @@
 import { decoders as d, detailsOf, isError, type ApiError } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { formatDuration, formatShort, type OpState } from "@/ui";
-import type { DataSource } from "./api.ts";
+import { tsdbActions, type DataSource } from "./api.ts";
 import type { SourceDetail, SourceRun } from "./writes.ts";
 
 /** "Managed by Cadence" / "Your TSDB"; the server's key when it's a kind this console doesn't know. */
@@ -73,13 +73,20 @@ export const ACTION_LINES = {
 } as const;
 
 /**
- * W6 TSDB jobs: only a bring-your-own TSDB on a dedicated (org or mission) database is provisioned
- * by Cadence (api-ops, lifecycle.ex validate_dedicated_byo_tsdb_backend). The source read will
- * name its actions (tsdb_actions); until then the same rule, here. A managed source isn't.
+ * W6 TSDB jobs the page offers: the source's own `tsdb_actions` (api-ops 888325a37). An older
+ * read without it falls back to the server's rule: only a bring-your-own TSDB on a dedicated (org
+ * or mission) database is provisioned by Cadence; a managed source isn't.
  */
-export const tsdbJobsOffered = (s: Pick<DataSource, "kind" | "isolation_level">): boolean =>
-  s.kind === "byo_tsdb" &&
-  (s.isolation_level === "org_isolated" || s.isolation_level === "mission_isolated");
+export function tsdbJobs(
+  s: Pick<DataSource, "kind" | "isolation_level" | "tsdb_actions">,
+): readonly (typeof tsdbActions)[number][] {
+  if (s.tsdb_actions !== undefined)
+    return s.tsdb_actions.filter((a): a is (typeof tsdbActions)[number] => a !== "unrecognized");
+  const dedicated =
+    s.kind === "byo_tsdb" &&
+    (s.isolation_level === "org_isolated" || s.isolation_level === "mission_isolated");
+  return dedicated ? tsdbActions : [];
+}
 
 /** One sentence for a refused write (U20). */
 export function sourceFailure(error: ApiError): string {

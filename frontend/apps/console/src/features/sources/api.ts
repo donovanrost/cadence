@@ -33,6 +33,7 @@ export const isolationLevels = [
   "mission_isolated",
 ] as const;
 export const storages = ["questdb", "postgres_projection"] as const;
+export const tsdbActions = ["provision", "reconcile", "deprovision"] as const;
 const option = object({ key: token, label: string });
 
 export const healthReader = nullable(
@@ -63,6 +64,8 @@ const source = object({
   credentials_ref: optional(nullable(string)),
   /** A platform-shared source: platform admins change it in admin mode; read-only here. */
   shared: optional(boolean),
+  /** api-ops 888325a37: the backend jobs this source takes ([] unless a dedicated BYO TSDB). */
+  tsdb_actions: optional(array(known(tsdbActions), 3)),
 });
 export type DataSource = Decoded<typeof source>;
 export const sourceReader = source;
