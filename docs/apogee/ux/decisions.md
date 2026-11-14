@@ -1170,12 +1170,16 @@ Two things must not stay silent (U20), because the preview has to say what Start
   - If later runs carry on: "Later runs generate the rest."
   - If not, it's caution: "Days after 11-20 aren't generated."
   - Data ask (domain → api): per template `capped: {limit, last_date} | null`.
-- **Over the 50,000 bound: a refusal** (api's `422 fleet_planning_occurrence_limit_exceeded`): "This start would
-  create more than 50,000 template requirements. Shorten the horizon or include fewer templates." With
-  `details.count`: "This start would create 62,400 template requirements; the limit is 50,000. …".
-  - **Placement** (api, 11-14): Start runs the check before creating anything, so a refusal leaves nothing
-    half-started. The 422 shows as a callout above Start with this sentence (never a toast), and Start stays
-    enabled for after the operator changes the horizon or templates.
-  - An estimate on the setup read, so Start can be disabled beforehand, is worth having only if domain says
-    the count is cheap without building rows. If it isn't, the 422 is enough; don't slow every load for a rare
-    refusal.
+- **Over the 50,000 bound** (api's `422 fleet_planning_occurrence_limit_exceeded`, details `{count, limit}`). The
+  count is gross fan-out: days that already exist count too, so it can read higher than what Start would create
+  (domain). Say "counts toward the limit", never "would create".
+  - With the count: "This start counts 62,400 template requirements toward the limit of 50,000, including days
+    that already exist. Shorten the horizon or include fewer templates."
+  - Without it: "This start goes over the limit of 50,000 template requirements. Shorten the horizon or include
+    fewer templates."
+  - **Beforehand** (domain: the estimate is cheap, one query per active template): the setup read carries
+    `template_requirements_estimate {count, limit}` for the chosen horizon. Over the limit, Start is disabled, and
+    the sentence above shows as a caution callout above it as the reason. At or under the limit, nothing shows:
+    the number alone means nothing to an operator.
+  - The 422 stays as the backstop and shows the same sentence in the same place (crit, since it was refused), never
+    as a toast.
