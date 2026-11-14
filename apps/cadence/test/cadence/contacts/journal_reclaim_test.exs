@@ -85,6 +85,30 @@ defmodule Cadence.Contacts.JournalReclaimTest do
     assert length(streams(c)) == 3
   end
 
+  test "a journal open on another node of a cluster keeps the stream (api-ops)", c do
+    contact = settled_contact!("remote")
+    stream!(c, contact, "path-a", [:processing, :archive])
+
+    # Clustered placement: runtime names are global. A journal registered from "another node"
+    # is only a global name; nothing in the local Registry.
+    %ProcessNamespace{registry: registry} = ProcessNamespace.default()
+    {:ok, previous} = with :error <- Registry.meta(registry, :cluster), do: {:ok, nil}
+    :ok = Registry.put_meta(registry, :cluster, id: "reclaim-test")
+    on_exit(fn -> Registry.put_meta(registry, :cluster, previous) end)
+
+    remote = spawn(fn -> Process.sleep(:infinity) end)
+    key = {:provider_ingress_journal, @mission, contact.realized_contact_id, "path-a", "remote"}
+    name = {Cadence.Runtime.Cluster, "reclaim-test", registry, key}
+    :yes = :global.register_name(name, remote)
+    on_exit(fn -> :global.unregister_name(name) end)
+
+    assert :none = JournalReclaim.run(@mission, @now)
+    assert [_kept] = streams(c)
+
+    :global.unregister_name(name)
+    assert {:reclaimed, _} = JournalReclaim.run(@mission, @now)
+  end
+
   test "a contact with two streams is recorded reclaimed only when both are gone", c do
     contact = settled_contact!("two-paths")
     stream!(c, contact, "path-a", [:processing, :archive])

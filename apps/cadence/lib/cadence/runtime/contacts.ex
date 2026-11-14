@@ -3,7 +3,7 @@ defmodule Cadence.Runtime.Contacts do
 
   alias Cadence.IngressJournal.FileSystem, as: JournalFileSystem
   alias Cadence.Runtime
-  alias Cadence.Runtime.{ContactBacklog, ProcessNamespace, RealizedContactRuntimeSpec}
+  alias Cadence.Runtime.{Cluster, ContactBacklog, ProcessNamespace, RealizedContactRuntimeSpec}
 
   @spec start(RealizedContactRuntimeSpec.t()) :: {:ok, pid()} | {:error, term()}
   def start(%RealizedContactRuntimeSpec{} = spec), do: Runtime.start_realized_contact(spec)
@@ -68,10 +68,10 @@ defmodule Cadence.Runtime.Contacts do
 
   @doc "Whether any ingress journal of the contact is open (a runtime or a replay writes it)."
   @spec journal_open?(binary(), binary()) :: boolean()
+  # Cluster-wide (api-ops): a journal open on another node must keep its directory too.
   def journal_open?(mission_id, realized_contact_id) do
-    %ProcessNamespace{registry: registry} = ProcessNamespace.default()
     key = {:provider_ingress_journal, mission_id, realized_contact_id, :_, :_}
-    Registry.select(registry, [{{key, :_, :_}, [], [true]}]) != []
+    Cluster.select(ProcessNamespace.default(), [{{key, :_, :_}, [], [true]}]) != []
   end
 
   @spec stored_journal_drain(map()) ::

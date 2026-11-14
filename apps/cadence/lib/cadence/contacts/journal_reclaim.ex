@@ -18,7 +18,11 @@ defmodule Cadence.Contacts.JournalReclaim do
 
   One stream per mission per reconcile tick. A contact is marked `journal_disk: "reclaimed"` once
   all its streams are gone. A stream that isn't drained on disk is kept and its contact marked
-  `journal_disk: "retained_undrained"` (logged once), for a manual decision.
+  `journal_disk: "retained_undrained"` (logged once), for a manual decision; that keeps ALL of
+  the contact's streams, its drained ones too (conservative).
+
+  Retention counts from the settlement's `settled_at` (a replay that re-settles a contact restarts
+  it), not from the stream files' times.
   """
 
   require Logger
@@ -87,23 +91,7 @@ defmodule Cadence.Contacts.JournalReclaim do
   defp reclaim_one(contact, [stream | rest], now) do
     case Runtime.stored_ingress_journal_drain(stream) do
       {:drained, bytes} ->
-        case Runtime.reclaim_stored_ingress_journal(stream) do
-          :ok ->
-            Logger.info(
-              "reclaimed ingress journal #{stream.stream_id} of #{contact.realized_contact_id} " <>
-                "(#{bytes} bytes)"
-            )
-
-            if rest == [], do: mark(contact, %{"journal_disk" => "reclaimed"}, now)
-            {:reclaimed, contact.realized_contact_id}
-
-          {:error, reason} ->
-            Logger.warning(
-              "could not reclaim ingress journal #{stream.stream_id}: #{inspect(reason)}"
-            )
-
-            nil
-        end
+        remove(contact, stream, bytes, rest == [], now)
 
       {:not_drained, reason, bytes} ->
         Logger.warning(
@@ -122,6 +110,26 @@ defmodule Cadence.Contacts.JournalReclaim do
         )
 
         {:retained, contact.realized_contact_id}
+    end
+  end
+
+  defp remove(contact, stream, bytes, last?, now) do
+    case Runtime.reclaim_stored_ingress_journal(stream) do
+      :ok ->
+        Logger.info(
+          "reclaimed ingress journal #{stream.stream_id} of #{contact.realized_contact_id} " <>
+            "(#{bytes} bytes)"
+        )
+
+        if last?, do: mark(contact, %{"journal_disk" => "reclaimed"}, now)
+        {:reclaimed, contact.realized_contact_id}
+
+      {:error, reason} ->
+        Logger.warning(
+          "could not reclaim ingress journal #{stream.stream_id}: #{inspect(reason)}"
+        )
+
+        nil
     end
   end
 
