@@ -15,11 +15,16 @@ defmodule Cadence.CommandingTest do
     CommandQueueEntry,
     CommandQueueEntryRow,
     CommandReleaseAttempt,
+    CommandReleaseAttemptRow,
     CommandRequest,
+    CommandRequestRow,
     CommandStage,
     CommandVerifierInstance,
+    ReleaseStore,
     ReleaseTargetGuard,
     ReleaseTargetSelection,
+    RequestQueueStore,
+    RequestStore,
     StagedCommandItem
   }
 
@@ -1227,6 +1232,62 @@ defmodule Cadence.CommandingTest do
       assert uplinks_sent_38(attempt_id) == 0
     end
 
+    test "the lane never cancels over a gateway with no SCID: the command waits, queued", c do
+      # A main deployment whose gateway bindings predate SCIDs: selection skips the pass.
+      _alpha = uplink_contact_38([c.alpha], c.alpha, %{})
+
+      assert {:error, {:command_queue_lane_no_release_target, _, _}} =
+               Cadence.Commanding.dispatch_queue_lane(
+                 @organization_id,
+                 @mission_id,
+                 c.entry.queue_lane_key,
+                 %{"user_id" => "lane-38"},
+                 attempted_at: DateTime.from_unix!(1_700_400_000, :second)
+               )
+
+      assert {:ok, %{lifecycle_state: :pending}} = fetch_entry_38(c.entry)
+      assert {:ok, %{lifecycle_state: :queued}} = fetch_request_38(c.request)
+      assert attempts_38(c.request) == []
+    end
+
+    test "a refusal never overwrites what happened to the command meanwhile", c do
+      # Another path completed this release between the claim and the refusal.
+      {claimed, request_row, attempt} = claim_38(c.entry, c.request)
+      set_state_38(CommandQueueEntryRow, :command_queue_entry_id, claimed, "released")
+      set_state_38(CommandRequestRow, :command_request_id, request_row, "released")
+      set_state_38(CommandReleaseAttemptRow, :command_release_attempt_id, attempt, "released")
+
+      assert {:ok, %{closed: false}} =
+               ReleaseStore.mark_refused(claimed, request_row, attempt, :refused_38)
+
+      assert {:ok, %{lifecycle_state: :released}} = fetch_entry_38(c.entry)
+      assert {:ok, %{lifecycle_state: :released}} = fetch_request_38(c.request)
+      assert [%{lifecycle_state: "released"}] = attempts_38(c.request)
+
+      # An operator canceled this one meanwhile: it stays canceled; the unsent attempt fails.
+      other = persist_safe_command_request(c.command_model, c.source_endpoint, 1, %{"n" => "2"})
+
+      {:ok, %{queue_entry: other_entry}} =
+        Cadence.Commanding.enqueue_command_request(
+          @organization_id,
+          @mission_id,
+          other.command_request_id,
+          %{"user_id" => "queue-38"}
+        )
+
+      {claimed, request_row, attempt} = claim_38(other_entry, other)
+      set_state_38(CommandQueueEntryRow, :command_queue_entry_id, claimed, "canceled")
+      set_state_38(CommandRequestRow, :command_request_id, request_row, "canceled")
+
+      assert {:ok, %{closed: false}} =
+               ReleaseStore.mark_refused(claimed, request_row, attempt, :refused_38)
+
+      assert {:ok, %{lifecycle_state: :canceled}} = fetch_entry_38(other_entry)
+
+      assert [%{lifecycle_state: "release_failed", failure_reason: "refused: " <> _}] =
+               attempts_38(other)
+    end
+
     test "a gateway SCID is compared exactly: integer or whole-number string, else refused", c do
       check = fn scid ->
         config = if scid == :none, do: %{}, else: %{"scid" => scid}
@@ -1318,6 +1379,76 @@ defmodule Cadence.CommandingTest do
         %{"user_id" => "release-38"},
         attempted_at: DateTime.from_unix!(1_700_400_000, :second)
       )
+
+  defp fetch_entry_38(entry),
+    do:
+      Cadence.Commanding.fetch_command_queue_entry(
+        @organization_id,
+        @mission_id,
+        entry.command_queue_entry_id
+      )
+
+  defp fetch_request_38(request),
+    do:
+      Cadence.Commanding.fetch_command_request(
+        @organization_id,
+        @mission_id,
+        request.command_request_id
+      )
+
+  defp attempts_38(request) do
+    CommandReleaseAttemptRow
+    |> where([row], row.command_request_id == ^request.command_request_id)
+    |> Repo.all()
+  end
+
+  # The state a release holds just before its pre-transmit check: entry claimed, attempt pending.
+  defp claim_38(entry, request) do
+    {:ok, row} =
+      RequestQueueStore.fetch_queue_entry_row(
+        @organization_id,
+        @mission_id,
+        entry.command_queue_entry_id
+      )
+
+    {:ok, claimed} = RequestQueueStore.claim_for_release(row)
+
+    {:ok, request_row} =
+      RequestStore.fetch_request_row(@organization_id, @mission_id, request.command_request_id)
+
+    {:ok, attempt} =
+      ReleaseStore.persist(
+        @organization_id,
+        CommandReleaseAttempt.new(%{
+          organization_id: @organization_id,
+          mission_id: @mission_id,
+          command_queue_entry_id: entry.command_queue_entry_id,
+          command_request_id: request.command_request_id,
+          source_endpoint_ref: request.source_endpoint_ref,
+          realized_contact_id: "realized-contact-38",
+          mission_model_revision_id: request.mission_model_revision_id,
+          command_id: request.command_id,
+          command_name: request.command_name,
+          lifecycle_state: :release_pending,
+          released_by: %{"user_id" => "release-38"},
+          attempted_at: DateTime.from_unix!(1_700_400_000, :second)
+        })
+      )
+
+    {claimed, request_row, attempt}
+  end
+
+  # Another writer changes the row; the caller keeps its stale copy.
+  defp set_state_38(schema, id_field, row, state) do
+    id = Map.fetch!(row, id_field)
+
+    {1, _} =
+      schema
+      |> where([r], r.mission_id == ^@mission_id and field(r, ^id_field) == ^id)
+      |> Repo.update_all(set: [lifecycle_state: state])
+
+    :ok
+  end
 
   defp uplinks_sent_38(attempt_id) do
     TransportActionRequestRow

@@ -720,8 +720,10 @@ defmodule Cadence.Commanding do
     )
   end
 
-  # The attempt fails and its request and queue entry close, so the lane moves on. Unlike a
-  # transmission failure the entry doesn't go back to pending: it would be refused again.
+  # As develop: the attempt fails and its request and queue entry close, so the lane moves on.
+  # Unlike a transmission failure the entry doesn't go back to pending: it would be refused again.
+  # The lane itself never gets here for a gap or mismatch (selection skips such contacts and the
+  # command waits); this is an operator naming a contact, or a change between select and send.
   defp fail_refused_release(context, %CommandReleaseAttempt{} = attempt, reason) do
     case ReleaseStore.mark_refused(context.queue_entry_row, context.request_row, attempt, reason) do
       {:ok, _refused} ->
