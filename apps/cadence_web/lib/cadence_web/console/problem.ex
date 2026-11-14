@@ -46,7 +46,10 @@ defmodule CadenceWeb.Console.Problem do
       {409, "That booking isn't waiting on the provider past the confirmation window."},
     booking_already_resolved: {409, "Someone already resolved that booking."},
     plan_not_editable: {422, "The plan can't be edited like that."},
-    version_conflict: {409, "The policy changed since you loaded it."},
+    # ux 11-14: generic (eight writes share it); a context may override with its own noun.
+    version_conflict:
+      {409,
+       "This changed since you opened it, so your changes weren't saved. Reload to see the current version."},
     reviewer_is_author: {409, "You can't approve a version you saved."},
     policy_not_found: {404, "Policy or version not found."},
     template_not_found: {404, "Template not found."},
