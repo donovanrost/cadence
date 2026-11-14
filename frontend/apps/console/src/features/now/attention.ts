@@ -67,7 +67,7 @@ export const attentionConflicts = [
   // archive_quarantine (U49): one item per contact and error code.
   "quarantined",
   // listener_refusal (U50): one item per open contact on the shared listener.
-  "peer_refused",
+  "listener_refusal",
 ] as const;
 /** U50 listener_refusal: why the shared listener refused the last connection. */
 export const listenerRefusals = [
@@ -564,7 +564,7 @@ export function attentionWords(
     case "journal_near_full":
     case "frames_dropped":
     case "quarantined":
-    case "peer_refused":
+    case "listener_refusal":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.

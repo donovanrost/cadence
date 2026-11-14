@@ -44,7 +44,7 @@ const item = (o: Record<string, unknown> = {}, priority = 1) => ({
   attention: {
     id: "rc-8",
     source: "listener_refusal",
-    conflict: "peer_refused",
+    conflict: "listener_refusal",
     state: "open",
     acknowledged_by: null,
     contact_id: "contact-8",
