@@ -65,12 +65,20 @@ describe("readinessReader", () => {
 
   it("requires an id for object fixes and none for list fixes", () => {
     const missingId = valid();
-    missingId.findings[1] = finding("x", "blocker", { kind: "station", id: null, label: null });
+    missingId.findings[1] = finding("x", "blocker", { kind: "profile", id: null, label: null });
     expect(decode(readinessReader, missingId).ok).toBe(false);
 
     const strayId = valid();
     strayId.findings[1] = finding("x", "blocker", { kind: "spacecraft_new", id: "a", label: null });
     expect(decode(readinessReader, strayId).ok).toBe(false);
+  });
+
+  it("reads a station fix without an id as the stations list (api: no_ground_stations)", () => {
+    const body = valid();
+    body.findings[1] = finding("x", "blocker", { kind: "station", id: null, label: null });
+    const r = decode(readinessReader, body);
+    if (!r.ok) throw r.error;
+    expect(r.value.findings[1]?.fix).toEqual({ kind: "station", id: null, label: null });
   });
 
   it("tolerates a fix kind this console doesn't know (finding kept, no action)", () => {

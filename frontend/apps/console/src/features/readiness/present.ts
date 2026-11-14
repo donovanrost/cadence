@@ -120,10 +120,12 @@ export function fixLink(fix: FindingFix, severity: Severity): FixLink {
           to: { name: "setup.profile", params: { profileId: fix.id } },
         };
       case "station":
-        return {
-          label: "Open station",
-          to: { name: "setup.stations", params: { stationId: fix.id } },
-        };
+        return fix.id === null
+          ? { label: "Open Ground stations", to: { name: "setup.stations" } }
+          : {
+              label: "Open station",
+              to: { name: "setup.stations", params: { stationId: fix.id } },
+            };
       case "data_source":
         return fix.id === null
           ? { label: "Open Data sources", to: { name: "setup.data-sources" } }

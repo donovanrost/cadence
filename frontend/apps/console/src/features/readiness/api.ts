@@ -45,12 +45,15 @@ export type FindingFix =
       label: string | null;
     }>
   | Readonly<{
-      kind: "spacecraft" | "profile" | "station" | "app";
+      kind: "spacecraft" | "profile" | "app";
       id: string;
       label: string | null;
     }>
-  /** domain source_endpoint_ambiguous: no single source to open, so the list (id null). */
-  | Readonly<{ kind: "data_source"; id: string | null; label: string | null }>;
+  /**
+   * The list when id is null: domain source_endpoint_ambiguous (no single source to open), and
+   * api's stations.no_ground_stations (no station yet; setup.md: id null = the stations list).
+   */
+  | Readonly<{ kind: "data_source" | "station"; id: string | null; label: string | null }>;
 
 export type ReadinessArea = Readonly<{
   key: AreaKey;
@@ -117,10 +120,10 @@ const fix: Reader<FindingFix | null> = (value, path = "") => {
     case "change_set":
       return { kind: raw.kind, label: raw.label };
     case "data_source":
+    case "station":
       return { kind: raw.kind, id: raw.id, label: raw.label };
     case "spacecraft":
     case "profile":
-    case "station":
     case "app":
       if (raw.id === null) throw new decoders.DecodeError(`${path}.id`, "id for an object target");
       return { kind: raw.kind, id: raw.id, label: raw.label };
