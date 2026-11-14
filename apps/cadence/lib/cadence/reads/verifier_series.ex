@@ -14,8 +14,8 @@ defmodule Cadence.Reads.VerifierSeries do
 
   alias Cadence.Commanding
   alias Cadence.Commanding.Groups.GroupStore
-  alias Cadence.Ops.PointCatalog
   alias Cadence.Commanding.RequestValidation
+  alias Cadence.Ops.PointCatalog
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.{SpacecraftLive, Telemetry}
 
@@ -174,9 +174,10 @@ defmodule Cadence.Reads.VerifierSeries do
   end
 
   # A verifier's subject is a point id (`telemetry:THERM.setpoint`) or, from the mission model, the
-  # parameter's semantic id (`semantic:parameter:…`). Samples, units and types are keyed by the
-  # catalog point (`PACKET.field`), so resolve to it first. A subject no active point has stays
-  # as is, with unit and type null. `:catalog_fun` (tests): `(-> [point catalog entry])`.
+  # parameter's semantic id (`semantic:parameter:…`) or qualified name (#73,
+  # `PointCatalog.resolve/2`). Samples, units and types are keyed by the catalog point
+  # (`PACKET.field`), so resolve to it first. A subject no active point has stays as is, with unit
+  # and type null. `:catalog_fun` (tests): `(-> [point catalog entry])`.
   defp point(org, mission, subject, opts) do
     catalog =
       case Keyword.get(opts, :catalog_fun) do
@@ -184,9 +185,7 @@ defmodule Cadence.Reads.VerifierSeries do
         fun -> fun.()
       end
 
-    entry =
-      Enum.find(catalog, &(&1.point_id == subject)) ||
-        Enum.find(catalog, &(&1.parameter_id == subject))
+    entry = PointCatalog.resolve(catalog, subject)
 
     id = if entry, do: entry.point_id, else: subject
     [described] = SpacecraftLive.points(org, mission, [id])

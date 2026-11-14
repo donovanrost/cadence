@@ -35,6 +35,21 @@ defmodule Cadence.Ops.PointCatalog do
     end
   end
 
+  @doc """
+  The point a verifier or constraint subject names, or nil: a point id (`HK.sc_mode`, also as
+  `telemetry:HK.sc_mode`), the parameter's semantic id from the mission model
+  (`semantic:parameter:…`, stored on the field since #73), or its qualified name. Compose's
+  current value and the U2 verifier plot resolve subjects the same way.
+  """
+  @spec resolve([point_info()], binary()) :: point_info() | nil
+  def resolve(points, subject) when is_list(points) and is_binary(subject) do
+    ref = subject |> String.trim() |> String.replace_prefix("telemetry:", "")
+
+    Enum.find(points, &(&1.point_id == ref)) ||
+      Enum.find(points, &(&1.parameter_id == ref)) ||
+      Enum.find(points, &(&1.qualified_name == ref))
+  end
+
   @doc "The points a binding set's packet definitions produce."
   @spec points(BindingSet.t()) :: [point_info()]
   def points(%BindingSet{} = binding_set) do

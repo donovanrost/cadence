@@ -218,11 +218,18 @@ defmodule Cadence.Reads.CommandCatalog do
     if pairs == %{} do
       %{}
     else
-      units = Map.new(PointCatalog.list_points(org, mission), &{&1.point_id, &1.unit})
+      # #73: a mission-model verifier names the parameter's semantic id; resolve it to the
+      # catalog point the samples are keyed by. An unknown subject stays as is (no unit).
+      points = PointCatalog.list_points(org, mission)
 
-      Map.new(pairs, fn {arg, point} ->
-        {arg, %{id: point, name: point, unit: Map.get(units, point)}}
-      end)
+      Map.new(pairs, fn {arg, subject} -> {arg, current_point(points, subject)} end)
+    end
+  end
+
+  defp current_point(points, subject) do
+    case PointCatalog.resolve(points, subject) do
+      nil -> %{id: subject, name: subject, unit: nil}
+      point -> %{id: point.point_id, name: point.point_id, unit: point.unit}
     end
   end
 
