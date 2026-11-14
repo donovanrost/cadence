@@ -47,8 +47,27 @@ export class ChartEvents {
       (m) => m.marker_type === "contact_interval",
     );
     this.renderContactBands(contacts);
-    for (const marker of this.surface.model.eventMarkers)
-      if (marker.marker_type === "mission_event") this.renderMissionEvent(marker);
+    this.renderMissionEvents(
+      this.surface.model.eventMarkers.filter(
+        (m) => m.marker_type === "mission_event" && m.link_id && m.timestamp_ms,
+      ),
+    );
+  }
+
+  /**
+   * Mission events: a thin line each. Events less than 6px apart (chained) merge into one line
+   * with the count and span in its title, as limit entries do: a once-a-second event stream
+   * otherwise packs hundreds of lines into an opaque block over the series (qa's overlay look).
+   */
+  renderMissionEvents(events: readonly ChartMarker[]) {
+    const placed = events
+      .flatMap((marker) => {
+        const left = this.surface.markerLeft(marker);
+        return left === null || left === undefined || Number.isNaN(left) ? [] : [{ marker, left }];
+      })
+      .sort((a, b) => a.left - b.left);
+    for (const cluster of chained(placed, 6))
+      this.renderMissionEvent(cluster.left, cluster.markers);
   }
 
   /**
@@ -138,15 +157,15 @@ export class ChartEvents {
     this.eventLayer.appendChild(label);
   }
 
-  renderMissionEvent(marker: ChartMarker) {
-    if (!marker.link_id || !marker.timestamp_ms) return;
-
-    const left = this.surface.markerLeft(marker);
-    if (left === null || left === undefined || Number.isNaN(left)) return;
-
+  renderMissionEvent(left: number, markers: readonly ChartMarker[]) {
+    const marker = markers[0];
+    if (!marker) return;
     const button = document.createElement("button");
     button.type = "button";
-    button.title = `Inspect ${marker.title || "mission event"}`;
+    button.title =
+      markers.length === 1
+        ? `Inspect ${marker.title || "mission event"}`
+        : `${markers.length} events ${clock(marker.timestamp_ms)}–${clock(markers.at(-1)?.timestamp_ms)}`;
     button.setAttribute("aria-label", button.title);
     button.dataset.eventMarkerTarget = "mission event";
     button.dataset.eventMarkerId = marker.mission_event_id || marker.target_id || "";
@@ -206,3 +225,19 @@ export function mergedSpans(spans: readonly { left: number; width: number }[]) {
   }
   return merged;
 }
+
+/** Marks merged while each is less than `px` from the previous one (a dense run is one mark). */
+export function chained(placed: readonly { marker: ChartMarker; left: number }[], px: number) {
+  const clusters: { left: number; last: number; markers: ChartMarker[] }[] = [];
+  for (const p of placed) {
+    const run = clusters.at(-1);
+    if (run && p.left - run.last < px) {
+      run.markers.push(p.marker);
+      run.last = p.left;
+    } else clusters.push({ left: p.left, last: p.left, markers: [p.marker] });
+  }
+  return clusters;
+}
+
+const clock = (ms: number | null | undefined) =>
+  ms ? `${new Date(ms).toISOString().slice(11, 16)}Z` : "";
