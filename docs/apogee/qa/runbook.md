@@ -90,8 +90,11 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127
   CADENCE_QUESTDB_HOST=127.0.0.1 CADENCE_QUESTDB_PORT=8822 EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
   CADENCE_INGRESS_JOURNAL_ENABLED=true CADENCE_INGRESS_JOURNAL_PATH="$PWD/../../var/ingress_journal" \
   CADENCE_INGRESS_JOURNAL_MAX_BYTES=2147483648 \
-  CADENCE_LIVE_VUE_VITE_PORT=5183 OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
-  mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server 2>&1 | tee -a ../../var/qa-server.log
+  CADENCE_LIVE_VUE_VITE_PORT=5183 POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
+  mise exec -- env OTEL_EXPORTER_OTLP_ENDPOINT= iex --sname cadence_apogee --cookie cadence -S mix phx.server 2>&1 | tee -a ../../var/qa-server.log
+#    OTEL_EXPORTER_OTLP_ENDPOINT is cleared AFTER mise (api-ops 11-14): set before `mise exec`, mise.toml's
+#    [env] value (http://localhost:4318) wins, runtime.exs turns the OTLP exporter on, and with nothing on
+#    4318 the log gets 'client error exporting … econnrefused' ~12×/min.
 #    After any restart also drop the log level to :info (director, 2026-11-11: at :debug the log hit
 #    28 GB and filled the disk). Over RPC on cadence_apogee: Logger.configure(level: :info).
 #    If var/qa-server.log grows past a few GB, truncate it in place: : > var/qa-server.log
