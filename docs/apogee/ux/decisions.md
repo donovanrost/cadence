@@ -1086,11 +1086,15 @@ data with an SCID or address Cadence didn't expect, and that's the case that mat
   is open: then a refused connection may be this pass's own telemetry being turned away. due_at is LOS (api), so it
   sorts among due items by LOS.
 - **Title:** `EARENDIL-008 · SVB 03:10Z pass · 3 connections refused` (singular: "1 connection refused").
-- **Meta:** `FIRST 03:12Z · LAST 03:14Z` (raised_at, last_refused_at; one time when they're equal). The connection's
+- **Meta:** `FIRST 03:12Z · LAST 03:14Z` (raised_at, last_refused_at; one time when they're equal). Add `STILL
+  REFUSING` last while last_refused_at is within 5 minutes, shown only while true (as U49's STILL ARRIVING). The connection's
   address isn't in visible text (api): it goes in Technical details.
 - **Body:** first the context, then the last refusal's reason, then the pass's state.
-  - Context: "Northlight's listener is shared with other passes, and Cadence refuses any connection it can't match
-    to exactly one of them." Without the provider's name: "This pass's listener is shared…".
+  - Context, from `shared_with` (the other open passes on the profile): "This pass shares Northlight's listener with
+    2 other open passes, and Cadence refuses any connection it can't match to exactly one of them." With none:
+    "Cadence refuses any connection on Northlight's listener that it can't match to this pass." Without the
+    provider's name: "the listener". It's never worded as this pass's fault: every open pass on the listener gets
+    its own row for the same refusal (domain), and each row's priority follows its own pass's `connected`.
   - Reason, from last_refusal:
     - unregistered_scid: "The last one sent frames for SCID 42, which no pass on this listener expects." Without
       the scid: "…sent frames for a spacecraft no pass on this listener expects."
