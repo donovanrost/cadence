@@ -60,11 +60,11 @@ defmodule Cadence.Applications.OpsConsoleTest do
              Cadence.Applications.Registry.fetch_surface(
                definition,
                :mission,
-               "dashboard_directory"
+               "commands"
              )
 
     assert surface.placement == :ops_workspace
-    assert surface.surface_id == "dashboard_directory"
+    assert surface.surface_id == "commands"
   end
 
   test "keeps query contributions and the action seam domain-owned" do
@@ -75,44 +75,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
   end
 
   test "declares exact deep-route query identity and fail-closed interaction ledgers" do
-    assert OpsConsole.surface_query_contract("dashboard_show") ==
-             {:ok,
-              %{
-                subject_param: "dashboard_id",
-                query_params: [
-                  "dashboard_id",
-                  "panel",
-                  "activity_filter",
-                  "activity_event",
-                  "selected_publish_issue",
-                  "selected_time",
-                  "time_mode",
-                  "time_axis",
-                  "from",
-                  "to",
-                  "limit_mode",
-                  "replay_run_id",
-                  "selection_view",
-                  "selected_widget",
-                  "selected_target",
-                  "selected_id",
-                  "selected_placement",
-                  "selected_data_view",
-                  "selected_scope_kind",
-                  "selected_scope_id",
-                  "selected_resource_id",
-                  "selected_spacecraft_id",
-                  "selected_contact_id",
-                  "selected_transport_id",
-                  "selected_source_endpoint_id",
-                  "selected_ground_station_id",
-                  "selected_scope_link_id",
-                  "realm",
-                  "data_source_id",
-                  "source_binding_id"
-                ]
-              }}
-
     assert OpsConsole.surface_query_contract("fleet_planning") ==
              {:ok, %{subject_param: nil, query_params: ["page", "state"]}}
 
@@ -129,18 +91,11 @@ defmodule Cadence.Applications.OpsConsoleTest do
                 ]
               }}
 
-    assert OpsConsole.surface_query_contract("dashboard_editor") ==
-             {:ok, %{subject_param: "dashboard_id", query_params: ["dashboard_id"]}}
-
     assert OpsConsole.surface_query_contract("data_source_registration") ==
              {:ok, %{subject_param: nil, query_params: []}}
 
-    assert OpsConsole.deep_route_interaction_ledger()["dashboard_show"].host_actions == []
-
     assert Enum.all?(
              [
-               "dashboard_editor",
-               "dashboard_activity",
                "data_operations_manage",
                "data_source_registration",
                "data_source_settings"
@@ -209,61 +164,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
               ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"]},
              {"contact_record", :subject_detail, :mission, :ops_workspace,
               "cadence.ops.contact_record", []},
-             {"dashboard_directory", :collection, :mission, :ops_workspace,
-              "cadence.ops.dashboard_directory",
-              ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]},
-             {"dashboard_show", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.dashboard_show", []},
-             {"dashboard_editor", :configuration, :mission, :ops_workspace,
-              "cadence.ops.dashboard_editor",
-              [
-                "layout_changed",
-                "validate_dashboard_section",
-                "save_dashboard_section",
-                "remove_dashboard_section",
-                "move_dashboard_section",
-                "preview_widget_binding",
-                "validate_widget",
-                "save_widget",
-                "remove_widget",
-                "rename",
-                "archive_dashboard",
-                "publish_dashboard",
-                "publish_dashboard_version",
-                "save_runtime_defaults",
-                "restore_version_as_draft",
-                "save_editor",
-                "review_editor",
-                "discard_editor",
-                "reload_editor"
-              ]},
-             {"dashboard_activity", :activity, :mission, :ops_workspace,
-              "cadence.ops.dashboard_activity", ["publish_version", "restore_version"]},
-             {"dashboard_new", :configuration, :mission, :ops_workspace,
-              "cadence.ops.dashboard_new", ["validate", "save"]},
-             {"dashboard_library", :collection, :mission, :ops_workspace,
-              "cadence.ops.dashboard_library",
-              ["stage-library-item", "create-library-item", "add-library-version"]},
-             {"dashboard_playlists", :collection, :mission, :ops_workspace,
-              "cadence.ops.dashboard_playlists", ["create-playlist"]},
-             {"dashboard_playlist_present", :operations, :mission, :ops_workspace,
-              "cadence.ops.dashboard_playlist_present", ["next-dashboard"]},
-             {"dashboard_settings", :configuration, :mission, :ops_workspace,
-              "cadence.ops.dashboard_settings",
-              [
-                "validate-settings",
-                "save-settings",
-                "create-share",
-                "revoke-share",
-                "create-snapshot",
-                "archive-dashboard"
-              ]},
-             {"dashboard_share", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.dashboard_share", []},
-             {"dashboard_snapshot", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.dashboard_snapshot", []},
-             {"dashboard_diagnostics", :activity, :mission, :ops_workspace,
-              "cadence.ops.dashboard_diagnostics", []},
              {"fleet_planning", :operations, :mission, :ops_workspace,
               "cadence.ops.fleet_planning", ["refresh-planning"]},
              {"fleet_planning_new", :configuration, :mission, :ops_workspace,

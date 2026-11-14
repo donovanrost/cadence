@@ -8,17 +8,6 @@ defmodule Cadence.Applications.OpsConsoleActionAdaptersTest do
   @scope %Scope{organization_id: "org-1"}
   @host_context HostContext.mission("mission-1")
 
-  test "dashboard adapter fails closed for missing and wrong surface versions" do
-    missing = request("dashboard_editor", nil, "layout_changed", %{})
-    wrong = request("dashboard_editor", 2, "layout_changed", %{})
-
-    assert {:error, :unsupported_application_action} =
-             Actions.DashboardDeepActions.execute(@scope, @host_context, missing)
-
-    assert {:error, :unsupported_application_action} =
-             Actions.DashboardDeepActions.execute(@scope, @host_context, wrong)
-  end
-
   test "mission and source adapters reject cross-surface action pairs" do
     source_request = request("data_source_settings", 1, "register-source", %{})
     mission_request = request("data_operations_manage", 1, "retry-group", %{})

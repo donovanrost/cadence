@@ -77,28 +77,14 @@ defmodule Cadence.Applications.OpsConsoleActionProviderTest do
              ActionProvider.execute(scope(), HostContext.mission("mission-1"), request)
   end
 
-  test "preserves an admitted adapter's malformed input error" do
-    request = %ActionRequest{
-      application_key: "ops_console",
-      application_version: 1,
-      action_id: "filter_dashboards",
-      surface_id: "dashboard_directory",
-      surface_version: 1,
-      params: %{"directory" => %{"query" => self()}}
-    }
-
-    assert {:error, %Cadence.Applications.ActionFailure{code: "invalid_action_input"}} =
-             ActionProvider.execute(scope(), HostContext.mission("mission-1"), request)
-  end
-
   test "preserves an admitted adapter's authorization error" do
     request = %ActionRequest{
       application_key: "ops_console",
       application_version: 1,
-      action_id: "filter_dashboards",
-      surface_id: "dashboard_directory",
+      action_id: "apply_filters",
+      surface_id: "telemetry_explore",
       surface_version: 1,
-      params: %{"directory" => %{}}
+      params: %{}
     }
 
     assert {:error, :forbidden} =
@@ -113,7 +99,6 @@ defmodule Cadence.Applications.OpsConsoleActionProviderTest do
   test "composed cohort bindings are unique" do
     assert ActionProvider.duplicate_binding_keys() == []
     assert ActionProvider.binding_keys() == Enum.uniq(ActionProvider.binding_keys())
-    assert {"dashboard_editor", "publish_dashboard"} in ActionProvider.binding_keys()
     assert {"alarms", "filter"} in ActionProvider.binding_keys()
     assert {"contact_schedule", "search"} in ActionProvider.binding_keys()
   end
