@@ -302,6 +302,10 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
   identity v2 shipped needs a lead or director decision first. This includes 11-14 00:38:36–00:40:40Z (001 and 009,
   collapsed 8:1 identities). A replay run always gets its own identities (realm + replay_run_id), so it never fixes or
   duplicates the live rows; it only adds its own. See `docs/apogee/plans/ingress-time-tags.md`.
+- **Never symlink the shared tree's `node_modules` into a throwaway worktree.** Page tests that shell out to
+  `vp test` start a `pnpm install`, which tries to remove the linked modules directory. On 11-14 07:52Z pnpm refused
+  (`ERR_PNPM_UNSAFE_MODULES_DIR`) and nothing changed, but don't rely on that. In a throwaway, page tests fail with
+  `ERR_MODULE_NOT_FOUND` (environmental). Run them in the shared tree through check-slot once the commits are in.
 - **Archive ranges written before c3680ddd9 re-archive their packets once under new ids if replayed** (dev/test data
   only). c3680ddd9 (domain, #71 (d)) makes a journaled packet's id stable across re-batching. It lands with #73's
   restart, restart 2 on 11-14.
