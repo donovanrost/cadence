@@ -105,6 +105,16 @@ defmodule Cadence.Catalog.Upload do
   end
 
   defp validate_upload(_upload), do: {:error, :invalid_catalog_upload}
-  defp actor(%Scope{user: %{id: id, email: email}}), do: %{user_id: id, email: email}
+  # Who uploaded and imported it (lead 11-14: imports recorded no actor). The user struct's key is
+  # user_id; matching on :id never did, so every upload stored %{}. The catalog read names the
+  # actor by "name", else "email".
+  defp actor(%Scope{user: %{user_id: id} = user}) when is_binary(id),
+    do: %{
+      "actor_kind" => "user",
+      "user_id" => id,
+      "name" => Map.get(user, :display_name),
+      "email" => Map.get(user, :email)
+    }
+
   defp actor(%Scope{}), do: %{}
 end

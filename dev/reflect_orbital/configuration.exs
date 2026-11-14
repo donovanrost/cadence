@@ -98,6 +98,14 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
             use_calibrated: false
   """
 
+  # Who imported the demo catalog (lead 11-14: imports recorded no actor). The seed runs as no
+  # user or service identity, so it names itself.
+  @seed_actor %{
+    "actor_kind" => "system",
+    "name" => "Reflect Orbital demo seed",
+    "seed" => "reflect-orbital-v1"
+  }
+
   defp with_demo_verifiers(source) do
     Enum.reduce(@verified_commands, source, fn name, acc ->
       line = "  - name: #{name}\n"
@@ -147,6 +155,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
           format_key: "cadence_yaml",
           media_type: "application/yaml",
           source_artifact: source,
+          uploaded_by: @seed_actor,
           metadata:
             Map.put(
               F.metadata(),
@@ -161,7 +170,8 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
           F.mission_id(),
           id,
           artifact,
-          "cadence_yaml"
+          "cadence_yaml",
+          requested_by: @seed_actor
         )
 
       await_import(run.import_run_id, 120)

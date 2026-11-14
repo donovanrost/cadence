@@ -123,6 +123,21 @@ defmodule CadenceWeb.Console.CatalogAPITest do
     assert %{"import_run_id" => run_id} = json_response(conn, 202)["data"]
     assert [%{"name" => "Earendil FSW"}] = get_data(c, c.base)["databases"]
     assert get_data(c, "#{c.base}/imports/#{run_id}")["file"]["name"] == "mission.yaml"
+
+    # lead 11-14: the import records who ran it (before, every upload stored %{}).
+    org_id = c.mission.organization_id
+    user_id = c.user.user_id
+
+    {:ok, run} = Cadence.Catalog.fetch_import_run(org_id, c.mission.mission_id, run_id)
+    assert %{"actor_kind" => "user", "user_id" => ^user_id} = run.requested_by
+
+    {:ok, artifact} =
+      Cadence.Catalog.fetch_artifact(org_id, c.mission.mission_id, run.artifact_id)
+
+    assert %{"actor_kind" => "user", "user_id" => ^user_id, "email" => email} =
+             artifact.uploaded_by
+
+    assert email == c.user.email
   end
 
   test "upload rejects an unsupported format, missing fields and a missing file", c do
