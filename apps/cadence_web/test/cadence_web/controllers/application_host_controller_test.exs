@@ -18,7 +18,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     html =
       conn
       |> get(
-        "/missions/#{mission.mission_id}/applications/ops_console/dashboard_activity/federated?spacecraft_id=filter-only"
+        "/missions/#{mission.mission_id}/applications/ops_console/commands/federated?spacecraft_id=filter-only"
       )
       |> html_response(200)
 
@@ -41,7 +41,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     html =
       conn
       |> get(
-        "/missions/#{mission.mission_id}/applications/ops_console/dashboard_activity/federated?" <>
+        "/missions/#{mission.mission_id}/applications/ops_console/commands/federated?" <>
           URI.encode_query(query)
       )
       |> html_response(200)
@@ -55,7 +55,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     {conn, _org, mission, _scope} = signed_in_scope_and_mission()
 
     path =
-      "/missions/#{mission.mission_id}/applications/ops_console/dashboard_activity/federated?"
+      "/missions/#{mission.mission_id}/applications/ops_console/commands/federated?"
 
     for query <- [
           "dashboard_id=one&dashboard_id=two",
