@@ -29,6 +29,7 @@ defmodule Cadence.Contacts.ContactSettler do
 
   alias Cadence.Contacts.ContactSettlement
   alias Cadence.Contacts.RealizedContact
+  alias Cadence.Contacts.Scheduler
   alias Cadence.Control.Contacts, as: Runtime
   alias Cadence.Control.ProcessNamespace
 
@@ -190,6 +191,8 @@ defmodule Cadence.Contacts.ContactSettler do
         do: ContactSettlement.record_replay(contact, outcome, backlog, stop),
         else: ContactSettlement.record(contact, outcome, backlog, stop)
 
+    # Its runtime is gone, listener included: a pass that couldn't start (ux U45) starts now.
+    :ok = Scheduler.retry_starts(mission_id)
     {:stop, :normal, state}
   end
 

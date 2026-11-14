@@ -420,6 +420,37 @@ defmodule Cadence.Contacts.ContactStore do
     end
   end
 
+  @doc """
+  Scheduled contacts' runs that were realized but never started, inside their window (ux U45):
+  the runtime start failed, e.g. the station listener was still held by the previous pass.
+  """
+  @spec defined_realized_to_start(DateTime.t(), binary() | nil) :: [RealizedContact.t()]
+  def defined_realized_to_start(%DateTime{} = reference_time, mission_id) do
+    RealizedContactRow
+    |> join(
+      :inner,
+      [realized_contact_row],
+      scheduled_contact_row in ScheduledContactRow,
+      on:
+        realized_contact_row.mission_id == scheduled_contact_row.mission_id and
+          realized_contact_row.scheduled_contact_id == scheduled_contact_row.scheduled_contact_id
+    )
+    |> where(
+      [realized_contact_row, scheduled_contact_row],
+      realized_contact_row.lifecycle_state == "defined" and
+        scheduled_contact_row.starts_at <= ^reference_time and
+        (is_nil(scheduled_contact_row.ends_at) or scheduled_contact_row.ends_at > ^reference_time)
+    )
+    |> maybe_filter_joined_realized_contacts_by_mission(mission_id)
+    |> order_by([realized_contact_row, _scheduled_contact_row],
+      asc: realized_contact_row.realized_at,
+      asc: realized_contact_row.realized_contact_id
+    )
+    |> select([realized_contact_row, _scheduled_contact_row], realized_contact_row)
+    |> Repo.all()
+    |> Enum.map(&RealizedContactRow.to_domain/1)
+  end
+
   @spec due_scheduled(DateTime.t(), binary() | nil) :: [ScheduledContact.t()]
   def due_scheduled(%DateTime{} = reference_time, mission_id) do
     ScheduledContactRow

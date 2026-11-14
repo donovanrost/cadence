@@ -7,6 +7,7 @@ defmodule Cadence.Contacts.ContactLifecycle do
   alias Cadence.Contacts.ContactRuntimeConfig
   alias Cadence.Contacts.ContactSettlement
   alias Cadence.Contacts.ContactSettler
+  alias Cadence.Contacts.ContactStartFailure
   alias Cadence.Contacts.ContactStore
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
@@ -142,7 +143,11 @@ defmodule Cadence.Contacts.ContactLifecycle do
   end
 
   defp do_reconcile(mission_id, %DateTime{} = reference_time) do
-    restart_candidates = ContactStore.active_realized_to_restart(reference_time, mission_id)
+    # Running contacts whose runtime is gone, and in-window contacts that never started (ux U45:
+    # e.g. the station listener was still held by the previous pass on the same profile).
+    restart_candidates =
+      ContactStore.active_realized_to_restart(reference_time, mission_id) ++
+        ContactStore.defined_realized_to_start(reference_time, mission_id)
 
     {expired_scheduled_contact_ids, expiration_errors} =
       ContactStore.expired_scheduled(reference_time, mission_id)
@@ -431,14 +436,30 @@ defmodule Cadence.Contacts.ContactLifecycle do
   defp start_runtime_and_mark_active(%RealizedContact{} = realized_contact, metadata_patch) do
     with {:ok, %RealizedContact{} = persisted_realized_contact} <-
            ensure_persisted_realized(realized_contact),
-         {:ok, pid} <- Runtime.start_realized_contact(persisted_realized_contact),
+         {:ok, pid} <- start_runtime(persisted_realized_contact),
          {:ok, _updated_realized_contact} <-
            ContactStore.update_realized_lifecycle(
              persisted_realized_contact,
              :active,
-             metadata_patch
+             Map.merge(
+               metadata_patch,
+               ContactStartFailure.started(persisted_realized_contact, DateTime.utc_now())
+             )
            ) do
+      :ok = ContactStartFailure.announce_started(persisted_realized_contact)
       {:ok, pid}
+    end
+  end
+
+  # ux U45: a failed start is kept on the contact, so the reconcile retries it and Now shows it.
+  defp start_runtime(%RealizedContact{} = realized_contact) do
+    case Runtime.start_realized_contact(realized_contact) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, reason} ->
+        _recorded = ContactStartFailure.record(realized_contact, reason, DateTime.utc_now())
+        {:error, reason}
     end
   end
 
