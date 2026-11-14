@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
+import { decoders as d, request, type ApiResult, type Decoded, type Reader } from "@/api";
 import { healthReader, sourceReader, storages, isolationLevels, registerKinds } from "./api.ts";
 
 /**
@@ -34,16 +34,43 @@ export function fetchSourceOptions(
 
 export const runStatuses = ["queued", "running", "completed", "failed"] as const;
 export const runKinds = ["provision", "reconcile", "deprovision"] as const;
+/** api-ops L11 (C): why a run failed, a closed set; run_failed is the catch-all. */
+export const runErrorCodes = [
+  "tsdb_executor_not_configured",
+  "credentials_unavailable",
+  "worker_failed",
+  "requeued",
+  "run_failed",
+] as const;
+/**
+ * A run's error as one sentence. api-ops (C) moves it from a raw string to {code, message}; both
+ * read, so the reader can land first. The code is kept for Technical details.
+ */
+const runError: Reader<Readonly<{ code: string | null; message: string }> | null> = (
+  value,
+  path = "",
+) => {
+  if (value === undefined || value === null) return null;
+  // free-text: the old raw error string (an inspected term), shown as is until (C) ships.
+  if (typeof value === "string") return { code: null, message: value };
+  const e = d.object({
+    code: d.knownText(runErrorCodes),
+    // free-text: the server's sentence for the failure.
+    message: d.string,
+  })(value, path);
+  return { code: typeof e.code === "string" ? e.code : e.code.unrecognized, message: e.message };
+};
 const run = d.object({
   job_id: d.token,
   kind: d.known(runKinds),
   status: d.known(runStatuses),
   started_at: d.timestamp,
-  // free-text: the job's error message, shown as is.
-  error: d.optional(d.nullable(d.string)),
+  error: runError,
   actions: d.optional(d.array(d.known(["retry", "requeue"] as const), 2)),
 });
 export type SourceRun = Decoded<typeof run>;
+/** For tests: one run row. */
+export const sourceRunReader = run;
 
 const binding = d.object({
   id: d.token,

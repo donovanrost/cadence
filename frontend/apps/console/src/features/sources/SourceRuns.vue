@@ -55,7 +55,7 @@ async function act(r: SourceRun) {
       /></template>
       <template #cell-at="{ row }">{{ formatShort(new Date(row.started_at)) }}</template>
       <template #cell-error="{ row }"
-        ><span class="text-text-2">{{ row.error ?? "—" }}</span></template
+        ><span class="text-text-2">{{ row.error?.message ?? "—" }}</span></template
       >
       <template #cell-act="{ row }">
         <ApButton

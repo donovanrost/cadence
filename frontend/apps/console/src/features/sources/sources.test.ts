@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { ApiError } from "@/api";
+import { decode, type ApiError } from "@/api";
 import type { DataSource } from "./api.ts";
 import {
   access,
@@ -11,7 +11,7 @@ import {
   SHARED_LINE,
 } from "./present.ts";
 import { blankDraft, blockedReason, registerBody } from "./register.ts";
-import type { SourceDetail, SourceOptions } from "./writes.ts";
+import { sourceRunReader, type SourceDetail, type SourceOptions } from "./writes.ts";
 
 /** Fixtures: api-ops' L11 shapes with fe-setup's 8 changes (agreed 11-13). */
 const options: SourceOptions = {
@@ -160,5 +160,38 @@ describe("TSDB jobs (api-ops L11 finding 1)", () => {
     expect(sourceFailure(refused("data_source_state", { state: "customer_owned" }))).toBe(
       "This source uses your own database as is; Cadence doesn't provision it.",
     );
+  });
+});
+
+describe("run errors (api-ops L11 C)", () => {
+  const run = (error: unknown) => ({
+    job_id: "j1",
+    kind: "provision",
+    status: "failed",
+    started_at: "2026-11-14T09:48:52Z",
+    error,
+  });
+  it("reads {code, message}, the old raw string, and none", () => {
+    const read = (error: unknown) => {
+      const r = decode(sourceRunReader, run(error));
+      if (!r.ok) throw r.error;
+      return r.value.error;
+    };
+    expect(
+      read({ code: "credentials_unavailable", message: "Its credentials couldn't be read." }),
+    ).toEqual({
+      code: "credentials_unavailable",
+      message: "Its credentials couldn't be read.",
+    });
+    expect(read({ code: "new_reason", message: "Something new." })).toEqual({
+      code: "new_reason",
+      message: "Something new.",
+    });
+    expect(read("{:job_not_running, :failed}")).toEqual({
+      code: null,
+      message: "{:job_not_running, :failed}",
+    });
+    expect(read(null)).toBeNull();
+    expect(read(undefined)).toBeNull();
   });
 });
