@@ -440,6 +440,24 @@ defmodule Cadence.Observability.Metrics.Catalog do
         tag_values: &journal_tags/1
       ),
       counter(
+        "cadence.telemetry.ingress.reads.paused",
+        [:cadence, :ingress, :reads_paused],
+        :count,
+        "{pause}",
+        "Receive pauses because the bounded buffer was full (push-back transports; DECISIONS #83).",
+        ["buffer"],
+        tag_values: &backpressure_tags/1
+      ),
+      counter(
+        "cadence.telemetry.ingress.frames.dropped",
+        [:cadence, :ingress, :frames_dropped],
+        :count,
+        "{frame}",
+        "Frames dropped because the bounded buffer was full (non-push-back transports; DECISIONS #83).",
+        ["buffer"],
+        tag_values: &backpressure_tags/1
+      ),
+      counter(
         "cadence.telemetry.ingress.journal.reclaimed",
         [:cadence, :ingress_journal, :reclaim],
         :bytes,
@@ -1151,6 +1169,8 @@ defmodule Cadence.Observability.Metrics.Catalog do
       "cadence.telemetry.protocol_family" => metadata[:protocol_family]
     }
   end
+
+  defp backpressure_tags(metadata), do: %{"buffer" => to_string(metadata[:buffer] || "unknown")}
 
   defp journal_tags(metadata) do
     %{"durability" => metadata[:durability]}

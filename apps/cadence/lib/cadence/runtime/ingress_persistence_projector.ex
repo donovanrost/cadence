@@ -515,6 +515,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   defp elapsed_us(started_at),
     do: System.convert_time_unit(System.monotonic_time() - started_at, :native, :microsecond)
 
+  # A crash keeps its exception (or `{kind, reason}`) so `Observability.error_class/1` names it
+  # (e.g. `DBConnection.ConnectionError`) instead of reading a formatted string as "unknown".
   defp run_persistence(fun) when is_function(fun, 0) do
     {:ok, fun.()}
   rescue
@@ -523,14 +525,14 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
       Logger.error(Exception.format(:error, exception, stacktrace))
 
-      {:crash, Exception.format_banner(:error, exception)}
+      {:crash, exception}
   catch
     kind, reason ->
       stacktrace = __STACKTRACE__
 
       Logger.error(Exception.format(kind, reason, stacktrace))
 
-      {:crash, Exception.format_banner(kind, reason)}
+      {:crash, {kind, reason}}
   end
 
   defp dequeue_persist_batch(state) do
