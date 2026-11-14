@@ -9,20 +9,20 @@ the tree moves.
 ## Status at a glance
 | Row | Legacy | Console replacement | Status |
 | --- | --- | --- | --- |
-| L1 requirements | `/ops/requirements…` | `setup.contact-planning` (+ `.requirement`) | after qa's live check (P4 re-test of b931638f2); delete with L2/L3 |
-| L2 templates | `/ops/requirement-templates` | `setup.contact-planning.template` | after qa's live check; delete with L1/L3 |
-| L3 fleet policy | `/ops/planning/policy` | `setup.contact-planning?tab=policy` | after qa's live check; delete with L1/L2 |
-| L4 mission create | `/missions`, `/missions/new` | `org.missions`, `org.missions.new` | after qa's live check |
-| L5 sign-in, invitations, no-org | POST `/sign-in`, POST `/invitations/:token` (+ dead modules) | console auth screens | deletable now (GET 302s stay) |
-| L6 admin mode | `/admin-mode` | account menu admin mode | deletable now |
-| L7 platform admin | `/admin/**` | `/console/admin/**` | after qa's live check (L7 migration) |
+| L1 requirements | `/ops/requirements…` | `setup.contact-planning` (+ `.requirement`) | **done** (batch 2, restart (a) 11-14 14:28Z: redirects f19f81649, pages 10343f337) |
+| L2 templates | `/ops/requirement-templates` | `setup.contact-planning.template` | **done** with L1 (batch 2) |
+| L3 fleet policy | `/ops/planning/policy` | `setup.contact-planning?tab=policy` | **done** with L1 (batch 2) |
+| L4 mission create | `/missions`, `/missions/new` | `org.missions`, `org.missions.new` | **done** (batch 2, restart (a) 11-14 14:28Z: redirects f2e4f172d, pages f68df5163, host harness 738f24e9e); its federated surfaces wait for fe-ops' L1–L4 federated batch |
+| L5 sign-in, invitations, no-org | POST `/sign-in`, POST `/invitations/:token` (+ dead modules) | console auth screens | **done** (batch 1, live 11-14 01:46Z, 12018de45; GET 302s stay) |
+| L6 admin mode | `/admin-mode` | account menu admin mode | **done** (batch 1, 5320cb7a3; host account menu follow-up 9ece4eed3) |
+| L7 platform admin | `/admin/**` | `/console/admin/**` | **done** (batch 3, restart (a) 11-14 14:28Z: redirects 0c6ed155c, pages b2cffbd10, federated surfaces 7227cc524, frontend 22d048048) |
 | L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a done (live 11-14 01:46Z, c21fad95a); federated batch done (restart 1, 11-14 08:01Z, 4cb04734d); L8b done (live 11-14 09:20Z, 3dbb243b0; Settings live a8649a04f, member path afd1201ca); L8c done (step 1 D18 `refresh`; step 2 live 11-14 15:54Z, fe-setup/l8c-r5, D18 latency flat); **L8 done** except L8c step 3, domain's later migration dropping the decision events table |
-| L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | blocked: no console API yet |
-| L11 data sources | `/ops/data-sources/**` | `setup.data-sources[/:sourceId]` | after qa's live check (endpoints 2e3c8c5ab) |
-| L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | blocked: L12 endpoints not built (api-ops) |
-| L13 provider accounts | `/provider-accounts…` | `org.provider-accounts[/:accountId]` | blocked: grant/revoke/credential endpoints not built |
+| L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | console live (be59d4f32, 6e289aa35); deletion waits on a re-inventory and qa's live check, then the director's go |
+| L11 data sources | `/ops/data-sources/**` | `setup.data-sources[/:sourceId]` | **done** (batch 3, restart (a) 11-14 14:28Z: redirects 70d25b5db, page 4d70c076d) |
+| L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | console live (2e899643c on api-ops 4f81a1d0d); deletion waits on qa's live check, then the director's go |
+| L13 provider accounts | `/provider-accounts…` | `org.provider-accounts[/:accountId]` | console live (b90f5401a on api-ops 74ad20816); deletion waits on qa's live check, then the director's go |
 | L19 spacecraft apps | `/spacecraft/:sid/applications…` | `setup.spacecraft.app` | blocked: list read not built; surfaces emit legacy hrefs |
-| L21 accept as signed-in | `/notifications` (accept event) | `account` invitations | deletable now (the bell stays) |
+| L21 accept as signed-in | `/notifications` (accept event) | `account` invitations | **done** (batch 1, 163cd0dfa; host page frontend 09974fc56; the bell stays) |
 
 ## Cross-cutting (every batch)
 - **Shared files: trim, never delete.**
@@ -540,7 +540,7 @@ Both need a console target (`setup.changes`). **Unblocks:** api lands `plans/act
 - list and `registration/new` → `setup.data-sources`
 - `:id[/settings]` → `setup.data-sources/:sourceId`
 
-## L12 · L13 providers (blocked: api-ops' endpoints, plans/providers.md)
+## L12 · L13 providers (console live 11-13; deletion waits on qa's live check)
 **L12**
 - **Routes:** R:384, :388, :392.
 - **Would delete:** `mission_provider_page.ex`, `reads/application_surfaces/comms_providers.ex` and
@@ -575,7 +575,7 @@ Both need a console target (`setup.changes`). **Unblocks:** api lands `plans/act
   - Trim `organization_admin_test.exs`, `host_page_live_test.exs` and `application_host_bridge_test.exs`.
 - **Redirects:** list and `new` → `org.provider-accounts`; `:id` → `org.provider-accounts/:accountId`.
 
-**Blocked:** deleting either now loses the only UI for:
+**Was blocked** (until 11-13; L12 2e899643c and L13 b90f5401a are live): deleting either before then lost the only UI for:
 - L12: create, validate, sync and archive.
 - L13: grant, revoke and credential revoke.
 
