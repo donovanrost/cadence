@@ -60,7 +60,8 @@ defmodule Cadence.Control.Commanding.CommandDrafts do
   defp revision(n) when is_integer(n) and n > 0, do: :ok
 
   defp revision(_other),
-    do: {:error, {:invalid_params, %{"expected_revision" => "must be null or a positive integer"}}}
+    do:
+      {:error, {:invalid_params, %{"expected_revision" => "must be null or a positive integer"}}}
 
   defp shape(%{"schema_version" => 1, "stack" => stack} = document) when is_list(stack) do
     cond do
@@ -103,7 +104,8 @@ defmodule Cadence.Control.Commanding.CommandDrafts do
       revision_saved: row.catalog_revision_id,
       revision_now: Map.get(current, :revision_id),
       # Unknown (no active catalog) reads as nothing known missing; Compose's catalog says why.
-      missing_command_ids: if(known, do: Enum.reject(stacked, &MapSet.member?(known, &1)), else: [])
+      missing_command_ids:
+        if(known, do: Enum.reject(stacked, &MapSet.member?(known, &1)), else: [])
     }
   end
 
