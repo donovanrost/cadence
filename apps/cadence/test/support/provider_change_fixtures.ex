@@ -11,7 +11,8 @@ defmodule Cadence.ProviderChangeFixtures do
 
   @doc """
   A booked pass with a provider reservation. The pass starts a day from now by default (L14: a
-  change for a pass that has ended can't be decided); `starts_at:` pins it.
+  change for a pass that has ended can't be decided); `starts_at:` pins it, and `baseline:` (a map,
+  or a function of the reservation) patches the provider's first answer.
   """
   def setup_contact(policy_document \\ %{}, opts \\ []) do
     suffix = System.unique_integer([:positive])
@@ -100,7 +101,7 @@ defmodule Cadence.ProviderChangeFixtures do
         }
       })
 
-    baseline = response(reservation, 1, %{})
+    baseline = response(reservation, 1, baseline_patch(Keyword.get(opts, :baseline), reservation))
 
     {:ok, reservation} =
       ProviderReservations.apply_provider_status(
@@ -255,4 +256,8 @@ defmodule Cadence.ProviderChangeFixtures do
     |> DateTime.truncate(:second)
     |> Map.put(:microsecond, {0, 6})
   end
+
+  defp baseline_patch(nil, _reservation), do: %{}
+  defp baseline_patch(patch, reservation) when is_function(patch, 1), do: patch.(reservation)
+  defp baseline_patch(%{} = patch, _reservation), do: patch
 end

@@ -40,6 +40,15 @@ defmodule Cadence.Contacts.ProviderChangeApprovalsTest do
     context = pending_change()
     change = only_change(context)
 
+    # Pending approval: the reservation keeps the window Cadence accepted.
+    pending =
+      Repo.get_by!(ProviderReservationRow,
+        provider_reservation_id: change.provider_reservation_id
+      )
+
+    {:ok, baseline_starts_at, _} = DateTime.from_iso8601(context.baseline["starts_at"])
+    assert DateTime.compare(pending.starts_at, baseline_starts_at) == :eq
+
     assert {:ok, result} =
              ProviderChangeApprovals.approve(
                context.admin_scope,
@@ -47,6 +56,17 @@ defmodule Cadence.Contacts.ProviderChangeApprovalsTest do
                change.proposal_hash,
                "Shift remains inside the flight plan"
              )
+
+    # Approved: the reservation's window follows, as the scheduled contact's does (occupancy and
+    # the pass reads use it).
+    moved =
+      Repo.get_by!(ProviderReservationRow,
+        provider_reservation_id: change.provider_reservation_id
+      )
+
+    assert DateTime.compare(moved.starts_at, result.scheduled_contact.starts_at) == :eq
+    assert DateTime.compare(moved.ends_at, result.scheduled_contact.ends_at) == :eq
+    assert DateTime.compare(moved.starts_at, baseline_starts_at) == :gt
 
     assert result.change.lifecycle_state == :approved
     assert result.provider_change_approval.decision == :approved

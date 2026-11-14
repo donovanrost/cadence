@@ -1318,7 +1318,7 @@ defmodule Cadence.Contacts.ProviderReservations do
     ArgumentError -> {:error, {:malformed_provider_response, :delivery_state}}
   end
 
-  defp delivery_descriptor(%{"delivery_descriptor" => descriptor}, reservation)
+  defp delivery_descriptor(%{"delivery_descriptor" => descriptor} = response, reservation)
        when is_map(descriptor) do
     descriptor = Validation.sanitize(descriptor)
 
@@ -1330,7 +1330,7 @@ defmodule Cadence.Contacts.ProviderReservations do
              reservation.transport_version
            ),
          :ok <- validate_transport_binding(transport, reservation),
-         :ok <- validate_descriptor_binding(descriptor, transport, reservation),
+         :ok <- validate_descriptor_binding(descriptor, transport, reservation, response),
          document = immutable_descriptor_document(descriptor),
          :ok <- validate_immutable_descriptor(document, reservation) do
       {:ok, document}
@@ -1360,7 +1360,7 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
-  defp validate_descriptor_binding(descriptor, transport, reservation) do
+  defp validate_descriptor_binding(descriptor, transport, reservation, response) do
     delivery_profile =
       get_in(transport.provider_configuration_snapshot, ["delivery_profile"]) || %{}
 
@@ -1377,12 +1377,23 @@ defmodule Cadence.Contacts.ProviderReservations do
       framing["family"] == diagnostics["framing_family"],
       framing["frame_bytes"] == diagnostics["frame_bytes"],
       reservation.provider_spacecraft_ref in (descriptor["allowed_source_refs"] || []),
-      activation_covers?(activation_window, reservation)
+      activation_covers?(activation_window, pass_window(response, reservation))
     ]
 
     if Enum.all?(checks),
       do: :ok,
       else: {:error, :delivery_descriptor_conflicts_with_transport}
+  end
+
+  # The delivery covers the pass the same answer describes (a provider that moves a pass moves its
+  # delivery with it), not the window Cadence holds from before that answer.
+  defp pass_window(response, reservation) do
+    with {:ok, starts_at, _offset} <- DateTime.from_iso8601(response["starts_at"] || ""),
+         {:ok, ends_at, _offset} <- DateTime.from_iso8601(response["ends_at"] || "") do
+      %{starts_at: starts_at, ends_at: ends_at}
+    else
+      _no_window -> %{starts_at: reservation.starts_at, ends_at: reservation.ends_at}
+    end
   end
 
   defp activation_covers?(window, reservation) do
@@ -1403,10 +1414,12 @@ defmodule Cadence.Contacts.ProviderReservations do
        when existing == %{},
        do: validate_document(document, :delivery_descriptor_document)
 
-  defp validate_immutable_descriptor(document, %{delivery_descriptor_document: document}), do: :ok
-
-  defp validate_immutable_descriptor(_document, _reservation),
-    do: {:error, :delivery_descriptor_changed}
+  # The activation window is the pass's timing, so it moves with the pass; the rest is fixed.
+  defp validate_immutable_descriptor(document, %{delivery_descriptor_document: existing}) do
+    if Map.drop(document, ["activation_window"]) == Map.drop(existing, ["activation_window"]),
+      do: :ok,
+      else: {:error, :delivery_descriptor_changed}
+  end
 
   defp persist_configuration_failure(organization_id, mission_id, reservation_id, reason) do
     error_document = %{
