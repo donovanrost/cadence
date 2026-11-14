@@ -1121,6 +1121,16 @@ data with an SCID or address Cadence didn't expect, and that's the case that mat
   window, change the title or raise priority. **Exception:** if the pass's own connection has gone quiet (no frames
   for domain's threshold) when the second one is refused, it counts as a normal refusal and opens the item. A
   half-open old connection can block the provider's real reconnect, and that's telemetry being turned away.
+  - **Quiet** (domain, 11-14): no ingested read for 30 s (a profile can override it) since the later of connect
+    and the last read. Silence during our own backpressure (#83) doesn't count. An uplink-only connection has no
+    reads to judge, so quiet doesn't apply to it, and a second connection there is counted only (domain may
+    propose a write-side signal later).
+  - A quiet own connection ranks the item **P1**, as not connected does (api): telemetry may be turned away while
+    `connected` still reads true. The tone stays caution.
+  - Reason second_connection: "The last one was a second connection for this pass, and Cadence keeps the first."
+  - Pass-state sentence when quiet (in place of "This pass has its own connection."): "This pass's own connection
+    has sent nothing since 03:14Z. If the refused connection was the provider reconnecting, its telemetry isn't
+    arriving." It needs `own_quiet_since` (timestamp | null) on the item.
 - **Build calls** (fe-ops a9dbf9813):
   - **Tone stays caution in both states** (changed). Priority isn't status: not connected raises it to P1, but
     nothing is known to be lost, so it's not crit (U20; as U45's not_started is P1 and still ▲). The
