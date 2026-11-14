@@ -3,7 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
 import { failureOutcome, SchemaForm, type FormValues } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApEmptyState, ApField, ApPanel, ApRemote } from "@/ui";
+import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote } from "@/ui";
 import PolicyDecision from "./PolicyDecision.vue";
 import {
   buildDocument,
@@ -20,7 +20,6 @@ const props = defineProps<{ missionId: MissionId }>();
 const { state, refetch } = useRemoteQuery(() => props.missionId, fetchPolicy);
 const values = ref<FormValues>({});
 const errors = ref<Readonly<Record<string, string>>>({});
-const reason = ref("");
 const busy = ref(false);
 const note = ref<{ tone: "nominal" | "crit"; text: string } | null>(null);
 watch(
@@ -45,7 +44,6 @@ async function save() {
     const result = await savePolicy(props.missionId, {
       document: built.document,
       expected_version: policy.version,
-      reason: reason.value.trim(),
     });
     note.value = result.ok
       ? {
@@ -103,7 +101,7 @@ async function save() {
         :title="policy.version === null ? 'Create policy' : 'Save a new version'"
       >
         <div class="flex flex-col gap-3">
-          <ApField v-model="reason" label="Why" placeholder="Recorded with the version" />
+          <!-- ux U20: no Why field until the server stores it (api is adding it); then it returns optional. -->
           <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
           <div>
             <ApButton variant="primary" :disabled="busy" disabled-reason="Saving…" @click="save">{{

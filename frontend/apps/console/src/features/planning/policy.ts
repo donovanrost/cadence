@@ -61,10 +61,9 @@ export function fetchPolicy(missionId: MissionId, signal: AbortSignal): Promise<
 
 export function savePolicy(
   missionId: MissionId,
-  body: Readonly<{ document: unknown; expected_version: number | null; reason: string }>,
+  body: Readonly<{ document: unknown; expected_version: number | null }>,
 ) {
-  const payload =
-    body.expected_version === null ? { document: body.document, reason: body.reason } : body;
+  const payload = body.expected_version === null ? { document: body.document } : body;
   return request(
     base(missionId),
     object({ version: integer, state: decoders.known(policyVersionStates) }),
