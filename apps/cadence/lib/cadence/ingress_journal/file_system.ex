@@ -282,6 +282,9 @@ defmodule Cadence.IngressJournal.FileSystem do
                0,
                []
              ) do
+          {:error, reason} ->
+            {:error, reason}
+
           {_entries, _valid_bytes, true} ->
             {:error, {:torn_tail, path}}
 
@@ -1286,27 +1289,9 @@ defmodule Cadence.IngressJournal.FileSystem do
          {:ok, file_size} <- :file.position(file, :eof) do
       result =
         try do
-          {entries, valid_bytes, truncated?} =
-            parse_records(
-              file,
-              file_size,
-              path,
-              stream_id,
-              expected_offset,
-              expected_sequence,
-              0,
-              []
-            )
-
-          if truncated? do
-            with {:ok, _position} <- :file.position(file, valid_bytes),
-                 :ok <- :file.truncate(file),
-                 :ok <- :file.sync(file) do
-              {:ok, entries, valid_bytes, true}
-            end
-          else
-            {:ok, entries, valid_bytes, false}
-          end
+          file
+          |> parse_records(file_size, path, stream_id, expected_offset, expected_sequence, 0, [])
+          |> settle_parsed_segment(file)
         after
           :file.close(file)
         end
@@ -1314,6 +1299,19 @@ defmodule Cadence.IngressJournal.FileSystem do
       result
     end
   end
+
+  defp settle_parsed_segment({:error, reason}, _file), do: {:error, reason}
+
+  defp settle_parsed_segment({entries, valid_bytes, true}, file) do
+    with {:ok, _position} <- :file.position(file, valid_bytes),
+         :ok <- :file.truncate(file),
+         :ok <- :file.sync(file) do
+      {:ok, entries, valid_bytes, true}
+    end
+  end
+
+  defp settle_parsed_segment({entries, valid_bytes, false}, _file),
+    do: {:ok, entries, valid_bytes, false}
 
   defp parse_records(
          _file,
@@ -1408,8 +1406,8 @@ defmodule Cadence.IngressJournal.FileSystem do
     with {:ok, body} <- :file.pread(file, body_offset, record_body_bytes),
          <<metadata_binary::binary-size(^metadata_length), payload::binary-size(^payload_length)>> <-
            body,
-         {:ok, metadata} <- safe_metadata(metadata_binary),
          true <- :crypto.hash(:sha256, payload) == header.checksum,
+         {:ok, metadata} <- record_metadata(metadata_binary, context),
          {:ok, receipt_time} <- DateTime.from_unix(header.receipt_unix_us, :microsecond) do
       entry = %Entry{
         stream_id: context.stream_id,
@@ -1435,11 +1433,44 @@ defmodule Cadence.IngressJournal.FileSystem do
         [entry | context.entries]
       )
     else
-      _invalid -> invalid_record(context)
+      {:error, {:ingress_journal_metadata_undecodable, _path, _offset}} = undecodable ->
+        undecodable
+
+      _invalid ->
+        invalid_record(context)
     end
   end
 
   defp invalid_record(context), do: {Enum.reverse(context.entries), context.file_offset, true}
+
+  # A complete record whose payload checksum matches is intact: if its metadata won't decode,
+  # that is the VM (an atom whose module isn't loaded yet), not a torn write. Load the app's
+  # modules and retry once (as Terms.decode does, 98c8b5a6); if it still fails, recovery stops
+  # WITHOUT truncating, so the journal refuses to open and keeps every byte (api-ops, 11-14).
+  defp record_metadata(binary, context) do
+    case safe_metadata(binary) do
+      {:ok, metadata} ->
+        {:ok, metadata}
+
+      {:error, :invalid_metadata} ->
+        load_application_modules()
+
+        case safe_metadata(binary) do
+          {:ok, metadata} ->
+            {:ok, metadata}
+
+          {:error, :invalid_metadata} ->
+            {:error, {:ingress_journal_metadata_undecodable, context.path, context.file_offset}}
+        end
+    end
+  end
+
+  defp load_application_modules do
+    case :application.get_key(:cadence, :modules) do
+      {:ok, modules} -> Enum.each(modules, &Code.ensure_loaded/1)
+      :undefined -> :ok
+    end
+  end
 
   defp safe_metadata(binary) do
     case :erlang.binary_to_term(binary, [:safe]) do
