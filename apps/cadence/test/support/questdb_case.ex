@@ -10,7 +10,8 @@ defmodule Cadence.TestSupport.QuestDBCase do
       @moduletag :questdb
       setup :setup_questdb
 
-  `setup_questdb/1` applies the QuestDB migrations once per run, points `telemetry_storage` and
+  `setup_questdb/1` applies the QuestDB migrations once per run, points telemetry writes (through
+  the test writer's delegate: the runtime's storage policy is fixed at boot) and
   `telemetry_history_store` at the QuestDB modules (restored on exit; Postgres stays on the
   sandbox), and gives `questdb_since`: QuestDB has no transactions or sandbox, so a test isolates
   with its own unique ids and reads only rows written since it started (a local container keeps
@@ -20,6 +21,7 @@ defmodule Cadence.TestSupport.QuestDBCase do
 
   import ExUnit.Callbacks, only: [on_exit: 1]
 
+  alias Cadence.OutageTelemetryWriter
   alias Cadence.Telemetry.Storage.QuestDB.{RestClient, SchemaMigrator, SQL}
 
   @endpoint_env "CADENCE_QUESTDB_HTTP_ENDPOINT"
@@ -35,12 +37,11 @@ defmodule Cadence.TestSupport.QuestDBCase do
 
     storage = Application.get_env(:cadence, :telemetry_storage)
     history = Application.get_env(:cadence, :telemetry_history_store)
+    writer = OutageTelemetryWriter.delegate()
 
-    Application.put_env(
-      :cadence,
-      :telemetry_storage,
-      Keyword.put(storage, :writer, Cadence.Telemetry.Storage.Writers.QuestDB)
-    )
+    # The runtime took its storage policy at boot (the test writer), so writes are switched
+    # through that writer's delegate; the history store is read per call, from the env.
+    OutageTelemetryWriter.delegate(Cadence.Telemetry.Storage.Writers.QuestDB)
 
     Application.put_env(:cadence, :telemetry_history_store,
       module: Cadence.Telemetry.HistoryStore.QuestDB,
@@ -49,7 +50,7 @@ defmodule Cadence.TestSupport.QuestDBCase do
     )
 
     on_exit(fn ->
-      Application.put_env(:cadence, :telemetry_storage, storage)
+      OutageTelemetryWriter.delegate(writer)
       Application.put_env(:cadence, :telemetry_history_store, history)
     end)
 
