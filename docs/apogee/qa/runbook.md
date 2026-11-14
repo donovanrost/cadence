@@ -271,7 +271,7 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 | 7 | api-ops | ingest fix / journal-matrix worktree (`scratchpad/ingest-wt`) |
 | 9 | api | api's side worktree for slot work (`…/cadence/api-held`) |
 | 12 | domain | domain's evidence runs (archive fix, #83) |
-| 13 | fe-setup | L8b worktree (`fe-setup-legacy-l8a`, branch `fe-setup/legacy-l8b`) |
+| 13 | fe-setup | L10/L12/L13 worktree (`fe-setup-l10-13`; re-labelled 11-14 from the L8b worktree, lead) |
 | 18 | fe-ops | L8 worktree |
 | 20 | api-ops | develop ports (L4, ingest fix) |
 | 21 | domain | domain's develop ports (verifier fix, gate, contact start, archive fix) |
