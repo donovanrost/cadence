@@ -440,7 +440,8 @@ coalescing. That's new work, not a port.
 - **Federation smoke:** devops moved it to `commands` (9f0927b4c). It's cherry-picked together with the
   federated batch, not merged separately (devops 11-14).
 - **Gate:** L8a goes to the director once qa confirms New live.
-- Still open: the storybook `dashboard-directory-study/` is ux's call.
+- **Storybook `dashboard-directory-study/`:** ux: delete it with the federated batch (the pre-Apogee directory
+  study; Dashboards.md › Directory replaces it).
 
 ## L10 activation approvals (blocked: no console API)
 **Routes:** R:563.
