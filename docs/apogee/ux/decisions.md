@@ -936,6 +936,35 @@ configuration failure P3. The amendments to fe-ops' drafts:
   - Placement (lead): the line and the named release sit on Contacts' selected-pass panel and Uplink's contact
     view. fe-ops builds it after domain's gate, on an api endpoint. Domain: nothing live relies on releasing into
     unscheduled contacts, and there's no start-time confirmation or request opt-in.
+- **Named release words** (fe-ops' drafts for a77cd4d40, ruled 11-13). The noun is **request**, as in the request
+  log and CommandFlow; "command group" is the model's word. On Contacts, plain `Release` already cancels a booking,
+  so these buttons name what they release.
+  - The callout button is `Release commands…` (secondary; the sheet is the danger step). The sheet's body ends
+    "Release 3 requests to it anyway?", and its action is `Release 3 requests` (danger), counted.
+  - A hand-started contact reads "contact", not "pass", and has no AOS or LOS: "Not released: the contact ended at
+    03:19Z." (without a time, "the contact has ended"), and "the contact hasn't started" if ever needed. A booked
+    pass keeps (b)'s AOS/LOS forms.
+  - Clauses after "Not released: " or "then stopped: ". Name the spacecraft where the screen has it (U25):
+    - not_found: "the request wasn't found"
+    - not_armed: "the request isn't queued for a contact"
+    - not_target_spacecraft: "it has no uplinks for EARENDIL-001"
+    - nothing_to_release: "its uplinks to EARENDIL-001 have already gone or ended"
+    - not_next: "an earlier queued uplink to EARENDIL-001 has to go first" (no "lane")
+    - earlier_command_failed: "an earlier uplink in it failed"
+    - command_release_refused: "the uplink transport refused it"
+    - release_basis_changed: "the configuration it was approved against has changed"
+    - unknown: the server's message, without its final stop.
+  - Outcome after the sheet: "Released 3 requests." when all go. Otherwise one line per request: "This request:
+    Released 1 uplink, then stopped: an earlier uplink in it failed. 2 uplinks still queued." Other requests are
+    named the way the request list names them. They read "Another request:" only when the console has no name.
+  - Request log (its column has the time): "Mira K. released 2 uplinks into a contact that wasn't a booked pass ·
+    then stopped: <clause> · 1 uplink still queued". For a booked pass: "Mira K. released 2 uplinks into the SVA
+    03:10Z pass" (without a label, "into a booked pass"), not "by name". Audit keeps the sentence above, with the
+    time.
+  - Uplink C3: "SVA pass · Command window opens at AOS 03:10Z." sits above the pipeline, and a member's refusal sits
+    under its target row.
+  - Whole-request refusals: "Not released: the contact has ended." No access: "Operators with mission access can
+    release commands."
 
 ### U47 · Now source `ingress_backpressure` (DECISIONS #83 follow-up; api-ops proposal) (api-ops / fe-ops)
 Titles lead with the spacecraft and pass, as in U45. Say "buffer", not "journal", in visible text; the journal,
