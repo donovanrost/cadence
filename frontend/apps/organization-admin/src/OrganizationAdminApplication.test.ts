@@ -269,25 +269,6 @@ describe("Organization Admin federated adapter", () => {
       } else if (contract.surfaceId === "notifications") {
         expect(wrapper.get("#notifications-destination").attributes("href")).toBe("/notifications");
         expect(wrapper.find("#notifications-panel").exists()).toBe(false);
-      } else if (
-        [
-          "admin_home",
-          "admin_organizations",
-          "admin_organization_new",
-          "admin_organization_show",
-          "admin_organization_invite",
-        ].includes(contract.surfaceId)
-      ) {
-        const destinations: Record<string, [string, string]> = {
-          admin_home: ["platform-overview", "/admin"],
-          admin_organizations: ["organization-directory", "/admin/organizations"],
-          admin_organization_new: ["organization-create", "/admin/organizations/new"],
-          admin_organization_show: ["organization-detail", "/admin/organizations"],
-          admin_organization_invite: ["organization-invite", "/admin/organizations"],
-        };
-        const [id, href] = required(destinations[contract.surfaceId]);
-        expect(wrapper.get(`#${id}-destination a`).attributes("href")).toBe(href);
-        expect(wrapper.find("#org-form").exists()).toBe(false);
       } else {
         expect(wrapper.find(`[data-test-legacy-renderer="${contract.component}"]`).exists()).toBe(
           true,
@@ -417,27 +398,30 @@ describe("Organization Admin federated adapter", () => {
     },
   );
 
+  // L7: the platform-admin surfaces are gone; the legacy notifications surface carries the
+  // generic renderer's action delivery.
   it("rebinds generic action delivery when the adapter context changes", async () => {
     const surface = required(
-      manifest.surfaces.find(({ surfaceId }) => surfaceId === "admin_organization_invite"),
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "notifications"),
     );
     const { bridge: query } = queryBridgeMock();
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
     const props = propsFor(surface, query);
+    props.context = { ...context, scope: "user", organizationId: null, userId: "user-1" };
     props.bridge.execute = execute;
     const wrapper = mount(OrganizationAdminApplication, {
       props,
       global: {
         stubs: {
-          OrganizationInviteDestination: {
+          NotificationsDestination: {
             template:
-              '<button id="context-action" @click="$emit(\'validate\', { invite: {} })">Validate</button>',
+              "<button id=\"context-action\" @click=\"$emit('mark-read', { notification_id: 'n-1' })\">Read</button>",
           },
         },
       },
     });
     await flushPromises();
-    const nextContext = { ...context, organizationId: "org-2" };
+    const nextContext = { ...props.context, actor: { ...context.actor, displayName: "Other" } };
     await wrapper.setProps({ context: nextContext });
     await flushPromises();
     await wrapper.get("#context-action").trigger("click");
@@ -448,7 +432,7 @@ describe("Organization Admin federated adapter", () => {
 
   it("honors same-origin navigation receipts without issuing a redundant query", async () => {
     const surface = required(
-      manifest.surfaces.find(({ surfaceId }) => surfaceId === "admin_organization_show"),
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "notifications"),
     );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
@@ -458,14 +442,15 @@ describe("Organization Admin federated adapter", () => {
       result: { navigation: { href: "/session/organization" } },
     });
     const props = propsFor(surface, query);
+    props.context = { ...context, scope: "user", organizationId: null, userId: "user-1" };
     props.bridge.execute = execute;
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const wrapper = mount(OrganizationAdminApplication, {
       props,
       global: {
         stubs: {
-          OrganizationDetailDestination: {
-            template: `<button id="issue" @click="$emit('issue-service-identity', { service_identity: { display_name: 'Relay', service_identity_id: 'svc-1' } })" />`,
+          NotificationsDestination: {
+            template: `<button id="issue" @click="$emit('accept-invitation', { invitation_id: 'inv-1' })" />`,
           },
         },
       },
@@ -481,7 +466,7 @@ describe("Organization Admin federated adapter", () => {
 
   it("shows rejection and keeps the newest overlapping action state", async () => {
     const surface = required(
-      manifest.surfaces.find(({ surfaceId }) => surfaceId === "admin_runtime"),
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "notifications"),
     );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
@@ -489,13 +474,14 @@ describe("Organization Admin federated adapter", () => {
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
     executeMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const props = propsFor(surface, query);
+    props.context = { ...context, scope: "user", organizationId: null, userId: "user-1" };
     props.bridge.execute = execute;
     const wrapper = mount(OrganizationAdminApplication, {
       props,
       global: {
         stubs: {
-          AdminRuntime: {
-            template: `<button id="refresh" @click="$emit('refresh')" />`,
+          NotificationsDestination: {
+            template: `<button id="refresh" @click="$emit('mark-read', { notification_id: 'n-1' })" />`,
           },
         },
       },
@@ -526,11 +512,16 @@ describe("Organization Admin federated adapter", () => {
     const { bridge: rejectedExecute, mock: rejectedExecuteMock } = actionBridgeMock();
     rejectedExecuteMock.mockRejectedValue(new Error("forbidden"));
     const rejectedProps = propsFor(surface, query);
+    rejectedProps.context = props.context;
     rejectedProps.bridge.execute = rejectedExecute;
     const rejected = mount(OrganizationAdminApplication, {
       props: rejectedProps,
       global: {
-        stubs: { AdminRuntime: { template: `<button id="refresh" @click="$emit('refresh')" />` } },
+        stubs: {
+          NotificationsDestination: {
+            template: `<button id="refresh" @click="$emit('mark-read', { notification_id: 'n-1' })" />`,
+          },
+        },
       },
     });
     await flushPromises();

@@ -29,14 +29,6 @@ function normalizeHostRoute(route: CatalogRoute) {
           administrationPage: route.administrationPage,
         };
       break;
-    case "platform_administration":
-      if (route.administrationPage)
-        return {
-          ...route,
-          kind: "platform_administration" as const,
-          administrationPage: route.administrationPage,
-        };
-      break;
     case "organization_module":
       if (route.contribution)
         return { ...route, kind: "organization_module" as const, contribution: route.contribution };
@@ -61,8 +53,6 @@ function normalizeHostRoute(route: CatalogRoute) {
       return { ...route, kind: "settings" as const };
     case "activation_approvals":
       return { ...route, kind: "activation_approvals" as const };
-    case "administration_diagnostics":
-      return { ...route, kind: "administration_diagnostics" as const };
   }
   return { ...route, kind: "unavailable" as const };
 }

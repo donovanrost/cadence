@@ -14,17 +14,6 @@ export function navigation(
     active: context.nav_item === key,
   });
   if (!mission || !context.mission) {
-    if (context.nav_context === "admin")
-      return [
-        item("admin_dashboard", "Dashboard", "/admin", "hero-chart-bar-square"),
-        item(
-          "admin_organizations",
-          "Organizations",
-          "/admin/organizations",
-          "hero-building-office",
-        ),
-        item("admin_runtime", "Runtime", "/admin/runtime", "hero-signal"),
-      ];
     return [
       item("organization_home", "Home", "/", "hero-home"),
       item("missions", "Missions", "/missions", "hero-rocket-launch"),

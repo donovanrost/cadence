@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./exploration": "./src/exploration.ts",
-    ".": "./src/index.ts"
+    "./exploration": "./src/exploration.ts"
   },
   "scripts": {
     "test": "vp test --run",

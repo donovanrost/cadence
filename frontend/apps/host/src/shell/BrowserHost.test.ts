@@ -70,7 +70,6 @@ import { createHostRouter, hostRoute, shellForRoute } from "./host-navigation";
 import routes from "../routes.json";
 import { databaseIndexFixture } from "../catalog/features/databases/fixtures.test-support";
 import { artifactFixture } from "../catalog/features/artifacts/fixtures.test-support";
-import { diagnosticsFixture } from "../../../../modules/dashboards-and-exploration/src/features/runtime-diagnostics/fixtures.test-support";
 import { monitorFixture } from "../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
 import { workspaceFixture as commandWorkspaceFixture } from "../../../../modules/commanding/src/features/workspace/fixtures.test-support";
 import { readMonitorQuery } from "../../../../modules/commanding/src/features/mission-commands/monitor-query";
@@ -123,30 +122,6 @@ function requestedPath(index: number): string {
   const path = required(transport.requests[index]).payload.path;
   if (typeof path !== "string") throw new Error("Expected a host request path");
   return path;
-}
-function diagnosticsSnapshot(path: string) {
-  const data = diagnosticsFixture();
-  for (const [key, value] of new URL(path, "https://cadence.test").searchParams)
-    if (
-      key === "dashboard_id" ||
-      key === "mission_id" ||
-      key === "boundary" ||
-      key === "context_reason" ||
-      key === "replay_run_id" ||
-      key === "affected_placement_id"
-    )
-      data.filters.values[key] = value;
-  return {
-    ...snapshot(path),
-    diagnostics: [
-      {
-        id: "dashboards.runtime-diagnostics",
-        version: 1,
-        status: "ready",
-        data,
-      },
-    ],
-  };
 }
 let wrapper: VueWrapper | undefined;
 const view = () => required(wrapper);
@@ -983,45 +958,6 @@ test("a scheduled spacecraft search cannot redirect back while another page is a
   }
 });
 
-test("administration diagnostics is host-owned and filters/refresh use authorized host navigation", async () => {
-  const app = await start();
-  await click("/admin/runtime");
-  await reply(0, diagnosticsSnapshot("/admin/runtime"));
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  expect(app.find("#administration-diagnostics-page").exists()).toBe(true);
-  expect(app.find("#admin-runtime-decisions-empty").exists()).toBe(true);
-  expect(app.findAll("h1")).toHaveLength(1);
-  await app.get("#admin-runtime-refresh").trigger("click");
-  expect(required(transport.requests[1]).payload).toEqual({ path: "/admin/runtime" });
-  await reply(1, diagnosticsSnapshot("/admin/runtime"));
-  const filter = app.get<HTMLInputElement>("#runtime_decision_filters_dashboard_id");
-  filter.element.focus();
-  await filter.setValue("dashboard-a");
-  await flushHostUpdates();
-  expect(new URL(requestedPath(2), "https://cadence.test").searchParams.get("dashboard_id")).toBe(
-    "dashboard-a",
-  );
-  await reply(2, diagnosticsSnapshot(requestedPath(2)));
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  expect(app.get("#runtime_decision_filters_dashboard_id").element).toBe(filter.element);
-  expect(document.activeElement).toBe(filter.element);
-  expect(filter.element.value).toBe("dashboard-a");
-});
-
-test("a late diagnostics refresh cannot replace a newer navigation or report its stale failure", async () => {
-  const app = await start();
-  await click("/admin/runtime");
-  await reply(0, diagnosticsSnapshot("/admin/runtime"));
-  await app.get("#admin-runtime-refresh").trigger("click");
-  await click("/settings");
-  await reply(2, snapshot("/settings"));
-  required(required(transport.requests[1]).reply)({ ok: false });
-  await flushHostUpdates();
-  expect(app.find("#administration-diagnostics-page").exists()).toBe(false);
-  expect(app.find("#host-navigation-error").exists()).toBe(false);
-  expect(onSettings(app)).toBe(true);
-});
-
 test("late navigation and live-prop responses cannot replace the committed mission", async () => {
   const app = await start();
   await click("/missions/mission-a");
@@ -1133,17 +1069,6 @@ test("reconnection refreshes the displayed resource rather than the initial tran
   required(refreshed.context.mission).display_name = "Renamed Mission";
   await reply(1, refreshed);
   expect(app.text()).toContain("Renamed Mission");
-});
-
-test("admin navigation is selected by the frontend route without server layout metadata", async () => {
-  const app = await start();
-  await click("/admin/runtime");
-  const admin = snapshot("/admin/runtime");
-  admin.context.capabilities = ["platform_admin"];
-  await reply(0, admin);
-  expect(app.get('a[href="/admin/runtime"]').attributes("aria-current")).toBe("page");
-  expect(app.find('a[href="/admin/organizations"]').exists()).toBe(true);
-  expect(app.find('a[href="/settings"]').exists()).toBe(false);
 });
 
 test("profile creation is a token-bound core action and navigates only to its profile directory", async () => {
@@ -1422,219 +1347,6 @@ test("core timeline filters, selected evidence and older pages restore through p
   expect(transport.requests.every((request) => request.event === "host:context")).toBe(true);
 });
 
-function platformCreationSnapshot(
-  userId = "u-1",
-  created: { id: string; name: string; slug: string } | null = null,
-) {
-  const value = snapshot("/admin/organizations/new");
-  value.context.user.user_id = userId;
-  return {
-    ...value,
-    platform_administration_page: {
-      version: 1,
-      page: "organization_create",
-      status: "ready",
-      user_id: userId,
-      action_token: `visit-${userId}`,
-      data: { version: 1, user_id: userId, observed_at: "2026-09-10T01:00:00Z", created },
-    },
-  };
-}
-async function submitPlatformOrganization() {
-  await view().get("#organization_display_name").setValue("Flight");
-  await view().get("#organization_slug").setValue("flight");
-  await view().get("#org-form").trigger("submit");
-  await flushHostUpdates();
-}
-test("core administration creation uses a scoped visit and displays a successful organization", async () => {
-  await start();
-  await click("/admin/organizations/new");
-  await reply(0, platformCreationSnapshot());
-  const shell = view().get("#sidebar-drawer").element;
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  await submitPlatformOrganization();
-  expect(transport.requests[1]).toMatchObject({
-    event: "host:platform-administration",
-    payload: {
-      path: "/admin/organizations/new",
-      event: "create",
-      token: "visit-u-1",
-      input: { display_name: "Flight", slug: "flight" },
-    },
-  });
-  const organization = { id: "org-new", name: "Flight", slug: "flight" };
-  await reply(1, {
-    status: "created",
-    organization,
-    host: platformCreationSnapshot("u-1", organization),
-  });
-  expect(view().get("#admin-organization-created-link").attributes("href")).toBe(
-    "/admin/organizations/org-new",
-  );
-  expect(view().get("#sidebar-drawer").element).toBe(shell);
-  expect(view().find("#org-form").exists()).toBe(false);
-});
-test("late organization creation cannot replace a later page or another administrator draft", async () => {
-  await start();
-  await click("/admin/organizations/new");
-  await reply(0, platformCreationSnapshot());
-  await submitPlatformOrganization();
-  await click("/settings");
-  await reply(2, snapshot("/settings"));
-  const organization = { id: "org-new", name: "Flight", slug: "flight" };
-  await reply(1, {
-    status: "created",
-    organization,
-    host: platformCreationSnapshot("u-1", organization),
-  });
-  expect(onSettings()).toBe(true);
-  expect(view().find("#admin-organization-created").exists()).toBe(false);
-  await click("/admin/organizations/new");
-  await reply(3, platformCreationSnapshot());
-  await submitPlatformOrganization();
-  await view().setProps({ snapshot: platformCreationSnapshot("u-2") });
-  await flushHostUpdates();
-  await reply(4, {
-    status: "created",
-    organization,
-    host: platformCreationSnapshot("u-1", organization),
-  });
-  expect(view().find("#admin-organization-created").exists()).toBe(false);
-  expect(
-    view().get<HTMLInputElement | HTMLSelectElement>("#organization_display_name").element.value,
-  ).toBe("");
-  expect(view().find("#admin-organization-create-message").exists()).toBe(false);
-});
-
-test("a refreshed administration visit token rejects an older same-user creation response", async () => {
-  await start();
-  await click("/admin/organizations/new");
-  await reply(0, platformCreationSnapshot());
-  await submitPlatformOrganization();
-  const refreshed = platformCreationSnapshot();
-  refreshed.platform_administration_page.action_token = "replacement-visit";
-  await view().setProps({ snapshot: refreshed });
-  await flushHostUpdates();
-  const organization = { id: "old-org", name: "Old result", slug: "old-result" };
-  await reply(1, {
-    status: "created",
-    organization,
-    host: platformCreationSnapshot("u-1", organization),
-  });
-  expect(view().find("#admin-organization-created").exists()).toBe(false);
-  expect(view().get("#admin-organization-create-message").text()).toContain("unknown");
-});
-
-function platformOrganizationSnapshot(
-  page: "organization_detail" | "organization_invite",
-  userId = "u-1",
-  token = "detail-visit",
-) {
-  const path = `/admin/organizations/org-a${page === "organization_invite" ? "/invite" : ""}`;
-  const value = snapshot(path);
-  value.context.user.user_id = userId;
-  const data = {
-    version: 1,
-    user_id: userId,
-    observed_at: "2026-09-10T01:00:00Z",
-    organization: { id: "org-a", name: "Flight organization", slug: "flight" },
-    ...(page === "organization_invite"
-      ? { submitted: null }
-      : {
-          limit: 25,
-          query: { members_after: "", invitations_after: "", services_after: "" },
-          issued_identity: null,
-          members: { entries: [], next_after: null },
-          invitations: { entries: [], next_after: null },
-          services: { entries: [], next_after: null },
-        }),
-  };
-  return {
-    ...value,
-    platform_administration_page: {
-      version: 1,
-      page,
-      status: "ready",
-      user_id: userId,
-      organization_id: "org-a",
-      action_token: token,
-      data,
-    },
-  };
-}
-for (const page of ["organization_detail", "organization_invite"] as const) {
-  for (const change of ["navigation", "user", "token"]) {
-    test(`${page} discards its action result after ${change} changes`, async () => {
-      await start();
-      const original = platformOrganizationSnapshot(page);
-      await click(original.path);
-      await reply(0, original);
-      const issue = page === "organization_detail";
-      if (issue) {
-        const form = view().get("#open-organization-form");
-        const event = new Event("submit", { bubbles: true, cancelable: true });
-        form.element.dispatchEvent(event);
-        expect(event.defaultPrevented).toBe(false);
-        await view().get("#service_identity_display_name").setValue("Flight API");
-        await view().get("#service_identity_id").setValue("svc-new");
-      } else {
-        await view().get("#invite_email").setValue("recipient@example.test");
-      }
-      await view()
-        .get(issue ? "#service-identity-form" : "#invite-form")
-        .trigger("submit");
-      await flushHostUpdates();
-      expect(transport.requests[1]).toMatchObject({
-        event: "host:platform-administration",
-        payload: {
-          path: original.path,
-          token: "detail-visit",
-          event: issue ? "issue_service_identity" : "invite",
-        },
-      });
-      if (change === "navigation") {
-        await click("/settings");
-        await reply(2, snapshot("/settings"));
-      } else {
-        await view().setProps({
-          snapshot: platformOrganizationSnapshot(
-            page,
-            change === "user" ? "u-2" : "u-1",
-            "replacement-visit",
-          ),
-        });
-        await flushHostUpdates();
-      }
-      const result = issue
-        ? {
-            status: "issued",
-            identity: {
-              id: "svc-new",
-              name: "Flight API",
-              api_token: "stale-ephemeral-test-token",
-            },
-          }
-        : {
-            status: "invited",
-            invitation: {
-              id: "invite-new",
-              email: "recipient@example.test",
-              role: "member",
-              grant_platform_admin: false,
-              expires_at: "2026-09-20T01:00:00Z",
-              delivery: "submitted",
-            },
-          };
-      await reply(1, { ...result, host: original });
-      expect(view().find("#issued-service-token").exists()).toBe(false);
-      expect(view().text()).not.toContain("stale-ephemeral-test-token");
-      expect(view().find("#organization-invitation-created").exists()).toBe(false);
-      if (change === "navigation") expect(onSettings()).toBe(true);
-    });
-  }
-}
-
-// Render every catalog entry, so adding a kind without a host branch fails visibly.
 const routeComponents = {
   settings: "SettingsPage",
   administration: "AdministrationPage",
@@ -1647,8 +1359,6 @@ const routeComponents = {
   ops_module: "OpsModulePage",
   activation_approvals: "ActivationApprovalsPage",
   notifications: "NotificationsPage",
-  platform_administration: "PlatformAdministrationPage",
-  administration_diagnostics: "AdministrationDiagnosticsPage",
   application_management: "InstallationManagementPage",
 };
 const routeStubs = Object.fromEntries(

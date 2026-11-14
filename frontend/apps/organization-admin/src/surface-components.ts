@@ -1,9 +1,3 @@
-import AdminHome from "./AdminHome.vue";
-import AdminOrganizationInvite from "./AdminOrganizationInvite.vue";
-import AdminOrganizationListPage from "./AdminOrganizationListPage.vue";
-import AdminOrganizationNew from "./AdminOrganizationNew.vue";
-import AdminOrganizationShow from "./AdminOrganizationShow.vue";
-import AdminRuntime from "./AdminRuntime.vue";
 import NotificationsBell from "./NotificationsBell.vue";
 import NotificationsPage from "./NotificationsPage.vue";
 import OrganizationHome from "./OrganizationHome.vue";
@@ -21,12 +15,6 @@ export const exposedComponents = {
   ProviderAccountShow,
   NotificationsPage,
   NotificationsBell,
-  AdminHome,
-  AdminRuntime,
-  AdminOrganizationListPage,
-  AdminOrganizationNew,
-  AdminOrganizationShow,
-  AdminOrganizationInvite,
 };
 
 /** The host surface id is the only renderer selection authority in this remote. */
@@ -37,10 +25,4 @@ export const surfaceComponents = {
   provider_account_show: ProviderAccountShow,
   notifications: NotificationsPage,
   notifications_bell: NotificationsBell,
-  admin_home: AdminHome,
-  admin_runtime: AdminRuntime,
-  admin_organizations: AdminOrganizationListPage,
-  admin_organization_new: AdminOrganizationNew,
-  admin_organization_show: AdminOrganizationShow,
-  admin_organization_invite: AdminOrganizationInvite,
 } satisfies Record<OrganizationAdminSurface, Component>;

@@ -13,12 +13,6 @@ const surfaceIds = [
   "provider_account_show",
   "notifications",
   "notifications_bell",
-  "admin_home",
-  "admin_runtime",
-  "admin_organizations",
-  "admin_organization_new",
-  "admin_organization_show",
-  "admin_organization_invite",
 ];
 
 /** @param {string} directory @returns {Promise<string[]>} */
@@ -64,10 +58,9 @@ void test("declares one app-level exposed renderer for every contributed surface
   assert.equal(new Set(surfaceIds).size, surfaceIds.length);
   assert.match(manifest, /applicationKey: "organization_admin"/);
   assert.match(manifest, /packageId: "cadence\.organization-admin"/);
-  assert.match(manifest, /installableScopes: \["organization", "user", "admin"\]/);
+  assert.match(manifest, /installableScopes: \["organization", "user"\]/);
   assert.match(contribution, /scope: "organization"/);
   assert.match(contribution, /scope: "user"/);
-  assert.match(contribution, /scope: "admin"/);
 });
 
 /** @param {string} path */

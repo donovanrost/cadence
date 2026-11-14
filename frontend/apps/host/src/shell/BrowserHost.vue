@@ -35,18 +35,10 @@ const InstallationManagementPage = lazyHostPage(
   () =>
     import("../capability-management/features/application-installations/InstallationManagementPage.vue"),
 );
-const AdministrationDiagnosticsPage = lazyHostPage(
-  "AdministrationDiagnosticsPage",
-  () => import("../administration/features/diagnostics/AdministrationDiagnosticsPage.vue"),
-);
 const CatalogPage = lazyHostPage("CatalogPage", () => import("../catalog/CatalogPage.vue"));
 const AdministrationPage = lazyHostPage(
   "AdministrationPage",
   () => import("../administration/AdministrationPage.vue"),
-);
-const PlatformAdministrationPage = lazyHostPage(
-  "PlatformAdministrationPage",
-  () => import("../administration/PlatformAdministrationPage.vue"),
 );
 const WorkspaceLanding = lazyHostPage(
   "WorkspaceLanding",
@@ -114,7 +106,6 @@ function field(value: unknown, ...keys: string[]): unknown {
 }
 const failure = shallowRef<string | null>(null);
 const pending = shallowRef(false);
-const refreshingDiagnostics = shallowRef(false);
 let generation = 0;
 let stopped = false;
 let removeLinks: (() => void) | undefined;
@@ -376,28 +367,6 @@ async function catalogAction(event: "reimport") {
 function cancelCatalogUpload(params: Record<string, unknown>) {
   live.pushEvent("catalog:upload:cancel", params);
 }
-async function platformAdministrationAction(event: string, input: Record<string, unknown>) {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const userId = context.value?.user?.user_id;
-  const token = currentPage().snapshot.platform_administration_page?.action_token;
-  const result = requireRecord(
-    await request("host:platform-administration", { event, input, path, token }),
-  );
-  if (
-    stopped ||
-    generation !== requestGeneration ||
-    currentPage().snapshot.path !== path ||
-    context.value?.user?.user_id !== userId ||
-    currentPage().snapshot.platform_administration_page?.action_token !== token
-  )
-    throw new Error("The administration context changed.");
-  const host = readHostSnapshot(result.host);
-  if (host.path !== path || host.context.user?.user_id !== userId)
-    throw new Error("Invalid administration context.");
-  committed.value = { ...currentPage(), snapshot: host };
-  return result;
-}
 async function missionAction(event: string, input: Record<string, unknown>) {
   const path = currentPage().snapshot.path;
   const requestGeneration = generation;
@@ -589,19 +558,6 @@ async function missionPageAction(payload: Record<string, unknown>) {
     throw new Error("Inactive mission page response.");
   return result;
 }
-async function refreshDiagnostics() {
-  if (refreshingDiagnostics.value) return;
-  refreshingDiagnostics.value = true;
-  try {
-    await reconnect();
-  } finally {
-    refreshingDiagnostics.value = false;
-  }
-}
-function updateDiagnosticsQuery(query: Record<string, string>) {
-  const search = new URLSearchParams(query).toString();
-  navigate(`/admin/runtime${search ? `?${search}` : ""}`);
-}
 // Routing is private to this host; descendants navigate through the host bridge.
 // Installing a plugin here would redefine app-wide $route when this component remounts.
 void router.replace(hostBrowserHistory.location).catch((error) => {
@@ -640,11 +596,7 @@ onBeforeUnmount(() => {
     managed-page
   >
     <HostPage
-      :key="
-        route.kind === 'administration_diagnostics' || route.kind === 'spacecraft'
-          ? committed.route.path
-          : committed.route.fullPath
-      "
+      :key="route.kind === 'spacecraft' ? committed.route.path : committed.route.fullPath"
       :title="pageTitle"
       :breadcrumbs="pageBreadcrumbs"
       :workspace="variant === 'ops'"
@@ -675,13 +627,6 @@ onBeforeUnmount(() => {
           :execute="settingsAction"
           :refresh="refreshSettings"
           :navigating="pending"
-        />
-        <AdministrationDiagnosticsPage
-          v-else-if="route.kind === 'administration_diagnostics'"
-          :snapshots="committed.snapshot.diagnostics ?? []"
-          :interactions="{ updateQuery: updateDiagnosticsQuery }"
-          :refreshing="refreshingDiagnostics"
-          @refresh="refreshDiagnostics"
         />
         <ActivationApprovalsPage
           v-else-if="route.kind === 'activation_approvals' && missionContext"
@@ -775,18 +720,6 @@ onBeforeUnmount(() => {
           :organization-id="missionContext.organizationId"
           :mission-id="missionContext.missionId"
           :navigate="navigate"
-          :refresh="reconnect"
-        />
-        <PlatformAdministrationPage
-          v-else-if="route.kind === 'platform_administration'"
-          :key="`${context.user?.user_id}:${committed.snapshot.path}`"
-          :id="route.mountId"
-          :page="route.administrationPage"
-          :snapshot="committed.snapshot.platform_administration_page"
-          :user-id="context.user?.user_id"
-          :organization-id="committed.params.org_id"
-          :csrf-token="context.csrf_token"
-          :act="platformAdministrationAction"
           :refresh="reconnect"
         />
         <AdministrationPage

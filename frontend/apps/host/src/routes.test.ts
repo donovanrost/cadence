@@ -159,26 +159,6 @@ test("each core host route resolves to its registered owner", () => {
       expect(route).not.toHaveProperty("surface");
       continue;
     }
-    if (route.kind === "platform_administration") {
-      expect([
-        "/admin",
-        "/admin/organizations",
-        "/admin/organizations/new",
-        "/admin/organizations/:org_id",
-        "/admin/organizations/:org_id/invite",
-      ]).toContain(route.path);
-      expect([
-        "platform_overview",
-        "organization_directory",
-        "organization_create",
-        "organization_detail",
-        "organization_invite",
-      ]).toContain(route.administrationPage);
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      expect(route.scope).toBe("admin");
-      continue;
-    }
     if (route.kind === "ops_workspace") {
       if (route.workspacePage === "landing") {
         expect(route.path).toBe("/missions/:mission_id/ops");
@@ -211,13 +191,6 @@ test("each core host route resolves to its registered owner", () => {
       expect(route.path).toBe("/");
       expect(route.administrationPage).toBe("organization_home");
       expect(route.scope).toBe("organization");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
-    if (route.kind === "administration_diagnostics") {
-      expect(route.path).toBe("/admin/runtime");
-      expect(route.scope).toBe("admin");
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
       continue;
@@ -281,4 +254,3 @@ test("contact scheduling captures spacecraft selection and independent ledger pa
     "operations_page",
   ]);
 });
-

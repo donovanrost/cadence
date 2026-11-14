@@ -449,7 +449,7 @@ const expected = [
     package: { packageId: "cadence.organization-admin", version: 1 },
     displayName: "Organization Administration",
     description: "Manage organization membership, providers, notifications, and administration.",
-    installableScopes: ["organization", "user", "admin"] as const,
+    installableScopes: ["organization", "user"] as const,
     releaseId: () => "organization-admin-v1",
     surfaces: [
       [
@@ -517,66 +517,6 @@ const expected = [
         60,
         "cadence.organization.notifications_bell",
         ["mark_notification_read"],
-      ],
-      [
-        "admin_home",
-        "overview",
-        "admin",
-        "application_workspace",
-        "Overview",
-        70,
-        "cadence.platform_admin.home",
-        [],
-      ],
-      [
-        "admin_runtime",
-        "activity",
-        "admin",
-        "application_workspace",
-        "Runtime",
-        80,
-        "cadence.platform_admin.runtime",
-        ["refresh_runtime", "filter_runtime_decisions"],
-      ],
-      [
-        "admin_organizations",
-        "collection",
-        "admin",
-        "application_workspace",
-        "Organizations",
-        90,
-        "cadence.platform_admin.organizations",
-        [],
-      ],
-      [
-        "admin_organization_new",
-        "configuration",
-        "admin",
-        "application_workspace",
-        "New Organization",
-        100,
-        "cadence.platform_admin.organization.new",
-        ["validate_organization", "create_organization"],
-      ],
-      [
-        "admin_organization_show",
-        "subject_detail",
-        "admin",
-        "application_workspace",
-        "Organization",
-        110,
-        "cadence.platform_admin.organization.show",
-        ["issue_service_identity", "dismiss_service_token", "open_organization"],
-      ],
-      [
-        "admin_organization_invite",
-        "configuration",
-        "admin",
-        "application_workspace",
-        "Invite User",
-        120,
-        "cadence.platform_admin.organization.invite",
-        ["validate_invitation", "invite_organization_member"],
       ],
     ] as SurfaceRow[],
   },
@@ -773,6 +713,6 @@ describe("first-party federated manifest parity", () => {
       }
     }
 
-    expect(surfaceCount).toBe(57);
+    expect(surfaceCount).toBe(51);
   });
 });

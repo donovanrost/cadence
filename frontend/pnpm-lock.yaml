@@ -705,9 +705,6 @@ importers:
       '@cadence/communications':
         specifier: workspace:*
         version: link:../../modules/communications
-      '@cadence/dashboards-and-exploration':
-        specifier: workspace:*
-        version: link:../../modules/dashboards-and-exploration
       '@cadence/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens

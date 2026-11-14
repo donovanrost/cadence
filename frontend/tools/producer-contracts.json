@@ -1,15 +1,5 @@
 [
   {
-    "consumer": "apps/host/src/administration/features/organization-create/organization-create.test.ts",
-    "environment": "CADENCE_PLATFORM_DOCUMENT",
-    "producer": "apps/cadence/test/cadence/reads/administration/platform_organizations_test.exs"
-  },
-  {
-    "consumer": "apps/host/src/administration/features/organization-detail/organization-detail.test.ts",
-    "environment": "CADENCE_PLATFORM_DETAIL_DOCUMENT",
-    "producer": "apps/cadence/test/cadence/administration/organization_invitations_test.exs"
-  },
-  {
     "consumer": "apps/host/src/administration/features/organization-home/organization-home.test.ts",
     "environment": "CADENCE_ORGANIZATION_HOME_DOCUMENT",
     "producer": "apps/cadence/test/cadence/reads/administration/organization_home_test.exs"

@@ -58,24 +58,6 @@ const actionEvents: Record<OrganizationAdminSurface, Record<string, string>> = {
   notifications_bell: {
     "mark-read": "mark_notification_read",
   },
-  admin_home: {},
-  admin_runtime: {
-    refresh: "refresh_runtime",
-    filter_decisions: "filter_runtime_decisions",
-  },
-  admin_organizations: {},
-  admin_organization_new: {
-    validate: "validate_organization",
-    save: "create_organization",
-  },
-  admin_organization_show: {
-    "issue-service-identity": "issue_service_identity",
-    "dismiss-service-token": "dismiss_service_token",
-  },
-  admin_organization_invite: {
-    validate: "validate_invitation",
-    save: "invite_organization_member",
-  },
 };
 
 const actionListeners = computed(() =>
