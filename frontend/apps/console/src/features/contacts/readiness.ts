@@ -45,6 +45,8 @@ export const readinessReasons = [
   "cop1_no_clcw_report",
   "uplink_state_unavailable",
   "unverified_peer_connected",
+  // U46 (domain's release gate, api b9a60f096): an accepted provider change took the uplink leg out.
+  "uplink_leg_dropped",
 ] as const;
 type KnownReason = (typeof readinessReasons)[number];
 export type ReadinessReason = KnownReason | Unrecognized;
@@ -125,6 +127,13 @@ const RESTART: KnownReason = "protocol_state_restore_required";
 const CANNOT_ATTEST: KnownReason = "provider_cannot_attest_uplink_sessions";
 /** domain c7c79063: only the spacecraft's report (or a new connection) clears it; Recover can't. */
 const NO_CLCW: KnownReason = "cop1_no_clcw_report";
+/** U46: the provider won't carry uplink on this pass; nothing on Cadence's side clears it. */
+const DROPPED: KnownReason = "uplink_leg_dropped";
+
+/** ux U46: "Northlight dropped the uplink from this pass at 02:40Z, so commands can't be sent on it." */
+export function droppedLine(since: string | null, provider: string | null | undefined): string {
+  return `${provider ?? "The provider"} dropped the uplink from this pass${since ? ` at ${hhmm(since)}` : ""}, so commands can't be sent on it.`;
+}
 
 const BLOCKED: Readonly<Partial<Record<KnownReason, Words>>> = {
   [RESTART]: (c) =>
@@ -139,6 +148,7 @@ const BLOCKED: Readonly<Partial<Record<KnownReason, Words>>> = {
   [NO_CLCW]: () => "the spacecraft didn't send a link report within 15 s of the uplink connecting",
   uplink_state_unavailable: () => "Cadence can't read the uplink's state right now",
   // #67 (domain a258d4fe; ux 000086ae): recoverable, like attestation_*.
+  [DROPPED]: (_c, p) => `${p} dropped the uplink from this pass`,
   unverified_peer_connected: (_c, p) =>
     `an unverified connection took the uplink, so Cadence dropped it and is waiting for ${p}'s verified one`,
 };
@@ -167,13 +177,15 @@ export function reasonSentence(reason: ReadinessReason | null, c: ReasonContext 
  * provider that can't attest uplink sessions, can't be recovered on this pass.
  */
 export const recoverable = (reason: ReadinessReason | null) =>
-  reason !== RESTART && reason !== CANNOT_ATTEST && reason !== NO_CLCW;
+  reason !== RESTART && reason !== CANNOT_ATTEST && reason !== NO_CLCW && reason !== DROPPED;
 
-/** What shows in Recover's place when it can't help (ux d6ba032b). */
-export const noRecoverText = (reason: ReadinessReason | null) =>
-  reason === NO_CLCW
-    ? "Recovery won't help: it clears when the spacecraft reports."
-    : "Recovery isn't possible on this pass.";
+/** What shows in Recover's place when it can't help (ux d6ba032b); U46's drop line says it already. */
+export const noRecoverText = (reason: ReadinessReason | null): string | null =>
+  reason === DROPPED
+    ? null
+    : reason === NO_CLCW
+      ? "Recovery won't help: it clears when the spacecraft reports."
+      : "Recovery isn't possible on this pass.";
 
 /** Where to fix a reason, when it names one. */
 export function reasonLink(
@@ -238,6 +250,10 @@ export function readinessTag(
   if (r.state === "ready")
     return where === "drawer" ? { state: "nominal", label: "Uplink ready", sentence: null } : null;
   if (r.state !== "blocked") return null;
+  const state = (r.command_groups_queued ?? 1) > 0 ? "crit" : "caution";
+  // U46: crit when groups are queued for it, else caution.
+  if (r.reason === DROPPED)
+    return { state, label: "Uplink dropped", sentence: droppedLine(r.since, c.provider) };
   const tail =
     r.reason === RESTART
       ? " The next pass isn't affected."
@@ -245,7 +261,7 @@ export function readinessTag(
         ? " It clears when the spacecraft reports or the link reconnects."
         : "";
   return {
-    state: (r.command_groups_queued ?? 1) > 0 ? "crit" : "caution",
+    state,
     label: "Can't command",
     sentence: `Can't command: ${reasonClause(r.reason, c)}.${tail}`,
   };

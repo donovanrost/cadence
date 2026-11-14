@@ -117,7 +117,7 @@ const composeTo = computed((): RouteLocationRaw => ({
                 :can-recover="access.abort"
                 @changed="uplink.refetch"
               />
-              <span v-else class="text-sm text-text-2">{{
+              <span v-else-if="noRecoverText(u.now.readiness.reason)" class="text-sm text-text-2">{{
                 noRecoverText(u.now.readiness.reason)
               }}</span>
             </template>

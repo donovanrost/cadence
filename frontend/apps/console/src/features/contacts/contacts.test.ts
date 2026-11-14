@@ -15,6 +15,8 @@ import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
 import { attentionReader, type Attention } from "@/features/now/index.ts";
 import { attentionErrorWords, resolutionRecord, whatToDo } from "./attention.ts";
 import {
+  droppedLine,
+  noRecoverText,
   groupBlockedLine,
   groupUplinkReader,
   passReadinessReader,
@@ -559,5 +561,30 @@ describe("U45 bar mark (lead bf3f36aac)", () => {
       ["c", undefined],
     ]);
     expect(bars[0]?.description).toContain(", was missed, and 1 more item");
+  });
+});
+
+describe("U46 uplink dropped (api b9a60f096)", () => {
+  const dropped = (queued: number | null, since: string | null = "2026-11-14T02:40:00Z") => ({
+    state: "blocked" as const,
+    reason: reason("uplink_leg_dropped"),
+    since,
+    command_groups_queued: queued,
+  });
+  it("tags the pass, crit only with groups queued, and says who dropped it and when", () => {
+    expect(readinessTag(dropped(2), "drawer", { provider: "Northlight" })).toEqual({
+      state: "crit",
+      label: "Uplink dropped",
+      sentence:
+        "Northlight dropped the uplink from this pass at 02:40Z, so commands can't be sent on it.",
+    });
+    expect(readinessTag(dropped(0), "row")?.state).toBe("caution");
+    expect(droppedLine(null, null)).toBe(
+      "The provider dropped the uplink from this pass, so commands can't be sent on it.",
+    );
+  });
+  it("offers no recovery and adds no second line", () => {
+    expect(recoverable(reason("uplink_leg_dropped"))).toBe(false);
+    expect(noRecoverText(reason("uplink_leg_dropped"))).toBeNull();
   });
 });

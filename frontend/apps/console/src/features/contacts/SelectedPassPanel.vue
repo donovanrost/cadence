@@ -268,13 +268,17 @@ const countdown = computed(() => {
           >
         </div>
         <p
-          v-if="readiness.state === 'blocked' && !recoverable(readiness.reason)"
+          v-if="
+            readiness.state === 'blocked' &&
+            !recoverable(readiness.reason) &&
+            noRecoverText(readiness.reason)
+          "
           class="m-0 text-sm text-text-2"
         >
           {{ noRecoverText(readiness.reason) }}
         </p>
         <RecoverUplink
-          v-else-if="readiness.state === 'blocked'"
+          v-else-if="readiness.state === 'blocked' && recoverable(readiness.reason)"
           :mission-id="missionId"
           :pass-id="pass.id"
           :recovering="false"
