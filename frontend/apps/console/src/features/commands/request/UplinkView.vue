@@ -25,6 +25,7 @@ import {
   type PersonName,
 } from "../groups/words.ts";
 import { refusalLine, releaseLogContext, windowLine } from "../groups/release.ts";
+import { ownValuesText } from "./ownValues.ts";
 import AbortPanel from "./AbortPanel.vue";
 import ContactRelease from "./ContactRelease.vue";
 import NeedsYouPanel from "./NeedsYouPanel.vue";
@@ -81,6 +82,12 @@ const refusalOf = (t: Group["targets"][number]) => {
   const r = t.members.find((m) => m.release_refusal)?.release_refusal;
   return r ? refusalLine(r, { spacecraft: t.name }) : null;
 };
+/** ux C2: the commands this target sends with its own values, and those values. */
+const ownOf = (t: Group["targets"][number]) =>
+  props.group.commands.flatMap((c) => {
+    const values = ownValuesText(c, t.spacecraft_id);
+    return values === null ? [] : [{ position: c.position, name: c.name ?? c.command_id, values }];
+  });
 const release = computed(() =>
   releaseLogContext(
     props.group.uplink,
@@ -173,6 +180,15 @@ const release = computed(() =>
             >
           </span>
           <ApTag :state="STAGE_STATE[t.stage]" :label="memberStageWord(t.stage, group.state)" />
+          <!-- ux C2: a target with its own values shows them on its command line. -->
+          <p
+            v-for="o in ownOf(t)"
+            :key="o.position"
+            class="col-span-3 col-start-2 m-0 flex flex-wrap items-center gap-2 font-mono text-sm text-text-2"
+          >
+            {{ pos(o.position) }} {{ o.name }} {{ o.values }}
+            <ApTag state="neutral" label="Own values" />
+          </p>
           <p v-if="refusalOf(t)" class="col-span-3 col-start-2 m-0 text-sm text-caution-text">
             {{ refusalOf(t) }}
           </p>

@@ -4,6 +4,7 @@ import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { fetchEncoding, hexBytes, type EncodingView } from "../groups/encoding.ts";
 import ValueChanges from "./ValueChanges.vue";
+import { radiateMeta } from "./ownValues.ts";
 import { formatClock, formatDayTime, plural, ApPanel, ApTag } from "@/ui";
 import { catalogRevisionWords } from "../api.ts";
 import type { Group } from "../groups/show.ts";
@@ -98,7 +99,9 @@ const bytesLine = (position: number) => {
     <ApPanel
       index="A3"
       title="What will radiate"
-      meta="payload bytes · before transport framing"
+      :meta="
+        ['payload bytes · before transport framing', radiateMeta(group)].filter(Boolean).join(' · ')
+      "
       flush
     >
       <ol class="m-0 list-none p-0">
@@ -116,6 +119,12 @@ const bytesLine = (position: number) => {
           <span class="min-w-0 truncate font-mono text-sm text-text-3">{{
             args(c.argument_values_json)
           }}</span>
+          <!-- ux C2: the shared values above; these targets send their own instead. -->
+          <ApTag
+            v-if="(c.per_target ?? []).length"
+            state="neutral"
+            :label="`${(c.per_target ?? []).length} own values`"
+          />
           <span
             v-if="bytesLine(c.position)"
             class="basis-full font-mono text-xs"

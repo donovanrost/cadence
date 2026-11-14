@@ -4,7 +4,10 @@ import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApCallout } from "@/ui";
 import type { Group } from "../groups/show.ts";
+import { fetchCommand, type CommandArgument } from "../api.ts";
 import { argChanges, fetchBrief, overwriteCallouts, type Brief } from "./brief.ts";
+import OwnValuesTable from "./OwnValuesTable.vue";
+import { overridesOf, readoutLines } from "./ownValues.ts";
 
 /**
  * A1 value changes (CommandFlow A1): for each command with arguments, `mode 1 → 3` per argument
@@ -44,15 +47,46 @@ const briefs = useRemoteQuery(key, async (_k, signal) => {
   return { ok: true as const, value: new Map<number, Brief[]>(byPosition) };
 });
 const nameOf = (id: string) => props.group.targets.find((t) => t.spacecraft_id === id)?.name ?? id;
+/** ux C2: targets with their own values; units and ranges come from the catalog's command. */
+const withOwn = computed(() => withArgs.value.filter((c) => (c.per_target ?? []).length > 0));
+const catalog = useRemoteQuery(
+  computed(() => {
+    const ids = [...new Set(withOwn.value.map((c) => c.command_id))];
+    return ids.length ? { m: scope.value.mission.id, ids } : null;
+  }),
+  async (k, signal) => {
+    const reads = await Promise.all(k.ids.map((id) => fetchCommand(k.m, id, signal)));
+    const map = new Map<string, readonly CommandArgument[]>();
+    reads.forEach((r, i) => {
+      const id = k.ids[i];
+      if (r.ok && id && r.value.command) map.set(id, r.value.command.arguments);
+    });
+    return { ok: true as const, value: map };
+  },
+);
+const argsOf = (commandId: string): readonly CommandArgument[] => {
+  const s = catalog.state.value;
+  return s.status === "ready" ? (s.value.get(commandId) ?? []) : [];
+};
 const rows = computed(() => {
   const s = briefs.state.value;
   if (s.status !== "ready") return [];
   return withArgs.value.map((c) => {
     const bs = s.value.get(c.position) ?? [];
+    const overrides = overridesOf(c, props.group);
+    const args = argsOf(c.command_id);
+    const unit = (name: string) => args.find((a) => a.name === name)?.unit ?? null;
     return {
       position: c.position,
       name: c.name ?? c.command_id,
-      changes: argChanges(bs),
+      command: c,
+      overrides,
+      args,
+      lines: argChanges(bs).flatMap((ch) =>
+        readoutLines(ch, overrides, props.group.target_count, unit(ch.name), nameOf).map(
+          (text, i) => ({ key: `${ch.name}:${i}`, text, note: i === 0 ? ch.note : null }),
+        ),
+      ),
       callouts: overwriteCallouts(bs, c.argument_values_json, nameOf),
       read: bs.length,
     };
@@ -71,11 +105,18 @@ const rows = computed(() => {
     <template v-for="r in rows" :key="r.position">
       <p class="m-0 font-mono text-sm font-semibold text-readout">{{ r.name }}</p>
       <ul class="m-0 list-none p-0">
-        <li v-for="ch in r.changes" :key="ch.name" class="font-mono text-md text-readout">
-          {{ ch.name }}: <span v-if="ch.from" class="text-text-2">{{ ch.from }} → </span>{{ ch.to }}
-          <span v-if="ch.note" class="text-sm text-text-3"> · {{ ch.note }}</span>
+        <li v-for="l in r.lines" :key="l.key" class="font-mono text-md text-readout">
+          {{ l.text }}<span v-if="l.note" class="text-sm text-text-3"> · {{ l.note }}</span>
         </li>
       </ul>
+      <!-- ux C2: what each target with its own values gets (not for a single target). -->
+      <OwnValuesTable
+        v-if="r.overrides.length && group.target_count > 1"
+        :command="r.command"
+        :overrides="r.overrides"
+        :args="r.args"
+        :name-of="nameOf"
+      />
       <ApCallout v-for="line in r.callouts" :key="line" tone="caution">{{ line }}</ApCallout>
     </template>
     <p v-if="unread" class="m-0 font-mono text-xs text-caution-text">
