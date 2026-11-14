@@ -40,6 +40,8 @@ export const attentionSources = [
   "ingress_backpressure",
   // U49 (#88): a contact's raw records the archive couldn't take; their telemetry was stored.
   "archive_quarantine",
+  // U50 (#87): connections a shared listener refused during this pass's window.
+  "listener_refusal",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -64,6 +66,17 @@ export const attentionConflicts = [
   "frames_dropped",
   // archive_quarantine (U49): one item per contact and error code.
   "quarantined",
+  // listener_refusal (U50): one item per open contact on the shared listener.
+  "peer_refused",
+] as const;
+/** U50 listener_refusal: why the shared listener refused the last connection. */
+export const listenerRefusals = [
+  "unregistered_scid",
+  "ambiguous_scid",
+  "unexpected_peer",
+  "unidentified",
+  "read_failed",
+  "unknown",
 ] as const;
 /** U38 mission_runtime reason keys (domain 292c8e6b, final). */
 export const runtimeReasons = [
@@ -348,6 +361,25 @@ export const attentionReader = d.object({
   last_retry: d.optional(
     d.nullable(d.object({ by: who, at: d.timestamp, indexed: d.optional(d.nullable(d.integer)) })),
   ),
+  /** listener_refusal (U50, #87): counted live in memory, so a restart starts them again. */
+  refused_count: d.optional(d.nullable(d.integer)),
+  last_refused_at: d.optional(d.nullable(d.timestamp)),
+  last_refusal: d.optional(
+    d.nullable(
+      d.object({
+        // free-text: the connection's address, Technical details only (U50)
+        peer: d.nullable(d.string),
+        reason: d.knownText(listenerRefusals),
+        scid: d.nullable(d.integer),
+      }),
+    ),
+  ),
+  /** Whether this contact has its own connection now. */
+  connected: d.optional(d.nullable(d.boolean)),
+  /** The other open contacts on the same listener. */
+  shared_with: d.optional(d.nullable(d.array(d.token, 1_000))),
+  // free-text: the provider's ground station reference
+  ground_station_ref: d.optional(d.nullable(d.string)),
   resolution: d.nullable(
     d.object({
       // free-text: what the operator recorded doing (resolve's action_text, contacts.md)
@@ -526,6 +558,7 @@ export function attentionWords(
     case "journal_near_full":
     case "frames_dropped":
     case "quarantined":
+    case "peer_refused":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.
@@ -606,6 +639,11 @@ export function resolvedWords(r: Resolved): string {
     if (r.action === "retried") return `Archived on retry at ${hhmm(r.resolved_at)}.`;
     if (r.action === "discarded")
       return `Discarded by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}${r.note ? `: ${noStop(r.note)}` : ""}.`;
+  }
+  if (r.id.startsWith("attention:listener_refusal:")) {
+    // U50: the pass got its own connection, or its window closed.
+    if (r.action === "accepted") return `Connected at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "ended") return `The pass ended at LOS ${hhmm(r.resolved_at)}.`;
   }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";

@@ -33,6 +33,7 @@ import { activationRow } from "./activation.ts";
 import { contactStartRow } from "./contactStart.ts";
 import { archiveRow } from "./archive.ts";
 import { ingressRow } from "./ingress.ts";
+import { listenerRow } from "./listener.ts";
 import { changeEvidence, changeTitle, pastDeadline } from "./providerChange.ts";
 import { changeSetReader, changeSetRow } from "./changeSet.ts";
 
@@ -390,6 +391,8 @@ function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueI
         return [ingressRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "archive_quarantine")
         return [archiveRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
+      if (a.source === "listener_refusal")
+        return [listenerRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "provider_change") {
         // U44: the pass in Contacts holds the decision; an approval counts down to its deadline.
         const pass = a.reservation_id ?? a.contact_id;

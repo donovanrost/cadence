@@ -37,6 +37,7 @@ import SettlementBlock from "./SettlementBlock.vue";
 import ContactStartBlock from "./ContactStartBlock.vue";
 import ArchiveBlock from "./ArchiveBlock.vue";
 import IngressBlock from "./IngressBlock.vue";
+import ListenerBlock from "./ListenerBlock.vue";
 import { passAttentions, passAttentionTag } from "./passAttention.ts";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
@@ -72,6 +73,7 @@ const startItem = computed(() => itemOf("contact_start"));
 /** U47: a pass can have both a backlog and lost frames. */
 const ingressItems = computed(() => items.value.filter((a) => a.source === "ingress_backpressure"));
 const archiveItems = computed(() => items.value.filter((a) => a.source === "archive_quarantine"));
+const listenerItem = computed(() => itemOf("listener_refusal"));
 const attentionTag = computed(() => (props.pass ? passAttentionTag(props.pass) : null));
 const resolutionItem = computed(() => itemOf("pass_resolution"));
 const liveChange = computed(() => {
@@ -209,6 +211,13 @@ const countdown = computed(() => {
         :mission-id="missionId"
         :attention="a"
         @changed="$emit('changed')"
+      />
+      <!-- U50: connections this pass's shared listener refused. -->
+      <ListenerBlock
+        v-if="listenerItem"
+        :attention="listenerItem"
+        :spacecraft="spacecraft?.name ?? null"
+        :now="now"
       />
       <!-- U49: raw records from this pass the archive couldn't take. -->
       <ArchiveBlock
