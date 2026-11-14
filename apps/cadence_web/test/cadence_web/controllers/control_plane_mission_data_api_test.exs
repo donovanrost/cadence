@@ -7,6 +7,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Jobs
+  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Runtime.MissionModelPlanDecoder
 
@@ -327,8 +328,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_stages/command-stage-alpha/submit",
         %{
           "submission" => %{
-            "staged_command_item_ids" => ["staged-command-item-alpha"],
-            "requested_by" => %{"user_id" => "requester-1"}
+            "staged_command_item_ids" => ["staged-command-item-alpha"]
           }
         }
       )
@@ -361,35 +361,31 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
              ]
            } = json_response(command_requests_conn, 200)
 
-    approved_command_request_conn =
+    # The request was made by the service identity. Approval is a human decision, and the
+    # approver is always the authenticated actor (DECISIONS #30), so the service can't approve
+    # through REST, not even by naming a user.
+    service_approval_conn =
       conn
       |> authorize(api_token)
       |> post(
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/#{staged_command_request_id}/approve",
-        %{
-          "approval" => %{
-            "decided_by" => %{"user_id" => "reviewer-1"},
-            "reason" => "Reviewed for uplink"
-          }
-        }
+        %{"approval" => %{"reason" => "Reviewed for uplink"}}
       )
 
-    approved_command_request_response = json_response(approved_command_request_conn, 200)
+    assert json_response(service_approval_conn, 422)
 
-    assert %{
-             "data" => %{
-               "approval" => %{
-                 "command_approval_id" => command_approval_id,
-                 "command_request_id" => ^staged_command_request_id,
-                 "decision" => "approved",
-                 "reason" => "Reviewed for uplink"
-               },
-               "command_request" => %{
-                 "command_request_id" => ^staged_command_request_id,
-                 "lifecycle_state" => "approved"
-               }
-             }
-           } = approved_command_request_response
+    # A human operator approves (the console / LiveView path).
+    assert {:ok, %{approval: approval, command_request: approved_request}} =
+             ManagementCommanding.approve_command_request(
+               organization_id,
+               mission_id,
+               staged_command_request_id,
+               %{"actor_kind" => "user", "user_id" => "reviewer-1"},
+               reason: "Reviewed for uplink"
+             )
+
+    command_approval_id = approval.command_approval_id
+    assert approved_request.lifecycle_state == :approved
 
     command_approvals_conn =
       conn
@@ -414,9 +410,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> post(
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/#{staged_command_request_id}/enqueue",
         %{
-          "queue_entry" => %{
-            "enqueued_by" => %{"user_id" => "queue-operator"}
-          }
+          "queue_entry" => %{}
         }
       )
 
@@ -443,8 +437,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
           "source_endpoint_ref" => "source-endpoint-commanding-001",
           "mission_model_revision_id" => mission_model_revision_id,
           "command_id" => noop_command_id,
-          "priority" => 1,
-          "requested_by" => %{"user_id" => "requester-2"}
+          "priority" => 1
         }
       })
 
@@ -461,9 +454,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> post(
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_requests/command-request-noop/enqueue",
         %{
-          "queue_entry" => %{
-            "enqueued_by" => %{"user_id" => "queue-operator"}
-          }
+          "queue_entry" => %{}
         }
       )
 
@@ -832,8 +823,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries/#{noop_queue_entry_id}/release",
         %{
           "release_attempt" => %{
-            "realized_contact_id" => realized_contact.realized_contact_id,
-            "released_by" => %{"user_id" => "release-operator"}
+            "realized_contact_id" => realized_contact.realized_contact_id
           }
         }
       )
@@ -906,8 +896,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
         "/api/organizations/#{organization_id}/missions/#{mission_id}/command_queue_entries/#{staged_queue_entry_id}/release",
         %{
           "release_attempt" => %{
-            "realized_contact_id" => realized_contact.realized_contact_id,
-            "released_by" => %{"user_id" => "release-operator"}
+            "realized_contact_id" => realized_contact.realized_contact_id
           }
         }
       )

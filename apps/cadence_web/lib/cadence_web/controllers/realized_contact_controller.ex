@@ -98,7 +98,10 @@ defmodule CadenceWeb.RealizedContactController do
              mission_id
            ),
          {:ok, termination_opts} <-
-           ContactParams.contact_action(Map.get(params, "termination", %{})),
+           ContactParams.contact_action(
+             Map.get(params, "termination", %{}),
+             ControlPlaneAccess.actor_document(conn.assigns.current_scope)
+           ),
          {:ok, realized_contact} <-
            Cadence.Contacts.end_realized_contact_early(
              organization_id,
