@@ -903,3 +903,19 @@ configuration failure P3. The amendments to fe-ops' drafts:
   (P1 > P2 > P3), then the soonest due, then contact_start. So a not_started (P1) wins. A missed pass (P2, nothing
   due) yields to an approval or provider change that has a deadline, because that's the one still actionable. The
   other items show as a count beside it, `+2`, and all of them appear in the pass detail.
+
+### U46 · Release gate: command window closed, and uplink dropped by the provider (domain's gate; lead's questions) (domain / api / fe-ops)
+- **(a) Fix the read.** The console never shows commanding as possible when it isn't (U20). When the provider
+  drops a pass's uplink leg, the pass and contact show it straight away, not after the next snapshot:
+  - Tag `UPLINK DROPPED`: crit when command groups are queued for that pass, else caution (as U33's blocked).
+  - Sentence in place of the command-window line: "Northlight dropped the uplink from this pass at 02:40Z, so
+    commands can't be sent on it." Without a time, drop "at 02:40Z". Without the provider's name: "The provider
+    dropped…".
+  - Compose and Uplink don't offer the pass as a command window.
+- **(b) Refusal `command_window_closed`** (a named release), in the release outcome form:
+  - outside_pass, before AOS: "Not released: the pass hasn't started (AOS 03:10Z)."
+  - outside_pass, after LOS: "Not released: the pass has ended (LOS 03:19Z)."
+  - uplink_leg_dropped: "Not released: Northlight dropped the uplink from this pass."
+  - Unknown or missing reason: "Not released: the command window is closed."
+  - Where the screen doesn't already name the pass, it follows "pass" as "the EARENDIL-312 · SVA 03:10Z pass".
+    Times are §4.
