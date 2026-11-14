@@ -15,7 +15,7 @@ defmodule Cadence.Reads.EventSentences do
   """
 
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Reads.{ConfigRevisionEvents, OffPlanBookingEvents}
+  alias Cadence.Reads.{ConfigRevisionEvents, OffPlanBookingEvents, WindowMoveEvents}
 
   @type context :: %{
           spacecraft: %{optional(binary()) => {binary() | nil, integer() | nil}},
@@ -115,6 +115,14 @@ defmodule Cadence.Reads.EventSentences do
 
   defp sentence("config_revision_" <> _applied_or_rolled_back, entry, _ctx),
     do: {ConfigRevisionEvents.sentence(entry), ConfigRevisionEvents.subject(entry), nil}
+
+  # Window truth (director 11-14; ux U56): the provider moved a booked pass; its contact followed.
+  defp sentence("contact_window_moved", entry, ctx) do
+    doc = Map.merge(current(entry), payload(entry))
+
+    {WindowMoveEvents.sentence(doc, craft(entry, ctx), entry.occurred_at),
+     %{kind: "pass", id: doc["provider_reservation_id"] || entry.subject_id, name: nil}, nil}
+  end
 
   defp sentence("contact_booked_off_plan", entry, ctx),
     do:

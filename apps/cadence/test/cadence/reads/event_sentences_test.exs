@@ -144,6 +144,66 @@ defmodule Cadence.Reads.EventSentencesTest do
              EventSentences.describe(activated, @ctx)
   end
 
+  # Window truth (director 11-14; ux U56): a provider move, in ux's four cases.
+  test "a moved pass reads later/earlier with the new AOS label and links the pass" do
+    moved = fn before, after_window, extra ->
+      entry(:contact_window_moved, %{
+        spacecraft_id: "sc-4",
+        subject_id: "sc-contact-1",
+        occurred_at: ~U[2026-11-14 12:58:00Z],
+        metadata: %{
+          "payload" => %{
+            "value" =>
+              Map.merge(
+                %{
+                  "provider_reservation_id" => "res-4",
+                  "ground_station_ref" => "PUQ",
+                  "provider_name" => "Northlight",
+                  "before" => before,
+                  "after" => after_window
+                },
+                extra
+              )
+          }
+        }
+      })
+    end
+
+    w = &%{"starts_at" => "2026-11-14T#{&1}Z", "ends_at" => "2026-11-14T#{&2}Z"}
+    text = &EventSentences.describe(&1, @ctx).text
+
+    both = moved.(w.("13:04:00", "13:12:00"), w.("13:04:30", "13:12:30"), %{})
+
+    assert %{
+             text:
+               "EARENDIL-004 · PUQ 13:04Z pass moved 30 s later by Northlight: 13:04:30–13:12:30Z",
+             subject: %{kind: "pass", id: "res-4"}
+           } = EventSentences.describe(both, @ctx)
+
+    assert text.(moved.(w.("13:04:30", "13:12:30"), w.("13:04:30", "13:13:30"), %{})) ==
+             "EARENDIL-004 · PUQ 13:04Z pass LOS moved 1 min later by Northlight: 13:04:30–13:13:30Z"
+
+    assert text.(moved.(w.("13:06:00", "13:12:00"), w.("13:04:30", "13:12:00"), %{})) ==
+             "EARENDIL-004 · PUQ 13:04Z pass AOS moved 1 min 30 s earlier by Northlight: 13:04:30–13:12:00Z"
+
+    next_day = %{"starts_at" => "2026-11-15T00:00:00Z", "ends_at" => "2026-11-15T00:08:00Z"}
+
+    assert text.(moved.(w.("23:59:30", "23:59:59"), next_day, %{})) =~
+             "pass window changed by Northlight: 11-15 00:00:00–00:08:00Z"
+
+    midnight = %{"starts_at" => "2026-11-14T23:58:00Z", "ends_at" => "2026-11-15T00:06:00Z"}
+
+    assert text.(moved.(w.("23:57:00", "23:59:00"), midnight, %{})) =~
+             ": 11-14 23:58:00–11-15 00:06:00Z"
+
+    assert text.(
+             moved.(w.("13:00:00", "13:10:00"), w.("13:02:00", "13:13:00"), %{
+               "provider_name" => nil
+             })
+           ) ==
+             "EARENDIL-004 · PUQ 13:02Z pass window changed by the provider: 13:02:00–13:13:00Z"
+  end
+
   test "unknown kinds use the sentence-case key plus the entity, never Title Case" do
     unknown = entry(:limit_violation, %{title: "Limit Violation", spacecraft_id: "sc-4"})
     assert %{text: "Limit violation on EARENDIL-004"} = EventSentences.describe(unknown, @ctx)
