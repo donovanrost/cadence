@@ -291,7 +291,8 @@ defmodule Cadence.Applications.CommsApplicationTest do
   test "contributes one immutable module-federation release coordinate per surface" do
     contributions = Comms.release_contributions()
 
-    assert length(contributions) == 15
+    # L12 removed the three provider surfaces (list, new, show).
+    assert length(contributions) == 12
     assert Enum.all?(contributions, &(ReleaseContribution.validate(&1) == :ok))
 
     assert Enum.uniq_by(contributions, &ReleaseContribution.release/1) == [

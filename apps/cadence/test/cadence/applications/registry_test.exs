@@ -169,12 +169,9 @@ defmodule Cadence.Applications.RegistryTest do
              version: 1
            }
 
-    assert {:ok, provider_show} = Registry.fetch_surface(definition, :mission, "provider_show")
-
-    assert provider_show.subject_contract == %{
-             schema_id: "cadence.comms.provider.subject",
-             version: 1
-           }
+    # L12: the mission providers surfaces went to the console (setup.stations.providers).
+    assert {:error, :unknown_surface} =
+             Registry.fetch_surface(definition, :mission, "provider_show")
   end
 
   test "available definitions are safe choices for a spacecraft profile" do
