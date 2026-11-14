@@ -314,6 +314,16 @@ jobs:
       - name: Build the browser assets (mix assets.deploy, behind the publication build lock)
         working-directory: apps/cadence_web
         run: node ../../frontend/tools/phoenix/run_federation_publication_build.mjs assets.deploy
+      # The browser smokes sign in through the console's sign-in API, which needs the CSRF meta of
+      # the console document (priv/static/console/index.html, uploaded with the rest below).
+      - name: Build the console (the browser smokes' sign-in document)
+        working-directory: frontend
+        run: |
+          if [ ! -f apps/console/package.json ]; then
+            echo "No console on this branch."
+            exit 0
+          fi
+          corepack pnpm --filter @cadence/console run build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-assets
