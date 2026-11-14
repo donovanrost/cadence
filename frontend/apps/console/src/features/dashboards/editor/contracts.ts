@@ -202,8 +202,40 @@ export const rebaseReply = d.object({
 });
 export type Rebase = Decoded<typeof rebaseReply>;
 
-export const savedReply = d.object({ version: d.integer });
-export const copiedReply = d.object({ id, version: d.integer });
+/**
+ * A source's health, as a save's readiness saw it (api a7bba3ca0, contract dashboards.md). Only
+ * facts about the source block a save; health from reads only warns (lead 11-14).
+ */
+export const LOGICAL_SOURCES = ["telemetry", "events", "limits", "operational_observables"] as const;
+export const REALMS = ["flight", "rehearsal", "replay", "simulation"] as const;
+export const SOURCE_REASONS = [
+  "source_unavailable",
+  "source_degraded",
+  "source_health_unknown",
+  "connection_test_failed",
+  "connection_test_blocked",
+] as const;
+const sourceFacts = {
+  logical_source: d.knownText(LOGICAL_SOURCES),
+  realm: d.nullable(d.knownText(REALMS)),
+  reasons: d.array(d.knownText(SOURCE_REASONS), 16),
+  observed_at: d.nullable(d.timestamp),
+};
+/** One per (code, source, realm): a slow source behind ten widgets warns once. */
+export const sourceWarning = d.object({
+  code: d.knownText(["source_unavailable", "source_degraded"] as const),
+  ...sourceFacts,
+  placement_ids: d.array(id, 1024),
+  // free-text: the server's sentence, a fallback only; the console words it from the fields.
+  message: d.string,
+});
+export type SourceWarning = Decoded<typeof sourceWarning>;
+// Absent until api's warnings commit lands; the readers treat absent as none.
+const warnings = d.optional(d.array(sourceWarning, 64));
+
+export const savedReply = d.object({ version: d.integer, warnings });
+export type Saved = Decoded<typeof savedReply>;
+export const copiedReply = d.object({ id, version: d.integer, warnings });
 
 export const versionsReply = d.object({
   current_version: d.integer,
@@ -244,6 +276,8 @@ export const notReady = d.object({
       // free-text: readiness codes are open (domain PublishReadiness grows them); the UI shows `message`.
       code: d.string,
       message: d.string,
+      // A source issue's facts, else null (api a7bba3ca0); absent before it lands.
+      details: d.optional(d.nullable(d.object(sourceFacts))),
     }),
     1024,
   ),

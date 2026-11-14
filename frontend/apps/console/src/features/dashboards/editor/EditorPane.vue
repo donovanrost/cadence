@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { ApEmptyState } from "@/ui";
 import type { DashboardView } from "../api.ts";
 import EditBoard from "./EditBoard.vue";
+import type { SourceWarning } from "./contracts.ts";
 import EditCallouts from "./EditCallouts.vue";
 import SaveSheet from "./SaveSheet.vue";
 import WidgetSheet from "./WidgetSheet.vue";
@@ -15,7 +16,7 @@ const props = defineProps<{
   view: DashboardView;
   missionId: MissionId;
 }>();
-const emit = defineEmits<{ saved: [version: number] }>();
+const emit = defineEmits<{ saved: [warnings: readonly SourceWarning[]] }>();
 const widgetSheet = ref<InstanceType<typeof WidgetSheet> | null>(null);
 const saveSheet = ref<InstanceType<typeof SaveSheet> | null>(null);
 const staged = computed(() => props.session.staged.value);
@@ -29,7 +30,7 @@ const sections = computed(
 async function onSave(input: { message: string; defaults: { time: boolean; scope: boolean } }) {
   const result = await props.session.save(input);
   saveSheet.value?.close();
-  if (result.ok) emit("saved", result.version);
+  if (result.ok) emit("saved", result.warnings ?? []);
 }
 defineExpose({
   add: () => widgetSheet.value?.openFor(null),

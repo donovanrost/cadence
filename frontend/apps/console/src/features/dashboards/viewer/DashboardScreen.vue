@@ -3,13 +3,15 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
 import { TakeoverHeader, useMissionScope, useSmallScreen } from "@/shell";
 import { useConnection } from "@/live";
-import { ApCallout } from "@/ui";
+import { ApButton, ApCallout } from "@/ui";
 import type { Runtime } from "../api.ts";
 import { recordView } from "../directory/api.ts";
 import { exportUrl } from "../settings/api.ts";
 import CopySheet from "../editor/CopySheet.vue";
 import EditActions from "../editor/EditActions.vue";
 import EditorPane from "../editor/EditorPane.vue";
+import type { SourceWarning } from "../editor/contracts.ts";
+import { warningsText } from "../editor/source-warnings.ts";
 import { useEditSession } from "../editor/useEditSession.ts";
 import VersionsSheet from "../versions/VersionsSheet.vue";
 import {
@@ -143,9 +145,21 @@ function onDiscard() {
   session.discard();
   setQuery({ edit: null });
 }
-function onSaved() {
+/** A write went through but a source wasn't answering (api): said once, until dismissed or edited. */
+const sourceNote = ref<string | null>(null);
+// Cleared on another dashboard or a new edit; leaving edit mode is how a save lands, so not then.
+watch(dashboardId, () => (sourceNote.value = null));
+watch(editing, (now) => {
+  if (now) sourceNote.value = null;
+});
+function onSaved(warnings: readonly SourceWarning[]) {
   setQuery({ edit: null });
   query.refetch();
+  sourceNote.value = warningsText("Saved.", warnings);
+}
+function onRestored(warnings: readonly SourceWarning[]) {
+  query.refetch();
+  sourceNote.value = warningsText("Restored.", warnings);
 }
 
 function setQuery(changes: Record<string, string | null>) {
@@ -207,6 +221,12 @@ const onRange = (s: TimeSelection) =>
   <ApCallout v-else-if="live.stalled.value && !editing" tone="stale">
     Live updates aren't arriving for this dashboard. Values may be out of date.
   </ApCallout>
+  <ApCallout v-if="sourceNote && !editing" tone="caution">
+    {{ sourceNote }}
+    <template #action>
+      <ApButton size="compact" variant="secondary" @click="sourceNote = null">Dismiss</ApButton>
+    </template>
+  </ApCallout>
   <EditorPane
     v-if="editing && view"
     ref="pane"
@@ -221,7 +241,7 @@ const onRange = (s: TimeSelection) =>
     :mission-id="missionId"
     :dashboard-id="dashboardId"
     :can-restore="canEdit && !editing"
-    @restored="query.refetch"
+    @restored="onRestored"
   />
   <SnapshotSheet
     ref="snapshotSheet"

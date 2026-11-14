@@ -3,6 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import ChangeList from "../editor/ChangeList.vue";
+import type { SourceWarning } from "../editor/contracts.ts";
 import JsonDiffView from "./JsonDiffView.vue";
 import VersionRows from "./VersionRows.vue";
 import { useVersions } from "./useVersions.ts";
@@ -12,7 +13,7 @@ import { useVersions } from "./useVersions.ts";
  * Restore isn't offered while editing (the draft would sit on a stale base).
  */
 const props = defineProps<{ missionId: MissionId; dashboardId: string; canRestore: boolean }>();
-const emit = defineEmits<{ restored: [version: number] }>();
+const emit = defineEmits<{ restored: [warnings: readonly SourceWarning[]] }>();
 const v = useVersions(
   computed(() => props.missionId),
   computed(() => props.dashboardId),
@@ -40,7 +41,7 @@ async function confirmRestore() {
   if (pending.value === null) return;
   const made = await v.restoreVersion(pending.value);
   pending.value = null;
-  if (made !== null) emit("restored", made);
+  if (made !== null) emit("restored", made.warnings ?? []);
 }
 defineExpose({ open });
 </script>

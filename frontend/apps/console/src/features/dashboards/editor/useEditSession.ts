@@ -168,7 +168,7 @@ export function useEditSession(
       });
       if (result.ok) {
         discard();
-        return { ok: true as const, version: result.value.version };
+        return { ok: true as const, ...result.value };
       }
       const failure = api.editFailure(result.error, d);
       if (failure.kind === "conflict") conflictBy.value = failure;

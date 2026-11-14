@@ -2,7 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import { ref, shallowRef, type Ref } from "vue";
 import type { ApiError } from "@/api";
 import { compareVersions, fetchVersions, restore } from "../editor/api.ts";
-import type { VersionChange, Versions } from "../editor/contracts.ts";
+import type { Saved, VersionChange, Versions } from "../editor/contracts.ts";
 
 export type Comparison = Readonly<{
   from: number;
@@ -45,7 +45,7 @@ export function useVersions(
       };
     else error.value = result.error;
   }
-  async function restoreVersion(version: number): Promise<number | null> {
+  async function restoreVersion(version: number): Promise<Saved | null> {
     const current = list.value?.current_version;
     if (current === undefined || busy.value) return null;
     busy.value = true;
@@ -53,7 +53,7 @@ export function useVersions(
       const result = await restore(missionId.value, dashboardId.value, version, current);
       comparison.value = null;
       await load();
-      if (result.ok) return result.value.version;
+      if (result.ok) return result.value;
       error.value = result.error;
       return null;
     } finally {
