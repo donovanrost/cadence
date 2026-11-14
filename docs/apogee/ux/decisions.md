@@ -989,3 +989,22 @@ a station, the spacecraft alone.
   drop figures, and Technical details (journal, stream, raw error), as U45's block. Now has no Technical details.
   - **Who to tell:** nobody is named. Cadence doesn't know a mission's escalation path, and the Now row itself is
     the notice (U20). If missions get an on-call setting, the body names it then.
+
+### U48 · A template edit leaves decided days alone (domain's template-version fix; director confirmed 11-13) (domain / api / fe-setup)
+A day an operator closed or canceled stays that way across a template edit. A day already planned or started keeps
+its requirement, and no second one is added. Reopening a day is its own explicit action, never a side effect of an
+edit. This replaces ContactPlanning's "an edit generates every remaining day afresh".
+- **Edit preview count line** (from the save dry run). It's a neutral info line above the caution "supersedes N
+  drafts" callout, which stays as it is:
+  - "v3 applies to every day that's still open. 3 days already planned or started keep v2's requirement. 2 closed
+    days stay closed, and 1 canceled day stays canceled."
+  - Not "from the next open day": planned and open days can alternate, so there's no single day it starts from.
+  - Drop any part whose count is 0, and use singulars ("1 day … keeps"). When every count is 0, the first sentence
+    stands alone. With 3 dates or fewer in a group, name them after a colon (§4 dates): "…keep v2's
+    requirement: 11-14, 11-15."
+  - "Planned" means what domain keeps: a day with a submitted or approved plan or booked passes. A day with only
+    a draft isn't planned; its draft is superseded, and the callout says so. Domain confirms the exact set.
+- **Template-generated occurrence, Close/Cancel sheet ending:** "This is final for this day: the template won't
+  bring it back, even when the template is edited. To plan 11-15 again, add a one-off requirement for it." Once a
+  reopen action exists: "To plan it again, reopen it."
+- **Requirement rows:** template-generated rows show the version in Source (`Block 1 daily · v2`).
