@@ -279,7 +279,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
          :ok <- expected_version(row, expected),
          {:ok, current_row} <- fetch_version_row(row, row.current_version),
          current <- FleetPlanningPolicyVersionRow.to_domain(current_row),
-         merged <- merge_content(current, attrs),
+         # A version's reason is its own, never carried from the previous one.
+         merged <- current |> merge_content(attrs) |> Map.put(:reason, value(attrs, :reason, nil)),
          {:ok, next_version} <-
            build_version(
              merged,

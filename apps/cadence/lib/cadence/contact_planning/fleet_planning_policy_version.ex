@@ -18,7 +18,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicyVersion do
           automation_repair_document: map(),
           content_sha256: binary(),
           created_by: binary(),
-          created_at: DateTime.t()
+          created_at: DateTime.t(),
+          reason: binary() | nil
         }
 
   defstruct [
@@ -35,7 +36,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicyVersion do
     :automation_repair_document,
     :content_sha256,
     :created_by,
-    :created_at
+    :created_at,
+    :reason
   ]
 
   @spec new(map()) :: t()
@@ -80,7 +82,9 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicyVersion do
           automation_repair_document: automation,
           content_sha256: value(attrs, :content_sha256),
           created_by: required(attrs, :created_by),
-          created_at: datetime(value(attrs, :created_at, DateTime.utc_now()), :created_at)
+          created_at: datetime(value(attrs, :created_at, DateTime.utc_now()), :created_at),
+          # The saver's note; not content, so outside the hash.
+          reason: value(attrs, :reason)
         }
 
       {:ok, %{version | content_sha256: version.content_sha256 || content_sha256(version)}}

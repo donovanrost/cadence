@@ -24,6 +24,7 @@ defmodule Cadence.Reads.OrganizationAudit do
   alias Cadence.Reads.OrganizationAudit.{
     AccountEvents,
     DashboardEvents,
+    PolicyEvents,
     ProviderAccountEvents,
     SettingsEvents
   }
@@ -76,6 +77,7 @@ defmodule Cadence.Reads.OrganizationAudit do
        command_events(organization_id, id) ++
        alarm_events(id, opts) ++
        plan_events(organization_id, id) ++
+       PolicyEvents.list(organization_id, id) ++
        data_events(organization_id, id) ++
        DashboardEvents.list(organization_id, id) ++
        ConfigAudit.list(organization_id, id))

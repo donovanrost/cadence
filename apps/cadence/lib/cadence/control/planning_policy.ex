@@ -66,11 +66,19 @@ defmodule Cadence.Control.PlanningPolicy do
   end
 
   @doc "Saves `document` as the next version (or the first). `expected_version` guards edits."
-  @spec save(Scope.t(), binary(), map(), pos_integer() | nil) ::
+  @spec save(Scope.t(), binary(), map(), pos_integer() | nil, binary() | nil) ::
           {:ok, %{version: pos_integer(), state: :pending_approval}} | {:error, term()}
-  def save(%Scope{} = scope, mission_id, document, expected_version) when is_map(document) do
-    attrs = attrs(document)
+  def save(%Scope{} = scope, mission_id, document, expected_version, reason \\ nil)
+      when is_map(document) do
+    with {:ok, reason} <- reason(reason) do
+      document
+      |> attrs()
+      |> Map.put(:reason, reason)
+      |> save_attrs(scope, mission_id, expected_version)
+    end
+  end
 
+  defp save_attrs(attrs, scope, mission_id, expected_version) do
     result =
       case FleetPlanningPolicies.fetch(scope.organization_id, mission_id) do
         {:error, :fleet_planning_policy_not_found} ->
@@ -164,7 +172,8 @@ defmodule Cadence.Control.PlanningPolicy do
         version: current.version,
         requested_by: actor(current.created_by),
         requested_at: current.created_at,
-        document: document(current)
+        document: document(current),
+        reason: current.reason
       }
   end
 
@@ -199,6 +208,21 @@ defmodule Cadence.Control.PlanningPolicy do
       {key, Map.get(version, attr) || %{}}
     end)
   end
+
+  # The saver's note on the version (lead 11-14): optional, at most 500 characters.
+  defp reason(nil), do: {:ok, nil}
+
+  defp reason(text) when is_binary(text) do
+    trimmed = String.trim(text)
+
+    cond do
+      trimmed == "" -> {:ok, nil}
+      String.length(trimmed) <= 500 -> {:ok, trimmed}
+      true -> {:error, {:invalid_params, %{reason: "Use at most 500 characters."}}}
+    end
+  end
+
+  defp reason(_other), do: {:error, {:invalid_params, %{reason: "must be text"}}}
 
   defp attrs(document) do
     FleetPlanningPolicySchema.groups()

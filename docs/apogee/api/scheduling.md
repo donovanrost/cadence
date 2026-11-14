@@ -466,7 +466,7 @@ Base: `/api/console/v1/missions/:mission_id/contact-planning`.
 ### `GET /policy` (CP2)
 
 `{policy_id, version, active_version, document, pending: {version, requested_by, requested_at,
-document} | null, schema: [field], defaults, permissions: ["planning.edit", "planning.approve"]}`.
+document, reason} | null, schema: [field], defaults, permissions: ["planning.edit", "planning.approve"]}`.
 `document` groups the six policy sections: `horizon, scoring, resources, budgets, redundancy,
 automation`.
 
@@ -483,9 +483,12 @@ the server fills in for omitted fields. Permissions are organization-admin today
 ### `POST /policy`
 
 Body `{document, expected_version?, reason?}`. It saves the next version (or the first) and returns
-`201 {version, state: "pending_approval"}`. A version becomes active only after another admin
+`201 {version, state: "pending_approval"}`. `reason` (trimmed, at most 500 characters; empty is
+none) is stored on that version: `pending.reason`, and the audit's "Proposed planning policy vN"
+entry. Earlier versions have none. A version becomes active only after another admin
 approves it. Errors: `422 invalid_params` (details keyed by `<group>.<field>`),
-`409 version_conflict` (`details.expected_version` = current), `403 forbidden`.
+`409 version_conflict` (`details.expected_version` = current), `403 forbidden`. A `reason` over
+500 characters is `422 invalid_params` (`details.reason`).
 
 ### `POST /policy/:version/decision`
 

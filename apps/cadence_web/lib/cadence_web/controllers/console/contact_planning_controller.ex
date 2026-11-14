@@ -27,7 +27,8 @@ defmodule CadenceWeb.Console.ContactPlanningController do
            conn.assigns.current_scope,
            conn.assigns.current_mission.mission_id,
            document,
-           expected
+           expected,
+           params["reason"]
          ) do
       {:ok, result} -> conn |> put_status(:created) |> json(%{data: ConfigJSON.encode(result)})
       {:error, reason} -> error(conn, reason)

@@ -15,6 +15,7 @@ defmodule CadenceWeb.Console.PlanningPolicyAPITest do
     mission = TestFixtures.persist_mission!(org)
 
     %{
+      org: org,
       ada: ada,
       bob: bob,
       mia: mia,
@@ -49,6 +50,47 @@ defmodule CadenceWeb.Console.PlanningPolicyAPITest do
 
     assert data["defaults"]["horizon"]["max_horizon_seconds"] == 604_800
     assert data["permissions"] == ["planning.edit", "planning.approve"]
+  end
+
+  # Lead 11-14: the saver's reason is stored on the version, shown on pending and in the audit.
+  test "a save's reason is stored on its version, read on pending and in the audit", c do
+    long = String.duplicate("x", 501)
+
+    assert %{"details" => %{"reason" => _}} =
+             c.ada
+             |> call(:post, c.base, %{"document" => document(), "reason" => long})
+             |> json_response(422)
+             |> Map.fetch!("error")
+
+    c.ada
+    |> call(:post, c.base, %{
+      "document" => document(),
+      "reason" => "  Wider horizon for the campaign "
+    })
+    |> json_response(201)
+
+    pending = c.ada |> call(:get, c.base) |> json_response(200) |> get_in(["data", "pending"])
+    assert pending["reason"] == "Wider horizon for the campaign"
+
+    audit =
+      c.ada
+      |> call(:get, "/api/console/v1/organizations/#{c.org.organization_id}/audit?kinds=contacts")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+
+    assert %{
+             "kind" => "contacts",
+             "reason" => "Wider horizon for the campaign",
+             "actor" => %{"kind" => "user", "name" => "Ada"},
+             "target" => %{"kind" => "planning_policy", "label" => "Planning policy"}
+           } = Enum.find(audit, &(&1["action"] == "Proposed planning policy v1"))
+
+    c.ada
+    |> call(:post, c.base, %{"document" => document(), "expected_version" => 1})
+    |> json_response(201)
+
+    second = c.ada |> call(:get, c.base) |> json_response(200) |> get_in(["data", "pending"])
+    assert %{"version" => 2, "reason" => nil} = second
   end
 
   test "save is pending until another admin approves", c do

@@ -550,7 +550,9 @@ first.
   - `alarms`: people acknowledging, assigning, handing off and annotating episodes (the note is
     the `reason`);
   - `contacts`: contact plan approval decisions ("Approved contact plan v1"; the 100 newest plans
-    per mission);
+    per mission), and planning policy changes ("Proposed planning policy v4" with the saver's
+    `reason`, "Approved planning policy v4" / "Rejected …" with the decision's), target `{kind:
+    "planning_policy", id, label: "Planning policy"}`;
   - `data`: data-source definition changes.
   - `provider_accounts`: account added, settings changed (a new version), renamed, retired;
     credential reference set / rotated / revoked; mission access granted / removed. Named by the
