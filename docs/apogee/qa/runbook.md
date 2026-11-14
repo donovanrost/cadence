@@ -284,6 +284,11 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 - **Live telemetry** covers EARENDIL-001…010 only; the other 490 stay `never_heard`. The feeds
   stop when their contacts end (2 h); rerun step 7. `dev/reflect_orbital_{live,activate}.exs`
   take `EARENDIL_CADENCE_NODE` (default `cadence`, i.e. the main checkout).
+- **Postgres has 100 connections, and the two dev nodes hold 60.** :4011 (`cadence_apogee_dev`) and the main
+  checkout (`cadence_dev`) keep 30 each. A full suite takes ~16 more, so two concurrent full suites filled it on 11-14
+  05:47Z (partitions 7 and 12), during an armed window. Before a full suite, check headroom
+  (`select count(*) from pg_stat_activity where backend_type='client backend'`). Start it only below ~70, and never
+  inside an armed window. At the limit, a :4011 pool reconnect and qa's guard queries both fail.
 - **Personas:** the env admin (`user_environment_admin`) has no Reflect Orbital membership; in
   admin mode the console selects the org from the URL (qa #15). e2e runs as `qa-org-admin`.
 - **Planning drafts:** reseeding planning templates invalidates existing drafts (they disappear
