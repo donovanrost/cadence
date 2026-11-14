@@ -52,6 +52,17 @@ defmodule Cadence.Missions do
     |> Repo.one()
   end
 
+  @doc """
+  Every mission on the platform as `{organization_id, mission_id}` (a platform-wide binding's
+  blast radius, DECISIONS #90).
+  """
+  @spec list_all_mission_keys() :: [{binary(), binary()}]
+  def list_all_mission_keys do
+    MissionRow
+    |> select([row], {row.organization_id, row.mission_id})
+    |> Repo.all()
+  end
+
   @spec list_missions(binary()) :: [Mission.t()]
   def list_missions(organization_id) when is_binary(organization_id) do
     MissionRow

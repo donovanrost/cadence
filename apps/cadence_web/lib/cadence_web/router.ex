@@ -1039,6 +1039,17 @@ defmodule CadenceWeb.Router do
       post("/data-sources/:data_source_id/probe", DataSourceWritesController, :probe)
       post("/data-sources/:data_source_id/credential", DataSourceWritesController, :credential)
       post("/data-sources/:data_source_id/tsdb/:operation", DataSourceWritesController, :tsdb)
+      # #90 / ux U53 (owner: api-ops): the mission's bindings, a platform binding's blast radius
+      # and history.
+      get("/data-source-bindings", DataSourceBindingsController, :index)
+
+      get(
+        "/data-source-bindings/:binding_id/blast-radius",
+        DataSourceBindingsController,
+        :blast_radius
+      )
+
+      get("/data-source-bindings/:binding_id/events", DataSourceBindingsController, :events)
       put("/data-source-bindings/:binding_id", DataSourceWritesController, :change_binding)
       post("/data-source-runs/:job_id/:action", DataSourceWritesController, :run_action)
       get("/settings", SettingsController, :show)

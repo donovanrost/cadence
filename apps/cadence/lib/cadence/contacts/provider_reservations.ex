@@ -457,6 +457,25 @@ defmodule Cadence.Contacts.ProviderReservations do
      length(rows) > limit}
   end
 
+  @doc """
+  The passes live at `now` on these missions (AOS <= now < LOS, active or in the pass phase, not
+  dead), earliest AOS first: a platform-wide binding's blast radius (DECISIONS #90).
+  """
+  @spec live_on([binary()], DateTime.t()) :: [struct()]
+  def live_on([], _now), do: []
+
+  def live_on(mission_ids, %DateTime{} = now) when is_list(mission_ids) do
+    from(row in ProviderReservationRow,
+      where:
+        row.mission_id in ^mission_ids and row.starts_at <= ^now and row.ends_at > ^now and
+          (row.lifecycle_state == "active" or row.pass_phase == "pass") and
+          row.lifecycle_state not in ~w(rejected canceling canceled failed),
+      order_by: [asc: row.starts_at, asc: row.provider_reservation_id]
+    )
+    |> Repo.all()
+    |> Enum.map(&ProviderReservationRow.to_domain/1)
+  end
+
   @booked_states ~w(confirmed active completed)
   @upcoming_states ~w(confirmed active)
   @dead_states ~w(rejected canceling canceled failed)

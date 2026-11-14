@@ -65,8 +65,10 @@ target: {kind, id, label} | null, organization: {id, name} | null}], next | null
 id (withdrawn invitations; revokes recorded before 11-13).
 
 - What's recorded: organizations created, invitations sent and withdrawn, service identities
-  issued, rotated and revoked, and admin mode entered (with when it ends) and left, through the
-  console or the legacy pages.
+  issued, rotated and revoked, admin mode entered (with when it ends) and left, through the
+  console or the legacy pages, and platform-wide data-source bindings switched (DECISIONS #90:
+  "Switched platform binding default_flight_telemetry from Cadence managed store to Northlight
+  archive · 12 missions, 3 live passes: “<reason>”"; `target` is the binding).
 - `action` is a server sentence: "Created organization Nova", "Issued service identity Bot in
   Acme Space", "Entered admin mode (until 03:10Z)".
 - Entries never hold a token or password.

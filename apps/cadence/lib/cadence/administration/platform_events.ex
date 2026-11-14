@@ -6,7 +6,8 @@ defmodule Cadence.Administration.PlatformEvents do
 
   Actions: `organization_created`, `invitation_created`, `invitation_withdrawn`,
   `service_identity_issued`, `service_identity_rotated`, `service_identity_revoked`,
-  `admin_mode_entered` (`details.expires_at`), `admin_mode_left`.
+  `admin_mode_entered` (`details.expires_at`), `admin_mode_left`, `platform_binding_switched`
+  (DECISIONS #90: `details` reason, affected_missions, live_passes_total, from and to).
   """
 
   import Ecto.Query
@@ -18,7 +19,8 @@ defmodule Cadence.Administration.PlatformEvents do
   alias Cadence.Repo
 
   @actions ~w(organization_created invitation_created invitation_withdrawn service_identity_issued
-              service_identity_rotated service_identity_revoked admin_mode_entered admin_mode_left)
+              service_identity_rotated service_identity_revoked admin_mode_entered admin_mode_left
+              platform_binding_switched)
 
   @doc "The actions the platform audit records."
   def actions, do: @actions

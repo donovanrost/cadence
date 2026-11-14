@@ -121,9 +121,18 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
         Problem.respond(conn, :binding_changed, %{current_data_source_id: current})
 
       _binding ->
-        case act(conn, "change-binding", %{
-               "binding" => %{"binding_id" => binding_id, "data_source_id" => to_string(target)}
-             }) do
+        binding_params =
+          params
+          |> Map.take(["reason", "expected_affected_missions", "expected_live_passes_total"])
+          |> Map.merge(%{"binding_id" => binding_id, "data_source_id" => to_string(target)})
+
+        case act(conn, "change-binding", %{"binding" => binding_params}) do
+          # #90: a platform-wide binding answers the counts it recorded.
+          {:ok, %{binding: binding, recorded: recorded}} ->
+            json(conn, %{
+              data: ConfigJSON.encode(%{binding: binding_view(binding), recorded: recorded})
+            })
+
           {:ok, binding} ->
             json(conn, %{data: ConfigJSON.encode(%{binding: binding_view(binding)})})
 
@@ -281,6 +290,16 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
   defp error(conn, {:error, :credential_reference_in_use}),
     do: Problem.respond(conn, :invalid_params, %{field: "credentials_ref"})
 
+  # #90 / U53: a platform-wide switch needs a reason and the counts the sheet showed.
+  defp error(conn, {:error, {:invalid, field, sentence}}),
+    do: Problem.respond(conn, :invalid_params, %{"field" => field, field => sentence})
+
+  defp error(conn, {:error, {:blast_radius_changed, fresh}}),
+    do: Problem.respond(conn, :blast_radius_changed, ConfigJSON.encode(fresh))
+
+  defp error(conn, {:error, :blast_radius_unavailable}),
+    do: Problem.respond(conn, :blast_radius_unavailable)
+
   defp error(conn, {:error, :incompatible_data_source}),
     do: Problem.respond(conn, :invalid_params, %{field: "data_source_id"})
 
@@ -315,7 +334,9 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
       id: binding.binding_id,
       logical_source: binding.logical_source,
       data_source_id: binding.data_source_id,
-      status: binding.status
+      status: binding.status,
+      # #90: a platform-wide binding (no organization); Switch… opens the danger sheet.
+      shared: is_nil(binding.organization_id)
     }
 
   defp runs(conn, id) do

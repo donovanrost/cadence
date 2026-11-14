@@ -131,6 +131,11 @@ defmodule CadenceWeb.Console.Problem do
     data_source_not_found: {404, "That data source isn't visible to this mission."},
     binding_not_found: {404, "That binding isn't this mission's."},
     binding_changed: {409, "Someone else changed this binding. Reload it."},
+    blast_radius_changed:
+      {409, "What this switch affects changed while you were confirming. Check it again."},
+    binding_not_shared: {409, "That binding is this mission's own; no platform-wide sheet."},
+    blast_radius_unavailable:
+      {503, "Cadence couldn't count what this switch affects, so it won't switch it now."},
     data_source_state: {409, "The data source is already in that state."},
     platform_source: {403, "Shared by the platform. Platform admins change it in admin mode."},
     run_not_found: {404, "That run isn't this mission's."},

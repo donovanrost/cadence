@@ -73,7 +73,26 @@ defmodule Cadence.Administration.PlatformAudit do
 
   defp sentence(%{action: "admin_mode_entered"}, _org), do: "Entered admin mode"
   defp sentence(%{action: "admin_mode_left"}, _org), do: "Left admin mode"
+
+  # ux U53: 'Switched platform binding default_flight_telemetry from <from> to <to> · 12 missions,
+  # 3 live passes: "<reason>"'.
+  defp sentence(%{action: "platform_binding_switched", details: details} = row, _org)
+       when is_map(details) do
+    "Switched platform binding #{label(row)} from #{source_name(details["from"])} to " <>
+      "#{source_name(details["to"])} · #{count(details["affected_missions"], "mission")}, " <>
+      "#{count(details["live_passes_total"], "live pass")}: “#{details["reason"]}”"
+  end
+
   defp sentence(%{action: action}, _org), do: action
+
+  defp source_name(%{"display_name" => name}) when is_binary(name), do: name
+  defp source_name(%{"id" => id}) when is_binary(id), do: id
+  defp source_name(_source), do: "a source"
+
+  defp count(1, noun), do: "1 #{noun}"
+  defp count(n, "live pass") when is_integer(n), do: "#{n} live passes"
+  defp count(n, noun) when is_integer(n), do: "#{n} #{noun}s"
+  defp count(_n, noun), do: "? #{noun}s"
 
   # The target's name when one was recorded, else its id: never null (withdrawn invitations and
   # revokes recorded before 11-13 carry no name).

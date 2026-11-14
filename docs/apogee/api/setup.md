@@ -722,10 +722,35 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
   - `422 invalid_params` with `details.field`.
 - `POST /data-sources/:id/disable` and `/enable` → `{source}`. `409 data_source_state {state}`
   when it's already in that state.
+- `GET /data-source-bindings` → `{bindings: [{id, logical_source, realm, data_source: {id,
+  display_name}, status, shared}]}`: the mission's own bindings first, then the platform-wide ones
+  it falls back to (only for a logical source and realm it has none of its own for). Every binding
+  view (`bindings[]` of a source, W3's `binding`) also carries `shared`: true for a platform-wide
+  binding (no organization), which every mission without its own reads.
+- `GET /data-source-bindings/:binding_id/blast-radius` (DECISIONS #90, ux U53; a platform-wide
+  binding, a platform admin in admin mode; re-read it when the sheet opens) → `{binding: {id,
+  logical_source, realm, from: {id, display_name}}, affected_missions, live_passes: {total, first:
+  [{spacecraft_name, station_code | null, aos}]}}`. `affected_missions` counts the platform's
+  missions with no active binding of their own for that logical source and realm; `first` is up to
+  3 passes live now (AOS ≤ now < LOS), earliest AOS first. `403 platform_source` outside admin
+  mode, `409 binding_not_shared` for a mission's own binding, `404 binding_not_found`, `503
+  blast_radius_unavailable` when counting fails (the sheet then refuses to switch).
+- `GET /data-source-bindings/:binding_id/events` → `{events: [{at, actor: {id, name} | null,
+  kind: switched | registered | changed | enabled | disabled | superseded, from: {id,
+  display_name} | null, to: …, reason | null, affected_missions | null, live_passes_total |
+  null}]}`, newest first, 50. A platform-wide switch's entry carries its reason and counts.
 - `PUT /data-source-bindings/:binding_id {data_source_id, expected_data_source_id?}` → `{binding}`.
   - `409 binding_changed {current_data_source_id}` when `expected_data_source_id` is stale.
   - `422` when the source doesn't serve the binding's logical source or isn't enabled.
-  - The binding must be the mission's own. It may point at a shared source.
+  - The binding must be the mission's own, or (a platform admin in admin mode) a platform-wide one.
+    It may point at a shared source.
+  - A platform-wide binding (#90) also takes `reason` (required, 1–500 characters),
+    `expected_affected_missions` and `expected_live_passes_total` (the counts the sheet showed;
+    required). The server recounts: if either differs, `409 blast_radius_changed` with the fresh
+    blast-radius body in `details`, and nothing is switched. `422 invalid_params {field, <field>:
+    sentence}` for a missing reason or count. Success is `{binding, recorded: {affected_missions,
+    live_passes_total}}`, the counts recorded in the binding's event and in the platform audit
+    (Admin › Audit).
 - `POST /data-sources/:id/probe` → `{source, probe: {health: {status, checked_at} | null,
   reason | null}}`.
 - `POST /data-sources/:id/credential {credentials_ref}` rotates to that reference (the reference

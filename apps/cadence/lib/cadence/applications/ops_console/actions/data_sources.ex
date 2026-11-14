@@ -7,6 +7,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   """
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
+  alias Cadence.Applications.OpsConsole.Actions.PlatformBindings
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Control.DataSources, as: DataSourceControl
   alias Cadence.Control.ManagedResources
@@ -45,6 +46,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     "retry-deployment-run",
     "requeue-deployment-run"
   ]
+
+  @shared_switch_keys ["reason", "expected_affected_missions", "expected_live_passes_total"]
 
   @source_fields [
     "data_source_id",
@@ -287,10 +290,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   defp normalize_change_binding(params) do
     with :ok <- exact_keys(params, ["binding"], ["mission_id"]),
          {:ok, binding_params} <- fetch_map(params, "binding"),
-         :ok <- exact_keys(binding_params, ["binding_id", "data_source_id"], []),
+         :ok <-
+           exact_keys(binding_params, ["binding_id", "data_source_id"], @shared_switch_keys),
          {:ok, binding_id} <- required_text(binding_params, "binding_id"),
          {:ok, data_source_id} <- required_text(binding_params, "data_source_id") do
-      {:ok, %{binding_id: binding_id, data_source_id: data_source_id}}
+      {:ok,
+       %{
+         binding_id: binding_id,
+         data_source_id: data_source_id,
+         shared_switch: Map.take(binding_params, @shared_switch_keys)
+       }}
     end
   end
 
@@ -455,9 +464,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          scope,
          host_context,
          %ActionRequest{action_id: "change-binding"} = request,
-         %{binding_id: binding_id, data_source_id: data_source_id}
+         %{binding_id: binding_id, data_source_id: data_source_id} = params
        ) do
-    change_binding(scope, host_context, request, binding_id, data_source_id)
+    change_binding(
+      scope,
+      host_context,
+      request,
+      binding_id,
+      data_source_id,
+      Map.get(params, :shared_switch, %{})
+    )
   end
 
   defp dispatch(
@@ -560,7 +576,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          %HostContext{mission_id: mission_id},
          request,
          binding_id,
-         data_source_id
+         data_source_id,
+         shared_switch
        ) do
     organization_id = scope.organization_id
 
@@ -569,16 +586,50 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          :ok <- different_source?(binding, data_source_id),
          {:ok, source} <- scoped_source(organization_id, mission_id, data_source_id),
          :ok <- compatible_source?(source, binding) do
-      DataSources.persist_data_binding(
-        %DataBinding{binding | data_source_id: data_source_id},
-        actor_id: actor_id(scope),
-        payload:
-          Map.merge(action_payload(request), %{
-            "previous_data_source_id" => binding.data_source_id,
-            "current_data_source_id" => data_source_id
-          })
-      )
+      if PlatformBindings.shared?(binding),
+        do: switch_shared_binding(scope, request, binding, source, shared_switch),
+        else: persist_switch(scope, request, binding, data_source_id, %{})
     end
+  end
+
+  # DECISIONS #90 / ux U53: a platform-wide binding moves every mission that reads it. The
+  # server recounts the blast radius, requires the reason, records both in the binding's event
+  # and the platform audit, and refuses when the radius changed under the confirmation.
+  defp switch_shared_binding(scope, request, binding, source, shared_switch) do
+    with {:ok, checked} <- PlatformBindings.check_switch(binding, shared_switch) do
+      from = PlatformBindings.source_ref(binding.data_source_id)
+      to = PlatformBindings.source_ref(source)
+      extra = PlatformBindings.payload(from, to, checked.reason, checked.radius)
+
+      with {:ok, persisted} <-
+             persist_switch(scope, request, binding, source.data_source_id, extra) do
+        :ok = PlatformBindings.audit(persisted, from, to, checked, actor_id(scope))
+
+        {:ok,
+         %{
+           binding: persisted,
+           recorded: %{
+             affected_missions: checked.radius.affected_missions,
+             live_passes_total: checked.radius.live_passes.total
+           }
+         }}
+      end
+    end
+  end
+
+  defp persist_switch(scope, request, %DataBinding{} = binding, data_source_id, extra) do
+    DataSources.persist_data_binding(
+      %DataBinding{binding | data_source_id: data_source_id},
+      actor_id: actor_id(scope),
+      payload:
+        request
+        |> action_payload()
+        |> Map.merge(%{
+          "previous_data_source_id" => binding.data_source_id,
+          "current_data_source_id" => data_source_id
+        })
+        |> Map.merge(extra)
+    )
   end
 
   defp source_action(scope, %HostContext{mission_id: mission_id}, request, data_source_id) do
