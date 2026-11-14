@@ -1225,6 +1225,15 @@ platform admins in admin mode can switch platform bindings." The binding name is
     and clears the typed name. Nothing is switched.
   - The outcome sentence uses the counts the server recorded, from the PUT's answer.
 - **Outcome:** "Switched default_flight_telemetry to Northlight archive. 12 missions read from it now."
+- **Build calls** (fe-setup, 11-14):
+  - The list is the `Bindings` panel on Data sources, under Sources.
+  - `History` is its own row button, opening a wide sheet (When · Who · What) with the audit line for switches and
+    short lines for other kinds.
+  - The blast line's noun is the logical source in words ("telemetry", "events").
+  - One mission reads "the one mission that uses it" / "One mission reads from it now." (title: "…for 1 mission?").
+  - The disabled Switch names the first missing field **in the sheet's own order**.
+  - While the sheet is open, the blast radius is re-read on `data_sources` or `contacts` invalidations. The typed
+    name is cleared only when a number actually changes.
 - **Audit line** (actor and time in their columns): "Switched platform binding default_flight_telemetry from
   Cadence managed store to Northlight archive · 12 missions, 3 live passes: “<reason>”". It's recorded in two
   places: on the binding's own events (api-ops: `data_source_binding_events` with the reason, counts and names in
