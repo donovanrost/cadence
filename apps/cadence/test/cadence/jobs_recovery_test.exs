@@ -11,15 +11,15 @@ defmodule Cadence.JobsRecoveryTest do
 
   @rerun_safe ~w(telemetry_latest_value_rebuild derived_telemetry_latest_value_rebuild
                  telemetry_latest_limit_state_refresh telemetry_latest_limit_state_rebuild
-                 mission_event_rebuild)a
+                 mission_event_rebuild catalog_import_run)a
 
-  test "only the five verified projection rebuilds are safe to run again" do
+  test "only the verified projection rebuilds and the catalog import are safe to run again" do
     runner = :cadence |> Application.fetch_env!(:job_handlers) |> JobRunner.new()
 
     for job_type <- @rerun_safe,
         do: assert(JobRunner.rerun_safe?(runner, job_type), "#{job_type}")
 
-    for job_type <- ~w(contact_schedule_operation catalog_import_run tsdb_backend_lifecycle
+    for job_type <- ~w(contact_schedule_operation tsdb_backend_lifecycle
                        managed_questdb_provisioning telemetry_limit_evaluation
                        derived_telemetry_evaluation replay_telemetry_scope
                        telemetry_historical_data_workflow unknown_job_type)a do

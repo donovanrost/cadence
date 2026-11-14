@@ -222,6 +222,17 @@ defmodule Cadence.Catalog do
     end
   end
 
+  @doc """
+  Whether a run of this job type is safe to run again after the node stopped mid-run (Jobs
+  recovery, 11-14): yes, since the revision fix (domain reviewed). The importer re-parses the
+  artifact content already stored; the mission-model writes are content-addressed and
+  on_conflict :nothing; a revision import finds the revision this run already made (looked up
+  again under the catalog_databases lock) and only republishes its cache-invalidation fact.
+  """
+  @spec rerun_safe?(atom()) :: boolean()
+  def rerun_safe?(:catalog_import_run), do: true
+  def rerun_safe?(_job_type), do: false
+
   @doc false
   @spec execute_enqueued_run(binary(), keyword()) :: {:ok, ImportRun.t()} | {:error, term()}
   def execute_enqueued_run(import_run_id, opts \\ [])
