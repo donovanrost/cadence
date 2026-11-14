@@ -212,6 +212,32 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
              )
   end
 
+  # 007 tonight (director 11-14): a lost lock race (the row changed between read and write) was
+  # recorded as a lifecycle failure. It's retried next cycle, with nothing recorded.
+  test "a lock conflict while applying the answer is retried, never recorded as a failure",
+       context do
+    {reservation, attrs} = pending_reservation(context)
+    response = provider_response(reservation, attrs, "confirmed")
+
+    assert {:ok, %{processed: 1, errors: 1}} =
+             reconcile(context,
+               describe_response: {:ok, response},
+               apply_provider_status: fn _org, _mission, _id, _response ->
+                 {:error, :provider_reservation_changed}
+               end
+             )
+
+    {:ok, unchanged} =
+      ProviderReservations.fetch(
+        context.organization_id,
+        context.mission_id,
+        reservation.provider_reservation_id
+      )
+
+    assert unchanged.lifecycle_state == :pending
+    assert unchanged.last_error_document == %{}
+  end
+
   test "describe preserves a durable configuration failure for an unapproved descriptor",
        context do
     {reservation, attrs} = pending_reservation(context)

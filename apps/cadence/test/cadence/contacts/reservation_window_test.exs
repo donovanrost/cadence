@@ -57,6 +57,24 @@ defmodule Cadence.Contacts.ReservationWindowTest do
     assert DateTime.compare(stored.ends_at, DateTime.add(c.reservation.ends_at, 60)) == :eq
   end
 
+  # 008 tonight (director 11-14): the provider proposes a move and keeps its delivery on the window
+  # still in force until the change is decided. Coverage holds against the accepted window, so the
+  # booking isn't failed while the pass flies on it.
+  test "a +60 s proposal not yet accepted, with the delivery on the old window, stays confirmed" do
+    c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1, 0)})
+    shift = &Fixtures.shift(c.baseline[&1], 60)
+
+    assert {:ok, proposed} =
+             Fixtures.advance(c, 2, %{
+               "starts_at" => shift.("starts_at"),
+               "ends_at" => shift.("ends_at"),
+               "delivery_descriptor" => descriptor(c.reservation, 0)
+             })
+
+    assert proposed.lifecycle_state == :confirmed
+    assert proposed.last_error_document == %{}
+  end
+
   test "a delivery that changes anything but its activation window still fails closed" do
     c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1, 0)})
 

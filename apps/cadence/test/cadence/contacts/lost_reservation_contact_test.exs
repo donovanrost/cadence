@@ -22,26 +22,83 @@ defmodule Cadence.Contacts.LostReservationContactTest do
   alias Cadence.ProviderChangeFixtures, as: Fixtures
   alias Cadence.Repo
 
-  test "a provider configuration failure cancels the pass's scheduled contact, with its reason" do
+  # Director 11-14: a failure from Cadence's own checks isn't the provider letting the pass go.
+  # 008's and 007's flew (~134k observations) after Cadence 'failed' them.
+  test "a configuration failure keeps the pass's contact: the provider may still fly it" do
     c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
+    failed = fail_by_configuration!(c)
+
+    assert ProviderReservations.cadence_side_failure?(failed)
+    refute ProviderReservations.lost?(failed)
     assert %{lifecycle_state: :scheduled} = scheduled(c)
 
-    assert {:error, {:provider_configuration_failure, failed, _reason}} =
-             Fixtures.advance(c, 2, %{
-               "delivery_descriptor" =>
-                 Map.put(descriptor(c.reservation), "endpoint_ref", "unapproved-endpoint")
-             })
+    # The repair shows it as a recheck, never a cancel.
+    reservation_id = c.reservation.provider_reservation_id
 
-    assert failed.lifecycle_state == :failed
+    assert {:ok,
+            [
+              %{
+                provider_reservation_id: ^reservation_id,
+                action: "recheck",
+                source: "provider_reservation_validation"
+              }
+            ]} = ReservationContactRepair.run(c.organization_id, c.mission_id)
+  end
+
+  test "the provider's own failed status cancels the contact, with its words and code" do
+    c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
+    provider_failed!(c)
 
     contact = scheduled(c)
     assert contact.lifecycle_state == :canceled
     assert contact.metadata["cause"] == "provider_failed"
     assert contact.metadata["provider_reservation_id"] == c.reservation.provider_reservation_id
-    assert contact.metadata["provider_reason"] == nil
+    assert contact.metadata["provider_reason"] == "no antenna available"
+    assert contact.metadata["provider_reason_code"] == "no_antenna"
+  end
 
-    assert contact.metadata["provider_reason_code"] ==
-             "delivery_descriptor_conflicts_with_transport"
+  describe "a provisional (Cadence-side) failure" do
+    test "returns to confirmed when the provider's next answer validates" do
+      c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
+      fail_by_configuration!(c)
+
+      assert {:ok, recovered} =
+               Fixtures.advance(c, 3, %{"delivery_descriptor" => descriptor(c.reservation)})
+
+      assert recovered.lifecycle_state == :confirmed
+      assert recovered.last_error_document == %{}
+      assert %{lifecycle_state: :scheduled} = scheduled(c)
+    end
+
+    test "is polled until its pass ends, then settles as failed with its reason" do
+      c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
+      fail_by_configuration!(c)
+      reservation_id = c.reservation.provider_reservation_id
+      before_los = DateTime.add(c.reservation.ends_at, -60)
+      after_los = DateTime.add(c.reservation.ends_at, 60)
+
+      assert reservation_id in due_ids(c, before_los)
+      refute reservation_id in due_ids(c, after_los)
+
+      {:ok, settled} = ProviderReservations.fetch(c.organization_id, c.mission_id, reservation_id)
+      assert settled.lifecycle_state == :failed
+      assert settled.last_error_document["source"] == "provider_reservation_validation"
+
+      assert settled.last_error_document["reason"] =~
+               "delivery_descriptor_conflicts_with_transport"
+    end
+  end
+
+  test "the provider's own failure stays terminal and isn't polled" do
+    c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
+    provider_failed!(c)
+    refute c.reservation.provider_reservation_id in due_ids(c, DateTime.utc_now())
+
+    assert {:error, {:invalid_provider_reservation_transition, :failed, :confirmed}} =
+             Fixtures.advance(c, 3, %{
+               "status" => "confirmed",
+               "delivery_descriptor" => descriptor(c.reservation)
+             })
   end
 
   test "the repair lists a lost reservation's open contact, releases it, then finds nothing" do
@@ -110,7 +167,7 @@ defmodule Cadence.Contacts.LostReservationContactTest do
       c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
       realized = realized_in!(c, :defined)
 
-      fail_by_configuration!(c)
+      provider_failed!(c)
 
       assert %{lifecycle_state: :canceled} = scheduled(c)
       assert {:ok, %{lifecycle_state: :stopped}} = fetch_realized(c, realized)
@@ -120,7 +177,7 @@ defmodule Cadence.Contacts.LostReservationContactTest do
       c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
       realized = realized_in!(c, :active)
 
-      fail_by_configuration!(c)
+      provider_failed!(c)
 
       assert %{lifecycle_state: :realized} = scheduled(c)
       assert {:ok, %{lifecycle_state: :active}} = fetch_realized(c, realized)
@@ -145,11 +202,32 @@ defmodule Cadence.Contacts.LostReservationContactTest do
   end
 
   defp fail_by_configuration!(c) do
-    {:error, {:provider_configuration_failure, %{lifecycle_state: :failed}, _reason}} =
+    {:error, {:provider_configuration_failure, %{lifecycle_state: :failed} = failed, _reason}} =
       Fixtures.advance(c, 2, %{
         "delivery_descriptor" =>
           Map.put(descriptor(c.reservation), "endpoint_ref", "unapproved-endpoint")
       })
+
+    failed
+  end
+
+  # The provider itself fails the pass, with its own reason.
+  defp provider_failed!(c) do
+    {:ok, %{lifecycle_state: :failed}} =
+      Fixtures.advance(c, 2, %{
+        "status" => "failed",
+        "status_reason" => %{"category" => "no_antenna", "detail" => "no antenna available"},
+        "delivery_descriptor" => descriptor(c.reservation)
+      })
+  end
+
+  defp due_ids(c, due_before) do
+    c.organization_id
+    |> ProviderReservations.list_due_for_reconciliation(
+      mission_id: c.mission_id,
+      due_before: due_before
+    )
+    |> Enum.map(& &1.provider_reservation_id)
   end
 
   defp fetch_realized(c, realized),

@@ -5,11 +5,15 @@ defmodule Cadence.Contacts.ReservationContactRepair do
   conflicted with its transport, for one) used to keep its contact 'scheduled', and that contact
   opened a listener for a pass no provider flew.
 
-  A finding is a lost reservation (`ProviderReservations.lost?/1`) whose pass hasn't ended and
-  whose contact is still 'scheduled', or realized but not started. Applying runs the release the
-  poll and a recorded error now run (`ProviderReservations.release_lost/1`): the code path, never
-  a hand edit. A contact already running is left to its LOS. qa runs it without `apply` first and
-  sends the list for review.
+  A finding is a reservation the provider no longer holds (`ProviderReservations.lost?/1`) whose
+  pass hasn't ended and whose contact is still 'scheduled', or realized but not started
+  (action "cancel"). Applying runs the release the poll runs (`ProviderReservations.release_lost/1`):
+  the code path, never a hand edit. A contact already running is left to its LOS.
+
+  A failure from Cadence's own checks is not lost (the provider may still fly the pass, director
+  11-14): it's listed as action "recheck" for visibility and never released. The reconciler polls
+  it until its pass ends, and the provider's next answer can return it to the provider's state.
+  qa runs it without `apply` first and sends the list for review.
   """
 
   import Ecto.Query
@@ -27,10 +31,40 @@ defmodule Cadence.Contacts.ReservationContactRepair do
   def run(organization_id, mission_id, opts \\ []) do
     now = Keyword.get(opts, :now, DateTime.utc_now())
     findings = findings(organization_id, mission_id, now)
+    rechecks = organization_id |> provisional_failures(mission_id, now) |> Enum.map(&recheck/1)
 
     if Keyword.get(opts, :apply, false),
-      do: {:ok, Enum.map(findings, &apply_one/1)},
-      else: {:ok, Enum.map(findings, &describe/1)}
+      do: {:ok, Enum.map(findings, &apply_one/1) ++ rechecks},
+      else: {:ok, Enum.map(findings, &describe/1) ++ rechecks}
+  end
+
+  # Cadence-side failures the reconciler still polls (ProviderReservations.cadence_side_failure?/1).
+  defp provisional_failures(organization_id, mission_id, now) do
+    from(row in ProviderReservationRow,
+      where:
+        row.organization_id == ^organization_id and row.lifecycle_state == "failed" and
+          row.ends_at > ^now,
+      order_by: [asc: row.starts_at]
+    )
+    |> maybe_mission(mission_id)
+    |> Repo.all()
+    |> Enum.map(&ProviderReservationRow.to_domain/1)
+    |> Enum.filter(&ProviderReservations.cadence_side_failure?/1)
+  end
+
+  defp recheck(reservation) do
+    %{
+      provider_reservation_id: reservation.provider_reservation_id,
+      reservation_state: "failed",
+      spacecraft_id: reservation.spacecraft_id,
+      scheduled_contact_id: reservation.scheduled_contact_id,
+      contact_state: nil,
+      starts_at: reservation.starts_at,
+      ends_at: reservation.ends_at,
+      action: "recheck",
+      source: reservation.last_error_document["source"],
+      reason: reservation.last_error_document["reason"]
+    }
   end
 
   @doc """

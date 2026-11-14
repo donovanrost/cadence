@@ -138,7 +138,7 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
          {:ok, response} <- fetch_provider_state(client, context, reservation, call_opts),
          {:ok, response} <- reservation_result(response),
          {:ok, updated} <-
-           ProviderReservations.apply_provider_status(
+           apply_status(opts).(
              reservation.organization_id,
              reservation.mission_id,
              reservation.provider_reservation_id,
@@ -149,10 +149,21 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
       {:error, {:provider_configuration_failure, failed_reservation, reason}} ->
         {:error, failed_reservation, reason}
 
+      # The row changed between read and write (another writer won the lock): not a failure of
+      # the booking. Retried next cycle, nothing recorded (director 11-14: 007's reservation was
+      # failed by exactly this).
+      {:error, :provider_reservation_changed} ->
+        {:error, reservation, :provider_reservation_changed}
+
       {:error, reason} ->
         record_reconciliation_error(reservation, reason)
     end
   end
+
+  # Tests replace it to reproduce a lost lock race (007, director 11-14), which needs a second
+  # writer at an exact instant.
+  defp apply_status(opts),
+    do: Keyword.get(opts, :apply_provider_status, &ProviderReservations.apply_provider_status/4)
 
   defp fetch_provider_state(client, context, reservation, opts) do
     call_opts = provider_call_opts(opts)

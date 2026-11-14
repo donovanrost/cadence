@@ -40,6 +40,8 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   @document_byte_limit 65_536
   @nonterminal_states ~w(requesting pending confirmed active unknown canceling)
+  # The sources of a 'failed' Cadence recorded from its own checks, not the provider's status.
+  @cadence_side_sources ~w(provider_reservation_validation provider_reservation_reconciler attempt_resolution)
   @materialized_states [:confirmed, :active, :completed]
 
   @provider_states %{
@@ -572,7 +574,11 @@ defmodule Cadence.Contacts.ProviderReservations do
     ProviderReservationRow
     |> where(
       [row],
-      row.organization_id == ^organization_id and row.lifecycle_state in ^@nonterminal_states and
+      row.organization_id == ^organization_id and
+        (row.lifecycle_state in ^@nonterminal_states or
+           (row.lifecycle_state == "failed" and
+              fragment("?->'value'->>'source'", row.last_error_document) in ^@cadence_side_sources and
+              row.ends_at > ^due_before)) and
         (is_nil(row.last_reconciled_at) or row.last_reconciled_at <= ^due_before)
     )
     |> maybe_filter_mission(Keyword.get(opts, :mission_id))
@@ -1065,6 +1071,15 @@ defmodule Cadence.Contacts.ProviderReservations do
     Repo.transaction(fn -> transition_locked(reservation, requested_state, attrs) end)
   end
 
+  # A provisional failure (Cadence's own, cadence_side_failure?/1) can return to whatever the
+  # provider says next; a provider's own failed stays terminal.
+  @provisional_failure_exits ~w(confirmed active completed canceling canceled unknown failed)a
+
+  defp allowed_transition?(current, requested_state) do
+    requested_state in Map.fetch!(@allowed_transitions, current.lifecycle_state) or
+      (cadence_side_failure?(current) and requested_state in @provisional_failure_exits)
+  end
+
   defp transition_locked(reservation, requested_state, attrs) do
     row =
       Repo.one!(
@@ -1087,7 +1102,7 @@ defmodule Cadence.Contacts.ProviderReservations do
       stable.(current) != stable.(reservation) ->
         Repo.rollback(:provider_reservation_changed)
 
-      requested_state not in Map.fetch!(@allowed_transitions, current.lifecycle_state) ->
+      not allowed_transition?(current, requested_state) ->
         Repo.rollback(
           {:invalid_provider_reservation_transition, current.lifecycle_state, requested_state}
         )
@@ -1259,12 +1274,19 @@ defmodule Cadence.Contacts.ProviderReservations do
   defp apply_contact_side_effect(reservation), do: apply_loss_side_effect(reservation)
 
   @doc """
-  Whether a reservation won't fly, so its contact must not open: failed, canceled, or an
-  attested booking the provider rejected (#53).
+  Whether the provider no longer holds the booking, so its contact must not open: canceled, the
+  provider's own failed status, or an attested booking the provider rejected (#53). A failure
+  Cadence recorded from its own checks is not lost (cadence_side_failure?/1).
   """
   @spec lost?(ProviderReservation.t()) :: boolean()
-  def lost?(%ProviderReservation{lifecycle_state: state}) when state in [:canceled, :failed],
-    do: true
+  def lost?(%ProviderReservation{lifecycle_state: :canceled}), do: true
+
+  # A 'failed' Cadence recorded from its own checks (a delivery descriptor it couldn't validate, a
+  # reconciliation error, an attempt resolution) isn't the provider letting the pass go: the
+  # provider may still fly it (director 11-14: 008's and 007's 'failed' passes flew, ~134k
+  # observations received). Only the provider's own failed status loses the booking.
+  def lost?(%ProviderReservation{lifecycle_state: :failed} = reservation),
+    do: not cadence_side_failure?(reservation)
 
   def lost?(%ProviderReservation{lifecycle_state: :rejected} = reservation),
     do: attested?(reservation)
@@ -1289,17 +1311,13 @@ defmodule Cadence.Contacts.ProviderReservations do
     result
   end
 
-  # A reservation that won't fly (failed, canceled, or an attested booking rejected) releases its
-  # scheduled contact, by whichever path it got there: the poll, or a recorded provider error such
-  # as a delivery descriptor that conflicts with the transport (director 11-14: a failed
-  # reservation's contact had stayed 'scheduled' and opened a listener for a pass no provider
-  # flew).
+  # A reservation the provider no longer holds (canceled, the provider's own failed status, or an
+  # attested booking it rejected) releases its scheduled contact, by whichever path it got there.
+  # A failure from Cadence's own checks isn't lost?/1: the provider may still fly the pass
+  # (director 11-14), so its contact stays and the next poll rechecks it.
   defp apply_loss_side_effect(%ProviderReservation{lifecycle_state: state} = reservation)
        when state in [:canceled, :failed] do
-    with :ok <- cancel_scheduled_contact(reservation, state),
-         :ok <- BookingOutcomes.booking_lost(reservation) do
-      BookingOutcomes.booking_settled(reservation)
-    end
+    if lost?(reservation), do: release_contact(reservation, state), else: :ok
   end
 
   defp apply_loss_side_effect(%ProviderReservation{lifecycle_state: :rejected} = reservation) do
@@ -1315,6 +1333,28 @@ defmodule Cadence.Contacts.ProviderReservations do
   end
 
   defp apply_loss_side_effect(_reservation), do: :ok
+
+  defp release_contact(reservation, state) do
+    with :ok <- cancel_scheduled_contact(reservation, state),
+         :ok <- BookingOutcomes.booking_lost(reservation) do
+      BookingOutcomes.booking_settled(reservation)
+    end
+  end
+
+  @doc """
+  Whether a 'failed' reservation's failure is Cadence's own (its last_error's source), not the
+  provider's status. Such a failure is provisional: still polled until its pass ends, and the
+  provider's next answer can return it to the provider's state (director 11-14).
+  """
+  @spec cadence_side_failure?(ProviderReservation.t()) :: boolean()
+  def cadence_side_failure?(%ProviderReservation{
+        lifecycle_state: :failed,
+        last_error_document: error
+      })
+      when is_map(error),
+      do: error["source"] in @cadence_side_sources
+
+  def cadence_side_failure?(%ProviderReservation{}), do: false
 
   # Cancels the contact while nothing runs on it: still 'scheduled', or realized but not started
   # (:defined, which is also where a failed start stays; its realized contact closes with it). Any
@@ -1535,7 +1575,10 @@ defmodule Cadence.Contacts.ProviderReservations do
       framing["family"] == diagnostics["framing_family"],
       framing["frame_bytes"] == diagnostics["frame_bytes"],
       reservation.provider_spacecraft_ref in (descriptor["allowed_source_refs"] || []),
-      activation_covers?(activation_window, pass_window(response, reservation))
+      # The accepted window, or the one this answer describes (director 11-14): a provider keeps
+      # its delivery on the window in force while a proposed move is pending (008 tonight).
+      activation_covers?(activation_window, reservation) or
+        activation_covers?(activation_window, pass_window(response, reservation))
     ]
 
     if Enum.all?(checks),
