@@ -56,7 +56,7 @@ defmodule Cadence.Reads.UplinkContacts do
       Map.merge(base, %{
         spacecraft: %{id: spacecraft_id, name: Map.get(ctx.names, spacecraft_id, spacecraft_id)},
         pass: base.pass && booked(base.pass, ctx, armed),
-        contact: contact && hand(contact, ctx, stations, armed)
+        contact: contact && hand(contact, stations, armed)
       })
     end
   end
@@ -73,7 +73,7 @@ defmodule Cadence.Reads.UplinkContacts do
     })
   end
 
-  defp hand(%RealizedContact{} = contact, ctx, stations, armed) do
+  defp hand(%RealizedContact{} = contact, stations, armed) do
     started_at = started_at(contact)
 
     %{
@@ -90,10 +90,12 @@ defmodule Cadence.Reads.UplinkContacts do
     }
   end
 
-  # A spacecraft's latest open contact that no booked pass realized (a hand start, #84).
+  # A spacecraft's latest live contact that no booked pass realized (a hand start, #84). Only an
+  # active one: a hand start that never started has no window to end it (domain's orphan sweep
+  # closes booked ones only) and is U45's contact_start item instead.
   defp hand_started(open, owners) do
     open
-    |> Enum.filter(&is_nil(&1.scheduled_contact_id))
+    |> Enum.filter(&(is_nil(&1.scheduled_contact_id) and &1.lifecycle_state == :active))
     |> Enum.sort_by(&realized_order/1)
     |> Enum.reduce(%{}, fn contact, acc ->
       case contact.source_endpoint_refs |> Enum.map(&owners[&1]) |> Enum.uniq() do
