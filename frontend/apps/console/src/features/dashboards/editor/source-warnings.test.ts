@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { SourceWarning } from "./contracts.ts";
 import { warningsText, warningText } from "./source-warnings.ts";
 
+const now = new Date("2026-11-14T10:00:00Z");
 const warning = (over: Partial<SourceWarning> = {}): SourceWarning => ({
   code: "source_unavailable",
   logical_source: "telemetry",
@@ -13,37 +14,51 @@ const warning = (over: Partial<SourceWarning> = {}): SourceWarning => ({
   ...over,
 });
 
-describe("source warnings", () => {
-  it("names the source, realm, time and widget count", () => {
-    expect(warningText(warning())).toBe(
-      "Telemetry (flight) wasn't answering at 09:12Z; 3 widgets may stay empty until it does.",
+describe("source warnings (ux words)", () => {
+  it("leaves flight unnamed and says when health was checked", () => {
+    expect(warningText(warning(), now)).toBe(
+      "Telemetry wasn't answering when checked at 09:12Z; 3 widgets may stay empty until it does.",
+    );
+  });
+  it("names any other realm, and dates a check from another day", () => {
+    const w = warning({ realm: "replay", observed_at: "2026-11-13T23:40:00Z" });
+    expect(warningText(w, now)).toBe(
+      "Telemetry (replay) wasn't answering when checked at 11-13 23:40Z; 3 widgets may stay empty until it does.",
     );
   });
   it("words a degraded source and a single widget", () => {
-    expect(warningText(warning({ code: "source_degraded", placement_ids: ["dash_widget_a"] }))).toBe(
-      "Telemetry (flight) was answering slowly at 09:12Z; 1 widget may show partial data.",
+    const w = warning({ code: "source_degraded", placement_ids: ["dash_widget_a"] });
+    expect(warningText(w, now)).toBe(
+      "Telemetry was slow when checked at 09:12Z; 1 widget may load slowly or show partial data.",
     );
   });
-  it("degrades unknown values to generic words, and no time without a health row", () => {
+  it("drops the widget clause with no placements, and the time with no health row", () => {
+    expect(warningText(warning({ placement_ids: [] }), now)).toBe(
+      "Telemetry wasn't answering when checked at 09:12Z.",
+    );
+    expect(warningText(warning({ observed_at: null, placement_ids: [] }), now)).toBe(
+      "Telemetry wasn't answering.",
+    );
+  });
+  it("degrades unknown values to generic words", () => {
     const w = warning({
       logical_source: { unrecognized: "archive" },
       realm: { unrecognized: "lab" },
-      observed_at: null,
     });
-    expect(warningText(w)).toBe(
-      "A data source wasn't answering; 3 widgets may stay empty until it does.",
+    expect(warningText(w, now)).toBe(
+      "A data source wasn't answering when checked at 09:12Z; 3 widgets may stay empty until it does.",
     );
   });
   it("falls back to the server's sentence for an unknown code", () => {
-    expect(warningText(warning({ code: { unrecognized: "source_flaky" } }))).toBe(
+    expect(warningText(warning({ code: { unrecognized: "source_flaky" } }), now)).toBe(
       "Dashboard source is unavailable for the publish context.",
     );
   });
   it("is null when the write had no warnings (or the server sent none yet)", () => {
-    expect(warningsText("Saved.", [])).toBeNull();
-    expect(warningsText("Saved.", undefined)).toBeNull();
-    expect(warningsText("Saved.", [warning(), warning({ realm: null })])).toBe(
-      "Saved. Telemetry (flight) wasn't answering at 09:12Z; 3 widgets may stay empty until it does. Telemetry wasn't answering at 09:12Z; 3 widgets may stay empty until it does.",
+    expect(warningsText("Saved.", [], now)).toBeNull();
+    expect(warningsText("Saved.", undefined, now)).toBeNull();
+    expect(warningsText("Saved.", [warning({ placement_ids: [] })], now)).toBe(
+      "Saved. Telemetry wasn't answering when checked at 09:12Z.",
     );
   });
 });
