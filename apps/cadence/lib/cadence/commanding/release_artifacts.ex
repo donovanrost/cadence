@@ -128,7 +128,9 @@ defmodule Cadence.Commanding.ReleaseArtifacts do
         severity: verifier_plan.severity,
         success_criteria: verifier_plan.success_criteria,
         failure_criteria: verifier_plan.failure_criteria,
-        delay_until: shift_time(released_at, verifier_plan.delay_ms),
+        # A verifier never matches what arrived before its command was released: with no plan
+        # delay its window opens at the release (P9CS, 11-14: a pre-release burst read SCIENCE).
+        delay_until: shift_time(released_at, verifier_plan.delay_ms || 0),
         timeout_at: shift_time(released_at, verifier_plan.timeout_ms),
         metadata: verifier_plan.metadata
       })
