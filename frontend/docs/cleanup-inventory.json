@@ -242,7 +242,6 @@
     "frontend/apps/host/src/administration/features/organization-home/producer-consumer-probe.mjs",
     "frontend/apps/host/src/auth-and-navigation/features/notifications/federated-bell-probe.mjs",
     "frontend/apps/host/src/auth-and-navigation/features/notifications/producer-consumer-probe.mjs",
-    "frontend/apps/host/src/auth-and-navigation/features/sign-in/producer-consumer-probe.mjs",
     "frontend/apps/host/src/ops-workspace/features/frame/context-navigation.test.js",
     "frontend/apps/host/src/ops-workspace/features/frame/context.js",
     "frontend/apps/host/src/ops-workspace/features/frame/nav-rail-controller.test.js",

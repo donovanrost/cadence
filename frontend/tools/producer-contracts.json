@@ -5,16 +5,6 @@
     "producer": "apps/cadence/test/cadence/reads/administration/organization_home_test.exs"
   },
   {
-    "consumer": "apps/host/src/auth-and-navigation/features/notifications/notifications.test.ts",
-    "environment": "CADENCE_NOTIFICATIONS_DOCUMENT",
-    "producer": "apps/cadence/test/cadence/reads/notifications/inbox_test.exs"
-  },
-  {
-    "consumer": "apps/host/src/auth-and-navigation/features/sign-in/native-forms-probe.test.ts",
-    "environment": "CADENCE_AUTH_DOCUMENT",
-    "producer": "apps/cadence_web/test/cadence_web/auth_navigation_contract_test.exs"
-  },
-  {
     "consumer": "apps/host/src/ops-workspace/features/timeline/timeline.test.ts",
     "environment": "CADENCE_TIMELINE_DOCUMENT",
     "producer": "apps/cadence/test/cadence/reads/ops_workspace/timeline_test.exs"
