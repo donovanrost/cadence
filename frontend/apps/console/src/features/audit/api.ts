@@ -1,4 +1,13 @@
-import { actor, decoders, orNull, request, type ApiResult, type Decoded } from "@/api";
+import type { RouteLocationRaw } from "vue-router";
+import {
+  actor,
+  decoders,
+  orNull,
+  request,
+  type ApiResult,
+  type Decoded,
+  type SessionOrganization,
+} from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /organizations/:id/audit` (AU1). */
 const { array, nullable, object, string, timestamp, token } = decoders;
@@ -119,6 +128,29 @@ export function groupRepeats(events: readonly AuditEvent[]): readonly AuditRow[]
 /** The target, unless the action sentence already names it ("Requested NOOP · NOOP"). */
 export function targetText(e: AuditEvent): string | null {
   return e.target && !e.action.includes(e.target.label) ? e.target.label : null;
+}
+
+/**
+ * Where a target opens, when it has a console page. api 11-15: a `command_group` target opens its
+ * command page (ops.commands.request, whose :requestId is the group id) in the event's mission,
+ * found among the organization's missions for its slug. Every other kind (`command_request`, kinds
+ * the console doesn't know yet) stays plain text.
+ */
+export function targetRoute(
+  e: Pick<AuditEvent, "target" | "mission">,
+  organization: Pick<SessionOrganization, "slug" | "missions"> | null,
+): RouteLocationRaw | null {
+  const target = e.target;
+  if (!target || target.kind !== "command_group" || !target.id || !e.mission || !organization)
+    return null;
+  const missionId = e.mission.id;
+  const mission = organization.missions.find((m) => m.id === missionId);
+  return mission
+    ? {
+        name: "ops.commands.request",
+        params: { org: organization.slug, mission: mission.slug, requestId: target.id },
+      }
+    : null;
 }
 
 /** "config, commanding and access" */

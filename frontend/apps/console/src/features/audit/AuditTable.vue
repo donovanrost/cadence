@@ -1,11 +1,25 @@
 <script setup lang="ts">
 import { ApTable, ApTag, formatAbsolute, type ApColumn } from "@/ui";
 import { computed } from "vue";
-import { groupRepeats, targetText, type AuditEvent } from "./api.ts";
+import { useConsoleScope } from "@/shell";
+import { groupRepeats, targetRoute, targetText, type AuditEvent } from "./api.ts";
 
 /** Audit rows, newest first: time · actor · action in words · mission · why. */
 const props = defineProps<{ events: readonly AuditEvent[] }>();
-const rows = computed(() => groupRepeats(props.events));
+const scope = useConsoleScope();
+const organization = computed(() => {
+  const s = scope.value;
+  return s.kind === "organization" || s.kind === "mission" || s.kind === "unknown-mission"
+    ? s.organization
+    : null;
+});
+/** Each row with the page its target opens, when it has one (api: a command group's). */
+const rows = computed(() =>
+  groupRepeats(props.events).map((row) => ({
+    ...row,
+    link: targetRoute(row, organization.value),
+  })),
+);
 const columns: readonly ApColumn[] = [
   { key: "at", label: "Time", mono: true },
   { key: "actor", label: "Actor" },
@@ -27,7 +41,12 @@ const columns: readonly ApColumn[] = [
     </template>
     <template #cell-action="{ row }"
       >{{ row.action
-      }}<span v-if="targetText(row)" class="text-text-3"> · {{ targetText(row) }}</span
+      }}<span v-if="targetText(row)" class="text-text-3">
+        ·
+        <RouterLink v-if="row.link" :to="row.link" class="text-readout hover:underline">{{
+          targetText(row)
+        }}</RouterLink
+        ><template v-else>{{ targetText(row) }}</template></span
       ><span v-if="row.repeat > 1" class="font-mono text-text-3"> ×{{ row.repeat }}</span></template
     >
     <template #cell-mission="{ row }">{{ row.mission?.name ?? "—" }}</template>
