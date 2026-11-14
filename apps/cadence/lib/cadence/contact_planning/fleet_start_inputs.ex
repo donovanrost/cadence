@@ -42,7 +42,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
          {:ok, templates} <-
            templates(scope.organization_id, mission_id, window, {locked, as_of}) do
       context = %{organization_id: scope.organization_id, mission_id: mission_id}
-      requirements = without_superseded(context, window, requirements, templates, locked, as_of)
+      requirements = without_superseded(context, requirements, templates, locked, as_of)
 
       snapshot = %{
         context: context,
@@ -75,10 +75,10 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
     end
   end
 
-  defp without_superseded(_context, _window, requirements, [], _locked, _as_of),
+  defp without_superseded(_context, requirements, [], _locked, _as_of),
     do: requirements
 
-  defp without_superseded(context, window, requirements, templates, locked, now) do
+  defp without_superseded(context, requirements, templates, locked, now) do
     future =
       requirements
       |> Enum.filter(fn {_requirement, version} ->
@@ -91,7 +91,8 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
       |> Enum.flat_map(fn t ->
         future
         |> Map.get(t.version.contact_requirement_template_id, [])
-        |> TemplateSupersession.in_window({window.horizon_start, window.horizon_end})
+        # Exactly the occurrences the start will generate for it (qa #86).
+        |> TemplateSupersession.at_occurrences(t.occurrences)
         |> TemplateSupersession.stale(t.version, MapSet.new(t.spacecraft_ids))
         |> Enum.map(&elem(&1, 0))
       end)
@@ -166,9 +167,52 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
     end
   end
 
+  @doc """
+  A fleet start's template fan-out over `window` (`%{horizon_start, horizon_end}`) at `as_of`,
+  without reading any requirement or occurrence rows: one target resolution per active template
+  plus schedule arithmetic. `count` is the gross fan-out the start's limit check uses (days that
+  already have a requirement included), `limit` that limit, and `capped` the templates whose
+  per-run cap cuts the window short, with the last occurrence kept (U52).
+  """
+  @spec estimate(binary(), binary(), map(), DateTime.t() | nil) ::
+          {:ok,
+           %{
+             count: non_neg_integer(),
+             limit: pos_integer(),
+             capped: [%{template_id: binary(), limit: pos_integer(), last_at: DateTime.t()}]
+           }}
+          | {:error, term()}
+  def estimate(org, mission, window, as_of \\ nil) do
+    as_of = as_of || DateTime.truncate(DateTime.utc_now(), :second)
+
+    with {:ok, rows} <- active_template_rows(org, mission, false) do
+      planned = Enum.map(rows, &fan_out(&1, window, as_of))
+
+      {:ok,
+       %{
+         count: fan_out_count(planned),
+         limit: ContactRequirementTemplates.fan_out_limit(),
+         capped:
+           for %{capped: %{} = capped} = p <- planned do
+             %{
+               template_id: p.version.contact_requirement_template_id,
+               limit: capped.limit,
+               last_at: capped.last_at
+             }
+           end
+       }}
+    end
+  end
+
   defp templates(_, _, %{include_recurring: false}, _), do: {:ok, []}
 
   defp templates(org, mission, window, {locked, as_of}) do
+    with {:ok, rows} <- active_template_rows(org, mission, locked) do
+      template_snapshots(rows, window, {locked, as_of})
+    end
+  end
+
+  defp active_template_rows(org, mission, locked) do
     query =
       ContactRequirementTemplateRow
       |> join(:left, [t], v in ContactRequirementTemplateVersionRow,
@@ -195,50 +239,64 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
         {:error, :fleet_planning_template_limit_exceeded}
 
       true ->
-        template_snapshots(rows, window, {locked, as_of})
+        {:ok, rows}
     end
   end
 
+  # The full fan-out is counted before any existing rows are read, so an over-limit start reports
+  # its whole count (U52: {count, limit}, not the first template over it).
   defp template_snapshots(rows, window, {locked, as_of}) do
-    Enum.reduce_while(rows, {:ok, [], 0}, fn {t, v}, {:ok, acc, count} ->
-      version = ContactRequirementTemplateVersionRow.to_domain(v)
+    planned = Enum.map(rows, &fan_out(&1, window, as_of))
+    count = fan_out_count(planned)
+    limit = ContactRequirementTemplates.fan_out_limit()
 
-      occurrences =
-        ContactRequirementTemplates.preview_occurrences(
-          version,
-          window.horizon_start,
-          window.horizon_end
-        )
+    if count > limit do
+      {:error, {:fleet_planning_occurrence_limit_exceeded, count, limit}}
+    else
+      {:ok, Enum.map(planned, &snapshot_entry(&1, {locked, as_of}))}
+    end
+  end
 
-      targets =
+  # One template's run over the window at `as_of`: its occurrences (earliest first, capped per
+  # run, the lookback measured from as_of) and its targets.
+  defp fan_out({t, v}, window, as_of) do
+    version = ContactRequirementTemplateVersionRow.to_domain(v)
+
+    {occurrences, capped} =
+      ContactRequirementTemplates.capped_occurrences(
+        version,
+        window.horizon_start,
+        window.horizon_end,
+        as_of
+      )
+
+    %{
+      template_row: t,
+      version: version,
+      occurrences: occurrences,
+      capped: capped,
+      spacecraft_ids:
         TemplateTargets.resolve(
           version.organization_id,
           version.mission_id,
           version.target_document
         )
+    }
+  end
 
-      # A template fans out per targeted spacecraft.
-      total = count + length(occurrences) * length(targets)
+  # A template fans out per targeted spacecraft.
+  defp fan_out_count(planned),
+    do: planned |> Enum.map(&(length(&1.occurrences) * length(&1.spacecraft_ids))) |> Enum.sum()
 
-      if total > ContactRequirementTemplates.fan_out_limit() do
-        {:halt, {:error, :fleet_planning_occurrence_limit_exceeded}}
-      else
-        entry = %{
-          template: ContactRequirementTemplateRow.to_domain(t),
-          version: version,
-          occurrences: occurrences,
-          spacecraft_ids: targets,
-          existing_occurrences:
-            existing_occurrences(version, occurrences, targets, {locked, as_of})
-        }
-
-        {:cont, {:ok, [entry | acc], total}}
-      end
-    end)
-    |> case do
-      {:ok, entries, _} -> {:ok, Enum.reverse(entries)}
-      {:error, _} = error -> error
-    end
+  defp snapshot_entry(planned, lock) do
+    %{
+      template: ContactRequirementTemplateRow.to_domain(planned.template_row),
+      version: planned.version,
+      occurrences: planned.occurrences,
+      spacecraft_ids: planned.spacecraft_ids,
+      existing_occurrences:
+        existing_occurrences(planned.version, planned.occurrences, planned.spacecraft_ids, lock)
+    }
   end
 
   # The template's days that already have a requirement, one row per (at, spacecraft) in a

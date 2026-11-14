@@ -229,8 +229,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
              OpsConsole.load(c.scope, host, query)
 
     window = %{
-      "horizon_start" => "2026-07-17T04:00:00.000Z",
-      "horizon_end" => "2026-07-17T08:00:00.000Z",
+      "horizon_start" => "2030-07-17T04:00:00.000Z",
+      "horizon_end" => "2030-07-17T08:00:00.000Z",
       "include_recurring" => false
     }
 

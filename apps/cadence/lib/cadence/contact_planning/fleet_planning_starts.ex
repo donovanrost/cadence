@@ -12,6 +12,16 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
 
   alias Cadence.Repo
 
+  @doc """
+  The start's template fan-out over `window` (`%{horizon_start, horizon_end}`): `count` toward
+  the fan-out limit, `limit`, and the templates whose per-run cap cuts the window short
+  (FleetStartInputs.estimate/4). Reads no requirement or occurrence rows (U52).
+  """
+  def estimate(%Scope{} = scope, mission_id, window) do
+    with :ok <- authorize(scope, mission_id),
+         do: FleetStartInputs.estimate(scope.organization_id, mission_id, window)
+  end
+
   def preview(%Scope{} = scope, mission_id, params) do
     with :ok <- authorize(scope, mission_id),
          {:ok, window, pages, _} <- admit(params, :preview),
@@ -230,7 +240,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
         t.version,
         t.spacecraft_ids,
         now,
-        {inputs.window.horizon_start, inputs.window.horizon_end}
+        # Exactly the occurrences the start generated for it (qa #86).
+        t.occurrences
       )
     end)
   end

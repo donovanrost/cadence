@@ -51,8 +51,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.FleetRunTest do
     assert observed["repair"]["available"]
 
     window = %{
-      "horizon_start" => "2026-07-17T04:00:00.000Z",
-      "horizon_end" => "2026-07-17T08:00:00.000Z"
+      "horizon_start" => "2030-07-17T04:00:00.000Z",
+      "horizon_end" => "2030-07-17T08:00:00.000Z"
     }
 
     input = native(%{model: observed, action: "repair", window: window})

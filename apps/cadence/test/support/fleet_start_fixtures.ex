@@ -7,7 +7,7 @@ defmodule Cadence.FleetStartFixtures do
   @organization_id "org-fleet-start"
   @mission_id "mission-fleet-start"
   @spacecraft_id "craft-fleet-start"
-  @now ~U[2026-07-17 04:00:00.000000Z]
+  @now ~U[2030-07-17 04:00:00.000000Z]
 
   def setup_start do
     %{organization: org, mission: mission} =

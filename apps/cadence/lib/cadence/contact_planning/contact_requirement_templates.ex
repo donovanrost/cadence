@@ -315,10 +315,9 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
          :ok <- active_template(template),
          {:ok, actor_id} <- actor_id(current_scope),
          targets = targets(version, mission_id, opts),
-         due = due_occurrences(version, from, until, opts),
+         now = now(opts),
+         {due, _capped} = capped_occurrences(version, from, until, now),
          :ok <- fan_out_bound(length(due) * length(targets)) do
-      now = now(opts)
-
       results =
         for occurrence_at <- due, spacecraft_id <- targets do
           materialize_occurrence(
@@ -333,7 +332,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
       case Enum.find(results, &match?({:error, _}, &1)) do
         nil ->
-          maybe_supersede(current_scope, version, targets, now, {from, until}, opts)
+          # Only the occurrences this run generated: each cancelled slot has its replacement.
+          maybe_supersede(current_scope, version, targets, now, due, opts)
           {:ok, Enum.map(results, fn {:ok, result} -> result end)}
 
         {:error, reason} ->
@@ -342,9 +342,9 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     end
   end
 
-  defp maybe_supersede(scope, version, targets, now, window, opts) do
+  defp maybe_supersede(scope, version, targets, now, occurrences, opts) do
     if Keyword.get(opts, :supersede, true),
-      do: TemplateSupersession.supersede(scope, version, targets, now, window)
+      do: TemplateSupersession.supersede(scope, version, targets, now, occurrences)
   end
 
   # A reviewed fleet start passes the spacecraft it reviewed; otherwise resolve them now.
@@ -421,23 +421,34 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   end
 
   @doc "Pure occurrence review using the same catch-up bounds as materialization."
-  def preview_occurrences(version, from, until),
-    do: due_occurrences(version, from, until, limit: 10_001)
+  def preview_occurrences(version, from, until, now \\ DateTime.utc_now()),
+    do: version |> capped_occurrences(from, until, now) |> elem(0)
 
-  defp due_occurrences(version, from, until, opts) do
+  @doc """
+  Pure: what a run at `now` generates for `version` over `from..until`, as
+  `{occurrences, capped}`. Occurrences are earliest first, at most the catch-up policy's
+  `maximum_occurrences_per_run`; `capped` is `%{limit: n, last_at: the last one kept}` when that
+  cap cut the range short, else nil.
+
+  `maximum_lookback_seconds` bounds how far into the PAST a catch-up reaches, measured from `now`;
+  the future part of the range is always in scope, up to the cap (lead, 11-14). It was measured
+  back from `until`, so a horizon longer than the lookback generated only its last part.
+  """
+  @spec capped_occurrences(map(), DateTime.t(), DateTime.t(), DateTime.t()) ::
+          {[DateTime.t()], %{limit: pos_integer(), last_at: DateTime.t()} | nil}
+  def capped_occurrences(version, from, until, now) do
     policy = version.catch_up_policy_document
-    configured_limit = policy["maximum_occurrences_per_run"]
-    requested_limit = Keyword.get(opts, :limit, configured_limit)
-    limit = requested_limit |> max(1) |> min(configured_limit)
-    earliest = DateTime.add(until, -policy["maximum_lookback_seconds"], :second)
+    limit = max(policy["maximum_occurrences_per_run"], 1)
+    earliest = DateTime.add(now, -policy["maximum_lookback_seconds"], :second)
     effective_from = if DateTime.before?(from, earliest), do: earliest, else: from
 
-    RequirementSchedule.occurrences_between(
-      version.schedule_document,
-      effective_from,
-      until,
-      limit
-    )
+    version.schedule_document
+    |> RequirementSchedule.occurrences_between(effective_from, until, limit + 1)
+    |> Enum.split(limit)
+    |> case do
+      {kept, []} -> {kept, nil}
+      {kept, _beyond} -> {kept, %{limit: limit, last_at: List.last(kept)}}
+    end
   end
 
   defp materialize_occurrence(scope, version, occurrence_at, spacecraft_id, actor_id, now) do

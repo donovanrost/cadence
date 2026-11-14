@@ -341,7 +341,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplatesTest do
                @mission_id,
                template.contact_requirement_template_id,
                @now,
-               DateTime.add(@now, 10_800, :second)
+               DateTime.add(@now, 10_800, :second),
+               now: @now
              )
 
     assert length(generated) == 2

@@ -54,6 +54,19 @@ defmodule Cadence.Control.Scheduling do
     end
   end
 
+  @doc """
+  The template fan-out a draft of `day` (one UTC day, as start_draft/4 drafts it) counts toward
+  the 50,000 limit, with the templates its per-run cap cuts short (U52, the Start screen's
+  estimate): `{:ok, %{count, limit, capped: [%{template_id, limit, last_at}]}}`.
+  """
+  @spec draft_template_estimate(Scope.t(), binary(), Date.t()) :: {:ok, map()} | {:error, term()}
+  def draft_template_estimate(%Scope{} = scope, mission_id, %Date{} = day) do
+    FleetPlanningStarts.estimate(scope, mission_id, %{
+      horizon_start: DateTime.new!(day, ~T[00:00:00], "Etc/UTC"),
+      horizon_end: day |> Date.add(1) |> DateTime.new!(~T[00:00:00], "Etc/UTC")
+    })
+  end
+
   @spec run_draft(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
   def run_draft(%Scope{} = scope, mission_id, run_id),
     do: FleetPlanner.run(scope, mission_id, run_id)

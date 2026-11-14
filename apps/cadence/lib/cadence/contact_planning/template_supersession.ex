@@ -25,25 +25,27 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
 
   @doc """
   Cancels the stale generated requirements of `version`'s template whose
-  occurrence falls in `window` (`{from, until}`, what `version` just
-  materialized, so each cancelled slot has its replacement; review E). Call it
-  after `version` has materialized. For each requirement the referencing plans
-  are share-locked first and uptake re-checked, then the requirement is locked
-  and cancelled (plans before requirements; review A, B).
+  occurrence is one of `occurrences`: exactly the occurrences `version` just
+  materialized, so each cancelled slot has its replacement (review E; qa #86: a
+  run whose lookback or per-run cap generated less than its range cancelled days
+  it didn't replace). A `{from, until}` window is still accepted. Call it after
+  `version` has materialized. For each requirement the referencing plans are
+  share-locked first and uptake re-checked, then the requirement is locked and
+  cancelled (plans before requirements; review A, B).
   """
   @spec supersede(
           Scope.t(),
           ContactRequirementTemplateVersion.t(),
           [binary()],
           DateTime.t(),
-          {DateTime.t(), DateTime.t()}
+          [DateTime.t()] | {DateTime.t(), DateTime.t()}
         ) :: %{superseded: non_neg_integer()}
   def supersede(
         %Scope{} = scope,
         %ContactRequirementTemplateVersion{} = version,
         targets,
         now,
-        window
+        slots
       ) do
     superseded =
       version.organization_id
@@ -52,25 +54,50 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
         version.contact_requirement_template_id,
         now
       )
-      |> in_window(window)
+      |> in_slots(slots)
       |> stale(version, MapSet.new(targets))
       |> Enum.count(&cancel_unless_taken_up(scope, version, &1, now))
 
     %{superseded: superseded}
   end
 
+  defp in_slots(requirements, {%DateTime{}, %DateTime{}} = window),
+    do: in_window(requirements, window)
+
+  defp in_slots(requirements, occurrences) when is_list(occurrences),
+    do: at_occurrences(requirements, occurrences)
+
   @doc "Requirements whose generating occurrence falls in `{from, until}` (inclusive)."
   @spec in_window([{map(), map()}], {DateTime.t(), DateTime.t()}) :: [{map(), map()}]
   def in_window(requirements, {from, until}) do
     Enum.filter(requirements, fn {_requirement, current} ->
-      with at when is_binary(at) <-
-             get_in(current.metadata || %{}, ["generation", "occurrence_at"]),
-           {:ok, at, _offset} <- DateTime.from_iso8601(at) do
-        not DateTime.before?(at, from) and not DateTime.after?(at, until)
-      else
-        _not_generated -> false
+      case generated_at(current) do
+        {:ok, at} -> not DateTime.before?(at, from) and not DateTime.after?(at, until)
+        :error -> false
       end
     end)
+  end
+
+  @doc "Requirements generated for one of `occurrences` (the occurrences a run generated)."
+  @spec at_occurrences([{map(), map()}], [DateTime.t()]) :: [{map(), map()}]
+  def at_occurrences(requirements, occurrences) do
+    wanted = MapSet.new(occurrences, &DateTime.to_unix(&1, :microsecond))
+
+    Enum.filter(requirements, fn {_requirement, current} ->
+      case generated_at(current) do
+        {:ok, at} -> MapSet.member?(wanted, DateTime.to_unix(at, :microsecond))
+        :error -> false
+      end
+    end)
+  end
+
+  defp generated_at(current) do
+    with at when is_binary(at) <- get_in(current.metadata || %{}, ["generation", "occurrence_at"]),
+         {:ok, at, _offset} <- DateTime.from_iso8601(at) do
+      {:ok, at}
+    else
+      _not_generated -> :error
+    end
   end
 
   @doc """

@@ -5,7 +5,7 @@ defmodule Cadence.FleetRunFixtures do
   alias Cadence.FleetStartFixtures
   alias Cadence.Management.Contacts.Store.ContactPlanRow
   alias Cadence.Repo
-  @now ~U[2026-07-17 04:00:00.000000Z]
+  @now ~U[2030-07-17 04:00:00.000000Z]
   def setup_run do
     c = FleetStartFixtures.setup_start()
 
