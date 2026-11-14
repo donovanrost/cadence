@@ -64,8 +64,6 @@ import { identityFixture } from "../mission-and-spacecraft/features/spacecraft-i
 import { profileFixture } from "../mission-and-spacecraft/features/profile-creation/fixtures.test-support";
 
 import { spacecraftDirectoryFixture } from "../mission-and-spacecraft/features/spacecraft-directory/fixtures.test-support";
-import { directoryFixture } from "../mission-and-spacecraft/features/mission-directory/fixtures.test-support";
-import { creationFixture } from "../mission-and-spacecraft/features/mission-creation/fixtures.test-support";
 import { overviewFixture } from "../mission-and-spacecraft/features/mission-overview/fixtures.test-support";
 import { installationSnapshot } from "../capability-management/features/application-installations/fixtures.test-support";
 import { createHostRouter, hostRoute, shellForRoute } from "./host-navigation";
@@ -82,14 +80,7 @@ import {
 } from "../../../../modules/dashboards-and-exploration/src/features/exploration/fixtures.test-support";
 
 function snapshot(path: string, mission: string | null = null) {
-  const page =
-    path === "/missions"
-      ? "mission_list"
-      : path === "/missions/new"
-        ? "mission_new"
-        : mission && path === `/missions/${mission}`
-          ? "mission_overview"
-          : null;
+  const page = mission && path === `/missions/${mission}` ? "mission_overview" : null;
   return {
     path,
     presentation: null,
@@ -107,12 +98,7 @@ function snapshot(path: string, mission: string | null = null) {
       page,
       version: 1,
       status: "ready",
-      data:
-        page === "mission_list"
-          ? directoryFixture()
-          : page === "mission_new"
-            ? creationFixture()
-            : overviewFixture(required(mission)),
+      data: overviewFixture(required(mission)),
     },
     context: {
       version: 1,
@@ -132,10 +118,6 @@ function snapshot(path: string, mission: string | null = null) {
       dock_surfaces: [],
     },
   };
-}
-function creationSnapshot(token: string) {
-  const page = snapshot("/missions/new");
-  return { ...page, mission_page: { ...required(page.mission_page), creation_token: token } };
 }
 function requestedPath(index: number): string {
   const path = required(transport.requests[index]).payload.path;
@@ -168,6 +150,9 @@ function diagnosticsSnapshot(path: string) {
 }
 let wrapper: VueWrapper | undefined;
 const view = () => required(wrapper);
+/** L4 removed the mission list: the tests' neutral organization page is now Organization settings. */
+const onSettings = (root: VueWrapper = view()) =>
+  root.findComponent({ name: "SettingsPage" }).exists();
 async function flushHostUpdates() {
   await flushPromises();
   if (wrapper)
@@ -491,9 +476,9 @@ test("pending navigation rejects old mission actions and late save replies canno
   await view().get("#ground_station_display_name").setValue("Late station");
   await reply(0, { status: "ok", data: { result: { valid: true } } });
   await view().get("#ground-station-form").trigger("submit");
-  await click("/missions");
+  await click("/settings");
   await expect(hostAction(payload)).rejects.toThrow();
-  await reply(2, snapshot("/missions"));
+  await reply(2, snapshot("/settings"));
   await reply(1, {
     status: "ok",
     data: {
@@ -501,7 +486,7 @@ test("pending navigation rejects old mission actions and late save replies canno
     },
   });
   expect(transport.requests).toHaveLength(3);
-  expect(view().getComponent(MissionPage).props("page")).toBe("mission_list");
+  expect(onSettings()).toBe(true);
 });
 test("organization directory composes Communications and recovers without a federated surface", async () => {
   const base = snapshot("/provider-accounts");
@@ -662,8 +647,8 @@ beforeEach(() => {
   transport.pushEvent.mockImplementation((event, payload, reply) =>
     transport.requests.push({ event, payload, reply }),
   );
-  window.history.replaceState({}, "", "/missions");
-  hostBrowserHistory.replace("/missions");
+  window.history.replaceState({}, "", "/settings");
+  hostBrowserHistory.replace("/settings");
 });
 afterEach(() => {
   wrapper?.unmount();
@@ -673,7 +658,7 @@ afterEach(() => {
 async function start() {
   wrapper = mount(BrowserHost, {
     attachTo: document.body,
-    props: { snapshot: snapshot("/missions") },
+    props: { snapshot: snapshot("/settings") },
   });
   await flushHostUpdates();
   return view();
@@ -707,8 +692,8 @@ test("activation decisions bind path and token and cannot replace a later visit 
   const pending = execute(input);
   expect(required(transport.requests[1]).event).toBe("host:activation");
   expect(required(transport.requests[1]).payload).toEqual({ path, token: "review-token", input });
-  await click("/missions");
-  await reply(2, snapshot("/missions"));
+  await click("/settings");
+  await reply(2, snapshot("/settings"));
   await click(path);
   const successor = {
     ...original,
@@ -736,20 +721,20 @@ test("host remounts within the same Vue app and ignores the previous instance's 
       defineComponent({
         data: () => ({ revision: 0 }),
         render() {
-          return h(BrowserHost, { key: this.revision, snapshot: snapshot("/missions") });
+          return h(BrowserHost, { key: this.revision, snapshot: snapshot("/settings") });
         },
       }),
       { attachTo: document.body },
     );
     await flushHostUpdates();
-    expect(view().find("#mission-list-table").exists()).toBe(true);
+    expect(onSettings()).toBe(true);
     await click("/missions/old-mission");
     expect(transport.requests).toHaveLength(1);
     await view().setData({ revision: 1 });
     await flushHostUpdates();
-    expect(view().find("#mission-list-table").exists()).toBe(true);
+    expect(onSettings()).toBe(true);
     await reply(0, snapshot("/missions/old-mission", "old-mission"));
-    expect(view().find("#mission-list-table").exists()).toBe(true);
+    expect(onSettings()).toBe(true);
     await click("/missions/current-mission");
     expect(transport.requests).toHaveLength(2);
     await reply(1, snapshot("/missions/current-mission", "current-mission"));
@@ -757,41 +742,14 @@ test("host remounts within the same Vue app and ignores the previous instance's 
     hostBrowserHistory.go(-1);
     await flushHostUpdates();
     expect(transport.requests).toHaveLength(3);
-    await reply(2, snapshot("/missions"));
-    expect(view().find("#mission-list-table").exists()).toBe(true);
+    await reply(2, snapshot("/settings"));
+    expect(onSettings()).toBe(true);
     expect(listen).toHaveBeenCalledTimes(2);
     expect(destroyHistory).not.toHaveBeenCalled();
   } finally {
     listen.mockRestore();
     destroyHistory.mockRestore();
   }
-});
-
-test("mission creation sends its page token and stale completion cannot redirect later navigation", async () => {
-  const app = await start();
-  await click("/missions/new");
-  const creation = creationSnapshot("creation-one");
-  await reply(0, creation);
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  await app.get("#mission_display_name").setValue("Flight");
-  await reply(1, { status: "ok", errors: {} });
-  await app.get("#mission_slug").setValue("flight");
-  await reply(2, { status: "ok", errors: {} });
-  await app.get("#mission-form").trigger("submit");
-  expect(transport.requests[3]).toMatchObject({
-    event: "host:mission",
-    payload: {
-      path: "/missions/new",
-      token: "creation-one",
-      event: "save",
-      input: { mission: { display_name: "Flight", slug: "flight" } },
-    },
-  });
-  await click("/missions");
-  await reply(4, snapshot("/missions"));
-  await reply(3, { status: "ok", errors: {}, data: { mission: { href: "/missions/created" } } });
-  expect(transport.requests).toHaveLength(5);
-  expect(app.getComponent(MissionPage).props("page")).toBe("mission_list");
 });
 
 test("installation actions are path-bound and an old reply cannot replace a revisited inventory", async () => {
@@ -812,8 +770,8 @@ test("installation actions are path-bound and an old reply cannot replace a revi
   });
   await app.get("#limits-install").trigger("click");
   expect(transport.requests).toHaveLength(2);
-  await click("/missions");
-  await reply(2, snapshot("/missions"));
+  await click("/settings");
+  await reply(2, snapshot("/settings"));
   await click(path);
   const fresh = inventory();
   if (!("applications_component" in fresh.application_management.data))
@@ -842,22 +800,6 @@ test("a failed installation action stays contained in the feature and releases i
   expect(app.find("#application-installation-action-error").exists()).toBe(true);
   expect(app.get("#limits-install").attributes("disabled")).toBeUndefined();
   expect(app.get("[data-sidebar-collapsible]").element).toBe(sidebar);
-});
-
-test("successful mission creation navigates through the host authorization guard", async () => {
-  const app = await start();
-  await click("/missions/new");
-  const creation = creationSnapshot("creation-one");
-  await reply(0, creation);
-  await app.get("#mission-form").trigger("submit");
-  await reply(1, { status: "ok", errors: {}, data: { mission: { href: "/missions/created" } } });
-  expect(transport.requests[2]).toMatchObject({
-    event: "host:context",
-    payload: { path: "/missions/created" },
-  });
-  await reply(2, snapshot("/missions/created", "created"));
-  expect(app.getComponent(MissionPage).props("page")).toBe("mission_overview");
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
 });
 
 test("spacecraft creation sends an explicit profile version and token, then returns through host authorization", async () => {
@@ -914,8 +856,8 @@ test("a stale spacecraft save cannot redirect after leaving and revisiting the c
   await click(path);
   await reply(0, creation("old"));
   await app.get("#spacecraft-form").trigger("submit");
-  await click("/missions");
-  await reply(2, snapshot("/missions"));
+  await click("/settings");
+  await reply(2, snapshot("/settings"));
   await click(path);
   await reply(3, creation("new"));
   await reply(1, { status: "ok", errors: {}, data: { href: "/missions/mission-a/spacecraft" } });
@@ -965,11 +907,11 @@ test("core Catalog navigation renders real pages without a federation surface", 
     payload: { event: "reimport", path: artifactPath },
   });
   // Completing an old action must not redirect a newly visited page.
-  await click("/missions");
-  await reply(3, snapshot("/missions"));
+  await click("/settings");
+  await reply(3, snapshot("/settings"));
   await reply(2, { href: `${path}/imports/new-run` });
   expect(transport.requests).toHaveLength(4);
-  expect(app.getComponent(MissionPage).props("page")).toBe("mission_list");
+  expect(onSettings(app)).toBe(true);
 });
 
 test("spacecraft query navigation preserves the search node and late replies cannot replace a newer query", async () => {
@@ -1030,12 +972,12 @@ test("a scheduled spacecraft search cannot redirect back while another page is a
   vi.useFakeTimers();
   try {
     await app.get("#spacecraft-roster-toolbar-search").setValue("delayed");
-    await click("/missions");
+    await click("/settings");
     await vi.advanceTimersByTimeAsync(350);
     expect(transport.requests).toHaveLength(2);
-    expect(requestedPath(1)).toBe("/missions");
-    await reply(1, snapshot("/missions"));
-    expect(app.getComponent(MissionPage).props("page")).toBe("mission_list");
+    expect(requestedPath(1)).toBe("/settings");
+    await reply(1, snapshot("/settings"));
+    expect(onSettings(app)).toBe(true);
   } finally {
     vi.useRealTimers();
   }
@@ -1071,13 +1013,13 @@ test("a late diagnostics refresh cannot replace a newer navigation or report its
   await click("/admin/runtime");
   await reply(0, diagnosticsSnapshot("/admin/runtime"));
   await app.get("#admin-runtime-refresh").trigger("click");
-  await click("/missions");
-  await reply(2, snapshot("/missions"));
+  await click("/settings");
+  await reply(2, snapshot("/settings"));
   required(required(transport.requests[1]).reply)({ ok: false });
   await flushHostUpdates();
   expect(app.find("#administration-diagnostics-page").exists()).toBe(false);
   expect(app.find("#host-navigation-error").exists()).toBe(false);
-  expect(app.getComponent(MissionPage).props("page")).toBe("mission_list");
+  expect(onSettings(app)).toBe(true);
 });
 
 test("late navigation and live-prop responses cannot replace the committed mission", async () => {
@@ -1138,7 +1080,7 @@ test("denied context preserves the displayed page and reports a recoverable fail
   await click("/missions/missing");
   required(required(transport.requests[0]).reply)({ ok: false });
   await flushHostUpdates();
-  expect(app.getComponent(MissionPage).props("page")).toBe("mission_list");
+  expect(onSettings(app)).toBe(true);
   expect(app.get("#host-navigation-error").attributes("role")).toBe("alert");
 });
 
@@ -1149,8 +1091,8 @@ test("Back and Forward reenter the guard without replacing the Vue shell", async
   await reply(0, snapshot("/missions/mission-a/spacecraft", "mission-a"));
   hostBrowserHistory.go(-1);
   await flushHostUpdates();
-  expect(requestedPath(1)).toBe("/missions");
-  await reply(1, snapshot("/missions"));
+  expect(requestedPath(1)).toBe("/settings");
+  await reply(1, snapshot("/settings"));
   hostBrowserHistory.go(1);
   await flushHostUpdates();
   await reply(2, snapshot("/missions/mission-a/spacecraft", "mission-a"));
@@ -1183,7 +1125,7 @@ test("reconnection refreshes the displayed resource rather than the initial tran
   await click("/missions/mission-a");
   await reply(0, snapshot("/missions/mission-a", "mission-a"));
   // A LiveView reconnect can resend its original bootstrap snapshot.
-  await app.setProps({ snapshot: snapshot("/missions") });
+  await app.setProps({ snapshot: snapshot("/settings") });
   window.dispatchEvent(new Event("cadence:transport-reconnected"));
   await flushHostUpdates();
   expect(requestedPath(1)).toBe("/missions/mission-a");
@@ -1201,7 +1143,7 @@ test("admin navigation is selected by the frontend route without server layout m
   await reply(0, admin);
   expect(app.get('a[href="/admin/runtime"]').attributes("aria-current")).toBe("page");
   expect(app.find('a[href="/admin/organizations"]').exists()).toBe(true);
-  expect(app.find('a[href="/missions"]').exists()).toBe(false);
+  expect(app.find('a[href="/settings"]').exists()).toBe(false);
 });
 
 test("profile creation is a token-bound core action and navigates only to its profile directory", async () => {
@@ -1259,15 +1201,15 @@ test("a late profile save cannot redirect a later mission page", async () => {
     },
   });
   await app.get("#spacecraft-profile-form").trigger("submit");
-  await click("/missions");
-  await reply(2, snapshot("/missions"));
+  await click("/settings");
+  await reply(2, snapshot("/settings"));
   await reply(1, {
     status: "ok",
     errors: {},
     data: { href: "/missions/mission-a/spacecraft/profiles" },
   });
   expect(transport.requests).toHaveLength(3);
-  expect(app.find("#mission-list-table").exists()).toBe(true);
+  expect(onSettings(app)).toBe(true);
 });
 
 function fleetSnapshot(path: string) {
@@ -1314,11 +1256,11 @@ test("fleet directory is host-composed and captured reads retain evidence across
   await reply(2, { ...fresh, status: "unavailable" });
   expect(view().find("#fleet-run-fresh-run").exists()).toBe(true);
   await view().get("#host-page-refresh").trigger("click");
-  await click("/missions");
-  await reply(4, snapshot("/missions"));
+  await click("/settings");
+  await reply(4, snapshot("/settings"));
   await reply(3, fresh);
   expect(view().find("#ops-fleet-planning-page").exists()).toBe(false);
-  expect(view().find("#mission-list-table").exists()).toBe(true);
+  expect(onSettings()).toBe(true);
 });
 
 test("live commanding notices are isolated to the captured path and token and stop after departure", async () => {
@@ -1361,8 +1303,8 @@ test("live commanding notices are isolated to the captured path and token and st
   expect(view().get<HTMLInputElement>("#workspace-shared-argument-0").element.value).toBe(
     "unfinished",
   );
-  await click("/missions");
-  await reply(3, snapshot("/missions"));
+  await click("/settings");
+  await reply(3, snapshot("/settings"));
   handler(notice);
   await flushPromises();
   expect(transport.requests).toHaveLength(4);
@@ -1416,10 +1358,10 @@ test("organization home composes core facts, refreshes and leaves through the pe
   expect(view().get("#organization-recent-mission-mission-one a").attributes("href")).toBe(
     "/missions/mission-one",
   );
-  await click("/missions");
-  await reply(1, snapshot("/missions"));
+  await click("/settings");
+  await reply(1, snapshot("/settings"));
   expect(view().find("#organization-home-page").exists()).toBe(false);
-  expect(view().getComponent(MissionPage).props("page")).toBe("mission_list");
+  expect(onSettings()).toBe(true);
 });
 
 test("core timeline filters, selected evidence and older pages restore through persistent Ops history", async () => {
@@ -1537,15 +1479,15 @@ test("late organization creation cannot replace a later page or another administ
   await click("/admin/organizations/new");
   await reply(0, platformCreationSnapshot());
   await submitPlatformOrganization();
-  await click("/missions");
-  await reply(2, snapshot("/missions"));
+  await click("/settings");
+  await reply(2, snapshot("/settings"));
   const organization = { id: "org-new", name: "Flight", slug: "flight" };
   await reply(1, {
     status: "created",
     organization,
     host: platformCreationSnapshot("u-1", organization),
   });
-  expect(view().find("#mission-list-table").exists()).toBe(true);
+  expect(onSettings()).toBe(true);
   expect(view().find("#admin-organization-created").exists()).toBe(false);
   await click("/admin/organizations/new");
   await reply(3, platformCreationSnapshot());
@@ -1651,8 +1593,8 @@ for (const page of ["organization_detail", "organization_invite"] as const) {
         },
       });
       if (change === "navigation") {
-        await click("/missions");
-        await reply(2, snapshot("/missions"));
+        await click("/settings");
+        await reply(2, snapshot("/settings"));
       } else {
         await view().setProps({
           snapshot: platformOrganizationSnapshot(
@@ -1687,7 +1629,7 @@ for (const page of ["organization_detail", "organization_invite"] as const) {
       expect(view().find("#issued-service-token").exists()).toBe(false);
       expect(view().text()).not.toContain("stale-ephemeral-test-token");
       expect(view().find("#organization-invitation-created").exists()).toBe(false);
-      if (change === "navigation") expect(view().find("#mission-list-table").exists()).toBe(true);
+      if (change === "navigation") expect(onSettings()).toBe(true);
     });
   }
 }
@@ -1741,12 +1683,12 @@ test.each(hostRoutes)("the host handles $path ($kind)", async (entry) => {
 });
 
 test("an unrecognized catalog kind is contained by the host", async () => {
-  const route = required(routes.find((route) => route.path === "/missions"));
+  const route = required(routes.find((route) => route.path === "/settings"));
   const kind = route.kind;
   try {
     route.kind = "unsupported-test-kind";
     wrapper = mount(BrowserHost, {
-      props: { snapshot: snapshot("/missions") },
+      props: { snapshot: snapshot("/settings") },
       global: { stubs: routeStubs },
     });
     await flushHostUpdates();
@@ -1758,7 +1700,7 @@ test("an unrecognized catalog kind is contained by the host", async () => {
 });
 
 test("nested LiveVue patches pass through snapshot admission", async () => {
-  const state = reactive(snapshot("/missions", null));
+  const state = reactive(snapshot("/settings", null));
   wrapper = mount(BrowserHost, { props: { snapshot: state } });
   await flushPromises();
   state.context.organization.display_name = "Patched organization";
