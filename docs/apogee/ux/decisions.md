@@ -1336,3 +1336,24 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
   expires at 14:00Z, before then." (one: "It expires at 14:00Z, before then."). Data (api): per pass, the queued
   count, how many expire before the next contact with the earliest expiry, and the next contact's station and
   AOS.
+
+### U56 · Contact events `window_moved` and the `provider_failed` cancel reason (domain's window-truth fix) (domain / api / fe-ops)
+- **window_moved** `{before, after, provider_change}`: an accepted provider timing shift moved the contact.
+  - **Times:** a shift is often seconds, so these lines give HH:MM:SSZ (§4's minutes form would hide a 30 s move).
+    The date is added when it isn't today.
+  - **Direction:** both ends move the same way: "30 s later" / "2 min earlier" (under a minute in s; above, min,
+    or "1 min 30 s"). Otherwise the length changed: "changed this pass's window".
+  - **Contact history:** "Northlight moved this pass 30 s later: now 12:11:27–12:19:27Z (was 12:10:57–12:18:57Z)."
+    It links `Open the change` to the provider change (U44), which says who accepted it and when. Changed length:
+    "Northlight changed this pass's window: now 12:11:27–12:21:27Z (was 12:10:57–12:18:57Z)."
+  - **Timeline:** "EARENDIL-003 · BRS 12:11Z pass moved 30 s later by Northlight: 12:11:27–12:19:27Z". The label
+    uses the new AOS.
+  - While live: the history line adds "Cadence now listens until 12:19:27Z." when the end moved.
+  - Without the provider's name: "The provider moved…". A hand-started contact can't be moved by a provider, so
+    there's no "contact" form.
+- **provider_failed** (Cadence cancels a contact whose booking the provider couldn't make; the phantom fix):
+  - History: "Canceled by Cadence at 12:58Z: Northlight couldn't book this pass (“no antenna available”)." The
+    provider's reason is free text and goes in quotes; when it's a code, it's worded or left out, never raw.
+    Without a reason: "…couldn't book this pass."
+  - Timeline: "EARENDIL-007 · PUQ 13:04Z pass canceled by Cadence: Northlight couldn't book it". The tag is
+    `CANCELED` (off), as for an operator's cancel (U55).
