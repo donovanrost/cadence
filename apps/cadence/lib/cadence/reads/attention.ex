@@ -24,6 +24,7 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.ContactSettlementAttention, as: ContactSettlement
   alias Cadence.Contacts.ContactStartAttention, as: ContactStart
   alias Cadence.Contacts.IngressBackpressureAttention, as: IngressBackpressure
+  alias Cadence.Contacts.JobOutcomeUnknownAttention, as: JobOutcomeUnknown
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
   alias Cadence.Contacts.ProviderChangeAttention, as: ProviderChange
   alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
@@ -40,7 +41,8 @@ defmodule Cadence.Reads.Attention do
     ActivationApply,
     ProviderChange,
     IngressBackpressure,
-    ArchiveQuarantine
+    ArchiveQuarantine,
+    JobOutcomeUnknown
   ]
   @resolved_window_s 60
 

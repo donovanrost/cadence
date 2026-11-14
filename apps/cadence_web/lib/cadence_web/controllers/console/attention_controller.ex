@@ -13,7 +13,8 @@ defmodule CadenceWeb.Console.AttentionController do
     ArchiveQuarantineAttention,
     ContactSettlementAttention,
     ContactStartAttention,
-    IngressBackpressureAttention
+    IngressBackpressureAttention,
+    JobOutcomeUnknownAttention
   }
 
   alias Cadence.Reads.ActionQueue.AttentionItems
@@ -78,7 +79,49 @@ defmodule CadenceWeb.Console.AttentionController do
     end
   end
 
+  # ux U54: retry a job whose outcome is unknown: the only way it runs again. The operator
+  # confirms they checked that it didn't happen; the note is optional.
+  def retry(conn, %{"source" => "job_outcome_unknown", "id" => id} = params) do
+    with :ok <- no_actor(params),
+         :ok <- confirmed(params["confirmed"]),
+         {:ok, note} <- optional_note(params["note"]),
+         {:ok, item} <-
+           JobOutcomeUnknownAttention.retry(scope(conn), mission_id(conn), id, true, note) do
+      names = AttentionItems.lookups(scope(conn).organization_id, mission_id(conn), [item])
+
+      conn
+      |> put_status(:accepted)
+      |> json(%{
+        data: %{
+          item: AttentionItems.object(item, names),
+          run: %{job_id: item.job.id, status: "queued"}
+        }
+      })
+    else
+      {:error, reason} -> problem(conn, reason)
+    end
+  end
+
   def retry(conn, _params), do: problem(conn, :attention_item_not_found)
+
+  defp confirmed(true), do: :ok
+
+  defp confirmed(_other),
+    do:
+      {:error,
+       {:invalid_params, %{"confirmed" => "Confirm you've checked that it didn't happen."}}}
+
+  defp optional_note(nil), do: {:ok, nil}
+  defp optional_note(note) when is_binary(note) and note == "", do: {:ok, nil}
+
+  defp optional_note(note) when is_binary(note) do
+    if String.length(String.trim(note)) > @max_action_text,
+      do:
+        {:error, {:invalid_params, %{"note" => "must be at most #{@max_action_text} characters"}}},
+      else: {:ok, String.trim(note)}
+  end
+
+  defp optional_note(_other), do: {:error, {:invalid_params, %{"note" => "must be text"}}}
 
   defp respond_retry(conn, {:error, {:retry_not_manual, item}}) do
     names = AttentionItems.lookups(scope(conn).organization_id, mission_id(conn))
@@ -97,6 +140,7 @@ defmodule CadenceWeb.Console.AttentionController do
   defp source("ingress_backpressure"), do: {:ok, IngressBackpressureAttention}
   # #88: no acknowledge (attention_item_not_open); resolve discards, with the reason required.
   defp source("archive_quarantine"), do: {:ok, ArchiveQuarantineAttention}
+  defp source("job_outcome_unknown"), do: {:ok, JobOutcomeUnknownAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}
 
   defp no_actor(params) do

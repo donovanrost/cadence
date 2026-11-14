@@ -227,6 +227,34 @@ receipt span), `last_seen_at` (bumped while more keep arriving), `actions` (`["r
   attention_item_not_found`, `422 invalid_params {action_text}` / `reason_required`, and `503
   attention_unavailable` when the archive can't be reached.
 
+### A job Cadence stopped during: the `job_outcome_unknown` source (ux U54; director, lead 11-14)
+
+Cadence stopped while a job that isn't safe to run again was running (a booking, a provider or TSDB
+operation, a catalog import, an evaluation, a backfill), so nobody knows whether it finished.
+Cadence doesn't run it again by itself; the job reads `outcome_unknown`. Now carries `source:
+"job_outcome_unknown"`, `conflict: "outcome_unknown"`, `id` = `job_outcome_unknown:<job_id>:<attempt>`:
+**one item per run**. A retried job that is cut off again raises a NEW open item beside the
+resolved one; an item never reopens. **P2**, **P1** when the job's pass starts within 2 h or is
+live. No acknowledge.
+
+Flattened keys besides the shared ones (`state`, `contact_id`, `reservation_id`, `station`,
+`provider`, `starts_at`, `raised_at`, `resolution`): `spacecraft_id`, `ends_at`, `job {id,
+type_key, run_id, attempt, node: null}`, `words {noun, check_place, consequence}` (free text, never
+a blank name: an unnamed provider is "the provider"), `started_at`, `found_at` (when the restart
+found it; Cadence doesn't record when it stopped), `actions` (`["retry", "close"]`). The pass keys
+are set when the job is tied to a booking, null otherwise.
+
+- `POST …/attention/job_outcome_unknown/:id/retry {confirmed: true, note?}` (`operate_mission`):
+  the job goes back in the queue, the only way it runs again. `202 {data: {item, run: {job_id,
+  status: "queued"}}}`; `item.resolution.action: "retried"`. `422 invalid_params {confirmed}`
+  without the confirmation.
+- Close is `POST …/attention/job_outcome_unknown/:id/resolve {action_text}` (the note, required,
+  at most 200 characters): the job stays as it is; `resolution.action: "closed"`, `note`.
+- Retry and close are atomic on the item: of two operators at once, one wins and the other gets
+  `409 attention_item_not_open`, and the job is queued at most once. `403 forbidden` for
+  non-operators, `404 attention_item_not_found`.
+- Jobs relabelled `outcome_unknown` after the 11-14 jobs fix raise no item (no Retry).
+
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id`: `pass_resolution` (the

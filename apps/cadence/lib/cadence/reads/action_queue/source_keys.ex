@@ -75,6 +75,16 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :last_seen_at,
       :actions,
       :last_retry
+    ],
+    # ux U54: a job Cadence stopped during, outcome unknown (P2; P1 near or during its pass).
+    "job_outcome_unknown" => [
+      :spacecraft_id,
+      :ends_at,
+      :job,
+      :words,
+      :started_at,
+      :found_at,
+      :actions
     ]
   }
 
