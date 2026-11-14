@@ -6,6 +6,7 @@ import {
   fieldErrors,
   notActiveLine,
   occurrenceDay,
+  planningButton,
   planningDay,
   occurrenceScope,
   requirementFacts,
@@ -202,5 +203,50 @@ describe("planning a requirement (ux P4, whole-day planning)", () => {
       planningDay(row("canceled", "2026-11-14T08:00:00Z", "2026-11-14T09:00:00Z"), now),
     ).toBeNull();
     expect(planningDay({ state: "active", content: {} }, now)).toBeNull();
+  });
+});
+
+describe("the requirement page's planning button (ux P4, api held_by)", () => {
+  const now = Date.parse("2026-11-14T06:00:00Z");
+  const base = {
+    state: "active" as const,
+    content: { earliest_start: "2026-11-15T08:00:00Z", latest_end: "2026-11-15T09:00:00Z" },
+  };
+  it("plans the day when nothing holds it, and opens the holding plan when one does", () => {
+    expect(planningButton({ ...base, held_by: null }, now)).toEqual({
+      label: "Plan 11-15",
+      day: "2026-11-15",
+    });
+    expect(planningButton({ ...base, held_by: undefined }, now)).toEqual({
+      label: "Plan 11-15",
+      day: "2026-11-15",
+    });
+    expect(
+      planningButton(
+        {
+          ...base,
+          held_by: { plan_id: "p1", revision: 41, state: "approved", day: "2026-11-15" },
+        },
+        now,
+      ),
+    ).toEqual({ label: "Open plan R41", day: "2026-11-15" });
+    expect(
+      planningButton(
+        { ...base, held_by: { plan_id: "p1", revision: 41, state: "executing", day: undefined } },
+        now,
+      ),
+    ).toEqual({ label: "Open plan R41", day: "2026-11-15" });
+  });
+  it("shows nothing once the requirement can't be planned", () => {
+    expect(
+      planningButton(
+        {
+          ...base,
+          state: "closed",
+          held_by: { plan_id: "p1", revision: 2, state: "approved", day: undefined },
+        },
+        now,
+      ),
+    ).toBeNull();
   });
 });

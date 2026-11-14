@@ -14,6 +14,7 @@ import {
   type Reader,
 } from "@/api";
 import { displayValue } from "@/features/changes/index.ts";
+import { planStates } from "@/features/scheduling/index.ts";
 import { formatCount, formatShort } from "@/ui";
 import { templateStates } from "./api.ts";
 import { readPath, templateSchemaReader, type TemplateSchema } from "./templates.ts";
@@ -62,6 +63,20 @@ export type RequirementPage = Decoded<typeof listReader>;
 const detailReader = object({
   ...requirementRowShape,
   versions: array(object({ version: integer, created_at: timestamp, actor }), 500),
+  /**
+   * api 54e083522: the plan past draft that holds it (the most recently changed if several), or
+   * null; absent until it ships. `day` (the plan's UTC day) is asked of api; optional until then.
+   */
+  held_by: optional(
+    nullable(
+      object({
+        plan_id: token,
+        revision: integer,
+        state: decoders.known(planStates),
+        day: optional(string),
+      }),
+    ),
+  ),
 });
 export type RequirementDetail = Decoded<typeof detailReader>;
 
@@ -161,6 +176,23 @@ export function planningDay(
   const begins = Math.max(start, now);
   const iso = new Date(begins).toISOString().slice(0, 10);
   return { iso, md: iso.slice(5), from: start < now ? new Date(now).toISOString() : from, to };
+}
+
+/**
+ * ux P4: the requirement page's planning button. A plan past draft holding it is opened as
+ * 'Open plan R41' (on the plan's day when api sends it, else the planning day); otherwise
+ * 'Plan 11-14'. Null when there's nothing to plan (see planningDay).
+ */
+export function planningButton(
+  r: Pick<RequirementDetail, "state" | "content" | "held_by">,
+  now: number,
+): Readonly<{ label: string; day: string }> | null {
+  const day = planningDay(r, now);
+  if (!day) return null;
+  const held = r.held_by;
+  return held
+    ? { label: `Open plan R${held.revision}`, day: held.day ?? day.iso }
+    : { label: `Plan ${day.md}`, day: day.iso };
 }
 
 /** A template occurrence's day, `11-15` (UTC, from its window's start); null when it has none. */
