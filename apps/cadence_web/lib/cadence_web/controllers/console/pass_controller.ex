@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.PassController do
 
   alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.RepairChain
-  alias Cadence.Contacts.{ProviderChangeAttention, ScheduleCommands}
+  alias Cadence.Contacts.{OpenContacts, ProviderChangeAttention, ScheduleCommands}
   alias Cadence.Control.{Contacts, UplinkReadiness}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.ActionQueue.AttentionItems
@@ -48,10 +48,31 @@ defmodule CadenceWeb.Console.PassController do
             pass
             |> Map.put(:queued_command_groups, queued)
             |> Map.put(:provider_changes, provider_changes(conn, pass.id))
+            |> Map.put(:second_connections_refused, second_connections(conn, pass))
         })
 
       {:error, :pass_not_found} ->
         Problem.respond(conn, :pass_not_found)
+    end
+  end
+
+  # U50: second connections the pass's listener refused while its own was up (Technical details).
+  # nil when the pass has no realized contact or the live count was lost to a restart.
+  defp second_connections(conn, pass) do
+    case OpenContacts.latest_for_scheduled(
+           org_id(conn),
+           mission_id(conn),
+           pass.scheduled_contact_id
+         ) do
+      nil ->
+        nil
+
+      contact ->
+        Contacts.second_connections_refused(
+          org_id(conn),
+          mission_id(conn),
+          contact.realized_contact_id
+        )
     end
   end
 

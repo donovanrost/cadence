@@ -255,6 +255,29 @@ are set when the job is tied to a booking, null otherwise.
   non-operators, `404 attention_item_not_found`.
 - Jobs relabelled `outcome_unknown` after the 11-14 jobs fix raise no item (no Retry).
 
+### Connections a shared listener refused: the `listener_refusal` source (#87, ux U50)
+
+Now and the pass row carry `source` and `conflict` `"listener_refusal"`, `id` =
+`<realized_contact_id>:<provider_binding_id>`: one item per open pass on a SHARED listen profile
+whose listener refused a connection in its window. Counted live (a restart starts the count again);
+no actions, so acknowledge, resolve and retry answer `404 attention_item_not_found`.
+
+- **P1** while the pass isn't connected, or its own connection is quiet, in the open window
+  (domain's `p1`); else **P2**. Due at LOS (`ends_at`).
+- Keys besides the shared ones (`contact_id`, `reservation_id`, `station`, `provider`,
+  `starts_at`, `raised_at` = the first refusal): `realized_contact_id`, `path_id`, `spacecraft_id`,
+  `ends_at`, `provider_profile_id`, `provider_profile_name`, `last_refused_at`, `refused_count`,
+  `last_refusal {reason, scid, peer, at}` (`reason` `unregistered_scid | ambiguous_scid |
+  unexpected_peer | unidentified | read_failed | second_connection | unknown`, read as known text;
+  `peer` for Technical details only), `own_quiet_since` (or null), `connected`, `shared_with`
+  (the other open passes' realized contact ids), `second_connections_refused`.
+- Resolved: `action` `accepted` (the pass's own connection came) or `ended` (LOS), by the system.
+- `GET /passes/:id` carries `second_connections_refused: integer | null`: connections refused
+  while the pass's own was up (live, else as recorded at LOS), null without a realized contact.
+
+Every recently resolved entry (all sources) also carries `reservation_id` (null without a booking)
+and `booked` (true when it has one), so an ended item can say "the pass" or "the contact".
+
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id`: `pass_resolution` (the

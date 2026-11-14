@@ -61,6 +61,22 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :drops,
       :diagnostics
     ],
+    # #87 / ux U50: connections a shared listener refused, one row per open pass on it.
+    "listener_refusal" => [
+      :realized_contact_id,
+      :path_id,
+      :spacecraft_id,
+      :ends_at,
+      :provider_profile_id,
+      :provider_profile_name,
+      :last_refused_at,
+      :refused_count,
+      :last_refusal,
+      :own_quiet_since,
+      :connected,
+      :shared_with,
+      :second_connections_refused
+    ],
     # DECISIONS #88 / ux U49: archive entries that couldn't be indexed (P2, no due time).
     "archive_quarantine" => [
       :realized_contact_id,

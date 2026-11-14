@@ -232,8 +232,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp due_at(%{source: source}) when source in ["ingress_backpressure", "archive_quarantine"],
     do: nil
 
-  # U45: a contact that failed to start is lost at LOS, whether still trying or missed.
-  defp due_at(%{source: "contact_start"} = attention), do: Map.get(attention, :ends_at)
+  # U45: a contact that failed to start is lost at LOS, whether still trying or missed. U50: a
+  # refused connection on a shared listener matters until the pass's LOS.
+  defp due_at(%{source: source} = attention) when source in ["contact_start", "listener_refusal"],
+    do: Map.get(attention, :ends_at)
 
   # An approval is due at its deadline (the provider applies or drops it then).
   defp due_at(%{source: "provider_change", deadline_at: %DateTime{} = deadline}), do: deadline
@@ -263,6 +265,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     do: Map.get(attention, :p1) == true
 
   defp p1?(%{source: "archive_quarantine"}, _now), do: false
+  # U50: domain decides (not connected, or its own connection quiet, in the open window).
+  defp p1?(%{source: "listener_refusal"} = attention, _now), do: Map.get(attention, :p1) == true
   # No spacecraft's telemetry is processed while it's open.
   defp p1?(%{source: "mission_runtime"}, _now), do: true
   # The same while an apply that would bring the runtime up is stuck (ux U41).
@@ -284,7 +288,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   # A provider closure names the provider; a user names themself; a system closure has no actor
   # name (ux: "Resolved: cancel confirmed").
   defp resolved(entry, names) do
-    by = entry.resolved_by || %{}
+    by = actor_map(entry.resolved_by)
 
     %{
       id: item_id(entry),
@@ -295,9 +299,17 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       },
       action: entry.action,
       resolved_at: entry.resolved_at,
-      note: Map.get(entry, :note)
+      note: Map.get(entry, :note),
+      # U50 (fe-ops, ux): a booked pass ends at LOS, a hand-started contact just ends.
+      reservation_id: Map.get(entry, :provider_reservation_id),
+      booked: is_binary(Map.get(entry, :provider_reservation_id))
     }
   end
+
+  # A source may name its resolver as a bare kind ("system", listener_refusal).
+  defp actor_map(%{} = by), do: by
+  defp actor_map(kind) when is_binary(kind), do: %{"kind" => kind}
+  defp actor_map(_none), do: %{}
 
   defp resolved_name(%{"kind" => "provider", "id" => id} = by, names),
     do: provider(id, names).name || by["name"]
