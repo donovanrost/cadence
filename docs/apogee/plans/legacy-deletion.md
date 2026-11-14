@@ -16,7 +16,7 @@ the tree moves.
 | L5 sign-in, invitations, no-org | POST `/sign-in`, POST `/invitations/:token` (+ dead modules) | console auth screens | deletable now (GET 302s stay) |
 | L6 admin mode | `/admin-mode` | account menu admin mode | deletable now |
 | L7 platform admin | `/admin/**` | `/console/admin/**` | after qa's live check (L7 migration) |
-| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a done (live 11-14 01:46Z, c21fad95a); federated batch done (restart 1, 11-14 08:01Z, 4cb04734d); L8b done (live 11-14 09:20Z, 3dbb243b0; Settings live a8649a04f, member path afd1201ca); L8c step 1 done (D18 `refresh`), step 2 has the director's go, lands after L7 |
+| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a done (live 11-14 01:46Z, c21fad95a); federated batch done (restart 1, 11-14 08:01Z, 4cb04734d); L8b done (live 11-14 09:20Z, 3dbb243b0; Settings live a8649a04f, member path afd1201ca); L8c done (step 1 D18 `refresh`; step 2 live 11-14 15:54Z, fe-setup/l8c-r5, D18 latency flat); **L8 done** except L8c step 3, domain's later migration dropping the decision events table |
 | L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | blocked: no console API yet |
 | L11 data sources | `/ops/data-sources/**` | `setup.data-sources[/:sourceId]` | after qa's live check (endpoints 2e3c8c5ab) |
 | L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | blocked: L12 endpoints not built (api-ops) |
