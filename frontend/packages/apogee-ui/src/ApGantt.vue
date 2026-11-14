@@ -11,6 +11,7 @@ import {
   type GanttWindow,
 } from "./gantt/model.ts";
 import { formatClock } from "./lib/format.ts";
+import ApStatusMark from "./ApStatusMark.vue";
 
 /**
  * Stations × time (design-language ApPassStrip/ApGantt). Bars are buttons with one roving tab stop:
@@ -151,35 +152,46 @@ const barKinds = computed(() =>
             :style="style(band.from, band.to)"
             :title="band.label"
           />
-          <button
-            v-for="bar in byRow.get(row.id) ?? []"
-            :key="bar.id"
-            type="button"
-            :data-bar="bar.id"
-            :tabindex="bar.id === tabStop ? 0 : -1"
-            :aria-label="bar.description"
-            :aria-pressed="bar.id === selected"
-            :title="bar.description"
-            class="ap-bar absolute top-1/2 h-4 -translate-y-1/2 overflow-hidden px-1 text-left font-mono text-2xs leading-4 whitespace-nowrap"
-            :class="[
-              `ap-bar--${bar.kind}`,
-              bar.id === selected ? 'ap-bar--selected' : '',
-              bar.dim ? 'ap-bar--dim' : '',
-              bar.notch ? 'ap-bar--notch' : '',
-            ]"
-            :style="style(bar.from, bar.to)"
-            @click="emit('select', bar.id)"
-            @focus="focusId = bar.id"
-            @keydown="onKey($event, bar.id)"
-          >
-            <!-- A hatched bar's label sits on a clean base, not the stripes (qa U30 #4). -->
-            <span
-              v-if="labelFits(bar)"
-              aria-hidden="true"
-              :class="bar.kind === 'unconfirmed' ? 'bg-[var(--color-stale-deep)]' : ''"
-              >{{ bar.label }}</span
+          <template v-for="bar in byRow.get(row.id) ?? []" :key="bar.id">
+            <button
+              type="button"
+              :data-bar="bar.id"
+              :tabindex="bar.id === tabStop ? 0 : -1"
+              :aria-label="bar.description"
+              :aria-pressed="bar.id === selected"
+              :title="bar.description"
+              class="ap-bar absolute top-1/2 h-4 -translate-y-1/2 overflow-hidden px-1 text-left font-mono text-2xs leading-4 whitespace-nowrap"
+              :class="[
+                `ap-bar--${bar.kind}`,
+                bar.id === selected ? 'ap-bar--selected' : '',
+                bar.dim ? 'ap-bar--dim' : '',
+                bar.notch ? 'ap-bar--notch' : '',
+                bar.attention && labelFits(bar) ? 'pl-2.5' : '',
+              ]"
+              :style="style(bar.from, bar.to)"
+              @click="emit('select', bar.id)"
+              @focus="focusId = bar.id"
+              @keydown="onKey($event, bar.id)"
             >
-          </button>
+              <!-- A hatched bar's label sits on a clean base, not the stripes (qa U30 #4). -->
+              <span
+                v-if="labelFits(bar)"
+                aria-hidden="true"
+                :class="bar.kind === 'unconfirmed' ? 'bg-[var(--color-stale-deep)]' : ''"
+                >{{ bar.label }}</span
+              >
+            </button>
+            <!-- U45: the mark sits on the bar's leading edge, outside the bar's clip, so it stays whole
+               on a pass a few px wide; it follows the bar's dim. -->
+            <span
+              v-if="bar.attention"
+              :data-bar-mark="bar.id"
+              class="pointer-events-none absolute top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2"
+              :class="bar.dim ? 'opacity-35' : ''"
+              :style="{ left: style(bar.from, bar.to).left }"
+              ><ApStatusMark :state="bar.attention"
+            /></span>
+          </template>
         </div>
       </div>
       <div

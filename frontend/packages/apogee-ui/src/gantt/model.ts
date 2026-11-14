@@ -51,6 +51,11 @@ export type GanttBar = Readonly<{
   dim?: boolean | undefined;
   /** A queued uplink rides this pass (Contacts 'highlight queued uplinks', `.cb.up`): a dark notch at the top. */
   notch?: boolean | undefined;
+  /**
+   * An open attention item on this pass (ux U45): a status mark at the bar's leading edge, never a
+   * fill. Decorative: the `description` must say it in words.
+   */
+  attention?: "caution" | "crit" | undefined;
 }>;
 
 export type GanttBand = Readonly<{

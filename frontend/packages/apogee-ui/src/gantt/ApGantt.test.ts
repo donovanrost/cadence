@@ -92,4 +92,34 @@ describe("ApGantt labels", () => {
     expect(notched?.classes()).toContain("ap-bar--notch");
     expect(notched?.classes()).not.toContain("ap-bar--dim");
   });
+
+  it("marks attention at the bar's leading edge, outside its clip, decorative (ux U45)", () => {
+    const narrow: GanttBar = { ...bar("301", "svb", H), to: H + 1_000, attention: "crit" };
+    const wrapper = mount(ApGantt, {
+      props: {
+        label: "Contacts",
+        rows: [{ id: "svb", label: "SVB-1" }],
+        bars: [
+          { ...bar("300", "svb", 2 * H), attention: "caution", dim: true },
+          narrow,
+          bar("302", "svb", 4 * H),
+        ],
+        window: { from: 0, to: 24 * H },
+        now: null,
+        selected: null,
+      },
+    });
+    const mark = (id: string) => wrapper.find(`[data-bar-mark="${id}"]`);
+    expect(mark("300").find(".ap-mark--caution").exists()).toBe(true);
+    expect(mark("300").classes()).toContain("opacity-35");
+    expect(mark("301").find(".ap-mark--crit").exists()).toBe(true);
+    expect(mark("302").exists()).toBe(false);
+    // Outside the button, so a pass a few px wide can't clip it; hidden from assistive tech.
+    expect(wrapper.find('[data-bar="301"]').find(".ap-mark").exists()).toBe(false);
+    expect(mark("301").find(".ap-mark").attributes("aria-hidden")).toBe("true");
+    expect(mark("301").attributes("style")).toContain("left:");
+    // The bar itself keeps its kind; no fill change.
+    expect(wrapper.find('[data-bar="301"]').classes()).toContain("ap-bar--own");
+    wrapper.unmount();
+  });
 });
