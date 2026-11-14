@@ -251,12 +251,15 @@ without a default), or its tests pass against tables that branch doesn't have. S
 - Never point a team-tree run at 20–29, or a port run at empty–19.
 
 **Partition register** (lead, 2026-11-14). **Claim a partition here before using it, and never
-drop, recreate or migrate a partition you don't own.** On 11-14 at 02:50Z someone dropped or
-terminated `cadence_test3` in the middle of api-ops' L4 suite. Release a claim by deleting your row.
+drop, recreate or migrate a partition you don't own.** Release a claim by deleting your row.
+(11-14 02:50Z: the `57P01 admin_shutdown` on `cadence_test3` during api-ops' L4 suite was the suite's own
+`frontend_release_publisher_controller_test` / publication janitor test, which call `pg_terminate_backend`
+on purpose. Nobody dropped it, but it's why a partition must not be shared between concurrent runs.)
 
 | Partition | Owner | Purpose |
 |---|---|---|
-| empty, 2, 4, 5, 6, 8, 10, 11, 13–17, 19 | unclaimed | team-tree runs: claim before use |
+| empty (`cadence_test`) | team | shared-tree runs through check-slot (no `MIX_TEST_PARTITION`): no claim needed; never drop it |
+| 2, 4, 5, 6, 8, 10, 11, 13–17, 19 | unclaimed | worktree runs: claim before use |
 | 3 | api-ops | L4 policy worktree (`scratchpad/policy-wt`) |
 | 7 | api-ops | ingest fix / journal-matrix worktree (`scratchpad/ingest-wt`) |
 | 9 | api | api's side worktree for slot work (`…/cadence/api-held`) |
@@ -267,9 +270,9 @@ terminated `cadence_test3` in the middle of api-ops' L4 suite. Release a claim b
 | 22–23 | unclaimed | develop ports: claim before use |
 | 24 | devops | devops' develop evidence |
 | 25 | api-ops | main ports and main reruns (`scratchpad/main-wt`, L4, ingest fix) |
-| 31 | qa | restart dry assemblies (`scratchpad/dry-b-wt`; (B) 11-14 01:23–01:35Z, the L8 + L4 bundle next) |
 | 26 | domain | domain's main ports |
 | 27–29 | unclaimed | main ports: claim before use |
+| 31 | qa | restart dry assemblies (`scratchpad/dry-b-wt`; (B) 11-14 01:23–01:35Z, the L8 + L4 bundle next) |
 
 ## Known limits
 
