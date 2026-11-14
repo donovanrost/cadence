@@ -79,6 +79,58 @@ defmodule Cadence.Protocol.TMFrameIngressTest do
     assert length(result.protocol_anomalies) == 2
   end
 
+  # 11-14 00:38:36–00:40:40Z: under persistence backpressure the journal consumer merged ~8 s of
+  # records into one evidence and every frame took the first record's receipt time.
+  test "a merged batch of journal records keeps each frame's own receipt time" do
+    t0 = ~U[2026-11-14 00:38:40.869209Z]
+    times = for i <- 0..7, do: DateTime.add(t0, i, :second)
+    bytes = Enum.map_join(0..7, &frame(100 + &1))
+
+    evidence =
+      RawEvidence.new(%{
+        mission_id: "mission",
+        source_endpoint_ref: "endpoint",
+        protocol_family: :tm,
+        raw: bytes,
+        receipt_time: t0,
+        receipt_times: Enum.with_index(times, fn time, i -> {i * 14, time} end),
+        metadata: Map.merge(%{frame_size: 14, ocf_length: 0}, metadata("j", "s", 0, 8 * 14))
+      })
+
+    {pipeline, continuity, remainder} = initial_state()
+
+    assert {:ok, result, <<>>, _pipeline, _continuity} =
+             TMFrameIngress.process(evidence, pipeline, continuity, remainder)
+
+    assert Enum.map(result.packet_records, & &1.receipt_time) == times
+    assert Enum.map(result.packet_records, & &1.source_time) == times
+    assert Enum.map(result.packet_records, & &1.sequence_count) == Enum.to_list(100..107)
+    assert Enum.all?(result.packet_records, &(&1.provenance.generation_time_source == :receipt))
+    assert Enum.map(result.transfer_frame_records, & &1.receipt_time) == times
+  end
+
+  test "evidence with its own source time keeps it and reads as on-board time" do
+    source_time = ~U[2026-11-14 00:00:00Z]
+
+    evidence =
+      RawEvidence.new(%{
+        mission_id: "mission",
+        source_endpoint_ref: "endpoint",
+        protocol_family: :tm,
+        raw: frame(7),
+        source_time: source_time,
+        metadata: Map.merge(%{frame_size: 14, ocf_length: 0}, metadata("j", "s", 0))
+      })
+
+    {pipeline, continuity, remainder} = initial_state()
+
+    assert {:ok, %{packet_records: [packet]}, _rest, _pipeline, _continuity} =
+             TMFrameIngress.process(evidence, pipeline, continuity, remainder)
+
+    assert packet.source_time == source_time
+    assert packet.provenance.generation_time_source == :onboard
+  end
+
   defp initial_state do
     {:ok, pipeline} = TMFrameIngress.init()
     {pipeline, %{}, <<>>}
