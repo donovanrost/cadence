@@ -21,13 +21,7 @@ const warning = computed(() =>
 </script>
 
 <template>
-  <ApPanel
-    :title="title"
-    :meta="warning"
-    :heading-level="3"
-    flush
-    class="flex h-full min-h-0 flex-col"
-  >
+  <ApPanel :title="title" :meta="warning" :heading-level="3" flush pane class="h-full">
     <template #meta>
       <span class="flex items-center gap-2">
         <span v-if="warning" class="text-caution-text">{{ warning }}</span>

@@ -68,12 +68,7 @@ function onHandleKey(p: OutlinePlacement, event: KeyboardEvent) {
       :gs-max-h="String(p.constraints.max_h)"
     >
       <div class="grid-stack-item-content">
-        <ApPanel
-          :title="p.title || 'Untitled widget'"
-          :heading-level="3"
-          flush
-          class="flex h-full min-h-0 flex-col"
-        >
+        <ApPanel :title="p.title || 'Untitled widget'" :heading-level="3" flush pane class="h-full">
           <template #meta>
             <span class="flex items-center gap-1">
               <button

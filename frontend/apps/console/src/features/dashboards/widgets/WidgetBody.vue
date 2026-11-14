@@ -35,7 +35,7 @@ const message = computed(() => {
 </script>
 
 <template>
-  <div class="relative min-h-0 flex-1" :data-workspace-widget-body="placement.id">
+  <div class="relative h-full min-h-0" :data-workspace-widget-body="placement.id">
     <p
       v-if="message || !ready"
       class="absolute inset-0 grid place-items-center px-4 text-center text-sm text-text-3"

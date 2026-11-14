@@ -1,6 +1,26 @@
 import uPlot from "uplot";
 import type { ChartSurface } from "./chart-surface.ts";
 
+const two = (n: number) => String(n).padStart(2, "0");
+/**
+ * X tick labels, 24-hour UTC like the range picker (§4): `07:15`, `07:15:30` below a minute's
+ * spacing, `11-14` at a day's or more. uPlot's default is local 12-hour (`12:15am`).
+ */
+export function utcTimeLabels(
+  _u: uPlot,
+  splits: number[],
+  _axis: number,
+  _space: number,
+  incr: number,
+) {
+  return splits.map((ts) => {
+    const d = new Date(ts * 1000);
+    if (incr >= 86_400) return `${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())}`;
+    const hm = `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
+    return incr < 60 ? `${hm}:${two(d.getUTCSeconds())}` : hm;
+  });
+}
+
 /** Owns uPlot creation, options and range-selection listeners. */
 export class ChartPlot {
   private rangeSelectionOverlay: Element | null = null;
@@ -42,6 +62,8 @@ export class ChartPlot {
     return {
       ...this.surface.chartSize(),
       legend: { show: false },
+      // The console is UTC throughout (§4): ticks on UTC boundaries, labelled in UTC.
+      tzDate: (ts) => uPlot.tzDate(new Date(ts * 1000), "Etc/UTC"),
       cursor: {
         drag: { x: this.surface.el.dataset.editMode !== "true", y: false },
         sync: { key: this.surface.el.dataset.correlationGroup || "cadence-dashboard-time" },
@@ -75,7 +97,7 @@ export class ChartPlot {
     const unitGroups = this.surface.model.unitGroups();
 
     return [
-      axis,
+      { ...axis, values: utcTimeLabels },
       ...unitGroups.map((unit, index) => ({
         ...axis,
         scale: this.surface.model.unitScaleKey(unit),
