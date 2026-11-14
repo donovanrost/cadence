@@ -60,12 +60,14 @@ const CADENCE_CANCELS: Readonly<Record<string, (p: string) => string>> = {
 /** History line: "Canceled by Mira K. at 12:58Z: “Its booking failed.”" (and U56's Cadence forms). */
 export function endedLine(e: ContactEnded, provider: string | null, now: Date): string {
   const what0 = e.kind === "ended_early" ? "Ended early" : "Canceled";
-  // No action record (api f65af9b0b): nothing is known beyond that it was canceled.
-  if (e.at === null) return `${what0}.`;
+  // ux U55: a legacy cancel without an action record says what's missing (U20), so it isn't
+  // read as Cadence's or the provider's.
+  if (e.at === null) return `${what0}; when, who and why weren't recorded.`;
   const at = short(e.at, now);
   const p = provider ?? "The provider";
   const cadence = e.cause !== null && isKnown(e.cause) ? CADENCE_CANCELS[e.cause] : undefined;
   if (cadence) return `Canceled by Cadence at ${at}: ${cadence(p)}${providerReason(e)}.`;
+  if (e.by === null) return `${what0} at ${at}; who and why weren't recorded.`;
   if (e.by?.kind !== "user" || e.cause === null || !isKnown(e.cause))
     return `${what0} by Cadence at ${at}.`;
   const who = e.by.name ?? "an operator";

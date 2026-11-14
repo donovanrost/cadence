@@ -151,8 +151,36 @@ describe("U55 cancel or end a contact", () => {
     expect(endedLine(odd, "Northlight", NOW)).toBe("Canceled by Cadence at 12:58Z.");
     const bare = ended({ cause: null, by: null, at: null, reason: null });
     if (!bare) throw new Error("ended");
-    expect(endedLine(bare, "Northlight", NOW)).toBe("Canceled.");
+    expect(endedLine(bare, "Northlight", NOW)).toBe(
+      "Canceled; when, who and why weren't recorded.",
+    );
+    const timed = ended({ cause: null, by: null, reason: null });
+    const earlyBare = ended({
+      kind: "ended_early",
+      cause: null,
+      by: null,
+      reason: null,
+      at: "2026-11-14T13:07:00Z",
+    });
+    if (!timed || !earlyBare) throw new Error("ended");
+    expect(endedLine(timed, "Northlight", NOW)).toBe(
+      "Canceled at 12:58Z; who and why weren't recorded.",
+    );
+    expect(endedLine(earlyBare, "Northlight", NOW)).toBe(
+      "Ended early at 13:07Z; who and why weren't recorded.",
+    );
     expect(endedTag(bare)).toEqual({ state: "off", label: "Canceled" });
+    const earlyNoTime = ended({
+      kind: "ended_early",
+      cause: null,
+      by: null,
+      at: null,
+      reason: null,
+    });
+    if (!earlyNoTime) throw new Error("ended");
+    expect(endedLine(earlyNoTime, "Northlight", NOW)).toBe(
+      "Ended early; when, who and why weren't recorded.",
+    );
     const rejected = ended({
       ...sys,
       cause: "provider_rejected",
