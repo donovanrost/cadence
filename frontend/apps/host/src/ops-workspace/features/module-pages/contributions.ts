@@ -20,34 +20,6 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
     import("@cadence/limits-and-alarming/alarm-conditions").then(
       (module) => module.alarmConditionsContribution,
     ),
-  "data-operations.sources": async () => {
-    const module = await import("@cadence/data-operations/data-sources");
-    const entry = module.sourceContributions.find((item) => item.id === "data-operations.sources");
-    if (!entry) throw Error("Missing compiled page contribution.");
-    return entry;
-  },
-  "data-operations.source": async () => {
-    const module = await import("@cadence/data-operations/data-sources");
-    const entry = module.sourceContributions.find((item) => item.id === "data-operations.source");
-    if (!entry) throw Error("Missing compiled page contribution.");
-    return entry;
-  },
-  "data-operations.source-registration": async () => {
-    const module = await import("@cadence/data-operations/data-sources");
-    const entry = module.sourceContributions.find(
-      (item) => item.id === "data-operations.source-registration",
-    );
-    if (!entry) throw Error("Missing compiled page contribution.");
-    return entry;
-  },
-  "data-operations.source-settings": async () => {
-    const module = await import("@cadence/data-operations/data-sources");
-    const entry = module.sourceContributions.find(
-      (item) => item.id === "data-operations.source-settings",
-    );
-    if (!entry) throw Error("Missing compiled page contribution.");
-    return entry;
-  },
   "data-operations.history": () =>
     import("@cadence/data-operations/historical-workflows").then(
       (module) => module.historicalWorkflowsContribution,

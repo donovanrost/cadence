@@ -92,48 +92,6 @@ defmodule CadenceWeb.HostPageLive do
     end
   end
 
-  def handle_event("host:ops-page:read", %{"path" => path, "id" => id} = params, socket)
-      when id in [
-             "data-operations.sources",
-             "data-operations.source",
-             "data-operations.source-registration",
-             "data-operations.source-settings"
-           ] do
-    with true <- CadenceWeb.OpsDataSourcesPage.matches_read?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsDataSourcesPage.matches_read?(socket, params) do
-      {page, socket} = CadenceWeb.OpsDataSourcesPage.read(socket)
-      {:reply, %{ok: true, snapshot: page}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{"path" => path, "id" => id, "event" => event, "input" => input} = params,
-        socket
-      )
-      when id in [
-             "data-operations.sources",
-             "data-operations.source",
-             "data-operations.source-registration",
-             "data-operations.source-settings"
-           ] do
-    with true <- CadenceWeb.OpsDataSourcesPage.matches_action?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsDataSourcesPage.matches_action?(socket, params) do
-      {result, socket} = CadenceWeb.OpsDataSourcesPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
   def handle_event("host:context", %{"path" => path}, socket) do
     case prepare_context(socket, path) do
       {:ok, socket} -> {:reply, %{ok: true, snapshot: snapshot(socket.assigns)}, socket}
@@ -894,7 +852,6 @@ defmodule CadenceWeb.HostPageLive do
         |> CadenceWeb.OpsPlanReviewPage.prepare(info, path)
         |> CadenceWeb.OpsContactSchedulingPage.prepare(info, path)
         |> CadenceWeb.OpsHistoricalWorkflowsPage.prepare(info, path)
-        |> CadenceWeb.OpsDataSourcesPage.prepare(info, path)
 
       socket =
         if info.route in @management_paths do

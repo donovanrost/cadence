@@ -55,11 +55,6 @@
     "producer": "apps/cadence_web/test/cadence_web/ops_command_stages_page_test.exs"
   },
   {
-    "consumer": "modules/data-operations/src/features/data-sources/native-workflow.test.ts",
-    "environment": "CADENCE_SOURCES",
-    "producer": "apps/cadence_web/test/cadence_web/ops_data_sources_page_test.exs"
-  },
-  {
     "consumer": "modules/data-operations/src/features/historical-workflows/native-workflow.test.ts",
     "environment": "CADENCE_HISTORY",
     "producer": "apps/cadence_web/test/cadence_web/ops_historical_workflows_page_test.exs"

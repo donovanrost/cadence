@@ -1018,56 +1018,6 @@
     "administrationPage": "organization_invite"
   },
   {
-    "path": "/missions/:mission_id/ops/data-sources",
-    "scope": "mission",
-    "mountId": "ops-data-sources-component",
-    "queryKeys": [
-      "data_source_id",
-      "binding_id",
-      "page",
-      "bindings_page",
-      "events_page",
-      "binding_events_page",
-      "health_page",
-      "health_events_page",
-      "watermarks_page",
-      "jobs_page"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Data Sources",
-      "ops_nav_item": "data_sources"
-    },
-    "kind": "ops_module",
-    "contribution": "data-operations.sources"
-  },
-  {
-    "path": "/missions/:mission_id/ops/data-sources/:data_source_id",
-    "scope": "mission",
-    "mountId": "ops-data-sources-component",
-    "queryKeys": [
-      "data_source_id",
-      "binding_id",
-      "page",
-      "bindings_page",
-      "events_page",
-      "binding_events_page",
-      "health_page",
-      "health_events_page",
-      "watermarks_page",
-      "jobs_page"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Data Sources",
-      "ops_nav_item": "data_sources"
-    },
-    "kind": "ops_module",
-    "contribution": "data-operations.source"
-  },
-  {
     "path": "/missions/:mission_id/ops/explore",
     "kind": "ops_module",
     "contribution": "dashboards.exploration",
@@ -1104,56 +1054,6 @@
       "page_title": "Telemetry Explore",
       "ops_nav_item": "explore"
     }
-  },
-  {
-    "path": "/missions/:mission_id/ops/data-sources/registration/new",
-    "scope": "mission",
-    "mountId": "ops-data-sources-component",
-    "queryKeys": [
-      "data_source_id",
-      "binding_id",
-      "page",
-      "bindings_page",
-      "events_page",
-      "binding_events_page",
-      "health_page",
-      "health_events_page",
-      "watermarks_page",
-      "jobs_page"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Data Sources",
-      "ops_nav_item": "data_sources"
-    },
-    "kind": "ops_module",
-    "contribution": "data-operations.source-registration"
-  },
-  {
-    "path": "/missions/:mission_id/ops/data-sources/:data_source_id/settings",
-    "scope": "mission",
-    "mountId": "ops-data-sources-component",
-    "queryKeys": [
-      "data_source_id",
-      "binding_id",
-      "page",
-      "bindings_page",
-      "events_page",
-      "binding_events_page",
-      "health_page",
-      "health_events_page",
-      "watermarks_page",
-      "jobs_page"
-    ],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Data Sources",
-      "ops_nav_item": "data_sources"
-    },
-    "kind": "ops_module",
-    "contribution": "data-operations.source-settings"
   },
   {
     "path": "/missions/:mission_id/applications",

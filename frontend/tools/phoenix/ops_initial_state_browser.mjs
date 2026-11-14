@@ -41,7 +41,8 @@ page.on("response", (response) => {
 const prefix = base + "/missions/" + mission;
 const routes = [
   "/ops",
-  // L8a/L8b: every legacy dashboards page redirects to the console (DECISIONS #79).
+  // L8a/L8b: every legacy dashboards page redirects to the console; L11 the data-sources pages
+  // (DECISIONS #79).
   "/ops/commands",
   "/ops/commands/new",
   "/ops/commands/stages",
@@ -56,8 +57,6 @@ const routes = [
   "/ops/requirements/new",
   "/ops/requirement-templates",
   "/ops/contacts",
-  "/ops/data-sources",
-  "/ops/data-sources/registration/new",
   "/ops/data-operations",
   "/ops/data-operations/manage",
   "/ops/activations",

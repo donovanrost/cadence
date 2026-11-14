@@ -152,7 +152,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
                         "lib/cadence/applications/ops_console/actions/provider_change_decisions.ex",
                         "lib/cadence/applications/ops_console/actions/requirement_decisions.ex",
                         "lib/cadence/applications/ops_console/actions/schedule_cancellations.ex",
-                        "lib/cadence/applications/ops_console/actions/source_inventory_actions.ex",
                         "lib/cadence/applications/ops_console/actions/telemetry_explore.ex",
                         "lib/cadence/applications/ops_console/actions/ui_interactions.ex"
                       ])
