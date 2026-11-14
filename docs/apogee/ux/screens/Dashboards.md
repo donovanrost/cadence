@@ -124,6 +124,11 @@ The rendering engine differs, but the look is the same.
     with no flown pass, dashed in full, with the station code label. The tooltip says "FAI pass · didn't start"
     (U45's words). It's never drawn from realized to the sweep's close: nothing flew in that span. Not (a), hiding
     it, because a pass that didn't start is exactly what an operator needs to see.
+    - From domain's frame (`started: false`, `close_reason`): the tooltip adds the reason. window_ended: "FAI pass ·
+      didn't start: its window ended first". hand_start_expired: "FAI contact · didn't start: the hand start
+      expired". Unknown: no reason.
+    - A hand start that never started has no booking, so it's dashed over its realized span with the same
+      tooltip, in "contact" words (U46).
 - **Point events:** a thin `text-4` vertical line, with the label in the tooltip. Mission events closer than 6px
   merge into one mark, titled "4 events 02:10Z–02:14Z". Watermark and evidence events aren't chart marks: they're
   a stream, not events an operator reads.
