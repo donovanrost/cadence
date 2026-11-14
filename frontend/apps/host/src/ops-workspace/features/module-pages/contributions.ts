@@ -122,36 +122,4 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
     import("@cadence/dashboards-and-exploration/exploration").then(
       (module) => module.explorationContribution,
     ),
-  "dashboards.execution-diagnostics": () =>
-    import("@cadence/dashboards-and-exploration/execution-diagnostics").then(
-      (module) => module.executionDiagnosticsContribution,
-    ),
-  "dashboards.activity": () =>
-    import("@cadence/dashboards-and-exploration/activity").then(
-      (module) => module.activityContribution,
-    ),
-  "dashboards.settings": () =>
-    import("@cadence/dashboards-and-exploration/settings").then(
-      (module) => module.settingsContribution,
-    ),
-  "dashboards.share": () =>
-    import("@cadence/dashboards-and-exploration/sharing").then(
-      (module) => module.shareContribution,
-    ),
-  "dashboards.snapshot": () =>
-    import("@cadence/dashboards-and-exploration/sharing").then(
-      (module) => module.snapshotContribution,
-    ),
-  "dashboards.library": () =>
-    import("@cadence/dashboards-and-exploration/library").then(
-      (module) => module.libraryContribution,
-    ),
-  "dashboards.playlists": () =>
-    import("@cadence/dashboards-and-exploration/playlists").then(
-      (module) => module.playlistsContribution,
-    ),
-  "dashboards.playlist-present": () =>
-    import("@cadence/dashboards-and-exploration/playlists").then(
-      (module) => module.playlistPresentationContribution,
-    ),
 });

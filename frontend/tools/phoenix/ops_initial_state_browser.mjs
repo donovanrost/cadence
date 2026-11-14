@@ -41,12 +41,7 @@ page.on("response", (response) => {
 const prefix = base + "/missions/" + mission;
 const routes = [
   "/ops",
-  // L8a: the directory, viewer, editor and New redirect to the console (DECISIONS #79).
-  "/ops/dashboards/library",
-  "/ops/dashboards/playlists",
-  "/ops/dashboards/draft-dashboard/settings",
-  "/ops/dashboards/draft-dashboard/activity",
-  "/ops/dashboards/draft-dashboard/diagnostics",
+  // L8a/L8b: every legacy dashboards page redirects to the console (DECISIONS #79).
   "/ops/commands",
   "/ops/commands/new",
   "/ops/commands/stages",
@@ -129,19 +124,6 @@ try {
     assert.equal(generic, false, route + " must have useful content or setup guidance");
     assert.equal(failure, null, route + " must render");
     assert.deepEqual(item.errors, [], route + " must not crash");
-    if (route.endsWith("/draft-dashboard/diagnostics")) {
-      assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
-      assert.equal(
-        await page.locator("#dashboard-publication-editor").getAttribute("href"),
-        "/missions/" + mission + "/ops/dashboards/draft-dashboard/edit",
-      );
-      await page.locator("#dashboard-publication-refresh").click();
-      await page.waitForFunction(() => {
-        const button = document.querySelector("#dashboard-publication-refresh");
-        return button instanceof HTMLButtonElement && !button.disabled;
-      });
-      assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
-    }
   }
   console.log(
     "OPS_LIFECYCLE_AUDIT_OK " +

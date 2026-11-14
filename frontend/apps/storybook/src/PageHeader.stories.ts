@@ -76,61 +76,58 @@ export const OpsCollection: Story = {
   },
 };
 
-export const OpsPrimaryMenu: Story = ops("/missions/:mission_id/ops/dashboards", "Dashboards", {
-  description:
-    "Telemetry workspaces shared across the mission. Stars and recently viewed are yours alone.",
-  actions: [
-    {
-      id: "library",
-      label: "Library",
-      icon: "hero-rectangle-stack",
-      href: href("/missions/:mission_id/ops/dashboards/library", mission),
-    },
-    {
-      id: "playlists",
-      label: "Playlists",
-      icon: "hero-play",
-      href: href("/missions/:mission_id/ops/dashboards/playlists", mission),
-    },
-  ],
-  primary: {
-    id: "new",
-    label: "New",
-    icon: "hero-plus",
-    menu: [
-      {
-        id: "blank",
-        label: "New dashboard",
-        href: href("/missions/:mission_id/ops/dashboards/new", mission),
-      },
-      {
-        id: "import",
-        label: "Import",
-        href: href("/missions/:mission_id/ops/dashboards/new", mission, { mode: "import" }),
-      },
-    ],
-  },
-});
-
-export const OpsResource: Story = ops(
-  "/missions/:mission_id/ops/dashboards/:dashboard_id/settings",
-  "Dashboard Settings",
+export const OpsPrimaryMenu: Story = ops(
+  "/missions/:mission_id/ops/commands/stages",
+  "Command Stages",
   {
-    title: "Pass Overview",
-    status: { tone: "warning", label: "Archived" },
-    facts: ["Version 14"],
+    description: "Commands staged for review and release across the mission.",
     actions: [
       {
-        id: "open",
-        label: "Open dashboard",
+        id: "workspace",
+        label: "Workspace",
+        icon: "hero-rectangle-stack",
+        href: href("/missions/:mission_id/ops/commands/workspace", mission),
+      },
+    ],
+    primary: {
+      id: "new",
+      label: "New",
+      icon: "hero-plus",
+      menu: [
+        {
+          id: "blank",
+          label: "New command",
+          href: href("/missions/:mission_id/ops/commands/new", mission),
+        },
+        {
+          id: "target",
+          label: "For this target",
+          href: href("/missions/:mission_id/ops/commands/new", mission, { target: "sc-1" }),
+        },
+      ],
+    },
+  },
+);
+
+export const OpsResource: Story = ops(
+  "/missions/:mission_id/ops/commands/requests/:command_request_id",
+  "Command Request",
+  {
+    title: "Deploy solar array",
+    status: { tone: "warning", label: "Held" },
+    facts: ["Revision 3"],
+    actions: [
+      {
+        id: "queue",
+        label: "Open queue",
         icon: "hero-arrow-top-right-on-square",
-        href: href("/missions/:mission_id/ops/dashboards/:dashboard_id", {
+        href: href("/missions/:mission_id/ops/commands/requests/:command_request_id/queue", {
           ...mission,
-          dashboard_id: "pass",
+          command_request_id: "req-1",
         }),
       },
     ],
-    more: [{ id: "archive", label: "Restore", run: () => {} }],
+    more: [{ id: "cancel", label: "Cancel", run: () => {} }],
   },
 );
 

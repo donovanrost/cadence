@@ -5,15 +5,6 @@
   "type": "module",
   "exports": {
     "./exploration": "./src/exploration.ts",
-    "./execution-diagnostics": "./src/execution-diagnostics.ts",
-    "./sharing": "./src/sharing.ts",
-    "./settings": "./src/settings.ts",
-    "./playlists": "./src/playlists.ts",
-    "./library": "./src/library.ts",
-    "./activity": "./src/activity.ts",
-    "./workspace": "./src/workspace.ts",
-    "./workspace.css": "./src/workspace.css",
-    "./charts.css": "./src/charts.css",
     ".": "./src/index.ts"
   },
   "scripts": {
@@ -23,8 +14,6 @@
   "dependencies": {
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",
-    "gridstack": "10.3.1",
-    "uplot": "1.6.32",
     "vue": "catalog:"
   },
   "devDependencies": {

@@ -14,8 +14,7 @@ import { readPageHeader } from "./page-header-validation";
 import { href } from "./routes";
 
 const alarms = "/missions/:mission_id/ops/alarms" as const;
-const settings = "/missions/:mission_id/ops/dashboards/:dashboard_id/settings" as const;
-const viewer = "/missions/:mission_id/ops/dashboards/:dashboard_id" as const;
+const request = "/missions/:mission_id/ops/commands/requests/:command_request_id" as const;
 const transports = "/missions/:mission_id/comms/transports" as const;
 const transport = "/missions/:mission_id/comms/transports/:transport_id" as const;
 const link = href(alarms, { mission_id: "m" });
@@ -27,10 +26,8 @@ test("header rules are type errors", () => {
     // @ts-expect-error -- collection pages take their title from the route
     useOpsHeader(alarms, { title: "Alarm conditions" });
     // @ts-expect-error -- resource pages must name their resource
-    useOpsHeader(settings, { description: "Settings" });
-    useOpsHeader(settings, { title: "Pass Overview", status: { tone: "warning", label: "Off" } });
-    // @ts-expect-error -- pages that own their identity bar have no host header
-    useOpsHeader(viewer, {});
+    useOpsHeader(request, { description: "Settings" });
+    useOpsHeader(request, { title: "Pass Overview", status: { tone: "warning", label: "Off" } });
     useOpsHeader(alarms, { actions: [a, a, a], more: [a] });
     // @ts-expect-error -- a fourth button does not compile; overflow goes in `more`
     useOpsHeader(alarms, { actions: [a, a, a, a] });
@@ -67,10 +64,10 @@ test("a component serving several routes types each header by its route", () => 
   const typed = () => {
     useOpsHeaders({
       [alarms]: { description: "Alarms" },
-      [settings]: () => ({ title: "Pass Overview" }),
+      [request]: () => ({ title: "Pass Overview" }),
     });
-    // @ts-expect-error -- the settings route is a resource page and must be named
-    useOpsHeaders({ [settings]: { description: "Settings" } });
+    // @ts-expect-error -- the command request route is a resource page and must be named
+    useOpsHeaders({ [request]: { description: "Settings" } });
   };
   expect(typed).toBeTypeOf("function");
 });

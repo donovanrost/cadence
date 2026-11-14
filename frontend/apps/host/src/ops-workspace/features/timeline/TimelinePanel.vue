@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
-import { href } from "@cadence/plugin-sdk/routes";
 import CadenceClipboardButton from "@cadence/ui/CadenceClipboardButton.vue";
 import { filterKeys, referenceKeys, timelineHref, type TimelineModel } from "./contracts";
 const props = defineProps<{
@@ -70,19 +69,6 @@ const options = {
 };
 useOpsHeader("/missions/:mission_id/ops/timeline", () => ({
   description: "Contacts, alarms, commands and runtime events across the mission.",
-  actions: props.model.source_dashboard_id
-    ? [
-        {
-          id: "source-dashboard",
-          label: "Return to dashboard",
-          icon: "hero-arrow-uturn-left",
-          href: href("/missions/:mission_id/ops/dashboards/:dashboard_id", {
-            mission_id: missionId.value,
-            dashboard_id: props.model.source_dashboard_id,
-          }),
-        },
-      ]
-    : [],
   refresh: { run: refreshPage, pending: busy.value },
 }));
 </script>

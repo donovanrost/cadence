@@ -7,7 +7,7 @@ import { href } from "@cadence/plugin-sdk/routes";
 import HostPage from "./HostPage.vue";
 
 const alarms = "/missions/:mission_id/ops/alarms";
-const settings = "/missions/:mission_id/ops/dashboards/:dashboard_id/settings";
+const request = "/missions/:mission_id/ops/commands/requests/:command_request_id";
 const breadcrumbs = [{ label: "Kestrel", href: "/missions/m" }, { label: "Alarms" }];
 let wrapper: ReturnType<typeof mount> | undefined;
 afterEach(() => {
@@ -57,13 +57,13 @@ test("the host draws a page's typed header with one primary, quiet actions and r
 
 test("resource pages name themselves and show their status", async () => {
   const page = defineComponent(() => {
-    useOpsHeader(settings, {
+    useOpsHeader(request, {
       title: "Pass Overview",
       status: { tone: "warning", label: "Archived" },
     });
     return () => h("p");
   });
-  const host = render(settings, page, "Dashboard Settings");
+  const host = render(request, page, "Command Request");
   await flushPromises();
   expect(host.get("h1").text()).toBe("Pass Overview");
   expect(host.get("#host-page-heading").text()).toContain("Archived");

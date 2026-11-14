@@ -2,6 +2,7 @@ import { defineComponent, h, shallowRef, type Component, type VNode } from "vue"
 import { pageHeaderKey, type MenuItem, type PageAction, type PageHeaderHost } from "./page-header";
 import { readPageHeader, type AdmittedHeader } from "./page-header-validation";
 import { isRouteId, routeCatalog } from "./routes";
+import type { HeaderKind } from "./routes/project";
 
 /**
  * A stand-in host for component tests: it admits the page's header exactly as
@@ -10,7 +11,9 @@ import { isRouteId, routeCatalog } from "./routes";
 export function pageHeaderHarness(route: string) {
   if (!isRouteId(route)) throw new Error(`${route} is not a catalog route`);
   const { layer } = routeCatalog[route];
-  const kind = routeCatalog[route].header.kind;
+  // Widened: no catalog route opts out of the host header today (L8b), but the policy allows it.
+  const policy: Readonly<{ kind: HeaderKind }> = routeCatalog[route].header;
+  const { kind } = policy;
   const current = shallowRef<AdmittedHeader | null>(null);
   const host: PageHeaderHost = {
     route: () => route,

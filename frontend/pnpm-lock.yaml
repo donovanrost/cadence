@@ -1038,12 +1038,6 @@ importers:
       '@cadence/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      gridstack:
-        specifier: 10.3.1
-        version: 10.3.1
-      uplot:
-        specifier: 1.6.32
-        version: 1.6.32
       vue:
         specifier: 'catalog:'
         version: 3.5.45(typescript@6.0.3)

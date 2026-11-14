@@ -73,7 +73,6 @@ import routes from "../routes.json";
 import { databaseIndexFixture } from "../catalog/features/databases/fixtures.test-support";
 import { artifactFixture } from "../catalog/features/artifacts/fixtures.test-support";
 import { diagnosticsFixture } from "../../../../modules/dashboards-and-exploration/src/features/runtime-diagnostics/fixtures.test-support";
-import { diagnosticsPageFixture } from "../../../../modules/dashboards-and-exploration/src/features/execution-diagnostics/fixtures.test-support";
 import { monitorFixture } from "../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
 import { workspaceFixture as commandWorkspaceFixture } from "../../../../modules/commanding/src/features/workspace/fixtures.test-support";
 import { readMonitorQuery } from "../../../../modules/commanding/src/features/mission-commands/monitor-query";
@@ -381,57 +380,6 @@ test("compiled Explore navigates real query and sample identities through host h
   expect(view().find("#exploration-results").exists()).toBe(false);
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   expect(transport.requests.every((request) => request.event === "host:context")).toBe(true);
-});
-test("compiled diagnostics selects through host URLs, restores history and keeps its Ops rails", async () => {
-  await start();
-  const base = "/missions/mission-1/ops/dashboards/dashboard-1/diagnostics";
-  const data = diagnosticsPageFixture();
-  Object.assign(data.model, {
-    organization_id: "org-1",
-    mission_id: "mission-1",
-    dashboard_id: "dashboard-1",
-  });
-  const stateAt = (path: string, selection = data.selection) => ({
-    ...snapshot(path, "mission-1"),
-    ops_page: {
-      id: "dashboards.execution-diagnostics",
-      slot: "ops.page",
-      version: 1,
-      status: "ready",
-      token: "11111111-1111-4111-8111-111111111111",
-      context: { organizationId: "org-1", missionId: "mission-1", resourceId: "dashboard-1" },
-      data: { ...data, selection },
-    },
-  });
-  await click(base);
-  await reply(0, stateAt(base));
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  const rail = view().get("#ops-nav-rail").element;
-  await view()
-    .get(`#diagnostics-row-${"a".repeat(64)}`)
-    .trigger("click");
-  await flushHostUpdates();
-  const selectedPath = requestedPath(1);
-  const selection = { ...data.selection, row: "a".repeat(64) };
-  expect(new URL(selectedPath, "http://cadence.test").searchParams.get("row")).toBe(selection.row);
-  await reply(1, stateAt(selectedPath, selection));
-  expect(
-    view().get<HTMLInputElement | HTMLSelectElement>("#diagnostic-identity").element.value,
-  ).toBe("dashboard");
-  await view().get("#diagnostics-collection-frames").trigger("click");
-  await flushHostUpdates();
-  const framesPath = requestedPath(2);
-  await reply(2, stateAt(framesPath, { collection: "frames", row: null, filter: "" }));
-  expect(view().get("#diagnostics-collection-frames").attributes("aria-current")).toBe("true");
-  hostBrowserHistory.go(-1);
-  await flushHostUpdates();
-  expect(requestedPath(3)).toBe(selectedPath);
-  await reply(3, stateAt(selectedPath, selection));
-  expect(
-    view().get<HTMLInputElement | HTMLSelectElement>("#diagnostic-identity").element.value,
-  ).toBe("dashboard");
-  expect(view().get("#ops-nav-rail").element).toBe(rail);
-  expect(view().get("#diagnostics-loaded-at").attributes("datetime")).toBe(data.model.loaded_at);
 });
 test("provider creation and detail share the mission host port without loading a remote", async () => {
   const state = {
