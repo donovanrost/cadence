@@ -41,7 +41,7 @@ async function confirmRestore() {
   if (pending.value === null) return;
   const made = await v.restoreVersion(pending.value);
   pending.value = null;
-  if (made !== null) emit("restored", made.warnings ?? []);
+  if (made !== null) emit("restored", made.warnings);
 }
 defineExpose({ open });
 </script>

@@ -30,7 +30,7 @@ const sections = computed(
 async function onSave(input: { message: string; defaults: { time: boolean; scope: boolean } }) {
   const result = await props.session.save(input);
   saveSheet.value?.close();
-  if (result.ok) emit("saved", result.warnings ?? []);
+  if (result.ok) emit("saved", result.warnings);
 }
 defineExpose({
   add: () => widgetSheet.value?.openFor(null),

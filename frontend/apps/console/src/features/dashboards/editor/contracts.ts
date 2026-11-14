@@ -206,7 +206,12 @@ export type Rebase = Decoded<typeof rebaseReply>;
  * A source's health, as a save's readiness saw it (api a7bba3ca0, contract dashboards.md). Only
  * facts about the source block a save; health from reads only warns (lead 11-14).
  */
-export const LOGICAL_SOURCES = ["telemetry", "events", "limits", "operational_observables"] as const;
+export const LOGICAL_SOURCES = [
+  "telemetry",
+  "events",
+  "limits",
+  "operational_observables",
+] as const;
 export const REALMS = ["flight", "rehearsal", "replay", "simulation"] as const;
 export const SOURCE_REASONS = [
   "source_unavailable",
@@ -230,8 +235,8 @@ export const sourceWarning = d.object({
   message: d.string,
 });
 export type SourceWarning = Decoded<typeof sourceWarning>;
-// Absent until api's warnings commit lands; the readers treat absent as none.
-const warnings = d.optional(d.array(sourceWarning, 64));
+// [] when none (api c16236516, live since restart 5).
+const warnings = d.array(sourceWarning, 64);
 
 export const savedReply = d.object({ version: d.integer, warnings });
 export type Saved = Decoded<typeof savedReply>;
@@ -276,8 +281,8 @@ export const notReady = d.object({
       // free-text: readiness codes are open (domain PublishReadiness grows them); the UI shows `message`.
       code: d.string,
       message: d.string,
-      // A source issue's facts, else null (api a7bba3ca0); absent before it lands.
-      details: d.optional(d.nullable(d.object(sourceFacts))),
+      // A source issue's facts, else null (api a7bba3ca0).
+      details: d.nullable(d.object(sourceFacts)),
     }),
     1024,
   ),
