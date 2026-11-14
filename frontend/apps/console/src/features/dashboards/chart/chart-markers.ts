@@ -34,6 +34,8 @@ export type LimitEventMarker = MarkerIds & {
 
 /** A pass: `scheduled_contact` is booked (dashed), `realized_contact` flown (tinted). */
 export type ContactKind = "scheduled_contact" | "realized_contact";
+/** Why a realized contact closed without starting (domain); a newer reason reads "unrecognized". */
+export type NotStartedReason = "window_ended" | "hand_start_expired" | "unrecognized";
 export type ContactMarker = MarkerIds &
   ChartInterval & {
     readonly marker_type: "contact_interval";
@@ -42,6 +44,12 @@ export type ContactMarker = MarkerIds &
     /** Ground-station code; null when the contact has no transport (the band falls back to label). */
     readonly station: string | null;
     readonly kind: ContactKind | null;
+    /**
+     * A realized contact: true once active, false when it closed without starting (its span is
+     * then the scheduled window it belonged to); null for bookings and not-yet-started contacts.
+     */
+    readonly started: boolean | null;
+    readonly close_reason: NotStartedReason | null;
   };
 
 /** Its `marker_id` is the mission_event_id when the row has one (overlay-markers pointEvent). */

@@ -1,5 +1,6 @@
 import type {
   ContactKind,
+  NotStartedReason,
   ContactMarker,
   EventMarker,
   LimitDefinitionMarker,
@@ -99,7 +100,15 @@ function contactInterval(row: Row, key: string): ContactMarker | null {
     kind: contactKind(text(row.kind)),
     /** Ground-station code (api 3d4c70d21). */
     station: text(row.station),
+    // Never-started contacts (domain): absent until the events source sends them.
+    started: typeof row.started === "boolean" ? row.started : null,
+    close_reason: notStartedReason(text(row.close_reason)),
   };
+}
+
+function notStartedReason(value: string | null): NotStartedReason | null {
+  if (value === null) return null;
+  return value === "window_ended" || value === "hand_start_expired" ? value : "unrecognized";
 }
 
 function pointEvent(row: Row, key: string): MissionEventMarker | null {

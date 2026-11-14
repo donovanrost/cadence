@@ -21,6 +21,8 @@ const contact = (id: string, starts_at_ms: number, ends_at_ms: number | null): C
   status: null,
   station: null,
   kind: null,
+  started: null,
+  close_reason: null,
 });
 const input = {
   chart_id: "chart",

@@ -153,4 +153,29 @@ describe("overlay frames as chart markers", () => {
       expect.objectContaining({ marker_type: "contact_interval", kind: null }),
     ]);
   });
+  it("reads a contact that closed without starting, and why (domain's frame)", () => {
+    const p = placementWith([
+      frame(
+        "intervals",
+        [
+          field("starts_at", "time", [1_000, 3_000, 5_000]),
+          field("ends_at", "time", [2_000, 4_000, 6_000]),
+          field("kind", "enum", ["realized_contact", "realized_contact", "scheduled_contact"]),
+          field("contact_id", "string", ["c-1", "c-2", "c-3"]),
+          field("started", "boolean", [false, true, null]),
+          field("close_reason", "string", ["window_ended", null, null]),
+        ],
+        "events",
+      ),
+    ]);
+    expect(
+      overlayMarkers(p).eventMarkers.map((m) =>
+        m.marker_type === "contact_interval" ? [m.marker_id, m.started, m.close_reason] : null,
+      ),
+    ).toEqual([
+      ["c-1", false, "window_ended"],
+      ["c-2", true, null],
+      ["c-3", null, null],
+    ]);
+  });
 });

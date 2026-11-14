@@ -1,4 +1,9 @@
-import type { ContactMarker, EventMarker, MissionEventMarker } from "./chart-markers.ts";
+import type {
+  ContactMarker,
+  EventMarker,
+  MissionEventMarker,
+  NotStartedReason,
+} from "./chart-markers.ts";
 import type { ChartSurface } from "./chart-surface.ts";
 /**
  * Owns event overlays. The browser snapshot (WorkspaceSnapshot) carries mission events only:
@@ -74,17 +79,23 @@ export class ChartEvents {
   renderContactBands(contacts: readonly ContactMarker[]) {
     const bands = contacts.flatMap((marker) => {
       const bounds = this.surface.intervalBounds(marker);
-      return bounds ? [{ marker, ...bounds, realized: marker.kind === "realized_contact" }] : [];
+      return bounds ? [{ marker, ...bounds, realized: flew(marker) }] : [];
     });
     const flown = mergedSpans(bands.filter((b) => b.realized));
     for (const span of flown) this.renderTint(span);
+    // A contact that closed without starting is drawn as its booking (dashed, at the scheduled
+    // window) and replaces the booking's own outline there: one outline, one tooltip (ux).
+    const notStarted = bands.filter((b) => b.marker.started === false);
+    const covers = mergedSpans([...flown, ...notStarted]);
     // ux 88b7e6ae7: where a flown pass covers its booking, only the pass's solid edges; where the
     // booking reaches past it (a late start, an early LOS), the dashed outline on that part only;
     // a booking with no pass stays dashed.
     const shown = bands.flatMap((band) =>
       band.realized
         ? [{ ...band, open: { left: true, right: true } }]
-        : uncovered(band, flown).map((part) => ({ ...band, ...part })),
+        : band.marker.started === false
+          ? [{ ...band, open: { left: true, right: true } }]
+          : uncovered(band, covers).map((part) => ({ ...band, ...part })),
     );
     for (const band of shown) this.renderBandEdges(band);
     const labelled = new Set<string>();
@@ -127,10 +138,8 @@ export class ChartEvents {
     open: { left: boolean; right: boolean };
   }) {
     const { marker, realized } = band;
-    const status = marker.status ? marker.status.replaceAll("_", " ") : null;
-    const name = marker.station || marker.label || "Contact";
     const edge = document.createElement("div");
-    edge.title = [realized ? "Pass" : "Booked pass", name, status].filter(Boolean).join(" · ");
+    edge.title = contactTitle(marker, realized);
     edge.setAttribute("role", "img");
     edge.setAttribute("aria-label", edge.title);
     const line = this.surface.themeColor("--chart-border-30");
@@ -276,3 +285,21 @@ const clock = (ms: number | undefined) =>
 const isContact = (m: EventMarker): m is ContactMarker => m.marker_type === "contact_interval";
 const isMissionEvent = (m: EventMarker): m is MissionEventMarker =>
   m.marker_type === "mission_event";
+
+/** A realized contact that started; one that closed without starting draws as its booking. */
+const flew = (m: ContactMarker) => m.kind === "realized_contact" && m.started !== false;
+
+const NOT_STARTED: Readonly<Record<NotStartedReason, string>> = {
+  window_ended: "pass · didn't start: its window ended first",
+  hand_start_expired: "contact · didn't start: the hand start expired",
+  unrecognized: "pass · didn't start",
+};
+
+/** A band's tooltip (ux Dashboards.md › Overlays; U45's words for a contact that didn't start). */
+export function contactTitle(marker: ContactMarker, flown: boolean): string {
+  const name = marker.station || marker.label || "Contact";
+  if (marker.started === false)
+    return `${name} ${NOT_STARTED[marker.close_reason ?? "unrecognized"]}`;
+  const status = marker.status ? marker.status.replaceAll("_", " ") : null;
+  return [flown ? "Pass" : "Booked pass", name, status].filter(Boolean).join(" · ");
+}
