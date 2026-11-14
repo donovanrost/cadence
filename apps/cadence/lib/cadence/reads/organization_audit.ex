@@ -5,7 +5,8 @@ defmodule Cadence.Reads.OrganizationAudit do
   server-made action sentences.
 
   Sources: `config` (applied configuration revisions and settings changes),
-  `commanding` (command requests and approval decisions), `access` (members
+  `commanding` (command groups' decisions, Cadence's cancels folded per group, standalone
+  requests' requests, decisions and cancels; `CommandEvents`), `access` (members
   joining, invitations sent), `alarms` (people acknowledging, assigning,
   handing off and annotating episodes), `contacts` (contact plan approval
   decisions), `data` (data source definition changes), `provider_accounts` and `account`
@@ -19,10 +20,11 @@ defmodule Cadence.Reads.OrganizationAudit do
   alias Cadence.Alarms.Queries, as: Alarms
   alias Cadence.Configuration.Status
   alias Cadence.Dashboards.ConfigAudit
-  alias Cadence.Management.{Commanding, Contacts, DataSources}
+  alias Cadence.Management.{Contacts, DataSources}
 
   alias Cadence.Reads.OrganizationAudit.{
     AccountEvents,
+    CommandEvents,
     DashboardEvents,
     PolicyEvents,
     ProviderAccountEvents,
@@ -74,7 +76,7 @@ defmodule Cadence.Reads.OrganizationAudit do
 
     (revision_events(organization_id, id) ++
        SettingsEvents.list(organization_id, id, ref) ++
-       command_events(organization_id, id) ++
+       CommandEvents.list(organization_id, id, opts) ++
        alarm_events(id, opts) ++
        plan_events(organization_id, id) ++
        PolicyEvents.list(organization_id, id) ++
@@ -103,47 +105,6 @@ defmodule Cadence.Reads.OrganizationAudit do
         reason: revision.reason
       )
     end)
-  end
-
-  defp command_events(organization_id, mission_id) do
-    requests = Commanding.list_command_requests(organization_id, mission_id, [])
-    names = Map.new(requests, &{&1.command_request_id, command_name(&1)})
-
-    requested =
-      requests
-      |> Enum.filter(& &1.requested_at)
-      |> Enum.map(fn request ->
-        event(
-          "commanding",
-          request.requested_at,
-          actor(request.requested_by),
-          "Requested #{command_name(request)}",
-          target: %{
-            kind: "command_request",
-            id: request.command_request_id,
-            label: command_name(request)
-          }
-        )
-      end)
-
-    decided =
-      organization_id
-      |> Commanding.list_command_approvals(mission_id, [])
-      |> Enum.filter(& &1.decided_at)
-      |> Enum.map(fn approval ->
-        name = Map.get(names, approval.command_request_id, "a command")
-
-        event(
-          "commanding",
-          approval.decided_at,
-          actor(approval.decided_by),
-          "#{verb(approval.decision)} #{name}",
-          target: %{kind: "command_request", id: approval.command_request_id, label: name},
-          reason: approval.reason
-        )
-      end)
-
-    requested ++ decided
   end
 
   defp alarm_events(mission_id, opts) do
@@ -361,9 +322,6 @@ defmodule Cadence.Reads.OrganizationAudit do
         event
     end)
   end
-
-  defp command_name(request),
-    do: request.command_display_name || request.command_name || request.command_id
 
   defp verb(:approved), do: "Approved"
   defp verb(:rejected), do: "Rejected"

@@ -543,7 +543,27 @@ first.
 - There's no single audit store yet, so this merges each domain's own records:
   - `config`: applied configuration revisions ("Applied r6 · 2 changes", "Rolled back to r4") and
     settings changes ("Changed Governance settings");
-  - `commanding`: command requests and approval decisions;
+  - `commanding` (director 11-15, ux U59): a command group is ONE entry per decision, never one
+    per member, target `{kind: "command_group", id: <command_group_id>, label: "SET_MODE and 2
+    more for 12 spacecraft"}` (the console opens it at `ops.commands.request`, whose param is
+    the group id): "Submitted <label>" (" · needs a second GO", " · 3 spacecraft have their own
+    values"), or "Resent <label> (sent back at 13:02Z: “<original title>”)"; "Gave GO on
+    <label>" (", excluding 2 spacecraft"), "Gave NO-GO on <label>", "Sent back <label>" (the
+    note is the `reason`); "Aborted <label>: 40 uplinks canceled, 8 already sent" (the abort
+    reason); "Released 2 uplinks of <label> into the SVL 14:05Z pass" (or "into a contact that
+    wasn't a booked pass (SVL 14:05Z)", plus " · then stopped, 1 uplink still queued");
+    "Acknowledged the Contact HOLD on <label>" (the note); "Canceled SET_MODE on EARENDIL-004 in
+    <label>" (an operator canceling one member; the reason). Cadence's own cancels (expiry,
+    fail-closed, a catalog change) fold to one entry per group and reason, actor `{kind:
+    "service", id, name: "Cadence"}`, `reason: null`: "Canceled 12 uplinks of <label>: they
+    expired before release" / ": what they were approved against changed" / ": the catalog
+    changed" / ": EARENDIL-004 was archived" ("3 of its spacecraft were archived"), else
+    "Canceled 12 uplinks of <label>." Notes and members' outcomes (failed, completed) aren't
+    audit entries. A standalone request (no group) keeps "Requested X" and "Approved X" /
+    "Rejected X", target `{kind: "command_request", …}`, and adds "Canceled X" (an operator, with
+    the reason) or "Canceled X on <spacecraft>: it expired before release" (Cadence). The window
+    is applied in SQL and each part is capped at 200 per mission, so a 1,000-target group is a
+    handful of rows;
   - `access`: invitations sent, accepted (by the new member) and revoked; members joining
     without an invitation; role changes and removals (by the admin who made them). Each carries
     its actor, so `actor_id` finds a person's own access events;
