@@ -421,4 +421,12 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 
 - 00:39:09.829Z `cadence.telemetry.ingress.persistence_failed`, `_39GI9_run`, downlink path, `error_class=unknown`. api-ops: a 15 s Postgres lock wait, retried with nothing lost; ~2 min time-tag bunching for 001/009 from 00:38:36Z to 00:40:40Z. The error_class fix comes after 01:00Z.
 
+### 60. (B) restart cut a live 008 pass; settlement replay loops on an archive identity conflict
+
+- qa stopped :4011 at 01:36Z during 008's `_39LEY_run` (01:35:49–01:43:49Z); the pre-flight checked armed
+  commands, not live passes. Since boot (01:44:37Z) its settlement reads `replay: running`, and
+  `protocol record archive flush failed … protocol_archive_record_identity_conflict` repeats every ~5 s with the same
+  frame ids. No manual action (no-replay rule); decision with api-ops/domain/director.
+- Runbook fix: a restart pre-flight must also check for no active realized contact and no pass starting in the window.
+
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
