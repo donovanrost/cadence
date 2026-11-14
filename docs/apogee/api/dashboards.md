@@ -70,18 +70,33 @@ most 256 commands (`422 too_many_commands`: "Save to keep going"). All of these 
   `more` says there are more matches. `422 details.fields` when they aren't a complete widget
   form.
 - **D9** `POST /save {base_version, commands, message?, defaults? {time, scope}, runtime?}` →
-  `201 {version, changed}`. Replays the commands on `base_version` and saves the next current
+  `201 {version, changed, warnings}`. Replays the commands on `base_version` and saves the next current
   version (`changed: false` and no new version when nothing changed). `message` defaults to the
   change labels. `defaults.time` / `defaults.scope` = "save the current range / spacecraft as
   the default", taken from `runtime`. `409 version_conflict` `details {current_version, saved_by
   {kind, id, name}, saved_at}` when someone saved since `base_version` (then D10).
-  `422 dashboard_not_ready` `details.placements [{placement_id, code, message}]` when publish
-  readiness fails (the list is empty until domain passes the report through).
+  `422 dashboard_not_ready` `details.placements [{placement_id, code, message, details}]` when
+  publish readiness fails. `details` is `{logical_source, realm, reasons, observed_at}` for a
+  source issue (`unready_publish_source_request`), `null` otherwise.
+  - **What blocks** (lead 11-14): facts about the source itself: a missing or ambiguous binding; a
+    missing, disabled or misconfigured data source; a failed connection test; an unsupported
+    capability or scope; an invalid runtime context. Health a read reported (a timed-out preview
+    records the source unavailable) doesn't block; it comes back in `warnings`. Health nobody has
+    seen yet (unknown) is silent.
+  - `warnings` (D9, D11, D13; `[]` when none, and on an unchanged save): `[{code:
+    source_unavailable | source_degraded, logical_source, realm, reasons, observed_at,
+    placement_ids, message}]`, one per (code, logical_source, realm), so one slow source behind
+    several widgets is one entry naming them. The save went through; say the widgets may stay
+    empty until the source answers. `message` is a fallback sentence.
+  - Closed sets: `logical_source` `telemetry | events | limits | operational_observables`; `realm`
+    `flight | rehearsal | replay | simulation` or `null`; `reasons` ⊆ `source_unavailable |
+    source_degraded | source_health_unknown | connection_test_failed | connection_test_blocked`.
+    `observed_at` is ISO-8601 UTC, `null` without a health row.
 - **D10** `POST /rebase {commands, runtime?}` → D7's body plus `{base_version (= current),
   applied: [commands], skipped: [{index, event, reason}]}`. Replays onto the newest version; keep
   `applied` as the new command list. `reason` is the authoring code (e.g. `missing_placement`:
   "widget removed").
-- **D11** `POST /copy {name, base_version, commands}` → `201 {id, version: 1}`. A new dashboard
+- **D11** `POST /copy {name, base_version, commands}` → `201 {id, version: 1, warnings}`. A new dashboard
   from the staged document, so unsaved edits survive "Save as copy"; `commands: []` copies
   `base_version` as it is.
 - **D12** `GET /versions` → `{current_version, versions: [{version, kind: create | save | revert |
@@ -89,7 +104,7 @@ most 256 commands (`422 too_many_commands`: "Save to keep going"). All of these 
   newest first. `current_version` is `null` for a legacy dashboard never made current. A revert's
   `based_on_version` is the version it restored ("Restored from v9").
   `GET /versions/compare?from&to` → `{from, to, changes, from_json, to_json}`.
-- **D13** `POST /versions/:version/restore {expected_version}` → `201 {version}`, a new current
+- **D13** `POST /versions/:version/restore {expected_version}` → `201 {version, warnings}`, a new current
   version (kind `revert`). `409 version_conflict` on a stale `expected_version`. (The directory's
   `POST /restore` is un-archive.)
 - Errors common to all: `403 forbidden`, `404 not_found`, `503 dashboard_unavailable`.

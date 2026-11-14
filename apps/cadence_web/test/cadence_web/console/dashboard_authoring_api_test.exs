@@ -74,7 +74,8 @@ defmodule CadenceWeb.Console.DashboardAuthoringAPITest do
 
   test "D9 save, D12 versions, a stale save's 409 says who saved, D10 rebase skips what no longer applies",
        c do
-    assert %{"version" => 2, "changed" => true} =
+    # lead 11-14: a save says which sources it went through despite; none here.
+    assert %{"version" => 2, "changed" => true, "warnings" => []} =
              json_response(
                post_json(c, "/save", %{
                  "base_version" => 1,
@@ -120,7 +121,7 @@ defmodule CadenceWeb.Console.DashboardAuthoringAPITest do
   end
 
   test "D11 copy keeps unsaved edits; D12 compare; D13 restore makes a new current version", c do
-    assert %{"id" => copy_id, "version" => 1} =
+    assert %{"id" => copy_id, "version" => 1, "warnings" => []} =
              json_response(
                post_json(c, "/copy", %{
                  "name" => "My copy",
@@ -148,7 +149,7 @@ defmodule CadenceWeb.Console.DashboardAuthoringAPITest do
              |> json_response(200)
              |> Map.fetch!("data")
 
-    assert %{"version" => 3} =
+    assert %{"version" => 3, "warnings" => []} =
              json_response(post_json(c, "/versions/1/restore", %{"expected_version" => 2}), 201)[
                "data"
              ]

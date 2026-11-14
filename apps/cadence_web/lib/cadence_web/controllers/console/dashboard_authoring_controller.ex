@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.DashboardAuthoringController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.Dashboards.{Document, StatelessAuthoring}
+  alias Cadence.Dashboards.{Document, SaveWarnings, StatelessAuthoring}
   alias Cadence.Reads.Dashboards.{Editor, ObservableChoices, Versions, Workspace}
   alias CadenceWeb.Console.{ConfigJSON, DashboardDefaults, DashboardRuntime, Problem}
 
@@ -75,7 +75,9 @@ defmodule CadenceWeb.Console.DashboardAuthoringController do
            ) do
       conn
       |> put_status(:created)
-      |> json(%{data: %{version: saved.version, changed: saved.changed}})
+      |> json(%{
+        data: %{version: saved.version, changed: saved.changed, warnings: warnings(saved)}
+      })
     else
       error -> error(conn, id, error)
     end
@@ -125,7 +127,13 @@ defmodule CadenceWeb.Console.DashboardAuthoringController do
       {:ok, %Document{} = copy} ->
         conn
         |> put_status(:created)
-        |> json(%{data: %{id: copy.dashboard_id, version: Document.version(copy)}})
+        |> json(%{
+          data: %{
+            id: copy.dashboard_id,
+            version: Document.version(copy),
+            warnings: SaveWarnings.for_document(copy)
+          }
+        })
 
       error ->
         error(conn, id, error)
@@ -171,7 +179,14 @@ defmodule CadenceWeb.Console.DashboardAuthoringController do
              version,
              params["expected_version"]
            ) do
-      conn |> put_status(:created) |> json(%{data: %{version: Document.version(restored)}})
+      conn
+      |> put_status(:created)
+      |> json(%{
+        data: %{
+          version: Document.version(restored),
+          warnings: SaveWarnings.for_document(restored)
+        }
+      })
     else
       error -> error(conn, id, error)
     end
@@ -289,6 +304,11 @@ defmodule CadenceWeb.Console.DashboardAuthoringController do
       saved_at: newest && newest.created_at
     }
   end
+
+  # lead 11-14: sources a read reported unavailable no longer block a save; the save sheet says
+  # so. An unchanged save re-checked nothing.
+  defp warnings(%{changed: true, document: document}), do: SaveWarnings.for_document(document)
+  defp warnings(_unchanged), do: []
 
   defp ok(conn, data), do: json(conn, %{data: ConfigJSON.encode(data)})
   defp scope(conn), do: conn.assigns.current_scope
