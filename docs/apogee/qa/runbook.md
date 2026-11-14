@@ -265,6 +265,7 @@ terminated `cadence_test3` in the middle of api-ops' L4 suite. Release a claim b
 | 21–23 | unclaimed | develop ports: claim before use |
 | 24 | devops | devops' develop evidence |
 | 25 | api-ops | main ports and main reruns (`scratchpad/main-wt`, L4, ingest fix) |
+| 31 | qa | restart dry assemblies (`scratchpad/dry-b-wt`; (B) 11-14 01:23–01:35Z, the L8 + L4 bundle next) |
 | 26–29 | unclaimed | main ports: claim before use |
 
 ## Known limits
