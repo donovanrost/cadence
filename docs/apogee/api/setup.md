@@ -703,8 +703,16 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
   Registration offers `byo_tsdb` and `managed_tsdb`.
 - `GET /data-sources/:id` → `{source, bindings: [{id, logical_source, data_source_id, status:
   active | disabled | superseded}], runs: [{job_id, kind: provision | deprovision | reconcile,
-  status: queued | running | completed | failed, started_at, error | null, actions: [] |
-  ["retry"] | ["requeue"]}]}`. Runs are the newest 20. `404 data_source_not_found`.
+  status: queued | running | completed | failed | outcome_unknown, started_at, error | null,
+  actions: [] | ["retry"] | ["requeue"]}]}`. Runs are the newest 20. `404 data_source_not_found`.
+  - `source.tsdb_actions` (also on D1 rows): `[]` or `["provision", "reconcile",
+    "deprovision"]`, the backend operations this source takes. Only a `byo_tsdb` source with an
+    `org_isolated` or `mission_isolated` backend takes them. The page offers only these.
+  - A run's `error` is `{code, message}` (since 11-14; it was a string). `code` is one of
+    `tsdb_executor_not_configured`, `credentials_unavailable`, `worker_failed`, `requeued`,
+    `outcome_unknown` and `run_failed` (the fallback); `message` is a sentence to show as is.
+  - `outcome_unknown`: the run's real outcome was lost (it ran before the 11-14 jobs fix). It
+    has no actions: nobody re-runs it from here.
 - `POST /data-sources {display_name, logical_source, kind, isolation_level, storage,
   credentials_ref?, credential_provider?, endpoint_ref?, material_env_profile?,
   http_endpoint_env?}` → `201 {source}`.
@@ -722,7 +730,16 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
   reason | null}}`.
 - `POST /data-sources/:id/credential {credentials_ref}` rotates to that reference (the reference
   only) → `{source}`.
+  - The source's current reference gets a new version (its material was rotated behind it).
+  - A new reference is registered the way Register does it, and the source points at it.
+  - `422 invalid_params {field: "credentials_ref"}` for a reference that another source or
+    mission holds.
 - `POST /data-sources/:id/tsdb/provision | reconcile | deprovision` → `202 {source, run | null}`.
+  - `run` is `null` for `reconcile`, which is synchronous.
+  - Outside `tsdb_actions`, the answer is `409 data_source_state {state}` with a sentence:
+    `managed` ("This source is managed by Cadence; its storage is provisioned automatically.")
+    or `customer_owned` ("This source uses your own database as is; Cadence doesn't provision
+    it.").
 - `POST /data-source-runs/:job_id/retry | requeue` → `202 {run}`. Retry starts a failed run again;
   requeue puts a run stuck in running back in the queue. `404 run_not_found`.
 - While any run is `queued` or `running`, poll `GET /data-sources/:id` (about every 5 s). The
