@@ -1360,7 +1360,7 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
     | --- | --- | --- |
     | both ends, same | "Northlight moved this pass 30 s later: now 12:11:27–12:19:27Z (was 12:10:57–12:18:57Z)." | "EARENDIL-003 · BRS 12:11Z pass moved 30 s later by Northlight: 12:11:27–12:19:27Z" |
     | start only | "Northlight moved this pass's AOS 30 s later: now 12:11:27–12:18:57Z (was …)." | "… pass AOS moved 30 s later by Northlight: 12:11:27–12:18:57Z" |
-    | end only | "Northlight moved this pass's LOS 1 min later: now 13:04:30–13:13:30Z (was …)." | "EARENDIL-007 · PUQ 13:04Z pass LOS moved 60 s later by Northlight: 13:04:30–13:13:30Z" |
+    | end only | "Northlight moved this pass's LOS 1 min later: now 13:04:30–13:13:30Z (was …)." | "EARENDIL-007 · PUQ 13:04Z pass LOS moved 1 min later by Northlight: 13:04:30–13:13:30Z" |
     | both, differently | "Northlight changed this pass's window: now … (was …)." | "… pass window changed by Northlight: …" |
   - The history line links `Open the change` to the provider change (U44, from provider_reservation_change_id),
     which says who accepted it. The timeline row links to the pass. Its label uses the new AOS. Stored sentences
