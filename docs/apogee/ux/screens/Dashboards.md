@@ -39,6 +39,30 @@ fleet health counts (crit · caution · stale chips, each linking to Alarms or F
   more.") and never break the grid.
 - Series colours never use status hues (OpsLists rule). Limit bands and states come from ground definitions.
 - **Empty dashboard:** the info callout "Add a widget to start." with the primary `Add widget`.
+- **Sections in the viewer** (dashboards, 11-14). Widgets outside any section come first, with no heading. Each
+  section then has its title as the heading.
+  - The description, when there is one, sits under the title in `text-3`, clamped to 2 lines (the full text in
+    its title attribute).
+  - Collapse is a disclosure on the heading (▾/▸ before the title; Enter and Space toggle it). A collapsed section
+    shows only its heading row, with the meta `3 WIDGETS`. `Start collapsed` sets how it opens. Toggling is per
+    viewer and isn't saved. Kiosk and Present use the saved default.
+  - A section with no widgets isn't drawn in the viewer.
+
+### Sections in edit mode
+- `Add section` (secondary) sits beside `Add widget` in the editing header. It opens a sheet titled `New section`:
+  - `Title`, required (≤ 512). Blank: "Give the section a title."
+  - `Description`, optional (≤ 4096). Help: "Shown under the title."
+  - `Start collapsed` (checkbox). Help: "Viewers see only the title until they open it."
+  - Action `Add section`. Like every edit, it changes the draft until `Save…`.
+- Each section heading in edit mode has `Edit` (the same sheet, titled `Edit section`, action `Apply`) and a `⋯`
+  menu: `Move up` · `Move down` · `Remove section…`. At the ends, Move is disabled with the reason "It's already
+  first." / "It's already last."
+- **Remove:** an empty section goes at once. A non-empty one first shows a caution callout in place: "Remove the
+  section “Power”? Its 3 widgets stay on the dashboard, at the top, outside any section." with `Remove section`
+  (danger) and `Cancel`. Widgets go where the server puts them (top, outside any section). There's no re-homing.
+- In edit mode, the area outside any section gets a faint `text-4` heading, `Not in a section`, so moved widgets
+  can be found. An empty section shows "No widgets yet." under its heading.
+- `Add widget` already picks a section, and a new section is offered there at once.
 
 ## Edit in place
 - `Edit` unlocks the grid. The header shows `EDITING` (caution text) with `Save…` (primary) and `Discard`.
