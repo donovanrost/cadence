@@ -1173,5 +1173,9 @@ Two things must not stay silent (U20), because the preview has to say what Start
 - **Over the 50,000 bound: a refusal** (api's `422 fleet_planning_occurrence_limit_exceeded`): "This start would
   create more than 50,000 template requirements. Shorten the horizon or include fewer templates." With
   `details.count`: "This start would create 62,400 template requirements; the limit is 50,000. …".
-  - Best caught in the preview: Start is disabled, and this sentence is the reason, so nobody finds out by pressing
-    it. Create keeps the same refusal as a backstop.
+  - **Placement** (api, 11-14): Start runs the check before creating anything, so a refusal leaves nothing
+    half-started. The 422 shows as a callout above Start with this sentence (never a toast), and Start stays
+    enabled for after the operator changes the horizon or templates.
+  - An estimate on the setup read, so Start can be disabled beforehand, is worth having only if domain says
+    the count is cheap without building rows. If it isn't, the 422 is enough; don't slow every load for a rare
+    refusal.
