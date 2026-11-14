@@ -1212,6 +1212,11 @@ platform admins in admin mode can switch platform bindings." The binding name is
     Switch. The blast radius is never unknown at the moment of confirming.
   - Counts are re-read when the sheet opens. If they change while it's open (a pass goes live), the line updates
     and the typed name is cleared, so the operator confirms what they now see.
+  - **At switch time** (api-ops' shape): the PUT sends the counts the operator saw. If the server's recount differs,
+    the answer is `409 blast_radius_changed` with the new counts. The sheet then shows the caution line "This
+    changed while you were confirming: it now affects 12 missions and 4 live passes." above the updated lines,
+    and clears the typed name. Nothing is switched.
+  - The outcome sentence uses the counts the server recorded, from the PUT's answer.
 - **Outcome:** "Switched default_flight_telemetry to Northlight archive. 12 missions read from it now."
 - **Audit line** (actor and time in their columns): "Switched platform binding default_flight_telemetry from
   Cadence managed store to Northlight archive · 12 missions, 3 live passes: “<reason>”". It's recorded in two
