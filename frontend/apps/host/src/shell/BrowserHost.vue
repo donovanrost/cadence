@@ -48,10 +48,6 @@ const PlatformAdministrationPage = lazyHostPage(
   "PlatformAdministrationPage",
   () => import("../administration/PlatformAdministrationPage.vue"),
 );
-const NotificationsPage = lazyHostPage(
-  "NotificationsPage",
-  () => import("../auth-and-navigation/features/notifications/NotificationsPage.vue"),
-);
 const WorkspaceLanding = lazyHostPage(
   "WorkspaceLanding",
   () => import("../ops-workspace/features/landing/WorkspaceLanding.vue"),
@@ -400,24 +396,6 @@ async function platformAdministrationAction(event: string, input: Record<string,
   if (host.path !== path || host.context.user?.user_id !== userId)
     throw new Error("Invalid administration context.");
   committed.value = { ...currentPage(), snapshot: host };
-  return result;
-}
-async function notificationAction(event: string, input: Record<string, unknown>) {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const token = currentPage().snapshot.notifications_page?.action_token;
-  const result = requireRecord(await request("host:notifications", { event, input, path, token }));
-  if (stopped || generation !== requestGeneration || currentPage().snapshot.path !== path)
-    throw new Error("The notification context changed.");
-  const host = readHostSnapshot(result.host);
-  if (host.path !== path || host.context.user?.user_id !== context.value?.user?.user_id)
-    throw new Error("Invalid notification context.");
-  committed.value = { ...currentPage(), snapshot: host };
-  if (result.status === "ok" && field(result, "data", "status") === "accepted") {
-    if (field(result, "data", "navigate") !== "/")
-      throw new Error("Invalid invitation destination.");
-    navigate("/");
-  }
   return result;
 }
 async function missionAction(event: string, input: Record<string, unknown>) {
@@ -777,14 +755,6 @@ onBeforeUnmount(() => {
           :execute="spacecraftAction"
           :navigating="pending"
           :navigate="navigate"
-          :refresh="reconnect"
-        />
-        <NotificationsPage
-          v-else-if="route.kind === 'notifications'"
-          :key="context.user?.user_id ?? 'anonymous'"
-          :snapshot="committed.snapshot.notifications_page"
-          :user-id="context.user?.user_id"
-          :act="notificationAction"
           :refresh="reconnect"
         />
         <WorkspaceLanding

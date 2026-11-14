@@ -58,7 +58,6 @@ const snapshotFields = object({
   spacecraft_module_page: featurePayload,
   spacecraft_page: maybe(spacecraftPage),
   mission_page: maybe(missionPage),
-  notifications_page: maybe(actionPage),
   platform_administration_page: maybe(actionPage),
   administration_page: featurePayload,
   catalog: featurePayload,

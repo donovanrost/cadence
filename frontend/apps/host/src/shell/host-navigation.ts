@@ -59,8 +59,6 @@ function normalizeHostRoute(route: CatalogRoute) {
       break;
     case "settings":
       return { ...route, kind: "settings" as const };
-    case "notifications":
-      return { ...route, kind: "notifications" as const };
     case "activation_approvals":
       return { ...route, kind: "activation_approvals" as const };
     case "administration_diagnostics":

@@ -208,14 +208,6 @@ test("each core host route resolves to its registered owner", () => {
       expect(route.scope).toBe("admin");
       continue;
     }
-    if (route.kind === "notifications") {
-      expect(route.path).toBe("/notifications");
-      expect(route.scope).toBe("user");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      expect(route.queryKeys).toEqual(["unread", "before_at", "before_id"]);
-      continue;
-    }
     if (route.kind === "ops_workspace") {
       if (route.workspacePage === "landing") {
         expect(route.path).toBe("/missions/:mission_id/ops");
