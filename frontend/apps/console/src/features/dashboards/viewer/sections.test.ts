@@ -7,19 +7,21 @@ import DashboardGrid from "./DashboardGrid.vue";
 
 /** A board with a collapsed-by-default 'Power', an open 'Thermal', and an empty 'Spare'. */
 function board(): WorkspaceSnapshot {
-  const json = snapshotJson();
-  const battery = json.placements[0];
+  const base = snapshotJson();
+  const battery = base.placements[0];
   if (!battery) throw new Error("fixture");
-  json.sections = [
-    { id: "power", title: "Power", description: "Batteries and buses.", collapsed: true },
-    { id: "thermal", title: "Thermal", description: "Radiators.", collapsed: false },
-    { id: "spare", title: "Spare", description: null, collapsed: false },
-  ];
-  json.placements = [
-    battery,
-    { ...battery, id: "radiator", authored_id: "radiator", section_id: "thermal" },
-  ];
-  const r = decode(workspaceSnapshot, json);
+  const r = decode(workspaceSnapshot, {
+    ...base,
+    sections: [
+      { id: "power", title: "Power", description: "Batteries and buses.", collapsed: true },
+      { id: "thermal", title: "Thermal", description: "Radiators.", collapsed: false },
+      { id: "spare", title: "Spare", description: null, collapsed: false },
+    ],
+    placements: [
+      battery,
+      { ...battery, id: "radiator", authored_id: "radiator", section_id: "thermal" },
+    ],
+  });
   if (!r.ok) throw new Error("fixture");
   return r.value;
 }
