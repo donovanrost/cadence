@@ -1244,25 +1244,29 @@ it or closes the item.
   | backfill | Backfill 11-13 02:00Z–04:00Z | in the telemetry for that span | write the span twice |
 
   An unknown type uses the noun "A Cadence job", the place "where it acts" and the consequence "repeat what it
-  did".
+  did". **The real table is api-ops' (11-14), accepted with two edits:** limit evaluation is "<definition> limit
+  check", like "<definition> evaluation"; spans are §4 ("Backfill 11-13 02:00Z–04:00Z"). The item carries
+  `words {noun, check_place, consequence}`, and the console slots them in as-is.
 - **Title:** context, then the noun: "outcome unknown". For example `EARENDIL-312 · SVA 03:10Z pass · Booking at
   Northlight: outcome unknown`. With no pass, the noun alone: `Catalog import r15: outcome unknown`. U47's pass
   label.
-- **Meta:** `STARTED 03:01Z · CADENCE STOPPED 03:02Z` (§4).
+- **Meta:** `STARTED 03:01Z · FOUND AT RESTART 03:09Z` (§4). Cadence doesn't record when it stopped, only the
+  job's start and the restart that found it (api-ops); the real stop is somewhere between the two (U20).
 - **Body:** "Cadence stopped while this was running, so it doesn't know whether it finished. It won't run it again
   by itself: running it twice could book the pass twice. Check with Northlight, then retry it or close this."
 - **Priority:** P2 caution. P1 when the job's pass starts within 2 hours or is live, because an unknown booking near
   AOS can lose the pass.
 - **Actions:** `Retry…` and `Close without retry…`. Operators only; otherwise "Operators decide what happens to
   jobs whose outcome is unknown." Both are audited with the actor, time, job and note.
-  - **Retry sheet** (danger): title `Retry the booking at Northlight?`, body "Retry only if you've checked with
-    Northlight that it didn't happen. If it did, retrying could book the pass twice." A required checkbox: "I've
-    checked with Northlight: it didn't happen." Note optional. `Retry` (danger) is enabled once the box is ticked;
+  - **Retry sheet** (danger): title `Retry: Booking at Northlight`, body "Retry only if you've checked <place>
+    that it didn't happen. If it did, retrying could <consequence>." A required checkbox: "I've checked <place>:
+    it didn't happen." Note optional. `Retry` (danger) is enabled once the box is ticked;
     `Cancel` takes the default focus.
   - **Close sheet:** title `Close without retrying?`, body "Use this when you've checked that it finished, or when
     it shouldn't run again. Cadence leaves the job as it is." A required note, "What did you find?", for the audit.
     The action is `Close`.
-- **Resolved lines:** "Retried by Mira K. at 03:20Z." (the job's own new outcome shows where the job shows) /
+- **Resolved lines:** "Retried by Mira K. at 03:20Z; it's queued." (the job's own new outcome shows where the job
+  shows) /
   "Closed without retry by Mira K. at 03:22Z: “Northlight shows it booked.”"
 - **Technical details:** job id, type key, worker, attempt, node, and the run or operation id.
 - **Contacts:** a job tied to a pass gets a block on the selected pass, as U45–U50 do.
