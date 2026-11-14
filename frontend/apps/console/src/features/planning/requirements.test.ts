@@ -232,7 +232,7 @@ describe("the requirement page's planning button (ux P4, api held_by)", () => {
     ).toEqual({ label: "Open plan R41", day: "2026-11-15" });
     expect(
       planningButton(
-        { ...base, held_by: { plan_id: "p1", revision: 41, state: "executing", day: undefined } },
+        { ...base, held_by: { plan_id: "p1", revision: 41, state: "executing", day: null } },
         now,
       ),
     ).toEqual({ label: "Open plan R41", day: "2026-11-15" });

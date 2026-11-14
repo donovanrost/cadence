@@ -64,8 +64,9 @@ const detailReader = object({
   ...requirementRowShape,
   versions: array(object({ version: integer, created_at: timestamp, actor }), 500),
   /**
-   * api 54e083522: the plan past draft that holds it (the most recently changed if several), or
-   * null; absent until it ships. `day` (the plan's UTC day) is asked of api; optional until then.
+   * api f2dcc94bd: the plan past draft that holds it (the most recently changed if several), or
+   * null; absent until it ships. `day` is the plan's UTC day (its first pass), null when the plan
+   * has no passes yet.
    */
   held_by: optional(
     nullable(
@@ -73,7 +74,7 @@ const detailReader = object({
         plan_id: token,
         revision: integer,
         state: decoders.known(planStates),
-        day: optional(string),
+        day: optional(nullable(string)),
       }),
     ),
   ),
