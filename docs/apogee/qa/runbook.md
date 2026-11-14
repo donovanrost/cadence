@@ -106,6 +106,12 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127
 #    :code.modified_modules() == [] alone does NOT catch this: on 11-11 the 22:14Z restart came up clean,
 #    but the reconciler crash-looped (binary_to_existing_atom "criteria", then a binding-set hash
 #    mismatch for r9's v3), so every spacecraft's TM failed ingress with no_active_binding_set.
+#    Cherry-pick gate (11-14): after a change adds or removes a struct field in apps/cadence, run
+#    MIX_ENV=test mix compile --force in apps/cadence_web once per worktree; an incremental build
+#    can keep a stale inferred type and report a false incompatibility (64387fb7e's RawEvidence
+#    field gave "incompatible types given to Control.Ingress.process_and_persist/1").
+#    Also fetch deps after a lock change: mix deps.get in each of apps/cadence, cadence_web,
+#    cadence_simulator (each app keeps its own deps/; a root-only deps.get leaves them stale).
 
 # 5. Seed (once; both are rerunnable)
 CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
