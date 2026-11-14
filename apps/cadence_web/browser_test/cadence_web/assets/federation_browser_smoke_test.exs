@@ -18,7 +18,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeTest do
     organization = CadenceWeb.TestFixtures.persist_org!()
     CadenceWeb.TestFixtures.grant_membership!(user, organization)
     mission = CadenceWeb.TestFixtures.persist_mission!(organization)
-    {:ok, view, _html} = live(CadenceWeb.TestFixtures.member_conn(user), "/missions")
+    {:ok, view, _html} = live(CadenceWeb.TestFixtures.member_conn(user), "/")
     initial = LiveVue.Test.get_vue(view, id: "application-shell")
     assert initial.use_diff
     assert initial.component == "BrowserHost"

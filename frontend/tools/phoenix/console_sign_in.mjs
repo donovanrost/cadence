@@ -5,6 +5,8 @@
 
 export const CONSOLE_SIGN_IN_PATH = "/console/sign-in";
 export const CONSOLE_SIGN_IN_API_PATH = "/api/console/v1/auth/sign-in";
+/** The console bootstrap read; signed out it answers 401 (its sign-in screen asks first). */
+export const CONSOLE_SESSION_PATH = "/api/console/v1/session";
 
 /**
  * Runs IN THE PAGE, on the Phoenix origin: reads the CSRF token the console document carries for

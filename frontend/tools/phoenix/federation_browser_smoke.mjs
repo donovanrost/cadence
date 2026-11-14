@@ -29,6 +29,7 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  CONSOLE_SESSION_PATH,
   CONSOLE_SIGN_IN_API_PATH,
   CONSOLE_SIGN_IN_PATH,
   assertConsoleSignedIn,
@@ -4165,7 +4166,45 @@ async function assertUnauthenticatedCatalogContained(
   signal,
 ) {
   const target = assertHttpUrl(catalogUrl, expectedOrigin, "unauthenticated catalog URL");
-  // Signed out, the catalog bounces through /sign-in to the console's sign-in screen (L5).
+  // Signed out, the catalog bounces through /sign-in to the console's sign-in screen (L5). That
+  // screen asks for an optional session first and is told 401: the one expected failure here.
+  const consoleSessionFailureCleanup = diagnostics.allowExpectedFailure(
+    (record) => pathMatches(record, "GET", CONSOLE_SESSION_PATH, expectedOrigin),
+    { status: 401 },
+  );
+  let consoleSessionFailureConfirmed = false;
+  try {
+    return await assertCatalogContainedOnSignIn(
+      client,
+      diagnostics,
+      target,
+      expectedOrigin,
+      signal,
+      (sessionRecord, generation) => {
+        diagnostics.confirmExpectedFailure(consoleSessionFailureCleanup, {
+          requestId: sessionRecord.requestId,
+          method: "GET",
+          url: sessionRecord.url,
+          generation,
+          status: 401,
+        });
+        consoleSessionFailureConfirmed = true;
+      },
+    );
+  } finally {
+    if (!consoleSessionFailureConfirmed) consoleSessionFailureCleanup();
+  }
+}
+
+/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {URL} target @param {string} expectedOrigin @param {AbortSignal|undefined} signal @param {(sessionRecord: RequestObservation, generation: unknown) => void} confirmSessionFailure */
+async function assertCatalogContainedOnSignIn(
+  client,
+  diagnostics,
+  target,
+  expectedOrigin,
+  signal,
+  confirmSessionFailure,
+) {
   const generation = await navigate(client, target.href, {
     expectedOrigin,
     expectedPath: CONSOLE_SIGN_IN_PATH,
@@ -4178,6 +4217,14 @@ async function assertUnauthenticatedCatalogContained(
     "unauthenticated catalog containment",
     { signal },
   );
+  const sessionRecord = await waitForResponse(
+    diagnostics,
+    (record) => pathMatches(record, "GET", CONSOLE_SESSION_PATH, expectedOrigin),
+    "console signed-out session probe",
+    { generation, signal },
+  );
+  assert.equal(sessionRecord.response?.status, 401, "signed-out console session probe must be 401");
+  confirmSessionFailure(sessionRecord, generation);
 
   const catalogRecord = diagnostics.requestForGeneration(
     generation,
@@ -4749,16 +4796,18 @@ async function assertRemoteSurface({
 /** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} missionId @param {string} origin @param {AbortSignal|undefined} signal */
 async function assertMissionEntryNavigation(client, diagnostics, missionId, origin, signal) {
   const root = `/missions/${encodeURIComponent(missionId)}`;
-  await navigate(client, `${origin}/missions`, {
+  // L4 deleted the core mission directory (/missions now redirects to the console), so the
+  // mission is entered from the organization home's recent missions.
+  await navigate(client, `${origin}/`, {
     expectedOrigin: origin,
-    expectedPath: "/missions",
+    expectedPath: "/",
     diagnostics,
     signal,
   });
   await waitForExpression(
     client,
-    "Boolean(document.querySelector('#mission-list-table') && window.liveSocket?.isConnected())",
-    "core mission directory",
+    "Boolean(document.querySelector('#organization-recent-missions') && window.liveSocket?.isConnected())",
+    "organization home recent missions",
     { signal },
   );
   assert.equal(
@@ -4767,17 +4816,17 @@ async function assertMissionEntryNavigation(client, diagnostics, missionId, orig
       `(() => {
     const shell = document.querySelector('#application-shell');
     if (shell?.dataset.useDiff !== 'true') return false;
-    const link = [...document.querySelectorAll('#mission-list-table a')]
+    const link = [...document.querySelectorAll('#organization-recent-missions a')]
       .find(link => new URL(link.href).pathname === ${JSON.stringify(root)});
     if (!link) return false;
     window.__missionEntryShell = shell;
     link.click(); return true;
   })()`,
-      "click mission from core directory with incremental props",
+      "click mission from the organization home with incremental props",
       { signal },
     ),
     true,
-    "core directory must expose its authorized mission link and incremental host",
+    "organization home must expose its authorized mission link and incremental host",
   );
   await waitForExpression(
     client,
