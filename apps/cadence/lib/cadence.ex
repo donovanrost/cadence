@@ -742,42 +742,6 @@ defmodule Cadence do
     RuntimeHealth.snapshot()
   end
 
-  @spec dashboard_runtime_invalidation_decisions(keyword()) :: [
-          Cadence.Dashboards.RuntimeInvalidation.DecisionProjection.decision_row()
-        ]
-  def dashboard_runtime_invalidation_decisions(opts \\ []) when is_list(opts) do
-    case durable_dashboard_runtime_invalidation_decisions(opts) do
-      [] ->
-        RuntimeHealth.snapshot()
-        |> Dashboards.dashboard_runtime_invalidation_decisions(opts)
-
-      decisions ->
-        decisions
-    end
-  end
-
-  @spec durable_dashboard_runtime_invalidation_decisions(keyword()) :: [
-          Cadence.Dashboards.RuntimeInvalidation.DecisionProjection.decision_row()
-        ]
-  def durable_dashboard_runtime_invalidation_decisions(opts \\ []) when is_list(opts) do
-    Dashboards.durable_dashboard_runtime_invalidation_decisions(opts)
-  rescue
-    _error -> []
-  catch
-    :exit, _reason -> []
-  end
-
-  @spec record_dashboard_runtime_invalidation_decision(
-          Cadence.Dashboards.RuntimeInvalidation.Event.t(),
-          map(),
-          keyword()
-        ) ::
-          {:ok, Cadence.Dashboards.RuntimeInvalidation.DecisionEvent.t()} | {:error, term()}
-  def record_dashboard_runtime_invalidation_decision(event, decision, opts \\ [])
-      when is_map(decision) and is_list(opts) do
-    Dashboards.record_dashboard_runtime_invalidation_decision(event, decision, opts)
-  end
-
   @spec dashboard_source_capability_posture_events(
           Cadence.Dashboards.DashboardResolveResult.t(),
           keyword() | map()

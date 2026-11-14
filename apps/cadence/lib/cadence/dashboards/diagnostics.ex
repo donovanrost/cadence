@@ -5,13 +5,6 @@ defmodule Cadence.Dashboards.Diagnostics do
 
   alias Cadence.Dashboards.{DashboardResolveResult, SourceExecutionSemantics}
 
-  alias Cadence.Dashboards.RuntimeInvalidation.{
-    DecisionEvent,
-    DecisionEvents,
-    DecisionProjection,
-    Event
-  }
-
   alias Cadence.Reads.OperationalEvidence
 
   def summarize_source_execution(%DashboardResolveResult{} = result),
@@ -45,21 +38,4 @@ defmodule Cadence.Dashboards.Diagnostics do
       )
     )
   end
-
-  @spec runtime_invalidation_decisions(map() | [map()], keyword()) :: [
-          DecisionProjection.decision_row()
-        ]
-  def runtime_invalidation_decisions(snapshot_or_recent_events, opts \\ []),
-    do: DecisionProjection.list(snapshot_or_recent_events, opts)
-
-  @spec record_runtime_invalidation_decision(Event.t(), map(), keyword()) ::
-          {:ok, DecisionEvent.t()} | {:error, term()}
-  def record_runtime_invalidation_decision(%Event{} = event, decision, opts \\ []),
-    do: DecisionEvents.record(event, decision, opts)
-
-  @spec durable_runtime_invalidation_decisions(keyword()) :: [
-          DecisionProjection.decision_row()
-        ]
-  def durable_runtime_invalidation_decisions(opts \\ []),
-    do: DecisionEvents.list_decision_rows(opts)
 end
