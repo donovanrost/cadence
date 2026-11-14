@@ -163,6 +163,22 @@ export function fetchQueuedGroups(missionId: MissionId, passId: string, signal?:
   );
 }
 
+/**
+ * GET /passes/:id only (api, U50): second connections refused while the pass's own connection was
+ * up. null = unknown (no realized contact, or a live count lost to a restart); 0 = none.
+ */
+const passTechnicalReader = d.object({
+  second_connections_refused: d.optional(d.nullable(d.integer)),
+});
+
+export function fetchPassTechnical(missionId: MissionId, passId: string, signal?: AbortSignal) {
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/passes/${encodeURIComponent(passId)}`,
+    passTechnicalReader,
+    signal ? { signal } : {},
+  );
+}
+
 export const passesReader = d.object({
   from: d.timestamp,
   to: d.timestamp,

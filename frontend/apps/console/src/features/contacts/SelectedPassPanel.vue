@@ -38,6 +38,7 @@ import ContactStartBlock from "./ContactStartBlock.vue";
 import ArchiveBlock from "./ArchiveBlock.vue";
 import IngressBlock from "./IngressBlock.vue";
 import ListenerBlock from "./ListenerBlock.vue";
+import PassTechnical from "./PassTechnical.vue";
 import { passAttentions, passAttentionTag } from "./passAttention.ts";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
@@ -324,6 +325,7 @@ const countdown = computed(() => {
       </div>
       <ApStateTrail v-if="state" :steps="contactTrail(state)" label="Contact state" />
       <ApKeyValue :items="facts" />
+      <PassTechnical :mission-id="missionId" :pass-id="pass.id" />
       <PassUplinks :mission-id="missionId" :pass-id="pass.id" />
       <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>
       <ReleasePass
