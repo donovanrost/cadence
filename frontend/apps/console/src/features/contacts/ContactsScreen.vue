@@ -236,7 +236,8 @@ const meta = computed(() => {
 });
 /**
  * Book a pass (§11 L15, ux Contacts.md): header entry (operate_mission), D4 gap rows prefilled, and
- * `?book=<spacecraft id>` from Investigate › Passes. Off until the single-booking endpoints exist.
+ * `?book=<spacecraft id>[&book_from&book_to]` from Investigate › Passes and Planning › requirement.
+ * Off until the single-booking endpoints exist.
  */
 const access = useCommandAccess();
 const bookSheet = ref<InstanceType<typeof BookPassSheet> | null>(null);
@@ -250,8 +251,13 @@ watch(
   () => route.query.book,
   (b) => {
     if (!SINGLE_BOOKINGS_LIVE || typeof b !== "string") return;
-    void nextTick(() => openBook({ spacecraftId: b }));
-    go({ book: undefined });
+    // fe-ops: the window rides only with book; a bad or reversed one opens with the spacecraft alone.
+    const at = (v: unknown) => (typeof v === "string" ? Date.parse(v) : Number.NaN);
+    const from = at(route.query.book_from);
+    const to = at(route.query.book_to);
+    const range = Number.isFinite(from) && Number.isFinite(to) && from < to ? { from, to } : {};
+    void nextTick(() => openBook({ spacecraftId: b, ...range }));
+    go({ book: undefined, book_from: undefined, book_to: undefined });
   },
   { immediate: true },
 );
