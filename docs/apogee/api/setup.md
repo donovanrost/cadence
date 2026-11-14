@@ -552,12 +552,13 @@ first.
     note is the `reason`); "Aborted <label>: 40 uplinks canceled, 8 already sent" (the abort
     reason); "Released 2 uplinks of <label> into the SVL 14:05Z pass" (or "into a contact that
     wasn't a booked pass (SVL 14:05Z)", plus " · then stopped, 1 uplink still queued");
-    "Acknowledged the Contact HOLD on <label>" (the note); "Canceled SET_MODE on EARENDIL-004 in
+    "Acknowledged the Contact HOLD on <label>" (the note); "Canceled SET_MODE on EARENDIL-004 from
     <label>" (an operator canceling one member; the reason). Cadence's own cancels (expiry,
     fail-closed, a catalog change) fold to one entry per group and reason, actor `{kind:
     "service", id, name: "Cadence"}`, `reason: null`: "Canceled 12 uplinks of <label>: they
     expired before release" / ": what they were approved against changed" / ": the catalog
-    changed" / ": EARENDIL-004 was archived" ("3 of its spacecraft were archived"), else
+    changed" / ": EARENDIL-004 was archived" ("3 of its spacecraft were archived") / ":
+    commanding was turned off for EARENDIL-004" ("for 3 of its spacecraft"), else
     "Canceled 12 uplinks of <label>." Notes and members' outcomes (failed, completed) aren't
     audit entries. A standalone request (no group) keeps "Requested X" and "Approved X" /
     "Rejected X", target `{kind: "command_request", …}`, and adds "Canceled X" (an operator, with

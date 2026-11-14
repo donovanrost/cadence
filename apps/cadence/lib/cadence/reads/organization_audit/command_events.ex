@@ -213,12 +213,12 @@ defmodule Cadence.Reads.OrganizationAudit.CommandEvents do
   # Spacecraft names by uplink endpoint, loaded only when a line names one.
   defp names?(records) do
     Enum.any?(records.group_events, &(to_string(&1.kind) == "member_canceled")) or
-      Enum.any?(
-        records.group_cancels,
-        &String.starts_with?(&1.reason || "", "spacecraft_archived")
-      ) or
+      Enum.any?(records.group_cancels, &names_spacecraft?(&1.reason)) or
       records.cancels != []
   end
+
+  defp names_spacecraft?(reason),
+    do: String.starts_with?(reason || "", ["spacecraft_archived", "commanding_disabled"])
 
   defp spacecraft_names(org, mission) do
     crafts =

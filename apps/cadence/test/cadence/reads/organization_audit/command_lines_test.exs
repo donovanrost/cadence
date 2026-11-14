@@ -43,6 +43,15 @@ defmodule Cadence.Reads.OrganizationAudit.CommandLinesTest do
     assert Lines.group_canceled(1, "catalog_changed: cs_1", [], @group) ==
              "Canceled 1 uplink of #{@label}: the catalog changed"
 
+    assert Lines.group_canceled(4, "commanding_disabled: cs_2", ["A", "B", "C"], @group) ==
+             "Canceled 4 uplinks of #{@label}: commanding was turned off for 3 of its spacecraft"
+
+    assert Lines.member_canceled("SET_MODE", "EARENDIL-004", @group) ==
+             "Canceled SET_MODE on EARENDIL-004 from #{@label}"
+
+    assert Lines.request_canceled("SET_MODE", "EARENDIL-004", true, "commanding_disabled: cs_2") ==
+             "Canceled SET_MODE on EARENDIL-004: commanding was turned off for it"
+
     assert Lines.group_canceled(2, "something_new", [], @group) ==
              "Canceled 2 uplinks of #{@label}."
 

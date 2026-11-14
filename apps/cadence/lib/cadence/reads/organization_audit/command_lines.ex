@@ -86,7 +86,7 @@ defmodule Cadence.Reads.OrganizationAudit.CommandLines do
   @doc "An operator canceled one member of a group."
   @spec member_canceled(String.t(), String.t() | nil, map() | nil) :: String.t()
   def member_canceled(command, spacecraft, group),
-    do: "Canceled #{command}#{on(spacecraft)} in #{label(group)}"
+    do: "Canceled #{command}#{on(spacecraft)} from #{label(group)}"
 
   @doc "Cadence's own cancels of a group's members, folded per reason (director 11-15)."
   @spec group_canceled(non_neg_integer(), String.t() | nil, [String.t()], map() | nil) ::
@@ -99,6 +99,7 @@ defmodule Cadence.Reads.OrganizationAudit.CommandLines do
       "release_basis_changed" -> base <> ": what they were approved against changed"
       "catalog_changed" -> base <> ": the catalog changed"
       "spacecraft_archived" -> base <> ": " <> archived_words(archived)
+      "commanding_disabled" -> base <> ": commanding was turned off for " <> named(archived)
       _unknown -> base <> "."
     end
   end
@@ -116,6 +117,7 @@ defmodule Cadence.Reads.OrganizationAudit.CommandLines do
       "release_basis_changed" -> base <> ": what it was approved against changed"
       "catalog_changed" -> base <> ": the catalog changed"
       "spacecraft_archived" -> base <> ": the spacecraft was archived"
+      "commanding_disabled" -> base <> ": commanding was turned off for it"
       _unknown -> base <> "."
     end
   end
@@ -126,6 +128,9 @@ defmodule Cadence.Reads.OrganizationAudit.CommandLines do
 
   defp archived_words([one]), do: "#{one} was archived"
   defp archived_words(names), do: "#{length(names)} of its spacecraft were archived"
+
+  defp named([one]), do: one
+  defp named(names), do: "#{length(names)} of its spacecraft"
 
   defp second_go(%{"second_go_required" => true}), do: " · needs a second GO"
   defp second_go(_payload), do: ""
