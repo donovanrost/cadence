@@ -43,7 +43,7 @@ function split(e: ContactEnded): Readonly<{ code: string | null; text: string | 
 }
 /** The raw provider code behind a Cadence cancel, for Technical details. */
 export const endedCode = (e: ContactEnded | null | undefined): string | null =>
-  e && e.by.kind === "system" ? split(e).code : null;
+  e && e.by?.kind === "system" ? split(e).code : null;
 function providerReason(e: ContactEnded): string {
   const { code, text } = split(e);
   const words = code ? CODE_WORDS[code] : undefined;
@@ -59,11 +59,15 @@ const CADENCE_CANCELS: Readonly<Record<string, (p: string) => string>> = {
 
 /** History line: "Canceled by Mira K. at 12:58Z: “Its booking failed.”" (and U56's Cadence forms). */
 export function endedLine(e: ContactEnded, provider: string | null, now: Date): string {
+  const what0 = e.kind === "ended_early" ? "Ended early" : "Canceled";
+  // No action record (api f65af9b0b): nothing is known beyond that it was canceled.
+  if (e.at === null) return `${what0}.`;
   const at = short(e.at, now);
   const p = provider ?? "The provider";
-  const cadence = isKnown(e.cause) ? CADENCE_CANCELS[e.cause] : undefined;
+  const cadence = e.cause !== null && isKnown(e.cause) ? CADENCE_CANCELS[e.cause] : undefined;
   if (cadence) return `Canceled by Cadence at ${at}: ${cadence(p)}${providerReason(e)}.`;
-  if (e.by.kind !== "user" || !isKnown(e.cause)) return `Canceled by Cadence at ${at}.`;
+  if (e.by?.kind !== "user" || e.cause === null || !isKnown(e.cause))
+    return `${what0} by Cadence at ${at}.`;
   const who = e.by.name ?? "an operator";
   const what = e.kind === "ended_early" ? "Ended early" : "Canceled";
   return e.reason ? `${what} by ${who} at ${at}${quoted(e.reason)}` : `${what} by ${who} at ${at}.`;

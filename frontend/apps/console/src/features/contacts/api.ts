@@ -62,13 +62,16 @@ export const contactEndCauses = [
 ] as const;
 const contactEnded = d.object({
   kind: d.known(["canceled", "ended_early"] as const),
-  cause: d.knownText(contactEndCauses),
-  by: d.object({
-    kind: d.knownText(["user", "system"] as const),
-    id: d.nullable(d.token),
-    name: d.nullable(d.string),
-  }),
-  at: d.timestamp,
+  // api f65af9b0b: a contact canceled without an action record has no cause, actor or time.
+  cause: d.nullable(d.knownText(contactEndCauses)),
+  by: d.nullable(
+    d.object({
+      kind: d.knownText(["user", "system"] as const),
+      id: d.nullable(d.token),
+      name: d.nullable(d.string),
+    }),
+  ),
+  at: d.nullable(d.timestamp),
   // free-text: the operator's reason, or the provider's own text for a Cadence cancel
   reason: d.nullable(d.string),
   /** U56 (domain 7754c6205): the provider's code, apart from its text; absent on older reads. */

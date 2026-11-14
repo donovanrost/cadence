@@ -149,6 +149,10 @@ describe("U55 cancel or end a contact", () => {
       "Canceled by Cadence at 12:58Z: Northlight canceled this pass.",
     );
     expect(endedLine(odd, "Northlight", NOW)).toBe("Canceled by Cadence at 12:58Z.");
+    const bare = ended({ cause: null, by: null, at: null, reason: null });
+    if (!bare) throw new Error("ended");
+    expect(endedLine(bare, "Northlight", NOW)).toBe("Canceled.");
+    expect(endedTag(bare)).toEqual({ state: "off", label: "Canceled" });
     const rejected = ended({
       ...sys,
       cause: "provider_rejected",
