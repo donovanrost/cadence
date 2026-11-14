@@ -10,6 +10,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   import Ecto.Query
 
+  require Logger
+
   alias Ecto.Multi
 
   alias Cadence.Ids
@@ -212,16 +214,44 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     case repo.transaction(fn ->
            rows
            |> Enum.chunk_every(1_000)
-           |> Enum.each(fn chunk ->
+           |> Enum.reduce(0, fn chunk, inserted ->
              case persist_index_rows(repo, chunk, opts) do
-               :ok -> :ok
+               {:ok, count} -> inserted + count
                {:error, reason} -> repo.rollback(reason)
              end
            end)
          end) do
-      {:ok, :ok} -> :ok
+      {:ok, 0} -> drop_unreferenced_object(object_key, opts)
+      {:ok, _inserted} -> :ok
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # Every record was already archived (a replay of frames archived before a stop): no index row
+  # points at this segment, so its object would be duplicate bytes nobody can reach (#71 follow-up).
+  defp drop_unreferenced_object(object_key, opts) do
+    case Keyword.fetch(opts, :base_path) do
+      {:ok, base_path} ->
+        path = Path.join(base_path, object_key)
+
+        case File.rm(path) do
+          :ok ->
+            :ok
+
+          {:error, :enoent} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "could not remove unreferenced archive segment #{path}: #{inspect(reason)}"
+            )
+        end
+
+      :error ->
+        :ok
+    end
+
+    :ok
   end
 
   defp persist_index_rows(repo, rows, opts) do
@@ -235,11 +265,11 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
            conflict_target: [:record_kind, :record_id]
          ) do
       {count, _rows} when count == length(rows) ->
-        :ok
+        {:ok, count}
 
-      {_count, _rows} ->
+      {count, _rows} ->
         if archived_record_ids?(rows, opts) do
-          :ok
+          {:ok, count}
         else
           {:error, {:protocol_archive_record_identity_conflict, Enum.map(rows, & &1.record_id)}}
         end

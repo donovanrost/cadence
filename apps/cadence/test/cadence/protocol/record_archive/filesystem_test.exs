@@ -345,7 +345,17 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
       assert :ok = RecordArchive.persist_records_many(archive_policy, [{replay, replayed, []}])
       assert :ok = RecordArchive.flush(archive_policy, mission_id)
+
+      # The replay's segment indexed nothing new, so its object isn't left on disk (#71 follow-up):
+      # only the first run's segment remains.
+      assert [_only] = segment_objects(archive_policy, mission_id)
     end
+  end
+
+  defp segment_objects(policy, mission_id) do
+    [Keyword.fetch!(policy.backend_opts, :base_path), mission_id, "**", "*.bin"]
+    |> Path.join()
+    |> Path.wildcard()
   end
 
   test "segment objects cannot be overwritten with different records", %{
@@ -485,7 +495,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       assert %{queue_depth: 1} = RecordArchive.stats(policy, mission_id)
 
       Cadence.ProtocolArchiveFaultRepo.recover()
-      assert_receive {:archive_write_completed, {:ok, :ok}}, 2_000
+      # The transaction yields the number of index rows it inserted.
+      assert_receive {:archive_write_completed, {:ok, 1}}, 2_000
 
       assert %{queue_depth: 0, backpressured?: false, flushed_count: ^index} =
                RecordArchive.stats(policy, mission_id)
