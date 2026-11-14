@@ -105,6 +105,11 @@ const pass = d.object({
   uplink_confirmed: d.optional(d.nullable(d.boolean)),
   /** The pass's open or acknowledged attention item (U31/U32), the queue's object. */
   attention: d.optional(d.nullable(attentionReader)),
+  /**
+   * Every open item on the pass in U45's order (priority, soonest due, contact_start on ties); the
+   * first is `attention`. Optional until api ships it (U45).
+   */
+  attentions: d.optional(d.array(attentionReader, 50)),
   /** U33: null when the pass has no uplink to be ready; optional until api-ops ships it. */
   uplink_readiness: d.optional(d.nullable(passReadinessReader)),
   /** Release (50c5e572): the booking revision to send back, and whether the viewer may release. */

@@ -26,9 +26,16 @@ import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
 import ProviderChangeBlock from "./ProviderChangeBlock.vue";
 import PassChangeHistory from "./PassChangeHistory.vue";
-import { attentionWords, changeEvidence, changeTitle } from "@/features/now/index.ts";
+import {
+  attentionWords,
+  changeEvidence,
+  changeTitle,
+  type attentionSources,
+} from "@/features/now/index.ts";
 import { targetOfAttention } from "./attention.ts";
 import SettlementBlock from "./SettlementBlock.vue";
+import ContactStartBlock from "./ContactStartBlock.vue";
+import { passAttentions, passAttentionTag } from "./passAttention.ts";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
@@ -55,8 +62,15 @@ const props = defineProps<{
 defineEmits<{ changed: [] }>();
 const now = useNow();
 /** The live provider change on this pass (its attention item), for the decision block. */
+/** U45: every open item on the pass, top first; each block finds its own. */
+const items = computed(() => (props.pass ? passAttentions(props.pass) : []));
+const itemOf = (source: (typeof attentionSources)[number]) =>
+  items.value.find((a) => a.source === source) ?? null;
+const startItem = computed(() => itemOf("contact_start"));
+const attentionTag = computed(() => (props.pass ? passAttentionTag(props.pass) : null));
+const resolutionItem = computed(() => itemOf("pass_resolution"));
 const liveChange = computed(() => {
-  const a = props.pass?.attention;
+  const a = itemOf("provider_change");
   // An expired change (its pass ended undecided) has no decision; the history shows it (U44).
   if (!a || a.source !== "provider_change" || a.provider_change?.state === "expired") return null;
   const c = a.conflict;
@@ -94,8 +108,8 @@ const readiness = computed(() => {
   return { ...r, tag, link: reasonLink(r.reason) };
 });
 const releaseIssue = computed(() => {
-  const a = props.pass?.attention;
-  return a && a.source === "pass_release" ? attentionWords(a) : null;
+  const a = itemOf("pass_release");
+  return a ? attentionWords(a) : null;
 });
 // Recover is operate_mission, the same policy as abort (DECISIONS #42).
 const access = useCommandAccess();
@@ -174,11 +188,20 @@ const countdown = computed(() => {
         <p class="m-0 font-semibold">{{ releaseIssue.what }}</p>
         <p class="m-0 text-text-2">{{ releaseIssue.evidence }}</p>
       </ApCallout>
+      <!-- U45: a pass that failed to start, or was missed. -->
+      <ContactStartBlock
+        v-if="startItem"
+        :key="startItem.id"
+        :mission-id="missionId"
+        :attention="startItem"
+        :now="now"
+        @changed="$emit('changed')"
+      />
       <SettlementBlock :mission-id="missionId" :pass-id="pass.id" />
       <AttentionBlock
-        v-if="pass.attention && pass.attention.source === 'pass_resolution'"
+        v-if="resolutionItem"
         :mission-id="missionId"
-        :attention="pass.attention"
+        :attention="resolutionItem"
         @changed="$emit('changed')"
       />
       <!-- §11 L14 (ux U44): a provider's change to this pass, decided here. -->
@@ -214,6 +237,13 @@ const countdown = computed(() => {
           spacecraft.name
         }}</span>
         <ApTag v-if="tag" :state="tag.state" :label="tag.label" />
+        <!-- U45: the top attention item, the rest counted beside it. -->
+        <template v-if="attentionTag">
+          <ApTag :state="attentionTag.state" :label="attentionTag.label" />
+          <span v-if="attentionTag.more" class="font-mono text-sm text-text-3"
+            >+{{ attentionTag.more }}</span
+          >
+        </template>
         <ApTag v-if="uplinkUnconfirmed" state="caution" label="Uplink unconfirmed" />
         <ApTag v-if="pass.off_plan" state="neutral" label="Off-plan" />
       </div>

@@ -59,6 +59,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   attested_by: null,
   uplink_confirmed: null,
   attention: null,
+  attentions: undefined,
   uplink_readiness: null,
   provider_revision: null,
   releasable: undefined,
