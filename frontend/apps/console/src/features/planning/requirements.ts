@@ -142,6 +142,25 @@ export function endRequirement(
   );
 }
 
+/**
+ * ux P4 "Planning it" (director 11-14: whole-day planning): the UTC day an active requirement is
+ * drafted with (its window's start day; api: a draft takes every window that overlaps its day), or
+ * null when there's nothing to plan: not active, no readable window, or the window has ended.
+ */
+export function planningDay(
+  r: Pick<RequirementRow, "state" | "content">,
+  now: number,
+): Readonly<{ iso: string; md: string; from: string; to: string }> | null {
+  const from = r.content["earliest_start"];
+  const to = r.content["latest_end"];
+  if (r.state !== "active" || typeof from !== "string" || typeof to !== "string") return null;
+  const start = Date.parse(from);
+  const end = Date.parse(to);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= now) return null;
+  const iso = new Date(start).toISOString().slice(0, 10);
+  return { iso, md: iso.slice(5), from, to };
+}
+
 /** A template occurrence's day, `11-15` (UTC, from its window's start); null when it has none. */
 export function occurrenceDay(content: Readonly<Record<string, unknown>>): string | null {
   const v = content["earliest_start"];

@@ -6,6 +6,7 @@ import { ApCallout, ApKeyValue, ApPanel, ApRemote, ApTable, formatAbsolute, plur
 import type { ApColumn } from "@/ui";
 import { fetchTemplate } from "./api.ts";
 import RequirementEnd from "./RequirementEnd.vue";
+import RequirementPlanning from "./RequirementPlanning.vue";
 import {
   endedLine,
   fetchRequirementSchema,
@@ -65,6 +66,7 @@ const columns: readonly ApColumn[] = [
       </template>
     </ApRemote>
   </ApPanel>
+  <RequirementPlanning :requirement="requirement" />
   <RequirementEnd
     v-if="endable"
     :mission-id="missionId"

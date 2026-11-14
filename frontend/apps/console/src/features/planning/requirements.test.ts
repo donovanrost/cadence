@@ -6,6 +6,7 @@ import {
   fieldErrors,
   notActiveLine,
   occurrenceDay,
+  planningDay,
   occurrenceScope,
   requirementFacts,
   withSpacecraftChoices,
@@ -161,5 +162,35 @@ describe("closing one template occurrence (ux, ContactPlanning.md)", () => {
     expect(occurrenceScope("cancel", { day: "11-15", template: "Daily downlink" }).lead).toMatch(
       /^This cancels only the 11-15 occurrence/,
     );
+  });
+});
+
+describe("planning a requirement (ux P4, whole-day planning)", () => {
+  const now = Date.parse("2026-11-14T06:00:00Z");
+  const row = (state: "active" | "closed" | "canceled", from: string, to: string) => ({
+    state,
+    content: { earliest_start: from, latest_end: to },
+  });
+  it("plans an active, unended window on its start's UTC day", () => {
+    expect(planningDay(row("active", "2026-11-14T23:30:00Z", "2026-11-15T01:00:00Z"), now)).toEqual(
+      {
+        iso: "2026-11-14",
+        md: "11-14",
+        from: "2026-11-14T23:30:00Z",
+        to: "2026-11-15T01:00:00Z",
+      },
+    );
+  });
+  it("offers nothing once it's ended, closed or canceled, or without a window", () => {
+    expect(
+      planningDay(row("active", "2026-11-13T00:00:00Z", "2026-11-14T05:00:00Z"), now),
+    ).toBeNull();
+    expect(
+      planningDay(row("closed", "2026-11-14T08:00:00Z", "2026-11-14T09:00:00Z"), now),
+    ).toBeNull();
+    expect(
+      planningDay(row("canceled", "2026-11-14T08:00:00Z", "2026-11-14T09:00:00Z"), now),
+    ).toBeNull();
+    expect(planningDay({ state: "active", content: {} }, now)).toBeNull();
   });
 });
