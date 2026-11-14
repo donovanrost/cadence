@@ -56,7 +56,8 @@ defmodule Cadence.Contacts.KnownAtom do
 
   @contact_action_kinds %{
     "scheduled_contact_canceled" => :scheduled_contact_canceled,
-    "realized_contact_ended_early" => :realized_contact_ended_early
+    "realized_contact_ended_early" => :realized_contact_ended_early,
+    "contact_window_moved" => :contact_window_moved
   }
 
   @provider_reservation_lifecycle_states %{
@@ -124,7 +125,7 @@ defmodule Cadence.Contacts.KnownAtom do
   def target_scope!(value), do: normalize_known_atom!(value, @target_scopes, :target_scope)
 
   @spec contact_action_kind!(atom() | binary()) ::
-          :scheduled_contact_canceled | :realized_contact_ended_early
+          :scheduled_contact_canceled | :realized_contact_ended_early | :contact_window_moved
   def contact_action_kind!(value) do
     normalize_known_atom!(value, @contact_action_kinds, :action_kind)
   end

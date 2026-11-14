@@ -6,6 +6,7 @@ defmodule Cadence.OperationalEvents.Event.Kind do
     :activation_superseded,
     :binding_set_activated,
     :catalog_revision_registered,
+    :contact_window_moved,
     :dashboard_archived,
     :dashboard_config_changed,
     :dashboard_comparison_review_requested,

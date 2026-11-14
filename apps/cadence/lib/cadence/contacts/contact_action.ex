@@ -1,12 +1,14 @@
 defmodule Cadence.Contacts.ContactAction do
   @moduledoc """
-  First-class audit/action record for operator-driven contact lifecycle changes.
+  First-class audit/action record for contact lifecycle changes: operator-driven ones, and a
+  provider's window move (`contact_window_moved`, window truth 11-14).
   """
 
   alias Cadence.Contacts.KnownAtom
   alias Cadence.Ids
 
-  @type action_kind :: :scheduled_contact_canceled | :realized_contact_ended_early
+  @type action_kind ::
+          :scheduled_contact_canceled | :realized_contact_ended_early | :contact_window_moved
 
   @type t :: %__MODULE__{
           contact_action_id: binary(),

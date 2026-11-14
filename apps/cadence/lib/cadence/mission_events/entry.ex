@@ -7,6 +7,7 @@ defmodule Cadence.MissionEvents.Entry do
   @type kind ::
           :scheduled_contact_canceled
           | :realized_contact_ended_early
+          | :contact_window_moved
           | :binding_set_activated
           | :limit_violation
           | :managed_action_requested

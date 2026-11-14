@@ -28,6 +28,28 @@ defmodule Cadence.Contacts.ReservationWindowTruthTest do
 
       assert reason["after"]["starts_at"] ==
                c.reservation.starts_at |> DateTime.add(30) |> DateTime.to_iso8601()
+
+      # Its timeline event (api, ux U56): one, subject the scheduled contact, with the deltas.
+      assert [event] =
+               c.organization_id
+               |> Contacts.list_contact_actions(c.mission_id, [])
+               |> Enum.filter(&(&1.action_kind == :contact_window_moved))
+
+      assert event.scheduled_contact_id == c.reservation.scheduled_contact_id
+      assert event.realized_contact_id == nil
+
+      assert %{
+               "provider_reservation_id" => reservation_id,
+               "provider_name" => provider_name,
+               "start_delta_s" => 30,
+               "end_delta_s" => 30,
+               "classification" => "acknowledgment_required",
+               "before" => %{"starts_at" => _},
+               "after" => %{"ends_at" => _}
+             } = event.metadata
+
+      assert reservation_id == c.reservation.provider_reservation_id
+      assert provider_name == c.provider.display_name
     end
 
     test "60 s earlier moves it earlier" do

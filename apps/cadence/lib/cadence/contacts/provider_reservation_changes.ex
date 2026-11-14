@@ -3,6 +3,9 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
 
   import Ecto.Query
 
+  require Logger
+
+  alias Cadence.Contacts.ContactAction
   alias Cadence.Contacts.ContactStore
   alias Cadence.Contacts.ContactStore.ScheduledContactRow
   alias Cadence.Contacts.ProviderChangeApproval
@@ -400,9 +403,10 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
       end
     end)
     |> case do
-      {:ok, {change_row, reservation_row, aligned_contact}} ->
-        # After the commit: the scheduler re-plans start and stop on the new window.
-        if aligned_contact, do: ContactStore.notify_contact_changed(aligned_contact)
+      {:ok, {change_row, reservation_row, moved}} ->
+        # After the commit: the move's timeline event, then the scheduler re-plans start and stop
+        # on the new window.
+        if moved, do: announce_window_move(moved, reservation_row)
 
         {:ok, ProviderReservationChangeRow.to_domain(change_row),
          ProviderReservationRow.to_domain(reservation_row)}
@@ -444,12 +448,18 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
          {:ok, window} <- snapshot_window(change_row),
          false <- same_window?({contact_row.starts_at, contact_row.ends_at}, window),
          {:ok, updated} <- update_contact(contact_row, change_row),
-         {:ok, _revision} <-
+         {:ok, revision} <-
            append_revision(updated, change_row, @window_actor, DateTime.utc_now(), %{
              "before" => window_document({contact_row.starts_at, contact_row.ends_at}),
              "after" => window_document(window)
            }) do
-      ScheduledContactRow.to_domain(updated)
+      %{
+        contact: ScheduledContactRow.to_domain(updated),
+        before: {contact_row.starts_at, contact_row.ends_at},
+        after: window,
+        revision: revision.revision,
+        change_row: change_row
+      }
     else
       {:error, :scheduled_contact_not_found} -> nil
       already_aligned_or_closed when is_boolean(already_aligned_or_closed) -> nil
@@ -458,6 +468,60 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   end
 
   defp align_contact_window(_change, _reservation_row, _change_row), do: nil
+
+  # The move's mission event (api, ux U56): one per move, subject the scheduled contact. Its id is
+  # the contact's revision, so a retry records it once.
+  defp announce_window_move(moved, reservation_row) do
+    %{contact: contact, before: {from_start, from_end}, after: {to_start, to_end}} = moved
+    snapshot = JsonDocument.unwrap_value(moved.change_row.after_snapshot_document)
+
+    action =
+      ContactAction.new(%{
+        contact_action_id:
+          "contact_window_moved:#{contact.scheduled_contact_id}:#{moved.revision}",
+        organization_id: contact.organization_id,
+        mission_id: contact.mission_id,
+        scheduled_contact_id: contact.scheduled_contact_id,
+        realized_contact_id: nil,
+        action_kind: :contact_window_moved,
+        actor: @window_actor,
+        occurred_at: DateTime.utc_now(),
+        metadata: %{
+          "scheduled_contact_id" => contact.scheduled_contact_id,
+          "provider_reservation_id" => reservation_row.provider_reservation_id,
+          "provider_reservation_change_id" => moved.change_row.provider_reservation_change_id,
+          "spacecraft_id" => reservation_row.spacecraft_id,
+          "ground_station_ref" => snapshot["ground_station_ref"],
+          "provider_id" => reservation_row.provider_id,
+          # The sentence names the provider ('by Northlight'); nil reads 'by the provider'.
+          "provider_name" => provider_name(reservation_row),
+          "classification" => to_string(moved.change_row.classification),
+          "before" => window_document({from_start, from_end}),
+          "after" => window_document({to_start, to_end}),
+          "start_delta_s" => DateTime.diff(to_start, from_start),
+          "end_delta_s" => DateTime.diff(to_end, from_end)
+        }
+      })
+
+    case ContactStore.persist_action(action) do
+      {:ok, _action} -> :ok
+      {:error, reason} -> Logger.warning("contact_window_moved not recorded: #{inspect(reason)}")
+    end
+
+    ContactStore.notify_contact_changed(contact)
+  end
+
+  defp provider_name(reservation_row) do
+    case MissionProviders.fetch_provider_version(
+           reservation_row.organization_id,
+           reservation_row.mission_id,
+           reservation_row.provider_id,
+           reservation_row.provider_version
+         ) do
+      {:ok, provider} -> provider.display_name
+      {:error, _not_found} -> nil
+    end
+  end
 
   defp snapshot_window(change_row) do
     snapshot = JsonDocument.unwrap_value(change_row.after_snapshot_document)
