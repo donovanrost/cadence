@@ -10,7 +10,14 @@ defmodule Cadence.Contacts.LostReservationContactTest do
   import Ecto.Query
 
   alias Cadence.Contacts
-  alias Cadence.Contacts.{ContactStore, ProviderReservations, ReservationContactRepair}
+
+  alias Cadence.Contacts.{
+    ContactStore,
+    ProviderReservationReconciler,
+    ProviderReservations,
+    ReservationContactRepair
+  }
+
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.ProviderChangeFixtures, as: Fixtures
   alias Cadence.Repo
@@ -65,6 +72,23 @@ defmodule Cadence.Contacts.LostReservationContactTest do
 
     assert %{lifecycle_state: :canceled} = scheduled(c)
     assert {:ok, []} = ReservationContactRepair.run(c.organization_id, c.mission_id)
+  end
+
+  test "a reconciler cycle releases a lost reservation's contact left open" do
+    c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
+    reservation_id = c.reservation.provider_reservation_id
+
+    # As if the release had failed after the transition committed: failed, contact still open.
+    {1, _} =
+      from(row in ProviderReservationRow, where: row.provider_reservation_id == ^reservation_id)
+      |> Repo.update_all(set: [lifecycle_state: "failed"])
+
+    assert {:ok, _summary} =
+             ProviderReservationReconciler.reconcile_due(c.organization_id,
+               mission_id: c.mission_id
+             )
+
+    assert %{lifecycle_state: :canceled} = scheduled(c)
   end
 
   test "a reservation that still flies is never listed" do

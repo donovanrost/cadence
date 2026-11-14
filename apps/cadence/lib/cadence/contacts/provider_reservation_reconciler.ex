@@ -8,7 +8,12 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
 
   use GenServer
 
-  alias Cadence.Contacts.{ProviderClients.Registry, ProviderReservations}
+  alias Cadence.Contacts.{
+    ProviderClients.Registry,
+    ProviderReservations,
+    ReservationContactRepair
+  }
+
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
@@ -60,6 +65,14 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
         {:ok, result} -> result
         {:exit, reason} -> {:error, {:reconciliation_task_exit, reason}}
       end)
+
+    # The re-check (api-ops): a lost reservation whose contact release failed after its
+    # transition committed isn't polled again, so each cycle releases any still open.
+    :ok =
+      ReservationContactRepair.sweep(organization_id,
+        mission_id: Keyword.get(opts, :mission_id),
+        now: now
+      )
 
     {:ok, summarize(results)}
   end

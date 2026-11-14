@@ -3,6 +3,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
 
   import Ecto.Query
 
+  alias Cadence.Contacts.ContactStore
   alias Cadence.Contacts.ContactStore.ScheduledContactRow
   alias Cadence.Contacts.ProviderChangeApproval
   alias Cadence.Contacts.ProviderReservation
@@ -32,6 +33,8 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   alias Cadence.Repo
 
   @pending_states ~w(pending_approval acknowledgment_required policy_accepted)
+  # Who moved a contact's window when the provider's change took effect without an approval.
+  @window_actor %{"kind" => "system", "id" => "provider_change_observer"}
   @snapshot_fields ~w(
     provider_contact_ref provider_revision client_reference opportunity_ref spacecraft_ref
     ground_station_ref antenna_or_service_pool_ref service_profile_ref delivery_profile_ref
@@ -375,7 +378,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
               change_identity: change.change_identity
             )
 
-          {existing, row}
+          {existing, row, nil}
 
         row.provider_revision != change.from_provider_revision ->
           Repo.rollback(:provider_change_revision_superseded)
@@ -393,11 +396,14 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
             |> ProviderReservationRow.transition_changeset(reservation_transition_attrs(change))
             |> Repo.update!()
 
-          {persisted, updated}
+          {persisted, updated, align_contact_window(change, updated, persisted)}
       end
     end)
     |> case do
-      {:ok, {change_row, reservation_row}} ->
+      {:ok, {change_row, reservation_row, aligned_contact}} ->
+        # After the commit: the scheduler re-plans start and stop on the new window.
+        if aligned_contact, do: ContactStore.notify_contact_changed(aligned_contact)
+
         {:ok, ProviderReservationChangeRow.to_domain(change_row),
          ProviderReservationRow.to_domain(reservation_row)}
 
@@ -422,6 +428,55 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
   end
 
   defp maybe_apply_policy(change, reservation, _opts), do: {:ok, change, reservation}
+
+  # Window truth (director 11-14): an observed change, or one the provider already made effective
+  # (acknowledgment_required), moves the reservation's accepted window above, and the pass's
+  # scheduled contact follows in the same transaction. Its window drives the runtime's start and
+  # stop and the release gate (CommandWindow). Until 11-14 only an approved change moved the
+  # contact (apply/4), so an effective shift left the runtime on the old window (003's 12:10:57Z
+  # pass closed its listener 30 s before the provider's LOS). A running contact moves too: its
+  # end is read live, so the scheduler stops it at the new LOS. An ended or canceled contact
+  # stays as it is.
+  defp align_contact_window(%{lifecycle_state: state}, reservation_row, change_row)
+       when state in [:observed, :acknowledgment_required] do
+    with {:ok, contact_row} <- lock_scheduled_contact(reservation_row),
+         true <- contact_row.lifecycle_state in ["scheduled", "realized"],
+         {:ok, window} <- snapshot_window(change_row),
+         false <- same_window?({contact_row.starts_at, contact_row.ends_at}, window),
+         {:ok, updated} <- update_contact(contact_row, change_row),
+         {:ok, _revision} <-
+           append_revision(updated, change_row, @window_actor, DateTime.utc_now(), %{
+             "before" => window_document({contact_row.starts_at, contact_row.ends_at}),
+             "after" => window_document(window)
+           }) do
+      ScheduledContactRow.to_domain(updated)
+    else
+      {:error, :scheduled_contact_not_found} -> nil
+      already_aligned_or_closed when is_boolean(already_aligned_or_closed) -> nil
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp align_contact_window(_change, _reservation_row, _change_row), do: nil
+
+  defp snapshot_window(change_row) do
+    snapshot = JsonDocument.unwrap_value(change_row.after_snapshot_document)
+
+    with {:ok, starts_at} <- datetime(snapshot["starts_at"], :starts_at),
+         {:ok, ends_at} <- datetime(snapshot["ends_at"], :ends_at),
+         do: {:ok, {starts_at, ends_at}}
+  end
+
+  defp same_window?({starts_at, ends_at}, {to_starts_at, to_ends_at}),
+    do:
+      DateTime.compare(starts_at, to_starts_at) == :eq and
+        DateTime.compare(ends_at, to_ends_at) == :eq
+
+  defp window_document({starts_at, ends_at}),
+    do: %{
+      "starts_at" => DateTime.to_iso8601(starts_at),
+      "ends_at" => DateTime.to_iso8601(ends_at)
+    }
 
   defp reservation_transition_attrs(change) do
     attrs = %{
@@ -631,7 +686,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
     end
   end
 
-  defp append_revision(contact_row, change, actor, now) do
+  defp append_revision(contact_row, change, actor, now, reason \\ %{}) do
     contact = ScheduledContactRow.to_domain(contact_row)
 
     revision =
@@ -642,12 +697,16 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
         revision: contact.current_revision,
         provider_reservation_change_id: change.provider_reservation_change_id,
         snapshot_document: ScheduledContactRevisions.snapshot(contact),
-        reason_document: %{
-          "kind" => "provider_change",
-          "classification" => change.classification,
-          "proposal_hash" => change.proposal_hash,
-          "provider_revision" => change.provider_revision
-        },
+        reason_document:
+          Map.merge(
+            %{
+              "kind" => "provider_change",
+              "classification" => change.classification,
+              "proposal_hash" => change.proposal_hash,
+              "provider_revision" => change.provider_revision
+            },
+            reason
+          ),
         created_by: actor["id"] || actor[:id] || "cadence",
         created_at: now
       })

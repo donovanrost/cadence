@@ -14,6 +14,8 @@ defmodule Cadence.Contacts.ReservationContactRepair do
 
   import Ecto.Query
 
+  require Logger
+
   alias Cadence.Contacts
   alias Cadence.Contacts.{ContactStore, ProviderReservations, RealizedContact, ScheduledContact}
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
@@ -31,13 +33,35 @@ defmodule Cadence.Contacts.ReservationContactRepair do
       else: {:ok, Enum.map(findings, &describe/1)}
   end
 
+  @doc """
+  The reconciler's re-check each cycle (api-ops' review): releases any lost reservation's open
+  contact in the organization (or one mission), so a release that failed after its transition
+  committed is retried. Logs what it releases; never raises.
+  """
+  @spec sweep(binary(), keyword()) :: :ok
+  def sweep(organization_id, opts \\ []) do
+    now = Keyword.get(opts, :now, DateTime.utc_now())
+
+    organization_id
+    |> findings(Keyword.get(opts, :mission_id), now)
+    |> Enum.each(fn finding ->
+      result = apply_one(finding)
+      Logger.info("released the open contact of lost reservation: #{inspect(result)}")
+    end)
+  rescue
+    exception ->
+      Logger.warning("lost-reservation contact sweep failed: #{Exception.message(exception)}")
+      :ok
+  end
+
   defp findings(organization_id, mission_id, now) do
     from(row in ProviderReservationRow,
       where:
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.lifecycle_state in @lost_states and row.ends_at > ^now,
+        row.organization_id == ^organization_id and row.lifecycle_state in @lost_states and
+          row.ends_at > ^now,
       order_by: [asc: row.starts_at]
     )
+    |> maybe_mission(mission_id)
     |> Repo.all()
     |> Enum.map(&ProviderReservationRow.to_domain/1)
     |> Enum.filter(&ProviderReservations.lost?/1)
@@ -48,6 +72,9 @@ defmodule Cadence.Contacts.ReservationContactRepair do
       end
     end)
   end
+
+  defp maybe_mission(query, nil), do: query
+  defp maybe_mission(query, mission_id), do: where(query, [row], row.mission_id == ^mission_id)
 
   defp open_contact(%{scheduled_contact_id: nil}), do: :closed
 

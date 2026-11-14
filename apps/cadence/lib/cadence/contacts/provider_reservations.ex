@@ -1317,8 +1317,10 @@ defmodule Cadence.Contacts.ProviderReservations do
   defp apply_loss_side_effect(_reservation), do: :ok
 
   # Cancels the contact while nothing runs on it: still 'scheduled', or realized but not started
-  # (its realized contact closes with it). A contact already running keeps running to its LOS and
-  # settles normally, so data already arriving isn't cut (director 11-14).
+  # (:defined, which is also where a failed start stays; its realized contact closes with it). Any
+  # other realized state (active, or already stopped or completed) is left as it is: a running one
+  # keeps running to its LOS and settles normally, so data already arriving isn't cut (director
+  # 11-14), and an ended one has nothing to close.
   defp cancel_scheduled_contact(reservation, state) do
     case Contacts.fetch_scheduled_contact(
            reservation.organization_id,
