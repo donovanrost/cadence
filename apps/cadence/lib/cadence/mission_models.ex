@@ -16,6 +16,7 @@ defmodule Cadence.MissionModels do
     Comparison,
     DiagnosticRow,
     LayerRow,
+    RevisionDecisions,
     RevisionLayerRow,
     RevisionRow,
     RuntimePlanRow
@@ -224,44 +225,15 @@ defmodule Cadence.MissionModels do
     Comparison.register_case(current_scope, mission_id, name, updates, opts)
   end
 
-  @spec approve_revision(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, Revision.t()} | {:error, term()}
-  def approve_revision(organization_id, mission_id, revision_id, actor, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(revision_id) and
-             is_map(actor) do
-    with {:ok, %Revision{} = revision} <- fetch_revision(organization_id, mission_id, revision_id),
-         :ok <- require_approvable(revision),
-         :ok <- require_ready_plans(organization_id, mission_id, revision_id),
-         {:ok, row} <- fetch_revision_row(organization_id, mission_id, revision_id),
-         {:ok, approved_row} <-
-           row
-           |> RevisionRow.status_changeset(
-             :approved,
-             actor,
-             normalized_datetime(Keyword.get(opts, :at, DateTime.utc_now()))
-           )
-           |> Repo.update() do
-      {:ok, RevisionRow.to_domain(approved_row)}
-    end
-  end
+  @doc "Approves a candidate revision; see `Cadence.MissionModels.RevisionDecisions`."
+  defdelegate approve_revision(organization_id, mission_id, revision_id, actor, opts \\ []),
+    to: RevisionDecisions,
+    as: :approve
 
-  @spec reject_revision(binary(), binary(), binary(), map(), keyword()) ::
-          {:ok, Revision.t()} | {:error, term()}
-  def reject_revision(organization_id, mission_id, revision_id, actor, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(revision_id) and
-             is_map(actor) do
-    with {:ok, row} <- fetch_revision_row(organization_id, mission_id, revision_id),
-         {:ok, rejected_row} <-
-           row
-           |> RevisionRow.status_changeset(
-             :rejected,
-             actor,
-             normalized_datetime(Keyword.get(opts, :at, DateTime.utc_now()))
-           )
-           |> Repo.update() do
-      {:ok, RevisionRow.to_domain(rejected_row)}
-    end
-  end
+  @doc "Rejects a revision; see `Cadence.MissionModels.RevisionDecisions`."
+  defdelegate reject_revision(organization_id, mission_id, revision_id, actor, opts \\ []),
+    to: RevisionDecisions,
+    as: :reject
 
   defp persist_compilation(layers, %CompilerResult{} = result) do
     multi =
@@ -345,41 +317,8 @@ defmodule Cadence.MissionModels do
     end
   end
 
-  defp fetch_revision_row(organization_id, mission_id, revision_id) do
-    case Repo.get_by(RevisionRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           revision_id: revision_id
-         ) do
-      nil -> {:error, :mission_model_revision_not_found}
-      row -> {:ok, row}
-    end
-  end
-
-  defp require_approvable(%Revision{status: :candidate}), do: :ok
-  defp require_approvable(%Revision{status: :approved}), do: :ok
-  defp require_approvable(%Revision{}), do: {:error, :mission_model_revision_not_approvable}
-
   defp require_passed_comparison(%{"status" => "passed"}), do: :ok
   defp require_passed_comparison(_comparison), do: {:error, :mission_model_comparison_not_passed}
-
-  defp require_ready_plans(organization_id, mission_id, revision_id) do
-    statuses =
-      RuntimePlanRow
-      |> where(
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.revision_id == ^revision_id
-      )
-      |> select([row], row.status)
-      |> Repo.all()
-
-    if length(statuses) == 4 and Enum.all?(statuses, &(&1 == "ready")) do
-      :ok
-    else
-      {:error, :mission_model_runtime_plans_not_ready}
-    end
-  end
 
   defp organization_filter(query, nil), do: where(query, [row], is_nil(row.organization_id))
 
@@ -390,9 +329,4 @@ defmodule Cadence.MissionModels do
 
   defp status_filter(query, status),
     do: where(query, [row], row.status == ^Atom.to_string(status))
-
-  defp normalized_datetime(%DateTime{} = datetime) do
-    {microsecond, _precision} = datetime.microsecond
-    %{datetime | microsecond: {microsecond, 6}}
-  end
 end

@@ -12,6 +12,9 @@ defmodule Cadence.MissionModelsTest do
   alias Cadence.Control.Missions
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels
+  alias Cadence.MissionModels.RevisionRow
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Repo
   alias Cadence.Runtime
 
   @organization_id "org-mission-models"
@@ -106,6 +109,37 @@ defmodule Cadence.MissionModelsTest do
 
     assert {:ok, persisted} = Cadence.Governance.persist_binding_set(binding_set)
     persisted
+  end
+
+  test "approving or rejecting a revision needs the deciding actor's kind and id", %{
+    mission_id: mission_id
+  } do
+    layer =
+      Layer.new(%{
+        organization_id: @organization_id,
+        mission_id: mission_id,
+        name: "empty executable model",
+        declarations: [%{kind: :space_system, qualified_name: "/"}]
+      })
+
+    assert {:ok, compilation} = MissionModels.compile_layers([layer])
+    id = compilation.revision.revision_id
+
+    for actor <- [%{}, %{"kind" => "user"}, %{"id" => "reviewer-1"}, %{"kind" => "", "id" => "x"}] do
+      assert {:error, :mission_model_decision_actor_required} =
+               MissionModels.approve_revision(@organization_id, mission_id, id, actor)
+
+      assert {:error, :mission_model_decision_actor_required} =
+               MissionModels.reject_revision(@organization_id, mission_id, id, actor)
+    end
+
+    actor = %{"kind" => "user", "id" => "reviewer-1"}
+
+    assert {:ok, %{status: :approved}} =
+             MissionModels.approve_revision(@organization_id, mission_id, id, actor)
+
+    row = Repo.get!(RevisionRow, id)
+    assert JsonDocument.unwrap_value(row.approved_by) == actor
   end
 
   defp compile_and_approve(mission_id) do
