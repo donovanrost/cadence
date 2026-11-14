@@ -9,7 +9,6 @@ import { MissionApplicationsPage, SpacecraftApplicationsPage } from "../capabili
 
 import {
   SignInPanel,
-  AdminModePanel,
   OrganizationAccessPanel,
   InvitationAcceptancePanel,
 } from "../auth-and-navigation";
@@ -44,7 +43,6 @@ const components = new Map<string, Component>([
     ),
   ],
   ["UserSession", inApplicationShell(SignInPanel)],
-  ["AdminModePage", inApplicationShell(AdminModePanel)],
   ["NoOrganizationPage", inApplicationShell(OrganizationAccessPanel)],
   ["OrganizationInvitationPage", inApplicationShell(InvitationAcceptancePanel)],
   ["FederatedFullPageSurface", inApplicationShell(FederatedFullPageSurface)],

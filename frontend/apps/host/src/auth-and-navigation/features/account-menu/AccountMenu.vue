@@ -4,7 +4,6 @@ import { computed } from "vue";
 import { readAccountContext } from "./contracts";
 import AccountDropdownMenu from "@cadence/ui/AccountDropdownMenu.vue";
 import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
-import { navigateAttrs } from "../../shared/navigation";
 const props = defineProps<{ context: unknown; id: string }>();
 const model = computed(() => readAccountContext(props.context));
 const otherOrganizations = computed(() => {
@@ -70,33 +69,14 @@ const otherOrganizations = computed(() => {
               >
             </form>
           </div>
+          <!-- L6 follow-up: the console owns entering and leaving admin mode (c57c815ea). -->
           <CadenceMenuItem v-if="model.platform_admin" :active="open" @select="onItemSelect"
             ><a
-              v-bind="model.admin_mode ? navigateAttrs('/admin') : { href: '/admin-mode' }"
+              href="/console/admin"
               class="flex items-center gap-2 px-3 py-2 text-xs uppercase text-base-content/70 hover:text-primary"
-              ><span class="hero-cog-6-tooth h-4 w-4"></span
-              >{{ model.admin_mode ? "System administration" : "Enter admin mode" }}</a
+              ><span class="hero-cog-6-tooth h-4 w-4"></span>Admin area</a
             ></CadenceMenuItem
           >
-          <form
-            v-if="model.admin_mode"
-            :id="`${id}-leave-admin`"
-            action="/admin-mode"
-            method="post"
-          >
-            <input type="hidden" name="_method" value="delete" /><input
-              type="hidden"
-              name="_csrf_token"
-              :value="model.csrf_token"
-            /><CadenceMenuItem :active="open" @select.prevent
-              ><button
-                type="submit"
-                class="flex w-full gap-2 px-3 py-2 text-xs uppercase text-base-content/70 hover:text-primary"
-              >
-                <span class="hero-lock-closed h-4 w-4"></span>Leave admin mode
-              </button></CadenceMenuItem
-            >
-          </form>
           <form
             :id="`${id}-sign-out`"
             action="/session"

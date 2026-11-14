@@ -70,8 +70,8 @@ CSRF token. It never serializes entire user or organization records. Embedded le
 `.html.heex` layouts pass `v-socket` explicitly because they bypass LiveVue's `~H` rewrite;
 the connected socket is required for incremental updates.
 
-Sign-in, organization switching, sign-out, invitation acceptance, and admin-mode
-reauthentication remain native Phoenix forms and server-controlled session transitions.
+Organization switching and sign-out remain native Phoenix forms and server-controlled
+session transitions; the console owns sign-in, invitations and admin mode.
 Passwords remain in inputs and POST bodies, never bootstrap props or LiveView assigns.
 Account menu submit items prevent Reka's `select` dismissal so their forms stay mounted
 until document navigation. They do not prevent native clicks or submissions: removing a
@@ -80,8 +80,8 @@ coverage uses mouse input rather than DOM `.click()` to exercise that event orde
 Vue hooks remove departed pages immediately during internal navigation. During a full
 document unload they retain LiveVue's deferred cleanup: Phoenix destroys its views inside
 the native submit event, before the browser serializes the form. Unmounting Vue at that
-point detaches the form and cancels the submission. Controller entry links such as
-`/admin-mode` use ordinary anchors rather than requesting a LiveView navigation.
+point detaches the form and cancels the submission. Links that leave for the console, such as
+the account menu's `/console/admin`, use ordinary anchors rather than a LiveView navigation.
 
 ## Page composition
 

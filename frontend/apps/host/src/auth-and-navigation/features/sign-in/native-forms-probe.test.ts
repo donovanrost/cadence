@@ -17,9 +17,9 @@ vi.mock("../../../shell/host-browser-history", async () => {
 import { writeFileSync } from "node:fs";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
-// L5 retired the sign-in, no-organization and invitation pages; the admin-mode page and the
-// shell's account menu stay until L7's console replaces them.
-import { AdminModePanel, AccountMenu } from "../../index";
+// L5 retired the sign-in, no-organization and invitation pages, and L6 the admin-mode page; the
+// shell's account menu stays until L7's console replaces it.
+import { AccountMenu } from "../../index";
 
 const producer = producerFixture("CADENCE_AUTH_DOCUMENT", import.meta.url);
 test.skipIf(!producer.available)(
@@ -29,9 +29,6 @@ test.skipIf(!producer.available)(
     if (typeof data.other_organization_id !== "string")
       throw Error("Missing organization fixture identity");
     const inputs: Record<string, unknown> = {};
-    const mode = mount(AdminModePanel, { props: { page: data.admin_mode } });
-    await mode.get("#admin_mode_password").setValue(data.password);
-    inputs.admin_mode = submit(mode.get("#admin-mode-form").element);
     const host = mount(BrowserHost, {
       attachTo: document.body,
       props: { snapshot: data.snapshot },
@@ -50,7 +47,7 @@ test.skipIf(!producer.available)(
     );
     if (!process.env.CADENCE_AUTH_INPUT_FILE) throw Error("Missing output file");
     writeFileSync(process.env.CADENCE_AUTH_INPUT_FILE, JSON.stringify(inputs));
-    for (const wrapper of [mode, host]) wrapper.unmount();
+    host.unmount();
   },
 );
 function submit(element: Element) {
