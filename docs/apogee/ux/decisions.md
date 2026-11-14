@@ -933,3 +933,6 @@ configuration failure P3. The amendments to fe-ops' drafts:
     - Actions `Release to this contact` (danger) and `Cancel` (the default focus).
     - Without the starter or time, drop that clause. Count the groups that would go.
   - Audit and the request log read "Released by Mira K. at 00:14Z into a contact that wasn't a booked pass."
+  - Placement (lead): the line and the named release sit on Contacts' selected-pass panel and Uplink's contact
+    view. fe-ops builds it after domain's gate, on an api endpoint. Domain: nothing live relies on releasing into
+    unscheduled contacts, and there's no start-time confirmation or request opt-in.
