@@ -912,6 +912,9 @@ configuration failure P3. The amendments to fe-ops' drafts:
     commands can't be sent on it." Without a time, drop "at 02:40Z". Without the provider's name: "The provider
     dropped…".
   - Compose and Uplink don't offer the pass as a command window.
+  - **Outside the pass** (director approved the read fix, 11-13): the command-window line reads from the pass
+    times, not the snapshot. Before AOS: "Command window opens at AOS 03:10Z." After LOS: "Command window closed at
+    LOS 03:19Z." While it's open: "Command window open until LOS 03:19Z."
 - **(b) Refusal `command_window_closed`** (a named release), in the release outcome form:
   - outside_pass, before AOS: "Not released: the pass hasn't started (AOS 03:10Z)."
   - outside_pass, after LOS: "Not released: the pass has ended (LOS 03:19Z)."
