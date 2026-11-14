@@ -256,6 +256,11 @@ without a default), or its tests pass against tables that branch doesn't have. S
   fixtures over the real `/fleet` read (`e2e/support/fleet.ts`).
 - **Ingress ports:** the Earendil seed binds delivery transports on 127.0.0.1:42100–42109. If the
   main checkout realizes contacts at the same time, one side gets `eaddrinuse`.
+- **No replay of pre-identity-v2 telemetry without a decision.** Any journal replay or replay_run over a range
+  ingested before the mission's identity-v2 cutover needs a lead or director decision first. This includes 11-14
+  00:38:36–00:40:40Z (001 and 009, collapsed 8:1 identities). Until v2 ships, such a replay adds duplicate identities.
+  After it ships, a pre-cutover replay computes v1 and lands as revisions, or the guard refuses it. See
+  `docs/apogee/plans/ingress-time-tags.md`.
 
 ## Playwright
 
