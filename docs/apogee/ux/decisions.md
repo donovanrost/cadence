@@ -1226,3 +1226,43 @@ platform admins in admin mode can switch platform bindings." The binding name is
 - **Mission binding list toggle:** a switch, `Show platform bindings (2)` with the count, off by default. Off: a
   `text-3` caption "Platform-wide bindings are hidden. They apply to every mission without its own binding." On:
   those rows show with a neutral mono tag `PLATFORM`.
+
+### U54 · Now source `job_outcome_unknown` (api-ops; director and lead approved the behaviour) (api-ops / fe-ops)
+Cadence stopped while a job that isn't safe to rerun was running, so nobody knows whether it finished. Say "outcome
+unknown", never "failed" or "interrupted", which claim more than is known (U20). An operator checks, then retries
+it or closes the item.
+- **Per-type words** (api-ops' table): each type needs a **noun** for the title, a **place to check** and a
+  **double-run consequence**. Examples:
+
+  | type | noun | check | running it twice could… |
+  | --- | --- | --- | --- |
+  | booking | Booking at Northlight | with Northlight | book the pass twice |
+  | provider cancel | Cancel at Northlight | with Northlight | send a second cancel |
+  | TSDB write | Telemetry write to <store> | in <store> | write the same samples twice |
+  | catalog import | Catalog import r15 | in Setup › Catalog | create a second revision |
+  | evaluation | <evaluation name> | in its results | record the result twice |
+  | backfill | Backfill 11-13 02:00Z–04:00Z | in the telemetry for that span | write the span twice |
+
+  An unknown type uses the noun "A Cadence job", the place "where it acts" and the consequence "repeat what it
+  did".
+- **Title:** context, then the noun: "outcome unknown". For example `EARENDIL-312 · SVA 03:10Z pass · Booking at
+  Northlight: outcome unknown`. With no pass, the noun alone: `Catalog import r15: outcome unknown`. U47's pass
+  label.
+- **Meta:** `STARTED 03:01Z · CADENCE STOPPED 03:02Z` (§4).
+- **Body:** "Cadence stopped while this was running, so it doesn't know whether it finished. It won't run it again
+  by itself: running it twice could book the pass twice. Check with Northlight, then retry it or close this."
+- **Priority:** P2 caution. P1 when the job's pass starts within 2 hours or is live, because an unknown booking near
+  AOS can lose the pass.
+- **Actions:** `Retry…` and `Close without retry…`. Operators only; otherwise "Operators decide what happens to
+  jobs whose outcome is unknown." Both are audited with the actor, time, job and note.
+  - **Retry sheet** (danger): title `Retry the booking at Northlight?`, body "Retry only if you've checked with
+    Northlight that it didn't happen. If it did, retrying could book the pass twice." A required checkbox: "I've
+    checked with Northlight: it didn't happen." Note optional. `Retry` (danger) is enabled once the box is ticked;
+    `Cancel` takes the default focus.
+  - **Close sheet:** title `Close without retrying?`, body "Use this when you've checked that it finished, or when
+    it shouldn't run again. Cadence leaves the job as it is." A required note, "What did you find?", for the audit.
+    The action is `Close`.
+- **Resolved lines:** "Retried by Mira K. at 03:20Z." (the job's own new outcome shows where the job shows) /
+  "Closed without retry by Mira K. at 03:22Z: “Northlight shows it booked.”"
+- **Technical details:** job id, type key, worker, attempt, node, and the run or operation id.
+- **Contacts:** a job tied to a pass gets a block on the selected pass, as U45–U50 do.
