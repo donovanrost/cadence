@@ -8,6 +8,8 @@ defmodule CadenceWeb.LegacySetupRedirectController do
   - L3 `/missions/:id/ops/planning/policy` → `…/setup/contact-planning/policy`
   - L11 `/missions/:id/ops/data-sources[/registration/new]` → `…/setup/data-sources`;
     `/missions/:id/ops/data-sources/:data_source_id[/…]` → `…/setup/data-sources/:id`
+  - L12 `/missions/:id/comms/providers[/new]` → `…/setup/stations/providers`;
+    `/missions/:id/comms/providers/:provider_id` → `…/setup/stations/providers/:provider_id`
 
   Slugs come from the signed-in organization (`CadenceWeb.ConsolePaths`), falling back to
   `/console`.
@@ -25,6 +27,11 @@ defmodule CadenceWeb.LegacySetupRedirectController do
   def templates(conn, params), do: go(conn, params, "/setup/contact-planning")
   def policy(conn, params), do: go(conn, params, "/setup/contact-planning/policy")
   def data_sources(conn, params), do: go(conn, params, "/setup/data-sources")
+
+  def providers(conn, params), do: go(conn, params, "/setup/stations/providers")
+
+  def provider(conn, %{"provider_id" => id} = params),
+    do: go(conn, params, "/setup/stations/providers/" <> ConsolePaths.segment(id))
 
   def data_source(conn, %{"data_source_id" => id} = params),
     do: go(conn, params, "/setup/data-sources/" <> ConsolePaths.segment(id))

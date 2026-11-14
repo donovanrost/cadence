@@ -50,6 +50,19 @@ defmodule CadenceWeb.LegacySetupRedirectControllerTest do
              c.console <> "/data-sources/src_1"
   end
 
+  test "L12: mission providers and New go to Setup's providers; one provider to it", c do
+    comms = String.replace_suffix(c.legacy, "/ops", "/comms")
+
+    assert redirected_to(get(c.conn, comms <> "/providers")) ==
+             c.console <> "/stations/providers"
+
+    assert redirected_to(get(c.conn, comms <> "/providers/new")) ==
+             c.console <> "/stations/providers"
+
+    assert redirected_to(get(c.conn, comms <> "/providers/provider_1")) ==
+             c.console <> "/stations/providers/provider_1"
+  end
+
   test "another organization's mission falls back to the console's home", c do
     assert redirected_to(get(c.conn, c.other <> "/requirements")) == "/console"
   end

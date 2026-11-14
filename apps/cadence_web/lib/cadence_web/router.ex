@@ -248,6 +248,16 @@ defmodule CadenceWeb.Router do
       :data_source
     )
 
+    # L12 cutover (owner: api; DECISIONS #79): mission providers moved to Setup's stations.
+    get("/missions/:mission_id/comms/providers", LegacySetupRedirectController, :providers)
+    get("/missions/:mission_id/comms/providers/new", LegacySetupRedirectController, :providers)
+
+    get(
+      "/missions/:mission_id/comms/providers/:provider_id",
+      LegacySetupRedirectController,
+      :provider
+    )
+
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
@@ -391,18 +401,6 @@ defmodule CadenceWeb.Router do
       )
 
       live("/missions/:mission_id/comms/validation", HostPageLive, :index,
-        metadata: %{host_policy: :comms}
-      )
-
-      live("/missions/:mission_id/comms/providers", HostPageLive, :index,
-        metadata: %{host_policy: :comms}
-      )
-
-      live("/missions/:mission_id/comms/providers/new", HostPageLive, :new,
-        metadata: %{host_policy: :comms}
-      )
-
-      live("/missions/:mission_id/comms/providers/:provider_id", HostPageLive, :show,
         metadata: %{host_policy: :comms}
       )
 
