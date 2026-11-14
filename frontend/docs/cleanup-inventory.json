@@ -328,7 +328,6 @@
     "frontend/tools/frontend-release-package.mjs",
     "frontend/tools/frontend-release-package.test.mjs",
     "frontend/tools/import-heroicons.mjs",
-    "frontend/tools/phoenix/admin_mode_browser_smoke.mjs",
     "frontend/tools/phoenix/federation_browser_smoke.mjs",
     "frontend/tools/phoenix/federation_browser_smoke_contract.test.mjs",
     "frontend/tools/phoenix/federation_browser_smoke_hardening.test.mjs",
