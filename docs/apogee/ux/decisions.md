@@ -886,9 +886,15 @@ configuration failure P3. The amendments to fe-ops' drafts:
 
   There's no "Start now": Cadence already retries as soon as it can (domain), so `Open pass` is the only action.
   Domain sends any new key before it's used.
-- The pass row in Contacts shows the same state as a tag: `▲ NOT STARTED` (caution) while retrying, `◆ MISSED`
-  (crit) after.
-- **A pass row with several open items** (api's question) shows one tag, chosen by Now's own order: priority first
+- **In Contacts** (there are no pass rows: the schedule is an ApGantt; fe-ops 11-13):
+  - **Bar:** a status mark at its leading edge, ApStatusMark ▲ caution while not started and ◆ crit once
+    missed. It's shape and colour, never colour alone, and not a bar fill. This needs an ApGantt bar prop
+    `attention: caution | crit | null` (fe-setup, ui package). It shows the top item by U45's order.
+  - **Bar description** (screen readers): ", hasn't started" / ", was missed", plus ", and 2 more items" when
+    there are more.
+  - **Selected pass panel:** the tag `▲ NOT STARTED` / `◆ MISSED` beside the state tag, then `+2`, which lists
+    the others. The reason, links and Technical details go in its block.
+- **A pass (bar, panel) with several open items** (api's question) shows one tag, chosen by Now's own order: priority first
   (P1 > P2 > P3), then the soonest due, then contact_start. So a not_started (P1) wins. A missed pass (P2, nothing
   due) yields to an approval or provider change that has a deadline, because that's the one still actionable. The
   other items show as a count beside it, `+2`, and all of them appear in the pass detail.
