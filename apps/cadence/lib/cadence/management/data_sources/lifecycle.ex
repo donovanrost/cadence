@@ -205,18 +205,8 @@ defmodule Cadence.Management.DataSources.Lifecycle do
     end
   end
 
-  defp validate_dedicated_byo_tsdb_backend(%DataSource{
-         kind: :byo_tsdb,
-         isolation_level: isolation_level
-       })
-       when isolation_level in [:org_isolated, :mission_isolated],
-       do: :ok
-
-  defp validate_dedicated_byo_tsdb_backend(%DataSource{kind: :byo_tsdb}),
-    do: {:error, :dedicated_tsdb_backend_required}
-
-  defp validate_dedicated_byo_tsdb_backend(%DataSource{}),
-    do: {:error, :byo_tsdb_backend_required}
+  defp validate_dedicated_byo_tsdb_backend(%DataSource{} = source),
+    do: DataSource.tsdb_backend_lifecycle(source)
 
   defp tsdb_backend_lifecycle_metadata(
          %DataSource{} = source,

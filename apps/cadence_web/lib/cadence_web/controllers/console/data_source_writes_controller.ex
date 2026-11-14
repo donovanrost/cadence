@@ -254,6 +254,24 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
   defp error(conn, {:error, :same_data_source}),
     do: Problem.respond(conn, :data_source_state, %{state: "already_bound"})
 
+  # L11 (qa): provision/reconcile/deprovision on a source whose backend Cadence doesn't manage.
+  # The source read's tsdb_actions lists what a source takes, so the page doesn't offer these.
+  defp error(conn, {:error, :byo_tsdb_backend_required}),
+    do:
+      tsdb_refusal(
+        conn,
+        "managed",
+        "This source is managed by Cadence; its storage is provisioned automatically."
+      )
+
+  defp error(conn, {:error, :dedicated_tsdb_backend_required}),
+    do:
+      tsdb_refusal(
+        conn,
+        "customer_owned",
+        "This source uses your own database as is; Cadence doesn't provision it."
+      )
+
   defp error(conn, {:error, :incompatible_data_source}),
     do: Problem.respond(conn, :invalid_params, %{field: "data_source_id"})
 
@@ -268,6 +286,12 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
   defp error(conn, error) do
     Logger.warning("data source write failed: #{inspect(error, limit: 20)}")
     Problem.respond(conn, :data_source_unavailable)
+  end
+
+  defp tsdb_refusal(conn, state, message) do
+    conn
+    |> put_status(409)
+    |> json(Problem.body("data_source_state", message, %{state: state}))
   end
 
   defp bindings(conn, id) do

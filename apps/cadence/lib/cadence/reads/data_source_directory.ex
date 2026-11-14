@@ -55,12 +55,21 @@ defmodule Cadence.Reads.DataSourceDirectory do
       isolation_level: source.isolation_level,
       storage: metadata["storage"],
       credentials_ref: mask(source.credentials_ref),
+      # L11 (qa, fe-setup): the backend operations this source takes; the page offers only these.
+      tsdb_actions: tsdb_actions(source),
       health: health(health, source, now),
       last_received_at: last_received_at,
       expected_interval_s: if(is_integer(interval), do: interval),
       stale: stale(last_received_at, interval, now),
       credentials: credentials(source.credentials_ref)
     }
+  end
+
+  defp tsdb_actions(%DataSource{} = source) do
+    case DataSource.tsdb_backend_lifecycle(source) do
+      :ok -> ~w(provision reconcile deprovision)
+      {:error, _reason} -> []
+    end
   end
 
   # The worst current health across the source's logical sources; unknown once a probe is stale.

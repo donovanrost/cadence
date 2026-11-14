@@ -89,6 +89,55 @@ defmodule CadenceWeb.Console.DataSourceWritesAPITest do
              c.conn |> get(api(c, "/data-sources/nope")) |> json_response(404)
   end
 
+  test "tsdb_actions lists the backend operations a source takes; others are 409 data_source_state",
+       c do
+    managed = register!(c, "Bus history")
+    assert managed["tsdb_actions"] == []
+
+    assert %{
+             "error" => %{
+               "code" => "data_source_state",
+               "message" => "This source is managed by Cadence" <> _,
+               "details" => %{"state" => "managed"}
+             }
+           } =
+             c.conn
+             |> post(api(c, "/data-sources/bus_history/tsdb/provision"))
+             |> json_response(409)
+
+    owned = register_byo!(c, "Customer QuestDB", "customer_owned")
+    assert owned["tsdb_actions"] == []
+
+    assert %{"error" => %{"details" => %{"state" => "customer_owned"}}} =
+             c.conn
+             |> post(api(c, "/data-sources/#{owned["id"]}/tsdb/reconcile"))
+             |> json_response(409)
+
+    dedicated = register_byo!(c, "Mission QuestDB", "mission_isolated")
+    assert dedicated["tsdb_actions"] == ["provision", "reconcile", "deprovision"]
+
+    assert %{"data" => %{"source" => %{"tsdb_actions" => ["provision" | _]}}} =
+             c.conn |> get(api(c, "/data-sources/#{dedicated["id"]}")) |> json_response(200)
+
+    assert c.conn
+           |> post(api(c, "/data-sources/#{dedicated["id"]}/tsdb/provision"))
+           |> json_response(202)
+  end
+
+  defp register_byo!(c, name, isolation_level) do
+    c.conn
+    |> post(api(c, "/data-sources"), %{
+      "display_name" => name,
+      "logical_source" => "telemetry",
+      "kind" => "byo_tsdb",
+      "isolation_level" => isolation_level,
+      "storage" => "questdb",
+      "credentials_ref" => "secret://l11-test/#{isolation_level}"
+    })
+    |> json_response(201)
+    |> get_in(["data", "source"])
+  end
+
   test "a platform-shared source is read-only for a mission operator (403 platform_source)", c do
     {:ok, _shared} =
       DataSources.persist_data_source(%DataSource{
