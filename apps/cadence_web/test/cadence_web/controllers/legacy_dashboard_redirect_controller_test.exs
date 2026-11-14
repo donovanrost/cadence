@@ -1,5 +1,5 @@
 defmodule CadenceWeb.LegacyDashboardRedirectControllerTest do
-  @moduledoc "L8 cutover: the legacy dashboards directory, viewer, editor and New go to the console."
+  @moduledoc "L8 cutover: every legacy dashboards page goes to the console (L8a, L8b)."
   use CadenceWeb.ConnCase, async: true
 
   alias CadenceWeb.TestFixtures
@@ -60,9 +60,39 @@ defmodule CadenceWeb.LegacyDashboardRedirectControllerTest do
     assert "/sign-in" <> _ = redirected_to(get(build_conn(), c.legacy))
   end
 
-  test "the pages the console doesn't have yet stay on the legacy routes", c do
-    for path <- ["/library", "/playlists", "/dash-1/settings", "/dash-1/activity"] do
-      assert get(c.conn, c.legacy <> path).status == 200
+  test "L8b: library, playlists, present, and a dashboard's settings, activity and diagnostics",
+       c do
+    for {legacy, console} <- [
+          {"/library", "/library"},
+          {"/playlists", "/playlists"},
+          {"/playlists/pl-1/present", "/playlists/pl-1/present"},
+          {"/dash-1/settings", "/dash-1/settings"},
+          {"/dash-1/activity", "/dash-1/settings/activity"},
+          {"/dash-1/diagnostics", "/dash-1/settings/diagnostics"}
+        ] do
+      assert redirected_to(get(c.conn, c.legacy <> legacy)) == c.console <> console
     end
+  end
+
+  test "L8b: shares and snapshots keep the range and spacecraft, nothing else", c do
+    base = "/missions/#{c.mission.mission_id}/ops"
+
+    assert redirected_to(get(c.conn, base <> "/dashboard-shares/sh-1")) ==
+             c.console <> "/shares/sh-1"
+
+    assert redirected_to(
+             get(c.conn, base <> "/dashboard-snapshots/sn-1?from=now-1h&to=now&kiosk=1")
+           ) == c.console <> "/snapshots/sn-1?from=now-1h&to=now"
+  end
+
+  test "L8b: another organization's mission goes to /console; the legacy export is gone", c do
+    other =
+      "/missions/#{TestFixtures.persist_mission!(TestFixtures.persist_org!()).mission_id}/ops"
+
+    for path <- ["/dashboards/library", "/dashboards/dash-1/activity", "/dashboard-shares/sh-1"] do
+      assert redirected_to(get(c.conn, other <> path)) == "/console"
+    end
+
+    assert get(c.conn, c.legacy <> "/dash-1/export").status == 404
   end
 end

@@ -214,12 +214,6 @@ defmodule CadenceWeb.Router do
       :telemetry_explore
     )
 
-    get(
-      "/missions/:mission_id/ops/dashboards/:dashboard_id/export",
-      DashboardExportController,
-      :show
-    )
-
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
@@ -382,33 +376,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/ops", HostPageLive, :index, metadata: %{host_policy: :ops})
 
-      live("/missions/:mission_id/ops/dashboards/library", HostPageLive, :index,
-        metadata: %{host_policy: :ops_dashboard_author}
-      )
-
-      live("/missions/:mission_id/ops/dashboards/playlists", HostPageLive, :index,
-        metadata: %{host_policy: :ops_dashboard_author}
-      )
-
-      live("/missions/:mission_id/ops/dashboards/:dashboard_id/settings", HostPageLive, :show,
-        metadata: %{host_policy: :ops_dashboard_author}
-      )
-
-      live("/missions/:mission_id/ops/dashboard-shares/:share_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/dashboard-snapshots/:snapshot_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live(
-        "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
-        HostPageLive,
-        :show,
-        metadata: %{host_policy: :ops}
-      )
-
       live("/missions/:mission_id/ops/data-sources", HostPageLive, :index,
         metadata: %{host_policy: :ops}
       )
@@ -520,14 +487,6 @@ defmodule CadenceWeb.Router do
       )
 
       live("/missions/:mission_id/ops/explore", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/dashboards/:dashboard_id/activity", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics", HostPageLive, :show,
         metadata: %{host_policy: :ops}
       )
 
@@ -735,12 +694,61 @@ defmodule CadenceWeb.Router do
       :runtime_identities_new
     )
 
-    # L8 cutover (owner: api-ops): the legacy directory, viewer and editor go to the console.
-    # After the live sessions, so the literal /new, /library, /playlists routes match first.
+    # L8 cutover (owner: api-ops): the legacy dashboard pages go to the console, one hop each.
     get("/missions/:mission_id/ops/dashboards", LegacyDashboardRedirectController, :directory)
 
     # L8a: New went too; before /:dashboard_id so "new" isn't read as an id.
     get("/missions/:mission_id/ops/dashboards/new", LegacyDashboardRedirectController, :new)
+
+    # L8b: library, playlists, settings (+ activity, diagnostics), shares, snapshots and present.
+    # The literal /library and /playlists stay before /:dashboard_id.
+    get(
+      "/missions/:mission_id/ops/dashboards/library",
+      LegacyDashboardRedirectController,
+      :library
+    )
+
+    get(
+      "/missions/:mission_id/ops/dashboards/playlists",
+      LegacyDashboardRedirectController,
+      :playlists
+    )
+
+    get(
+      "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
+      LegacyDashboardRedirectController,
+      :present
+    )
+
+    get(
+      "/missions/:mission_id/ops/dashboards/:dashboard_id/settings",
+      LegacyDashboardRedirectController,
+      :settings
+    )
+
+    get(
+      "/missions/:mission_id/ops/dashboards/:dashboard_id/activity",
+      LegacyDashboardRedirectController,
+      :activity
+    )
+
+    get(
+      "/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics",
+      LegacyDashboardRedirectController,
+      :diagnostics
+    )
+
+    get(
+      "/missions/:mission_id/ops/dashboard-shares/:share_id",
+      LegacyDashboardRedirectController,
+      :share
+    )
+
+    get(
+      "/missions/:mission_id/ops/dashboard-snapshots/:snapshot_id",
+      LegacyDashboardRedirectController,
+      :snapshot
+    )
 
     get(
       "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",

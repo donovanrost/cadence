@@ -7,14 +7,18 @@ defmodule CadenceWeb.LegacyDashboardRedirectController do
   - `/missions/:id/ops/dashboards/:dashboard_id` → `…/telemetry/dashboards/:dashboard_id`
   - `/missions/:id/ops/dashboards/:dashboard_id/edit` → the same with `?edit=1`
   - `/missions/:id/ops/dashboards/new` → `…/telemetry/dashboards/new` (L8a)
+  - L8b: `…/ops/dashboards/library`, `/playlists`, `/playlists/:playlist_id/present`, and a
+    dashboard's `/settings`, `/activity` and `/diagnostics` → the console's `library`, `playlists`,
+    `playlists/:playlist_id/present` and `:dashboard_id/settings[/activity|/diagnostics]`;
+    `…/ops/dashboard-shares/:share_id` and `…/ops/dashboard-snapshots/:snapshot_id` → `shares/:id`
+    and `snapshots/:id`. The legacy export (`/:dashboard_id/export`) has no page to land on: gone.
 
   Console URLs carry slugs, legacy ones ids: the slugs come from the signed-in organization's
   mission. A mission that isn't the organization's (or doesn't exist) falls back to `/console`.
   Query parameters the console reads are kept: the time range (`from`, `to`), the spacecraft
-  (`spacecraft`, legacy `spacecraft_id`), `refresh` and `kiosk` for the viewer; the search and
-  tag filters for the directory (`q`, `tags`; legacy `query`, `tag`). The pages the console
-  doesn't have yet (library, playlists, settings, shares, snapshots, activity, diagnostics) stay
-  on the legacy routes.
+  (`spacecraft`, legacy `spacecraft_id`), `refresh` and `kiosk` for the viewer, and the range and
+  spacecraft for shared views; the search and tag filters for the directory (`q`, `tags`; legacy
+  `query`, `tag`).
   """
 
   use CadenceWeb, :controller
@@ -23,11 +27,35 @@ defmodule CadenceWeb.LegacyDashboardRedirectController do
 
   @viewer_params ~w(from to spacecraft refresh kiosk)
   @directory_params ~w(q tags)
+  @shared_params ~w(from to spacecraft)
 
   def directory(conn, %{"mission_id" => mission_id} = params),
     do: go(conn, mission_id, "", directory_query(params))
 
   def new(conn, %{"mission_id" => mission_id}), do: go(conn, mission_id, "/new", %{})
+
+  def library(conn, %{"mission_id" => mission_id}), do: go(conn, mission_id, "/library", %{})
+
+  def playlists(conn, %{"mission_id" => mission_id}), do: go(conn, mission_id, "/playlists", %{})
+
+  def present(conn, %{"mission_id" => mission_id, "playlist_id" => playlist_id}),
+    do: go(conn, mission_id, "/playlists/" <> segment(playlist_id) <> "/present", %{})
+
+  @doc "A dashboard's settings, activity and diagnostics: one console page, a tab each."
+  def settings(conn, %{"mission_id" => mission_id, "dashboard_id" => dashboard_id}),
+    do: go(conn, mission_id, "/" <> segment(dashboard_id) <> "/settings", %{})
+
+  def activity(conn, %{"mission_id" => mission_id, "dashboard_id" => dashboard_id}),
+    do: go(conn, mission_id, "/" <> segment(dashboard_id) <> "/settings/activity", %{})
+
+  def diagnostics(conn, %{"mission_id" => mission_id, "dashboard_id" => dashboard_id}),
+    do: go(conn, mission_id, "/" <> segment(dashboard_id) <> "/settings/diagnostics", %{})
+
+  def share(conn, %{"mission_id" => mission_id, "share_id" => share_id} = params),
+    do: go(conn, mission_id, "/shares/" <> segment(share_id), shared_query(params))
+
+  def snapshot(conn, %{"mission_id" => mission_id, "snapshot_id" => snapshot_id} = params),
+    do: go(conn, mission_id, "/snapshots/" <> segment(snapshot_id), shared_query(params))
 
   def viewer(conn, %{"mission_id" => mission_id, "dashboard_id" => dashboard_id} = params),
     do: go(conn, mission_id, "/" <> segment(dashboard_id), viewer_query(params))
@@ -71,6 +99,8 @@ defmodule CadenceWeb.LegacyDashboardRedirectController do
     |> Map.put_new("tags", params["tag"])
     |> Map.take(@directory_params)
   end
+
+  defp shared_query(params), do: params |> viewer_query() |> Map.take(@shared_params)
 
   defp viewer_query(params) do
     params
