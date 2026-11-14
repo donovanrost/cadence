@@ -5,7 +5,9 @@ defmodule CadenceWeb.Console.ContactRequirementController do
   """
   use CadenceWeb, :controller
 
+  alias Cadence.ContactPlanning.ContactPlans
   alias Cadence.Control.PlanningRequirements
+  alias Cadence.Reads.ContactPlanOverview
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   # todo(authz): reads are open to the mission's console members (the plan reads are too);
@@ -28,10 +30,59 @@ defmodule CadenceWeb.Console.ContactRequirementController do
 
   def show(conn, %{"requirement_id" => id}) do
     case PlanningRequirements.get(org_id(conn), mission_id(conn), id) do
-      {:ok, requirement} -> ok(conn, requirement)
+      {:ok, requirement} -> ok(conn, Map.put(requirement, :held_by, held_by(conn, id)))
       {:error, reason} -> error(conn, reason)
     end
   end
+
+  # ux P4 (fe-setup): the plan past draft that holds this requirement ('Open plan R41' instead of
+  # 'Plan <day>'), the most recently changed one if several do; null when none.
+  defp held_by(conn, requirement_id) do
+    org = org_id(conn)
+    mission = mission_id(conn)
+
+    case ContactPlans.requirement_uptake(org, mission, [requirement_id]) do
+      %{^requirement_id => [_ | _] = plan_ids} ->
+        plan_ids
+        |> Enum.flat_map(&plan(org, mission, &1))
+        |> Enum.max_by(&plan_order/1, fn -> nil end)
+        |> holder(org, mission)
+
+      _none ->
+        nil
+    end
+  end
+
+  defp holder(nil, _org, _mission), do: nil
+
+  # day: the plan's UTC day as the plans list files it (its first pass), since the console opens
+  # a plan through its day (fe-setup). null when the plan has no passes.
+  defp holder(plan, org, mission) do
+    day =
+      case ContactPlanOverview.plan(org, mission, plan.contact_plan_id) do
+        {:ok, %{window: %{from: %DateTime{} = from}}} -> DateTime.to_date(from)
+        _none -> nil
+      end
+
+    %{
+      plan_id: plan.contact_plan_id,
+      revision: plan.current_version,
+      state: plan.lifecycle_state,
+      day: day
+    }
+  end
+
+  defp plan(org, mission, plan_id) do
+    case ContactPlans.fetch(org, mission, plan_id) do
+      {:ok, plan, _version} -> [plan]
+      _gone -> []
+    end
+  end
+
+  defp plan_order(plan),
+    do:
+      {DateTime.to_unix(plan.updated_at || ~U[1970-01-01 00:00:00Z], :microsecond),
+       plan.contact_plan_id}
 
   def create(conn, params), do: save(conn, nil, params)
   def update(conn, %{"requirement_id" => id} = params), do: save(conn, id, params)

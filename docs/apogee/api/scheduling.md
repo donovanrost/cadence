@@ -643,6 +643,11 @@ rationale, provider_constraints_document {allowed, excluded}, station_constraint
 - `GET /requirements/:id` → the row plus `versions: [{version, created_at, actor {kind, id,
   name}}]` (newest first). `kind` is `user`, `service` (a service identity, named) or `system`
   (`name` null). `404 requirement_not_found`.
+  - `held_by: {plan_id, revision, state, day} | null` (ux P4): the plan past draft
+    (pending_approval or later) that holds the requirement, the most recently changed if several
+    do; `revision` is its current version; `day` is the plan's UTC day as the plans list files it
+    (its first pass; null without passes), which is how the console opens it. A draft doesn't hold
+    it. Show "Open plan R<revision>" instead of "Plan <day>".
 - `POST /requirements` `{content, operation_id?}` → `201 {id, version: 1}`. Omitted fields take
   the schema's `defaults`. Optional `operation_id` (client idempotency key, 1–200 characters, the same contract as
   command groups): a replay answers `409 duplicate_operation` with `details.requirement_id` (the one
