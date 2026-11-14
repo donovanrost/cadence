@@ -936,3 +936,24 @@ configuration failure P3. The amendments to fe-ops' drafts:
   - Placement (lead): the line and the named release sit on Contacts' selected-pass panel and Uplink's contact
     view. fe-ops builds it after domain's gate, on an api endpoint. Domain: nothing live relies on releasing into
     unscheduled contacts, and there's no start-time confirmation or request opt-in.
+
+### U47 · Now source `ingress_backpressure` (DECISIONS #83 follow-up; api-ops proposal) (api-ops / fe-ops)
+Titles lead with the spacecraft and pass, as in U45. Say "buffer", not "journal", in visible text; the journal,
+stream and error go in Technical details. The pass label is `SVB 03:10Z pass`; without one, `SVB contact`; without
+a station, the spacecraft alone.
+- **journal_near_full** (P1 at ≥ 95% or rising during a live pass, else P2):
+  - Title `EARENDIL-008 · SVB 03:10Z pass · telemetry is backing up`.
+  - Meta `BUFFER 87% · RISING · 412 MB WAITING`. Show RISING only while it is.
+  - Body: "Cadence is storing this pass's telemetry more slowly than it arrives. At 100% Cadence stops reading, and
+    new telemetry arrives late." At ≥ 95%: "The buffer is almost full."
+  - Action `Open pass`. There's nothing to acknowledge.
+  - Resolves itself: "Caught up at 03:22Z." The row fades.
+- **frames_dropped** (P1 while live with a drop in the last 5 min, else P2):
+  - Title `EARENDIL-008 · SVB 03:10Z pass · 12 telemetry frames lost` (singular: "1 telemetry frame lost").
+  - Meta `12 FRAMES · 48 KB · 03:14Z–03:15Z`.
+  - Body: "Cadence's buffer was full, so these frames from Northlight were dropped. Cadence can't recover them."
+  - Actions `Acknowledge` (operate_mission, no reason, as U37's Mark as seen) and `Open pass`. Without the
+    capability: "Operators acknowledge lost telemetry."
+  - After that: "Acknowledged by Mira K. at 03:20Z." It resolves when the pass has also ended.
+  - **Who to tell:** nobody is named. Cadence doesn't know a mission's escalation path, and the Now row itself is
+    the notice (U20). If missions get an on-call setting, the body names it then.
