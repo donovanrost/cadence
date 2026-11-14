@@ -1417,5 +1417,9 @@ Cadence's own validation found the booking inconsistent with its setup. Never sa
   the pass ends → "The pass ended at LOS 13:12Z."; the provider drops the booking → U56's cancel line takes over.
 - **Contacts:** a block on the selected pass, as U45–U50, with the title minus the spacecraft and pass label.
 - **Technical details:** code, the provider's reason, provider_reservation_id, and the item id.
-- **Data (domain → api):** U47's pass fields; `code`; `provider_reason` (text | null); `flagged_at`; and the
-  resolution `{action: revalidated | ended | lost, at}`.
+- **Data (domain, confirmed 11-14):** U47's pass fields; `code`; `source`; `provider_reason` (always null here: a
+  Cadence-side check has no provider words, so the "(Northlight: …)" variant doesn't occur); `flagged_at`; and the
+  resolution `{action: revalidated | ended | lost, at}`. All three triggers exist once window truth is live:
+  revalidated by the next passing poll (b0efad061), ended at LOS, lost on the provider's own failure. `source`
+  goes in Technical details. Built with the director's "delivery unverified" decision; if that changes what's
+  claimed, the words change with it.
