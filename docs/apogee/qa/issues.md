@@ -407,4 +407,18 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   a failed runtime start after `persist_realization` leaves them, and the expiry sweeps cover `active` only.
   Downlink-only paths, so not P9CS release targets (precise query 0 rows, 15:34Z). domain's sweep lands after the pass.
 
+### 57. 001 pass 11-14: settlement drain of a non-zero journal backlog not shown (UNSHOWN)
+
+- `_39GI9_run` settled in 0.18 s (00:41:52.104Z → .288Z, journal enabled); the metadata has no counts.
+  Tracked as unshown (director). See `pass-001-2026-11-14.md`.
+
+### 58. 001 pass 11-14: first dispatch failed with `eaddrinuse` (owner api-ops)
+
+- 00:34:00.839Z `PathCoordinator … tcp_provider_listen_failed "provider_profile_i4467s4fie_3F" :eaddrinuse`;
+  recovered 00:35:01Z, so the release came 73 s after AOS.
+
+### 59. 001 pass 11-14: one ingress persistence failure (owner domain)
+
+- 00:39:09.829Z `cadence.telemetry.ingress.persistence_failed`, `_39GI9_run`, downlink path, `error_class=unknown`.
+
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
