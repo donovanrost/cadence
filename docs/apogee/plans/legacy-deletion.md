@@ -16,7 +16,7 @@ the tree moves.
 | L5 sign-in, invitations, no-org | POST `/sign-in`, POST `/invitations/:token` (+ dead modules) | console auth screens | deletable now (GET 302s stay) |
 | L6 admin mode | `/admin-mode` | account menu admin mode | deletable now |
 | L7 platform admin | `/admin/**` | `/console/admin/**` | after qa's live check (L7 migration) |
-| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a done (live 11-14 01:46Z, c21fad95a); federated batch done (restart 1, 11-14 08:01Z, 4cb04734d); L8b blocked on settings only (slice 5 route pending); L8c step 1 done (D18 `refresh`), step 2 awaits the director's go |
+| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a done (live 11-14 01:46Z, c21fad95a); federated batch done (restart 1, 11-14 08:01Z, 4cb04734d); L8b done (live 11-14 09:20Z, 3dbb243b0; Settings live a8649a04f, member path afd1201ca); L8c step 1 done (D18 `refresh`), step 2 has the director's go, lands after L7 |
 | L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | blocked: no console API yet |
 | L11 data sources | `/ops/data-sources/**` | `setup.data-sources[/:sourceId]` | after qa's live check (endpoints 2e3c8c5ab) |
 | L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | blocked: L12 endpoints not built (api-ops) |
@@ -383,6 +383,12 @@ their params, and library, playlists, new, settings, activity and diagnostics st
   covering the dashboards until they're gone.
 
 ### L8b library, playlists, settings (+ activity, diagnostics), shares, snapshots, export (one batch; fe-setup)
+**Done:** live 11-14 09:20Z at 3dbb243b0 (98440ca15 redirects, 1e4df94fc pages, ec2720628 policy, 4a717b586
+present/search, 3bf3058ca frontend, 3dbb243b0 playlist reads). qa: all 8 legacy URLs 302 once to the console and
+land 200; `/:id/export` 404s. The member path (Activity and Diagnostics only) is proven by afd1201ca's test: no
+non-author persona exists while `author_dashboards` is `operate_mission`. devops follows with the smoke driver's
+`draft-dashboard` seed.
+
 - **Gate:** fe-setup switches `ops.dashboard.settings` from `pending` to its `SettingsScreen` first, and qa
   checks it live. Slice 6 (shares, snapshots, playlists, present, export) and the library are live (11-14).
 - **Routes** (`router.ex`, 11-14 lines): the `HostPageLive` lives for `…/ops/dashboards/library`, `/playlists`,
