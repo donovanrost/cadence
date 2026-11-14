@@ -1445,8 +1445,10 @@ Technical details.
     without connecting."
   - Contacts block as U50, titled `3 connections refused`, with the same sentences.
   - Technical details: listener (station · port), the holder's realized_contact_id, reason key, count, item id.
-  - **One item, not two:** if the same refusal would also raise U45's contact_start `listener_in_use`, only this
-    item shows. Domain confirms which source owns it.
+  - **One item, not two** (domain, provisional): a pass that couldn't START because its listener was held is
+    U45's contact_start `listener_in_use` ("…because the EARENDIL-006 · SNTG 00:05Z pass was still holding it."),
+    and listener_refusal raises nothing for it. A RUNNING pass whose connection was refused is this item. Domain
+    confirms after tracing 001's 00:05Z case, which showed nothing in Now.
 - **(b) Booking-time overlap flag** (on the plan's passes, Book a pass offers, and the booked pass on Contacts):
   - Tag `LISTENER OVERLAP` (caution ▲) on the **later** pass, the one that loses time.
   - Sentence on the later pass: "Overlaps EARENDIL-006's SNTG 00:05Z pass by 26 s. Santiago's listener takes one
