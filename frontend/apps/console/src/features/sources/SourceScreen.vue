@@ -81,11 +81,13 @@ const crumbs: readonly ApCrumb[] = [
         <SourceActions v-else :mission-id="missionId" :source="value.source" @done="done" />
         <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
         <SourceFacts :source="value.source" />
+        <!-- A binding is the mission's even when it reads from a shared source: mission operators
+          switch it (the server checks the binding's owner, not the source's; qa L11). -->
         <SourceBindings
           :mission-id="missionId"
           :bindings="value.bindings"
           :sources="list?.sources ?? []"
-          :editable="rights(value.source).editable"
+          :editable="list?.canManage ?? false"
           @done="done"
         />
         <SourceRuns
