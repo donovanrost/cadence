@@ -622,6 +622,50 @@ jobs:
           fi
           mix test --only questdb --slowest-modules 10
 
+  # The test env runs with the ingress journal on, but production's default is off (config.exs).
+  # This reruns the ingest tests tagged @moduletag :ingest_journal_matrix with it off (director
+  # 11-14; api-ops 3c94a9853). Journal-only tests in those modules skip themselves, visibly.
+  # Kept out of ci-ok for its first clean week, like the browser shards.
+  ingest-journal-off:
+    name: Ingest tests, journal off
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        # Keep en_US.utf8, as in test-core.
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      # The tag reaches develop with ui/apogee-spa. Until a branch has it, this step only reports that.
+      - name: mix test --only ingest_journal_matrix (journal off)
+        working-directory: apps/cadence
+        env:
+          CADENCE_TEST_INGRESS_JOURNAL: "off"
+        run: |
+          if ! grep -rqE '@moduletag[[:space:]]+:ingest_journal_matrix\b' test; then
+            echo "No :ingest_journal_matrix tests on this branch yet."
+            exit 0
+          fi
+          mix test --only ingest_journal_matrix --slowest-modules 10
+
   ci-ok:
     name: ci-ok
     needs:
