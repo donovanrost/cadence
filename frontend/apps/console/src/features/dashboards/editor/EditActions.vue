@@ -2,9 +2,9 @@
 import { ref } from "vue";
 import { ApButton, ApSheet } from "@/ui";
 
-/** Header actions while editing (ux): EDITING, the paused-values caption, Add widget, Save…, Discard. */
+/** Header actions while editing (ux): EDITING, the paused-values caption, Add widget, Add section, Save…, Discard. */
 const props = defineProps<{ changes: number; busy: boolean }>();
-const emit = defineEmits<{ add: []; save: []; discard: [] }>();
+const emit = defineEmits<{ add: []; addSection: []; save: []; discard: [] }>();
 const confirm = ref<InstanceType<typeof ApSheet> | null>(null);
 function onDiscard() {
   if (props.changes === 0) emit("discard");
@@ -19,6 +19,7 @@ function onDiscard() {
       <span class="text-xs text-text-3">Live values paused while editing.</span>
     </span>
     <ApButton variant="secondary" size="compact" @click="emit('add')">Add widget</ApButton>
+    <ApButton variant="secondary" size="compact" @click="emit('addSection')">Add section</ApButton>
     <ApButton
       variant="primary"
       size="compact"

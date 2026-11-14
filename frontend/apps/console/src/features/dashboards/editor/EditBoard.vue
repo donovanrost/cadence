@@ -2,14 +2,20 @@
 import { computed } from "vue";
 import { ApButton, ApCallout } from "@/ui";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
-import type { Command, LayoutEdit, OutlinePlacement, Preview } from "./contracts.ts";
+import type { Command, LayoutEdit, Outline, OutlinePlacement, Preview } from "./contracts.ts";
 import EditSection from "./EditSection.vue";
+import EditSectionHead from "./EditSectionHead.vue";
 
-/** The board in edit mode: sections of editable grids over the staged outline and preview. */
+/**
+ * The board in edit mode: sections of editable grids over the staged outline and preview. Once a
+ * board has sections, its unsectioned widgets get a faint 'Not in a section' heading so widgets a
+ * removed section left behind are findable; an empty section says so (ux, Sections in edit mode).
+ */
 const props = defineProps<{ preview: Preview }>();
 const emit = defineEmits<{
   stage: [command: Command];
   edit: [p: OutlinePlacement | null, sectionId: string];
+  editSection: [section: Outline["sections"][number]];
 }>();
 const previews = computed(() => {
   // A repeated widget previews through its first instance (they share the authored placement).
@@ -18,16 +24,14 @@ const previews = computed(() => {
     if (!map.has(p.authored_id)) map.set(p.authored_id, p);
   return map;
 });
+const outline = computed(() => props.preview.outline);
+const inSection = (id: string | null) =>
+  outline.value.placements.filter((p) => p.section_id === id);
+const loose = computed(() => inSection(null));
 const sections = computed(() =>
-  [
-    { id: null as string | null, title: null as string | null },
-    ...props.preview.outline.sections,
-  ].map((s) => ({
-    ...s,
-    placements: props.preview.outline.placements.filter((p) => p.section_id === s.id),
-  })),
+  outline.value.sections.map((s) => ({ section: s, placements: inSection(s.id) })),
 );
-const empty = computed(() => props.preview.outline.placements.length === 0);
+const empty = computed(() => outline.value.placements.length === 0);
 const onLayout = (layouts: LayoutEdit[]) => emit("stage", { event: "layout", input: { layouts } });
 const onRemove = (p: OutlinePlacement) =>
   emit("stage", { event: "remove_widget", input: { placement_id: p.id } });
@@ -43,19 +47,37 @@ const onRemove = (p: OutlinePlacement) =>
     >
   </ApCallout>
   <div class="flex flex-col gap-3">
-    <section v-for="s in sections" :key="s.id ?? 'top'" class="flex flex-col gap-2">
-      <header v-if="s.title" class="flex items-center justify-between">
-        <h2 class="m-0 font-display text-sm uppercase tracking-title text-text-2">{{ s.title }}</h2>
-        <ApButton variant="ghost" size="compact" @click="emit('edit', null, s.id ?? '')"
-          >Add widget here</ApButton
-        >
-      </header>
+    <section v-if="loose.length || !sections.length" class="flex flex-col gap-2">
+      <h2 v-if="sections.length" class="m-0 font-display text-sm uppercase text-text-4">
+        Not in a section
+      </h2>
       <EditSection
+        :placements="loose"
+        :previews="previews"
+        :snapshot="preview.snapshot"
+        @layout="onLayout"
+        @edit="emit('edit', $event, '')"
+        @remove="onRemove"
+      />
+    </section>
+    <section v-for="(s, i) in sections" :key="s.section.id" class="flex flex-col gap-2">
+      <EditSectionHead
+        :section="s.section"
+        :count="s.placements.length"
+        :first="i === 0"
+        :last="i === sections.length - 1"
+        @add-widget="emit('edit', null, s.section.id)"
+        @edit="emit('editSection', s.section)"
+        @stage="emit('stage', $event)"
+      />
+      <p v-if="!s.placements.length" class="m-0 text-sm text-text-3">No widgets yet.</p>
+      <EditSection
+        v-else
         :placements="s.placements"
         :previews="previews"
         :snapshot="preview.snapshot"
         @layout="onLayout"
-        @edit="emit('edit', $event, s.id ?? '')"
+        @edit="emit('edit', $event, s.section.id)"
         @remove="onRemove"
       />
     </section>

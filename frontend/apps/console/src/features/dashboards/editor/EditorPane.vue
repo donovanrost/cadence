@@ -7,6 +7,7 @@ import EditBoard from "./EditBoard.vue";
 import type { SourceWarning } from "./contracts.ts";
 import EditCallouts from "./EditCallouts.vue";
 import SaveSheet from "./SaveSheet.vue";
+import SectionSheet from "./SectionSheet.vue";
 import WidgetSheet from "./WidgetSheet.vue";
 import type { useEditSession } from "./useEditSession.ts";
 
@@ -19,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{ saved: [warnings: readonly SourceWarning[]] }>();
 const widgetSheet = ref<InstanceType<typeof WidgetSheet> | null>(null);
 const saveSheet = ref<InstanceType<typeof SaveSheet> | null>(null);
+const sectionSheet = ref<InstanceType<typeof SectionSheet> | null>(null);
 const staged = computed(() => props.session.staged.value);
 const retiredLibrary = computed(
   () => staged.value?.outline.placements.some((p) => p.library?.retired === true) ?? false,
@@ -34,6 +36,7 @@ async function onSave(input: { message: string; defaults: { time: boolean; scope
 }
 defineExpose({
   add: () => widgetSheet.value?.openFor(null),
+  addSection: () => sectionSheet.value?.openFor(null),
   save: () => saveSheet.value?.open(),
 });
 </script>
@@ -53,6 +56,7 @@ defineExpose({
     :preview="staged"
     @stage="session.stage"
     @edit="(p, sectionId) => widgetSheet?.openFor(p, sectionId)"
+    @edit-section="sectionSheet?.openFor($event)"
   />
   <ApEmptyState v-else headline="Opening the editor…" />
   <WidgetSheet
@@ -64,6 +68,7 @@ defineExpose({
     :spacecraft="view.scope_options"
     @stage="session.stage"
   />
+  <SectionSheet ref="sectionSheet" @stage="session.stage" />
   <SaveSheet
     ref="saveSheet"
     :changes="session.changes.value"

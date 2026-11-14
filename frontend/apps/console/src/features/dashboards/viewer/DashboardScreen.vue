@@ -195,6 +195,7 @@ const onRange = (s: TimeSelection) =>
         :changes="session.draft.value?.commands.length ?? 0"
         :busy="session.busy.value"
         @add="pane?.add()"
+        @add-section="pane?.addSection()"
         @save="pane?.save()"
         @discard="onDiscard"
       />

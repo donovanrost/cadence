@@ -3,9 +3,14 @@ import { ref, useId } from "vue";
 import { useDisclosure } from "@/shell";
 
 /** The viewer's ⋯ menu (ux): a disclosure of actions, in AccountMenu's pattern. */
-withDefaults(defineProps<{ items: readonly { id: Id; label: string }[]; label?: string }>(), {
-  label: "More dashboard actions",
-});
+withDefaults(
+  defineProps<{
+    /** `disabled`: why the item can't run now, shown on it (ux: disabled reasons, not silence). */
+    items: readonly { id: Id; label: string; disabled?: string | undefined }[];
+    label?: string;
+  }>(),
+  { label: "More dashboard actions" },
+);
 const emit = defineEmits<{ select: [id: Id] }>();
 const root = ref<HTMLElement | null>(null);
 const { open, toggle, close } = useDisclosure(root);
@@ -40,10 +45,12 @@ function choose(id: Id) {
         v-for="item in items"
         :key="item.id"
         type="button"
-        :class="itemClass"
-        @click="choose(item.id)"
+        :class="[itemClass, item.disabled ? 'cursor-default text-text-4 hover:bg-transparent' : '']"
+        :aria-disabled="item.disabled ? 'true' : undefined"
+        @click="item.disabled || choose(item.id)"
       >
         {{ item.label }}
+        <span v-if="item.disabled" class="ml-auto pl-3 text-sm">{{ item.disabled }}</span>
       </button>
     </div>
   </div>
