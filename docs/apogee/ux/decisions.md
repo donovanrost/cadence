@@ -857,3 +857,24 @@ configuration failure P3. The amendments to fe-ops' drafts:
     history shows the confirmation, it's the booking's own line: "Confirmed by Earendil Demo Ground Network at
     02:12Z." Any other status change by the provider (for example confirmed → cancelled) is a real change and
     stays.
+
+### U45 · Now source `contact_start`: a pass that didn't start (domain, with the eaddrinuse fix) (domain / api / fe-ops)
+- **not_started** (in the window, Cadence retrying), **P1**, due at LOS:
+  - Title `EARENDIL-312 · SVA 03:10Z pass hasn't started`.
+  - Meta `Cadence is retrying · 3 tries · LOS T−00:06:12`. Give the try count only if the server sends it.
+  - Body: the reason sentence (below).
+  - Action: `Open pass` (Contacts). There's no "Start now" unless domain offers a real action.
+  - It resolves when the pass starts: "Started at 03:12Z." The row fades.
+- **missed** (the window ended unstarted), **P2**:
+  - Title `EARENDIL-312 · SVA 03:10Z pass was missed`.
+  - Body: "The pass ended before Cadence could start it." then the reason sentence.
+  - Action `Mark as seen` (as in U37: no reason, needs `operate_mission`). Without the capability: "Operators
+    mark missed passes as seen."
+  - Resolved: "Marked as seen by Mira K. at 03:40Z."
+- **Reason sentences** (one per server reason key; words only, the key in Technical details):
+  - Station listener still held (the eaddrinuse case): "Cadence couldn't open the station connection because
+    the previous pass was still holding it."
+  - Unknown or missing reason: "No reason was recorded."
+  - Domain sends the key list and ux words each one.
+- The pass row in Contacts shows the same state as a tag: `▲ NOT STARTED` (caution) while retrying, `◆ MISSED`
+  (crit) after.
