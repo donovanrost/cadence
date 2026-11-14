@@ -9,7 +9,7 @@ import type { QueueItem } from "./queue.ts";
 /**
  * archive_quarantine (ux U49; DECISIONS #88, domain's final shape): raw records from one contact
  * that the archive couldn't take. Their telemetry was still stored, so nothing here says it was
- * lost. Visible text says "archive" and "raw records"; the error, its code, the entry count and the
+ * lost. Visible text says "archive" and "raw records"; the error, its code and the
  * id stay in Technical details. Retry is synchronous; Discard is resolve with a required reason.
  */
 

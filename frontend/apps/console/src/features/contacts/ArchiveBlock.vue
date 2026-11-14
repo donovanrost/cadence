@@ -18,7 +18,7 @@ import {
 /**
  * U49 pass block (archive_quarantine): raw records from this pass the archive couldn't take; their
  * telemetry was still stored. Same title and sentences as Now, with Retry and Discard… (operators
- * only). The error, its code, the entry count and the id show only in Technical details.
+ * only). The error, its code and the id show only in Technical details.
  */
 const props = defineProps<{ missionId: MissionId; attention: Attention; now: Date }>();
 const emit = defineEmits<{ changed: [] }>();
@@ -29,14 +29,17 @@ const canDiscard = computed(() => archiveOffers(props.attention, "discard"));
 /** The block sits on the pass, so the title drops the spacecraft and the pass label. */
 const title = computed(() => {
   const a = props.attention;
-  return `${archiveTitle({ ...a, station: null, reservation_id: null, contact_label: null }, null, props.now)}.`;
+  return archiveTitle(
+    { ...a, station: null, reservation_id: null, contact_label: null },
+    null,
+    props.now,
+  );
 });
 const technical = computed(() => {
   const a = props.attention;
   return [
     a.error_code ? `error_code: ${serverKey(a.error_code)}` : null,
     a.error ? `error: ${a.error}` : null,
-    a.counts?.entries != null ? `quarantined entries: ${a.counts.entries}` : null,
     `id: ${a.id}`,
   ].filter((l): l is string => l !== null);
 });
@@ -69,7 +72,7 @@ const sheet = ref<InstanceType<typeof DiscardSheet> | null>(null);
       {{ NO_ACCESS_ARCHIVE }}
     </p>
     <p v-if="note" class="m-0 text-sm text-caution-text">{{ note }}</p>
-    <!-- ux U49: quarantine, entries, the error and the id live here only, never in the copy. -->
+    <!-- ux U49: the error, its code and the id live here only, never in the copy. -->
     <details class="text-xs text-text-3">
       <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
       <p v-for="line in technical" :key="line" class="m-0 pt-1 font-mono break-all">{{ line }}</p>

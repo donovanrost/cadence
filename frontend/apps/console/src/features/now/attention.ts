@@ -335,9 +335,7 @@ export const attentionReader = d.object({
     ),
   ),
   /** archive_quarantine (U49, #88): what the archive couldn't take, and what was stored anyway. */
-  counts: d.optional(
-    d.nullable(d.object({ entries: d.optional(d.integer), frames: d.integer, packets: d.integer })),
-  ),
+  counts: d.optional(d.nullable(d.object({ frames: d.integer, packets: d.integer }))),
   stored_without_archive: d.optional(
     d.nullable(d.object({ frames: d.integer, packets: d.integer })),
   ),
