@@ -93,15 +93,23 @@ Console takeover:
   histogram of current values across targets, and callouts for targets whose value was hand-set
   before ("EARENDIL-117 and -144 were hand-set to 6.0 °C on 14 Sep (REQ-0302). This overwrites
   that."). For non-value commands: the stack as mono lines.
-- **Per-target values** (fe-ops, 11-15; from the group's `commands[].per_target`). The reviewer must see what each
-  target gets, never one value as if all were equal (U20).
-  - The readout gives ranges: `5.0–6.2 → 8.0–9.5 °C · PER TARGET · ON 98 SPACECRAFT`. When every target happens to
-    get the same value, it's the plain form.
-  - On a stack line, a per-target argument reads `setpoint PER TARGET 8.0–9.5 °C`, not a single value.
-  - Under the command, a table as in Compose B2: Target (mono) · Now · New, per per-target argument, with the
-    unit. The first 8 rows show in target order, then `Show all 98`. A value outside the argument's range keeps
-    B2's caution.
-  - A3's header meta names them: `SAME FOR ALL 98 EXCEPT SEQ, CRC AND setpoint`.
+- **Targets with their own values** (lead, safety; api f1bed1880: `commands[].per_target` gives a target a
+  **complete** value set that **replaces** the command's shared values; it isn't merged). An approver sees exactly
+  what each target gets (U20).
+  - **Readout:** `5.0 → 8.0 °C · ON 95 SPACECRAFT` for the shared value, then a second line `3 WITH THEIR OWN VALUES ·
+    8.5–9.5 °C`. When every target has its own values, there's no shared line: `5.0–6.2 → 8.0–9.5 °C · EACH OF 98
+    WITH ITS OWN VALUES`.
+  - **Stack line:** the shared values as today, then a neutral tag `3 OWN VALUES` (no tag when there are none).
+  - **Own-values table** under the command: Target (mono) · one column per argument, with the unit. A value that
+    differs from the shared one is in `text` weight 600; one that equals it is `text-4`; an argument the override
+    leaves out reads `default` in `text-4` (never a dash). The first 8 rows show in target order, then `Show all
+    50`. Out-of-range values keep B2's caution.
+  - **1 target:** no shared line and no table, only its values in the readout (`5.0 → 8.5 °C · EARENDIL-312`).
+    With **50 targets** and 3 overrides: the shared line, `3 WITH THEIR OWN VALUES`, and a 3-row table. With 50
+    overrides: the table's first 8 rows and `Show all 50`.
+  - A3's header meta names the difference: `SAME FOR ALL 98 EXCEPT SEQ AND CRC; 3 TARGETS ENCODE THEIR OWN VALUES`.
+- **Uplink & verify:** a target row with its own values shows them on its command line (mono, as on Approve), with
+  the tag `OWN VALUES`. The others need nothing extra.
 - **A2 Re-checked at review:** the preflight re-run at open time (`ck` rows, GO/HOLD/NO-GO), incl.
   `Excluded · 163 stale · 188 safe mode · GO −2`. Header meta `6 GO` in nominal text.
 - **A3 What will radiate:** the encoded packet as byte boxes (`by`: hex 15px mono, field name,
