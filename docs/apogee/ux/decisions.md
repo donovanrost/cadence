@@ -1189,3 +1189,33 @@ Two things must not stay silent (U20), because the preview has to say what Start
     the number alone means nothing to an operator.
   - The 422 stays as the backstop and shows the same sentence in the same place (crit, since it was refused), never
     as a toast.
+
+### U53 · Switching a platform-wide data-source binding (DECISIONS #90) (fe-setup / api-ops)
+Only platform admins in admin mode can switch one. Elsewhere the row has no action, and a caption reads "Only
+platform admins in admin mode can switch platform bindings." The binding name is mono throughout
+(`default_flight_telemetry`).
+- **Confirm sheet** (ApSheet, danger):
+  - Title: `Switch default_flight_telemetry for 12 missions?`
+  - Blast radius first: "This changes telemetry for all 12 missions that use it. They'll read from Northlight
+    archive instead of Cadence managed store." (from and to are the targets' names; without them, drop the second
+    sentence).
+  - Live passes, when any: a crit line, "3 passes are live right now, and their telemetry switches mid-pass:
+    EARENDIL-312 · SVA 03:10Z, EARENDIL-008 · SVB 03:12Z, EARENDIL-401 · KSAT 03:14Z." Up to 3, then "and 4 more".
+    With none, the line is left out.
+  - `Reason` (required, server-checked): help "Recorded with your name and the time." Blank: "Give a reason
+    first."
+  - `Type default_flight_telemetry to confirm` (mono input, exact match, case-sensitive; paste allowed).
+  - Actions: `Switch for 12 missions` (danger), enabled once the reason and name are filled. `Cancel` takes the
+    default focus.
+  - **Counts unavailable:** if api-ops can't count missions or live passes, the sheet says "Cadence couldn't count
+    the missions and live passes this affects, so it can't be switched now. Try again in a moment." and there's no
+    Switch. The blast radius is never unknown at the moment of confirming.
+  - Counts are re-read when the sheet opens. If they change while it's open (a pass goes live), the line updates
+    and the typed name is cleared, so the operator confirms what they now see.
+- **Outcome:** "Switched default_flight_telemetry to Northlight archive. 12 missions read from it now."
+- **Audit line** (actor and time in their columns): "Switched platform binding default_flight_telemetry from
+  Cadence managed store to Northlight archive · 12 missions, 3 live passes: “<reason>”". Where it's recorded is
+  api-ops' answer (the Admin.md caption question).
+- **Mission binding list toggle:** a switch, `Show platform bindings (2)` with the count, off by default. Off: a
+  `text-3` caption "Platform-wide bindings are hidden. They apply to every mission without its own binding." On:
+  those rows show with a neutral mono tag `PLATFORM`.
