@@ -1,7 +1,9 @@
 defmodule CadenceWeb.DashboardPlaylistsTest do
   @moduledoc """
-  Playlist authoring and the directory read. L8b removed `Playlists.present/search` (only the
-  legacy page called them) with their cases, and the playlists feature's producer check.
+  Playlist authoring. L8b removed the legacy reads (`Reads.Dashboards.Playlists` directory,
+  present and search; `PlaylistStore.list/choices/dashboard`; `PlaylistInput.query/position/ids?`)
+  with their cases and the playlists feature's producer check: the console's D23/D24 go through
+  `PlaylistAuthoring` and its own reads.
   """
   use CadenceWeb.ConnCase, async: false
   alias Cadence.Auth.Scope
@@ -10,11 +12,9 @@ defmodule CadenceWeb.DashboardPlaylistsTest do
     DocumentCodec,
     Documents,
     Management,
-    PlaylistAuthoring,
-    PlaylistInput
+    PlaylistAuthoring
   }
 
-  alias Cadence.Reads.Dashboards.Playlists
   alias CadenceWeb.TestFixtures
 
   @fixture Path.expand(
@@ -66,10 +66,6 @@ defmodule CadenceWeb.DashboardPlaylistsTest do
     assert playlist.dashboard_ids == ids
     assert playlist.created_by == c.user.user_id
     assert playlist.wallboard_mode == false
-    assert {:ok, directory} = Playlists.directory(c.scope, c.mission.mission_id, %{})
-    assert [%{id: id, count: 3}] = directory.playlists.rows
-    assert id == receipt.id
-    refute Map.has_key?(hd(directory.playlists.rows), :dashboard_ids)
   end
 
   test "malformed fields and foreign or archived dashboard references cannot persist", c do
@@ -105,22 +101,6 @@ defmodule CadenceWeb.DashboardPlaylistsTest do
                c.mission.mission_id,
                fields(c)
              )
-  end
-
-  test "the directory is bounded and pages with a scoped cursor", c do
-    for n <- 1..28 do
-      assert {:ok, _} = create(c, %{"name" => "Playlist #{n}"})
-    end
-
-    assert {:ok, first} = Playlists.directory(c.scope, c.mission.mission_id, %{})
-    assert length(first.playlists.rows) == 25
-
-    assert {:ok, next} =
-             Playlists.directory(c.scope, c.mission.mission_id, %{"after" => first.playlists.next})
-
-    assert length(next.playlists.rows) == 3
-    assert next.playlists.next == nil
-    assert {:error, :invalid_input} = PlaylistInput.query(%{"after" => 1})
   end
 
   defp fields(c),
