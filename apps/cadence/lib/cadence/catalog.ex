@@ -476,7 +476,10 @@ defmodule Cadence.Catalog do
   # published after the commit.
   defp create_revision_from_completed_run(%ImportRun{} = run, event_bus) do
     case fetch_revision_by_import_run(run.organization_id, run.mission_id, run.import_run_id) do
+      # Published again (domain): a node that stopped between the commit and the publish lost
+      # the fact; its one consumer is an idempotent dashboard cache invalidation.
       {:ok, %Revision{} = revision} ->
+        Facts.publish(event_bus, revision)
         {:ok, revision}
 
       {:error, :catalog_revision_not_found} ->
@@ -500,15 +503,11 @@ defmodule Cadence.Catalog do
            |> metadata_value("mission_model")
            |> metadata_value("revision_id"),
          :ok <- ensure_revision_basis(mission_model_revision_id),
-         revision_number <- next_revision_number(run.catalog_database_id),
-         revision_label <- revision_label(run, revision_number),
-         revision <-
-           Revision.new(%{
+         attrs <-
+           %{
              organization_id: run.organization_id,
              mission_id: run.mission_id,
              catalog_database_id: run.catalog_database_id,
-             revision_number: revision_number,
-             revision_label: revision_label,
              catalog_family: database.catalog_family,
              artifact_id: artifact.artifact_id,
              import_run_id: run.import_run_id,
@@ -525,8 +524,8 @@ defmodule Cadence.Catalog do
                "source_artifact_name" => artifact.artifact_name,
                "importer_key" => run.importer_key
              }
-           }),
-         {:ok, revision} <- persist_revision(revision) do
+           },
+         {:ok, revision} <- persist_revision(run, attrs) do
       {:ok, revision}
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
@@ -534,8 +533,22 @@ defmodule Cadence.Catalog do
     end
   end
 
-  defp persist_revision(%Revision{} = revision) do
+  # The database row is locked while the next number and label are chosen (domain): two runs
+  # on one database at once take turns instead of one failing on the unique
+  # (catalog_database_id, revision_number) index.
+  defp persist_revision(%ImportRun{} = run, attrs) do
     Repo.transaction(fn ->
+      _locked = lock_database(run.catalog_database_id)
+      revision_number = next_revision_number(run.catalog_database_id)
+
+      revision =
+        attrs
+        |> Map.merge(%{
+          revision_number: revision_number,
+          revision_label: revision_label(run, revision_number)
+        })
+        |> Revision.new()
+
       with {:ok, %RevisionRow{} = row} <- Repo.insert(RevisionRow.changeset(revision)),
            revision = RevisionRow.to_domain(row),
            {:ok, %OperationalEvent{}} <-
@@ -547,6 +560,14 @@ defmodule Cadence.Catalog do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  defp lock_database(catalog_database_id) do
+    from(row in DatabaseRow,
+      where: row.catalog_database_id == ^catalog_database_id,
+      lock: "FOR UPDATE"
+    )
+    |> Repo.one()
   end
 
   defp ensure_revision_basis(revision_id) when is_binary(revision_id) and revision_id != "",

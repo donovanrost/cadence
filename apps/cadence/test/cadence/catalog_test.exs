@@ -323,7 +323,8 @@ defmodule Cadence.CatalogTest do
 
       # Director 11-14: running the same import run again (a node stopped mid-run, or a retry)
       # finds the revision it made: the run stays completed with the same revision, with no
-      # second revision, operational event or fact.
+      # second revision or operational event. The fact is published again (domain: one that was
+      # lost between commit and publish is recovered; its consumer is idempotent).
       assert {:ok, %{status: :completed} = rerun} =
                Catalog.execute_enqueued_run(
                  completed_run.import_run_id,
@@ -347,7 +348,9 @@ defmodule Cadence.CatalogTest do
                  source_record_id: revision_id
                )
 
-      refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :catalog, :facts}, _second}}, 200
+      assert_receive {:"$gen_cast",
+                      {:cadence_fact, {:cadence, :catalog, :facts},
+                       %{catalog_revision_id: ^revision_id}}}
     end
 
     test "successful revision import invalidates matching dashboard runtime caches", %{
