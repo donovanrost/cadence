@@ -58,8 +58,7 @@ footer: Stack · N chips │ Release (choice) │ check summary GO/HOLD │ "NOT
     footer shows it after the form closes.
   - **Approve (C2)** shows the same grouped block for each command, because the reviewer must see it. **Uplink &
     verify:** U2 draws one plot per verifier point, each captioned with its targets.
-  - Not a GO/HOLD check (it informs; it doesn't gate). Whether differing verifiers should be an acknowledged HOLD
-    is the director's call.
+  - Not a GO/HOLD check: it informs and doesn't gate (no HOLD, lead 11-14).
 - **B2 Per-target values:** only when an arg is Per target. Fill buttons (`All from form · 8.0`,
   `Current + 2.0`, `Paste CSV`, `Clear`), table rows: mark + name (mono) · value cell(s) with unit
   (inherited = `text-4`, out of range = caution) · Now (current telemetry value) · context (mono

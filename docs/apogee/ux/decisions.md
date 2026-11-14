@@ -1141,4 +1141,5 @@ CommandFlow.md, C1 B "When targets differ".
   catalog_revisions: [{number, label}], spacecraft_ids}]`, grouped server-side by identical verifier definitions.
   Also per target, `catalog_revision {number, label}` for D's line. Preferably on the preflight response, so it
   re-runs with C1 and C2.
-- Informational, not a GO/HOLD check. Making it an acknowledged HOLD is the director's call.
+- Informational, not a GO/HOLD check. **No HOLD** (lead, 11-14): seeing it where targets are reviewed is enough,
+  and a HOLD on every mixed-fleet request would become noise.
