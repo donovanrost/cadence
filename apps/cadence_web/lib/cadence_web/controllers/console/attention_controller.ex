@@ -12,10 +12,10 @@ defmodule CadenceWeb.Console.AttentionController do
   alias Cadence.Contacts.{
     ArchiveQuarantineAttention,
     ContactSettlementAttention,
-    ContactStartAttention
+    ContactStartAttention,
+    IngressBackpressureAttention
   }
 
-  alias Cadence.Ingress.BackpressureAttention
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias CadenceWeb.Console.Problem
 
@@ -94,7 +94,7 @@ defmodule CadenceWeb.Console.AttentionController do
   defp source("contact_start"), do: {:ok, ContactStartAttention}
 
   # #83 / U47: only dropped frames (lost telemetry) are acknowledged; a filling buffer clears itself.
-  defp source("ingress_backpressure"), do: {:ok, BackpressureAttention}
+  defp source("ingress_backpressure"), do: {:ok, IngressBackpressureAttention}
   # #88: no acknowledge (attention_item_not_open); resolve discards, with the reason required.
   defp source("archive_quarantine"), do: {:ok, ArchiveQuarantineAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}

@@ -55,7 +55,9 @@ defmodule Cadence.Runtime.Supervisor do
           {Cadence.Runtime.CapabilityRegistry, name: process_namespace.capability_registry},
           {Registry, keys: :unique, name: process_namespace.registry, meta: [cluster: cluster]},
           # #83: watches the contacts' ingest buffers and dropped frames for the attention read.
-          {Cadence.Ingress.BackpressureMonitor, process_namespace: process_namespace},
+          {Cadence.Runtime.IngressBackpressureMonitor,
+           process_namespace: process_namespace,
+           organization_for: &Cadence.Missions.organization_id_for_mission/1},
           {SessionReadiness,
            name: SessionReadiness.name(process_namespace), policy: session_policy(composition)},
           # (A): one listener per listen-mode provider profile, handing peers to their contacts.

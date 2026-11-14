@@ -362,7 +362,7 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
       `reservation_id`, `provider_message` (null) and `resolution` (null). `journal_usage` is null
       on `frames_dropped` and `drops` null on `journal_near_full`. Visible text says "buffer";
       `diagnostics` is for Technical details only (U47).
-    - The state is in the node's memory (`Cadence.Ingress.BackpressureMonitor`, sampled every
+    - The state is in the node's memory (`Cadence.Runtime.IngressBackpressureMonitor`, sampled every
       5 s): a node restart clears it, along with the backlog itself. Opening and clearing
       publish `invalidate` with `attention`.
 - **`missed_pass` and `station` items** (§8; U11 amended by U35).

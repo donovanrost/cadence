@@ -1,7 +1,8 @@
-defmodule Cadence.Ingress.BackpressureAttention do
+defmodule Cadence.Contacts.IngressBackpressureAttention do
   @moduledoc """
   The `ingress_backpressure` source of the mission attention read (DECISIONS #83, ux U47), one
-  item per downlink transport of a running contact, from `Cadence.Ingress.BackpressureMonitor`:
+  item per downlink transport of a running contact, from `Cadence.Runtime.IngressBackpressureMonitor`
+  (read through `Cadence.Runtime.Ingress`):
 
   - `journal_near_full`: the contact's ingest buffer (its journal) is at least 80% full. P1 at
     95% or while it is still rising during the pass; otherwise P2. It clears itself (resolved
@@ -20,8 +21,8 @@ defmodule Cadence.Ingress.BackpressureAttention do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Contacts.{ContactStore, RealizedContact}
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
-  alias Cadence.Ingress.BackpressureMonitor
   alias Cadence.Repo
+  alias Cadence.Runtime.Ingress, as: RuntimeIngress
 
   @source "ingress_backpressure"
   @p1_ratio 0.95
@@ -31,7 +32,7 @@ defmodule Cadence.Ingress.BackpressureAttention do
 
   @spec items(binary(), binary()) :: [map()]
   def items(org, mission) do
-    snapshot = BackpressureMonitor.snapshot(mission)
+    snapshot = RuntimeIngress.backpressure(mission)
     keys = Enum.map(snapshot.near_full, & &1.key) ++ Enum.map(snapshot.drops, & &1.key)
     context = context(org, mission, keys)
     now = DateTime.utc_now()
@@ -43,7 +44,7 @@ defmodule Cadence.Ingress.BackpressureAttention do
   @spec resolved_since(binary(), binary(), DateTime.t()) :: [map()]
   def resolved_since(_org, mission, %DateTime{} = since) do
     for %{key: {_mission, contact, binding}} = entry <-
-          BackpressureMonitor.snapshot(mission).resolved,
+          RuntimeIngress.backpressure(mission).resolved,
         DateTime.compare(entry.resolved_at, since) != :lt do
       %{
         id: id(entry.conflict, contact, binding),
@@ -57,7 +58,7 @@ defmodule Cadence.Ingress.BackpressureAttention do
 
   @spec counts(binary(), binary()) :: %{open: non_neg_integer(), acknowledged: non_neg_integer()}
   def counts(_org, mission) do
-    snapshot = BackpressureMonitor.snapshot(mission)
+    snapshot = RuntimeIngress.backpressure(mission)
     acknowledged = Enum.count(snapshot.drops, &(&1.acknowledged_by != nil))
 
     %{
@@ -72,7 +73,7 @@ defmodule Cadence.Ingress.BackpressureAttention do
     with {:ok, "frames_dropped", contact, binding} <- parse(id),
          {:ok, actor} <- actor(scope, mission),
          {:ok, drop} <-
-           BackpressureMonitor.acknowledge(mission, {mission, contact, binding}, actor) do
+           RuntimeIngress.acknowledge_dropped_frames(mission, {mission, contact, binding}, actor) do
       context = context(scope.organization_id, mission, [drop.key])
       {:ok, dropped(drop, context, DateTime.utc_now())}
     else

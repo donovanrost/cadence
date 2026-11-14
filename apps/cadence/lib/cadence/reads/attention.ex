@@ -23,11 +23,11 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
   alias Cadence.Contacts.ContactSettlementAttention, as: ContactSettlement
   alias Cadence.Contacts.ContactStartAttention, as: ContactStart
+  alias Cadence.Contacts.IngressBackpressureAttention, as: IngressBackpressure
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
   alias Cadence.Contacts.ProviderChangeAttention, as: ProviderChange
   alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
   alias Cadence.Control.UplinkReadiness.Attention, as: UplinkBlocked
-  alias Cadence.Ingress.BackpressureAttention, as: IngressBackpressure
   alias Cadence.Reads.MissionRuntimeAttention, as: MissionRuntime
 
   @sources [

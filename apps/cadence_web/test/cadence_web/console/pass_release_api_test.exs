@@ -4,7 +4,8 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
 
   alias Cadence.CommandGroupFixtures
   alias Cadence.Contacts.RealizedContact
-  alias Cadence.Ingress.{BackpressureMonitor, ReceiveBackpressure}
+  alias Cadence.Ingress.ReceiveBackpressure
+  alias Cadence.Runtime.IngressBackpressureMonitor, as: BackpressureMonitor
   alias CadenceWeb.TestFixtures
 
   setup do

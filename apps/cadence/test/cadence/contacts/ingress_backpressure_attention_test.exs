@@ -1,11 +1,13 @@
-defmodule Cadence.Ingress.BackpressureAttentionTest do
+defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
   @moduledoc "The ingress_backpressure attention source (DECISIONS #83, ux U47)."
   use Cadence.DataCase, async: false
 
   alias Cadence.Applications.TelemetryDecomFixtures
-  alias Cadence.Ingress.{BackpressureAttention, BackpressureMonitor, ReceiveBackpressure}
+  alias Cadence.Contacts.IngressBackpressureAttention, as: BackpressureAttention
+  alias Cadence.Ingress.ReceiveBackpressure
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
   alias Cadence.Reads.ActionQueue.AttentionItems
+  alias Cadence.Runtime.IngressBackpressureMonitor, as: BackpressureMonitor
   alias Cadence.Runtime.ProcessNamespace
 
   setup do

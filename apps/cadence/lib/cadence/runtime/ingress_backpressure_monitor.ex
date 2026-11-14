@@ -1,4 +1,4 @@
-defmodule Cadence.Ingress.BackpressureMonitor do
+defmodule Cadence.Runtime.IngressBackpressureMonitor do
   @moduledoc """
   Watches ingest backpressure for the `ingress_backpressure` attention source (DECISIONS #83).
 
@@ -96,7 +96,10 @@ defmodule Cadence.Ingress.BackpressureMonitor do
       near_full: %{},
       drops: %{},
       resolved: [],
-      organizations: %{}
+      organizations: %{},
+      # The mission's organization, for the attention_changed publish. Injected by the runtime
+      # supervisor (Cadence.Missions is management plane; this is data plane).
+      organization_for: Keyword.get(opts, :organization_for, fn _mission_id -> nil end)
     }
 
     {:ok, schedule(state)}
@@ -364,7 +367,7 @@ defmodule Cadence.Ingress.BackpressureMonitor do
         {organization_id, state}
 
       :error ->
-        organization_id = Cadence.Missions.organization_id_for_mission(mission_id)
+        organization_id = state.organization_for.(mission_id)
         {organization_id, put_in(state, [:organizations, mission_id], organization_id)}
     end
   rescue

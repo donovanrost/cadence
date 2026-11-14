@@ -13,6 +13,7 @@ defmodule Cadence.Runtime.Ingress do
   alias Cadence.ApplicationDispatch.{BindingSet, DispatchDecision, Dispatcher}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime
+  alias Cadence.Runtime.IngressBackpressureMonitor
   alias Cadence.Runtime.IngressEvidence
   alias Cadence.Runtime.Persistence
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
@@ -29,6 +30,17 @@ defmodule Cadence.Runtime.Ingress do
           required(:outputs) => [term()],
           required(:runtime_records) => map()
         }
+
+  @doc """
+  A mission's ingest backpressure (#83): contacts whose ingest buffer is near full, dropped
+  frames, and what resolved recently. Read by the `ingress_backpressure` attention source.
+  """
+  defdelegate backpressure(mission_id), to: IngressBackpressureMonitor, as: :snapshot
+
+  @doc "Records an operator's acknowledgement of a contact's dropped frames (#83)."
+  defdelegate acknowledge_dropped_frames(mission_id, key, actor),
+    to: IngressBackpressureMonitor,
+    as: :acknowledge
 
   @spec process(RawEvidence.t(), BindingSet.t()) ::
           {:ok, processing_result()} | {:error, term()}
