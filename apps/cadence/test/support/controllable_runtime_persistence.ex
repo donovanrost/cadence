@@ -23,6 +23,7 @@ defmodule Cadence.ControllableRuntimePersistence do
 
     receive do
       {:release_runtime_persistence, ^ref} -> :ok
+      {:raise_runtime_persistence, ^ref, exception} -> raise exception
     end
   end
 end

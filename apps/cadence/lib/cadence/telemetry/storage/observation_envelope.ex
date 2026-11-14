@@ -38,6 +38,7 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
           validity_state: validity_state(),
           generation_time: DateTime.t() | nil,
           receipt_time: DateTime.t(),
+          identity_digest_version: pos_integer(),
           ingested_at: DateTime.t(),
           revision: pos_integer(),
           supersedes_observation_id: binary() | nil,
@@ -74,6 +75,7 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
     :ingested_at,
     :revision,
     :supersedes_observation_id,
+    identity_digest_version: 1,
     provenance: %{},
     metadata: %{}
   ]
@@ -116,7 +118,8 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
         metadata: Map.merge(context.metadata, Keyword.get(opts, :metadata, %{}))
       }
 
-      observation_identity_id = observation_identity_id(envelope)
+      envelope = with_identity_basis(envelope, identity_ref(sample))
+      observation_identity_id = observation_identity_id(envelope, identity_ref(sample))
       observation_id = observation_id(envelope, observation_identity_id)
 
       {:ok,
@@ -202,7 +205,7 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
     end
   end
 
-  defp observation_identity_id(%__MODULE__{} = envelope) do
+  defp observation_identity_id(%__MODULE__{} = envelope, ref) do
     stable_digest([
       envelope.organization_id,
       envelope.mission_id,
@@ -216,7 +219,45 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
       envelope.packet_definition_id,
       envelope.packet_definition_version,
       envelope.generation_time
+      | digest_ref(envelope.identity_digest_version, ref)
     ])
+  end
+
+  # Identity v2 (docs/apogee/plans/ingress-time-tags.md): one identity is one measurement.
+  # (a) A CCSDS source sequence count always tells measurements apart, with or without on-board
+  # time; (b) count-less data whose generation time is only its receipt time is told apart by its
+  # stream position; (c) on-board time with no count is unchanged. The tag keeps (a) and (b) from
+  # ever colliding, and an envelope without a ref digests exactly as v1 did.
+  # The version slot travels with the ref, and the version tells the truth: 2 only when a ref is in
+  # the digest. Both are stored on the row (metadata_json / provenance_json) so a v2 identity can
+  # be explained and recomputed. The ref and time source live on the sample (the envelope stays
+  # within 31 fields).
+  defp identity_ref(%Sample{frame_ref: {:seq, apid, count}})
+       when is_integer(apid) and is_integer(count),
+       do: {:seq, apid, count}
+
+  defp identity_ref(%Sample{
+         frame_ref: {:pos, stream, position},
+         generation_time_source: :receipt
+       })
+       when is_binary(stream) and is_integer(position),
+       do: {:pos, stream, position}
+
+  defp identity_ref(%Sample{}), do: nil
+
+  defp digest_ref(_version, nil), do: []
+  defp digest_ref(version, ref), do: [{:identity_v, version}, ref]
+
+  defp with_identity_basis(%__MODULE__{} = envelope, nil), do: envelope
+
+  defp with_identity_basis(%__MODULE__{} = envelope, ref) do
+    %{
+      envelope
+      | identity_digest_version: 2,
+        metadata: Map.put(envelope.metadata, "identity_digest_version", 2),
+        provenance:
+          Map.put(envelope.provenance || %{}, "identity_ref", Sample.encode_frame_ref(ref))
+    }
   end
 
   defp observation_id(%__MODULE__{} = envelope, observation_identity_id) do

@@ -1,6 +1,7 @@
 defmodule Cadence.IngressJournal.FileSystemTest do
   use ExUnit.Case, async: true
 
+  alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressJournal.{Entry, Evidence, FileSystem}
 
   @context [
@@ -377,6 +378,62 @@ defmodule Cadence.IngressJournal.FileSystemTest do
     assert {:ok, snapshot} = FileSystem.snapshot(ctx.name)
     assert snapshot.retained_bytes <= snapshot.max_bytes
     assert snapshot.full_count == 1
+  end
+
+  # Identity v2 needs no cutover because nothing re-reads persisted entries: a consumer cursor
+  # only moves forward (docs/apogee/plans/ingress-time-tags.md).
+  @tag :tmp_dir
+  test "a consumer cursor never moves backwards", ctx do
+    start_supervised!({FileSystem, ctx.opts})
+    receipt_time = DateTime.utc_now()
+
+    assert {:ok, first} = FileSystem.append(ctx.name, <<1, 2, 3>>, receipt_time, %{})
+    assert {:ok, second} = FileSystem.append(ctx.name, <<4, 5>>, receipt_time, %{})
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, second.end_offset)
+
+    assert {:error, {:ingress_journal_cursor_regression, [:processing], end_offset}} =
+             FileSystem.acknowledge(ctx.name, :processing, first.end_offset)
+
+    assert end_offset == first.end_offset
+    assert {:ok, snapshot} = FileSystem.snapshot(ctx.name)
+    assert snapshot.lag_bytes.processing == 0
+  end
+
+  @tag :tmp_dir
+  test "evidence merged from several records keeps each record's receipt time", ctx do
+    start_supervised!({FileSystem, ctx.opts})
+    t0 = ~U[2026-11-14 00:38:40.000000Z]
+    metadata = %{protocol_family: :tm, mission_id: "mission-journal-test"}
+
+    entries =
+      for i <- 0..2 do
+        {:ok, entry} =
+          FileSystem.append(
+            ctx.name,
+            :binary.copy(<<i>>, 14),
+            DateTime.add(t0, i, :second),
+            metadata
+          )
+
+        entry
+      end
+
+    assert {:ok, evidence} = Evidence.from_contiguous_entries(entries)
+    assert evidence.receipt_time == t0
+
+    assert evidence.receipt_times == [
+             {0, t0},
+             {14, DateTime.add(t0, 1, :second)},
+             {28, DateTime.add(t0, 2, :second)}
+           ]
+
+    assert RawEvidence.receipt_time_at(evidence, 0) == t0
+    assert RawEvidence.receipt_time_at(evidence, 20) == DateTime.add(t0, 1, :second)
+    assert RawEvidence.receipt_time_at(evidence, 41) == DateTime.add(t0, 2, :second)
+
+    # Read back from the ingress archive (which keeps metadata, not the struct field).
+    archived = %{evidence | receipt_times: []}
+    assert RawEvidence.receipt_time_at(archived, 30) == DateTime.add(t0, 2, :second)
   end
 
   defp assert_eventually(assertion, attempts \\ 20)
