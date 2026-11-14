@@ -539,27 +539,38 @@ defmodule Cadence.Catalog do
   defp persist_revision(%ImportRun{} = run, attrs) do
     Repo.transaction(fn ->
       _locked = lock_database(run.catalog_database_id)
-      revision_number = next_revision_number(run.catalog_database_id)
 
-      revision =
-        attrs
-        |> Map.merge(%{
-          revision_number: revision_number,
-          revision_label: revision_label(run, revision_number)
-        })
-        |> Revision.new()
-
-      with {:ok, %RevisionRow{} = row} <- Repo.insert(RevisionRow.changeset(revision)),
-           revision = RevisionRow.to_domain(row),
-           {:ok, %OperationalEvent{}} <-
-             revision
-             |> OperationalEvent.from_catalog_revision(row.inserted_at)
-             |> then(&OperationalEvents.persist_event(Repo, &1)) do
-        revision
-      else
+      # Under the lock, again (domain): two reruns of the same import run at once both miss the
+      # check before the lock; the second must find the first's revision, not insert another.
+      case fetch_revision_by_import_run(run.organization_id, run.mission_id, run.import_run_id) do
+        {:ok, %Revision{} = existing} -> existing
+        {:error, :catalog_revision_not_found} -> insert_locked_revision(run, attrs)
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  defp insert_locked_revision(%ImportRun{} = run, attrs) do
+    revision_number = next_revision_number(run.catalog_database_id)
+
+    revision =
+      attrs
+      |> Map.merge(%{
+        revision_number: revision_number,
+        revision_label: revision_label(run, revision_number)
+      })
+      |> Revision.new()
+
+    with {:ok, %RevisionRow{} = row} <- Repo.insert(RevisionRow.changeset(revision)),
+         revision = RevisionRow.to_domain(row),
+         {:ok, %OperationalEvent{}} <-
+           revision
+           |> OperationalEvent.from_catalog_revision(row.inserted_at)
+           |> then(&OperationalEvents.persist_event(Repo, &1)) do
+      revision
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
   end
 
   defp lock_database(catalog_database_id) do
