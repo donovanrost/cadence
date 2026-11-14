@@ -8,6 +8,7 @@ defmodule Cadence.Protocol.RecordArchive.QuarantineTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Protocol.{PacketRecord, RecordArchive, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.{FileSystem, Quarantine}
+  alias Cadence.Protocol.RecordArchive.FileSystem.PoisonIsolation
 
   setup context do
     base_path =
@@ -87,6 +88,60 @@ defmodule Cadence.Protocol.RecordArchive.QuarantineTest do
     assert id == bad_packet.packet_id
     assert error =~ "0x00"
     refute bad_evidence.evidence_id == nil
+  end
+
+  test "several data-rejected entries are all quarantined in one flush (api-ops review)", c do
+    batches =
+      for n <- 1..12 do
+        source_ref = if rem(n, 3) == 0, do: "SC-\u0000-#{n}", else: "SC-OK"
+        packet_batch(c.mission_id, "many-#{n}", source_ref)
+      end
+
+    for {evidence, packets} <- batches,
+        do: :ok = RecordArchive.persist_records(c.policy, evidence, [], packets)
+
+    assert :ok = RecordArchive.flush(c.policy, c.mission_id)
+
+    quarantined = c.mission_id |> Quarantine.rows() |> Enum.map(& &1.record_id) |> Enum.sort()
+    assert quarantined == Enum.sort(for n <- [3, 6, 9, 12], do: "packet-quarantine-many-#{n}")
+    assert %{queue_depth: 0, backpressured?: false} = RecordArchive.stats(c.policy, c.mission_id)
+  end
+
+  test "a later round that ends transient hands back what it quarantined, leaving no objects",
+       c do
+    # One frame archived, so a different frame at its id conflicts (isolated in round 2), plus a
+    # data-rejected packet (round 1) and good entries.
+    run = evidence(c.mission_id, "partial-run")
+    :ok = RecordArchive.persist_records(c.policy, run, [frame(run, c.mission_id, 1)], [])
+    :ok = RecordArchive.flush(c.policy, c.mission_id)
+    before = segments(c)
+
+    later = evidence(c.mission_id, "partial-later")
+    {bad, [bad_packet]} = packet_batch(c.mission_id, "partial-bad", "SC-\u0000")
+
+    entries =
+      FileSystem.build_entries(later, [%{frame(later, c.mission_id, 1) | scid: 99}], []) ++
+        FileSystem.build_entries(bad, [], [bad_packet]) ++
+        FileSystem.build_entries(later, [frame(later, c.mission_id, 2)], [])
+
+    # The quarantine accepts round 1 and refuses round 2 (as at its cap).
+    {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+    quarantine = fn _poisoned ->
+      case Agent.get_and_update(calls, &{&1, &1 + 1}) do
+        0 -> :ok
+        _ -> {:error, :archive_quarantine_full}
+      end
+    end
+
+    opts = [base_path: c.base_path, repo: Cadence.Repo]
+
+    assert {:error, :archive_quarantine_full, [%{error_code: "data_rejected", entry: entry}]} =
+             PoisonIsolation.persist(FileSystem.new_segment_id(), entries, opts, quarantine)
+
+    assert entry["record_id"] == bad_packet.packet_id
+    # Neither round's object is left behind.
+    assert segments(c) == before
   end
 
   test "an error that fails every entry is environmental: nothing is quarantined", c do
