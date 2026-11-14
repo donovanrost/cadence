@@ -104,7 +104,6 @@ defmodule Cadence.Telemetry.RuntimeHealthTest do
            ] in RuntimeHealth.events()
 
     assert RuntimeInvalidation.telemetry_event() in RuntimeHealth.events()
-    assert RuntimeInvalidation.decision_telemetry_event() in RuntimeHealth.events()
   end
 
   test "collects runtime queue and backpressure telemetry" do
@@ -240,81 +239,6 @@ defmodule Cadence.Telemetry.RuntimeHealthTest do
     assert event.runtime_event.filters.logical_source == :telemetry
     assert event.runtime_event.measurements.total == 5
     assert %DateTime{} = event.runtime_event.occurred_at
-  end
-
-  test "collects dashboard runtime invalidation decision telemetry" do
-    server = start_runtime_health!(recent_limit: 5)
-
-    invalidation =
-      Event.new(
-        :source_watermark_changed,
-        [:source_result, :frame],
-        %{
-          organization_id: "org-health",
-          mission_id: "mission-health",
-          logical_source: :telemetry,
-          data_source_id: "managed_questdb_primary"
-        },
-        %{
-          source_result: %{mission_id: "mission-health", logical_source: :telemetry},
-          frame: %{mission_id: "mission-health", logical_source: :telemetry}
-        },
-        %{source_results: 2, frames: 3, total: 5},
-        occurred_at: ~U[2026-06-24 12:00:00Z]
-      )
-
-    RuntimeInvalidation.emit_decision(
-      invalidation,
-      %{
-        dashboard_id: "dashboard-health",
-        organization_id: "org-health",
-        mission_id: "mission-health",
-        matches?: false,
-        dashboard_matches?: true,
-        context_matches?: false,
-        context_reason: :replay_run_mismatch,
-        refresh_allowed?: false,
-        refresh_reason: :stale_for_context,
-        affected_placement_count: 2,
-        affected_placement_ids: ["placement-counter", "placement-trend"],
-        affected_widget_type_ids: ["cadence.value_tile", "cadence.trend_chart"],
-        affected_impact_reasons: [:primary_source, :secondary_source],
-        decision_status: :filtered
-      },
-      invalidation_event_id: "source-watermark-decision-1"
-    )
-
-    snapshot = wait_for_total_events(server, 1)
-
-    assert snapshot.sources.dashboards_runtime_invalidation.total_events == 1
-    assert snapshot.sources.dashboards_runtime_invalidation.events.decision == 1
-    assert snapshot.sources.dashboards_runtime_invalidation.boundaries == %{}
-
-    assert [%{source: :dashboards_runtime_invalidation} = event] = snapshot.recent_events
-    assert event.event == :decision
-    assert event.event_name == RuntimeInvalidation.decision_telemetry_event()
-    assert event.measurements.total == 1
-    assert event.metadata.invalidation_event_id == "source-watermark-decision-1"
-    assert event.metadata.decision.context_reason == :replay_run_mismatch
-    assert event.metadata.decision.refresh_reason == :stale_for_context
-
-    assert event.metadata.decision.affected_placement_ids == [
-             "placement-counter",
-             "placement-trend"
-           ]
-
-    assert event.metadata.context_reason == :replay_run_mismatch
-    assert event.metadata.refresh_allowed? == false
-    assert event.metadata.affected_placement_count == 2
-    assert event.metadata.affected_placement_ids == ["placement-counter", "placement-trend"]
-
-    assert event.metadata.affected_widget_type_ids == [
-             "cadence.value_tile",
-             "cadence.trend_chart"
-           ]
-
-    assert event.metadata.affected_impact_reasons == [:primary_source, :secondary_source]
-    refute Map.has_key?(event, :runtime_event)
   end
 
   test "collector stays process-local and does not depend on Repo writes" do

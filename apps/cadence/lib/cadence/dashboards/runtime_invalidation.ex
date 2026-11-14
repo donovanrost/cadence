@@ -13,7 +13,6 @@ defmodule Cadence.Dashboards.RuntimeInvalidation do
 
   @pubsub Cadence.PubSub
   @telemetry_event [:cadence, :dashboards, :runtime_invalidation, :invalidate]
-  @decision_telemetry_event [:cadence, :dashboards, :runtime_invalidation, :decision]
   @message_tag :dashboard_runtime_invalidated
 
   @type filters :: keyword() | map()
@@ -246,33 +245,6 @@ defmodule Cadence.Dashboards.RuntimeInvalidation do
   """
   @spec telemetry_event() :: [atom()]
   def telemetry_event, do: @telemetry_event
-
-  @doc """
-  Telemetry event emitted by dashboard runtimes after evaluating invalidation relevance.
-  """
-  @spec decision_telemetry_event() :: [atom()]
-  def decision_telemetry_event, do: @decision_telemetry_event
-
-  @doc """
-  Emit a dashboard-local invalidation relevance decision.
-
-  The invalidation boundary event records the producer/cache fact. This decision
-  event records what one open dashboard runtime did with that fact for its
-  active runtime context.
-  """
-  @spec emit_decision(Event.t(), map(), keyword()) :: :ok
-  def emit_decision(%Event{} = event, decision, opts \\ []) when is_map(decision) do
-    measurements = %{total: 1}
-
-    metadata =
-      event
-      |> Event.to_telemetry_metadata(runtime_cache_server(opts))
-      |> Map.put(:invalidation_event_id, Keyword.get(opts, :invalidation_event_id))
-      |> Map.put(:decision, decision)
-      |> Map.merge(Map.take(decision, decision_metadata_keys()))
-
-    :telemetry.execute(@decision_telemetry_event, measurements, metadata)
-  end
 
   @doc """
   Subscribe the caller to runtime invalidations relevant to a dashboard scope.
@@ -527,25 +499,6 @@ defmodule Cadence.Dashboards.RuntimeInvalidation do
       %RuntimeCache{} = cache -> RuntimeCache.server(cache)
       server -> server
     end
-  end
-
-  defp decision_metadata_keys do
-    [
-      :dashboard_id,
-      :organization_id,
-      :mission_id,
-      :matches?,
-      :dashboard_matches?,
-      :context_matches?,
-      :context_reason,
-      :refresh_allowed?,
-      :refresh_reason,
-      :affected_placement_count,
-      :affected_placement_ids,
-      :affected_widget_type_ids,
-      :affected_impact_reasons,
-      :decision_status
-    ]
   end
 
   defp broadcast_invalidation(%Event{} = event) do
