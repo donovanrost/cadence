@@ -256,9 +256,10 @@ terminated `cadence_test3` in the middle of api-ops' L4 suite. Release a claim b
 
 | Partition | Owner | Purpose |
 |---|---|---|
-| empty, 2, 4, 5, 6, 8–11, 13–17, 19 | unclaimed | team-tree runs: claim before use |
+| empty, 2, 4, 5, 6, 8, 10, 11, 13–17, 19 | unclaimed | team-tree runs: claim before use |
 | 3 | api-ops | L4 policy worktree (`scratchpad/policy-wt`) |
 | 7 | api-ops | ingest fix / journal-matrix worktree (`scratchpad/ingest-wt`) |
+| 9 | api | api's side worktree for slot work (`…/cadence/api-held`) |
 | 12 | domain | domain's evidence runs (archive fix, #83) |
 | 18 | fe-ops | L8 worktree |
 | 20 | api-ops | develop ports (L4, ingest fix) |
