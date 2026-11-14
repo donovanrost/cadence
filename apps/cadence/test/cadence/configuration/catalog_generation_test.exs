@@ -249,9 +249,10 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
     assert spec.generation == active.generation
 
-    # Re-read, the binding set's packet fields carry no parameter ids (lookup keys only); each
-    # resolves, as PartitionOwner does, to the mission-model plan's definition, whose fields do.
-    # That is what gives samples their semantic_id and so a semantic Update.
+    # Re-read, the binding set's packet fields carry their parameter ids (#73: stored on the field
+    # rows, left out of the content hash). Each still resolves, as PartitionOwner does, to the
+    # mission-model plan's definition, with the same ids. That is what gives samples their
+    # semantic_id and so a semantic Update.
     telemetry =
       for %{runtime_configuration: %PacketDefinition{} = configured} <-
             spec.binding_set.capability_instances,
@@ -260,7 +261,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     assert telemetry != []
 
     assert Enum.all?(telemetry, fn configured ->
-             Enum.all?(configured.fields, &is_nil(&1.parameter_id))
+             Enum.all?(configured.fields, &is_binary(&1.parameter_id))
            end)
 
     for configured <- telemetry do
@@ -270,7 +271,8 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
                  configured
                )
 
-      assert Enum.all?(resolved.fields, &is_binary(&1.parameter_id))
+      assert Enum.map(resolved.fields, & &1.parameter_id) ==
+               Enum.map(configured.fields, & &1.parameter_id)
     end
   end
 

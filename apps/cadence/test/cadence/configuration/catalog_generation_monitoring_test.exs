@@ -81,7 +81,9 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
             spec.binding_set.capability_instances,
           do: configured
 
-    assert [%{parameter_id: nil}] = configured.fields
+    # #73: the stored field keeps its parameter id; resolving against the plan agrees.
+    assert [%{parameter_id: stored_parameter_id}] = configured.fields
+    assert is_binary(stored_parameter_id)
 
     # PartitionOwner's path: resolve against the plan, decode, turn the sample into an Update.
     assert {:ok, resolved} =
@@ -91,7 +93,7 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
              )
 
     [field] = resolved.fields
-    assert is_binary(field.parameter_id)
+    assert field.parameter_id == stored_parameter_id
 
     update =
       Update.new(%{
