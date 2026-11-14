@@ -20,6 +20,7 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
   alias Cadence.Management.DataSources
   alias Cadence.Reads.DataSourceDirectory
   alias CadenceWeb.Console.{ConfigJSON, Problem}
+  alias CadenceWeb.Console.DataSourceRunError, as: RunError
 
   @kinds [
     %{key: "managed_tsdb", label: "Managed by Cadence", requires_credentials: false},
@@ -187,6 +188,10 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
   def run_action(conn, %{"job_id" => job_id, "action" => action})
       when action in ~w(retry requeue) do
     case act(conn, action <> "-deployment-run", %{"job-id" => job_id}) do
+      # Retry and requeue answer the run's job wrapped with its deployment status (qa L11 (D)).
+      {:ok, %{job: %Jobs.Job{} = job}} ->
+        conn |> put_status(:accepted) |> json(%{data: ConfigJSON.encode(%{run: run_view(job)})})
+
       {:ok, %Jobs.Job{} = job} ->
         conn |> put_status(:accepted) |> json(%{data: ConfigJSON.encode(%{run: run_view(job)})})
 
@@ -272,6 +277,10 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
         "This source uses your own database as is; Cadence doesn't provision it."
       )
 
+  # W5: a reference another source or mission already uses can't be rotated to.
+  defp error(conn, {:error, :credential_reference_in_use}),
+    do: Problem.respond(conn, :invalid_params, %{field: "credentials_ref"})
+
   defp error(conn, {:error, :incompatible_data_source}),
     do: Problem.respond(conn, :invalid_params, %{field: "data_source_id"})
 
@@ -333,7 +342,7 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
         ),
       status: job.status,
       started_at: job.started_at,
-      error: job.failure_reason && inspect(job.failure_reason, limit: 10),
+      error: RunError.view(job.failure_reason),
       actions:
         case job.status do
           :failed -> ["retry"]

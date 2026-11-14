@@ -681,13 +681,20 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          credentials_ref
        ) do
     with {:ok, source} <- scoped_source(scope.organization_id, mission_id, data_source_id),
-         :ok <- writable(scope, source),
-         :ok <- credential_belongs_to_source?(source, credentials_ref),
-         {:ok, reference, event} <-
+         :ok <- writable(scope, source) do
+      if source.credentials_ref == credentials_ref,
+        do: rotate_current_reference(scope, mission_id, request, source),
+        else: rotate_to_new_reference(scope, mission_id, request, source, credentials_ref)
+    end
+  end
+
+  # The same reference: its material was rotated behind it, so it gets a new version.
+  defp rotate_current_reference(scope, mission_id, request, source) do
+    with {:ok, reference, event} <-
            DataSources.rotate_credential_reference(
-             credentials_ref,
+             source.credentials_ref,
              %{
-               data_source_id: data_source_id,
+               data_source_id: source.data_source_id,
                organization_id: scope.organization_id,
                mission_id: mission_id,
                payload: action_payload(request)
@@ -696,6 +703,62 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
            ) do
       {:ok, %{reference: reference, event: event}}
     end
+  end
+
+  # A new reference (L11 W5, 'rotates to that reference'; qa (B)): registered like a source's
+  # first one, from the current reference's provider and material metadata, then the source
+  # points at it. The old reference stays as it was.
+  defp rotate_to_new_reference(scope, mission_id, request, source, credentials_ref) do
+    attrs = rotation_attrs(source, credentials_ref)
+    payload = action_payload(request)
+
+    with :ok <-
+           maybe_register_credentials(attrs, scope.organization_id, mission_id, payload, scope),
+         {:ok, reference} <- DataSources.fetch_credential_reference(credentials_ref),
+         :ok <- reference_scope(reference, scope.organization_id, mission_id, source),
+         {:ok, persisted} <-
+           DataSources.persist_data_source(%DataSource{source | credentials_ref: credentials_ref},
+             actor_id: actor_id(scope),
+             payload: payload
+           ) do
+      {:ok, %{source: persisted, reference: reference}}
+    end
+  end
+
+  defp rotation_attrs(%DataSource{} = source, credentials_ref) do
+    current =
+      case source.credentials_ref &&
+             DataSources.fetch_credential_reference(source.credentials_ref) do
+        {:ok, reference} -> reference
+        _none -> nil
+      end
+
+    metadata = (current && current.metadata) || %{}
+    source_metadata = source.metadata || %{}
+
+    %{
+      credentials_ref: credentials_ref,
+      data_source_id: source.data_source_id,
+      owner: source.owner,
+      kind: source.kind,
+      credential_provider: current && current.provider,
+      storage: metadata_text(source_metadata, :storage),
+      endpoint_ref: metadata_text(metadata, :endpoint_ref),
+      material_env_profile: metadata_text(metadata, :material_env_profile),
+      http_endpoint_env: metadata_text(metadata, :http_endpoint_env)
+    }
+  end
+
+  defp metadata_text(metadata, key) when is_map(metadata) and is_atom(key),
+    do: Map.get(metadata, key) || Map.get(metadata, Atom.to_string(key))
+
+  # A reference that already exists must be this source's, in this mission and organization.
+  defp reference_scope(reference, organization_id, mission_id, source) do
+    if reference.data_source_id in [nil, source.data_source_id] and
+         reference.organization_id in [nil, organization_id] and
+         reference.mission_id in [nil, mission_id],
+       do: :ok,
+       else: {:error, :credential_reference_in_use}
   end
 
   defp deployment_action(scope, %HostContext{mission_id: mission_id}, request, job_id) do
@@ -779,15 +842,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
       {:error, :incompatible_data_source}
     end
   end
-
-  defp credential_belongs_to_source?(
-         %DataSource{credentials_ref: credentials_ref},
-         credentials_ref
-       ),
-       do: :ok
-
-  defp credential_belongs_to_source?(_source, _credentials_ref),
-    do: {:error, :scope_mismatch}
 
   defp scoped_job?(organization_id, mission_id, %Job{} = job) do
     payload_organization_id = payload_value(job.payload, :organization_id)
