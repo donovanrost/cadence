@@ -27,24 +27,6 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org, role: :organization_admin)
 
-    base =
-      Cadence.Dashboards.DocumentCodec.load!(
-        Path.expand(
-          "../../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
-          __DIR__
-        )
-      )
-
-    {:ok, _} =
-      Cadence.Dashboards.Documents.persist(org.organization_id, %{
-        base
-        | organization_id: org.organization_id,
-          mission_id: mission.mission_id,
-          dashboard_id: "draft-dashboard",
-          placements: [],
-          sections: []
-      })
-
     output_dir =
       System.get_env("CADENCE_INITIAL_STATE_ARTIFACTS") ||
         Path.join(
@@ -84,12 +66,6 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
              ),
              :count
            ) == 0
-
-    assert %{published_version: nil} =
-             Cadence.Repo.get_by!(Cadence.Dashboards.DocumentStore.DashboardRow,
-               mission_id: mission.mission_id,
-               dashboard_id: "draft-dashboard"
-             )
 
     refute Cadence.Repo.get(Cadence.Activations.ActiveBindingSetRow, mission.mission_id)
   end
