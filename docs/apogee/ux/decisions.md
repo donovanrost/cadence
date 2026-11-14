@@ -1002,8 +1002,19 @@ edit. This replaces ContactPlanning's "an edit generates every remaining day afr
   - Drop any part whose count is 0, and use singulars ("1 day … keeps"). When every count is 0, the first sentence
     stands alone. With 3 dates or fewer in a group, name them after a colon (§4 dates): "…keep v2's
     requirement: 11-14, 11-15."
-  - "Planned" means what domain keeps: a day with a submitted or approved plan or booked passes. A day with only
-    a draft isn't planned; its draft is superseded, and the callout says so. Domain confirms the exact set.
+  - **A template for many spacecraft** counts requirements (one per spacecraft and day), not days, with the dates
+    in brackets: "1,500 requirements already planned or started keep v2's version (11-14, 11-15). 2 closed
+    requirements stay closed (11-15)." With more than 3 dates, give the span: "(11-14 to 11-20)". When every item
+    is the same spacecraft, use the "days" form above.
+  - **Definitions** (domain 11-13):
+    - **Planned:** a plan in pending_approval, approved, executing, partially_reserved or reserved holds the
+      requirement. Booked passes come from those plans, so they're covered. A day with only a draft isn't
+      planned: it's regenerated under the new version, and the drafts callout says so.
+    - **Started:** the requirement's window has begun.
+    - **Closed / canceled:** done by an operator. Requirements canceled by supersession, or by a spacecraft leaving
+      the target, are regenerated and not counted.
+  - The dry run groups items as kept {planned | started} and done {closed | canceled}, each with occurrence_at and
+    the spacecraft. The line merges planned and started.
 - **Template-generated occurrence, Close/Cancel sheet ending:** "This is final for this day: the template won't
   bring it back, even when the template is edited. To plan 11-15 again, add a one-off requirement for it." Once a
   reopen action exists: "To plan it again, reopen it."
