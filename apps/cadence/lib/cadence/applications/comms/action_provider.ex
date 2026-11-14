@@ -1,5 +1,5 @@
 defmodule Cadence.Applications.Comms.ActionProvider do
-  @moduledoc "Typed action adapter for mission Comms provider operations."
+  @moduledoc "Typed action adapter for mission Comms form operations (L12 moved providers to the console)."
 
   @behaviour Cadence.Applications.ActionProvider
 
@@ -7,18 +7,11 @@ defmodule Cadence.Applications.Comms.ActionProvider do
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Auth.Scope
 
-  alias Cadence.Control.Providers, as: ControlProviders
-  alias Cadence.GroundNetworks.{MissionProvider, MissionProviderRegistration}
   alias Cadence.Management.CommunicationsSetup
-  alias Cadence.Management.Providers
 
   @application_key "comms"
   @form_surfaces ~w(transport_new routing_new ground_station_new ground_station_edit)
   @surface_action_bindings [
-    {"provider_new", 1, "create_provider"},
-    {"provider_show", 1, "validate_provider"},
-    {"provider_show", 1, "sync_provider"},
-    {"provider_show", 1, "archive_provider"},
     {"transport_new", 1, "validate"},
     {"transport_new", 1, "save"},
     {"routing_new", 1, "validate"},
@@ -91,39 +84,6 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     CommunicationsSetup.execute(scope, mission_id, surface_id, "save", params)
   end
 
-  defp execute_action(
-         %Scope{} = scope,
-         %HostContext{placement: :mission, mission_id: mission_id},
-         %ActionRequest{
-           application_key: @application_key,
-           application_version: 1,
-           action_id: action_id,
-           params: params
-         }
-       )
-       when action_id in ["validate_provider", "sync_provider", "archive_provider"] do
-    with {:ok, provider_id} <- required_id(params, "provider_id") do
-      case action_id do
-        "validate_provider" -> ControlProviders.validate_current(scope, mission_id, provider_id)
-        "sync_provider" -> ControlProviders.sync_current(scope, mission_id, provider_id)
-        "archive_provider" -> Providers.archive_provider(scope, mission_id, provider_id)
-      end
-    end
-  end
-
-  defp execute_action(
-         %Scope{} = scope,
-         %HostContext{placement: :mission, mission_id: mission_id},
-         %ActionRequest{
-           application_key: @application_key,
-           application_version: 1,
-           action_id: "create_provider",
-           params: params
-         }
-       ) do
-    MissionProviderRegistration.create(scope, mission_id, Map.get(params, "provider", params))
-  end
-
   defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{}),
     do: {:error, :application_action_scope_required}
 
@@ -138,23 +98,6 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     do: {:error, :unsupported_application_action}
 
   @impl true
-  def result(%MissionProvider{} = provider) do
-    %{
-      "provider_id" => provider.provider_id,
-      "version" => provider.version,
-      "display_name" => provider.display_name
-    }
-  end
-
   def result(value) when is_map(value), do: value
   def result(value), do: value
-
-  defp required_id(params, key) when is_map(params) do
-    case Map.get(params, key) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _invalid -> {:error, {:missing_action_parameter, key}}
-    end
-  end
-
-  defp required_id(_params, key), do: {:error, {:missing_action_parameter, key}}
 end

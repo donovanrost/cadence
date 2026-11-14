@@ -187,7 +187,7 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     providers = SurfaceProviderRegistry.providers()
 
     expected_contribution_counts = %{
-      "comms" => 15,
+      "comms" => 12,
       "spacecraft" => 11,
       "mission_catalog" => 8,
       "telemetry_decom" => 2,
@@ -197,8 +197,8 @@ defmodule Cadence.Applications.ProviderRegistryTest do
       "organization_admin" => 5
     }
 
-    assert length(SurfaceProviderRegistry.contributions()) == 62
-    assert map_size(providers) == 62
+    assert length(SurfaceProviderRegistry.contributions()) == 59
+    assert map_size(providers) == 59
 
     assert providers
            |> Map.keys()
@@ -208,14 +208,7 @@ defmodule Cadence.Applications.ProviderRegistryTest do
 
     assert Map.has_key?(providers, {"comms", "cadence.comms.overview"})
 
-    assert Map.fetch!(providers, {"comms", "cadence.comms.provider_list"}) ==
-             Cadence.Reads.ApplicationSurfaces.CommsProviders
-
-    assert Map.fetch!(providers, {"comms", "cadence.comms.provider_new"}) ==
-             Cadence.Reads.ApplicationSurfaces.CommsProviders
-
-    assert Map.fetch!(providers, {"comms", "cadence.comms.provider_show"}) ==
-             Cadence.Reads.ApplicationSurfaces.CommsProviders
+    refute Map.has_key?(providers, {"comms", "cadence.comms.provider_list"})
 
     declared_keys =
       for definition <- definitions,

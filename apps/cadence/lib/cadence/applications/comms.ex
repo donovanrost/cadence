@@ -80,30 +80,6 @@ defmodule Cadence.Applications.Comms do
       fallback_parent_path: "/comms/ground-stations"
     },
     %{
-      id: "provider_list",
-      purpose: :collection,
-      label: "Providers",
-      order: 90,
-      fallback_path: "/comms/providers"
-    },
-    %{
-      id: "provider_new",
-      purpose: :configuration,
-      label: "New Provider",
-      order: 100,
-      fallback_path: "/comms/providers/new",
-      fallback_parent_path: "/comms/providers"
-    },
-    %{
-      id: "provider_show",
-      purpose: :subject_detail,
-      label: "Provider",
-      order: 110,
-      subject_schema: "cadence.comms.provider.subject",
-      fallback_path: "/comms/providers/:subject",
-      fallback_parent_path: "/comms/providers"
-    },
-    %{
       id: "transport_new",
       purpose: :configuration,
       label: "New Transport",
@@ -139,10 +115,6 @@ defmodule Cadence.Applications.Comms do
   ]
 
   @provider_actions [
-    %{id: "create_provider", surface: "provider_new", effect: :durable},
-    %{id: "validate_provider", surface: "provider_show", effect: :external},
-    %{id: "sync_provider", surface: "provider_show", effect: :external},
-    %{id: "archive_provider", surface: "provider_show", effect: :durable},
     %{
       id: "validate",
       surfaces: ~w(transport_new routing_new ground_station_new ground_station_edit),
@@ -220,9 +192,6 @@ defmodule Cadence.Applications.Comms do
 
   @spec action_provider() :: module()
   def action_provider, do: Cadence.Applications.Comms.ActionProvider
-
-  defp query_provider(surface_id) when surface_id in ~w(provider_list provider_new provider_show),
-    do: Cadence.Reads.ApplicationSurfaces.CommsProviders
 
   defp query_provider(_surface_id), do: Cadence.Reads.ApplicationSurfaces.Comms
 

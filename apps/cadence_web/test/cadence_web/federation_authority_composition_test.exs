@@ -77,7 +77,7 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
 
     assert contributions
            |> Enum.frequencies_by(& &1.application_key) == %{
-             "comms" => 15,
+             "comms" => 12,
              "spacecraft" => 11,
              "mission_catalog" => 8,
              "telemetry_decom" => 2,

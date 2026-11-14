@@ -5,7 +5,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
   alias Cadence.Applications.OpsConsole.ActionProvider, as: OpsActionProvider
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.FleetPlanningRuns
-  alias Cadence.Reads.ApplicationSurfaces.{Comms, CommsProviders, OpsConsole}
+  alias Cadence.Reads.ApplicationSurfaces.{Comms, OpsConsole}
 
   @organization_id "org-trusted-surface-contract"
   @mission_id "mission-trusted-surface-contract"
@@ -312,20 +312,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
       assert match?({:ok, _payload}, result),
              "expected #{surface_id} to fit the trusted output boundary"
     end
-  end
-
-  test "provider creation represents an empty grant set as an actionable state", context do
-    assert {:ok, %{"data" => data}} =
-             CommsProviders.load(
-               context.scope,
-               context.host_context,
-               request("comms", "provider_new")
-             )
-
-    assert data["accounts"]["empty"]
-    assert data["accounts"]["selected"] == nil
-    assert data["accounts"]["empty_state"]["action"]["href"] == "/provider-accounts"
-    assert data["form"]["fields"]["provider_account_grant_id"]["value"] == ""
   end
 
   defp request(application_key, surface_id) do

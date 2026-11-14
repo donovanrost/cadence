@@ -113,10 +113,6 @@ defmodule Cadence.Applications.RegistryTest do
     assert definition.installable_scopes == [:mission]
 
     assert Enum.map(definition.actions, & &1.action_id) == [
-             "create_provider",
-             "validate_provider",
-             "sync_provider",
-             "archive_provider",
              "validate",
              "save"
            ]
@@ -140,12 +136,6 @@ defmodule Cadence.Applications.RegistryTest do
               {:trusted, "cadence.comms.ground_stations"}},
              {"ground_station", %{query_id: "cadence.comms.ground_station", version: 1},
               {:trusted, "cadence.comms.ground_station"}},
-             {"provider_list", %{query_id: "cadence.comms.provider_list", version: 1},
-              {:trusted, "cadence.comms.provider_list"}},
-             {"provider_new", %{query_id: "cadence.comms.provider_new", version: 1},
-              {:trusted, "cadence.comms.provider_new"}},
-             {"provider_show", %{query_id: "cadence.comms.provider_show", version: 1},
-              {:trusted, "cadence.comms.provider_show"}},
              {"transport_new", %{query_id: "cadence.comms.transport_new", version: 1},
               {:trusted, "cadence.comms.transport_new"}},
              {"routing_new", %{query_id: "cadence.comms.routing_new", version: 1},

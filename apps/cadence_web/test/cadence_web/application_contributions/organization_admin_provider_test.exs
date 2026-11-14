@@ -77,7 +77,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert :ok = ActionContractLedger.validate()
 
     ledgers = ActionContractLedger.ledgers()
-    assert length(ledgers.declared) == 47
+    assert length(ledgers.declared) == 43
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
 

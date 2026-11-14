@@ -77,7 +77,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
   test "advertises the canonical Comms release for every admitted surface" do
     surfaces =
-      ~w(overview validation transports transport routing routing_detail ground_stations ground_station provider_list provider_new provider_show)
+      ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
 
     Enum.each(surfaces, fn surface_id ->
       assert {:ok, release} =

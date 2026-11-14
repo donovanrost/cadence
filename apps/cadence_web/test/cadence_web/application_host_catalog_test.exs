@@ -8,7 +8,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
 
   @now "2026-09-03T12:00:00Z"
-  @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station provider_list provider_new provider_show)
+  @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
 
   test "serializes tagged organization, user, and admin scope documents without mission ids" do
     scope = %Scope{organization_id: "org-1", actor_kind: :user, user: %{id: "user-1"}}

@@ -293,8 +293,6 @@ defmodule Cadence.Applications.CommsActionProviderTest do
              {surface.surface_id, surface.actions}
            end)
            |> Enum.filter(fn {_surface_id, actions} -> actions != [] end) == [
-             {"provider_new", ["create_provider"]},
-             {"provider_show", ["validate_provider", "sync_provider", "archive_provider"]},
              {"transport_new", ["validate", "save"]},
              {"routing_new", ["validate", "save"]},
              {"ground_station_new", ["validate", "save"]},

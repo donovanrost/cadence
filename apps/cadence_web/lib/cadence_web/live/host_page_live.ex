@@ -606,25 +606,6 @@ defmodule CadenceWeb.HostPageLive do
 
   def handle_event(
         "host:mission-page",
-        %{"id" => id, "event" => event, "input" => input, "path" => path} = params,
-        socket
-      )
-      when id in ~w(comms.provider-new comms.provider-show) and
-             event in ~w(create-provider validate-provider sync-provider archive-provider refresh) do
-    with true <- CadenceWeb.MissionProviderPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.MissionProviderPage.matches?(socket, params) do
-      {result, socket} = CadenceWeb.MissionProviderPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:mission-page",
         %{"event" => event, "input" => input, "path" => path} = params,
         socket
       )
@@ -795,7 +776,6 @@ defmodule CadenceWeb.HostPageLive do
         |> ProviderAccountRegistrationPage.prepare(info, path)
         |> ProviderAccountDetailPage.prepare(info, path)
         |> CommunicationsSetupPage.prepare(info, path)
-        |> CadenceWeb.MissionProviderPage.prepare(info, path)
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)
         |> CadenceWeb.OpsCommandPage.prepare(info, path)
         |> CadenceWeb.OpsCommandHistoryPage.prepare(info, path)
