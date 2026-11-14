@@ -120,6 +120,10 @@ The rendering engine differs, but the look is the same.
   - **Booked vs flown:** where a flown pass covers its booking, only the pass's solid edges are drawn. Where the
     booking reaches past the flown pass (a late start or an early end), the dashed outline is drawn on **that part
     only**, so lost time shows. A booking with no flown pass stays dashed in full.
+  - **Realized but never started** (no AOS; closed by the sweep): drawn at its **scheduled** window as a booking
+    with no flown pass, dashed in full, with the station code label. The tooltip says "FAI pass · didn't start"
+    (U45's words). It's never drawn from realized to the sweep's close: nothing flew in that span. Not (a), hiding
+    it, because a pass that didn't start is exactly what an operator needs to see.
 - **Point events:** a thin `text-4` vertical line, with the label in the tooltip. Mission events closer than 6px
   merge into one mark, titled "4 events 02:10Z–02:14Z". Watermark and evidence events aren't chart marks: they're
   a stream, not events an operator reads.
