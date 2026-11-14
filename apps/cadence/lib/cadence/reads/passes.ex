@@ -202,11 +202,12 @@ defmodule Cadence.Reads.Passes do
 
   defp attestation(_reservation), do: nil
 
-  # nil when no uplink leg was requested (downlink-only): there's nothing to confirm.
+  # nil when no uplink leg was requested (downlink-only): there's nothing to confirm. False once
+  # an accepted change dropped the leg (U46: the pass has no command window then).
   defp uplink_confirmed(%ProviderReservation{} = reservation) do
     if is_map(get_in(reservation.request_document || %{}, ["uplink"])) do
       get_in(reservation.provider_confirmed_snapshot_document || %{}, ["uplink", "status"]) ==
-        "included"
+        "included" and not Contacts.uplink_leg_dropped?(reservation)
     end
   end
 

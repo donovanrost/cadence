@@ -231,6 +231,13 @@ and `attention`.
   - `since` is when this state began.
   - `command_groups_queued`, only for `blocked`, is the number of queued groups it holds back:
     `> 0` crit, `0` caution. It's `null` for other states.
+  - **Dropped uplink leg** (U46, DECISIONS #84): when Cadence has accepted terms without the
+    uplink leg the booking asked for, the pass reads `{state: "blocked", reason:
+    "uplink_leg_dropped", since: <when Cadence accepted the drop, or null>,
+    command_groups_queued}` for its whole window, before its session too, and `uplink_confirmed`
+    is `false`. Commands can't be released on it. Compose's preflight, the spacecraft uplink read
+    and a group's next pass skip it. A group live on it when it dropped shows the same readiness
+    on its `uplink`. Ended passes read `null` as usual.
   - The whole field is `null` when the pass has no live uplink session: a future pass before its
     session starts, a downlink-only pass, or one that isn't booked. Show no tag then, as for `ready`.
   - A pass row's `attention` is its first open item (Pass row attentions below). A blocked uplink

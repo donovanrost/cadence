@@ -2,10 +2,14 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
   @moduledoc "U33 / DECISIONS #58: pass readiness, group uplink, uplink_blocked attention, Recover."
   use CadenceWeb.ConnCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.{CommandAuthoringFixtures, CommandGroupFixtures, ExactCommandAuthoringFixtures}
   alias Cadence.Contacts.ContactStore.ScheduledContactRow
   alias Cadence.Contacts.ScheduledContact
+  alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.Control.UplinkReadiness
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
@@ -288,6 +292,57 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
 
     # The pass row's attention block stays for pass resolutions; readiness carries the block.
     assert pass["attention"] == nil
+  end
+
+  # U46 / DECISIONS #84: Cadence accepted terms without the uplink leg the booking asked for.
+  test "a pass whose uplink leg was dropped reads blocked, uplink_leg_dropped (U46)", c do
+    live!(c, :ready, nil)
+    group_id = queue_group!(c)
+    drop_uplink!(c)
+
+    pass = get_data(c, "/passes/#{c.reservation.provider_reservation_id}")
+
+    assert %{
+             "state" => "blocked",
+             "reason" => "uplink_leg_dropped",
+             "since" => _since,
+             "command_groups_queued" => queued
+           } = pass["uplink_readiness"]
+
+    assert is_integer(queued)
+    assert pass["uplink_confirmed"] == false
+
+    # The group was live on it, so its uplink shows the drop (fe-ops).
+    assert %{
+             "uplink" => %{
+               "pass" => %{"reservation_id" => reservation_id},
+               "readiness" => %{"state" => "blocked", "reason" => "uplink_leg_dropped"}
+             }
+           } = get_data(c, "/command-groups/#{group_id}")
+
+    assert reservation_id == c.reservation.provider_reservation_id
+  end
+
+  defp drop_uplink!(c) do
+    id = c.reservation.provider_reservation_id
+
+    row =
+      Repo.one!(from(row in ProviderReservationRow, where: row.provider_reservation_id == ^id))
+
+    update = fn doc, uplink ->
+      (JsonDocument.unwrap_value(doc) || %{}) |> Map.put("uplink", uplink)
+    end
+
+    row
+    |> Ecto.Changeset.change(
+      request_document:
+        JsonDocument.wrap_value(update.(row.request_document, %{"routing_rule_id" => "r"})),
+      cadence_accepted_snapshot_document:
+        JsonDocument.wrap_value(
+          update.(row.cadence_accepted_snapshot_document, %{"status" => "rejected"})
+        )
+    )
+    |> Repo.update!()
   end
 
   test "Recover: refused when unrecoverable, not_blocked when ready, unknown pass", c do

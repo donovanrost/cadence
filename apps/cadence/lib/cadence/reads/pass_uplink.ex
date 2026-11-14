@@ -14,6 +14,7 @@ defmodule Cadence.Reads.PassUplink do
 
   alias Cadence.Comms.StationRefs
   alias Cadence.Contacts.UplinkPasses
+  alias Cadence.Control.Contacts
   alias Cadence.Control.UplinkReadiness
   alias Cadence.Control.UplinkReadiness.Groups
   alias Cadence.Reads.{CommandGroups, Passes}
@@ -31,14 +32,54 @@ defmodule Cadence.Reads.PassUplink do
         passes |> Enum.map(& &1.scheduled_contact_id) |> Enum.reject(&is_nil/1)
       )
 
+    drops = drops_by_contact(org, mission, passes)
+
     Enum.map(passes, fn pass ->
-      Map.put(
-        pass,
-        :uplink_readiness,
-        readiness_view(Map.get(readiness, pass.scheduled_contact_id), pass, blocked)
-      )
+      view =
+        case Map.get(drops, pass.scheduled_contact_id) do
+          nil -> readiness_view(Map.get(readiness, pass.scheduled_contact_id), pass, blocked)
+          drop -> dropped_view(org, mission, pass, drop)
+        end
+
+      Map.put(pass, :uplink_readiness, view)
     end)
   end
+
+  @doc """
+  U46: the passes among `rows` (pass rows: `id` = reservation id) whose uplink leg an accepted
+  change dropped, `%{scheduled_contact_id => %{at, change_id, provider_id, reason}}`.
+  """
+  @spec drops_by_contact(binary(), binary(), [map()]) :: %{binary() => map()}
+  def drops_by_contact(org, mission, rows) do
+    drops =
+      Contacts.uplink_drops(
+        org,
+        mission,
+        rows |> Enum.map(&Map.get(&1, :id)) |> Enum.filter(&is_binary/1) |> Enum.uniq()
+      )
+
+    for row <- rows, drop = Map.get(drops, Map.get(row, :id)), into: %{} do
+      {row.scheduled_contact_id, drop}
+    end
+  end
+
+  # U46: blocked for its whole window (not only while a session runs), since the drop. Gone
+  # once the pass has ended, as any readiness.
+  defp dropped_view(org, mission, pass, drop) do
+    if ended?(pass),
+      do: nil,
+      else: %{
+        state: "blocked",
+        reason: "uplink_leg_dropped",
+        since: drop.at,
+        command_groups_queued: queued_for_pass(org, mission, pass).count
+      }
+  end
+
+  defp ended?(%{ends_at: %DateTime{} = ends_at}),
+    do: DateTime.compare(ends_at, DateTime.utc_now()) != :gt
+
+  defp ended?(_pass), do: false
 
   defp readiness_view(nil, _pass, _blocked), do: nil
 
@@ -129,10 +170,22 @@ defmodule Cadence.Reads.PassUplink do
 
     passes = waiting |> Map.values() |> Enum.flat_map(&[&1.contact, &1.next_contact])
     refs = pass_refs(org, mission, Enum.reject(passes, &is_nil/1))
+    drops = drops_by_contact(org, mission, Map.values(refs.rows))
 
     Map.new(group_ids, fn id ->
-      {id, waiting |> Map.get(id) |> group_uplink(refs)}
+      {id, waiting |> Map.get(id) |> without_drops(drops) |> group_uplink(refs)}
     end)
+  end
+
+  # U46: domain's next_contact already skips dropped passes; the live contact the group is on
+  # shows a drop as its readiness (fe-ops).
+  defp without_drops(nil, _drops), do: nil
+
+  defp without_drops(entry, drops) do
+    case entry.contact && Map.get(drops, entry.contact.scheduled_contact_id) do
+      nil -> entry
+      drop -> %{entry | contact: Map.put(entry.contact, :dropped, drop)}
+    end
   end
 
   # The pass a group releases on is its spacecraft's live pass, else the next booked one that
@@ -152,10 +205,15 @@ defmodule Cadence.Reads.PassUplink do
   defp group_uplink(%{contact: contact, next_contact: next}, refs) do
     %{
       pass: pass_ref(contact, refs),
-      readiness: contact.readiness && wire_readiness(contact.readiness),
+      readiness: group_readiness(contact),
       next_pass: next && pass_ref(next, refs)
     }
   end
+
+  defp group_readiness(%{dropped: drop}),
+    do: %{state: "blocked", reason: "uplink_leg_dropped", since: drop.at}
+
+  defp group_readiness(contact), do: contact.readiness && wire_readiness(contact.readiness)
 
   @doc false
   def pass_ref(pass, refs) do

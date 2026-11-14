@@ -31,7 +31,7 @@ defmodule Cadence.Reads.SpacecraftUplink do
       lanes = lanes(org, mission, spacecraft_id)
       {current, upcoming} = passes(org, mission, spacecraft_id, now)
       refs = PassUplink.pass_refs(org, mission, Enum.reject([current | upcoming], &is_nil/1))
-      readiness = readiness(org, mission, current)
+      readiness = readiness(org, mission, current, refs)
       now_view = now_view(current, readiness, refs, now)
 
       {:ok,
@@ -78,16 +78,18 @@ defmodule Cadence.Reads.SpacecraftUplink do
     end
   end
 
-  defp readiness(_org, _mission, nil), do: nil
+  defp readiness(_org, _mission, nil, _refs), do: nil
 
-  # The same object as a /passes row's `uplink_readiness` (with `command_groups_queued`).
-  defp readiness(org, mission, pass) do
+  # The same object as a /passes row's `uplink_readiness` (with `command_groups_queued`), from the
+  # pass's row where there is one (it carries the reservation a dropped uplink is read from).
+  defp readiness(org, mission, pass, refs) do
     blocked =
       org
       |> UplinkBlocked.items(mission)
       |> Map.new(&{&1.contact_id, &1})
 
-    [%{uplink_readiness: readiness}] = PassUplink.put_readiness(org, mission, [pass], blocked)
+    row = Map.get(refs.rows, pass.scheduled_contact_id) || pass
+    [%{uplink_readiness: readiness}] = PassUplink.put_readiness(org, mission, [row], blocked)
     readiness
   end
 

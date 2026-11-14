@@ -151,6 +151,22 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "packet_definition_not_found")
   end
 
+  # U46 / DECISIONS #84: domain's release gate refused the named contact (outside its pass, or
+  # its uplink leg was dropped). Nothing was released.
+  def call(conn, {:error, {:command_window_closed, realized_contact_id, why}}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{
+      errors: [
+        %{
+          reason: "command_window_closed",
+          why: format_reason(why),
+          realized_contact_id: realized_contact_id
+        }
+      ]
+    })
+  end
+
   def call(conn, {:error, {:invalid_param, field, reason}}) do
     conn
     |> put_status(:unprocessable_entity)
