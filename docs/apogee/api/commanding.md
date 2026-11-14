@@ -187,6 +187,20 @@ No side effects. Returns:
 - Plan impact and umbra margin are absent (no data, DECISIONS #4).
 - Oversize drafts return only `size` (`no_go`, with the bounds) and `digest: null`.
 
+- **U51 (per-target verifiers).** Each target's commands are validated against its own pinned
+  mission model (a fleet activation can pin spacecraft to different catalog revisions), so:
+  - `targets[].catalog_revision`: `{number, label} | null`, the catalog revision its commands
+    resolve to (show `rev <number>`, the label only without a number). `null` when no command
+    validated for that target, which is then a Catalog NO-GO in `checks`.
+  - `commands: [{position, command_id, verifier_groups: [{verifiers: [{id, name, description,
+    phase, timeout_ms, delay_ms, severity}], catalog_revisions: [{number, label}], spacecraft_ids}]}]`:
+    one group per distinct verifier set, compared without ids (two revisions give the same verifier
+    different ids), largest first, then by first spacecraft id. `verifiers: []` is "No verifier:
+    can't turn green". Targets with a NO-GO for that command are in no group.
+  - The group's policy classifies each command by the strictest of its targets' revisions
+    (critical/hazardous if any is, the highest significance, the strictest release hint), not by
+    whichever target came first.
+
 ### `POST /command-groups` (M16)
 
 Body: the draft plus `preflight_digest` (from the preflight the operator saw) and

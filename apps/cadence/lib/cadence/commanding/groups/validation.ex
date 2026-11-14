@@ -176,7 +176,13 @@ defmodule Cadence.Commanding.Groups.Validation do
                 target_index: target.index,
                 position: position,
                 request: enriched,
-                target_token: state.target_token
+                target_token: state.target_token,
+                # U51: the target's own pinned verifiers for this command (per-spacecraft basis).
+                verifier_plans:
+                  Enum.filter(
+                    state.snapshot.catalog.verifier_plans,
+                    &(&1.command_id == enriched.command_id)
+                  )
               }
 
               {[member | members], failures}
@@ -217,25 +223,41 @@ defmodule Cadence.Commanding.Groups.Validation do
     })
   end
 
-  # Classification per command, from a validated member when there is one, otherwise from the
-  # snapshot's operational binding (so the policy holds even while some targets fail).
-  defp policy_commands(commands, members, snapshot) do
+  # Classification per command: the STRICTEST across its validated members (each target's pinned
+  # revision may classify it differently, domain 11-14), otherwise the snapshot's operational
+  # binding (so the policy holds even while every target fails).
+  @significance_rank %{nil => 0, routine: 1, warning: 2, critical: 3, hazardous: 4}
+  @hint_rank %{"confirmation_required" => 1, "approval_required" => 2}
+
+  defp policy_sources(id, members, bindings) do
+    case for(%{request: %{command_id: ^id} = request} <- members, do: request) do
+      [] -> [Map.get(bindings, id) || %{}]
+      requests -> requests
+    end
+  end
+
+  @doc false
+  def policy_commands(commands, members, snapshot) do
     bindings = Map.new(snapshot.catalog.operational_bindings, &{&1.command_id, &1})
 
     commands
     |> Enum.uniq_by(& &1.command_id)
     |> Enum.map(fn %{command_id: id} ->
-      source =
-        Enum.find_value(members, &(&1.request.command_id == id && &1.request)) ||
-          Map.get(bindings, id) || %{}
+      sources = policy_sources(id, members, bindings)
 
       %{
         command_id: id,
-        name: Map.get(source, :command_name) || Map.get(source, :name),
-        significance: Map.get(source, :significance),
-        critical: Map.get(source, :critical, false),
-        hazardous: Map.get(source, :hazardous, false),
-        release_policy_hint: Map.get(source, :release_policy_hint)
+        name: Enum.find_value(sources, &(Map.get(&1, :command_name) || Map.get(&1, :name))),
+        significance:
+          sources
+          |> Enum.map(&Map.get(&1, :significance))
+          |> Enum.max_by(&Map.get(@significance_rank, &1, 0), fn -> nil end),
+        critical: Enum.any?(sources, &(Map.get(&1, :critical, false) == true)),
+        hazardous: Enum.any?(sources, &(Map.get(&1, :hazardous, false) == true)),
+        release_policy_hint:
+          sources
+          |> Enum.map(&Map.get(&1, :release_policy_hint))
+          |> Enum.max_by(&Map.get(@hint_rank, &1, 0), fn -> nil end)
       }
     end)
   end

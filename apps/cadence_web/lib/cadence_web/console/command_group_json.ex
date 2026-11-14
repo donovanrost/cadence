@@ -21,8 +21,18 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
       targets:
         Enum.map(
           preflight.targets,
-          &Map.take(&1, [:index, :spacecraft_id, :source_endpoint_id, :name, :scid, :failure])
+          &Map.take(&1, [
+            :index,
+            :spacecraft_id,
+            :source_endpoint_id,
+            :name,
+            :scid,
+            :failure,
+            :catalog_revision
+          ])
         ),
+      # U51: per stacked command, the groups of targets that share a verifier set.
+      commands: Map.get(preflight, :commands, []),
       checks: Enum.map(preflight.checks, &check/1)
     }
     |> encode()

@@ -14,6 +14,7 @@ defmodule Cadence.Reads.CommandPreflight do
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
   alias Cadence.Reads.{CommandGroups, Passes}
+  alias Cadence.Reads.CommandPreflight.VerifierGroups
 
   @contact_horizon_s 6 * 3_600
   # DECISIONS #60: HOLDs the submitter may acknowledge with a note. Every other HOLD is hard.
@@ -99,12 +100,18 @@ defmodule Cadence.Reads.CommandPreflight do
       two_person_check(validated.policy)
     ]
 
+    # U51: each target's catalog revision, and where targets differ in what verifies a command.
+    revisions = VerifierGroups.catalog_revisions(org, mission, validated.members)
+    by_index = Map.new(validated.targets, &{&1.index, &1})
+
     %{
       valid?: validated.valid?,
       digest: validated.digest,
       snapshot: validated.snapshot,
       policy: validated.policy,
-      targets: validated.targets,
+      targets:
+        Enum.map(validated.targets, &Map.put(&1, :catalog_revision, Map.get(revisions, &1.index))),
+      commands: VerifierGroups.commands(draft.commands, validated.members, by_index, revisions),
       members: length(validated.members),
       checks: checks
     }
