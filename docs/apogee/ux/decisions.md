@@ -1389,3 +1389,28 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
   - Unknown codes are left out, with the raw code in Technical details.
 - A **running** contact whose booking is lost keeps running to LOS (director). That needs no new line; its pass shows
   the reservation's state as today.
+
+### U57 · Now item: a booking the provider holds but Cadence's checks rejected (director; domain sends the fields) (domain / api / fe-ops)
+The provider still holds the booking and will probably fly it, and Cadence keeps the contact and listens. But
+Cadence's own validation found the booking inconsistent with its setup. Never say the pass is canceled or lost
+(U20). Say "doesn't match", and name what was checked. The pass label is U47's.
+- **Title:** `EARENDIL-007 · PUQ 13:04Z pass · Northlight's booking doesn't match Cadence's setup`.
+- **Meta:** `FLAGGED 12:58Z` (§4).
+- **Body:** "Northlight still holds this booking, but Cadence found a problem with it: <code words>. The pass is
+  still on and Cadence will listen, but telemetry may not arrive as expected. Check EARENDIL-007's transport and
+  data source in Setup, or the delivery settings with Northlight."
+  - With the provider's own text too: "…: <code words> (Northlight: “…”)."
+- **Code → words** (the same map as U56's reasons):
+  - delivery_descriptor_conflicts_with_transport → "its delivery settings don't match the transport set up in
+    Cadence"
+  - unknown → "it doesn't pass Cadence's checks", with the raw code in Technical details.
+- **Priority:** P2 caution. P1 when the pass starts within 2 hours or is live (U54's rule), because that's when
+  telemetry is at stake.
+- **Actions:** none from the server yet. `Open pass` takes the free slot (U49's row rule). There's nothing to
+  acknowledge.
+- **Resolutions** (domain names the triggers): the check passes again → "Matches Cadence's setup again at 13:01Z.";
+  the pass ends → "The pass ended at LOS 13:12Z."; the provider drops the booking → U56's cancel line takes over.
+- **Contacts:** a block on the selected pass, as U45–U50, with the title minus the spacecraft and pass label.
+- **Technical details:** code, the provider's reason, provider_reservation_id, and the item id.
+- **Data (domain → api):** U47's pass fields; `code`; `provider_reason` (text | null); `flagged_at`; and the
+  resolution `{action: revalidated | ended | lost, at}`.
