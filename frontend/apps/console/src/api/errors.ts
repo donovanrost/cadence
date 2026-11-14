@@ -164,6 +164,8 @@ export const errorCodes = [
   "horizon_exceeds_policy",
   "planning_not_set_up",
   "fleet_planning_requirement_not_active",
+  // U52 (api 6af9e279d): a start's template fan-out over the limit; details {count, limit}.
+  "fleet_planning_occurrence_limit_exceeded",
   "fleet_repair_horizon_exceeded",
   "plan_not_found",
   "plan_changed",

@@ -18,6 +18,8 @@ import PlanFooter from "./PlanFooter.vue";
 import { planHeaderTail } from "./plan-primary.ts";
 import { useBookingStopped } from "./useBookingStopped.ts";
 import PlanStatePanel from "./PlanStatePanel.vue";
+import { limitRefusal, overLimit } from "./start-limit.ts";
+import StartLimits from "./StartLimits.vue";
 import SelectedPanel from "./SelectedPanel.vue";
 import { isPlanSuperseded, planErrorText } from "./errors.ts";
 import SendBackSheet from "./SendBackSheet.vue";
@@ -50,6 +52,7 @@ const {
   proposal,
   busy,
   actionError,
+  estimate,
   draftDay,
   resume,
   submit,
@@ -144,7 +147,11 @@ function onEdit(change: { add?: string[]; remove?: string[] }) {
   void edit(view.value.plan, change);
   selected.value = null;
 }
-const actionText = computed(() => (actionError.value ? planErrorText(actionError.value) : null));
+const actionText = computed(() =>
+  actionError.value ? (limitRefusal(actionError.value) ?? planErrorText(actionError.value)) : null,
+);
+/** U52: over the limit, Start is disabled with the sentence StartLimits shows above it. */
+const overReason = computed(() => overLimit(estimate.value));
 function onExecute() {
   if (view.value.kind === "plan") void execute(view.value.plan.id);
 }
@@ -332,7 +339,10 @@ const clock = computed(() =>
   </template>
   <template v-else>
     <PlanStatePanel :view="view" />
-    <ApCallout v-if="actionText" tone="caution">{{ actionText }}</ApCallout>
+    <StartLimits :estimate="estimate" :error="actionError" />
+    <ApCallout v-if="actionText && !limitRefusal(actionError)" tone="caution">{{
+      actionText
+    }}</ApCallout>
     <footer class="flex flex-none justify-end border-t border-hairline pt-3">
       <ApButton v-if="view.kind === 'not_set_up'" variant="primary" size="commit" :to="setupLink"
         >Set up contact planning</ApButton
@@ -341,7 +351,8 @@ const clock = computed(() =>
         v-else-if="view.kind === 'no_draft' || view.kind === 'draft_failed'"
         variant="primary"
         size="commit"
-        :disabled="busy"
+        :disabled="busy || overReason !== null"
+        :disabled-reason="overReason ?? 'Drafting…'"
         @click="draftDay"
         >Draft the day</ApButton
       >

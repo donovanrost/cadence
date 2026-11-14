@@ -10,6 +10,7 @@ import {
   type MissionId,
   type Reader,
 } from "@/api";
+import { startEstimateReader } from "./start-limit.ts";
 
 /** Contracts: docs/apogee/api/scheduling.md §4 (S3 drafts, S6 plans, plan detail with S2 demand). */
 const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/contact-plans`;
@@ -516,6 +517,8 @@ export const setupReader = d.object({
     policy: d.nullable(d.object({ id: d.token, version: d.integer })),
     requirements: d.integer,
     templates: d.integer,
+    /** U52 (api 6af9e279d): the day's template fan-out; null when no active template counts. */
+    template_requirements_estimate: d.optional(d.nullable(startEstimateReader)),
   }),
 });
 export type PlanningSetup = Decoded<typeof setupReader>["setup"];
@@ -529,11 +532,14 @@ export const dayDemandReader = d.object({
 });
 export type DayDemand = Decoded<typeof dayDemandReader>;
 
+/** U52: `day` (UTC YYYY-MM-DD) is the day Start would draft; the estimate counts that day. */
 export function fetchSetup(
   missionId: MissionId,
+  day: string,
   signal?: AbortSignal,
 ): Promise<ApiResult<{ setup: PlanningSetup }>> {
-  return request(`${base(missionId)}/setup`, setupReader, signal ? { signal } : {});
+  const q = new URLSearchParams({ day }).toString();
+  return request(`${base(missionId)}/setup?${q}`, setupReader, signal ? { signal } : {});
 }
 
 export function fetchDayDemand(

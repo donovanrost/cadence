@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref, type Ref } from "vue";
+import { computed, ref, shallowRef, watch, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, isError, useRemoteQuery, type ApiError } from "@/api";
 import { useChannelEvent, useMissionInvalidation } from "@/live";
@@ -14,6 +14,7 @@ import {
   fetchPlan,
   fetchPlans,
   fetchSetup,
+  type PlanningSetup,
   rejectPlan,
   startDraft,
   submitPlan,
@@ -44,14 +45,32 @@ export function usePlanDay(
   const runId = computed(() => (typeof route.query.run === "string" ? route.query.run : null));
   /** Fallback when a draft request is refused before the setup read caught up. */
   const refusedNotSetUp = ref<readonly string[] | null>(null);
-  const setup = useRemoteQuery(missionId, (id, signal) => fetchSetup(id, signal));
+  const setup = useRemoteQuery(
+    computed(() => ({ m: missionId.value, day: day.value })),
+    (k, signal) => fetchSetup(k.m, k.day, signal),
+  );
+  /**
+   * Set-up-ness isn't per day: keep the last answer while another day's setup loads, so the
+   * no-plan branch doesn't flash between 'not set up' and 'no draft' (fe-ops). The estimate is per
+   * day, so it reads only the current answer.
+   */
+  const lastSetup = shallowRef<PlanningSetup | null>(null);
+  watch(setup.state, (s) => {
+    if (s.status === "ready") lastSetup.value = s.value.setup;
+  });
+  /** U52: the day's template fan-out against the limit, with each template's per-run cap. */
+  const estimate = computed(() =>
+    setup.state.value.status === "ready"
+      ? (setup.state.value.value.setup.template_requirements_estimate ?? null)
+      : null,
+  );
   const dayDemand = useRemoteQuery(
     () => `${missionId.value}|${day.value}`,
     (_k, signal) => fetchDayDemand(missionId.value, day.value, signal),
   );
   const notSetUp = computed<readonly string[] | null>(() => {
-    const s = setup.state.value;
-    if (s.status === "ready" && !s.value.setup.ready) return s.value.setup.missing;
+    const s = lastSetup.value;
+    if (s && !s.ready) return s.missing;
     return refusedNotSetUp.value;
   });
   const actionError = ref<ApiError | null>(null);
@@ -239,6 +258,7 @@ export function usePlanDay(
     proposal,
     busy,
     actionError,
+    estimate,
     draftDay,
     resume,
     submit,
