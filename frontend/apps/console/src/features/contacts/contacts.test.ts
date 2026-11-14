@@ -12,7 +12,7 @@ import {
 } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
 import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
-import type { Attention } from "@/features/now/index.ts";
+import { attentionReader, type Attention } from "@/features/now/index.ts";
 import { attentionErrorWords, resolutionRecord, whatToDo } from "./attention.ts";
 import {
   groupBlockedLine,
@@ -522,5 +522,42 @@ describe("D2 state trail (Contacts.md, ScheduleFlow M1)", () => {
       { label: "Rejected", outcome: "caution" },
     ]);
     expect(contactTrail("ended")).toContainEqual({ label: "Ended · not verified" });
+  });
+});
+
+describe("U45 bar mark (lead bf3f36aac)", () => {
+  const open = (source: string, conflict: string) =>
+    readRaw(attentionReader, {
+      id: `${source}-1`,
+      source,
+      conflict,
+      state: "open",
+      acknowledged_by: null,
+      contact_id: "contact-1",
+      station: null,
+      provider: null,
+      starts_at: null,
+      raised_at: "2026-11-09T01:00:00Z",
+      provider_message: null,
+      resolution: null,
+    });
+  it("marks ◆ for a missed top item, ▲ for any other open one, nothing otherwise", () => {
+    const missed = open("contact_start", "missed");
+    const change = open("provider_change", "approval_required");
+    const { bars } = passGantt(
+      [
+        pass("a", { attention: missed, attentions: [missed, change] }),
+        pass("b", { attention: change, attentions: [change] }),
+        pass("c"),
+      ],
+      () => null,
+      now,
+    );
+    expect(bars.map((b) => [b.id, b.attention])).toEqual([
+      ["a", "crit"],
+      ["b", "caution"],
+      ["c", undefined],
+    ]);
+    expect(bars[0]?.description).toContain(", was missed, and 1 more item");
   });
 });

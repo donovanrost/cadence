@@ -1,6 +1,6 @@
 import type { Scid, SpacecraftId } from "@/api/index.ts";
 import { readinessTag } from "./readiness.ts";
-import { passAttentionDescription } from "./passAttention.ts";
+import { passAttentionDescription, passAttentionTag } from "./passAttention.ts";
 import type { GanttBand, GanttBar, GanttRow } from "@/ui";
 import type { Availability } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
@@ -70,6 +70,8 @@ export function passGantt(
     const rowLabel = axis === "station" ? stationLabel(p) : (sc?.name ?? "Unknown spacecraft");
     if (!rows.has(key)) rows.set(key, { id: key, label: rowLabel });
     const status = passStatus(p, now);
+    // ux U45: ◆ the top item is a missed pass, ▲ any other open item (lead bf3f36aac).
+    const attention = passAttentionTag(p)?.state;
     bars.push({
       id: p.id,
       rowId: key,
@@ -85,6 +87,7 @@ export function passGantt(
       description: `${sc?.name ?? "Unknown spacecraft"} at ${p.station.name ?? stationLabel(p)}, ${status}${evidence(p)}${p.source.synthetic ? " (synthetic window)" : ""}${marks.uplinks?.has(p.id) ? ", uplink queued" : ""}`,
       ...(marks.match && !marks.match(p) ? { dim: true } : {}),
       ...(marks.uplinks?.has(p.id) ? { notch: true } : {}),
+      ...(attention ? { attention } : {}),
     });
   }
   return { rows: [...rows.values()].sort((a, b) => a.label.localeCompare(b.label)), bars };
