@@ -487,9 +487,6 @@ defmodule Cadence.Catalog do
           Facts.publish(event_bus, revision)
           {:ok, revision}
         end
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -545,7 +542,6 @@ defmodule Cadence.Catalog do
       case fetch_revision_by_import_run(run.organization_id, run.mission_id, run.import_run_id) do
         {:ok, %Revision{} = existing} -> existing
         {:error, :catalog_revision_not_found} -> insert_locked_revision(run, attrs)
-        {:error, reason} -> Repo.rollback(reason)
       end
     end)
   end
