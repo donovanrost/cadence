@@ -39,6 +39,8 @@ config :cadence,
     Cadence.Spacecraft.ConfigKinds.SpacecraftOverride,
     # App configuration through change sets (DECISIONS #77): derived telemetry points.
     Cadence.Governance.DerivedTelemetryKind,
+    # ... and limit definitions (DECISIONS #77, stage 2).
+    Cadence.Control.LimitDefinitionKind,
     # Derived: re-materializes profile routes after the ops above (finalize/3).
     Cadence.Comms.ConfigKinds.SpacecraftRoutes,
     # Derived: framing compatibility HOLDs when the profile becomes framing authority.
@@ -46,7 +48,9 @@ config :cadence,
     # Derived: catalog compatibility HOLDs when spacecraft move to another catalog (#36/#65).
     Cadence.Spacecraft.ConfigKinds.CatalogCompatibility,
     # Derived: commanding and telemetry switch HOLDs (L22).
-    Cadence.Spacecraft.ConfigKinds.SwitchCompatibility
+    Cadence.Spacecraft.ConfigKinds.SwitchCompatibility,
+    # Derived: handled APIDs HOLDs (L22).
+    Cadence.Spacecraft.ConfigKinds.ApidCompatibility
   ],
   # Which spacecraft have had traffic, for the archive HOLD (#49/#50).
   spacecraft_traffic: Cadence.Control.SpacecraftTraffic,
@@ -56,6 +60,8 @@ config :cadence,
   # Catalog revision lookup for profile/override catalog changes (#36/#65), configured so the
   # spacecraft kinds have no compile-time edge to the catalog context.
   catalog_revisions: Cadence.Catalog,
+  # A catalog revision's APIDs, for profile/override handled_apids (L22), configured likewise.
+  catalog_apids: Cadence.MissionModels.CatalogApids,
   # Builds runtime activations for profile-framed change-set applies (DECISIONS #36).
   configuration_generation: Cadence.Control.ConfigurationGeneration,
   ecto_repos: [Cadence.Repo],
