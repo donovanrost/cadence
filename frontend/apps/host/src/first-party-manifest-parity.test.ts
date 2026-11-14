@@ -481,7 +481,7 @@ const expected = [
         "Telemetry Explore",
         10,
         "cadence.ops.telemetry_explore",
-        ["apply_filters", "apply_question", "add_to_dashboard"],
+        ["apply_filters", "apply_question"],
       ],
       [
         "data_operations",

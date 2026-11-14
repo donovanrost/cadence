@@ -164,7 +164,7 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :operations,
       label: "Telemetry Explore",
       path: "/missions/:mission_id/ops/explore",
-      actions: ["apply_filters", "apply_question", "add_to_dashboard"]
+      actions: ["apply_filters", "apply_question"]
     },
     %{
       id: "data_operations",

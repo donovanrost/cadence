@@ -1,15 +1,13 @@
 defmodule Cadence.Applications.OpsConsole.Actions.TelemetryExplore do
-  @moduledoc "Strict navigation and dashboard-authoring actions for Telemetry Explore."
+  @moduledoc "Strict navigation actions for Telemetry Explore."
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Dashboards
   alias Cadence.Ops.PointCatalog
 
   @bindings [
     {"telemetry_explore", "apply_filters"},
-    {"telemetry_explore", "apply_question"},
-    {"telemetry_explore", "add_to_dashboard"}
+    {"telemetry_explore", "apply_question"}
   ]
 
   @filter_keys ~w(
@@ -96,13 +94,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.TelemetryExplore do
     end
   end
 
-  defp authorize(scope, organization_id, mission_id, "add_to_dashboard") do
-    Policy.authorize(scope, :author_dashboards, %{
-      organization_id: organization_id,
-      mission_id: mission_id
-    })
-  end
-
   defp authorize(scope, organization_id, mission_id, _action_id) do
     Policy.authorize(scope, :operate_mission, %{
       organization_id: organization_id,
@@ -130,27 +121,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.TelemetryExplore do
     end
   end
 
-  defp dispatch(scope, mission_id, "add_to_dashboard", params) do
-    title = params["title"]
-
-    with :ok <- exact_keys(params, ["dashboard_id", "widget_type", "title"] ++ @filter_keys),
-         {:ok, dashboard_id} <- required_text(params["dashboard_id"]),
-         {:ok, widget_type} <- widget_type(params["widget_type"]),
-         :ok <- optional_text(params["title"]),
-         {:ok, point_id} <- required_text(params["point_id"]),
-         :ok <- validate_filter_values(params),
-         :ok <- dashboard_target(scope.organization_id, mission_id, dashboard_id) do
-      {:ok,
-       navigation_result(
-         dashboard_path(
-           mission_id,
-           dashboard_id,
-           candidate_query(params, point_id, widget_type, title)
-         )
-       )}
-    end
-  end
-
   defp dispatch(_scope, _mission_id, _action_id, _params),
     do: {:error, :unsupported_application_action}
 
@@ -174,28 +144,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.TelemetryExplore do
   defp required_question(question) when question in @question_ids, do: {:ok, question}
   defp required_question(_question), do: {:error, :invalid_question}
 
-  defp widget_type(widget_type) when widget_type in ["value_tile", "time_series"],
-    do: {:ok, widget_type}
-
-  defp widget_type(_widget_type), do: {:error, :invalid_widget_type}
-
-  defp required_text(value) when is_binary(value) do
-    value = String.trim(value)
-    if value == "", do: {:error, :malformed_action_input}, else: {:ok, value}
-  end
-
-  defp required_text(_value), do: {:error, :malformed_action_input}
-
   defp optional_text(value) when is_binary(value), do: :ok
   defp optional_text(_value), do: {:error, :malformed_action_input}
-
-  defp dashboard_target(organization_id, mission_id, dashboard_id) do
-    if Enum.any?(Dashboards.list_dashboard_summaries(organization_id, mission_id), fn dashboard ->
-         dashboard.dashboard_id == dashboard_id and dashboard.lifecycle_state == "active"
-       end),
-       do: :ok,
-       else: {:error, :dashboard_not_found}
-  end
 
   defp filter_query(params) do
     params
@@ -241,38 +191,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.TelemetryExplore do
     })
   end
 
-  defp candidate_query(params, point_id, widget_type, title) do
-    params
-    |> Map.take(@filter_keys)
-    |> Map.merge(%{
-      "candidate_source" => "explore",
-      "candidate_point_id" => point_id,
-      "candidate_title" => if(title == "", do: default_title(point_id), else: title),
-      "candidate_widget_type" => widget_type,
-      "candidate_spacecraft_id" => params["spacecraft_id"],
-      "candidate_realm" => params["realm"],
-      "candidate_data_view" => params["selection_view"],
-      "candidate_data_source_id" => params["data_source_id"],
-      "candidate_source_binding_id" => params["source_binding_id"],
-      "data_view" => params["selection_view"]
-    })
-    |> Map.drop(["point_id", "question", "sample_id", "selected_time", "source_dashboard_id"])
-    |> compact_query()
-  end
-
-  defp default_title(point_id),
-    do:
-      point_id
-      |> String.replace(["_", "."], " ")
-      |> String.split()
-      |> Enum.map_join(" ", &String.capitalize/1)
-
   defp explore_path(mission_id, query),
     do: "/missions/#{URI.encode(mission_id)}/ops/explore?#{URI.encode_query(query)}"
-
-  defp dashboard_path(mission_id, dashboard_id, query),
-    do:
-      "/missions/#{URI.encode(mission_id)}/ops/dashboards/#{URI.encode(dashboard_id)}/edit?#{URI.encode_query(query)}"
 
   defp navigation_result(href), do: %{"navigation" => href}
 

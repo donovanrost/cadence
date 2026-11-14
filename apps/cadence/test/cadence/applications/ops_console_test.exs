@@ -285,7 +285,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
              {"commands", :operations, :mission, :ops_workspace, "cadence.ops.commands", []},
              {"telemetry_explore", :operations, :mission, :ops_workspace,
               "cadence.ops.telemetry_explore",
-              ["apply_filters", "apply_question", "add_to_dashboard"]},
+              ["apply_filters", "apply_question"]},
              {"data_operations", :operations, :mission, :ops_workspace,
               "cadence.ops.data_operations",
               [

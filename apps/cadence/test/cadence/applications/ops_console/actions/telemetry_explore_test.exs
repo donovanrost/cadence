@@ -37,11 +37,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.TelemetryExploreTest do
     }
   end
 
-  test "declares the exact navigation and authoring bindings" do
+  test "declares the exact navigation bindings" do
     assert TelemetryExplore.bindings() == [
              {"telemetry_explore", "apply_filters"},
-             {"telemetry_explore", "apply_question"},
-             {"telemetry_explore", "add_to_dashboard"}
+             {"telemetry_explore", "apply_question"}
            ]
   end
 
@@ -62,22 +61,9 @@ defmodule Cadence.Applications.OpsConsole.Actions.TelemetryExploreTest do
     assert question_path =~ "question=recent_anomalies"
   end
 
-  test "rejects malformed filter and dashboard authoring inputs", %{scope: scope} do
+  test "rejects malformed filter inputs", %{scope: scope} do
     assert {:error, :malformed_action_input} =
              execute(scope, "apply_filters", Map.delete(filter_params(), "limit"))
-
-    assert {:error, :invalid_widget_type} =
-             execute(
-               scope,
-               "add_to_dashboard",
-               %{
-                 "dashboard_id" => "dashboard-1",
-                 "widget_type" => "unsupported",
-                 "title" => "Telemetry",
-                 "point_id" => "point-1"
-               }
-               |> Map.merge(filter_params())
-             )
   end
 
   defp execute(scope, action_id, params) do
