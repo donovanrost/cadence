@@ -52,7 +52,12 @@ const passEnder = d.object({
 export type PassEnder = Decoded<typeof passEnder>;
 
 /** U55 (api): how Cadence's side of the contact was stopped; the booking itself is unchanged. */
-export const contactEndCauses = ["operator", "provider_failed", "provider_canceled"] as const;
+export const contactEndCauses = [
+  "operator",
+  "provider_failed",
+  "provider_canceled",
+  "provider_rejected",
+] as const;
 const contactEnded = d.object({
   kind: d.known(["canceled", "ended_early"] as const),
   cause: d.knownText(contactEndCauses),

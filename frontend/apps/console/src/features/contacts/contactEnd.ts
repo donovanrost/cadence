@@ -23,14 +23,40 @@ const short = (iso: string, now: Date) =>
   `${iso.slice(0, 10) === now.toISOString().slice(0, 10) ? "" : `${iso.slice(5, 10)} `}${hhmm(iso)}`;
 const quoted = (reason: string | null) => (reason ? `: “${reason.trim()}”` : "");
 
+/**
+ * ux U56: until domain splits the provider's text from a code, a bare snake_case string is a code.
+ * A known code gets words; an unknown one is left out (its raw key goes in Technical details).
+ */
+const CODE = /^[a-z0-9_]+$/;
+const CODE_WORDS: Readonly<Record<string, string>> = {
+  delivery_descriptor_conflicts_with_transport:
+    "its delivery settings don't match the transport set up in Cadence",
+};
+/** The raw provider code behind a Cadence cancel, for Technical details; null for free text. */
+export const endedCode = (e: ContactEnded | null | undefined): string | null => {
+  const r = e?.reason?.trim();
+  return e && e.by.kind === "system" && r && CODE.test(r) ? r : null;
+};
+function providerReason(e: ContactEnded): string {
+  const r = e.reason?.trim();
+  if (!r) return "";
+  if (!CODE.test(r)) return ` (“${r}”)`;
+  const words = CODE_WORDS[r];
+  return words ? ` (${words})` : "";
+}
+
+const CADENCE_CANCELS: Readonly<Record<string, (p: string) => string>> = {
+  provider_failed: (p) => `${p} couldn't book this pass`,
+  provider_canceled: (p) => `${p} canceled this pass`,
+  provider_rejected: (p) => `${p} rejected the booking for this pass`,
+};
+
 /** History line: "Canceled by Mira K. at 12:58Z: “Its booking failed.”" (and U56's Cadence forms). */
 export function endedLine(e: ContactEnded, provider: string | null, now: Date): string {
   const at = short(e.at, now);
   const p = provider ?? "The provider";
-  if (e.cause === "provider_failed")
-    return `Canceled by Cadence at ${at}: ${p} couldn't book this pass${e.reason ? ` (“${e.reason.trim()}”)` : ""}.`;
-  if (e.cause === "provider_canceled")
-    return `Canceled by Cadence at ${at}: ${p} canceled this pass${e.reason ? ` (“${e.reason.trim()}”)` : ""}.`;
+  const cadence = isKnown(e.cause) ? CADENCE_CANCELS[e.cause] : undefined;
+  if (cadence) return `Canceled by Cadence at ${at}: ${cadence(p)}${providerReason(e)}.`;
   if (e.by.kind !== "user" || !isKnown(e.cause)) return `Canceled by Cadence at ${at}.`;
   const who = e.by.name ?? "an operator";
   const what = e.kind === "ended_early" ? "Ended early" : "Canceled";

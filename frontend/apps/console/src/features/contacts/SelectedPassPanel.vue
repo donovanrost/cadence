@@ -45,7 +45,7 @@ import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from 
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
 import ContactEndAction from "./ContactEndAction.vue";
-import { endedLine, endedTag } from "./contactEnd.ts";
+import { endedCode, endedLine, endedTag } from "./contactEnd.ts";
 import PassUplinks from "./PassUplinks.vue";
 import { contactTrail } from "./trail.ts";
 import { offPlanLine } from "./singleBookings.ts";
@@ -301,6 +301,11 @@ const countdown = computed(() => {
       <p v-if="pass.contact_ended" class="m-0 text-sm text-text-2">
         {{ endedLine(pass.contact_ended, pass.source.provider_name, now) }}
       </p>
+      <!-- U56: a provider's reason code is worded or left out; the raw key lives here. -->
+      <details v-if="endedCode(pass.contact_ended)" class="text-xs text-text-3">
+        <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
+        <p class="m-0 pt-1 font-mono">reason: {{ endedCode(pass.contact_ended) }}</p>
+      </details>
       <p class="m-0 font-mono text-md text-text-2 uppercase">
         {{ pass.station.name ?? stationLabel(pass) }} ·
         <span class="text-readout">{{ countdown }}</span>

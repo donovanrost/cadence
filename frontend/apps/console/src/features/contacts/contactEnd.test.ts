@@ -4,6 +4,7 @@ import { passReader } from "./api.ts";
 import {
   commandsLine,
   consequenceLines,
+  endedCode,
   endedLine,
   endedTag,
   refusalWords,
@@ -148,6 +149,21 @@ describe("U55 cancel or end a contact", () => {
       "Canceled by Cadence at 12:58Z: Northlight canceled this pass.",
     );
     expect(endedLine(odd, "Northlight", NOW)).toBe("Canceled by Cadence at 12:58Z.");
+    const rejected = ended({
+      ...sys,
+      cause: "provider_rejected",
+      reason: "delivery_descriptor_conflicts_with_transport",
+    });
+    const unknownCode = ended({ ...sys, cause: "provider_failed", reason: "station_busy_42" });
+    if (!rejected || !unknownCode) throw new Error("ended");
+    expect(endedLine(rejected, "Northlight", NOW)).toBe(
+      "Canceled by Cadence at 12:58Z: Northlight rejected the booking for this pass (its delivery settings don't match the transport set up in Cadence).",
+    );
+    expect(endedCode(rejected)).toBe("delivery_descriptor_conflicts_with_transport");
+    expect(endedLine(unknownCode, "Northlight", NOW)).toBe(
+      "Canceled by Cadence at 12:58Z: Northlight couldn't book this pass.",
+    );
+    expect(endedCode(failed)).toBeNull();
   });
 
   it("words each refusal", () => {
