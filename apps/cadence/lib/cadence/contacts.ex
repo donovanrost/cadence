@@ -591,11 +591,12 @@ defmodule Cadence.Contacts do
     ContactLifecycle.start_realized(mission_id, realized_contact_id)
   end
 
-  @spec start_realized_contact(binary(), binary(), binary()) :: {:ok, pid()} | {:error, term()}
-  def start_realized_contact(organization_id, mission_id, realized_contact_id)
+  @spec start_realized_contact(binary(), binary(), binary(), map() | nil) ::
+          {:ok, pid()} | {:error, term()}
+  def start_realized_contact(organization_id, mission_id, realized_contact_id, started_by \\ nil)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(realized_contact_id) do
-    ContactLifecycle.start_realized(organization_id, mission_id, realized_contact_id)
+    ContactLifecycle.start_realized(organization_id, mission_id, realized_contact_id, started_by)
   end
 
   @spec end_realized_contact_early(binary(), binary(), keyword()) ::

@@ -432,7 +432,8 @@ defmodule Cadence.Commanding do
            ReleaseTargetSelection.resolve_dispatch(
              organization_id,
              mission_id,
-             CommandRequestRow.to_domain(request_row)
+             CommandRequestRow.to_domain(request_row),
+             attempted_at
            ) do
       organization_id
       |> release_command_queue_entry(
@@ -531,6 +532,17 @@ defmodule Cadence.Commanding do
       &verifier_target_spacecraft/3
     )
   end
+
+  # Who a release that starts its contact names as the starter (api U46 "started_by").
+  defp starter(%{"user_id" => id}) when is_binary(id), do: %{"kind" => "user", "id" => id}
+
+  defp starter(%{"service_identity_id" => id}) when is_binary(id),
+    do: %{"kind" => "service", "id" => id}
+
+  # The lane dispatcher (an armed group releasing by itself).
+  defp starter(%{"service" => id}) when is_binary(id), do: %{"kind" => "service", "id" => id}
+
+  defp starter(_released_by), do: %{"kind" => "system", "id" => "command_release"}
 
   # SAFETY (#38): a telemetry verifier reads only its command's target spacecraft.
   defp verifier_target_spacecraft(organization_id, mission_id, source_endpoint_ref)
@@ -739,10 +751,16 @@ defmodule Cadence.Commanding do
            ReleaseTargetSelection.fetch_realized_contact(
              organization_id,
              mission_id,
-             realized_contact_id
+             realized_contact_id,
+             attempted_at
            ),
          {:ok, _pid} <-
-           Contacts.start_realized_contact(organization_id, mission_id, realized_contact_id),
+           Contacts.start_realized_contact(
+             organization_id,
+             mission_id,
+             realized_contact_id,
+             starter(released_by)
+           ),
          {:ok,
           %{path: %Path{} = path, transport_binding: %TransportBinding{} = transport_binding}} <-
            ReleaseTargetSelection.resolve(

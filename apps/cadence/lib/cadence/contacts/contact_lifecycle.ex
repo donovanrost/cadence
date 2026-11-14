@@ -14,6 +14,9 @@ defmodule Cadence.Contacts.ContactLifecycle do
   alias Cadence.Contacts.Validation
   alias Cadence.Control.Contacts, as: Runtime
 
+  # Who starts a scheduled pass on time (api U46 "started_by").
+  @scheduler %{"kind" => "system", "id" => "contact_scheduler"}
+
   @spec reconcile(DateTime.t()) :: {:ok, map()}
   def reconcile(%DateTime{} = reference_time) do
     do_reconcile(nil, reference_time)
@@ -67,8 +70,19 @@ defmodule Cadence.Contacts.ContactLifecycle do
   end
 
   @spec start_realized(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
-  def start_realized(%RealizedContact{} = realized_contact) do
-    start_runtime_and_mark_active(realized_contact, %{started_at: DateTime.utc_now()})
+  def start_realized(%RealizedContact{} = realized_contact),
+    do: start_realized_by(realized_contact, nil)
+
+  @doc """
+  Starts the contact's runtime for `started_by` (api U46), who asked:
+  `%{"kind" => "user" | "service" | "system", "id" => id}`, recorded when the contact goes active.
+  """
+  @spec start_realized_by(RealizedContact.t(), map() | nil) :: {:ok, pid()} | {:error, term()}
+  def start_realized_by(%RealizedContact{} = realized_contact, started_by) do
+    start_runtime_and_mark_active(realized_contact, %{
+      started_at: DateTime.utc_now(),
+      started_by: started_by
+    })
   end
 
   @spec start_realized(binary(), binary()) :: {:ok, pid()} | {:error, term()}
@@ -80,13 +94,14 @@ defmodule Cadence.Contacts.ContactLifecycle do
     end
   end
 
-  @spec start_realized(binary(), binary(), binary()) :: {:ok, pid()} | {:error, term()}
-  def start_realized(organization_id, mission_id, realized_contact_id)
+  @spec start_realized(binary(), binary(), binary(), map() | nil) ::
+          {:ok, pid()} | {:error, term()}
+  def start_realized(organization_id, mission_id, realized_contact_id, started_by \\ nil)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(realized_contact_id) do
     with {:ok, %RealizedContact{} = realized_contact} <-
            ContactStore.fetch_realized(organization_id, mission_id, realized_contact_id) do
-      start_realized(realized_contact)
+      start_realized_by(realized_contact, started_by)
     end
   end
 
@@ -342,7 +357,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
     else
       case start_runtime_and_mark_active(realized_contact, %{
              reconciled_at: reference_time,
-             started_at: reference_time
+             started_at: reference_time,
+             started_by: @scheduler
            }) do
         {:ok, _pid} ->
           {:ok, realized_contact.realized_contact_id}
@@ -364,7 +380,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
          {:ok, _pid} <-
            start_runtime_and_mark_active(persisted_realized_contact, %{
              activated_from_schedule: true,
-             started_at: transition_time
+             started_at: transition_time,
+             started_by: @scheduler
            }),
          {:ok, %RealizedContact{} = active_realized_contact} <-
            ContactStore.fetch_realized(
@@ -441,8 +458,9 @@ defmodule Cadence.Contacts.ContactLifecycle do
            ContactStore.update_realized_lifecycle(
              persisted_realized_contact,
              :active,
-             Map.merge(
-               metadata_patch,
+             persisted_realized_contact
+             |> start_patch(metadata_patch)
+             |> Map.merge(
                ContactStartFailure.started(persisted_realized_contact, DateTime.utc_now())
              )
            ) do
@@ -450,6 +468,15 @@ defmodule Cadence.Contacts.ContactLifecycle do
       {:ok, pid}
     end
   end
+
+  # A contact already active keeps who started it (a release reaching a running pass isn't a start).
+  defp start_patch(%RealizedContact{lifecycle_state: :active}, patch),
+    do: Map.delete(patch, :started_by)
+
+  defp start_patch(%RealizedContact{}, %{started_by: nil} = patch),
+    do: Map.delete(patch, :started_by)
+
+  defp start_patch(%RealizedContact{}, patch), do: patch
 
   # ux U45: a failed start is kept on the contact, so the reconcile retries it and Now shows it.
   defp start_runtime(%RealizedContact{} = realized_contact) do

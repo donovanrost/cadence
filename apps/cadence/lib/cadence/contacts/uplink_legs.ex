@@ -10,8 +10,13 @@ defmodule Cadence.Contacts.UplinkLegs do
   snapshot.
   """
 
+  import Ecto.Query
+
   alias Cadence.Comms.{RoutingRule, RoutingRuleStore, Transport, TransportStore}
   alias Cadence.Contacts.{LinkAssignment, LinkAssignmentStore, ProviderReservation}
+  alias Cadence.Control.Contacts.Store.{ProviderReservationChangeRow, ProviderReservationRow}
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Repo
 
   @not_booked "uplink not booked"
   @unconfirmed "uplink unconfirmed"
@@ -71,6 +76,85 @@ defmodule Cadence.Contacts.UplinkLegs do
          %{"uplink" => %{"booked" => false, "reason" => @not_booked, "provider_reason" => reason}}}
     end
   end
+
+  # Changes whose terms Cadence has taken on: the accepted snapshot follows them.
+  @accepted_change_states ~w(observed policy_accepted approved acknowledged)
+
+  @doc """
+  Whether the booking asked for an uplink leg that Cadence's accepted terms no longer include:
+  the provider won't carry the uplink, so the pass has no command window (director, 11-14). The
+  scheduled contact keeps its snapshot (#46); releases check this instead.
+  """
+  @spec dropped?(ProviderReservation.t()) :: boolean()
+  def dropped?(%ProviderReservation{} = reservation) do
+    status = uplink_status(reservation.cadence_accepted_snapshot_document)
+
+    is_map(get_in(reservation.request_document || %{}, ["uplink"])) and
+      status not in [nil, "included"]
+  end
+
+  @doc """
+  The dropped uplink legs among `reservation_ids`, with the accepted change that dropped each:
+  `%{reservation_id => %{at, change_id, provider_id, reason}}` (`at` is when Cadence accepted
+  it; `reason` the provider's status_reason, if any). Reservations whose leg is fine are absent.
+  """
+  @spec drops(binary(), binary(), [binary()]) :: %{binary() => map()}
+  def drops(_org, _mission, []), do: %{}
+
+  def drops(org, mission, reservation_ids) when is_list(reservation_ids) do
+    dropped =
+      from(row in ProviderReservationRow,
+        where:
+          row.organization_id == ^org and row.mission_id == ^mission and
+            row.provider_reservation_id in ^reservation_ids
+      )
+      |> Repo.all()
+      |> Enum.map(&ProviderReservationRow.to_domain/1)
+      |> Enum.filter(&dropped?/1)
+
+    changes = drop_changes(org, mission, Enum.map(dropped, & &1.provider_reservation_id))
+
+    Map.new(dropped, fn reservation ->
+      change = Map.get(changes, reservation.provider_reservation_id)
+
+      {reservation.provider_reservation_id,
+       %{
+         at: change && (change.decided_at || change.inserted_at),
+         change_id: change && change.provider_reservation_change_id,
+         provider_id: reservation.provider_id,
+         reason:
+           get_in(reservation.cadence_accepted_snapshot_document || %{}, [
+             "uplink",
+             "status_reason"
+           ])
+       }}
+    end)
+  end
+
+  # The latest accepted change per reservation that took the leg out of "included".
+  defp drop_changes(_org, _mission, []), do: %{}
+
+  defp drop_changes(org, mission, ids) do
+    from(row in ProviderReservationChangeRow,
+      where:
+        row.organization_id == ^org and row.mission_id == ^mission and
+          row.provider_reservation_id in ^ids and row.lifecycle_state in ^@accepted_change_states,
+      order_by: [desc: row.provider_revision]
+    )
+    |> Repo.all()
+    |> Enum.filter(fn row ->
+      uplink_status(JsonDocument.unwrap_value(row.before_snapshot_document)) == "included" and
+        uplink_status(JsonDocument.unwrap_value(row.after_snapshot_document)) not in [
+          nil,
+          "included"
+        ]
+    end)
+    |> Enum.reduce(%{}, fn row, acc -> Map.put_new(acc, row.provider_reservation_id, row) end)
+  end
+
+  defp uplink_status(%{"value" => %{} = snapshot}), do: uplink_status(snapshot)
+  defp uplink_status(%{"uplink" => %{"status" => status}}), do: status
+  defp uplink_status(_snapshot), do: nil
 
   defp attested?(%ProviderReservation{
          metadata: %{"operator_resolution" => %{"action" => "booked"}}

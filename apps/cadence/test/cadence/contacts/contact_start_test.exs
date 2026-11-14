@@ -88,7 +88,23 @@ defmodule Cadence.Contacts.ContactStartTest do
 
     assert Cadence.Runtime.realized_contact_running?(ctx.mission_id, second_run)
 
-    assert {:ok, %{lifecycle_state: :active}} =
+    assert {:ok, %{lifecycle_state: :active} = started} =
+             ContactStore.fetch_realized(ctx.mission_id, second_run)
+
+    # api U46: the scheduler started it, and a later start (a release reaching the running pass)
+    # doesn't rename the starter.
+    scheduler = %{"kind" => "system", "id" => "contact_scheduler"}
+    assert started.metadata["started_by"] == scheduler
+
+    assert {:ok, _pid} =
+             Contacts.start_realized_contact(
+               ctx.organization_id,
+               ctx.mission_id,
+               second_run,
+               %{"kind" => "user", "id" => "op"}
+             )
+
+    assert {:ok, %{metadata: %{"started_by" => ^scheduler}}} =
              ContactStore.fetch_realized(ctx.mission_id, second_run)
 
     assert [] = ContactStartAttention.items(ctx.organization_id, ctx.mission_id)

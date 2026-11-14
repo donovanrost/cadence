@@ -147,6 +147,14 @@ defmodule Cadence.Control.Contacts do
     to: ProviderReservations,
     as: :list_in_window
 
+  @doc "Whether the booking's uplink leg was dropped by an accepted change (no command window)."
+  defdelegate uplink_leg_dropped?(reservation), to: Cadence.Contacts.UplinkLegs, as: :dropped?
+
+  @doc "Dropped uplink legs among the reservations, with when and why (api U46 reads)."
+  defdelegate uplink_drops(org, mission, reservation_ids),
+    to: Cadence.Contacts.UplinkLegs,
+    as: :drops
+
   @spec fetch_provider_reservation(binary(), binary(), binary()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
   def fetch_provider_reservation(organization_id, mission_id, reservation_id),

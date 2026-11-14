@@ -25,7 +25,14 @@ defmodule Cadence.CommandingTest do
     StagedCommandItem
   }
 
-  alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, TransportBinding}
+  alias Cadence.Contacts.{
+    Path,
+    ProviderBinding,
+    RealizedContact,
+    ScheduledContact,
+    TransportBinding
+  }
+
   alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.OperationalEvents
   alias Cadence.Repo
@@ -1360,7 +1367,8 @@ defmodule Cadence.CommandingTest do
                ReleaseTargetSelection.resolve_dispatch(
                  @organization_id,
                  @mission_id,
-                 CommandRequest.new(Map.from_struct(c.request))
+                 CommandRequest.new(Map.from_struct(c.request)),
+                 DateTime.utc_now()
                )
 
       # Even named explicitly, bravo's pass refuses alpha's command before anything is sent.
@@ -1393,17 +1401,63 @@ defmodule Cadence.CommandingTest do
     end
 
     test "with both spacecraft's passes active, the lane picks the target's own", c do
-      _bravo = uplink_contact_38([c.bravo], nil)
-      alpha = uplink_contact_38([c.alpha], c.alpha)
+      _bravo = uplink_contact_38([c.bravo], nil, %{"scid" => 0}, now_window())
+      alpha = uplink_contact_38([c.alpha], c.alpha, %{"scid" => 0}, now_window())
 
       assert {:ok, %{realized_contact: %{realized_contact_id: id}}} =
                ReleaseTargetSelection.resolve_dispatch(
                  @organization_id,
                  @mission_id,
-                 CommandRequest.new(Map.from_struct(c.request))
+                 CommandRequest.new(Map.from_struct(c.request)),
+                 DateTime.utc_now()
                )
 
       assert id == alpha.realized_contact_id
+    end
+
+    test "an armed lane releases only into a scheduled pass inside its window (director, 11-14)",
+         c do
+      request = CommandRequest.new(Map.from_struct(c.request))
+      now = DateTime.utc_now()
+
+      # A hand-started contact of the target: the lane never picks it by itself.
+      _hand_started = uplink_contact_38([c.alpha], c.alpha)
+
+      assert {:error, {:command_queue_lane_no_release_target, _, _}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 request,
+                 now
+               )
+
+      # A scheduled pass that has ended (its runtime still up, as tonight's stale ones were).
+      _ended =
+        uplink_contact_38([c.alpha], c.alpha, %{"scid" => 0}, {
+          DateTime.add(now, -900),
+          DateTime.add(now, -300)
+        })
+
+      assert {:error, {:command_queue_lane_no_release_target, _, _}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 request,
+                 now
+               )
+
+      # The target's pass that is on now is the one.
+      on_now = uplink_contact_38([c.alpha], c.alpha, %{"scid" => 0}, now_window())
+
+      assert {:ok, %{realized_contact: %{realized_contact_id: id}}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 request,
+                 now
+               )
+
+      assert id == on_now.realized_contact_id
     end
 
     test "a gateway that doesn't name a SCID is refused, never sent", c do
@@ -1465,32 +1519,44 @@ defmodule Cadence.CommandingTest do
     end
   end
 
-  defp uplink_contact_38(contact_endpoints, path_endpoint, gateway_config \\ %{"scid" => 0}) do
+  defp now_window,
+    do: {DateTime.add(DateTime.utc_now(), -300), DateTime.add(DateTime.utc_now(), 900)}
+
+  # `window` {starts_at, ends_at}: the contact realizes a scheduled pass; nil: started by hand.
+  defp uplink_contact_38(
+         contact_endpoints,
+         path_endpoint,
+         gateway_config \\ %{"scid" => 0},
+         window \\ nil
+       ) do
+    paths = [
+      Path.new(%{
+        path_id: "uplink-path-alpha",
+        direction: :uplink,
+        selection_role: :selected,
+        source_endpoint_ref: path_endpoint,
+        transport_bindings: [
+          TransportBinding.new(%{
+            transport_binding_id: "uplink-gateway-alpha",
+            family_key: :uplink_gateway,
+            target_scope: :path,
+            configuration: Map.put(gateway_config, "service_name", "gateway")
+          })
+        ]
+      })
+    ]
+
     contact =
       RealizedContact.new(%{
         realized_contact_id:
           "realized-contact-38-" <> Integer.to_string(System.unique_integer([:positive])),
         organization_id: @organization_id,
         mission_id: @mission_id,
+        scheduled_contact_id: scheduled_38(contact_endpoints, paths, window),
         source_endpoint_refs: contact_endpoints,
         clock_mode: :replay,
         initial_time: DateTime.from_unix!(1_700_400_000, :second),
-        paths: [
-          Path.new(%{
-            path_id: "uplink-path-alpha",
-            direction: :uplink,
-            selection_role: :selected,
-            source_endpoint_ref: path_endpoint,
-            transport_bindings: [
-              TransportBinding.new(%{
-                transport_binding_id: "uplink-gateway-alpha",
-                family_key: :uplink_gateway,
-                target_scope: :path,
-                configuration: Map.put(gateway_config, "service_name", "gateway")
-              })
-            ]
-          })
-        ]
+        paths: paths
       })
 
     assert {:ok, _} = Cadence.Contacts.persist_realized_contact(@organization_id, contact)
@@ -1503,6 +1569,27 @@ defmodule Cadence.CommandingTest do
              )
 
     contact
+  end
+
+  defp scheduled_38(_endpoints, _paths, nil), do: nil
+
+  defp scheduled_38(endpoints, paths, {starts_at, ends_at}) do
+    id = "scheduled-38-" <> Integer.to_string(System.unique_integer([:positive]))
+
+    {:ok, _scheduled} =
+      Cadence.Contacts.persist_scheduled_contact(
+        @organization_id,
+        ScheduledContact.new(%{
+          scheduled_contact_id: id,
+          mission_id: @mission_id,
+          source_endpoint_refs: endpoints,
+          starts_at: starts_at,
+          ends_at: ends_at,
+          paths: paths
+        })
+      )
+
+    id
   end
 
   defp release_38(c, contact),
