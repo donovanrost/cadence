@@ -9,6 +9,7 @@ import {
   type ApiResult,
 } from "@/api/index.ts";
 import { NO_ACCESS_ARCHIVE } from "./archive.ts";
+import { NO_ACCESS_JOB } from "./jobs.ts";
 import { attentionReader, serverKey, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 
@@ -166,7 +167,9 @@ export function useQueueCommand(
     const base =
       item.command && !canRun
         ? `${item.sentence} ${noAccessText(item.command.kind, item.command.targets)}`
-        : item.sentence;
+        : item.job && !canRun
+          ? `${item.sentence} ${NO_ACCESS_JOB}`
+          : item.sentence;
     const note = notes.value[item.key];
     return note ? `${base} ${note}` : base;
   }

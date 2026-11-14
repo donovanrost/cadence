@@ -6,8 +6,10 @@ import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote, formatRelative, useN
 import type { QueueItem } from "./queue.ts";
 import type { Attention } from "./attention.ts";
 import DiscardSheet from "./DiscardSheet.vue";
+import JobSheets from "./JobSheets.vue";
 import QueueListSheet from "./QueueListSheet.vue";
 import { useFreshFlash } from "./useFreshFlash.ts";
+import { jobOffers } from "./jobs.ts";
 import { useQueueCommand, type RetryOutcome } from "./useQueueCommand.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
@@ -23,6 +25,15 @@ function discarded(row: QueueItem, item: Attention | null) {
   emit("retried", row, { text: null, items: item ? [item] : [], emptied: false });
 }
 let discarding: QueueItem | null = null;
+/** U54: Retry… / Close without retry… open their sheets; the returned item patches the row. */
+const jobSheets = ref<InstanceType<typeof JobSheets> | null>(null);
+let deciding: QueueItem | null = null;
+function openJob(row: QueueItem, kind: "retry" | "close") {
+  if (!row.job) return;
+  deciding = row;
+  if (kind === "retry") jobSheets.value?.openRetry(row.job);
+  else jobSheets.value?.openClose(row.job);
+}
 function openDiscard(row: QueueItem) {
   if (!row.discard) return;
   discarding = row;
@@ -101,6 +112,23 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 >{{ item.command.label }}</ApButton
               >
               <!-- A folded row (U37) opens its members in a sheet instead of routing. -->
+              <!-- U54: both slots go to the job's two decisions (operators only). -->
+              <template v-else-if="item.job && access.abort">
+                <ApButton
+                  v-if="jobOffers(item.job, 'retry')"
+                  size="compact"
+                  variant="secondary"
+                  @click="openJob(item, 'retry')"
+                  >Retry…</ApButton
+                >
+                <ApButton
+                  v-if="jobOffers(item.job, 'close')"
+                  size="compact"
+                  variant="secondary"
+                  @click="openJob(item, 'close')"
+                  >Close without retry…</ApButton
+                >
+              </template>
               <ApButton
                 v-else-if="item.list"
                 size="compact"
@@ -109,7 +137,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 >{{ item.action.label }}</ApButton
               >
               <ApButton
-                v-else
+                v-else-if="!item.noAction"
                 size="compact"
                 :variant="
                   item.primary || (i === 0 && item.priority === 1 && !item.acknowledged)
@@ -134,6 +162,11 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
       </template>
     </ApRemote>
     <QueueListSheet ref="sheet" />
+    <JobSheets
+      ref="jobSheets"
+      :mission-id="scope.mission.id"
+      @done="(item) => deciding && discarded(deciding, item)"
+    />
     <DiscardSheet
       ref="discardSheet"
       :mission-id="scope.mission.id"

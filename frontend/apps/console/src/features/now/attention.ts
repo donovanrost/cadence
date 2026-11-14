@@ -42,6 +42,8 @@ export const attentionSources = [
   "archive_quarantine",
   // U50 (#87): connections a shared listener refused during this pass's window.
   "listener_refusal",
+  // U54 (api-ops): a job that isn't safe to rerun was running when Cadence stopped.
+  "job_outcome_unknown",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -68,6 +70,8 @@ export const attentionConflicts = [
   "quarantined",
   // listener_refusal (U50): one item per open contact on the shared listener.
   "listener_refusal",
+  // job_outcome_unknown (U54): one item per cut-off run.
+  "outcome_unknown",
 ] as const;
 /** U50 listener_refusal: why the shared listener refused the last connection. */
 export const listenerRefusals = [
@@ -358,7 +362,7 @@ export const attentionReader = d.object({
   first_received_at: d.optional(d.nullable(d.timestamp)),
   last_received_at: d.optional(d.nullable(d.timestamp)),
   last_seen_at: d.optional(d.nullable(d.timestamp)),
-  actions: d.optional(d.nullable(d.array(d.knownText(["retry", "discard"] as const), 10))),
+  actions: d.optional(d.nullable(d.array(d.knownText(["retry", "discard", "close"] as const), 10))),
   /** `indexed` asked of domain 11-14: how many that retry archived. */
   last_retry: d.optional(
     d.nullable(d.object({ by: who, at: d.timestamp, indexed: d.optional(d.nullable(d.integer)) })),
@@ -384,6 +388,36 @@ export const attentionReader = d.object({
   shared_with: d.optional(d.nullable(d.array(d.token, 1_000))),
   // free-text: the provider's ground station reference
   ground_station_ref: d.optional(d.nullable(d.string)),
+  /** job_outcome_unknown (U54, api-ops): the cut-off run, and its type's words from the server. */
+  job: d.optional(
+    d.nullable(
+      d.object({
+        id: d.token,
+        type_key: d.token,
+        run_id: d.nullable(d.token),
+        attempt: d.nullable(d.integer),
+        // free-text: a node name
+        node: d.nullable(d.string),
+        // free-text: the worker module, Technical details only
+        worker: d.optional(d.nullable(d.string)),
+      }),
+    ),
+  ),
+  words: d.optional(
+    d.nullable(
+      d.object({
+        // free-text: the job's noun ("Booking at Northlight"), from api-ops' table
+        noun: d.string,
+        // free-text: where to check ("with Northlight", "in Setup › Catalog")
+        check_place: d.string,
+        // free-text: what a second run could do ("book the pass twice")
+        consequence: d.string,
+      }),
+    ),
+  ),
+  started_at: d.optional(d.nullable(d.timestamp)),
+  /** When the restart found it; Cadence doesn't record when it stopped (U54). */
+  found_at: d.optional(d.nullable(d.timestamp)),
   resolution: d.nullable(
     d.object({
       // free-text: what the operator recorded doing (resolve's action_text, contacts.md)
@@ -565,6 +599,7 @@ export function attentionWords(
     case "frames_dropped":
     case "quarantined":
     case "listener_refusal":
+    case "outcome_unknown":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.
@@ -661,6 +696,15 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
         : r.booked === false
           ? `The contact ended at ${at}.`
           : `Ended at ${at}.`;
+  }
+  if (r.id.startsWith("attention:job_outcome_unknown:")) {
+    // U54: retried (queued again) or closed with what the operator found.
+    const who = r.resolved_by.name ?? "an operator";
+    if (r.action === "retried") return `Retried by ${who} at ${at}; it's queued.`;
+    if (r.action === "closed")
+      return r.note
+        ? `Closed without retry by ${who} at ${at}: “${r.note.trim()}”`
+        : `Closed without retry by ${who} at ${at}.`;
   }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";

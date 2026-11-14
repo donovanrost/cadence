@@ -40,6 +40,10 @@ export type QueueItem = Readonly<{
   command?: Readonly<{ label: string; kind: "retry" | "seen"; targets: readonly Attention[] }>;
   /** U49: a second write beside Retry, `Discard…`, which opens a sheet for its required reason. */
   discard?: Attention;
+  /** U54: `Retry…` and `Close without retry…`, each a sheet (operators only). */
+  job?: Attention;
+  /** The row has nothing to open (a job with no pass): no route button. */
+  noAction?: boolean;
   /** A folded row's members: its action opens them in a sheet (U30 pattern) instead of routing. */
   list?: Readonly<{ title: string; rows: readonly QueueListRow[] }>;
 }>;
