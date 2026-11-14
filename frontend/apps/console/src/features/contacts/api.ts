@@ -69,6 +69,8 @@ const contactEnded = d.object({
   at: d.timestamp,
   // free-text: the operator's reason, or the provider's own text for a Cadence cancel
   reason: d.nullable(d.string),
+  /** U56 (domain 7754c6205): the provider's code, apart from its text; absent on older reads. */
+  reason_code: d.optional(d.nullable(d.token)),
 });
 export type ContactEnded = Decoded<typeof contactEnded>;
 

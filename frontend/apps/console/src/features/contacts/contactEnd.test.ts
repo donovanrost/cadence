@@ -164,6 +164,28 @@ describe("U55 cancel or end a contact", () => {
       "Canceled by Cadence at 12:58Z: Northlight couldn't book this pass.",
     );
     expect(endedCode(failed)).toBeNull();
+    const split = ended({
+      ...sys,
+      cause: "provider_rejected",
+      reason: "Antenna 2 is down",
+      reason_code: "delivery_descriptor_conflicts_with_transport",
+    });
+    const textOnly = ended({
+      ...sys,
+      cause: "provider_failed",
+      reason: "no_slot",
+      reason_code: null,
+    });
+    if (!split || !textOnly) throw new Error("ended");
+    expect(endedLine(split, "Northlight", NOW)).toBe(
+      "Canceled by Cadence at 12:58Z: Northlight rejected the booking for this pass (its delivery settings don't match the transport set up in Cadence: “Antenna 2 is down”).",
+    );
+    expect(endedCode(split)).toBe("delivery_descriptor_conflicts_with_transport");
+    // With reason_code sent, reason is never guessed to be a code.
+    expect(endedLine(textOnly, "Northlight", NOW)).toBe(
+      "Canceled by Cadence at 12:58Z: Northlight couldn't book this pass (“no_slot”).",
+    );
+    expect(endedCode(textOnly)).toBeNull();
   });
 
   it("words each refusal", () => {

@@ -24,25 +24,28 @@ const short = (iso: string, now: Date) =>
 const quoted = (reason: string | null) => (reason ? `: “${reason.trim()}”` : "");
 
 /**
- * ux U56: until domain splits the provider's text from a code, a bare snake_case string is a code.
- * A known code gets words; an unknown one is left out (its raw key goes in Technical details).
+ * ux U56: the provider's code is worded or left out, its text is quoted. domain sends them apart
+ * (reason_code, reason); an older read without reason_code falls back to treating a bare
+ * snake_case reason as a code.
  */
 const CODE = /^[a-z0-9_]+$/;
 const CODE_WORDS: Readonly<Record<string, string>> = {
   delivery_descriptor_conflicts_with_transport:
     "its delivery settings don't match the transport set up in Cadence",
 };
-/** The raw provider code behind a Cadence cancel, for Technical details; null for free text. */
-export const endedCode = (e: ContactEnded | null | undefined): string | null => {
-  const r = e?.reason?.trim();
-  return e && e.by.kind === "system" && r && CODE.test(r) ? r : null;
-};
+function split(e: ContactEnded): Readonly<{ code: string | null; text: string | null }> {
+  const r = e.reason?.trim() || null;
+  if (e.reason_code !== undefined) return { code: e.reason_code, text: r };
+  return r && CODE.test(r) ? { code: r, text: null } : { code: null, text: r };
+}
+/** The raw provider code behind a Cadence cancel, for Technical details. */
+export const endedCode = (e: ContactEnded | null | undefined): string | null =>
+  e && e.by.kind === "system" ? split(e).code : null;
 function providerReason(e: ContactEnded): string {
-  const r = e.reason?.trim();
-  if (!r) return "";
-  if (!CODE.test(r)) return ` (“${r}”)`;
-  const words = CODE_WORDS[r];
-  return words ? ` (${words})` : "";
+  const { code, text } = split(e);
+  const words = code ? CODE_WORDS[code] : undefined;
+  const parts = [words ?? null, text ? `“${text}”` : null].filter((p): p is string => p !== null);
+  return parts.length ? ` (${parts.join(": ")})` : "";
 }
 
 const CADENCE_CANCELS: Readonly<Record<string, (p: string) => string>> = {
