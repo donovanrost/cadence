@@ -20,7 +20,7 @@ import { plural } from "@/ui";
  */
 
 /** A refusal's details as sent; each code's shape is read where it's worded. */
-const raw: Reader<unknown> = (value) => value;
+export const raw: Reader<unknown> = (value) => value;
 
 export const groupRefusalCodes = [
   "command_group_not_found",
@@ -35,7 +35,7 @@ export const stopCodes = [
   "command_release_refused",
   "release_basis_changed",
 ] as const;
-const releaseCode = d.knownText([...groupRefusalCodes, ...stopCodes]);
+export const releaseCode = d.knownText([...groupRefusalCodes, ...stopCodes]);
 export type ReleaseCode = Decoded<typeof releaseCode>;
 
 export const windowWhys = ["outside_pass", "uplink_leg_dropped"] as const;
@@ -93,51 +93,65 @@ export type WindowContext = Readonly<{
   /** false for a hand-started contact: it reads "contact", not "pass". */
   booked?: boolean | null | undefined;
   provider?: string | null | undefined;
+  /** The spacecraft the screen names (U25), for the per-spacecraft clauses. */
+  spacecraft?: string | null | undefined;
 }>;
 
 /** ux U46 (b): why the command window was closed, as a clause after "Not released: ". */
 export function windowClosedClause(details: unknown, c: WindowContext): string {
   const w = decode(windowClosed, details);
   if (!w.ok || w.value.why === "unrecognized") return "the command window is closed";
-  const noun = c.booked === false ? "contact" : "pass";
+  const contact = c.booked === false;
   if (w.value.why === "uplink_leg_dropped")
-    return `${c.provider ?? "the provider"} dropped the uplink from this ${noun}`;
+    return `${c.provider ?? "the provider"} dropped the uplink from this ${contact ? "contact" : "pass"}`;
   const { starts_at: aos, ends_at: los } = w.value;
   const t = c.at.getTime();
-  if (aos && t < Date.parse(aos)) return `the ${noun} hasn't started (AOS ${shortAt(aos, c.at)})`;
-  if (los && t >= Date.parse(los)) return `the ${noun} has ended (LOS ${shortAt(los, c.at)})`;
+  // ux: a hand-started contact has no AOS or LOS; a booked pass keeps them.
+  if (aos && t < Date.parse(aos))
+    return contact
+      ? "the contact hasn't started"
+      : `the pass hasn't started (AOS ${shortAt(aos, c.at)})`;
+  if (los && t >= Date.parse(los))
+    return contact
+      ? `the contact ended at ${shortAt(los, c.at)}`
+      : `the pass has ended (LOS ${shortAt(los, c.at)})`;
+  if (contact && !los && w.value.why === "outside_pass") return "the contact has ended";
   return "the command window is closed";
 }
 
+/** ux's ruled clauses (e8d04f6b2); `sc` is the spacecraft's name, or "this spacecraft". */
 const CLAUSES: Readonly<
   Record<
     Exclude<(typeof groupRefusalCodes | typeof stopCodes)[number], "command_window_closed">,
-    string
+    (sc: string) => string
   >
 > = {
-  command_group_not_found: "the request wasn't found",
-  command_group_not_armed: "the request isn't waiting for a contact",
-  release_contact_not_target_spacecraft: "it has nothing for this contact's spacecraft",
-  command_group_nothing_to_release: "its uplinks to this spacecraft have already gone or ended",
-  command_queue_entry_not_next_for_release:
-    "an earlier uplink on this spacecraft's lane goes first",
-  earlier_command_failed: "an earlier uplink in it failed",
-  command_release_refused: "the uplink transport refused it",
-  release_basis_changed: "what it was approved against changed",
+  command_group_not_found: () => "the request wasn't found",
+  command_group_not_armed: () => "the request isn't queued for a contact",
+  release_contact_not_target_spacecraft: (sc) => `it has no uplinks for ${sc}`,
+  command_group_nothing_to_release: (sc) => `its uplinks to ${sc} have already gone or ended`,
+  command_queue_entry_not_next_for_release: (sc) =>
+    `an earlier queued uplink to ${sc} has to go first`,
+  earlier_command_failed: () => "an earlier uplink in it failed",
+  command_release_refused: () => "the uplink transport refused it",
+  release_basis_changed: () => "the configuration it was approved against has changed",
 };
 
 /** One code's clause, lower-case and without a final stop; unknown codes use the server's message. */
 export function releaseClause(code: ReleaseCode, details: unknown, c: WindowContext): string {
   if (code === "command_window_closed") return windowClosedClause(details, c);
-  if (isKnown(code)) return CLAUSES[code];
+  if (isKnown(code)) return CLAUSES[code](c.spacecraft ?? "this spacecraft");
   const message = decode(messageDetails, details);
   const text = message.ok ? message.value.message : null;
   return text ? text.replace(/[.!?]+$/, "") : code.unrecognized.replaceAll("_", " ");
 }
 
 /** A member's line from its latest stop: "Not released: the pass has ended (LOS 03:19Z)." */
-export function refusalLine(r: ReleaseRefusal, provider?: string | null): string {
-  return `Not released: ${releaseClause(r.code, r.details, { at: new Date(r.at), booked: r.booked, provider })}.`;
+export function refusalLine(
+  r: ReleaseRefusal,
+  c: Omit<WindowContext, "at" | "booked"> = {},
+): string {
+  return `Not released: ${releaseClause(r.code, r.details, { ...c, at: new Date(r.at), booked: r.booked })}.`;
 }
 
 /** One group's outcome after a named release. */
@@ -230,5 +244,37 @@ export function unbookedSheetBody(
     : startedAt
       ? `, started at ${shortAt(startedAt, now)},`
       : "";
-  return `${whose}${where}${by} wasn't booked as a pass. Release ${plural(groups, "command group")} to it anyway?`;
+  return `${whose}${where}${by} wasn't booked as a pass. Release ${plural(groups, "request")} to it anyway?`;
+}
+
+/** What the request log needs to word a named release beyond the event (ux U46). */
+export type ReleaseLogContext = Readonly<{
+  /** "SVA 03:10Z" for the booked pass with this realized contact id, when the screen has it. */
+  passLabel?: ((realizedContactId: string) => string | null) | undefined;
+  spacecraft?: string | null | undefined;
+}>;
+
+type LabelSource = Readonly<{
+  spacecraft?: Readonly<{ name: string }> | undefined;
+  pass: Readonly<{
+    realized_contact_id?: string | null | undefined;
+    station: Readonly<{ code: string | null; name: string | null }>;
+    starts_at: string;
+  }> | null;
+}>;
+
+/** The group's uplink block as log context: its pass's label and its spacecraft. */
+export function releaseLogContext(
+  uplink: LabelSource | null | undefined,
+  fallbackName: string | null,
+): ReleaseLogContext {
+  const pass = uplink?.pass ?? null;
+  return {
+    spacecraft: uplink?.spacecraft?.name ?? fallbackName,
+    passLabel: (id) => {
+      if (!pass || pass.realized_contact_id !== id) return null;
+      const code = pass.station.code ?? pass.station.name;
+      return code ? `${code} ${hhmm(pass.starts_at)}` : hhmm(pass.starts_at);
+    },
+  };
 }

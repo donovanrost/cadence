@@ -2,6 +2,7 @@ import { isKnown } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import type { GroupState, MemberStage } from "./api.ts";
 import { checkLabel } from "./checks.ts";
+import { releaseClause, type ReleaseLogContext } from "./release.ts";
 import type { GroupEvent, GroupMember } from "./show.ts";
 
 /**
@@ -177,7 +178,12 @@ export const eventState = (e: GroupEvent): OpState =>
   e.kind === "member_failed" ? "crit" : "neutral";
 
 /** One request-log line: what happened, by whom, with the note when there is one. */
-export function eventText(e: GroupEvent, nameOf: PersonName, targets: EventTargets = []): string {
+export function eventText(
+  e: GroupEvent,
+  nameOf: PersonName,
+  targets: EventTargets = [],
+  release: ReleaseLogContext = {},
+): string {
   // A system actor has no user; nameOf(null) is "Cadence".
   const who = nameOf(e.actor?.actor_kind === "user" ? e.actor.user_id : null);
   const p = e.payload;
@@ -217,11 +223,18 @@ export function eventText(e: GroupEvent, nameOf: PersonName, targets: EventTarge
       // ux U46 audit line; the log's own column carries the time.
       const sent = p?.released_entry_ids?.length;
       const left = p?.not_attempted_entry_ids?.length ?? 0;
-      const where = p?.booked === false ? " into a contact that wasn't a booked pass" : " by name";
+      const label = p?.realized_contact_id ? release.passLabel?.(p.realized_contact_id) : null;
+      const where =
+        p?.booked === false
+          ? "into a contact that wasn't a booked pass"
+          : label
+            ? `into the ${label} pass`
+            : "into a booked pass";
+      const why = p?.stopped?.reason;
       const stop = p?.stopped
-        ? ` · stopped${left ? `, ${plural(left, "uplink")} still queued` : ""}`
+        ? ` · then stopped${why ? `: ${releaseClause(why.code, why.details, { at: new Date(e.at), booked: p.booked, spacecraft: release.spacecraft })}` : ""}${left ? ` · ${plural(left, "uplink")} still queued` : ""}`
         : "";
-      return `${who} released ${sent != null ? plural(sent, "uplink") : "it"}${where}${stop}`;
+      return `${who} released ${sent != null ? plural(sent, "uplink") : "it"} ${where}${stop}`;
     }
     default:
       return `${who} · ${(isKnown(e.kind) ? e.kind : e.kind.unrecognized).replaceAll("_", " ")}`;

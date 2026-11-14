@@ -3,6 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { plural, useNow, ApButton, ApCallout, ApTag } from "@/ui";
 import ConfirmDialog from "../compose/ConfirmDialog.vue";
+import { fetchGroups } from "../groups/api.ts";
 import type { Group } from "../groups/show.ts";
 import {
   NO_ACCESS_RELEASE,
@@ -40,6 +41,13 @@ const body = computed(() => {
     : "";
 });
 
+/** ux: other requests are named as the request list names them (their title). */
+async function titlesOf(ids: readonly string[]): Promise<ReadonlyMap<string, string>> {
+  if (ids.every((id) => id === props.group.id)) return new Map();
+  const rows = await fetchGroups(props.missionId, {});
+  return new Map(rows.ok ? rows.value.map((g) => [g.id, g.title]) : []);
+}
+
 const dialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
 const busy = ref(false);
 const lines = ref<readonly string[]>([]);
@@ -56,12 +64,16 @@ async function release() {
     });
     if (out.kind === "done") {
       const rs = out.release.results;
-      lines.value = rs.every((r) => r.outcome === "released")
-        ? [`Released ${plural(rs.length, "command group")}.`]
-        : rs.map(
-            (r) =>
-              `${r.command_group_id === props.group.id ? "This request" : "Another request"}: ${resultLine(r, { at, booked: false })}`,
-          );
+      if (rs.every((r) => r.outcome === "released"))
+        lines.value = [`Released ${plural(rs.length, "request")}.`];
+      else {
+        const titles = await titlesOf(rs.map((r) => r.command_group_id));
+        const ctx = { at, booked: false, spacecraft: spacecraft.value };
+        lines.value = rs.map(
+          (r) =>
+            `${r.command_group_id === props.group.id ? "This request" : (titles.get(r.command_group_id) ?? "Another request")}: ${resultLine(r, ctx)}`,
+        );
+      }
       emit("changed");
     } else
       lines.value = [
@@ -85,16 +97,14 @@ async function release() {
     <p v-if="busy" class="m-0 text-sm text-text-2">Releasing…</p>
     <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
     <template v-if="canRelease" #action>
-      <ApButton size="compact" variant="danger" :disabled="busy" @click="release"
-        >Release here</ApButton
-      >
+      <ApButton size="compact" :disabled="busy" @click="release">Release commands…</ApButton>
     </template>
   </ApCallout>
   <ConfirmDialog
     ref="dialog"
     question="Release into a contact that isn't a booked pass?"
     :body="body"
-    confirm="Release to this contact"
+    :confirm="`Release ${plural(armed.length, 'request')}`"
     cancel="Cancel"
   />
 </template>

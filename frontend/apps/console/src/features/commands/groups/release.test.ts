@@ -4,6 +4,7 @@ import { groupOf, showBody } from "./fixtures.ts";
 import {
   refusalLine,
   releaseErrorWords,
+  releaseLogContext,
   resultLine,
   unbookedSheetBody,
   windowLine,
@@ -79,7 +80,7 @@ describe("U46 command window and named release words", () => {
     expect(
       refusalLine(
         refusalOf("command_window_closed", closed("uplink_leg_dropped"), "2026-11-14T03:12:00Z"),
-        "Northlight",
+        { provider: "Northlight" },
       ),
     ).toBe("Not released: Northlight dropped the uplink from this pass.");
     expect(
@@ -95,7 +96,18 @@ describe("U46 command window and named release words", () => {
       refusalLine(
         refusalOf("command_window_closed", closed("outside_pass"), "2026-11-14T03:20:00Z", false),
       ),
-    ).toBe("Not released: the contact has ended (LOS 03:19Z).");
+    ).toBe("Not released: the contact ended at 03:19Z.");
+    expect(
+      refusalLine(
+        refusalOf("command_window_closed", closed("outside_pass"), "2026-11-14T03:05:00Z", false),
+      ),
+    ).toBe("Not released: the contact hasn't started.");
+    expect(
+      refusalLine(
+        refusalOf("command_queue_entry_not_next_for_release", null, "2026-11-14T03:12:00Z"),
+        { spacecraft: "EARENDIL-001" },
+      ),
+    ).toBe("Not released: an earlier queued uplink to EARENDIL-001 has to go first.");
     expect(
       refusalLine(
         refusalOf("lane_wedged", { message: "The lane is wedged." }, "2026-11-14T03:12:00Z"),
@@ -116,7 +128,7 @@ describe("U46 command window and named release words", () => {
       refused: null,
       ...o,
     });
-    const c = { at: AT, booked: false };
+    const c = { at: AT, booked: false, spacecraft: "EARENDIL-001" };
     expect(resultLine(r({}), c)).toBe("Released 2 uplinks.");
     expect(
       resultLine(
@@ -145,7 +157,7 @@ describe("U46 command window and named release words", () => {
         }),
         c,
       ),
-    ).toBe("Not released: its uplinks to this spacecraft have already gone or ended.");
+    ).toBe("Not released: its uplinks to EARENDIL-001 have already gone or ended.");
   });
 
   it("words whole-request refusals and asks for the sheet on an unconfirmed contact", () => {
@@ -197,10 +209,10 @@ describe("U46 command window and named release words", () => {
         AT,
       ),
     ).toBe(
-      "EARENDIL-001's contact at SVA, started by Mira K. at 00:12Z, wasn't booked as a pass. Release 3 command groups to it anyway?",
+      "EARENDIL-001's contact at SVA, started by Mira K. at 00:12Z, wasn't booked as a pass. Release 3 requests to it anyway?",
     );
     expect(unbookedSheetBody(null, null, null, null, 1, AT)).toBe(
-      "This contact wasn't booked as a pass. Release 1 command group to it anyway?",
+      "This contact wasn't booked as a pass. Release 1 request to it anyway?",
     );
   });
 
@@ -230,7 +242,48 @@ describe("U46 command window and named release words", () => {
     const e = g.events[0];
     if (!e) throw new Error("no event");
     expect(eventText(e, () => "Mira K.")).toBe(
-      "Mira K. released 2 uplinks into a contact that wasn't a booked pass · stopped, 1 uplink still queued",
+      "Mira K. released 2 uplinks into a contact that wasn't a booked pass · then stopped: an earlier uplink in it failed · 1 uplink still queued",
     );
+  });
+
+  it("logs a named release into a booked pass, by its label when the screen has it", () => {
+    const g = groupOf({
+      events: [
+        {
+          id: "ev-10",
+          kind: "released_on_contact",
+          actor: { actor_kind: "user", user_id: "user-7" },
+          at: "2026-11-14T03:14:00Z",
+          payload: {
+            realized_contact_id: "rc-1",
+            booked: true,
+            released_entry_ids: ["e1", "e2"],
+            not_attempted_entry_ids: [],
+            stopped: null,
+          },
+        },
+      ],
+    });
+    const e = g.events[0];
+    if (!e) throw new Error("no event");
+    const u = decode(groupUplinkReader, {
+      spacecraft: { id: "sc-1", name: "EARENDIL-001" },
+      pass: {
+        reservation_id: "pass-1",
+        contact_id: "c-1",
+        station,
+        starts_at: "2026-11-14T03:10:00Z",
+        ends_at: "2026-11-14T03:19:00Z",
+        booked: true,
+        realized_contact_id: "rc-1",
+      },
+      readiness: null,
+      contact: null,
+    });
+    if (!u.ok) throw u.error;
+    expect(eventText(e, () => "Mira K.", [], releaseLogContext(u.value, null))).toBe(
+      "Mira K. released 2 uplinks into the SVA 03:10Z pass",
+    );
+    expect(eventText(e, () => "Mira K.")).toBe("Mira K. released 2 uplinks into a booked pass");
   });
 });

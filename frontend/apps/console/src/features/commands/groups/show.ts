@@ -10,7 +10,7 @@ import {
 } from "@/api/index.ts";
 import { groupUplinkReader } from "@/features/contacts/readiness.ts";
 import { catalogRevisionReader } from "../api.ts";
-import { releaseRefusalReader } from "./release.ts";
+import { raw, releaseCode, releaseRefusalReader } from "./release.ts";
 import {
   actor,
   groupsBase,
@@ -168,7 +168,15 @@ const event = d.object({
       booked: d.optional(d.boolean),
       released_entry_ids: d.optional(d.array(d.token, 1_000)),
       not_attempted_entry_ids: d.optional(d.array(d.token, 1_000)),
-      stopped: d.optional(d.nullable(d.object({ command_queue_entry_id: d.token }))),
+      realized_contact_id: d.optional(d.token),
+      stopped: d.optional(
+        d.nullable(
+          d.object({
+            command_queue_entry_id: d.token,
+            reason: d.optional(d.object({ code: releaseCode, details: d.optional(raw) })),
+          }),
+        ),
+      ),
     }),
   ),
 });

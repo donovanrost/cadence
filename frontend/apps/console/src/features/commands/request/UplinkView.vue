@@ -24,7 +24,7 @@ import {
   STAGE_STATE,
   type PersonName,
 } from "../groups/words.ts";
-import { refusalLine, windowLine } from "../groups/release.ts";
+import { refusalLine, releaseLogContext, windowLine } from "../groups/release.ts";
 import AbortPanel from "./AbortPanel.vue";
 import ContactRelease from "./ContactRelease.vue";
 import NeedsYouPanel from "./NeedsYouPanel.vue";
@@ -79,8 +79,11 @@ const windowText = computed(() => {
 /** U46 (b): a member's latest named-release stop, under its target. */
 const refusalOf = (t: Group["targets"][number]) => {
   const r = t.members.find((m) => m.release_refusal)?.release_refusal;
-  return r ? refusalLine(r) : null;
+  return r ? refusalLine(r, { spacecraft: t.name }) : null;
 };
+const release = computed(() =>
+  releaseLogContext(props.group.uplink, props.group.targets[0]?.name ?? null),
+);
 </script>
 
 <template>
@@ -177,7 +180,7 @@ const refusalOf = (t: Group["targets"][number]) => {
           :datetime="e.at"
           :state="eventState(e)"
           mono
-          >{{ eventText(e, nameOf, group.targets) }}</ApEventLine
+          >{{ eventText(e, nameOf, group.targets, release) }}</ApEventLine
         >
       </ol>
     </ApPanel>
