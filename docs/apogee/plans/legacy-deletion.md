@@ -382,9 +382,18 @@ their params, and library, playlists, new, settings, activity and diagnostics st
   own: lead/fe-setup cherry-pick it onto `ui/apogee-spa` **in the same batch** as this deletion, so the smoke keeps
   covering the dashboards until they're gone.
 
-### L8b library, playlists, settings (+ activity, diagnostics), shares, snapshots, export (blocked)
-- **Blocked on:** settings only (fe-setup's slice 5; `ops.dashboard.settings` is still `pending`). Slice 6
-  (shares, snapshots, playlists, present, export) and the library are live in the console (11-14).
+### L8b library, playlists, settings (+ activity, diagnostics), shares, snapshots, export (one batch; fe-setup)
+- **Gate:** fe-setup switches `ops.dashboard.settings` from `pending` to its `SettingsScreen` first, and qa
+  checks it live. Slice 6 (shares, snapshots, playlists, present, export) and the library are live (11-14).
+- **Routes** (`router.ex`, 11-14 lines): the `HostPageLive` lives for `…/ops/dashboards/library`, `/playlists`,
+  `/:id/settings` (:385-395), `…/ops/dashboard-shares/:share_id`, `…/ops/dashboard-snapshots/:snapshot_id`,
+  `…/ops/dashboards/playlists/:playlist_id/present` (:397-410), `/:id/activity` and `/:id/diagnostics`
+  (:526-533), and the export `get` (:218). Replace each with a `LegacyDashboardRedirectController` action (L8a's
+  pattern; old bookmarks and links keep working) to the console's `telemetry/dashboards/…`: `library`,
+  `playlists`, `playlists/:id/present`, `:id/settings`, `:id/settings/activity`, `:id/settings/diagnostics`,
+  `shares/:id`, `snapshots/:id`. Export has no page to land on: let it 404. Put the literal `library` and
+  `playlists` routes before `/:dashboard_id`, as L8a's comment at :739 says. New share links already use the
+  console path (`Console.DashboardSettings.base_url/2`).
 - **Delete then:**
   - their pages: `ops_{library,playlist,settings,activity,diagnostics,shared_view}_page.ex` and
     `ops_diagnostics_url.ex`;
@@ -393,7 +402,9 @@ their params, and library, playlists, new, settings, activity and diagnostics st
     `index.ts`/`contributions.ts` and `features/runtime-diagnostics` (L7). Also drop `gridstack`/`uplot`, the
     `exports` entries and the four CSS imports, among them `apps/host/src/phoenix.css:15`, which the Phoenix
     build imports;
-  - the `:ops_dashboard_author` policy and `DashboardAuthorAuth`'s `on_mount`/`authorize/3`;
+  - the `:ops_dashboard_author` policy (`host_page_authorization.ex:22-23`) and `DashboardAuthorAuth`'s
+    `on_mount`/`authorize/3`. **Keep `authorized?/2`:** the console's `DashboardSettingsController:52` and
+    `ops_shell_hook.ex:74` call it;
   - `DashboardExportController` (the console has its own export) and its route;
   - their tests and the producer-check assertions in the settings, library, playlists, shared-views and
     execution-diagnostics tests, and in `workspace_snapshot_test.exs` and `dashboard_workspace_read_test.exs`
@@ -401,7 +412,8 @@ their params, and library, playlists, new, settings, activity and diagnostics st
     `workspace.ts`/`features/workspace`, left by the federated batch).
 - **Keep:** the domain behind them: `SharedViews`, `SettingsAuthoring`, `Reads.Dashboards.{Settings,Library,
   Playlists}`, `LibraryAuthoring`, `PlaylistAuthoring`. The console endpoints wrap them.
-  `Playlists.present/search` can go.
+  `Reads.Dashboards.Playlists.present/search` can go (only `ops_playlist_page.ex` calls them), with their cases
+  in `dashboard_playlists_test.exs` (:156-166, :233-258).
 
 ### L8c dashboard invalidation decisions (follow-up batch; lead 11-14)
 Nothing in lib records dashboard invalidation decisions any more. Neither writer has callers:
