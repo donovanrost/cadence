@@ -1472,7 +1472,9 @@ One entry per decision, not per member. The verbs match the request log (groups/
 the log say the same thing. `<label>` is "SET_MODE and 2 more for 12 spacecraft" (the first command, "and N more",
 then the target count). The reason column takes the note or reason.
 - submitted: "Submitted <label>". It adds " · needs a second GO" and " · 3 spacecraft have their own values" when
-  they apply. Resent: "Resent <label> (sent back as REQ-0419)", or the group's label when it has no ref.
+  they apply. Resent: "Resent <label> (sent back at 13:02Z: “Safe mode recovery”)". The parenthesis gives the
+  original's send-back time, plus its title when the operator gave one. There are no request numbers in the
+  product, so never "REQ-…" (U25).
 - approved: "Gave GO on <label>"; with exclusions: "Gave GO on <label>, excluding 2 spacecraft".
 - rejected: "Gave NO-GO on <label>"; sent_back: "Sent back <label>".
 - aborted: "Aborted <label>: 40 uplinks canceled, 8 already sent". Its member cancels fold into this entry.
@@ -1482,9 +1484,12 @@ then the target count). The reason column takes the note or reason.
 - Single requests: keep Requested / Approved / Rejected, and add "Canceled <request>" from metadata.cancellation.
 - **Notes aren't audit entries.** They're comments, and they stay in the request log and Timeline. The audit
   records decisions.
-- **System cancels** (the director decides whether they're in): the actor is Cadence (SERVICE tag). "Canceled
-  SET_MODE on EARENDIL-004: it expired before release" / "…: what it was approved against changed"
-  (release_basis_changed, U46's clause). If they're in, they're the only system rows in this source, so they need
-  the actor shown clearly.
+- **System cancels** (director: in, folded per group, actor Cadence with the SERVICE tag, reason given):
+  - Standalone request: "Canceled SET_MODE on EARENDIL-004: it expired before release".
+  - Group, folded per reason: "Canceled 12 uplinks of <label>: they expired before release" / "…: what they were
+    approved against changed" / "…: the catalog changed" / "…: EARENDIL-004 was archived" (several: "…: 3 of its
+    spacecraft were archived").
+  - An unknown reason: "Canceled 12 uplinks of <label>." with nothing invented.
+  - Mixed reasons in one fold make one entry per reason, never one line that blurs them.
 - The target kind `command_group` links to the group's page. Per-target values aren't separate rows; the
   submitted line's count points there.

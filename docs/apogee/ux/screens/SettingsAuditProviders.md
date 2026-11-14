@@ -76,7 +76,7 @@ filters: actor (select) · mission (select) · kind as a one-of segmented contro
 ┌ L1 Audit table (scrolls) ───────────────────────────────────────────────────────────────┐
 ```
 - **Row:** time (mono, `11-09 01:12:07Z`) · actor (name; service identities in mono with a `SERVICE`
-  tag) · action in words ("Applied r6 · 2 changes", "Approved REQ-0419", "Invited ana@…",
+  tag) · action in words ("Applied r6 · 2 changes", "Gave GO on SET_MODE and 2 more for 12 spacecraft", "Invited ana@…",
   "Acknowledged VBAT on EARENDIL-001") · target (link) · mission · why (reason / note, `text-3`).
   Identical consecutive actions group (Timeline rule). Name link → the object's page.
 - **Source honesty:** a unified audit read doesn't exist yet (plans/setup.md). Until api unifies

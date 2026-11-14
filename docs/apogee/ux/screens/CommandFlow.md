@@ -83,15 +83,15 @@ Console takeover:
 │ queue of requests      │ │ A3 What will radiate · (A4 Release plan)                          │ │ decision · note   │
 └────────────────────────┘ └───────────────────────────────────────────────────────────────────┘ └───────────────────┘
 ```
-- **Q Waiting on you:** requests where *you* can give the GO, oldest first: mono `REQ-0419 ·
-  DONOVAN R.` + age, mnemonic (mono 600, `HAZ` tag), scope sentence. Your own requests appear at
+- **Q Waiting on you:** requests where *you* can give the GO, oldest first: mono `DONOVAN R.` + age (there are
+  no request numbers; never invent one, U25), mnemonic (mono 600, `HAZ` tag), scope sentence. Your own requests appear at
   the end as a non-clickable note: "You can't approve your own request. Waiting on Ana or Owen."
   Also reachable from Now (P2 "awaits your GO").
 - **Request header:** title = the author's reason as a headline, classification tag, the author's
   justification quoted with mono byline.
 - **A1 What changes:** for set-value commands: `5.0 → 8.0 °C · ON 98 SPACECRAFT` (readout 34px),
   histogram of current values across targets, and callouts for targets whose value was hand-set
-  before ("EARENDIL-117 and -144 were hand-set to 6.0 °C on 14 Sep (REQ-0302). This overwrites
+  before ("EARENDIL-117 and -144 were hand-set to 6.0 °C on 14 Sep (“Thermal trim”, Ana R.). This overwrites
   that."). For non-value commands: the stack as mono lines.
 - **Targets with their own values** (lead, safety; api f1bed1880: `commands[].per_target` gives a target a
   **complete** value set that **replaces** the command's shared values; it isn't merged). An approver sees exactly
