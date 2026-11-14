@@ -8,6 +8,8 @@ defmodule Cadence.Contacts.ContactStartTest do
   """
   use Cadence.RuntimeCase, async: false
 
+  @moduletag :ingest_journal_matrix
+
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Contacts

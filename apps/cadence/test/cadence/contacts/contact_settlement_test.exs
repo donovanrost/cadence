@@ -2,12 +2,16 @@ defmodule Cadence.Contacts.ContactSettlementTest do
   @moduledoc "DECISIONS #71: ending a contact never waits on the TSDB, and drops nothing."
   use Cadence.RuntimeCase, async: false
 
+  @moduletag :ingest_journal_matrix
+
+  import Cadence.TestSupport.IngressJournalMatrix, only: [requires_ingress_journal: 0]
+
   import Ecto.Query
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Contacts
-  alias Cadence.Contacts.{ContactSettlementAttention, ContactStore}
+  alias Cadence.Contacts.{ContactSettlementAttention, ContactSettler, ContactStore}
 
   alias Cadence.Contacts.{
     Path,
@@ -89,6 +93,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
     assert ContactSettlementAttention.items(ctx.organization_id, ctx.mission_id) == []
     assert b.scheduled_contact_id <> "_run" == b_run
   end
+
+  requires_ingress_journal()
 
   test "past the settling deadline the contact is unsettled, its backlog kept and named", ctx do
     Application.put_env(:cadence, :contact_settlement, deadline_ms: 300)
@@ -210,6 +216,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
   end
 
   describe "replay (#71 follow-up)" do
+    requires_ingress_journal()
+
     test "an unsettled contact replays when storage is back; nothing is lost or doubled", ctx do
       {a_run, _a} = unsettled_contact!(ctx)
       OutageTelemetryWriter.outage(false)
@@ -234,6 +242,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
                Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
     end
 
+    requires_ingress_journal()
+
     test "a failing replay backs off, stops after 6 for an operator, who can retry", ctx do
       Application.put_env(:cadence, :contact_settlement,
         deadline_ms: 300,
@@ -248,7 +258,7 @@ defmodule Cadence.Contacts.ContactSettlementTest do
 
         assert_eventually(fn ->
           settlement(ctx, a_run)["attempts"] == attempt and
-            not Cadence.Contacts.ContactSettler.replaying?(ctx.mission_id)
+            not ContactSettler.replaying?(ctx.mission_id)
         end)
 
         if attempt < 6 do
@@ -285,6 +295,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
       assert_eventually(fn -> settlement(ctx, a_run)["state"] == "settled" end)
       assert samples(ctx) == 1
     end
+
+    requires_ingress_journal()
 
     test "a contact that ended before #71 with a journal backlog is found and drained", ctx do
       now = DateTime.utc_now() |> DateTime.truncate(:second)

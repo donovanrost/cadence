@@ -1,6 +1,8 @@
 defmodule Cadence.CommandingTest do
   use Cadence.ConfigCase, async: false
 
+  @moduletag :ingest_journal_matrix
+
   import Ecto.Query
 
   alias Cadence.Jobs.Runner, as: JobRunner

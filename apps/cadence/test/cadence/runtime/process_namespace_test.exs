@@ -1,6 +1,8 @@
 defmodule Cadence.Runtime.ProcessNamespaceTest do
   use ExUnit.Case, async: false
 
+  @moduletag :ingest_journal_matrix
+
   alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions

@@ -28,9 +28,11 @@ config :cadence, command_dispatcher: [enabled: false]
 config :cadence, command_verifier_scheduler: [enabled: false]
 config :cadence, password_hash_iterations: 1_000
 
+# CADENCE_TEST_INGRESS_JOURNAL=off runs the suite with production's default, the journal off
+# (config.exs); CI reruns the :ingest_journal_matrix tests that way (director 11-14).
 config :cadence,
   ingress_journal: [
-    enabled?: true,
+    enabled?: System.get_env("CADENCE_TEST_INGRESS_JOURNAL", "on") != "off",
     base_path:
       Path.join(
         System.tmp_dir!(),
