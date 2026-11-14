@@ -1065,6 +1065,14 @@ U47's (`SVB 03:10Z pass`, `SVB contact`, or the spacecraft alone).
   <reason>."
 - **Contacts:** the selected-pass panel gets a block per item, with the same title, sentences, actions and Technical
   details, as for U45 and U47.
+- **Build calls** (fe-ops f7d5f6384, accepted):
+  - The Now row has `Retry` and `Discard…` side by side; the title link opens the pass. Row rule: at most two
+    buttons, and `Open pass` takes a slot only when one is free (U47 keeps it next to Acknowledge).
+  - The last-retry line goes last in the body, and `STILL ARRIVING` goes last in the meta.
+  - The Contacts block drops the spacecraft and pass label from its title, because the panel is the pass:
+    `12 frames and 40 packets couldn't be archived`.
+  - With both counts 0, the title is `Raw records couldn't be archived`, and the sheet asks "Discard the raw records
+    that couldn't be archived?". A blank reason shows "Give a reason first.".
 - **Shape** (domain's final, 11-14): `last_retry {by, at}` and `resolution {kind, by, at, reason}` are both sent.
   The pass block needs `contact_id` / `provider_reservation_id`; with both null, the item is Now-only. There's no
   acknowledge.
