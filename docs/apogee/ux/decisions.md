@@ -1373,3 +1373,13 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
 - **provider_canceled** (api's final shape: the reservation was canceled at the provider): history "Canceled by
   Cadence at 12:58Z: Northlight canceled this pass (“…”)."; timeline "…pass canceled by Cadence: Northlight
   canceled it". An unknown cause reads "Canceled by Cadence at 12:58Z." with nothing invented (U20).
+- **provider_rejected** (domain 82104c735: the provider rejected the booking on attestation): history "Canceled by
+  Cadence at 12:58Z: Northlight rejected the booking for this pass."; timeline "…pass canceled by Cadence:
+  Northlight rejected its booking".
+- **The provider's reason:** text and code come apart, never guessed from the string's shape. `provider_reason`
+  is the provider's own text (quoted), and `provider_reason_code` is a code (worded or left out). Known codes:
+  - delivery_descriptor_conflicts_with_transport → "(its delivery settings don't match the transport set up in
+    Cadence)".
+  - Unknown codes are left out, with the raw code in Technical details.
+- A **running** contact whose booking is lost keeps running to LOS (director). That needs no new line; its pass shows
+  the reservation's state as today.
