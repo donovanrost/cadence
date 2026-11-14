@@ -547,6 +547,70 @@ jobs:
       - run: corepack pnpm verify
         working-directory: frontend
 
+  # Production reads and writes telemetry through QuestDB, but the test env swaps every
+  # telemetry store for Postgres. This job runs against a real QuestDB (docs/ci/questdb-integration.md).
+  # Kept out of ci-ok for its first clean week, like the browser shards.
+  questdb-integration:
+    name: QuestDB integration
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CADENCE_QUESTDB_HTTP_ENDPOINT: http://127.0.0.1:9000
+      CADENCE_QUESTDB_HOST: 127.0.0.1
+      CADENCE_QUESTDB_PORT: "8812"
+    services:
+      questdb:
+        # Same version as docker-compose.yml, pinned to the 9.4.3 multi-arch index digest.
+        image: questdb/questdb:9.4.3@sha256:3fd139f9f16015afc1b064fe4591b271be26cdec10315415e5511e9d80a5919e
+        ports:
+          - 9000:9000
+          - 8812:8812
+        options: >-
+          --health-cmd "curl -fsS http://127.0.0.1:9003/"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+      postgres:
+        # For the :questdb ExUnit suite (Repo sandbox); keep en_US.utf8, as in test-core.
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
+          xmllint: "false"
+      - name: Apply the QuestDB schema migrations
+        working-directory: apps/cadence
+        run: mix cadence.questdb.migrate
+      - name: QuestDB round trip (write, then read history, decimation and watermark)
+        working-directory: apps/cadence
+        run: mix cadence.questdb.smoke
+      # Tests tagged :questdb (excluded from the normal suites by test_helper.exs) run here. Until
+      # the first one exists this step only reports that; adding one needs no workflow change.
+      - name: mix test --only questdb
+        working-directory: apps/cadence
+        run: |
+          if ! grep -rqE '@(module)?tag[[:space:]]+:questdb\b' test; then
+            echo "No :questdb-tagged tests yet."
+            exit 0
+          fi
+          mix test --only questdb --slowest-modules 10
+
   ci-ok:
     name: ci-ok
     needs:
