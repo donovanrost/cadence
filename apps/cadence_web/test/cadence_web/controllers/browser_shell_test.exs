@@ -32,13 +32,13 @@ defmodule CadenceWeb.BrowserShellTest do
     assert redirected_to(get(conn, "/sign-in")) == "/console/sign-in"
   end
 
-  test "platform admin root redirect routes to admin dashboard", %{conn: conn} do
+  test "platform admin root redirect routes to the console admin dashboard", %{conn: conn} do
     root_conn =
       conn
       |> environment_admin_conn()
       |> get("/")
 
-    assert redirected_to(root_conn) == "/admin"
+    assert redirected_to(root_conn) == "/console/admin"
   end
 
   test "environment admin in admin mode can open any organization without membership",
@@ -65,20 +65,6 @@ defmodule CadenceWeb.BrowserShellTest do
 
     assert scope.organization.organization_id == organization.organization_id
     assert scope.organization_membership == nil
-  end
-
-  test "expired admin mode requires reauthentication", %{conn: conn} do
-    issued_session = environment_admin_session()
-
-    expired_conn =
-      conn
-      |> init_test_session(%{
-        user_session_token: issued_session.session_token,
-        admin_mode_expires_at: 0
-      })
-      |> get("/admin")
-
-    assert redirected_to(expired_conn) == "/admin-mode"
   end
 
   test "logout revokes the issued environment-admin browser session", %{conn: conn} do

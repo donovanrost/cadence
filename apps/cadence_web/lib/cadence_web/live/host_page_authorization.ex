@@ -3,7 +3,7 @@ defmodule CadenceWeb.HostPageAuthorization do
 
   import Phoenix.Component
 
-  alias CadenceWeb.{AdminAuth, MissionAuth, OrganizationAuth}
+  alias CadenceWeb.{MissionAuth, OrganizationAuth}
   alias CadenceWeb.{OpsShellHook, SpacecraftAuth, UserAuth}
   alias CadenceWeb.OpsShellHook.CommandUpdates
 
@@ -20,8 +20,7 @@ defmodule CadenceWeb.HostPageAuthorization do
     comms: {@organization, [@mission], false},
     ops: {@organization, [@mission], true},
     ops_admin: {@organization, [@admin, @mission], true},
-    user: {{UserAuth, :require_user_scope}, [], false},
-    admin: {{AdminAuth, :require_platform_admin}, [], false}
+    user: {{UserAuth, :require_user_scope}, [], false}
   }
 
   def prepare(socket, policy, params) do

@@ -10,7 +10,6 @@ defmodule CadenceWeb.HostPageLive do
 
   alias CadenceWeb.{
     ActivationApprovals,
-    AdministrationDiagnostics,
     AdministrationPage,
     ApplicationManagement,
     CatalogPage,
@@ -23,7 +22,6 @@ defmodule CadenceWeb.HostPageLive do
     OpsLandingPage,
     OpsTimelinePage,
     OrganizationModulePage,
-    PlatformAdministrationPage,
     ProviderAccountDetailPage,
     ProviderAccountRegistrationPage,
     SpacecraftModulePage,
@@ -644,37 +642,6 @@ defmodule CadenceWeb.HostPageLive do
   end
 
   def handle_event(
-        "host:platform-administration",
-        %{"path" => path, "event" => event, "input" => input, "token" => token},
-        socket
-      )
-      when event in ["create", "issue_service_identity", "invite"] do
-    with true <- path == socket.assigns.host_path,
-         true <- PlatformAdministrationPage.matches?(socket, token),
-         {:ok, info} <- resolve_path(path),
-         true <- PlatformAdministrationPage.action_route?(info.route, event),
-         {:ok, socket} <- prepare_context(socket, path),
-         true <- PlatformAdministrationPage.matches?(socket, token) do
-      {result, socket} = PlatformAdministrationPage.action(socket, event, input)
-
-      case prepare_context(socket, path) do
-        {:ok, socket} ->
-          {:reply, %{ok: true, snapshot: Map.put(result, :host, snapshot(socket.assigns))},
-           socket}
-
-        {:halt, socket} ->
-          {:noreply, socket}
-
-        :error ->
-          {:reply, %{ok: false}, socket}
-      end
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
         "host:spacecraft-configuration",
         %{"path" => path, "event" => event, "input" => input},
         socket
@@ -795,16 +762,8 @@ defmodule CadenceWeb.HostPageLive do
       socket = assign(socket, host_path: path, page_title: "Cadence")
       socket = SettingsPage.prepare(socket, info, path)
 
-      diagnostics =
-        if info.route == "/admin/runtime" do
-          AdministrationDiagnostics.load(socket.assigns.current_scope, info.params)
-        else
-          []
-        end
-
       socket =
         assign(socket,
-          diagnostics: diagnostics,
           activation_approvals: ActivationApprovals.load(socket.assigns.current_scope, info),
           activation_review_session:
             ActivationApprovals.session(
@@ -832,7 +791,6 @@ defmodule CadenceWeb.HostPageLive do
           catalog: CatalogPage.load(socket.assigns.current_scope, info)
         )
         |> SpacecraftConfigurationPage.subscribe(info)
-        |> PlatformAdministrationPage.prepare(info, path)
         |> CatalogUpload.prepare(info, path)
         |> ProviderAccountRegistrationPage.prepare(info, path)
         |> ProviderAccountDetailPage.prepare(info, path)
@@ -908,11 +866,9 @@ defmodule CadenceWeb.HostPageLive do
         |> Map.drop([:nav_context, :nav_item, :ops_nav_item, :active_dashboard_id]),
       presentation: assigns[:presentation],
       application_management: ApplicationManagement.snapshot(assigns),
-      diagnostics: assigns[:diagnostics] || [],
       activation_approvals: ActivationApprovals.presentation(assigns),
       settings_page: assigns[:settings_page],
       catalog: CatalogUpload.presentation(assigns),
-      platform_administration_page: assigns[:platform_administration_page],
       timeline_page: assigns[:timeline_page],
       ops_landing_page: assigns[:ops_landing_page],
       administration_page: assigns[:administration_page],

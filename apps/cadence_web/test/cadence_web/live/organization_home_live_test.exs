@@ -49,6 +49,6 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
         admin_mode_expires_at: CadenceWeb.AdminMode.expires_at()
       })
 
-    assert {:error, {:redirect, %{to: "/admin"}}} = live(conn, ~p"/")
+    assert {:error, {:redirect, %{to: "/console/admin"}}} = live(conn, ~p"/")
   end
 end
