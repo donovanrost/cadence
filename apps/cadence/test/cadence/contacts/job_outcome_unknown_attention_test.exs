@@ -43,6 +43,25 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttentionTest do
     assert %{open: 1, acknowledged: 0} = JobOutcomeUnknownAttention.counts(c.org, c.mission)
   end
 
+  test "a job's carried facts name it", c do
+    cut_off!(c.mission, :telemetry_historical_data_workflow, %{
+      "workflow" => "backfill",
+      "attrs" => %{
+        "receipt_from" => "2026-11-13T02:00:00Z",
+        "receipt_to" => "2026-11-13T04:00:00Z"
+      }
+    })
+
+    cut_off!(c.mission, :telemetry_limit_evaluation, %{
+      "limit_run_id" => "r",
+      "definition_count" => 3
+    })
+
+    nouns = c.org |> JobOutcomeUnknownAttention.items(c.mission) |> Enum.map(& &1.words.noun)
+    assert "Backfill 11-13 02:00Z–04:00Z" in nouns
+    assert "Limit check of 3 definitions" in nouns
+  end
+
   test "close needs a note and leaves the job as it is", c do
     job = cut_off!(c.mission, :contact_schedule_operation, %{})
     [item] = JobOutcomeUnknownAttention.items(c.org, c.mission)
@@ -127,6 +146,42 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttentionTest do
              })
 
     assert %{noun: "Catalog import"} = JobOutcomeWords.words(:catalog_import_run, %{})
+
+    # Names from the facts the job carried (ux U54); older jobs keep the bare noun.
+    assert %{noun: "Battery margin evaluation"} =
+             JobOutcomeWords.words(:derived_telemetry_evaluation, %{
+               definition_name: "Battery margin"
+             })
+
+    assert %{noun: "Derived telemetry evaluation of 3 definitions"} =
+             JobOutcomeWords.words(:derived_telemetry_evaluation, %{definition_count: 3})
+
+    assert %{noun: "Derived telemetry evaluation"} =
+             JobOutcomeWords.words(:derived_telemetry_evaluation, %{})
+
+    assert %{noun: "EPS.batt_voltage limit check"} =
+             JobOutcomeWords.words(:telemetry_limit_evaluation, %{
+               definition_name: "EPS.batt_voltage"
+             })
+
+    assert %{noun: "Limit check of 3 definitions"} =
+             JobOutcomeWords.words(:telemetry_limit_evaluation, %{definition_count: 3})
+
+    assert %{noun: "Backfill 11-13 02:00Z–04:00Z"} =
+             JobOutcomeWords.words(:telemetry_historical_data_workflow, %{
+               workflow: "backfill",
+               span_from: "2026-11-13T02:00:00Z",
+               span_to: "2026-11-13T04:00:00Z"
+             })
+
+    assert %{noun: "Replay 11-13 23:00Z–11-14 01:00Z"} =
+             JobOutcomeWords.words(:replay_telemetry_scope, %{
+               span_from: "2026-11-13T23:00:00Z",
+               span_to: "2026-11-14T01:00:00Z"
+             })
+
+    assert %{noun: "Import"} =
+             JobOutcomeWords.words(:telemetry_historical_data_workflow, %{workflow: "import"})
 
     assert %{
              noun: "A Cadence job",

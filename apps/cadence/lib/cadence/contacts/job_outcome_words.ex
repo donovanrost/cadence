@@ -12,7 +12,11 @@ defmodule Cadence.Contacts.JobOutcomeWords do
           optional(:source_name) => binary() | nil,
           optional(:operation) => binary() | nil,
           optional(:artifact_name) => binary() | nil,
-          optional(:workflow_kind) => binary() | nil
+          optional(:workflow) => binary() | nil,
+          optional(:definition_name) => binary() | nil,
+          optional(:definition_count) => non_neg_integer() | nil,
+          optional(:span_from) => binary() | nil,
+          optional(:span_to) => binary() | nil
         }
 
   @spec words(atom(), context()) :: %{
@@ -70,28 +74,72 @@ defmodule Cadence.Contacts.JobOutcomeWords do
     end
   end
 
-  def words(:derived_telemetry_evaluation, _context),
-    do: phrases("Derived telemetry evaluation", "in its results", "record the result twice")
-
-  def words(:telemetry_limit_evaluation, _context),
-    do: phrases("Limit check", "in Limits", "record the limit events twice")
-
-  def words(:telemetry_historical_data_workflow, context) do
+  # Names come from facts the job carried at enqueue (ux U54); older jobs keep the bare noun.
+  def words(:derived_telemetry_evaluation, context) do
     noun =
-      case context[:workflow_kind] do
-        "correction" -> "Correction"
-        "replacement" -> "Replacement"
-        _backfill -> "Backfill"
-      end
+      definitions_noun(context, "evaluation", "Derived telemetry evaluation")
 
-    phrases(noun, "in the telemetry for that span", "write the span twice")
+    phrases(noun, "in its results", "record the result twice")
   end
 
-  def words(:replay_telemetry_scope, _context),
-    do: phrases("Replay", "in the replay's telemetry", "write the replay twice")
+  def words(:telemetry_limit_evaluation, context) do
+    noun = definitions_noun(context, "limit check", "Limit check")
+    phrases(noun, "in Limits", "record the limit events twice")
+  end
+
+  def words(:telemetry_historical_data_workflow, context) do
+    noun = if context[:workflow] == "import", do: "Import", else: "Backfill"
+    phrases(with_span(noun, context), "in the telemetry for that span", "write the span twice")
+  end
+
+  def words(:replay_telemetry_scope, context),
+    do:
+      phrases(
+        with_span("Replay", context),
+        "in the replay's telemetry",
+        "write the replay twice"
+      )
 
   def words(_job_type, _context),
     do: phrases("A Cadence job", "where it acts", "repeat what it did")
+
+  # 'Battery margin evaluation' / 'Derived telemetry evaluation of 3 definitions'.
+  defp definitions_noun(context, what, bare) do
+    case {name(context[:definition_name]), context[:definition_count]} do
+      {name, _count} when is_binary(name) -> "#{name} #{what}"
+      {nil, count} when is_integer(count) and count > 1 -> "#{bare} of #{count} definitions"
+      _none -> bare
+    end
+  end
+
+  # §4: 'Backfill 11-13 02:00Z–04:00Z'; across midnight '11-13 23:00Z–11-14 01:00Z'.
+  defp with_span(noun, context) do
+    with {:ok, from} <- datetime(context[:span_from]),
+         {:ok, to} <- datetime(context[:span_to]) do
+      to_text =
+        if Date.compare(DateTime.to_date(from), DateTime.to_date(to)) == :eq,
+          do: clock(to),
+          else: "#{day(to)} #{clock(to)}"
+
+      "#{noun} #{day(from)} #{clock(from)}–#{to_text}"
+    else
+      _missing -> noun
+    end
+  end
+
+  defp datetime(%DateTime{} = at), do: {:ok, at}
+
+  defp datetime(text) when is_binary(text) do
+    case DateTime.from_iso8601(text) do
+      {:ok, at, _offset} -> {:ok, at}
+      _error -> :error
+    end
+  end
+
+  defp datetime(_value), do: :error
+
+  defp day(at), do: Calendar.strftime(at, "%m-%d")
+  defp clock(at), do: Calendar.strftime(at, "%H:%MZ")
 
   defp phrases(noun, check_place, consequence),
     do: %{noun: noun, check_place: check_place, consequence: consequence}

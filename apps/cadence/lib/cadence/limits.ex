@@ -234,7 +234,10 @@ defmodule Cadence.Limits do
              :telemetry_limit_evaluation,
              mission_id,
              persisted_run.limit_run_id,
-             %{"limit_run_id" => persisted_run.limit_run_id}
+             Map.merge(
+               %{"limit_run_id" => persisted_run.limit_run_id},
+               definition_facts(active_limit_definitions(mission_id))
+             )
            ) do
         {:ok, _job} ->
           {:ok, persisted_run}
@@ -275,6 +278,13 @@ defmodule Cadence.Limits do
       execute_run(run, Keyword.merge(opts_from_run(run), opts))
     end
   end
+
+  # Facts the job carries for its words when its outcome is unknown (ux U54): the checked point
+  # when there's exactly one definition, else how many (the run evaluates the active ones).
+  defp definition_facts([%Definition{point_id: point_id}]) when is_binary(point_id),
+    do: %{"definition_name" => point_id}
+
+  defp definition_facts(definitions), do: %{"definition_count" => length(definitions)}
 
   defp build_run(mission_id, opts) do
     Run.new(%{

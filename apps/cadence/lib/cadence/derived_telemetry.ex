@@ -36,7 +36,10 @@ defmodule Cadence.DerivedTelemetry do
              :derived_telemetry_evaluation,
              mission_id,
              persisted_run.derived_run_id,
-             %{"derived_run_id" => persisted_run.derived_run_id}
+             Map.merge(
+               %{"derived_run_id" => persisted_run.derived_run_id},
+               definition_facts(definitions)
+             )
            ) do
         {:ok, _job} ->
           {:ok, persisted_run}
@@ -75,6 +78,13 @@ defmodule Cadence.DerivedTelemetry do
       execute_run(run, opts)
     end
   end
+
+  # Facts the job carries for its words when its outcome is unknown (ux U54): the definition's
+  # name when there's exactly one, else how many.
+  defp definition_facts([%Definition{point_name: name}]) when is_binary(name) and name != "",
+    do: %{"definition_name" => name}
+
+  defp definition_facts(definitions), do: %{"definition_count" => length(definitions)}
 
   defp build_run(mission_id, definitions, opts) do
     Run.new(%{

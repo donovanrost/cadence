@@ -101,7 +101,7 @@ defmodule Cadence.Replay do
              :replay_telemetry_scope,
              mission_id,
              persisted_run.replay_run_id,
-             %{"replay_run_id" => persisted_run.replay_run_id}
+             Map.merge(%{"replay_run_id" => persisted_run.replay_run_id}, span_facts(scope))
            ) do
         {:ok, _job} ->
           {:ok, persisted_run}
@@ -128,6 +128,15 @@ defmodule Cadence.Replay do
       execute_run(run, scope_from_run(run))
     end
   end
+
+  # The receipt span the job carries for its words when its outcome is unknown (ux U54).
+  defp span_facts(%Scope{
+         from_receipt_time: %DateTime{} = from,
+         to_receipt_time: %DateTime{} = to
+       }),
+       do: %{"span_from" => DateTime.to_iso8601(from), "span_to" => DateTime.to_iso8601(to)}
+
+  defp span_facts(%Scope{}), do: %{}
 
   defp build_run(mission_id, %Scope{} = scope, binding_set_id, version) do
     Run.new(%{
