@@ -185,6 +185,11 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
               {:tcp_provider_invalid_configuration, _profile, {:quiet_connection_ms, ^bad}}} =
                GenServer.start(TCPSocket, opts.(bad))
     end
+
+    # null (the key present) is the default, not a refusal (api-ops): the start gets past the
+    # configuration check and stops later, here on the ingress dependency this test leaves out.
+    assert {:error, {:tcp_provider_missing_ingress_dependency, _profile, _reason}} =
+             GenServer.start(TCPSocket, opts.(nil))
   end
 
   # A crashing acceptor isn't restarted by its supervisor (adapters register again on :DOWN, which

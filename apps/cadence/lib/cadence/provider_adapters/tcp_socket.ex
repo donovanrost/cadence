@@ -47,6 +47,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   @executor_high_watermark 8_192
   # (ux U50) Default for quiet_connection_ms: our own connection read nothing for this long.
   @quiet_connection_ms 30_000
+  # Re-registering after the acceptor died: the first retry is quick (after a kill the old
+  # listener may still be closing as we bind), later ones back off (api-ops, lead).
+  @reregister_first_retry_ms 250
+  @reregister_retry_ms 5_000
   @executor_low_watermark 2_048
   @executor_capacity_retry_ms 1_000
   @journal_capacity_retry_ms 25
@@ -237,7 +241,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
             acceptor?: true,
             port: port,
             acceptor_monitor_ref: Process.monitor(acceptor),
-            acceptor_registration: {listen, registration}
+            acceptor_registration: {listen, registration},
+            reregister_failures: 0
           })
 
         log_provider_started(state)
@@ -725,6 +730,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
           Map.get(configuration, "quiet_connection_ms", @quiet_connection_ms)
         )
         |> coerce_integer()
+        # A key present with null means the default (api-ops): never fail a contact start on it.
+        |> Kernel.||(@quiet_connection_ms)
     }
   end
 
@@ -953,16 +960,26 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
            registration
          ) do
       {:ok, _port, acceptor} ->
-        %{state | acceptor_monitor_ref: Process.monitor(acceptor)}
+        %{state | acceptor_monitor_ref: Process.monitor(acceptor), reregister_failures: 0}
 
       {:error, error} ->
+        delay_ms =
+          if state.reregister_failures == 0,
+            do: @reregister_first_retry_ms,
+            else: @reregister_retry_ms
+
         Logger.warning(
           "TCP provider #{state.provider_binding_id} could not register with its profile " <>
-            "acceptor (#{inspect(error)}); keeping the session, retrying in 5 s"
+            "acceptor (#{inspect(error)}); keeping the session, retrying in #{delay_ms} ms"
         )
 
-        Process.send_after(self(), :reregister, 5_000)
-        %{state | acceptor_monitor_ref: nil}
+        Process.send_after(self(), :reregister, delay_ms)
+
+        %{
+          state
+          | acceptor_monitor_ref: nil,
+            reregister_failures: state.reregister_failures + 1
+        }
     end
   end
 

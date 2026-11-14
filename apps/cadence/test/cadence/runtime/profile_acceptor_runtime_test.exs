@@ -58,7 +58,10 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
       replaced =
         ProfileAcceptor.whereis(ProcessNamespace.default(), ctx.mission_id, ctx.profile_id)
 
-      is_pid(replaced) and replaced != acceptor
+      # Both contacts registered again: one may first hit :eaddrinuse while the killed
+      # listener closes and come back on its quick (250 ms) retry.
+      is_pid(replaced) and replaced != acceptor and
+        length(GenServer.call(replaced, :routing).registrations) == 2
     end)
 
     before = received(ctx, first)
@@ -157,6 +160,35 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
 
       :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, run_id(pass))
     end
+  end
+
+  # api-ops, lead: after a kill the old listener can still be closing when the adapter binds, so
+  # the first retry is quick (250 ms), not the 5 s backoff.
+  test "after a failed re-registration the first retry comes quickly", ctx do
+    {pass, port} = start_pass!(ctx, [])
+    _peer = connect!(port, frame(1))
+    assert_eventually(fn -> received(ctx, pass) > 0 end)
+
+    namespace = ProcessNamespace.default()
+    adapter = adapter(ctx, pass)
+    acceptor = ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id)
+
+    :ok = :sys.suspend(adapter)
+    :ok = DynamicSupervisor.terminate_child(ProfileAcceptor.supervisor_name(namespace), acceptor)
+    squatter = squat!(port)
+    :ok = :sys.resume(adapter)
+
+    # The re-registration on :DOWN fails while the port is held; free it at once.
+    Process.sleep(100)
+    :ok = :gen_tcp.close(squatter)
+
+    # Registered again well before the 5 s backoff would have allowed.
+    assert_eventually(
+      fn -> is_pid(ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id)) end,
+      30
+    )
+
+    :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, run_id(pass))
   end
 
   defp start_pass!(ctx, configuration) do
