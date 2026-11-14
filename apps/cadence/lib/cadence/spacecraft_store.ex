@@ -110,6 +110,32 @@ defmodule Cadence.SpacecraftStore do
   end
 
   @doc """
+  Moves spacecraft to `version` of their profile in one statement (a profile rollout across the
+  fleet, director 11-14): `{:ok, %{spacecraft_id => spacecraft}}` as stored. Announces the
+  configuration change once.
+  """
+  @spec set_profile_version(binary(), binary(), [binary()], pos_integer()) ::
+          {:ok, %{binary() => Spacecraft.t()}}
+  def set_profile_version(_organization_id, _mission_id, [], _version), do: {:ok, %{}}
+
+  def set_profile_version(organization_id, mission_id, spacecraft_ids, version)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) and
+             is_integer(version) and version > 0 do
+    {_count, rows} =
+      SpacecraftRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^spacecraft_ids
+      )
+      |> select([row], row)
+      |> Repo.update_all(set: [spacecraft_type_version: version])
+
+    ScopedReadUpdates.publish(:spacecraft_configuration_changed, organization_id, mission_id)
+    {:ok, Map.new(rows, &{&1.spacecraft_id, SpacecraftRow.to_domain(&1)})}
+  end
+
+  @doc """
   Sets a spacecraft's commanding and telemetry switches (L22; the change-set kind is their only
   writer). `switches`: `%{commanding_enabled: bool, telemetry_enabled: bool}`.
   """

@@ -34,12 +34,17 @@ defmodule Cadence.Comms.RouteMaterializer do
     |> Enum.chunk_every(100)
     |> Enum.flat_map(fn ids ->
       {:ok, found} = SpacecraftStore.fetch_spacecrafts(organization_id, mission_id, ids)
-      Map.values(found)
+
+      rules =
+        RoutingRuleStore.list_routing_rules_for_spacecrafts(organization_id, mission_id, ids)
+
+      Enum.map(Map.values(found), &{&1, Map.fetch!(rules, &1.spacecraft_id)})
     end)
-    |> Enum.reduce_while({:ok, []}, fn spacecraft, {:ok, changes} ->
+    |> Enum.reduce_while({:ok, []}, fn {spacecraft, before}, {:ok, changes} ->
       case reconcile(
              organization_id,
              spacecraft,
+             before,
              Map.get(overrides, spacecraft.spacecraft_id, %{}),
              context
            ) do
@@ -62,28 +67,25 @@ defmodule Cadence.Comms.RouteMaterializer do
     |> to_document()
   end
 
-  defp reconcile(organization_id, spacecraft, overrides, context) do
+  # `before`: the spacecraft's rules, preloaded for its chunk. They're read again only when this
+  # reconcile changed something (a route written, archived or retired); otherwise nothing moved.
+  defp reconcile(organization_id, spacecraft, before, overrides, context) do
     mission_id = spacecraft.mission_id
-
-    before =
-      RoutingRuleStore.list_routing_rules_for_spacecraft(
-        organization_id,
-        mission_id,
-        spacecraft.spacecraft_id
-      )
-
     existing = Enum.filter(before, &(&1.origin == :profile))
 
     with {:ok, desired} <- desired(organization_id, spacecraft, overrides, context),
-         {:ok, _} <- write(organization_id, desired),
-         :ok <- archive_unwanted(organization_id, existing, desired),
-         :ok <- retire_superseded(organization_id, spacecraft, desired) do
+         {:ok, written} <- write(organization_id, desired),
+         {:ok, archived} <- archive_unwanted(organization_id, existing, desired),
+         {:ok, retired} <- retire_superseded(organization_id, before, desired) do
       after_routes =
-        RoutingRuleStore.list_routing_rules_for_spacecraft(
-          organization_id,
-          mission_id,
-          spacecraft.spacecraft_id
-        )
+        if written or archived or retired,
+          do:
+            RoutingRuleStore.list_routing_rules_for_spacecraft(
+              organization_id,
+              mission_id,
+              spacecraft.spacecraft_id
+            ),
+          else: before
 
       previous = to_document(before)
       proposed = to_document(after_routes)
@@ -123,11 +125,12 @@ defmodule Cadence.Comms.RouteMaterializer do
 
   defp prefix_errors(ok, _spacecraft), do: ok
 
+  # {:ok, changed?}: whether any route was created or updated.
   defp write(organization_id, desired) do
-    Enum.reduce_while(desired, {:ok, []}, fn route, {:ok, acc} ->
+    Enum.reduce_while(desired, {:ok, false}, fn route, {:ok, changed} ->
       case RoutingRuleStore.put_route(organization_id, route) do
-        {:ok, rule, _change} ->
-          {:cont, {:ok, [rule | acc]}}
+        {:ok, _rule, change} ->
+          {:cont, {:ok, changed or change != :unchanged}}
 
         {:error, reason} ->
           {:halt,
@@ -138,36 +141,36 @@ defmodule Cadence.Comms.RouteMaterializer do
 
   defp archive_unwanted(organization_id, existing, desired) do
     wanted = MapSet.new(desired, & &1.routing_rule_id)
+    unwanted = Enum.reject(existing, &MapSet.member?(wanted, &1.routing_rule_id))
 
-    existing
-    |> Enum.reject(&MapSet.member?(wanted, &1.routing_rule_id))
-    |> Enum.each(
+    Enum.each(
+      unwanted,
       &RoutingRuleStore.archive_routing_rule(organization_id, &1.mission_id, &1.routing_rule_id)
     )
 
-    :ok
+    {:ok, unwanted != []}
   end
 
   # A legacy per-spacecraft rule that a profile route now covers (same transport, direction and
   # role) is retired, so the lift into profile rules never leaves two live copies of a route.
   # A bidirectional rule is retired once both of its directions are covered.
-  defp retire_superseded(_organization_id, _spacecraft, []), do: :ok
+  defp retire_superseded(_organization_id, _before, []), do: {:ok, false}
 
-  defp retire_superseded(organization_id, spacecraft, desired) do
+  # `before`: the spacecraft's rules from before this reconcile's writes. Those writes are profile
+  # routes only, so its legacy rules are as they were. {:ok, retired?}.
+  defp retire_superseded(organization_id, before, desired) do
     covered = MapSet.new(desired, &{&1.transport_id, &1.direction, &1.role})
 
-    organization_id
-    |> RoutingRuleStore.list_routing_rules_for_spacecraft(
-      spacecraft.mission_id,
-      spacecraft.spacecraft_id
-    )
-    |> Enum.filter(fn rule ->
-      rule.origin == :legacy and rule.enabled? and
-        rule
-        |> directions()
-        |> Enum.all?(&MapSet.member?(covered, {rule.transport_id, &1, rule.role}))
-    end)
-    |> Enum.each(
+    superseded =
+      Enum.filter(before, fn rule ->
+        rule.origin == :legacy and rule.enabled? and
+          rule
+          |> directions()
+          |> Enum.all?(&MapSet.member?(covered, {rule.transport_id, &1, rule.role}))
+      end)
+
+    Enum.each(
+      superseded,
       &RoutingRuleStore.archive_routing_rule(
         organization_id,
         &1.mission_id,
@@ -178,7 +181,7 @@ defmodule Cadence.Comms.RouteMaterializer do
       )
     )
 
-    :ok
+    {:ok, superseded != []}
   end
 
   defp directions(%{direction: :bidirectional}), do: [:inbound, :outbound]

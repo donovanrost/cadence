@@ -312,16 +312,17 @@ defmodule Cadence.Control.ConfigurationGeneration do
   defp pending_configuration(org, mission_id, ids) do
     with {:ok, mission} <- Missions.fetch_mission(org, mission_id),
          {:ok, %{activation: %{}} = active} <- Active.load(mission) do
-      Enum.filter(ids, fn id ->
-        latest = Drafts.latest(org, mission_id, id)
-
-        latest != nil and
-          latest.configuration_revision_id != active.entries[id]["configuration_revision_id"]
-      end)
+      latest = Drafts.latest_many(org, mission_id, ids)
+      Enum.filter(ids, &newer_configuration?(Map.get(latest, &1), active.entries[&1]))
     else
       _no_active_activation -> []
     end
   end
+
+  defp newer_configuration?(nil, _entry), do: false
+
+  defp newer_configuration?(latest, entry),
+    do: latest.configuration_revision_id != (entry || %{})["configuration_revision_id"]
 
   defp catalog_targets(mission, ids, entries) do
     ids = Enum.filter(ids, &Map.has_key?(entries, &1))
@@ -333,8 +334,9 @@ defmodule Cadence.Control.ConfigurationGeneration do
         ids
       )
 
-    for {id, sc} <- spacecraft,
-        to = CatalogAuthority.effective(mission, sc),
+    effective = CatalogAuthority.effective_many(mission, Map.new(spacecraft))
+
+    for {id, to} <- effective,
         to != nil and to != entries[id]["catalog_revision_id"],
         into: %{},
         do: {id, to}

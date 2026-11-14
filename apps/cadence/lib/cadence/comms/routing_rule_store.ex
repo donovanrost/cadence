@@ -289,6 +289,30 @@ defmodule Cadence.Comms.RoutingRuleStore do
     |> Enum.map(&RoutingRuleRow.to_domain/1)
   end
 
+  @doc """
+  `list_routing_rules_for_spacecraft/3` for many spacecraft in one query (fleet-scale previews):
+  `%{spacecraft_id => [rule]}`, each list in the same order, every id present.
+  """
+  @spec list_routing_rules_for_spacecrafts(binary(), binary(), [binary()]) :: %{
+          binary() => [map()]
+        }
+  def list_routing_rules_for_spacecrafts(organization_id, mission_id, spacecraft_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
+    found =
+      RoutingRuleRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^spacecraft_ids and row.lifecycle_state != "archived"
+      )
+      |> order_by([row], asc: row.purpose_label, asc: row.direction)
+      |> Repo.all()
+      |> Enum.map(&RoutingRuleRow.to_domain/1)
+      |> Enum.group_by(& &1.spacecraft_id)
+
+    Map.new(spacecraft_ids, &{&1, Map.get(found, &1, [])})
+  end
+
   @doc "Active profile-route counts per rule for spacecraft on one profile version."
   @spec profile_route_counts(binary(), binary(), binary(), pos_integer()) :: %{
           binary() => non_neg_integer()

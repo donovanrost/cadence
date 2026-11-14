@@ -13,6 +13,8 @@ defmodule Cadence.Configuration.Submission do
   using the returned `impacts`.
   """
 
+  alias Cadence.SpacecraftTypeStore
+
   alias Cadence.Configuration.{
     ChangeSetRow,
     ChangeSetStore,
@@ -255,8 +257,12 @@ defmodule Cadence.Configuration.Submission do
     end)
   end
 
+  # The memo covers the pipeline and the generation build that follows it in the same
+  # transaction: both re-read the same profile versions per spacecraft.
   defp apply_transaction(set, fun) do
-    Repo.transaction(fun, timeout: @apply_timeout_ms)
+    SpacecraftTypeStore.with_version_memo(fn ->
+      Repo.transaction(fun, timeout: @apply_timeout_ms)
+    end)
   rescue
     DBConnection.ConnectionError -> landed(set)
   end

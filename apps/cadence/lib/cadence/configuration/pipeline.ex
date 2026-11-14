@@ -12,6 +12,7 @@ defmodule Cadence.Configuration.Pipeline do
   """
 
   alias Cadence.Configuration.{Document, Kinds, Ledger}
+  alias Cadence.SpacecraftTypeStore
 
   @type op :: %{
           required(:op_id) => String.t(),
@@ -36,6 +37,13 @@ defmodule Cadence.Configuration.Pipeline do
 
   @spec run(String.t(), String.t(), integer(), [op()]) :: result()
   def run(organization_id, mission_id, base_revision, ops) do
+    # Kinds re-read the same profile versions once per spacecraft; one read each for the run.
+    SpacecraftTypeStore.with_version_memo(fn ->
+      run_ops(organization_id, mission_id, base_revision, ops)
+    end)
+  end
+
+  defp run_ops(organization_id, mission_id, base_revision, ops) do
     initial = %{
       entries: [],
       conflicts: [],

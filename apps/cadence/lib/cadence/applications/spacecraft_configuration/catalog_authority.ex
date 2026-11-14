@@ -36,6 +36,25 @@ defmodule Cadence.Applications.SpacecraftConfiguration.CatalogAuthority do
   end
 
   @doc """
+  `effective/2` for many spacecraft (`%{id => spacecraft}`), reading their overrides in one query:
+  `%{id => catalog_revision_id | nil}`. Fleet-scale previews use it (director 11-14).
+  """
+  @spec effective_many(map(), %{binary() => struct()}) :: %{binary() => binary() | nil}
+  def effective_many(mission, spacecraft) when is_map(spacecraft) do
+    overrides = Overrides.list(mission.organization_id, mission.mission_id, Map.keys(spacecraft))
+
+    Map.new(spacecraft, fn {id, sc} ->
+      case SpacecraftStore.fetch_pinned_profile(mission, sc) do
+        {:ok, %SpacecraftType{} = profile} ->
+          {id, Effective.resolve(profile, Map.get(overrides, id, %{}))["catalog_revision_id"]}
+
+        _no_profile ->
+          {id, nil}
+      end
+    end)
+  end
+
+  @doc """
   `:ok` when the spacecraft's own configuration may use `catalog_revision_id`: its profile sets
   none, or sets exactly that one. Otherwise `{:error, :spacecraft_catalog_set_by_profile}`.
   """

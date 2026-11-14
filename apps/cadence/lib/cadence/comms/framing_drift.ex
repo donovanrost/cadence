@@ -42,12 +42,13 @@ defmodule Cadence.Comms.FramingDrift do
       |> Enum.reject(&is_nil(&1.spacecraft_type_id))
       |> Enum.filter(&(only == :all or &1.spacecraft_id in only))
 
-    overrides =
-      Overrides.list(organization_id, mission_id, Enum.map(spacecraft, & &1.spacecraft_id))
+    ids = Enum.map(spacecraft, & &1.spacecraft_id)
+    overrides = Overrides.list(organization_id, mission_id, ids)
+    rules = RoutingRuleStore.list_routing_rules_for_spacecrafts(organization_id, mission_id, ids)
 
     spacecraft
     |> Enum.flat_map(
-      &drifts(organization_id, &1, Map.get(overrides, &1.spacecraft_id, %{}), transports)
+      &drifts(organization_id, &1, Map.get(overrides, &1.spacecraft_id, %{}), {transports, rules})
     )
     |> Enum.group_by(fn {profile, transport, differences, _sc} ->
       {profile, transport, differences}
@@ -75,18 +76,28 @@ defmodule Cadence.Comms.FramingDrift do
       |> TransportStore.list_transports(mission_id)
       |> Map.new(&{&1.transport_id, &1})
 
-    organization_id
-    |> SpacecraftStore.list_spacecraft(mission_id)
-    |> Enum.filter(&(&1.spacecraft_id in only and not is_nil(&1.spacecraft_type_id)))
-    |> Enum.flat_map(&unverified_cause(organization_id, &1, transports))
+    spacecraft =
+      organization_id
+      |> SpacecraftStore.list_spacecraft(mission_id)
+      |> Enum.filter(&(&1.spacecraft_id in only and not is_nil(&1.spacecraft_type_id)))
+
+    rules =
+      RoutingRuleStore.list_routing_rules_for_spacecrafts(
+        organization_id,
+        mission_id,
+        Enum.map(spacecraft, & &1.spacecraft_id)
+      )
+
+    spacecraft
+    |> Enum.flat_map(&unverified_cause(organization_id, &1, {transports, rules}))
     |> Enum.group_by(fn {profile, cause} -> {profile, cause} end)
     |> Enum.map(fn {{profile, cause}, rows} ->
       %{profile: profile, cause: cause, spacecraft_count: length(rows)}
     end)
   end
 
-  defp unverified_cause(organization_id, spacecraft, transports) do
-    feeding = feeding_transports(organization_id, spacecraft, transports)
+  defp unverified_cause(organization_id, spacecraft, feeds) do
+    feeding = feeding_transports(spacecraft, feeds)
 
     cause =
       cond do
@@ -119,7 +130,7 @@ defmodule Cadence.Comms.FramingDrift do
     end
   end
 
-  defp drifts(organization_id, spacecraft, overrides, transports) do
+  defp drifts(organization_id, spacecraft, overrides, feeds) do
     case SpacecraftTypeStore.fetch_spacecraft_type_version(
            organization_id,
            spacecraft.mission_id,
@@ -129,8 +140,8 @@ defmodule Cadence.Comms.FramingDrift do
       {:ok, profile} ->
         framing = Effective.resolve(profile, overrides)["frame_parameters"]
 
-        organization_id
-        |> feeding_transports(spacecraft, transports)
+        spacecraft
+        |> feeding_transports(feeds)
         |> Enum.flat_map(&transport_drift(&1, profile, framing, spacecraft))
 
       {:error, _missing} ->
@@ -138,12 +149,10 @@ defmodule Cadence.Comms.FramingDrift do
     end
   end
 
-  defp feeding_transports(organization_id, spacecraft, transports) do
-    organization_id
-    |> RoutingRuleStore.list_routing_rules_for_spacecraft(
-      spacecraft.mission_id,
-      spacecraft.spacecraft_id
-    )
+  # The spacecraft's routing rules come preloaded for the whole set (one query, not one each).
+  defp feeding_transports(spacecraft, {transports, rules}) do
+    rules
+    |> Map.get(spacecraft.spacecraft_id, [])
     |> Enum.filter(&(&1.enabled? and &1.direction in [:inbound, :bidirectional]))
     |> Enum.map(&Map.get(transports, &1.transport_id))
     |> Enum.reject(&is_nil/1)

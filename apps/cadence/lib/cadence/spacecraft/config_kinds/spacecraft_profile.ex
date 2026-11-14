@@ -304,22 +304,23 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
     SpacecraftTypeStore.persist_spacecraft_type(organization_id, profile)
   end
 
+  # One statement for the whole rollout (director 11-14: moving 499 spacecraft one by one was
+  # half the preview's queries).
   defp roll_out(organization_id, mission_id, current, profile, options) do
-    organization_id
-    |> rollout_targets(mission_id, current, rollout(options))
-    |> Enum.reject(kept_fn(organization_id, mission_id))
-    |> Enum.reduce_while({:ok, []}, fn spacecraft, {:ok, entries} ->
-      moved = %{spacecraft | spacecraft_type_version: profile.version}
+    targets =
+      organization_id
+      |> rollout_targets(mission_id, current, rollout(options))
+      |> Enum.reject(kept_fn(organization_id, mission_id))
 
-      case SpacecraftStore.update_spacecraft(organization_id, moved) do
-        {:ok, stored} -> {:cont, {:ok, [entry(spacecraft, stored) | entries]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-    |> case do
-      {:ok, entries} -> {:ok, Enum.reverse(entries)}
-      error -> error
-    end
+    {:ok, stored} =
+      SpacecraftStore.set_profile_version(
+        organization_id,
+        mission_id,
+        Enum.map(targets, & &1.spacecraft_id),
+        profile.version
+      )
+
+    {:ok, Enum.map(targets, &entry(&1, Map.fetch!(stored, &1.spacecraft_id)))}
   end
 
   defp rollout_targets(_organization_id, _mission_id, _current, "none"), do: []
