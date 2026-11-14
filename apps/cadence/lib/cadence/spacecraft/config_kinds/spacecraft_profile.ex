@@ -314,7 +314,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
 
     ids = Enum.map(targets, & &1.spacecraft_id)
 
-    # A target archived or deleted meanwhile refuses the apply, as the per-spacecraft update did
+    # A target deleted meanwhile refuses the apply, as the per-spacecraft update did
     # (api-ops), rather than raising.
     with {:ok, stored} <-
            SpacecraftStore.set_profile_version(organization_id, mission_id, ids, profile.version),
