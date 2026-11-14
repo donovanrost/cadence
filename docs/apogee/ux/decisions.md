@@ -1247,6 +1247,13 @@ it or closes the item.
   did". **The real table is api-ops' (11-14), accepted with two edits:** limit evaluation is "<definition> limit
   check", like "<definition> evaluation"; spans are §4 ("Backfill 11-13 02:00Z–04:00Z"). The item carries
   `words {noun, check_place, consequence}`, and the console slots them in as-is.
+  - **Names** (api-ops, 11-14): the run-based jobs don't carry names, so the nouns are bare for now: "Derived
+    telemetry evaluation", "Limit check", "Backfill" / "Correction" / "Replacement", "Replay". The run id is in
+    Technical details. **Follow-up, wanted:** the enqueue sites store the facts in the job args: the definition
+    name when there's one, else the count, and the span's start and end. The words table then forms "Battery
+    margin evaluation", "Derived telemetry evaluation of 3 definitions", "Battery voltage limit check", and
+    "Backfill 11-13 02:00Z–04:00Z" (a stored span always has its date; across midnight, "11-13 23:00Z–11-14
+    01:00Z"). Older jobs keep the bare noun.
 - **Title:** context, then the noun: "outcome unknown". For example `EARENDIL-312 · SVA 03:10Z pass · Booking at
   Northlight: outcome unknown`. With no pass, the noun alone: `Catalog import r15: outcome unknown`. U47's pass
   label.
