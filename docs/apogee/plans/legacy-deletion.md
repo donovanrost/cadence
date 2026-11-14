@@ -16,7 +16,7 @@ the tree moves.
 | L5 sign-in, invitations, no-org | POST `/sign-in`, POST `/invitations/:token` (+ dead modules) | console auth screens | deletable now (GET 302s stay) |
 | L6 admin mode | `/admin-mode` | account menu admin mode | deletable now |
 | L7 platform admin | `/admin/**` | `/console/admin/**` | after qa's live check (L7 migration) |
-| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a after qa's live check (editing smoke PASS 11-14); federated surfaces own batch; L8b blocked (slices 6, library, settings); L8c decision machinery after D18 drops `refresh` |
+| L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a done (live 11-14 01:46Z, c21fad95a); federated batch done (restart 1, 11-14 08:01Z, 4cb04734d); L8b blocked on settings only (slice 5 route pending); L8c step 1 done (D18 `refresh`), step 2 awaits the director's go |
 | L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | blocked: no console API yet |
 | L11 data sources | `/ops/data-sources/**` | `setup.data-sources[/:sourceId]` | after qa's live check (endpoints 2e3c8c5ab) |
 | L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | blocked: L12 endpoints not built (api-ops) |
@@ -383,8 +383,8 @@ their params, and library, playlists, new, settings, activity and diagnostics st
   covering the dashboards until they're gone.
 
 ### L8b library, playlists, settings (+ activity, diagnostics), shares, snapshots, export (blocked)
-- **Blocked on:** slice 6 (api D20/D23/D24 after L10; domain's Q6 functions are being built), the library (D21/
-  D22, fe-ops), and settings (fe-setup's slice 5; its console route is still pending).
+- **Blocked on:** settings only (fe-setup's slice 5; `ops.dashboard.settings` is still `pending`). Slice 6
+  (shares, snapshots, playlists, present, export) and the library are live in the console (11-14).
 - **Delete then:**
   - their pages: `ops_{library,playlist,settings,activity,diagnostics,shared_view}_page.ex` and
     `ops_diagnostics_url.ex`;
