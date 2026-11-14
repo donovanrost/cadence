@@ -306,6 +306,10 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
   identity v2 shipped needs a lead or director decision first. This includes 11-14 00:38:36–00:40:40Z (001 and 009,
   collapsed 8:1 identities). A replay run always gets its own identities (realm + replay_run_id), so it never fixes or
   duplicates the live rows; it only adds its own. See `docs/apogee/plans/ingress-time-tags.md`.
+- **RULE (lead, 11-14): a side worktree's `frontend/node_modules` is its OWN directory, never a symlink to the
+  shared tree's.** With a symlink, vue-tsc, lint and tests resolve workspace packages (plugin-sdk, the route
+  catalog) from the shared tree and test the wrong code: batch 3 showed host vue-tsc 0 errors with 10 real ones.
+  Check: `test -L frontend/node_modules && echo SYMLINK`.
 - **Never symlink the shared tree's `node_modules` into a throwaway worktree.** Page tests that shell out to
   `vp test` start a `pnpm install`, which tries to remove the linked modules directory. On 11-14 07:52Z pnpm refused
   (`ERR_PNPM_UNSAFE_MODULES_DIR`) and nothing changed, but don't rely on that. In a throwaway, page tests fail with
