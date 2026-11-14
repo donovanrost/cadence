@@ -71,6 +71,36 @@ defmodule Cadence.Ingress.BackpressureAttentionTest do
     assert id == item.id
   end
 
+  # qa's restart 1 dry run: a journal that has stopped can still be listed by the registry for a
+  # moment (its entry is removed asynchronously). Holding the registry's partitions pins that
+  # window: the stopped journal counts as gone, and its item clears as drained.
+  @tag :tmp_dir
+  test "a stopped journal the registry still lists clears its item", ctx do
+    journal = start_journal!(ctx)
+    append!(journal, 85_000)
+    :ok = BackpressureMonitor.sample_now()
+    assert [%{conflict: "journal_near_full"}] = items(ctx)
+
+    partitions = registry_partitions()
+    Enum.each(partitions, &:sys.suspend/1)
+    on_exit(fn -> Enum.each(partitions, &resume/1) end)
+
+    stop_supervised!(:journal)
+    assert [_still_listed] = Registry.lookup(Cadence.Runtime.Registry, journal_key(ctx))
+
+    :ok = BackpressureMonitor.sample_now()
+    Enum.each(partitions, &resume/1)
+
+    assert [] == items(ctx)
+
+    assert [%{action: "drained"}] =
+             BackpressureAttention.resolved_since(
+               ctx.organization_id,
+               ctx.mission_id,
+               DateTime.add(DateTime.utc_now(), -60)
+             )
+  end
+
   test "dropped frames stay until acknowledged, then resolve once the contact has ended", ctx do
     for _drop <- 1..3 do
       ReceiveBackpressure.on_full(false, drop_metadata(ctx), 48)
@@ -138,8 +168,27 @@ defmodule Cadence.Ingress.BackpressureAttentionTest do
     }
   end
 
+  defp items(ctx), do: BackpressureAttention.items(ctx.organization_id, ctx.mission_id)
+
+  defp journal_key(ctx),
+    do: {:provider_ingress_journal, ctx.mission_id, ctx.contact_id, "path-bp", ctx.binding_id}
+
+  defp registry_partitions do
+    for {_id, pid, _type, [Registry.Partition]} <-
+          Supervisor.which_children(Cadence.Runtime.Registry),
+        is_pid(pid),
+        do: pid
+  end
+
+  defp resume(pid) do
+    :sys.resume(pid)
+  catch
+    # Already resumed, or the partition is gone.
+    :exit, _reason -> :ok
+  end
+
   defp start_journal!(%{tmp_dir: tmp_dir} = ctx) do
-    key = {:provider_ingress_journal, ctx.mission_id, ctx.contact_id, "path-bp", ctx.binding_id}
+    key = journal_key(ctx)
 
     start_supervised!(
       Supervisor.child_spec(

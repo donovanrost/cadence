@@ -290,8 +290,13 @@ defmodule Cadence.Ingress.BackpressureMonitor do
            last_error: snapshot.last_error
          }}
 
+      # A slow or busy journal keeps its last reading; a stopped one (the contact ended, its
+      # registry entry not yet gone) has no usage, so its item clears as drained.
       :error ->
         {key, Map.get(previous, key)}
+
+      :gone ->
+        {key, nil}
     end
   end
 
@@ -299,14 +304,25 @@ defmodule Cadence.Ingress.BackpressureMonitor do
   defp backlog_bytes(%{lag_bytes: %{processing: bytes}}) when is_integer(bytes), do: bytes
   defp backlog_bytes(_snapshot), do: 0
 
+  # :gone when the journal has stopped (dead pid, or it exits during the call); :error when it
+  # couldn't answer in time, which keeps the last reading.
+  # Clustered runtimes: IngressJournal.lookup/1 checks Process.alive?/1, which raises for another
+  # node's pid; such a journal reads as :error here (no usage) rather than aborting the sample.
   defp journal_snapshot(pid) do
     case IngressJournal.snapshot(pid) do
       {:ok, %{retained_bytes: _, max_bytes: _} = snapshot} -> {:ok, snapshot}
+      {:error, :ingress_journal_not_running} -> :gone
       _other -> :error
     end
+  rescue
+    ArgumentError -> :error
   catch
-    :exit, _reason -> :error
+    :exit, reason -> if gone?(reason), do: :gone, else: :error
   end
+
+  defp gone?({reason, _call}) when reason in [:noproc, :normal, :shutdown], do: true
+  defp gone?({{:shutdown, _detail}, _call}), do: true
+  defp gone?(_reason), do: false
 
   defp journals(namespace) do
     Cluster.select(namespace, [
