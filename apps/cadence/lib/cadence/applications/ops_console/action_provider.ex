@@ -8,8 +8,6 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
 
   alias Cadence.Applications.OpsConsole.Actions.{
     ContactPlanning,
-    DashboardDeepActions,
-    DashboardWorkflows,
     DataSources,
     FleetPlanning,
     MissionOperations,
@@ -23,8 +21,6 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
 
   @cohort_adapters [
     UiInteractions,
-    DashboardWorkflows,
-    DashboardDeepActions,
     ContactPlanning,
     FleetPlanning,
     DataSources,

@@ -103,158 +103,6 @@ defmodule Cadence.Applications.OpsConsole do
       actions: []
     },
     %{
-      id: "dashboard_directory",
-      purpose: :collection,
-      label: "Dashboards",
-      path: "/missions/:mission_id/ops/dashboards",
-      query_params: ~w(query tags starred archived sort page lifecycle tag),
-      actions: ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]
-    },
-    %{
-      id: "dashboard_show",
-      purpose: :subject_detail,
-      label: "Dashboard",
-      path: "/missions/:mission_id/ops/dashboards/:dashboard_id",
-      subject_param: "dashboard_id",
-      query_params: [
-        "dashboard_id",
-        "panel",
-        "activity_filter",
-        "activity_event",
-        "selected_publish_issue",
-        "selected_time",
-        "time_mode",
-        "time_axis",
-        "from",
-        "to",
-        "limit_mode",
-        "replay_run_id",
-        "selection_view",
-        "selected_widget",
-        "selected_target",
-        "selected_id",
-        "selected_placement",
-        "selected_data_view",
-        "selected_scope_kind",
-        "selected_scope_id",
-        "selected_resource_id",
-        "selected_spacecraft_id",
-        "selected_contact_id",
-        "selected_transport_id",
-        "selected_source_endpoint_id",
-        "selected_ground_station_id",
-        "selected_scope_link_id",
-        "realm",
-        "data_source_id",
-        "source_binding_id"
-      ],
-      actions: []
-    },
-    %{
-      id: "dashboard_editor",
-      purpose: :configuration,
-      label: "Dashboard Editor",
-      path: "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
-      subject_param: "dashboard_id",
-      query_params: ["dashboard_id"],
-      actions: [
-        "layout_changed",
-        "validate_dashboard_section",
-        "save_dashboard_section",
-        "remove_dashboard_section",
-        "move_dashboard_section",
-        "preview_widget_binding",
-        "validate_widget",
-        "save_widget",
-        "remove_widget",
-        "rename",
-        "archive_dashboard",
-        "publish_dashboard",
-        "publish_dashboard_version",
-        "save_runtime_defaults",
-        "restore_version_as_draft",
-        "save_editor",
-        "review_editor",
-        "discard_editor",
-        "reload_editor"
-      ]
-    },
-    %{
-      id: "dashboard_activity",
-      purpose: :activity,
-      label: "Dashboard Activity",
-      path: "/missions/:mission_id/ops/dashboards/:dashboard_id/activity",
-      subject_param: "dashboard_id",
-      query_params: ["dashboard_id", "version", "selected_publish_issue"],
-      actions: ["publish_version", "restore_version"]
-    },
-    %{
-      id: "dashboard_new",
-      purpose: :configuration,
-      label: "New Dashboard",
-      path: "/missions/:mission_id/ops/dashboards/new",
-      query_params: ["mode", "source_dashboard_id"],
-      actions: ["validate", "save"]
-    },
-    %{
-      id: "dashboard_library",
-      purpose: :collection,
-      label: "Dashboard Library",
-      path: "/missions/:mission_id/ops/dashboards/library",
-      actions: ["stage-library-item", "create-library-item", "add-library-version"]
-    },
-    %{
-      id: "dashboard_playlists",
-      purpose: :collection,
-      label: "Dashboard Playlists",
-      path: "/missions/:mission_id/ops/dashboards/playlists",
-      actions: ["create-playlist"]
-    },
-    %{
-      id: "dashboard_playlist_present",
-      purpose: :operations,
-      label: "Present Playlist",
-      path: "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
-      subject_param: "playlist_id",
-      query_params: ["playlist_id", "index"],
-      actions: ["next-dashboard"]
-    },
-    %{
-      id: "dashboard_settings",
-      purpose: :configuration,
-      label: "Dashboard Settings",
-      path: "/missions/:mission_id/ops/dashboards/:dashboard_id/settings",
-      actions: [
-        "validate-settings",
-        "save-settings",
-        "create-share",
-        "revoke-share",
-        "create-snapshot",
-        "archive-dashboard"
-      ]
-    },
-    %{
-      id: "dashboard_share",
-      purpose: :subject_detail,
-      label: "Dashboard Share",
-      path: "/missions/:mission_id/ops/dashboard-shares/:share_id",
-      actions: []
-    },
-    %{
-      id: "dashboard_snapshot",
-      purpose: :subject_detail,
-      label: "Dashboard Snapshot",
-      path: "/missions/:mission_id/ops/dashboard-snapshots/:snapshot_id",
-      actions: []
-    },
-    %{
-      id: "dashboard_diagnostics",
-      purpose: :activity,
-      label: "Dashboard Diagnostics",
-      path: "/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics",
-      actions: []
-    },
-    %{
       id: "fleet_planning",
       purpose: :operations,
       label: "Fleet Planning",
@@ -422,18 +270,6 @@ defmodule Cadence.Applications.OpsConsole do
     "contact_plan_show" => [],
     "contact_detail" => [],
     "contact_record" => [],
-    "dashboard_directory" => [],
-    "dashboard_show" => [],
-    "dashboard_editor" => [],
-    "dashboard_activity" => [],
-    "dashboard_new" => [],
-    "dashboard_library" => [],
-    "dashboard_playlists" => [],
-    "dashboard_playlist_present" => [],
-    "dashboard_settings" => [],
-    "dashboard_share" => [],
-    "dashboard_snapshot" => [],
-    "dashboard_diagnostics" => [],
     "fleet_planning" => [],
     "fleet_planning_new" => [],
     "fleet_planning_policy" => [],
@@ -451,25 +287,6 @@ defmodule Cadence.Applications.OpsConsole do
   }
 
   @deep_route_interaction_ledger %{
-    "dashboard_show" => %{
-      host_actions: [],
-      navigation: ["open_dashboard_activity", "open_dashboard_editor", "open_dashboard_settings"],
-      phoenix_events: []
-    },
-    "dashboard_editor" => %{
-      host_actions:
-        Enum.map(
-          @surface_specs |> Enum.find(&(&1.id == "dashboard_editor")) |> Map.fetch!(:actions),
-          & &1
-        ),
-      navigation: ["open_dashboard_activity", "open_dashboard_settings"],
-      phoenix_events: []
-    },
-    "dashboard_activity" => %{
-      host_actions: ["publish_version", "restore_version"],
-      navigation: ["open_dashboard_viewer", "open_dashboard_editor"],
-      phoenix_events: []
-    },
     "data_source_registration" => %{
       host_actions: ["register-source"],
       navigation: ["open_data_sources"],
