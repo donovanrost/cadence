@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.ContactTemplateController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.ContactPlanning.TemplateSchema
+  alias Cadence.ContactPlanning.{TemplateDayReview, TemplateSchema}
   alias Cadence.Control.PlanningTemplates
   alias Cadence.Reads.ContactPlanOverview
   alias CadenceWeb.Console.{ConfigJSON, Problem}
@@ -30,8 +30,15 @@ defmodule CadenceWeb.Console.ContactTemplateController do
     end
   end
 
-  @doc "Dry run: the open drafts a new version of this template would supersede."
-  def supersedes(conn, %{"template_id" => id}), do: drafts(conn, {:template, id})
+  @doc """
+  Dry run: the open drafts a new version of this template would supersede, and the days it won't
+  regenerate (U48, DECISIONS #86: `decided` planned_or_started / closed / canceled).
+  """
+  def supersedes(conn, %{"template_id" => id}) do
+    drafts = ContactPlanOverview.would_supersede(org_id(conn), mission_id(conn), {:template, id})
+    decided = TemplateDayReview.decided(org_id(conn), mission_id(conn), id, DateTime.utc_now())
+    ok(conn, %{drafts: drafts, decided: decided})
+  end
 
   @doc "Dry run: the open drafts a new version of this requirement would supersede."
   def requirement_supersedes(conn, %{"requirement_id" => id}),

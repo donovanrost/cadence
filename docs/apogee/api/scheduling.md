@@ -569,6 +569,18 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
 
   Plans past draft are K2's and aren't listed. A **policy** version doesn't supersede drafts:
   each draft keeps the policy snapshot it was made with.
+- **Days an edit won't regenerate** (U48, DECISIONS #86): the template's `supersedes` read also
+  returns `decided: {planned_or_started, closed, canceled}`, each a list of `{occurrence_at, date
+  (YYYY-MM-DD, UTC), spacecraft_ids}` (one per occurrence instant, oldest first; spacecraft sorted).
+  - `planned_or_started`: a plan past draft holds the day's requirement, or its window has begun.
+    The edit keeps that requirement (no second one for the day).
+  - `closed` / `canceled`: an operator closed or canceled it; the edit doesn't bring it back.
+    Days canceled by supersession or by leaving the target regenerate, so they aren't listed.
+  - The days looked at are the template's generated occurrences from the current version's
+    catch-up lookback onward, classified as the next version would (domain's `TemplateDays`, the
+    rule materialize and the fleet start use). A day's count is the number of distinct `date`s;
+    its requirements are the sum of `spacecraft_ids` lengths (ux words both).
+  - Not on `requirements/:id/supersedes`.
 - Templates aren't change sets: edits are versioned and audited on the template (planning policy,
   not mission configuration).
 
@@ -619,8 +631,9 @@ rationale, provider_constraints_document {allowed, excluded}, station_constraint
   next_page}`. Each row is a requirement at its **current version**, most recently changed first.
   `state` is `active | closed | canceled`; `source` is `one_off | template`; `limit` 1–200
   (default 50); `next_page` is `null` on the last page. A row is `{id, state, version, spacecraft
-  {id, name}, template_id | null, content, rule_summary, updated_at}`. `updated_at` is the current
-  version's time. `rule_summary` is the templates' sentence without a cadence, plus the gap limit
+  {id, name}, template_id | null, template_version | null, content, rule_summary, updated_at}`.
+  `template_version` (U48) is the template version that generated it (Source "Block 1 daily ·
+  v2"), `null` for a one-off. `updated_at` is the current version's time. `rule_summary` is the templates' sentence without a cadence, plus the gap limit
   when set: "2 downlinks ≥ 5 min each", "1 downlink ≥ 2.0 GB each · gaps ≤ 6h00".
 - `GET /requirements/by-template?day=YYYY-MM-DD` (UTC day, default today) → `{day, templates:
   [{template {id, name, state}, count, active_count}]}` by name: per template, the requirements it

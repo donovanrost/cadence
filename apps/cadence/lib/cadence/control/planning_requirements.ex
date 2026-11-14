@@ -245,6 +245,7 @@ defmodule Cadence.Control.PlanningRequirements do
       version: version.version,
       spacecraft: %{id: version.spacecraft_id, name: Map.get(names, version.spacecraft_id)},
       template_id: RequirementListing.template_id(version),
+      template_version: RequirementListing.template_version(version),
       content: version |> Map.from_struct() |> Map.take(content_atoms()),
       rule_summary: rule_summary(version),
       updated_at: version.created_at,

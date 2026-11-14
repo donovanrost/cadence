@@ -81,6 +81,7 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
              "state" => "active",
              "version" => 1,
              "template_id" => nil,
+             "template_version" => nil,
              "spacecraft" => %{"name" => "SC-1"},
              "content" => %{"contact_count" => 2, "preferred_duration_seconds" => 600},
              "state_changed" => nil,

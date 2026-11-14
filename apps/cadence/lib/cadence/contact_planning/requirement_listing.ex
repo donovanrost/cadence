@@ -111,6 +111,16 @@ defmodule Cadence.ContactPlanning.RequirementListing do
 
   def template_id(_version), do: nil
 
+  @doc "The template version that generated `version` (U48 Source \"· v2\"), or nil for a one-off."
+  @spec template_version(ContactRequirementVersion.t()) :: pos_integer() | nil
+  def template_version(%{
+        metadata: %{"generation" => %{"contact_requirement_template_version" => v}}
+      })
+      when is_integer(v),
+      do: v
+
+  def template_version(_version), do: nil
+
   defp spacecraft(query, nil), do: query
 
   defp spacecraft(query, id),

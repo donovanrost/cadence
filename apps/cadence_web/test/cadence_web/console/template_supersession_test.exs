@@ -359,7 +359,11 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
 
     plan_id = fixture.plan.contact_plan_id
 
-    assert %{"data" => %{"drafts" => [draft]}} = read.("/templates/tmpl-dry/supersedes")
+    assert %{"data" => %{"drafts" => [draft], "decided" => decided}} =
+             read.("/templates/tmpl-dry/supersedes")
+
+    # U48: nothing kept or closed yet (the draft-only day is superseded, not kept).
+    assert decided == %{"planned_or_started" => [], "closed" => [], "canceled" => []}
 
     assert %{
              "plan" => %{"id" => ^plan_id, "version" => 1},
