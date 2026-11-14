@@ -18,6 +18,7 @@ defmodule Cadence.Reads.VerifierSeries do
   alias Cadence.Ops.PointCatalog
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.{SpacecraftLive, Telemetry}
+  alias Cadence.Reads.VerifierSeries.Points
 
   @max_targets 100
   @max_samples 300
@@ -40,7 +41,32 @@ defmodule Cadence.Reads.VerifierSeries do
 
   defp build(org, mission, group, members, verifiers, opts) do
     by_request = Enum.group_by(verifiers, & &1.command_request_id)
+    plans_for = cached_plans(org, mission, members, opts)
 
+    points =
+      members
+      |> Points.list(plans_for)
+      |> Enum.map(&Map.put(&1, :point, point(org, mission, &1.subject, opts)))
+
+    case select_point(points, Keyword.get(opts, :point)) do
+      # U2: one point (?point=, else the first), plotted for the targets whose own verifiers watch it.
+      %{} = selected ->
+        plotted_members = Enum.filter(members, &(&1.command_request_id in selected.request_ids))
+        plotted = {selected.position, selected.point, selected.plan}
+
+        org
+        |> series(mission, group, plotted_members, by_request, plotted, opts)
+        |> Map.put(:points, Enum.map(points, &point_entry(&1, members, group)))
+
+      nil ->
+        org
+        |> by_instances(mission, group, members, verifiers, by_request, opts)
+        |> Map.put(:points, [])
+    end
+  end
+
+  # No plan names a telemetry point: the instances may (before U2's points), else not plottable.
+  defp by_instances(org, mission, group, members, verifiers, by_request, opts) do
     case plotted(org, mission, members, by_request, opts) do
       nil ->
         not_plottable(org, mission, group, members, verifiers, opts)
@@ -48,9 +74,43 @@ defmodule Cadence.Reads.VerifierSeries do
       {position, subject, plan} ->
         plotted_members = Enum.filter(members, &(&1.metadata["group"]["position"] == position))
         point = point(org, mission, subject, opts)
-
         series(org, mission, group, plotted_members, by_request, {position, point, plan}, opts)
     end
+  end
+
+  defp select_point([], _wanted), do: nil
+  defp select_point([first | _], nil), do: first
+
+  defp select_point([first | _] = points, wanted),
+    do: Enum.find(points, first, &(&1.point.id == wanted))
+
+  defp point_entry(entry, members, group) do
+    index_of = Map.new(members, &{&1.command_request_id, &1.metadata["group"]["target_index"]})
+    spacecraft = Map.new(group.targets, &{&1["index"], &1["spacecraft_id"]})
+
+    %{
+      point_id: entry.point.id,
+      name: entry.point.name,
+      verifier_name: entry.verifier_name,
+      position: entry.position,
+      spacecraft_ids:
+        entry.request_ids
+        |> Enum.map(&Map.get(spacecraft, Map.get(index_of, &1)))
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+    }
+  end
+
+  # A member's own verifier plans, looked up once per (pinned revision, command).
+  defp cached_plans(org, mission, members, opts) do
+    key = &{&1.mission_model_revision_id, &1.command_id}
+
+    by_key =
+      members
+      |> Enum.uniq_by(key)
+      |> Map.new(&{key.(&1), plans(org, mission, &1, opts)})
+
+    &Map.get(by_key, key.(&1), [])
   end
 
   # The first stack position whose command has a verifier on a telemetry point: from the command's
@@ -95,15 +155,7 @@ defmodule Cadence.Reads.VerifierSeries do
     end
   end
 
-  defp telemetry_point(%{success_criteria: %{subject_ref: ref}}) when is_binary(ref) do
-    ref = String.trim(ref)
-
-    if String.starts_with?(ref, "transport:"),
-      do: nil,
-      else: String.trim_leading(ref, "telemetry:")
-  end
-
-  defp telemetry_point(_verifier), do: nil
+  defp telemetry_point(verifier), do: Points.subject(verifier)
 
   # Nothing to plot: the commands are verified only by the uplink acknowledgement, or not at all.
   defp not_plottable(org, mission, group, members, verifiers, opts) do
@@ -136,7 +188,9 @@ defmodule Cadence.Reads.VerifierSeries do
         instance -> instance.success_criteria
       end
 
-    targets = select_targets(group.targets, Keyword.get(opts, :target_ids))
+    plotted = MapSet.new(members, & &1.metadata["group"]["target_index"])
+    point_targets = Enum.filter(group.targets, &MapSet.member?(plotted, &1["index"]))
+    targets = select_targets(point_targets, Keyword.get(opts, :target_ids))
     window = window(org, mission, members, instances, opts)
 
     {samples, telemetry} =
@@ -166,8 +220,8 @@ defmodule Cadence.Reads.VerifierSeries do
             samples: Map.get(samples, target["spacecraft_id"], [])
           }
         end),
-      target_count: length(group.targets),
-      truncated: length(targets) < length(group.targets),
+      target_count: length(point_targets),
+      truncated: length(targets) < length(point_targets),
       summary: summary(instances),
       telemetry: telemetry
     }

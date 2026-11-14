@@ -3,6 +3,7 @@ defmodule Cadence.Reads.VerifierSeriesTest do
   use Cadence.DataCase, async: false
 
   import Cadence.CommandGroupFixtures
+  import Ecto.Query
 
   alias Cadence.Catalog.Command.Compiler.VerifierPlan
   alias Cadence.Catalog.Command.MatchCriteria
@@ -92,6 +93,73 @@ defmodule Cadence.Reads.VerifierSeriesTest do
     assert [%{samples: first}, %{samples: second}] = series.targets
     assert Enum.map(first, & &1.value_json) == ["5.0", "8.0"]
     assert length(second) == 2
+  end
+
+  # U2 (fe-ops 11-14): targets pinned to different revisions watch different points.
+  test "points lists every watched point with its own targets; ?point= plots one", c do
+    [_first, second] = c.members
+    [sc1, sc2] = c.spacecraft
+
+    {1, _} =
+      Cadence.Repo.update_all(
+        from(r in Cadence.Commanding.CommandRequestRow,
+          where: r.command_request_id == ^second.command_request_id
+        ),
+        set: [mission_model_revision_id: "revision-4"]
+      )
+
+    therm = %VerifierPlan{
+      name: "Setpoint reached",
+      phase: :completion,
+      success_criteria:
+        MatchCriteria.new(%{
+          subject_ref: "telemetry:THERM.setpoint",
+          comparison: :equal,
+          value: 8.0
+        })
+    }
+
+    mode = %VerifierPlan{
+      name: "Mode applied",
+      phase: :completion,
+      success_criteria:
+        MatchCriteria.new(%{subject_ref: "telemetry:HK.mode", comparison: :equal, value: 4})
+    }
+
+    plans = fn member ->
+      if member.mission_model_revision_id == "revision-4", do: [therm, mode], else: [therm]
+    end
+
+    history = fn _point, spacecraft_id -> [sample(spacecraft_id, 8.0, 40)] end
+    extra = [plans_fun: plans, history_fun: history]
+
+    {:ok, series} =
+      VerifierSeries.load(c.org, c.mission, c.group.command_group_id, opts(c, extra))
+
+    assert [
+             %{point_id: "THERM.setpoint", verifier_name: "Setpoint reached", position: 0} =
+               therm_point,
+             %{
+               point_id: "HK.mode",
+               verifier_name: "Mode applied",
+               position: 0,
+               spacecraft_ids: [^sc2]
+             }
+           ] = series.points
+
+    assert Enum.sort(therm_point.spacecraft_ids) == Enum.sort([sc1, sc2])
+    assert %{point: %{id: "THERM.setpoint"}, target_count: 2} = series
+
+    {:ok, mode_series} =
+      VerifierSeries.load(
+        c.org,
+        c.mission,
+        c.group.command_group_id,
+        opts(c, extra ++ [point: "HK.mode"])
+      )
+
+    assert %{point: %{id: "HK.mode"}, target_count: 1, targets: [%{spacecraft_id: ^sc2}]} =
+             mode_series
   end
 
   test "targets picks a subset and says the rest are left out", c do

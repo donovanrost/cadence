@@ -238,7 +238,9 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   Released tab = `queued` and not `finished` (qa #28).
 - Show adds `review_token` (send it back on decisions), `log_entry`, `sent_back_from`,
   `target_query`, `commands[] {position, command_id, name, significance, critical, hazardous,
-  argument_values_json}`, `release`, `policy`, `decision`, `decided_by/at`, `aborted_by/at`,
+  argument_values_json, verifier_groups}` (`verifier_groups` as preflight's U51, from each
+  member's stored pinned revision; rejected or excluded members in no group), `release`,
+  `policy`, `decision`, `decided_by/at`, `aborted_by/at`,
   `abort_reason`, `abort_result`, `progress` (`{stage: target count}`), `finished` (always a
   boolean on show), `events[] {id, kind, actor, at, payload}` (see Timeline events below),
   and `targets[]`:
@@ -342,7 +344,14 @@ Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_ap
 
 ### M26 (Uplink U2 / N; DECISIONS #69)
 
-**Verifier series**, `GET /command-groups/:id/verifier-series[?targets=<id,id,…>]`: what U2 plots.
+**Verifier series**, `GET /command-groups/:id/verifier-series[?targets=<id,id,…>][&point=<point_id>]`:
+what U2 plots.
+- `points: [{point_id, name, verifier_name, position, spacecraft_ids}]` (U2, 11-14): every
+  telemetry point the group's verifiers watch, each with the targets whose OWN verifiers watch it
+  (targets pinned to different catalog revisions can differ), ordered by stack position, then the
+  verifier's order on the command. `[]` when nothing is plottable. `?point=` plots that one; without
+  it (or for an unknown id) the first. The plot (`targets`, `target_count`, `truncated`, `summary`)
+  covers only that point's targets. U2 draws one plot per `points[]` entry.
 Refetch on `invalidate` `commanding`, plus `telemetry` throttled to 10 s.
 - `verifier: {position, command_id, command_name}`: the plotted command, the first in stack order
   whose verifier watches a telemetry point (from its catalog verifier plans, so it's known before

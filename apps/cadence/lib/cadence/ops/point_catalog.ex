@@ -45,9 +45,9 @@ defmodule Cadence.Ops.PointCatalog do
   def resolve(points, subject) when is_list(points) and is_binary(subject) do
     ref = subject |> String.trim() |> String.replace_prefix("telemetry:", "")
 
-    Enum.find(points, &(&1.point_id == ref)) ||
-      Enum.find(points, &(&1.parameter_id == ref)) ||
-      Enum.find(points, &(&1.qualified_name == ref))
+    Enum.find(points, &(Map.get(&1, :point_id) == ref)) ||
+      Enum.find(points, &(Map.get(&1, :parameter_id) == ref)) ||
+      Enum.find(points, &(Map.get(&1, :qualified_name) == ref))
   end
 
   @doc "The points a binding set's packet definitions produce."

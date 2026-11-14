@@ -151,7 +151,9 @@ defmodule CadenceWeb.Console.CommandGroupController do
   @doc "M26: what Uplink U2 plots. `?targets=` (comma list of spacecraft ids) picks up to 100."
   def verifier_series(conn, %{"command_group_id" => id} = params) do
     case VerifierSeries.load(org(conn), mission(conn), id,
-           target_ids: target_ids(params["targets"])
+           target_ids: target_ids(params["targets"]),
+           # U2: plot this point (one of points[]); else the first.
+           point: point_param(params["point"])
          ) do
       {:ok, series} -> json(conn, %{data: CommandGroupJSON.verifier_series(series)})
       error -> CommandGroupProblems.respond(conn, error)
@@ -162,6 +164,9 @@ defmodule CadenceWeb.Console.CommandGroupController do
     do: value |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
 
   defp target_ids(_value), do: nil
+
+  defp point_param(value) when is_binary(value) and value != "", do: String.trim(value)
+  defp point_param(_value), do: nil
 
   def review_preflight(conn, %{"command_group_id" => id}) do
     with {:ok, group} <- GroupStore.fetch(org(conn), mission(conn), id),

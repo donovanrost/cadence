@@ -12,6 +12,7 @@ defmodule Cadence.Reads.CommandPreflight.VerifierGroups do
   """
 
   alias Cadence.Catalog
+  alias Cadence.Commanding.RequestValidation
 
   @compared [
     :name,
@@ -47,6 +48,58 @@ defmodule Cadence.Reads.CommandPreflight.VerifierGroups do
           |> Map.get(position, [])
           |> groups(targets_by_index, revisions_by_index)
       }
+    end)
+  end
+
+  @doc """
+  The same verifier groups for a submitted group's members (U2: Approve and Uplink read what
+  Compose showed), from each member's stored pinned revision: `%{position => verifier_groups}`.
+  Members rejected or excluded at review are in no group.
+  """
+  @spec for_group(binary(), binary(), map(), [map()]) :: %{non_neg_integer() => [map()]}
+  def for_group(org, mission, group, members) do
+    live = Enum.reject(members, &(&1.lifecycle_state == :rejected))
+    plans = plans_by_key(org, mission, live)
+
+    shaped =
+      Enum.map(live, fn member ->
+        %{
+          target_index: member.metadata["group"]["target_index"],
+          position: member.metadata["group"]["position"],
+          request: %{mission_model_revision_id: member.mission_model_revision_id},
+          verifier_plans: Map.get(plans, plan_key(member), [])
+        }
+      end)
+
+    targets = Map.new(group.targets, &{&1["index"], %{spacecraft_id: &1["spacecraft_id"]}})
+
+    group.commands
+    |> Enum.sort_by(& &1["position"])
+    |> Enum.map(&%{command_id: &1["command_id"]})
+    |> commands(shaped, targets, catalog_revisions(org, mission, shaped))
+    |> Map.new(&{&1.position, &1.verifier_groups})
+  end
+
+  defp plan_key(member), do: {member.mission_model_revision_id, member.command_id}
+
+  # Once per (pinned revision, command): the same plans whatever the target.
+  defp plans_by_key(org, mission, members) do
+    members
+    |> Enum.uniq_by(&plan_key/1)
+    |> Map.new(fn member ->
+      plans =
+        case RequestValidation.resolve_basis(
+               org,
+               mission,
+               member.mission_model_revision_id,
+               member.command_id,
+               member.source_endpoint_ref
+             ) do
+          {:ok, %{verifier_plans: plans}} when is_list(plans) -> plans
+          _unavailable -> []
+        end
+
+      {plan_key(member), plans}
     end)
   end
 
