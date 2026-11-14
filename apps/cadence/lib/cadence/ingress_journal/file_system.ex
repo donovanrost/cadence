@@ -172,6 +172,160 @@ defmodule Cadence.IngressJournal.FileSystem do
     ArgumentError -> []
   end
 
+  @doc """
+  Every stored stream under `base_path`: its directory, stream id and context (reclaim of
+  completed streams, #71 follow-up). A directory whose `stream.term` can't be read isn't listed.
+  """
+  @spec stored_stream_directories(binary()) :: [
+          %{directory: binary(), stream_id: binary(), context: map()}
+        ]
+  def stored_stream_directories(base_path) when is_binary(base_path) do
+    case File.ls(base_path) do
+      {:ok, names} ->
+        names
+        |> Enum.sort()
+        |> Enum.flat_map(fn name ->
+          directory = Path.join(base_path, name)
+
+          # The directory is named by its context's digest: a stream.term naming another context
+          # isn't this directory's (it never steers a reclaim). stream_id is the incarnation the
+          # record headers carry.
+          with {:ok, %{stream_id: stream_id, context: context}} <-
+                 stored_stream_metadata(Path.join(directory, "stream.term")),
+               true <- stream_id(context) == name do
+            [%{directory: directory, stream_id: stream_id, context: context}]
+          else
+            _unreadable_or_foreign -> []
+          end
+        end)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp stored_stream_metadata(path) do
+    with {:ok, binary} <- File.read(path),
+         %{stream_id: stream_id, context: %{mission_id: _, realized_contact_id: _}} = metadata
+         when is_binary(stream_id) <- :erlang.binary_to_term(binary, [:safe]) do
+      {:ok, metadata}
+    else
+      _other -> :error
+    end
+  rescue
+    ArgumentError -> :error
+  end
+
+  @doc """
+  Whether a stored stream (not open by a journal) is drained ON DISK: its checkpoint has every
+  consumer (processing and archive) at its `next_offset`, and the segments, read without
+  modifying them, end exactly there with no torn tail. `bytes` is the directory's size.
+  """
+  @spec stored_stream_drain(binary(), binary()) ::
+          {:drained, non_neg_integer()} | {:not_drained, term(), non_neg_integer()}
+  def stored_stream_drain(directory, stream_id)
+      when is_binary(directory) and is_binary(stream_id) do
+    bytes = directory_bytes(directory)
+
+    with {:ok, checkpoint} <- load_checkpoint(directory, @default_consumers),
+         {:ok, tail} <- read_only_tail(directory, stream_id, checkpoint.next_offset) do
+      behind =
+        for {consumer, offset} <- checkpoint.cursors, offset != tail, do: {consumer, offset}
+
+      cond do
+        behind != [] -> {:not_drained, {:cursors_behind, behind, tail}, bytes}
+        checkpoint.next_offset != tail -> {:not_drained, {:checkpoint_behind, tail}, bytes}
+        true -> {:drained, bytes}
+      end
+    else
+      {:error, reason} -> {:not_drained, reason, bytes}
+    end
+  end
+
+  defp read_only_tail(directory, stream_id, checkpoint_next_offset) do
+    case directory |> Path.join("segment-*.cij") |> Path.wildcard() |> Enum.sort() do
+      [] ->
+        {:ok, checkpoint_next_offset}
+
+      [first | _rest] = paths ->
+        paths
+        |> Enum.reduce_while({:ok, segment_start_from_path(first), nil}, fn path,
+                                                                            {:ok, offset,
+                                                                             sequence} ->
+          case read_segment(path, stream_id, offset, sequence) do
+            {:ok, next_offset, next_sequence} -> {:cont, {:ok, next_offset, next_sequence}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
+        |> case do
+          {:ok, tail, _sequence} -> {:ok, tail}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  defp read_segment(path, stream_id, expected_offset, expected_sequence) do
+    with {:ok, file} <- :file.open(path, [:read, :binary, :raw]),
+         {:ok, file_size} <- :file.position(file, :eof) do
+      try do
+        case parse_records(
+               file,
+               file_size,
+               path,
+               stream_id,
+               expected_offset,
+               expected_sequence,
+               0,
+               []
+             ) do
+          {_entries, _valid_bytes, true} ->
+            {:error, {:torn_tail, path}}
+
+          {entries, _valid_bytes, false} ->
+            case List.last(entries) do
+              nil -> {:ok, expected_offset, expected_sequence}
+              last -> {:ok, last.end_offset, last.sequence + 1}
+            end
+        end
+      after
+        :file.close(file)
+      end
+    end
+  end
+
+  defp directory_bytes(directory) do
+    directory
+    |> Path.join("*")
+    |> Path.wildcard()
+    |> Enum.map(fn path ->
+      case File.stat(path) do
+        {:ok, %{size: size}} -> size
+        _gone -> 0
+      end
+    end)
+    |> Enum.sum()
+  end
+
+  @doc """
+  Removes a stored stream's directory, only if it is a direct child of `base_path` (a stored
+  `stream.term` must never steer the removal elsewhere).
+  """
+  @spec reclaim_stored_stream(binary(), binary()) :: :ok | {:error, term()}
+  def reclaim_stored_stream(base_path, directory)
+      when is_binary(base_path) and is_binary(directory) do
+    base = Path.expand(base_path)
+    target = Path.expand(directory)
+
+    if Path.dirname(target) == base and Path.basename(target) not in ["", ".", ".."] do
+      case File.rm_rf(target) do
+        {:ok, _removed} -> :ok
+        {:error, reason, path} -> {:error, {:reclaim_failed, path, reason}}
+      end
+    else
+      {:error, {:reclaim_outside_base_path, target}}
+    end
+  end
+
   @doc false
   @spec policy(keyword() | map()) :: policy()
   def policy(config) when is_list(config) or is_map(config) do

@@ -3,12 +3,15 @@ defmodule Cadence.Contacts.ContactLifecycle do
   Orchestrates contact reconciliation, runtime transitions, and operator actions.
   """
 
+  require Logger
+
   alias Cadence.Contacts.ContactAction
   alias Cadence.Contacts.ContactRuntimeConfig
   alias Cadence.Contacts.ContactSettlement
   alias Cadence.Contacts.ContactSettler
   alias Cadence.Contacts.ContactStartFailure
   alias Cadence.Contacts.ContactStore
+  alias Cadence.Contacts.JournalReclaim
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Contacts.Validation
@@ -194,6 +197,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
       |> replay_candidates(reference_time)
       |> collect_reconcile_results(&replay_realized_for_reconcile/1)
 
+    :ok = reclaim_journals(mission_id, reference_time)
+
     {:ok,
      %{
        reference_time: reference_time,
@@ -230,6 +235,21 @@ defmodule Cadence.Contacts.ContactLifecycle do
           {:error, reconcile_error(:realized_contact_settlement, realized_contact, reason)}
       end
     end
+  end
+
+  # #71 follow-up: a settled contact's journal stream leaves the disk after its retention, one
+  # per tick, never while a replay runs (JournalReclaim). It must never break the reconcile.
+  defp reclaim_journals(nil, _reference_time), do: :ok
+
+  defp reclaim_journals(mission_id, reference_time) do
+    if not ContactSettler.replaying?(mission_id),
+      do: JournalReclaim.run(mission_id, Enum.max([reference_time, DateTime.utc_now()], DateTime))
+
+    :ok
+  rescue
+    exception ->
+      Logger.warning("journal reclaim failed for #{mission_id}: #{Exception.message(exception)}")
+      :ok
   end
 
   # #71 follow-up: one replay per mission at a time, so a backlog of ended contacts drains in

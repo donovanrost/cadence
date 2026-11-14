@@ -57,6 +57,74 @@ defmodule Cadence.IngressJournal.FileSystemTest do
              FileSystem.append_stream(ctx.name, "later", DateTime.utc_now())
   end
 
+  describe "stored streams: drained on disk, and reclaim (#71 follow-up)" do
+    @describetag :tmp_dir
+
+    test "a sealed stream is drained on disk and its directory can be reclaimed", ctx do
+      %{directory: directory, stream_id: stream_id} = stored!(ctx, [:processing, :archive])
+
+      assert {:drained, bytes} = FileSystem.stored_stream_drain(directory, stream_id)
+      assert bytes > 0
+      assert :ok = FileSystem.reclaim_stored_stream(ctx.tmp_dir, directory)
+      refute File.exists?(directory)
+      assert FileSystem.stored_stream_directories(ctx.tmp_dir) == []
+    end
+
+    test "an archive or processing cursor behind the tail is not drained", ctx do
+      for acked <- [[:processing], [:archive]] do
+        %{directory: directory, stream_id: stream_id} = stored!(ctx, acked)
+
+        assert {:not_drained, {:cursors_behind, [{_consumer, 0}], tail}, _bytes} =
+                 FileSystem.stored_stream_drain(directory, stream_id)
+
+        assert tail > 0
+        File.rm_rf!(directory)
+      end
+    end
+
+    test "a torn tail is not drained, and checking it leaves the bytes alone", ctx do
+      %{directory: directory, stream_id: stream_id} = stored!(ctx, [:processing, :archive])
+      [segment] = Path.wildcard(Path.join(directory, "segment-*.cij"))
+      File.write!(segment, "torn", [:append])
+      size = File.stat!(segment).size
+
+      assert {:not_drained, {:torn_tail, _path}, _bytes} =
+               FileSystem.stored_stream_drain(directory, stream_id)
+
+      assert File.stat!(segment).size == size
+    end
+
+    test "an unreadable stream.term isn't listed; a path outside the base is never removed",
+         ctx do
+      %{directory: directory} = stored!(ctx, [:processing, :archive])
+      File.write!(Path.join(directory, "stream.term"), "not a term")
+      assert FileSystem.stored_stream_directories(ctx.tmp_dir) == []
+
+      outside =
+        Path.join(System.tmp_dir!(), "cadence-reclaim-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(outside)
+
+      for target <- [outside, Path.join(directory, "nested"), Path.join(ctx.tmp_dir, "..")] do
+        assert {:error, {:reclaim_outside_base_path, _}} =
+                 FileSystem.reclaim_stored_stream(ctx.tmp_dir, target)
+      end
+
+      assert File.dir?(outside)
+      File.rm_rf!(outside)
+    end
+  end
+
+  # A stream with one record, its given consumers acknowledged, stopped (terminate checkpoints).
+  defp stored!(ctx, acked) do
+    start_supervised!({FileSystem, ctx.opts})
+    assert {:ok, entry} = FileSystem.append(ctx.name, "captured", DateTime.utc_now())
+    for consumer <- acked, do: :ok = FileSystem.acknowledge(ctx.name, consumer, entry.end_offset)
+    :ok = stop_supervised({:ingress_journal, ctx.opts[:provider_binding_id]})
+    [stream] = FileSystem.stored_stream_directories(ctx.tmp_dir)
+    stream
+  end
+
   @tag :tmp_dir
   test "a runtime stop checkpoints the acknowledged cursors (#71 follow-up)", ctx do
     start_supervised!({FileSystem, Keyword.put(ctx.opts, :checkpoint_interval_ms, 60_000)})

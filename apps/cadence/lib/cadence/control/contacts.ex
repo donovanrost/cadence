@@ -244,6 +244,20 @@ defmodule Cadence.Control.Contacts do
   @spec journaled_realized_contact_ids(binary()) :: MapSet.t(binary())
   def journaled_realized_contact_ids(mission_id), do: RuntimeContacts.journaled_ids(mission_id)
 
+  @spec stored_ingress_journals(binary()) :: [map()]
+  def stored_ingress_journals(mission_id), do: RuntimeContacts.stored_journals(mission_id)
+
+  @spec ingress_journal_open?(binary(), binary()) :: boolean()
+  def ingress_journal_open?(mission_id, realized_contact_id),
+    do: RuntimeContacts.journal_open?(mission_id, realized_contact_id)
+
+  @spec stored_ingress_journal_drain(map()) ::
+          {:drained, non_neg_integer()} | {:not_drained, term(), non_neg_integer()}
+  def stored_ingress_journal_drain(stream), do: RuntimeContacts.stored_journal_drain(stream)
+
+  @spec reclaim_stored_ingress_journal(map()) :: :ok | {:error, term()}
+  def reclaim_stored_ingress_journal(stream), do: RuntimeContacts.reclaim_stored_journal(stream)
+
   @spec running_realized_contact_ids(binary()) :: [binary()]
   def running_realized_contact_ids(mission_id), do: RuntimeContacts.running_ids(mission_id)
 

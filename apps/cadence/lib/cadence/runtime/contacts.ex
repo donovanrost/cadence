@@ -1,6 +1,7 @@
 defmodule Cadence.Runtime.Contacts do
   @moduledoc "Public data-plane command and observation boundary for realized Contacts."
 
+  alias Cadence.IngressJournal.FileSystem, as: JournalFileSystem
   alias Cadence.Runtime
   alias Cadence.Runtime.{ContactBacklog, ProcessNamespace, RealizedContactRuntimeSpec}
 
@@ -32,22 +33,66 @@ defmodule Cadence.Runtime.Contacts do
 
   @doc "Whether downlink ingress is journaled to disk (DECISIONS #71 holds only when it is)."
   @spec journal_enabled?() :: boolean()
-  def journal_enabled?, do: Cadence.IngressJournal.FileSystem.configured_policy().enabled?
+  def journal_enabled?, do: JournalFileSystem.configured_policy().enabled?
 
   @doc "The mission's realized contacts with an ingress journal on disk (replay, #71)."
   @spec journaled_ids(binary()) :: MapSet.t(binary())
   def journaled_ids(mission_id) do
-    policy = Cadence.IngressJournal.FileSystem.configured_policy()
+    policy = JournalFileSystem.configured_policy()
 
     case {policy.enabled?, Keyword.get(policy.file_system_opts, :base_path)} do
       {true, base_path} when is_binary(base_path) ->
         base_path
-        |> Cadence.IngressJournal.FileSystem.stored_streams()
+        |> JournalFileSystem.stored_streams()
         |> Enum.filter(&(&1.mission_id == mission_id))
         |> MapSet.new(& &1.realized_contact_id)
 
       _off ->
         MapSet.new()
+    end
+  end
+
+  @doc "The mission's stored ingress journal streams on disk (reclaim, #71 follow-up)."
+  @spec stored_journals(binary()) :: [map()]
+  def stored_journals(mission_id) do
+    case journal_base_path() do
+      nil ->
+        []
+
+      base_path ->
+        base_path
+        |> JournalFileSystem.stored_stream_directories()
+        |> Enum.filter(&(&1.context.mission_id == mission_id))
+    end
+  end
+
+  @doc "Whether any ingress journal of the contact is open (a runtime or a replay writes it)."
+  @spec journal_open?(binary(), binary()) :: boolean()
+  def journal_open?(mission_id, realized_contact_id) do
+    %ProcessNamespace{registry: registry} = ProcessNamespace.default()
+    key = {:provider_ingress_journal, mission_id, realized_contact_id, :_, :_}
+    Registry.select(registry, [{{key, :_, :_}, [], [true]}]) != []
+  end
+
+  @spec stored_journal_drain(map()) ::
+          {:drained, non_neg_integer()} | {:not_drained, term(), non_neg_integer()}
+  def stored_journal_drain(%{directory: directory, stream_id: stream_id}),
+    do: JournalFileSystem.stored_stream_drain(directory, stream_id)
+
+  @spec reclaim_stored_journal(map()) :: :ok | {:error, term()}
+  def reclaim_stored_journal(%{directory: directory}) do
+    case journal_base_path() do
+      nil -> {:error, :ingress_journal_disabled}
+      base_path -> JournalFileSystem.reclaim_stored_stream(base_path, directory)
+    end
+  end
+
+  defp journal_base_path do
+    policy = JournalFileSystem.configured_policy()
+
+    case {policy.enabled?, Keyword.get(policy.file_system_opts, :base_path)} do
+      {true, base_path} when is_binary(base_path) -> base_path
+      _off -> nil
     end
   end
 
