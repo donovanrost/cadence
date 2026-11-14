@@ -183,6 +183,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
       ContactStore.expired_active_realized(reference_time, mission_id)
       |> collect_reconcile_results(&complete_realized_for_reconcile(&1, reference_time))
 
+    :ok = close_never_started(mission_id, reference_time)
+
     {restarted_realized_contact_ids, restart_errors} =
       restart_candidates
       |> collect_reconcile_results(&restart_realized_for_reconcile(&1, reference_time))
@@ -217,6 +219,66 @@ defmodule Cadence.Contacts.ContactLifecycle do
            Enum.reverse(restart_errors) ++
            Enum.reverse(settle_errors) ++ Enum.reverse(replay_errors)
      }}
+  end
+
+  @window_grace_s 5 * 60
+  @hand_start_s 60 * 60
+
+  # The orphan sweep (director, lead 11-14): a realized contact still 'defined' after its window
+  # ended (plus a grace, so the in-window retry and its LOS edge aren't raced), or a hand start
+  # still 'defined' an hour after it was realized, will never start. It closes as :stopped with
+  # not_started {at, reason}, and a settlement that a replay never picks (no runtime ever ran, and
+  # inspected_at is set: ContactSettlement.uninspected). contact_start's missed item, keyed on
+  # start_failure, stays until marked seen.
+  defp close_never_started(mission_id, reference_time) do
+    now = DateTime.utc_now()
+
+    reference_time
+    |> DateTime.add(-@window_grace_s, :second)
+    |> ContactStore.never_started(
+      DateTime.add(reference_time, -@hand_start_s, :second),
+      mission_id
+    )
+    |> Enum.each(fn {contact, reason} -> close_never_started_contact(contact, reason, now) end)
+
+    :ok
+  rescue
+    exception ->
+      Logger.warning(
+        "never-started sweep failed for #{mission_id}: #{Exception.message(exception)}"
+      )
+
+      :ok
+  end
+
+  defp close_never_started_contact(%RealizedContact{} = contact, reason, now) do
+    at = DateTime.to_iso8601(now)
+
+    settlement =
+      contact.metadata
+      |> Map.get("settlement", %{})
+      |> Map.merge(%{
+        "state" => "settled",
+        "settled_at" => at,
+        "runtime" => "absent",
+        "inspected_at" => at
+      })
+
+    case ContactStore.update_realized_lifecycle(contact, :stopped, %{
+           "not_started" => %{"at" => at, "reason" => reason},
+           "settlement" => settlement
+         }) do
+      {:ok, _stopped} ->
+        Logger.info(
+          "closed never-started contact #{contact.realized_contact_id} " <>
+            "(#{contact.mission_id}, #{reason})"
+        )
+
+      {:error, error} ->
+        Logger.warning(
+          "could not close never-started contact #{contact.realized_contact_id}: #{inspect(error)}"
+        )
+    end
   end
 
   # DECISIONS #71 sweep: an ended contact with no settler gets one (idempotent), so a failed
