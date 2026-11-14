@@ -795,6 +795,13 @@ talk to the server: `{catalog, status, surfaces}`.
   `409 application_not_installed` with `details.status` (`not_installed` or `disabled`; the host
   shows "<App> isn't installed on <mission>." with `Install` for admins); `403 forbidden`;
   `503 application_unavailable` (no release, or the catalog can't be built).
+- **A mission that isn't the session organization's** (another organization's, or one that
+  doesn't exist): with L4 (`51e3babb1`, director 11-14) the policy refuses it before any lookup.
+  The bridge's `GET /api/cadence/application-host/v1/…/catalog` answers `404
+  application_unavailable` (was `404 mission_not_found`), and the legacy REST paths that take a raw
+  mission id answer `403 scope_mismatch`. Foreign and nonexistent missions get the same answer, so
+  it reveals nothing. Note that the same code `application_unavailable` also appears as a 503 (no
+  release); read the status.
 
 ### Settings (ST1): `GET /missions/:mission_id/settings` and `GET /organizations/:organization_id/settings`
 

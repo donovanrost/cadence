@@ -250,6 +250,23 @@ without a default), or its tests pass against tables that branch doesn't have. S
   migrate) is what removes another branch's extra tables and columns.
 - Never point a team-tree run at 20–29, or a port run at empty–19.
 
+**Partition register** (lead, 2026-11-14). **Claim a partition here before using it, and never
+drop, recreate or migrate a partition you don't own.** On 11-14 at 02:50Z someone dropped or
+terminated `cadence_test3` in the middle of api-ops' L4 suite. Release a claim by deleting your row.
+
+| Partition | Owner | Purpose |
+|---|---|---|
+| empty, 2, 4, 5, 6, 8–11, 13–17, 19 | unclaimed | team-tree runs: claim before use |
+| 3 | api-ops | L4 policy worktree (`scratchpad/policy-wt`) |
+| 7 | api-ops | ingest fix / journal-matrix worktree (`scratchpad/ingest-wt`) |
+| 12 | domain | domain's evidence runs (archive fix, #83) |
+| 18 | fe-ops | L8 worktree |
+| 20 | api-ops | develop ports (L4, ingest fix) |
+| 21–23 | unclaimed | develop ports: claim before use |
+| 24 | devops | devops' develop evidence |
+| 25 | api-ops | main ports and main reruns (`scratchpad/main-wt`, L4, ingest fix) |
+| 26–29 | unclaimed | main ports: claim before use |
+
 ## Known limits
 
 - **Live telemetry saturates the shared laptop.** On 2026-11-08, ten 1 Hz feeds plus team builds
