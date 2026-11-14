@@ -149,6 +149,10 @@ Building it found federated surfaces this manifest missed, which keep these aliv
 - **Delete with the surfaces:** the specs, dispatch clauses, frontend modules, the federated manifests'
   entries, `first-party-manifest-parity.test.ts` rows (deletion-only in `frontend/apps/host`), then the reads,
   actions and modules above once nothing calls them. Re-grep each first.
+- **Also delete `frontend/tools/retained-legacy-routes.json` and its test exception** (fe-ops, 11-14): batches
+  2 + 3 keep the seven removed L1–L4 paths in plugin-sdk's route TYPE catalog through that file, because these
+  surfaces still link them by type. Remove it, the generator's read of it and the routes.json ∪ retained comparison
+  in `plugin-sdk/src/routes/routes.test.ts`, then regenerate the catalog.
 
 ## L5 sign-in, invitation acceptance, no-organization (deletable now)
 **Keep:** the GETs R:109-111 (`AuthRedirectController`'s 302s to `/console/*`).
