@@ -170,12 +170,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
              "entries" => []
            }
 
-    requirements =
-      surface_props(context, "contact_requirement_list", "OpsContactRequirementList")
-
-    assert Map.has_key?(requirements["page"]["header"], "create_action")
-    assert Map.has_key?(requirements["page"], "journey_steps")
-
     %{"schedule" => contacts} = surface_props(context, "contact_schedule", "OpsContactSchedule")
     assert contacts["contract_version"] == 1
     assert contacts["context"]["mission_id"] == @mission_id
@@ -194,10 +188,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
       for {surface, component} <- [
             {"fleet_planning", "OpsFleetPlanning"},
             {"fleet_planning_new", "OpsFleetPlanningNew"},
-            {"fleet_planning_policy", "OpsFleetPlanningPolicy"},
-            {"contact_requirement_list", "OpsContactRequirementList"},
-            {"contact_requirement_new", "OpsContactRequirementNew"},
-            {"contact_requirement_template", "OpsContactRequirementTemplate"},
             {"contact_schedule", "OpsContactSchedule"}
           ] do
         %{component: component, props: surface_props(context, surface, component)}

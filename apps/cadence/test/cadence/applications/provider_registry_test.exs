@@ -189,16 +189,16 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     expected_contribution_counts = %{
       "comms" => 15,
       "spacecraft" => 11,
-      "mission_catalog" => 10,
+      "mission_catalog" => 8,
       "telemetry_decom" => 2,
       "derived_telemetry" => 1,
       "limits" => 2,
-      "ops_console" => 23,
+      "ops_console" => 18,
       "organization_admin" => 5
     }
 
-    assert length(SurfaceProviderRegistry.contributions()) == 69
-    assert map_size(providers) == 69
+    assert length(SurfaceProviderRegistry.contributions()) == 62
+    assert map_size(providers) == 62
 
     assert providers
            |> Map.keys()

@@ -15,7 +15,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
   alias Cadence.Applications.{OrganizationAdmin, OrganizationAdminAction}
   alias Cadence.Applications.OrganizationAdminProviders, as: Providers
   alias Cadence.Applications.OrganizationAdminQuery
-  alias Cadence.Applications.Registry
   alias Cadence.Auth.Scope
   alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
   alias Cadence.Notifications.Notification
@@ -78,7 +77,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert :ok = ActionContractLedger.validate()
 
     ledgers = ActionContractLedger.ledgers()
-    assert length(ledgers.declared) == 49
+    assert length(ledgers.declared) == 47
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
 
@@ -384,9 +383,9 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     organization: organization,
     organization_scope: organization_scope
   } do
-    assert ApplicationSurfaces.organization_installation_exempt?("mission_catalog")
+    refute ApplicationSurfaces.organization_installation_exempt?("mission_catalog")
     assert ApplicationSurfaces.organization_installation_exempt?("organization_admin")
-    assert ApplicationSurfaces.installation_exempt?("mission_catalog", :organization)
+    refute ApplicationSurfaces.installation_exempt?("mission_catalog", :organization)
 
     assert ApplicationSurfaces.installation_exempt?("organization_admin", :organization)
     assert ApplicationSurfaces.installation_exempt?("organization_admin", :user)
@@ -408,22 +407,10 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                HostContext.organization(organization.organization_id),
                "third_party"
              )
-
-    assert {:ok, definition} = Registry.fetch_available("mission_catalog")
-    assert {:ok, surface} = Registry.fetch_surface(definition, :organization, "mission_list")
-
-    assert {:ok, _result} =
-             ApplicationSurfaces.load(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               "mission_catalog",
-               1,
-               surface
-             )
   end
 
   test "uses the same installation exemption matrix in the action dispatcher" do
-    assert ActionDispatcher.installation_exempt?("mission_catalog", :organization)
+    refute ActionDispatcher.installation_exempt?("mission_catalog", :organization)
     assert ActionDispatcher.installation_exempt?("organization_admin", :organization)
     assert ActionDispatcher.installation_exempt?("organization_admin", :user)
     refute ActionDispatcher.installation_exempt?("organization_admin", :admin)

@@ -13,15 +13,15 @@ defmodule Cadence.Applications.OpsConsoleTest do
            |> Enum.map(&{&1.surface_id, &1.placement, &1.data_contract}) == [
              {"workspace", :application_workspace,
               %{query_id: "cadence.ops.workspace", version: 1}},
-             {"contact_requirement_list", :ops_workspace,
-              %{query_id: "cadence.ops.contact_requirement_list", version: 1}}
+             {"contact_schedule", :ops_workspace,
+              %{query_id: "cadence.ops.contact_schedule", version: 1}}
            ]
 
-    assert Enum.at(definition.surfaces, 1).actions == []
+    assert Enum.at(definition.surfaces, 1).actions == ["validate", "search", "reserve", "cancel"]
 
-    assert length(definition.surfaces) == 23
-    assert length(definition.actions) == 53
-    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 22
+    assert length(definition.surfaces) == 18
+    assert length(definition.actions) == 39
+    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 17
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
              Enum.map(definition.surfaces, & &1.surface_id)
@@ -32,7 +32,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
   test "contributes exact release identity for each surface" do
     contributions = OpsConsole.release_contributions()
 
-    assert length(contributions) == 23
+    assert length(contributions) == 18
 
     assert Enum.take(contributions, 1) |> Enum.map(&ReleaseContribution.key/1) == [
              {"ops_console", 1, "workspace", 1}
@@ -139,21 +139,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
            end) == [
              {"workspace", :overview, :mission, :application_workspace, "cadence.ops.workspace",
               []},
-             {"contact_requirement_list", :collection, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_list", []},
-             {"contact_requirement_new", :configuration, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_new", ["validate", "save"]},
-             {"contact_requirement_show", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_show", ["plan", "create-plan"]},
-             {"contact_requirement_template", :configuration, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_template",
-              [
-                "validate-template",
-                "create-template",
-                "pause-template",
-                "activate-template",
-                "close-template"
-              ]},
              {"contact_schedule", :operations, :mission, :ops_workspace,
               "cadence.ops.contact_schedule", ["validate", "search", "reserve", "cancel"]},
              {"contact_plan_show", :subject_detail, :mission, :ops_workspace,
@@ -168,16 +153,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
               "cadence.ops.fleet_planning", ["refresh-planning"]},
              {"fleet_planning_new", :configuration, :mission, :ops_workspace,
               "cadence.ops.fleet_planning_new", ["validate-fleet-run", "create-fleet-run"]},
-             {"fleet_planning_policy", :configuration, :mission, :ops_workspace,
-              "cadence.ops.fleet_planning_policy",
-              [
-                "validate-policy",
-                "save-policy",
-                "approve-policy",
-                "validate-grant",
-                "issue-grant",
-                "revoke-grant"
-              ]},
              {"fleet_planning_run", :subject_detail, :mission, :ops_workspace,
               "cadence.ops.fleet_planning_run", ["refresh-fleet-run", "repair-fleet-run"]},
              {"activation_requests", :operations, :mission, :ops_workspace,

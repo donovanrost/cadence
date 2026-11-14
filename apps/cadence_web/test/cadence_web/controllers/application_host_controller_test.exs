@@ -146,47 +146,14 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert catalog["session"]["context"]["missionId"] == nil
   end
 
-  test "organization-scope root query admits an installation-exempt Mission Catalog surface" do
-    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
-
-    {catalog_conn, catalog} =
-      member_conn
-      |> get(
-        "/api/cadence/application-host/v1/catalog?scope=organization&organization_id=#{organization.organization_id}"
-      )
-      |> then(fn conn -> {conn, json_response(conn, 200)} end)
-
-    response =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> post_json("/api/cadence/application-host/v1/query", %{
-        "applicationKey" => "mission_catalog",
-        "applicationVersion" => 1,
-        "surfaceId" => "mission_list",
-        "surfaceVersion" => 1,
-        "queryId" => "cadence.mission_catalog.mission_list",
-        "queryVersion" => 1,
-        "params" => %{},
-        "scope" => %{
-          "scope" => "organization",
-          "organizationId" => organization.organization_id
-        }
-      })
-
-    assert %{"trusted_surface" => %{"presentation" => presentation}} =
-             json_response(response, 200)
-
-    assert presentation["header"]["title"]["text"] == "Missions"
-  end
-
   test "catalog manifest URLs preserve the browser request origin" do
     {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
 
     path =
       "/api/cadence/application-host/v1/catalog?" <>
         URI.encode_query(%{
-          "application_key" => "mission_catalog",
-          "surface_id" => "mission_list",
+          "application_key" => "organization_admin",
+          "surface_id" => "organization_home",
           "scope" => "organization",
           "organization_id" => organization.organization_id
         })
@@ -199,7 +166,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
       catalog = member_conn |> get(origin <> path) |> json_response(200)
 
       assert [%{"release" => %{"manifestUrl" => manifest_url}}] = catalog["applications"]
-      assert manifest_url == origin <> "/assets/application-host/mission-catalog/mf-manifest.json"
+
+      assert manifest_url ==
+               origin <> "/assets/application-host/organization-admin/mf-manifest.json"
     end
   end
 

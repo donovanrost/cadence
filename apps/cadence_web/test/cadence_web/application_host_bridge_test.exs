@@ -106,7 +106,7 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
              ApplicationHostBridge.action(%Scope{}, %{}, params, "bridge-test-key")
   end
 
-  test "rejects mismatched action scopes except for bounded Mission Catalog organization actions" do
+  test "rejects mismatched action scopes" do
     third_party = %ApplicationDefinition{
       application_key: "third_party",
       version: 1,
@@ -143,7 +143,7 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
              mission_action
            )
 
-    assert ApplicationHostBridge.action_scope_compatible?(
+    refute ApplicationHostBridge.action_scope_compatible?(
              %ApplicationDefinition{third_party | application_key: "mission_catalog"},
              organization_surface,
              %ActionDefinition{mission_action | action_id: "save"}

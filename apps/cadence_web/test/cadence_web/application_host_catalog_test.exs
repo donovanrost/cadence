@@ -80,7 +80,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              )
 
     assert Enum.sort(Enum.map(catalog["applications"], & &1["applicationKey"])) ==
-             ["mission_catalog", "organization_admin"]
+             ["organization_admin"]
 
     for application_key <- ["mission_catalog", "organization_admin"] do
       assert {:error, :application_installation_scope_required} =
@@ -101,10 +101,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
       spacecraft: nil
     }
 
-    for {application_key, surface_id} <- [
-          {"mission_catalog", "mission_list"},
-          {"organization_admin", "organization_home"}
-        ] do
+    for {application_key, surface_id} <- [{"organization_admin", "organization_home"}] do
       assert {:ok, admission} =
                ApplicationHostCatalog.admit_application(
                  scope,
