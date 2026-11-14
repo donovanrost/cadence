@@ -1,0 +1,112 @@
+{
+  "until": "the L1-L4 federated batch (fe-ops): it deletes the surfaces that still link these paths by type, then this file and plugin-sdk's test exception. Only shrink this list; routes.test.ts fails if an entry is back in routes.json.",
+  "routes": [
+    {
+      "path": "/missions",
+      "scope": "organization",
+      "mountId": "mission-list-component",
+      "queryKeys": [],
+      "queryAliases": {},
+      "viewClass": "",
+      "metadata": {
+        "page_title": "Missions",
+        "nav_item": "missions"
+      },
+      "kind": "mission",
+      "missionPage": "mission_list"
+    },
+    {
+      "path": "/missions/new",
+      "scope": "organization",
+      "mountId": "mission-new-component",
+      "queryKeys": [],
+      "queryAliases": {},
+      "viewClass": "space-y-6 max-w-xl",
+      "metadata": {
+        "page_title": "New Mission",
+        "nav_item": "missions"
+      },
+      "kind": "mission",
+      "missionPage": "mission_new"
+    },
+    {
+      "path": "/missions/:mission_id/ops/planning/policy",
+      "kind": "ops_module",
+      "contribution": "planning.fleet-policy",
+      "scope": "mission",
+      "mountId": "ops-fleet-planning-policy-component",
+      "queryKeys": ["grants_page", "identities_page"],
+      "queryAliases": {},
+      "viewClass": "contents",
+      "metadata": {
+        "page_title": "Fleet Planning Policy",
+        "ops_nav_item": "planning"
+      }
+    },
+    {
+      "path": "/missions/:mission_id/ops/requirement-templates",
+      "scope": "mission",
+      "mountId": "ops-contact-requirement-template-component",
+      "queryKeys": [],
+      "queryAliases": {},
+      "viewClass": "contents",
+      "metadata": {
+        "page_title": "Requirement Templates",
+        "ops_nav_item": "planning"
+      },
+      "kind": "ops_module",
+      "contribution": "planning.requirement-templates"
+    },
+    {
+      "path": "/missions/:mission_id/ops/requirements",
+      "scope": "mission",
+      "mountId": "ops-contact-requirements-component",
+      "queryKeys": ["page", "state"],
+      "queryAliases": {},
+      "viewClass": "contents",
+      "metadata": {
+        "page_title": "Contact Requirements",
+        "ops_nav_item": "requirements"
+      },
+      "kind": "ops_module",
+      "contribution": "planning.requirement-directory"
+    },
+    {
+      "path": "/missions/:mission_id/ops/requirements/new",
+      "scope": "mission",
+      "mountId": "ops-contact-requirement-new-component",
+      "queryKeys": [],
+      "queryAliases": {},
+      "viewClass": "contents",
+      "metadata": {
+        "page_title": "Declare Contact Need",
+        "ops_nav_item": "requirements"
+      },
+      "kind": "ops_module",
+      "contribution": "planning.requirement-declaration"
+    },
+    {
+      "path": "/missions/:mission_id/ops/requirements/:contact_requirement_id",
+      "scope": "mission",
+      "mountId": "ops-contact-requirement-show-component",
+      "queryKeys": [
+        "contact_requirement_id",
+        "version",
+        "planning_run_id",
+        "versions_page",
+        "runs_page",
+        "searches_page",
+        "opportunities_page"
+      ],
+      "queryAliases": {},
+      "viewClass": "contents",
+      "metadata": {
+        "page_title": "Contact Requirement",
+        "ops_nav_item": "requirements"
+      },
+      "kind": "ops_module",
+      "contribution": "planning.requirement-review",
+      "resourceParam": "contact_requirement_id"
+    }
+  ]
+}
