@@ -1328,8 +1328,17 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
   `CANCELED` (off) / `ENDED EARLY` (off).
 - **Access:** operators (`operate_mission`). Otherwise there's no button, and the caption reads "Operators can
   cancel or end contacts."
-- **Refusals:** completed or expired: "Not canceled: the contact has already ended." Gone: "Not canceled: the
-  contact wasn't found." Others: the server's message.
+- **Refusals** (api's codes, 11-14). Each also re-reads the pass, so the right button shows:
+  - `contact_not_cancelable` with state active: "Not canceled: the contact started meanwhile. End it now instead."
+  - `contact_not_cancelable` when ended or canceled: "Not canceled: the contact has already ended."
+  - `contact_not_live` before AOS: "Not ended: the contact hasn't started. Cancel it instead."
+  - `contact_not_live` after LOS: "Not ended: the contact has already ended."
+  - `no_scheduled_contact`: "Not canceled: this pass has no contact in Cadence."
+  - `pass_not_found`: "Not canceled: the pass wasn't found."
+  - Others: the server's message.
+- **History from the read:** `contact_ended {kind, by, at, reason, cause}`. `cause: provider_failed` uses U56's
+  "Canceled by Cadence … Northlight couldn't book this pass (“…”)", and an operator's cancel uses the lines above.
+  The org audit row reads "Canceled the PUQ 13:04Z contact for EARENDIL-007: “…”" (typographic quotes).
 - **Confirmed (domain, 11-14):** neither action cancels queued command requests. The queue is per spacecraft, so
   they wait for the next releasable contact, armed groups stay armed, and a named release (U46) keeps what it
   already sent. One addition: when some will expire before that next contact, the commands line adds "1 of them
