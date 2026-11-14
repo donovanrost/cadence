@@ -50,6 +50,7 @@ const RUN_WORDS: Readonly<Record<SourceRun["status"], { state: OpState; label: s
   running: { state: "live", label: "RUNNING" },
   completed: { state: "nominal", label: "DONE" },
   failed: { state: "crit", label: "FAILED" },
+  outcome_unknown: { state: "caution", label: "OUTCOME UNKNOWN" },
   unrecognized: { state: "neutral", label: "UNKNOWN" },
 };
 export const runTag = (r: SourceRun) => RUN_WORDS[r.status];

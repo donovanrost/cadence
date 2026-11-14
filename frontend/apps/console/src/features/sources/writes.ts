@@ -32,7 +32,8 @@ export function fetchSourceOptions(
   return request(`${base(missionId)}/data-sources/options`, optionsReader, { signal });
 }
 
-export const runStatuses = ["queued", "running", "completed", "failed"] as const;
+// api-ops: outcome_unknown marks a run Cadence can't tell succeeded (never retried).
+export const runStatuses = ["queued", "running", "completed", "failed", "outcome_unknown"] as const;
 export const runKinds = ["provision", "reconcile", "deprovision"] as const;
 /** api-ops L11 (C): why a run failed, a closed set; run_failed is the catch-all. */
 export const runErrorCodes = [

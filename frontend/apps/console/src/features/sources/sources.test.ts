@@ -5,6 +5,7 @@ import {
   access,
   kindText,
   runsActive,
+  runTag,
   sourceFacts,
   sourceFailure,
   tsdbJobsOffered,
@@ -193,5 +194,26 @@ describe("run errors (api-ops L11 C)", () => {
     });
     expect(read(null)).toBeNull();
     expect(read(undefined)).toBeNull();
+  });
+});
+
+describe("a run whose outcome is unknown (api-ops jobs fix)", () => {
+  it("reads outcome_unknown with its sentence and offers no action", () => {
+    const r = decode(sourceRunReader, {
+      job_id: "j2",
+      kind: "provision",
+      status: "outcome_unknown",
+      started_at: "2026-11-14T09:48:52Z",
+      error: {
+        code: "outcome_unknown",
+        message:
+          "Outcome unknown: this job ran before a fix, and Cadence can't tell whether it succeeded.",
+      },
+      actions: [],
+    });
+    if (!r.ok) throw r.error;
+    expect(runTag(r.value)).toEqual({ state: "caution", label: "OUTCOME UNKNOWN" });
+    expect(r.value.error?.message).toContain("Outcome unknown");
+    expect(r.value.actions).toEqual([]);
   });
 });
