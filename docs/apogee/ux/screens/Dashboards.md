@@ -134,6 +134,11 @@ call (K2). The old teal "current" and violet "compare" hues are gone on purpose.
 
 ## Settings (`…/:id/settings/:tab`), a reading page
 Tabs: `General` · `Sharing` · `Activity` · `Diagnostics`.
+- **Entry** (fe-setup, 11-14): the viewer's `⋯` menu, after Versions.
+  - Authors see `Settings` and get all four tabs, opening on General.
+  - Everyone else sees `Activity and diagnostics` (the page isn't settings for them) and gets those two tabs only,
+    opening on Activity. General and Sharing are hidden, not disabled.
+  - Not on phones, which are view only.
 - **General:** name, description, tags, defaults (range, spacecraft). Saving creates a current version, with a
   "Saved as v8" line.
 - **Activity:** an event list (save, restore, archive, share, export) with actor and time.
