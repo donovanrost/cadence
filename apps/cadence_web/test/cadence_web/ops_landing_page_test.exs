@@ -31,7 +31,8 @@ defmodule CadenceWeb.OpsLandingPageTest do
            }
 
     assert page(view)["can_administer"] == false
-    render_hook(view, "host:context", %{"path" => path(c) <> "/dashboards/library"})
+    # L8b: the legacy dashboard library is a redirect now; Explore is another live ops page.
+    render_hook(view, "host:context", %{"path" => path(c) <> "/explore"})
     assert page(view) == nil
     render_hook(view, "host:context", %{"path" => path(c)})
     assert page(view)["context"]["mission_id"] == c.mission.mission_id
