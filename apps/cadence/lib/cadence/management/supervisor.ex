@@ -9,7 +9,10 @@ defmodule Cadence.Management.Supervisor do
 
   @impl true
   def init(_opts) do
-    # The password-check throttle's table (Accounts.AttemptLimit).
-    Supervisor.init([Cadence.Accounts.AttemptLimit], strategy: :one_for_one)
+    # In-memory tables only: the password-check throttle and Policy's confirmed
+    # (organization, mission) pairs. No Repo, control or data services.
+    Supervisor.init([Cadence.Accounts.AttemptLimit, Cadence.Auth.MissionOrganizationCache],
+      strategy: :one_for_one
+    )
   end
 end
