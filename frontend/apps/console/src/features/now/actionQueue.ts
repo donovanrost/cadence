@@ -31,6 +31,7 @@ import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settle
 import { runtimeRow } from "./runtime.ts";
 import { activationRow } from "./activation.ts";
 import { contactStartRow } from "./contactStart.ts";
+import { ingressRow } from "./ingress.ts";
 import { changeEvidence, changeTitle, pastDeadline } from "./providerChange.ts";
 import { changeSetReader, changeSetRow } from "./changeSet.ts";
 
@@ -384,6 +385,8 @@ function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueI
       if (a.source === "activation_apply") return [activationRow(base(item), item.id, a, now)];
       if (a.source === "contact_start")
         return [contactStartRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
+      if (a.source === "ingress_backpressure")
+        return [ingressRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "provider_change") {
         // U44: the pass in Contacts holds the decision; an approval counts down to its deadline.
         const pass = a.reservation_id ?? a.contact_id;

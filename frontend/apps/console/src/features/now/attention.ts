@@ -36,6 +36,8 @@ export const attentionSources = [
   "provider_change",
   // U45: a realized contact that failed to start; cleared when it starts (domain, api).
   "contact_start",
+  // U47 (api-ops, #83): a contact's ingest buffer backing up, or frames a transport dropped.
+  "ingress_backpressure",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -55,6 +57,9 @@ export const attentionConflicts = [
   // contact_start (U45): failing to start while the pass is on · its window ended unstarted.
   "not_started",
   "missed",
+  // ingress_backpressure (U47): the buffer is >= 80% full · frames were lost.
+  "journal_near_full",
+  "frames_dropped",
 ] as const;
 /** U38 mission_runtime reason keys (domain 292c8e6b, final). */
 export const runtimeReasons = [
@@ -274,6 +279,53 @@ export const attentionReader = d.object({
   provider_profile_name: d.optional(d.nullable(d.string)),
   /** listener_in_use only: the pass still holding the station connection. */
   holder: d.optional(d.nullable(holderReader)),
+  /** ingress_backpressure (U47): the downlink transport, its buffer, and what it dropped. */
+  // free-text: the contact's pass name when it has one (api-ops)
+  contact_label: d.optional(d.nullable(d.string)),
+  transport: d.optional(
+    d.nullable(
+      d.object({
+        provider_binding_id: d.token,
+        kind: d.knownText(["tcp"] as const),
+      }),
+    ),
+  ),
+  journal_usage: d.optional(
+    d.nullable(
+      d.object({
+        used_bytes: d.integer,
+        capacity_bytes: d.integer,
+        ratio: d.number,
+        threshold: d.number,
+        backlog_bytes: d.integer,
+        observed_at: d.timestamp,
+        /** The ratio grew between the last two samples. */
+        rising: d.boolean,
+      }),
+    ),
+  ),
+  drops: d.optional(
+    d.nullable(
+      d.object({
+        count: d.integer,
+        bytes: d.integer,
+        first_at: d.timestamp,
+        last_at: d.timestamp,
+        buffer: d.knownText(["journal", "executor"] as const),
+      }),
+    ),
+  ),
+  /** Raw, for Technical details only. */
+  diagnostics: d.optional(
+    d.nullable(
+      d.object({
+        // free-text: a transport stream id
+        stream_id: d.nullable(d.string),
+        // free-text: the raw error, never in visible text
+        last_error: d.nullable(d.string),
+      }),
+    ),
+  ),
   resolution: d.nullable(
     d.object({
       // free-text: what the operator recorded doing (resolve's action_text, contacts.md)
@@ -449,6 +501,8 @@ export function attentionWords(
     case "configuration_failure":
     case "not_started":
     case "missed":
+    case "journal_near_full":
+    case "frames_dropped":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.
@@ -517,6 +571,12 @@ export function resolvedWords(r: Resolved): string {
     if (r.action === "started") return `Started at ${hhmm(r.resolved_at)}.`;
     if (r.action === "acknowledged")
       return `Marked as seen by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}.`;
+  }
+  if (r.id.startsWith("attention:ingress_backpressure:")) {
+    // U47: the buffer caught up, or an operator acknowledged the lost frames.
+    if (r.action === "drained") return `Caught up at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "acknowledged")
+      return `Acknowledged by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}.`;
   }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";

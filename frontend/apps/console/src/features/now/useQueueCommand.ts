@@ -11,9 +11,16 @@ export const NO_ACCESS_SEEN = "Operators mark lost telemetry as seen.";
 /** ux U45: a missed pass (contact_start) closes the same way. */
 export const NO_ACCESS_MISSED = "Operators mark missed passes as seen.";
 
+/** ux U47: lost frames (ingress_backpressure) are acknowledged, not marked seen. */
+export const NO_ACCESS_ACK_LOST = "Operators acknowledge lost telemetry.";
+
 export type CommandKind = "retry" | "seen";
 const seenNoAccess = (a: Attention | undefined) =>
-  a?.source === "contact_start" ? NO_ACCESS_MISSED : NO_ACCESS_SEEN;
+  a?.source === "contact_start"
+    ? NO_ACCESS_MISSED
+    : a?.source === "ingress_backpressure"
+      ? NO_ACCESS_ACK_LOST
+      : NO_ACCESS_SEEN;
 export const noAccessText = (kind: CommandKind, targets: readonly Attention[]) =>
   kind === "seen" ? seenNoAccess(targets[0]) : NO_ACCESS;
 
@@ -126,7 +133,11 @@ export function useQueueCommand(
 
   function sentenceFor(item: QueueItem, canRun: boolean): string {
     if (running.value.has(item.key))
-      return item.command?.kind === "seen" ? "Marking…" : "Retrying…";
+      return item.command?.kind !== "seen"
+        ? "Retrying…"
+        : item.command.targets[0]?.source === "ingress_backpressure"
+          ? "Acknowledging…"
+          : "Marking…";
     const base =
       item.command && !canRun
         ? `${item.sentence} ${noAccessText(item.command.kind, item.command.targets)}`

@@ -89,6 +89,8 @@ export function changeTitle(a: Attention, now: Date): string {
     case "apply_stalled":
     case "not_started":
     case "missed":
+    case "journal_near_full":
+    case "frames_dropped":
     case null:
     default:
       return `${provider} wants to change ${pass}`;

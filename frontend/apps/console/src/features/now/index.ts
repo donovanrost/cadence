@@ -17,6 +17,7 @@ export {
 export { useSettlement } from "./useSettlement.ts";
 export {
   NO_ACCESS,
+  NO_ACCESS_ACK_LOST,
   NO_ACCESS_MISSED,
   NO_ACCESS_SEEN,
   retryTargets,
