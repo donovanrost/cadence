@@ -119,6 +119,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       acceptor?: false,
       peers_refused: 0,
       last_peer_refused: nil,
+      refusals: nil,
       direction: direction,
       mode: configuration.mode,
       host: configuration.host,
@@ -426,7 +427,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   # (#87) The profile acceptor identified this peer as ours: the same connected path as an accept,
   # with the bytes it read to identify it handed to the receiver first.
   @impl true
-  def handle_info({:peer_accepted, socket, prefix, peer}, %{acceptor?: true} = state) do
+  def handle_info({:peer_accepted, socket, prefix, peer, read_at}, %{acceptor?: true} = state) do
     case current_socket(state) do
       {:ok, _existing_socket} ->
         state =
@@ -439,14 +440,15 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
           )
 
         :gen_tcp.close(socket)
-        {:noreply, state}
+        {:noreply, count_refusal(state, peer, :second_connection)}
 
       {:error, :tcp_provider_not_connected} ->
         {:noreply,
          state
          |> Map.put(:socket, socket)
          |> Session.connected()
-         |> start_socket_receiver!(socket, prefix)}
+         |> resolve_refusals()
+         |> start_socket_receiver!(socket, {prefix, read_at})}
     end
   end
 
@@ -459,33 +461,19 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         "registering again"
     )
 
-    {listen, registration} = state.acceptor_registration
-    namespace = acceptor_namespace(state)
-
-    case ProfileAcceptor.register(
-           namespace,
-           state.mission_id,
-           state.provider_binding_id,
-           listen,
-           registration
-         ) do
-      {:ok, _port} ->
-        acceptor = ProfileAcceptor.whereis(namespace, state.mission_id, state.provider_binding_id)
-        {:noreply, %{state | acceptor_monitor_ref: acceptor && Process.monitor(acceptor)}}
-
-      {:error, error} ->
-        {:stop, error, state}
-    end
+    {:noreply, reregister(state)}
   end
 
-  def handle_info({:peer_refused, peer, reason}, %{acceptor?: true} = state) do
-    {:noreply,
-     %{
-       state
-       | peers_refused: state.peers_refused + 1,
-         last_peer_refused: %{peer: peer, reason: inspect(reason), at: DateTime.utc_now()}
-     }}
-  end
+  def handle_info({:peer_refused, peer, reason}, %{acceptor?: true} = state),
+    do: {:noreply, count_refusal(state, peer, reason)}
+
+  # (api-ops) Re-registration failed after the acceptor died: keep the live session, retry later.
+  # A stale retry once registered again is ignored (no second monitor).
+  def handle_info(:reregister, %{acceptor?: true, acceptor_monitor_ref: ref} = state)
+      when is_reference(ref),
+      do: {:noreply, state}
+
+  def handle_info(:reregister, %{acceptor?: true} = state), do: {:noreply, reregister(state)}
 
   def handle_info(
         {:accept_result, accept_ref, {:ok, socket, :ok}},
@@ -832,17 +820,84 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     }
   end
 
+  # The refusal window behind the listener_refusal Now item (ux U50): opened by a refusal,
+  # resolved 'accepted' when this contact's own peer connects; a refusal after that reopens it
+  # with a fresh count. Counted live (a restart starts it again).
+  defp count_refusal(state, peer, reason) do
+    now = DateTime.utc_now()
+    last = %{peer: peer, reason: refusal_reason(reason), scid: refusal_scid(reason), at: now}
+
+    refusals =
+      case state.refusals do
+        %{resolved: nil} = open -> %{open | count: open.count + 1, last_at: now, last: last}
+        _none_or_resolved -> %{count: 1, first_at: now, last_at: now, last: last, resolved: nil}
+      end
+
+    %{
+      state
+      | peers_refused: state.peers_refused + 1,
+        last_peer_refused: %{peer: peer, reason: inspect(reason), at: now},
+        refusals: refusals
+    }
+  end
+
+  defp resolve_refusals(%{refusals: %{resolved: nil} = open} = state),
+    do: %{state | refusals: %{open | resolved: %{action: "accepted", at: DateTime.utc_now()}}}
+
+  defp resolve_refusals(state), do: state
+
+  defp refusal_reason({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
+  defp refusal_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp refusal_reason(_reason), do: "unknown"
+
+  defp refusal_scid({reason, scid}) when reason in [:unregistered_scid, :ambiguous_scid],
+    do: scid
+
+  defp refusal_scid(_reason), do: nil
+
+  defp reregister(state) do
+    {listen, registration} = state.acceptor_registration
+    namespace = acceptor_namespace(state)
+
+    case ProfileAcceptor.register(
+           namespace,
+           state.mission_id,
+           state.provider_binding_id,
+           listen,
+           registration
+         ) do
+      {:ok, _port} ->
+        acceptor = ProfileAcceptor.whereis(namespace, state.mission_id, state.provider_binding_id)
+        %{state | acceptor_monitor_ref: acceptor && Process.monitor(acceptor)}
+
+      {:error, error} ->
+        Logger.warning(
+          "TCP provider #{state.provider_binding_id} could not register with its profile " <>
+            "acceptor (#{inspect(error)}); keeping the session, retrying in 5 s"
+        )
+
+        Process.send_after(self(), :reregister, 5_000)
+        %{state | acceptor_monitor_ref: nil}
+    end
+  end
+
   # The bytes the profile acceptor read to identify the peer (#87) are ingested first, as if this
   # receiver had read them.
+  # Stamped with the time the acceptor read them (api-ops review), and counted as a receive.
   defp receive_prefix(state, <<>>), do: state
+  defp receive_prefix(state, {<<>>, _read_at}), do: state
 
-  defp receive_prefix(%{ingress_journal_name: nil} = state, prefix) do
-    {next_state, batch_status} = consume_socket_data(state, prefix, DateTime.utc_now())
+  defp receive_prefix(%{ingress_journal_name: nil} = state, {prefix, read_at}) do
+    Instrumentation.record_receive(state, prefix, 0)
+    {next_state, batch_status} = consume_socket_data(state, prefix, read_at)
     send(state.provider_pid, {:tcp_receiver_batch, self(), batch_status})
     next_state
   end
 
-  defp receive_prefix(state, prefix), do: capture_socket_data(state, prefix, DateTime.utc_now())
+  defp receive_prefix(state, {prefix, read_at}) do
+    Instrumentation.record_receive(state, prefix, 0)
+    capture_socket_data(state, prefix, read_at)
+  end
 
   defp acceptor_namespace(%{process_namespace: %ProcessNamespace{} = namespace}),
     do: namespace
@@ -1365,6 +1420,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       listener_closed?: is_nil(state.listener) and not state.acceptor?,
       peers_refused: state.peers_refused,
       last_peer_refused: state.last_peer_refused,
+      refusals: state.refusals,
+      shared_listener?: state.acceptor?,
+      connected?: is_port(state.socket),
       receiver_stopped?: is_nil(state.socket_receiver_pid)
     }
   end

@@ -19,12 +19,15 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   - fallback (opt-in per profile, off by default): with exactly ONE registration and framing that
     can't be read, that registration takes the peer; with two or more, the peer is refused.
 
-  Anything else is refused: closed, counted, and reported to the adapters (a pass observable),
-  rate-limited in the log. The acceptor monitors its adapters, unregisters a stopped one and
+  Anything else is refused: closed, counted, and reported to EVERY registered adapter, so each
+  contact on the profile counts the profile's refusals (ux U50 words it as the shared listener's,
+  never one pass's fault); rate-limited in the log. The acceptor monitors its adapters, unregisters a stopped one and
   closes the listener `linger_ms` after the last one leaves.
   """
 
   use GenServer, restart: :transient
+
+  import Bitwise
 
   require Logger
 
@@ -227,17 +230,22 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   defp read_first_frame(_socket, nil), do: :unreadable
 
+  # The frame's receipt time is when it was read, not when it's handed over (api-ops review).
   defp read_first_frame(socket, frame_size) when frame_size >= 2 do
     case :gen_tcp.recv(socket, frame_size, @identify_timeout_ms) do
-      {:ok, frame} -> {:ok, frame}
+      {:ok, frame} -> {:ok, {frame, DateTime.utc_now()}}
       {:error, reason} -> {:error, reason}
     end
   end
 
   # TM transfer frame primary header: version (2 bits), spacecraft id (10 bits).
-  defp match_scid(<<_version::2, scid::10, _rest::bitstring>> = frame, peer, registrations) do
+  defp match_scid(
+         {<<_version::2, scid::10, _rest::bitstring>> = frame, read_at},
+         peer,
+         registrations
+       ) do
     case Enum.filter(registrations, &(&1.scid == scid and peer_allowed?(&1, peer))) do
-      [registration] -> {:ok, registration, frame}
+      [registration] -> {:ok, registration, {frame, read_at}}
       [] -> {:refused, {:unregistered_scid, scid}}
       _several -> {:refused, {:ambiguous_scid, scid}}
     end
@@ -245,21 +253,21 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   defp fallback([registration], peer, true) do
     if peer_allowed?(registration, peer),
-      do: {:ok, registration, <<>>},
+      do: {:ok, registration, {<<>>, DateTime.utc_now()}},
       else: {:refused, :unexpected_peer}
   end
 
   defp fallback(_registrations, _peer, _fallback?), do: {:refused, :unidentified}
 
   defp peer_allowed?(%{expected_peer_address: expected}, peer) when is_binary(expected),
-    do: expected == peer
+    do: normalize_address(expected) == peer
 
   defp peer_allowed?(_registration, _peer), do: true
 
-  defp hand_over(socket, %{adapter: adapter} = registration, prefix, peer, profile_id) do
+  defp hand_over(socket, %{adapter: adapter} = registration, {prefix, read_at}, peer, profile_id) do
     case :gen_tcp.controlling_process(socket, adapter) do
       :ok ->
-        send(adapter, {:peer_accepted, socket, prefix, peer})
+        send(adapter, {:peer_accepted, socket, prefix, peer, read_at})
 
       {:error, reason} ->
         :gen_tcp.close(socket)
@@ -287,12 +295,26 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   defp cancel_linger(state), do: %{state | linger_ref: nil}
 
+  # An IPv4-mapped IPv6 address (::ffff:a.b.c.d) reads as its IPv4 address, on both sides of the
+  # expected-address compare (api-ops review).
   defp peer_address(socket) do
     case :inet.peername(socket) do
-      {:ok, {address, _port}} -> address |> :inet.ntoa() |> to_string()
+      {:ok, {address, _port}} -> format_address(address)
       _unknown -> "unknown"
     end
   end
+
+  defp normalize_address(text) do
+    case :inet.parse_address(String.to_charlist(text)) do
+      {:ok, address} -> format_address(address)
+      {:error, _not_an_address} -> text
+    end
+  end
+
+  defp format_address({0, 0, 0, 0, 0, 0xFFFF, high, low}),
+    do: format_address({high >>> 8, high &&& 0xFF, low >>> 8, low &&& 0xFF})
+
+  defp format_address(address), do: address |> :inet.ntoa() |> to_string()
 
   defp listen_opts(nil), do: @tcp_opts
   defp listen_opts(host) when is_binary(host), do: [{:ip, parse_ip(host)} | @tcp_opts]

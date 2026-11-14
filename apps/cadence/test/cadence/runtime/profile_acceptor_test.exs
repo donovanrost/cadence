@@ -22,12 +22,17 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
     {a, port} = register!(c, "contact-a", 1)
     {b, ^port} = register!(c, "contact-b", 2)
 
+    sent_at = DateTime.utc_now()
     peer_b = connect!(port, frame(2))
     peer_a = connect!(port, frame(1))
 
-    assert_receive {^a, {:peer_accepted, socket_a, prefix_a, _peer}}, 2_000
-    assert_receive {^b, {:peer_accepted, socket_b, prefix_b, _peer}}, 2_000
+    assert_receive {^a, {:peer_accepted, socket_a, prefix_a, _peer, read_a}}, 2_000
+    assert_receive {^b, {:peer_accepted, socket_b, prefix_b, _peer, _read_b}}, 2_000
     assert <<_::2, 1::10, _::bitstring>> = prefix_a
+    # The first frame's receipt time is when the acceptor read it (api-ops review).
+    assert %DateTime{} = read_a
+    assert DateTime.compare(read_a, sent_at) != :lt
+    assert DateTime.compare(read_a, DateTime.utc_now()) != :gt
     assert <<_::2, 2::10, _::bitstring>> = prefix_b
 
     # Each adapter now owns its peer's socket and reads what follows.
@@ -40,11 +45,11 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
   test "a contained pass comes and goes; the other contact's session is untouched", c do
     {a, port} = register!(c, "contact-a", 1)
     peer_a = connect!(port, frame(1))
-    assert_receive {^a, {:peer_accepted, socket_a, _prefix, _peer}}, 2_000
+    assert_receive {^a, {:peer_accepted, socket_a, _prefix, _peer, _read_at}}, 2_000
 
     {b, ^port} = register!(c, "contact-b", 2)
     _peer_b = connect!(port, frame(2))
-    assert_receive {^b, {:peer_accepted, _socket_b, _prefix, _peer}}, 2_000
+    assert_receive {^b, {:peer_accepted, _socket_b, _prefix, _peer, _read_at}}, 2_000
     stop_adapter(b)
 
     :ok = :gen_tcp.send(peer_a, "still-here")
@@ -57,19 +62,25 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
 
     assert_receive {^a, {:peer_refused, _peer, {:unregistered_scid, 99}}}, 2_000
     assert {:error, :closed} = :gen_tcp.recv(peer, 0, 2_000)
-    refute_received {^a, {:peer_accepted, _, _, _}}
+    refute_received {^a, {:peer_accepted, _, _, _, _}}
   end
 
   test "the single-registration fallback, opt-in, refuses once two are registered", c do
     listen = %{port: 0, host: "127.0.0.1", fallback_single_registration?: true}
     {a, port} = register!(c, "contact-a", nil, listen: listen, frame_size: nil)
     _peer = connect!(port, "")
-    assert_receive {^a, {:peer_accepted, _socket, <<>>, _peer}}, 2_000
+    assert_receive {^a, {:peer_accepted, _socket, <<>>, _peer, _read_at}}, 2_000
 
     {b, ^port} = register!(c, "contact-b", nil, listen: listen, frame_size: nil)
     _peer2 = connect!(port, "")
     assert_receive {^a, {:peer_refused, _, :unidentified}}, 2_000
     assert_receive {^b, {:peer_refused, _, :unidentified}}, 2_000
+  end
+
+  test "an IPv4-mapped expected address matches its IPv4 peer", c do
+    {a, port} = register!(c, "contact-a", 1, expected_peer_address: "::ffff:127.0.0.1")
+    _peer = connect!(port, frame(1))
+    assert_receive {^a, {:peer_accepted, _socket, _prefix, "127.0.0.1", _read_at}}, 2_000
   end
 
   test "a peer from an address the profile doesn't expect is refused", c do

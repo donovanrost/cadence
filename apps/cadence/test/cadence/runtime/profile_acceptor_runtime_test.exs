@@ -73,6 +73,55 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
         do: :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, run_id(scheduled))
   end
 
+  test "a failed re-registration keeps the live session and retries until it registers", ctx do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    port = free_port()
+
+    pass =
+      schedule!(ctx, ctx.alpha, "alpha", DateTime.add(now, -60), DateTime.add(now, 600), port)
+
+    assert {:ok, %{errors: []}} = Contacts.reconcile(ctx.mission_id, now)
+    peer = connect!(port, frame(1))
+    assert_eventually(fn -> received(ctx, pass) > 0 end)
+
+    namespace = ProcessNamespace.default()
+    adapter = adapter(ctx, pass)
+    acceptor = ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id)
+
+    # The adapter can't register again while something else holds the port.
+    :ok = :sys.suspend(adapter)
+    :ok = DynamicSupervisor.terminate_child(ProfileAcceptor.supervisor_name(namespace), acceptor)
+    {:ok, squatter} = :gen_tcp.listen(port, [:binary, ip: {127, 0, 0, 1}, reuseaddr: true])
+    on_exit(fn -> :gen_tcp.close(squatter) end)
+    :ok = :sys.resume(adapter)
+
+    # It keeps its session (no stop), and its own peer's frames still arrive.
+    Process.sleep(200)
+    assert Process.alive?(adapter)
+    before = received(ctx, pass)
+    :ok = :gen_tcp.send(peer, frame(1))
+    assert_eventually(fn -> received(ctx, pass) > before end)
+
+    # Once the port is free, the retry (5 s backoff) registers it again.
+    :ok = :gen_tcp.close(squatter)
+
+    assert_eventually(
+      fn -> is_pid(ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id)) end,
+      400
+    )
+
+    :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, run_id(pass))
+  end
+
+  defp adapter(ctx, scheduled) do
+    key =
+      {:provider_runtime, ctx.mission_id, run_id(scheduled),
+       "downlink-" <> scheduled.scheduled_contact_id, ctx.profile_id}
+
+    [{pid, _}] = Registry.lookup(ProcessNamespace.default().registry, key)
+    pid
+  end
+
   defp received(ctx, scheduled) do
     path_id = "downlink-" <> scheduled.scheduled_contact_id
 
