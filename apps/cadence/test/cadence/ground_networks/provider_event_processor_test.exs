@@ -224,6 +224,27 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
       assert audit_actions(context, "event-config-failure") == ["provider_event.processed"]
     end
 
+    test "a later transient read on a booking failed by configuration still retries", context do
+      now = ~U[2026-07-15 12:00:00.000000Z]
+      conflicting = [describe_response: {:ok, conflicting_response(context.reservation)}]
+      assert {:ok, _first} = ingest_contact_event(context, "event-config-first", now)
+
+      assert {:ok, %{processed: 1}} =
+               ProviderEventProcessor.process_once(processor_opts(context, now, conflicting))
+
+      # The row keeps its configuration failure; this read fails for another reason. The event
+      # is decided by this read (api-ops 11-14), not by what the row already says.
+      at = DateTime.add(now, 1, :second)
+      assert {:ok, entry} = ingest_contact_event(context, "event-transient-after", at)
+      failing = [describe_response: {:error, :provider_unavailable}]
+
+      assert {:ok, %{claimed: 1, processed: 0, retried: 1}} =
+               ProviderEventProcessor.process_once(processor_opts(context, at, failing))
+
+      assert {:ok, %{processing_state: :received}} =
+               ProviderEventInbox.fetch(context.organization_id, entry.provider_event_inbox_id)
+    end
+
     test "a failing event backs off exponentially and is quarantined at the cap", context do
       now = ~U[2026-07-15 12:00:00.000000Z]
       assert {:ok, entry} = ingest_contact_event(context, "event-transient", now)

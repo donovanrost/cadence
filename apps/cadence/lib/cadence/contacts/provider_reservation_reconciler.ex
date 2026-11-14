@@ -146,8 +146,10 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
            ) do
       {:ok, updated}
     else
+      # Tagged so a caller decides from THIS read, not from the row's stored state (api-ops
+      # 11-14): an earlier configuration failure stays on the row through a later transient error.
       {:error, {:provider_configuration_failure, failed_reservation, reason}} ->
-        {:error, failed_reservation, reason}
+        {:error, failed_reservation, {:provider_configuration_failure, reason}}
 
       # The row changed between read and write (another writer won the lock): not a failure of
       # the booking. Retried next cycle, nothing recorded (director 11-14: 007's reservation was
