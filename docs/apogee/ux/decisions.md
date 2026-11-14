@@ -1306,8 +1306,9 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
     there's no listener and no runtime.
   - **While live:** `End contact now…`. Domain's close (end_realized_early): the runtime stops now, and the
     scheduled contact is marked done. "Close" is the model's word; operators end a contact.
-  - After LOS, or already canceled or ended: neither. Hand-started contacts get `End contact now…` too, in
-    "contact" words (U46).
+  - After LOS, or already canceled or ended: neither. Hand-started contacts aren't pass rows, so they're out of
+    this step (api's routes are per pass). Their `End contact now…`, in "contact" words (U46), waits for a BACKLOG
+    item or Uplink's contact view, lead's call.
 - **Sheet** (danger). The dismiss button is `Keep contact`, never `Cancel`, which would read as the action.
   - Cancel: title `Cancel EARENDIL-007's PUQ 13:04Z contact?` Consequence lines:
     - "Cadence won't open this contact: nothing is received or sent on it."
@@ -1336,7 +1337,8 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
   - `no_scheduled_contact`: "Not canceled: this pass has no contact in Cadence."
   - `pass_not_found`: "Not canceled: the pass wasn't found."
   - Others: the server's message.
-- **History from the read:** `contact_ended {kind, by, at, reason, cause}`. `cause: provider_failed` uses U56's
+- **History from the read:** `contact_ended {kind, by, at, reason, reason_code}`; Cadence's cancel is `by.kind:
+  system` with `reason_code: provider_failed` (lead's change), and it uses U56's
   "Canceled by Cadence … Northlight couldn't book this pass (“…”)", and an operator's cancel uses the lines above.
   The org audit row reads "Canceled the PUQ 13:04Z contact for EARENDIL-007: “…”" (typographic quotes).
 - **Confirmed (domain, 11-14):** neither action cancels queued command requests. The queue is per spacecraft, so
