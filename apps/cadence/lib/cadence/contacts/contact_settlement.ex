@@ -69,11 +69,11 @@ defmodule Cadence.Contacts.ContactSettlement do
   end
 
   @doc """
-  Records a replay's outcome. Drained: `settled`, with `replayed_at` when it had been
-  `unsettled` (its attention item resolves as replayed), else `inspected_at` (a contact whose
-  journal wasn't inspected when it ended). Not drained: `unsettled` again, the backlog re-read,
-  `attempts` + 1 and `next_attempt_at` backing off 5 min doubling to 2 h; after 6 failed replays,
-  `retry` turns `manual` and only an operator's retry starts another (director 2026-11-12).
+  Records a replay's outcome. Drained: `settled` and `inspected_at`, plus `replayed_at` when it
+  had been `unsettled` (its attention item resolves as replayed). Not drained: `unsettled` again,
+  the backlog re-read, `attempts` + 1 and `next_attempt_at` backing off 5 min doubling to 2 h;
+  after 6 failed replays, `retry` turns `manual` and only an operator's retry starts another
+  (director 2026-11-12).
   """
   @spec record_replay(RealizedContact.t(), term(), map(), term()) ::
           {:ok, RealizedContact.t()} | {:error, term()}
@@ -94,18 +94,21 @@ defmodule Cadence.Contacts.ContactSettlement do
     end
   end
 
+  # A drained replay has inspected the journal, whichever way it was picked: an unsettled
+  # contact's replay must not leave it looking uninspected (39LEY, 11-14: a never-inspected contact
+  # whose first replay failed was replayed a second time after it drained).
   defp replay_fields(:settled, previous, _backlog, now) do
     at = DateTime.to_iso8601(now)
-    drained = if previous["state"] == "unsettled", do: "replayed_at", else: "inspected_at"
 
     %{
       "state" => "settled",
       "settled_at" => at,
-      drained => at,
+      "inspected_at" => at,
       "replay" => "done",
       "retry" => nil,
       "next_attempt_at" => nil
     }
+    |> maybe_put("replayed_at", previous["state"] == "unsettled", at)
   end
 
   defp replay_fields(outcome, previous, backlog, now) do
@@ -128,6 +131,9 @@ defmodule Cadence.Contacts.ContactSettlement do
         previous["first_failure_kind"] || previous["failure_kind"] || fields["failure_kind"]
     })
   end
+
+  defp maybe_put(map, key, true, value), do: Map.put(map, key, value)
+  defp maybe_put(map, _key, false, _value), do: map
 
   defp normalize_replay_outcome({:unsettled, _reason, _error} = outcome), do: outcome
   defp normalize_replay_outcome(other), do: {:unsettled, "settle_failed", other}

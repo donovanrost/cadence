@@ -325,6 +325,67 @@ defmodule Cadence.Contacts.ContactSettlementTest do
     end
   end
 
+  describe "replay bookkeeping (#71 follow-up, 39LEY)" do
+    test "a never-inspected contact whose first replay failed is inspected once it drains", ctx do
+      Application.put_env(:cadence, :contact_settlement,
+        deadline_ms: 300,
+        replay_deadline_ms: 300
+      )
+
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      a = schedule!(ctx, "a", DateTime.add(now, -60), DateTime.add(now, 600), downlink: true)
+
+      assert {:ok, %{realized_scheduled_contact_ids: [a_run]}} =
+               Contacts.reconcile(ctx.mission_id, now)
+
+      OutageTelemetryWriter.outage(true)
+      send_telemetry!(ctx, a_run, a)
+      assert_eventually(fn -> projector(ctx, a_run, a).failed_count > 0 end)
+
+      # As 39LEY: settled with no runtime to drain (a node stop mid-pass), journal not inspected.
+      :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, a_run)
+      {:ok, contact} = ContactStore.fetch_realized(ctx.mission_id, a_run)
+
+      absent = %{
+        "state" => "settled",
+        "runtime" => "absent",
+        "settled_at" => "2026-11-14T01:44:30Z"
+      }
+
+      {:ok, _} =
+        ContactStore.update_realized_lifecycle(contact, :completed, %{"settlement" => absent})
+
+      # Its first replay fails (storage still down): unsettled.
+      assert {:ok, %{replaying_realized_contact_ids: [^a_run]}} =
+               Contacts.reconcile(ctx.mission_id, DateTime.add(now, 10))
+
+      assert_eventually(fn ->
+        settlement(ctx, a_run)["state"] == "unsettled" and
+          not ContactSettler.replaying?(ctx.mission_id)
+      end)
+
+      # Storage is back: the due replay drains it.
+      OutageTelemetryWriter.outage(false)
+      make_due!(ctx, a_run)
+
+      assert {:ok, %{replaying_realized_contact_ids: [^a_run]}} =
+               Contacts.reconcile(ctx.mission_id, DateTime.add(now, 20))
+
+      assert_eventually(fn ->
+        settlement(ctx, a_run)["state"] == "settled" and
+          not ContactSettler.replaying?(ctx.mission_id)
+      end)
+
+      assert %{"replayed_at" => replayed, "inspected_at" => inspected} = settlement(ctx, a_run)
+      assert replayed == inspected
+      assert samples(ctx) == 1
+
+      # Drained once: nothing picks it again (39LEY replayed twice, doubling its observations).
+      assert {:ok, %{replaying_realized_contact_ids: []}} =
+               Contacts.reconcile(ctx.mission_id, DateTime.add(now, 30))
+    end
+  end
+
   defp unsettled_contact!(ctx) do
     if Application.get_env(:cadence, :contact_settlement) == nil,
       do: Application.put_env(:cadence, :contact_settlement, deadline_ms: 300)
