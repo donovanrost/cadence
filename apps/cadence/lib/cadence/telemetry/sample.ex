@@ -5,6 +5,16 @@ defmodule Cadence.Telemetry.Sample do
 
   @type quality_state :: :good | :suspect | :bad
 
+  @typedoc """
+  What tells one measurement from another when they share a generation time (identity v2):
+  `{:seq, apid, sequence_count}` from a CCSDS packet (a property of the measurement, stable
+  across paths and replays), or `{:pos, stream, position}` for count-less data whose generation
+  time is only its receipt time (stable on journal replay).
+  """
+  @type frame_ref ::
+          {:seq, non_neg_integer(), non_neg_integer()}
+          | {:pos, binary(), non_neg_integer()}
+
   @type t :: %__MODULE__{
           sample_id: binary(),
           mission_id: binary(),
@@ -26,6 +36,8 @@ defmodule Cadence.Telemetry.Sample do
           quality_state: quality_state(),
           generation_time: DateTime.t() | nil,
           receipt_time: DateTime.t(),
+          generation_time_source: :onboard | :receipt | nil,
+          frame_ref: frame_ref() | nil,
           provenance: map()
         }
 
@@ -50,6 +62,8 @@ defmodule Cadence.Telemetry.Sample do
     :quality_state,
     :generation_time,
     :receipt_time,
+    :generation_time_source,
+    :frame_ref,
     provenance: %{}
   ]
 
@@ -73,4 +87,20 @@ defmodule Cadence.Telemetry.Sample do
     |> String.trim()
     |> String.trim_leading("telemetry:")
   end
+
+  @doc "A JSON-safe form of a frame ref, for metadata that may be encoded (`decode_frame_ref/1`)."
+  @spec encode_frame_ref(frame_ref() | nil) :: [term()] | nil
+  def encode_frame_ref({:seq, apid, count}), do: ["seq", apid, count]
+  def encode_frame_ref({:pos, stream, position}), do: ["pos", stream, position]
+  def encode_frame_ref(_ref), do: nil
+
+  @spec decode_frame_ref(term()) :: frame_ref() | nil
+  def decode_frame_ref(["seq", apid, count]) when is_integer(apid) and is_integer(count),
+    do: {:seq, apid, count}
+
+  def decode_frame_ref(["pos", stream, position]) when is_binary(stream) and is_integer(position),
+    do: {:pos, stream, position}
+
+  def decode_frame_ref({_kind, _a, _b} = ref), do: decode_frame_ref(encode_frame_ref(ref))
+  def decode_frame_ref(_ref), do: nil
 end

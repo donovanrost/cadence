@@ -84,7 +84,11 @@ defmodule Cadence.IngressJournal.Evidence do
         "journal_start_offset" => first.start_offset,
         "journal_end_offset" => last.end_offset,
         "journal_first_receipt_time" => DateTime.to_iso8601(first.receipt_time),
-        "journal_last_receipt_time" => DateTime.to_iso8601(last.receipt_time)
+        "journal_last_receipt_time" => DateTime.to_iso8601(last.receipt_time),
+        # Survives the ingress archive (which keeps metadata), so re-decoding archived evidence
+        # still gives each frame its own record's receipt time.
+        RawEvidence.receipt_times_key() =>
+          RawEvidence.encode_receipt_times(receipt_times(entries))
       }
 
       {:ok,
@@ -97,6 +101,9 @@ defmodule Cadence.IngressJournal.Evidence do
          direction: :downlink,
          raw: payload,
          receipt_time: first.receipt_time,
+         # Each record keeps its own socket receipt time: a merged batch must not stamp every
+         # frame with the first record's time (11-14 00:38–00:40Z, 8 frames per stamp).
+         receipt_times: receipt_times(entries),
          source_ref: metadata_value(metadata, :source_ref),
          metadata: Map.merge(ingress_metadata, journal_metadata)
        })}
@@ -104,6 +111,8 @@ defmodule Cadence.IngressJournal.Evidence do
       {:error, {:unsupported_journal_protocol_family, protocol_family}}
     end
   end
+
+  defp receipt_times(entries), do: Enum.map(entries, &{&1.start_offset, &1.receipt_time})
 
   defp validate_contiguous_entries([%Entry{}]), do: :ok
 

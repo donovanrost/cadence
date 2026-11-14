@@ -43,19 +43,15 @@ defmodule Cadence.Protocol.TMFrameIngress do
     with {:ok, codec_opts} <- frame_codec_opts(raw_evidence),
          {:ok, pipeline_state, frame_remainder, next_continuity_state} <-
            prepare_receive_stream(raw_evidence, pipeline_state, continuity_state, frame_remainder),
+         absolute_base_offset = absolute_base_offset(raw_evidence, frame_remainder),
          {:ok, sdu_octets, frame_infos, decode_anomalies, rest, next_pipeline_state} <-
            TMFramePipeline.decode_sdu_octets_detailed(
              frame_remainder <> raw_evidence.raw,
              codec_opts,
              pipeline_state,
-             %{
-               direction: raw_evidence.direction,
-               sdu_kind_hint: :space_packet
-             }
+             decode_context(raw_evidence, absolute_base_offset)
            ),
          {:ok, packet_records} <- build_packet_records(raw_evidence, sdu_octets) do
-      absolute_base_offset = absolute_base_offset(raw_evidence, frame_remainder)
-
       transfer_frame_records =
         build_transfer_frame_records(raw_evidence, frame_infos, absolute_base_offset)
 
@@ -144,6 +140,28 @@ defmodule Cadence.Protocol.TMFrameIngress do
     end
   end
 
+  # Without a source time a frame's time IS its receipt time: each frame takes the receipt time
+  # of the journal record its bytes arrived in, not the first record of a merged batch.
+  defp decode_context(%RawEvidence{source_time: nil} = raw_evidence, absolute_base_offset) do
+    %{
+      direction: raw_evidence.direction,
+      sdu_kind_hint: :space_packet,
+      frame_timestamp: &RawEvidence.receipt_time_at(raw_evidence, absolute_base_offset + &1)
+    }
+  end
+
+  defp decode_context(%RawEvidence{} = raw_evidence, _absolute_base_offset),
+    do: %{direction: raw_evidence.direction, sdu_kind_hint: :space_packet}
+
+  # A packet is received when the frame completing it is: that frame's stamp (receipt fallback).
+  defp packet_receipt_time(%RawEvidence{source_time: nil} = raw_evidence, sdu),
+    do: sdu.timestamp || raw_evidence.receipt_time
+
+  defp packet_receipt_time(%RawEvidence{} = raw_evidence, _sdu), do: raw_evidence.receipt_time
+
+  defp generation_time_source(%RawEvidence{source_time: nil}), do: :receipt
+  defp generation_time_source(%RawEvidence{}), do: :onboard
+
   defp build_packet_records(%RawEvidence{} = raw_evidence, sdu_octets) when is_list(sdu_octets) do
     sdu_octets
     |> Enum.with_index()
@@ -189,7 +207,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
         first_header_pointer: Map.get(frame.meta, :fhp),
         quality: frame.quality,
         source_time: frame.timestamp || raw_evidence.source_time,
-        receipt_time: raw_evidence.receipt_time,
+        receipt_time: RawEvidence.receipt_time_at(raw_evidence, absolute_offset),
         metadata: %{
           frame_meta: frame.meta,
           ocf_present?: is_binary(frame.ocf) and byte_size(frame.ocf) > 0,
@@ -248,7 +266,9 @@ defmodule Cadence.Protocol.TMFrameIngress do
       packet_id: Identity.packet_id(raw_evidence.evidence_id, ordinal, sdu.octets),
       protocol_family: raw_evidence.protocol_family,
       source_time: sdu.timestamp || raw_evidence.source_time,
+      receipt_time: packet_receipt_time(raw_evidence, sdu),
       provenance: %{
+        generation_time_source: generation_time_source(raw_evidence),
         tm: %{
           scid: sdu.scid,
           vcid: sdu.vcid,

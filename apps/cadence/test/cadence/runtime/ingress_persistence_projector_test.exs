@@ -174,6 +174,58 @@ defmodule Cadence.Runtime.IngressPersistenceProjectorTest do
     assert Profiler.snapshot(profiler_name, raw_evidence.mission_id).stages.persistence.count == 1
   end
 
+  # 11-14 00:39:09.829Z: a pool timeout raised inside persistence was classed "unknown".
+  @tag capture_log: true
+  test "a crash in persistence is classed by its exception and the batch is retried" do
+    start_supervised!({ControllableRuntimePersistence, owner: self()})
+    handler = "projector-error-class-#{System.unique_integer([:positive])}"
+    test_pid = self()
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:cadence, :runtime, :ingress_persistence_projector, :persist_result],
+        fn _event, _measurements, metadata, _config ->
+          send(test_pid, {:persist_result, metadata})
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    projector =
+      start_projector!(nil, persistence_module: ControllableRuntimePersistence, retry_delay_ms: 1)
+
+    raw_evidence =
+      RawEvidence.new(%{mission_id: "mission-ingress-projector", source_ref: "t", raw: <<1>>})
+
+    batch =
+      ProcessedIngressBatch.new(%{
+        mission_id: raw_evidence.mission_id,
+        realized_contact_id: "contact-ingress-projector",
+        path_id: "path-ingress-projector",
+        provider_binding_id: "provider-ingress-projector",
+        processing_results: [%{raw_evidence: raw_evidence}]
+      })
+
+    assert :ok = IngressPersistenceProjector.enqueue(projector, batch)
+
+    assert_receive {:runtime_persistence_started, ^projector, first_ref, [_], _}, 500
+    timeout = DBConnection.ConnectionError.exception("connection is closed")
+    send(projector, {:raise_runtime_persistence, first_ref, timeout})
+
+    assert_receive {:persist_result,
+                    %{outcome: :error, error_type: "DBConnection.ConnectionError"}},
+                   500
+
+    # Requeued at the head and retried: nothing is dropped.
+    assert_receive {:runtime_persistence_started, ^projector, retry_ref, [_], _}, 500
+    send(projector, {:release_runtime_persistence, retry_ref})
+    assert_receive {:persist_result, %{outcome: :ok}}, 500
+
+    assert {:ok, %{persisted_count: 1}} = IngressPersistenceProjector.quiesce(projector)
+  end
+
   defp start_projector!(name, opts \\ []) do
     policies = TelemetryPersistencePolicies.postgres()
 
