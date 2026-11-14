@@ -1029,3 +1029,36 @@ edit. This replaces ContactPlanning's "an edit generates every remaining day afr
   until then it's the true one.
 - **Requirement rows:** template-generated rows show the version in Source (`Block 1 daily · v2`), from api's
   `template_version`. Without it, show the template name alone.
+
+### U49 · Now source `archive_quarantine` (DECISIONS #88; domain's shape) (domain / api / fe-ops)
+Some records from a pass couldn't be added to the archive. Their telemetry was still stored, so this is not lost
+telemetry, and the words must not suggest it is. **P2, caution:** confirmed, never P1. Say "archive" and "raw
+records", not "quarantine", "writer", "entries" or "index"; those go in Technical details. The pass label is
+U47's (`SVB 03:10Z pass`, `SVB contact`, or the spacecraft alone).
+- **Title:** `EARENDIL-008 · SVB 03:10Z pass · 12 frames and 40 packets couldn't be archived`. Drop a zero count,
+  and use singulars ("1 frame couldn't be archived").
+- **Meta:** `12 FRAMES · 40 PACKETS · 03:14Z–03:15Z` (first_seen_at–last_seen_at, §4; one time when they're equal).
+- **Body:** the cause sentence, then what was stored, then the choice.
+  - record_identity_conflict: "The archive already holds different records with the same identity, so these
+    weren't added."
+  - record_data_rejected: "The archive rejected their data, so these weren't added."
+  - unknown code: "The archive couldn't take them."
+  - Stored: "Their telemetry was still stored: 12 frames and 40 packets, without an archived copy of the raw
+    records." With both stored counts 0: "None of their telemetry was stored."
+  - Choice: "Retry once the cause is fixed, or discard them if they can't be archived."
+  - The server's `error` is free text and goes in Technical details only, as do error_code, counts.entries and
+    the item id.
+- **Actions:** `Retry` (secondary) and `Discard…` (danger, sheet). Operators only; without the capability: "Operators
+  retry or discard records that couldn't be archived."
+  - Retry has no confirm. Then: "Retried by Mira K. at 03:20Z." If some still fail, the row stays with the new
+    counts and the same line.
+  - Discard sheet: title `Discard 12 frames and 40 packets that couldn't be archived?`, body "They won't be
+    archived, and Retry won't be offered for them again. Their stored telemetry stays." A reason is required. The
+    action is `Discard` (danger). Put "The raw bytes may still be in the buffer or the ingest archive." in the
+    sheet's Technical details: it's a "may", so it isn't promised in the body (U20).
+- **Resolutions:** retried: "Archived on retry at 03:21Z." The row fades. discarded: "Discarded by Mira K. at 03:22Z:
+  <reason>."
+- **Contacts:** the selected-pass panel gets a block per item, with the same title, sentences, actions and Technical
+  details, as for U45 and U47.
+- **Shape asks:** the retry line needs `last_retry: {by, at} | null` on the open item; discard needs the actor and
+  reason on the resolution.
