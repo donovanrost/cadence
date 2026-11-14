@@ -6,8 +6,9 @@ Run before deploying a branch to an environment. Each line names why it exists.
 
 1. **Release-target SCIDs (#97, DECISIONS #84 background).** Run
    `docs/how-to/check-release-target-scids-before-deploy.md` (on main since 9e6ee41e). A binding or
-   gateway without a SCID makes the release target guard cancel every queued command on its first
-   dispatch. Fix the data first, or don't deploy.
+   gateway without a SCID makes queued commands for that spacecraft WAIT (the lane skips that
+   contact), and an operator-named release to it is refused and cancelled. Fix the data first, or
+   don't deploy.
 2. **No live pass, nothing starting soon, nothing armed** (qa runbook pre-flight, 15df1aac2): no
    active realized contact, nothing starting within 15 minutes, no armed command group. A stop during
    a live pass replays its journal on boot (issue 60).
