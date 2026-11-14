@@ -871,10 +871,20 @@ configuration failure P3. The amendments to fe-ops' drafts:
   - Action `Mark as seen` (as in U37: no reason, needs `operate_mission`). Without the capability: "Operators
     mark missed passes as seen."
   - Resolved: "Marked as seen by Mira K. at 03:40Z."
-- **Reason sentences** (one per server reason key; words only, the key in Technical details):
-  - Station listener still held (the eaddrinuse case): "Cadence couldn't open the station connection because
-    the previous pass was still holding it."
-  - Unknown or missing reason: "No reason was recorded."
-  - Domain sends the key list and ux words each one.
+- **Reason sentences** (domain's list, 11-13; the key and `failure_message` in Technical details):
+
+| Key | Sentence | Link |
+| --- | --- | --- |
+| listener_in_use | "Cadence couldn't open the station connection because the EARENDIL-047 · SVA 02:55Z pass was still holding it." Without a holder: "…because another pass was still holding it." | the holder pass |
+| listener_unavailable | "Cadence couldn't open the station connection on its side." | — |
+| connect_failed | "Cadence couldn't reach Northlight's endpoint for this pass." | `Check provider` (Setup › Ground stations › Providers) |
+| ingress_pipeline_failed | "Cadence couldn't start storing telemetry for this pass." | — |
+| uplink_session_failed | "Cadence couldn't start the uplink session for this pass." | — |
+| no_runtime_spec | "The mission's runtime has no active configuration, so passes can't start." | `Open Changes` |
+| unknown | "Starting failed." | — |
+| (missing) | "No reason was recorded." | — |
+
+  There's no "Start now": Cadence already retries as soon as it can (domain), so `Open pass` is the only action.
+  Domain sends any new key before it's used.
 - The pass row in Contacts shows the same state as a tag: `▲ NOT STARTED` (caution) while retrying, `◆ MISSED`
   (crit) after.
