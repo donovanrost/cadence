@@ -37,7 +37,22 @@ pane ids will change if herdr recreates panes; update `docs/apogee/ROSTER.md` af
 
 ## Dev stack restart order (qa)
 
-_qa fills this in before the reboot._
+Stack shut down cleanly 21:13-21:15Z (qa): `:4011` stopped gracefully (drain: contacts 0, journals
+[]); the simulator stopped gracefully; the cadence-apogee-questdb container stopped; Postgres stopped
+with `pg_ctl stop -m fast` (pg_controldata "shut down", checkpoint 67/7C894AB8); the brew service is
+unloaded. No ports open. Next pass after the reboot: 00:13:49Z.
+
+After boot, in order (qa does this on resume):
+1. OrbStack up; `brew services start postgresql@14`; check `SHOW max_connections` = 200.
+2. `docker start cadence-apogee-questdb`; ports 9200/8822 answer.
+3. Simulator in pane w0R:pA (the runbook line, `--sname qa_sim`); run offset 0.
+4. `:4011` in pane w0R:p7 (the runbook START line, OTEL cleared after mise). Post-checks: log level
+   :info, admspec gen 8, journal on, modified_modules [], QuestDB env, 0 errors, no reconciler
+   terminations, repair dry run still only 4NYUX = recheck.
+5. The main checkout's `:4001` is the user's to bring back.
+
+Note: OrbStack's Kubernetes will likely bring the user's `cadence-chaos` lab back too (it has
+filled the disk before); the user decides whether to stop it.
 
 ## Handoffs (each agent, before the reboot)
 
@@ -92,6 +107,12 @@ _Each agent's 2-3 line handoff goes here as it arrives._
   tracker until 11-20, the disk samples) die with the reboot; the tracker, its state and the scripts
   are copied to `ci-github-actions/.devops-scratch/` (untracked, with HANDOFF.md). After resume:
   re-create the timers from HANDOFF.md, run the tracker once, take the overdue disk sample.
+- **qa** (`18d0f7b0…`, confirmed): nothing in flight; tonight's work (restart b, L8c, the hot-loop fix
+  881e19e8c, the baseline, WAL, sim #2) is logged in `var/qa-pass-checklist.txt`. Nothing
+  uncommitted; dry-b-wt removed. After resume: restart the stack (order above), the runbook
+  post-checks, grep the sim log for the first "Session started for" line (the 00:13:49Z pass), the
+  4NYUX post-check (~06:51Z; from the DB if it's past), the WAL "before" windows, then 11-15's first
+  restart.
 - The uncommitted `docs/apogee/plans/dashboards-settings.md` was fe-setup's, committed as 260247244.
   Nothing else is uncommitted in the shared tree.
 
