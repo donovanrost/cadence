@@ -8,8 +8,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.OrganizationScope
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
-  alias Cadence.Protocol.RecordArchive.FileSystem
+  alias Cadence.Protocol.RecordArchive.{FileSystem, Quarantine}
+  alias Cadence.Protocol.RecordArchive.FileSystem.PoisonIsolation
   alias Cadence.Repo
 
   @default_flush_interval_ms 250
@@ -334,17 +336,28 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
     segment_id = Map.fetch!(state.segment_ids, mission_id)
     organization_id = OrganizationScope.organization_id_for_mission(mission_id)
 
-    with {:ok, object_key, segment_size_bytes} <-
-           FileSystem.store_segment_object(segment_id, entries, base_path: state.base_path),
-         :ok <-
-           FileSystem.persist_segment(segment_id, entries,
-             base_path: state.base_path,
-             object_key: object_key,
-             organization_id: organization_id,
-             archive_backend: state.archive_backend,
-             repo: state.repo
-           ) do
-      {:ok, segment_size_bytes}
+    opts = [
+      base_path: state.base_path,
+      organization_id: organization_id,
+      archive_backend: state.archive_backend,
+      repo: state.repo
+    ]
+
+    # DECISIONS #88: entries that can never be indexed are quarantined and the rest flushes, so
+    # the mission's storage goes on (their own samples included); anything else stays transient.
+    quarantine = &Quarantine.put(mission_id, organization_id, &1, DateTime.utc_now())
+
+    with {:ok, %{size_bytes: size_bytes, quarantined: quarantined}} <-
+           PoisonIsolation.persist(segment_id, entries, opts, quarantine) do
+      if quarantined != [] do
+        Logger.warning(
+          "protocol record archive quarantined #{length(quarantined)} entries for #{mission_id}"
+        )
+
+        ScopedReadUpdates.publish(:attention_changed, organization_id, mission_id)
+      end
+
+      {:ok, size_bytes}
     end
   rescue
     exception in [DBConnection.ConnectionError, Postgrex.Error] ->

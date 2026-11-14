@@ -268,13 +268,22 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
         {:ok, count}
 
       {count, _rows} ->
-        if archived_record_ids?(rows, opts) do
-          {:ok, count}
-        else
-          {:error, {:protocol_archive_record_identity_conflict, Enum.map(rows, & &1.record_id)}}
+        # Name only the records that really conflict (DECISIONS #88 quarantines exactly those).
+        case conflicting_rows(rows, opts) do
+          [] ->
+            {:ok, count}
+
+          conflicts ->
+            {:error,
+             {:protocol_archive_record_identity_conflict, Enum.map(conflicts, & &1.record_id)}}
         end
     end
   end
+
+  @doc "The record id an entry is indexed under (what an identity conflict names)."
+  @spec entry_index_record_id(map(), keyword()) :: binary()
+  def entry_index_record_id(entry, opts \\ []),
+    do: index_record_id(Map.fetch!(entry, "record_id"), archive_backend(opts))
 
   @spec store_segment_object(binary(), [map()], keyword()) ::
           {:ok, binary(), non_neg_integer()} | {:error, term()}
@@ -694,7 +703,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     :packet_kind
   ]
 
-  defp archived_record_ids?(rows, opts) do
+  defp conflicting_rows(rows, opts) do
     archive_backend = archive_backend(opts)
     repo = repo(opts)
 
@@ -722,12 +731,15 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
       |> repo.all()
       |> Map.new(&{{&1.record_kind, &1.record_id}, &1})
 
-    Enum.all?(expected, fn {key, row} ->
+    expected
+    |> Enum.reject(fn {key, row} ->
       case Map.fetch(found, key) do
         {:ok, existing} -> same_record?(row, existing) and segment_present?(existing, opts)
         :error -> false
       end
     end)
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.sort_by(&{&1.record_kind, &1.record_id})
   end
 
   defp same_record?(%{record_kind: @transfer_frame_record_kind} = row, existing),

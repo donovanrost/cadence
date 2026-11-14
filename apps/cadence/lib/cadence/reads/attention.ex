@@ -19,6 +19,7 @@ defmodule Cadence.Reads.Attention do
   """
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Contacts.ArchiveQuarantineAttention, as: ArchiveQuarantine
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
   alias Cadence.Contacts.ContactSettlementAttention, as: ContactSettlement
   alias Cadence.Contacts.ContactStartAttention, as: ContactStart
@@ -38,7 +39,8 @@ defmodule Cadence.Reads.Attention do
     MissionRuntime,
     ActivationApply,
     ProviderChange,
-    IngressBackpressure
+    IngressBackpressure,
+    ArchiveQuarantine
   ]
   @resolved_window_s 60
 
