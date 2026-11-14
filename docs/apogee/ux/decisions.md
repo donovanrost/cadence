@@ -1297,3 +1297,38 @@ it or closes the item.
   "Closed without retry by Mira K. at 03:22Z: “Northlight shows it booked.”"
 - **Technical details:** job id, type key, worker, attempt, node, and the run or operation id.
 - **Contacts:** a job tied to a pass gets a block on the selected pass, as U45–U50 do.
+
+### U55 · Cancel or end a scheduled contact from Contacts (BACKLOG parity gap; after domain's window-truth fix) (api / fe-ops / domain)
+The console gains 8g's two lifecycle actions on Contacts' selected pass. Both stop Cadence's side of the contact.
+**Neither changes the provider's booking**: that's `Release` (U-era Contacts D2), a separate act for org admins.
+- **Which applies** (one action at a time, never both):
+  - **Before AOS** (scheduled, not started): `Cancel contact…`. Domain's cancel: the contact won't open, so
+    there's no listener and no runtime.
+  - **While live:** `End contact now…`. Domain's close (end_realized_early): the runtime stops now, and the
+    scheduled contact is marked done. "Close" is the model's word; operators end a contact.
+  - After LOS, or already canceled or ended: neither. Hand-started contacts get `End contact now…` too, in
+    "contact" words (U46).
+- **Sheet** (danger). The dismiss button is `Keep contact`, never `Cancel`, which would read as the action.
+  - Cancel: title `Cancel EARENDIL-007's PUQ 13:04Z contact?` Consequence lines:
+    - "Cadence won't open this contact: nothing is received or sent on it."
+    - Booked: "Northlight's booking isn't changed. If you don't want the pass either, release it after this." (with
+      a link to `Release` when the viewer may release; otherwise the sentence ends at "changed.")
+    - Commands, when any are queued for it: "2 queued command requests wait for EARENDIL-007's next contact (KSAT
+      15:40Z)." Without a next contact: "…wait for EARENDIL-007's next contact; none is scheduled yet."
+  - End now: title `End EARENDIL-007's PUQ 13:04Z contact now?` Consequence lines:
+    - "Cadence stops receiving and sending now. Telemetry from the rest of this pass won't be received."
+    - Booked: "Northlight's booking isn't changed: the provider may keep flying the pass until LOS 13:12Z."
+    - Commands: "Uplinks already sent stay sent. 2 queued requests wait for the next contact (KSAT 15:40Z)."
+  - `Reason` (required): help "Recorded with your name and the time." Placeholder "e.g. Its booking failed, so
+    there's nothing to listen to." Blank: "Give a reason first."
+  - Actions: `Cancel contact` / `End contact now` (danger). `Keep contact` takes the default focus.
+- **Outcome / history line** (Contacts' selected pass, and its Timeline event): "Canceled by Mira K. at 12:58Z:
+  “Its booking failed.”" / "Ended early by Mira K. at 13:07Z: “…”". The Timeline reads "EARENDIL-007 · PUQ
+  13:04Z contact canceled by Mira K.: “…”" (U29: actor and time together). The pass row's state tag becomes
+  `CANCELED` (off) / `ENDED EARLY` (off).
+- **Access:** operators (`operate_mission`). Otherwise there's no button, and the caption reads "Operators can
+  cancel or end contacts."
+- **Refusals:** completed or expired: "Not canceled: the contact has already ended." Gone: "Not canceled: the
+  contact wasn't found." Others: the server's message.
+- **To confirm (domain):** that queued command requests wait for the next contact and aren't canceled. If they're
+  canceled, the commands line changes to say so.
