@@ -945,7 +945,7 @@ a station, the spacecraft alone.
   - Title `EARENDIL-008 · SVB 03:10Z pass · telemetry is backing up`.
   - Meta `BUFFER 87% · RISING · 412 MB WAITING`. Show RISING only while it is.
   - Body: "Cadence is storing this pass's telemetry more slowly than it arrives. At 100% Cadence stops reading, and
-    new telemetry arrives late." At ≥ 95%: "The buffer is almost full."
+    new telemetry arrives late." At ≥ 95%, "The buffer is almost full." comes first, and the cause sentence stays.
   - Action `Open pass`. There's nothing to acknowledge.
   - Resolves itself: "Caught up at 03:22Z." The row fades.
 - **frames_dropped** (P1 while live with a drop in the last 5 min, else P2):
@@ -955,5 +955,8 @@ a station, the spacecraft alone.
   - Actions `Acknowledge` (operate_mission, no reason, as U37's Mark as seen) and `Open pass`. Without the
     capability: "Operators acknowledge lost telemetry."
   - After that: "Acknowledged by Mira K. at 03:20Z." It resolves when the pass has also ended.
+  - Acknowledged rows keep their place with `ACK MIRA K.` in the meta until the pass ends (U21).
+- **Contacts:** the selected-pass panel gets a block for either conflict, with the same sentences, the buffer or
+  drop figures, and Technical details (journal, stream, raw error), as U45's block. Now has no Technical details.
   - **Who to tell:** nobody is named. Cadence doesn't know a mission's escalation path, and the Now row itself is
     the notice (U20). If missions get an on-call setting, the body names it then.
