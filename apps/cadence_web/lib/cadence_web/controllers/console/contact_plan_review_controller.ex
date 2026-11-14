@@ -10,7 +10,7 @@ defmodule CadenceWeb.Console.ContactPlanReviewController do
   alias Cadence.ContactPlanning.ContactPlans
   alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Reads.ContactPlanOverview
-  alias CadenceWeb.Console.{ConfigJSON, Problem}
+  alias CadenceWeb.Console.{ConfigJSON, PlanDetail, Problem}
 
   def reject(conn, %{"plan_id" => plan_id} = params) do
     scope = conn.assigns.current_scope
@@ -29,7 +29,8 @@ defmodule CadenceWeb.Console.ContactPlanReviewController do
              reason
            ),
          {:ok, plan} <- ContactPlanOverview.plan(scope.organization_id, mission_id, plan_id) do
-      json(conn, %{data: ConfigJSON.encode(plan)})
+      # The same plan detail as the other plan writes (drift sweep; lead's K1 reader).
+      json(conn, %{data: ConfigJSON.encode(PlanDetail.build(conn, plan))})
     else
       {:error, reason} -> error(conn, reason)
     end

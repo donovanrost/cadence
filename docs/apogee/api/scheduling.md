@@ -86,7 +86,8 @@ unsatisfied}, ready_to_approve, updated_at}]}`, newest first, capped at 100. `wi
 selected passes (`null` for an empty plan); `day` matches the window's start date (UTC). `state` is
 one of `draft, pending_approval, approved, executing, partially_reserved, reserved, failed,
 canceled, superseded`, or the derived `interrupted` / `unconfirmed` (§Plan states). The `state`
-filter accepts only the stored states for now (`?state=interrupted` is a 422).
+filter takes any of them; a stored state filters as stored (an `executing` plan shown as
+`interrupted` still matches `executing`), a derived one by the derived state.
 
 ### `GET /contact-plans/:plan_id[?version=n]`
 
@@ -542,7 +543,8 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
   carries `state_changed: {state, at, actor {kind, id, name}, reason} | null`, the last move a person
   made (`null` while it's active since create).
 - `POST /templates/:id` `{name?, target?, document?, expected_version}` → `201 {id, version}`.
-  Omitted parts carry over. `409 version_conflict` on a stale `expected_version`.
+  Omitted parts carry over. `409 version_conflict` on a stale `expected_version`
+  (`details.expected_version` = current).
 - `POST /templates/preview` `{name?, target, document, days?}` (days 1–31, default 1) → `{spacecraft_count,
   occurrences, contacts, contacts_per_day, warnings: [{code}]}`, writing nothing. Warnings:
   `applies_to_nobody` (count 0) and `excluded_outside_target` (with `spacecraft_ids`: excluded ids
@@ -591,7 +593,8 @@ within the active fleet planning policy. Under `/contact-planning`:
   `maximum_contacts`, `maximum_execution_concurrency`), a disabled or other-mission identity
   (`service_identity_id`), or missing input.
 - `POST /grants/:id/revoke` (organization admins) `{reason, sha256}` → `200 {grant}` (state
-  `revoked`). `409 grant_changed` when `sha256` no longer matches; `404 grant_not_found`.
+  `revoked`). `409 grant_changed` when `sha256` no longer matches; `404 grant_not_found`;
+  `422 invalid_params` (`details.sha256`) when it's missing.
 
 ### Requirements (one-off; BACKLOG §8 8g)
 
@@ -622,7 +625,8 @@ rationale, provider_constraints_document {allowed, excluded}, station_constraint
   Templates with none that day are left out. One grouped query; `422 details.day` for a bad
   date.
 - `GET /requirements/:id` → the row plus `versions: [{version, created_at, actor {kind, id,
-  name}}]` (newest first). `404 requirement_not_found`.
+  name}}]` (newest first). `kind` is `user`, `service` (a service identity, named) or `system`
+  (`name` null). `404 requirement_not_found`.
 - `POST /requirements` `{content, operation_id?}` → `201 {id, version: 1}`. Omitted fields take
   the schema's `defaults`. Optional `operation_id` (client idempotency key, 1–200 characters, the same contract as
   command groups): a replay answers `409 duplicate_operation` with `details.requirement_id` (the one

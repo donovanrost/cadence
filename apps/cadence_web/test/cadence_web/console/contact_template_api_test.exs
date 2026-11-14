@@ -202,7 +202,11 @@ defmodule CadenceWeb.Console.ContactTemplateAPITest do
         Map.put(body(plane), "expected_version", 7)
       )
 
-    assert json_response(stale, 409)["error"]["code"] == "version_conflict"
+    # Drift sweep: a stale edit names the current version, like the other writes.
+    assert %{"code" => "version_conflict", "details" => %{"expected_version" => current}} =
+             json_response(stale, 409)["error"]
+
+    assert is_integer(current) and current != 7
 
     renamed =
       c.admin

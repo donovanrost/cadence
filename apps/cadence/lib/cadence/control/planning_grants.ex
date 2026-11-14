@@ -84,6 +84,8 @@ defmodule Cadence.Control.PlanningGrants do
        row(grant, %{}, user_names([grant]), DateTime.utc_now())
        |> with_identity_name(scope.organization_id)}
     else
+      # A missing sha256 is a field error on sha256 (drift sweep), not on the grant.
+      {:error, message} when is_binary(message) -> {:error, {:invalid_params, %{sha256: message}}}
       {:error, reason} -> {:error, error(reason)}
     end
   end

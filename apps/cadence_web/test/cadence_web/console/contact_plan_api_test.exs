@@ -36,6 +36,12 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
     assert json_response(get_json(c, "/contact-plans?state=bad"), 422)["error"]["details"][
              "state"
            ]
+
+    # Drift sweep: the derived states filter too (none here).
+    for state <- ~w(interrupted unconfirmed) do
+      assert %{"plans" => [], "repair_proposals" => []} =
+               json_response(get_json(c, "/contact-plans?state=#{state}"), 200)["data"]
+    end
   end
 
   test "lists the plan and shows passes, demand, unmet and conflicts", c do

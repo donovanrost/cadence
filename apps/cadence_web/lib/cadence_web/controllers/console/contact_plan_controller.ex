@@ -6,20 +6,26 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.ContactPlanning.{ContactPlan, RepairChain}
-  alias Cadence.Control.{PlanConfirmation, Scheduling}
+  alias Cadence.ContactPlanning.ContactPlan
+  alias Cadence.Control.Scheduling
   alias Cadence.Reads.{ContactPlanOverview, PlanAlternatives, PlanningSetup}
-  alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
+  alias CadenceWeb.Console.{ConfigJSON, PlanDetail, Problem, SchedulingRunner}
 
   @states Map.new(ContactPlan.states(), &{Atom.to_string(&1), &1})
+  # Derived states (§Plan states): the stored state doesn't say, so they filter after deriving.
+  @derived %{"interrupted" => :interrupted, "unconfirmed" => :unconfirmed}
 
   def index(conn, params) do
     with {:ok, day} <- day(params["day"]),
          {:ok, state} <- state(params["state"]) do
+      derived? = state in Map.values(@derived)
+      stored = if derived?, do: nil, else: state
+
       plans =
         org_id(conn)
-        |> ContactPlanOverview.list(mission_id(conn), %{day: day, state: state})
-        |> Enum.map(&effective_state(conn, &1))
+        |> ContactPlanOverview.list(mission_id(conn), %{day: day, state: stored})
+        |> Enum.map(&PlanDetail.effective_state(conn, &1))
+        |> Enum.filter(&(not derived? or &1.state == state))
 
       # U28: repair proposals come apart from the plans, so K1 picks the base plan and points to
       # its repair.
@@ -33,7 +39,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
   def show(conn, %{"plan_id" => plan_id} = params) do
     with {:ok, version} <- version(params["version"]),
          {:ok, plan} <- ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id, version) do
-      json(conn, %{data: ConfigJSON.encode(detail(conn, plan))})
+      json(conn, %{data: ConfigJSON.encode(PlanDetail.build(conn, plan))})
     else
       {:error, :plan_not_found} -> Problem.respond(conn, :plan_not_found)
       {:error, details} -> Problem.respond(conn, :invalid_params, details)
@@ -72,7 +78,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
            Scheduling.edit_plan(scope(conn), mission_id(conn), plan_id, version, add, remove),
          {:ok, plan} <-
            ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id, new_version.version) do
-      json(conn, %{data: ConfigJSON.encode(detail(conn, plan))})
+      json(conn, %{data: ConfigJSON.encode(PlanDetail.build(conn, plan))})
     else
       {:error, details} when is_map(details) ->
         Problem.respond(conn, :invalid_params, details)
@@ -134,7 +140,9 @@ defmodule CadenceWeb.Console.ContactPlanController do
   @doc "Re-executes an approved plan whose execution was interrupted (idempotent per item)."
   def execute(conn, %{"plan_id" => plan_id}) do
     with {:ok, plan} <- ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id),
-         true <- effective_state(conn, plan).state in [:interrupted, :approved] or :not_resumable,
+         true <-
+           PlanDetail.effective_state(conn, plan).state in [:interrupted, :approved] or
+             :not_resumable,
          {:ok, version, sha} <-
            Scheduling.approved_version(org_id(conn), mission_id(conn), plan_id) do
       start_execution(conn, plan_id, version, sha)
@@ -157,7 +165,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
   defp respond_submit(conn, plan_id, outcome) when outcome in [:pending_approval, :replayed] do
     state =
       case ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id) do
-        {:ok, plan} -> effective_state(conn, plan).state
+        {:ok, plan} -> PlanDetail.effective_state(conn, plan).state
         _missing -> nil
       end
 
@@ -277,45 +285,6 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   defp submit_error(conn, _plan_id, _reason), do: Problem.respond(conn, :plan_not_submittable)
 
-  # U30: which placed bookings the provider hasn't confirmed past the window (null otherwise).
-  defp detail(conn, plan) do
-    # U30 unconfirmed, the execution summary and each pass's booking (lead), from one read.
-    {bookings, confirmation} =
-      conn |> org_id() |> PlanConfirmation.detail(mission_id(conn), plan.id) |> Map.pop(:bookings)
-
-    conn
-    |> effective_state(plan)
-    |> with_bookings(bookings)
-    |> Map.merge(confirmation)
-    |> Map.merge(chain(conn, plan.id))
-  end
-
-  # K1 8e: passes[].booking, null for a pass the approved version doesn't book (or before approval).
-  defp with_bookings(%{passes: passes} = plan, bookings) when is_list(passes),
-    do: %{plan | passes: Enum.map(passes, &Map.put(&1, :booking, bookings[&1.snapshot_id]))}
-
-  defp with_bookings(plan, _bookings), do: plan
-
-  # qa #30: the day's repair chain (root first, then applied repairs) and its head.
-  defp chain(conn, plan_id) do
-    case RepairChain.load(org_id(conn), mission_id(conn), plan_id) do
-      {:ok, chain} ->
-        %{
-          chain: Enum.map(chain.plans, &%{id: &1, version: chain.versions[&1]}),
-          chain_head: chain.head
-        }
-
-      {:error, _not_found} ->
-        %{chain: [], chain_head: nil}
-    end
-  end
-
-  defp effective_state(conn, plan),
-    do: %{
-      plan
-      | state: Scheduling.plan_state(org_id(conn), mission_id(conn), plan.id, plan.state)
-    }
-
   defp positive(value, _key) when is_integer(value) and value > 0, do: {:ok, value}
   defp positive(_value, key), do: {:error, %{key => "is required (positive integer)"}}
 
@@ -336,13 +305,16 @@ defmodule CadenceWeb.Console.ContactPlanController do
   defp state(nil), do: {:ok, nil}
 
   defp state(value) do
-    case Map.fetch(@states, value) do
+    case Map.fetch(Map.merge(@states, @derived), value) do
       {:ok, state} ->
         {:ok, state}
 
       :error ->
         {:error,
-         %{state: "must be one of #{@states |> Map.keys() |> Enum.sort() |> Enum.join(", ")}"}}
+         %{
+           state:
+             "must be one of #{@states |> Map.merge(@derived) |> Map.keys() |> Enum.sort() |> Enum.join(", ")}"
+         }}
     end
   end
 

@@ -85,7 +85,16 @@ defmodule CadenceWeb.Console.ContactTemplateController do
   defp save(conn, id, params) do
     case PlanningTemplates.save(conn.assigns.current_scope, mission_id(conn), id, params) do
       {:ok, result} -> conn |> put_status(:created) |> json(%{data: ConfigJSON.encode(result)})
+      {:error, :stale_contact_requirement_template_version} -> stale(conn, id)
       {:error, reason} -> error(conn, reason)
+    end
+  end
+
+  # A stale edit names the template's current version, like the other writes (drift sweep).
+  defp stale(conn, id) do
+    case PlanningTemplates.get(conn.assigns.current_scope.organization_id, mission_id(conn), id) do
+      {:ok, %{version: current}} -> error(conn, {:version_conflict, current})
+      _gone -> error(conn, :stale_contact_requirement_template_version)
     end
   end
 

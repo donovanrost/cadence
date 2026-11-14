@@ -115,6 +115,10 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
                409
              )["error"]
 
+    # Drift sweep: a missing sha256 is a field error on sha256.
+    assert %{"code" => "invalid_params", "details" => %{"sha256" => "is required"}} =
+             json_response(post_json(c.admin, revoke, %{"reason" => "x"}), 422)["error"]
+
     assert %{
              "grant" => %{
                "state" => "revoked",

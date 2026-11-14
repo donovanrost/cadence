@@ -8,7 +8,6 @@ defmodule Cadence.Control.PlanningRequirements do
   field (`max_gap_seconds: null` is no limit), as `ContactRequirements` merges them.
   """
 
-  alias Cadence.Accounts
   alias Cadence.Auth.Scope
 
   alias Cadence.ContactPlanning.{
@@ -19,7 +18,7 @@ defmodule Cadence.Control.PlanningRequirements do
     TemplateDescriptions
   }
 
-  alias Cadence.Control.PlanningOperations
+  alias Cadence.Control.{ActorRef, PlanningOperations}
   alias Cadence.Control.PlanningRequirements.Schema
   alias Cadence.SpacecraftStore
 
@@ -276,7 +275,11 @@ defmodule Cadence.Control.PlanningRequirements do
   defp state_changed(requirement) do
     %{
       at: requirement.lifecycle_changed_at,
-      by: actor(%{created_by: requirement.lifecycle_changed_by}),
+      by:
+        actor(%{
+          organization_id: requirement.organization_id,
+          created_by: requirement.lifecycle_changed_by
+        }),
       reason: requirement.lifecycle_reason
     }
   end
@@ -345,15 +348,9 @@ defmodule Cadence.Control.PlanningRequirements do
     end
   end
 
-  defp actor(%{created_by: id}) when is_binary(id) do
-    name =
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> user.display_name || user.email
-        _service_or_missing -> nil
-      end
-
-    %{kind: if(name, do: "user", else: "actor"), id: id, name: name}
-  end
+  # user, service or system (drift sweep: the console has no "actor" kind).
+  defp actor(%{created_by: id} = version) when is_binary(id),
+    do: ActorRef.resolve(Map.get(version, :organization_id), id)
 
   defp actor(_version), do: nil
 

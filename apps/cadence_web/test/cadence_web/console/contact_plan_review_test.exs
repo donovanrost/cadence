@@ -65,16 +65,29 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
              })
              |> json_response(403)
 
-    assert %{"id" => plan_id, "state" => "draft"} =
-             c
-             |> post_as(c.admin, "/#{c.plan_id}/reject", %{
-               "expected_version" => 1,
-               "reason" => "Move 004 off Kiruna first"
-             })
-             |> json_response(200)
-             |> Map.fetch!("data")
+    sent_back =
+      c
+      |> post_as(c.admin, "/#{c.plan_id}/reject", %{
+        "expected_version" => 1,
+        "reason" => "Move 004 off Kiruna first"
+      })
+      |> json_response(200)
+      |> Map.fetch!("data")
 
+    assert %{"id" => plan_id, "state" => "draft"} = sent_back
     assert plan_id == c.plan_id
+
+    # Drift sweep: the reply is the same plan detail as GET (booking, unconfirmed, execution,
+    # chain), not the bare plan read.
+    shown =
+      c.admin
+      |> TestFixtures.member_conn()
+      |> get(c.base <> "/" <> c.plan_id)
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert Map.keys(sent_back) |> Enum.sort() == Map.keys(shown) |> Enum.sort()
+    assert Enum.all?(~w(unconfirmed execution chain chain_head), &Map.has_key?(sent_back, &1))
 
     # Plan detail says who sent it back and why.
     admin_id = c.admin.user_id
