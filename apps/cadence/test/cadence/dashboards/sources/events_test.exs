@@ -122,7 +122,11 @@ defmodule Cadence.Dashboards.Sources.EventsTest do
                values: ["contact-scheduled-1", "contact-realized-1"]
              },
              %Field{name: "station", kind: :string, values: [nil, nil]},
-             %Field{name: "source_event_id", kind: :string, values: [nil, nil]}
+             %Field{name: "source_event_id", kind: :string, values: [nil, nil]},
+             %Field{name: "started", kind: :boolean, values: [nil, nil]},
+             %Field{name: "close_reason", kind: :string, values: [nil, nil]},
+             %Field{name: "scheduled_starts_at", kind: :time, values: [nil, nil]},
+             %Field{name: "scheduled_ends_at", kind: :time, values: [nil, nil]}
            ] = contacts.fields
 
     assert contacts.meta.family == :contacts

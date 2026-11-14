@@ -364,6 +364,10 @@ defmodule Cadence.Dashboards.Sources.Events.Reads do
     to: OperationalEvidence,
     as: :list_realized_contacts
 
+  defdelegate default_fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id),
+    to: OperationalEvidence,
+    as: :fetch_scheduled_contact
+
   defdelegate default_contact_operational_events(organization_id, mission_id, opts),
     to: OperationalEvidence,
     as: :list_contact_events

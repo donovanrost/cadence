@@ -43,6 +43,9 @@ defmodule Cadence.Reads.OperationalEvidence do
     end)
   end
 
+  def fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id),
+    do: Contacts.fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id)
+
   def list_contact_events(organization_id, mission_id, opts) do
     OperationalEvents.list_events(organization_id, mission_id, canonical_contact_event_opts(opts))
   end

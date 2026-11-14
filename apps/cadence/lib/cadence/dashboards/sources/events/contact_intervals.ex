@@ -55,6 +55,28 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
           name: "source_event_id",
           kind: :string,
           values: Enum.map(contacts, &source_event_id/1)
+        },
+        # A realized contact that closed without starting (dashboards, ux 11-14): drawn at its
+        # scheduled window, dashed, 'didn't start'. nil for scheduled rows and open contacts.
+        %Field{
+          name: "started",
+          kind: :boolean,
+          values: Enum.map(contacts, &Map.get(&1, :started))
+        },
+        %Field{
+          name: "close_reason",
+          kind: :string,
+          values: Enum.map(contacts, &Map.get(&1, :close_reason))
+        },
+        %Field{
+          name: "scheduled_starts_at",
+          kind: :time,
+          values: Enum.map(contacts, &Map.get(&1, :scheduled_starts_at))
+        },
+        %Field{
+          name: "scheduled_ends_at",
+          kind: :time,
+          values: Enum.map(contacts, &Map.get(&1, :scheduled_ends_at))
         }
       ],
       meta:
@@ -96,11 +118,14 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
       scheduled_fun = Keyword.get(funs, :scheduled_contacts_fun, &default_scheduled_contacts/3)
       realized_fun = Keyword.get(funs, :realized_contacts_fun, &default_realized_contacts/3)
 
+      fetch_scheduled =
+        Keyword.get(funs, :scheduled_contact_fun, &default_fetch_scheduled_contact/3)
+
       scheduled_fun.(organization_id, mission_id, opts)
       |> Enum.map(&scheduled_contact_interval/1)
       |> Kernel.++(
         realized_fun.(organization_id, mission_id, opts)
-        |> Enum.map(&realized_contact_interval/1)
+        |> Enum.map(&realized_contact_interval(&1, organization_id, fetch_scheduled))
       )
     end
   end
@@ -301,20 +326,68 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
       get_attr(get_attr(event, :scope), key)
   end
 
-  defp realized_contact_interval(contact) do
-    starts_at = contact.realized_at || contact.initial_time
-
+  defp realized_contact_interval(contact, organization_id, fetch_scheduled) do
     %{
       kind: :realized_contact,
       contact_id: contact.realized_contact_id,
-      starts_at: starts_at,
+      starts_at: contact.realized_at || contact.initial_time,
       ends_at: contact_end_time(contact.metadata),
       status: contact.lifecycle_state,
       label: contact_label(:realized_contact, contact.realized_contact_id, contact),
       source_endpoint_refs: contact.source_endpoint_refs,
-      source: contact
+      source: contact,
+      started: started(contact),
+      close_reason: nil,
+      scheduled_starts_at: nil,
+      scheduled_ends_at: nil
     }
+    |> never_started(contact, organization_id, fetch_scheduled)
   end
+
+  # True once it went active (metadata.started_at is set then and only then); false only for a
+  # contact closed without starting (the orphan sweep's not_started, or any closed state with no
+  # started_at); nil while it's open and hasn't reached AOS (armed, pre-AOS).
+  defp started(contact) do
+    cond do
+      get_attr(contact.metadata, :started_at) != nil -> true
+      contact.lifecycle_state in [:stopped, :completed] -> false
+      true -> nil
+    end
+  end
+
+  # A never-started contact is drawn at the pass it belonged to: its scheduled contact's window.
+  # A hand start has none, so it keeps its realized span, to the close.
+  defp never_started(%{started: false} = interval, contact, organization_id, fetch_scheduled) do
+    not_started = get_attr(contact.metadata, :not_started)
+
+    interval = %{
+      interval
+      | close_reason: get_attr(not_started, :reason),
+        ends_at: interval.ends_at || normalize_datetime(get_attr(not_started, :at))
+    }
+
+    case scheduled_window(contact, organization_id, fetch_scheduled) do
+      {:ok, %{starts_at: starts_at, ends_at: ends_at}} ->
+        %{
+          interval
+          | starts_at: starts_at,
+            ends_at: ends_at,
+            scheduled_starts_at: starts_at,
+            scheduled_ends_at: ends_at
+        }
+
+      _no_schedule ->
+        interval
+    end
+  end
+
+  defp never_started(interval, _contact, _organization_id, _fetch_scheduled), do: interval
+
+  defp scheduled_window(%{scheduled_contact_id: id} = contact, organization_id, fetch_scheduled)
+       when is_binary(id),
+       do: fetch_scheduled.(organization_id, contact.mission_id, id)
+
+  defp scheduled_window(_contact, _organization_id, _fetch_scheduled), do: :none
 
   defp contact_label(kind, contact_id, contact) do
     case get_attr(contact, :provider_contact_ref) do
