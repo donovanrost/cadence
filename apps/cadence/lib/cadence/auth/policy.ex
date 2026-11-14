@@ -4,7 +4,7 @@ defmodule Cadence.Auth.Policy do
   access.
   """
 
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{MissionOrganizationCache, Scope}
 
   @spec authorize(Scope.t(), atom(), map()) :: :ok | {:error, term()}
   def authorize(%Scope{} = current_scope, :read_organization, %{organization_id: organization_id}) do
@@ -58,8 +58,9 @@ defmodule Cadence.Auth.Policy do
     case current_scope.actor_kind do
       :user ->
         with :ok <- authenticated_user(current_scope),
-             :ok <- authorized_mission_organization(current_scope, organization_id) do
-          valid_mission_id(mission_id)
+             :ok <- authorized_mission_organization(current_scope, organization_id),
+             :ok <- valid_mission_id(mission_id) do
+          mission_in_organization(organization_id, mission_id)
         end
 
       :service ->
@@ -171,6 +172,29 @@ defmodule Cadence.Auth.Policy do
        do: {:error, :scope_mismatch}
 
   defp active_organization_membership(%Scope{}, _organization_id), do: {:error, :forbidden}
+
+  # Defense in depth (director): a mission id from the request must be a mission of the
+  # organization being authorized, so callers stop relying on every domain query to filter by
+  # organization. A service identity's mission is pinned to its own organization by
+  # authorize_service_mission/3.
+  #
+  # operate_mission runs on hot paths (every console request, /session's per-mission capability
+  # loops, every dashboard resolve, so every live tick), so a (organization, mission) pair is checked
+  # once per node and kept in MissionOrganizationCache (ETS): a mission never changes organization. Only pairs
+  # that matched are kept; anything else is asked again every time (and refused).
+  # todo(authz): Cedar should own mission membership in the organization.
+  defp mission_in_organization(organization_id, mission_id) do
+    cond do
+      MissionOrganizationCache.confirmed?(organization_id, mission_id) ->
+        :ok
+
+      Cadence.Missions.organization_id_for_mission(mission_id) == organization_id ->
+        MissionOrganizationCache.confirm(organization_id, mission_id)
+
+      true ->
+        {:error, :scope_mismatch}
+    end
+  end
 
   defp valid_mission_id(mission_id) when is_binary(mission_id) and mission_id != "", do: :ok
   defp valid_mission_id(_mission_id), do: {:error, :scope_mismatch}
