@@ -8,7 +8,13 @@ defmodule CadenceWeb.Console.AttentionController do
   use CadenceWeb, :controller
 
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
-  alias Cadence.Contacts.{ContactSettlementAttention, ContactStartAttention}
+
+  alias Cadence.Contacts.{
+    ArchiveQuarantineAttention,
+    ContactSettlementAttention,
+    ContactStartAttention
+  }
+
   alias Cadence.Ingress.BackpressureAttention
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias CadenceWeb.Console.Problem
@@ -52,6 +58,26 @@ defmodule CadenceWeb.Console.AttentionController do
     end
   end
 
+  # DECISIONS #88 / ux U49: retry re-indexes quarantined archive entries synchronously and
+  # answers with the counts; the item is resolved when nothing still fails.
+  def retry(conn, %{"source" => "archive_quarantine", "id" => id} = params) do
+    with :ok <- no_actor(params),
+         {:ok, %{item: item, indexed: indexed, still_failing: still_failing}} <-
+           ArchiveQuarantineAttention.retry(scope(conn), mission_id(conn), id) do
+      names = AttentionItems.lookups(scope(conn).organization_id, mission_id(conn), [item])
+
+      json(conn, %{
+        data: %{
+          item: AttentionItems.object(item, names),
+          indexed: indexed,
+          still_failing: still_failing
+        }
+      })
+    else
+      {:error, reason} -> problem(conn, reason)
+    end
+  end
+
   def retry(conn, _params), do: problem(conn, :attention_item_not_found)
 
   defp respond_retry(conn, {:error, {:retry_not_manual, item}}) do
@@ -69,6 +95,8 @@ defmodule CadenceWeb.Console.AttentionController do
 
   # #83 / U47: only dropped frames (lost telemetry) are acknowledged; a filling buffer clears itself.
   defp source("ingress_backpressure"), do: {:ok, BackpressureAttention}
+  # #88: no acknowledge (attention_item_not_open); resolve discards, with the reason required.
+  defp source("archive_quarantine"), do: {:ok, ArchiveQuarantineAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}
 
   defp no_actor(params) do
@@ -123,8 +151,16 @@ defmodule CadenceWeb.Console.AttentionController do
     do: Problem.respond(conn, :contact_start_not_missed)
 
   defp problem(conn, reason)
-       when reason in [:attention_item_not_found, :attention_item_not_open, :forbidden],
+       when reason in [
+              :attention_item_not_found,
+              :attention_item_not_open,
+              :forbidden,
+              :reason_required
+            ],
        do: Problem.respond(conn, reason)
+
+  # Anything else a source returns (a store error, say) is a 503, not a crash.
+  defp problem(conn, _reason), do: Problem.respond(conn, :attention_unavailable)
 
   defp scope(conn), do: conn.assigns.current_scope
   defp mission_id(conn), do: conn.assigns.current_mission.mission_id

@@ -19,7 +19,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   alias Cadence.Auth.Scope
   alias Cadence.Comms.StationRefs
   alias Cadence.GroundNetworks.MissionProviders
-  alias Cadence.Reads.ActionQueue.{ContactStartItem, Item}
+  alias Cadence.Reads.ActionQueue.{ContactStartItem, Item, SourceKeys}
   alias Cadence.Reads.{Attention, PassUplink}
   alias Cadence.SpacecraftStore
 
@@ -183,87 +183,14 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp source_fields(%{source: "contact_start"} = attention, names),
     do: ContactStartItem.fields(attention, names.spacecraft, names.station)
 
-  defp source_fields(attention, _names), do: settlement(attention)
-
-  # DECISIONS #71 / ux U37: telemetry still on disk, not stored. The pass has ended, so the row
-  # is always P2; nothing expires it (the journal keeps it) and Cadence retries by itself.
-  @settlement_keys [
-    :reason,
-    :failure_kind,
-    :failure_message,
-    :realized_contact_id,
-    :spacecraft_id,
-    :ends_at,
-    :deadline_at,
-    :journal,
-    :backlog,
-    :expires_at,
-    :retry,
-    :attempts,
-    :next_attempt_at,
-    :last_attempt_at,
-    :first_failure_kind
-  ]
-
-  # 2026-11-12 / ux U38: the mission's runtime hasn't applied its active generation.
-  @mission_runtime_keys [
-    :reason,
-    :failure_message,
-    :desired_generation,
-    :applied_generation,
-    :since,
-    :activated_at,
-    :change_set_id
-  ]
-
-  # Director C / ux U41: an approved activation whose apply failed or stalled (Retry apply).
-  @activation_apply_keys [
-    :error_code,
-    :error,
-    :retryable,
-    :activation_request_id,
-    :summary,
-    :kind,
-    :app,
-    :spacecraft_ids,
-    :spacecraft_count,
-    :runtime_not_applied,
-    :since,
-    :approved_by,
-    :approved_at
-  ]
-
-  # DECISIONS #83 / ux U47: a contact's ingest buffer filling, or frames lost.
-  @ingress_backpressure_keys [
-    :realized_contact_id,
-    :contact_label,
-    :ends_at,
-    :transport,
-    :journal_usage,
-    :drops,
-    :diagnostics
-  ]
-
-  defp settlement(%{source: "ingress_backpressure"} = attention),
-    do: Map.take(attention, @ingress_backpressure_keys)
-
-  defp settlement(%{source: "contact_settlement"} = attention),
-    do: Map.take(attention, @settlement_keys)
-
-  defp settlement(%{source: "mission_runtime"} = attention),
-    do: Map.take(attention, @mission_runtime_keys)
-
-  defp settlement(%{source: "activation_apply"} = attention),
-    do: Map.take(attention, @activation_apply_keys)
-
   # §11 L14: what the provider changed, for the decision block.
-  defp settlement(%{source: "provider_change"} = attention) do
+  defp source_fields(%{source: "provider_change"} = attention, _names) do
     attention
     |> Map.take([:provider_change, :deadline_at])
     |> Map.update(:provider_change, nil, &provider_change/1)
   end
 
-  defp settlement(_attention), do: %{}
+  defp source_fields(attention, _names), do: SourceKeys.take(attention)
 
   @doc """
   A provider change as the console reads it (ux U44): one `state`, which is `expired` for a
@@ -300,8 +227,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp due_at(%{source: "contact_settlement"} = attention),
     do: Map.get(attention, :next_attempt_at) || attention.starts_at
 
-  # #83: buffer pressure and lost frames are about now, not a coming pass.
-  defp due_at(%{source: "ingress_backpressure"}), do: nil
+  # #83: buffer pressure and lost frames are about now, not a coming pass. #88: nothing is lost,
+  # so nothing is due (ux U49: P2, after anything due).
+  defp due_at(%{source: source}) when source in ["ingress_backpressure", "archive_quarantine"],
+    do: nil
 
   # U45: a contact that failed to start is lost at LOS, whether still trying or missed.
   defp due_at(%{source: "contact_start"} = attention), do: Map.get(attention, :ends_at)
@@ -333,6 +262,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp p1?(%{source: "ingress_backpressure"} = attention, _now),
     do: Map.get(attention, :p1) == true
 
+  defp p1?(%{source: "archive_quarantine"}, _now), do: false
   # No spacecraft's telemetry is processed while it's open.
   defp p1?(%{source: "mission_runtime"}, _now), do: true
   # The same while an apply that would bring the runtime up is stuck (ux U41).

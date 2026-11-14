@@ -168,7 +168,9 @@ provider decides then; ux U44). Acknowledgement and configuration-failure rows a
 
 `GET /passes` rows and `GET /passes/:id` carry `attentions: [<attention object> + {priority,
 due_at}]`: every open item of the pass (`pass_resolution`, `pass_release`, `provider_change`,
-`contact_start`), in Now's order: `priority` (1 first), then the soonest `due_at` (null last), then
+`contact_start`, `archive_quarantine`, and any later source whose item carries the booking's
+`provider_reservation_id`; only `uplink_blocked` stays out, shown through `uplink_readiness`), in
+Now's order: `priority` (1 first), then the soonest `due_at` (null last), then
 `contact_start` on a tie. `attention` is `attentions[0]`, or `null`; `attentions` is `[]` when
 there's none. Show the first as the tag with "+N" for the rest; the pass detail shows them all.
 
@@ -198,6 +200,32 @@ details only), `expires_at: null`.
   `missed` item. `409 contact_start_not_missed` while it's still `not_started`; `403` "Operators
   mark missed passes as seen."; `404 attention_item_not_found`. `resolve` and `retry` are 404 for
   this source.
+
+### Archive entries that couldn't be indexed: the `archive_quarantine` source (DECISIONS #88, ux U49)
+
+Now (and the pass row, when the contact was a booked pass) carry `source: "archive_quarantine"`,
+`conflict: "quarantined"`, `id` = `<realized_contact_id | "none">:<error_code>` (no source prefix):
+one item per contact and cause. Their telemetry was still stored; their raw records weren't
+archived. **P2**, `due_at: null` (nothing is lost, so it sorts after anything due). No acknowledge.
+
+Flattened keys besides the shared ones (`state`, `contact_id`, `reservation_id`, `station`,
+`provider`, `starts_at`, `raised_at`, `resolution`): `realized_contact_id`, `spacecraft_id`,
+`ends_at`, `error_code` (`identity_conflict | data_rejected | unknown`; read as known text),
+`error` (technical, ≤300, Technical details only), `counts {entries, frames, packets}`,
+`stored_without_archive {frames, packets}`, `first_received_at`, `last_received_at` (the entries'
+receipt span), `last_seen_at` (bumped while more keep arriving), `actions` (`["retry",
+"discard"]`), `last_retry: null | {by: <actor>, at, indexed}`.
+
+- `POST …/attention/archive_quarantine/:id/retry` (no body; `operate_mission`): re-indexes the
+  entries now, synchronously. `200 {data: {item: <attention object>, indexed, still_failing}}`;
+  `item.state` is `resolved` (`resolution.action: "retried"`) when `still_failing` is 0, else the
+  open item with new counts and `last_retry`.
+- Discard is `POST …/attention/archive_quarantine/:id/resolve {action_text}` (the reason,
+  required, at most 200 characters): the entries leave the quarantine unarchived;
+  `resolution.action: "discarded"`, `note` the reason.
+- `acknowledge` answers `409 attention_item_not_open`. `403 forbidden` for non-operators, `404
+  attention_item_not_found`, `422 invalid_params {action_text}` / `reason_required`, and `503
+  attention_unavailable` when the archive can't be reached.
 
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 

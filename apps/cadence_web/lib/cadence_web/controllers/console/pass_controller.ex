@@ -67,20 +67,11 @@ defmodule CadenceWeb.Console.PassController do
           []
       end
 
-    # A pass row carries its booking's open items (resolution, failed release, provider change, a
-    # contact that didn't start, its ingest buffer or lost frames); a blocked uplink shows through
-    # uplink_readiness instead.
-    {resolutions, blocked} =
-      Enum.split_with(
-        items,
-        &(&1.source in [
-            "pass_resolution",
-            "pass_release",
-            "provider_change",
-            "contact_start",
-            "ingress_backpressure"
-          ])
-      )
+    # A pass row carries every open item of its booking (resolution, failed release, provider
+    # change, a contact that didn't start, ingest pressure #83, archive quarantine #88, …): items
+    # with no booking never match a row. A blocked uplink shows through uplink_readiness instead,
+    # so only that source feeds the readiness map (any other could shadow command_groups_queued).
+    {blocked, resolutions} = Enum.split_with(items, &(&1.source == "uplink_blocked"))
 
     conn
     |> with_replacements(result)
@@ -267,7 +258,10 @@ defmodule CadenceWeb.Console.PassController do
          item |> AttentionItems.object(names) |> Map.merge(%{priority: priority, due_at: due_at})}
       end)
       |> Enum.sort_by(fn {item, object} -> order(item, object) end)
-      |> Enum.group_by(fn {item, _object} -> item.provider_reservation_id end, &elem(&1, 1))
+      |> Enum.group_by(
+        fn {item, _object} -> Map.get(item, :provider_reservation_id) end,
+        &elem(&1, 1)
+      )
 
     %{
       result
