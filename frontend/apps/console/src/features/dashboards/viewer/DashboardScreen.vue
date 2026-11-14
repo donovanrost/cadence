@@ -108,7 +108,9 @@ const pane = ref<InstanceType<typeof EditorPane> | null>(null);
 const versions = ref<InstanceType<typeof VersionsSheet> | null>(null);
 const copySheet = ref<InstanceType<typeof CopySheet> | null>(null);
 const snapshotSheet = ref<InstanceType<typeof SnapshotSheet> | null>(null);
-function onMenu(id: "versions" | "copy" | "snapshot" | "export" | "kiosk") {
+function onMenu(
+  id: "versions" | "settings" | "activity" | "copy" | "snapshot" | "export" | "kiosk",
+) {
   switch (id) {
     case "kiosk":
       return setQuery({ kiosk: "1" });
@@ -119,6 +121,12 @@ function onMenu(id: "versions" | "copy" | "snapshot" | "export" | "kiosk") {
     case "export":
       // A plain download (the server records the export); ux's toast waits for a kit toast.
       return download(exportUrl({ missionId: missionId.value, dashboardId: dashboardId.value }));
+    case "settings":
+    case "activity":
+      return router.push({
+        name: "ops.dashboard.settings",
+        params: { dashboardId: dashboardId.value, tab: id === "settings" ? "general" : "activity" },
+      });
     case "copy":
       return copySheet.value?.open(
         session.draft.value ?? { baseVersion: currentVersion.value ?? 1, commands: [] },
@@ -183,6 +191,7 @@ const onRange = (s: TimeSelection) =>
         :selection="selection"
         :refresh="refresh"
         :can-edit="canEdit"
+        :phone="small"
         @spacecraft="setQuery({ spacecraft: $event })"
         @range="onRange"
         @refresh="setQuery({ refresh: $event === '2s' ? null : $event })"

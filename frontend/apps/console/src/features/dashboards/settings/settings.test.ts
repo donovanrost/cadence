@@ -6,6 +6,7 @@ import {
   activityText,
   cacheText,
   parseTags,
+  settingsTabs,
   shareStateText,
   snapshotWindow,
   visibilityWord,
@@ -79,5 +80,10 @@ describe("D3 archive in use (api-ops 3e2a6632)", () => {
     });
     expect(usedByPlaylists(conflict("dashboard_in_use"))).toEqual(["Wallboard"]);
     expect(usedByPlaylists(conflict("in_use"))).toBeNull();
+  });
+
+  it("gives authors all four tabs and everyone else Activity and Diagnostics (ux § Settings)", () => {
+    expect(settingsTabs(true)).toEqual(["general", "sharing", "activity", "diagnostics"]);
+    expect(settingsTabs(false)).toEqual(["activity", "diagnostics"]);
   });
 });

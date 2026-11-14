@@ -153,3 +153,12 @@ export function usedByPlaylists(e: ApiError): readonly string[] | null {
 
 /** The server's `/console/…` url as a router path (the router's base is `/console/`). */
 export const routerPath = (url: string) => url.replace(/^\/console(?=\/)/, "");
+
+const allTabs = ["general", "sharing", "activity", "diagnostics"] as const;
+export type SettingsTab = (typeof allTabs)[number];
+/**
+ * ux § Settings: authors get all four tabs; everyone else reads Activity and Diagnostics (D17/D18
+ * are operator reads), with General and Sharing hidden, not disabled.
+ */
+export const settingsTabs = (author: boolean): readonly SettingsTab[] =>
+  author ? allTabs : ["activity", "diagnostics"];

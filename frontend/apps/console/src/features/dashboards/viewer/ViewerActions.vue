@@ -13,6 +13,8 @@ const props = defineProps<{
   selection: TimeSelection;
   refresh: RefreshChoice;
   canEdit: boolean;
+  /** Phones are view-only (ux): no Settings or Activity and diagnostics entry. */
+  phone: boolean;
 }>();
 const emit = defineEmits<{
   spacecraft: [id: string];
@@ -21,9 +23,15 @@ const emit = defineEmits<{
   edit: [];
   menu: [id: MenuId];
 }>();
-type MenuId = "versions" | "copy" | "snapshot" | "export" | "kiosk";
+type MenuId = "versions" | "settings" | "activity" | "copy" | "snapshot" | "export" | "kiosk";
 const menu = computed(() => [
   { id: "versions" as const, label: "Versions" },
+  // ux § Settings: authors get all four tabs; everyone else reads Activity and Diagnostics there.
+  ...(props.phone
+    ? []
+    : props.canEdit
+      ? [{ id: "settings" as const, label: "Settings" }]
+      : [{ id: "activity" as const, label: "Activity and diagnostics" }]),
   ...(props.canEdit ? [{ id: "copy" as const, label: "Save as copy…" }] : []),
   // ux § Snapshots and § Export; D16 and D19 need dashboard authoring.
   ...(props.canEdit

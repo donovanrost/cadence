@@ -1,6 +1,5 @@
 import type { RouteRecordRaw } from "vue-router";
 import { paramText } from "@/shell/route-params.ts";
-import { pending } from "./pending.ts";
 import { responsive } from "./responsive.ts";
 
 /**
@@ -122,8 +121,7 @@ export const opsRoutes: RouteRecordRaw[] = [
     component: () => import("@/features/dashboards/directory/NewDashboardScreen.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "New dashboard" },
   },
-  // Dashboards screens built against fixtures, registered as pending until their endpoints land
-  // (plans/dashboards.md slices 5, 6, 8); owners swap in the screen when they do.
+  // Dashboards' slice 5, 6 and 8 screens (plans/dashboards.md), live since their endpoints landed.
   {
     path: "telemetry/dashboards/library",
     name: "ops.dashboards.library",
@@ -166,7 +164,8 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "telemetry/dashboards/:dashboardId/settings/:tab?",
     name: "ops.dashboard.settings",
-    component: pending,
+    // D14–D19 (api f4ef739b9, fc222221).
+    component: () => import("@/features/dashboards/settings/SettingsScreen.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "Dashboard settings" },
   },
   {
