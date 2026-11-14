@@ -53,7 +53,7 @@ describe("U53 platform binding switch words (ux)", () => {
       "This changes telemetry for all 12 missions that use it. They'll read from Northlight archive instead of Cadence managed store.",
     );
     expect(blastLine(radius(1, 0), null)).toBe(
-      "This changes telemetry for the 1 mission that uses it.",
+      "This changes telemetry for the one mission that uses it.",
     );
     expect(switchLabel(12)).toBe("Switch for 12 missions");
     expect(switchLabel(1)).toBe("Switch for 1 mission");
@@ -109,6 +109,11 @@ describe("U53 platform binding switch words (ux)", () => {
     expect(blockedReason({ ...f, typed: "x" })).toBe("Type default_flight_telemetry to confirm.");
     expect(switchReady({ ...f, target: "s1" })).toBe(false);
     expect(blockedReason({ ...f, target: "s1" })).toBe("Choose another source.");
+    // ux: the first missing field in the sheet's order, top to bottom: source, reason, name.
+    expect(blockedReason({ ...f, target: "s1", reason: "", typed: "" })).toBe(
+      "Choose another source.",
+    );
+    expect(blockedReason({ ...f, reason: "", typed: "" })).toBe("Give a reason first.");
   });
 
   it("reports the outcome from the recorded counts", () => {
@@ -116,7 +121,7 @@ describe("U53 platform binding switch words (ux)", () => {
       "Switched default_flight_telemetry to Northlight archive. 12 missions read from it now.",
     );
     expect(outcomeLine("default_flight_telemetry", "Northlight archive", 1)).toBe(
-      "Switched default_flight_telemetry to Northlight archive. 1 mission reads from it now.",
+      "Switched default_flight_telemetry to Northlight archive. One mission reads from it now.",
     );
   });
 

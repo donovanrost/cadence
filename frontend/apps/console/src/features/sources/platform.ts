@@ -27,7 +27,8 @@ export const sheetTitle = (name: string, affected: number) =>
 /** "This changes telemetry for all 12 missions that use it. They'll read from <to> instead of <from>." */
 export function blastLine(r: BlastRadius, to: string | null): string {
   const n = r.affected_missions;
-  const who = n === 1 ? "the 1 mission that uses it" : `all ${formatCount(n)} missions that use it`;
+  const who =
+    n === 1 ? "the one mission that uses it" : `all ${formatCount(n)} missions that use it`;
   const first = `This changes ${bindingNoun(r.binding.logical_source)} for ${who}.`;
   const from = r.binding.from.display_name;
   return to && from ? `${first} They'll read from ${to} instead of ${from}.` : first;
@@ -68,7 +69,7 @@ export const changedLine = (r: BlastRadius) =>
 
 /** The outcome, from the counts the server recorded. */
 export const outcomeLine = (name: string, to: string, affected: number) =>
-  `Switched ${name} to ${to}. ${missions(affected)} ${affected === 1 ? "reads" : "read"} from it now.`;
+  `Switched ${name} to ${to}. ${affected === 1 ? "One mission reads" : `${missions(affected)} read`} from it now.`;
 
 /** Two reads that differ in what the operator confirms: the typed name is cleared (ux). */
 export const countsDiffer = (a: BlastRadius | null, b: BlastRadius | null) =>
@@ -81,13 +82,16 @@ export const switchReady = (
   f: Readonly<{ reason: string; typed: string; name: string; target: string; current: string }>,
 ) => f.reason.trim() !== "" && f.typed === f.name && f.target !== "" && f.target !== f.current;
 
-/** Why the Switch is still disabled, first missing step first (ux: blank reason → REASON_BLANK). */
+/**
+ * Why the Switch is still disabled: the first missing field in the sheet's order, top to bottom
+ * (ux): the source picker, then the reason, then the typed name.
+ */
 export function blockedReason(
   f: Readonly<{ reason: string; typed: string; name: string; target: string; current: string }>,
 ): string {
+  if (f.target === "" || f.target === f.current) return "Choose another source.";
   if (f.reason.trim() === "") return REASON_BLANK;
-  if (f.typed !== f.name) return `Type ${f.name} to confirm.`;
-  return "Choose another source.";
+  return `Type ${f.name} to confirm.`;
 }
 
 export const switchLabel = (affected: number) => `Switch for ${missions(affected)}`;
