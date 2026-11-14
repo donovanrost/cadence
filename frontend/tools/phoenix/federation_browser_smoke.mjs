@@ -28,6 +28,12 @@ import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  CONSOLE_SIGN_IN_API_PATH,
+  CONSOLE_SIGN_IN_PATH,
+  assertConsoleSignedIn,
+  consoleSignInExpression,
+} from "./console_sign_in.mjs";
 import { spawn } from "node:child_process";
 import { types as nodeTypes } from "node:util";
 
@@ -4126,19 +4132,14 @@ export async function navigate(
   }
 }
 
-/** @param {Pick<RequestObservation,"url"> & Partial<RequestObservation>|undefined} record @param {{expectedOrigin?:string}} [options] */
-export function matchesSignInNavigationRequest(record, { expectedOrigin } = {}) {
-  if (
-    record?.resourceType !== "Document" ||
-    record.method !== "POST" ||
-    !record.frameId ||
-    !record.loaderId
-  )
-    return false;
+/** The console sign-in API call (L5): a same-origin POST from the page, not a form navigation.
+ * @param {Pick<RequestObservation,"url"> & Partial<RequestObservation>|undefined} record @param {{expectedOrigin?:string}} [options] */
+export function matchesSignInRequest(record, { expectedOrigin } = {}) {
+  if (record?.resourceType !== "Fetch" || record.method !== "POST") return false;
 
   try {
     const requestUrl = new URL(record.url);
-    return requestUrl.origin === expectedOrigin && requestUrl.pathname === "/sign-in";
+    return requestUrl.origin === expectedOrigin && requestUrl.pathname === CONSOLE_SIGN_IN_API_PATH;
   } catch {
     return false;
   }
@@ -4147,7 +4148,11 @@ export function matchesSignInNavigationRequest(record, { expectedOrigin } = {}) 
 /** @param {string} url @param {string|undefined} expectedOrigin @param {string} [label] */
 export function assertSignInUrl(url, expectedOrigin, label = "sign-in URL") {
   const parsed = assertHttpUrl(url, expectedOrigin, label);
-  assert.equal(parsed.pathname, "/sign-in", `${label} must use the exact /sign-in pathname`);
+  assert.equal(
+    parsed.pathname,
+    CONSOLE_SIGN_IN_PATH,
+    `${label} must use the exact ${CONSOLE_SIGN_IN_PATH} pathname`,
+  );
   return parsed;
 }
 
@@ -4160,15 +4165,16 @@ async function assertUnauthenticatedCatalogContained(
   signal,
 ) {
   const target = assertHttpUrl(catalogUrl, expectedOrigin, "unauthenticated catalog URL");
+  // Signed out, the catalog bounces through /sign-in to the console's sign-in screen (L5).
   const generation = await navigate(client, target.href, {
     expectedOrigin,
-    expectedPath: "/sign-in",
+    expectedPath: CONSOLE_SIGN_IN_PATH,
     diagnostics,
     signal,
   });
   await waitForExpression(
     client,
-    "Boolean(document.querySelector('#sign-in-form')) && !document.querySelector('#cadence-phoenix-host')",
+    `location.pathname === ${JSON.stringify(CONSOLE_SIGN_IN_PATH)} && !document.querySelector('#cadence-phoenix-host')`,
     "unauthenticated catalog containment",
     { signal },
   );
@@ -4347,7 +4353,12 @@ async function armNextActionCsrfRejection(client, signal) {
   return result.identifier;
 }
 
-/** @param {CdpPort} client @param {string} loginUrl @param {string} email @param {string} password @param {string} expectedOrigin @param {Diagnostics} diagnostics @param {AbortSignal|undefined} signal */
+/**
+ * Signs the browser session in through the console's JSON API (L5), from the console sign-in
+ * document, then opens the organization home. Returns that navigation's request generation, which
+ * owns the authenticated LiveView socket.
+ * @param {CdpPort} client @param {string} loginUrl @param {string} email @param {string} password @param {string} expectedOrigin @param {Diagnostics} diagnostics @param {AbortSignal|undefined} signal
+ */
 async function submitSignIn(
   client,
   loginUrl,
@@ -4358,84 +4369,54 @@ async function submitSignIn(
   signal,
 ) {
   const login = assertSignInUrl(loginUrl, expectedOrigin);
-  await navigate(client, login.href, {
+  const state = await evaluateRecord(
+    client,
+    "({origin: location.origin, pathname: location.pathname})",
+    "sign-in document",
+    { signal },
+  );
+  if (state.origin !== login.origin || state.pathname !== login.pathname)
+    await navigate(client, login.href, {
+      expectedOrigin,
+      expectedPath: CONSOLE_SIGN_IN_PATH,
+      diagnostics,
+      signal,
+    });
+
+  const generation = diagnostics?.beginRequestGeneration("authenticated sign-in");
+  const signInRequest = diagnostics?.waitForRequest(
+    generation,
+    (record) => matchesSignInRequest(record, { expectedOrigin: login.origin }),
+    "console sign-in request",
+    { signal },
+  );
+  const result = await evaluateRecord(
+    client,
+    consoleSignInExpression({ email, password }),
+    "console sign-in",
+    { signal },
+  );
+  assertConsoleSignedIn({
+    status: typeof result.status === "number" ? result.status : 0,
+    redirectTo: typeof result.redirectTo === "string" ? result.redirectTo : null,
+    detail: diagnosticString(result.detail, "console sign-in detail"),
+  });
+  if (diagnostics && signInRequest)
+    diagnostics.bindRequestGeneration(generation, await signInRequest);
+
+  const landing = await navigate(client, `${expectedOrigin}/`, {
     expectedOrigin,
-    expectedPath: "/sign-in",
+    expectedPath: "/",
     diagnostics,
     signal,
   });
   await waitForExpression(
     client,
-    "Boolean(document.querySelector('#sign-in-form input[name=\"user[email]\"]') && document.querySelector('#sign-in-form input[name=\"user[password]\"]'))",
-    "sign-in form",
+    `location.pathname === "/" && !location.pathname.startsWith(${JSON.stringify(CONSOLE_SIGN_IN_PATH)})`,
+    "authenticated redirect",
     { signal },
   );
-
-  const submissionController = new AbortController();
-  const onAbort = () => submissionController.abort(abortError(signal));
-  signal?.addEventListener("abort", onAbort, { once: true });
-  if (signal?.aborted) onAbort();
-  const submissionSignal = submissionController.signal;
-  const generation = diagnostics?.beginRequestGeneration("authenticated sign-in");
-  try {
-    const navigationRequest = diagnostics?.waitForRequest(
-      generation,
-      (record) => matchesSignInNavigationRequest(record, { expectedOrigin: login.origin }),
-      "authenticated sign-in navigation",
-      { signal: submissionSignal },
-    );
-    const navigation = waitForPageNavigation(
-      client,
-      async () => {
-        const request = await navigationRequest;
-        return { frameId: request.frameId, loaderId: request.loaderId };
-      },
-      { signal: submissionSignal, label: "authenticated sign-in navigation" },
-    );
-    const result = await evaluate(
-      client,
-      `(() => {
-        const form = document.querySelector('#sign-in-form');
-        const emailInput = form?.querySelector('input[name="user[email]"]');
-        const passwordInput = form?.querySelector('input[name="user[password]"]');
-        if (!form || !emailInput || !passwordInput) return false;
-        emailInput.value = ${JSON.stringify(email)};
-        passwordInput.value = ${JSON.stringify(password)};
-        emailInput.dispatchEvent(new Event('input', {bubbles: true}));
-        passwordInput.dispatchEvent(new Event('input', {bubbles: true}));
-        form.submit();
-        return true;
-      })()`,
-      "sign-in submission",
-      { signal: submissionSignal },
-    );
-    assert.equal(result, true, "sign-in form was not submitted");
-    const authenticatedRequest = await navigationRequest;
-    await navigation;
-    diagnostics?.bindRequestGeneration(generation, authenticatedRequest);
-    const state = await evaluateRecord(
-      client,
-      "({href: location.href, origin: location.origin})",
-      "authenticated redirect",
-      { signal: submissionSignal },
-    );
-    assertHttpUrl(
-      diagnosticString(state.href, "redirect href"),
-      expectedOrigin,
-      "authenticated redirect URL",
-    );
-    assert.equal(state.origin, expectedOrigin, "authenticated redirect changed origin");
-    await waitForExpression(
-      client,
-      "location.pathname !== '/sign-in' && !document.querySelector('#sign-in-form')",
-      "authenticated redirect",
-      { signal: submissionSignal },
-    );
-    return generation;
-  } finally {
-    signal?.removeEventListener("abort", onAbort);
-    submissionController.abort(new Error("sign-in wait settled"));
-  }
+  return landing;
 }
 
 /** @param {ReturnType<typeof readBrowserCatalog>} catalog @param {string} applicationKey @param {string} surfaceId @param {string} expectedScope @param {string} expectedOrigin @param {string|undefined} expectedReleaseId */

@@ -3,6 +3,7 @@ import { chromium } from "playwright";
 import { createInterface } from "node:readline";
 import { writeFile } from "node:fs/promises";
 import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts";
+import { signInThroughConsole } from "./console_sign_in.mjs";
 
 const [base, mission, spacecraft, email, output] = process.argv.slice(2);
 assert.ok(base && mission && spacecraft && email && output);
@@ -35,16 +36,12 @@ async function completed(id) {
   assert.fail(`Operation ${id} did not complete: ${await row.textContent()}`);
 }
 try {
-  await page.goto(native);
-  await page.waitForURL(`${base}/sign-in`);
-  await page.locator("#user_email").fill(email);
-  await page.locator("#user_password").fill(fixtureString(fixtureRecord(credentials).password));
-  await page.locator("#sign-in-form").evaluate((form) => {
-    if (!(form instanceof HTMLFormElement)) throw Error("Expected sign-in form");
-    form.requestSubmit();
+  await signInThroughConsole(page, {
+    base,
+    email,
+    password: fixtureString(fixtureRecord(credentials).password),
+    path: native.slice(base.length),
   });
-  await page.waitForURL((url) => url.pathname !== "/sign-in");
-  await page.goto(native);
   await page.locator("#contact-search-submit").click();
   await page.locator("#reserve-opportunity-alpha").click();
   const nativeOperation = page.locator("[data-operation-id]").first();

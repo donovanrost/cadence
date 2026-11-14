@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { createInterface } from "node:readline";
 import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts";
+import { signInThroughConsole } from "./console_sign_in.mjs";
 const [base, mission, requester, reviewer, first, second, out] = process.argv.slice(2);
 assert.ok(base && mission && requester && reviewer && first && second && out);
 const input = createInterface({ input: process.stdin });
@@ -30,11 +31,12 @@ for (const current of [page, teammate]) {
 }
 /** @param {import("playwright").Page} current @param {string} email */
 async function login(current, email) {
-  await current.goto(base + "/sign-in");
-  await current.locator("#user_email").fill(email);
-  await current.locator("#user_password").fill(fixtureString(fixtureRecord(secret).password));
-  await current.locator('#sign-in-form button[type="submit"]').click();
-  await current.waitForURL((url) => url.pathname !== "/sign-in");
+  await signInThroughConsole(current, {
+    // A function declaration doesn't see the argv assertion's narrowing.
+    base: fixtureString(base),
+    email,
+    password: fixtureString(fixtureRecord(secret).password),
+  });
 }
 /** @param {import("playwright").Page} current */
 async function save(current) {

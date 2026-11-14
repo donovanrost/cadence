@@ -109,7 +109,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "--spacecraft-url",
       "#{base_url}/missions/#{context.mission.mission_id}/applications/spacecraft/list/federated",
       "--login-url",
-      "#{base_url}/sign-in",
+      "#{base_url}/console/sign-in",
       "--login-email",
       context.user.email,
       "--mission-id",

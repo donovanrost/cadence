@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { createInterface } from "node:readline";
 import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts";
+import { signInThroughConsole } from "./console_sign_in.mjs";
 
 const [base, mission, user, first, second, revision, out] = process.argv.slice(2);
 assert.ok(base && mission && user && first && second && revision && out);
@@ -27,13 +28,12 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 const path = `/missions/${mission}/spacecraft/${first}`;
 try {
-  await page.goto(`${base}${path}`);
-  await page.waitForURL(`${base}/sign-in`);
-  await page.locator("#user_email").fill(user);
-  await page.locator("#user_password").fill(fixtureString(fixtureRecord(secret).password));
-  await page.locator('#sign-in-form button[type="submit"]').click();
-  await page.waitForURL((url) => url.pathname !== "/sign-in");
-  await page.goto(`${base}${path}`);
+  await signInThroughConsole(page, {
+    base,
+    email: user,
+    password: fixtureString(fixtureRecord(secret).password),
+    path,
+  });
   await page.locator("#spacecraft-configuration-workspace").waitFor();
   assert.equal(await page.locator("h1").count(), 1);
   const shell = await page.locator("#application-shell").elementHandle();

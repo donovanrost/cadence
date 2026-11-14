@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
+import { signInThroughConsole } from "./console_sign_in.mjs";
 const [base, mission, user, out] = process.argv.slice(2);
 assert.ok(base && mission && user && out, "Expected endpoint, mission, user and output directory");
 const manifest = fixtureRecord(
@@ -62,15 +63,12 @@ const routes = [
   "/ops/activations",
 ];
 try {
-  await page.goto(prefix + "/ops");
-  await page.waitForURL(base + "/sign-in");
-  await page.locator("#user_email").fill(user);
-  await page.locator("#user_password").fill(fixtureString(fixtureRecord(secret).password));
-  await page.locator("#sign-in-form").evaluate((f) => {
-    if (!(f instanceof HTMLFormElement)) throw Error("Expected sign-in form");
-    f.requestSubmit();
+  await signInThroughConsole(page, {
+    base,
+    email: user,
+    password: fixtureString(fixtureRecord(secret).password),
+    path: `/missions/${mission}/ops`,
   });
-  await page.waitForURL((url) => url.pathname !== "/sign-in");
   await page.waitForFunction(() => document.querySelector("[data-phx-main].phx-connected"));
   // Loading the Phoenix-digested entry must reuse the same hashed runtime and connection.
   const connection = await page.evaluateHandle(() =>

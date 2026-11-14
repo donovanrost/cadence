@@ -3,6 +3,7 @@ import { chromium } from "playwright";
 import { createInterface } from "node:readline";
 import { writeFile } from "node:fs/promises";
 import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts";
+import { signInThroughConsole } from "./console_sign_in.mjs";
 
 const [base, mission, user, command, out, safeCommand] = process.argv.slice(2);
 assert.ok(
@@ -38,16 +39,12 @@ page.on("response", (response) => {
 });
 const prefix = `${base}/missions/${mission}/ops`;
 try {
-  await page.goto(prefix);
-  await page.waitForURL(`${base}/sign-in`);
-  await page.locator("#user_email").fill(user);
-  await page.locator("#user_password").fill(fixtureString(fixtureRecord(secret).password));
-  await page.locator("#sign-in-form").evaluate((form) => {
-    if (!(form instanceof HTMLFormElement)) throw Error("Expected sign-in form");
-    form.requestSubmit();
+  await signInThroughConsole(page, {
+    base,
+    email: user,
+    password: fixtureString(fixtureRecord(secret).password),
+    path: `/missions/${mission}/ops`,
   });
-  await page.waitForURL((url) => url.pathname !== "/sign-in");
-  await page.goto(prefix);
   await page.locator("[data-phx-main].phx-connected").waitFor();
   const shell = await page.locator("#application-shell").elementHandle();
   assert.ok(shell);
