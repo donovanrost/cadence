@@ -1423,3 +1423,44 @@ Cadence's own validation found the booking inconsistent with its setup. Never sa
   revalidated by the next passing poll (b0efad061), ended at LOS, lost on the provider's own failure. `source`
   goes in Technical details. Built with the director's "delivery unverified" decision; if that changes what's
   claimed, the words change with it.
+
+### U58 · Single-connection listener: refusals on an own listener, and the booking-time overlap flag (domain's proposal; lead) (domain / api / fe-ops)
+Some station listeners take one connection at a time. When two passes overlap on one, the later pass is refused
+until the earlier one lets go (11-14: 001 was refused for 26 s while 006 held Santiago :42105, and 30 frames were
+lost). Say "takes one connection at a time" and name the pass that holds it. Keep "port", "acceptor" and "socket" in
+Technical details.
+- **(a) listener_refusal on an own listener** (`shared_with: []`, cause: another contact holds it). This is U50's
+  item; only the context, state and resolution sentences change:
+  - Title as U50: `EARENDIL-001 · SNTG 00:13Z pass · 3 connections refused`.
+  - Meta: `FIRST 00:13:54Z · LAST 00:14:12Z · HELD BY EARENDIL-006` (+ STILL REFUSING while true).
+  - Context: "Santiago's listener takes one connection at a time, and EARENDIL-006's SNTG 00:05Z pass held it, so
+    Cadence refused this pass's connection."
+  - Not connected (P1, U50): "This pass isn't connected yet, so its telemetry isn't arriving. It can connect when
+    EARENDIL-006's pass lets go of the listener, at its LOS 00:14:15Z." Without the holder's LOS: "…when
+    EARENDIL-006's pass lets go of the listener."
+  - Loss, only when counted (U20): "30 telemetry frames were lost before it connected." Not counted: "Telemetry
+    sent before it connected wasn't received."
+  - Resolutions: accepted: "Connected at 00:14:20Z, 26 s after AOS. Telemetry from before that wasn't received."
+    (or "…30 telemetry frames were lost before that." when counted). ended: "The pass ended at LOS 00:21:15Z
+    without connecting."
+  - Contacts block as U50, titled `3 connections refused`, with the same sentences.
+  - Technical details: listener (station · port), the holder's realized_contact_id, reason key, count, item id.
+  - **One item, not two:** if the same refusal would also raise U45's contact_start `listener_in_use`, only this
+    item shows. Domain confirms which source owns it.
+- **(b) Booking-time overlap flag** (on the plan's passes, Book a pass offers, and the booked pass on Contacts):
+  - Tag `LISTENER OVERLAP` (caution ▲) on the **later** pass, the one that loses time.
+  - Sentence on the later pass: "Overlaps EARENDIL-006's SNTG 00:05Z pass by 26 s. Santiago's listener takes one
+    connection at a time, so this pass loses its first 26 s."
+  - On the earlier pass, no tag, only a `text-3` note: "EARENDIL-001's SNTG 00:13Z pass overlaps this one by 26 s
+    and loses its start."
+  - A Book a pass offer carries the sentence before booking, and booking is still allowed. On the plan's Gantt,
+    the later pass gets U45's ▲ ("Needs attention" in the legend).
+  - **Refuse variant (uplink), only if the director picks it:** the offer can't be booked. Disabled reason: "Can't
+    book: it overlaps EARENDIL-006's uplink on Santiago by 26 s, and Santiago's uplink takes one connection at a
+    time." The plan doesn't draft it; its unplanned-row cause reads "Santiago's uplink is taken by EARENDIL-006
+    then." A booking refusal reads "Not booked: it overlaps EARENDIL-006's uplink on Santiago by 26 s."
+- **Data asks (domain → api):**
+  - (a): `holder {realized_contact_id, spacecraft name, station code, starts_at, ends_at}`, plus
+    `frames_lost` (int | null) only when it's really counted.
+  - (b): per pass `listener_overlap {with {spacecraft name, station code, starts_at}, seconds, loses: this |
+    other, direction}`.
