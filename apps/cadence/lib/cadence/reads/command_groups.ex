@@ -20,6 +20,7 @@ defmodule Cadence.Reads.CommandGroups do
 
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.Reads.{CommandCatalog, Commands}
+  alias Cadence.Reads.CommandGroups.ReleaseRefusals
 
   # Final member stages. `indeterminate` (an uncertain release) isn't: an operator must resolve
   # it, so its group isn't finished (and gets no `completed` event, DECISIONS #51).
@@ -99,7 +100,12 @@ defmodule Cadence.Reads.CommandGroups do
       rows = command_rows(org, mission, members)
       held = held_lanes(org, mission, members)
       lanes = Map.new(members, &{&1.metadata["group"]["target_index"], &1.source_endpoint_ref})
-      targets = target_views(group, members, rows, &blocked(&1, &2, lanes, held))
+      events = GroupStore.events(mission, id)
+
+      targets =
+        group
+        |> target_views(members, rows, &blocked(&1, &2, lanes, held))
+        |> ReleaseRefusals.put(events, org, mission)
 
       revision_id = members |> List.first() |> then(&(&1 && &1.mission_model_revision_id))
 
@@ -113,7 +119,7 @@ defmodule Cadence.Reads.CommandGroups do
          targets: targets,
          progress: Enum.frequencies_by(targets, & &1.stage),
          finished: Enum.all?(targets, &(&1.stage in @finished)),
-         events: GroupStore.events(mission, id)
+         events: events
        })}
     end
   end

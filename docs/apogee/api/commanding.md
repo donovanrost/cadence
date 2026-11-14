@@ -229,8 +229,12 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   boolean on show), `events[] {id, kind, actor, at, payload}` (see Timeline events below),
   and `targets[]`:
   `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
-  end_reason, caused_by, verify_by, occurred_at}], last_event_at, blocked: null}`. `caused_by` is the
-  earlier member whose failure stopped this one (`end_reason: earlier_command_failed`).
+  end_reason, caused_by, verify_by, occurred_at, release_refusal}], last_event_at, blocked: null}`.
+  `caused_by` is the earlier member whose failure stopped this one (`end_reason:
+  earlier_command_failed`). `release_refusal` (U46): `null`, or `{code, details, at,
+  realized_contact_id, booked}` while the member still waits and the latest named release that
+  reached it stopped there (same codes as the release's `stopped`); a later release clears it. A
+  member the stop closed says why in `end_reason` instead.
   `blocked`: `null`, or `{reason: "lane_release_uncertain", command_request_id}` when the target is
   waiting for its contact but its lane is held by a release whose outcome is unknown
   (`release_uncertain`). Nothing behind it releases until an operator resolves that attempt. Show
@@ -266,6 +270,40 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
     verify_timed_out, release_failed, canceled, catalog_changed, rejected: count}}` (only non-zero keys).
     Written right after the release, verification, halt or abort that finished the last member.
     A one-minute reconcile sweep backs it up. Each write invalidates `commanding`.
+  - `released_on_contact` (U46): a named release that got past the group-level checks, even when
+    its first member stopped. `actor` the user. Payload: `{released_by, realized_contact_id, booked,
+    released_entry_ids, not_attempted_entry_ids, stopped: null | {command_queue_entry_id,
+    command_request_id, reason: {code, details}}}`. The audit line reads actor, `at` and `booked`.
+
+### `POST /contacts/:realized_contact_id/release` (U46 named release, DECISIONS #84; owner: api)
+
+Sends armed groups over a contact the operator names: a booked pass, or a hand-started contact
+after the danger sheet. Body `{command_group_ids: [id] (1–50, distinct, in release order),
+confirm_unbooked: bool (default false)}`; `operate_mission`, a fresh human (GO/NO-GO's rule).
+
+- Each group goes through domain's `release_group_to_contact`: only its members for that
+  contact's spacecraft, in stack order, stopping at the first that doesn't release (what went out
+  stays released). Later groups are still tried after a stop or a group-level refusal.
+- `200 {realized_contact_id, booked, results: [{command_group_id, outcome: released | stopped |
+  refused, released_entry_ids, not_attempted_entry_ids, stopped: null | {command_queue_entry_id,
+  command_request_id, code, details}, refused: null | {code, details}}]}`, one per id, in order.
+  - Group codes (`refused`): `command_group_not_found`, `command_group_not_armed {state}`,
+    `release_contact_not_target_spacecraft {realized_contact_id}`, `command_group_nothing_to_release
+    {realized_contact_id}`.
+  - Stop codes (`stopped`), read as known text: `command_window_closed {realized_contact_id, why,
+    starts_at, ends_at}`, `command_queue_entry_not_next_for_release {next_command_queue_entry_id}`,
+    `command_queue_lane_release_pending {queue_lane_key}`, `command_release_refused
+    {command_release_attempt_id, refusal: {code, details}}`, `command_release_outcome_uncertain
+    {command_release_attempt_id, message}`, bare codes (`earlier_command_failed`,
+    `release_basis_changed`, …) with `{}`, any other tag with `{message}`, else `unknown`.
+- Whole-request refusals, only while nothing has gone out: `409 command_window_closed
+  {realized_contact_id, why: outside_pass | uplink_leg_dropped, starts_at, ends_at}` (times null
+  without a booked window), `409 unbooked_contact_unconfirmed {realized_contact_id}` (resend with
+  `confirm_unbooked: true` from the danger sheet), `404 realized_contact_not_found`, `409
+  realized_contact_not_releasable {realized_contact_id, state: stopped | completed}`, `403
+  forbidden`, `422 invalid_params {command_group_ids | confirm_unbooked}`. Once something has gone
+  out, the same no about the contact is a 200: that group and the rest are `refused` with it.
+- Each release that got past the group checks writes `released_on_contact` on the group's timeline.
 
 ### `POST /command-groups/:id/decision`
 

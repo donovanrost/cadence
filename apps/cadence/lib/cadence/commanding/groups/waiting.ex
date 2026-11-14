@@ -8,6 +8,7 @@ defmodule Cadence.Commanding.Groups.Waiting do
   import Ecto.Query
 
   alias Cadence.Commanding.CommandRequestRow
+  alias Cadence.Commanding.Groups.CommandGroupRow
   alias Cadence.Repo
 
   @doc "`%{group_id => [source_endpoint_ref]}` in target order."
@@ -43,5 +44,40 @@ defmodule Cadence.Commanding.Groups.Waiting do
       select: r.command_group_id
     )
     |> Repo.all()
+  end
+
+  @doc """
+  Armed groups (`queued`, with members still queued) on the given source endpoints, oldest GO
+  first: `[{source_endpoint_ref, group_id}]` (api U46 `armed_group_ids`, the order a named release
+  sends them in).
+  """
+  @spec armed_on(binary(), binary(), [binary()]) :: [{binary(), binary()}]
+  def armed_on(_org, _mission, []), do: []
+
+  def armed_on(org, mission, source_endpoint_refs) do
+    from(r in CommandRequestRow,
+      join: g in CommandGroupRow,
+      on:
+        g.organization_id == r.organization_id and g.mission_id == r.mission_id and
+          g.command_group_id == r.command_group_id,
+      where:
+        r.organization_id == ^org and r.mission_id == ^mission and g.state == "queued" and
+          r.lifecycle_state == "queued" and r.source_endpoint_ref in ^source_endpoint_refs,
+      distinct: true,
+      select:
+        {r.source_endpoint_ref, r.command_group_id, [g.decided_at, g.resolved_at, g.requested_at]}
+    )
+    |> Repo.all()
+    # Sorted here, bytewise on ties (#56: no collation-dependent order).
+    |> Enum.sort_by(fn {_ref, id, times} -> {armed_at(times), id} end)
+    |> Enum.map(fn {ref, id, _times} -> {ref, id} end)
+  end
+
+  # When the group was armed: its GO, else when it was resolved or requested.
+  defp armed_at(times) do
+    case Enum.find(times, &match?(%DateTime{}, &1)) do
+      nil -> 0
+      at -> DateTime.to_unix(at, :microsecond)
+    end
   end
 end

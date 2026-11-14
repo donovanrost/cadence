@@ -6,7 +6,8 @@ defmodule Cadence.Reads.PassUplink do
     * on pass rows: `uplink_readiness` `%{state, reason, since, command_groups_queued}`, or
       `nil` when the pass has no live uplink session (future, downlink-only, not booked);
     * on queued command groups: `uplink` `%{pass, readiness, next_pass}` for the pass the group
-      will release on, named by reservation and station.
+      will release on, named by reservation and station, plus U46's `spacecraft`, `contact` and
+      the pass's contact fields (`Cadence.Reads.UplinkContacts`).
 
   `command_groups_queued` is known for a blocked pass (the `uplink_blocked` attention item lists
   the groups it holds back; none listed means none queued) and `nil` otherwise.
@@ -17,7 +18,7 @@ defmodule Cadence.Reads.PassUplink do
   alias Cadence.Control.Contacts
   alias Cadence.Control.UplinkReadiness
   alias Cadence.Control.UplinkReadiness.Groups
-  alias Cadence.Reads.{CommandGroups, Passes}
+  alias Cadence.Reads.{CommandGroups, Passes, UplinkContacts}
 
   @doc """
   Puts `uplink_readiness` on pass rows. `blocked` is the mission's `uplink_blocked` attention
@@ -171,11 +172,22 @@ defmodule Cadence.Reads.PassUplink do
     passes = waiting |> Map.values() |> Enum.flat_map(&[&1.contact, &1.next_contact])
     refs = pass_refs(org, mission, Enum.reject(passes, &is_nil/1))
     drops = drops_by_contact(org, mission, Map.values(refs.rows))
+    # U46: the block describes the group's first target; its contacts and armed groups.
+    first = Map.new(waiting, fn {id, entry} -> {id, first_target(entry)} end)
+    contacts = UplinkContacts.load(org, mission, first |> Map.values() |> Enum.reject(&is_nil/1))
 
     Map.new(group_ids, fn id ->
-      {id, waiting |> Map.get(id) |> without_drops(drops) |> group_uplink(refs)}
+      {id,
+       waiting
+       |> Map.get(id)
+       |> without_drops(drops)
+       |> group_uplink(refs)
+       |> UplinkContacts.decorate(Map.get(first, id), contacts, refs.stations)}
     end)
   end
+
+  defp first_target(%{targets: [%{spacecraft_id: id} | _rest]}), do: id
+  defp first_target(_entry), do: nil
 
   # U46: domain's next_contact already skips dropped passes; the live contact the group is on
   # shows a drop as its readiness (fe-ops).

@@ -253,6 +253,21 @@ and `attention`.
     When it's `null`, say "on the next ready pass" without naming one.
   - Expiry comes from the group's `release.expires_at`.
   - Recover posts to `pass.reservation_id`.
+  - **U46 (named release, DECISIONS #84).** `uplink` is also set when the first target has a live
+    hand-started contact and no booked pass, and it gains:
+    - `spacecraft {id, name}`: the target the block describes (the group's first; `name` falls back
+      to the id). Other targets' passes aren't in it.
+    - `pass` gains `realized_contact_id` (null before the pass starts), `booked: true`,
+      `started_by {kind: user | service | system, id, name} | null` (a user is named; `name` is null
+      otherwise), `started_at` (null before it starts) and `armed_group_ids`.
+    - `contact`: the target's live hand-started contact (not a booked pass), else `null`, with
+      `{realized_contact_id, booked: false, reservation_id: null, contact_id: null, station,
+      starts_at, ends_at: null, started_by, started_at, armed_group_ids}`.
+    - `pass` is `null` only when `contact` isn't. With a hand start and a booked pass ahead, `pass`
+      is that pass (`readiness` and `next_pass` `null`).
+    - `armed_group_ids`: the mission's `queued` groups with members still queued for that
+      spacecraft, oldest GO first. Send it as is to the named release (commanding.md); the viewed
+      group is in it while it has unreleased members there. Empty means nothing to release.
 - **`POST /api/console/v1/missions/:mission_id/passes/:id/recover-uplink`** (`:id` = the pass row
   `id`, a reservation). No body; `operate_mission`; audited; safe to repeat. It re-runs the pass's
   uplink qualification.

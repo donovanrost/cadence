@@ -889,6 +889,13 @@ defmodule CadenceWeb.Router do
       get("/passes/:id", PassController, :show)
       post("/passes/:id/recover-uplink", PassController, :recover_uplink)
       post("/passes/:id/release", PassController, :release)
+      # U46 named release (owner: api). Contract: docs/apogee/api/commanding.md
+      post(
+        "/contacts/:realized_contact_id/release",
+        ContactReleaseController,
+        :release
+      )
+
       # L15 single bookings (owner: api).
       post("/single-bookings/search", SingleBookingController, :search)
       post("/single-bookings", SingleBookingController, :create)

@@ -196,6 +196,12 @@ defmodule CadenceWeb.Console.Problem do
     reason_required: {422, "A reason is required."},
     command_request_already_started: {409, "That command has already started."},
     command_request_not_found: {404, "Command request not found."},
+    # U46 named release (whole-request refusals; ux 11-13 words the console's own lines).
+    command_window_closed: {409, "Not released: this contact's command window is closed."},
+    unbooked_contact_unconfirmed:
+      {409, "This contact isn't a booked pass. Confirm to release into it anyway."},
+    realized_contact_not_found: {404, "Contact not found."},
+    realized_contact_not_releasable: {409, "Not released: the contact has ended."},
     encode_unavailable:
       {409, "These bytes can't be shown: the request's catalog revision isn't the active one."},
     station_not_found: {404, "Ground station not found."},
