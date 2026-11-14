@@ -71,14 +71,30 @@ export const ACTION_LINES = {
   requeue: "Requeue puts a run that's stuck in running back in the queue.",
 } as const;
 
+/**
+ * W6 TSDB jobs: only a bring-your-own TSDB on a dedicated (org or mission) database is provisioned
+ * by Cadence (api-ops, lifecycle.ex validate_dedicated_byo_tsdb_backend). The source read will
+ * name its actions (tsdb_actions); until then the same rule, here. A managed source isn't.
+ */
+export const tsdbJobsOffered = (s: Pick<DataSource, "kind" | "isolation_level">): boolean =>
+  s.kind === "byo_tsdb" &&
+  (s.isolation_level === "org_isolated" || s.isolation_level === "mission_isolated");
+
 /** One sentence for a refused write (U20). */
 export function sourceFailure(error: ApiError): string {
   if (isError(error, "platform_source")) return SHARED_LINE;
   if (isError(error, "data_source_state")) {
     const state = detailsOf(
       error,
-      d.object({ state: d.known(["enabled", "disabled"] as const) }),
+      d.object({
+        state: d.known(["enabled", "disabled", "managed", "customer_owned"] as const),
+      }),
     )?.state;
+    // api-ops: a TSDB job on a source Cadence doesn't provision is refused with its kind.
+    if (state === "managed")
+      return "This source is managed by Cadence; its storage is provisioned automatically.";
+    if (state === "customer_owned")
+      return "This source uses your own database as is; Cadence doesn't provision it.";
     return state === "enabled" || state === "disabled"
       ? `It's already ${state}. Reload to see it.`
       : "Its state changed. Reload to see it.";

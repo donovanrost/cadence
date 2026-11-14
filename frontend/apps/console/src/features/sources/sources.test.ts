@@ -7,6 +7,7 @@ import {
   runsActive,
   sourceFacts,
   sourceFailure,
+  tsdbJobsOffered,
   SHARED_LINE,
 } from "./present.ts";
 import { blankDraft, blockedReason, registerBody } from "./register.ts";
@@ -140,5 +141,24 @@ describe("source page", () => {
       storage: undefined,
     };
     expect(facts(old)).toMatchObject({ stores: "Not reported", isolation: "Not reported" });
+  });
+});
+
+describe("TSDB jobs (api-ops L11 finding 1)", () => {
+  it("are offered only on a dedicated bring-your-own TSDB, never a managed or customer-owned one", () => {
+    expect(tsdbJobsOffered({ kind: "byo_tsdb", isolation_level: "mission_isolated" })).toBe(true);
+    expect(tsdbJobsOffered({ kind: "byo_tsdb", isolation_level: "org_isolated" })).toBe(true);
+    expect(tsdbJobsOffered(source)).toBe(false);
+    expect(tsdbJobsOffered({ kind: "managed_tsdb", isolation_level: "mission_isolated" })).toBe(
+      false,
+    );
+  });
+  it("says why a refused job wasn't run", () => {
+    expect(sourceFailure(refused("data_source_state", { state: "managed" }))).toBe(
+      "This source is managed by Cadence; its storage is provisioned automatically.",
+    );
+    expect(sourceFailure(refused("data_source_state", { state: "customer_owned" }))).toBe(
+      "This source uses your own database as is; Cadence doesn't provision it.",
+    );
   });
 });

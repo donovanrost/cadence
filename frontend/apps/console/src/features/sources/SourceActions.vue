@@ -5,17 +5,17 @@ import type { ApiResult } from "@/api";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import type { DataSource } from "./api.ts";
 import CredentialSheet from "./CredentialSheet.vue";
-import { health, sourceFailure } from "./present.ts";
+import { health, sourceFailure, tsdbJobsOffered } from "./present.ts";
 import { probeSource, setSourceEnabled, startTsdbJob } from "./writes.ts";
 
-/** L11 W2 enable/disable, W4 probe, W5 rotate, W6 TSDB jobs (managed stores only). */
+/** L11 W2 enable/disable, W4 probe, W5 rotate, W6 TSDB jobs (dedicated BYO TSDBs only). */
 const props = defineProps<{ missionId: MissionId; source: DataSource }>();
 const emit = defineEmits<{ done: [note: { tone: "nominal" | "crit"; text: string }] }>();
 const key = computed(() => ({ missionId: props.missionId, sourceId: props.source.id }));
 const busy = ref(false);
 const credential = ref<InstanceType<typeof CredentialSheet> | null>(null);
 const confirm = ref<InstanceType<typeof ApSheet> | null>(null);
-const managed = computed(() => props.source.kind === "managed_tsdb");
+const jobs = computed(() => tsdbJobsOffered(props.source));
 const enabled = computed(() => props.source.state !== "disabled");
 
 async function run<T>(call: () => Promise<ApiResult<T>>, said: (v: T) => string) {
@@ -67,7 +67,7 @@ const job = (kind: "provision" | "reconcile" | "deprovision") => {
       @click="credential?.open()"
       >Rotate credential…</ApButton
     >
-    <template v-if="managed">
+    <template v-if="jobs">
       <ApButton :disabled="busy" disabled-reason="Working…" @click="job('provision')"
         >Provision</ApButton
       >
