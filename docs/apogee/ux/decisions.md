@@ -1114,3 +1114,15 @@ data with an SCID or address Cadence didn't expect, and that's the case that mat
   ground_station_ref, refused_count and the id, plus "Counted live: a Cadence restart starts the count again." (in-memory counts, U20).
 - **Contacts:** the selected-pass panel gets a block, as for U45, U47 and U49, with the title minus the spacecraft and
   pass label.
+- **Build calls** (fe-ops a9dbf9813):
+  - **Tone stays caution in both states** (changed). Priority isn't status: not connected raises it to P1, but
+    nothing is known to be lost, so it's not crit (U20; as U45's not_started is P1 and still ▲). The
+    not-connected sentence carries the weight.
+  - The Setup line ends the body as plain text (accepted).
+  - Without a provider, unexpected_peer reads "…an address the listen profile doesn't expect". Without an scid,
+    ambiguous_scid reads "…for a spacecraft more than one pass on this listener expects." (accepted)
+  - **ended without a booked flag:** "Ended at 03:19Z.", which is true for both kinds (changed; "LOS" is wrong for
+    a hand-started contact, U46). With api's `booked` on the resolved entry, use "The pass ended at LOS 03:19Z." /
+    "The contact ended at 03:19Z.".
+  - Technical details order: reason, peer, scid, listen profile (name · id), station ref, count, id, then the
+    "Counted live…" line (accepted).
