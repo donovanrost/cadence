@@ -46,6 +46,17 @@ defmodule Cadence.IngressJournal.Identity do
     stable_id("packet", [evidence_id, ordinal, :crypto.hash(:sha256, packet)])
   end
 
+  @doc """
+  A journaled packet's id: its stream and the absolute offset of the frame that completed it, with
+  its bytes. Two distinct packets completing in one frame differ in bytes (their sequence counts),
+  and the same bytes there are the same packet, whatever evidence a replay groups them into.
+  """
+  @spec journal_packet_id(binary(), non_neg_integer(), binary()) :: binary()
+  def journal_packet_id(stream_id, frame_absolute_offset, packet)
+      when is_binary(stream_id) and is_integer(frame_absolute_offset) and is_binary(packet) do
+    stable_id("packet", [stream_id, frame_absolute_offset, :crypto.hash(:sha256, packet)])
+  end
+
   defp stable_id(prefix, parts) do
     digest =
       parts

@@ -244,8 +244,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                object_key: "mission-alpha/changed-frame-bytes.bin"
              )
 
+    # Likewise a packet's id hashes its bytes, so another packet at that id is another packet
+    # (here another APID): a real conflict.
     [frame, packet] = entries
-    changed = Map.put(packet, "packet_data_base64", Base.encode64(<<99, 99>>))
+    changed = Map.put(packet, "apid", 99)
 
     assert {:error, {:protocol_archive_record_identity_conflict, _ids}} =
              FileSystem.persist_segment("segment-collision", [frame, changed],
@@ -324,6 +326,51 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                )
 
       assert id == frame.frame_record_id
+    end
+
+    test "re-archiving the same packets under other evidence is idempotent too", %{
+      mission_id: mission_id
+    } do
+      first =
+        replay_evidence(mission_id, "0-2", ~U[2026-11-14 01:35:54.969000Z], %{"records" => 2})
+
+      packets = for seq <- 1..3, do: replay_packet(first, mission_id, seq)
+
+      assert :ok =
+               FileSystem.persist_segment(
+                 "segment-packets-run",
+                 FileSystem.build_entries(first, [], packets),
+                 object_key: "#{mission_id}/segment-packets-run.bin"
+               )
+
+      replay =
+        replay_evidence(mission_id, "0-6", ~U[2026-11-14 01:44:37.000000Z], %{"records" => 6})
+
+      replayed =
+        Enum.map(
+          packets,
+          &%{&1 | evidence_id: replay.evidence_id, receipt_time: replay.receipt_time}
+        )
+
+      entries = FileSystem.build_entries(replay, [], replayed)
+
+      assert :ok =
+               FileSystem.persist_segment("segment-packets-replay", entries,
+                 object_key: "#{mission_id}/segment-packets-replay.bin"
+               )
+
+      assert 3 == archive_entry_count(entries)
+
+      # Another packet at one of those ids (another APID) still conflicts.
+      [packet | _rest] = packets
+      wrong = FileSystem.build_entries(replay, [], [%{packet | apid: 99}])
+
+      assert {:error, {:protocol_archive_record_identity_conflict, [id]}} =
+               FileSystem.persist_segment("segment-packets-wrong", wrong,
+                 object_key: "#{mission_id}/segment-packets-wrong.bin"
+               )
+
+      assert id == packet.packet_id
     end
 
     test "the writer's buffered flush clears instead of retrying forever", %{
@@ -614,6 +661,22 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       quality: :good,
       receipt_time: evidence.receipt_time
     })
+  end
+
+  # A journaled packet's id is its journal position and bytes: the same for the run and the replay.
+  defp replay_packet(evidence, mission_id, seq) do
+    %PacketRecord{
+      packet_id: "packet-stream-008-frame-#{seq * 1115}",
+      evidence_id: evidence.evidence_id,
+      mission_id: mission_id,
+      protocol_family: :tm,
+      packet_kind: :space_packet,
+      apid: 100,
+      sequence_count: seq,
+      packet_data: <<seq>>,
+      receipt_time: evidence.receipt_time,
+      provenance: %{}
+    }
   end
 
   defp archive_entry_count(entries) when is_list(entries) do

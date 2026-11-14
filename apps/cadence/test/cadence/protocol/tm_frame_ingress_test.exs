@@ -131,6 +131,48 @@ defmodule Cadence.Protocol.TMFrameIngressTest do
     assert packet.provenance.generation_time_source == :onboard
   end
 
+  test "a replay that batches the journal differently gives its packets the same ids (#71)" do
+    bytes = Enum.map_join(0..7, &frame(100 + &1))
+    whole = journal_evidence(bytes, 0, "evidence-whole")
+    {:ok, once, <<>>, _pipeline, _continuity} = process(whole, initial_state())
+
+    {first_half, second_half} = String.split_at(bytes, 4 * 14)
+    first = journal_evidence(first_half, 0, "evidence-first")
+    {:ok, a, rest, pipeline, continuity} = process(first, initial_state())
+    second = journal_evidence(second_half, 4 * 14, "evidence-second")
+    {:ok, b, <<>>, _pipeline, _continuity} = process(second, {pipeline, continuity, rest})
+
+    ids = Enum.map(once.packet_records, & &1.packet_id)
+    assert length(Enum.uniq(ids)) == 8
+    assert ids == Enum.map(a.packet_records ++ b.packet_records, & &1.packet_id)
+
+    refute Enum.any?(
+             once.packet_records,
+             &Map.has_key?(&1.provenance.tm.metadata, :raw_frame_offset_bytes)
+           )
+
+    # Without a journal stream there is no position: the evidence-scoped id, as before.
+    unjournaled = %{whole | metadata: %{frame_size: 14, ocf_length: 0}}
+    {:ok, plain, _rest, _pipeline, _continuity} = process(unjournaled, initial_state())
+    refute Enum.map(plain.packet_records, & &1.packet_id) == ids
+  end
+
+  defp journal_evidence(bytes, offset, evidence_id) do
+    RawEvidence.new(%{
+      evidence_id: evidence_id,
+      mission_id: "mission",
+      source_endpoint_ref: "endpoint",
+      protocol_family: :tm,
+      raw: bytes,
+      receipt_time: ~U[2026-11-14 01:35:54Z],
+      metadata:
+        Map.merge(%{frame_size: 14, ocf_length: 0}, metadata("j", "s", offset, byte_size(bytes)))
+    })
+  end
+
+  defp process(evidence, {pipeline, continuity, remainder}),
+    do: TMFrameIngress.process(evidence, pipeline, continuity, remainder)
+
   defp initial_state do
     {:ok, pipeline} = TMFrameIngress.init()
     {pipeline, %{}, <<>>}

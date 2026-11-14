@@ -683,6 +683,17 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     :frame_seq
   ]
 
+  # A packet's record id is its journal position and bytes (#71 follow-up), so a re-batched replay
+  # sends the same id with different evidence fields; like a frame, it matches on its columns.
+  @packet_identity_columns [
+    :mission_id,
+    :spacecraft_id,
+    :protocol_family,
+    :direction,
+    :apid,
+    :packet_kind
+  ]
+
   defp archived_record_ids?(rows, opts) do
     archive_backend = archive_backend(opts)
     repo = repo(opts)
@@ -702,7 +713,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
         [row],
         map(
           row,
-          ^[:record_kind, :record_id, :content_sha256, :object_key | @frame_identity_columns]
+          ^Enum.uniq(
+            [:record_kind, :record_id, :content_sha256, :object_key] ++
+              @frame_identity_columns ++ @packet_identity_columns
+          )
         )
       )
       |> repo.all()
@@ -718,6 +732,12 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   defp same_record?(%{record_kind: @transfer_frame_record_kind} = row, existing),
     do: Map.take(row, @frame_identity_columns) == Map.take(existing, @frame_identity_columns)
+
+  # A legacy row without a content hash still isn't evidence it holds this packet.
+  defp same_record?(%{record_kind: @packet_record_kind} = row, existing),
+    do:
+      is_binary(existing.content_sha256) and
+        Map.take(row, @packet_identity_columns) == Map.take(existing, @packet_identity_columns)
 
   defp same_record?(row, existing),
     do: is_binary(existing.content_sha256) and existing.content_sha256 == row.content_sha256

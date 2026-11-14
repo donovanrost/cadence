@@ -51,7 +51,8 @@ defmodule Cadence.Protocol.TMFrameIngress do
              pipeline_state,
              decode_context(raw_evidence, absolute_base_offset)
            ),
-         {:ok, packet_records} <- build_packet_records(raw_evidence, sdu_octets) do
+         {:ok, packet_records} <-
+           build_packet_records(raw_evidence, sdu_octets, absolute_base_offset) do
       transfer_frame_records =
         build_transfer_frame_records(raw_evidence, frame_infos, absolute_base_offset)
 
@@ -162,11 +163,12 @@ defmodule Cadence.Protocol.TMFrameIngress do
   defp generation_time_source(%RawEvidence{source_time: nil}), do: :receipt
   defp generation_time_source(%RawEvidence{}), do: :onboard
 
-  defp build_packet_records(%RawEvidence{} = raw_evidence, sdu_octets) when is_list(sdu_octets) do
+  defp build_packet_records(%RawEvidence{} = raw_evidence, sdu_octets, absolute_base_offset)
+       when is_list(sdu_octets) do
     sdu_octets
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {sdu, ordinal}, {:ok, acc} ->
-      reduce_packet_record(raw_evidence, sdu, ordinal, acc)
+      reduce_packet_record(raw_evidence, sdu, {ordinal, absolute_base_offset}, acc)
     end)
     |> case do
       {:ok, packet_records} -> {:ok, Enum.reverse(packet_records)}
@@ -244,10 +246,10 @@ defmodule Cadence.Protocol.TMFrameIngress do
     end)
   end
 
-  defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, ordinal, acc) do
+  defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, position, acc) do
     with :ok <- validate_tm_sdu_kind(sdu),
          {:ok, %PacketRecord{} = packet_record} <-
-           decode_tm_packet_record(raw_evidence, sdu, ordinal) do
+           decode_tm_packet_record(raw_evidence, sdu, position) do
       {:cont, {:ok, [packet_record | acc]}}
     else
       {:error, reason} ->
@@ -261,9 +263,9 @@ defmodule Cadence.Protocol.TMFrameIngress do
     {:error, {:unsupported_tm_sdu_kind, sdu.sdu_kind_hint}}
   end
 
-  defp decode_tm_packet_record(%RawEvidence{} = raw_evidence, sdu, ordinal) do
+  defp decode_tm_packet_record(%RawEvidence{} = raw_evidence, sdu, position) do
     SpacePacketDecoder.decode_packet(raw_evidence, sdu.octets,
-      packet_id: Identity.packet_id(raw_evidence.evidence_id, ordinal, sdu.octets),
+      packet_id: packet_id(raw_evidence, sdu, position),
       protocol_family: raw_evidence.protocol_family,
       source_time: sdu.timestamp || raw_evidence.source_time,
       receipt_time: packet_receipt_time(raw_evidence, sdu),
@@ -275,10 +277,24 @@ defmodule Cadence.Protocol.TMFrameIngress do
           map_id: sdu.map_id,
           quality: sdu.quality,
           source_frames: sdu.source_frames,
-          metadata: sdu.meta
+          metadata: Map.delete(sdu.meta, :raw_frame_offset_bytes)
         }
       }
     )
+  end
+
+  # A journaled packet's id is its journal position: the stream and the absolute offset of the
+  # frame that completed it, with its bytes (#71 follow-up). A replay that batches the journal
+  # differently gives it the same id, so it isn't archived twice. Without a journal stream, the
+  # evidence-scoped id as before.
+  defp packet_id(raw_evidence, sdu, {ordinal, absolute_base_offset}) do
+    case {journal_stream_id(raw_evidence), Map.get(sdu.meta || %{}, :raw_frame_offset_bytes)} do
+      {stream_id, offset} when is_binary(stream_id) and is_integer(offset) ->
+        Identity.journal_packet_id(stream_id, absolute_base_offset + offset, sdu.octets)
+
+      _no_journal_position ->
+        Identity.packet_id(raw_evidence.evidence_id, ordinal, sdu.octets)
+    end
   end
 
   defp application_anomaly_kind(:virtual_channel_frame_count_discontinuity),

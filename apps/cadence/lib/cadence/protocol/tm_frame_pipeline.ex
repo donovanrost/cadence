@@ -85,7 +85,7 @@ defmodule Cadence.Protocol.TMFramePipeline do
                                                                        {acc_sdu_octets,
                                                                         kept_frames, anomalies,
                                                                         current_state} ->
-      case Reassembly.ingest_detailed(frame_info.frame, ctx, current_state) do
+      case Reassembly.ingest_detailed(located_frame(frame_info), ctx, current_state) do
         {:ok, sdu_octets, reassembly_anomalies, next_state} ->
           {Enum.reverse(sdu_octets, acc_sdu_octets), [frame_info | kept_frames],
            reassembly_anomalies
@@ -114,6 +114,19 @@ defmodule Cadence.Protocol.TMFramePipeline do
       {:ok, Enum.reverse(sdu_octets), Enum.reverse(kept_frames), Enum.reverse(anomalies), rest,
        next_state}
     end)
+  end
+
+  # Reassembly builds an SDU's meta from the frame that completes it, so the completing frame's
+  # position within this decode call reaches the SDU (meta.raw_frame_offset_bytes): a packet's
+  # stable archive id is keyed on it (#71 follow-up). Only reassembly sees it.
+  defp located_frame(frame_info) do
+    frame = frame_info.frame
+
+    %{
+      frame
+      | meta:
+          Map.put(frame.meta || %{}, :raw_frame_offset_bytes, frame_info.raw_frame_offset_bytes)
+    }
   end
 
   defp locate_anomalies(anomalies, frame_info) do
