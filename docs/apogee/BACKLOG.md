@@ -153,7 +153,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | ~~Compose layout: ux rules; default is to accept Command.md's C1–C5 as built (#64)~~ accepted as built (ux 198d12ca; fe-ops b8fe16e0) | ux | — |
 | ~~Draft autosave / `Save draft` / `DRAFT SAVED`~~ done (c0510343, e262c233; ux 601a32f9; api a4d19e69) | fe-ops | — |
-| ~~Per-target values (Same for all / Per target, Paste CSV, Now column)~~ done (api f1bed1880: commands[].per_target on create + preflight, digest covers it; fe-ops ff64363bd, a2f03fb4d). Open: Approve doesn't DISPLAY per-target values (ux spec → fe-ops) | fe-ops + ux | — |
+| ~~Per-target values (Same for all / Per target, Paste CSV, Now column)~~ done (api f1bed1880: commands[].per_target on create + preflight, digest covers it; fe-ops ff64363bd, a2f03fb4d). Approve + Uplink & verify now show per-target values (fe-ops a16f48442 on ux c5bd78f81; ux closing) | fe-ops + ux | — |
 | ~~Verifier line / "No verifier: this command can't turn green"~~ done (b8fe16e0) | fe-ops | — |
 | ~~Keep/Drop callout when a target leaves a live query~~ done (fd776880) | fe-ops | — |
 | ~~Reorder: move up / down, drag and Alt+↑/↓~~ done (f2085bfd, fd776880) | fe-ops | — |
