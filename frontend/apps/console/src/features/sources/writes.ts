@@ -79,6 +79,8 @@ const binding = d.object({
   logical_source: d.token,
   data_source_id: d.token,
   status: d.known(["active", "disabled", "superseded"] as const),
+  /** #90: a platform-wide binding (no organization) every mission without its own reads. */
+  shared: d.optional(d.boolean),
 });
 export type SourceBinding = Decoded<typeof binding>;
 
@@ -189,15 +191,30 @@ export function runAction(missionId: MissionId, jobId: string, action: "retry" |
   );
 }
 
-/** W3: switch which source a binding reads; 409 binding_changed if someone switched it first. */
+/**
+ * W3: switch which source a binding reads; 409 binding_changed if someone switched it first. A
+ * platform-wide one (#90, admin mode) also sends a reason and the counts the sheet showed: 409
+ * blast_radius_changed when the server's recount differs; `recorded` holds the counts it audited.
+ */
 export function switchBinding(
   missionId: MissionId,
   bindingId: string,
-  body: Readonly<{ data_source_id: string; expected_data_source_id: string }>,
+  body: Readonly<{
+    data_source_id: string;
+    expected_data_source_id: string;
+    reason?: string;
+    expected_affected_missions?: number;
+    expected_live_passes_total?: number;
+  }>,
 ) {
   return request(
     `${base(missionId)}/data-source-bindings/${encodeURIComponent(bindingId)}`,
-    d.object({ binding }),
+    d.object({
+      binding,
+      recorded: d.optional(
+        d.object({ affected_missions: d.integer, live_passes_total: d.integer }),
+      ),
+    }),
     { method: "PUT", body },
   );
 }

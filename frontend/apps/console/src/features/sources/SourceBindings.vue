@@ -1,21 +1,19 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
-import {
-  ApButton,
-  ApCallout,
-  ApEmptyState,
-  ApPanel,
-  ApSelect,
-  ApSheet,
-  ApTable,
-  type ApColumn,
-} from "@/ui";
+import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, type ApColumn } from "@/ui";
 import type { DataSource } from "./api.ts";
-import { sourceFailure } from "./present.ts";
-import { switchBinding, type SourceBinding } from "./writes.ts";
+import BindingHistorySheet from "./BindingHistorySheet.vue";
+import BindingSwitchSheet from "./BindingSwitchSheet.vue";
+import PlatformSwitchSheet from "./PlatformSwitchSheet.vue";
+import { ADMIN_ONLY } from "./platform.ts";
+import { usePlatformSwitch } from "./usePlatformSwitch.ts";
+import type { SourceBinding } from "./writes.ts";
 
-/** S2 · which logical sources read from this source; W3 switches one to another source. */
+/**
+ * S2 · which logical sources read from this source. W3 switches a mission's own binding; a
+ * platform-wide one (U53, #90) only a platform admin in admin mode, through the danger sheet.
+ */
 const props = defineProps<{
   missionId: MissionId;
   bindings: readonly SourceBinding[];
@@ -23,11 +21,15 @@ const props = defineProps<{
   editable: boolean;
 }>();
 const emit = defineEmits<{ done: [note: { tone: "nominal" | "crit"; text: string }] }>();
+const platformAdmin = usePlatformSwitch();
+const canSwitch = (b: SourceBinding) => (b.shared === true ? platformAdmin.value : props.editable);
+const anyAction = computed(() => props.bindings.some(canSwitch));
 const columns = computed<readonly ApColumn[]>(() => [
   { key: "logical", label: "Logical source", mono: true },
   { key: "reads", label: "Reads from" },
   { key: "status", label: "Status" },
-  ...(props.editable ? [{ key: "switch", label: "Switch", hiddenLabel: true }] : []),
+  ...(anyAction.value ? [{ key: "switch", label: "Switch", hiddenLabel: true }] : []),
+  { key: "history", label: "History", hiddenLabel: true },
 ]);
 const BINDING_WORDS: Readonly<Record<SourceBinding["status"], string>> = {
   active: "Active",
@@ -36,47 +38,17 @@ const BINDING_WORDS: Readonly<Record<SourceBinding["status"], string>> = {
   unrecognized: "Unknown",
 };
 const nameOf = (id: string) => props.sources.find((s) => s.id === id)?.display_name ?? id;
-const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
-const picked = ref<SourceBinding | null>(null);
-const target = ref("");
-const failure = ref<string | null>(null);
-const busy = ref(false);
-const choices = computed(() =>
-  props.sources
-    // A binding may read a shared source. The server takes only an active source serving the same
-    // logical source (422 incompatible_data_source), so only those are offered (and the current one).
-    .filter(
-      (s) =>
-        s.id === picked.value?.data_source_id ||
-        (s.state !== "disabled" && s.logical_source?.key === picked.value?.logical_source),
-    )
-    .map((s) => ({ value: s.id, label: s.display_name })),
+const lockedPlatform = computed(() =>
+  props.bindings.some((b) => b.shared === true && !canSwitch(b)),
 );
-function open(b: SourceBinding) {
-  picked.value = b;
-  target.value = b.data_source_id;
-  failure.value = null;
-  sheet.value?.open();
+const own = ref<InstanceType<typeof BindingSwitchSheet> | null>(null);
+const platform = ref<InstanceType<typeof PlatformSwitchSheet> | null>(null);
+const history = ref<InstanceType<typeof BindingHistorySheet> | null>(null);
+function openSwitch(b: SourceBinding) {
+  if (b.shared === true) platform.value?.open(b);
+  else own.value?.open(b);
 }
-async function submit() {
-  const b = picked.value;
-  if (!b || busy.value || target.value === b.data_source_id) return;
-  busy.value = true;
-  try {
-    const r = await switchBinding(props.missionId, b.id, {
-      data_source_id: target.value,
-      expected_data_source_id: b.data_source_id,
-    });
-    if (!r.ok) return void (failure.value = sourceFailure(r.error));
-    sheet.value?.close();
-    emit("done", {
-      tone: "nominal",
-      text: `${b.logical_source} now reads from ${nameOf(target.value)}.`,
-    });
-  } finally {
-    busy.value = false;
-  }
-}
+const relay = (n: { tone: "nominal" | "crit"; text: string }) => emit("done", n);
 </script>
 
 <template>
@@ -88,29 +60,29 @@ async function submit() {
       sentence="No logical source is bound to this source."
     />
     <ApTable v-else :columns="columns" :rows="bindings" :row-key="(b) => b.id" caption="Bindings">
+      <template #cell-logical="{ row }"
+        ><span class="inline-flex items-center gap-2"
+          >{{ row.logical_source
+          }}<ApTag v-if="row.shared === true" state="neutral" label="PLATFORM" /></span
+      ></template>
       <template #cell-reads="{ row }">{{ nameOf(row.data_source_id) }}</template>
       <template #cell-status="{ row }"
         ><span class="text-text-2">{{ BINDING_WORDS[row.status] }}</span></template
       >
       <template #cell-switch="{ row }"
-        ><ApButton size="compact" variant="ghost" @click="open(row)">Switch…</ApButton></template
+        ><ApButton v-if="canSwitch(row)" size="compact" variant="ghost" @click="openSwitch(row)"
+          >Switch…</ApButton
+        ></template
+      >
+      <template #cell-history="{ row }"
+        ><ApButton size="compact" variant="ghost" @click="history?.open(row)"
+          >History</ApButton
+        ></template
       >
     </ApTable>
+    <p v-if="lockedPlatform" class="m-0 px-4 py-2 text-sm text-text-3">{{ ADMIN_ONLY }}</p>
   </ApPanel>
-  <ApSheet ref="sheet" :title="`Switch ${picked?.logical_source ?? ''}`" width="narrow">
-    <div class="flex flex-col gap-3">
-      <ApSelect v-model="target" label="Read from" :options="choices" />
-      <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
-    </div>
-    <template #footer>
-      <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
-      <ApButton
-        variant="primary"
-        :disabled="busy || target === picked?.data_source_id"
-        :disabled-reason="busy ? 'Switching…' : 'Choose another source.'"
-        @click="submit"
-        >Switch</ApButton
-      >
-    </template>
-  </ApSheet>
+  <BindingSwitchSheet ref="own" :mission-id="missionId" :sources="sources" @done="relay" />
+  <PlatformSwitchSheet ref="platform" :mission-id="missionId" :sources="sources" @done="relay" />
+  <BindingHistorySheet ref="history" :mission-id="missionId" />
 </template>

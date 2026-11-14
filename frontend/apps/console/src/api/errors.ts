@@ -71,6 +71,10 @@ export const errorCodes = [
   "data_source_state",
   "binding_changed",
   "platform_source",
+  // #90 / U53 (api-ops 65f66a88e): a platform-wide binding's switch
+  "blast_radius_changed",
+  "binding_not_shared",
+  "blast_radius_unavailable",
   // Providers and provider accounts (L12, L13)
   "provider_not_found",
   "grant_revoked",

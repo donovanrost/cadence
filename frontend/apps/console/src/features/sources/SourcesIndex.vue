@@ -5,6 +5,7 @@ import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
 import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, plural } from "@/ui";
 import { fetchSources } from "./api.ts";
+import MissionBindings from "./MissionBindings.vue";
 import RegisterSheet from "./RegisterSheet.vue";
 import SourcesTable from "./SourcesTable.vue";
 
@@ -54,6 +55,12 @@ const register = ref<InstanceType<typeof RegisterSheet> | null>(null);
         </template>
       </ApRemote>
     </ApPanel>
+    <MissionBindings
+      v-if="state.status === 'ready'"
+      :mission-id="missionId"
+      :sources="state.value.sources"
+      :can-manage="state.value.canManage"
+    />
     <RegisterSheet ref="register" :mission-id="missionId" />
   </div>
 </template>
