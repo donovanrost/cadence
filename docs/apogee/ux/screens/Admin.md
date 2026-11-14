@@ -11,9 +11,11 @@ Route `/console/admin/**`, outside org and mission scope.
 - **Layout:** reading layout. Outside admin mode every route shows the step-up form inline (Auth.md); nothing
   renders behind it.
 - **Footer caption** (api-ops): on an organization's page, "Changes to Acme Space's members and invitations are
-  recorded in its audit log (Access)." with a link to that org's Audit filtered to Access. On the platform pages
-  (create organization, service identities), the caption waits until api-ops names where those actions are
-  recorded. Until then there's no caption (U20).
+  recorded in its audit log (Access)." with a link to that org's Audit filtered to Access. On the platform pages,
+  "Recorded in Admin › Audit; organization changes also appear in that organization's Audit." (api-ops, built in
+  0698ba78f). **Admin › Audit** (`GET /admin/audit`, api/admin.md AD5) lists platform actions: organizations
+  created, service identities issued, rotated and revoked, admin mode entered and left, and, once api-ops adds
+  them, platform-wide binding switches (U53).
 
 ## Organizations (`/console/admin/organizations`)
 - h1 `12 organizations`. ApTable: Name (link) · Slug (mono) · Members · Missions · Created (by, when). There's a
