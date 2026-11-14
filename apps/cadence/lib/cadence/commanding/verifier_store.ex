@@ -91,9 +91,10 @@ defmodule Cadence.Commanding.VerifierStore do
     |> where([row], row.timeout_at <= ^current_time and not is_nil(row.organization_id))
     |> select([row], {row.organization_id, row.mission_id, row.command_release_attempt_id})
     |> distinct(true)
-    # The global lock order (ReleaseAttemptLock): mission, then attempt.
-    |> order_by([row], asc: row.mission_id, asc: row.command_release_attempt_id)
     |> repo.all()
+    # The global lock order (ReleaseAttemptLock): mission, then attempt, bytewise. Sorted here, as
+    # the other lock takers sort, not by the database's text collation (#56).
+    |> Enum.sort_by(fn {_organization, mission, attempt} -> {mission, attempt} end)
   end
 
   @spec pending_timeout_instances(module(), binary(), binary(), binary()) :: [

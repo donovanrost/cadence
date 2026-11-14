@@ -379,4 +379,42 @@ defmodule Cadence.Commanding.TransportVerifierRaceTest do
 
     assert request_state() == :timed_out
   end
+
+  # #56: the global advisory-lock order is bytewise; en_US ordered attempt_a before attempt_B.
+  test "#56: due release attempts come in bytewise {mission, attempt} order, the lock order" do
+    for attempt <- ["attempt_b", "attempt_B", "attempt_a"] do
+      Repo.insert!(
+        CommandVerifierInstanceRow.changeset(
+          CommandVerifierInstance.new(%{
+            command_verifier_instance_id: "verifier_#{attempt}",
+            organization_id: @org,
+            mission_id: @mission,
+            command_request_id: @request,
+            command_release_attempt_id: attempt,
+            source_endpoint_ref: "spacecraft_runtime:sc-race",
+            mission_model_revision_id: "revision-race",
+            command_id: "command:noop",
+            command_name: "NOOP",
+            verifier_id: "verifier:start",
+            verifier_name: "start",
+            phase: :start,
+            success_criteria:
+              MatchCriteria.new(%{
+                criteria_type: :comparison,
+                subject_ref: "transport:started",
+                comparison: :equal,
+                value: true
+              }),
+            timeout_at: @timeout_at,
+            lifecycle_state: :pending
+          })
+        )
+      )
+    end
+
+    due = VerifierStore.due_release_attempts(Repo, DateTime.add(@timeout_at, 1))
+
+    assert Enum.map(due, &elem(&1, 2)) == ["attempt_B", "attempt_a", "attempt_b"]
+    assert due == Enum.sort_by(due, fn {_org, mission, attempt} -> {mission, attempt} end)
+  end
 end
