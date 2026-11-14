@@ -259,11 +259,12 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 | Partition | Owner | Purpose |
 |---|---|---|
 | empty (`cadence_test`) | team | shared-tree runs through check-slot (no `MIX_TEST_PARTITION`): no claim needed; never drop it |
-| 2, 4, 5, 6, 8, 10, 11, 13–17, 19 | unclaimed | worktree runs: claim before use |
+| 2, 4, 5, 6, 8, 10, 11, 14–17, 19 | unclaimed | worktree runs: claim before use |
 | 3 | api-ops | L4 policy worktree (`scratchpad/policy-wt`) |
 | 7 | api-ops | ingest fix / journal-matrix worktree (`scratchpad/ingest-wt`) |
 | 9 | api | api's side worktree for slot work (`…/cadence/api-held`) |
 | 12 | domain | domain's evidence runs (archive fix, #83) |
+| 13 | fe-setup | L8b worktree (`fe-setup-legacy-l8a`, branch `fe-setup/legacy-l8b`) |
 | 18 | fe-ops | L8 worktree |
 | 20 | api-ops | develop ports (L4, ingest fix) |
 | 21 | domain | domain's develop ports (verifier fix, gate, contact start, archive fix) |
