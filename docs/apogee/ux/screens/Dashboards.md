@@ -46,6 +46,15 @@ fleet health counts (crit · caution · stale chips, each linking to Alarms or F
 - While editing, live values pause, and a text-3 caption in the header says "Live values paused while editing."
 - `Save…` opens a drawer with a message (optional), a changes summary and "Save current range and scope as
   default". Saving creates the new current version.
+- **A source isn't answering** (dashboards 6e40e86d0; lead's readiness fix). Save, copy and restore still go through.
+  The outcome is a caution callout under the header with `Dismiss`, cleared by another dashboard or a new edit:
+  - "Saved. Telemetry wasn't answering when checked at 09:12Z; 3 widgets may stay empty until it does."
+  - Degraded: "…was slow when checked at 09:12Z; 1 widget may load slowly or show partial data."
+  - `Copied.` / `Restored.` replace `Saved.`. One sentence per source.
+  - The realm is named only when it isn't flight ("Telemetry (replay)"). An unknown source reads "A data source".
+    Without a check time, drop "when checked at …". The time is §4 (with the date when it isn't today). With 0
+    widgets affected, drop the widget clause.
+  - Save as copy: the sheet stays open with the note and `Open the copy`, so the note isn't lost on the jump.
 - Someone else saved meanwhile: the caution callout "Saved by Mira K. at 02:51Z while you were editing." with
   [Continue editing] [Discard mine]. Continue replays your edits onto the new version and lists any that no longer
   apply.
