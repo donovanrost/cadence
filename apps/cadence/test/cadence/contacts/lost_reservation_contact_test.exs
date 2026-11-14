@@ -31,7 +31,10 @@ defmodule Cadence.Contacts.LostReservationContactTest do
     assert contact.lifecycle_state == :canceled
     assert contact.metadata["cause"] == "provider_failed"
     assert contact.metadata["provider_reservation_id"] == c.reservation.provider_reservation_id
-    assert contact.metadata["provider_reason"] =~ "delivery_descriptor"
+    assert contact.metadata["provider_reason"] == nil
+
+    assert contact.metadata["provider_reason_code"] ==
+             "delivery_descriptor_conflicts_with_transport"
   end
 
   test "the repair lists a lost reservation's open contact, releases it, then finds nothing" do

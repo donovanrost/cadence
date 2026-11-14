@@ -250,8 +250,11 @@ defmodule Cadence.Contacts.ProviderReservations do
     else
       state = if evidence["outcome"] == "rejected", do: :rejected, else: :failed
 
+      # Lost by an operator's evidence: releases its contact like any lost path (api-ops' map;
+      # today no contact exists here yet, but the invariant holds structurally).
       checked_resolution(
-        transition(reservation, state, %{
+        reservation
+        |> transition(state, %{
           last_error_document:
             JsonDocument.wrap_value(%{
               "source" => "attempt_resolution",
@@ -261,6 +264,7 @@ defmodule Cadence.Contacts.ProviderReservations do
               "resolved_at" => evidence["recorded_at"]
             })
         })
+        |> release_lost_contact()
       )
 
       "closed_without_resend"
@@ -578,6 +582,9 @@ defmodule Cadence.Contacts.ProviderReservations do
     |> Enum.map(&ProviderReservationRow.to_domain/1)
   end
 
+  # Tests only (api-ops' map): records an answer WITHOUT its contact side effects. Production
+  # answers go through apply_provider_status/4, which runs them.
+  @doc false
   @spec record_provider_response(binary(), binary(), binary(), map()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
   def record_provider_response(organization_id, mission_id, provider_reservation_id, response)
@@ -1341,12 +1348,15 @@ defmodule Cadence.Contacts.ProviderReservations do
            reservation.scheduled_contact_id,
            actor: %{"kind" => "system", "id" => "provider_reservation_reconciler"},
            reason: "provider_#{state}",
-           # ux U56: the history line names the provider's reason.
-           metadata: %{
-             "cause" => "provider_#{state}",
-             "provider_reservation_id" => reservation.provider_reservation_id,
-             "provider_reason" => provider_reason(reservation)
-           }
+           # ux U56: the history line quotes the provider's own words, or words a known code.
+           metadata:
+             Map.merge(
+               %{
+                 "cause" => "provider_#{state}",
+                 "provider_reservation_id" => reservation.provider_reservation_id
+               },
+               provider_reason(reservation)
+             )
          ) do
       {:ok, _contact} -> :ok
       {:error, reason} -> {:error, reason}
@@ -1367,16 +1377,24 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
-  # The provider's own words where it gave some (status_reason detail), else its category or code.
+  # Split for ux U56 so the console never guesses whether a string is quotable:
+  # provider_reason is the provider's own words (a status_reason detail) or nil, and
+  # provider_reason_code a code (the status category, or Cadence's validation reason) or nil.
   defp provider_reason(%ProviderReservation{last_error_document: error}) when is_map(error) do
     case error["reason"] do
-      %{} = reason -> reason["detail"] || reason["category"]
-      reason when is_binary(reason) -> reason
-      _none -> error["category"]
+      %{} = reason ->
+        %{"provider_reason" => reason["detail"], "provider_reason_code" => reason["category"]}
+
+      code when is_binary(code) ->
+        %{"provider_reason" => nil, "provider_reason_code" => code}
+
+      _none ->
+        %{"provider_reason" => nil, "provider_reason_code" => error["category"]}
     end
   end
 
-  defp provider_reason(_reservation), do: nil
+  defp provider_reason(_reservation),
+    do: %{"provider_reason" => nil, "provider_reason_code" => nil}
 
   defp validate_documents(reservation) do
     with :ok <- validate_document(reservation.request_document, :request_document),
