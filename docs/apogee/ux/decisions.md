@@ -1338,6 +1338,11 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
   - `no_scheduled_contact`: "Not canceled: this pass has no contact in Cadence."
   - `pass_not_found`: "Not canceled: the pass wasn't found."
   - Others: the server's message.
+- **No record** (contacts ended before these actions were recorded: `cause` and `by` are null). The line says what's
+  missing rather than guessing:
+  - "Canceled at 12:58Z; who and why weren't recorded." / "Ended early at 13:07Z; who and why weren't recorded."
+  - Without `at`: "Canceled; when, who and why weren't recorded."
+  - The tags stay `CANCELED` / `ENDED EARLY`. The Timeline has no event for it.
 - **History from the read:** `contact_ended {kind, by, at, reason, reason_code}`; Cadence's cancel is `by.kind:
   system` with `reason_code: provider_failed` (lead's change), and it uses U56's
   "Canceled by Cadence … Northlight couldn't book this pass (“…”)", and an operator's cancel uses the lines above.
