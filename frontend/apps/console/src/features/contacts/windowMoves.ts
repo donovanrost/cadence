@@ -15,11 +15,19 @@ export function moveDuration(ms: number): string {
   return rest ? `${min} min ${rest} s` : `${min} min`;
 }
 
-/** HH:MM:SS, with MM-DD in front when the day differs from the move's own day. */
-const at = (iso: string, day: string) =>
-  `${iso.slice(0, 10) === day ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 19)}`;
-const span = (w: { starts_at: string; ends_at: string }, day: string) =>
-  `${at(w.starts_at, day)}–${at(w.ends_at, day)}Z`;
+const hms = (iso: string) => iso.slice(11, 19);
+const md = (iso: string) => iso.slice(5, 10);
+/**
+ * A window to the second (ux U56): no date on the move's own day; once when both ends share
+ * another day ("11-15 00:00:00–00:08:00Z"); on both ends across midnight.
+ */
+function span(w: { starts_at: string; ends_at: string }, day: string): string {
+  const d0 = w.starts_at.slice(0, 10);
+  const d1 = w.ends_at.slice(0, 10);
+  if (d0 === day && d1 === day) return `${hms(w.starts_at)}–${hms(w.ends_at)}Z`;
+  if (d0 === d1) return `${md(w.starts_at)} ${hms(w.starts_at)}–${hms(w.ends_at)}Z`;
+  return `${md(w.starts_at)} ${hms(w.starts_at)}–${md(w.ends_at)} ${hms(w.ends_at)}Z`;
+}
 
 /**
  * "Northlight moved this pass 30 s later: now 12:11:27–12:19:27Z (was 12:10:57–12:18:57Z)."

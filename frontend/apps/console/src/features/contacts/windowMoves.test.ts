@@ -88,14 +88,14 @@ describe("U56 window moves in the pass history", () => {
     expect(listensUntil(m, false)).toBeNull();
   });
 
-  it("dates a time on another day than the move", () => {
+  it("dates a window once on another day, on both ends across midnight", () => {
     const m = moveOf(
       ["2026-11-14T23:59:30Z", "2026-11-15T00:07:30Z"],
       ["2026-11-15T00:00:00Z", "2026-11-15T00:08:00Z"],
       "2026-11-14T23:50:00Z",
     );
     expect(windowMoveLine(m, "Northlight")).toBe(
-      "Northlight moved this pass 30 s later: now 11-15 00:00:00–11-15 00:08:00Z (was 23:59:30–11-15 00:07:30Z).",
+      "Northlight moved this pass 30 s later: now 11-15 00:00:00–00:08:00Z (was 11-14 23:59:30–11-15 00:07:30Z).",
     );
   });
 });
