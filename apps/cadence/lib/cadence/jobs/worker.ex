@@ -1,7 +1,12 @@
 defmodule Cadence.Jobs.Worker do
   @moduledoc false
 
-  use GenServer
+  # Temporary: a worker runs its claimed job once. As :permanent (the default) a worker that
+  # finished was restarted and ran run_job again, which overwrote the job's outcome with
+  # job_not_running (every dev job ended 'failed'), and a worker killed mid-handler would have run
+  # the handler again. The dispatcher monitors workers and fails a job whose worker exits
+  # abnormally (worker_exited); an operator decides about a retry.
+  use GenServer, restart: :temporary
 
   alias Cadence.Jobs.Runner
 

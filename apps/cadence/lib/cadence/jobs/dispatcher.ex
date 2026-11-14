@@ -126,6 +126,8 @@ defmodule Cadence.Jobs.Dispatcher do
   def handle_info({:safety_dispatch, _token}, state), do: {:noreply, state}
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    _ = fail_exited_job(Map.get(state.worker_refs, ref), reason)
+
     state =
       state
       |> unmonitor_worker(ref)
@@ -278,6 +280,14 @@ defmodule Cadence.Jobs.Dispatcher do
       safety_timer_active?: not is_nil(state.safety_timer)
     }
   end
+
+  # A worker that exited abnormally left its job :running: fail it with the exit, never run it
+  # again on its own. A shutdown (node stop) is left to the bootstrap requeue.
+  defp fail_exited_job(job_id, reason) when is_binary(job_id) do
+    if worker_outcome(reason) == :error, do: Jobs.fail_exited_worker(job_id, reason), else: :ok
+  end
+
+  defp fail_exited_job(_job_id, _reason), do: :ok
 
   defp worker_outcome(:normal), do: :ok
   defp worker_outcome(:shutdown), do: :ok

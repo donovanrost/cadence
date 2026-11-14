@@ -259,6 +259,24 @@ defmodule Cadence.Jobs do
     end
   end
 
+  @doc """
+  Fails a job whose worker exited abnormally while it was still :running (`worker_exited` with
+  the exit reason). A job that already recorded its outcome is left as it is.
+  """
+  @spec fail_exited_worker(binary(), term()) :: {:ok, Job.t()} | :ok | {:error, term()}
+  def fail_exited_worker(job_id, exit_reason) when is_binary(job_id) do
+    case fetch_job(job_id) do
+      {:ok, %Job{status: :running} = job} ->
+        fail_job(job, {:worker_exited, inspect(exit_reason, limit: 20, printable_limit: 200)})
+
+      {:ok, %Job{}} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp mark_running(%Job{} = job) do
     %Job{
       job

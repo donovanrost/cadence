@@ -37,8 +37,10 @@ defmodule Cadence.Jobs.Runner do
       {:ok, %Job{status: :running} = job} ->
         Jobs.record_execution_result(job, safe_dispatch(runner, job))
 
+      # Not ours to run (finished, requeued, or never claimed): record nothing, so its outcome
+      # stays the one its run recorded.
       {:ok, %Job{} = job} ->
-        Jobs.record_execution_result(job, {:error, {:job_not_running, job.status}})
+        {:error, {:job_not_running, job.status}}
 
       {:error, reason} ->
         {:error, reason}
