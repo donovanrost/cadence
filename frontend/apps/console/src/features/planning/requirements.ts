@@ -154,8 +154,8 @@ export function occurrenceDay(content: Readonly<Record<string, unknown>>): strin
 
 /**
  * ux (ContactPlanning.md): closing or canceling ONE template occurrence leads with its scope and
- * ends with what domain confirmed: the same template version never regenerates that day; an edit
- * (a new version) generates every remaining day afresh.
+ * ends with what domain confirmed (a0ca3fd5c): no template version, the current or a later edit,
+ * regenerates that day; a one-off requirement is the way back.
  */
 export function occurrenceScope(
   action: EndAction,
@@ -164,8 +164,8 @@ export function occurrenceScope(
   const verb = action === "close" ? "closes" : "cancels";
   return {
     lead: `This ${verb} only the ${o.day} occurrence of “${o.template}”. The template's other days aren't affected.`,
-    final:
-      "The template won't bring this day back, unless the template is edited: an edit generates every remaining day afresh.",
+    // ux U48 + domain a0ca3fd5c: an edit no longer regenerates closed or canceled days.
+    final: `This is final for this day: the template won't bring it back, even when the template is edited. To plan ${o.day} again, add a one-off requirement for it.`,
   };
 }
 

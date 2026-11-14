@@ -156,7 +156,7 @@ describe("closing one template occurrence (ux, ContactPlanning.md)", () => {
     expect(occurrenceScope("close", { day: "11-15", template: "Daily downlink" })).toEqual({
       lead: "This closes only the 11-15 occurrence of “Daily downlink”. The template's other days aren't affected.",
       final:
-        "The template won't bring this day back, unless the template is edited: an edit generates every remaining day afresh.",
+        "This is final for this day: the template won't bring it back, even when the template is edited. To plan 11-15 again, add a one-off requirement for it.",
     });
     expect(occurrenceScope("cancel", { day: "11-15", template: "Daily downlink" }).lead).toMatch(
       /^This cancels only the 11-15 occurrence/,
