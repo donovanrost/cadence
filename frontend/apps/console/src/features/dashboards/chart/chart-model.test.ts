@@ -1,8 +1,27 @@
 import { expect, test } from "vite-plus/test";
 import { ChartModel } from "./chart-model.ts";
-import { readMarkers, readSelection } from "./chart-input.ts";
+import type { ContactMarker, LimitDefinitionMarker, MissionEventMarker } from "./chart-markers.ts";
 import { required } from "./required.test-support.ts";
 
+const event = (id: string, timestamp_ms: number): MissionEventMarker => ({
+  marker_type: "mission_event",
+  marker_id: id,
+  link_id: id,
+  timestamp_ms,
+  title: null,
+  severity: null,
+});
+const contact = (id: string, starts_at_ms: number, ends_at_ms: number | null): ContactMarker => ({
+  marker_type: "contact_interval",
+  marker_id: id,
+  link_id: id,
+  starts_at_ms,
+  ends_at_ms,
+  label: null,
+  status: null,
+  station: null,
+  kind: null,
+});
 const input = {
   chart_id: "chart",
   widget_id: "battery",
@@ -47,7 +66,7 @@ test("aligns series and explicit gaps, preserves point evidence, and pairs envel
   });
   expect(model.seriesList.map((series) => series.id)).toEqual(["voltage", "temperature"]);
 });
-test("append and window trimming keep interval overlaps and drop points before the window", () => {
+test("series appends and window trimming keep interval overlaps and drop points before the window", () => {
   const model = new ChartModel({
     ...input,
     time_mode: "live",
@@ -56,21 +75,12 @@ test("append and window trimming keep interval overlaps and drop points before t
       [60_000, 2],
     ],
     event_markers: [
-      { marker_id: "past", marker_type: "mission_event", timestamp_ms: 1_000 },
-      {
-        marker_id: "interval",
-        marker_type: "mission_event",
-        starts_at_ms: 1_000,
-        ends_at_ms: 80_000,
-      },
+      event("past", 1_000),
+      contact("interval", 1_000, 80_000),
+      event("late", 110_000),
     ],
   });
   expect(model.appendSeriesPayload([[120_000, 3]])).toBe(true);
-  expect(
-    model.appendMarkerPayload({
-      event_markers: [{ marker_id: "late", marker_type: "mission_event", timestamp_ms: 110_000 }],
-    }),
-  ).toBe(true);
   expect(model.advanceLiveWindow(120_000)).toBe(true);
   model.trimToWindow();
   expect(model.plotData()).toEqual([
@@ -97,14 +107,27 @@ test("normalizers reject malformed coordinates and keep absent marker timestamps
     },
   });
   expect(model.plotData()).toEqual([[2], [null]]);
+});
+test("an open interval's missing end never pulls the x range back to the epoch", () => {
+  const definition: LimitDefinitionMarker = {
+    marker_type: "limit_definition_interval",
+    marker_id: "d",
+    link_id: "d",
+    starts_at_ms: 10_000,
+    ends_at_ms: null,
+    limit_definition_id: null,
+    limit_set_name: null,
+    limit_definition_version: null,
+    red_low: null,
+    yellow_low: null,
+    yellow_high: null,
+    red_high: null,
+  };
+  const model = new ChartModel({ ...input, limit_markers: [definition] });
   expect(
-    readMarkers([null, "bad", { timestamp_ms: null }, { timestamp_ms: Symbol("bad") }]),
-  ).toEqual([{ timestamp_ms: null }, { timestamp_ms: null }]);
-  expect(readSelection({ timestamp_ms: "3000", placement_id: "p" })).toEqual({
-    timestamp_ms: 3_000,
-    placement_id: "p",
-  });
-  expect(readSelection(null)).toBeNull();
+    model.markerXValues([definition, contact("c", 20_000, 30_000), event("e", 5_000)]),
+  ).toEqual([10, 20, 30, 5]);
+  expect(model.chartXRange(12, 14)).toEqual([10, 14]);
 });
 test("inferred gaps use observed cadence and coalesce pixel ranges without filling explicit gaps", () => {
   const model = new ChartModel(input);

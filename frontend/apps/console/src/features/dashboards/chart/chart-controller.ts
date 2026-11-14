@@ -10,7 +10,6 @@ import { ChartEvents } from "./chart-events.ts";
 import { ChartLimits } from "./chart-limits.ts";
 import { ChartSelection } from "./chart-selection.ts";
 import { ChartLive } from "./chart-live.ts";
-import { readSelection } from "./chart-input.ts";
 
 /** Owns the mounted lifetime. Data and renderers never install global observers themselves. */
 export class TelemetryChartController {
@@ -72,17 +71,14 @@ export class TelemetryChartController {
   }
   handleAppend(payload: Record<string, unknown>) {
     if (this.disposed) return;
-    const { series, markers, window_end_ms, refresh_interval_ms } = payload;
+    // Overlays come whole with each snapshot (updateSnapshot); appends carry samples only.
+    const { series, window_end_ms, refresh_interval_ms } = payload;
     const points = record(series)
       ? series[this.model.widgetId] || series[this.model.placementId]
       : undefined;
     const appendedPointCount = this.model.seriesPayloadPointCount(points);
     const previousLength = this.model.plotSeries.length;
     const appendedSeries = this.model.appendSeriesPayload(points);
-    const markerAppends = record(markers)
-      ? markers[this.model.widgetId] || markers[this.model.placementId]
-      : undefined;
-    const appendedMarkers = this.model.appendMarkerPayload(markerAppends);
     const advancedLiveWindow = this.model.advanceLiveWindow(window_end_ms);
     this.live.recordLiveActivity({
       appendedPointCount,
@@ -91,16 +87,13 @@ export class TelemetryChartController {
       seriesPayload: points,
       windowEndMs: window_end_ms,
     });
-    if (!appendedSeries && !appendedMarkers && !advancedLiveWindow) return;
+    if (!appendedSeries && !advancedLiveWindow) return;
     this.model.trimToWindow();
     if (this.model.plotSeries.length !== previousLength) this.rebuild();
     else {
       this.surface.chart.setData(this.model.plotData());
       this.render();
     }
-  }
-  handleSelection(payload: Record<string, unknown>) {
-    this.updated(payload.selection);
   }
   updateSnapshot(input: TelemetryChartProps) {
     if (this.disposed) return;
@@ -115,7 +108,6 @@ export class TelemetryChartController {
           .filter((series) => previous.hiddenSeriesIds.has(series.id))
           .map((series) => series.id),
       );
-      next.selectedRef = previous.selectedRef;
       if (previous.input.axis_mode === input.axis_mode) next.axisMode = previous.axisMode;
     }
     const rebuild = plotSignature(previous) !== plotSignature(next);
@@ -128,18 +120,12 @@ export class TelemetryChartController {
       this.render();
     }
   }
-  updated(selection: unknown) {
-    if (this.disposed) return;
-    this.model.selectedRef = readSelection(selection);
-    this.selection.renderSelection();
-  }
   private attachLayers() {
     this.surface.el.prepend(this.events.fillLayer);
     this.surface.el.append(
       this.events.eventLayer,
       this.annotations.annotationLayer,
       this.limits.markerLayer,
-      this.selection.selectionLayer,
       this.live.liveEdge,
       this.legend.legendLayer,
       this.legend.tooltipLayer,
@@ -162,7 +148,6 @@ export class TelemetryChartController {
     this.annotations.renderAnnotations();
     this.limits.renderLimitMarkers();
     this.legend.renderLegend();
-    this.selection.renderSelection();
     this.live.renderLiveEdge();
   }
   private rebuild() {
@@ -185,7 +170,6 @@ export class TelemetryChartController {
       this.events.eventLayer,
       this.annotations.annotationLayer,
       this.limits.markerLayer,
-      this.selection.selectionLayer,
       this.legend.legendLayer,
       this.legend.tooltipLayer,
     ])
@@ -194,9 +178,7 @@ export class TelemetryChartController {
 }
 
 function snapshotSignature(input: TelemetryChartProps) {
-  const snapshot = { ...input };
-  delete snapshot.selected_ref;
-  return JSON.stringify(snapshot);
+  return JSON.stringify(input);
 }
 
 function chartIdentity(input: Readonly<TelemetryChartProps>) {
@@ -219,7 +201,6 @@ function plotSignature(model: ChartModel) {
   delete options.limit_markers;
   delete options.event_markers;
   delete options.annotations;
-  delete options.selected_ref;
   return JSON.stringify({
     options,
     axisMode: model.axisMode,

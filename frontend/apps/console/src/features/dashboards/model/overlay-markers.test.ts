@@ -54,7 +54,10 @@ describe("overlay frames as chart markers", () => {
         "limits",
       ),
     ]);
-    expect(overlayMarkers(p).limitMarkers.map((m) => [m.marker_id, m.limit_state])).toEqual([
+    const entries = overlayMarkers(p).limitMarkers.flatMap((m) =>
+      m.marker_type === "limit_event" ? [[m.marker_id, m.limit_state]] : [],
+    );
+    expect(entries).toEqual([
       ["a", "yellow"],
       ["c", "red"],
       ["e", "red"],
@@ -102,9 +105,12 @@ describe("overlay frames as chart markers", () => {
         "events",
       ),
     ]);
-    expect(overlayMarkers(p).eventMarkers.map((m) => [m.marker_id, m.station, m.label])).toEqual([
-      ["c-1", "SVL", "NL-ABC123"],
-      ["c-2", null, "NL-DEF456"],
+    const bands = overlayMarkers(p).eventMarkers.flatMap((m) =>
+      m.marker_type === "contact_interval" ? [[m.marker_id, m.station, m.label, m.kind]] : [],
+    );
+    expect(bands).toEqual([
+      ["c-1", "SVL", "NL-ABC123", "realized_contact"],
+      ["c-2", null, "NL-DEF456", "scheduled_contact"],
     ]);
   });
   it("marks mission timeline events only, not the watermark or other evidence frames", () => {
@@ -122,9 +128,29 @@ describe("overlay frames as chart markers", () => {
       events("mission_event_id", "Pass started"),
       events("source_watermark_event_id", "Telemetry watermark advanced"),
     ]);
-    expect(overlayMarkers(p).eventMarkers.map((m) => [m.marker_id, m.title])).toEqual([
+    const marks = overlayMarkers(p).eventMarkers.flatMap((m) =>
+      m.marker_type === "mission_event" ? [[m.marker_id, m.title]] : [],
+    );
+    expect(marks).toEqual([
       ["mission_event_id-1", "Pass started"],
       ["mission_event_id-2", "Pass started"],
+    ]);
+  });
+  it("reads a contact kind it doesn't know as neither booked nor flown", () => {
+    const p = placementWith([
+      frame(
+        "intervals",
+        [
+          field("starts_at", "time", [1_000]),
+          field("ends_at", "time", [2_000]),
+          field("kind", "enum", ["maintenance_window"]),
+          field("contact_id", "string", ["c-1"]),
+        ],
+        "events",
+      ),
+    ]);
+    expect(overlayMarkers(p).eventMarkers).toEqual([
+      expect.objectContaining({ marker_type: "contact_interval", kind: null }),
     ]);
   });
 });

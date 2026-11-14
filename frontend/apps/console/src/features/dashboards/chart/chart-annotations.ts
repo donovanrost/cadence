@@ -1,4 +1,4 @@
-import type { ChartMarker } from "./chart-input.ts";
+import type { ChartAnnotation } from "./chart-markers.ts";
 import type { ChartSurface } from "./chart-surface.ts";
 import { ChartAnnotationTooltip, type AnnotationGeometry } from "./chart-annotation-tooltip.ts";
 
@@ -42,7 +42,7 @@ export class ChartAnnotations {
     });
   }
 
-  renderIntervalAnnotation(annotation: ChartMarker) {
+  renderIntervalAnnotation(annotation: ChartAnnotation) {
     const interval = this.surface.intervalBounds(annotation);
     if (!interval) return;
 
@@ -50,9 +50,7 @@ export class ChartAnnotations {
     const color = this.annotationColor(annotation);
     const region = document.createElement("div");
     region.dataset.chartAnnotation = "interval";
-    region.dataset.chartAnnotationId = annotation.annotation_id || "";
-    region.dataset.chartAnnotationProvider = annotation.provider_id || "";
-    region.dataset.chartAnnotationLayer = annotation.layer_id || "";
+    region.dataset.chartAnnotationId = annotation.annotation_id;
     region.setAttribute("aria-hidden", "true");
     Object.assign(region.style, {
       position: "absolute",
@@ -76,7 +74,7 @@ export class ChartAnnotations {
     });
   }
 
-  renderPointAnnotation(annotation: ChartMarker) {
+  renderPointAnnotation(annotation: ChartAnnotation) {
     const left = this.annotationLeft(annotation);
     if (left === null || left === undefined || Number.isNaN(left)) return;
 
@@ -84,9 +82,7 @@ export class ChartAnnotations {
     const color = this.annotationColor(annotation);
     const line = document.createElement("div");
     line.dataset.chartAnnotation = "point";
-    line.dataset.chartAnnotationId = annotation.annotation_id || "";
-    line.dataset.chartAnnotationProvider = annotation.provider_id || "";
-    line.dataset.chartAnnotationLayer = annotation.layer_id || "";
+    line.dataset.chartAnnotationId = annotation.annotation_id;
     line.setAttribute("aria-hidden", "true");
     Object.assign(line.style, {
       position: "absolute",
@@ -108,7 +104,7 @@ export class ChartAnnotations {
   }
 
   renderAnnotationControl(
-    annotation: ChartMarker,
+    annotation: ChartAnnotation,
     { geometry, left, width, top, color }: AnnotationGeometry,
   ) {
     const wrapper = document.createElement("div");
@@ -118,9 +114,7 @@ export class ChartAnnotations {
     const markerCenter = interval ? left + width / 2 : left;
 
     wrapper.dataset.chartAnnotationAnchor = geometry;
-    wrapper.dataset.chartAnnotationId = annotation.annotation_id || "";
-    wrapper.dataset.chartAnnotationProvider = annotation.provider_id || "";
-    wrapper.dataset.chartAnnotationLayer = annotation.layer_id || "";
+    wrapper.dataset.chartAnnotationId = annotation.annotation_id;
     Object.assign(wrapper.style, {
       position: "absolute",
       left: `${wrapperLeft}px`,
@@ -147,9 +141,7 @@ export class ChartAnnotations {
     control.setAttribute("aria-expanded", "false");
     control.dataset.chartAnnotationControl = "true";
     control.dataset.chartAnnotationGeometry = geometry;
-    control.dataset.chartAnnotationId = annotation.annotation_id || "";
-    control.dataset.chartAnnotationProvider = annotation.provider_id || "";
-    control.dataset.chartAnnotationLayer = annotation.layer_id || "";
+    control.dataset.chartAnnotationId = annotation.annotation_id;
 
     if (interval) {
       Object.assign(control.style, {
@@ -216,24 +208,6 @@ export class ChartAnnotations {
       showTooltip();
     });
 
-    const evidenceControl = tooltip.querySelector?.("[data-chart-annotation-open-evidence='true']");
-    if (evidenceControl) {
-      evidenceControl.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        hideTooltip();
-        this.surface.pushEvent(
-          "open_data_link",
-          this.annotationDataLinkPayload(
-            annotation,
-            annotation.target,
-            annotation.target_id,
-            annotation.timestamp_ms || annotation.starts_at_ms,
-          ),
-        );
-      });
-    }
-
     wrapper.appendChild(control);
     wrapper.appendChild(tooltip);
     this.annotationLayer.appendChild(wrapper);
@@ -252,74 +226,35 @@ export class ChartAnnotations {
     this.activeAnnotationPopover = visible ? { control, tooltip } : null;
   }
 
-  annotationTooltipId(annotation: ChartMarker) {
+  annotationTooltipId(annotation: ChartAnnotation) {
     const raw = [
       "chart-annotation-tooltip",
       this.surface.model.placementId || "chart",
-      annotation.annotation_id || annotation.starts_at_ms || "annotation",
+      annotation.annotation_id,
     ].join("-");
 
     return raw.replace(/[^a-zA-Z0-9_-]/g, "-");
   }
 
-  annotationDataLinkPayload(
-    annotation: ChartMarker,
-    target: string | null | undefined,
-    targetId: string | null | undefined,
-    timestampMs: number | null | undefined,
-  ) {
-    const metadata = annotation.metadata || {};
-
-    return this.surface.markerDataLinkPayload(
-      {
-        ...annotation,
-        requested_realm: metadata.realm || annotation.requested_realm || null,
-        requested_data_view: metadata.data_view || annotation.requested_data_view || null,
-        requested_data_source_id:
-          metadata.data_source_id || annotation.requested_data_source_id || null,
-        requested_source_binding_id:
-          metadata.source_binding_id || annotation.requested_source_binding_id || null,
-        replay_run_id: metadata.replay_run_id || annotation.replay_run_id || null,
-      },
-      target,
-      targetId,
-      timestampMs,
-    );
-  }
-
-  annotationLeft(annotation: ChartMarker) {
-    const timestampMs = Number(annotation.timestamp_ms || annotation.starts_at_ms);
-    if (!Number.isFinite(timestampMs)) return null;
-
+  annotationLeft(annotation: ChartAnnotation) {
     const xDomain = this.surface.chartXDomain();
-    const seconds = timestampMs / 1000;
+    const seconds = annotation.starts_at_ms / 1000;
     if (seconds < xDomain.min || seconds > xDomain.max) return null;
 
     return this.surface.chartPlotBounds().left + this.surface.chart.valToPos(seconds, "x", false);
   }
 
-  annotationColor(annotation: ChartMarker) {
-    const namedColors = {
-      amber: `${this.surface.themeColor("--chart-warning-90")}`,
-      cyan: `${this.surface.themeColor("--chart-action-90")}`,
-      green: `${this.surface.themeColor("--chart-success-86")}`,
-      indigo: `${this.surface.themeColor("--chart-revision-88")}`,
-      red: `${this.surface.themeColor("--chart-critical-90")}`,
-      teal: `${this.surface.themeColor("--chart-current-88")}`,
-      violet: `${this.surface.themeColor("--chart-compare-90")}`,
-    };
-
-    if (annotation.color && Object.hasOwn(namedColors, annotation.color)) {
-      const color = Object.entries(namedColors).find(([name]) => name === annotation.color)?.[1];
-      if (color) return color;
+  /** Severity sets the colour (annotations carry no colour of their own). */
+  annotationColor(annotation: ChartAnnotation) {
+    switch (annotation.severity) {
+      case "critical":
+      case "error":
+        return this.surface.themeColor("--chart-critical-90");
+      case "warning":
+        return this.surface.themeColor("--chart-warning-90");
+      case "info":
+      case "unrecognized":
+        return this.surface.themeColor("--chart-revision-88");
     }
-    if (typeof annotation.color === "string" && /^(#|rgb|hsl)/.test(annotation.color)) {
-      return annotation.color;
-    }
-    if (annotation.severity === "critical" || annotation.severity === "error") {
-      return namedColors.red;
-    }
-    if (annotation.severity === "warning") return namedColors.amber;
-    return namedColors.indigo;
   }
 }

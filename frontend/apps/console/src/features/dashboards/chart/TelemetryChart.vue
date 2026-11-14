@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, onUpdated, ref, watch } from "vue";
+import { onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
 import { useChartRuntime } from "./chart-runtime.ts";
 import { TelemetryChartController } from "./chart-controller.ts";
 import type { TelemetryChartProps } from "./chart-props.ts";
@@ -22,7 +22,6 @@ const props = withDefaults(defineProps<TelemetryChartProps>(), {
   limit_markers: () => [],
   event_markers: () => [],
   annotations: () => [],
-  selected_ref: null,
   time_mode: "",
   time_from: "",
   time_to: "",
@@ -42,7 +41,6 @@ const live = useChartRuntime();
 let controller: TelemetryChartController | null = null;
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
 live.on("append", (payload) => controller?.handleAppend(payload));
-live.on("selection", (payload) => controller?.handleSelection(payload));
 onMounted(() => {
   if (chartRoot.value)
     controller = new TelemetryChartController(chartRoot.value, props, (event, payload) =>
@@ -50,11 +48,6 @@ onMounted(() => {
     );
 });
 onUpdated(() => controller?.updateSnapshot(props));
-watch(
-  () => props.selected_ref,
-  (selection) => controller?.updated(selection),
-  { deep: true, flush: "post" },
-);
 onBeforeUnmount(() => {
   controller?.destroyed();
   controller = null;
@@ -87,7 +80,6 @@ onBeforeUnmount(() => {
     :data-limit-markers="serialize(props.limit_markers)"
     :data-event-markers="serialize(props.event_markers)"
     :data-annotations="serialize(props.annotations)"
-    :data-selected-ref="serialize(props.selected_ref)"
     :data-time-mode="props.time_mode"
     :data-time-from="props.time_from"
     :data-time-to="props.time_to"

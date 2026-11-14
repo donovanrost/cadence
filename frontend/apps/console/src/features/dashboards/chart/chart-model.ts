@@ -1,5 +1,11 @@
-import { record } from "./record.ts";
-import { readMarkers, type ChartMarker, type ChartSeries } from "./chart-input.ts";
+import type { ChartSeries } from "./chart-input.ts";
+import {
+  markerTimes,
+  type ChartAnnotation,
+  type ChartInterval,
+  type EventMarker,
+  type LimitMarker,
+} from "./chart-markers.ts";
 import { ChartSeriesModel } from "./chart-series-model.ts";
 
 /** Owns admitted samples, aligned series, marker history, visibility and time windows. No DOM or timers. */
@@ -31,98 +37,47 @@ export class ChartModel extends ChartSeriesModel {
     );
   }
 
-  appendMarkerPayload(payload: unknown) {
-    const markerAppends = Array.isArray(payload)
-      ? readMarkers(payload)
-      : record(payload)
-        ? {
-            limit_markers: readMarkers(payload.limit_markers),
-            event_markers: readMarkers(payload.event_markers),
-            annotations: readMarkers(payload.annotations),
-          }
-        : null;
-    if (Array.isArray(markerAppends) && markerAppends.length > 0) {
-      this.limitMarkers = this.dedupeMarkers(this.limitMarkers.concat(markerAppends));
-      return true;
+  eventMarkerOverlapsWindow(marker: EventMarker, cutoff: number) {
+    switch (marker.marker_type) {
+      case "contact_interval":
+        return this.intervalMarkerOverlapsWindow(marker, cutoff);
+      case "mission_event":
+        return this.instantOverlapsWindow(marker.timestamp_ms, cutoff);
     }
-
-    if (!markerAppends || Array.isArray(markerAppends)) return false;
-
-    const limitMarkerAppends = markerAppends.limit_markers || [];
-    const eventMarkerAppends = markerAppends.event_markers || [];
-    const annotationAppends = markerAppends.annotations || [];
-    let appended = false;
-
-    if (limitMarkerAppends.length > 0) {
-      this.limitMarkers = this.dedupeMarkers(this.limitMarkers.concat(limitMarkerAppends));
-      appended = true;
-    }
-
-    if (eventMarkerAppends.length > 0) {
-      this.eventMarkers = this.dedupeMarkers(this.eventMarkers.concat(eventMarkerAppends));
-      appended = true;
-    }
-
-    if (annotationAppends.length > 0) {
-      this.annotations = this.dedupeMarkers(this.annotations.concat(annotationAppends));
-      appended = true;
-    }
-
-    return appended;
   }
 
-  eventMarkerOverlapsWindow(marker: ChartMarker, cutoff: number) {
-    if (marker.starts_at_ms) return this.intervalMarkerOverlapsWindow(marker, cutoff);
-    if (!marker.timestamp_ms) return false;
-    return marker.timestamp_ms / 1000 >= cutoff;
-  }
-
-  limitMarkerOverlapsWindow(marker: ChartMarker, cutoff: number) {
-    if (
-      marker.marker_type === "limit_definition_interval" ||
-      marker.marker_type === "limit_analysis_bucket"
-    ) {
-      return this.intervalMarkerOverlapsWindow(marker, cutoff);
+  limitMarkerOverlapsWindow(marker: LimitMarker, cutoff: number) {
+    switch (marker.marker_type) {
+      case "limit_definition_interval":
+        return this.intervalMarkerOverlapsWindow(marker, cutoff);
+      case "limit_event":
+        return this.instantOverlapsWindow(marker.timestamp_ms, cutoff);
     }
-
-    if (!marker.timestamp_ms) return false;
-    return marker.timestamp_ms / 1000 >= cutoff;
   }
 
-  intervalMarkerOverlapsWindow(marker: ChartMarker, cutoff: number) {
-    const start = marker.starts_at_ms && marker.starts_at_ms / 1000;
+  /** A zero start or timestamp is "unset" (the chart never draws marks at the epoch). */
+  instantOverlapsWindow(timestampMs: number, cutoff: number) {
+    return timestampMs !== 0 && timestampMs / 1000 >= cutoff;
+  }
+
+  intervalMarkerOverlapsWindow(marker: ChartInterval, cutoff: number) {
     const end = marker.ends_at_ms ? marker.ends_at_ms / 1000 : this.chartWindowEnd();
-    if (!start) return false;
+    if (marker.starts_at_ms === 0) return false;
     return end !== null && end >= cutoff;
   }
 
-  annotationOverlapsWindow(annotation: ChartMarker, cutoff: number) {
+  annotationOverlapsWindow(annotation: ChartAnnotation, cutoff: number) {
     if (annotation.geometry === "interval") {
       return this.intervalMarkerOverlapsWindow(annotation, cutoff);
     }
 
-    const timestampMs = Number(annotation.timestamp_ms || annotation.starts_at_ms);
-    return Number.isFinite(timestampMs) && timestampMs / 1000 >= cutoff;
+    return annotation.starts_at_ms / 1000 >= cutoff;
   }
 
   chartWindowEnd(): number | null {
     if (this.liveMode() && Number.isFinite(this.liveWindowEnd)) return this.liveWindowEnd;
     if (this.xs.length === 0) return null;
     return this.xs.at(-1) ?? null;
-  }
-
-  dedupeMarkers(markers: ChartMarker[]) {
-    const seen = new Set();
-    return markers.filter((marker) => {
-      const key =
-        marker.annotation_id ||
-        marker.link_id ||
-        marker.marker_id ||
-        `${marker.marker_type || "limit_event"}:${marker.limit_event_id || marker.limit_definition_id}:${marker.timestamp_ms || marker.starts_at_ms}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
   }
 
   visibleSeriesCount() {
@@ -204,16 +159,8 @@ export class ChartModel extends ChartSeriesModel {
     return [fromMs / 1000, toMs / 1000];
   }
 
-  markerXValues(markers: ChartMarker[]) {
-    if (!Array.isArray(markers)) return [];
-
-    return markers.flatMap((marker) =>
-      (["timestamp_ms", "starts_at_ms", "ends_at_ms"] as const)
-        .map((key) => {
-          const value = Number(marker[key]);
-          return Number.isFinite(value) ? value / 1000 : null;
-        })
-        .filter((value) => value !== null),
-    );
+  /** Marker times in seconds, for the x range. */
+  markerXValues(markers: readonly (LimitMarker | EventMarker)[]) {
+    return markers.flatMap((marker) => markerTimes(marker).map((ms) => ms / 1000));
   }
 }

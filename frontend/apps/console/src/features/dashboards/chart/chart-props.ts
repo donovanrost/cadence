@@ -1,3 +1,5 @@
+import type { ChartAnnotation, EventMarker, LimitMarker } from "./chart-markers.ts";
+
 /** Display options, as the snapshot decodes them (model/snapshot.ts; unknown values are dropped). */
 export type ChartLegendMode = "auto" | "always" | "hidden";
 export type ChartLineWidth = "thin" | "normal" | "bold";
@@ -12,7 +14,7 @@ export type ChartTimeMode =
   | "unrecognized"
   | "";
 
-/** Chart input boundary. External data is admitted by the chart model. */
+/** Chart input boundary. Series payloads are admitted by the chart model; overlays come typed. */
 export interface TelemetryChartProps {
   chart_id: string;
   widget_id: string;
@@ -32,10 +34,9 @@ export interface TelemetryChartProps {
   unit?: string;
   backfill?: unknown[] | Record<string, unknown>;
   compare_backfill?: unknown[] | Record<string, unknown>;
-  limit_markers?: unknown[];
-  event_markers?: unknown[];
-  annotations?: unknown[];
-  selected_ref?: Record<string, unknown> | null;
+  limit_markers?: readonly LimitMarker[];
+  event_markers?: readonly EventMarker[];
+  annotations?: readonly ChartAnnotation[];
   time_mode?: ChartTimeMode;
   time_from?: string;
   time_to?: string;

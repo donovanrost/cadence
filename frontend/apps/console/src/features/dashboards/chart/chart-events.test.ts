@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
 import { chained, mergedSpans, overlapsAny } from "./chart-events.ts";
-import type { ChartMarker } from "./chart-input.ts";
 
 describe("contact tints (qa's overlay look)", () => {
   it("merges overlapping or touching passes into one tint, so 5% washes never stack", () => {
@@ -29,7 +28,7 @@ describe("contact tints (qa's overlay look)", () => {
 describe("mission event marks", () => {
   const at = (left: number, id: string) => ({
     left,
-    marker: { marker_id: id } satisfies ChartMarker,
+    marker: { marker_id: id },
   });
   it("chains a dense run (a once-a-second event stream) into one mark", () => {
     const runs = chained([at(10, "a"), at(14, "b"), at(18, "c"), at(22, "d"), at(40, "e")], 6);

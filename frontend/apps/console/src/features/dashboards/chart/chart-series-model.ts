@@ -6,14 +6,8 @@ import {
   type PointMetadata,
 } from "./chart-points.ts";
 import { record } from "./record.ts";
-import {
-  readMarkers,
-  readSelection,
-  textValue,
-  type ChartMarker,
-  type ChartSeries,
-  type PlotSeries,
-} from "./chart-input.ts";
+import { textValue, type ChartSeries, type PlotSeries } from "./chart-input.ts";
+import type { ChartAnnotation, EventMarker, LimitMarker } from "./chart-markers.ts";
 import type {
   ChartAxisMode,
   ChartLegendMode,
@@ -33,10 +27,9 @@ export abstract class ChartSeriesModel {
   plotSeries: PlotSeries[] = [];
   hiddenSeriesIds = new Set<string>();
   liveWindowEnd: number | null = null;
-  limitMarkers: ChartMarker[];
-  eventMarkers: ChartMarker[];
-  annotations: ChartMarker[];
-  selectedRef: ChartMarker | null;
+  limitMarkers: readonly LimitMarker[];
+  eventMarkers: readonly EventMarker[];
+  annotations: readonly ChartAnnotation[];
   axisMode: ChartAxisMode;
   readonly widgetId: string;
   readonly placementId: string;
@@ -63,10 +56,9 @@ export abstract class ChartSeriesModel {
     this.seriesList = this.normalizeSeriesPayload(input.backfill).concat(
       this.normalizeCompareSeriesPayload(input.compare_backfill),
     );
-    this.limitMarkers = readMarkers(input.limit_markers);
-    this.eventMarkers = readMarkers(input.event_markers);
-    this.annotations = readMarkers(input.annotations);
-    this.selectedRef = readSelection(input.selected_ref);
+    this.limitMarkers = input.limit_markers ?? [];
+    this.eventMarkers = input.event_markers ?? [];
+    this.annotations = input.annotations ?? [];
     if (this.liveMode()) this.advanceLiveWindow(Date.now());
     this.rebuildPlotData();
   }

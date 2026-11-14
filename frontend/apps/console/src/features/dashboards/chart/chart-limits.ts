@@ -1,8 +1,10 @@
-import type { ChartMarker } from "./chart-input.ts";
-type ThresholdBand = { name: string; from: number | null; to: number | null };
+import type { LimitDefinitionMarker, LimitEventMarker } from "./chart-markers.ts";
 import type { ChartSurface } from "./chart-surface.ts";
 
-/** Owns limit events, analysis buckets and threshold overlays. */
+type ThresholdName = "red_high" | "yellow_high" | "yellow_low" | "red_low";
+type ThresholdBand = { name: ThresholdName; from: number | null; to: number | null };
+
+/** Owns limit entries, definition intervals and their threshold overlays. */
 export class ChartLimits {
   readonly markerLayer: HTMLDivElement;
   constructor(private readonly surface: ChartSurface) {
@@ -26,14 +28,17 @@ export class ChartLimits {
     if (!this.markerLayer || !this.surface.chart) return;
 
     this.markerLayer.replaceChildren();
-    const entries: ChartMarker[] = [];
-    this.surface.model.limitMarkers.forEach((marker) => {
-      if (marker.marker_type === "limit_definition_interval")
-        this.renderLimitDefinitionInterval(marker);
-      else if (marker.marker_type === "limit_analysis_bucket")
-        this.renderLimitAnalysisBucket(marker);
-      else entries.push(marker);
-    });
+    const entries: LimitEventMarker[] = [];
+    for (const marker of this.surface.model.limitMarkers) {
+      switch (marker.marker_type) {
+        case "limit_definition_interval":
+          this.renderLimitDefinitionInterval(marker);
+          break;
+        case "limit_event":
+          entries.push(marker);
+          break;
+      }
+    }
     this.renderLimitEntries(entries);
   }
 
@@ -42,14 +47,14 @@ export class ChartLimits {
    * diamond) or yellow (caution triangle) state, along the plot's top edge. Marks closer than
    * 6px merge into one, worst state first, with the count and span in its title.
    */
-  renderLimitEntries(entries: readonly ChartMarker[]) {
+  renderLimitEntries(entries: readonly LimitEventMarker[]) {
     const placed = entries
       .flatMap((marker) => {
-        const left = this.surface.markerLeft(marker);
-        return left === null || left === undefined || Number.isNaN(left) ? [] : [{ marker, left }];
+        const left = this.surface.markerLeft(marker.timestamp_ms);
+        return Number.isNaN(left) ? [] : [{ marker, left }];
       })
       .sort((a, b) => a.left - b.left);
-    const clusters: { left: number; markers: ChartMarker[] }[] = [];
+    const clusters: { left: number; markers: LimitEventMarker[] }[] = [];
     for (const p of placed) {
       const last = clusters.at(-1);
       if (last && p.left - last.left < 6) last.markers.push(p.marker);
@@ -58,75 +63,11 @@ export class ChartLimits {
     for (const cluster of clusters) this.renderLimitEntry(cluster.left, cluster.markers);
   }
 
-  renderLimitAnalysisBucket(marker: ChartMarker) {
-    if (!marker.starts_at_ms || !marker.ends_at_ms) return;
-
-    const interval = this.surface.intervalBounds(marker);
-    if (!interval) return;
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.title = this.limitAnalysisBucketTitle(marker);
-    button.setAttribute("aria-label", button.title);
-    button.dataset.limitMarkerTarget = "limit analysis bucket";
-    button.dataset.limitMarkerId =
-      marker.limit_event_id || marker.sample_id || marker.marker_id || "";
-    button.dataset.limitMarkerRef = marker.link_id || marker.marker_id || "";
-    button.dataset.limitBucketState = marker.normalized_state || "";
-    button.dataset.limitBucketEventCount = String(marker.event_count || "");
-    button.dataset.limitBucketDivergenceCount = String(marker.limit_divergence_count || "");
-    button.dataset.limitDefinitionId = marker.limit_definition_id || "";
-    button.dataset.limitDefinitionVersion = String(marker.limit_definition_version || "");
-    button.dataset.limitSetName = marker.limit_set_name || "";
-    button.dataset.limitSelectedClock = this.limitMarkerMetadata(marker.selected_limit_clock);
-    button.dataset.limitSelectedDefinitionIntervals = this.limitMarkerMetadata(
-      marker.selected_limit_definition_intervals,
-    );
-    Object.assign(button.style, {
-      position: "absolute",
-      left: `${interval.left}px`,
-      top: `${this.surface.chart.bbox.top || 0}px`,
-      width: `${interval.width}px`,
-      height: `${this.surface.chart.bbox.height || this.surface.el.clientHeight}px`,
-      border: "0",
-      borderLeft: `1px solid ${this.surface.markerColor(marker)}`,
-      borderRight: `1px solid ${this.surface.markerColor(marker)}`,
-      padding: "0",
-      background: this.limitAnalysisBucketFill(marker),
-      outline: `1px solid ${this.limitAnalysisBucketEdge(marker)}`,
-      outlineOffset: "-1px",
-      cursor: marker.link_id ? "pointer" : "default",
-      pointerEvents: marker.link_id ? "auto" : "none",
-    });
-
-    if (marker.limit_divergence_count) {
-      button.dataset.limitBucketDiverged = "true";
-    }
-
-    button.addEventListener("click", (event) => {
-      if (!marker.link_id) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-      const target = marker.synthetic_limit_analysis ? "telemetry_sample" : "limit_event";
-      const targetId =
-        target === "telemetry_sample"
-          ? marker.sample_id
-          : marker.limit_event_id || marker.sample_id;
-      this.surface.pushEvent(
-        "open_data_link",
-        this.surface.markerDataLinkPayload(marker, target, targetId, marker.timestamp_ms),
-      );
-    });
-
-    this.markerLayer.appendChild(button);
-  }
-
-  renderLimitEntry(left: number, markers: readonly ChartMarker[]) {
+  renderLimitEntry(left: number, markers: readonly LimitEventMarker[]) {
     const first = markers[0];
     if (!first) return;
     const crit = markers.some((m) => m.limit_state === "red");
-    const at = (m: ChartMarker | undefined) =>
+    const at = (m: LimitEventMarker | undefined) =>
       m?.timestamp_ms ? `${new Date(m.timestamp_ms).toISOString().slice(11, 16)}Z` : "";
     const word = crit ? "crit" : "caution";
     const button = document.createElement("button");
@@ -137,8 +78,8 @@ export class ChartLimits {
         : `${markers.length} ${word} entries ${at(first)}–${at(markers.at(-1))}`;
     button.setAttribute("aria-label", button.title);
     button.dataset.limitMarkerTarget = "limit event";
-    button.dataset.limitMarkerId = first.limit_event_id || "";
-    button.dataset.limitMarkerRef = first.link_id || "";
+    button.dataset.limitMarkerId = first.limit_event_id ?? "";
+    button.dataset.limitMarkerRef = first.link_id;
     Object.assign(button.style, {
       position: "absolute",
       left: `${left}px`,
@@ -179,7 +120,7 @@ export class ChartLimits {
       this.surface.pushEvent(
         "open_data_link",
         this.surface.markerDataLinkPayload(
-          first,
+          first.link_id,
           "limit_event",
           first.limit_event_id,
           first.timestamp_ms,
@@ -189,9 +130,7 @@ export class ChartLimits {
     this.markerLayer.appendChild(button);
   }
 
-  renderLimitDefinitionInterval(marker: ChartMarker) {
-    if (!marker.link_id || !marker.starts_at_ms) return;
-
+  renderLimitDefinitionInterval(marker: LimitDefinitionMarker) {
     const interval = this.surface.intervalBounds(marker);
     if (!interval) return;
 
@@ -200,12 +139,12 @@ export class ChartLimits {
     // A definition that starts inside the window is a change (ux): a 1px tick and its time.
     const changed = interval.left > 0.5;
     button.title = changed
-      ? `Limits changed ${marker.starts_at_ms ? new Date(marker.starts_at_ms).toISOString().slice(11, 16) : ""}Z`
-      : `${marker.limit_set_name || "Active"} limits`;
+      ? `Limits changed ${new Date(marker.starts_at_ms).toISOString().slice(11, 16)}Z`
+      : `${marker.limit_set_name ?? "Active"} limits`;
     button.setAttribute("aria-label", button.title);
     button.dataset.limitMarkerTarget = "limit definition";
-    button.dataset.limitMarkerId = marker.limit_definition_id || marker.target_id || "";
-    button.dataset.limitMarkerRef = marker.link_id || "";
+    button.dataset.limitMarkerId = marker.limit_definition_id ?? "";
+    button.dataset.limitMarkerRef = marker.link_id;
     Object.assign(button.style, {
       position: "absolute",
       left: `${interval.left}px`,
@@ -229,9 +168,9 @@ export class ChartLimits {
       this.surface.pushEvent(
         "open_data_link",
         this.surface.markerDataLinkPayload(
-          marker,
+          marker.link_id,
           "limit_definition",
-          marker.target_id || marker.limit_definition_id,
+          marker.limit_definition_id,
           marker.starts_at_ms,
         ),
       );
@@ -240,12 +179,13 @@ export class ChartLimits {
     this.markerLayer.appendChild(button);
   }
 
-  renderThresholdLines(parent: HTMLElement, marker: ChartMarker) {
+  renderThresholdLines(parent: HTMLElement, marker: LimitDefinitionMarker) {
     const thresholdNames = ["red_high", "yellow_high", "yellow_low", "red_low"] as const;
 
     thresholdNames.forEach((name) => {
-      const value = Number(marker[name]);
-      if (!Number.isFinite(value)) return;
+      // An unset threshold draws nothing (it used to read as a line at 0).
+      const value = marker[name];
+      if (value === null) return;
 
       const top = this.surface.chart.valToPos(value, "y", false);
       const height = this.surface.chart.bbox.height || this.surface.el.clientHeight;
@@ -263,9 +203,9 @@ export class ChartLimits {
     });
   }
 
-  renderThresholdBands(parent: HTMLElement, marker: ChartMarker) {
+  renderThresholdBands(parent: HTMLElement, marker: LimitDefinitionMarker) {
     // Only beyond red gets a wash (ux: crit wash, no caution wash).
-    this.thresholdBandSpecs(marker)
+    thresholdBands(marker)
       .filter((band) => band.name.startsWith("red"))
       .forEach((band) => {
         const bounds = this.thresholdBandBounds(band);
@@ -286,23 +226,6 @@ export class ChartLimits {
       });
   }
 
-  thresholdBandSpecs(marker: ChartMarker) {
-    return [
-      { name: "red_high", from: this.numberOrNull(marker.red_high), to: null },
-      {
-        name: "yellow_high",
-        from: this.numberOrNull(marker.yellow_high),
-        to: this.numberOrNull(marker.red_high),
-      },
-      {
-        name: "yellow_low",
-        from: this.numberOrNull(marker.red_low),
-        to: this.numberOrNull(marker.yellow_low),
-      },
-      { name: "red_low", from: null, to: this.numberOrNull(marker.red_low) },
-    ].filter((band) => band.from !== null || band.to !== null);
-  }
-
   thresholdBandBounds(band: ThresholdBand) {
     const plotTop = this.surface.chart.bbox.top || 0;
     const plotHeight = this.surface.chart.bbox.height || this.surface.el.clientHeight;
@@ -321,52 +244,24 @@ export class ChartLimits {
     return { top: clippedTop - plotTop, height };
   }
 
-  numberOrNull(value: unknown) {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : null;
-  }
-
-  limitAnalysisBucketTitle(marker: ChartMarker) {
-    const state = marker.normalized_state || "limit";
-    const count = marker.event_count
-      ? ` / ${marker.event_count} event${marker.event_count === 1 ? "" : "s"}`
-      : "";
-    const divergence = marker.limit_divergence_count
-      ? ` / ${marker.limit_divergence_count} divergent`
-      : "";
-    return `Inspect ${state} limit analysis bucket${count}${divergence}`;
-  }
-
-  limitMarkerMetadata(value: unknown) {
-    if (value === null || value === undefined || value === "") return "";
-    if (typeof value === "string") return value;
-
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return "";
-    }
-  }
-
-  limitAnalysisBucketFill(marker: ChartMarker) {
-    if (marker.normalized_state === "red")
-      return `${this.surface.themeColor("--chart-critical-14")}`;
-    return `${this.surface.themeColor("--chart-caution-12")}`;
-  }
-
-  limitAnalysisBucketEdge(marker: ChartMarker) {
-    if (marker.normalized_state === "red")
-      return `${this.surface.themeColor("--chart-critical-28")}`;
-    return `${this.surface.themeColor("--chart-caution-24")}`;
-  }
-
-  limitThresholdColor(name: string) {
+  limitThresholdColor(name: ThresholdName) {
     if (name.startsWith("red")) return `${this.surface.themeColor("--chart-critical-82")}`;
     return `${this.surface.themeColor("--chart-caution-82")}`;
   }
 
-  limitThresholdBandColor(name: string) {
+  limitThresholdBandColor(name: ThresholdName) {
     if (name.startsWith("red")) return this.surface.themeColor("--apogee-wash-crit");
     return "transparent";
   }
+}
+
+/** The wash bands a definition's thresholds bound, from the top down; unset thresholds bound none. */
+export function thresholdBands(marker: LimitDefinitionMarker): ThresholdBand[] {
+  const bands: ThresholdBand[] = [
+    { name: "red_high", from: marker.red_high, to: null },
+    { name: "yellow_high", from: marker.yellow_high, to: marker.red_high },
+    { name: "yellow_low", from: marker.red_low, to: marker.yellow_low },
+    { name: "red_low", from: null, to: marker.red_low },
+  ];
+  return bands.filter((band) => band.from !== null || band.to !== null);
 }

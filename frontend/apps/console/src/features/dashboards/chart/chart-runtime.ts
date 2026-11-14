@@ -2,7 +2,7 @@ import { inject, onBeforeUnmount, onMounted, type InjectionKey } from "vue";
 
 /** A workspace-instance transport. Its owner must authorize and scope every operation. */
 export type ChartAction = "open_data_link" | "open_evidence" | "set_chart_time_range";
-export type ChartTopic = "append" | "selection";
+export type ChartTopic = "append";
 export interface ChartRuntimePort {
   readonly version: 1;
   execute(action: ChartAction, payload: Record<string, unknown>): void | Promise<void>;
@@ -12,7 +12,7 @@ export const CHART_RUNTIME_PORT: InjectionKey<ChartRuntimePort> = Symbol(
   "cadence.dashboard.chart-runtime.v1",
 );
 const actions: readonly string[] = ["open_data_link", "open_evidence", "set_chart_time_range"];
-const topics: readonly string[] = ["append", "selection"];
+const topics: readonly string[] = ["append"];
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 

@@ -1,7 +1,8 @@
 import uPlot from "uplot";
 import type { ChartModel } from "./chart-model.ts";
 import type { ChartAction } from "./chart-runtime.ts";
-import type { ChartMarker, ChartSeries } from "./chart-input.ts";
+import type { ChartSeries } from "./chart-input.ts";
+import type { ChartInterval } from "./chart-markers.ts";
 import type { PointMetadata } from "./chart-points.ts";
 
 /** Shared plot geometry, themed colors and native action payloads for render-only layers. */
@@ -49,25 +50,19 @@ export class ChartSurface {
     });
   }
 
+  /** A mark's data link. The console's markers carry no data scope of their own (no realm/view). */
   markerDataLinkPayload(
-    marker: ChartMarker,
-    target: string | null | undefined,
-    targetId: string | null | undefined,
-    timestampMs: number | null | undefined,
+    linkId: string,
+    target: string,
+    targetId: string | null,
+    timestampMs: number,
   ) {
     return this.compactPayload({
-      "link-id": marker.link_id,
+      "link-id": linkId,
       "placement-id": this.model.placementId,
       target,
       "target-id": targetId,
       "timestamp-ms": timestampMs,
-      realm: marker.requested_realm || marker.realm,
-      "data-view": marker.requested_data_view || marker.data_view,
-      "data-source-id": marker.requested_data_source_id || marker.data_source_id,
-      "source-binding-id": marker.requested_source_binding_id || marker.source_binding_id,
-      "time-mode": marker.time_mode,
-      "time-axis": marker.time_axis,
-      "replay-run-id": marker.replay_run_id,
     });
   }
 
@@ -101,14 +96,12 @@ export class ChartSurface {
     };
   }
 
-  markerLeft(marker: ChartMarker) {
+  markerLeft(timestampMs: number) {
     const plotLeft = this.chart.bbox.left || 0;
-    if (marker.timestamp_ms == null) return null;
-    const x = marker.timestamp_ms / 1000;
-    return plotLeft + this.chart.valToPos(x, "x", false);
+    return plotLeft + this.chart.valToPos(timestampMs / 1000, "x", false);
   }
 
-  intervalBounds(marker: ChartMarker) {
+  intervalBounds(marker: ChartInterval) {
     if (!marker.starts_at_ms || this.model.xs.length === 0) return null;
 
     const plotBounds = this.chartPlotBounds();
@@ -128,28 +121,6 @@ export class ChartSurface {
     const width = Math.max(2, right - left);
 
     return { left, width };
-  }
-
-  markerColor(marker: ChartMarker) {
-    if (marker.normalized_state === "red") return `${this.themeColor("--chart-critical-95")}`;
-    return `${this.themeColor("--chart-caution-95")}`;
-  }
-
-  limitAnalysisBucketSelectionFill(marker: ChartMarker) {
-    if (marker.normalized_state === "red") return `${this.themeColor("--chart-critical-20")}`;
-    return `${this.themeColor("--chart-caution-18")}`;
-  }
-
-  limitIntervalColor(_marker: ChartMarker) {
-    return `${this.themeColor("--chart-caution-58")}`;
-  }
-
-  eventColor(marker: ChartMarker) {
-    if (marker.severity === "critical" || marker.severity === "error")
-      return `${this.themeColor("--chart-critical-90")}`;
-    if (marker.severity === "warning" || marker.status === "canceled")
-      return `${this.themeColor("--chart-warning-90")}`;
-    return `${this.themeColor("--chart-revision-86")}`;
   }
 
   chartSize() {

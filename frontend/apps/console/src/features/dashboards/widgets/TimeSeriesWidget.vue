@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import TelemetryChart from "../chart/TelemetryChart.vue";
+import type { ChartAnnotation } from "../chart/chart-markers.ts";
 import type { ReadyPlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import { overlayMarkers } from "../model/overlay-markers.ts";
 import { snapshotSeries } from "../model/snapshot-series.ts";
@@ -27,15 +28,15 @@ const series = computed(() => {
 });
 /** Limits and contacts from the placement's overlay frames (ux Dashboards.md 'Overlays'). */
 const overlay = computed(() => overlayMarkers(props.placement));
+/** An unrecognized annotation kind draws as a point, as the chart always did. */
 const annotations = computed(() =>
-  props.placement.annotations.map((a) => ({
+  props.placement.annotations.map((a): ChartAnnotation => ({
     annotation_id: a.id,
     title: a.title,
     severity: a.severity,
-    geometry: a.kind,
+    geometry: a.kind === "interval" ? "interval" : "point",
     starts_at_ms: a.starts_at_ms,
     ends_at_ms: a.ends_at_ms,
-    ...(a.kind === "point" ? { timestamp_ms: a.starts_at_ms } : {}),
   })),
 );
 // Every refresh delivers a complete snapshot (moving window included). Append mode would wait
@@ -78,8 +79,8 @@ const optional = computed(() => {
       :backfill="{ series: series.primary }"
       :compare_backfill="{ series: series.compare }"
       :annotations="annotations"
-      :limit_markers="[...overlay.limitMarkers]"
-      :event_markers="[...overlay.eventMarkers]"
+      :limit_markers="overlay.limitMarkers"
+      :event_markers="overlay.eventMarkers"
       :time_mode="timeMode"
       :time_axis="placement.frames[0]?.time_axis ?? context.time_axis"
       :time_from="context.from ?? ''"

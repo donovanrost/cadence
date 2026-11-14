@@ -1,4 +1,4 @@
-import type { ChartMarker } from "./chart-input.ts";
+import type { ContactMarker, EventMarker, MissionEventMarker } from "./chart-markers.ts";
 import type { ChartSurface } from "./chart-surface.ts";
 /**
  * Owns event overlays. The browser snapshot (WorkspaceSnapshot) carries mission events only:
@@ -43,15 +43,9 @@ export class ChartEvents {
     if (!this.eventLayer || !this.surface.chart) return;
     this.eventLayer.replaceChildren();
     this.fillLayer.replaceChildren();
-    const contacts = this.surface.model.eventMarkers.filter(
-      (m) => m.marker_type === "contact_interval",
-    );
-    this.renderContactBands(contacts);
-    this.renderMissionEvents(
-      this.surface.model.eventMarkers.filter(
-        (m) => m.marker_type === "mission_event" && m.link_id && m.timestamp_ms,
-      ),
-    );
+    const markers = this.surface.model.eventMarkers;
+    this.renderContactBands(markers.filter(isContact));
+    this.renderMissionEvents(markers.filter(isMissionEvent));
   }
 
   /**
@@ -59,11 +53,11 @@ export class ChartEvents {
    * with the count and span in its title, as limit entries do: a once-a-second event stream
    * otherwise packs hundreds of lines into an opaque block over the series (qa's overlay look).
    */
-  renderMissionEvents(events: readonly ChartMarker[]) {
+  renderMissionEvents(events: readonly MissionEventMarker[]) {
     const placed = events
       .flatMap((marker) => {
-        const left = this.surface.markerLeft(marker);
-        return left === null || left === undefined || Number.isNaN(left) ? [] : [{ marker, left }];
+        const left = this.surface.markerLeft(marker.timestamp_ms);
+        return Number.isNaN(left) ? [] : [{ marker, left }];
       })
       .sort((a, b) => a.left - b.left);
     for (const cluster of chained(placed, 6))
@@ -77,7 +71,7 @@ export class ChartEvents {
    * overlapping run and drawn behind the series, so overlapping passes (or a booked + realized
    * pair) never stack into a heavier wash (qa's overlay look); labels go on top of every band.
    */
-  renderContactBands(contacts: readonly ChartMarker[]) {
+  renderContactBands(contacts: readonly ContactMarker[]) {
     const bands = contacts.flatMap((marker) => {
       const bounds = this.surface.intervalBounds(marker);
       return bounds ? [{ marker, ...bounds, realized: marker.kind === "realized_contact" }] : [];
@@ -119,7 +113,7 @@ export class ChartEvents {
   }
 
   private renderBandEdges(band: {
-    marker: ChartMarker;
+    marker: ContactMarker;
     left: number;
     width: number;
     realized: boolean;
@@ -161,7 +155,7 @@ export class ChartEvents {
     this.eventLayer.appendChild(label);
   }
 
-  renderMissionEvent(left: number, markers: readonly ChartMarker[]) {
+  renderMissionEvent(left: number, markers: readonly MissionEventMarker[]) {
     const marker = markers[0];
     if (!marker) return;
     const button = document.createElement("button");
@@ -172,8 +166,7 @@ export class ChartEvents {
         : `${markers.length} events ${clock(marker.timestamp_ms)}–${clock(markers.at(-1)?.timestamp_ms)}`;
     button.setAttribute("aria-label", button.title);
     button.dataset.eventMarkerTarget = "mission event";
-    button.dataset.eventMarkerId = marker.mission_event_id || marker.target_id || "";
-    button.dataset.eventMarkerRef = marker.link_id || "";
+    button.dataset.eventMarkerRef = marker.link_id;
     Object.assign(button.style, {
       position: "absolute",
       left: `${left}px`,
@@ -205,9 +198,9 @@ export class ChartEvents {
       this.surface.pushEvent(
         "open_data_link",
         this.surface.markerDataLinkPayload(
-          marker,
+          marker.link_id,
           "mission_event",
-          marker.target_id || marker.mission_event_id,
+          null,
           marker.timestamp_ms,
         ),
       );
@@ -239,8 +232,8 @@ export function mergedSpans(spans: readonly { left: number; width: number }[]) {
 }
 
 /** Marks merged while each is less than `px` from the previous one (a dense run is one mark). */
-export function chained(placed: readonly { marker: ChartMarker; left: number }[], px: number) {
-  const clusters: { left: number; last: number; markers: ChartMarker[] }[] = [];
+export function chained<M>(placed: readonly { marker: M; left: number }[], px: number) {
+  const clusters: { left: number; last: number; markers: M[] }[] = [];
   for (const p of placed) {
     const run = clusters.at(-1);
     if (run && p.left - run.last < px) {
@@ -251,5 +244,9 @@ export function chained(placed: readonly { marker: ChartMarker; left: number }[]
   return clusters;
 }
 
-const clock = (ms: number | null | undefined) =>
+const clock = (ms: number | undefined) =>
   ms ? `${new Date(ms).toISOString().slice(11, 16)}Z` : "";
+
+const isContact = (m: EventMarker): m is ContactMarker => m.marker_type === "contact_interval";
+const isMissionEvent = (m: EventMarker): m is MissionEventMarker =>
+  m.marker_type === "mission_event";

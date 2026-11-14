@@ -37,7 +37,6 @@ function probe(port?: ChartRuntimePort) {
     setup() {
       runtime = useChartRuntime();
       runtime.on("append", received);
-      runtime.on("selection", received);
       return () => h("div");
     },
   });
@@ -64,7 +63,7 @@ test("ports isolate workspace instances, restrict actions and unsubscribe on unm
   a.app.unmount();
   late({ series: {} });
   a.runtime.pushEvent("open_evidence", {});
-  expect(one.stop).toHaveBeenCalledTimes(2);
+  expect(one.stop).toHaveBeenCalledOnce();
   expect(a.received).toHaveBeenCalledOnce();
   expect(one.execute).toHaveBeenCalledOnce();
 });
