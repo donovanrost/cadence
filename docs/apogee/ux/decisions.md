@@ -1160,3 +1160,18 @@ CommandFlow.md, C1 B "When targets differ".
   re-runs with C1 and C2.
 - Informational, not a GO/HOLD check. **No HOLD** (lead, 11-14): seeing it where targets are reviewed is enough,
   and a HOLD on every mixed-fleet request would become noise.
+
+### U52 · Fleet start after the lookback fix: per-run cap and the 50,000 bound (domain / api / fe-setup)
+Domain's fix generates a template's whole future horizon, so preview counts rise. The counts need no new words.
+Two things must not stay silent (U20), because the preview has to say what Start will actually create.
+- **Per-template cap: flag it.** For each capped template, the preview shows an info line: "Block 1 daily stops at
+  11-20 in this start: it reached its limit of 1,000 requirements per run." The second sentence depends on domain's
+  answer:
+  - If later runs carry on: "Later runs generate the rest."
+  - If not, it's caution: "Days after 11-20 aren't generated."
+  - Data ask (domain → api): per template `capped: {limit, last_date} | null`.
+- **Over the 50,000 bound: a refusal** (api's `422 fleet_planning_occurrence_limit_exceeded`): "This start would
+  create more than 50,000 template requirements. Shorten the horizon or include fewer templates." With
+  `details.count`: "This start would create 62,400 template requirements; the limit is 50,000. …".
+  - Best caught in the preview: Start is disabled, and this sentence is the reason, so nobody finds out by pressing
+    it. Create keeps the same refusal as a backstop.
