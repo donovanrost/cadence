@@ -1116,7 +1116,8 @@ data with an SCID or address Cadence didn't expect, and that's the case that mat
   pass label.
 - **Second connection while connected** (api-ops' review, lead's call, 11-14). When the pass's own connection is
   up and receiving, a refused second connection to the same profile stays out of the item. It's counted only, and
-  the count shows in the pass block's Technical details as "Second connections refused: 2". It doesn't open a
+  the count shows in the selected pass's own Technical details (the pass facts, from the pass row), as "Second
+  connections refused: 2", whether or not a refusal block exists (fe-ops). It doesn't open a
   window, change the title or raise priority. **Exception:** if the pass's own connection has gone quiet (no frames
   for domain's threshold) when the second one is refused, it counts as a normal refusal and opens the item. A
   half-open old connection can block the provider's real reconnect, and that's telemetry being turned away.
