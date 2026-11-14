@@ -37,12 +37,26 @@ export function contactName(a: Attention, now: Date = new Date()): string {
   return station ? `${station} contact` : "contact";
 }
 
+/**
+ * U47's label, or null with nothing to name. api renders a passless item's station as an object
+ * of nulls ({ref: null, …}), so "has a station" means it has a code or name, not that it's set.
+ */
+export function passLabel(a: Attention, now: Date = new Date()): string | null {
+  const station = a.station?.code ?? a.station?.name ?? null;
+  const pass = a.reservation_id != null || a.contact_label != null;
+  return station || pass ? contactName(a, now) : null;
+}
+
 const frames = (n: number) => plural(n, "telemetry frame", "telemetry frames");
 
 export function ingressTitle(a: Attention, now: Date = new Date()): string {
-  const where = contactName(a, now);
-  if (a.conflict === "frames_dropped" && a.drops) return `${where} · ${frames(a.drops.count)} lost`;
-  return `${where} · telemetry is backing up`;
+  // U47: without a station or pass, the spacecraft alone (the row adds it).
+  const where = passLabel(a, now);
+  const what =
+    a.conflict === "frames_dropped" && a.drops
+      ? `${frames(a.drops.count)} lost`
+      : "telemetry is backing up";
+  return where ? `${where} · ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
 }
 
 const BACKING_UP = "Cadence is storing this pass's telemetry more slowly than it arrives.";

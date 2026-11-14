@@ -2,7 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import { decoders as d, request, type ApiResult } from "@/api/index.ts";
 import { attentionReader, serverKey, short, type Attention } from "./attention.ts";
-import { contactName } from "./ingress.ts";
+import { passLabel } from "./ingress.ts";
 import type { QueueItem } from "./queue.ts";
 
 /**
@@ -21,9 +21,8 @@ export const jobWords = (a: Attention) => a.words ?? UNKNOWN;
 
 /** `EARENDIL-312 · SVA 03:10Z pass · Booking at Northlight: outcome unknown`, or the noun alone. */
 export function jobTitle(a: Attention, spacecraft: string | null, now: Date = new Date()) {
-  const named = a.station != null || a.reservation_id != null || a.contact_label != null;
   const what = `${jobWords(a).noun}: outcome unknown`;
-  return [spacecraft, named ? contactName(a, now) : null, what].filter(Boolean).join(" · ");
+  return [spacecraft, passLabel(a, now), what].filter(Boolean).join(" · ");
 }
 
 /** `STARTED 03:01Z · FOUND AT RESTART 03:09Z`: the stop isn't recorded, only these two (U54). */

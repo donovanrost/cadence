@@ -120,6 +120,24 @@ describe("job_outcome_unknown on Now (ux U54)", () => {
     );
   });
 
+  it("api's passless station and provider (objects of nulls) name nothing", () => {
+    const row = rowOf({
+      reservation_id: null,
+      contact_id: null,
+      station: { ref: null, id: null, code: null, name: null },
+      provider: { id: null, name: null },
+      starts_at: null,
+      ends_at: null,
+      words: {
+        noun: "Catalog import",
+        check_place: "in Setup › Catalog",
+        consequence: "create a second revision",
+      },
+    });
+    expect(row?.title).toBe("EARENDIL-008 · Catalog import: outcome unknown");
+    expect(row?.noAction).toBe(true);
+  });
+
   it("words the Retry sheet from the server's words", () => {
     const row = rowOf();
     if (!row?.job) throw new Error("no job");

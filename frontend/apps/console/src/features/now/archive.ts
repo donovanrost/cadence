@@ -3,7 +3,7 @@ import type { RouteLocationRaw } from "vue-router";
 import { request } from "@/api/index.ts";
 import { plural } from "@/ui";
 import { attentionReader, serverKey, short, type Attention } from "./attention.ts";
-import { contactName } from "./ingress.ts";
+import { passLabel } from "./ingress.ts";
 import type { QueueItem } from "./queue.ts";
 
 /**
@@ -26,8 +26,7 @@ export function recordCounts(c: Readonly<{ frames: number; packets: number }> | 
 
 /** The pass label (U47's), or null with neither a station nor a pass to name. */
 function where(a: Attention, now: Date): string | null {
-  const named = a.station != null || a.reservation_id != null || a.contact_label != null;
-  return named ? contactName(a, now) : null;
+  return passLabel(a, now);
 }
 
 /** `EARENDIL-008 · SVB 03:10Z pass · 12 frames and 40 packets couldn't be archived`. */

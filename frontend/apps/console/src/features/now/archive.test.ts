@@ -129,6 +129,10 @@ describe("archive_quarantine on Now (ux U49)", () => {
     expect(rowOf({ reservation_id: null })?.title).toBe(
       "EARENDIL-008 · SVB contact · 12 frames and 40 packets couldn't be archived",
     );
+    expect(
+      rowOf({ reservation_id: null, station: { ref: null, id: null, code: null, name: null } })
+        ?.title,
+    ).toBe("EARENDIL-008 · 12 frames and 40 packets couldn't be archived");
     const bare = rowOf({ reservation_id: null, station: null });
     expect(bare?.title).toBe("EARENDIL-008 · 12 frames and 40 packets couldn't be archived");
   });

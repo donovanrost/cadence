@@ -2,7 +2,7 @@ import type { RouteLocationRaw } from "vue-router";
 import { isKnown } from "@/api/index.ts";
 import { plural } from "@/ui";
 import { serverKey, short, type Attention } from "./attention.ts";
-import { contactName } from "./ingress.ts";
+import { passLabel } from "./ingress.ts";
 import type { QueueItem } from "./queue.ts";
 
 /**
@@ -16,9 +16,8 @@ const connections = (n: number) => plural(n, "connection");
 
 /** `EARENDIL-008 · SVB 03:10Z pass · 3 connections refused`. */
 export function listenerTitle(a: Attention, spacecraft: string | null, now: Date = new Date()) {
-  const named = a.station != null || a.reservation_id != null || a.contact_label != null;
   const what = `${connections(a.refused_count ?? 1)} refused`;
-  return [spacecraft, named ? contactName(a, now) : null, what].filter(Boolean).join(" · ");
+  return [spacecraft, passLabel(a, now), what].filter(Boolean).join(" · ");
 }
 
 const STILL_MS = 5 * 60_000;
