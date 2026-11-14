@@ -429,4 +429,13 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   frame ids. No manual action (no-replay rule); decision with api-ops/domain/director.
 - Runbook fix: a restart pre-flight must also check for no active realized contact and no pass starting in the window.
 
+### 61. Archive rows carry no contact: realized_contact_id, path_id, provider_binding_id all NULL
+
+- Found during the 06:45Z ingest post-checks (owner **api-ops**). Every `protocol_archive_record_entries` row for
+  11-14's 008/010/007 passes has `realized_contact_id` NULL. api-ops: true of all rows, before (98,125) and after
+  (44,390) the ingest fix, so it predates tonight's fix. `Evidence.from_payload` (ingress_journal/evidence.ex) drops
+  the journal entry's top-level `realized_contact_id` / `path_id` / `provider_binding_id`.
+- Impact: archive rows can't be joined to a pass, and #88's quarantine items would always read `none:<code>`.
+- Fix: api-ops, carries the three keys into evidence metadata. New rows only; old dev rows stay NULL.
+
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
