@@ -629,42 +629,74 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     |> Keyword.delete(:module)
   end
 
+  # A record whose id is already indexed was archived before when it is the same record and its
+  # segment object is on disk.
+  #
+  # A transfer frame's id is its journal position (stream, offset, length), which pins its bytes,
+  # so it is the same frame when its decoded identity columns agree. Its entry's provenance can
+  # legitimately differ: a replay may group the same journal records into different evidence than
+  # the run that archived them (evidence_id, evidence_sha256, receipt_time, the batch's metadata).
+  # 11-14: 008's pass, interrupted mid-batch, replayed into a permanent conflict that stalled the
+  # mission's ingest. The columns are compared, not a hash, so rows indexed before this change
+  # (whose content_sha256 hashes the whole entry) match too.
+  #
+  # A packet's id already digests its evidence, so a re-batched replay gives it a new id rather
+  # than a conflict; packets keep the whole-entry content check.
+  @frame_identity_columns [
+    :mission_id,
+    :spacecraft_id,
+    :protocol_family,
+    :direction,
+    :scid,
+    :vcid,
+    :map_id,
+    :frame_seq
+  ]
+
   defp archived_record_ids?(rows, opts) do
     archive_backend = archive_backend(opts)
     repo = repo(opts)
 
-    expected_pairs =
-      rows
-      |> Enum.map(&{&1.record_kind, &1.record_id, &1.content_sha256})
-      |> Enum.uniq()
+    expected = Map.new(rows, &{{&1.record_kind, &1.record_id}, &1})
+    record_kinds = expected |> Map.keys() |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    record_ids = expected |> Map.keys() |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
 
-    expected_set = MapSet.new(expected_pairs)
-    record_kinds = expected_pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
-    record_ids = expected_pairs |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
-
-    found_rows =
+    found =
       ProtocolArchiveRecordEntryRow
       |> where(
         [row],
         row.archive_backend == ^archive_backend and row.record_kind in ^record_kinds and
           row.record_id in ^record_ids
       )
-      |> select([row], {row.record_kind, row.record_id, row.content_sha256, row.object_key})
+      |> select(
+        [row],
+        map(
+          row,
+          ^[:record_kind, :record_id, :content_sha256, :object_key | @frame_identity_columns]
+        )
+      )
       |> repo.all()
+      |> Map.new(&{{&1.record_kind, &1.record_id}, &1})
 
-    found_pairs =
-      found_rows
-      |> Enum.map(fn {kind, id, hash, _key} -> {kind, id, hash} end)
-      |> Enum.filter(&MapSet.member?(expected_set, &1))
-      |> MapSet.new()
+    Enum.all?(expected, fn {key, row} ->
+      case Map.fetch(found, key) do
+        {:ok, existing} -> same_record?(row, existing) and segment_present?(existing, opts)
+        :error -> false
+      end
+    end)
+  end
 
-    MapSet.equal?(found_pairs, expected_set) and
-      Enum.all?(found_rows, fn {_kind, _id, _hash, key} ->
-        case Keyword.fetch(opts, :base_path) do
-          {:ok, base_path} -> File.regular?(Path.join(base_path, key))
-          :error -> true
-        end
-      end)
+  defp same_record?(%{record_kind: @transfer_frame_record_kind} = row, existing),
+    do: Map.take(row, @frame_identity_columns) == Map.take(existing, @frame_identity_columns)
+
+  defp same_record?(row, existing),
+    do: is_binary(existing.content_sha256) and existing.content_sha256 == row.content_sha256
+
+  defp segment_present?(%{object_key: object_key}, opts) do
+    case Keyword.fetch(opts, :base_path) do
+      {:ok, base_path} -> File.regular?(Path.join(base_path, object_key))
+      :error -> true
+    end
   end
 
   defp content_hash(entry) do
