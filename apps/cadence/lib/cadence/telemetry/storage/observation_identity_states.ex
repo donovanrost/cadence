@@ -195,10 +195,36 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     |> Enum.map(&TelemetryObservationIdentityStateRow.to_domain/1)
   end
 
-  @doc "Returns all identity states needed for effective telemetry selection."
+  @doc """
+  Returns the identity states needed for effective telemetry selection.
+
+  With `:observation_identity_ids`, only those identities' states (a primary-key lookup): a
+  history read passes the identities of the rows it fetched, since a sample's selection depends
+  only on its own identity's state. Without it, every state matching the filters (a point's
+  whole history: avoid on a hot read path).
+  """
   @spec list_for_selection(binary(), keyword()) :: [ObservationIdentityState.t()]
   def list_for_selection(mission_id, opts \\ [])
       when is_binary(mission_id) and is_list(opts) do
+    case Keyword.fetch(opts, :observation_identity_ids) do
+      {:ok, ids} when is_list(ids) ->
+        case normalize_identity_ids(ids) do
+          [] ->
+            []
+
+          ids ->
+            mission_id
+            |> selection_query(opts)
+            |> where([row], row.observation_identity_id in ^ids)
+            |> load_states()
+        end
+
+      :error ->
+        mission_id |> selection_query(opts) |> load_states()
+    end
+  end
+
+  defp selection_query(mission_id, opts) do
     TelemetryObservationIdentityStateRow
     |> where([row], row.mission_id == ^mission_id)
     |> filter(:organization_id, Keyword.get(opts, :organization_id))
@@ -208,6 +234,10 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     |> filter(:binding_id, Keyword.get(opts, :binding_id))
     |> filter(:point_id, Keyword.get(opts, :point_id))
     |> filter(:spacecraft_id, Keyword.get(opts, :spacecraft_id))
+  end
+
+  defp load_states(query) do
+    query
     |> Repo.all()
     |> Enum.map(&TelemetryObservationIdentityStateRow.to_domain/1)
   end
