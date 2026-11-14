@@ -35,7 +35,13 @@ defmodule Cadence.ContactPlanning.FleetStartProjection do
   defp fan_out(t), do: length(t.occurrences) * length(t.spacecraft_ids)
 
   defp eligible_count(t, window) do
-    existing = MapSet.new(t.existing_occurrences, &{&1.at, &1.spacecraft_id})
+    # Days an older version's requirement still serves (kept) or closed (done) aren't eligible;
+    # its days this version regenerates are (DECISIONS #86).
+    existing =
+      for row <- t.existing_occurrences,
+          Map.get(row, :outcome) != "generate",
+          into: MapSet.new(),
+          do: {row.at, row.spacecraft_id}
 
     for at <- t.occurrences,
         {starts, ends} = RequirementSchedule.window(t.version.schedule_document, at),

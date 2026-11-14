@@ -7,6 +7,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
     ContactRequirementTemplates,
     ContentHash,
     FleetPlanningPolicies,
+    TemplateDays,
     TemplateSupersession,
     TemplateTargets
   }
@@ -38,7 +39,8 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
          :ok <- horizon(window, policy),
          :ok <- lock_plans_first(scope.organization_id, mission_id, window, locked),
          {:ok, requirements} <- requirements(scope.organization_id, mission_id, window, locked),
-         {:ok, templates} <- templates(scope.organization_id, mission_id, window, locked) do
+         {:ok, templates} <-
+           templates(scope.organization_id, mission_id, window, {locked, as_of}) do
       context = %{organization_id: scope.organization_id, mission_id: mission_id}
       requirements = without_superseded(context, window, requirements, templates, locked, as_of)
 
@@ -166,7 +168,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
 
   defp templates(_, _, %{include_recurring: false}, _), do: {:ok, []}
 
-  defp templates(org, mission, window, locked) do
+  defp templates(org, mission, window, {locked, as_of}) do
     query =
       ContactRequirementTemplateRow
       |> join(:left, [t], v in ContactRequirementTemplateVersionRow,
@@ -193,11 +195,11 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
         {:error, :fleet_planning_template_limit_exceeded}
 
       true ->
-        template_snapshots(rows, window)
+        template_snapshots(rows, window, {locked, as_of})
     end
   end
 
-  defp template_snapshots(rows, window) do
+  defp template_snapshots(rows, window, {locked, as_of}) do
     Enum.reduce_while(rows, {:ok, [], 0}, fn {t, v}, {:ok, acc, count} ->
       version = ContactRequirementTemplateVersionRow.to_domain(v)
 
@@ -226,7 +228,8 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
           version: version,
           occurrences: occurrences,
           spacecraft_ids: targets,
-          existing_occurrences: existing_occurrences(version, occurrences)
+          existing_occurrences:
+            existing_occurrences(version, occurrences, targets, {locked, as_of})
         }
 
         {:cont, {:ok, [entry | acc], total}}
@@ -238,27 +241,71 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
     end
   end
 
-  defp existing_occurrences(version, occurrences) do
-    ContactRequirementOccurrenceRow
-    |> where(
-      [r],
-      r.organization_id == ^version.organization_id and
-        r.mission_id == ^version.mission_id and
-        r.contact_requirement_template_id == ^version.contact_requirement_template_id and
-        r.contact_requirement_template_version == ^version.version and
-        r.occurrence_at in ^occurrences
-    )
-    # Stable order: several spacecraft share one occurrence, and the review hashes this list.
-    |> order_by([r], asc: r.occurrence_at, asc: r.spacecraft_id)
-    |> select([r], %{
-      at: r.occurrence_at,
-      spacecraft_id: r.spacecraft_id,
-      state: r.generation_state,
-      requirement_id: r.generated_contact_requirement_id,
-      requirement_version: r.generated_contact_requirement_version
-    })
-    |> Repo.all()
-    |> Enum.map(fn row -> Map.put(row, :at, DateTime.to_unix(row.at, :microsecond)) end)
+  # The template's days that already have a requirement, one row per (at, spacecraft) in a
+  # stable order (the review hashes this list; sorted in Elixir, #56): this version's own
+  # occurrences, and for the other days, the older version's requirement with what DECISIONS #86
+  # decides for it (kept, done, or generate). A kept day that flips (its plan rejected) changes
+  # the hash, so the start re-reviews instead of booking a day the review said was kept.
+  defp existing_occurrences(version, occurrences, targets, {locked, as_of}) do
+    own =
+      ContactRequirementOccurrenceRow
+      |> where(
+        [r],
+        r.organization_id == ^version.organization_id and
+          r.mission_id == ^version.mission_id and
+          r.contact_requirement_template_id == ^version.contact_requirement_template_id and
+          r.contact_requirement_template_version == ^version.version and
+          r.occurrence_at in ^occurrences
+      )
+      |> select([r], %{
+        at: r.occurrence_at,
+        spacecraft_id: r.spacecraft_id,
+        state: r.generation_state,
+        requirement_id: r.generated_contact_requirement_id,
+        requirement_version: r.generated_contact_requirement_version
+      })
+      |> maybe_lock(locked)
+      |> Repo.all()
+      |> Enum.map(fn row -> Map.put(row, :at, DateTime.to_unix(row.at, :microsecond)) end)
+
+    own_days = MapSet.new(own, &{&1.at, &1.spacecraft_id})
+
+    other_days =
+      for at <- occurrences,
+          spacecraft_id <- targets,
+          not MapSet.member?(own_days, TemplateDays.key(at, spacecraft_id)),
+          do: {at, spacecraft_id}
+
+    older =
+      version.organization_id
+      |> TemplateDays.classify(
+        version.mission_id,
+        version.contact_requirement_template_id,
+        version.version,
+        other_days,
+        now: as_of,
+        lock: locked
+      )
+      |> Enum.flat_map(fn
+        {_day, %{prior: nil}} -> []
+        {{at, spacecraft_id}, day} -> [older_row(at, spacecraft_id, day)]
+      end)
+
+    Enum.sort_by(own ++ older, &{&1.at, &1.spacecraft_id})
+  end
+
+  defp older_row(at, spacecraft_id, %{outcome: outcome, why: why, prior: prior}) do
+    %{
+      at: at,
+      spacecraft_id: spacecraft_id,
+      state: prior.occurrence.generation_state,
+      requirement_id: prior.requirement_id,
+      requirement_version: prior.occurrence.generated_contact_requirement_version,
+      requirement_current_version: prior.requirement_version,
+      template_version: prior.template_version,
+      outcome: Atom.to_string(outcome),
+      why: why && Atom.to_string(why)
+    }
   end
 
   defp maybe_lock(query, true), do: lock(query, [row], fragment("FOR SHARE OF ?", row))

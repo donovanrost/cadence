@@ -16,6 +16,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     ContactRequirementTemplateVersion,
     ContactRequirementVersion,
     RequirementSchedule,
+    TemplateDays,
     TemplateSupersession,
     TemplateTargets
   }
@@ -243,6 +244,37 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     |> Enum.map(&ContactRequirementOccurrenceRow.to_domain/1)
   end
 
+  @doc """
+  The generated occurrence rows of `template_id` below version `below_version` for the given
+  instants and spacecraft (`TemplateDays`, DECISIONS #86). `lock: true` share-locks them.
+  """
+  @spec older_occurrence_rows(
+          binary(),
+          binary(),
+          binary(),
+          pos_integer(),
+          [DateTime.t()],
+          [
+            binary()
+          ],
+          boolean()
+        ) :: [struct()]
+  def older_occurrence_rows(org, mission, template_id, below_version, ats, spacecraft_ids, lock?) do
+    query =
+      where(
+        ContactRequirementOccurrenceRow,
+        [o],
+        o.organization_id == ^org and o.mission_id == ^mission and
+          o.contact_requirement_template_id == ^template_id and
+          o.contact_requirement_template_version < ^below_version and
+          o.generation_state == "generated" and o.occurrence_at in ^ats and
+          o.spacecraft_id in ^spacecraft_ids
+      )
+
+    query = if lock?, do: lock(query, "FOR SHARE"), else: query
+    Repo.all(query)
+  end
+
   @spec materialize(
           Scope.t(),
           binary(),
@@ -392,43 +424,84 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
   defp materialize_occurrence(scope, version, occurrence_at, spacecraft_id, actor_id, now) do
     Repo.transaction(fn ->
-      candidate =
-        ContactRequirementOccurrence.new(%{
-          organization_id: version.organization_id,
-          mission_id: version.mission_id,
-          contact_requirement_template_id: version.contact_requirement_template_id,
-          contact_requirement_template_version: version.version,
-          spacecraft_id: spacecraft_id,
-          occurrence_at: occurrence_at,
-          generation_state: :materializing,
-          materialized_by: actor_id,
-          materialized_at: now
-        })
-
-      {:ok, _candidate_row} =
-        candidate
-        |> ContactRequirementOccurrenceRow.changeset()
-        |> Repo.insert(
-          on_conflict: :nothing,
-          conflict_target: [
-            :organization_id,
-            :mission_id,
-            :contact_requirement_template_id,
-            :contact_requirement_template_version,
-            :occurrence_at,
-            :spacecraft_id
-          ]
-        )
-
-      row = fetch_occurrence_row!(version, occurrence_at, spacecraft_id)
-
-      if row.contact_requirement_occurrence_id == candidate.contact_requirement_occurrence_id do
-        create_generated_requirement(scope, version, row, occurrence_at, now)
-      else
-        existing_materialization(row)
+      # DECISIONS #86: one requirement per template day. A day an older version already serves
+      # (planned, started) or an operator closed stays as it is; this version generates nothing.
+      case day_served_by_older_version(version, occurrence_at, spacecraft_id, now) do
+        nil -> insert_occurrence(scope, version, occurrence_at, spacecraft_id, actor_id, now)
+        older -> existing_materialization(older)
       end
     end)
     |> normalize_materialization_result()
+  end
+
+  # The older version's occurrence when the day is kept or done and this version hasn't
+  # generated it already; nil when this version should generate (or already did).
+  defp day_served_by_older_version(version, occurrence_at, spacecraft_id, now) do
+    own =
+      Repo.get_by(ContactRequirementOccurrenceRow,
+        organization_id: version.organization_id,
+        mission_id: version.mission_id,
+        contact_requirement_template_id: version.contact_requirement_template_id,
+        contact_requirement_template_version: version.version,
+        occurrence_at: occurrence_at,
+        spacecraft_id: spacecraft_id
+      )
+
+    with nil <- own,
+         %{} = days <-
+           TemplateDays.classify(
+             version.organization_id,
+             version.mission_id,
+             version.contact_requirement_template_id,
+             version.version,
+             [{occurrence_at, spacecraft_id}],
+             now: now,
+             lock: true
+           ),
+         %{outcome: outcome, prior: %{occurrence: older}} when outcome in [:kept, :done] <-
+           days[TemplateDays.key(occurrence_at, spacecraft_id)] do
+      older
+    else
+      _generate -> nil
+    end
+  end
+
+  defp insert_occurrence(scope, version, occurrence_at, spacecraft_id, actor_id, now) do
+    candidate =
+      ContactRequirementOccurrence.new(%{
+        organization_id: version.organization_id,
+        mission_id: version.mission_id,
+        contact_requirement_template_id: version.contact_requirement_template_id,
+        contact_requirement_template_version: version.version,
+        spacecraft_id: spacecraft_id,
+        occurrence_at: occurrence_at,
+        generation_state: :materializing,
+        materialized_by: actor_id,
+        materialized_at: now
+      })
+
+    {:ok, _candidate_row} =
+      candidate
+      |> ContactRequirementOccurrenceRow.changeset()
+      |> Repo.insert(
+        on_conflict: :nothing,
+        conflict_target: [
+          :organization_id,
+          :mission_id,
+          :contact_requirement_template_id,
+          :contact_requirement_template_version,
+          :occurrence_at,
+          :spacecraft_id
+        ]
+      )
+
+    row = fetch_occurrence_row!(version, occurrence_at, spacecraft_id)
+
+    if row.contact_requirement_occurrence_id == candidate.contact_requirement_occurrence_id do
+      create_generated_requirement(scope, version, row, occurrence_at, now)
+    else
+      existing_materialization(row)
+    end
   end
 
   defp create_generated_requirement(scope, version, row, occurrence_at, now) do

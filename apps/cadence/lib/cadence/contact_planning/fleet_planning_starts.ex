@@ -252,6 +252,13 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
         {:created, nil} ->
           true
 
+        # An older version's day the review said this version regenerates (DECISIONS #86).
+        {:created, %{outcome: "generate"}} ->
+          true
+
+        {:existing, %{outcome: "generate"}} ->
+          false
+
         {:existing, %{state: "generated", requirement_id: id, requirement_version: version}} ->
           occurrence.generated_contact_requirement_id == id and
             occurrence.generated_contact_requirement_version == version
