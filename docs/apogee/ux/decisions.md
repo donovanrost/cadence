@@ -1083,10 +1083,11 @@ them to exactly one pass. **Never say "someone else's frames"** (U20): a refused
 data with an SCID or address Cadence didn't expect, and that's the case that matters most. Say "connection", not
 "peer", "socket" or "acceptor"; those go in Technical details. The pass label is U47's.
 - **Priority:** P2 caution while the pass is connected (`connected: true`). **P1** while it isn't and the window
-  is open: then a refused connection may be this pass's own telemetry being turned away.
+  is open: then a refused connection may be this pass's own telemetry being turned away. due_at is LOS (api), so it
+  sorts among due items by LOS.
 - **Title:** `EARENDIL-008 · SVB 03:10Z pass · 3 connections refused` (singular: "1 connection refused").
-- **Meta:** `FIRST 03:12Z · LAST 03:14Z · 10.0.0.7` (raised_at, last_refused_at, the last peer's address in mono; one
-  time when they're equal).
+- **Meta:** `FIRST 03:12Z · LAST 03:14Z` (raised_at, last_refused_at; one time when they're equal). The connection's
+  address isn't in visible text (api): it goes in Technical details.
 - **Body:** first the context, then the last refusal's reason, then the pass's state.
   - Context: "Northlight's listener is shared with other passes, and Cadence refuses any connection it can't match
     to exactly one of them." Without the provider's name: "This pass's listener is shared…".
@@ -1094,7 +1095,7 @@ data with an SCID or address Cadence didn't expect, and that's the case that mat
     - unregistered_scid: "The last one sent frames for SCID 42, which no pass on this listener expects." Without
       the scid: "…sent frames for a spacecraft no pass on this listener expects."
     - ambiguous_scid: "The last one sent frames for SCID 42, which more than one pass on this listener expects."
-    - unexpected_peer: "The last one came from 10.0.0.7, which isn't an address Northlight's profile expects."
+    - unexpected_peer: "The last one came from an address Northlight's profile doesn't expect."
     - unidentified: "Cadence couldn't tell from its first frames which spacecraft the last one was for."
     - read_failed: "Cadence couldn't read the last one's first frames."
     - unknown, or a code the console doesn't know: "Cadence couldn't match the last one to a pass."
@@ -1105,7 +1106,7 @@ data with an SCID or address Cadence didn't expect, and that's the case that mat
   acknowledge.
 - **Resolutions:** accepted: "Connected at 03:16Z." ended: "The pass ended at LOS 03:19Z." (hand-started: "The
   contact ended at 03:19Z.", as U46). Both fade.
-- **Technical details:** reason key, peer address, scid, provider_profile_id, ground_station_ref, refused_count and
-  the id, plus "Counted live: a Cadence restart starts the count again." (in-memory counts, U20).
+- **Technical details:** reason key, peer address, scid, the listen profile (provider_profile_name, then its id),
+  ground_station_ref, refused_count and the id, plus "Counted live: a Cadence restart starts the count again." (in-memory counts, U20).
 - **Contacts:** the selected-pass panel gets a block, as for U45, U47 and U49, with the title minus the spacecraft and
   pass label.
