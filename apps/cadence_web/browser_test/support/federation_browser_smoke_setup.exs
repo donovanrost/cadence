@@ -101,7 +101,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "--telemetry-url",
       "#{base_url}/missions/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings/federated",
       "--mission-catalog-url",
-      "#{base_url}/applications/mission_catalog/mission_list/federated",
+      "#{base_url}/missions/#{context.mission.mission_id}/applications/mission_catalog/mission_overview/federated",
       "--ops-url",
       "#{base_url}/missions/#{context.mission.mission_id}/applications/ops_console/commands/federated",
       "--organization-admin-url",

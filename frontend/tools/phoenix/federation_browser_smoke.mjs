@@ -5225,15 +5225,16 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     },
     {
       argName: "--mission-catalog-url",
-      expectedPath: "/applications/mission_catalog/mission_list/federated",
+      // L1-L4 federated deleted mission_list; mission_overview is Mission Catalog's sample surface.
+      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/mission_catalog/mission_overview/federated`,
       applicationKey: "mission_catalog",
-      surfaceId: "mission_list",
-      expectedScope: "organization",
+      surfaceId: "mission_overview",
+      expectedScope: "mission",
       readyExpression:
-        "Boolean(document.querySelector('#mission-catalog-application') && document.querySelector('#mission-list-table') && !document.querySelector('#mission-catalog-error') && !document.querySelector('#remote-error'))",
-      catalogPath: "/api/cadence/application-host/v1/catalog",
-      queryPath: "/api/cadence/application-host/v1/query",
-      queryId: "cadence.mission_catalog.mission_list",
+        "Boolean(document.querySelector('#mission-catalog-application [data-surface-id=\"mission_overview\"] #spacecraft-readiness-section') && !document.querySelector('#mission-catalog-error') && !document.querySelector('#remote-error'))",
+      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
+      queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
+      queryId: "cadence.mission_catalog.mission_overview",
       expectedReleaseId: releases.nMinus1.mission_catalog,
     },
     {

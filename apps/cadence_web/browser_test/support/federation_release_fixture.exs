@@ -584,8 +584,8 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     metadata(
       "mission_catalog",
       "cadence.mission-catalog",
-      "mission_list",
-      "cadence.mission_catalog.mission_list",
+      "mission_overview",
+      "cadence.mission_catalog.mission_overview",
       [],
       "cadence_mission_catalog",
       "federation-browser-mission-catalog-#{slot_name(slot)}",
