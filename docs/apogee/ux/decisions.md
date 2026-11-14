@@ -888,3 +888,7 @@ configuration failure P3. The amendments to fe-ops' drafts:
   Domain sends any new key before it's used.
 - The pass row in Contacts shows the same state as a tag: `▲ NOT STARTED` (caution) while retrying, `◆ MISSED`
   (crit) after.
+- **A pass row with several open items** (api's question) shows one tag, chosen by Now's own order: priority first
+  (P1 > P2 > P3), then the soonest due, then contact_start. So a not_started (P1) wins. A missed pass (P2, nothing
+  due) yields to an approval or provider change that has a deadline, because that's the one still actionable. The
+  other items show as a count beside it, `+2`, and all of them appear in the pass detail.
