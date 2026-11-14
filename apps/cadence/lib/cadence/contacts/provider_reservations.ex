@@ -20,6 +20,7 @@ defmodule Cadence.Contacts.ProviderReservations do
     KnownAtom,
     ProviderReservation,
     ProviderReservationChanges,
+    ReservationChange,
     ScheduledContact,
     UplinkLegs
   }
@@ -558,9 +559,12 @@ defmodule Cadence.Contacts.ProviderReservations do
           {:ok, ProviderReservation.t()} | {:error, term()}
   def record_provider_response(organization_id, mission_id, provider_reservation_id, response)
       when is_map(response) do
+    before =
+      ReservationChange.visible(fetch(organization_id, mission_id, provider_reservation_id))
+
     organization_id
     |> record_provider_response_unpublished(mission_id, provider_reservation_id, response)
-    |> published(organization_id, mission_id)
+    |> ReservationChange.publish_if_changed(organization_id, mission_id, before)
   end
 
   defp record_provider_response_unpublished(
@@ -621,9 +625,12 @@ defmodule Cadence.Contacts.ProviderReservations do
           {:ok, ProviderReservation.t()} | {:error, term()}
   def record_provider_error(organization_id, mission_id, provider_reservation_id, error_document)
       when is_map(error_document) do
+    before =
+      ReservationChange.visible(fetch(organization_id, mission_id, provider_reservation_id))
+
     organization_id
     |> record_provider_error_unpublished(mission_id, provider_reservation_id, error_document)
-    |> published(organization_id, mission_id)
+    |> ReservationChange.publish_if_changed(organization_id, mission_id, before)
   end
 
   defp record_provider_error_unpublished(
@@ -875,9 +882,13 @@ defmodule Cadence.Contacts.ProviderReservations do
           {:ok, ProviderReservation.t()} | {:error, term()}
   def apply_provider_status(organization_id, mission_id, provider_reservation_id, response)
       when is_map(response) do
+    # A poll that changed nothing visible announces nothing (qa 11-14, ReservationChange).
+    before =
+      ReservationChange.visible(fetch(organization_id, mission_id, provider_reservation_id))
+
     organization_id
     |> apply_provider_status_unpublished(mission_id, provider_reservation_id, response)
-    |> published(organization_id, mission_id)
+    |> ReservationChange.publish_if_changed(organization_id, mission_id, before)
   end
 
   defp apply_provider_status_unpublished(
@@ -886,7 +897,8 @@ defmodule Cadence.Contacts.ProviderReservations do
          provider_reservation_id,
          response
        ) do
-    case record_provider_response(
+    # Unpublished: apply_provider_status announces once, and only on a visible change.
+    case record_provider_response_unpublished(
            organization_id,
            mission_id,
            provider_reservation_id,
@@ -1182,7 +1194,9 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   defp apply_contact_side_effect(%ProviderReservation{lifecycle_state: state} = reservation)
        when state in @materialized_states do
-    case materialize_scheduled_contact(
+    # Unpublished: every poll of a booked pass re-ensures its scheduled contact (a no-op after the
+    # first), and the poll announces once if anything visible changed (ReservationChange).
+    case materialize_scheduled_contact_unpublished(
            reservation.organization_id,
            reservation.mission_id,
            reservation.provider_reservation_id
