@@ -44,6 +44,18 @@ tabs: Requirements · Policy
     including `Longest time without a contact` (`max_gap_seconds`, #74; empty reads "No limit"). Save creates a
     new version and shows the supersedes sentence first (as for templates). Template-generated requirements are
     read-only, with "Change it in its template: Block 1 daily." and a link.
+  - **Planning it** (director, 11-14: whole-day planning is the model). An active requirement whose window hasn't
+    ended offers the secondary `Plan 11-14`, which opens `M/contacts/plan?day=2026-11-14`. The day is the UTC day
+    the requirement is planned in: use api's planning day if the read carries one, else the window's start day.
+    - Under it, a `text-3` line: "Cadence plans a whole day at a time: this requirement is planned with the rest
+      of 11-14's requirements, so it can't take capacity another one needs."
+    - Then: "For a one-off pass outside any plan, book a pass instead." The link opens Contacts' `Book a pass`
+      sheet (L15), prefilled with the spacecraft and the requirement's window.
+    - Already held by a plan past draft: the button reads `Open plan R41` and goes to that plan; the line stays.
+    - Closed, canceled or ended requirements show none of this. Template-generated occurrences get it as well,
+      because they're planned the same way.
+    - Without the planning capability, there's no button, but the line stays. Without `operate_mission`, the
+      Book a pass sentence is dropped.
   - **Close… / Cancel…** (secondary, each confirms with a required reason). Each sheet says what it does, in the
     server's terms:
     - Domain: both behave the same today. Booked passes stay booked, draft and pending plans that use it read
