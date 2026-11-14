@@ -994,7 +994,9 @@ a station, the spacecraft alone.
 A day an operator closed or canceled stays that way across a template edit. A day already planned or started keeps
 its requirement, and no second one is added. Reopening a day is its own explicit action, never a side effect of an
 edit. This replaces ContactPlanning's "an edit generates every remaining day afresh".
-- **Edit preview count line** (api: `POST …/templates/preview` with `template_id`, `effect.groups`). It's a
+- **Edit preview count line** (api: `GET …/templates/:id/supersedes` gains `decided` {planned_or_started, closed,
+  canceled}, each a list of `{occurrence_at, date, spacecraft_ids}`). A group's days are its distinct `date`s, and
+  its requirements are the sum of its `spacecraft_ids` lengths. It's a
   neutral info line above the caution "supersedes N drafts" callout, which stays as it is:
   - "v3 applies to every day that's still open. 3 days already planned or started keep their requirement: 11-14,
     11-15, 11-16. 2 closed days stay closed, and 1 canceled day stays canceled."
@@ -1002,10 +1004,10 @@ edit. This replaces ContactPlanning's "an edit generates every remaining day afr
     describes them (U20). `current_version` isn't needed for this line.
   - Not "from the next open day": planned and open days can alternate, so there's no single day it starts from.
   - Drop any group whose count is 0, and use singulars ("1 day … keeps its requirement"). When every group is 0,
-    the first sentence stands alone. `groups: null` (a new template) shows no line.
-  - **Dates:** with `count` ≤ 3, list `dates` after a colon (§4, `11-14`). Above 3, add "between 11-14 and 11-20",
+    the first sentence stands alone. A new template has no dry run, so it shows no line.
+  - **Dates:** with 3 days or fewer, list them after a colon (§4, `11-14`). Above 3, add "between 11-14 and 11-20",
     using the first and last date, because the days needn't be consecutive.
-  - **Days or requirements:** when `requirements` equals `count` (one spacecraft), the noun is "days". Otherwise
+  - **Days or requirements:** when requirements equal days (one spacecraft), the noun is "days". Otherwise
     lead with requirements: "1,500 requirements on 3 days already planned or started keep their requirement…"
     becomes "1,500 requirements on 3 days, already planned or started, stay as they are: 11-14, 11-15, 11-16." The
     closed and canceled groups follow the same rule: "2 closed requirements on 1 day stay closed: 11-15."
