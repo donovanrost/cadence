@@ -12,6 +12,7 @@ defmodule Cadence.Control.UplinkReadinessTest do
   alias Cadence.Control.{UplinkQualification, UplinkReadiness}
   alias Cadence.Control.UplinkReadiness.{Attention, Groups}
   alias Cadence.GroundNetworks.ProviderAudit
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Runtime.ProcessNamespace
 
   defmodule FakeDriver do
@@ -234,6 +235,14 @@ defmodule Cadence.Control.UplinkReadinessTest do
     assert next.starts_at == reservation.starts_at
 
     assert %{} == UplinkPasses.upcoming(c.org, c.mission, [], DateTime.utc_now())
+
+    # An accepted change drops that pass's uplink leg: it can't command, so it isn't next.
+    drop_uplink_leg!(reservation)
+
+    assert %{^group_id => %{next_contact: nil}} =
+             Groups.for_command_groups(c.org, c.mission, [group_id], table: c.table)
+
+    assert %{} == UplinkPasses.upcoming(c.org, c.mission, [c.sc], DateTime.utc_now())
   end
 
   test "Recover re-qualifies a blocked pass, audited; refuses what re-qualifying can't fix", c do
@@ -370,6 +379,30 @@ defmodule Cadence.Control.UplinkReadinessTest do
 
       if Process.alive?(session), do: GenServer.stop(session)
     end
+  end
+
+  # As Cadence's accepted terms read after the provider takes the leg out of "included".
+  defp drop_uplink_leg!(reservation) do
+    id = reservation.provider_reservation_id
+
+    row =
+      Cadence.Repo.get_by!(Cadence.Control.Contacts.Store.ProviderReservationRow,
+        provider_reservation_id: id
+      )
+
+    request = Map.put(JsonDocument.unwrap_value(row.request_document), "uplink", %{})
+
+    accepted =
+      Map.put(JsonDocument.unwrap_value(row.cadence_accepted_snapshot_document), "uplink", %{
+        "status" => "rejected"
+      })
+
+    row
+    |> Ecto.Changeset.change(
+      request_document: JsonDocument.wrap_value(request),
+      cadence_accepted_snapshot_document: JsonDocument.wrap_value(accepted)
+    )
+    |> Cadence.Repo.update!()
   end
 
   defp scheduled_contact!(c, reservation, intents) do
