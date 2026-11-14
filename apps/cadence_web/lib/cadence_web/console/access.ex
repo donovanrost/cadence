@@ -80,6 +80,9 @@ defmodule CadenceWeb.Console.Access do
 
   def authorize_mission(_credentials, _mission_id), do: {:error, :mission_not_found}
 
+  # todo(authz): a platform admin in admin mode operates ANY mission by id here without being a
+  # member (Policy :operate_mission lets admin mode through; #90's platform binding sheet relies on
+  # it, lead 11-14). Cedar should decide which mission routes admin mode may reach.
   defp authorize_operate(scope, organization_id, mission_id) do
     Policy.authorize(scope, :operate_mission, %{
       organization_id: organization_id,

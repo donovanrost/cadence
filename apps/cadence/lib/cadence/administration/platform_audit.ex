@@ -75,12 +75,20 @@ defmodule Cadence.Administration.PlatformAudit do
   defp sentence(%{action: "admin_mode_left"}, _org), do: "Left admin mode"
 
   # ux U53: 'Switched platform binding default_flight_telemetry from <from> to <to> · 12 missions,
-  # 3 live passes: "<reason>"'.
+  # 3 live passes: "<reason>"'. A count that wasn't recorded is left out, never guessed (U20).
   defp sentence(%{action: "platform_binding_switched", details: details} = row, _org)
        when is_map(details) do
+    counts =
+      [
+        count(details["affected_missions"], "mission", "missions"),
+        count(details["live_passes_total"], "live pass", "live passes")
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    suffix = if counts == [], do: "", else: " · " <> Enum.join(counts, ", ")
+
     "Switched platform binding #{label(row)} from #{source_name(details["from"])} to " <>
-      "#{source_name(details["to"])} · #{count(details["affected_missions"], "mission")}, " <>
-      "#{count(details["live_passes_total"], "live pass")}: “#{details["reason"]}”"
+      "#{source_name(details["to"])}#{suffix}: “#{details["reason"]}”"
   end
 
   defp sentence(%{action: action}, _org), do: action
@@ -89,10 +97,9 @@ defmodule Cadence.Administration.PlatformAudit do
   defp source_name(%{"id" => id}) when is_binary(id), do: id
   defp source_name(_source), do: "a source"
 
-  defp count(1, noun), do: "1 #{noun}"
-  defp count(n, "live pass") when is_integer(n), do: "#{n} live passes"
-  defp count(n, noun) when is_integer(n), do: "#{n} #{noun}s"
-  defp count(_n, noun), do: "? #{noun}s"
+  defp count(1, singular, _plural), do: "1 #{singular}"
+  defp count(n, _singular, plural) when is_integer(n), do: "#{n} #{plural}"
+  defp count(_n, _singular, _plural), do: nil
 
   # The target's name when one was recorded, else its id: never null (withdrawn invitations and
   # revokes recorded before 11-13 carry no name).
