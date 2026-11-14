@@ -61,11 +61,17 @@ function reasonSentence(a: Attention): string {
       return "Cadence couldn't read the last one's first frames.";
     case "unknown":
       return "Cadence couldn't match the last one to a pass.";
+    case "second_connection":
+      return "The last one was a second connection for this pass, and Cadence keeps the first.";
   }
 }
 
 /** Context, the last refusal's reason, then this pass's state (U50). */
-export function listenerEvidence(a: Attention, spacecraft: string | null): string {
+export function listenerEvidence(
+  a: Attention,
+  spacecraft: string | null,
+  now: Date = new Date(),
+): string {
   const provider = a.provider?.name ?? null;
   const listener = provider ? `${provider}'s listener` : "the listener";
   const others = a.shared_with?.length ?? 0;
@@ -73,6 +79,9 @@ export function listenerEvidence(a: Attention, spacecraft: string | null): strin
   const context = others
     ? `This pass shares ${listener} with ${plural(others, "other open pass", "other open passes")}, and Cadence refuses any connection it can't match to exactly one of them.`
     : `Cadence refuses any connection on ${listener} that it can't match to this pass.`;
+  // U50: its own connection gone quiet reads first; "connected" may still be true.
+  if (a.own_quiet_since)
+    return `${context} ${reasonSentence(a)} This pass's own connection has sent nothing since ${short(a.own_quiet_since, now)}. If the refused connection was the provider reconnecting, its telemetry isn't arriving.`;
   if (a.connected === true)
     return `${context} ${reasonSentence(a)} This pass has its own connection.`;
   const reason = a.last_refusal?.reason;
@@ -116,7 +125,7 @@ export function listenerRow(
     key,
     title: listenerTitle(a, spacecraftName, now),
     titleTo: to,
-    sentence: listenerEvidence(a, spacecraftName),
+    sentence: listenerEvidence(a, spacecraftName, now),
     meta: listenerMeta(a, now),
     // U50: no server actions, so Open pass takes the free slot.
     action: { label: "Open pass", to },

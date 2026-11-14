@@ -171,13 +171,20 @@ describe("archive_quarantine on Now (ux U49)", () => {
       "Discard 12 frames and 40 packets that couldn't be archived?",
     );
     const closed = (action: string, note: string | null) =>
-      resolvedWords({
-        id: "attention:archive_quarantine:rc-8:identity_conflict",
-        resolved_by: { kind: action === "retried" ? "system" : "user", id: null, name: "Mira K." },
-        action,
-        resolved_at: "2026-11-14T03:21:00Z",
-        note,
-      });
+      resolvedWords(
+        {
+          id: "attention:archive_quarantine:rc-8:identity_conflict",
+          resolved_by: {
+            kind: action === "retried" ? "system" : "user",
+            id: null,
+            name: "Mira K.",
+          },
+          action,
+          resolved_at: "2026-11-14T03:21:00Z",
+          note,
+        },
+        NOW,
+      );
     expect(closed("retried", null)).toBe("Archived on retry at 03:21Z.");
     expect(closed("discarded", "Bad replay.")).toBe("Discarded by Mira K. at 03:21Z: Bad replay.");
   });

@@ -147,13 +147,16 @@ describe("ingress_backpressure on Now (ux U47)", () => {
 
   it("says how it closed", () => {
     const closed = (action: string, kind: "system" | "user", name: string | null) =>
-      resolvedWords({
-        id: "attention:ingress_backpressure:frames_dropped:rc-8:pb-1",
-        resolved_by: { kind, id: null, name },
-        action,
-        resolved_at: "2026-11-14T03:22:00Z",
-        note: null,
-      });
+      resolvedWords(
+        {
+          id: "attention:ingress_backpressure:frames_dropped:rc-8:pb-1",
+          resolved_by: { kind, id: null, name },
+          action,
+          resolved_at: "2026-11-14T03:22:00Z",
+          note: null,
+        },
+        NOW,
+      );
     expect(closed("drained", "system", null)).toBe("Caught up at 03:22Z.");
     expect(closed("acknowledged", "user", "Mira K.")).toBe("Acknowledged by Mira K. at 03:22Z.");
   });

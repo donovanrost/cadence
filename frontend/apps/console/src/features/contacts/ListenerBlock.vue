@@ -28,7 +28,7 @@ const title = computed(() =>
 <template>
   <ApCallout tone="caution">
     <p class="m-0 font-semibold">{{ title }}</p>
-    <p class="m-0 text-text-2">{{ listenerEvidence(attention, spacecraft) }}</p>
+    <p class="m-0 text-text-2">{{ listenerEvidence(attention, spacecraft, now) }}</p>
     <p class="m-0 font-mono text-xs text-text-3">{{ listenerMeta(attention, now) }}</p>
     <!-- ux U50: the address, the reason key and the profile live here only. -->
     <details class="text-xs text-text-3">

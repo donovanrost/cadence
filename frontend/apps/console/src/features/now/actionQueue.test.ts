@@ -357,13 +357,15 @@ describe("attention rows (U31, fafe581a)", () => {
       resolved_at: "2026-11-09T11:00:00Z",
       note: null,
     });
-    expect(resolvedWords(r("provider", "Northlight", "confirmed"))).toBe(
-      "Resolved: Northlight confirmed.",
+    expect(
+      resolvedWords(r("provider", "Northlight", "confirmed"), new Date("2026-11-13T03:00:00Z")),
+    ).toBe("Resolved: Northlight confirmed.");
+    expect(
+      resolvedWords(r("system", "Cadence", "cancel_confirmed"), new Date("2026-11-13T03:00:00Z")),
+    ).toBe("Resolved: cancel confirmed.");
+    expect(resolvedWords(r("user", "Mira K.", "resolved"), new Date("2026-11-13T03:00:00Z"))).toBe(
+      "Resolved by Mira K.",
     );
-    expect(resolvedWords(r("system", "Cadence", "cancel_confirmed"))).toBe(
-      "Resolved: cancel confirmed.",
-    );
-    expect(resolvedWords(r("user", "Mira K.", "resolved"))).toBe("Resolved by Mira K.");
   });
 });
 
@@ -540,13 +542,16 @@ describe("contact_settlement (U37, #71)", () => {
       to: { name: "ops.contacts", query: { contact: "scheduled_contact_cd34" } },
     });
     expect(
-      resolvedWords({
-        id: "x",
-        resolved_by: { kind: "system", id: null, name: null },
-        action: "replayed",
-        resolved_at: "2026-11-12T01:00:00Z",
-        note: null,
-      }),
+      resolvedWords(
+        {
+          id: "x",
+          resolved_by: { kind: "system", id: null, name: null },
+          action: "replayed",
+          resolved_at: "2026-11-12T01:00:00Z",
+          note: null,
+        },
+        new Date("2026-11-13T03:00:00Z"),
+      ),
     ).toBe("Resolved: telemetry stored.");
   });
 
@@ -832,13 +837,16 @@ describe("mission_runtime (U38; domain 292c8e6b reasons)", () => {
       "GENERATION 8 · RUNNING — · SINCE 23:10Z",
     );
     expect(
-      resolvedWords({
-        id: "x",
-        resolved_by: { kind: "system", id: null, name: null },
-        action: "applied",
-        resolved_at: "2026-11-11T23:26:00Z",
-        note: null,
-      }),
+      resolvedWords(
+        {
+          id: "x",
+          resolved_by: { kind: "system", id: null, name: null },
+          action: "applied",
+          resolved_at: "2026-11-11T23:26:00Z",
+          note: null,
+        },
+        new Date("2026-11-13T03:00:00Z"),
+      ),
     ).toBe("Resolved: configuration applied.");
   });
 });
@@ -932,13 +940,16 @@ describe("activation_apply (domain 9b8456132; ux U41)", () => {
 
   it("says how it closed", () => {
     const closed = (action: string) =>
-      resolvedWords({
-        id: "attention:activation_apply:act-1",
-        resolved_by: { kind: "system", id: null, name: null },
-        action,
-        resolved_at: "2026-11-13T02:20:00Z",
-        note: null,
-      });
+      resolvedWords(
+        {
+          id: "attention:activation_apply:act-1",
+          resolved_by: { kind: "system", id: null, name: null },
+          action,
+          resolved_at: "2026-11-13T02:20:00Z",
+          note: null,
+        },
+        new Date("2026-11-13T03:00:00Z"),
+      );
     expect(closed("applied")).toBe("Applied at 02:20Z.");
     expect(closed("superseded")).toBe("Replaced by a newer request.");
   });

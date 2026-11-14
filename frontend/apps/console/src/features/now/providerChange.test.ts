@@ -117,13 +117,16 @@ describe("provider changes in Now (U44)", () => {
 
   it("says who decided, when and why; a newer change replaces it", () => {
     const closed = (action: string, note: string | null) =>
-      resolvedWords({
-        id: "attention:provider_change:chg-1",
-        resolved_by: { kind: "user", id: "u-1", name: "Mira K." },
-        action,
-        resolved_at: "2026-11-13T02:31:00Z",
-        note,
-      });
+      resolvedWords(
+        {
+          id: "attention:provider_change:chg-1",
+          resolved_by: { kind: "user", id: "u-1", name: "Mira K." },
+          action,
+          resolved_at: "2026-11-13T02:31:00Z",
+          note,
+        },
+        NOW,
+      );
     expect(closed("approved", "The new start still clears the eclipse.")).toBe(
       "Approved by Mira K. at 02:31Z: The new start still clears the eclipse.",
     );

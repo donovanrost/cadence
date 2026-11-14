@@ -77,6 +77,8 @@ export const listenerRefusals = [
   "unidentified",
   "read_failed",
   "unknown",
+  // U50: a second connection while this pass's own was up (counted; opens only if it's quiet).
+  "second_connection",
 ] as const;
 /** U38 mission_runtime reason keys (domain 292c8e6b, final). */
 export const runtimeReasons = [
@@ -376,6 +378,8 @@ export const attentionReader = d.object({
   ),
   /** Whether this contact has its own connection now. */
   connected: d.optional(d.nullable(d.boolean)),
+  /** U50: its own connection has sent nothing since then (a half-open one may block a reconnect). */
+  own_quiet_since: d.optional(d.nullable(d.timestamp)),
   /** The other open contacts on the same listener. */
   shared_with: d.optional(d.nullable(d.array(d.token, 1_000))),
   // free-text: the provider's ground station reference
@@ -615,7 +619,9 @@ const CHANGE_DECIDED: ReadonlyMap<string, string> = new Map([
   ["acknowledged", "Acknowledged"],
 ]);
 
-export function resolvedWords(r: ResolvedEntry): string {
+export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string {
+  // §4 short form: a row resolved before midnight keeps its date after it (ux).
+  const at = short(r.resolved_at, now);
   // U41: a stuck activation closes by applying, or by a newer activation replacing it.
   // U44: a provider change says who decided, when and why; a newer change replaces it.
   if (r.id.startsWith("attention:provider_change:")) {
@@ -624,41 +630,41 @@ export function resolvedWords(r: ResolvedEntry): string {
     if (decided) {
       const who = r.resolved_by.name ?? "an operator";
       const why = r.note ? `: ${noStop(r.note)}` : "";
-      return `${decided} by ${who} at ${hhmm(r.resolved_at)}${why}.`;
+      return `${decided} by ${who} at ${at}${why}.`;
     }
   }
   if (r.id.startsWith("attention:contact_start:")) {
     // U45: it started, or an operator marked the missed pass as seen.
-    if (r.action === "started") return `Started at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "started") return `Started at ${at}.`;
     if (r.action === "acknowledged")
-      return `Marked as seen by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}.`;
+      return `Marked as seen by ${r.resolved_by.name ?? "an operator"} at ${at}.`;
   }
   if (r.id.startsWith("attention:ingress_backpressure:")) {
     // U47: the buffer caught up, or an operator acknowledged the lost frames.
-    if (r.action === "drained") return `Caught up at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "drained") return `Caught up at ${at}.`;
     if (r.action === "acknowledged")
-      return `Acknowledged by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}.`;
+      return `Acknowledged by ${r.resolved_by.name ?? "an operator"} at ${at}.`;
   }
   if (r.id.startsWith("attention:archive_quarantine:")) {
     // U49: archived on retry, or discarded by an operator with a reason.
-    if (r.action === "retried") return `Archived on retry at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "retried") return `Archived on retry at ${at}.`;
     if (r.action === "discarded")
-      return `Discarded by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}${r.note ? `: ${noStop(r.note)}` : ""}.`;
+      return `Discarded by ${r.resolved_by.name ?? "an operator"} at ${at}${r.note ? `: ${noStop(r.note)}` : ""}.`;
   }
   if (r.id.startsWith("attention:listener_refusal:")) {
     // U50: the pass got its own connection, or its window closed.
-    if (r.action === "accepted") return `Connected at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "accepted") return `Connected at ${at}.`;
     // ux: without the booked flag, "Ended at" is true of a pass and a hand-started contact.
     if (r.action === "ended")
       return r.booked === true
-        ? `The pass ended at LOS ${hhmm(r.resolved_at)}.`
+        ? `The pass ended at LOS ${at}.`
         : r.booked === false
-          ? `The contact ended at ${hhmm(r.resolved_at)}.`
-          : `Ended at ${hhmm(r.resolved_at)}.`;
+          ? `The contact ended at ${at}.`
+          : `Ended at ${at}.`;
   }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";
-    if (r.action === "applied") return `Applied at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "applied") return `Applied at ${at}.`;
   }
   const said = r.action ? (ACTION_WORDS[r.action] ?? r.action.replaceAll("_", " ")) : null;
   const action = said ? noStop(said) : null;
@@ -701,7 +707,7 @@ export function newlyResolved(
       ...rest,
       key,
       state: "off",
-      sentence: resolvedWords(r),
+      sentence: resolvedWords(r, new Date(now)),
       meta: null,
       acknowledged: true,
     };

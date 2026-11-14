@@ -188,6 +188,7 @@ describe("attention block words (U32)", () => {
     last_refused_at: undefined,
     last_refusal: undefined,
     connected: undefined,
+    own_quiet_since: undefined,
     shared_with: undefined,
     ground_station_ref: undefined,
     station: { ref: "svb-1", id: "st-1", code: "SVB-1", name: "Svalbard 1" },

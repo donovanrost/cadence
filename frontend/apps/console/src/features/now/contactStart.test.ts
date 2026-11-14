@@ -158,13 +158,16 @@ describe("contact_start on Now (ux U45)", () => {
 
   it("says how it closed", () => {
     const closed = (action: string, kind: "system" | "user", name: string | null) =>
-      resolvedWords({
-        id: "attention:contact_start:rc-312",
-        resolved_by: { kind, id: null, name },
-        action,
-        resolved_at: "2026-11-14T03:40:00Z",
-        note: null,
-      });
+      resolvedWords(
+        {
+          id: "attention:contact_start:rc-312",
+          resolved_by: { kind, id: null, name },
+          action,
+          resolved_at: "2026-11-14T03:40:00Z",
+          note: null,
+        },
+        NOW,
+      );
     expect(closed("started", "system", null)).toBe("Started at 03:40Z.");
     expect(closed("acknowledged", "user", "Mira K.")).toBe("Marked as seen by Mira K. at 03:40Z.");
   });

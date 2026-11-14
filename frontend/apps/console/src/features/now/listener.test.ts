@@ -163,16 +163,45 @@ describe("listener_refusal on Now (ux U50)", () => {
     ]);
   });
 
+  it("own connection gone quiet: says since when, whatever connected says", () => {
+    const row = rowOf({
+      connected: true,
+      own_quiet_since: "2026-11-14T03:14:00Z",
+      last_refusal: { peer: null, reason: "second_connection", scid: 8 },
+    });
+    expect(row?.sentence).toBe(
+      `${CONTEXT} The last one was a second connection for this pass, and Cadence keeps the first. This pass's own connection has sent nothing since 03:14Z. If the refused connection was the provider reconnecting, its telemetry isn't arriving.`,
+    );
+  });
+
+  it("dates a resolution from another day (§4)", () => {
+    expect(
+      resolvedWords(
+        {
+          id: "attention:listener_refusal:rc-8",
+          resolved_by: { kind: "system", id: null, name: null },
+          action: "accepted",
+          resolved_at: "2026-11-13T23:58:00Z",
+          note: null,
+        },
+        NOW,
+      ),
+    ).toBe("Connected at 11-13 23:58Z.");
+  });
+
   it("says how it closed", () => {
     const closed = (action: string, booked?: boolean) =>
-      resolvedWords({
-        id: "attention:listener_refusal:rc-8",
-        resolved_by: { kind: "system", id: null, name: null },
-        action,
-        resolved_at: "2026-11-14T03:19:00Z",
-        note: null,
-        ...(booked === undefined ? {} : { booked }),
-      });
+      resolvedWords(
+        {
+          id: "attention:listener_refusal:rc-8",
+          resolved_by: { kind: "system", id: null, name: null },
+          action,
+          resolved_at: "2026-11-14T03:19:00Z",
+          note: null,
+          ...(booked === undefined ? {} : { booked }),
+        },
+        NOW,
+      );
     expect(closed("accepted")).toBe("Connected at 03:19Z.");
     expect(closed("ended", true)).toBe("The pass ended at LOS 03:19Z.");
     expect(closed("ended", false)).toBe("The contact ended at 03:19Z.");
