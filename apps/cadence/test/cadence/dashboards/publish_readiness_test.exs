@@ -3,7 +3,7 @@ defmodule Cadence.Dashboards.PublishReadinessTest do
 
   alias Cadence.Dashboards
 
-  alias Cadence.Dashboards.{Document, Placement, WidgetDef}
+  alias Cadence.Dashboards.{Document, Placement, PublishReadiness, WidgetDef}
 
   alias Cadence.DataSources.{SourceHealthEvent, SourceHealthStatus}
 
@@ -231,6 +231,74 @@ defmodule Cadence.Dashboards.PublishReadinessTest do
     assert details.connection_test_result == "failed"
     assert details.connection_test_kind == "adapter_io"
     assert details.connection_test_message == "Adapter connection test failed."
+  end
+
+  # lead 11-14 (qa's overlay check): a timed-out read recorded source_unavailable, and every save
+  # on the mission was blocked until another read succeeded (up to 24 h).
+  test "a source a read reported unavailable warns but doesn't block the save" do
+    document = load_fixture!("value_tile_latest.v1.json")
+    observed_at = DateTime.utc_now()
+
+    validation =
+      Dashboards.validate_publish_readiness(
+        document.organization_id,
+        document.mission_id,
+        document,
+        registry_opts(
+          source_health_statuses: [
+            source_health_status("managed_questdb_primary",
+              source_health: :unavailable,
+              reason: :source_read_timeout,
+              observed_at: observed_at
+            )
+          ]
+        )
+      )
+
+    assert validation.valid?
+    assert validation.errors == []
+
+    assert [%{code: :source_unavailable, details: details}] =
+             Enum.filter(validation.warnings, &(&1.code == :source_unavailable))
+
+    assert %{
+             logical_source: :telemetry,
+             reasons: reasons,
+             realm: "flight",
+             observed_at: ^observed_at
+           } = details
+
+    assert :source_unavailable in reasons
+  end
+
+  test "an unavailable source whose connection test also failed still blocks" do
+    document = load_fixture!("value_tile_latest.v1.json")
+
+    validation =
+      Dashboards.validate_publish_readiness(
+        document.organization_id,
+        document.mission_id,
+        document,
+        registry_opts(
+          source_health_statuses: [
+            source_health_status("managed_questdb_primary",
+              source_health: :unavailable,
+              payload: %{connection_test_result: "failed"}
+            )
+          ]
+        )
+      )
+
+    refute validation.valid?
+    assert [%{code: :unready_publish_source_request, details: details} | _] = validation.errors
+
+    assert %{logical_source: :telemetry, reasons: reasons} =
+             PublishReadiness.source_details(
+               :unready_publish_source_request,
+               details
+             )
+
+    assert :connection_test_failed in reasons
   end
 
   test "blocks publish when operational observables cannot satisfy dashboard scope" do

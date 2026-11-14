@@ -19,19 +19,24 @@ defmodule Cadence.Dashboards.PublishReadiness do
 
   alias Cadence.Reads.DataSources
 
-  @blocking_warning_codes [
+  # Facts about the source itself block a save (lead 11-14): it isn't bound, configured, enabled
+  # or capable, or its connection test failed.
+  @source_fact_codes [
     :missing_source_binding,
     :source_binding_interval_ambiguous,
     :missing_data_source,
     :disabled_data_source,
     :invalid_data_source_configuration,
-    :source_unavailable,
     :source_connection_failed,
-    :source_degraded,
     :unsupported_source_capability,
     :unsupported_observable_scope,
     :invalid_runtime_context
   ]
+  # Health a read reported (a timed-out preview records source_unavailable for up to 24 h) only
+  # warns: one slow read must not block every save on the mission. It still blocks when the same
+  # evidence carries a failed connection test.
+  @source_health_codes [:source_unavailable, :source_degraded]
+  @failed_connection_tests ["failed", "blocked"]
   @source_evidence_warning_codes [
     :stale_data,
     :watermark_unknown,
@@ -86,6 +91,9 @@ defmodule Cadence.Dashboards.PublishReadiness do
             warning_details(warning)
           )
 
+        source_health_warning?(warning) ->
+          ValidationResult.add_warning(acc, warning.code, warning_details(warning))
+
         source_evidence_warning?(warning) ->
           ValidationResult.add_warning(acc, warning.code, warning_details(warning))
 
@@ -135,21 +143,68 @@ defmodule Cadence.Dashboards.PublishReadiness do
     end
   end
 
-  defp blocking_warning?(%ResolveWarning{code: code}), do: code in @blocking_warning_codes
+  defp blocking_warning?(%ResolveWarning{code: code}) when code in @source_fact_codes, do: true
+
+  defp blocking_warning?(%ResolveWarning{code: code} = warning) when code in @source_health_codes,
+    do: connection_test_failed?(warning)
+
   defp blocking_warning?(_warning), do: false
+
+  # Only health a read actually reported warns: a source nobody has read yet is unknown, and
+  # warning on it would flag every new widget (dashboards).
+  defp source_health_warning?(%ResolveWarning{code: code, details: details})
+       when code in @source_health_codes and is_map(details) do
+    details
+    |> Map.get(:reasons, [])
+    |> Enum.any?(&(&1 in [:source_unavailable, :source_degraded]))
+  end
+
+  defp source_health_warning?(_warning), do: false
+
+  defp connection_test_failed?(%ResolveWarning{details: %{} = details}) do
+    case Map.get(details, :connection_test_result) do
+      nil -> false
+      result -> to_string(result) in @failed_connection_tests
+    end
+  end
+
+  defp connection_test_failed?(_warning), do: false
 
   defp source_evidence_warning?(%ResolveWarning{code: code}),
     do: code in @source_evidence_warning_codes
 
   defp source_evidence_warning?(_warning), do: false
 
+  @doc """
+  An editor issue's source details for the save sheet (lead 11-14): which source and realm, why
+  (`SourceReadiness` reasons) and when its health was seen. nil for an issue that isn't about a
+  source.
+  """
+  @spec source_details(atom(), map()) :: map() | nil
+  def source_details(:unready_publish_source_request, details) when is_map(details),
+    do: %{
+      logical_source: details[:logical_source],
+      realm: details[:realm],
+      reasons: details[:reasons] || [],
+      observed_at: details[:observed_at]
+    }
+
+  def source_details(_code, _details), do: nil
+
+  # logical_source, realm, reasons and observed_at sit on top for the save sheet (lead 11-14).
   defp warning_details(%ResolveWarning{} = warning) do
+    details = warning.details || %{}
+
     %{
       source_warning_code: warning.code,
       source_warning_message: warning.message,
       severity: warning.severity,
       placement_id: warning.placement_id,
-      details: warning.details || %{}
+      logical_source: Map.get(details, :logical_source),
+      realm: Map.get(details, :realm),
+      reasons: Map.get(details, :reasons),
+      observed_at: Map.get(details, :source_health_observed_at),
+      details: details
     }
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
     |> Map.new()

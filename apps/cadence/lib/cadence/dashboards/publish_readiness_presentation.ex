@@ -1,7 +1,7 @@
 defmodule Cadence.Dashboards.PublishReadinessPresentation do
   @moduledoc false
 
-  alias Cadence.Dashboards.{DashboardAction, SourceActions, ValidationResult}
+  alias Cadence.Dashboards.{DashboardAction, PublishReadiness, SourceActions, ValidationResult}
 
   def build(validation, freshness \\ nil)
 
@@ -40,7 +40,8 @@ defmodule Cadence.Dashboards.PublishReadinessPresentation do
       %{
         placement_id: details[:placement_id] || details["placement_id"],
         code: code,
-        message: issue_message(issue)
+        message: issue_message(issue),
+        details: PublishReadiness.source_details(code, details)
       }
     end)
   end

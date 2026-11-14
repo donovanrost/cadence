@@ -325,6 +325,8 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
              source_health: Map.get(candidate, :source_health),
              source_health_reason: Map.get(candidate, :source_health_reason),
              source_health_freshness: Map.get(candidate, :source_health_freshness),
+             source_health_observed_at: Map.get(candidate, :source_health_observed_at),
+             reasons: Map.get(candidate, :reasons, []),
              connection_test_result: Map.get(candidate, :connection_test_result),
              connection_test_kind: Map.get(candidate, :connection_test_kind),
              connection_test_message: Map.get(candidate, :connection_test_message),
