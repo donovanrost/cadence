@@ -156,6 +156,22 @@ const pass = d.object({
       }),
     ),
   ),
+  /**
+   * GET /passes/:id only (U56, api; domain part 2): every window move a provider change made,
+   * newest first; [] when never moved.
+   */
+  window_moves: d.optional(
+    d.array(
+      d.object({
+        at: d.timestamp,
+        before: d.object({ starts_at: d.timestamp, ends_at: d.timestamp }),
+        after: d.object({ starts_at: d.timestamp, ends_at: d.timestamp }),
+        classification: d.knownText(["observed", "acknowledgment_required"] as const),
+        provider_change_id: d.nullable(d.token),
+      }),
+      100,
+    ),
+  ),
   /** GET /passes/:id only (api, L14 flown passes): the pass's open changes, newest first. */
   provider_changes: d.optional(d.array(passChangeReader, 100)),
 });

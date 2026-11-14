@@ -6,6 +6,8 @@ import { ApCallout, ApStatusMark, ApTag } from "@/ui";
 import { historyEntry } from "@/features/now/index.ts";
 import { fetchPass } from "./api.ts";
 import ProviderChangeBlock from "./ProviderChangeBlock.vue";
+import { contactState } from "@/features/scheduling/index.ts";
+import { listensUntil, windowMoveLine } from "./windowMoves.ts";
 
 /**
  * The pass's provider changes, newest first (ux U44 pass history; api, L14 flown passes): what
@@ -47,6 +49,24 @@ const newestExpired = computed(() => {
   const first = entries.value[0];
   return first && first.e.expired ? first : null;
 });
+/** U56: the window's moves, newest first; the newest says how long Cadence listens while live. */
+const moves = computed(() => {
+  const s = read.state.value;
+  if (s.status !== "ready") return [];
+  const live = contactState(s.value) === "in_contact";
+  return (s.value.window_moves ?? []).map((m, i) => ({
+    m,
+    line: windowMoveLine(m, props.provider),
+    listens: i === 0 ? listensUntil(m, live) : null,
+  }));
+});
+const shown = computed(() => new Set(changes.value.map((c) => c.id)));
+/** "Open the change": the change's own entry below (U44 says who accepted it). */
+function openChange(id: string) {
+  const el = document.getElementById(`provider-change-${id}`);
+  el?.scrollIntoView({ block: "nearest" });
+  el?.focus();
+}
 function changed() {
   read.refetch();
   emit("changed");
@@ -54,7 +74,11 @@ function changed() {
 </script>
 
 <template>
-  <section v-if="entries.length" class="flex flex-col gap-2" aria-label="Provider changes">
+  <section
+    v-if="entries.length || moves.length"
+    class="flex flex-col gap-2"
+    aria-label="Provider changes"
+  >
     <h3 class="ap-label m-0">Provider changes</h3>
     <ApCallout v-if="newestExpired" tone="off">
       <p class="m-0 flex flex-wrap items-center gap-2">
@@ -63,8 +87,28 @@ function changed() {
         expired.
       </p>
     </ApCallout>
+    <ul v-if="moves.length" class="m-0 flex list-none flex-col gap-1 p-0">
+      <li v-for="{ m, line, listens } in moves" :key="m.at" class="text-sm text-text-2">
+        {{ line }}
+        <template v-if="listens"> {{ listens }}</template>
+        <button
+          v-if="m.provider_change_id && shown.has(m.provider_change_id)"
+          type="button"
+          class="max-md:hit-44 ml-1 cursor-pointer text-readout underline hover:text-bright"
+          @click="openChange(m.provider_change_id)"
+        >
+          Open the change
+        </button>
+      </li>
+    </ul>
     <ol class="m-0 flex list-none flex-col gap-2 p-0">
-      <li v-for="{ c, e } in entries" :key="c.id" class="flex flex-col gap-1">
+      <li
+        v-for="{ c, e } in entries"
+        :id="`provider-change-${c.id}`"
+        :key="c.id"
+        tabindex="-1"
+        class="flex flex-col gap-1"
+      >
         <ProviderChangeBlock
           v-if="e.open"
           :mission-id="missionId"
