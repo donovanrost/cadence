@@ -60,7 +60,18 @@ jobs:
       # Each check runs even when an earlier one fails, so one run reports every problem.
       - name: Compile every project (warnings as errors)
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --warnings-as-errors
+        # The restored _build makes this an incremental build. When a struct in one project gains
+        # or loses a field, an incremental build of a project that depends on it can keep a stale
+        # inferred type and report a false "incompatible types" warning (cadence_web after
+        # 64387fb7e's RawEvidence.receipt_times; reproduced locally). So a failure is checked
+        # again by a forced full build, and only that build's result counts. A real warning
+        # fails both builds.
+        run: |
+          if mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --warnings-as-errors; then
+            exit 0
+          fi
+          echo "::warning title=Incremental compile failed::Checking again with a forced full build (stale build-cache types can cause false warnings)."
+          mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors
       - name: Format
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: mix format.all --check-formatted
