@@ -14,7 +14,13 @@ export {
   type Attention,
 } from "./attention.ts";
 export { useSettlement } from "./useSettlement.ts";
-export { NO_ACCESS, NO_ACCESS_SEEN, retryTargets, seenTargets } from "./useQueueCommand.ts";
+export {
+  NO_ACCESS,
+  NO_ACCESS_MISSED,
+  NO_ACCESS_SEEN,
+  retryTargets,
+  seenTargets,
+} from "./useQueueCommand.ts";
 export {
   changeEvidence,
   changeTitle,
@@ -28,3 +34,12 @@ export {
 } from "./providerChange.ts";
 /** §4 short time: `18:49Z`, with the date when it isn't today. */
 export { short } from "./attention.ts";
+export {
+  holderPass,
+  startEvidence,
+  startReasonAction,
+  startReasonOf,
+  startReasonWords,
+  startTitle,
+  type StartReason,
+} from "./contactStart.ts";

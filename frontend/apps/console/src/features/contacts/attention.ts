@@ -108,6 +108,8 @@ export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }
     case "approval_required":
     case "acknowledgment_required":
     case "configuration_failure":
+    case "not_started":
+    case "missed":
     case null:
     default:
       return { text: `Check the booking with ${provider}, then record what you did.`, plan: false };

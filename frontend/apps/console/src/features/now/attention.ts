@@ -34,6 +34,8 @@ export const attentionSources = [
   "activation_apply",
   // §11 L14 (api 30b3f60b9): a provider changed a booked pass.
   "provider_change",
+  // U45: a realized contact that failed to start; cleared when it starts (domain, api).
+  "contact_start",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -50,6 +52,9 @@ export const attentionConflicts = [
   "approval_required",
   "acknowledgment_required",
   "configuration_failure",
+  // contact_start (U45): failing to start while the pass is on · its window ended unstarted.
+  "not_started",
+  "missed",
 ] as const;
 /** U38 mission_runtime reason keys (domain 292c8e6b, final). */
 export const runtimeReasons = [
@@ -57,6 +62,16 @@ export const runtimeReasons = [
   "reconcile_crashed",
   "runtime_not_running",
   "apply_failed",
+] as const;
+/** U45 contact_start: why the pass didn't start (domain's 7 keys; null: no reason recorded). */
+export const startReasons = [
+  "listener_in_use",
+  "listener_unavailable",
+  "connect_failed",
+  "ingress_pipeline_failed",
+  "uplink_session_failed",
+  "no_runtime_spec",
+  "unknown",
 ] as const;
 /** U37 contact_settlement: why the telemetry isn't stored (null: a slow drain past the deadline). */
 export const settlementFailures = ["telemetry_storage_unavailable", "settle_failed"] as const;
@@ -135,6 +150,27 @@ export const passChangeReader = d.object({
 });
 export type PassChange = Decoded<typeof passChangeReader>;
 
+const stationReader = d.object({
+  ref: d.nullable(d.string),
+  id: d.nullable(d.token),
+  // free-text: a station's call sign, not a vocabulary
+  code: d.nullable(d.string),
+  name: d.nullable(d.string),
+});
+
+/** U45: the pass holding the station connection, served like the item's own pass fields. */
+const holderReader = d.object({
+  realized_contact_id: d.nullable(d.token),
+  contact_id: d.nullable(d.token),
+  reservation_id: d.optional(d.nullable(d.token)),
+  spacecraft: d.optional(
+    d.nullable(d.object({ id: spacecraftIdReader, name: d.nullable(d.string) })),
+  ),
+  station: d.optional(d.nullable(stationReader)),
+  starts_at: d.optional(d.nullable(d.timestamp)),
+  ends_at: d.nullable(d.timestamp),
+});
+
 export const attentionReader = d.object({
   id: d.token,
   source: d.knownText(attentionSources),
@@ -149,15 +185,7 @@ export const attentionReader = d.object({
   // Null when a contact has no provider booking (domain, #71).
   reservation_id: d.optional(d.nullable(d.token)),
   // Null on mission-wide sources (mission_runtime: no station, provider or pass).
-  station: d.nullable(
-    d.object({
-      ref: d.nullable(d.string),
-      id: d.nullable(d.token),
-      // free-text: a station's call sign, not a vocabulary
-      code: d.nullable(d.string),
-      name: d.nullable(d.string),
-    }),
-  ),
+  station: d.nullable(stationReader),
   provider: d.nullable(d.object({ id: d.nullable(d.token), name: d.nullable(d.string) })),
   starts_at: d.nullable(d.timestamp),
   raised_at: d.timestamp,
@@ -189,8 +217,8 @@ export const attentionReader = d.object({
       }),
     ),
   ),
-  /** mission_runtime (U38): the reason key, generations, and when the mismatch began. */
-  reason: d.optional(d.nullable(d.knownText(runtimeReasons))),
+  /** mission_runtime (U38) or contact_start (U45): the reason key. */
+  reason: d.optional(d.nullable(d.knownText([...runtimeReasons, ...startReasons] as const))),
   desired_generation: d.optional(d.nullable(d.integer)),
   applied_generation: d.optional(d.nullable(d.integer)),
   since: d.optional(d.nullable(d.timestamp)),
@@ -198,7 +226,8 @@ export const attentionReader = d.object({
   activated_at: d.optional(d.nullable(d.timestamp)),
   /** enabled | disabled: whether the mission keeps a disk copy of incoming telemetry. */
   journal: d.optional(d.nullable(d.knownText(["enabled", "disabled"] as const))),
-  ends_at: d.optional(d.timestamp),
+  // Null when the contact has no provider booking (domain, U45).
+  ends_at: d.optional(d.nullable(d.timestamp)),
   deadline_at: d.optional(d.nullable(d.timestamp)),
   /** telemetry_storage_unavailable | settle_failed | null (a slow drain past the deadline). */
   failure_kind: d.optional(d.nullable(d.knownText(settlementFailures))),
@@ -238,6 +267,13 @@ export const attentionReader = d.object({
   /** true: the runtime isn't running the active configuration either (mission_runtime is left out). */
   runtime_not_applied: d.optional(d.nullable(d.boolean)),
   provider_change: d.optional(d.nullable(providerChangeReader)),
+  /** contact_start (U45): the realized contact that didn't start, and the profile it runs on. */
+  realized_contact_id: d.optional(d.nullable(d.token)),
+  provider_profile_id: d.optional(d.nullable(d.token)),
+  // free-text: the provider profile's name ("Santiago (Demo) S-band downlink")
+  provider_profile_name: d.optional(d.nullable(d.string)),
+  /** listener_in_use only: the pass still holding the station connection. */
+  holder: d.optional(d.nullable(holderReader)),
   resolution: d.nullable(
     d.object({
       // free-text: what the operator recorded doing (resolve's action_text, contacts.md)
@@ -411,6 +447,8 @@ export function attentionWords(
     case "approval_required":
     case "acknowledgment_required":
     case "configuration_failure":
+    case "not_started":
+    case "missed":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.
@@ -473,6 +511,12 @@ export function resolvedWords(r: Resolved): string {
       const why = r.note ? `: ${noStop(r.note)}` : "";
       return `${decided} by ${who} at ${hhmm(r.resolved_at)}${why}.`;
     }
+  }
+  if (r.id.startsWith("attention:contact_start:")) {
+    // U45: it started, or an operator marked the missed pass as seen.
+    if (r.action === "started") return `Started at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "acknowledged")
+      return `Marked as seen by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}.`;
   }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";

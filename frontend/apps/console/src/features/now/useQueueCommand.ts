@@ -8,10 +8,16 @@ export const NO_ACCESS = "Operators can retry storing.";
 /** ux bda6f91d: lost telemetry closes with Mark as seen (acknowledge, operate_mission). */
 export const NO_ACCESS_SEEN = "Operators mark lost telemetry as seen.";
 
-export type CommandKind = "retry" | "seen";
-export const noAccessText = (kind: CommandKind) => (kind === "seen" ? NO_ACCESS_SEEN : NO_ACCESS);
+/** ux U45: a missed pass (contact_start) closes the same way. */
+export const NO_ACCESS_MISSED = "Operators mark missed passes as seen.";
 
-/** POST …/acknowledge on a lost settlement (domain: allowed only when backlog.lost). */
+export type CommandKind = "retry" | "seen";
+const seenNoAccess = (a: Attention | undefined) =>
+  a?.source === "contact_start" ? NO_ACCESS_MISSED : NO_ACCESS_SEEN;
+export const noAccessText = (kind: CommandKind, targets: readonly Attention[]) =>
+  kind === "seen" ? seenNoAccess(targets[0]) : NO_ACCESS;
+
+/** POST …/acknowledge on a lost settlement (backlog.lost) or a missed pass (U45). */
 export function markSeen(missionId: MissionId, a: Attention) {
   return request(
     `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}/acknowledge`,
@@ -29,7 +35,7 @@ export async function seenTargets(
   for (const a of targets) {
     const r = await markSeen(missionId, a);
     if (r.ok) items.push(r.value);
-    else if (r.error.kind === "forbidden") return { text: NO_ACCESS_SEEN, items, emptied: false };
+    else if (r.error.kind === "forbidden") return { text: seenNoAccess(a), items, emptied: false };
     else if (r.error.kind !== "not_found")
       return { text: describeApiError(r.error), items, emptied: false };
   }
@@ -123,7 +129,7 @@ export function useQueueCommand(
       return item.command?.kind === "seen" ? "Marking…" : "Retrying…";
     const base =
       item.command && !canRun
-        ? `${item.sentence} ${noAccessText(item.command.kind)}`
+        ? `${item.sentence} ${noAccessText(item.command.kind, item.command.targets)}`
         : item.sentence;
     const note = notes.value[item.key];
     return note ? `${base} ${note}` : base;
