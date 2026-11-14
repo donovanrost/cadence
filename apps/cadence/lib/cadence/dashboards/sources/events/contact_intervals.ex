@@ -13,7 +13,7 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
     ScopeContext
   }
 
-  alias Cadence.Reads.ContactStations
+  alias Cadence.Reads.{ContactStations, OperationalState}
 
   def contact_interval_frame(
         %PlannedSourceRequest{} = request,
@@ -24,12 +24,13 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
         limit
       ) do
     contact_opts = contact_opts(request, source_binding, limit)
+    scope = interval_scope(request, organization_id, mission_id, opts)
 
     contacts =
       contact_intervals(request, organization_id, mission_id, contact_opts, opts)
       |> Enum.filter(fn interval ->
         interval_overlaps_request?(interval, request) and
-          interval_matches_scope?(interval, request)
+          interval_matches_scope?(interval, scope)
       end)
       |> Enum.sort_by(&interval_sort_key/1)
       |> Enum.take(limit)
@@ -341,15 +342,53 @@ defmodule Cadence.Dashboards.Sources.Events.ContactIntervals do
 
   defp contact_end_time(_metadata), do: nil
 
-  defp interval_matches_scope?(interval, %PlannedSourceRequest{} = request) do
-    if ScopeContext.primary_kind(request.scope_context) in [:source_endpoint, "source_endpoint"] do
-      ids = ScopeContext.primary_ids(request.scope_context)
+  # The widget's scope, in the precedence mission events use (maybe_put_scope_filters/2): a
+  # spacecraft keeps the contacts of its source endpoints (contacts carry endpoint refs, not a
+  # spacecraft); a contact keeps that contact, a realized one also by the scheduled contact it
+  # realizes; a source endpoint keeps its contacts; a mission keeps all. Until 11-14 only a
+  # source-endpoint scope filtered, so a widget fixed to one spacecraft drew every spacecraft's
+  # contact bands (dashboards, qa's overlay check).
+  defp interval_scope(%PlannedSourceRequest{scope_context: context}, org, mission, funs) do
+    spacecraft_ids = ScopeContext.scope_ids(context, :spacecraft)
+    contact_ids = ScopeContext.scope_ids(context, :contact)
 
-      ids == [] or
-        not MapSet.disjoint?(MapSet.new(interval.source_endpoint_refs), MapSet.new(ids))
-    else
-      true
+    cond do
+      spacecraft_ids != [] ->
+        {:source_endpoints, spacecraft_endpoints(org, mission, spacecraft_ids, funs)}
+
+      contact_ids != [] ->
+        {:contacts, MapSet.new(contact_ids)}
+
+      ScopeContext.primary_kind(context) in [:source_endpoint, "source_endpoint"] and
+          ScopeContext.primary_ids(context) != [] ->
+        {:source_endpoints, MapSet.new(ScopeContext.primary_ids(context))}
+
+      true ->
+        :all
     end
+  end
+
+  defp spacecraft_endpoints(org, mission, spacecraft_ids, funs) do
+    endpoints_fun = Keyword.get(funs, :source_endpoints_fun, &default_source_endpoints/2)
+    wanted = MapSet.new(spacecraft_ids)
+
+    for endpoint <- endpoints_fun.(org, mission),
+        MapSet.member?(wanted, get_attr(endpoint, :spacecraft_id)),
+        into: MapSet.new(),
+        do: get_attr(endpoint, :source_endpoint_id)
+  end
+
+  defp default_source_endpoints(org, mission),
+    do: OperationalState.list_source_endpoints(org, mission)
+
+  defp interval_matches_scope?(_interval, :all), do: true
+
+  defp interval_matches_scope?(interval, {:source_endpoints, ids}),
+    do: not MapSet.disjoint?(MapSet.new(interval.source_endpoint_refs || []), ids)
+
+  defp interval_matches_scope?(interval, {:contacts, ids}) do
+    MapSet.member?(ids, interval.contact_id) or
+      MapSet.member?(ids, get_attr(interval.source, :scheduled_contact_id))
   end
 
   defp interval_overlaps_request?(%{starts_at: nil}, %PlannedSourceRequest{}), do: false
