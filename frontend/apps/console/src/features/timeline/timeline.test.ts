@@ -174,7 +174,7 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
     expect(c?.rows).toHaveLength(1);
     expect(c?.rows[0]?.members).toHaveLength(4);
     expect(c?.rows[0]?.event.severity).toBe("caution");
-    expect(c?.rows[0]?.label).toBe("Contacts canceled by the provider");
+    expect(c?.rows[0]?.label).toBe("Contacts canceled");
     expect(kindLabel({ ...canceled(1, "info"), raw_kind: "station_went_dark" })).toBe(
       "Station went dark",
     );
