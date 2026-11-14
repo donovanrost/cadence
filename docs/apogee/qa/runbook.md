@@ -143,6 +143,10 @@ EARENDIL_CADENCE_NODE=cadence_apogee \
 #    confirmed with command_window, and any CLCW override is armed on the right contact ref.
 #  - To hold bookings 'pending' for unconfirmed-state checks, don't pause the run; find another way
 #    (ask domain), or pause only far from any armed pass and reset the offset afterwards.
+#  - RULE (director, 11-14): pausing or resuming the shared sim run is a qa-owned action, like a restart.
+#    Nobody else pauses or resumes it. qa checks paused_duration_seconds is 0 before every pass it
+#    cares about. (A late pass start isn't always a pause: 11-14's 12:10:57Z 30 s was issue 62's
+#    window bug, with offset 0.)
 #  - Keep the host awake from arming until after LOS + the post-pass checks (director, 2026-11-11):
 #      caffeinate -dims -t <seconds>     # in a spare shell; touches neither lib nor the stack
 #    and check `pmset -g assertions | grep caffeinate` at T-15. A sleeping Mac lets the provider
