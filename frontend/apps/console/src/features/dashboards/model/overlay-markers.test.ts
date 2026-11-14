@@ -107,4 +107,24 @@ describe("overlay frames as chart markers", () => {
       ["c-2", null, "NL-DEF456"],
     ]);
   });
+  it("marks mission timeline events only, not the watermark or other evidence frames", () => {
+    const events = (idField: string, title: string) =>
+      frame(
+        "events",
+        [
+          field("occurred_at", "time", [1_000, 2_000]),
+          field("title", "string", [title, title]),
+          field(idField, "string", [`${idField}-1`, `${idField}-2`]),
+        ],
+        "events",
+      );
+    const p = placementWith([
+      events("mission_event_id", "Pass started"),
+      events("source_watermark_event_id", "Telemetry watermark advanced"),
+    ]);
+    expect(overlayMarkers(p).eventMarkers.map((m) => [m.marker_id, m.title])).toEqual([
+      ["mission_event_id-1", "Pass started"],
+      ["mission_event_id-2", "Pass started"],
+    ]);
+  });
 });

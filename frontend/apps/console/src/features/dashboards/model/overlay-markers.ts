@@ -10,7 +10,10 @@ import { frameRows, type Row } from "./widget-data.ts";
  * - limits, events (time + normalized_state/limit_state)                  → `limit_event`, only on
  *   entry into a red or yellow state (ux: marks on entry, not on every violating sample)
  * - events, intervals (starts_at/ends_at: contacts)                        → `contact_interval`
- * - events, points (occurred_at or time)                                   → `mission_event`
+ * - events, the mission timeline (mission_event_id)                       → `mission_event`
+ *   The events source also sends source-health, watermark, capability, backfill and revision
+ *   frames (same occurred_at columns); they're evidence, not chart marks (a watermark advances
+ *   about once a second during a pass: qa's overlay look), so only the mission timeline is read.
  *
  * `link_id` is the marker's own id: the renderers need one, and the console's chart port treats
  * evidence links as no-ops.
@@ -85,7 +88,7 @@ function contactInterval(row: Row, key: string): MarkerInput | null {
 function pointEvent(row: Row, key: string): MarkerInput | null {
   const at = num(row.occurred_at) ?? num(row.time);
   if (at === null) return null;
-  const id = text(row.event_id) ?? text(row.source_event_id) ?? `event-${key}`;
+  const id = text(row.mission_event_id) ?? text(row.event_id) ?? `event-${key}`;
   return {
     marker_type: "mission_event",
     marker_id: id,
@@ -144,11 +147,7 @@ export function overlayMarkers(placement: ReadyPlacement): OverlayMarkers {
       ),
     ],
     eventMarkers: collect(events, (f) =>
-      has(f, "starts_at")
-        ? contactInterval
-        : has(f, "occurred_at") || has(f, "time")
-          ? pointEvent
-          : null,
+      has(f, "starts_at") ? contactInterval : has(f, "mission_event_id") ? pointEvent : null,
     ),
   };
 }
