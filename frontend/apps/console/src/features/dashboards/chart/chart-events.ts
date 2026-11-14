@@ -7,8 +7,23 @@ import type { ChartSurface } from "./chart-surface.ts";
  */
 export class ChartEvents {
   readonly eventLayer: HTMLDivElement;
+  /** Contact tints, behind the plot (attached first, so the series draws over them). */
+  readonly fillLayer: HTMLDivElement;
   constructor(private readonly surface: ChartSurface) {
     this.eventLayer = this.buildEventLayer();
+    this.fillLayer = this.buildFillLayer();
+  }
+  buildFillLayer() {
+    const layer = document.createElement("div");
+    layer.setAttribute("aria-hidden", "true");
+    Object.assign(layer.style, {
+      position: "absolute",
+      inset: "0",
+      bottom: `${this.surface.model.legendHeight()}px`,
+      pointerEvents: "none",
+      zIndex: "0",
+    });
+    return layer;
   }
   buildEventLayer() {
     const layer = document.createElement("div");
@@ -27,50 +42,92 @@ export class ChartEvents {
   renderEventMarkers() {
     if (!this.eventLayer || !this.surface.chart) return;
     this.eventLayer.replaceChildren();
-    for (const marker of this.surface.model.eventMarkers) {
-      if (marker.marker_type === "contact_interval") this.renderContactInterval(marker);
-      else if (marker.marker_type === "mission_event") this.renderMissionEvent(marker);
-    }
+    this.fillLayer.replaceChildren();
+    const contacts = this.surface.model.eventMarkers.filter(
+      (m) => m.marker_type === "contact_interval",
+    );
+    this.renderContactBands(contacts);
+    for (const marker of this.surface.model.eventMarkers)
+      if (marker.marker_type === "mission_event") this.renderMissionEvent(marker);
   }
 
   /**
-   * A contact behind the plot (ux Dashboards.md 'Overlays'): raised fill, the station code (or
-   * the contact's label) mono 11 top-left. Booked = dashed outline; realized = filled. Missed or
-   * partial is said in the title, never as a colour.
+   * Contacts behind the plot (ux Dashboards.md 'Overlays'): a realized pass is a 5% readout tint
+   * with hairline edges, a booked one a dashed outline; the station code (or label) mono 11
+   * top-left. Missed or partial is said in the title, never as a colour. Tints are merged per
+   * overlapping run and drawn behind the series, so overlapping passes (or a booked + realized
+   * pair) never stack into a heavier wash (qa's overlay look); labels go on top of every band.
    */
-  renderContactInterval(marker: ChartMarker) {
-    const interval = this.surface.intervalBounds(marker);
-    if (!interval) return;
-    const realized = marker.kind === "realized_contact";
-    const status = marker.status ? marker.status.replaceAll("_", " ") : null;
-    const name = marker.station || marker.label || "Contact";
-    const band = document.createElement("div");
-    band.title = [realized ? "Pass" : "Booked pass", name, status].filter(Boolean).join(" · ");
-    band.setAttribute("role", "img");
-    band.setAttribute("aria-label", band.title);
-    Object.assign(band.style, {
+  renderContactBands(contacts: readonly ChartMarker[]) {
+    const bands = contacts.flatMap((marker) => {
+      const bounds = this.surface.intervalBounds(marker);
+      return bounds ? [{ marker, ...bounds, realized: marker.kind === "realized_contact" }] : [];
+    });
+    for (const span of mergedSpans(bands.filter((b) => b.realized))) this.renderTint(span);
+    for (const band of bands) this.renderBandEdges(band);
+    const labelled = new Set<string>();
+    for (const band of bands) {
+      const name = band.marker.station || band.marker.label || "Contact";
+      const key = `${Math.round(band.left)}:${name}`;
+      if (labelled.has(key)) continue;
+      labelled.add(key);
+      this.renderBandLabel(band.left, name);
+    }
+  }
+
+  private bandBox(left: number, width: number) {
+    return {
       position: "absolute",
-      left: `${interval.left}px`,
+      left: `${left}px`,
       top: `${this.surface.chart.bbox.top || 0}px`,
-      width: `${interval.width}px`,
+      width: `${width}px`,
       height: `${this.surface.chart.bbox.height || this.surface.el.clientHeight}px`,
       boxSizing: "border-box",
-      // As ApTimeSeries' pass band: a 5% readout tint with hairline edges (the plot shows through).
-      background: realized
-        ? `rgba(${this.surface.themeColor("--chart-color-foreground")}, 0.05)`
-        : "transparent",
-      border: realized ? "0" : `1px dashed ${this.surface.themeColor("--chart-border-30")}`,
-      borderLeft: `1px ${realized ? "solid" : "dashed"} ${this.surface.themeColor("--chart-border-30")}`,
-      borderRight: `1px ${realized ? "solid" : "dashed"} ${this.surface.themeColor("--chart-border-30")}`,
-      pointerEvents: "auto",
-      zIndex: "0",
+    };
+  }
+
+  private renderTint(span: { left: number; width: number }) {
+    const tint = document.createElement("div");
+    Object.assign(tint.style, {
+      ...this.bandBox(span.left, span.width),
+      background: `rgba(${this.surface.themeColor("--chart-color-foreground")}, 0.05)`,
     });
+    this.fillLayer.appendChild(tint);
+  }
+
+  private renderBandEdges(band: {
+    marker: ChartMarker;
+    left: number;
+    width: number;
+    realized: boolean;
+  }) {
+    const { marker, realized } = band;
+    const status = marker.status ? marker.status.replaceAll("_", " ") : null;
+    const name = marker.station || marker.label || "Contact";
+    const edge = document.createElement("div");
+    edge.title = [realized ? "Pass" : "Booked pass", name, status].filter(Boolean).join(" · ");
+    edge.setAttribute("role", "img");
+    edge.setAttribute("aria-label", edge.title);
+    const line = this.surface.themeColor("--chart-border-30");
+    Object.assign(edge.style, {
+      ...this.bandBox(band.left, band.width),
+      background: "transparent",
+      border: realized ? "0" : `1px dashed ${line}`,
+      borderLeft: `1px ${realized ? "solid" : "dashed"} ${line}`,
+      borderRight: `1px ${realized ? "solid" : "dashed"} ${line}`,
+      pointerEvents: "auto",
+    });
+    this.eventLayer.appendChild(edge);
+  }
+
+  private renderBandLabel(left: number, name: string) {
     const label = document.createElement("span");
     label.textContent = name;
+    label.setAttribute("aria-hidden", "true");
     Object.assign(label.style, {
       position: "absolute",
-      top: "0",
-      left: "0",
+      left: `${left}px`,
+      top: `${this.surface.chart.bbox.top || 0}px`,
       font: this.surface.themeColor("--chart-font"),
       color: this.surface.themeColor("--chart-label-90"),
       background: this.surface.themeColor("--chart-surface-96"),
@@ -78,8 +135,7 @@ export class ChartEvents {
       whiteSpace: "nowrap",
       pointerEvents: "none",
     });
-    band.appendChild(label);
-    this.eventLayer.appendChild(band);
+    this.eventLayer.appendChild(label);
   }
 
   renderMissionEvent(marker: ChartMarker) {
@@ -136,4 +192,17 @@ export class ChartEvents {
 
     this.eventLayer.appendChild(button);
   }
+}
+
+/** Pixel spans merged where they overlap or touch: one tint per run of passes. */
+export function mergedSpans(spans: readonly { left: number; width: number }[]) {
+  const sorted = [...spans].sort((a, b) => a.left - b.left);
+  const merged: { left: number; width: number }[] = [];
+  for (const span of sorted) {
+    const last = merged.at(-1);
+    if (last && span.left <= last.left + last.width)
+      last.width = Math.max(last.width, span.left + span.width - last.left);
+    else merged.push({ left: span.left, width: span.width });
+  }
+  return merged;
 }

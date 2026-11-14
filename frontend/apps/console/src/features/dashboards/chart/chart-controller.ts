@@ -134,6 +134,7 @@ export class TelemetryChartController {
     this.selection.renderSelection();
   }
   private attachLayers() {
+    this.surface.el.prepend(this.events.fillLayer);
     this.surface.el.append(
       this.events.eventLayer,
       this.annotations.annotationLayer,
@@ -180,6 +181,7 @@ export class TelemetryChartController {
     this.live.destroy();
     this.plot.destroy();
     for (const layer of [
+      this.events.fillLayer,
       this.events.eventLayer,
       this.annotations.annotationLayer,
       this.limits.markerLayer,
