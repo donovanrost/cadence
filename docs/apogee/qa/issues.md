@@ -438,4 +438,24 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 - Impact: archive rows can't be joined to a pass, and #88's quarantine items would always read `none:<code>`.
 - Fix: api-ops, carries the three keys into evidence metadata. New rows only; old dev rows stay NULL.
 
+### 62. An effective provider timing shift moves the reservation, not the scheduled contact (window truth)
+
+- Owner **domain** (L14 / 6cf490e87). Found by api-ops from 003's 11-14 12:10:57Z pass (scheduled_contact_brs6fn2wcu_39YJM).
+- qa's L14 check on 11-13 14:53Z made an effective +30 s shift on 003's reservation 39YJN. The reservation moved to
+  12:11:27–12:19:27Z, but the scheduled contact (and so the realized contact and its listener) kept 12:10:57–12:18:57Z.
+- The sim flew the provider's window. Cadence listened 30 s early and closed 30 s before the provider's LOS, so about 30 s
+  of telemetry was lost at the END (12:18:57–12:19:27Z). qa's first report wrongly put it at the start.
+- Check: `SELECT … FROM scheduled_contacts s JOIN provider_reservations r ON r.scheduled_contact_id = s.scheduled_contact_id
+  WHERE s.starts_at <> r.starts_at OR s.ends_at <> r.ends_at` (api-ops).
+
+### 63. A failed reservation leaves its scheduled contact 'scheduled' (phantom listener)
+
+- Owner **domain**. 007's 3A497 (contact 13:04:54–13:12:54Z, after a -60 s proposal from qa's 11-13 revert check; the
+  reservation was 'failed' at 13:03:54–13:11:54Z) and 008's 39YKZ (12:55:49Z, reservation 'failed', windows match) were
+  both still 'scheduled'.
+- 3A497 shares the Punta Arenas delivery profile with 002's real pass 3A4AK (13:12:15Z), a 39 s overlap and an eaddrinuse
+  risk (issue 58 class). The director chose to cancel 3A497 through the REST path. The cancel needs a Bearer API token,
+  qa's session tool policy blocked minting one, and nobody else minted one, so the director took the fallback: accept and
+  record. Evidence: var/qa-cluster-1255-1322.log (12:55–13:22Z).
+
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
