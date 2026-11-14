@@ -320,7 +320,11 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         profile.version
       )
 
-    {:ok, Enum.map(targets, &entry(&1, Map.fetch!(stored, &1.spacecraft_id)))}
+    # A target archived or deleted meanwhile refuses the apply, as the per-spacecraft update did
+    # (api-ops), rather than raising.
+    if map_size(stored) == length(targets),
+      do: {:ok, Enum.map(targets, &entry(&1, Map.fetch!(stored, &1.spacecraft_id)))},
+      else: {:error, :spacecraft_not_found}
   end
 
   defp rollout_targets(_organization_id, _mission_id, _current, "none"), do: []
