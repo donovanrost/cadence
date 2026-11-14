@@ -428,17 +428,39 @@ Invalidation Decisions" (with `Reads.Dashboards.RuntimeDiagnostics`); it gets no
    - fe-setup makes DiagnosticsTab's reader tolerate an absent `refresh`, then removes it;
    - only then, api drops `refresh {observed_at, decision_status, context_reason}` from D18 (it reads the same
      decisions: `execution_diagnostics.ex:133-139`).
-2. **The decision machinery** (a deletion batch under #79: the director's go first, and a re-grep proving no
-   callers):
-   - `RuntimeInvalidation.emit_decision`, `decision_telemetry_event` and `@decision_telemetry_event`;
-   - `Dashboards.RuntimeInvalidation.{DecisionEvents, DecisionProjection, DecisionEvent}`;
+2. **The decision machinery** (a deletion batch under #79: the director's go first). Step 1 is done: D18's
+   serializer has no `refresh` (api 729f9e895) and the console reader doesn't read it (`settings/api.ts:252`).
+   **Re-grep 11-14 (dashboards):** in lib, nothing calls any writer (`emit_decision`, `DecisionEvents.record`,
+   `Diagnostics.record_runtime_invalidation_decision`, `DashboardRuntimeInvalidations.record`, the facades). Only
+   tests write decisions. Three readers remain, all on pages that are going:
+   - `Reads.Dashboards.RuntimeDiagnostics` → `Projections.DashboardRuntimeInvalidations` (`/admin/runtime`, L7);
+   - `ExecutionDiagnostics.decisions/4` (`execution_diagnostics.ex:52,129-158`): it still runs on every D18
+     request (a durable query, then a RuntimeHealth snapshot), but `Console.DashboardDiagnostics.build` ignores the
+     decision collections. Its other caller is the legacy `ops_diagnostics_page.ex` (L8b).
+
+   **Order: after L7 and L8b land** (L7 deletes `RuntimeDiagnostics` and `/admin/runtime`; L8b the legacy
+   diagnostics page). Then delete:
+   - `RuntimeInvalidation.emit_decision`, `decision_telemetry_event`, `@decision_telemetry_event` and
+     `decision_metadata_keys/0` (`runtime_invalidation.ex:16,253-275,532-548`); keep `telemetry_event/0` and the
+     boundary event;
+   - `RuntimeHealth`'s subscription to it (`runtime_health.ex:55`);
+   - `Dashboards.RuntimeInvalidation.{DecisionEvents, DecisionEvents.DecisionEventRow, DecisionProjection,
+     DecisionEvent}`;
    - `Dashboards.Diagnostics.{runtime_invalidation_decisions, record_runtime_invalidation_decision,
-     durable_runtime_invalidation_decisions}`;
-   - `Projections.DashboardRuntimeInvalidations`;
-   - the facade functions in `dashboards.ex:76-83` and `cadence.ex:745-779`;
-   - `ExecutionDiagnostics`' decision lookup and `ExecutionEvidence`'s "Recorded invalidation" row;
-   - their tests (`dashboard_runtime_invalidation_decisions_test`, `runtime_invalidation/decision_events_test`,
-     the decision cases in `runtime_health_test`).
+     durable_runtime_invalidation_decisions}` (`diagnostics.ex:49-65`) and their aliases;
+   - `Projections.DashboardRuntimeInvalidations` (whole module);
+   - the facades `dashboards.ex:76-83` and `cadence.ex:745-779` (`dashboard_runtime_invalidation_decisions`,
+     `durable_…`, `record_…`);
+   - `ExecutionDiagnostics.decisions/4` and its `++` at :52 (moduledoc :3,7 too), and `ExecutionEvidence`'s
+     `decisions/2`, `unavailable_decisions/0`, `refresh/1`, `invalidation/1` ("Recorded invalidation") and
+     `decision_identity/1` (`execution_evidence.ex:44-51,256-295`);
+   - tests: `dashboard_runtime_invalidation_decisions_test.exs`, `runtime_invalidation/decision_events_test.exs`,
+     `runtime_invalidation/decision_projection_test.exs` (whole files); `runtime_health_test.exs` :107 and the
+     decision case (:266-306); `cadence_web/dashboard_execution_diagnostics_test.exs`'s decision cases (:302,
+     :365-375).
+
+   **Not this:** same words, other things. `Telemetry.Storage.ObservationIdentityDecisionEvent` (ingest identity),
+   and `decision_status` in `ComparisonReviewQueue` / `DocumentStore.LifecycleEvents` (comparison findings).
 3. **Later, domain's call:** a migration dropping the durable decision events table.
 
 Future note, not work now: "why did my board refresh" would be a per-dashboard Diagnostics feature fed by C1's own
