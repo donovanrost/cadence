@@ -38,6 +38,8 @@ export type QueueItem = Readonly<{
    * only with operate access, else "Operators can retry storing."
    */
   command?: Readonly<{ label: string; kind: "retry" | "seen"; targets: readonly Attention[] }>;
+  /** U49: a second write beside Retry, `Discard…`, which opens a sheet for its required reason. */
+  discard?: Attention;
   /** A folded row's members: its action opens them in a sheet (U30 pattern) instead of routing. */
   list?: Readonly<{ title: string; rows: readonly QueueListRow[] }>;
 }>;

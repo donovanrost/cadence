@@ -4,6 +4,8 @@ import { RouterLink } from "vue-router";
 import type { RemoteState } from "@/api/index.ts";
 import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
 import type { QueueItem } from "./queue.ts";
+import type { Attention } from "./attention.ts";
+import DiscardSheet from "./DiscardSheet.vue";
 import QueueListSheet from "./QueueListSheet.vue";
 import { useFreshFlash } from "./useFreshFlash.ts";
 import { useQueueCommand, type RetryOutcome } from "./useQueueCommand.ts";
@@ -15,6 +17,17 @@ const props = defineProps<{ state: RemoteState<QueueItem[]>; nominal: number }>(
 const emit = defineEmits<{ retry: []; retried: [row: QueueItem, outcome: RetryOutcome] }>();
 const now = useNow();
 const sheet = ref<InstanceType<typeof QueueListSheet> | null>(null);
+const discardSheet = ref<InstanceType<typeof DiscardSheet> | null>(null);
+/** U49: the discarded item comes back resolved; the row takes it as a Retry's does. */
+function discarded(row: QueueItem, item: Attention | null) {
+  emit("retried", row, { text: null, items: item ? [item] : [], emptied: false });
+}
+let discarding: QueueItem | null = null;
+function openDiscard(row: QueueItem) {
+  if (!row.discard) return;
+  discarding = row;
+  discardSheet.value?.open(row.discard);
+}
 /** U37 Retry storing: operate_mission, the same flag Recover uses (access.abort). */
 const scope = useMissionScope();
 const access = useCommandAccess();
@@ -106,11 +119,25 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 :to="item.action.to"
                 >{{ item.action.label }}</ApButton
               >
+              <!-- U49: Discard… sits beside Retry and opens its sheet (danger, reason required). -->
+              <ApButton
+                v-if="item.discard && access.abort"
+                size="compact"
+                variant="danger"
+                :disabled="command.running.value.has(item.key)"
+                @click="openDiscard(item)"
+                >Discard…</ApButton
+              >
             </template>
           </ApListRow>
         </ul>
       </template>
     </ApRemote>
     <QueueListSheet ref="sheet" />
+    <DiscardSheet
+      ref="discardSheet"
+      :mission-id="scope.mission.id"
+      @done="(item) => discarding && discarded(discarding, item)"
+    />
   </ApPanel>
 </template>

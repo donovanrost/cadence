@@ -35,6 +35,7 @@ import {
 import { targetOfAttention } from "./attention.ts";
 import SettlementBlock from "./SettlementBlock.vue";
 import ContactStartBlock from "./ContactStartBlock.vue";
+import ArchiveBlock from "./ArchiveBlock.vue";
 import IngressBlock from "./IngressBlock.vue";
 import { passAttentions, passAttentionTag } from "./passAttention.ts";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
@@ -70,6 +71,7 @@ const itemOf = (source: (typeof attentionSources)[number]) =>
 const startItem = computed(() => itemOf("contact_start"));
 /** U47: a pass can have both a backlog and lost frames. */
 const ingressItems = computed(() => items.value.filter((a) => a.source === "ingress_backpressure"));
+const archiveItems = computed(() => items.value.filter((a) => a.source === "archive_quarantine"));
 const attentionTag = computed(() => (props.pass ? passAttentionTag(props.pass) : null));
 const resolutionItem = computed(() => itemOf("pass_resolution"));
 const liveChange = computed(() => {
@@ -206,6 +208,15 @@ const countdown = computed(() => {
         :key="a.id"
         :mission-id="missionId"
         :attention="a"
+        @changed="$emit('changed')"
+      />
+      <!-- U49: raw records from this pass the archive couldn't take. -->
+      <ArchiveBlock
+        v-for="a in archiveItems"
+        :key="a.id"
+        :mission-id="missionId"
+        :attention="a"
+        :now="now"
         @changed="$emit('changed')"
       />
       <SettlementBlock :mission-id="missionId" :pass-id="pass.id" />

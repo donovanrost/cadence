@@ -1,6 +1,14 @@
 import type { MissionId } from "@/api/index.ts";
 import { shallowRef, type Ref } from "vue";
-import { decoders as d, describeApiError, detailsOf, isError, request } from "@/api/index.ts";
+import {
+  decoders as d,
+  describeApiError,
+  detailsOf,
+  isError,
+  request,
+  type ApiResult,
+} from "@/api/index.ts";
+import { NO_ACCESS_ARCHIVE } from "./archive.ts";
 import { attentionReader, serverKey, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 
@@ -22,7 +30,11 @@ const seenNoAccess = (a: Attention | undefined) =>
       ? NO_ACCESS_ACK_LOST
       : NO_ACCESS_SEEN;
 export const noAccessText = (kind: CommandKind, targets: readonly Attention[]) =>
-  kind === "seen" ? seenNoAccess(targets[0]) : NO_ACCESS;
+  kind === "seen"
+    ? seenNoAccess(targets[0])
+    : targets[0]?.source === "archive_quarantine"
+      ? NO_ACCESS_ARCHIVE
+      : NO_ACCESS;
 
 /** POST …/acknowledge on a lost settlement (backlog.lost) or a missed pass (U45). */
 export function markSeen(missionId: MissionId, a: Attention) {
@@ -49,13 +61,25 @@ export async function seenTargets(
   return { text: null, items, emptied: false };
 }
 
-/** POST …/attention/contact_settlement/:id/retry (domain #71; operate_mission). */
-export function retrySettlement(missionId: MissionId, a: Attention) {
-  return request(
-    `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}/retry`,
-    attentionReader,
-    { method: "POST" },
-  );
+/** archive_quarantine's retry answers with counts beside the item (api, U49). */
+const archiveRetry = d.object({
+  item: attentionReader,
+  indexed: d.integer,
+  still_failing: d.integer,
+});
+
+/**
+ * POST …/attention/:source/:id/retry (operate_mission): contact_settlement (#71) answers with the
+ * item; archive_quarantine (#88) with {item, indexed, still_failing}, read here down to the item.
+ */
+export async function retrySettlement(
+  missionId: MissionId,
+  a: Attention,
+): Promise<ApiResult<Attention>> {
+  const path = `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}/retry`;
+  if (a.source !== "archive_quarantine") return request(path, attentionReader, { method: "POST" });
+  const r = await request(path, archiveRetry, { method: "POST" });
+  return r.ok ? { ok: true, value: r.value.item } : r;
 }
 
 export type RetryOutcome = Readonly<{
@@ -92,7 +116,8 @@ export async function retryTargets(
       const current = detailsOf(e, conflictItem);
       if (current) items.push(current.item);
     } else if (e.kind === "not_found") dropped += 1;
-    else if (e.kind === "forbidden") return { text: NO_ACCESS, items, emptied: false };
+    else if (e.kind === "forbidden")
+      return { text: noAccessText("retry", [a]), items, emptied: false };
     else failed.push(describeApiError(e));
   }
   const retried = targets.length - dropped - failed.length;

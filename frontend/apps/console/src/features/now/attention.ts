@@ -38,6 +38,8 @@ export const attentionSources = [
   "contact_start",
   // U47 (api-ops, #83): a contact's ingest buffer backing up, or frames a transport dropped.
   "ingress_backpressure",
+  // U49 (#88): a contact's raw records the archive couldn't take; their telemetry was stored.
+  "archive_quarantine",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -60,6 +62,8 @@ export const attentionConflicts = [
   // ingress_backpressure (U47): the buffer is >= 80% full · frames were lost.
   "journal_near_full",
   "frames_dropped",
+  // archive_quarantine (U49): one item per contact and error code.
+  "quarantined",
 ] as const;
 /** U38 mission_runtime reason keys (domain 292c8e6b, final). */
 export const runtimeReasons = [
@@ -251,6 +255,10 @@ export const attentionReader = d.object({
         "activation_execution_interrupted",
         "spacecraft_configuration_review_stale",
         "approved_activation_content_mismatch",
+        // archive_quarantine (#88): why the archive refused the records.
+        "identity_conflict",
+        "data_rejected",
+        "unknown",
       ] as const),
     ),
   ),
@@ -325,6 +333,22 @@ export const attentionReader = d.object({
         last_error: d.nullable(d.string),
       }),
     ),
+  ),
+  /** archive_quarantine (U49, #88): what the archive couldn't take, and what was stored anyway. */
+  counts: d.optional(
+    d.nullable(d.object({ entries: d.optional(d.integer), frames: d.integer, packets: d.integer })),
+  ),
+  stored_without_archive: d.optional(
+    d.nullable(d.object({ frames: d.integer, packets: d.integer })),
+  ),
+  /** The records' receipt span (the meta), and the last one seen (bumped while more arrive). */
+  first_received_at: d.optional(d.nullable(d.timestamp)),
+  last_received_at: d.optional(d.nullable(d.timestamp)),
+  last_seen_at: d.optional(d.nullable(d.timestamp)),
+  actions: d.optional(d.nullable(d.array(d.knownText(["retry", "discard"] as const), 10))),
+  /** `indexed` asked of domain 11-14: how many that retry archived. */
+  last_retry: d.optional(
+    d.nullable(d.object({ by: who, at: d.timestamp, indexed: d.optional(d.nullable(d.integer)) })),
   ),
   resolution: d.nullable(
     d.object({
@@ -503,6 +527,7 @@ export function attentionWords(
     case "missed":
     case "journal_near_full":
     case "frames_dropped":
+    case "quarantined":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.
@@ -577,6 +602,12 @@ export function resolvedWords(r: Resolved): string {
     if (r.action === "drained") return `Caught up at ${hhmm(r.resolved_at)}.`;
     if (r.action === "acknowledged")
       return `Acknowledged by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}.`;
+  }
+  if (r.id.startsWith("attention:archive_quarantine:")) {
+    // U49: archived on retry, or discarded by an operator with a reason.
+    if (r.action === "retried") return `Archived on retry at ${hhmm(r.resolved_at)}.`;
+    if (r.action === "discarded")
+      return `Discarded by ${r.resolved_by.name ?? "an operator"} at ${hhmm(r.resolved_at)}${r.note ? `: ${noStop(r.note)}` : ""}.`;
   }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";
