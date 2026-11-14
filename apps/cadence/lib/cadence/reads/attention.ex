@@ -20,6 +20,7 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
   alias Cadence.Contacts.ContactSettlementAttention, as: ContactSettlement
+  alias Cadence.Contacts.ContactStartAttention, as: ContactStart
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
   alias Cadence.Contacts.ProviderChangeAttention, as: ProviderChange
   alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
@@ -31,6 +32,7 @@ defmodule Cadence.Reads.Attention do
     UplinkBlocked,
     PassRelease,
     ContactSettlement,
+    ContactStart,
     MissionRuntime,
     ActivationApply,
     ProviderChange

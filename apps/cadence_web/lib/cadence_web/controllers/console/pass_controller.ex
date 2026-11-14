@@ -67,12 +67,13 @@ defmodule CadenceWeb.Console.PassController do
           []
       end
 
-    # A pass row carries its booking's pass_resolution item, else a pass_release one (a Release the
-    # provider didn't confirm); a blocked uplink shows through uplink_readiness instead.
+    # A pass row carries its booking's open items (resolution, failed release, provider change, a
+    # contact that didn't start); a blocked uplink shows through uplink_readiness instead.
     {resolutions, blocked} =
-      items
-      |> Enum.sort_by(&attention_rank/1)
-      |> Enum.split_with(&(&1.source in ["pass_resolution", "pass_release", "provider_change"]))
+      Enum.split_with(
+        items,
+        &(&1.source in ["pass_resolution", "pass_release", "provider_change", "contact_start"])
+      )
 
     conn
     |> with_replacements(result)
@@ -244,29 +245,37 @@ defmodule CadenceWeb.Console.PassController do
   defp person(%{"kind" => "user", "id" => id} = by), do: %{id: id, name: by["name"]}
   defp person(_system), do: nil
 
-  # One item per pass, the highest rank winning (the last one kept): a booking resolution, then a
-  # provider change awaiting approval (L14, fe-ops), another provider change, then a failed release.
-  defp attention_rank(%{source: "pass_resolution"}), do: 3
-  defp attention_rank(%{source: "provider_change", conflict: "approval_required"}), do: 2
-  defp attention_rank(%{source: "provider_change"}), do: 1
-  defp attention_rank(_item), do: 0
-
-  defp with_attention(result, _conn, []), do: result
-
+  # ux U45: every open item of the pass in Now's order (priority, the soonest due, then a
+  # contact that didn't start), each with its priority and due_at; `attention` is the first.
   defp with_attention(%{passes: passes} = result, conn, items) do
-    names = AttentionItems.lookups(org_id(conn), mission_id(conn))
-    by_reservation = Map.new(items, &{&1.provider_reservation_id, &1})
+    now = DateTime.utc_now()
+    names = AttentionItems.lookups(org_id(conn), mission_id(conn), items)
+
+    by_reservation =
+      items
+      |> Enum.map(fn item ->
+        {priority, due_at} = AttentionItems.rank(item, now)
+
+        {item,
+         item |> AttentionItems.object(names) |> Map.merge(%{priority: priority, due_at: due_at})}
+      end)
+      |> Enum.sort_by(fn {item, object} -> order(item, object) end)
+      |> Enum.group_by(fn {item, _object} -> item.provider_reservation_id end, &elem(&1, 1))
 
     %{
       result
       | passes:
           Enum.map(passes, fn pass ->
-            case Map.get(by_reservation, pass.id) do
-              nil -> pass
-              item -> %{pass | attention: AttentionItems.object(item, names)}
-            end
+            attentions = Map.get(by_reservation, pass.id, [])
+            Map.merge(pass, %{attention: List.first(attentions), attentions: attentions})
           end)
     }
+  end
+
+  # A null due_at sorts after any time; on a tie, a contact that didn't start comes first.
+  defp order(item, %{priority: priority, due_at: due_at}) do
+    due = if due_at, do: {0, DateTime.to_unix(due_at, :microsecond)}, else: {1, 0}
+    {priority, due, if(item.source == "contact_start", do: 0, else: 1)}
   end
 
   # U33: live uplink readiness per pass.

@@ -147,9 +147,8 @@ proposal_hash, already_effective, expired, fields: [{field, label, before_json, 
 - **At the deadline Cadence does nothing by itself.** Approve and reject are refused from then on
   (`409 provider_change_deadline_passed`), and the change stays open until the provider's next
   revision supersedes it: the provider decides.
-- Pass rows (`GET /passes`, `/passes/:id`) carry an open provider-change item as their
-  `attention`. Precedence: a booking resolution, then an approval, then another provider change,
-  then a failed release.
+- Pass rows (`GET /passes`, `/passes/:id`) carry an open provider-change item in their
+  `attentions` (below, Pass row attentions).
 
 `POST …/attention/provider_change/:id/approve | reject | acknowledge {reason, proposal_hash}` →
 `200 {data: {item: <the attention object> | null}}` (null once decided). Organization admins only:
@@ -164,6 +163,41 @@ proposal_hash, already_effective, expired, fields: [{field, label, before_json, 
 
 Now (ops.md): approval rows are P2, due at `deadline_at`, and drop to P3 once it passes (the
 provider decides then; ux U44). Acknowledgement and configuration-failure rows are P3.
+
+### Pass row attentions (ux U45)
+
+`GET /passes` rows and `GET /passes/:id` carry `attentions: [<attention object> + {priority,
+due_at}]`: every open item of the pass (`pass_resolution`, `pass_release`, `provider_change`,
+`contact_start`), in Now's order: `priority` (1 first), then the soonest `due_at` (null last), then
+`contact_start` on a tie. `attention` is `attentions[0]`, or `null`; `attentions` is `[]` when
+there's none. Show the first as the tag with "+N" for the rest; the pass detail shows them all.
+
+### A contact that didn't start: the `contact_start` source (ux U45)
+
+Now and pass rows carry `source: "contact_start"`, `id` = the realized contact id, `conflict`:
+
+- `not_started` while the pass's window is on: Cadence retries by itself (`retry: "automatic"`),
+  at once when the holder frees the station and on every reconcile. **P1**, due at LOS
+  (`ends_at`).
+- `missed` once the window ended without a start. **P2**, due at `ends_at`; it stays until an
+  operator marks it as seen (`acknowledge`).
+
+The item's keys, flattened as for `contact_settlement`: `reason` (`listener_in_use |
+listener_unavailable | connect_failed | ingress_pipeline_failed | uplink_session_failed |
+no_runtime_spec | unknown`, or null; ux words each), `holder`, `provider_profile_id`,
+`provider_profile_name`, `realized_contact_id`, `contact_id`, `reservation_id`, `ends_at` (null
+without a booking), `attempts`, `last_attempt_at`, `retry`, `failure_message` (raw, Technical
+details only), `expires_at: null`.
+
+- `holder` (only for `listener_in_use`): the pass still holding the station listener,
+  `{realized_contact_id, contact_id, reservation_id, spacecraft: {id, name}, station: <station
+  object>, starts_at, ends_at} | null`.
+- Resolved: `action: "started"` by the system, or `"acknowledged"` by the operator who marked it
+  as seen.
+- `POST …/attention/contact_start/:id/acknowledge` (no body; `operate_mission`): only on a
+  `missed` item. `409 contact_start_not_missed` while it's still `not_started`; `403` "Operators
+  mark missed passes as seen."; `404 attention_item_not_found`. `resolve` and `retry` are 404 for
+  this source.
 
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
@@ -199,9 +233,8 @@ and `attention`.
     `> 0` crit, `0` caution. It's `null` for other states.
   - The whole field is `null` when the pass has no live uplink session: a future pass before its
     session starts, a downlink-only pass, or one that isn't booked. Show no tag then, as for `ready`.
-  - A pass row's `attention` is its highest-ranked open item: `pass_resolution`, `pass_release` or
-    `provider_change` (precedence under Provider changes). A blocked uplink shows through
-    `uplink_readiness`, not `attention`.
+  - A pass row's `attention` is its first open item (Pass row attentions below). A blocked uplink
+    shows through `uplink_readiness`, not `attention`.
 - **Command groups** (list rows and show) gain `uplink`, set on `queued` groups that aren't
   `finished`, otherwise `null`:
   `{pass: {reservation_id, contact_id, station {ref, id, code, name}, starts_at, ends_at},

@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.AttentionController do
   use CadenceWeb, :controller
 
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
-  alias Cadence.Contacts.ContactSettlementAttention
+  alias Cadence.Contacts.{ContactSettlementAttention, ContactStartAttention}
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias CadenceWeb.Console.Problem
 
@@ -20,7 +20,10 @@ defmodule CadenceWeb.Console.AttentionController do
   def acknowledge(conn, %{"source" => source, "id" => id} = params) do
     with :ok <- no_actor(params),
          {:ok, actions} <- source(source) do
-      respond(conn, actions.acknowledge(scope(conn), mission_id(conn), id))
+      case actions.acknowledge(scope(conn), mission_id(conn), id) do
+        {:error, :forbidden} when source == "contact_start" -> not_operator(conn)
+        result -> respond(conn, result)
+      end
     else
       {:error, reason} -> problem(conn, reason)
     end
@@ -59,6 +62,8 @@ defmodule CadenceWeb.Console.AttentionController do
   # Sources with operator actions. contact_settlement: only a lost item can be acknowledged.
   defp source("pass_resolution"), do: {:ok, PassResolutions}
   defp source("contact_settlement"), do: {:ok, ContactSettlementAttention}
+  # U45: only a missed pass can be marked as seen (acknowledge); there's nothing to resolve.
+  defp source("contact_start"), do: {:ok, ContactStartAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}
 
   defp no_actor(params) do
@@ -84,11 +89,18 @@ defmodule CadenceWeb.Console.AttentionController do
   defp too_long, do: %{"action_text" => "must be at most #{@max_action_text} characters"}
 
   defp respond(conn, {:ok, item}) do
-    names = AttentionItems.lookups(conn.assigns.current_scope.organization_id, mission_id(conn))
+    names = AttentionItems.lookups(scope(conn).organization_id, mission_id(conn), [item])
     json(conn, %{data: AttentionItems.object(item, names)})
   end
 
   defp respond(conn, {:error, reason}), do: problem(conn, reason)
+
+  # ux U45: who may mark a missed pass as seen.
+  defp not_operator(conn) do
+    conn
+    |> put_status(:forbidden)
+    |> json(Problem.body("forbidden", "Operators mark missed passes as seen.", nil))
+  end
 
   defp problem(conn, {:invalid_params, details}),
     do: Problem.respond(conn, :invalid_params, details)
@@ -98,6 +110,9 @@ defmodule CadenceWeb.Console.AttentionController do
 
   defp problem(conn, {:actor_not_assignable, keys}),
     do: Problem.respond(conn, :actor_not_assignable, %{"fields" => keys})
+
+  defp problem(conn, :contact_start_not_missed),
+    do: Problem.respond(conn, :contact_start_not_missed)
 
   defp problem(conn, reason)
        when reason in [:attention_item_not_found, :attention_item_not_open, :forbidden],

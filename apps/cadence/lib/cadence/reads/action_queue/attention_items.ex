@@ -19,7 +19,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   alias Cadence.Auth.Scope
   alias Cadence.Comms.StationRefs
   alias Cadence.GroundNetworks.MissionProviders
-  alias Cadence.Reads.ActionQueue.Item
+  alias Cadence.Reads.ActionQueue.{ContactStartItem, Item}
   alias Cadence.Reads.{Attention, PassUplink}
   alias Cadence.SpacecraftStore
 
@@ -47,7 +47,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp attention_names(org, mission_id, fleet, loaded) do
     wanted =
       loaded.items
-      |> Enum.flat_map(&(Map.get(&1, :spacecraft_ids) || [Map.get(&1, :spacecraft_id)]))
+      |> Enum.flat_map(&named_spacecraft/1)
       |> Enum.reject(&is_nil/1)
       |> MapSet.new()
 
@@ -60,6 +60,27 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     |> lookups(mission_id)
     |> Map.put(:spacecraft, Map.merge(outside_fleet(org, mission_id, wanted, in_fleet), in_fleet))
   end
+
+  # An item's spacecraft, and a contact_start holder's (U45: the holder pass is named too).
+  defp named_spacecraft(%{source: "contact_start"} = attention),
+    do: ContactStartItem.spacecraft_ids(attention)
+
+  defp named_spacecraft(attention),
+    do: Map.get(attention, :spacecraft_ids) || [Map.get(attention, :spacecraft_id)]
+
+  @doc "`lookups/2` with names for the items' spacecraft (pass rows name a U45 holder)."
+  @spec lookups(binary(), binary(), [map()]) :: map()
+  def lookups(org, mission_id, items) do
+    ids = items |> Enum.flat_map(&named_spacecraft/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    org |> lookups(mission_id) |> Map.put(:spacecraft, outside_fleet(org, mission_id, ids, %{}))
+  end
+
+  @doc """
+  Now's order for one attention item (ux U45, also a pass row's): `{priority, due_at}`, as the
+  queue row would carry them.
+  """
+  @spec rank(map(), DateTime.t()) :: {1 | 2 | 3, DateTime.t() | nil}
+  def rank(attention, now), do: {priority(p1?(attention, now), attention, now), due_at(attention)}
 
   @doc "Station and provider name lookups for `object/2` (pass rows, the attention endpoints)."
   @spec lookups(binary(), binary()) :: map()
@@ -156,8 +177,13 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       uplink: uplink(attention),
       release: release(attention)
     }
-    |> Map.merge(settlement(attention))
+    |> Map.merge(source_fields(attention, names))
   end
+
+  defp source_fields(%{source: "contact_start"} = attention, names),
+    do: ContactStartItem.fields(attention, names.spacecraft, names.station)
+
+  defp source_fields(attention, _names), do: settlement(attention)
 
   # DECISIONS #71 / ux U37: telemetry still on disk, not stored. The pass has ended, so the row
   # is always P2; nothing expires it (the journal keeps it) and Cadence retries by itself.
@@ -260,6 +286,9 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp due_at(%{source: "contact_settlement"} = attention),
     do: Map.get(attention, :next_attempt_at) || attention.starts_at
 
+  # U45: a contact that failed to start is lost at LOS, whether still trying or missed.
+  defp due_at(%{source: "contact_start"} = attention), do: Map.get(attention, :ends_at)
+
   # An approval is due at its deadline (the provider applies or drops it then).
   defp due_at(%{source: "provider_change", deadline_at: %DateTime{} = deadline}), do: deadline
   defp due_at(attention), do: Map.get(attention, :starts_at)
@@ -280,6 +309,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{source: "contact_settlement"}, _now), do: false
+  # U45: P1 while Cadence is still trying to start the pass; P2 once it's missed.
+  defp p1?(%{source: "contact_start", conflict: conflict}, _now), do: conflict == "not_started"
   defp p1?(%{source: "provider_change"}, _now), do: false
   # No spacecraft's telemetry is processed while it's open.
   defp p1?(%{source: "mission_runtime"}, _now), do: true

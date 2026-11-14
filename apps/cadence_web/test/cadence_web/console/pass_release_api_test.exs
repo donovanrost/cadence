@@ -94,6 +94,14 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
 
     assert id == c.id
     assert outcome == details["outcome"]
-    assert %{"attention" => %{"source" => "pass_release"}} = pass(c, c.admin)
+
+    assert %{"attention" => %{"source" => "pass_release"} = top, "attentions" => [first | _]} =
+             pass(c, c.admin)
+
+    # ux U45: every open item of the pass in Now's order, each with priority and due_at;
+    # attention is the first.
+    assert first == top
+    assert %{"priority" => priority, "due_at" => _} = first
+    assert priority in [1, 2, 3]
   end
 end
