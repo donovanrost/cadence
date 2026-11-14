@@ -1214,8 +1214,9 @@ platform admins in admin mode can switch platform bindings." The binding name is
     and the typed name is cleared, so the operator confirms what they now see.
 - **Outcome:** "Switched default_flight_telemetry to Northlight archive. 12 missions read from it now."
 - **Audit line** (actor and time in their columns): "Switched platform binding default_flight_telemetry from
-  Cadence managed store to Northlight archive · 12 missions, 3 live passes: “<reason>”". Where it's recorded is
-  api-ops' answer (the Admin.md caption question).
+  Cadence managed store to Northlight archive · 12 missions, 3 live passes: “<reason>”". It's recorded on the
+  binding's own events (api-ops: `data_source_binding_events` with the reason, counts and names in its payload), so
+  it shows in that binding's history. There's no platform-actions log yet: don't caption it as one (U20).
 - **Mission binding list toggle:** a switch, `Show platform bindings (2)` with the count, off by default. Off: a
   `text-3` caption "Platform-wide bindings are hidden. They apply to every mission without its own binding." On:
   those rows show with a neutral mono tag `PLATFORM`.
