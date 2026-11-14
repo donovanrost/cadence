@@ -184,23 +184,25 @@ defmodule Cadence.IngressJournal.FileSystem do
       {:ok, names} ->
         names
         |> Enum.sort()
-        |> Enum.flat_map(fn name ->
-          directory = Path.join(base_path, name)
-
-          # The directory is named by its context's digest: a stream.term naming another context
-          # isn't this directory's (it never steers a reclaim). stream_id is the incarnation the
-          # record headers carry.
-          with {:ok, %{stream_id: stream_id, context: context}} <-
-                 stored_stream_metadata(Path.join(directory, "stream.term")),
-               true <- stream_id(context) == name do
-            [%{directory: directory, stream_id: stream_id, context: context}]
-          else
-            _unreadable_or_foreign -> []
-          end
-        end)
+        |> Enum.flat_map(&stored_stream_directory(base_path, &1))
 
       {:error, _reason} ->
         []
+    end
+  end
+
+  # The directory is named by its context's digest: a stream.term naming another context isn't
+  # this directory's (it never steers a reclaim). stream_id is the incarnation the record headers
+  # carry.
+  defp stored_stream_directory(base_path, name) do
+    directory = Path.join(base_path, name)
+
+    with {:ok, %{stream_id: stream_id, context: context}} <-
+           stored_stream_metadata(Path.join(directory, "stream.term")),
+         true <- stream_id(context) == name do
+      [%{directory: directory, stream_id: stream_id, context: context}]
+    else
+      _unreadable_or_foreign -> []
     end
   end
 
@@ -248,19 +250,21 @@ defmodule Cadence.IngressJournal.FileSystem do
         {:ok, checkpoint_next_offset}
 
       [first | _rest] = paths ->
-        paths
-        |> Enum.reduce_while({:ok, segment_start_from_path(first), nil}, fn path,
-                                                                            {:ok, offset,
-                                                                             sequence} ->
-          case read_segment(path, stream_id, offset, sequence) do
-            {:ok, next_offset, next_sequence} -> {:cont, {:ok, next_offset, next_sequence}}
-            {:error, reason} -> {:halt, {:error, reason}}
-          end
-        end)
-        |> case do
-          {:ok, tail, _sequence} -> {:ok, tail}
-          {:error, reason} -> {:error, reason}
-        end
+        segments_tail(paths, stream_id, segment_start_from_path(first))
+    end
+  end
+
+  defp segments_tail(paths, stream_id, start_offset) do
+    paths
+    |> Enum.reduce_while({:ok, start_offset, nil}, fn path, {:ok, offset, sequence} ->
+      case read_segment(path, stream_id, offset, sequence) do
+        {:ok, next_offset, next_sequence} -> {:cont, {:ok, next_offset, next_sequence}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, tail, _sequence} -> {:ok, tail}
+      {:error, reason} -> {:error, reason}
     end
   end
 
