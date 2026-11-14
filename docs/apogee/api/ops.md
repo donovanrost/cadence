@@ -339,6 +339,32 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
   - **`provider_change`** (§11 L14, contacts.md): **P2** for `approval_required`, due at
     `deadline_at`; **P3** for `acknowledgment_required` and `configuration_failure`. `attention`
     adds `provider_change {…}` and `deadline_at`.
+  - **`ingress_backpressure`** (DECISIONS #83, ux U47; api-ops): one downlink transport of a
+    running contact whose ingest is under pressure. Row id
+    `attention:ingress_backpressure:<conflict>:<realized_contact_id>:<provider_binding_id>`;
+    `attention.id` is the part after the source. `due_at` null. It also appears in its pass's
+    `attentions[]` on `/passes` and `/passes/:id` (by `reservation_id`).
+    - `conflict` `journal_near_full`: the contact's ingest buffer (its journal) is >= 80% full.
+      **P1** at >= 95%, or while `rising` during the pass; else **P2**. It clears itself below 70%,
+      or when the contact ends and drains (resolved `system` / `drained`). Not acknowledgeable
+      (acknowledge answers `404 attention_item_not_found`).
+    - `conflict` `frames_dropped`: a transport that can't push back dropped frames because its
+      buffer was full (data loss; no such transport exists today, so this is the seam #83 pins).
+      **P1** while the pass is live and a drop happened in the last 5 min; else **P2**. Any
+      mission operator acknowledges it (`POST …/attention/ingress_backpressure/:id/acknowledge`;
+      without the capability `403 forbidden` "Operators acknowledge lost telemetry."). It resolves
+      once acknowledged and the contact has ended (`user` / `acknowledged`).
+    - `attention` adds `{realized_contact_id, contact_label (null for now), ends_at, transport
+      {provider_binding_id, kind: tcp | <adapter key> | null}, journal_usage {used_bytes,
+      capacity_bytes, ratio, threshold (0.8), backlog_bytes, observed_at, rising} | null,
+      drops {count, bytes, first_at, last_at, buffer: journal | executor} | null, diagnostics
+      {stream_id, last_error}}`, with the shared `station`, `provider`, `starts_at`,
+      `reservation_id`, `provider_message` (null) and `resolution` (null). `journal_usage` is null
+      on `frames_dropped` and `drops` null on `journal_near_full`. Visible text says "buffer";
+      `diagnostics` is for Technical details only (U47).
+    - The state is in the node's memory (`Cadence.Ingress.BackpressureMonitor`, sampled every
+      5 s): a node restart clears it, along with the backlog itself. Opening and clearing
+      publish `invalidate` with `attention`.
 - **`missed_pass` and `station` items** (§8; U11 amended by U35).
   - `missed_pass`: one row per spacecraft with a pass result `missed` or `failed` (S9) whose
     planned AOS falls within `failure_lookback_s`.

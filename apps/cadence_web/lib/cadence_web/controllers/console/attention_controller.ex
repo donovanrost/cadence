@@ -9,6 +9,7 @@ defmodule CadenceWeb.Console.AttentionController do
 
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
   alias Cadence.Contacts.{ContactSettlementAttention, ContactStartAttention}
+  alias Cadence.Ingress.BackpressureAttention
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias CadenceWeb.Console.Problem
 
@@ -22,6 +23,7 @@ defmodule CadenceWeb.Console.AttentionController do
          {:ok, actions} <- source(source) do
       case actions.acknowledge(scope(conn), mission_id(conn), id) do
         {:error, :forbidden} when source == "contact_start" -> not_operator(conn)
+        {:error, :forbidden} when source == "ingress_backpressure" -> not_operator(conn, :lost)
         result -> respond(conn, result)
       end
     else
@@ -64,6 +66,9 @@ defmodule CadenceWeb.Console.AttentionController do
   defp source("contact_settlement"), do: {:ok, ContactSettlementAttention}
   # U45: only a missed pass can be marked as seen (acknowledge); there's nothing to resolve.
   defp source("contact_start"), do: {:ok, ContactStartAttention}
+
+  # #83 / U47: only dropped frames (lost telemetry) are acknowledged; a filling buffer clears itself.
+  defp source("ingress_backpressure"), do: {:ok, BackpressureAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}
 
   defp no_actor(params) do
@@ -96,11 +101,14 @@ defmodule CadenceWeb.Console.AttentionController do
   defp respond(conn, {:error, reason}), do: problem(conn, reason)
 
   # ux U45: who may mark a missed pass as seen.
-  defp not_operator(conn) do
+  defp not_operator(conn, what \\ :missed_pass) do
     conn
     |> put_status(:forbidden)
-    |> json(Problem.body("forbidden", "Operators mark missed passes as seen.", nil))
+    |> json(Problem.body("forbidden", not_operator_message(what), nil))
   end
+
+  defp not_operator_message(:missed_pass), do: "Operators mark missed passes as seen."
+  defp not_operator_message(:lost), do: "Operators acknowledge lost telemetry."
 
   defp problem(conn, {:invalid_params, details}),
     do: Problem.respond(conn, :invalid_params, details)

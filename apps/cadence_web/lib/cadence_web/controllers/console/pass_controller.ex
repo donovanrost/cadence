@@ -68,11 +68,18 @@ defmodule CadenceWeb.Console.PassController do
       end
 
     # A pass row carries its booking's open items (resolution, failed release, provider change, a
-    # contact that didn't start); a blocked uplink shows through uplink_readiness instead.
+    # contact that didn't start, its ingest buffer or lost frames); a blocked uplink shows through
+    # uplink_readiness instead.
     {resolutions, blocked} =
       Enum.split_with(
         items,
-        &(&1.source in ["pass_resolution", "pass_release", "provider_change", "contact_start"])
+        &(&1.source in [
+            "pass_resolution",
+            "pass_release",
+            "provider_change",
+            "contact_start",
+            "ingress_backpressure"
+          ])
       )
 
     conn

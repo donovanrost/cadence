@@ -233,6 +233,20 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     :approved_at
   ]
 
+  # DECISIONS #83 / ux U47: a contact's ingest buffer filling, or frames lost.
+  @ingress_backpressure_keys [
+    :realized_contact_id,
+    :contact_label,
+    :ends_at,
+    :transport,
+    :journal_usage,
+    :drops,
+    :diagnostics
+  ]
+
+  defp settlement(%{source: "ingress_backpressure"} = attention),
+    do: Map.take(attention, @ingress_backpressure_keys)
+
   defp settlement(%{source: "contact_settlement"} = attention),
     do: Map.take(attention, @settlement_keys)
 
@@ -286,6 +300,9 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp due_at(%{source: "contact_settlement"} = attention),
     do: Map.get(attention, :next_attempt_at) || attention.starts_at
 
+  # #83: buffer pressure and lost frames are about now, not a coming pass.
+  defp due_at(%{source: "ingress_backpressure"}), do: nil
+
   # U45: a contact that failed to start is lost at LOS, whether still trying or missed.
   defp due_at(%{source: "contact_start"} = attention), do: Map.get(attention, :ends_at)
 
@@ -312,6 +329,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   # U45: P1 while Cadence is still trying to start the pass; P2 once it's missed.
   defp p1?(%{source: "contact_start", conflict: conflict}, _now), do: conflict == "not_started"
   defp p1?(%{source: "provider_change"}, _now), do: false
+  # #83: the source decides (buffer >= 95% or rising during the pass; a recent drop mid-pass).
+  defp p1?(%{source: "ingress_backpressure"} = attention, _now),
+    do: Map.get(attention, :p1) == true
+
   # No spacecraft's telemetry is processed while it's open.
   defp p1?(%{source: "mission_runtime"}, _now), do: true
   # The same while an apply that would bring the runtime up is stuck (ux U41).

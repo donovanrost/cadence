@@ -3,6 +3,8 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.CommandGroupFixtures
+  alias Cadence.Contacts.RealizedContact
+  alias Cadence.Ingress.{BackpressureMonitor, ReceiveBackpressure}
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -26,6 +28,8 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
       admin: admin,
       member: member,
       id: reservation.provider_reservation_id,
+      org_id: org.organization_id,
+      mission_id: mission.mission_id,
       base: "/api/console/v1/missions/#{mission.mission_id}"
     }
   end
@@ -103,5 +107,41 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
     assert first == top
     assert %{"priority" => priority, "due_at" => _} = first
     assert priority in [1, 2, 3]
+  end
+
+  # ux U47 / api U45: an ingest-backpressure item shows on its pass row (by reservation), not in
+  # the uplink-readiness map, where it would shadow the pass's uplink_blocked item.
+  test "a contact's dropped frames join its pass's attentions", c do
+    run = "run-" <> c.id
+
+    {:ok, _contact} =
+      Cadence.Contacts.persist_realized_contact(
+        c.org_id,
+        RealizedContact.new(%{
+          realized_contact_id: run,
+          mission_id: c.mission_id,
+          scheduled_contact_id: "contact-" <> c.id
+        })
+      )
+
+    ReceiveBackpressure.on_full(
+      false,
+      %{
+        mission_id: c.mission_id,
+        realized_contact_id: run,
+        provider_binding_id: "binding-" <> c.id,
+        buffer: :executor
+      },
+      48
+    )
+
+    :ok = BackpressureMonitor.sample_now()
+
+    assert %{"attentions" => attentions} = pass(c, c.admin)
+
+    assert %{"conflict" => "frames_dropped", "drops" => %{"count" => 1}, "reservation_id" => id} =
+             Enum.find(attentions, &(&1["source"] == "ingress_backpressure"))
+
+    assert id == c.id
   end
 end
