@@ -52,10 +52,13 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
   end
 
   test "generic federation shells reject ambiguous or unbounded selectors without mounting a broader page" do
-    {conn, _org, mission, _scope} = signed_in_scope_and_mission()
+    {conn, org, mission, _scope} = signed_in_scope_and_mission()
 
     path =
       "/missions/#{mission.mission_id}/applications/ops_console/commands/federated?"
+
+    # f2e4f172d (L4): the not-found redirect is the organization's console missions page.
+    missions = CadenceWeb.ConsolePaths.organization(org.organization_id, "/org/missions")
 
     for query <- [
           "dashboard_id=one&dashboard_id=two",
@@ -73,7 +76,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
           )
         ] do
       response = get(conn, path <> query)
-      assert redirected_to(response) == "/missions"
+      assert redirected_to(response) == missions
       html = response.resp_body
 
       assert html
