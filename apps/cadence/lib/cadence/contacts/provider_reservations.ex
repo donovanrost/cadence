@@ -1365,6 +1365,19 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   def cadence_side_failure?(%ProviderReservation{}), do: false
 
+  @doc """
+  Failed by Cadence's own check of the provider's answer (`provider_configuration_failure`: a
+  delivery descriptor that conflicts with its transport, for one), recorded on the reservation.
+  """
+  @spec configuration_failure?(ProviderReservation.t()) :: boolean()
+  def configuration_failure?(%ProviderReservation{
+        lifecycle_state: :failed,
+        last_error_document: %{"category" => "provider_configuration_failure"}
+      }),
+      do: true
+
+  def configuration_failure?(%ProviderReservation{}), do: false
+
   # Cancels the contact while nothing runs on it: still 'scheduled', or realized but not started
   # (:defined, which is also where a failed start stays; its realized contact closes with it). Any
   # other realized state (active, or already stopped or completed) is left as it is: a running one

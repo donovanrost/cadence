@@ -23,10 +23,13 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessor do
     worker_ref = Keyword.get(opts, :worker_ref, default_worker_ref())
 
     with {:ok, entries} <-
-           ProviderEventInbox.claim(worker_ref,
-             limit: Keyword.get(opts, :limit, @default_claim_limit),
-             now: now(opts),
-             processing_timeout_ms: Keyword.get(opts, :processing_timeout_ms, 60_000)
+           ProviderEventInbox.claim(
+             worker_ref,
+             [
+               limit: Keyword.get(opts, :limit, @default_claim_limit),
+               now: now(opts),
+               processing_timeout_ms: Keyword.get(opts, :processing_timeout_ms, 60_000)
+             ] ++ Keyword.take(opts, [:retry_base_ms, :retry_max_ms])
            ) do
       results =
         entries
@@ -65,7 +68,16 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessor do
     {:noreply, state}
   end
 
-  defp process_entry(%ProviderEventInboxEntry{resource_type: resource_type} = entry, opts)
+  # Past the cap even when no retry ran: a task that crashed leaves the row 'processing', and it's
+  # re-claimed after the processing timeout with its count bumped (api-ops).
+  defp process_entry(%ProviderEventInboxEntry{attempt_count: attempts} = entry, opts)
+       when is_integer(attempts) do
+    if attempts > ProviderEventInbox.max_attempts(opts),
+      do: quarantine(entry, %{code: :retry_exhausted, last_error: nil}, opts),
+      else: process_claimed(entry, opts)
+  end
+
+  defp process_claimed(%ProviderEventInboxEntry{resource_type: resource_type} = entry, opts)
        when resource_type in ["contact", "delivery"] do
     with {:ok, resolution} <- ProviderEvents.reconcile_provider_event(entry, opts),
          {:ok, processed} <-
@@ -86,7 +98,7 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessor do
     end
   end
 
-  defp process_entry(%ProviderEventInboxEntry{} = entry, opts) do
+  defp process_claimed(%ProviderEventInboxEntry{} = entry, opts) do
     case ProviderEventInbox.complete(entry, %{}, now: now(opts)) do
       {:ok, processed} -> {:ok, processed}
       {:error, reason} -> {:error, reason}
@@ -94,7 +106,11 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessor do
   end
 
   defp retry(entry, reason, opts) do
-    case ProviderEventInbox.retry(entry, reason, now: now(opts)) do
+    case ProviderEventInbox.retry(
+           entry,
+           reason,
+           [now: now(opts)] ++ Keyword.take(opts, [:max_attempts])
+         ) do
       {:ok, retried} -> {:retry, retried, reason}
       {:error, persistence_reason} -> {:error, {reason, persistence_reason}}
     end
