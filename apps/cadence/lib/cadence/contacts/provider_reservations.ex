@@ -8,6 +8,8 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   import Ecto.Query
 
+  require Logger
+
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -17,9 +19,11 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   alias Cadence.Contacts.{
     BookingResolutions,
+    ContactStore,
     KnownAtom,
     ProviderReservation,
     ProviderReservationChanges,
+    RealizedContact,
     ReservationChange,
     ScheduledContact,
     UplinkLegs
@@ -649,8 +653,28 @@ defmodule Cadence.Contacts.ProviderReservations do
 
     organization_id
     |> record_provider_error_unpublished(mission_id, provider_reservation_id, error_document)
+    |> release_lost_contact()
     |> ReservationChange.publish_if_changed(organization_id, mission_id, before)
   end
+
+  # A recorded error that fails the reservation (a provider configuration failure, for one)
+  # releases its contact as the poll does. The error is recorded even if the release fails.
+  defp release_lost_contact({:ok, %ProviderReservation{} = reservation} = result) do
+    case apply_loss_side_effect(reservation) do
+      :ok ->
+        result
+
+      {:error, reason} ->
+        Logger.warning(
+          "could not release the contact of lost reservation " <>
+            "#{reservation.provider_reservation_id}: #{inspect(reason)}"
+        )
+
+        result
+    end
+  end
+
+  defp release_lost_contact(result), do: result
 
   defp record_provider_error_unpublished(
          organization_id,
@@ -1225,7 +1249,45 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
-  defp apply_contact_side_effect(%ProviderReservation{lifecycle_state: state} = reservation)
+  defp apply_contact_side_effect(reservation), do: apply_loss_side_effect(reservation)
+
+  @doc """
+  Whether a reservation won't fly, so its contact must not open: failed, canceled, or an
+  attested booking the provider rejected (#53).
+  """
+  @spec lost?(ProviderReservation.t()) :: boolean()
+  def lost?(%ProviderReservation{lifecycle_state: state}) when state in [:canceled, :failed],
+    do: true
+
+  def lost?(%ProviderReservation{lifecycle_state: :rejected} = reservation),
+    do: attested?(reservation)
+
+  def lost?(%ProviderReservation{}), do: false
+
+  @doc """
+  Releases a lost reservation's contact, as the poll and a recorded provider error do: cancels a
+  scheduled or realized-but-unstarted contact and fails its plan items (idempotent). The repair
+  for contacts left open before 11-14 runs this (ReservationContactRepair).
+  """
+  @spec release_lost(ProviderReservation.t()) :: :ok | {:error, term()}
+  def release_lost(%ProviderReservation{} = reservation) do
+    result = apply_loss_side_effect(reservation)
+
+    ScopedReadUpdates.publish(
+      :contacts_changed,
+      reservation.organization_id,
+      reservation.mission_id
+    )
+
+    result
+  end
+
+  # A reservation that won't fly (failed, canceled, or an attested booking rejected) releases its
+  # scheduled contact, by whichever path it got there: the poll, or a recorded provider error such
+  # as a delivery descriptor that conflicts with the transport (director 11-14: a failed
+  # reservation's contact had stayed 'scheduled' and opened a listener for a pass no provider
+  # flew).
+  defp apply_loss_side_effect(%ProviderReservation{lifecycle_state: state} = reservation)
        when state in [:canceled, :failed] do
     with :ok <- cancel_scheduled_contact(reservation, state),
          :ok <- BookingOutcomes.booking_lost(reservation) do
@@ -1233,7 +1295,7 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
-  defp apply_contact_side_effect(%ProviderReservation{lifecycle_state: :rejected} = reservation) do
+  defp apply_loss_side_effect(%ProviderReservation{lifecycle_state: :rejected} = reservation) do
     # An attested booking the provider rejects is lost like a canceled one (#53).
     if attested?(reservation) do
       with :ok <- cancel_scheduled_contact(reservation, :rejected),
@@ -1245,8 +1307,11 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
-  defp apply_contact_side_effect(_reservation), do: :ok
+  defp apply_loss_side_effect(_reservation), do: :ok
 
+  # Cancels the contact while nothing runs on it: still 'scheduled', or realized but not started
+  # (its realized contact closes with it). A contact already running keeps running to its LOS and
+  # settles normally, so data already arriving isn't cut (director 11-14).
   defp cancel_scheduled_contact(reservation, state) do
     case Contacts.fetch_scheduled_contact(
            reservation.organization_id,
@@ -1254,24 +1319,64 @@ defmodule Cadence.Contacts.ProviderReservations do
            reservation.scheduled_contact_id
          ) do
       {:ok, %ScheduledContact{lifecycle_state: :scheduled}} ->
-        case Contacts.cancel_scheduled_contact(
-               reservation.organization_id,
-               reservation.mission_id,
-               reservation.scheduled_contact_id,
-               actor: %{"kind" => "system", "id" => "provider_reservation_reconciler"},
-               reason: "provider_#{state}"
-             ) do
-          {:ok, _contact} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
+        cancel_for_provider(reservation, state)
 
-      {:ok, _contact} ->
+      {:ok, %ScheduledContact{lifecycle_state: :realized} = scheduled} ->
+        if realized_running?(scheduled),
+          do: :ok,
+          else: cancel_for_provider(reservation, state)
+
+      {:ok, _ended_or_canceled} ->
         :ok
 
       {:error, :scheduled_contact_not_found} ->
         :ok
     end
   end
+
+  defp cancel_for_provider(reservation, state) do
+    case Contacts.cancel_scheduled_contact(
+           reservation.organization_id,
+           reservation.mission_id,
+           reservation.scheduled_contact_id,
+           actor: %{"kind" => "system", "id" => "provider_reservation_reconciler"},
+           reason: "provider_#{state}",
+           # ux U56: the history line names the provider's reason.
+           metadata: %{
+             "cause" => "provider_#{state}",
+             "provider_reservation_id" => reservation.provider_reservation_id,
+             "provider_reason" => provider_reason(reservation)
+           }
+         ) do
+      {:ok, _contact} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp realized_running?(%ScheduledContact{realized_contact_id: nil}), do: false
+
+  defp realized_running?(%ScheduledContact{} = scheduled) do
+    case ContactStore.fetch_realized(
+           scheduled.organization_id,
+           scheduled.mission_id,
+           scheduled.realized_contact_id
+         ) do
+      {:ok, %RealizedContact{lifecycle_state: :defined}} -> false
+      {:ok, %RealizedContact{}} -> true
+      {:error, _not_found} -> false
+    end
+  end
+
+  # The provider's own words where it gave some (status_reason detail), else its category or code.
+  defp provider_reason(%ProviderReservation{last_error_document: error}) when is_map(error) do
+    case error["reason"] do
+      %{} = reason -> reason["detail"] || reason["category"]
+      reason when is_binary(reason) -> reason
+      _none -> error["category"]
+    end
+  end
+
+  defp provider_reason(_reservation), do: nil
 
   defp validate_documents(reservation) do
     with :ok <- validate_document(reservation.request_document, :request_document),

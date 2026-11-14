@@ -788,6 +788,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
       canceled_from_schedule_action: true
     }
     |> maybe_put_reason(opts)
+    # The caller's details (a provider's cause and reason, ux U56) are kept with the cancel.
+    |> Map.merge(Keyword.get(opts, :metadata, %{}))
   end
 
   defp realized_cancellation_metadata(
@@ -824,9 +826,11 @@ defmodule Cadence.Contacts.ContactLifecycle do
       action_kind: :scheduled_contact_canceled,
       reason: Keyword.get(opts, :reason),
       actor: Keyword.get(opts, :actor, %{}),
-      metadata: %{
-        canceled_during_execution?: not is_nil(scheduled_contact.realized_contact_id)
-      },
+      metadata:
+        Map.merge(
+          %{canceled_during_execution?: not is_nil(scheduled_contact.realized_contact_id)},
+          Keyword.get(opts, :metadata, %{})
+        ),
       occurred_at: transition_time
     })
   end
