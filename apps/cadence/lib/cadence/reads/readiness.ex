@@ -159,7 +159,11 @@ defmodule Cadence.Reads.Readiness do
     organization_id
     |> Health.list_source_health_statuses(mission_id)
     |> Enum.filter(fn %SourceHealthStatus{replay_run_id: replay} -> is_nil(replay) end)
-    |> Enum.map(&%{data_source_id: &1.data_source_id, health: &1.source_health})
+    # Health as classified now: a read-derived status older than its short window reads unknown,
+    # so one slow read doesn't leave a blocker on Now for a day (qa/api-ops 11-14).
+    |> Enum.map(
+      &%{data_source_id: &1.data_source_id, health: Health.classify_status(&1).source_health}
+    )
   end
 
   defp apps(organization_id, mission_id) do
