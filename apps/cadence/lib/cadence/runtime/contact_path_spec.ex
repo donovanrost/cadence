@@ -14,6 +14,7 @@ defmodule Cadence.Runtime.ContactPathSpec do
           selection_role: selection_role(),
           source_endpoint_ref: binary() | nil,
           source_endpoint_spacecraft_id: binary() | nil,
+          source_endpoint_spacecraft_scid: non_neg_integer() | nil,
           provider_path_ref: binary() | nil,
           provider_bindings: [ProviderBindingSpec.t()],
           transport_bindings: [TransportBindingSpec.t()],
@@ -32,6 +33,7 @@ defmodule Cadence.Runtime.ContactPathSpec do
               [
                 source_endpoint_ref: nil,
                 source_endpoint_spacecraft_id: nil,
+                source_endpoint_spacecraft_scid: nil,
                 provider_path_ref: nil
               ]
 
@@ -42,6 +44,7 @@ defmodule Cadence.Runtime.ContactPathSpec do
     selection_role = value(attrs, :selection_role, :candidate)
     source_endpoint_ref = value(attrs, :source_endpoint_ref)
     source_endpoint_spacecraft_id = value(attrs, :source_endpoint_spacecraft_id)
+    source_endpoint_spacecraft_scid = value(attrs, :source_endpoint_spacecraft_scid)
     provider_path_ref = value(attrs, :provider_path_ref)
     metadata = value(attrs, :metadata, %{})
 
@@ -51,6 +54,7 @@ defmodule Cadence.Runtime.ContactPathSpec do
          :ok <- optional_binary(source_endpoint_ref, :source_endpoint_ref),
          :ok <-
            optional_binary(source_endpoint_spacecraft_id, :source_endpoint_spacecraft_id),
+         :ok <- optional_scid(source_endpoint_spacecraft_scid),
          :ok <- optional_binary(provider_path_ref, :provider_path_ref),
          {:ok, provider_bindings} <-
            build_list(value(attrs, :provider_bindings, []), ProviderBindingSpec),
@@ -64,6 +68,7 @@ defmodule Cadence.Runtime.ContactPathSpec do
          selection_role: selection_role,
          source_endpoint_ref: source_endpoint_ref,
          source_endpoint_spacecraft_id: source_endpoint_spacecraft_id,
+         source_endpoint_spacecraft_scid: source_endpoint_spacecraft_scid,
          provider_path_ref: provider_path_ref,
          provider_bindings: provider_bindings,
          transport_bindings: transport_bindings,
@@ -71,6 +76,13 @@ defmodule Cadence.Runtime.ContactPathSpec do
        }}
     end
   end
+
+  # The spacecraft's SCID, for a profile acceptor to route a downlink peer by its first frame (#87).
+  defp optional_scid(nil), do: :ok
+  defp optional_scid(scid) when is_integer(scid) and scid >= 0, do: :ok
+
+  defp optional_scid(_scid),
+    do: {:error, {:invalid_contact_path_spec, :source_endpoint_spacecraft_scid}}
 
   defp build_list(values, module) when is_list(values) do
     Enum.reduce_while(values, {:ok, []}, fn value, {:ok, acc} ->

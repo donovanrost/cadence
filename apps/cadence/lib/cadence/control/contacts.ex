@@ -19,6 +19,7 @@ defmodule Cadence.Control.Contacts do
   alias Cadence.Runtime.Contacts, as: RuntimeContacts
   alias Cadence.Runtime.RealizedContactRuntimeSpec
   alias Cadence.SourceEndpoints
+  alias Cadence.SpacecraftStore
 
   @doc "Reviews a scoped provider reservation before resolving its uncertain outcome."
   def review_provider_reservation_resolution(%Scope{} = scope, mission, id) do
@@ -297,10 +298,37 @@ defmodule Cadence.Control.Contacts do
     path
     |> Map.from_struct()
     |> Map.put(:source_endpoint_ref, source_endpoint_ref)
-    |> Map.put(
-      :source_endpoint_spacecraft_id,
+    |> put_spacecraft(
+      realized_contact,
       source_endpoint_spacecraft_id(realized_contact, source_endpoint_ref)
     )
+  end
+
+  # The path's spacecraft and its SCID (a profile acceptor routes a downlink peer by it, #87).
+  defp put_spacecraft(path, _realized_contact, nil),
+    do:
+      Map.merge(path, %{source_endpoint_spacecraft_id: nil, source_endpoint_spacecraft_scid: nil})
+
+  defp put_spacecraft(path, realized_contact, spacecraft_id) do
+    fetched =
+      case realized_contact.organization_id do
+        org when is_binary(org) and org != "" ->
+          SpacecraftStore.fetch_spacecraft(org, realized_contact.mission_id, spacecraft_id)
+
+        _none ->
+          SpacecraftStore.fetch_spacecraft(realized_contact.mission_id, spacecraft_id)
+      end
+
+    scid =
+      case fetched do
+        {:ok, %{scid: scid}} when is_integer(scid) -> scid
+        _unknown -> nil
+      end
+
+    Map.merge(path, %{
+      source_endpoint_spacecraft_id: spacecraft_id,
+      source_endpoint_spacecraft_scid: scid
+    })
   end
 
   defp effective_source_endpoint_ref(source_endpoint_ref, _contact_source_endpoint_refs)

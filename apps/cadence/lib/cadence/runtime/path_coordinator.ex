@@ -568,6 +568,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         process_namespace: state.process_namespace,
         source_endpoint_ref: state.path.source_endpoint_ref,
         source_endpoint_spacecraft_id: state.path.source_endpoint_spacecraft_id,
+        source_endpoint_spacecraft_scid: state.path.source_endpoint_spacecraft_scid,
         direction: state.path.direction,
         ingress_executor_name:
           MissionRuntime.provider_ingress_executor_name(
