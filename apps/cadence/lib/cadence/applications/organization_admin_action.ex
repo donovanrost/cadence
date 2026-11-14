@@ -5,59 +5,9 @@ defmodule Cadence.Applications.OrganizationAdminAction do
   alias Cadence.Applications.{ActionFailure, ActionRequest, HostContext}
   alias Cadence.Applications.OrganizationAdminProviders, as: Providers
   alias Cadence.Auth.Scope
-  alias Cadence.GroundNetworks.ProviderAccountOperations
   alias Cadence.Notifications.Actions, as: NotificationActions
 
   @action_contracts [
-    %{
-      id: "validate_provider_account_form",
-      version: 1,
-      surface_id: "provider_account_new",
-      effect: :none,
-      host_owned?: false
-    },
-    %{
-      id: "register_provider_account",
-      version: 1,
-      surface_id: "provider_account_new",
-      effect: :durable,
-      host_owned?: false
-    },
-    %{
-      id: "validate_provider_account",
-      version: 1,
-      surface_id: "provider_account_show",
-      effect: :external,
-      host_owned?: false
-    },
-    %{
-      id: "rotate_provider_credential",
-      version: 1,
-      surface_id: "provider_account_show",
-      effect: :durable,
-      host_owned?: false
-    },
-    %{
-      id: "revoke_provider_credential",
-      version: 1,
-      surface_id: "provider_account_show",
-      effect: :durable,
-      host_owned?: false
-    },
-    %{
-      id: "grant_provider_account_mission",
-      version: 1,
-      surface_id: "provider_account_show",
-      effect: :durable,
-      host_owned?: false
-    },
-    %{
-      id: "revoke_provider_account_mission",
-      version: 1,
-      surface_id: "provider_account_show",
-      effect: :durable,
-      host_owned?: false
-    },
     %{
       id: "mark_notification_read",
       version: 1,
@@ -108,41 +58,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
   def execute(_scope, _host_context, _request),
     do: {:error, failure("invalid_action", "The organization action request is invalid.")}
 
-  defp execute_action(_scope, _host_context, %ActionRequest{
-         action_id: "validate_provider_account_form",
-         params: params
-       }) do
-    values = input_map(params, "provider_account")
-    {:ok, %{patch: %{form: Providers.ProviderAccountNew.form(values)}}}
-  end
-
-  defp execute_action(scope, _host_context, %ActionRequest{
-         action_id: "register_provider_account",
-         params: params
-       }) do
-    with {:ok, values} <- required_input_map(params, "provider_account") do
-      Providers.ProviderAccountNew.create(scope, values)
-    end
-  end
-
-  defp execute_action(scope, _host_context, %ActionRequest{action_id: action, params: params})
-       when action in ~w(validate_provider_account rotate_provider_credential revoke_provider_credential grant_provider_account_mission revoke_provider_account_mission) do
-    with {:ok, account_id} <- required_param(params, "provider_account_id"),
-         {:ok, _result} <- ProviderAccountOperations.execute(scope, action, params),
-         {:ok, props} <- Providers.ProviderAccountShow.props(scope, account_id) do
-      {:ok, %{patch: props}}
-    else
-      {:error, :stale_provider_account} ->
-        {:error, failure("stale_provider_account", "Refresh the account before this action.")}
-
-      {:error, :invalid_input} ->
-        {:error, failure("invalid_input", "The action input is invalid.")}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
   defp execute_action(scope, _host_context, %ActionRequest{
          action_id: "mark_notification_read",
          params: params
@@ -183,36 +98,10 @@ defmodule Cadence.Applications.OrganizationAdminAction do
 
   defp ensure_action_context(_scope, _host_context, _action_id), do: {:error, :scope_mismatch}
 
-  defp organization_actions do
-    [
-      "validate_provider_account_form",
-      "register_provider_account",
-      "validate_provider_account",
-      "rotate_provider_credential",
-      "revoke_provider_credential",
-      "grant_provider_account_mission",
-      "revoke_provider_account_mission"
-    ]
-  end
+  # L13 moved the provider-account actions to the console; no organization-placed action is left.
+  defp organization_actions, do: []
 
   defp user_actions, do: ["mark_notification_read"]
-
-  defp required_input_map(params, key) do
-    value = input_map(params, key)
-
-    if value == %{},
-      do: {:error, failure("invalid_input", "The action input is invalid.")},
-      else: {:ok, value}
-  end
-
-  defp input_map(params, key) when is_map(params) do
-    case value(params, key) do
-      map when is_map(map) -> map
-      _other -> %{}
-    end
-  end
-
-  defp input_map(_params, _key), do: %{}
 
   defp required_param(params, key) do
     case value(params, key) do
@@ -225,20 +114,7 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     Map.get(params, key) || Map.get(params, atom_key(key))
   end
 
-  defp atom_key("provider_account"), do: :provider_account
-  defp atom_key("provider_account_id"), do: :provider_account_id
-  defp atom_key("expected_account_version"), do: :expected_account_version
-  defp atom_key("expected_credential_version"), do: :expected_credential_version
-  defp atom_key("expected_grant_version"), do: :expected_grant_version
-  defp atom_key("credential_ref"), do: :credential_ref
-  defp atom_key("grant"), do: :grant
-  defp atom_key("grant-id"), do: :grant_id
   defp atom_key("notification_id"), do: :notification_id
-  defp atom_key("mission_id"), do: :mission_id
-  defp atom_key("allowed_services"), do: :allowed_services
-  defp atom_key("allowed_stations"), do: :allowed_stations
-  defp atom_key("max_quota"), do: :max_quota
-  defp atom_key("grant_reason"), do: :grant_reason
   defp atom_key(_key), do: nil
 
   defp failure(code, message), do: %ActionFailure{code: code, message: message}

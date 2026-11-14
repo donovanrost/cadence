@@ -14,24 +14,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
       stream?: false
     },
     %{
-      id: "cadence.organization.provider_accounts.list",
-      version: 1,
-      surface_id: "provider_accounts",
-      stream?: true
-    },
-    %{
-      id: "cadence.organization.provider_accounts.new",
-      version: 1,
-      surface_id: "provider_account_new",
-      stream?: false
-    },
-    %{
-      id: "cadence.organization.provider_account.show",
-      version: 1,
-      surface_id: "provider_account_show",
-      stream?: false
-    },
-    %{
       id: "cadence.organization.notifications_bell",
       version: 1,
       surface_id: "notifications_bell",
@@ -79,28 +61,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
   defp surface_data(scope, %HostContext{placement: :organization}, "organization_home", _params) do
     with {:ok, organization} <- Cadence.Organizations.fetch_organization(scope.organization_id) do
       {:ok, %{organization_id: organization.organization_id}}
-    end
-  end
-
-  defp surface_data(scope, %HostContext{placement: :organization}, "provider_accounts", _params),
-    do: Providers.ProviderAccountList.props(scope)
-
-  defp surface_data(
-         _scope,
-         %HostContext{placement: :organization},
-         "provider_account_new",
-         _params
-       ),
-       do: {:ok, Providers.ProviderAccountNew.props()}
-
-  defp surface_data(
-         scope,
-         %HostContext{placement: :organization},
-         "provider_account_show",
-         params
-       ) do
-    with {:ok, provider_account_id} <- required_param(params, "provider_account_id") do
-      Providers.ProviderAccountShow.props(scope, provider_account_id)
     end
   end
 
@@ -183,18 +143,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
         {:error, :unknown_surface}
     end
   end
-
-  defp required_param(params, key) when is_map(params) do
-    case Map.get(params, key) || Map.get(params, query_param_key(key)) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _missing -> {:error, :application_surface_subject_required}
-    end
-  end
-
-  defp required_param(_params, _key), do: {:error, :application_surface_subject_required}
-
-  defp query_param_key("provider_account_id"), do: :provider_account_id
-  defp query_param_key(_key), do: nil
 
   @doc "Fetches a query contract by its durable string identity."
   @spec fetch(binary(), pos_integer()) :: {:ok, map()} | {:error, :unknown_query}

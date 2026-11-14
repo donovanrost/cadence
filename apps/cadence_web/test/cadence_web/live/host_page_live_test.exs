@@ -116,10 +116,11 @@ defmodule CadenceWeb.HostPageLiveTest do
   end
 
   test "context requests cannot bypass organization or platform administrator policies" do
-    {conn, _organization, _mission} = navigation_fixture()
+    {conn, _organization, mission} = navigation_fixture()
 
-    # L7: /admin is no longer a host page (it redirects to the console).
-    for target <- ["/provider-accounts"] do
+    # L7 moved /admin and L13 /provider-accounts to the console; data-operations/manage keeps the
+    # organization-admin policy.
+    for target <- ["/missions/#{mission.mission_id}/ops/data-operations/manage"] do
       {:ok, view, _html} = live(conn, "/")
 
       assert {:error, {:redirect, %{to: "/"}}} =

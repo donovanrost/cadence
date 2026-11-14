@@ -13,10 +13,8 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
   }
 
   alias Cadence.Applications.{OrganizationAdmin, OrganizationAdminAction}
-  alias Cadence.Applications.OrganizationAdminProviders, as: Providers
   alias Cadence.Applications.OrganizationAdminQuery
   alias Cadence.Auth.Scope
-  alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
   alias Cadence.Notifications.Notification
   alias Cadence.Reads.ApplicationSurfaces
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
@@ -38,12 +36,9 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
      user_scope: Scope.new(%{user: user})}
   end
 
-  test "registers all five surfaces with executable query and action authorities" do
+  test "registers both surfaces with executable query and action authorities" do
     assert Enum.map(OrganizationAdmin.surface_query_contributions(), & &1.query_id) == [
              "cadence.organization.home",
-             "cadence.organization.provider_accounts.list",
-             "cadence.organization.provider_accounts.new",
-             "cadence.organization.provider_account.show",
              "cadence.organization.notifications_bell"
            ]
 
@@ -77,14 +72,11 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert :ok = ActionContractLedger.validate()
 
     ledgers = ActionContractLedger.ledgers()
-    assert length(ledgers.declared) == 43
+    assert length(ledgers.declared) == 36
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
 
-    refute OrganizationAdminAction.host_owned?(
-             "provider_account_new",
-             "register_provider_account"
-           )
+    refute OrganizationAdminAction.host_owned?("notifications_bell", "mark_notification_read")
   end
 
   test "loads executable organization and user presentations", %{
@@ -92,15 +84,14 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     organization_scope: organization_scope,
     user_scope: user_scope
   } do
-    assert {:ok, %{"data" => %{page: _page, form: _form}}} =
+    assert {:ok, %{"data" => %{organization_id: organization_id}}} =
              OrganizationAdminQuery.load(
                organization_scope,
                HostContext.organization(organization.organization_id),
-               query_request(
-                 "provider_account_new",
-                 "cadence.organization.provider_accounts.new"
-               )
+               query_request("organization_home", "cadence.organization.home")
              )
+
+    assert organization_id == organization.organization_id
 
     assert {:ok, %{"data" => %{context: %{version: 1, unread_count: 0, notifications: []}}}} =
              OrganizationAdminQuery.load(
@@ -115,18 +106,9 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     organization_scope: organization_scope,
     user_scope: user_scope
   } do
-    {account, _version, _credential} = persist_provider_account!(organization)
-
     organization_queries = [
       {organization_scope, HostContext.organization(organization.organization_id),
-       "organization_home", "cadence.organization.home", %{}},
-      {organization_scope, HostContext.organization(organization.organization_id),
-       "provider_accounts", "cadence.organization.provider_accounts.list", %{}},
-      {organization_scope, HostContext.organization(organization.organization_id),
-       "provider_account_new", "cadence.organization.provider_accounts.new", %{}},
-      {organization_scope, HostContext.organization(organization.organization_id),
-       "provider_account_show", "cadence.organization.provider_account.show",
-       %{"provider_account_id" => account.provider_account_id}}
+       "organization_home", "cadence.organization.home", %{}}
     ]
 
     user_queries = [
@@ -145,200 +127,17 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
 
       assert is_map(data)
     end
-
-    assert {:ok, %{"data" => %{organization_id: organization_id}}} =
-             OrganizationAdminQuery.load(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               query_request("organization_home", "cadence.organization.home")
-             )
-
-    assert organization_id == organization.organization_id
-
-    assert {:ok, %{provider_accounts: [_row]}} =
-             Providers.ProviderAccountList.props(organization_scope)
-
-    assert is_map(Providers.ProviderAccountNew.props())
-
-    assert {:ok, %{page: _page, account_grants: _grants}} =
-             Providers.ProviderAccountShow.props(organization_scope, account.provider_account_id)
-  end
-
-  test "Communications renders real provider account DTOs without legacy Vue implementations", %{
-    organization: organization,
-    organization_scope: scope
-  } do
-    assert {:ok, empty} = Providers.ProviderAccountList.props(scope)
-    registration = Providers.ProviderAccountNew.props()
-    {account, _version, _credential} = persist_provider_account!(organization)
-    assert {:ok, populated} = Providers.ProviderAccountList.props(scope)
-    assert {:ok, detail} = Providers.ProviderAccountShow.props(scope, account.provider_account_id)
-
-    corrected = %{
-      registration
-      | form:
-          Providers.ProviderAccountNew.form(%{
-            "provider_type" => "simulator",
-            "backend_type" => "env",
-            "provider_account_id" => "contract-account",
-            "credential_ref" => "contract-reference"
-          })
-    }
-
-    samples =
-      Enum.map([empty, populated], fn data ->
-        %{
-          component: "ProviderAccountListPage",
-          organization_id: scope.organization_id,
-          props: data,
-          ids: Enum.map(data.provider_accounts, & &1.__dom_id)
-        }
-      end) ++
-        Enum.map([registration, corrected], fn data ->
-          %{
-            component: "ProviderAccountNew",
-            props: data,
-            ids: [data.page.id, data.form.id, data.form.actions.submit.id]
-          }
-        end) ++
-        [
-          %{
-            component: "ProviderAccountShow",
-            organization_id: scope.organization_id,
-            props: detail,
-            ids: [detail.page.id, detail.grant_form.id, detail.configuration.id]
-          }
-        ]
-
-    checker =
-      Path.expand(
-        "../../../../../frontend/modules/communications/src/features/provider-accounts/producer-render-check.mjs",
-        __DIR__
-      )
-
-    node =
-      System.find_executable("node") || flunk("Node is required for the Vue producer contract")
-
-    {output, status} = System.cmd(node, [checker, Jason.encode!(samples)], stderr_to_stdout: true)
-    assert status == 0, output
-  end
-
-  test "registration validation retains identity and saves a zero quota as a governed value", %{
-    organization: organization,
-    organization_scope: scope
-  } do
-    previous = Application.fetch_env(:cadence_web, :provider_account_live_opts)
-
-    Application.put_env(:cadence_web, :provider_account_live_opts,
-      manage_backend?: false,
-      validate_credential?: false
-    )
-
-    on_exit(fn ->
-      case previous do
-        {:ok, value} -> Application.put_env(:cadence_web, :provider_account_live_opts, value)
-        :error -> Application.delete_env(:cadence_web, :provider_account_live_opts)
-      end
-    end)
-
-    model = Providers.ProviderAccountNew.props()
-
-    fields =
-      Map.values(model.form.fields) ++
-        Enum.flat_map(model.form.connector.configuration.sections, & &1.fields)
-
-    values =
-      fields
-      |> Map.new(&{&1.key, &1.value})
-      |> Map.merge(%{
-        "display_name" => "Zero quota contract account",
-        "max_quota" => "0",
-        "base_url" => "https://provider.example.test",
-        "environment_ref" => "contract"
-      })
-
-    host = HostContext.organization(organization.organization_id)
-
-    assert {:ok, %{patch: %{form: form}}} =
-             execute_action(
-               scope,
-               host,
-               "provider_account_new",
-               "validate_provider_account_form",
-               %{
-                 "provider_account" => values
-               }
-             )
-
-    assert form.fields.provider_account_id.value == values["provider_account_id"]
-    assert form.fields.credential_ref.value == values["credential_ref"]
-    assert form.fields.max_quota.value == "0"
-
-    assert {:ok, %{navigate: path}} =
-             execute_action(scope, host, "provider_account_new", "register_provider_account", %{
-               "provider_account" => values
-             })
-
-    assert path == "/provider-accounts/#{values["provider_account_id"]}"
-    assert {:ok, account, version} = ProviderAccounts.fetch(scope, values["provider_account_id"])
-    assert account.organization_id == organization.organization_id
-    assert version.guardrails["max_quota"] == 0
   end
 
   test "keeps action permissions and effects specific to their operations" do
     actions = Map.new(OrganizationAdmin.definition().actions, &{&1.action_id, &1})
 
-    assert actions["validate_provider_account_form"].required_permission ==
-             "manage_provider_accounts"
-
-    assert actions["validate_provider_account_form"].effect == :none
-    assert actions["validate_provider_account"].effect == :external
-    assert actions["validate_provider_account"].intent == :maintenance
+    assert actions["mark_notification_read"].required_permission == "read_notifications"
+    assert actions["mark_notification_read"].effect == :durable
   end
 
-  test "executes every provider-owned action family without route-module helpers", %{
-    organization: organization,
-    organization_scope: organization_scope,
-    user_scope: user_scope
-  } do
-    assert {:ok, %{patch: %{form: provider_form}}} =
-             execute_action(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               "provider_account_new",
-               "validate_provider_account_form",
-               %{"provider_account" => %{"provider_type" => "simulator", "backend_type" => "env"}}
-             )
-
-    assert provider_form.connector.selected.provider_type == "simulator"
-
+  test "rejects a notification read without its subject", %{user_scope: user_scope} do
     assert {:error, %ActionFailure{code: "invalid_input"}} =
-             execute_action(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               "provider_account_new",
-               "register_provider_account",
-               %{}
-             )
-
-    for action_id <- [
-          "validate_provider_account",
-          "rotate_provider_credential",
-          "revoke_provider_credential",
-          "grant_provider_account_mission",
-          "revoke_provider_account_mission"
-        ] do
-      assert {:error, _reason} =
-               execute_action(
-                 organization_scope,
-                 HostContext.organization(organization.organization_id),
-                 "provider_account_show",
-                 action_id,
-                 %{"provider_account_id" => "missing-provider-account"}
-               )
-    end
-
-    assert {:error, %ActionFailure{}} =
              execute_action(
                user_scope,
                HostContext.user(user_scope.user.user_id),
@@ -348,23 +147,10 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
              )
   end
 
-  test "authorizes organization actions without installation and rejects user actions there", %{
+  test "rejects user actions in the organization context", %{
     organization: organization,
     organization_scope: organization_scope
   } do
-    assert :ok =
-             ActionDispatcher.authorize(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               %ActionRequest{
-                 application_key: "organization_admin",
-                 application_version: 1,
-                 action_id: "validate_provider_account_form",
-                 surface_id: "provider_account_new",
-                 surface_version: 1
-               }
-             )
-
     assert {:error, :scope_mismatch} =
              ActionDispatcher.authorize(
                organization_scope,
@@ -438,8 +224,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
              )
   end
 
-  test "rejects cross-scope contexts and cross-scope subjects", %{
-    organization: organization,
+  test "rejects cross-scope contexts", %{
     organization_scope: organization_scope,
     user_scope: user_scope
   } do
@@ -447,7 +232,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
              OrganizationAdminQuery.load(
                organization_scope,
                HostContext.organization("different-organization"),
-               query_request("provider_account_new", "cadence.organization.provider_accounts.new")
+               query_request("organization_home", "cadence.organization.home")
              )
 
     assert {:error, :scope_mismatch} =
@@ -456,108 +241,36 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                HostContext.user("different-user"),
                query_request("notifications_bell", "cadence.organization.notifications_bell")
              )
-
-    assert {:error, :application_surface_subject_required} =
-             OrganizationAdminQuery.load(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               query_request(
-                 "provider_account_show",
-                 "cadence.organization.provider_account.show"
-               )
-             )
-
-    assert {:error, _reason} =
-             OrganizationAdminQuery.load(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               query_request(
-                 "provider_account_show",
-                 "cadence.organization.provider_account.show",
-                 %{"provider_account_id" => "provider-account-from-another-scope"}
-               )
-             )
-
-    assert {:error, :scope_mismatch} =
-             OrganizationAdminAction.execute(
-               organization_scope,
-               HostContext.organization("different-organization"),
-               %ActionRequest{
-                 application_key: "organization_admin",
-                 application_version: 1,
-                 action_id: "validate_provider_account_form",
-                 surface_id: "provider_account_new",
-                 surface_version: 1
-               }
-             )
   end
 
   test "requires the exact provider-owned surface binding before action execution", %{
-    organization: organization,
-    organization_scope: organization_scope
+    user_scope: user_scope
   } do
+    host = HostContext.user(user_scope.user.user_id)
+
     base = %ActionRequest{
       application_key: "organization_admin",
       application_version: 1,
-      action_id: "validate_provider_account_form",
-      surface_id: "provider_account_new",
+      action_id: "mark_notification_read",
+      surface_id: "notifications_bell",
       surface_version: 1,
-      params: %{
-        "provider_account" => %{
-          "provider_type" => "simulator",
-          "backend_type" => "env"
-        }
-      }
+      params: %{}
     }
 
-    assert {:ok, _result} =
-             OrganizationAdminAction.execute(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               base
-             )
+    # The exact binding is admitted and reaches the action's own input validation.
+    assert {:error, %ActionFailure{code: "invalid_input"}} =
+             OrganizationAdminAction.execute(user_scope, host, base)
 
     for request <- [
           %{base | surface_id: nil, surface_version: nil},
           %{base | surface_version: 2},
-          %{base | action_id: "mark_notification_read", surface_id: "provider_account_new"},
-          %{base | action_id: "accept_invitation", surface_id: "notifications_bell"},
-          %{base | action_id: "register_provider_account", surface_id: "provider_account_show"}
+          %{base | surface_id: "organization_home"},
+          %{base | action_id: "accept_invitation"},
+          %{base | action_id: "register_provider_account", surface_id: "provider_account_new"}
         ] do
       assert {:error, :unsupported_application_action} =
-               OrganizationAdminAction.execute(
-                 organization_scope,
-                 HostContext.organization(organization.organization_id),
-                 request
-               )
+               OrganizationAdminAction.execute(user_scope, host, request)
     end
-  end
-
-  test "executes a real Phoenix-owned form validation patch", %{
-    organization: organization,
-    organization_scope: organization_scope
-  } do
-    assert {:ok, %{patch: %{form: form}}} =
-             OrganizationAdminAction.execute(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               %ActionRequest{
-                 application_key: "organization_admin",
-                 application_version: 1,
-                 action_id: "validate_provider_account_form",
-                 surface_id: "provider_account_new",
-                 surface_version: 1,
-                 params: %{
-                   "provider_account" => %{
-                     "provider_type" => "simulator",
-                     "backend_type" => "env"
-                   }
-                 }
-               }
-             )
-
-    assert is_map(form)
-    assert form.connector.selected.provider_type == "simulator"
   end
 
   test "notification compatibility delegates inbox placement and retains the bell read result", %{
@@ -612,50 +325,5 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
         params: params
       }
     )
-  end
-
-  defp persist_provider_account!(organization) do
-    suffix = System.unique_integer([:positive])
-    account_id = "provider-account-closure-#{suffix}"
-    credential_ref = "provider-credential-closure-#{suffix}"
-    now = ~U[2026-07-15 20:00:00.000000Z]
-
-    {:ok, credential} =
-      ProviderCredentials.create(
-        organization.organization_id,
-        account_id,
-        %{
-          provider_credential_ref: credential_ref,
-          backend_type: :external,
-          backend_key: "providers/closure/#{suffix}",
-          registered_at: now
-        },
-        manage_backend?: false,
-        now: now
-      )
-
-    {:ok, account, version} =
-      ProviderAccounts.create_for_system(
-        organization.organization_id,
-        %{
-          provider_account_id: account_id,
-          display_name: "Closure Provider",
-          provider_type: :simulator,
-          base_url: "http://127.0.0.1:4101",
-          region_ref: "local",
-          environment_ref: "demo",
-          credential_ref: credential_ref,
-          guardrails: %{
-            "allowed_services" => ["telemetry"],
-            "allowed_stations" => ["station-alpha"],
-            "max_quota" => 10
-          }
-        },
-        %{"kind" => "system", "id" => "organization-admin-provider-test"},
-        validate_credential?: false,
-        now: now
-      )
-
-    {account, version, credential}
   end
 end

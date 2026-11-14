@@ -12,7 +12,6 @@ defmodule CadenceWeb.HostPageAuthorization do
   @admin {OrganizationAuth, :require_organization_admin}
   @policies %{
     organization: {@organization, [], false},
-    provider_accounts: {@organization, [@admin], false},
     mission: {@organization, [@mission], false},
     spacecraft: {@organization, [@mission], false},
     spacecraft_show: {@organization, [@mission, {SpacecraftAuth, :load_spacecraft}], false},

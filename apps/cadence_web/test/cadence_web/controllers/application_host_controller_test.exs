@@ -222,46 +222,6 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
            }
   end
 
-  test "organization members cannot query the privileged provider-account surface" do
-    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
-
-    catalog_url =
-      "/api/cadence/application-host/v1/catalog?" <>
-        URI.encode_query(%{
-          "application_key" => "organization_admin",
-          "organization_id" => organization.organization_id,
-          "scope" => "organization",
-          "surface_id" => "provider_accounts"
-        })
-
-    {catalog_conn, catalog} =
-      member_conn
-      |> get(catalog_url)
-      |> then(fn conn -> {conn, json_response(conn, 200)} end)
-
-    response =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> post_json("/api/cadence/application-host/v1/query", %{
-        "applicationKey" => "organization_admin",
-        "applicationVersion" => 1,
-        "surfaceId" => "provider_accounts",
-        "surfaceVersion" => 1,
-        "queryId" => "cadence.organization.provider_accounts.list",
-        "queryVersion" => 1,
-        "params" => %{},
-        "scope" => %{
-          "scope" => "organization",
-          "organizationId" => organization.organization_id
-        }
-      })
-
-    assert %{
-             "schema" => "cadence.application-host-problem.v1",
-             "code" => "forbidden"
-           } = json_response(response, 403)
-  end
-
   test "mission catalog accepts the browser context query on its scoped route" do
     {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
 

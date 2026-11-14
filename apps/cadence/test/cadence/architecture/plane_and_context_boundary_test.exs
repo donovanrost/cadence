@@ -208,7 +208,7 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
 
   test "host providers and notification recipient authorization have their actual owners" do
     for name <-
-          ~w(comms/action_provider spacecraft/action_provider mission_catalog/action_provider telemetry_decom/action_provider organization_admin_query organization_admin_providers/provider_account_new) do
+          ~w(comms/action_provider spacecraft/action_provider mission_catalog/action_provider telemetry_decom/action_provider organization_admin_query organization_admin_providers/notifications) do
       path = "lib/cadence/applications/#{name}.ex"
       assert PlaneBoundary.classify(path) == :adapter
       assert ContextBoundary.classify(path) == :adapter

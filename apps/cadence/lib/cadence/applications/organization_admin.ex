@@ -34,54 +34,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
       exposed_module: "./Application"
     },
     %{
-      id: "provider_accounts",
-      fallback_path: "/provider-accounts",
-      scope: :organization,
-      component: "ProviderAccountListPage",
-      purpose: :collection,
-      placement: :application_workspace,
-      navigation_label: "Provider Accounts",
-      navigation_order: 20,
-      query: "cadence.organization.provider_accounts.list",
-      query_version: 1,
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "provider_account_new",
-      fallback_path: "/provider-accounts/new",
-      scope: :organization,
-      component: "ProviderAccountNew",
-      purpose: :configuration,
-      placement: :application_workspace,
-      navigation_label: "New Provider Account",
-      navigation_order: 30,
-      query: "cadence.organization.provider_accounts.new",
-      query_version: 1,
-      actions: ["validate_provider_account_form", "register_provider_account"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "provider_account_show",
-      fallback_path: "/provider-accounts/:subject",
-      scope: :organization,
-      component: "ProviderAccountShow",
-      purpose: :subject_detail,
-      placement: :application_workspace,
-      navigation_label: "Provider Account",
-      navigation_order: 40,
-      query: "cadence.organization.provider_account.show",
-      query_version: 1,
-      actions: [
-        "validate_provider_account",
-        "rotate_provider_credential",
-        "revoke_provider_credential",
-        "grant_provider_account_mission",
-        "revoke_provider_account_mission"
-      ],
-      exposed_module: "./Application"
-    },
-    %{
       id: "notifications_bell",
       scope: :user,
       component: "NotificationsBell",
@@ -108,21 +60,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
       surface_id: "organization_home",
       live_view: "CadenceWeb.HostPageLive",
       component: "OrganizationHome"
-    },
-    %{
-      surface_id: "provider_accounts",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "ProviderAccountListPage"
-    },
-    %{
-      surface_id: "provider_account_new",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "ProviderAccountNew"
-    },
-    %{
-      surface_id: "provider_account_show",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "ProviderAccountShow"
     },
     %{
       surface_id: "notifications_bell",
@@ -306,27 +243,10 @@ defmodule Cadence.Applications.OrganizationAdmin do
     end)
   end
 
-  defp action_permission("validate_provider_account_form"), do: "manage_provider_accounts"
-  defp action_permission("validate_provider_account"), do: "manage_provider_accounts"
-  defp action_permission("register_provider_account"), do: "manage_provider_accounts"
-
-  defp action_permission(action_id)
-       when action_id in [
-              "rotate_provider_credential",
-              "revoke_provider_credential",
-              "grant_provider_account_mission",
-              "revoke_provider_account_mission"
-            ],
-       do: "manage_provider_accounts"
-
   defp action_permission("mark_notification_read"), do: "read_notifications"
 
-  defp action_effect("validate_provider_account_form"), do: :none
-  defp action_effect("validate_provider_account"), do: :external
   defp action_effect(_action_id), do: :durable
 
-  defp action_intent("validate_provider_account_form"), do: :diagnostic
-  defp action_intent("validate_provider_account"), do: :maintenance
   defp action_intent(_action_id), do: :configuration
 
   defp surface_definition(surface) do

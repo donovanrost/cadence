@@ -19,50 +19,6 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       exposed_module: "./Application"
     },
     %{
-      id: "provider_accounts",
-      purpose: :collection,
-      scope: :organization,
-      placement: :application_workspace,
-      navigation: %{label: "Provider Accounts", order: 20, fallback_path: "/provider-accounts"},
-      query: %{id: "cadence.organization.provider_accounts.list", version: 1},
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "provider_account_new",
-      purpose: :configuration,
-      scope: :organization,
-      placement: :application_workspace,
-      navigation: %{
-        label: "New Provider Account",
-        order: 30,
-        fallback_path: "/provider-accounts/new"
-      },
-      query: %{id: "cadence.organization.provider_accounts.new", version: 1},
-      actions: ["validate_provider_account_form", "register_provider_account"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "provider_account_show",
-      purpose: :subject_detail,
-      scope: :organization,
-      placement: :application_workspace,
-      navigation: %{
-        label: "Provider Account",
-        order: 40,
-        fallback_path: "/provider-accounts/:subject"
-      },
-      query: %{id: "cadence.organization.provider_account.show", version: 1},
-      actions: [
-        "validate_provider_account",
-        "rotate_provider_credential",
-        "revoke_provider_credential",
-        "grant_provider_account_mission",
-        "revoke_provider_account_mission"
-      ],
-      exposed_module: "./Application"
-    },
-    %{
       id: "notifications_bell",
       purpose: :activity,
       scope: :user,
@@ -74,22 +30,16 @@ defmodule Cadence.Applications.OrganizationAdminTest do
     }
   ]
 
-  test "contributes every post-auth organization surface (L7: platform admin is in the console)" do
+  test "contributes every post-auth organization surface (L7: platform admin, L13: provider accounts are in the console)" do
     assert :ok = OrganizationAdmin.validate()
 
     assert Enum.map(OrganizationAdmin.surfaces(), & &1.id) == [
              "organization_home",
-             "provider_accounts",
-             "provider_account_new",
-             "provider_account_show",
              "notifications_bell"
            ]
 
     assert Enum.map(OrganizationAdmin.surfaces(), &{&1.id, &1.scope}) == [
              {"organization_home", :organization},
-             {"provider_accounts", :organization},
-             {"provider_account_new", :organization},
-             {"provider_account_show", :organization},
              {"notifications_bell", :user}
            ]
 
@@ -136,17 +86,8 @@ defmodule Cadence.Applications.OrganizationAdminTest do
     end
   end
 
-  test "publishes the exact 8-row surface action ledger with 8 unique actions" do
-    expected = [
-      {"provider_account_new", 1, "validate_provider_account_form"},
-      {"provider_account_new", 1, "register_provider_account"},
-      {"provider_account_show", 1, "validate_provider_account"},
-      {"provider_account_show", 1, "rotate_provider_credential"},
-      {"provider_account_show", 1, "revoke_provider_credential"},
-      {"provider_account_show", 1, "grant_provider_account_mission"},
-      {"provider_account_show", 1, "revoke_provider_account_mission"},
-      {"notifications_bell", 1, "mark_notification_read"}
-    ]
+  test "publishes the exact 1-row surface action ledger" do
+    expected = [{"notifications_bell", 1, "mark_notification_read"}]
 
     surface_pairs =
       OrganizationAdmin.surfaces()
@@ -154,12 +95,9 @@ defmodule Cadence.Applications.OrganizationAdminTest do
 
     action_pairs = Enum.map(OrganizationAdminAction.all(), &{&1.surface_id, &1.version, &1.id})
 
-    assert length(surface_pairs) == 8
-    assert length(action_pairs) == 8
-    assert length(Enum.uniq(Enum.map(action_pairs, &elem(&1, 2)))) == 8
     assert surface_pairs == expected
     assert action_pairs == expected
-    assert length(OrganizationAdmin.definition().actions) == 8
+    assert length(OrganizationAdmin.definition().actions) == 1
   end
 
   test "rejects duplicate provider binding rows" do

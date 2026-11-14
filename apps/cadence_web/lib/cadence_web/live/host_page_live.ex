@@ -21,9 +21,6 @@ defmodule CadenceWeb.HostPageLive do
     MissionPage,
     OpsLandingPage,
     OpsTimelinePage,
-    OrganizationModulePage,
-    ProviderAccountDetailPage,
-    ProviderAccountRegistrationPage,
     SpacecraftModulePage,
     SpacecraftPage
   }
@@ -569,42 +566,6 @@ defmodule CadenceWeb.HostPageLive do
   end
 
   def handle_event(
-        "host:organization-page",
-        %{"event" => event, "input" => input, "path" => path} = params,
-        socket
-      )
-      when event in ["validate", "save"] do
-    with true <- ProviderAccountRegistrationPage.matches?(socket, params),
-         {:ok, %{route: "/provider-accounts/new"} = info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- ProviderAccountRegistrationPage.matches?(socket, params) do
-      {result, socket} = ProviderAccountRegistrationPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:organization-page",
-        %{"event" => event, "input" => input, "path" => path} = params,
-        socket
-      )
-      when event in ~w(refresh validate-account rotate-credential revoke-credential grant-mission revoke-grant) do
-    with true <- ProviderAccountDetailPage.matches?(socket, params),
-         {:ok, %{route: "/provider-accounts/:provider_account_id"} = info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- ProviderAccountDetailPage.matches?(socket, params) do
-      {result, socket} = ProviderAccountDetailPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
         "host:mission-page",
         %{"event" => event, "input" => input, "path" => path} = params,
         socket
@@ -760,8 +721,6 @@ defmodule CadenceWeb.HostPageLive do
           spacecraft_page: SpacecraftPage.load(socket.assigns.current_scope, info),
           spacecraft_module_page: SpacecraftModulePage.load(socket.assigns.current_scope, info),
           mission_module_page: MissionModulePage.load(socket.assigns.current_scope, info),
-          organization_module_page:
-            OrganizationModulePage.load(socket.assigns.current_scope, info),
           spacecraft_identity_session:
             SpacecraftPage.identity_session(
               socket.assigns[:spacecraft_identity_session],
@@ -773,8 +732,6 @@ defmodule CadenceWeb.HostPageLive do
         )
         |> SpacecraftConfigurationPage.subscribe(info)
         |> CatalogUpload.prepare(info, path)
-        |> ProviderAccountRegistrationPage.prepare(info, path)
-        |> ProviderAccountDetailPage.prepare(info, path)
         |> CommunicationsSetupPage.prepare(info, path)
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)
         |> CadenceWeb.OpsCommandPage.prepare(info, path)
@@ -857,7 +814,6 @@ defmodule CadenceWeb.HostPageLive do
       spacecraft_module_page: assigns[:spacecraft_module_page],
       mission_module_page: assigns[:mission_module_page],
       ops_page: assigns[:ops_page],
-      organization_module_page: assigns[:organization_module_page],
       error: assigns[:management_error]
     }
   end
