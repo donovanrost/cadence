@@ -1154,6 +1154,13 @@ CommandFlow.md, C1 B "When targets differ".
   and revision. The same block appears in Approve, and U2 plots one panel per verifier point.
 - Words: "Not every target checks this command the same way." The label is `rev 14`, as Compose's `Catalog rev`
   already reads.
+- **Row text** (with api's shape, 11-14): when verifiers differ, each row lists its whole verifier set by name in
+  order, then the longest wait: "Uplink started · Accepted on board · Mode applied · within 60 s". The single
+  completion line would hide differences in other phases; tonight's two groups differ only by "Mode applied". So
+  for 11-14: `Uplink started · Accepted on board · within 30 s` · `499 targets · rev 3` and `Uplink started ·
+  Accepted on board · Mode applied · within 60 s` · `EARENDIL-001 · rev 4`. The single line stays when there's
+  one group. Targets with a NO-GO for the command aren't in any group (api); their `revision unknown` shows with
+  the NO-GO.
 - **Data ask (api):** per stacked command, `verifier_groups: [{verifiers: [{name, phase, timeout_ms, …as today}],
   catalog_revisions: [{number, label}], spacecraft_ids}]`, grouped server-side by identical verifier definitions.
   Also per target, `catalog_revision {number, label}` for D's line. Preferably on the preflight response, so it
