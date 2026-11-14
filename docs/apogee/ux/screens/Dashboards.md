@@ -91,7 +91,14 @@ The rendering engine differs, but the look is the same.
 - **Contact intervals:** labelled bands behind the plot, as ApTimeSeries' TimeBand: `raised` fill, station code in
   mono 11 at the top-left. Booked passes are a dashed outline, realized passes are filled. Status other than
   booked or realized (missed, partial) goes in the tooltip in words, not as a colour.
-- **Point events:** a thin `text-4` vertical line, with the label in the tooltip.
+  - **Overlaps** (dashboards, qa look 11-14): overlapping flown passes merge into one 5% tint behind the series, so
+    tints never stack. Labels are drawn on top of every band.
+  - **Booked vs flown:** where a flown pass covers its booking, only the pass's solid edges are drawn. Where the
+    booking reaches past the flown pass (a late start or an early end), the dashed outline is drawn on **that part
+    only**, so lost time shows. A booking with no flown pass stays dashed in full.
+- **Point events:** a thin `text-4` vertical line, with the label in the tooltip. Mission events closer than 6px
+  merge into one mark, titled "4 events 02:10Z–02:14Z". Watermark and evidence events aren't chart marks: they're
+  a stream, not events an operator reads.
 - **No glows or box-shadows** anywhere in the chart. Remove the engine's.
 
 ## Chart tokens (K2): Apogee values for the 29 base `--chart-color-*`
