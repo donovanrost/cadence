@@ -1300,7 +1300,7 @@ it or closes the item.
 
 ### U55 · Cancel or end a scheduled contact from Contacts (BACKLOG parity gap; after domain's window-truth fix) (api / fe-ops / domain)
 The console gains 8g's two lifecycle actions on Contacts' selected pass. Both stop Cadence's side of the contact.
-**Neither changes the provider's booking**: that's `Release` (U-era Contacts D2), a separate act for org admins.
+**Neither changes the provider's booking**: that's `Release` (Contacts D2), a separate act for org admins.
 - **Which applies** (one action at a time, never both):
   - **Before AOS** (scheduled, not started): `Cancel contact…`. Domain's cancel: the contact won't open, so
     there's no listener and no runtime.
