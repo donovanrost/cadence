@@ -38,6 +38,28 @@ footer: Stack · N chips │ Release (choice) │ check summary GO/HOLD │ "NOT
   for numbers a `Same for all │ Per target` micro switch. Verifier line (`THERM.batt_setpoint =
   value ±0.1 within 60 s`) when the catalog defines one, else `No verifier: this command can't turn
   green` in stale text **[decision]**. Primary `Add to stack ↵`.
+- **When targets differ** (U51, director's backlog, 11-14). Group by what's actually different: the verifiers,
+  not just the revision number.
+  - **Same verifiers on every target:** the line above, unchanged. When targets span catalog revisions, the meta
+    reads `rev 14 · 15`, and nothing else changes.
+  - **Verifiers differ:** a caution tag `VERIFIERS DIFFER` sits in B's header meta. In place of the single line,
+    one row per distinct verifier set, largest group first:
+    - Lead sentence: "Not every target checks this command the same way."
+    - Rows: `THERM.batt_setpoint = value ±0.1 within 60 s` · `94 targets · rev 15`.
+      `MODE.current = LOW within 30 s` · `EARENDIL-001, EARENDIL-003 · rev 14`.
+      `No verifier: can't turn green` (stale text) · `EARENDIL-117 · rev 12`.
+    - Up to 3 targets are named; above that, a count with `Show`. The text comes from the same verifier words as
+      the single line.
+  - **The command isn't in a target's revision:** that's C3's existing Catalog NO-GO, with names. It isn't shown
+    here.
+  - **D Targets:** when targets span revisions, each resolved target line adds `rev 14` (mono `text-4`) after the
+    profile.
+  - **Stack chip:** a command whose verifiers differ gets a caution `VERIFIERS DIFFER` at the chip's end, so the
+    footer shows it after the form closes.
+  - **Approve (C2)** shows the same grouped block for each command, because the reviewer must see it. **Uplink &
+    verify:** U2 draws one plot per verifier point, each captioned with its targets.
+  - Not a GO/HOLD check (it informs; it doesn't gate). Whether differing verifiers should be an acknowledged HOLD
+    is the director's call.
 - **B2 Per-target values:** only when an arg is Per target. Fill buttons (`All from form · 8.0`,
   `Current + 2.0`, `Paste CSV`, `Clear`), table rows: mark + name (mono) · value cell(s) with unit
   (inherited = `text-4`, out of range = caution) · Now (current telemetry value) · context (mono

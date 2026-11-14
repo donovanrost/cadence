@@ -1126,3 +1126,19 @@ data with an SCID or address Cadence didn't expect, and that's the case that mat
     "The contact ended at 03:19Z.".
   - Technical details order: reason, peer, scid, listen profile (name · id), station ref, count, id, then the
     "Counted live…" line (accepted).
+
+### U51 · Per-target catalog revision and verifiers in Compose (director's backlog via lead, 11-14) (api / fe-ops)
+On 11-14, 001 and 003 ran the same SET_MODE with different verifiers, and nothing showed it. Spec:
+CommandFlow.md, C1 B "When targets differ".
+- Group by the verifiers themselves; the revision explains the difference but isn't the test, because two
+  revisions can share a verifier.
+- The same verifiers everywhere means no change apart from the meta `rev 14 · 15`. Differing verifiers get a caution
+  `VERIFIERS DIFFER` in the form header and on the stack chip, plus a grouped block of the verifier line, targets
+  and revision. The same block appears in Approve, and U2 plots one panel per verifier point.
+- Words: "Not every target checks this command the same way." The label is `rev 14`, as Compose's `Catalog rev`
+  already reads.
+- **Data ask (api):** per stacked command, `verifier_groups: [{verifiers: [{name, phase, timeout_ms, …as today}],
+  catalog_revisions: [{number, label}], spacecraft_ids}]`, grouped server-side by identical verifier definitions.
+  Also per target, `catalog_revision {number, label}` for D's line. Preferably on the preflight response, so it
+  re-runs with C1 and C2.
+- Informational, not a GO/HOLD check. Making it an acknowledged HOLD is the director's call.
