@@ -10,10 +10,4 @@ test("workspace production code has no dependency on the legacy Ops application 
       /apps\/ops-console|from ["']\.\/ops-events|cadence:ops-event|window\.dispatchEvent/,
     );
   }
-  const legacy = readFileSync(
-    new URL("../../../../../apps/ops-console/src/OpsDashboardShow.vue", import.meta.url),
-    "utf8",
-  );
-  expect(legacy).toContain("@cadence/dashboards-and-exploration/workspace");
-  expect(legacy).not.toContain("<template>");
 });

@@ -15,8 +15,6 @@
     "./workspace": "./src/workspace.ts",
     "./workspace.css": "./src/workspace.css",
     "./charts.css": "./src/charts.css",
-    "./creation": "./src/creation.ts",
-    "./directory": "./src/directory.ts",
     ".": "./src/index.ts"
   },
   "scripts": {

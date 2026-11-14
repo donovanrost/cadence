@@ -13,7 +13,6 @@ export { default as TelemetryChart } from "./features/workspace/TelemetryChart.v
 export { CHART_RUNTIME_PORT } from "./features/workspace/chart-runtime";
 export type { ChartRuntimePort, ChartAction, ChartTopic } from "./features/workspace/chart-runtime";
 export { readWorkspaceSnapshot } from "./features/workspace/validation";
-export { dashboardContribution } from "./features/dashboard/contribution";
 export { default as WorkspaceSnapshotCanvas } from "./features/workspace/WorkspaceSnapshotCanvas.vue";
 export type {
   WorkspaceSnapshot,
