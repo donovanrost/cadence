@@ -10,12 +10,6 @@ import {
 } from "@cadence/communications/form-surfaces";
 import type { Component } from "vue";
 import CommsCanonicalSurface from "./CommsCanonicalSurface.vue";
-import {
-  admitProviderSurface,
-  ProviderList,
-  ProviderCreation,
-  ProviderDetail,
-} from "@cadence/communications/providers";
 
 const props = defineProps<FullPageSurfaceProps>();
 
@@ -28,9 +22,6 @@ const surfaceComponents: Record<string, Component> = {
   routing_detail: CommsCanonicalSurface,
   ground_stations: CommsCanonicalSurface,
   ground_station: CommsCanonicalSurface,
-  provider_list: ProviderList,
-  provider_new: ProviderCreation,
-  provider_show: ProviderDetail,
   transport_new: TransportCreation,
   routing_new: RoutingCreation,
   ground_station_new: GroundStationEditor,
@@ -145,18 +136,6 @@ function pagePropsFor(value: unknown): Record<string, unknown> {
 
   if (!navigation || !isValidNavigation(navigation)) {
     throw new Error("The Comms surface navigation is invalid.");
-  }
-
-  if (["provider_list", "provider_new", "provider_show"].includes(props.surface.surfaceId)) {
-    if (typeof props.context.missionId !== "string") throw new Error("A mission is required.");
-    const context = { missionId: props.context.missionId };
-    const admitted = admitProviderSurface(
-      props.surface.surfaceId,
-      props.surface.dataContract.version,
-      { navigation, data },
-      context,
-    );
-    return { ...admitted, port: scopedPort(), context };
   }
 
   if (

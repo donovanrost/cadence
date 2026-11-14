@@ -15,7 +15,6 @@ const features = {
     "CommsGroundStationList",
     "CommsGroundStationListPage",
   ],
-  providers: ["CommsProviderList", "CommsProviderTable", "CommsProviderNew", "CommsProviderShow"],
 } as const;
 const directory = dirname(fileURLToPath(import.meta.url));
 const legacy = import.meta.glob("../../../apps/comms-overview/src/*.vue", {

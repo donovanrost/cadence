@@ -68,10 +68,6 @@ const OpsModulePage = lazyHostPage(
   "OpsModulePage",
   () => import("../ops-workspace/features/module-pages/OpsModulePage.vue"),
 );
-const OrganizationModulePage = lazyHostPage(
-  "OrganizationModulePage",
-  () => import("../administration/features/module-pages/OrganizationModulePage.vue"),
-);
 const ActivationApprovalsPage = lazyHostPage(
   "ActivationApprovalsPage",
   () =>
@@ -240,11 +236,6 @@ const context = computed(() => {
     active_dashboard_id: page.params.dashboard_id,
     ...selected.metadata,
   };
-});
-const organizationContext = computed(() => {
-  const organizationId = context.value?.organization?.organization_id;
-  const resourceId = committed.value?.params.provider_account_id;
-  return organizationId ? { organizationId, ...(resourceId ? { resourceId } : {}) } : null;
 });
 const missionContext = computed(() => {
   const organizationId = context.value?.organization?.organization_id;
@@ -485,17 +476,6 @@ async function activationDecision(input: unknown) {
   }
   return result.result;
 }
-async function organizationPageAction(payload: Record<string, unknown>) {
-  const path = currentPage().snapshot.path,
-    requestGeneration = generation;
-  const page = currentPage().snapshot.organization_module_page;
-  if (pending.value || payload.id !== page?.id || payload.token !== page?.token)
-    throw new Error("Inactive organization page.");
-  const result = await request("host:organization-page", { ...payload, path });
-  if (stopped || generation !== requestGeneration || currentPage().snapshot.path !== path)
-    throw new Error("Inactive organization page response.");
-  return result;
-}
 async function opsPageAction(payload: Record<string, unknown>) {
   const path = currentPage().snapshot.path,
     requestGeneration = generation;
@@ -620,17 +600,6 @@ onBeforeUnmount(() => {
           :execute="activationDecision"
           :refresh="reconnect"
           :navigating="pending"
-        />
-        <OrganizationModulePage
-          v-else-if="route.kind === 'organization_module' && organizationContext"
-          :id="route.mountId"
-          :contribution-id="route.contribution"
-          :snapshot="committed.snapshot.organization_module_page"
-          :context="organizationContext"
-          :execute="organizationPageAction"
-          :navigate="navigate"
-          :refresh="reconnect"
-          :refreshing="pending"
         />
         <OpsModulePage
           v-else-if="route.kind === 'ops_module' && missionContext"

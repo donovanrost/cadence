@@ -15,48 +15,6 @@
     "administrationPage": "organization_home"
   },
   {
-    "path": "/provider-accounts",
-    "kind": "organization_module",
-    "contribution": "comms.provider-account-directory",
-    "scope": "organization",
-    "mountId": "provider-account-list-page-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Provider Accounts",
-      "nav_item": "provider_accounts"
-    }
-  },
-  {
-    "path": "/provider-accounts/new",
-    "kind": "organization_module",
-    "contribution": "comms.provider-account-registration",
-    "scope": "organization",
-    "mountId": "provider-account-new-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "max-w-3xl space-y-6",
-    "metadata": {
-      "page_title": "Register Provider Account",
-      "nav_item": "provider_accounts"
-    }
-  },
-  {
-    "path": "/provider-accounts/:provider_account_id",
-    "kind": "organization_module",
-    "contribution": "comms.provider-account-detail",
-    "scope": "organization",
-    "mountId": "provider-account-show-component",
-    "queryKeys": ["provider_account_id"],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Provider Account",
-      "nav_item": "provider_accounts"
-    }
-  },
-  {
     "path": "/missions/:mission_id",
     "header": { "kind": "resource" },
     "scope": "mission",
@@ -479,49 +437,6 @@
       "page_title": "Setup Validation",
       "nav_item": "comms_validation"
     }
-  },
-  {
-    "path": "/missions/:mission_id/comms/providers",
-    "scope": "mission",
-    "mountId": "comms-provider-list-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Ground Network Providers",
-      "nav_item": "comms_providers"
-    },
-    "kind": "mission_module",
-    "contribution": "comms.provider-list"
-  },
-  {
-    "path": "/missions/:mission_id/comms/providers/new",
-    "scope": "mission",
-    "mountId": "comms-provider-new-component",
-    "queryKeys": ["provider_account_id", "provider_account_grant_id"],
-    "queryAliases": {},
-    "viewClass": "max-w-3xl space-y-6",
-    "metadata": {
-      "page_title": "New Ground Network Provider",
-      "nav_item": "comms_providers"
-    },
-    "kind": "mission_module",
-    "contribution": "comms.provider-new"
-  },
-  {
-    "path": "/missions/:mission_id/comms/providers/:provider_id",
-    "scope": "mission",
-    "mountId": "comms-provider-show-component",
-    "queryKeys": ["provider_id"],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Ground Network Provider",
-      "nav_item": "comms_providers"
-    },
-    "kind": "mission_module",
-    "contribution": "comms.provider-show",
-    "resourceParam": "provider_id"
   },
   {
     "path": "/missions/:mission_id/ops",

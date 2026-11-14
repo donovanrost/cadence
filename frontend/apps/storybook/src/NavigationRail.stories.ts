@@ -119,7 +119,7 @@ export const Collapsed: Story = {
 
 export const Organization: Story = {
   name: "Production organization navigation",
-  render: renderShell("sidebar", { nav_context: "organization", nav_item: "provider_accounts" }),
+  render: renderShell("sidebar", { nav_context: "organization", nav_item: "missions" }),
   play: async ({ canvas }) =>
     expectIcons(canvas.getByRole("navigation", { name: "Primary navigation" })),
 };

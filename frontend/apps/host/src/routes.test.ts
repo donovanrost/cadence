@@ -8,7 +8,6 @@ import { spacecraftPages } from "./mission-and-spacecraft/spacecraft-pages";
 import { loadedSpacecraftPages as spacecraftModulePages } from "./module-pages.test-support";
 import { loadedMissionPages as missionModulePages } from "./module-pages.test-support";
 import { loadedOpsPages as opsPages } from "./module-pages.test-support";
-import { loadedOrganizationPages as organizationModulePages } from "./module-pages.test-support";
 import { resolveHostComponent } from "./shell/registry";
 test("plan review retains the exact version and independently paged evidence", () => {
   const route = required(
@@ -110,13 +109,6 @@ test("each core host route resolves to its registered owner", () => {
     if (route.kind === "mission_module") {
       expect(missionModulePages[required(route.contribution)], route.path).toBeDefined();
       expect(route.scope).toBe("mission");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
-    if (route.kind === "organization_module") {
-      expect(organizationModulePages[required(route.contribution)], route.path).toBeDefined();
-      expect(route.scope).toBe("organization");
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
       continue;

@@ -1,9 +1,4 @@
 import { containing } from "../../../test-support/matchers";
-import {
-  providerNewSurface,
-  providerDetailSurface,
-  providerListSurface,
-} from "../../../modules/communications/src/features/providers/surface-fixtures.test-support";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
@@ -36,9 +31,6 @@ const surfaceIds = [
   "routing_detail",
   "ground_stations",
   "ground_station",
-  "provider_list",
-  "provider_new",
-  "provider_show",
   "transport_new",
   "routing_new",
   "ground_station_new",
@@ -46,27 +38,10 @@ const surfaceIds = [
 ] as const;
 
 describe("Comms canonical federated application", () => {
-  it.each(["provider_list", "provider_new", "provider_show"] as const)(
-    "contains malformed %s before mounting and recovers through the feature entry",
-    async (surface) => {
-      const query = vi
-        .fn<TestQuery>()
-        .mockResolvedValueOnce({ ...surfacePayload(surface), data: {} })
-        .mockResolvedValue(surfacePayload(surface));
-      const wrapper = mount(CommsApplication, { props: propsFor(surface, query) });
-      await flushPromises();
-      expect(wrapper.find("#comms-application-error").exists()).toBe(true);
-      await wrapper.get("#retry-comms-application").trigger("click");
-      await flushPromises();
-      expect(wrapper.find("#comms-application-error").exists()).toBe(false);
-      expect(wrapper.find("[data-surface-id='" + surface + "']").exists()).toBe(true);
-      wrapper.unmount();
-    },
-  );
   it("does not expose private query failures", async () => {
     const wrapper = mount(CommsApplication, {
       props: propsFor(
-        "provider_show",
+        "ground_station",
         vi.fn<TestQuery>().mockRejectedValue(new Error("private upstream diagnostics")),
       ),
     });
@@ -75,57 +50,6 @@ describe("Comms canonical federated application", () => {
     expect(wrapper.text()).not.toContain("private upstream diagnostics");
     wrapper.unmount();
   });
-  it.each(["navigation", "completion"])(
-    "keeps provider creation scoped through %s",
-    async (mode) => {
-      let finish!: (value: unknown) => void;
-      const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("provider_new"));
-      const props = propsFor("provider_new", query);
-      const execute = vi.fn(
-        () =>
-          new Promise((resolve) => {
-            finish = resolve;
-          }),
-      );
-      props.bridge.execute = execute as HostBridge["execute"];
-      props.bridge.navigate = vi.fn();
-      const wrapper = mount(CommsApplication, { props });
-      await flushPromises();
-      await wrapper.get("#provider_provider_account_grant_id").setValue("grant-2");
-      expect(execute).not.toHaveBeenCalled();
-      await wrapper.get("#mission-provider-form").trigger("submit");
-      expect(execute).toHaveBeenCalledExactlyOnceWith(
-        containing({
-          actionId: "create_provider",
-          context,
-          input: {
-            provider: containing({
-              provider_account_grant_id: "grant-2",
-              provider_account_grant_version: "2",
-              provider_account_version: "4",
-            }),
-          },
-        }),
-      );
-      if (mode === "navigation")
-        await wrapper.setProps(
-          propsFor(
-            "provider_list",
-            vi.fn<TestQuery>().mockResolvedValue(surfacePayload("provider_list")),
-          ),
-        );
-      finish({
-        result: { provider_id: "saved-provider", version: 1, display_name: "Saved provider" },
-      });
-      await flushPromises();
-      if (mode === "navigation") expect(props.bridge.navigate).not.toHaveBeenCalled();
-      else
-        expect(props.bridge.navigate).toHaveBeenCalledExactlyOnceWith(
-          "/missions/mission-1/comms/providers/saved-provider",
-        );
-      wrapper.unmount();
-    },
-  );
   it.each(["transport_new", "routing_new", "ground_station_new", "ground_station_edit"] as const)(
     "rejects malformed %s form props before mount and recovers on retry",
     async (surfaceId) => {
@@ -247,16 +171,7 @@ describe("Comms canonical federated application", () => {
   it.each(surfaceIds)("queries and renders the %s surface through Phoenix", async (surfaceId) => {
     const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload(surfaceId));
     const props = propsFor(surfaceId, query);
-    const wrapper = mount(CommsApplication, {
-      props,
-      global: {
-        stubs: {
-          CommsProviderList: true,
-          CommsProviderNew: true,
-          CommsProviderShow: true,
-        },
-      },
-    });
+    const wrapper = mount(CommsApplication, { props });
 
     await flushPromises();
 
@@ -292,18 +207,13 @@ describe("Comms canonical federated application", () => {
   });
 
   it("does not supply route params to a detail query", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("provider_show"));
-    const wrapper = mount(CommsApplication, {
-      props: propsFor("provider_show", query),
-      global: {
-        stubs: { CommsProviderShow: true },
-      },
-    });
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("ground_station"));
+    const wrapper = mount(CommsApplication, { props: propsFor("ground_station", query) });
 
     await flushPromises();
 
     expect(query).toHaveBeenCalledWith({
-      queryId: "cadence.comms.provider_show",
+      queryId: "cadence.comms.ground_station",
       version: 1,
       context,
     });
@@ -629,10 +539,6 @@ function bridgeFor(query: TestQuery): HostBridge {
 
 function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
   if (surfaceId === "overview") return overviewPayload();
-
-  if (surfaceId === "provider_list") return providerListSurface();
-  if (surfaceId === "provider_new") return providerNewSurface();
-  if (surfaceId === "provider_show") return providerDetailSurface();
 
   if (surfaceId === "transport_new") {
     return {

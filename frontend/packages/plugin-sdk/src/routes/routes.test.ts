@@ -20,13 +20,13 @@ test("links are built from routes, with encoded params and admitted query keys",
       { severity: "warning,critical", query: "" },
     ),
   ).toBe("/missions/m/ops/alarms?severity=warning%2Ccritical");
-  expect(href("/provider-accounts")).toBe("/provider-accounts");
+  expect(href("/settings")).toBe("/settings");
   expect(isRouteId("/missions/:mission_id/ops/alarms")).toBe(true);
   expect(isRouteId("/missions/:mission_id/ops/nowhere")).toBe(false);
 });
 
 test("route drift is a type error", () => {
-  expectTypeOf(href("/provider-accounts")).toEqualTypeOf<Href>();
+  expectTypeOf(href("/settings")).toEqualTypeOf<Href>();
   expectTypeOf<RouteHeaderKind<"/missions/:mission_id/ops/alarms">>().toEqualTypeOf<"collection">();
   expectTypeOf<
     RouteHeaderKind<"/missions/:mission_id/ops/commands/requests/:command_request_id">

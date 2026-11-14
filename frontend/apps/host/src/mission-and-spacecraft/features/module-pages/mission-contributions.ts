@@ -121,30 +121,6 @@ export const missionModulePages = createPageRegistry<MissionPageContribution<Com
       if (!entry) throw Error("Missing compiled page contribution.");
       return entry;
     },
-    "comms.provider-list": async () => {
-      const module = await import("@cadence/communications/mission-pages");
-      const entry = module.communicationsMissionPages.find(
-        (item) => item.id === "comms.provider-list",
-      );
-      if (!entry) throw Error("Missing compiled page contribution.");
-      return entry;
-    },
-    "comms.provider-new": async () => {
-      const module = await import("@cadence/communications/mission-pages");
-      const entry = module.communicationsMissionPages.find(
-        (item) => item.id === "comms.provider-new",
-      );
-      if (!entry) throw Error("Missing compiled page contribution.");
-      return entry;
-    },
-    "comms.provider-show": async () => {
-      const module = await import("@cadence/communications/mission-pages");
-      const entry = module.communicationsMissionPages.find(
-        (item) => item.id === "comms.provider-show",
-      );
-      if (!entry) throw Error("Missing compiled page contribution.");
-      return entry;
-    },
   },
   admitMissionPages,
 );

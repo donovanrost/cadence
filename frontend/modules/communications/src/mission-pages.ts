@@ -6,7 +6,6 @@ import { missionPages as feature4 } from "./features/ground-stations/mission.con
 import { setupPages as transportSetup } from "./features/transports/setup.contribution";
 import { setupPages as routingSetup } from "./features/routing/setup.contribution";
 import { setupPages as stationSetup } from "./features/ground-stations/setup.contribution";
-import { missionPages as providers } from "./features/providers/mission.contribution";
 
 export const communicationsMissionPages = [
   ...feature0,
@@ -17,5 +16,4 @@ export const communicationsMissionPages = [
   ...transportSetup,
   ...routingSetup,
   ...stationSetup,
-  ...providers,
 ] as const;

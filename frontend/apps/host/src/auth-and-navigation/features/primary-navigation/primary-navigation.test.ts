@@ -27,8 +27,12 @@ test("capabilities select the compiled primary navigation links", () => {
     "organization_home",
     "missions",
   ]);
+  // L13 moved provider accounts to the console; administrators see the same organization links.
   const admin = { ...context, capabilities: ["organization_admin"] };
-  expect(navigation(admin, false).some((item) => item.key === "provider_accounts")).toBe(true);
+  expect(navigation(admin, false).map((item) => item.key)).toEqual([
+    "organization_home",
+    "missions",
+  ]);
 });
 test("an unavailable navigation document retains a safe home destination", async () => {
   wrapper = mount(PrimaryNavigation, { props: { context, mission: true } });

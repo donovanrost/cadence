@@ -1,6 +1,5 @@
 import "../module-pages.test-support";
 import { containing } from "../../../../test-support/matchers";
-import { registrationValues } from "../../../../modules/communications/src/features/provider-accounts/registration.validation";
 import { nativeElement, required } from "../../../../test-support/mounted-contract";
 import {
   fixture as timelineFixture,
@@ -42,21 +41,10 @@ import { hostBrowserHistory } from "./host-browser-history";
 import BrowserHost from "./BrowserHost.vue";
 import OpsModulePage from "../ops-workspace/features/module-pages/OpsModulePage.vue";
 import { spacecraftRoutingSnapshot } from "../../../../modules/communications/src/features/routing/spacecraft-routing.test-support";
-import { listFixture } from "../../../../modules/communications/src/features/provider-accounts/provider-accounts.test-support";
-import {
-  registrationModel,
-  validationReceipt,
-  receipt,
-} from "../../../../modules/communications/src/features/provider-accounts/registration.test-support";
 import MissionPage from "../mission-and-spacecraft/MissionPage.vue";
 import MissionModulePage from "../mission-and-spacecraft/features/module-pages/MissionModulePage.vue";
 import { missionSnapshots } from "../mission-and-spacecraft/features/module-pages/mission-pages.test-support";
 import { groundStationFormPayload } from "../../../../modules/communications/src/features/ground-stations/fixtures.test-support";
-import {
-  providerNewSurface,
-  providerDetailSurface,
-} from "../../../../modules/communications/src/features/providers/surface-fixtures.test-support";
-import { accountDetailFixture } from "../../../../modules/communications/src/features/provider-accounts/detail.test-support";
 import SpacecraftPage from "../mission-and-spacecraft/SpacecraftPage.vue";
 import ActivationApprovalsPage from "../capability-management/features/activation-approvals/ActivationApprovalsPage.vue";
 import { inboxFixture } from "../capability-management/features/activation-approvals/fixtures.test-support";
@@ -341,65 +329,6 @@ test("compiled Explore navigates real query and sample identities through host h
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   expect(transport.requests.every((request) => request.event === "host:context")).toBe(true);
 });
-test("provider creation and detail share the mission host port without loading a remote", async () => {
-  const state = {
-    ...snapshot("/missions/mission-1/comms/providers/new", "mission-1"),
-    mission_module_page: {
-      id: "comms.provider-new",
-      slot: "mission.page",
-      version: 1,
-      status: "ready",
-      token: "11111111-1111-4111-8111-111111111111",
-      context: { organizationId: "org-1", missionId: "mission-1" },
-      data: { model: providerNewSurface(), phase: "editing", sequence: 0 },
-    },
-  };
-  wrapper = mount(BrowserHost, {
-    props: { snapshot: state },
-  });
-  await flushHostUpdates();
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  await view().get("#mission-provider-form").trigger("submit");
-  expect(transport.requests[0]).toEqual(
-    containing({
-      event: "host:mission-page",
-      payload: containing({
-        id: "comms.provider-new",
-        token: state.mission_module_page.token,
-        path: state.path,
-        event: "create-provider",
-        input: containing({ sequence: 1 }),
-      }),
-    }),
-  );
-  await reply(0, {
-    status: "ok",
-    sequence: 1,
-    data: { result: { provider_id: "provider-1", version: 1, display_name: "Created" } },
-  });
-  const detail = {
-    ...snapshot("/missions/mission-1/comms/providers/provider-1", "mission-1"),
-    mission_module_page: {
-      ...state.mission_module_page,
-      id: "comms.provider-show",
-      token: "22222222-2222-4222-8222-222222222222",
-      context: { ...state.mission_module_page.context, resourceId: "provider-1" },
-      data: { model: providerDetailSurface(), phase: "editing", sequence: 0 },
-    },
-  };
-  expect(requestedPath(1)).toBe(detail.path);
-  await reply(1, detail);
-  await view().get("#host-action-validate-provider-button").trigger("click");
-  expect(required(transport.requests[2]).payload).toEqual({
-    id: "comms.provider-show",
-    token: detail.mission_module_page.token,
-    path: detail.path,
-    event: "validate-provider",
-    input: { provider_id: "provider-1", expected_provider_version: 1, sequence: 1 },
-  });
-  await reply(2, { status: "unknown", sequence: 1 });
-  expect(view().get("#host-action-sync-provider-button").attributes("disabled")).toBeDefined();
-});
 test("mission setup uses page-bound host actions and only confirmed saves navigate", async () => {
   const state = setupSnapshot();
   wrapper = mount(BrowserHost, {
@@ -462,142 +391,6 @@ test("pending navigation rejects old mission actions and late save replies canno
   });
   expect(transport.requests).toHaveLength(3);
   expect(onSettings()).toBe(true);
-});
-test("organization directory composes Communications and recovers without a federated surface", async () => {
-  const base = snapshot("/provider-accounts");
-  const contribution = {
-    id: "comms.provider-account-directory",
-    slot: "organization.page",
-    version: 1,
-    context: { organizationId: "org-1" },
-    status: "ready",
-    data: listFixture(),
-  };
-  const state = { ...base, organization_module_page: { ...contribution, status: "unavailable" } };
-  wrapper = mount(BrowserHost, {
-    props: { snapshot: state },
-  });
-  await flushHostUpdates();
-  expect(view().find("#organization-module-unavailable").exists()).toBe(true);
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  await view().get("#organization-module-retry").trigger("click");
-  expect(required(transport.requests[0]).payload).toEqual({ path: "/provider-accounts" });
-  await reply(0, { ...state, organization_module_page: contribution });
-  expect(view().find("#provider-account-account-1").exists()).toBe(true);
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-});
-test("registration uses page-bound host actions and navigates only after a confirmed feature receipt", async () => {
-  const base = snapshot("/provider-accounts/new");
-  const token = "11111111-1111-4111-8111-111111111111";
-  const state = {
-    ...base,
-    organization_module_page: {
-      id: "comms.provider-account-registration",
-      slot: "organization.page",
-      version: 1,
-      context: { organizationId: "org-1" },
-      status: "ready",
-      token,
-      data: registrationModel(),
-    },
-  };
-  wrapper = mount(BrowserHost, {
-    props: { snapshot: state },
-  });
-  await flushHostUpdates();
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  await view().get("#account-display_name").setValue("Host draft");
-  const validation = required(transport.requests[0]);
-  expect(validation.event).toBe("host:organization-page");
-  expect(validation.payload).toEqual(
-    containing({
-      id: state.organization_module_page.id,
-      token,
-      path: state.path,
-      event: "validate",
-    }),
-  );
-  expect(required(transport.requests[0]).payload.input).toEqual({
-    provider_account: {
-      ...registrationValues(state.organization_module_page.data.form),
-      display_name: "Host draft",
-    },
-  });
-  await reply(0, {
-    status: "ok",
-    data: validationReceipt({
-      ...registrationValues(state.organization_module_page.data.form),
-      display_name: "Host draft",
-    }),
-  });
-  await view().get("#registration-form").trigger("submit");
-  expect(required(transport.requests[1]).payload.event).toBe("save");
-  await reply(1, { status: "ok", data: receipt({ navigate: "/provider-accounts/account-1" }) });
-  expect(transport.requests[2]).toEqual(
-    containing({
-      event: "host:context",
-      payload: { path: "/provider-accounts/account-1" },
-    }),
-  );
-  await reply(2, snapshot("/provider-accounts/account-1"));
-});
-test("account detail binds refresh and effect sequence to its route and contains a foreign account DTO", async () => {
-  const base = snapshot("/provider-accounts/account-1"),
-    model = accountDetailFixture();
-  const token = "11111111-1111-4111-8111-111111111111";
-  const state = {
-    ...base,
-    organization_module_page: {
-      id: "comms.provider-account-detail",
-      slot: "organization.page",
-      version: 1,
-      status: "ready",
-      token,
-      context: { organizationId: "org-1", resourceId: "account-1" },
-      data: { model, sequence: 4, locked: false },
-    },
-  };
-  wrapper = mount(BrowserHost, {
-    props: { snapshot: state },
-  });
-  await flushHostUpdates();
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  await view().get("#grant-grant_reason").setValue("Preserved");
-  await view().get("#refresh-provider-account").trigger("click");
-  expect(transport.requests[0]).toEqual(
-    containing({
-      event: "host:organization-page",
-      payload: {
-        id: state.organization_module_page.id,
-        token,
-        path: state.path,
-        event: "refresh",
-        input: {},
-      },
-    }),
-  );
-  await reply(0, { status: "ok", data: model });
-  expect(view().get("#grant-grant_reason").element).toHaveProperty("value", "Preserved");
-  await view().get("#host-action-validate-account").trigger("click");
-  expect(required(transport.requests[1]).payload.input).toEqual(
-    containing({
-      provider_account_id: "account-1",
-      expected_credential_version: 2,
-      sequence: 5,
-    }),
-  );
-  await reply(1, { status: "ok", data: receipt({ patch: model }) });
-  await view().setProps({
-    snapshot: {
-      ...state,
-      organization_module_page: {
-        ...state.organization_module_page,
-        context: { organizationId: "org-1", resourceId: "foreign" },
-      },
-    },
-  });
-  await flushHostUpdates();
-  expect(view().find("#organization-module-unavailable").exists()).toBe(true);
 });
 test("spacecraft routing composes Communications without mounting a federated surface", async () => {
   const base = snapshot("/missions/mission-1/spacecraft/spacecraft-1/routing", "mission-1");
@@ -1351,7 +1144,6 @@ const routeComponents = {
   settings: "SettingsPage",
   administration: "AdministrationPage",
   mission: "MissionPage",
-  organization_module: "OrganizationModulePage",
   spacecraft: "SpacecraftPage",
   spacecraft_module: "SpacecraftModulePage",
   catalog: "CatalogPage",

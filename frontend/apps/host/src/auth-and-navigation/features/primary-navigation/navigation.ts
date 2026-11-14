@@ -1,5 +1,4 @@
 import type { readNavigationContext } from "./contracts";
-import { canAdminister } from "../../shared/navigation";
 export function navigation(
   context: NonNullable<ReturnType<typeof readNavigationContext>>,
   mission: boolean,
@@ -17,17 +16,6 @@ export function navigation(
     return [
       item("organization_home", "Home", "/", "hero-home"),
       item("missions", "Missions", "/missions", "hero-rocket-launch"),
-      ...(canAdminister(context)
-        ? [
-            item(
-              "provider_accounts",
-              "Provider Accounts",
-              "/provider-accounts",
-              "hero-globe-alt",
-              "provider-accounts-nav-link",
-            ),
-          ]
-        : []),
     ];
   }
   const root = `/missions/${encodeURIComponent(context.mission.mission_id)}`;
