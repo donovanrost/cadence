@@ -11,17 +11,6 @@ import OpsContactRequirementNew from "./OpsContactRequirementNew.vue";
 import OpsContactRequirementShow from "./OpsContactRequirementShow.vue";
 import OpsContactRequirementTemplate from "./OpsContactRequirementTemplate.vue";
 import OpsContactSchedule from "./OpsContactSchedule.vue";
-import OpsDashboardActivitySurface from "./OpsDashboardActivitySurface.vue";
-import OpsDashboardDiagnostics from "./OpsDashboardDiagnostics.vue";
-import OpsDashboardDirectory from "./OpsDashboardDirectory.vue";
-import OpsDashboardLibrary from "./OpsDashboardLibrary.vue";
-import OpsDashboardNew from "./OpsDashboardNew.vue";
-import OpsDashboardPlaylistPresent from "./OpsDashboardPlaylistPresent.vue";
-import OpsDashboardPlaylists from "./OpsDashboardPlaylists.vue";
-import OpsDashboardSettings from "./OpsDashboardSettings.vue";
-import OpsDashboardShare from "./OpsDashboardShare.vue";
-import OpsDashboardShow from "./OpsDashboardShow.vue";
-import OpsDashboardSnapshot from "./OpsDashboardSnapshot.vue";
 import OpsDataOperations from "./OpsDataOperations.vue";
 import OpsDataOperationsManage from "./OpsDataOperationsManage.vue";
 import OpsDataSourceRegistration from "./OpsDataSourceRegistration.vue";
@@ -50,17 +39,6 @@ export const OPS_COMPONENTS: Record<string, Component> = {
   OpsContactRequirementShow,
   OpsContactRequirementTemplate,
   OpsContactSchedule,
-  OpsDashboardActivitySurface,
-  OpsDashboardDiagnostics,
-  OpsDashboardDirectory,
-  OpsDashboardLibrary,
-  OpsDashboardNew,
-  OpsDashboardPlaylistPresent,
-  OpsDashboardPlaylists,
-  OpsDashboardSettings,
-  OpsDashboardShare,
-  OpsDashboardShow,
-  OpsDashboardSnapshot,
   OpsDataOperations,
   OpsDataOperationsManage,
   OpsDataSourceRegistration,
