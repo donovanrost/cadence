@@ -1334,6 +1334,7 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
   - `contact_not_cancelable` when ended or canceled: "Not canceled: the contact has already ended."
   - `contact_not_live` before AOS: "Not ended: the contact hasn't started. Cancel it instead."
   - `contact_not_live` after LOS: "Not ended: the contact has already ended."
+  - `contact_not_live` with state canceled: "Not ended: the contact was canceled."
   - `no_scheduled_contact`: "Not canceled: this pass has no contact in Cadence."
   - `pass_not_found`: "Not canceled: the pass wasn't found."
   - Others: the server's message.
@@ -1368,3 +1369,6 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
     Without a reason: "…couldn't book this pass."
   - Timeline: "EARENDIL-007 · PUQ 13:04Z pass canceled by Cadence: Northlight couldn't book it". The tag is
     `CANCELED` (off), as for an operator's cancel (U55).
+- **provider_canceled** (api's final shape: the reservation was canceled at the provider): history "Canceled by
+  Cadence at 12:58Z: Northlight canceled this pass (“…”)."; timeline "…pass canceled by Cadence: Northlight
+  canceled it". An unknown cause reads "Canceled by Cadence at 12:58Z." with nothing invented (U20).
