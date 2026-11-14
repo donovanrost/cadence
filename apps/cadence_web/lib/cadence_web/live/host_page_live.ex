@@ -653,100 +653,6 @@ defmodule CadenceWeb.HostPageLive do
     end
   end
 
-  def handle_event(
-        "host:ops-page",
-        %{
-          "path" => path,
-          "id" => "dashboards.execution-diagnostics",
-          "event" => event,
-          "input" => input
-        } = params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsDiagnosticsPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsDiagnosticsPage.matches?(socket, params) do
-      {result, socket} = CadenceWeb.OpsDiagnosticsPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{"path" => path, "id" => "dashboards.playlists", "event" => event, "input" => input} =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsPlaylistPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsPlaylistPage.matches?(socket, params) do
-      {result, socket} = CadenceWeb.OpsPlaylistPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{"path" => path, "id" => "dashboards.library", "event" => event, "input" => input} =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsLibraryPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsLibraryPage.matches?(socket, params) do
-      {result, socket} = CadenceWeb.OpsLibraryPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{"path" => path, "id" => "dashboards.settings", "event" => event, "input" => input} =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsSettingsPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsSettingsPage.matches?(socket, params) do
-      {result, socket} = CadenceWeb.OpsSettingsPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
-        "host:ops-page",
-        %{"path" => path, "id" => "dashboards.activity", "event" => event, "input" => input} =
-          params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsActivityPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsActivityPage.matches?(socket, params) do
-      {result, socket} = CadenceWeb.OpsActivityPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
   def handle_event("host:manage", %{"path" => path, "event" => event} = params, socket)
       when event in ["install", "disable", "uninstall"] do
     # Bind every mutation to its explicit resource path and reauthorize it. A stale
@@ -1162,8 +1068,6 @@ defmodule CadenceWeb.HostPageLive do
         |> ProviderAccountDetailPage.prepare(info, path)
         |> CommunicationsSetupPage.prepare(info, path)
         |> CadenceWeb.MissionProviderPage.prepare(info, path)
-        |> CadenceWeb.OpsActivityPage.prepare(info, path)
-        |> CadenceWeb.OpsDiagnosticsPage.prepare(info, path)
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)
         |> CadenceWeb.OpsCommandPage.prepare(info, path)
         |> CadenceWeb.OpsCommandHistoryPage.prepare(info, path)
@@ -1172,10 +1076,6 @@ defmodule CadenceWeb.HostPageLive do
         |> CadenceWeb.OpsCommandAuthoringPage.prepare(info, path)
         |> CadenceWeb.OpsCommandStagesPage.prepare(info, path)
         |> CadenceWeb.OpsCommandWorkspacePage.prepare(info, path)
-        |> CadenceWeb.OpsSettingsPage.prepare(info, path)
-        |> CadenceWeb.OpsSharedViewPage.prepare(info, path)
-        |> CadenceWeb.OpsLibraryPage.prepare(info, path)
-        |> CadenceWeb.OpsPlaylistPage.prepare(info, path)
         |> CadenceWeb.OpsAlarmConditionsPage.prepare(info, path)
         |> CadenceWeb.OpsFleetDirectoryPage.prepare(info, path)
         |> CadenceWeb.OpsFleetWorkflowPage.prepare(info, path)

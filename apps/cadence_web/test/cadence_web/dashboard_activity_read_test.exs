@@ -1,6 +1,9 @@
-defmodule CadenceWeb.OpsActivityPageTest do
+defmodule CadenceWeb.DashboardActivityReadTest do
+  @moduledoc """
+  `Reads.Dashboards.Activity`: history, restore and paging. Moved from the legacy activity page's
+  test when L8b deleted the page; the console's D17 reads it (`console/dashboard_settings_api_test`).
+  """
   use CadenceWeb.ConnCase, async: false
-  import Phoenix.LiveViewTest
   alias Cadence.Auth.Scope
   alias Cadence.Dashboards.{CurrentVersions, DocumentCodec, Documents}
   alias Cadence.Reads.Dashboards.Activity
@@ -10,10 +13,6 @@ defmodule CadenceWeb.OpsActivityPageTest do
              "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
              __DIR__
            )
-  @renderer Path.expand(
-              "../../../../frontend/modules/dashboards-and-exploration/src/features/activity/producer-render-check.mjs",
-              __DIR__
-            )
 
   setup do
     org = TestFixtures.persist_org!()
@@ -44,15 +43,11 @@ defmodule CadenceWeb.OpsActivityPageTest do
       user: user,
       mission: mission,
       scope: scope,
-      document: document,
-      conn: TestFixtures.member_conn(user),
-      path:
-        "/missions/#{mission.mission_id}/ops/dashboards/#{document.dashboard_id}/activity?version=1"
+      document: document
     }
   end
 
-  test "real producer metadata renders in the feature without raw documents or event payloads",
-       c do
+  test "history reads producer metadata without raw documents or event payloads", c do
     {:ok, first} = read(c)
     assert first.document_version == 1
     assert first.selected.widget_count == length(c.document.placements)
@@ -81,16 +76,6 @@ defmodule CadenceWeb.OpsActivityPageTest do
 
     {:ok, archived} = read(c)
     assert archived.archived
-
-    node =
-      System.find_executable("node") || flunk("Node is required for activity DTO verification")
-
-    {output, status} =
-      System.cmd(node, ["--no-warnings", @renderer, Jason.encode!([first, published, archived])],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
   end
 
   test "restore appends an attributed snapshot that becomes current and keeps old content", c do
@@ -186,48 +171,8 @@ defmodule CadenceWeb.OpsActivityPageTest do
     end
   end
 
-  test "host binds token and sequence, and history accepts no writes", c do
-    {:ok, view, _} = live(c.conn, c.path)
-    page = page(view)
-    assert page["id"] == "dashboards.activity"
-    assert page["status"] == "ready"
-    reload = %{"sequence" => 1, "command" => %{}}
-
-    assert action(view, c.path, %{page | "token" => "wrong"}, "reload_activity", reload)["ok"] ==
-             false
-
-    for event <- ["restore_version", "publish_version"] do
-      input = %{"sequence" => 1, "command" => command(page["data"]["model"])}
-      assert action(view, c.path, page, event, input)["snapshot"]["status"] == "rejected"
-    end
-
-    assert action(view, c.path, page, "reload_activity", reload)["snapshot"]["status"] == "ok"
-
-    assert action(view, c.path, page, "reload_activity", reload)["snapshot"]["status"] ==
-             "rejected"
-
-    :ok = Cadence.Auth.revoke_user_session(get_session(c.conn, :user_session_token))
-
-    render_hook(view, "host:ops-page", %{
-      "id" => page["id"],
-      "token" => page["token"],
-      "path" => c.path,
-      "event" => "reload_activity",
-      "input" => %{"sequence" => 2, "command" => %{}}
-    })
-
-    assert_redirect(view, "/sign-in")
-  end
-
   defp read(c, params \\ %{"version" => "1"}),
     do: Activity.load(c.scope, c.mission.mission_id, c.document.dashboard_id, params)
-
-  defp command(%{"selected" => selected} = model),
-    do: %{
-      "version" => selected["version"],
-      "expected_version" => model["document_version"],
-      "expected_revision" => model["revision"]
-    }
 
   defp restore(c, version, expected \\ nil) do
     expected = expected || fetch_version!(c)
@@ -245,21 +190,5 @@ defmodule CadenceWeb.OpsActivityPageTest do
   defp fetch_version!(c) do
     {:ok, current} = read(c)
     current.document_version
-  end
-
-  defp page(view),
-    do: LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
-
-  defp action(view, path, page, event, input) do
-    render_hook(view, "host:ops-page", %{
-      "id" => page["id"],
-      "token" => page["token"],
-      "path" => path,
-      "event" => event,
-      "input" => input
-    })
-
-    assert_reply(view, reply)
-    reply |> Jason.encode!() |> Jason.decode!()
   end
 end

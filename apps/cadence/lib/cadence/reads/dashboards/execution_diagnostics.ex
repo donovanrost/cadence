@@ -25,17 +25,6 @@ defmodule Cadence.Reads.Dashboards.ExecutionDiagnostics do
   @dto_version 2
   def dto_version, do: @dto_version
 
-  @doc "Reauthorizes the published resource without resolving any sources or loading evidence."
-  def current_version(scope, mission, dashboard) do
-    with {:ok, document} <- authorized_document(scope, mission, dashboard) do
-      {:ok, Document.version(document)}
-    end
-  rescue
-    _ -> {:error, :unavailable}
-  catch
-    _, _ -> {:error, :unavailable}
-  end
-
   def load(scope, mission, dashboard, opts \\ [])
 
   def load(%Scope{organization_id: org} = scope, mission, dashboard, opts) when is_list(opts) do
@@ -78,8 +67,6 @@ defmodule Cadence.Reads.Dashboards.ExecutionDiagnostics do
       _ -> {:error, :unavailable}
     end
   end
-
-  defp authorized_document(_, _, _), do: {:error, :unavailable}
 
   defp authorize(%Scope{actor_kind: :user, user: %{user_id: user}} = scope, mission, dashboard) do
     resource = %{organization_id: scope.organization_id, mission_id: mission}

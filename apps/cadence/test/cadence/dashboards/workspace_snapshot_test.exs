@@ -19,33 +19,17 @@ defmodule Cadence.Dashboards.WorkspaceSnapshotTest do
 
   alias Cadence.Reads.Dashboards.{WorkspaceFrame, WorkspaceSnapshot}
 
-  test "projects all registered widget kinds and crosses the actual TypeScript boundary" do
-    models =
-      for type <- WidgetRegistry.list_types() do
-        {document, request, result} = fixture(type.widget_type_id)
-        assert {:ok, model} = WorkspaceSnapshot.build(document, result, request, false)
+  # L8b: the legacy workspace feature's producer contract check went with features/workspace.
+  test "projects all registered widget kinds" do
+    for type <- WidgetRegistry.list_types() do
+      {document, request, result} = fixture(type.widget_type_id)
+      assert {:ok, model} = WorkspaceSnapshot.build(document, result, request, false)
 
-        assert [%{status: "ready", frames: [%{fields: [_, _]}]}] =
-                 model.placements
+      assert [%{status: "ready", frames: [%{fields: [_, _]}]}] =
+               model.placements
 
-        refute Jason.encode!(model) =~ "secret"
-        model
-      end
-
-    script =
-      Path.expand(
-        "../../../../../frontend/modules/dashboards-and-exploration/src/features/workspace/producer-contract-check.mjs",
-        __DIR__
-      )
-
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               ["--no-warnings", script, Jason.encode!(models)],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "Workspace producer/consumer contract passed"
+      refute Jason.encode!(model) =~ "secret"
+    end
   end
 
   test "unavailable definitions and malformed frame buckets never erase placements" do
@@ -82,34 +66,17 @@ defmodule Cadence.Dashboards.WorkspaceSnapshotTest do
              )
   end
 
-  test "authored chart styles cross the actual producer and presentation boundary" do
-    models =
-      for legend <- ~w(auto always hidden), width <- ~w(thin normal bold) do
-        {document, request, result} = fixture("cadence.time_series")
-        [placement] = document.placements
-        options = %{legend_mode: legend, line_width: width, fill_opacity: 30}
-        placement = %{placement | widget_def: %{placement.widget_def | options: options}}
-        document = %{document | placements: [placement]}
-        assert {:ok, model} = WorkspaceSnapshot.build(document, result, request, true)
-        assert hd(model.placements).widget.options.legend_mode == legend
-        assert hd(model.placements).widget.options.line_width == width
-        model
-      end
-
-    script =
-      Path.expand(
-        "../../../../../frontend/modules/dashboards-and-exploration/src/features/workspace/producer-contract-check.mjs",
-        __DIR__
-      )
-
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               ["--no-warnings", script, Jason.encode!(models)],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "contract passed"
+  test "authored chart styles reach the snapshot's widget options" do
+    for legend <- ~w(auto always hidden), width <- ~w(thin normal bold) do
+      {document, request, result} = fixture("cadence.time_series")
+      [placement] = document.placements
+      options = %{legend_mode: legend, line_width: width, fill_opacity: 30}
+      placement = %{placement | widget_def: %{placement.widget_def | options: options}}
+      document = %{document | placements: [placement]}
+      assert {:ok, model} = WorkspaceSnapshot.build(document, result, request, true)
+      assert hd(model.placements).widget.options.legend_mode == legend
+      assert hd(model.placements).widget.options.line_width == width
+    end
   end
 
   test "frame projection enforces alignment, types, bounds and annotation geometry" do

@@ -1,6 +1,9 @@
 defmodule CadenceWeb.DashboardSharedViewsTest do
+  @moduledoc """
+  `Reads.Dashboards.SharedViews`. L8b removed the legacy shared-view page's host test and the
+  sharing feature's producer check; the console's D20 reads it (`console/dashboard_sharing_api_test`).
+  """
   use CadenceWeb.ConnCase, async: false
-  import Phoenix.LiveViewTest
   alias Cadence.Auth.Scope
 
   alias Cadence.Dashboards.{
@@ -19,10 +22,6 @@ defmodule CadenceWeb.DashboardSharedViewsTest do
 
   @fixture Path.expand(
              "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
-             __DIR__
-           )
-  @checker Path.expand(
-             "../../../../frontend/modules/dashboards-and-exploration/src/features/sharing/producer-contract-check.mjs",
              __DIR__
            )
   setup do
@@ -179,16 +178,15 @@ defmodule CadenceWeb.DashboardSharedViewsTest do
     refute_received {:shared_source, _, _, _, _}
   end
 
-  test "persisted producers render through the actual Vue contribution, including runtime snapshots",
-       c do
+  test "persisted shares and snapshots load, including runtime and frozen-window snapshots", c do
     {:ok, share} =
       Management.create_share(c.org, c.mission, c.document.dashboard_id, %{},
         data_visibility: "definition_only"
       )
 
-    {:ok, unpublished} = load(c, :share, share.dashboard_share_id)
+    {:ok, _unpublished} = load(c, :share, share.dashboard_share_id)
     {:ok, _} = Documents.publish(c.org, c.mission, c.document.dashboard_id, 1, [])
-    {:ok, shared} = load(c, :share, share.dashboard_share_id)
+    {:ok, _shared} = load(c, :share, share.dashboard_share_id)
 
     {:ok, snapshot} =
       Management.create_snapshot(c.org, c.mission, c.document, %{"spacecraft_id" => "sc_001"}, [])
@@ -209,19 +207,6 @@ defmodule CadenceWeb.DashboardSharedViewsTest do
 
     {:ok, fixed_view} = load(c, :snapshot, fixed.dashboard_snapshot_id)
     assert fixed_view.data_semantics == "frozen_time_window"
-
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               [
-                 "--no-warnings",
-                 @checker,
-                 Jason.encode!([unpublished, shared, runtime, fixed_view])
-               ],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "shared view contract passed"
   end
 
   test "invalid scopes, expired/revoked shares and forged snapshot identity return no data", c do
@@ -344,31 +329,5 @@ defmodule CadenceWeb.DashboardSharedViewsTest do
     assert after_update.canvas.document_version == 2
   end
 
-  test "host refresh reauthorizes and removes revoked shares while query identities cannot redirect reads",
-       c do
-    {:ok, share} =
-      Management.create_share(c.org, c.mission, c.document.dashboard_id, %{},
-        data_visibility: "definition_only"
-      )
-
-    path = "/missions/#{c.mission}/ops/dashboard-shares/#{share.dashboard_share_id}"
-    {:ok, view, _} = live(c.conn, path <> "?share_id=foreign&mission_id=foreign&realm=simulation")
-    assert page(view)["status"] == "ready"
-    assert page(view)["context"]["resourceId"] == share.dashboard_share_id
-    assert page(view)["data"]["runtime_context"] == %{}
-    {:ok, _} = Management.revoke_share(c.org, c.mission, share.dashboard_share_id)
-    render_hook(view, "host:context", %{"path" => path})
-    assert_reply(view, %{ok: true})
-    assert page(view)["status"] == "unavailable"
-    refute Map.has_key?(page(view), "data")
-    :ok = Cadence.Auth.revoke_user_session(get_session(c.conn, :user_session_token))
-    render_hook(view, "host:context", %{"path" => path})
-    assert_redirect(view, "/sign-in")
-    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), path)
-  end
-
   defp load(c, kind, id), do: SharedViews.load(c.scope, c.mission, kind, id, c.opts)
-
-  defp page(view),
-    do: LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
 end

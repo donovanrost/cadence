@@ -16,11 +16,6 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
   alias Cadence.Telemetry.{RuntimeHealth, Sample}
   alias CadenceWeb.TestFixtures
 
-  @checker Path.expand(
-             "../../../../frontend/modules/dashboards-and-exploration/src/features/execution-diagnostics/producer-contract-check.mjs",
-             __DIR__
-           )
-
   @fixture Path.expand(
              "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
              __DIR__
@@ -151,7 +146,6 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
            ).status == "miss"
 
     assert {:ok, second} = load(c)
-    assert_consumer_accepts([first, second])
     assert Enum.any?(collection(second, "cache").rows, &(&1.status == "hit"))
     assert byte_size(Jason.encode!(second)) < 1_048_576
 
@@ -251,7 +245,6 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
     end
 
     refute Jason.encode!(model) =~ "private-decision-secret"
-    assert_consumer_accepts([model])
     refute_received {:diagnostic_source, _, _, _}
   end
 
@@ -275,7 +268,6 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
 
     assert %{source: nil, state: "unavailable", rows: []} = collection(model, "invalidation")
     assert collection(model, "plan").state == "ready"
-    assert_consumer_accepts([model])
   end
 
   test "populated local fallback excludes foreign and missing scope without exposing raw decisions",
@@ -311,22 +303,10 @@ defmodule CadenceWeb.DashboardExecutionDiagnosticsTest do
     assert %{source: "process_local", rows: [row]} = collection(model, "invalidation")
     assert Enum.find(row.details, &(&1.key == "invalidation_event_id")).value == "local-event"
     refute Jason.encode!(model) =~ "local-private-secret"
-    assert_consumer_accepts([model])
   end
 
   defp load(c),
     do: ExecutionDiagnostics.load(c.scope, c.mission.mission_id, c.document.dashboard_id, c.opts)
-
-  defp assert_consumer_accepts(models) do
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               ["--no-warnings", @checker, Jason.encode!(models)],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "contract passed"
-  end
 
   defp publish(c) do
     assert {:ok, _} =

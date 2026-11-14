@@ -322,9 +322,8 @@ defmodule CadenceWeb.DashboardSettingsTest do
     assert Document.version(c.document) == 1
   end
 
-  test "bounded metadata pages round-trip through the real frontend consumer", c do
-    empty = read(c)
-
+  # L8b: the legacy settings feature's producer check (the frontend consumer) went with the page.
+  test "bounded metadata pages, expiry and archive read back", c do
     populate_metadata(c)
 
     {:ok, other} =
@@ -374,29 +373,7 @@ defmodule CadenceWeb.DashboardSettingsTest do
              "expired"
 
     assert {:ok, _} = execute(c, "archive_dashboard", %{})
-    archived = read(c)
-
-    renderer =
-      Path.expand(
-        "../../../../frontend/modules/dashboards-and-exploration/src/features/settings/producer-contract-check.mjs",
-        __DIR__
-      )
-
-    node =
-      System.find_executable("node") || flunk("Node is required for settings producer contracts")
-
-    {output, status} =
-      System.cmd(
-        node,
-        [
-          "--no-warnings",
-          renderer,
-          Jason.encode!([empty, first, second, expired_page, archived])
-        ],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
+    assert read(c).lifecycle == "archived"
   end
 
   test "oversized deployment metadata is unavailable rather than an unbounded payload", c do
