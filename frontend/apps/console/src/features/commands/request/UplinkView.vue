@@ -26,6 +26,7 @@ import {
 } from "../groups/words.ts";
 import { refusalLine, releaseLogContext, windowLine } from "../groups/release.ts";
 import { ownValuesText } from "./ownValues.ts";
+import { useCatalogArgs } from "./useCatalogArgs.ts";
 import AbortPanel from "./AbortPanel.vue";
 import ContactRelease from "./ContactRelease.vue";
 import NeedsYouPanel from "./NeedsYouPanel.vue";
@@ -82,10 +83,14 @@ const refusalOf = (t: Group["targets"][number]) => {
   const r = t.members.find((m) => m.release_refusal)?.release_refusal;
   return r ? refusalLine(r, { spacecraft: t.name }) : null;
 };
-/** ux C2: the commands this target sends with its own values, and those values. */
+/** ux C2: the commands this target sends with its own values, worded as Approve words them. */
+const argsOf = useCatalogArgs(
+  computed(() => props.missionId),
+  computed(() => props.group),
+);
 const ownOf = (t: Group["targets"][number]) =>
   props.group.commands.flatMap((c) => {
-    const values = ownValuesText(c, t.spacecraft_id);
+    const values = ownValuesText(c, t.spacecraft_id, argsOf(c.command_id));
     return values === null ? [] : [{ position: c.position, name: c.name ?? c.command_id, values }];
   });
 const release = computed(() =>

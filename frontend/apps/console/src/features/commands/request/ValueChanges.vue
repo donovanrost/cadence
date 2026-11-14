@@ -4,9 +4,9 @@ import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApCallout } from "@/ui";
 import type { Group } from "../groups/show.ts";
-import { fetchCommand, type CommandArgument } from "../api.ts";
 import { argChanges, fetchBrief, overwriteCallouts, type Brief } from "./brief.ts";
 import OwnValuesTable from "./OwnValuesTable.vue";
+import { useCatalogArgs } from "./useCatalogArgs.ts";
 import { overridesOf, readoutLines } from "./ownValues.ts";
 
 /**
@@ -48,26 +48,10 @@ const briefs = useRemoteQuery(key, async (_k, signal) => {
 });
 const nameOf = (id: string) => props.group.targets.find((t) => t.spacecraft_id === id)?.name ?? id;
 /** ux C2: targets with their own values; units and ranges come from the catalog's command. */
-const withOwn = computed(() => withArgs.value.filter((c) => (c.per_target ?? []).length > 0));
-const catalog = useRemoteQuery(
-  computed(() => {
-    const ids = [...new Set(withOwn.value.map((c) => c.command_id))];
-    return ids.length ? { m: scope.value.mission.id, ids } : null;
-  }),
-  async (k, signal) => {
-    const reads = await Promise.all(k.ids.map((id) => fetchCommand(k.m, id, signal)));
-    const map = new Map<string, readonly CommandArgument[]>();
-    reads.forEach((r, i) => {
-      const id = k.ids[i];
-      if (r.ok && id && r.value.command) map.set(id, r.value.command.arguments);
-    });
-    return { ok: true as const, value: map };
-  },
+const argsOf = useCatalogArgs(
+  computed(() => scope.value.mission.id),
+  computed(() => props.group),
 );
-const argsOf = (commandId: string): readonly CommandArgument[] => {
-  const s = catalog.state.value;
-  return s.status === "ready" ? (s.value.get(commandId) ?? []) : [];
-};
 const rows = computed(() => {
   const s = briefs.state.value;
   if (s.status !== "ready") return [];

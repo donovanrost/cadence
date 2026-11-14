@@ -173,8 +173,37 @@ export function radiateMeta(group: Pick<Group, "commands" | "target_count">): st
     : null;
 }
 
-/** Uplink & verify: a target's own values on its command line (mono, as on Approve). */
-export function ownValuesText(command: Command, spacecraftId: string): string | null {
+/** A value as an operator reads it: strings unquoted, numbers and the rest as sent. */
+const shown = (raw: string) => {
+  if (!raw.startsWith('"')) return raw;
+  try {
+    const v: unknown = JSON.parse(raw);
+    return typeof v === "string" ? v : raw;
+  } catch {
+    return raw;
+  }
+};
+
+/**
+ * Uplink & verify (ux C2): a target's own values as Approve shows them, `setpoint 9.5 °C · mode 1`,
+ * in catalog order (then any the catalog doesn't list), with units; null when it has none.
+ */
+export function ownValuesText(
+  command: Command,
+  spacecraftId: string,
+  args: readonly Readonly<{ name: string; unit: string | null }>[] = [],
+): string | null {
   const p = (command.per_target ?? []).find((x) => x.spacecraft_id === spacecraftId);
-  return p ? p.argument_values_json : null;
+  const values = p ? rawEntries(p.argument_values_json) : null;
+  if (!values) return null;
+  const names = [
+    ...args.map((a) => a.name).filter((n) => values.has(n)),
+    ...[...values.keys()].filter((n) => !args.some((a) => a.name === n)),
+  ];
+  return names
+    .map((n) => {
+      const unit = args.find((a) => a.name === n)?.unit;
+      return `${n} ${shown(values.get(n) ?? "")}${unit ? ` ${unit}` : ""}`;
+    })
+    .join(" · ");
 }

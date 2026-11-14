@@ -105,8 +105,21 @@ describe("targets with their own values (ux C2)", () => {
         nameOf,
       ),
     ).toEqual(["setpoint: 5.0 → 8.5 °C · EARENDIL-1"]);
-    expect(ownValuesText(c1, "sc-1")).toBe('{"setpoint":8.5}');
+    expect(ownValuesText(c1, "sc-1")).toBe("setpoint 8.5");
     expect(ownValuesText(c1, "sc-9")).toBeNull();
+  });
+
+  it("Uplink words own values as Approve does: catalog order, units, strings unquoted", () => {
+    const g = groupWith(2, [
+      { spacecraft_id: "sc-1", argument_values_json: '{"mode":"low","setpoint":9.5,"extra":3}' },
+    ]);
+    const c = g.commands[0];
+    if (!c) throw new Error("command");
+    const args = [
+      { name: "setpoint", unit: "°C" },
+      { name: "mode", unit: null },
+    ];
+    expect(ownValuesText(c, "sc-1", args)).toBe("setpoint 9.5 °C · mode low · extra 3");
   });
 
   it("no overrides: the line as today, and no A3 addition", () => {
