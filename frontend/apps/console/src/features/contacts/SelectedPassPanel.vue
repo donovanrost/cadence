@@ -35,6 +35,7 @@ import {
 import { targetOfAttention } from "./attention.ts";
 import SettlementBlock from "./SettlementBlock.vue";
 import ContactStartBlock from "./ContactStartBlock.vue";
+import IngressBlock from "./IngressBlock.vue";
 import { passAttentions, passAttentionTag } from "./passAttention.ts";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
@@ -67,6 +68,8 @@ const items = computed(() => (props.pass ? passAttentions(props.pass) : []));
 const itemOf = (source: (typeof attentionSources)[number]) =>
   items.value.find((a) => a.source === source) ?? null;
 const startItem = computed(() => itemOf("contact_start"));
+/** U47: a pass can have both a backlog and lost frames. */
+const ingressItems = computed(() => items.value.filter((a) => a.source === "ingress_backpressure"));
 const attentionTag = computed(() => (props.pass ? passAttentionTag(props.pass) : null));
 const resolutionItem = computed(() => itemOf("pass_resolution"));
 const liveChange = computed(() => {
@@ -195,6 +198,14 @@ const countdown = computed(() => {
         :mission-id="missionId"
         :attention="startItem"
         :now="now"
+        @changed="$emit('changed')"
+      />
+      <!-- U47: this pass's telemetry backing up, or frames lost. -->
+      <IngressBlock
+        v-for="a in ingressItems"
+        :key="a.id"
+        :mission-id="missionId"
+        :attention="a"
         @changed="$emit('changed')"
       />
       <SettlementBlock :mission-id="missionId" :pass-id="pass.id" />

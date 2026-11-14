@@ -45,3 +45,4 @@ export {
   startTitle,
   type StartReason,
 } from "./contactStart.ts";
+export { ingressEvidence, ingressMeta, size } from "./ingress.ts";

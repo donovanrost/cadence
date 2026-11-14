@@ -107,7 +107,9 @@ describe("ingress_backpressure on Now (ux U47)", () => {
         rising: false,
       },
     });
-    expect(full?.sentence).toMatch(/^The buffer is almost full\. At 100%/);
+    expect(full?.sentence).toBe(
+      "The buffer is almost full. Cadence is storing this pass's telemetry more slowly than it arrives. At 100% Cadence stops reading, and new telemetry arrives late.",
+    );
     expect(full?.meta).toBe("BUFFER 96%");
   });
 

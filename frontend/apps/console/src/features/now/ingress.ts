@@ -52,7 +52,7 @@ export function ingressEvidence(a: Attention): string {
   if (a.conflict === "frames_dropped")
     return `Cadence's buffer was full, so these frames from ${a.provider?.name ?? "the provider"} were dropped. Cadence can't recover them.`;
   const full = (a.journal_usage?.ratio ?? 0) >= 0.95;
-  return `${full ? "The buffer is almost full." : BACKING_UP} ${STOPS}`;
+  return `${full ? "The buffer is almost full. " : ""}${BACKING_UP} ${STOPS}`;
 }
 
 /** `BUFFER 87% · RISING · 412 MB WAITING` / `12 FRAMES · 48 KB · 03:14Z–03:15Z`. */
