@@ -43,6 +43,58 @@ _qa fills this in before the reboot._
 
 _Each agent's 2-3 line handoff goes here as it arrives._
 
+- **ux** (`fc79d3fb…`, confirmed): nothing uncommitted (last b67c5a598). Waiting on others: U57
+  rejected-booking Now item (domain, after the "delivery unverified" decision), U56 window_moved
+  timeline (api's sentence), U54 nouns and U53 switch (landing via qa). Open asks: Book-a-pass copy
+  review once off its flag; fe-setup's app-surface frame, 5-link cap, Gantt legend, policy panel
+  fixes. After resume: reread `ux/decisions.md` U53-U57, then answer queued pane messages.
+- **lead** (`9329f570…`, confirmed): nothing uncommitted; BACKLOG current at 8d9063387. Waiting on the
+  00:13:49Z sim session-start line, qa's 4NYUX post-check ~06:51Z, and 11-15's first restart (preview
+  fix + 1b43c321c + api U55 + fe-ops L1-L4). After resume: re-read BACKLOG §0, confirm each agent
+  resumed with its queue (domain, fe-setup, api-ops rows), then route qa's first-restart slot.
+- **api-ops** (`b214f0a1…`, confirmed): nothing uncommitted, no side worktrees. Landed today: #90,
+  catalog rerun-safe, the sim session-start log (d1536906b, live since the 19:44Z sim restart).
+  Waiting: qa's grep for the first "Session started for" line at the 00:13:49Z pass; domain's
+  reconciler cadence proposal (tomorrow); the QuestDB P1 suite (c9f2199d0 on test/questdb-ingest),
+  never run against a real QuestDB (needs disk or CI). After resume: re-read pane traffic, check qa's
+  session-start line, review domain's proposal when it arrives.
+- **dashboards** (`e463b19f…`, confirmed): nothing uncommitted; last ab3c7ed48 (never-started reader),
+  1e44feb54 (L8 status). L8 done apart from domain's table drop. Waiting: qa's live checks of section
+  editing (non-empty remove + start collapsed), the ChartMarker union c7bc1ee7f and booking rule
+  30626f98f, domain's never-started frame 1b43c321c in a restart (then ZKgUX), limits after the flip.
+  After resume: read herdr messages from qa/domain/lead, then answer whichever check comes back.
+- **fe-ops** (`ba9c2ff8…`, confirmed): nothing uncommitted. Side worktree fe-ops-l1l4 is clean; branch
+  fe-ops/l1l4-federated (9 commits, tip 1f8357fb9) has the director's GO for 11-15's first restart,
+  after domain and api at qa's node-down. Waiting: U54/U55/U56/U51 servers (readers committed). After
+  resume: wait for qa's node-down call, cherry-pick -x L1-L4, compile, send SHAs; then repoint the 5
+  legacy links to console routes (this week).
+- **api** (`8e49aebc…`, confirmed): nothing uncommitted; side worktree api-held is clean. Waiting: U55
+  3bacc837b (branch api/u55-on-ab) for 11-15's first restart (SHA with qa); L10/L12/L13 redirects
+  5f78be8dd/305de0c82/88baf9ef8 (branch api/legacy-l10-l12-l13) with fe-setup's deletion batch,
+  after qa's live checks and the director's go. After resume: check panes for qa/lead/domain, then
+  wait for qa's slot call for U55. The step 4 preview endpoint waits on domain's findings.
+- **fe-setup** (`e9127bd3…`, confirmed): nothing uncommitted, no side worktrees; today's work is live
+  (b23 + U53 + fix + L8c; docs 510c00d18). Next: the L10/L12/L13 deletion. Recipes agreed with
+  qa/api/domain/api-ops (L10 on mission_fyyx5ju6zm_3ESL; L12/L13 on a new QA-org mission, Event
+  Ingestion "Disabled"); api's redirects ready. After resume: wait for qa's live checks of those
+  three, build the batch in a new side worktree with its own node_modules, then the director's go.
+  After that, §11c's covered-already pages.
+- **domain** (`c35dac59…`, confirmed): nothing uncommitted. Landed tonight: window truth
+  (f65fa86ff..bdf661a05) and the hot-loop fix 881e19e8c. Parked on branches in worktree
+  domain-77-stage3: the preview fix (domain/profile-preview-scale: 7bb725650, fa0ecabf2, ab0842686,
+  72d340c1f), the never-started frame (1b43c321c, domain/never-started-frame), the reconciler
+  proposal notes (87a551fda, domain/reconciler-cadence, including qa's WAL baseline; the /tmp copy is
+  lost on reboot). After resume, in lead's order: be on hand for the first restart (preview fix +
+  1b43c321c), then the inbox nit, then the reconciler proposal to api-ops.
+- **devops** (`a6d07257…`, confirmed): nothing uncommitted, nothing running; work on branches, none
+  pushed. Pending the director: the Postgres doc 8590c0c53 (journal-off 20b8ad421 is already merged as
+  #92). Pending the user's merge decision: f426e26d5, the team PR, the host.js pin. Timers (flake
+  tracker until 11-20, the disk samples) die with the reboot; the tracker, its state and the scripts
+  are copied to `ci-github-actions/.devops-scratch/` (untracked, with HANDOFF.md). After resume:
+  re-create the timers from HANDOFF.md, run the tracker once, take the overdue disk sample.
+- The uncommitted `docs/apogee/plans/dashboards-settings.md` was fe-setup's, committed as 260247244.
+  Nothing else is uncommitted in the shared tree.
+
 ## Things that do NOT survive a reboot
 
 - Scheduled wake-ups and background monitors inside agent sessions (devops' browser-flake tracker,
