@@ -62,31 +62,42 @@ async function open(tab: string) {
  * Activity and Diagnostics only. Dev can't show this live (author_dashboards == operate_mission),
  * so this is the evidence (lead, 11-14).
  */
+// Mounting the router and screen takes ~5 s at load 40-50 (dashboards): a longer budget per test.
+const MOUNT_TIMEOUT = 30_000;
+
 describe("dashboard settings for someone who isn't an author", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("lands a General link on Activity, shows two tabs and no Export, and never reads D14", async () => {
-    const urls = stubApi(false);
-    const { router, wrapper } = await open("general");
+  it(
+    "lands a General link on Activity, shows two tabs and no Export, and never reads D14",
+    async () => {
+      const urls = stubApi(false);
+      const { router, wrapper } = await open("general");
 
-    expect(router.currentRoute.value.path).toBe("/d/dashboard/settings/activity");
-    const tabs = wrapper.findAll("nav[aria-label='Settings sections'] a").map((a) => a.text());
-    expect(tabs).toEqual(["Activity", "Diagnostics"]);
-    expect(wrapper.text()).not.toContain("Export");
-    expect(wrapper.text()).toContain("Bus overview");
-    expect(urls.some((u) => new URL(u, "http://console.test").pathname.endsWith("/settings"))).toBe(
-      false,
-    );
-    wrapper.unmount();
-  });
+      expect(router.currentRoute.value.path).toBe("/d/dashboard/settings/activity");
+      const tabs = wrapper.findAll("nav[aria-label='Settings sections'] a").map((a) => a.text());
+      expect(tabs).toEqual(["Activity", "Diagnostics"]);
+      expect(wrapper.text()).not.toContain("Export");
+      expect(wrapper.text()).toContain("Bus overview");
+      expect(
+        urls.some((u) => new URL(u, "http://console.test").pathname.endsWith("/settings")),
+      ).toBe(false);
+      wrapper.unmount();
+    },
+    MOUNT_TIMEOUT,
+  );
 
-  it("gives an author all four tabs and Export", async () => {
-    stubApi(true);
-    const { wrapper } = await open("activity");
+  it(
+    "gives an author all four tabs and Export",
+    async () => {
+      stubApi(true);
+      const { wrapper } = await open("activity");
 
-    const tabs = wrapper.findAll("nav[aria-label='Settings sections'] a").map((a) => a.text());
-    expect(tabs).toEqual(["General", "Sharing", "Activity", "Diagnostics"]);
-    expect(wrapper.text()).toContain("Export");
-    wrapper.unmount();
-  });
+      const tabs = wrapper.findAll("nav[aria-label='Settings sections'] a").map((a) => a.text());
+      expect(tabs).toEqual(["General", "Sharing", "Activity", "Diagnostics"]);
+      expect(wrapper.text()).toContain("Export");
+      wrapper.unmount();
+    },
+    MOUNT_TIMEOUT,
+  );
 });
