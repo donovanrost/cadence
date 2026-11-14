@@ -39,14 +39,14 @@ const columns: readonly ApColumn[] = [
       </template>
       <span v-else class="text-text-3">Not recorded</span>
     </template>
+    <!-- A linkable row links its action: api's actions name the target ("Submitted SET_MODE for 1
+      spacecraft"), so the deduped target text would hide the link (qa 11-14). -->
     <template #cell-action="{ row }"
-      >{{ row.action
-      }}<span v-if="targetText(row)" class="text-text-3">
-        ·
-        <RouterLink v-if="row.link" :to="row.link" class="text-readout hover:underline">{{
-          targetText(row)
-        }}</RouterLink
-        ><template v-else>{{ targetText(row) }}</template></span
+      ><RouterLink v-if="row.link" :to="row.link" class="text-readout hover:underline">{{
+        row.action
+      }}</RouterLink
+      ><template v-else>{{ row.action }}</template
+      ><span v-if="targetText(row)" class="text-text-3"> · {{ targetText(row) }}</span
       ><span v-if="row.repeat > 1" class="font-mono text-text-3"> ×{{ row.repeat }}</span></template
     >
     <template #cell-mission="{ row }">{{ row.mission?.name ?? "—" }}</template>
