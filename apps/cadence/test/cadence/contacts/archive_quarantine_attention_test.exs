@@ -5,12 +5,15 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttentionTest do
   import Ecto.Query
 
   alias Cadence.CommandGroupFixtures
+  alias Cadence.Contacts
   alias Cadence.Contacts.ArchiveQuarantineAttention, as: Attention
+  alias Cadence.Contacts.RealizedContact
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Protocol.{RecordArchive, TransferFrameRecord}
   alias Cadence.Protocol.RecordArchive.FileSystem
   alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow
   alias Cadence.Protocol.RecordArchive.Quarantine
+  alias Cadence.ProviderChangeFixtures
 
   setup do
     base_path =
@@ -117,6 +120,67 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttentionTest do
 
     assert Quarantine.rows(c.mission) == []
     assert {:error, :attention_item_not_found} = Attention.retry(c.scope, c.mission, id)
+  end
+
+  test "the item names its pass: the booking's, or a hand start's own station and start" do
+    booked = ProviderChangeFixtures.setup_contact()
+    reservation = booked.reservation
+    org = booked.organization_id
+    mission = booked.mission_id
+
+    contact = fn id, scheduled_id, metadata ->
+      {:ok, _} =
+        Contacts.persist_realized_contact(
+          org,
+          RealizedContact.new(%{
+            realized_contact_id: id,
+            organization_id: org,
+            mission_id: mission,
+            scheduled_contact_id: scheduled_id,
+            source_endpoint_refs: [],
+            paths: [],
+            metadata: metadata,
+            realized_at: ~U[2026-11-14 03:10:00.000000Z]
+          })
+        )
+    end
+
+    contact.("booked-run", reservation.scheduled_contact_id, %{})
+    contact.("hand-run", nil, %{"ground_station_ref" => "SVB"})
+
+    for id <- ["booked-run", "hand-run"] do
+      entry = %{
+        "record_kind" => "transfer_frame_record",
+        "record_id" => "frame-" <> id,
+        "mission_id" => mission,
+        "metadata" => %{"realized_contact_id" => id}
+      }
+
+      :ok =
+        Quarantine.put(
+          mission,
+          org,
+          [%{entry: entry, error_code: "identity_conflict", error: nil}],
+          DateTime.utc_now()
+        )
+    end
+
+    items = Map.new(Attention.items(org, mission), &{&1.realized_contact_id, &1})
+    id = reservation.provider_reservation_id
+    starts_at = reservation.starts_at
+
+    assert %{provider_reservation_id: ^id, starts_at: ^starts_at, contact_id: contact_id} =
+             items["booked-run"]
+
+    assert contact_id == reservation.scheduled_contact_id
+
+    assert %{
+             provider_reservation_id: nil,
+             ground_station_ref: "SVB",
+             ends_at: nil,
+             starts_at: %DateTime{}
+           } =
+             items["hand-run"]
   end
 
   defp evidence(mission, name) do

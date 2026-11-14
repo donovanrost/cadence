@@ -6,10 +6,14 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttention do
   them once the cause is fixed (synchronous) or discards them with a reason. No acknowledge.
   """
 
+  import Ecto.Query
+
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Contacts.{ContactStore, RealizedContact}
+  alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Protocol.RecordArchive.Quarantine
+  alias Cadence.Repo
 
   @source "archive_quarantine"
   @conflict "quarantined"
@@ -136,7 +140,6 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttention do
       spacecraft_id: Enum.find_value(rows, & &1.spacecraft_id),
       realized_contact_id: first.realized_contact_id,
       contact_id: contact && contact.scheduled_contact_id,
-      provider_reservation_id: contact && contact.metadata["provider_reservation_id"],
       error_code: first.error_code,
       error: Enum.find_value(rows, & &1.error),
       counts: counts,
@@ -146,6 +149,61 @@ defmodule Cadence.Contacts.ArchiveQuarantineAttention do
       actions: ["retry", "discard"],
       last_retry: last_retry(rows)
     }
+    |> Map.merge(pass(contact, reservation(org, mission, contact)))
+  end
+
+  # The pass the entries came from, for the row's title and its Contacts-block placement: the
+  # booking when there is one, else the hand-started contact's own station and start.
+  defp pass(nil, _reservation), do: pass_fields(nil, nil, nil, nil, nil)
+
+  defp pass(%RealizedContact{}, %{} = reservation) do
+    pass_fields(
+      reservation.provider_reservation_id,
+      ground_station_ref(reservation),
+      reservation.provider_id,
+      reservation.starts_at,
+      reservation.ends_at
+    )
+  end
+
+  defp pass(%RealizedContact{} = contact, nil),
+    do: pass_fields(nil, contact.metadata["ground_station_ref"], nil, contact.realized_at, nil)
+
+  defp pass_fields(reservation_id, station, provider_id, starts_at, ends_at) do
+    %{
+      provider_reservation_id: reservation_id,
+      ground_station_ref: station,
+      provider_id: provider_id,
+      starts_at: starts_at,
+      ends_at: ends_at
+    }
+  end
+
+  defp reservation(_org, _mission, %RealizedContact{scheduled_contact_id: id} = _contact)
+       when not is_binary(id),
+       do: nil
+
+  defp reservation(org, mission, %RealizedContact{scheduled_contact_id: id}) do
+    from(row in ProviderReservationRow,
+      where:
+        row.organization_id == ^org and row.mission_id == ^mission and
+          row.scheduled_contact_id == ^id,
+      limit: 1
+    )
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      row -> ProviderReservationRow.to_domain(row)
+    end
+  end
+
+  defp reservation(_org, _mission, nil), do: nil
+
+  defp ground_station_ref(reservation) do
+    Enum.find_value(
+      [reservation.provider_confirmed_snapshot_document, reservation.request_document],
+      &(is_map(&1) && &1["ground_station_ref"])
+    )
   end
 
   defp span(rows, pick) do
