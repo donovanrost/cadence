@@ -184,8 +184,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
               "cadence.ops.activation_requests", ["decide"]},
              {"commands", :operations, :mission, :ops_workspace, "cadence.ops.commands", []},
              {"telemetry_explore", :operations, :mission, :ops_workspace,
-              "cadence.ops.telemetry_explore",
-              ["apply_filters", "apply_question"]},
+              "cadence.ops.telemetry_explore", ["apply_filters", "apply_question"]},
              {"data_operations", :operations, :mission, :ops_workspace,
               "cadence.ops.data_operations",
               [
