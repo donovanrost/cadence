@@ -93,6 +93,15 @@ Console takeover:
   histogram of current values across targets, and callouts for targets whose value was hand-set
   before ("EARENDIL-117 and -144 were hand-set to 6.0 °C on 14 Sep (REQ-0302). This overwrites
   that."). For non-value commands: the stack as mono lines.
+- **Per-target values** (fe-ops, 11-15; from the group's `commands[].per_target`). The reviewer must see what each
+  target gets, never one value as if all were equal (U20).
+  - The readout gives ranges: `5.0–6.2 → 8.0–9.5 °C · PER TARGET · ON 98 SPACECRAFT`. When every target happens to
+    get the same value, it's the plain form.
+  - On a stack line, a per-target argument reads `setpoint PER TARGET 8.0–9.5 °C`, not a single value.
+  - Under the command, a table as in Compose B2: Target (mono) · Now · New, per per-target argument, with the
+    unit. The first 8 rows show in target order, then `Show all 98`. A value outside the argument's range keeps
+    B2's caution.
+  - A3's header meta names them: `SAME FOR ALL 98 EXCEPT SEQ, CRC AND setpoint`.
 - **A2 Re-checked at review:** the preflight re-run at open time (`ck` rows, GO/HOLD/NO-GO), incl.
   `Excluded · 163 stale · 188 safe mode · GO −2`. Header meta `6 GO` in nominal text.
 - **A3 What will radiate:** the encoded packet as byte boxes (`by`: hex 15px mono, field name,
