@@ -35,6 +35,7 @@ out. Use these guides when you need to accomplish a specific task.
 
 - [Configuration Reference](configuration-reference.md)
 - [Archive Backlog and Backpressure](archive-backlog-and-backpressure.md)
+- [Check Release Target SCIDs Before Deploying the #38 Guard](check-release-target-scids-before-deploy.md)
 - [BEAM-Native Improvement Inventory](beam-native-improvement-inventory.md)
 
 ## Provider Integration

@@ -15,9 +15,16 @@ defmodule Cadence.CommandingTest do
     CommandQueueEntry,
     CommandQueueEntryRow,
     CommandReleaseAttempt,
+    CommandReleaseAttemptRow,
     CommandRequest,
+    CommandRequestRow,
     CommandStage,
     CommandVerifierInstance,
+    ReleaseStore,
+    ReleaseTargetGuard,
+    ReleaseTargetSelection,
+    RequestQueueStore,
+    RequestStore,
     StagedCommandItem
   }
 
@@ -786,6 +793,21 @@ defmodule Cadence.CommandingTest do
         receipt_time: DateTime.add(release_attempt.released_at, 1, :second)
       }
 
+    # #38: the same point from another spacecraft, or from no known spacecraft, verifies nothing.
+    for other <- ["spacecraft-bravo", nil] do
+      assert {:ok, []} =
+               Cadence.Commanding.evaluate_command_verifiers([
+                 %Sample{sample | sample_id: "sample-mode-#{other}", spacecraft_id: other}
+               ])
+    end
+
+    assert {:ok, %{lifecycle_state: :pending}} =
+             Cadence.Commanding.fetch_command_verifier_instance(
+               @organization_id,
+               @mission_id,
+               completion_verifier_instance.command_verifier_instance_id
+             )
+
     assert {:ok, [%CommandVerifierInstance{} = satisfied_verifier_instance]} =
              Cadence.Commanding.evaluate_command_verifiers([sample])
 
@@ -1079,12 +1101,368 @@ defmodule Cadence.CommandingTest do
     assert retransmit_request.request_document["first_frame_seq"] == 0
   end
 
+  describe "#38 a command releases only over its target spacecraft's uplink" do
+    setup %{source_endpoint: source_endpoint, command_model: command_model} do
+      {:ok, _} =
+        Cadence.SpacecraftStore.persist_spacecraft(
+          @organization_id,
+          Spacecraft.new(%{
+            spacecraft_id: "spacecraft-bravo",
+            mission_id: @mission_id,
+            display_name: "SC Bravo",
+            scid: 1
+          })
+        )
+
+      {:ok, bravo} =
+        Cadence.SourceEndpoints.persist_source_endpoint(
+          @organization_id,
+          SourceEndpoint.new(%{
+            source_endpoint_id: "source-endpoint-bravo",
+            mission_id: @mission_id,
+            spacecraft_id: "spacecraft-bravo",
+            source_ref: "SC-BRAVO",
+            display_name: "SC Bravo Endpoint"
+          })
+        )
+
+      request =
+        persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "38"})
+
+      {:ok, %{queue_entry: entry}} =
+        Cadence.Commanding.enqueue_command_request(
+          @organization_id,
+          @mission_id,
+          request.command_request_id,
+          %{"user_id" => "queue-38"}
+        )
+
+      %{
+        alpha: source_endpoint.source_endpoint_id,
+        bravo: bravo.source_endpoint_id,
+        request: request,
+        entry: entry
+      }
+    end
+
+    test "qa's 004-on-007: only another spacecraft's pass is active, so nothing releases", c do
+      # Bravo's pass, its uplink path materialized from a route (no source endpoint of its own).
+      bravo = uplink_contact_38([c.bravo], nil)
+
+      assert {:error, {:command_queue_lane_no_release_target, _, _}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 CommandRequest.new(Map.from_struct(c.request))
+               )
+
+      # Even named explicitly, bravo's pass refuses alpha's command before anything is sent.
+      assert {:error,
+              {:command_release_refused, attempt_id, {:release_contact_not_target_spacecraft, _}}} =
+               release_38(c, bravo)
+
+      assert {:ok, %{lifecycle_state: :release_failed}} =
+               Cadence.Commanding.fetch_command_release_attempt(
+                 @organization_id,
+                 @mission_id,
+                 attempt_id
+               )
+
+      assert uplinks_sent_38(attempt_id) == 0
+
+      # main: the refusal closes the command; it doesn't go back to pending to be refused again.
+      assert {:ok, %{lifecycle_state: :canceled}} =
+               Cadence.Commanding.fetch_command_queue_entry(
+                 @organization_id,
+                 @mission_id,
+                 c.entry.command_queue_entry_id
+               )
+
+      assert {:ok, %{lifecycle_state: :canceled}} =
+               Cadence.Commanding.fetch_command_request(
+                 @organization_id,
+                 @mission_id,
+                 c.request.command_request_id
+               )
+    end
+
+    test "qa's 001-on-009: the contact is the target's but its uplink path belongs to another spacecraft",
+         c do
+      # A path that names another spacecraft's endpoint was never selectable: no attempt.
+      foreign_path = uplink_contact_38([c.alpha], c.bravo)
+
+      assert {:error, {:selected_uplink_path_not_found, _, _}} = release_38(c, foreign_path)
+
+      # A path that names no spacecraft at all (no endpoint, no route) is refused too.
+      unowned = uplink_contact_38([c.alpha], nil)
+
+      assert {:error, {:command_release_refused, _, {:release_path_not_target_spacecraft, _}}} =
+               release_38(c, unowned)
+    end
+
+    test "with both spacecraft's passes active, the lane picks the target's own", c do
+      _bravo = uplink_contact_38([c.bravo], nil)
+      alpha = uplink_contact_38([c.alpha], c.alpha)
+
+      assert {:ok, %{realized_contact: %{realized_contact_id: id}}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 CommandRequest.new(Map.from_struct(c.request))
+               )
+
+      assert id == alpha.realized_contact_id
+    end
+
+    test "a gateway that doesn't name a SCID is refused, never sent", c do
+      contact = uplink_contact_38([c.alpha], c.alpha, %{})
+
+      assert {:error,
+              {:command_release_refused, attempt_id,
+               {:uplink_gateway_scid_unknown, "uplink-gateway-alpha"}}} =
+               release_38(c, contact)
+
+      assert {:ok, %{lifecycle_state: :release_failed}} =
+               Cadence.Commanding.fetch_command_release_attempt(
+                 @organization_id,
+                 @mission_id,
+                 attempt_id
+               )
+
+      assert uplinks_sent_38(attempt_id) == 0
+    end
+
+    test "the lane never cancels over a gateway with no SCID: the command waits, queued", c do
+      # A main deployment whose gateway bindings predate SCIDs: selection skips the pass.
+      _alpha = uplink_contact_38([c.alpha], c.alpha, %{})
+
+      assert {:error, {:command_queue_lane_no_release_target, _, _}} =
+               Cadence.Commanding.dispatch_queue_lane(
+                 @organization_id,
+                 @mission_id,
+                 c.entry.queue_lane_key,
+                 %{"user_id" => "lane-38"},
+                 attempted_at: DateTime.from_unix!(1_700_400_000, :second)
+               )
+
+      assert {:ok, %{lifecycle_state: :pending}} = fetch_entry_38(c.entry)
+      assert {:ok, %{lifecycle_state: :queued}} = fetch_request_38(c.request)
+      assert attempts_38(c.request) == []
+    end
+
+    test "a refusal never overwrites what happened to the command meanwhile", c do
+      # Another path completed this release between the claim and the refusal.
+      {claimed, request_row, attempt} = claim_38(c.entry, c.request)
+      set_state_38(CommandQueueEntryRow, :command_queue_entry_id, claimed, "released")
+      set_state_38(CommandRequestRow, :command_request_id, request_row, "released")
+      set_state_38(CommandReleaseAttemptRow, :command_release_attempt_id, attempt, "released")
+
+      assert {:ok, %{closed: false}} =
+               ReleaseStore.mark_refused(claimed, request_row, attempt, :refused_38)
+
+      assert {:ok, %{lifecycle_state: :released}} = fetch_entry_38(c.entry)
+      assert {:ok, %{lifecycle_state: :released}} = fetch_request_38(c.request)
+      assert [%{lifecycle_state: "released"}] = attempts_38(c.request)
+
+      # An operator canceled this one meanwhile: it stays canceled; the unsent attempt fails.
+      other = persist_safe_command_request(c.command_model, c.source_endpoint, 1, %{"n" => "2"})
+
+      {:ok, %{queue_entry: other_entry}} =
+        Cadence.Commanding.enqueue_command_request(
+          @organization_id,
+          @mission_id,
+          other.command_request_id,
+          %{"user_id" => "queue-38"}
+        )
+
+      {claimed, request_row, attempt} = claim_38(other_entry, other)
+      set_state_38(CommandQueueEntryRow, :command_queue_entry_id, claimed, "canceled")
+      set_state_38(CommandRequestRow, :command_request_id, request_row, "canceled")
+
+      assert {:ok, %{closed: false}} =
+               ReleaseStore.mark_refused(claimed, request_row, attempt, :refused_38)
+
+      assert {:ok, %{lifecycle_state: :canceled}} = fetch_entry_38(other_entry)
+
+      assert [%{lifecycle_state: "release_failed", failure_reason: "refused: " <> _}] =
+               attempts_38(other)
+    end
+
+    test "a gateway SCID is compared exactly: integer or whole-number string, else refused", c do
+      check = fn scid ->
+        config = if scid == :none, do: %{}, else: %{"scid" => scid}
+
+        contact =
+          RealizedContact.new(%{
+            realized_contact_id: "rc-38",
+            organization_id: @organization_id,
+            mission_id: @mission_id,
+            source_endpoint_refs: [c.alpha],
+            clock_mode: :replay,
+            initial_time: DateTime.from_unix!(1_700_400_000, :second)
+          })
+
+        ReleaseTargetGuard.check(
+          @organization_id,
+          @mission_id,
+          c.alpha,
+          contact,
+          Path.new(%{path_id: "uplink-38", direction: :uplink, source_endpoint_ref: c.alpha}),
+          TransportBinding.new(%{
+            transport_binding_id: "gw-38",
+            family_key: :uplink_gateway,
+            target_scope: :path,
+            configuration: config
+          })
+        )
+      end
+
+      assert check.(0) == :ok
+      assert check.("0") == :ok
+
+      for foreign <- [1, "1"],
+          do:
+            assert(check.(foreign) == {:error, {:release_gateway_not_target_spacecraft, "gw-38"}})
+
+      for unknown <- [:none, nil, "", "0x", " 0", "0 ", "zero", 0.0, [0]],
+          do: assert(check.(unknown) == {:error, {:uplink_gateway_scid_unknown, "gw-38"}})
+    end
+  end
+
+  defp uplink_contact_38(contact_endpoints, path_endpoint, gateway_config \\ %{"scid" => 0}) do
+    contact =
+      RealizedContact.new(%{
+        realized_contact_id:
+          "realized-contact-38-" <> Integer.to_string(System.unique_integer([:positive])),
+        organization_id: @organization_id,
+        mission_id: @mission_id,
+        source_endpoint_refs: contact_endpoints,
+        clock_mode: :replay,
+        initial_time: DateTime.from_unix!(1_700_400_000, :second),
+        paths: [
+          Path.new(%{
+            path_id: "uplink-path-alpha",
+            direction: :uplink,
+            selection_role: :selected,
+            source_endpoint_ref: path_endpoint,
+            transport_bindings: [
+              TransportBinding.new(%{
+                transport_binding_id: "uplink-gateway-alpha",
+                family_key: :uplink_gateway,
+                target_scope: :path,
+                configuration: Map.put(gateway_config, "service_name", "gateway")
+              })
+            ]
+          })
+        ]
+      })
+
+    assert {:ok, _} = Cadence.Contacts.persist_realized_contact(@organization_id, contact)
+
+    assert {:ok, _pid} =
+             Cadence.Contacts.start_realized_contact(
+               @organization_id,
+               @mission_id,
+               contact.realized_contact_id
+             )
+
+    contact
+  end
+
+  defp release_38(c, contact),
+    do:
+      Cadence.Commanding.release_command_queue_entry(
+        @organization_id,
+        @mission_id,
+        c.entry.command_queue_entry_id,
+        contact.realized_contact_id,
+        %{"user_id" => "release-38"},
+        attempted_at: DateTime.from_unix!(1_700_400_000, :second)
+      )
+
+  defp fetch_entry_38(entry),
+    do:
+      Cadence.Commanding.fetch_command_queue_entry(
+        @organization_id,
+        @mission_id,
+        entry.command_queue_entry_id
+      )
+
+  defp fetch_request_38(request),
+    do:
+      Cadence.Commanding.fetch_command_request(
+        @organization_id,
+        @mission_id,
+        request.command_request_id
+      )
+
+  defp attempts_38(request) do
+    CommandReleaseAttemptRow
+    |> where([row], row.command_request_id == ^request.command_request_id)
+    |> Repo.all()
+  end
+
+  # The state a release holds just before its pre-transmit check: entry claimed, attempt pending.
+  defp claim_38(entry, request) do
+    {:ok, row} =
+      RequestQueueStore.fetch_queue_entry_row(
+        @organization_id,
+        @mission_id,
+        entry.command_queue_entry_id
+      )
+
+    {:ok, claimed} = RequestQueueStore.claim_for_release(row)
+
+    {:ok, request_row} =
+      RequestStore.fetch_request_row(@organization_id, @mission_id, request.command_request_id)
+
+    {:ok, attempt} =
+      ReleaseStore.persist(
+        @organization_id,
+        CommandReleaseAttempt.new(%{
+          organization_id: @organization_id,
+          mission_id: @mission_id,
+          command_queue_entry_id: entry.command_queue_entry_id,
+          command_request_id: request.command_request_id,
+          source_endpoint_ref: request.source_endpoint_ref,
+          realized_contact_id: "realized-contact-38",
+          mission_model_revision_id: request.mission_model_revision_id,
+          command_id: request.command_id,
+          command_name: request.command_name,
+          lifecycle_state: :release_pending,
+          released_by: %{"user_id" => "release-38"},
+          attempted_at: DateTime.from_unix!(1_700_400_000, :second)
+        })
+      )
+
+    {claimed, request_row, attempt}
+  end
+
+  # Another writer changes the row; the caller keeps its stale copy.
+  defp set_state_38(schema, id_field, row, state) do
+    id = Map.fetch!(row, id_field)
+
+    {1, _} =
+      schema
+      |> where([r], r.mission_id == ^@mission_id and field(r, ^id_field) == ^id)
+      |> Repo.update_all(set: [lifecycle_state: state])
+
+    :ok
+  end
+
+  defp uplinks_sent_38(attempt_id) do
+    TransportActionRequestRow
+    |> where([row], row.command_release_attempt_id == ^attempt_id)
+    |> Repo.aggregate(:count)
+  end
+
   defp persist_source_endpoint do
     spacecraft =
       Spacecraft.new(%{
         spacecraft_id: @spacecraft_id,
         mission_id: @mission_id,
-        display_name: "SC Alpha"
+        display_name: "SC Alpha",
+        scid: 0
       })
 
     assert {:ok, _spacecraft} =
@@ -1272,7 +1650,8 @@ defmodule Cadence.CommandingTest do
                 transport_binding_id: "uplink-gateway-alpha",
                 family_key: :uplink_gateway,
                 target_scope: :path,
-                configuration: transport_configuration
+                # #38: a release gateway names its spacecraft (SC Alpha's SCID).
+                configuration: Map.put_new(transport_configuration, "scid", 0)
               })
             ]
           })
