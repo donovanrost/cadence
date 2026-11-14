@@ -708,7 +708,9 @@ defmodule Cadence.Governance do
           size_bits: field_row.size_bits,
           data_type: telemetry_data_type(field_row.data_type),
           byte_order: telemetry_byte_order(field_row.byte_order),
-          engineering_unit: field_row.engineering_unit
+          engineering_unit: field_row.engineering_unit,
+          parameter_id: field_row.parameter_id,
+          qualified_name: field_row.qualified_name
         }
       end)
 

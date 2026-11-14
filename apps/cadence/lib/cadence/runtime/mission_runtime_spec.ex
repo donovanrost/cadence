@@ -117,7 +117,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
 
   @spec content_sha256(BindingSet.t()) :: binary()
   def content_sha256(%BindingSet{} = binding_set) do
-    ContentHash.term_sha256(binding_set)
+    BindingSet.content_sha256(binding_set)
   end
 
   @spec identity(t()) :: {binary(), pos_integer(), binary()}

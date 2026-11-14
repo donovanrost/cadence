@@ -1,6 +1,8 @@
 defmodule Cadence.Governance.Persistence do
   @moduledoc false
 
+  import Ecto.Query, only: [from: 2]
+
   alias Ecto.Changeset
 
   alias Cadence.ApplicationDispatch.{
@@ -146,7 +148,7 @@ defmodule Cadence.Governance.Persistence do
       changeset = PacketDefinitionFieldRow.changeset(packet_definition_row.id, field_definition)
 
       case repo.insert(changeset,
-             on_conflict: :nothing,
+             on_conflict: fill_field_identity(),
              conflict_target: [:packet_definition_row_id, :field_id]
            ) do
         {:ok, %PacketDefinitionFieldRow{} = field_row} ->
@@ -156,6 +158,20 @@ defmodule Cadence.Governance.Persistence do
           {:halt, {:error, changeset}}
       end
     end)
+  end
+
+  # DECISIONS #73: a field row written before its identity was persisted gains it when the same
+  # packet definition is persisted again; a stored identity is never replaced.
+  defp fill_field_identity do
+    from(field_row in PacketDefinitionFieldRow,
+      update: [
+        set: [
+          parameter_id: fragment("COALESCE(?, EXCLUDED.parameter_id)", field_row.parameter_id),
+          qualified_name:
+            fragment("COALESCE(?, EXCLUDED.qualified_name)", field_row.qualified_name)
+        ]
+      ]
+    )
   end
 
   defp capability_instance_config_attrs(%CapabilityInstance{} = capability_instance) do

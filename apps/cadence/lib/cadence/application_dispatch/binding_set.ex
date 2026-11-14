@@ -5,6 +5,8 @@ defmodule Cadence.ApplicationDispatch.BindingSet do
 
   alias Cadence.ApplicationDispatch.{BindingRule, CapabilityInstance}
   alias Cadence.Ids
+  alias Cadence.Platform.ContentHash
+  alias Cadence.Telemetry.FieldDefinition
 
   @type t :: %__MODULE__{
           binding_set_id: binary(),
@@ -54,6 +56,41 @@ defmodule Cadence.ApplicationDispatch.BindingSet do
       rules: rules
     }
   end
+
+  @doc """
+  The binding set's content hash: what an activation request approves, an activation records, and
+  the runtime spec verifies against the stored binding set.
+
+  A telemetry field's `parameter_id` and `qualified_name` are left out (DECISIONS #73). They are
+  the mission-model plan's semantic identity, which the runtime basis hash already covers through
+  the mission model's content hash. Before 11-14 they weren't persisted, so every stored hash was
+  computed without them; leaving them out keeps those generations verifiable, and an in-memory
+  set always hashes like its read-back.
+  """
+  @spec content_sha256(t()) :: binary()
+  def content_sha256(%__MODULE__{} = binding_set) do
+    binding_set
+    |> without_field_identity()
+    |> ContentHash.term_sha256()
+  end
+
+  defp without_field_identity(%FieldDefinition{} = field),
+    do: %{field | parameter_id: nil, qualified_name: nil}
+
+  defp without_field_identity(%module{} = struct) do
+    fields =
+      struct |> Map.from_struct() |> Map.new(fn {k, v} -> {k, without_field_identity(v)} end)
+
+    struct(module, fields)
+  end
+
+  defp without_field_identity(map) when is_map(map),
+    do: Map.new(map, fn {k, v} -> {k, without_field_identity(v)} end)
+
+  defp without_field_identity(list) when is_list(list),
+    do: Enum.map(list, &without_field_identity/1)
+
+  defp without_field_identity(other), do: other
 
   @spec fetch_capability_instance(t(), binary()) :: {:ok, CapabilityInstance.t()} | :error
   def fetch_capability_instance(

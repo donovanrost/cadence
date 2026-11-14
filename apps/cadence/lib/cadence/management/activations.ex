@@ -20,7 +20,6 @@ defmodule Cadence.Management.Activations do
   }
 
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Platform.ContentHash
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
@@ -232,7 +231,7 @@ defmodule Cadence.Management.Activations do
       mission_id: binding_set.mission_id,
       binding_set_id: binding_set.binding_set_id,
       binding_set_version: binding_set.version,
-      binding_set_content_sha256: ContentHash.term_sha256(binding_set),
+      binding_set_content_sha256: BindingSet.content_sha256(binding_set),
       change_class: change_class,
       state: request_state(approval_required?),
       requester_actor_kind: scope.actor_kind,
@@ -271,7 +270,7 @@ defmodule Cadence.Management.Activations do
                mission_id: binding_set.mission_id,
                binding_set_id: binding_set.binding_set_id,
                binding_set_version: binding_set.version,
-               binding_set_content_sha256: ContentHash.term_sha256(binding_set),
+               binding_set_content_sha256: BindingSet.content_sha256(binding_set),
                change_class: :mission_data_plane,
                state: :approved,
                requester_actor_kind: if(kind == "service", do: :service, else: :user),

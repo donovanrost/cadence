@@ -15,6 +15,7 @@ defmodule Cadence.Ops.PointCatalog do
   @type point_info :: %{
           point_id: binary(),
           parameter_id: binary() | nil,
+          qualified_name: binary() | nil,
           packet_name: binary(),
           field_name: binary(),
           unit: binary() | nil,
@@ -27,14 +28,20 @@ defmodule Cadence.Ops.PointCatalog do
       when is_binary(organization_id) and is_binary(mission_id) do
     case Activations.fetch_active_binding_set(organization_id, mission_id) do
       {:ok, %BindingSet{} = binding_set} ->
-        binding_set.capability_instances
-        |> Enum.flat_map(&points_from_instance/1)
-        |> Enum.uniq_by(& &1.point_id)
-        |> Enum.sort_by(& &1.point_id)
+        points(binding_set)
 
       {:error, _reason} ->
         []
     end
+  end
+
+  @doc "The points a binding set's packet definitions produce."
+  @spec points(BindingSet.t()) :: [point_info()]
+  def points(%BindingSet{} = binding_set) do
+    binding_set.capability_instances
+    |> Enum.flat_map(&points_from_instance/1)
+    |> Enum.uniq_by(& &1.point_id)
+    |> Enum.sort_by(& &1.point_id)
   end
 
   defp points_from_instance(%CapabilityInstance{
@@ -44,6 +51,7 @@ defmodule Cadence.Ops.PointCatalog do
       %{
         point_id: packet_definition.packet_name <> "." <> field.name,
         parameter_id: field.parameter_id,
+        qualified_name: field.qualified_name,
         packet_name: packet_definition.packet_name,
         field_name: field.name,
         unit: field.engineering_unit,

@@ -25,6 +25,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
   """
 
   alias Cadence.Activations
+  alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.SpacecraftConfiguration.{Active, CatalogAuthority, Drafts, Review}
   alias Cadence.Catalog
   alias Cadence.Catalog.FleetSnapshot
@@ -34,7 +35,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels.CatalogApids
   alias Cadence.Missions
-  alias Cadence.Platform.{ConfigurationSettings, ContentHash}
+  alias Cadence.Platform.ConfigurationSettings
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
@@ -454,7 +455,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
              mission_id,
              binding_set.binding_set_id,
              binding_set.version,
-             binding_set_content_sha256: ContentHash.term_sha256(binding_set),
+             binding_set_content_sha256: BindingSet.content_sha256(binding_set),
              activation_request_id: request.activation_request_id,
              metadata: metadata,
              publish: false

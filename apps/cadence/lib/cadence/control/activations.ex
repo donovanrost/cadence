@@ -22,7 +22,6 @@ defmodule Cadence.Control.Activations do
   alias Cadence.Governance
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.ApprovedActivation
-  alias Cadence.Platform.ContentHash
   alias Cadence.Repo
   alias Cadence.Runtime.MissionRuntimeSpec
 
@@ -262,7 +261,7 @@ defmodule Cadence.Control.Activations do
   defp error_code(_reason), do: nil
 
   defp exact_approved_content(approved_activation, binding_set) do
-    if ContentHash.term_sha256(binding_set) == approved_activation.binding_set_content_sha256 do
+    if BindingSet.content_sha256(binding_set) == approved_activation.binding_set_content_sha256 do
       :ok
     else
       {:error, :approved_activation_content_mismatch}
