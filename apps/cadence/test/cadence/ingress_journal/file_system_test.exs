@@ -58,6 +58,46 @@ defmodule Cadence.IngressJournal.FileSystemTest do
   end
 
   @tag :tmp_dir
+  test "a runtime stop checkpoints the acknowledged cursors (#71 follow-up)", ctx do
+    start_supervised!({FileSystem, Keyword.put(ctx.opts, :checkpoint_interval_ms, 60_000)})
+    assert {:ok, entry} = FileSystem.append(ctx.name, "captured", DateTime.utc_now())
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, entry.end_offset)
+    assert {:ok, %{stream_path: stream_path}} = FileSystem.snapshot(ctx.name)
+
+    # No periodic checkpoint yet; the supervisor's shutdown must write it.
+    :ok = stop_supervised({:ingress_journal, ctx.opts[:provider_binding_id]})
+
+    checkpoint =
+      stream_path
+      |> Path.join("cursors.term")
+      |> File.read!()
+      |> :erlang.binary_to_term([:safe])
+
+    assert checkpoint.cursors.processing == entry.end_offset
+    assert checkpoint.cursors.archive == 0
+  end
+
+  @tag :tmp_dir
+  test "a linked process's crash still stops the journal; a normal exit doesn't", ctx do
+    journal = start_supervised!({FileSystem, ctx.opts}, restart: :temporary)
+    ref = Process.monitor(journal)
+
+    linked = fn reason ->
+      spawn(fn ->
+        Process.link(journal)
+        exit(reason)
+      end)
+    end
+
+    linked.(:normal)
+    refute_receive {:DOWN, ^ref, :process, ^journal, _reason}, 100
+    assert Process.alive?(journal)
+
+    linked.(:writer_crashed)
+    assert_receive {:DOWN, ^ref, :process, ^journal, :writer_crashed}
+  end
+
+  @tag :tmp_dir
   test "failed final checkpoint is not a successful drain", ctx do
     opts =
       Keyword.merge(ctx.opts,

@@ -194,6 +194,12 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   @impl true
   def init(opts) do
+    # A runtime stop (its supervisor's shutdown) must run terminate/2, which checkpoints the
+    # acknowledged cursors; otherwise acks since the last periodic checkpoint are lost and the next
+    # start replays them (39LEY, 11-14). A linked process's abnormal exit still stops the journal
+    # (handle_info {:EXIT, ...}).
+    Process.flag(:trap_exit, true)
+
     context = %{
       mission_id: Keyword.fetch!(opts, :mission_id),
       realized_contact_id: Keyword.fetch!(opts, :realized_contact_id),
@@ -515,6 +521,12 @@ defmodule Cadence.IngressJournal.FileSystem do
   end
 
   def handle_info({:DOWN, _monitor_ref, :process, _pid, _reason}, state), do: {:noreply, state}
+
+  # Trapping exits (init/1): a linked process ending normally changes nothing; any other exit stops
+  # the journal with that reason, as it did before it trapped exits. Its supervisor's own exit is
+  # handled by GenServer (terminate/2 runs).
+  def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _pid, reason}, state), do: {:stop, reason, state}
 
   @impl true
   def terminate(_reason, state) do
