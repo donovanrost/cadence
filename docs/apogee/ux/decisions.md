@@ -1171,7 +1171,8 @@ Two things must not stay silent (U20), because the preview has to say what Start
     regenerates the same ones. Later days come only from a later start whose range begins past them (domain).
   - The cap stays as it is: it counts existing days too, so a repeated start generates the same days. Counting only
     new days would make each repeat of the same start reach further, which surprises people.
-  - Data ask (domain → api): per template `capped: {limit, last_date} | null`.
+  - Data (api, 11-14): the Start screen's setup read, `template_requirements_estimate.capped: [{template {id, name},
+    limit, last_date}]` (`[]` when none). One caution line per entry, above Start; it doesn't disable Start.
 - **Over the 50,000 bound** (api's `422 fleet_planning_occurrence_limit_exceeded`, details `{count, limit}`). The
   count is gross fan-out: days that already exist count too, so it can read higher than what Start would create
   (domain). Say "counts toward the limit", never "would create".
