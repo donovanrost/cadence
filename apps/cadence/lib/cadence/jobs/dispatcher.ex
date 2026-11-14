@@ -5,6 +5,7 @@ defmodule Cadence.Jobs.Dispatcher do
 
   alias Cadence.Jobs
   alias Cadence.Jobs.{Available, Worker}
+  alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Platform.EventBus
 
   @default_safety_poll_interval_ms 60_000
@@ -60,7 +61,8 @@ defmodule Cadence.Jobs.Dispatcher do
 
   @impl true
   def handle_continue(:bootstrap, state) do
-    _ = Jobs.requeue_running_jobs()
+    # Only job types safe to run again go back in the queue; the rest become outcome_unknown.
+    _ = Jobs.recover_running_jobs(&JobRunner.rerun_safe?(state.runner, &1))
     {:noreply, dispatch_available_jobs(state, :boot)}
   end
 

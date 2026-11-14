@@ -112,6 +112,24 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
     end
   end
 
+  @doc """
+  Whether a run of these job types is safe to run again after the node stopped mid-run (Jobs
+  recovery, 11-14): yes, for the refresh and the rebuild. Both replace the latest limit states
+  in one transaction (Limits.Store.replace_latest_states). The alarm-episode reconcile inside it
+  skips an observation whose ref is already recorded (Alarms.Episodes seen?), and the refs are
+  deterministic per definition, version and sample, so a rerun appends no episode events. The
+  only publish is the :alarms_changed read invalidation, and only when something changed.
+  """
+  @spec rerun_safe?(atom()) :: boolean()
+  def rerun_safe?(job_type)
+      when job_type in [
+             :telemetry_latest_limit_state_refresh,
+             :telemetry_latest_limit_state_rebuild
+           ],
+      do: true
+
+  def rerun_safe?(_job_type), do: false
+
   @doc false
   @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def execute_enqueued_run(rebuild_run_id) when is_binary(rebuild_run_id) do

@@ -64,6 +64,16 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
     end
   end
 
+  @doc """
+  Whether a run of this job type is safe to run again after the node stopped mid-run (Jobs
+  recovery, 11-14): yes. It replaces the derived latest values in one transaction
+  (DerivedTelemetry.Store.replace_latest_values: delete plus insert), with no external call or
+  publish.
+  """
+  @spec rerun_safe?(atom()) :: boolean()
+  def rerun_safe?(:derived_telemetry_latest_value_rebuild), do: true
+  def rerun_safe?(_job_type), do: false
+
   @doc false
   @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def execute_enqueued_run(rebuild_run_id) when is_binary(rebuild_run_id) do

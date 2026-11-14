@@ -412,6 +412,15 @@ defmodule Cadence.Projections.MissionEvents do
     end
   end
 
+  @doc """
+  Whether a run of this job type is safe to run again after the node stopped mid-run (Jobs
+  recovery, 11-14): yes. The rebuild reads Postgres only and replaces the mission's rows in one
+  transaction (delete, then insert on_conflict replace on deterministic mission_event ids).
+  """
+  @spec rerun_safe?(atom()) :: boolean()
+  def rerun_safe?(:mission_event_rebuild), do: true
+  def rerun_safe?(_job_type), do: false
+
   @doc false
   @spec execute_enqueued_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def execute_enqueued_run(rebuild_run_id) when is_binary(rebuild_run_id) do
