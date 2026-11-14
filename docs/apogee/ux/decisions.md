@@ -999,18 +999,22 @@ edit. This replaces ContactPlanning's "an edit generates every remaining day afr
   its requirements are the sum of its `spacecraft_ids` lengths. It's a
   neutral info line above the caution "supersedes N drafts" callout, which stays as it is:
   - "v3 applies to every day that's still open. 3 days already planned or started keep their requirement: 11-14,
-    11-15, 11-16. 2 closed days stay closed, and 1 canceled day stays canceled."
+    11-15, 11-16. 2 closed days stay closed: 11-12, 11-13. 1 canceled day stays canceled: 11-11." Each group is its
+    own sentence (fe-setup).
   - "Keep their requirement", not "keep v2's": kept days can come from older versions, so no single version
     describes them (U20). `current_version` isn't needed for this line.
   - Not "from the next open day": planned and open days can alternate, so there's no single day it starts from.
   - Drop any group whose count is 0, and use singulars ("1 day … keeps its requirement"). When every group is 0,
     the first sentence stands alone. A new template has no dry run, so it shows no line.
-  - **Dates:** with 3 days or fewer, list them after a colon (§4, `11-14`). Above 3, add "between 11-14 and 11-20",
-    using the first and last date, because the days needn't be consecutive.
+  - **Dates:** with 3 days or fewer, list them after a colon (§4, `11-14`). Above 3, put the span right after the
+    noun, using the first and last date, because the days needn't be consecutive: "5 days between 11-14 and 11-20,
+    already planned or started, keep their requirement." / "4 closed days between 11-12 and 11-18 stay closed."
+    Never at the end, where it reads as the requirement's window.
   - **Days or requirements:** when requirements equal days (one spacecraft), the noun is "days". Otherwise
     lead with requirements: "1,500 requirements on 3 days already planned or started keep their requirement…"
     becomes "1,500 requirements on 3 days, already planned or started, stay as they are: 11-14, 11-15, 11-16." The
-    closed and canceled groups follow the same rule: "2 closed requirements on 1 day stay closed: 11-15."
+    closed and canceled groups follow the same rule: "2 closed requirements on 1 day stay closed: 11-15." Above 3
+    days: "1,500 requirements on 5 days between 11-14 and 11-20, already planned or started, stay as they are."
   - **Definitions** (domain 11-13):
     - **Planned:** a plan in pending_approval, approved, executing, partially_reserved or reserved holds the
       requirement. Booked passes come from those plans, so they're covered. A day with only a draft isn't

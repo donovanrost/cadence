@@ -74,8 +74,8 @@ tabs: Requirements · Policy
   spacecraft = 1,500 passes a day". Before saving, show what it supersedes (from a server dry-run): a caution callout "Saving v3 supersedes 2 open
   drafts: Wed 11 Nov (R1, Mira K.), Thu 12 Nov (R1, you). They'll need drafting again." Above it, the dry run's
   count line (U48), as a neutral info line: "v3 applies to every day that's still open. 3 days already planned or
-  started keep their requirement: 11-14, 11-15, 11-16. 2 closed days stay closed, and 1 canceled day stays
-  canceled." For a template on many spacecraft it leads with requirements: "1,500 requirements on 3 days, already
+  started keep their requirement: 11-14, 11-15, 11-16. 2 closed days stay closed: 11-12, 11-13. 1 canceled day
+  stays canceled: 11-11." For a template on many spacecraft it leads with requirements: "1,500 requirements on 3 days, already
   planned or started, stay as they are: …". Save then reads
   `Save v3 · supersede 2 drafts`. Booked plans are untouched (they go to K2 if needed). Save makes **template v3** (versions are immutable), and the history
   lists the versions with who/when/why.
