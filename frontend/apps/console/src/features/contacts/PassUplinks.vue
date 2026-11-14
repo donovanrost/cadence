@@ -25,7 +25,7 @@ useMissionInvalidation(
 const bound = computed(() =>
   groups.state.value.status === "ready"
     ? groups.state.value.value.filter(
-        (g) => g.finished !== true && g.uplink?.pass.reservation_id === props.passId,
+        (g) => g.finished !== true && g.uplink?.pass?.reservation_id === props.passId,
       )
     : null,
 );

@@ -213,6 +213,16 @@ export function eventText(e: GroupEvent, nameOf: PersonName, targets: EventTarge
         typeof m === "object" ? Object.entries(m).map(([k, n]) => `${n} ${outcomeWord(k)}`) : [];
       return [`${who} closed the run`, ...tally].join(" · ");
     }
+    case "released_on_contact": {
+      // ux U46 audit line; the log's own column carries the time.
+      const sent = p?.released_entry_ids?.length;
+      const left = p?.not_attempted_entry_ids?.length ?? 0;
+      const where = p?.booked === false ? " into a contact that wasn't a booked pass" : " by name";
+      const stop = p?.stopped
+        ? ` · stopped${left ? `, ${plural(left, "uplink")} still queued` : ""}`
+        : "";
+      return `${who} released ${sent != null ? plural(sent, "uplink") : "it"}${where}${stop}`;
+    }
     default:
       return `${who} · ${(isKnown(e.kind) ? e.kind : e.kind.unrecognized).replaceAll("_", " ")}`;
   }

@@ -64,22 +64,65 @@ export const passReadinessReader = d.object({
 });
 export type PassReadiness = Decoded<typeof passReadinessReader>;
 
+const contactStation = d.object({
+  ref: d.nullable(d.string),
+  id: d.nullable(stationIdReader),
+  // free-text: a station call sign (SVA, KIR), not a vocabulary
+  code: d.nullable(d.string),
+  name: d.nullable(d.string),
+});
+export const starterKinds = ["user", "service", "system"] as const;
+/** U46 (api): who started the contact, and the groups a named release on it would send. */
+const contactFields = {
+  /** null before the pass starts. */
+  realized_contact_id: d.optional(d.nullable(d.token)),
+  started_by: d.optional(
+    d.nullable(
+      d.object({
+        kind: d.known(starterKinds),
+        id: d.nullable(d.token),
+        // free-text: a person's or service's display name
+        name: d.nullable(d.string),
+      }),
+    ),
+  ),
+  started_at: d.optional(d.nullable(d.timestamp)),
+  /** This mission's queued groups with unreleased members for that spacecraft, oldest first. */
+  armed_group_ids: d.optional(d.array(d.token, 1_000)),
+};
 const passRef = d.object({
   reservation_id: d.token,
   contact_id: d.nullable(d.token),
-  station: d.object({
-    ref: d.nullable(d.string),
-    id: d.nullable(stationIdReader),
-    // free-text: a station call sign (SVA, KIR), not a vocabulary
-    code: d.nullable(d.string),
-    name: d.nullable(d.string),
-  }),
+  station: contactStation,
   starts_at: d.timestamp,
+  ends_at: d.optional(d.timestamp),
+  booked: d.optional(d.boolean),
+  ...contactFields,
 });
+/** U46: a live hand-started contact that isn't a booked pass; ends_at null if open-ended. */
+const handContact = d.object({
+  realized_contact_id: d.token,
+  booked: d.boolean,
+  station: contactStation,
+  starts_at: d.nullable(d.timestamp),
+  ends_at: d.nullable(d.timestamp),
+  started_by: contactFields.started_by,
+  started_at: contactFields.started_at,
+  armed_group_ids: d.array(d.token, 1_000),
+});
+export type HandContact = Decoded<typeof handContact>;
 
-/** On command groups: the pass the group is queued for, and its readiness. */
+/**
+ * On command groups: the pass the group is queued for, and its readiness. U46 (api): null pass
+ * only while a hand-started contact is live and nothing booked lies ahead (`contact` is then set).
+ */
 export const groupUplinkReader = d.object({
-  pass: passRef,
+  /**
+   * U46 (api): the group's first target, whom the whole block describes (domain keys a group by
+   * it). name falls back to the id for a deleted spacecraft. Optional until api's build lands.
+   */
+  spacecraft: d.optional(d.object({ id: d.token, name: d.string })),
+  pass: d.nullable(passRef),
   /** 12792cb2: the next ready pass it would go on; named only when present. */
   next_pass: d.optional(d.nullable(passRef)),
   /** null when the spacecraft has no live pass: `pass` is then its next commandable pass. */
@@ -90,6 +133,7 @@ export const groupUplinkReader = d.object({
       since: d.nullable(d.timestamp),
     }),
   ),
+  contact: d.optional(d.nullable(handContact)),
 });
 export type GroupUplink = Decoded<typeof groupUplinkReader>;
 
@@ -273,13 +317,21 @@ export function readinessTag(
  * Otherwise it goes on the next pass (KIR 02:31Z) unless it expires at 03:00Z." The next pass is
  * booked, not promised ready; with none booked: "No later pass is booked for it yet."
  */
+type PassAt = Readonly<{ station: StationRef & { name: string | null }; starts_at: string }>;
+/** What the line reads of a group's uplink block (Investigate's lane passes its own pass). */
+export type BlockedUplink = Readonly<{
+  pass: PassAt | null;
+  next_pass?: PassAt | null | undefined;
+  readiness: GroupUplink["readiness"];
+}>;
+
 export function groupBlockedLine(
-  uplink: GroupUplink | null | undefined,
+  uplink: BlockedUplink | null | undefined,
   expiresAt: string | null,
   stations: StationLookup = NO_STATIONS,
 ): string | null {
   const readiness = uplink?.readiness ?? null;
-  if (!uplink || readiness?.state !== "blocked") return null;
+  if (!uplink?.pass || readiness?.state !== "blocked") return null;
   const station = codeFor(uplink.pass.station, stations) ?? uplink.pass.station.name ?? "its";
   const provider = providerFor(uplink.pass.station, stations);
   const next = uplink.next_pass ?? null;

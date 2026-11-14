@@ -125,6 +125,11 @@ export const errorCodes = [
   "uplink_not_blocked",
   "uplink_recovering",
   "uplink_recovery_refused",
+  // U46 named release (api, DECISIONS #84): whole-request refusals before anything went out.
+  "command_window_closed",
+  "unbooked_contact_unconfirmed",
+  "realized_contact_not_found",
+  "realized_contact_not_releasable",
   // Alarms, attention
   "alarms_unavailable",
   "episode_not_found",

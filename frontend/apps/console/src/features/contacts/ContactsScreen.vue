@@ -144,7 +144,7 @@ const uplinkPasses = computed<ReadonlySet<string>>(() => {
   return new Set(
     g.status === "ready" && showUplinks.value
       ? g.value.flatMap((row) =>
-          row.finished !== true && row.uplink ? [row.uplink.pass.reservation_id] : [],
+          row.finished !== true && row.uplink?.pass ? [row.uplink.pass.reservation_id] : [],
         )
       : [],
   );

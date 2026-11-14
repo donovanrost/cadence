@@ -11,6 +11,7 @@ import {
   ApStatTile,
   ApStatusMark,
   ApTag,
+  useNow,
 } from "@/ui";
 import { groupBlockedLine, recoverable } from "@/features/contacts/readiness.ts";
 import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
@@ -23,7 +24,9 @@ import {
   STAGE_STATE,
   type PersonName,
 } from "../groups/words.ts";
+import { refusalLine, windowLine } from "../groups/release.ts";
 import AbortPanel from "./AbortPanel.vue";
+import ContactRelease from "./ContactRelease.vue";
 import NeedsYouPanel from "./NeedsYouPanel.vue";
 import TargetMatrix from "./TargetMatrix.vue";
 import { useFleet } from "@/features/fleet/index.ts";
@@ -64,6 +67,20 @@ const stations = useStationCodes(computed(() => props.missionId));
 const blocked = computed(() =>
   groupBlockedLine(props.group.uplink, props.group.release?.expires_at ?? null, stations),
 );
+/** U46 (a): the queued pass's command window from its times; the blocked line replaces it. */
+const now = useNow();
+const windowText = computed(() => {
+  const pass = props.group.uplink?.pass;
+  if (!pass || blocked.value || props.group.finished === true) return null;
+  const line = windowLine(pass.starts_at, pass.ends_at, now.value);
+  const code = pass.station.code ?? pass.station.name;
+  return line && code ? `${code} pass · ${line}` : line;
+});
+/** U46 (b): a member's latest named-release stop, under its target. */
+const refusalOf = (t: Group["targets"][number]) => {
+  const r = t.members.find((m) => m.release_refusal)?.release_refusal;
+  return r ? refusalLine(r) : null;
+};
 </script>
 
 <template>
@@ -93,7 +110,7 @@ const blocked = computed(() =>
     <ApCallout v-else-if="group.state === 'aborted'" tone="off">
       Aborted by {{ nameOf(group.aborted_by?.user_id ?? null) }}: “{{ group.abort_reason }}”
     </ApCallout>
-    <div v-if="blocked && group.uplink" class="flex flex-col gap-2">
+    <div v-if="blocked && group.uplink?.pass" class="flex flex-col gap-2">
       <ApCallout tone="crit">{{ blocked }}</ApCallout>
       <RecoverUplink
         v-if="recoverable(group.uplink.readiness?.reason ?? null)"
@@ -104,6 +121,13 @@ const blocked = computed(() =>
         @changed="$emit('changed')"
       />
     </div>
+    <p v-if="windowText" class="m-0 font-mono text-sm text-text-2">{{ windowText }}</p>
+    <ContactRelease
+      :group="group"
+      :mission-id="missionId"
+      :can-release="canAbort"
+      @changed="$emit('changed')"
+    />
     <!-- CommandFlow C3: Abort sits up top (header area), never below a long target list. -->
     <AbortPanel v-if="canAbort && abortable(group)" :group="group" @done="$emit('changed')" />
     <ApStatStrip :columns="tiles.length" label="Uplink pipeline">
@@ -138,6 +162,9 @@ const blocked = computed(() =>
             >
           </span>
           <ApTag :state="STAGE_STATE[t.stage]" :label="memberStageWord(t.stage, group.state)" />
+          <p v-if="refusalOf(t)" class="col-span-3 col-start-2 m-0 text-sm text-caution-text">
+            {{ refusalOf(t) }}
+          </p>
         </li>
       </ul>
     </ApPanel>

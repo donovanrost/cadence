@@ -10,6 +10,7 @@ import {
 } from "@/api/index.ts";
 import { groupUplinkReader } from "@/features/contacts/readiness.ts";
 import { catalogRevisionReader } from "../api.ts";
+import { releaseRefusalReader } from "./release.ts";
 import {
   actor,
   groupsBase,
@@ -54,6 +55,8 @@ export const eventKinds = [
   "member_canceled",
   "member_failed",
   "completed",
+  // U46 (api): an operator released armed groups into a named contact.
+  "released_on_contact",
 ] as const;
 
 const member = d.object({
@@ -66,6 +69,8 @@ const member = d.object({
   end_reason: d.nullable(d.knownText(endReasons)),
   verify_by: d.nullable(d.timestamp),
   occurred_at: d.nullable(d.timestamp),
+  /** U46: its latest named-release stop; a window-closed stop leaves it queued. */
+  release_refusal: d.optional(d.nullable(releaseRefusalReader)),
 });
 export type GroupMember = Decoded<typeof member>;
 
@@ -159,6 +164,11 @@ const event = d.object({
       spacecraft_id: d.optional(d.token),
       position: d.optional(d.integer),
       later_members_stopped: d.optional(d.integer),
+      // released_on_contact (U46)
+      booked: d.optional(d.boolean),
+      released_entry_ids: d.optional(d.array(d.token, 1_000)),
+      not_attempted_entry_ids: d.optional(d.array(d.token, 1_000)),
+      stopped: d.optional(d.nullable(d.object({ command_queue_entry_id: d.token }))),
     }),
   ),
 });
