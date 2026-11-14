@@ -1036,13 +1036,16 @@ telemetry, and the words must not suggest it is. **P2, caution:** confirmed, nev
 records", not "quarantine", "writer", "entries" or "index"; those go in Technical details. The pass label is
 U47's (`SVB 03:10Z pass`, `SVB contact`, or the spacecraft alone).
 - **Title:** `EARENDIL-008 · SVB 03:10Z pass · 12 frames and 40 packets couldn't be archived`. Drop a zero count,
-  and use singulars ("1 frame couldn't be archived").
-- **Meta:** `12 FRAMES · 40 PACKETS · 03:14Z–03:15Z` (first_seen_at–last_seen_at, §4; one time when they're equal).
+  and use singulars ("1 frame couldn't be archived"). Without a contact or a spacecraft (id `none:…`), the count
+  stands alone.
+- **Meta:** `12 FRAMES · 40 PACKETS · 03:14Z–03:15Z`, from first_received_at–last_received_at (when the records
+  arrived, §4; one time when they're equal). Add `STILL ARRIVING` while the pass is live and last_seen_at is within
+  the last 5 minutes. As with U47's RISING, show it only while it's true.
 - **Body:** the cause sentence, then what was stored, then the choice.
-  - record_identity_conflict: "The archive already holds different records with the same identity, so these
+  - identity_conflict: "The archive already holds different records with the same identity, so these
     weren't added."
-  - record_data_rejected: "The archive rejected their data, so these weren't added."
-  - unknown code: "The archive couldn't take them."
+  - data_rejected: "The archive rejected their data, so these weren't added."
+  - unknown (or a code the console doesn't know): "The archive couldn't take them."
   - Stored: "Their telemetry was still stored: 12 frames and 40 packets, without an archived copy of the raw
     records." With both stored counts 0: "None of their telemetry was stored."
   - Choice: "Retry once the cause is fixed, or discard them if they can't be archived."
@@ -1050,8 +1053,10 @@ U47's (`SVB 03:10Z pass`, `SVB contact`, or the spacecraft alone).
     the item id.
 - **Actions:** `Retry` (secondary) and `Discard…` (danger, sheet). Operators only; without the capability: "Operators
   retry or discard records that couldn't be archived."
-  - Retry has no confirm. Then: "Retried by Mira K. at 03:20Z." If some still fail, the row stays with the new
-    counts and the same line.
+  - Retry has no confirm, and it's synchronous (domain's final shape). When everything is archived, the row
+    resolves. If some still fail, the row stays with the new counts, and the line comes from last_retry: "Retried
+    by Mira K. at 03:20Z; the rest still couldn't be archived." If none were archived: "Retried by Mira K. at
+    03:20Z; none could be archived yet."
   - Discard sheet: title `Discard 12 frames and 40 packets that couldn't be archived?`, body "They won't be
     archived, and Retry won't be offered for them again. Their stored telemetry stays." A reason is required. The
     action is `Discard` (danger). Put "The raw bytes may still be in the buffer or the ingest archive." in the
@@ -1060,5 +1065,6 @@ U47's (`SVB 03:10Z pass`, `SVB contact`, or the spacecraft alone).
   <reason>."
 - **Contacts:** the selected-pass panel gets a block per item, with the same title, sentences, actions and Technical
   details, as for U45 and U47.
-- **Shape asks:** the retry line needs `last_retry: {by, at} | null` on the open item; discard needs the actor and
-  reason on the resolution.
+- **Shape** (domain's final, 11-14): `last_retry {by, at}` and `resolution {kind, by, at, reason}` are both sent.
+  The pass block needs `contact_id` / `provider_reservation_id`; with both null, the item is Now-only. There's no
+  acknowledge.
