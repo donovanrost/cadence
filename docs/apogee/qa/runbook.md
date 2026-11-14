@@ -185,6 +185,13 @@ Ecto.Migrator.migrations(Cadence.Repo, path)   # status before and after
 
 Or qa folds them into a planned restart.
 
+**Before any planned :4011 or simulator restart** (11-14 01:36Z: the (B) restart cut a live 008 pass and its
+settlement replay then looped on an archive identity conflict, issues.md #60), check all three, read-only:
+no command group armed within 1 h; NO realized contact in `active` and no scheduled contact starting
+before the node is back (allow ~10 min); a graceful stop (`:init.stop` over RPC), never a kill.
+`select count(*) from realized_contacts where lifecycle_state = 'active'` and
+`select count(*) from scheduled_contacts where starts_at between now() and now() + interval '15 minutes'`.
+
 **When a save breaks the compile** (11-13 09:59-10:03Z: an uncommitted controller edit with an
 undefined function made `CadenceWeb.Router` "not available", so every request 500'd), the dev
 reloader doesn't retry after the fix is saved. Once the file compiles (`MIX_ENV=test
