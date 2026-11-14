@@ -105,7 +105,8 @@ defmodule Cadence.IngressJournal.Evidence do
          # frame with the first record's time (11-14 00:38–00:40Z, 8 frames per stamp).
          receipt_times: receipt_times(entries),
          source_ref: metadata_value(metadata, :source_ref),
-         metadata: Map.merge(ingress_metadata, journal_metadata)
+         metadata:
+           ingress_metadata |> Map.merge(contact_context(metadata)) |> Map.merge(journal_metadata)
        })}
     else
       {:error, {:unsupported_journal_protocol_family, protocol_family}}
@@ -113,6 +114,17 @@ defmodule Cadence.IngressJournal.Evidence do
   end
 
   defp receipt_times(entries), do: Enum.map(entries, &{&1.start_offset, &1.receipt_time})
+
+  # The contact, path and binding the TCP receiver journals at the entry's top level, as the
+  # same string keys the journal-less path sets (tcp_socket.ex), so archive rows name their
+  # contact (qa issue 61: every archive row read NULL, and #88 quarantine items group by it).
+  defp contact_context(metadata) do
+    for key <- [:realized_contact_id, :path_id, :provider_binding_id],
+        value = metadata_value(metadata, key),
+        is_binary(value),
+        into: %{},
+        do: {Atom.to_string(key), value}
+  end
 
   defp validate_contiguous_entries([%Entry{}]), do: :ok
 
