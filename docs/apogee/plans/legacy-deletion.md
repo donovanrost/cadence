@@ -410,10 +410,12 @@ their params, and library, playlists, new, settings, activity and diagnostics st
     execution-diagnostics tests, and in `workspace_snapshot_test.exs` and `dashboard_workspace_read_test.exs`
     (they run `features/workspace`'s `producer-contract-check.mjs`, which goes here with the rest of
     `workspace.ts`/`features/workspace`, left by the federated batch).
-- **Keep:** the domain behind them: `SharedViews`, `SettingsAuthoring`, `Reads.Dashboards.{Settings,Library,
-  Playlists}`, `LibraryAuthoring`, `PlaylistAuthoring`. The console endpoints wrap them.
-  `Reads.Dashboards.Playlists.present/search` can go (only `ops_playlist_page.ex` calls them), with their cases
-  in `dashboard_playlists_test.exs` (:156-166, :233-258).
+- **Keep:** the domain behind them: `SharedViews`, `SettingsAuthoring`, `Reads.Dashboards.{Settings,Library}`,
+  `LibraryAuthoring`, `PlaylistAuthoring`. The console endpoints wrap them.
+- **Also goes:** all of `Reads.Dashboards.Playlists` (`directory/present/search`: only `ops_playlist_page.ex` called
+  them), with the functions only it used, `PlaylistStore.list/choices/dashboard` and
+  `PlaylistInput.query/position` (`ids?/1` becomes private), and their cases in `dashboard_playlists_test.exs`
+  (fe-setup e55c149d7).
 
 ### L8c dashboard invalidation decisions (follow-up batch; lead 11-14)
 Nothing in lib records dashboard invalidation decisions any more. Neither writer has callers:
