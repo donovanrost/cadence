@@ -7,10 +7,7 @@ import { allow, expect, test } from "./support/fixtures.ts";
 // grant, which this spec leaves again; nothing permanent. The wrong password's 422 is the point.
 test.use({
   storageState: storageStateFor("admin"),
-  allowedDiagnostics: allow(
-    /session\/admin-mode -> 422/,
-    /status of 422.*session\/admin-mode/,
-  ),
+  allowedDiagnostics: allow(/session\/admin-mode -> 422/, /status of 422.*session\/admin-mode/),
 });
 
 test.describe("admin mode", () => {
@@ -27,10 +24,7 @@ test.describe("admin mode", () => {
       await leaveFirst.click();
       await accountMenu.click();
     }
-    await page
-      .getByRole("button", { name: "Enter admin mode" })
-      .first()
-      .click();
+    await page.getByRole("button", { name: "Enter admin mode" }).first().click();
 
     const form = page.locator("dialog[open]").last();
     const password = form.getByLabel("Password", { exact: true });
@@ -50,11 +44,7 @@ test.describe("admin mode", () => {
     await page.getByRole("button", { name: "Leave admin mode" }).click();
 
     await accountMenu.click();
-    await expect(
-      page.getByRole("button", { name: "Enter admin mode" }).first(),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Leave admin mode" }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Enter admin mode" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Leave admin mode" })).toHaveCount(0);
   });
 });
