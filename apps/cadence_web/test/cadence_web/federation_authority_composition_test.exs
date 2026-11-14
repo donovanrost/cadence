@@ -63,7 +63,7 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
              }
            ] = Enum.filter(releases, &(&1.application_key == "derived_telemetry"))
 
-    assert length(OrganizationAdmin.surfaces()) == 12
+    assert length(OrganizationAdmin.surfaces()) == 11
   end
 
   test "composes the exact core and optional web query contribution ledger" do
@@ -84,10 +84,10 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
              "derived_telemetry" => 1,
              "limits" => 2,
              "ops_console" => 35,
-             "organization_admin" => 12
+             "organization_admin" => 11
            }
 
-    assert Enum.count(contributions, &(&1.application_key == "organization_admin")) == 12
+    assert Enum.count(contributions, &(&1.application_key == "organization_admin")) == 11
   end
 
   defp contribution_identity(contribution) do
