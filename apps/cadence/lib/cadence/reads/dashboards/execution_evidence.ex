@@ -41,15 +41,6 @@ defmodule Cadence.Reads.Dashboards.ExecutionEvidence do
     Enum.map(@inspection_collections, &unavailable/1)
   end
 
-  def decisions(rows, source) when source in ["durable", "process_local"] do
-    [
-      collection("refresh", source, Stream.map(rows, &refresh/1)),
-      collection("invalidation", source, Stream.map(rows, &invalidation/1))
-    ]
-  end
-
-  def unavailable_decisions, do: Enum.map(~w(refresh invalidation), &unavailable/1)
-
   defp unavailable(id),
     do: %{id: id, state: "unavailable", source: nil, limited: false, rows: []}
 
@@ -251,46 +242,6 @@ defmodule Cadence.Reads.Dashboards.ExecutionEvidence do
       runtime_action: outcome.runtime_action,
       warning_codes: names(outcome.warning_codes)
     )
-  end
-
-  defp refresh(decision) do
-    identity = decision_identity(decision)
-
-    row("refresh", [identity], identity, "Recorded refresh decision", decision.refresh_reason,
-      observed_at: decision.decision_observed_at,
-      refresh_allowed: decision.refresh_allowed?,
-      decision_status: decision.decision_status,
-      context_reason: decision.context_reason,
-      affected_placement_count: decision.affected_placement_count
-    )
-  end
-
-  defp invalidation(decision) do
-    identity = decision_identity(decision)
-
-    row("invalidation", [identity], identity, "Recorded invalidation", decision.decision_status,
-      observed_at: decision.decision_observed_at,
-      invalidation_event_id: decision.invalidation_event_id,
-      boundary: decision.boundary,
-      domain_fact: decision.domain_fact,
-      matches: decision.matches?,
-      context_matches: decision.context_matches?,
-      context_reason: decision.context_reason,
-      invalidated_artifacts: decision.invalidated_artifacts,
-      affected_placement_count: decision.affected_placement_count,
-      affected_placements: names(decision.affected_placement_ids || [])
-    )
-  end
-
-  defp decision_identity(%{dashboard_runtime_invalidation_decision_event_id: id})
-       when is_binary(id), do: id
-
-  defp decision_identity(decision) do
-    digest([
-      decision.invalidation_event_id,
-      scalar(decision.decision_observed_at),
-      scalar(decision.decision_status)
-    ])
   end
 
   defp row(category, key, identity, title, status, details) do

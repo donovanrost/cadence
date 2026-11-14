@@ -1,16 +1,14 @@
 defmodule Cadence.Reads.Dashboards.ExecutionDiagnostics do
   @moduledoc """
-  Mission-authorized published-dashboard inspection and recorded runtime decisions.
+  Mission-authorized published-dashboard inspection.
 
   Inspection runs the ordinary resolver at read time; it is not historical viewer
   evidence. Runtime dependencies are server-owned, never browser-supplied options.
-  Recorded decisions are read independently so inspection failure cannot erase them.
   """
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.Dashboards.{
     DashboardResolveRequest,
-    Diagnostics,
     Document,
     Documents,
     Resolution,
@@ -20,7 +18,6 @@ defmodule Cadence.Reads.Dashboards.ExecutionDiagnostics do
 
   alias Cadence.Missions
   alias Cadence.Reads.Dashboards.ExecutionEvidence
-  alias Cadence.Telemetry.RuntimeHealth
 
   @dto_version 2
   def dto_version, do: @dto_version
@@ -38,7 +35,7 @@ defmodule Cadence.Reads.Dashboards.ExecutionDiagnostics do
           name: document.name,
           document_version: Document.version(document),
           loaded_at: DateTime.utc_now() |> DateTime.to_iso8601(),
-          collections: inspection(document, opts) ++ decisions(org, mission, dashboard, opts)
+          collections: inspection(document, opts)
         }
 
         if byte_size(Jason.encode!(model)) <= 1_048_576,
@@ -111,38 +108,6 @@ defmodule Cadence.Reads.Dashboards.ExecutionDiagnostics do
     _ -> ExecutionEvidence.unavailable_inspection()
   catch
     _, _ -> ExecutionEvidence.unavailable_inspection()
-  end
-
-  defp decisions(org, mission, dashboard, opts) do
-    filters = [organization_id: org, mission_id: mission, dashboard_id: dashboard, limit: 51]
-
-    {rows, source} =
-      case Diagnostics.durable_runtime_invalidation_decisions(filters) do
-        [] ->
-          rows =
-            opts
-            |> Keyword.get(:runtime_health, RuntimeHealth)
-            |> RuntimeHealth.snapshot()
-            |> Diagnostics.runtime_invalidation_decisions(filters)
-
-          {rows, "process_local"}
-
-        rows ->
-          {rows, "durable"}
-      end
-
-    # Scope every projection row as defense in depth, including local fallback.
-    rows =
-      Enum.filter(
-        rows,
-        &(&1.organization_id == org and &1.mission_id == mission and &1.dashboard_id == dashboard)
-      )
-
-    ExecutionEvidence.decisions(rows, source)
-  rescue
-    _ -> ExecutionEvidence.unavailable_decisions()
-  catch
-    _, _ -> ExecutionEvidence.unavailable_decisions()
   end
 
   defp valid_id?(value) when is_binary(value) and byte_size(value) in 1..256,
