@@ -320,6 +320,34 @@ defmodule Cadence.CatalogTest do
                revision.mission_model_revision_id
 
       assert operational_event.causality.import_run_id == completed_run.import_run_id
+
+      # Director 11-14: running the same import run again (a node stopped mid-run, or a retry)
+      # finds the revision it made: the run stays completed with the same revision, with no
+      # second revision, operational event or fact.
+      assert {:ok, %{status: :completed} = rerun} =
+               Catalog.execute_enqueued_run(
+                 completed_run.import_run_id,
+                 Keyword.put(importer_opts, :event_bus, event_bus)
+               )
+
+      assert rerun.result_document["catalog_revision"]["catalog_revision_id"] == revision_id
+
+      assert [%{catalog_revision_id: ^revision_id}] =
+               Catalog.list_revisions(
+                 organization_id(),
+                 mission_id(),
+                 database.catalog_database_id
+               )
+
+      assert [_one] =
+               Cadence.OperationalEvents.list_events(organization_id(), mission_id(),
+                 category: :catalog,
+                 kind: :catalog_revision_registered,
+                 source_record_kind: :catalog_revision,
+                 source_record_id: revision_id
+               )
+
+      refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :catalog, :facts}, _second}}, 200
     end
 
     test "successful revision import invalidates matching dashboard runtime caches", %{

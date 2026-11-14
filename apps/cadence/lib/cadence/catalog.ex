@@ -470,7 +470,27 @@ defmodule Cadence.Catalog do
 
   defp create_revision_run?(%ImportRun{}), do: false
 
+  # Idempotent (director 11-14): a rerun of the same import run finds the revision it already
+  # made instead of inserting a second (which the unique index on import_run_id refused, failing
+  # a completed run). The revision and its operational event commit together; the fact is
+  # published after the commit.
   defp create_revision_from_completed_run(%ImportRun{} = run, event_bus) do
+    case fetch_revision_by_import_run(run.organization_id, run.mission_id, run.import_run_id) do
+      {:ok, %Revision{} = revision} ->
+        {:ok, revision}
+
+      {:error, :catalog_revision_not_found} ->
+        with {:ok, revision} <- insert_revision_from_completed_run(run) do
+          Facts.publish(event_bus, revision)
+          {:ok, revision}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp insert_revision_from_completed_run(%ImportRun{} = run) do
     with {:ok, %Artifact{} = artifact} <-
            fetch_artifact(run.organization_id, run.mission_id, run.artifact_id),
          {:ok, %Database{} = database} <-
@@ -506,19 +526,27 @@ defmodule Cadence.Catalog do
                "importer_key" => run.importer_key
              }
            }),
-         {:ok, %RevisionRow{} = row} <-
-           Repo.insert(RevisionRow.changeset(revision)),
-         revision = RevisionRow.to_domain(row),
-         {:ok, %OperationalEvent{}} <-
-           revision
-           |> OperationalEvent.from_catalog_revision(row.inserted_at)
-           |> then(&OperationalEvents.persist_event(Repo, &1)) do
-      Facts.publish(event_bus, revision)
+         {:ok, revision} <- persist_revision(revision) do
       {:ok, revision}
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp persist_revision(%Revision{} = revision) do
+    Repo.transaction(fn ->
+      with {:ok, %RevisionRow{} = row} <- Repo.insert(RevisionRow.changeset(revision)),
+           revision = RevisionRow.to_domain(row),
+           {:ok, %OperationalEvent{}} <-
+             revision
+             |> OperationalEvent.from_catalog_revision(row.inserted_at)
+             |> then(&OperationalEvents.persist_event(Repo, &1)) do
+        revision
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
   defp ensure_revision_basis(revision_id) when is_binary(revision_id) and revision_id != "",
