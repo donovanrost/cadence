@@ -78,12 +78,18 @@ export class ChartEvents {
     });
     const flown = mergedSpans(bands.filter((b) => b.realized));
     for (const span of flown) this.renderTint(span);
-    // A booking a flown pass overlaps says nothing the pass doesn't: the flown pass's solid edges
-    // win (qa: 003's pair read dashed); a booking with no pass keeps its dashed outline.
-    const shown = bands.filter((b) => b.realized || !overlapsAny(b, flown));
+    // ux 88b7e6ae7: where a flown pass covers its booking, only the pass's solid edges; where the
+    // booking reaches past it (a late start, an early LOS), the dashed outline on that part only;
+    // a booking with no pass stays dashed.
+    const shown = bands.flatMap((band) =>
+      band.realized
+        ? [{ ...band, open: { left: true, right: true } }]
+        : uncovered(band, flown).map((part) => ({ ...band, ...part })),
+    );
     for (const band of shown) this.renderBandEdges(band);
     const labelled = new Set<string>();
     for (const band of shown) {
+      if (!band.open.left) continue; // a part after a flown pass: the pass is already labelled
       const name = band.marker.station || band.marker.label || "Contact";
       const key = `${Math.round(band.left)}:${name}`;
       if (labelled.has(key)) continue;
@@ -117,6 +123,8 @@ export class ChartEvents {
     left: number;
     width: number;
     realized: boolean;
+    /** Whether each side is the contact's own start or end (a cut side borders a flown pass). */
+    open: { left: boolean; right: boolean };
   }) {
     const { marker, realized } = band;
     const status = marker.status ? marker.status.replaceAll("_", " ") : null;
@@ -130,8 +138,8 @@ export class ChartEvents {
       ...this.bandBox(band.left, band.width),
       background: "transparent",
       border: realized ? "0" : `1px dashed ${line}`,
-      borderLeft: `1px ${realized ? "solid" : "dashed"} ${line}`,
-      borderRight: `1px ${realized ? "solid" : "dashed"} ${line}`,
+      borderLeft: band.open.left ? `1px ${realized ? "solid" : "dashed"} ${line}` : "0",
+      borderRight: band.open.right ? `1px ${realized ? "solid" : "dashed"} ${line}` : "0",
       pointerEvents: "auto",
     });
     this.eventLayer.appendChild(edge);
@@ -210,13 +218,31 @@ export class ChartEvents {
   }
 }
 
-/** Whether a span overlaps any of `spans` (touching isn't overlapping). */
-export function overlapsAny(
+/**
+ * The parts of `span` no span in `covers` (sorted, merged) covers, each saying whether its sides
+ * are the span's own ends. A booking fully under a flown pass leaves nothing.
+ */
+export function uncovered(
   span: { left: number; width: number },
-  spans: readonly { left: number; width: number }[],
+  covers: readonly { left: number; width: number }[],
 ) {
-  return spans.some((s) => span.left < s.left + s.width && s.left < span.left + span.width);
+  const end = span.left + span.width;
+  const parts: { left: number; width: number; open: { left: boolean; right: boolean } }[] = [];
+  let at = span.left;
+  for (const c of covers) {
+    const cEnd = c.left + c.width;
+    if (cEnd <= at || c.left >= end) continue;
+    if (c.left > at) parts.push(part(at, c.left, span.left, end));
+    at = Math.max(at, cEnd);
+  }
+  if (at < end) parts.push(part(at, end, span.left, end));
+  return parts;
 }
+const part = (from: number, to: number, start: number, end: number) => ({
+  left: from,
+  width: to - from,
+  open: { left: from === start, right: to === end },
+});
 
 /** Pixel spans merged where they overlap or touch: one tint per run of passes. */
 export function mergedSpans(spans: readonly { left: number; width: number }[]) {

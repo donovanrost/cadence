@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { chained, mergedSpans, overlapsAny } from "./chart-events.ts";
+import { chained, mergedSpans, uncovered } from "./chart-events.ts";
 
 describe("contact tints (qa's overlay look)", () => {
   it("merges overlapping or touching passes into one tint, so 5% washes never stack", () => {
@@ -39,11 +39,20 @@ describe("mission event marks", () => {
   });
 });
 
-describe("booked vs flown", () => {
-  it("drops a booking a flown pass overlaps, keeps one with no pass", () => {
-    const flown = [{ left: 100, width: 50 }];
-    expect(overlapsAny({ left: 98, width: 54 }, flown)).toBe(true);
-    expect(overlapsAny({ left: 300, width: 40 }, flown)).toBe(false);
-    expect(overlapsAny({ left: 150, width: 20 }, flown)).toBe(false);
+describe("booked vs flown (ux 88b7e6ae7)", () => {
+  const flown = [{ left: 100, width: 50 }];
+  it("leaves nothing of a booking the pass covers", () => {
+    expect(uncovered({ left: 100, width: 50 }, flown)).toEqual([]);
+  });
+  it("keeps the late-start and early-LOS parts, dashed only on the booking's own ends", () => {
+    expect(uncovered({ left: 90, width: 70 }, flown)).toEqual([
+      { left: 90, width: 10, open: { left: true, right: false } },
+      { left: 150, width: 10, open: { left: false, right: true } },
+    ]);
+  });
+  it("keeps a booking with no pass whole", () => {
+    expect(uncovered({ left: 300, width: 40 }, flown)).toEqual([
+      { left: 300, width: 40, open: { left: true, right: true } },
+    ]);
   });
 });
