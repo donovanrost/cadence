@@ -98,9 +98,10 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttention do
          actions: [],
          resolution: %{
            action: row.action,
-           by: %{id: row.actor["id"], name: row.actor["name"]},
+           actor: row.actor,
            at: row.resolved_at,
-           note: row.note
+           note: row.note,
+           provider_reference: nil
          }
      }}
   end

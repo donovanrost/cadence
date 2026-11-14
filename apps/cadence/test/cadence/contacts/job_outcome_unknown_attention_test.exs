@@ -50,8 +50,17 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttentionTest do
     assert {:error, :reason_required} =
              JobOutcomeUnknownAttention.resolve(c.scope, c.mission, item.id, " ")
 
-    assert {:ok, %{state: "resolved", resolution: %{action: "closed", note: "Booked."}}} =
-             JobOutcomeUnknownAttention.resolve(c.scope, c.mission, item.id, "Booked.")
+    assert {:ok,
+            %{
+              state: "resolved",
+              resolution: %{
+                action: "closed",
+                actor: %{"kind" => "user", "id" => _, "name" => _},
+                at: %DateTime{},
+                note: "Booked.",
+                provider_reference: nil
+              }
+            }} = JobOutcomeUnknownAttention.resolve(c.scope, c.mission, item.id, "Booked.")
 
     assert {:ok, %{status: :outcome_unknown}} = Cadence.fetch_background_job(job.job_id)
     assert [] = JobOutcomeUnknownAttention.items(c.org, c.mission)

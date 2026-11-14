@@ -54,7 +54,14 @@ defmodule CadenceWeb.Console.JobOutcomeUnknownAPITest do
              "data" => %{
                "source" => "job_outcome_unknown",
                "state" => "resolved",
-               "resolution" => %{"action" => "closed", "note" => "It booked."}
+               "resolution" => %{
+                 "action" => "closed",
+                 "note" => "It booked.",
+                 "actor" => %{"kind" => "user", "name" => "Mira K."},
+                 "provider_reference" => nil
+               },
+               "acknowledged_by" => nil,
+               "provider_message" => nil
              }
            } =
              c.conn
