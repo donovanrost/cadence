@@ -3,7 +3,7 @@ defmodule CadenceWeb.HostPageAuthorization do
 
   import Phoenix.Component
 
-  alias CadenceWeb.{AdminAuth, DashboardAuthorAuth, MissionAuth, OrganizationAuth}
+  alias CadenceWeb.{AdminAuth, MissionAuth, OrganizationAuth}
   alias CadenceWeb.{OpsShellHook, SpacecraftAuth, UserAuth}
   alias CadenceWeb.OpsShellHook.CommandUpdates
 
@@ -19,8 +19,6 @@ defmodule CadenceWeb.HostPageAuthorization do
     catalog: {@organization, [@mission], false},
     comms: {@organization, [@mission], false},
     ops: {@organization, [@mission], true},
-    ops_dashboard_author:
-      {@organization, [@mission, {DashboardAuthorAuth, :require_dashboard_author}], true},
     ops_admin: {@organization, [@admin, @mission], true},
     user: {{UserAuth, :require_user_scope}, [], false},
     admin: {{AdminAuth, :require_platform_admin}, [], false}
