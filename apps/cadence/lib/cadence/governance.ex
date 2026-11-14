@@ -464,19 +464,16 @@ defmodule Cadence.Governance do
         [capability_instance_row],
         capability_instance_row.binding_set_row_id == ^binding_set_row.id
       )
-      |> order_by([capability_instance_row],
-        asc: capability_instance_row.capability_instance_id
-      )
       |> Repo.all()
+      # Bytewise, not by the database's text collation: the hydrated set is hashed (#56).
+      |> Enum.sort_by(& &1.capability_instance_id)
 
     binding_rule_rows =
       BindingRuleRow
       |> where([binding_rule_row], binding_rule_row.binding_set_row_id == ^binding_set_row.id)
-      |> order_by([binding_rule_row],
-        asc: binding_rule_row.priority,
-        asc: binding_rule_row.binding_rule_id
-      )
       |> Repo.all()
+      # Priority, then id bytewise: the evaluation order and the hash mustn't follow the collation.
+      |> Enum.sort_by(&{&1.priority, &1.binding_rule_id})
 
     with {:ok, packet_definitions_by_key} <-
            fetch_capability_instance_packet_definitions(capability_instance_rows),
