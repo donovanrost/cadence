@@ -1,9 +1,12 @@
 defmodule Cadence.Auth.ApplicationHostPolicyTest do
-  use Cadence.UnitCase, async: true
+  use Cadence.DataCase, async: true
 
   alias Cadence.Auth.{Policy, Scope}
 
   test "application catalog and legacy read admissions require the scoped organization" do
+    # operate_mission checks the mission belongs to the organization (director, defense in depth).
+    persist_mission_scope("org-alpha", "mission-alpha")
+
     scope = %Scope{
       actor_kind: :user,
       organization_id: "org-alpha",

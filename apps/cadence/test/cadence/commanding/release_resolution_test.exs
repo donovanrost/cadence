@@ -188,7 +188,8 @@ defmodule Cadence.Commanding.ReleaseResolutionTest do
 
     foreign = CommandReviewFixtures.scope!()
 
-    assert {:error, :command_release_attempt_not_found} =
+    # L4: another organization's mission is refused by the policy before the attempt is looked up.
+    assert {:error, :scope_mismatch} =
              Commanding.resolve_release_attempt(
                foreign.scope,
                c.mission,

@@ -1,10 +1,12 @@
 defmodule Cadence.Auth.DashboardAuthorPolicyTest do
-  use Cadence.UnitCase, async: true
+  use Cadence.DataCase, async: true
 
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.{Policy, Scope}
 
   test "ratifies active human mission operators as dashboard authors" do
+    persist_mission_scope("org-author", "mission-author")
+
     assert :ok =
              Policy.authorize(scope(:active), :author_dashboards, %{
                organization_id: "org-author",
@@ -24,6 +26,20 @@ defmodule Cadence.Auth.DashboardAuthorPolicyTest do
                organization_id: "other-org",
                mission_id: "mission-author"
              })
+  end
+
+  test "a mission of another organization, or no mission at all, is refused (operate_mission)" do
+    persist_mission_scope("org-author", "mission-author")
+    persist_mission_scope("org-elsewhere", "mission-elsewhere")
+
+    for mission <- ["mission-elsewhere", "mission-that-does-not-exist"] do
+      assert {:error, :scope_mismatch} =
+               Policy.authorize(scope(:active), :operate_mission, %{
+                 organization_id: "org-author",
+                 mission_id: mission
+               }),
+             mission
+    end
   end
 
   defp scope(lifecycle_state) do

@@ -442,7 +442,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     other_organization = TestFixtures.persist_org!(display_name: "Other Organization")
     other_mission = TestFixtures.persist_mission!(other_organization)
 
-    assert %{"code" => "mission_not_found"} =
+    # L4: another organization's mission is refused by the policy before it is looked up, the
+    # same way a nonexistent one is, so the 404 reveals nothing.
+    assert %{"code" => "application_unavailable"} =
              member_conn
              |> get(catalog_path(other_mission.mission_id))
              |> json_response(404)

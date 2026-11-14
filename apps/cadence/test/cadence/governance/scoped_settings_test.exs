@@ -81,7 +81,9 @@ defmodule Cadence.Governance.ScopedSettingsTest do
                "value" => nil
              })
 
-    assert {:error, :mission_not_found} =
+    # L4: the policy refuses a mission that isn't the scope's organization's before any query
+    # (a nonexistent mission is refused the same way, so it reveals nothing).
+    assert {:error, :scope_mismatch} =
              ActivationPolicy.save(member("other-org", "other"), c.mission, current.token, %{
                "value" => nil
              })
