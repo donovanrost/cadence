@@ -12,7 +12,9 @@ import type { RemoteState } from "./remote-state.ts";
 /**
  * Owns one remote read: fetches when `key` changes (null pauses), aborts the previous request,
  * ignores stale responses, and keeps showing the last value while a refetch is in flight
- * (refetches never flash back to loading). Aborts on scope dispose. Keys compare by value (a
+ * (refetches never flash back to loading). A refetch while a read of the same key is in flight
+ * doesn't abort it: it asks for one more read when that one lands (qa 11-14: invalidations at
+ * ~1/s against ~1.5 s reads aborted every read, so the plan screen never settled). Aborts on scope dispose. Keys compare by value (a
  * stable JSON signature), so callers pass typed object keys and the fetcher gets them back as
  * they are: no stringify-and-parse round trip (typing plan §12 A4).
  *
@@ -28,12 +30,17 @@ export function useRemoteQuery<K, T>(
   const state = shallowRef<RemoteState<T>>({ status: "loading" });
   let controller: AbortController | null = null;
   let generation = 0;
+  /** The signature of the read in flight, and whether a refetch arrived during it. */
+  let inFlight: string | null = null;
+  let again = false;
 
   async function run(current: K, keepValue: boolean) {
     controller?.abort();
     const mine = new AbortController();
     controller = mine;
     const id = ++generation;
+    inFlight = JSON.stringify(current);
+    again = false;
     if (!keepValue || state.value.status !== "ready") state.value = { status: "loading" };
     try {
       const result = await fetcher(current, mine.signal);
@@ -51,6 +58,11 @@ export function useRemoteQuery<K, T>(
           message: error instanceof Error ? error.message : "Request failed",
         },
       };
+    } finally {
+      if (id === generation) {
+        inFlight = null;
+        if (again) void run(current, true).catch(() => undefined);
+      }
     }
   }
 
@@ -83,7 +95,9 @@ export function useRemoteQuery<K, T>(
     state,
     refetch: () => {
       const current = toValue(key);
-      if (current !== null) void run(current, true).catch(() => undefined);
+      if (current === null) return;
+      if (inFlight !== null && inFlight === JSON.stringify(current)) again = true;
+      else void run(current, true).catch(() => undefined);
     },
   };
 }

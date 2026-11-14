@@ -45,6 +45,66 @@ describe("useRemoteQuery", () => {
     expect(calls[1]?.signal.aborted).toBe(true);
   });
 
+  it("doesn't abort an in-flight read on refetch: refetches during it become one more read", async () => {
+    const { calls, fetcher } = harness();
+    const scope = effectScope();
+    const query = scope.run(() => useRemoteQuery(ref("m1"), fetcher));
+    calls[0]?.resolve({ ok: true, value: "first" });
+    await flush();
+    query?.refetch();
+    query?.refetch();
+    query?.refetch();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.signal.aborted).toBe(false);
+    calls[1]?.resolve({ ok: true, value: "second" });
+    await flush();
+    expect(query?.state.value).toMatchObject({ status: "ready", value: "second" });
+    expect(calls).toHaveLength(3);
+    calls[2]?.resolve({ ok: true, value: "third" });
+    await flush();
+    expect(query?.state.value).toMatchObject({ status: "ready", value: "third" });
+    expect(calls).toHaveLength(3);
+    scope.stop();
+  });
+
+  it("starts a fresh read for a refetch that comes after the read landed (no lost update)", async () => {
+    const { calls, fetcher } = harness();
+    const scope = effectScope();
+    const query = scope.run(() => useRemoteQuery(ref("m1"), fetcher));
+    calls[0]?.resolve({ ok: true, value: "first" });
+    await flush();
+    query?.refetch();
+    calls[1]?.resolve({ ok: true, value: "second" });
+    await flush();
+    query?.refetch();
+    expect(calls).toHaveLength(3);
+    calls[2]?.resolve({ ok: true, value: "third" });
+    await flush();
+    expect(query?.state.value).toMatchObject({ status: "ready", value: "third" });
+    scope.stop();
+  });
+
+  it("keeps the newest read's value: a follow-up queued during the follow-up runs last", async () => {
+    const { calls, fetcher } = harness();
+    const scope = effectScope();
+    const query = scope.run(() => useRemoteQuery(ref("m1"), fetcher));
+    query?.refetch(); // during the first read: one follow-up
+    calls[0]?.resolve({ ok: true, value: "older" });
+    await flush();
+    expect(calls).toHaveLength(2);
+    query?.refetch(); // during the follow-up: one more
+    query?.refetch();
+    calls[1]?.resolve({ ok: true, value: "newer" });
+    await flush();
+    expect(query?.state.value).toMatchObject({ status: "ready", value: "newer" });
+    expect(calls).toHaveLength(3);
+    calls[2]?.resolve({ ok: true, value: "newest" });
+    await flush();
+    expect(query?.state.value).toMatchObject({ status: "ready", value: "newest" });
+    expect(calls).toHaveLength(3);
+    scope.stop();
+  });
+
   it("treats a new object with the same contents as the same key, and hands the fetcher the typed key", async () => {
     const seen: { m: string; page: number }[] = [];
     const fetcher = (key: { m: string; page: number }) => {
