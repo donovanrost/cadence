@@ -1345,7 +1345,8 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
 - **Confirmed (domain, 11-14):** neither action cancels queued command requests. The queue is per spacecraft, so
   they wait for the next releasable contact, armed groups stay armed, and a named release (U46) keeps what it
   already sent. One addition: when some will expire before that next contact, the commands line adds "1 of them
-  expires at 14:00Z, before then." (one: "It expires at 14:00Z, before then."). Data (api): per pass, the queued
+  expires at 14:00Z, before then." (one queued: "It expires at 14:00Z, before then."; several expiring: "2 of
+  them expire before then, the first at 14:00Z.", fe-ops). Data (api): per pass, the queued
   count, how many expire before the next contact with the earliest expiry, and the next contact's station and
   AOS.
 
