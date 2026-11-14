@@ -1,4 +1,3 @@
-export { default as OpsDashboardShow } from "./features/workspace/OpsDashboardShow.vue";
 export { default as DashboardCanvas } from "./features/workspace/DashboardCanvas.vue";
 export { default as DashboardGrid } from "./features/workspace/DashboardGrid.vue";
 export { default as DashboardWidget } from "./features/workspace/DashboardWidget.vue";

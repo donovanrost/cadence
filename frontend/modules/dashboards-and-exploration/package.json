@@ -6,7 +6,6 @@
   "exports": {
     "./exploration": "./src/exploration.ts",
     "./execution-diagnostics": "./src/execution-diagnostics.ts",
-    "./charts": "./src/charts.ts",
     "./sharing": "./src/sharing.ts",
     "./settings": "./src/settings.ts",
     "./playlists": "./src/playlists.ts",
