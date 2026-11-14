@@ -922,3 +922,14 @@ configuration failure P3. The amendments to fe-ops' drafts:
   - Unknown or missing reason: "Not released: the command window is closed."
   - Where the screen doesn't already name the pass, it follows "pass" as "the EARENDIL-312 · SVA 03:10Z pass".
     Times are §4.
+- **Hand-started contacts** (director's decision, 11-13): armed groups never release into a contact that wasn't
+  booked as a pass. An operator can release into one only by naming it.
+  - Command-window line on such a contact: tag `NOT A BOOKED PASS` (caution) and "Armed commands don't go to this
+    contact on their own. Release them here only if you mean to."
+  - The named release confirms first (sheet, danger):
+    - Title `Release into a contact that isn't a booked pass?`
+    - Body: "EARENDIL-001's contact at SVA, started by Mira K. at 00:12Z, wasn't booked as a pass. Release 3
+      command groups to it anyway?"
+    - Actions `Release to this contact` (danger) and `Cancel` (the default focus).
+    - Without the starter or time, drop that clause. Count the groups that would go.
+  - Audit and the request log read "Released by Mira K. at 00:14Z into a contact that wasn't a booked pass."
