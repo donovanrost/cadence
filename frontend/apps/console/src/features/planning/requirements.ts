@@ -144,8 +144,9 @@ export function endRequirement(
 
 /**
  * ux P4 "Planning it" (director 11-14: whole-day planning): the UTC day an active requirement is
- * drafted with (its window's start day; api: a draft takes every window that overlaps its day), or
- * null when there's nothing to plan: not active, no readable window, or the window has ended.
+ * drafted with, or null when there's nothing to plan: not active, no readable window, or the
+ * window has ended. api: a draft takes every window that overlaps its day, so it's the later of the
+ * window's start day and today (ux: never a day that's over); `from` is clamped to now the same way.
  */
 export function planningDay(
   r: Pick<RequirementRow, "state" | "content">,
@@ -157,8 +158,9 @@ export function planningDay(
   const start = Date.parse(from);
   const end = Date.parse(to);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= now) return null;
-  const iso = new Date(start).toISOString().slice(0, 10);
-  return { iso, md: iso.slice(5), from, to };
+  const begins = Math.max(start, now);
+  const iso = new Date(begins).toISOString().slice(0, 10);
+  return { iso, md: iso.slice(5), from: start < now ? new Date(now).toISOString() : from, to };
 }
 
 /** A template occurrence's day, `11-15` (UTC, from its window's start); null when it has none. */

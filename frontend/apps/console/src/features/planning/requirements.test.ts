@@ -181,6 +181,16 @@ describe("planning a requirement (ux P4, whole-day planning)", () => {
       },
     );
   });
+  it("plans a window that began on an earlier day on today, from now (ux: never a day that's over)", () => {
+    expect(planningDay(row("active", "2026-11-13T12:00:00Z", "2026-11-15T00:00:00Z"), now)).toEqual(
+      {
+        iso: "2026-11-14",
+        md: "11-14",
+        from: "2026-11-14T06:00:00.000Z",
+        to: "2026-11-15T00:00:00Z",
+      },
+    );
+  });
   it("offers nothing once it's ended, closed or canceled, or without a window", () => {
     expect(
       planningDay(row("active", "2026-11-13T00:00:00Z", "2026-11-14T05:00:00Z"), now),
