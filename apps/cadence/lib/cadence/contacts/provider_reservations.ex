@@ -758,6 +758,12 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   defp attested?(_reservation), do: false
 
+  defp materialized?(%ProviderReservation{metadata: %{"scheduled_contact_id" => id}})
+       when is_binary(id),
+       do: true
+
+  defp materialized?(_reservation), do: false
+
   @doc """
   A cancel that failed, never read as a lost booking (rejected/failed). The error is the
   reservation's `last_error` (`"action" => "cancel"`). `"outcome" => "refused"` or `"not_sent"`:
@@ -1073,7 +1079,7 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   # A provisional failure (Cadence's own, cadence_side_failure?/1) can return to whatever the
   # provider says next; a provider's own failed stays terminal.
-  @provisional_failure_exits ~w(confirmed active completed canceling canceled unknown failed)a
+  @provisional_failure_exits ~w(pending confirmed active completed canceling canceled rejected unknown failed)a
 
   defp allowed_transition?(current, requested_state) do
     requested_state in Map.fetch!(@allowed_transitions, current.lifecycle_state) or
@@ -1288,8 +1294,11 @@ defmodule Cadence.Contacts.ProviderReservations do
   def lost?(%ProviderReservation{lifecycle_state: :failed} = reservation),
     do: not cadence_side_failure?(reservation)
 
+  # A rejection loses a booking whose contact exists: attested (#53), or materialized from an
+  # earlier confirmation (a provisional failure the provider then rejects, api-ops). A rejected
+  # request that never had a contact has nothing to release.
   def lost?(%ProviderReservation{lifecycle_state: :rejected} = reservation),
-    do: attested?(reservation)
+    do: attested?(reservation) or materialized?(reservation)
 
   def lost?(%ProviderReservation{}), do: false
 
@@ -1321,8 +1330,8 @@ defmodule Cadence.Contacts.ProviderReservations do
   end
 
   defp apply_loss_side_effect(%ProviderReservation{lifecycle_state: :rejected} = reservation) do
-    # An attested booking the provider rejects is lost like a canceled one (#53).
-    if attested?(reservation) do
+    # A booking the provider rejects once its contact exists is lost like a canceled one (#53).
+    if lost?(reservation) do
       with :ok <- cancel_scheduled_contact(reservation, :rejected),
            :ok <- BookingOutcomes.booking_lost(reservation) do
         BookingOutcomes.booking_settled(reservation)

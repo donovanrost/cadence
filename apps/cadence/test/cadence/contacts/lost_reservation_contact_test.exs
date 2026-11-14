@@ -70,6 +70,40 @@ defmodule Cadence.Contacts.LostReservationContactTest do
       assert %{lifecycle_state: :scheduled} = scheduled(c)
     end
 
+    # api-ops' re-review: the provider's next answer may be its own loss.
+    test "becomes rejected when the provider rejects it, and its contact is released" do
+      c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
+      fail_by_configuration!(c)
+
+      assert {:ok, %{lifecycle_state: :rejected} = rejected} =
+               Fixtures.advance(c, 3, %{
+                 "status" => "rejected",
+                 "status_reason" => %{
+                   "category" => "no_capacity",
+                   "detail" => "antenna reassigned"
+                 },
+                 "delivery_descriptor" => descriptor(c.reservation)
+               })
+
+      assert ProviderReservations.lost?(rejected)
+      assert %{lifecycle_state: :canceled} = contact = scheduled(c)
+      assert contact.metadata["cause"] == "provider_rejected"
+      assert contact.metadata["provider_reason"] == "antenna reassigned"
+    end
+
+    test "can go back to pending when the provider re-queues it" do
+      c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
+      fail_by_configuration!(c)
+
+      assert {:ok, %{lifecycle_state: :pending}} =
+               Fixtures.advance(c, 3, %{
+                 "status" => "pending",
+                 "delivery_descriptor" => descriptor(c.reservation)
+               })
+
+      assert %{lifecycle_state: :scheduled} = scheduled(c)
+    end
+
     test "is polled until its pass ends, then settles as failed with its reason" do
       c = Fixtures.setup_contact(%{}, baseline: &%{"delivery_descriptor" => descriptor(&1)})
       fail_by_configuration!(c)
