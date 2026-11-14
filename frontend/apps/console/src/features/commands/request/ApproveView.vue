@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { RemoteState } from "@/api/index.ts";
-import { ApCheckRows, ApPanel, ApRemote } from "@/ui";
+import { ApCheckRows, ApPanel, ApRemote, ApTag } from "@/ui";
 import type { GroupRow, Preflight } from "../groups/api.ts";
 import { checkMeta, checkRows } from "../groups/checks.ts";
 import type { Group } from "../groups/show.ts";
 import type { PersonName } from "../groups/words.ts";
+import { verifiersDiffer } from "../groups/verifierGroups.ts";
+import VerifierGroups from "../groups/VerifierGroups.vue";
 import DecisionPanel from "./DecisionPanel.vue";
 import QueuePanel from "./QueuePanel.vue";
 import RequestBrief from "./RequestBrief.vue";
@@ -30,6 +32,16 @@ const targetName = (id: string) => {
   return t?.name ? `${t.name}${t.scid === null ? "" : ` (SCID ${t.scid})`}` : "Unknown spacecraft";
 };
 const reviewValue = computed(() => (props.review.status === "ready" ? props.review.value : null));
+/** U51: the reviewer sees each command whose verifiers differ across targets (no gate). */
+const shortName = (id: string) =>
+  props.group.targets.find((x) => x.spacecraft_id === id)?.name ?? "Unknown spacecraft";
+const differing = (p: Preflight) =>
+  (p.commands ?? [])
+    .filter((c) => verifiersDiffer(c.verifier_groups))
+    .map((c) => ({
+      ...c,
+      name: props.group.commands.find((x) => x.position === c.position)?.name ?? c.command_id,
+    }));
 </script>
 
 <template>
@@ -55,6 +67,16 @@ const reviewValue = computed(() => (props.review.status === "ready" ? props.revi
             <ApRemote :state="review" loading-label="RE-CHECKING…" @retry="$emit('retryReview')">
               <template #default="{ value }">
                 <ApCheckRows :rows="checkRows(value, targetName)" />
+                <div
+                  v-for="c in differing(value)"
+                  :key="c.position"
+                  class="flex flex-col gap-1 border-t border-hairline px-4 py-3"
+                >
+                  <p class="m-0 flex items-center gap-2 font-mono text-sm text-readout">
+                    {{ c.name }} <ApTag state="caution" label="Verifiers differ" />
+                  </p>
+                  <VerifierGroups :groups="c.verifier_groups" :name-of="shortName" />
+                </div>
               </template>
             </ApRemote>
           </ApPanel>

@@ -21,6 +21,8 @@ import { queryFromRoute, resolveTargets, type TargetQuery } from "./targets.ts";
 import type { ComposeFields, Restored } from "./saved.ts";
 import { closeLabel, draftLine, savedWhen, useComposeDraft } from "./useComposeDraft.ts";
 import { useComposeRequest } from "./useComposeRequest.ts";
+import type { Preflight } from "../groups/api.ts";
+import { groupsAt, spanText, targetRevisions } from "../groups/verifierGroups.ts";
 import { onlyFrom, resendFrom, useResend } from "./useResend.ts";
 
 /**
@@ -191,6 +193,22 @@ const {
   saved,
 );
 
+/**
+ * U51: the last preflight answer's verifier groups and target revisions. Kept while a re-run
+ * checks, so the rows and tags don't flicker on every edit.
+ */
+const lastPreflight = shallowRef<Preflight | null>(null);
+watch(
+  () => preflight.state.value,
+  (st) => {
+    if (st.status === "ready") lastPreflight.value = st.value;
+  },
+  { immediate: true },
+);
+const groupsAtStack = (position: number) => groupsAt(lastPreflight.value, position);
+const revisions = computed(() => targetRevisions(lastPreflight.value));
+const span = computed(() => spanText(lastPreflight.value));
+
 const steps = computed(() => [
   `Targets · ${targets.value.length}`,
   `Commands · ${stack.value.length}`,
@@ -302,6 +320,7 @@ const close = computed((): RouteLocationRaw =>
               :fleet="rows"
               :query="query"
               :targets="targets"
+              :revisions="revisions"
               @change="(q) => (query = q)"
             />
           </ApRemote>
@@ -313,6 +332,9 @@ const close = computed((): RouteLocationRaw =>
             :items="stack"
             :revision="revision"
             :catalog-rev="catalogRev"
+            :groups-at="groupsAtStack"
+            :name-of="nameOf"
+            :span="span"
             :adding="adding"
             :targets="targets"
             @add="onAdd"

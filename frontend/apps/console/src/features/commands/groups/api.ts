@@ -119,6 +119,27 @@ const check = d.object({
 });
 export type PreflightCheck = Decoded<typeof check>;
 
+/** U51 (api): a catalog revision as preflight names it; label is set whenever the revision exists. */
+const revision = d.object({ number: d.nullable(d.integer), label: d.nullable(d.string) });
+/** One verifier as the catalog defines it (commanding.md command.verifiers; the rest unread). */
+const verifier = d.object({
+  id: d.token,
+  name: d.string,
+  phase: d.knownText(["acceptance", "start", "completion", "custom"] as const),
+  timeout_ms: d.nullable(d.integer),
+});
+/**
+ * U51: one group per distinct verifier set for a command, largest first; `verifiers: []` is "no
+ * verifier". Targets with that command's Catalog NO-GO are in no group.
+ */
+const verifierGroup = d.object({
+  verifiers: d.array(verifier, 100),
+  catalog_revisions: d.array(revision, 100),
+  spacecraft_ids: d.array(d.token, 10_000),
+});
+export type VerifierGroup = Decoded<typeof verifierGroup>;
+export type CatalogRevision = Decoded<typeof revision>;
+
 export const preflightReader = d.object({
   valid: d.boolean,
   digest: d.nullable(d.string),
@@ -132,10 +153,23 @@ export const preflightReader = d.object({
       name: d.nullable(d.string),
       scid: d.nullable(scidReader),
       failure: d.nullable(d.token),
+      /** U51: the revision its commands resolve to; null = unresolved (already a Catalog NO-GO). */
+      catalog_revision: d.optional(d.nullable(revision)),
     }),
     1_000,
   ),
   checks: d.array(check, 20),
+  /** U51: per command (by stack position), how each group of targets verifies it. */
+  commands: d.optional(
+    d.array(
+      d.object({
+        position: d.integer,
+        command_id: d.token,
+        verifier_groups: d.array(verifierGroup, 100),
+      }),
+      16,
+    ),
+  ),
 });
 export type Preflight = Decoded<typeof preflightReader>;
 

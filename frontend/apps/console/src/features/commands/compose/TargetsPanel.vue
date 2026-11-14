@@ -15,6 +15,8 @@ const props = defineProps<{
   fleet: readonly FleetSpacecraft[];
   query: TargetQuery;
   targets: readonly FleetSpacecraft[];
+  /** U51: each target's catalog revision, only when the targets span more than one. */
+  revisions?: ReadonlyMap<string, string> | null | undefined;
 }>();
 const emit = defineEmits<{ change: [query: TargetQuery] }>();
 const set = (patch: Partial<TargetQuery>) => emit("change", { ...props.query, ...patch });
@@ -183,6 +185,7 @@ function addOne(id: string) {
             >
             <span class="text-text-3">SCID {{ sc.scid }}</span>
             <span class="text-text-3">{{ sc.profile?.name ?? "no profile" }}</span>
+            <span v-if="revisions?.get(sc.id)" class="text-text-4">{{ revisions.get(sc.id) }}</span>
           </li>
         </ul>
       </details>

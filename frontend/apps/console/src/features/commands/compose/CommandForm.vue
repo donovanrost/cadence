@@ -1,14 +1,24 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, useTemplateRef } from "vue";
-import { ApCallout, ApSegmented } from "@/ui";
+import { ApCallout, ApSegmented, ApTag } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { argInput } from "../args.ts";
 import ArgField from "./ArgField.vue";
 import PerTargetPanel from "./PerTargetPanel.vue";
+import type { VerifierGroup } from "../groups/api.ts";
+import { verifiersDiffer } from "../groups/verifierGroups.ts";
+import VerifierGroups from "../groups/VerifierGroups.vue";
 import { checkItem, setPerTargetMode, verifierLine, type StackItem } from "./stack.ts";
 
 /** Inline form for one stack row: every argument from the catalog, errors inline. */
-const props = defineProps<{ item: StackItem; targets: readonly FleetSpacecraft[] }>();
+const props = defineProps<{
+  item: StackItem;
+  targets: readonly FleetSpacecraft[];
+  /** U51: how each group of targets verifies this command (preflight); [] before it answers. */
+  groups?: readonly VerifierGroup[] | undefined;
+  nameOf?: ((spacecraftId: string) => string) | undefined;
+}>();
+const differ = computed(() => verifiersDiffer(props.groups ?? []));
 const emit = defineEmits<{
   change: [values: Record<string, string>];
   perTarget: [perTarget: StackItem["perTarget"]];
@@ -65,7 +75,13 @@ const set = (argId: string, value: string) =>
     @submit.prevent="submit"
   >
     <button type="submit" class="sr-only">Done</button>
+    <!-- U51: when targets verify it differently, one row per verifier set replaces the line. -->
+    <div v-if="differ" class="flex flex-col gap-1">
+      <ApTag state="caution" label="Verifiers differ" class="self-start" />
+      <VerifierGroups :groups="groups ?? []" :name-of="nameOf ?? ((id) => id)" />
+    </div>
     <p
+      v-else
       class="m-0 font-mono text-xs uppercase"
       :class="verifier.verifiable ? 'text-text-2' : 'text-stale-text'"
     >

@@ -2,6 +2,8 @@
 import { ref } from "vue";
 import { ApButton, ApEmptyState, ApPanel, ApTag } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
+import type { VerifierGroup } from "../groups/api.ts";
+import { verifiersDiffer } from "../groups/verifierGroups.ts";
 import CatalogSearch from "./CatalogSearch.vue";
 import CommandForm from "./CommandForm.vue";
 import { argSummary, checkItem, type StackItem } from "./stack.ts";
@@ -16,6 +18,11 @@ const props = defineProps<{
   /** "Catalog rev 14" when the catalog revision is recorded (backlog §2). */
   catalogRev?: string | null;
   adding: boolean;
+  /** U51: each stack position's verifier groups (preflight), and target names for them. */
+  groupsAt?: ((position: number) => readonly VerifierGroup[]) | undefined;
+  nameOf?: ((spacecraftId: string) => string) | undefined;
+  /** U51: `rev 14 · 15` when the targets span catalog revisions. */
+  span?: string | null | undefined;
   /** The request's targets, for B2 per-target values. */
   targets: readonly FleetSpacecraft[];
 }>();
@@ -51,7 +58,7 @@ function altMove(e: KeyboardEvent, i: number) {
   <ApPanel
     index="C2"
     title="Command stack"
-    :meta="revision ? (catalogRev ?? 'active catalog') : undefined"
+    :meta="revision ? (span ? `Catalog ${span}` : (catalogRev ?? 'active catalog')) : undefined"
     flush
   >
     <ApEmptyState
@@ -101,6 +108,12 @@ function altMove(e: KeyboardEvent, i: number) {
             state="caution"
             label="Needs values"
           />
+          <!-- U51: the chip keeps it after the form closes. -->
+          <ApTag
+            v-if="groupsAt && verifiersDiffer(groupsAt(i))"
+            state="caution"
+            label="Verifiers differ"
+          />
           <!-- ux Compose ruling #1: the value summary reopens the form. -->
           <button
             v-if="item.command.arguments.length"
@@ -144,6 +157,8 @@ function altMove(e: KeyboardEvent, i: number) {
           v-if="open === item.key"
           :item="item"
           :targets="targets"
+          :groups="groupsAt ? groupsAt(i) : []"
+          :name-of="nameOf"
           @change="(v) => emit('change', item.key, v)"
           @per-target="(p) => emit('perTarget', item.key, p)"
           @done="open = null"
