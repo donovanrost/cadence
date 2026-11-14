@@ -215,19 +215,10 @@ defmodule Cadence.Commanding.VerifierEvaluation do
 
   defp sample_matches_subject_ref?(nil, _sample), do: false
 
-  defp sample_matches_subject_ref?(subject_ref, %Sample{} = sample) when is_binary(subject_ref) do
-    normalized_ref = normalize_subject_ref(subject_ref)
-    normalized_point_id = normalize_subject_ref(sample.point_id)
-    normalized_point_name = normalize_subject_ref(sample.point_name)
-
-    normalized_ref in [normalized_point_id, normalized_point_name]
-  end
-
-  defp normalize_subject_ref(subject_ref) when is_binary(subject_ref) do
-    subject_ref
-    |> String.trim()
-    |> String.trim_leading("telemetry:")
-  end
+  # A mission-model verifier names the parameter's semantic id, a catalog one the point: match
+  # every name the sample has, as the transmission constraints do.
+  defp sample_matches_subject_ref?(subject_ref, %Sample{} = sample) when is_binary(subject_ref),
+    do: Sample.normalize_subject_ref(subject_ref) in Sample.subject_refs(sample)
 
   defp normalize_transport_subject_ref(nil), do: nil
 
