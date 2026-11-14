@@ -2,18 +2,11 @@
 import { expect, expectTypeOf, test } from "vite-plus/test";
 import { href, isRouteId, routeCatalog, type Href, type RouteHeaderKind } from ".";
 import catalog from "../../../../apps/host/src/routes.json";
-import retained from "../../../../tools/retained-legacy-routes.json";
 import { projectRoutes } from "./project";
 
 test("the generated catalog matches the host route catalog exactly", () => {
-  // Regenerate with `corepack pnpm routes:generate` when this fails. The catalog also holds the
-  // retained legacy routes, until the L1-L4 federated batch deletes them (fe-ops).
-  expect(routeCatalog).toEqual(projectRoutes([...catalog, ...retained.routes]));
-});
-
-test("a retained legacy route never comes back into the host catalog (the list only shrinks)", () => {
-  const hostPaths = new Set(catalog.map((route) => route.path));
-  expect(retained.routes.filter((route) => hostPaths.has(route.path))).toEqual([]);
+  // Regenerate with `corepack pnpm routes:generate` when this fails.
+  expect(routeCatalog).toEqual(projectRoutes(catalog));
 });
 
 test("links are built from routes, with encoded params and admitted query keys", () => {
