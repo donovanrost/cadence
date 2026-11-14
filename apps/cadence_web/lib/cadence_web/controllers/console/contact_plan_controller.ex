@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
   use CadenceWeb, :controller
 
   alias Cadence.ContactPlanning.ContactPlan
-  alias Cadence.Control.Scheduling
+  alias Cadence.Control.{PlanningTemplates, Scheduling}
   alias Cadence.Reads.{ContactPlanOverview, PlanAlternatives, PlanningSetup}
   alias CadenceWeb.Console.{ConfigJSON, PlanDetail, Problem, SchedulingRunner}
 
@@ -46,12 +46,59 @@ defmodule CadenceWeb.Console.ContactPlanController do
     end
   end
 
-  @doc "Whether drafting is possible (policy + requirements), before offering Draft."
-  def setup(conn, _params),
-    do:
-      json(conn, %{
-        data: ConfigJSON.encode(%{setup: PlanningSetup.setup(org_id(conn), mission_id(conn))})
-      })
+  @doc """
+  Whether drafting is possible (policy + requirements), before offering Draft, plus (U52) the template fan-out Start would count for `?day=` (UTC,
+  default today) against the 50,000 limit, and the templates its per-run cap cuts short.
+  """
+  def setup(conn, params) do
+    case day(params["day"]) do
+      {:ok, day} ->
+        setup =
+          org_id(conn)
+          |> PlanningSetup.setup(mission_id(conn))
+          |> Map.put(:template_requirements_estimate, estimate(conn, day || Date.utc_today()))
+
+        json(conn, %{data: ConfigJSON.encode(%{setup: setup})})
+
+      {:error, details} ->
+        Problem.respond(conn, :invalid_params, details)
+    end
+  end
+
+  # null when there's nothing to count (no active template) or no estimate.
+  defp estimate(conn, day) do
+    case Scheduling.draft_template_estimate(conn.assigns.current_scope, mission_id(conn), day) do
+      {:ok, %{count: 0, capped: []}} ->
+        nil
+
+      {:ok, %{count: count, limit: limit, capped: capped}} ->
+        names = template_names(conn, capped)
+
+        %{
+          count: count,
+          limit: limit,
+          capped:
+            Enum.map(capped, fn cut ->
+              %{
+                template: %{id: cut.template_id, name: Map.get(names, cut.template_id)},
+                limit: cut.limit,
+                last_at: cut.last_at
+              }
+            end)
+        }
+
+      _unavailable ->
+        nil
+    end
+  end
+
+  defp template_names(_conn, []), do: %{}
+
+  defp template_names(conn, _capped) do
+    org_id(conn)
+    |> PlanningTemplates.list(mission_id(conn))
+    |> Map.new(&{&1.id, &1.name})
+  end
 
   @doc "Contact demand for a UTC day without a plan (S2)."
   def demand(conn, params) do

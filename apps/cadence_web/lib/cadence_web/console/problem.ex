@@ -196,6 +196,9 @@ defmodule CadenceWeb.Console.Problem do
     reason_required: {422, "A reason is required."},
     command_request_already_started: {409, "That command has already started."},
     command_request_not_found: {404, "Command request not found."},
+    fleet_planning_occurrence_limit_exceeded:
+      {422,
+       "This start goes over the limit of template requirements. Include fewer templates, or narrow their targets."},
     # U46 named release (whole-request refusals; ux 11-13 words the console's own lines).
     command_window_closed: {409, "Not released: this contact's command window is closed."},
     unbooked_contact_unconfirmed:

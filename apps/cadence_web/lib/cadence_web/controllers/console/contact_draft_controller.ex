@@ -201,6 +201,14 @@ defmodule CadenceWeb.Console.ContactDraftController do
   defp error(conn, {:error, :fleet_planning_horizon_exceeds_policy}),
     do: Problem.respond(conn, :horizon_exceeds_policy)
 
+  # U52: the whole count and the limit, so the console can say how far over it is.
+  defp error(conn, {:error, {:fleet_planning_occurrence_limit_exceeded, count, limit}}),
+    do:
+      Problem.respond(conn, :fleet_planning_occurrence_limit_exceeded, %{
+        count: count,
+        limit: limit
+      })
+
   defp error(conn, {:error, :fleet_planning_review_changed}),
     do: Problem.respond(conn, :inputs_changed)
 
