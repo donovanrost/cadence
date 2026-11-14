@@ -78,6 +78,52 @@ defmodule Cadence.IngressJournal.FileSystemTest do
   end
 
   @tag :tmp_dir
+  test "a periodic checkpoint still in flight at a stop can't overwrite the final one", ctx do
+    test_pid = self()
+
+    # The periodic writer stalls, then would write the cursors it was given (older than the
+    # final ones) if it were ever released (api-ops' ordering check).
+    stalling_writer = fn stream_path, cursors, next_offset, next_sequence ->
+      send(test_pid, {:checkpoint_in_flight, self()})
+
+      receive do
+        :release ->
+          File.write!(
+            Path.join(stream_path, "cursors.term"),
+            :erlang.term_to_binary(%{
+              version: 1,
+              cursors: cursors,
+              next_offset: next_offset,
+              next_sequence: next_sequence
+            })
+          )
+      end
+    end
+
+    opts = Keyword.merge(ctx.opts, checkpoint_interval_ms: 10, checkpoint_writer: stalling_writer)
+    start_supervised!({FileSystem, opts})
+    assert {:ok, first} = FileSystem.append(ctx.name, "first", DateTime.utc_now())
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, first.end_offset)
+    assert_receive {:checkpoint_in_flight, writer}
+
+    assert {:ok, second} = FileSystem.append(ctx.name, "second", DateTime.utc_now())
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, second.end_offset)
+    assert {:ok, %{stream_path: stream_path}} = FileSystem.snapshot(ctx.name)
+
+    :ok = stop_supervised({:ingress_journal, ctx.opts[:provider_binding_id]})
+    refute Process.alive?(writer)
+    send(writer, :release)
+
+    checkpoint =
+      stream_path
+      |> Path.join("cursors.term")
+      |> File.read!()
+      |> :erlang.binary_to_term([:safe])
+
+    assert checkpoint.cursors.processing == second.end_offset
+  end
+
+  @tag :tmp_dir
   test "a linked process's crash still stops the journal; a normal exit doesn't", ctx do
     journal = start_supervised!({FileSystem, ctx.opts}, restart: :temporary)
     ref = Process.monitor(journal)
