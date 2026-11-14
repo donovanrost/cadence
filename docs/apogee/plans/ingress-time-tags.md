@@ -114,7 +114,7 @@ with this value (unless a test overrides it explicitly).
 | `ingress_journal.enabled?` | true | **false** (config.exs; dev/:4011 turns it on) | Inverse: the journal-less TCP path, the **production default**, runs only where a test opts out. Worth a check that it has its own coverage |
 | `start_background_jobs` | false | true | **Yes**: background jobs never start under the app; tests drive jobs directly |
 | `control_supervisor.start_mission_recovery?` | false | true (code default) | **Yes**: boot recovery of missions never runs in the app's tree |
-| `event_bus.delivery` | `:sync` (+ sandbox allow) | `:async` (code default) | **Yes**: async delivery ordering/races never exercised |
+| `event_bus.delivery` | `:sync` (+ sandbox allow) | `:async` (code default) | **Yes**: async delivery ordering/races never exercised. Follow-up 3 (director 11-14): `platform/async_fact_delivery_test.exs` runs the ingest → verifier (`Control.RuntimeFactConsumer`) and ingest → latest values / limits (`Projections.TelemetryFactConsumer`) flows on an `:async` bus: the publisher never waits on a busy consumer, every fact arrives in order, a failed refresh doesn't stop later ones, and an async consumer reaches the DB via the sandbox hook. The bulk stays `:sync` |
 | `contact_scheduler.enabled` | false | true | **Yes**: the scheduler's own loop; tests call it directly |
 | `contact_scheduler_global_safety.enabled` | false | false | No (same) |
 | `provider_reservation_reconciler.enabled` | false | true (5 s poll) | **Yes**: the reconcile loop |
