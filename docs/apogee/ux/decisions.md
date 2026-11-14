@@ -1489,7 +1489,12 @@ then the target count). The reason column takes the note or reason.
   - Group, folded per reason: "Canceled 12 uplinks of <label>: they expired before release" / "…: what they were
     approved against changed" / "…: the catalog changed" / "…: EARENDIL-004 was archived" (several: "…: 3 of its
     spacecraft were archived").
+  - commanding_disabled (L22: a change set turned commanding off): group "…: commanding was turned off for
+    EARENDIL-004" (several: "…for 3 of its spacecraft"); single request "Canceled SET_MODE on EARENDIL-004:
+    commanding was turned off for it".
   - An unknown reason: "Canceled 12 uplinks of <label>." with nothing invented.
+- **An operator cancels one member** (member_canceled, reason beside it): "Canceled SET_MODE on EARENDIL-004 from
+  <label>".
   - Mixed reasons in one fold make one entry per reason, never one line that blurs them.
 - The target kind `command_group` links to the group's page. Per-target values aren't separate rows; the
   submitted line's count points there.
