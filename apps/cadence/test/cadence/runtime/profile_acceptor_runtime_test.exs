@@ -9,6 +9,7 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, ProviderBinding, ScheduledContact}
+  alias Cadence.ProviderAdapters.TCPSocket
   alias Cadence.Runtime.{ProcessNamespace, ProfileAcceptor}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -91,7 +92,7 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
     # The adapter can't register again while something else holds the port.
     :ok = :sys.suspend(adapter)
     :ok = DynamicSupervisor.terminate_child(ProfileAcceptor.supervisor_name(namespace), acceptor)
-    {:ok, squatter} = :gen_tcp.listen(port, [:binary, ip: {127, 0, 0, 1}, reuseaddr: true])
+    squatter = squat!(port)
     on_exit(fn -> :gen_tcp.close(squatter) end)
     :ok = :sys.resume(adapter)
 
@@ -111,6 +112,74 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
     )
 
     :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, run_id(pass))
+  end
+
+  # ux U50: a second connection identified as this pass's is counted; it opens the refusal
+  # window (the listener_refusal item) only when the pass's own connection has gone quiet.
+  describe "a second connection for a pass" do
+    test "while its own connection is receiving is counted only, with no refusal window", ctx do
+      {pass, port} = start_pass!(ctx, quiet_connection_ms: 60_000)
+      _own = connect!(port, frame(1))
+      assert_eventually(fn -> received(ctx, pass) > 0 end)
+
+      _duplicate = connect!(port, frame(1))
+      adapter = adapter(ctx, pass)
+      assert_eventually(fn -> snapshot!(adapter).second_connections_refused == 1 end)
+
+      snapshot = snapshot!(adapter)
+      assert snapshot.refusals == nil
+      assert snapshot.peers_refused == 1
+      assert snapshot.connected?
+
+      :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, run_id(pass))
+    end
+
+    test "after its own connection went quiet opens the window, with when it went quiet", ctx do
+      {pass, port} = start_pass!(ctx, quiet_connection_ms: 100)
+      _own = connect!(port, frame(1))
+      assert_eventually(fn -> received(ctx, pass) > 0 end)
+      adapter = adapter(ctx, pass)
+      Process.sleep(250)
+
+      refused_after = DateTime.utc_now()
+      _reconnect = connect!(port, frame(1))
+      assert_eventually(fn -> snapshot!(adapter).second_connections_refused == 1 end)
+
+      assert %{
+               count: 1,
+               resolved: nil,
+               last: %{reason: "second_connection", own_quiet_since: %DateTime{} = quiet_since}
+             } = snapshot!(adapter).refusals
+
+      assert DateTime.diff(refused_after, quiet_since, :millisecond) >= 100
+      assert snapshot!(adapter).connected?
+
+      :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, run_id(pass))
+    end
+  end
+
+  defp start_pass!(ctx, configuration) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    port = free_port()
+
+    pass =
+      schedule!(
+        ctx,
+        ctx.alpha,
+        "alpha",
+        DateTime.add(now, -60),
+        DateTime.add(now, 600),
+        port,
+        Map.new(configuration)
+      )
+
+    assert {:ok, %{errors: []}} = Contacts.reconcile(ctx.mission_id, now)
+    {pass, port}
+  end
+
+  defp snapshot!(adapter) do
+    {:ok, snapshot} = TCPSocket.snapshot(adapter)
+    snapshot
   end
 
   defp adapter(ctx, scheduled) do
@@ -178,7 +247,7 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
     endpoint.source_endpoint_id
   end
 
-  defp schedule!(ctx, endpoint_id, name, starts_at, ends_at, port) do
+  defp schedule!(ctx, endpoint_id, name, starts_at, ends_at, port, configuration \\ %{}) do
     id = "#{name}-#{System.unique_integer([:positive])}"
 
     contact =
@@ -198,14 +267,18 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
               ProviderBinding.new(%{
                 provider_binding_id: ctx.profile_id,
                 adapter_key: :tcp_socket,
-                configuration: %{
-                  mode: :listen,
-                  listener: "shared",
-                  port: port,
-                  ingress_protocol_family: :tm,
-                  frame_size: @frame_size,
-                  ingress_metadata: %{frame_size: @frame_size, ocf_length: 0}
-                }
+                configuration:
+                  Map.merge(
+                    %{
+                      mode: :listen,
+                      listener: "shared",
+                      port: port,
+                      ingress_protocol_family: :tm,
+                      frame_size: @frame_size,
+                      ingress_metadata: %{frame_size: @frame_size, ocf_length: 0}
+                    },
+                    configuration
+                  )
               })
             ]
           })
@@ -217,6 +290,18 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
   end
 
   defp run_id(%ScheduledContact{scheduled_contact_id: id}), do: id <> "_run"
+
+  # The stopped acceptor's listener may still be closing: retry the bind briefly.
+  defp squat!(port, attempts \\ 40) do
+    case :gen_tcp.listen(port, [:binary, ip: {127, 0, 0, 1}, reuseaddr: true]) do
+      {:ok, socket} ->
+        socket
+
+      {:error, :eaddrinuse} when attempts > 0 ->
+        Process.sleep(50)
+        squat!(port, attempts - 1)
+    end
+  end
 
   defp free_port do
     {:ok, socket} = :gen_tcp.listen(0, [:binary, ip: {127, 0, 0, 1}])

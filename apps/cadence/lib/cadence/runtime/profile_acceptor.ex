@@ -53,11 +53,16 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   @doc """
   Registers `registration` with the acceptor of `{mission_id, profile_id}` (started, and its port
-  bound, on first use). `{:ok, port}` or `{:error, {:tcp_provider_listen_failed, profile_id,
-  reason}}`, as a direct listen would have reported.
+  bound, on first use). `{:ok, port, acceptor}` or `{:error, {:tcp_provider_listen_failed,
+  profile_id, reason}}`, as a direct listen would have reported.
+
+  `acceptor` is the process that stored the registration (its `self()`); the caller monitors that
+  pid. A pid looked up afterwards could be a newer acceptor that never heard of the registration,
+  or nil if this one died in between; monitoring a dead pid delivers `:DOWN` (`:noproc`) at once,
+  so the caller's re-registration covers that race.
   """
   @spec register(ProcessNamespace.t(), binary(), binary(), map(), registration()) ::
-          {:ok, :inet.port_number()} | {:error, term()}
+          {:ok, :inet.port_number(), pid()} | {:error, term()}
   def register(namespace, mission_id, profile_id, listen, registration) do
     with {:ok, pid} <- ensure_started(namespace, mission_id, profile_id, listen) do
       GenServer.call(pid, {:register, registration})
@@ -130,7 +135,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   def handle_call({:register, %{adapter: adapter} = registration}, _from, state) do
     ref = Process.monitor(adapter)
     state = cancel_linger(state)
-    {:reply, {:ok, state.port}, put_in(state.registrations[ref], registration)}
+    {:reply, {:ok, state.port, self()}, put_in(state.registrations[ref], registration)}
   end
 
   def handle_call(:routing, _from, state),

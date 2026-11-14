@@ -89,6 +89,35 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
     assert_receive {^a, {:peer_refused, "127.0.0.1", {:unregistered_scid, 1}}}, 2_000
   end
 
+  # api-ops review: an adapter monitors the acceptor only after register returns. Register names
+  # the process that stored the registration, so if it died in between the monitor still reports
+  # it and the adapter registers again (no lookup that could return nil or a newer acceptor).
+  test "register names the acceptor that took it; dead before the caller monitors, DOWN still comes",
+       c do
+    registration = %{
+      adapter: self(),
+      realized_contact_id: "contact-a",
+      path_id: "downlink",
+      scid: 1,
+      expected_peer_address: nil,
+      frame_size: @frame_size
+    }
+
+    listen = %{port: 0, host: "127.0.0.1"}
+
+    assert {:ok, _port, acceptor} =
+             ProfileAcceptor.register(c.namespace, c.mission, c.profile, listen, registration)
+
+    assert acceptor == ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+
+    :ok =
+      DynamicSupervisor.terminate_child(ProfileAcceptor.supervisor_name(c.namespace), acceptor)
+
+    refute Process.alive?(acceptor)
+    ref = Process.monitor(acceptor)
+    assert_receive {:DOWN, ^ref, :process, ^acceptor, :noproc}, 1_000
+  end
+
   test "the listener closes after the last contact leaves (linger) and frees its port", c do
     listen = %{port: 0, host: "127.0.0.1", linger_ms: 50}
     {a, port} = register!(c, "contact-a", 1, listen: listen)
@@ -128,7 +157,8 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
       end)
 
     send(adapter, {:register, self()})
-    assert_receive {:registered, {:ok, port}}, 2_000
+    assert_receive {:registered, {:ok, port, acceptor}}, 2_000
+    assert acceptor == ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
     {adapter, port}
   end
 

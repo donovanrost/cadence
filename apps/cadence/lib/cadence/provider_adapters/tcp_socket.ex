@@ -45,6 +45,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     recbuf: @tcp_socket_buffer
   ]
   @executor_high_watermark 8_192
+  # (ux U50) Default for quiet_connection_ms: our own connection read nothing for this long.
+  @quiet_connection_ms 30_000
   @executor_low_watermark 2_048
   @executor_capacity_retry_ms 1_000
   @journal_capacity_retry_ms 25
@@ -120,6 +122,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       peers_refused: 0,
       last_peer_refused: nil,
       refusals: nil,
+      second_connections_refused: 0,
+      connected_at: nil,
+      quiet_connection_ms: configuration.quiet_connection_ms,
       direction: direction,
       mode: configuration.mode,
       host: configuration.host,
@@ -210,16 +215,15 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
            listen,
            registration
          ) do
-      {:ok, port} ->
+      {:ok, port, acceptor} ->
         # If the acceptor dies, its listener closes but our socket (if any) lives on; register
-        # again so the next peer can reach us (handle_info :DOWN).
-        acceptor = ProfileAcceptor.whereis(namespace, base_state.mission_id, provider_binding_id)
-
+        # again so the next peer can reach us (handle_info :DOWN). We monitor the acceptor that
+        # took the registration: if it already died, :DOWN (:noproc) arrives at once.
         state =
           Map.merge(base_state, %{
             acceptor?: true,
             port: port,
-            acceptor_monitor_ref: acceptor && Process.monitor(acceptor),
+            acceptor_monitor_ref: Process.monitor(acceptor),
             acceptor_registration: {listen, registration}
           })
 
@@ -353,6 +357,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         last_ingress_at: state.last_ingress_at,
         last_ingress_error: state.last_ingress_error,
         reads_paused?: state.reads_paused?,
+        shared_listener?: state.acceptor?,
+        peers_refused: state.peers_refused,
+        refusals: state.refusals,
+        second_connections_refused: state.second_connections_refused,
         ingress_journal: ingress_journal,
         ingress_journal_consumer: ingress_journal_consumer,
         ingress_archive_consumer: ingress_archive_consumer,
@@ -440,12 +448,13 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
           )
 
         :gen_tcp.close(socket)
-        {:noreply, count_refusal(state, peer, :second_connection)}
+        {:noreply, refuse_second_connection(state, peer)}
 
       {:error, :tcp_provider_not_connected} ->
         {:noreply,
          state
          |> Map.put(:socket, socket)
+         |> Map.put(:connected_at, DateTime.utc_now())
          |> Session.connected()
          |> resolve_refusals()
          |> start_socket_receiver!(socket, {prefix, read_at})}
@@ -693,6 +702,14 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
           configuration,
           :expected_peer_address,
           Map.get(configuration, "expected_peer_address")
+        ),
+      # (ux U50) How long our own connection goes without reads before a second connection for
+      # this contact counts as a refusal (refuse_second_connection/2).
+      quiet_connection_ms:
+        Map.get(
+          configuration,
+          :quiet_connection_ms,
+          Map.get(configuration, "quiet_connection_ms", @quiet_connection_ms)
         )
     }
   end
@@ -823,9 +840,18 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   # The refusal window behind the listener_refusal Now item (ux U50): opened by a refusal,
   # resolved 'accepted' when this contact's own peer connects; a refusal after that reopens it
   # with a fresh count. Counted live (a restart starts it again).
-  defp count_refusal(state, peer, reason) do
+  # own_quiet_since (ux U50): set only for a second connection refused while our own connection
+  # was quiet, the time it last showed activity.
+  defp count_refusal(state, peer, reason, own_quiet_since \\ nil) do
     now = DateTime.utc_now()
-    last = %{peer: peer, reason: refusal_reason(reason), scid: refusal_scid(reason), at: now}
+
+    last = %{
+      peer: peer,
+      reason: refusal_reason(reason),
+      scid: refusal_scid(reason),
+      at: now,
+      own_quiet_since: own_quiet_since
+    }
 
     refusals =
       case state.refusals do
@@ -833,13 +859,50 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         _none_or_resolved -> %{count: 1, first_at: now, last_at: now, last: last, resolved: nil}
       end
 
+    %{note_refused(state, peer, reason, now) | refusals: refusals}
+  end
+
+  defp note_refused(state, peer, reason, now) do
     %{
       state
       | peers_refused: state.peers_refused + 1,
-        last_peer_refused: %{peer: peer, reason: inspect(reason), at: now},
-        refusals: refusals
+        last_peer_refused: %{peer: peer, reason: inspect(reason), at: now}
     }
   end
+
+  # (ux U50) A second connection identified as this contact's. While our own connection is
+  # receiving it's a duplicate: counted (second_connections_refused, the pass's Technical
+  # details), no refusal window. If ours has gone quiet it's likely the provider reconnecting
+  # past a half-open socket while connected? still reads true: a normal refusal, so the
+  # listener_refusal item opens.
+  defp refuse_second_connection(state, peer) do
+    now = DateTime.utc_now()
+    state = %{state | second_connections_refused: state.second_connections_refused + 1}
+
+    case quiet_since(state, now) do
+      nil -> note_refused(state, peer, :second_connection, now)
+      since -> count_refusal(state, peer, :second_connection, since)
+    end
+  end
+
+  # When our own connection last showed activity, if that is quiet_connection_ms or longer ago;
+  # nil while it's active. Only reads count, so only a downlink can be quiet (an uplink-only
+  # connection has no reads); paused reads (#83 backpressure) are our silence, not the peer's.
+  defp quiet_since(%{direction: direction}, _now) when direction != :downlink, do: nil
+  defp quiet_since(%{reads_paused?: true}, _now), do: nil
+
+  defp quiet_since(state, now) do
+    case last_activity(state) do
+      nil -> nil
+      since -> if DateTime.diff(now, since, :millisecond) >= state.quiet_connection_ms, do: since
+    end
+  end
+
+  defp last_activity(%{connected_at: nil, last_ingress_at: at}), do: at
+  defp last_activity(%{connected_at: connected_at, last_ingress_at: nil}), do: connected_at
+
+  defp last_activity(%{connected_at: connected_at, last_ingress_at: at}),
+    do: Enum.max([connected_at, at], DateTime)
 
   defp resolve_refusals(%{refusals: %{resolved: nil} = open} = state),
     do: %{state | refusals: %{open | resolved: %{action: "accepted", at: DateTime.utc_now()}}}
@@ -866,9 +929,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
            listen,
            registration
          ) do
-      {:ok, _port} ->
-        acceptor = ProfileAcceptor.whereis(namespace, state.mission_id, state.provider_binding_id)
-        %{state | acceptor_monitor_ref: acceptor && Process.monitor(acceptor)}
+      {:ok, _port, acceptor} ->
+        %{state | acceptor_monitor_ref: Process.monitor(acceptor)}
 
       {:error, error} ->
         Logger.warning(
@@ -1421,6 +1483,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       peers_refused: state.peers_refused,
       last_peer_refused: state.last_peer_refused,
       refusals: state.refusals,
+      second_connections_refused: state.second_connections_refused,
       shared_listener?: state.acceptor?,
       connected?: is_port(state.socket),
       receiver_stopped?: is_nil(state.socket_receiver_pid)
