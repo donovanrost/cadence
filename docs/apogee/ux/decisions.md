@@ -1114,6 +1114,12 @@ data with an SCID or address Cadence didn't expect, and that's the case that mat
   ground_station_ref, refused_count and the id, plus "Counted live: a Cadence restart starts the count again." (in-memory counts, U20).
 - **Contacts:** the selected-pass panel gets a block, as for U45, U47 and U49, with the title minus the spacecraft and
   pass label.
+- **Second connection while connected** (api-ops' review, lead's call, 11-14). When the pass's own connection is
+  up and receiving, a refused second connection to the same profile stays out of the item. It's counted only, and
+  the count shows in the pass block's Technical details as "Second connections refused: 2". It doesn't open a
+  window, change the title or raise priority. **Exception:** if the pass's own connection has gone quiet (no frames
+  for domain's threshold) when the second one is refused, it counts as a normal refusal and opens the item. A
+  half-open old connection can block the provider's real reconnect, and that's telemetry being turned away.
 - **Build calls** (fe-ops a9dbf9813):
   - **Tone stays caution in both states** (changed). Priority isn't status: not connected raises it to P1, but
     nothing is known to be lost, so it's not crit (U20; as U45's not_started is P1 and still ▲). The
