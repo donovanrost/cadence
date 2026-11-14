@@ -204,6 +204,11 @@ defmodule CadenceWeb.Console.Problem do
     fleet_planning_occurrence_limit_exceeded:
       {422,
        "This start goes over the limit of template requirements. Include fewer templates, or narrow their targets."},
+    # U55: cancel or end a pass's contact (the console words each state itself).
+    contact_not_cancelable: {409, "This contact can't be canceled now."},
+    contact_not_live: {409, "This contact isn't live, so it can't be ended."},
+    no_scheduled_contact: {404, "This pass has no contact in Cadence."},
+    contacts_unavailable: {503, "Contacts are unavailable right now."},
     # U46 named release (whole-request refusals; ux 11-13 words the console's own lines).
     command_window_closed: {409, "Not released: this contact's command window is closed."},
     unbooked_contact_unconfirmed:

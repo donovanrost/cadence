@@ -278,6 +278,50 @@ no actions, so acknowledge, resolve and retry answer `404 attention_item_not_fou
 Every recently resolved entry (all sources) also carries `reservation_id` (null without a booking)
 and `booked` (true when it has one), so an ended item can say "the pass" or "the contact".
 
+### Cancel or end a pass's contact (ux U55/U56)
+
+Pass rows (`GET /passes`, `GET /passes/:id`) carry:
+
+- `contact_action: "cancel" | "end" | null`: `cancel` before the contact is live, `end` while it
+  is, `null` once it ended, was canceled, or the window is over. Never both.
+- `contact_ended: null | {kind: canceled | ended_early, cause, by {kind: user | system, id, name},
+  at, reason, reason_code}`. `cause` (known text): `operator`, or `provider_failed |
+  provider_canceled | provider_rejected` when Cadence canceled it because the reservation won't fly
+  (`by` is `{kind: system, id: provider_reservation_reconciler, name: null}`). `reason` is the
+  operator's reason, or the provider's own words (null when it gave none); `reason_code` the
+  provider's code (null for an operator).
+  Nullable (lead 11-14): `cause`, `by` and `at` are null ONLY for a contact canceled with no
+  ending action record (legacy rows); every new cancel or end fills all three. `by` is null rather
+  than a half actor when the recorded actor lacks its kind or id. With no action record, `at` is
+  the contact's own lifecycle cancel time when it has one (`cause` and `by` stay null).
+
+`GET /passes/:id` also carries:
+
+- `queued_commands: {count, expiring_before_next: {count, earliest_at} | null, next_contact:
+  {station, starts_at} | null} | null`: the spacecraft's queued command requests, how many expire
+  before its next commandable contact, and that contact. `next_contact` is the next contact by the
+  CORRECTED accepted window, after this pass, skipping canceled, phantom and uplink-dropped contacts;
+  it is not "the next scheduled_contacts row". Neither action cancels queued requests: they wait
+  for the next contact.
+- `window_moves: [{at, before {starts_at, ends_at}, after {…}, classification: observed |
+  acknowledgment_required, provider_change_id}]`, newest first: the provider's moves of this pass.
+
+Writes (operators, `operate_mission`; neither changes the provider booking, which is Release):
+
+- `POST /passes/:id/cancel-contact {reason}`: before AOS (domain's scheduled-contact cancel).
+- `POST /passes/:id/end-contact {reason}`: while live (domain's end-early).
+- `reason` required, trimmed, at most 500 characters. `200` answers the pass row (`GET
+  /passes/:id`).
+- Errors: `422 invalid_params {reason}`; `409 contact_not_cancelable {state: active | ended |
+  canceled}`; `409 contact_not_live {state: not_started | ended | canceled}`; `404
+  no_scheduled_contact` (a booking with no contact in Cadence); `404 pass_not_found`; `403
+  forbidden`.
+- Each writes the contact action that the Timeline shows (`scheduled_contact_canceled`,
+  `realized_contact_ended_early`, with the actor and reason) and an organization audit entry
+  (`kind: contacts`).
+- Hand-started contacts aren't pass rows, so they're out of this step: ending one from Uplink's
+  contact view is a follow-up.
+
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id`: `pass_resolution` (the

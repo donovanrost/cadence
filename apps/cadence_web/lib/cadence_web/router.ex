@@ -903,6 +903,9 @@ defmodule CadenceWeb.Router do
       get("/passes/:id", PassController, :show)
       post("/passes/:id/recover-uplink", PassController, :recover_uplink)
       post("/passes/:id/release", PassController, :release)
+      # U55 cancel or end a pass's contact (owner: api). Contract: docs/apogee/api/contacts.md
+      post("/passes/:id/cancel-contact", PassContactController, :cancel)
+      post("/passes/:id/end-contact", PassContactController, :finish)
       # U46 named release (owner: api). Contract: docs/apogee/api/commanding.md
       post(
         "/contacts/:realized_contact_id/release",

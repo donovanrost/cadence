@@ -130,10 +130,38 @@ defmodule Cadence.Reads.EventSentencesTest do
         summary: "provider_canceled"
       })
 
+    # U55/U56: Cadence canceled it because the reservation won't fly.
+    assert %{text: "EARENDIL-004 · HAW 07:32Z pass canceled by Cadence: the provider canceled it"} =
+             EventSentences.describe(canceled, @ctx)
+
+    by_operator =
+      entry(:scheduled_contact_canceled, %{
+        scheduled_contact_id: "sc-contact-1",
+        spacecraft_id: "sc-4",
+        summary: "Antenna maintenance",
+        actor: %{"kind" => "user", "id" => "user-mira"},
+        metadata: %{"cause" => "operator"}
+      })
+
+    assert %{text: "EARENDIL-004 · HAW 07:32Z contact canceled by Mira K.: “Antenna maintenance”"} =
+             EventSentences.describe(by_operator, @ctx)
+
+    rejected = %{
+      by_operator
+      | actor: %{"kind" => "system"},
+        metadata: %{"cause" => "provider_rejected"}
+    }
+
     assert %{
              text:
-               "Contact for EARENDIL-004 at Hawaii (Demo) (HAW), 07:32:53–07:40:53Z, canceled by the provider"
-           } = EventSentences.describe(canceled, @ctx)
+               "EARENDIL-004 · HAW 07:32Z pass canceled by Cadence: the provider rejected its booking"
+           } =
+             EventSentences.describe(rejected, @ctx)
+
+    ended = %{by_operator | kind: :realized_contact_ended_early, summary: "Wrong target"}
+
+    assert %{text: "EARENDIL-004 · HAW 07:32Z contact ended early by Mira K.: “Wrong target”"} =
+             EventSentences.describe(ended, @ctx)
 
     activated =
       entry(:binding_set_activated, %{

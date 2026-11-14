@@ -45,6 +45,7 @@ Commit 4d92b1f5e.
 | Release: unlisted `ScheduleCommands.execute` errors fall to a 500 | server | **HOLD** (reservation), unverified |
 | `/spacecraft/:id/passes` stations carry `ref` too | doc→server | doc fix below |
 | Pass review `provider.account_id`, `freshness[].provider_id` extra keys | doc→server | doc fix below |
+| U55 `contact_ended.cause` / `by` / `at` null on a canceled contact with no action record; the console decoded non-null | shape change | **fixed** contract confirmed nullable (lead 11-14): null only without an action record; `at` from the lifecycle cancel time; `by` null, never half; fe-ops reader 68b3180b6; test that a new cancel fills all three |
 
 ## Planning (all on the contact path except reads): listed, server fixes HOLD
 

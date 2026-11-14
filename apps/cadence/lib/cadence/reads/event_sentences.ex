@@ -15,7 +15,13 @@ defmodule Cadence.Reads.EventSentences do
   """
 
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Reads.{ConfigRevisionEvents, OffPlanBookingEvents, WindowMoveEvents}
+
+  alias Cadence.Reads.{
+    ConfigRevisionEvents,
+    ContactEndingEvents,
+    OffPlanBookingEvents,
+    WindowMoveEvents
+  }
 
   @type context :: %{
           spacecraft: %{optional(binary()) => {binary() | nil, integer() | nil}},
@@ -71,20 +77,17 @@ defmodule Cadence.Reads.EventSentences do
      contact_ref(entry), nil}
   end
 
-  defp sentence("scheduled_contact_canceled", entry, ctx) do
-    why = if entry.summary == "provider_canceled", do: " by the provider", else: ""
-
+  # U55/U56: who canceled or ended the contact and why (ContactEndingEvents).
+  defp sentence(kind, entry, ctx)
+       when kind in ["scheduled_contact_canceled", "realized_contact_ended_early"] do
     facts =
       ctx
       |> Map.get(:contacts, %{})
       |> Map.get(entry.scheduled_contact_id || entry.subject_id, %{})
 
-    window =
-      if facts[:starts_at],
-        do: ", #{span(%{"starts_at" => iso(facts.starts_at), "ends_at" => iso(facts.ends_at)})},",
-        else: ""
+    metadata = Map.merge(%{"reason" => entry.summary}, entry.metadata || %{})
 
-    {"Contact for #{craft(entry, ctx)}#{station(facts[:station])}#{window} canceled#{why}",
+    {ContactEndingEvents.sentence(kind, metadata, craft(entry, ctx), facts, by(entry, ctx)),
      contact_ref(entry), nil}
   end
 
@@ -216,16 +219,6 @@ defmodule Cadence.Reads.EventSentences do
   defp outcome(nil), do: "recorded"
   defp outcome(status), do: status |> to_string() |> String.replace("_", " ")
 
-  defp station(%{name: name, code: code}) when is_binary(code), do: " at #{name} (#{code})"
-  defp station(%{name: name}), do: " at #{name}"
-  defp station(_none), do: ""
-
-  defp iso(%DateTime{} = at), do: DateTime.to_iso8601(at)
-
-  defp iso(%NaiveDateTime{} = at),
-    do: at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_iso8601()
-
-  defp iso(other), do: other
   defp time(nil), do: "an unknown time"
 
   defp time(iso) when is_binary(iso) do

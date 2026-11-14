@@ -8,11 +8,11 @@ defmodule CadenceWeb.Console.PassController do
 
   alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.RepairChain
-  alias Cadence.Contacts.{OpenContacts, ProviderChangeAttention, ScheduleCommands}
+  alias Cadence.Contacts.{ProviderChangeAttention, ScheduleCommands}
   alias Cadence.Control.{Contacts, UplinkReadiness}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.ActionQueue.AttentionItems
-  alias Cadence.Reads.{Attention, Passes, PassUplink}
+  alias Cadence.Reads.{Attention, PassContactFields, Passes, PassUplink}
   alias CadenceWeb.Console.{PassJSON, Problem, WindowParams}
 
   @max_span_s 7 * 86_400
@@ -48,7 +48,8 @@ defmodule CadenceWeb.Console.PassController do
             pass
             |> Map.put(:queued_command_groups, queued)
             |> Map.put(:provider_changes, provider_changes(conn, pass.id))
-            |> Map.put(:second_connections_refused, second_connections(conn, pass))
+            # U55/U56 queued requests and the provider's moves; U50 second connections refused.
+            |> Map.merge(PassContactFields.detail(org_id(conn), mission_id(conn), pass, now()))
         })
 
       {:error, :pass_not_found} ->
@@ -56,25 +57,14 @@ defmodule CadenceWeb.Console.PassController do
     end
   end
 
-  # U50: second connections the pass's listener refused while its own was up (Technical details).
-  # nil when the pass has no realized contact or the live count was lost to a restart.
-  defp second_connections(conn, pass) do
-    case OpenContacts.latest_for_scheduled(
-           org_id(conn),
-           mission_id(conn),
-           pass.scheduled_contact_id
-         ) do
-      nil ->
-        nil
+  # U55: cancel or end the pass's contact, and how it ended.
+  defp with_contact_fields(%{passes: passes} = result, conn),
+    do: %{
+      result
+      | passes: PassContactFields.annotate(org_id(conn), mission_id(conn), passes, now())
+    }
 
-      contact ->
-        Contacts.second_connections_refused(
-          org_id(conn),
-          mission_id(conn),
-          contact.realized_contact_id
-        )
-    end
-  end
+  defp now, do: DateTime.utc_now()
 
   defp decorate(conn, result) do
     items =
@@ -100,6 +90,7 @@ defmodule CadenceWeb.Console.PassController do
     |> with_readiness(conn, Map.new(blocked, &{&1.contact_id, &1}))
     |> with_releasable(conn)
     |> with_bookers()
+    |> with_contact_fields(conn)
   end
 
   # L15: an off-plan booking names its booker (one batch of names per page).
