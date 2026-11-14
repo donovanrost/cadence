@@ -21,6 +21,9 @@ const time = (v: unknown): v is string =>
   /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z$/.test(v) &&
   Number.isFinite(Date.parse(v));
 const optional = <T>(v: unknown, check: Guard<T>): v is T | null => v === null || check(v);
+/** A console path the server built (`/console/<org>/<mission>/…`, or `/console`). */
+const consoleHref = (v: unknown): v is string =>
+  typeof v === "string" && (v === "/console" || v.startsWith("/console/")) && v.length <= 2048;
 const states = [
   "observed",
   "pending_approval",
@@ -122,7 +125,9 @@ function validReservation(
       !time(r.starts_at) ||
       !time(r.ends_at) ||
       Date.parse(r.starts_at) >= Date.parse(r.ends_at) ||
-      !optional(r.last_reconciled_at, time)
+      !optional(r.last_reconciled_at, time) ||
+      (r.requirement_console_href !== undefined &&
+        !optional(r.requirement_console_href, consoleHref))
     )
       return false;
     if (

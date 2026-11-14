@@ -69,6 +69,30 @@ defmodule CadenceWeb.OpsContactReviewPageTest do
     assert action(view, c.path, original, event, input)["snapshot"]["status"] == "rejected"
   end
 
+  test "the requirement link is the console's requirement page, built by the server", c do
+    # A plan-bound reservation needs a real requirement, plan and snapshot (FKs), so the href is
+    # checked on the page's own builder with this fixture's real organization and mission.
+    scope = %{organization_id: c.organization_id}
+    mission = %{mission_id: c.mission_id}
+    model = %{reservation: %{requirement_id: "requirement-one", requirement_version: 2}}
+
+    assert %{reservation: %{requirement_console_href: href}} =
+             CadenceWeb.OpsContactSchedulingPage.requirement_console_href(model, scope, mission)
+
+    # The literal path, so a lost slug (bare "/console") can't pass; the fixture's slugs are its ids.
+    assert href ==
+             "/console/#{c.organization_id}/#{c.mission_id}/setup/contact-planning/requirements/requirement-one"
+
+    unbound = %{reservation: %{requirement_id: nil}}
+
+    assert unbound ==
+             CadenceWeb.OpsContactSchedulingPage.requirement_console_href(unbound, scope, mission)
+
+    # The page itself still renders, without a requirement link, for this unbound reservation.
+    {:ok, view, _} = live(c.conn, c.path)
+    refute Map.has_key?(page(view)["data"]["model"]["reservation"], "requirement_console_href")
+  end
+
   test "review pins its selected change while newer provider observations disable decisions", c do
     {:ok, view, _} = live(c.conn, c.path)
     original = page(view)

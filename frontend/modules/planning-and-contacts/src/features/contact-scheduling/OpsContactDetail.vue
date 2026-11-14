@@ -215,7 +215,10 @@ useOpsHeader("/missions/:mission_id/ops/contacts/:provider_reservation_id", () =
             <a
               id="reservation-requirement"
               class="text-primary"
-              :href="`/missions/${encodeURIComponent(detail.context.mission_id)}/ops/requirements/${encodeURIComponent(detail.reservation.requirement_id)}?version=${detail.reservation.requirement_version}`"
+              :href="
+                detail.reservation.requirement_console_href ??
+                `/missions/${encodeURIComponent(detail.context.mission_id)}/ops/requirements/${encodeURIComponent(detail.reservation.requirement_id)}?version=${detail.reservation.requirement_version}`
+              "
               >{{ detail.reservation.requirement_id }} · Version
               {{ detail.reservation.requirement_version }}</a
             >

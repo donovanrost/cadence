@@ -7,6 +7,7 @@ defmodule CadenceWeb.OpsContactSchedulingPage do
   alias Cadence.Contacts.ScheduleOperations
   alias Cadence.Missions
   alias Cadence.Reads.ApplicationSurfaces.Planning.{ContactDetail, ContactRecord, ContactSchedule}
+  alias CadenceWeb.ConsolePaths
   alias Phoenix.Component
 
   @routes %{
@@ -249,8 +250,26 @@ defmodule CadenceWeb.OpsContactSchedulingPage do
   end
 
   defp load(scope, mission, %{kind: "reservation", params: params}) do
-    with {:ok, %{detail: model}} <- ContactDetail.load(scope, mission, params), do: {:ok, model}
+    with {:ok, %{detail: model}} <- ContactDetail.load(scope, mission, params),
+         do: {:ok, requirement_console_href(model, scope, mission)}
   end
+
+  # Director 11-15 (lead's narrow exception): the requirement link goes straight to the console's
+  # requirement page, not through b23's 302 on the legacy URL, which the deletions will take away.
+  # Reservation review itself stays until the console covers it (L14).
+  @doc false
+  def requirement_console_href(
+        %{reservation: %{requirement_id: id} = reservation} = model,
+        scope,
+        mission
+      )
+      when is_binary(id) do
+    rest = "/setup/contact-planning/requirements/" <> ConsolePaths.segment(id)
+    href = ConsolePaths.mission(scope.organization_id, mission.mission_id, rest)
+    %{model | reservation: Map.put(reservation, :requirement_console_href, href)}
+  end
+
+  def requirement_console_href(model, _scope, _mission), do: model
 
   defp pin(%{kind: "schedule"} = session, model) do
     window = session.initial_window || model["initial_window"]
