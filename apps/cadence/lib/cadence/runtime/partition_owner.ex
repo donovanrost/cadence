@@ -726,7 +726,10 @@ defmodule Cadence.Runtime.PartitionOwner do
           spacecraft_id: sample.spacecraft_id,
           packet_id: sample.packet_id,
           evidence_id: sample.evidence_id,
-          trigger_sample_id: sample.sample_id
+          trigger_sample_id: sample.sample_id,
+          trigger_frame_ref: Sample.encode_frame_ref(sample.frame_ref),
+          generation_time_source:
+            sample.generation_time_source && Atom.to_string(sample.generation_time_source)
         }
       })
     ]
@@ -758,6 +761,9 @@ defmodule Cadence.Runtime.PartitionOwner do
       quality_state: update.quality,
       generation_time: update.generation_time,
       receipt_time: update.receipt_time,
+      # A derived value shares its trigger's time, so it shares its trigger's identity ref too.
+      generation_time_source: time_source(metadata_value(update, :generation_time_source)),
+      frame_ref: Sample.decode_frame_ref(metadata_value(update, :trigger_frame_ref)),
       provenance: %{
         source_update_ids: update.source_update_ids,
         trigger_sample_id: metadata_value(update, :trigger_sample_id),
@@ -1759,6 +1765,10 @@ defmodule Cadence.Runtime.PartitionOwner do
   defp raw_evidence_time(%RawEvidence{} = raw_evidence) do
     raw_evidence.source_time || raw_evidence.receipt_time
   end
+
+  defp time_source(source) when source in [:receipt, "receipt"], do: :receipt
+  defp time_source(source) when source in [:onboard, "onboard"], do: :onboard
+  defp time_source(_source), do: nil
 
   defp value(map, key, default \\ nil),
     do: Map.get(map, key, Map.get(map, Atom.to_string(key), default))

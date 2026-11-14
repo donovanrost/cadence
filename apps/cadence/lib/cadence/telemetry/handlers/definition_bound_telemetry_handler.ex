@@ -93,6 +93,8 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
       quality_state: :good,
       generation_time: packet_record.source_time,
       receipt_time: packet_record.receipt_time,
+      generation_time_source: generation_time_source(packet_record),
+      frame_ref: frame_ref(packet_record),
       provenance: %{
         evidence_id: packet_record.evidence_id,
         packet_id: packet_record.packet_id,
@@ -104,4 +106,26 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
       }
     }
   end
+
+  # Identity v2: a CCSDS packet is told apart by its source sequence count, with or without
+  # on-board time. Count-less packets would need a stream position; no producer has one today.
+  defp frame_ref(%PacketRecord{apid: apid, sequence_count: count})
+       when is_integer(apid) and is_integer(count),
+       do: {:seq, apid, count}
+
+  defp frame_ref(%PacketRecord{}), do: nil
+
+  defp generation_time_source(%PacketRecord{provenance: provenance}) when is_map(provenance) do
+    case Map.get(
+           provenance,
+           :generation_time_source,
+           Map.get(provenance, "generation_time_source")
+         ) do
+      source when source in [:receipt, "receipt"] -> :receipt
+      source when source in [:onboard, "onboard"] -> :onboard
+      _unknown -> nil
+    end
+  end
+
+  defp generation_time_source(%PacketRecord{}), do: nil
 end

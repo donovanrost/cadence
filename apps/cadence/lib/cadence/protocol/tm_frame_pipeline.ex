@@ -64,6 +64,21 @@ defmodule Cadence.Protocol.TMFramePipeline do
     end
   end
 
+  # `ctx.frame_timestamp` (optional, `raw_frame_offset_bytes -> DateTime | nil`) stamps each
+  # frame with its own time before reassembly, so a packet takes the time of the frame that
+  # completed it rather than one time for the whole decode call.
+  defp reduce_frames(frame_infos, decode_anomalies, rest, state, %{frame_timestamp: stamp} = ctx)
+       when is_function(stamp, 1) do
+    frame_infos
+    |> Enum.map(fn frame_info ->
+      case stamp.(frame_info.raw_frame_offset_bytes) do
+        %DateTime{} = time -> %{frame_info | frame: %{frame_info.frame | timestamp: time}}
+        nil -> frame_info
+      end
+    end)
+    |> reduce_frames(decode_anomalies, rest, state, Map.delete(ctx, :frame_timestamp))
+  end
+
   defp reduce_frames(frame_infos, decode_anomalies, rest, state, ctx) do
     frame_infos
     |> Enum.reduce({[], [], Enum.reverse(decode_anomalies), state}, fn frame_info,

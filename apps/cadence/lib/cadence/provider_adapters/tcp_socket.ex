@@ -19,7 +19,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   require Logger
 
   alias Cadence.ActionRequests.ProviderRequest
-  alias Cadence.Ingress.RawEvidence
+  alias Cadence.Ingress.{RawEvidence, ReceiveBackpressure}
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
   alias Cadence.ProviderAdapters.TCPSocket.{Instrumentation, Session}
 
@@ -743,7 +743,15 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         %{state | reads_paused?: false, message_remainder_bytes: message_remainder_bytes}
 
       {:error, :ingress_journal_full} ->
+        # #83: TCP pushes back (stops reading), never drops; counted when the pause begins.
         if not state.reads_paused? do
+          :pause =
+            ReceiveBackpressure.on_full(
+              true,
+              backpressure_metadata(state, :journal),
+              byte_size(data)
+            )
+
           send(state.provider_pid, {:tcp_receiver_reads_paused, self(), true})
         end
 
@@ -824,8 +832,18 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   defp pause_socket_reads(state) do
+    :pause = ReceiveBackpressure.on_full(true, backpressure_metadata(state, :executor), 0)
     send(state.provider_pid, {:tcp_receiver_reads_paused, self(), true})
     %{state | reads_paused?: true}
+  end
+
+  defp backpressure_metadata(state, buffer) do
+    %{
+      mission_id: state.mission_id,
+      realized_contact_id: state.realized_contact_id,
+      provider_binding_id: state.provider_binding_id,
+      buffer: buffer
+    }
   end
 
   defp wait_for_executor_capacity_signal(state) do
