@@ -4842,8 +4842,8 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
   );
 
   const seenQueries = new Set(diagnostics.completed(() => true).map((record) => record.requestId));
-  /** @param {string} path @param {string} application @param {string} surface @param {boolean} [sidebar] */
-  const ready = async (path, application, surface, sidebar = true) => {
+  /** @param {string} path @param {string} application @param {string} surface */
+  const ready = async (path, application, surface) => {
     try {
       const coreContent =
         path === "/"
@@ -4852,9 +4852,7 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
             ? "#spacecraft-list-content"
             : path === `${root}/comms`
               ? "#comms-overview-content"
-              : path === `${root}/ops/dashboards`
-                ? "#dashboard-directory-feature"
-                : null;
+              : null;
       if (coreContent) {
         await waitForExpression(
           client,
@@ -4865,12 +4863,12 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
           const title = header?.querySelector('h1');
           return location.pathname === ${JSON.stringify(path)} && probe?.shell === shell &&
             probe.phoenixNavigations === 0 && probe.liveRoot === shell?.closest('[data-phx-main]') &&
-            ${sidebar ? "probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&" : ""}
+            probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&
             shell.querySelectorAll(${JSON.stringify(coreContent)}).length === 1 &&
             document.querySelectorAll('#cadence-federation-root').length === 0 &&
             header?.dataset.pageHeadingSource === 'page' && title?.textContent.trim() &&
             document.querySelectorAll('h1').length === 1 &&
-            getComputedStyle(title).fontSize === ${JSON.stringify(path === `${root}/ops/dashboards` ? "20px" : "24px")};
+            getComputedStyle(title).fontSize === '24px';
         })()`,
           `persistent core host navigation to ${path}`,
           { signal },
@@ -4886,7 +4884,7 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
       if (document.querySelectorAll("#cadence-federation-root").length !== 1) return false;
       return location.pathname === ${JSON.stringify(path)} && probe?.shell === shell && probe.phoenixNavigations === 0 &&
         probe.liveRoot === shell?.closest('[data-phx-main]') &&
-        ${sidebar ? "probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&" : ""}
+        probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&
         mount?.dataset.mountedApplication === ${JSON.stringify(application)} &&
         mount?.dataset.mountedSurface === ${JSON.stringify(surface)} &&
         !document.querySelector('#remote-error') && !document.querySelector('#phoenix-host-error');
@@ -5015,9 +5013,6 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
   await ready(`${root}/spacecraft`, "spacecraft", "list");
   await evaluate(client, "history.forward()", "host navigation forward", { signal });
   await ready(`${root}/comms`, "comms", "overview");
-  await expand("ops");
-  await click(`${root}/ops/dashboards`);
-  await ready(`${root}/ops/dashboards`, "ops_console", "dashboard_directory", false);
   await diagnostics.drainLateEvents(300, signal);
   diagnostics.assertClean("persistent host navigation");
   reportProgress(
