@@ -890,6 +890,8 @@ configuration failure P3. The amendments to fe-ops' drafts:
   - **Bar:** a status mark at its leading edge, ApStatusMark ▲ caution while not started and ◆ crit once
     missed. It's shape and colour, never colour alone, and not a bar fill. This needs an ApGantt bar prop
     `attention: caution | crit | null` (fe-setup, ui package). It shows the top item by U45's order.
+    The mark sits on a small dark backing so ▲ stays visible on caution-filled bars. The Gantt legend lists the
+    marks only while one is on screen, as with U30's Unconfirmed: `▲ Not started` · `◆ Missed`.
   - **Bar description** (screen readers): ", hasn't started" / ", was missed", plus ", and 2 more items" when
     there are more.
   - **Selected pass panel:** the tag `▲ NOT STARTED` / `◆ MISSED` beside the state tag, then `+2`, which lists
