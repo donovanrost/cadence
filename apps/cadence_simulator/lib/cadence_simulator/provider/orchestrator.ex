@@ -537,9 +537,28 @@ defmodule CadenceSimulator.Provider.Orchestrator do
       # later step fails before the state keeps it, the sweep finds it (stop_untracked/1).
       true = Process.link(pid)
       reference = Process.monitor(pid)
+      log_session_start(resource_type, reservation, run)
       stream = %{pid: pid, reference: reference, resource_type: resource_type}
       {:ok, %{state | streams: Map.put(state.streams, reservation["id"], stream)}}
     end
+  end
+
+  # 11-14 (003's pass looked 30 s late; it was a provider timing shift Cadence's contact didn't
+  # follow): say what a session started for, against which AOS and version, and how late.
+  defp log_session_start(resource_type, resource, run) do
+    now = DateTime.utc_now()
+
+    late =
+      case parse_time(resource["starts_at"]) do
+        {:ok, starts_at} -> DateTime.diff(now, starts_at, :millisecond) / 1000
+        _no_start -> nil
+      end
+
+    Logger.info(
+      "Session started for #{resource_type} #{resource["id"]}: AOS #{resource["starts_at"]}, " <>
+        "version #{resource["revision"] || resource["version"] || "?"}, " <>
+        "late by #{late || "?"} s, paused #{Map.get(run, "paused_duration_seconds", 0)} s"
+    )
   end
 
   defp stream_options(data_plane, reservation, run, provider_defaults) do

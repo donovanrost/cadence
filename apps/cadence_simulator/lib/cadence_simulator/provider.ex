@@ -6,6 +6,8 @@ defmodule CadenceSimulator.Provider do
   exposing internal structs or atoms.
   """
 
+  require Logger
+
   alias CadenceSimulator.Provider.{
     Capabilities,
     Contract,
@@ -133,6 +135,12 @@ defmodule CadenceSimulator.Provider do
     with {:ok, run} <- Store.fetch(:run, run_id),
          {:ok, next_run} <- apply_run_transition(run, action),
          {:ok, next_run} <- Store.put(:run, next_run) do
+      # A pause shifts every later session start (orchestrator effective_now); say so.
+      Logger.info(
+        "Simulator run #{run_id} #{action}: state #{next_run["state"]}, paused " <>
+          "#{next_run["paused_duration_seconds"]} s in total"
+      )
+
       emit(run_event_type(action), next_run, %{"state" => next_run["state"]})
       {:ok, next_run}
     end
