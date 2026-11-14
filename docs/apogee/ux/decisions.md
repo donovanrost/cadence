@@ -1466,3 +1466,25 @@ Technical details.
     `frames_lost` (int | null) only when it's really counted.
   - (b): per pass `listener_overlap {with {spacecraft name, station code, starts_at}, seconds, loses: this |
     other, direction}`.
+
+### U59 · Command groups in the organization audit (api's proposal; lead and director decide scope) (api / fe-setup)
+One entry per decision, not per member. The verbs match the request log (groups/words.ts) and U46, so the audit and
+the log say the same thing. `<label>` is "SET_MODE and 2 more for 12 spacecraft" (the first command, "and N more",
+then the target count). The reason column takes the note or reason.
+- submitted: "Submitted <label>". It adds " · needs a second GO" and " · 3 spacecraft have their own values" when
+  they apply. Resent: "Resent <label> (sent back as REQ-0419)", or the group's label when it has no ref.
+- approved: "Gave GO on <label>"; with exclusions: "Gave GO on <label>, excluding 2 spacecraft".
+- rejected: "Gave NO-GO on <label>"; sent_back: "Sent back <label>".
+- aborted: "Aborted <label>: 40 uplinks canceled, 8 already sent". Its member cancels fold into this entry.
+- released_on_contact (U46): "Released 2 uplinks of <label> into the SVL 14:05Z pass"; unbooked: "…into a contact
+  that wasn't a booked pass (SVL 14:05Z)". If it stopped: "· then stopped, 1 uplink still queued".
+- hold_acknowledged: "Acknowledged the <check label> HOLD on <label>" (checkLabel words, never the key).
+- Single requests: keep Requested / Approved / Rejected, and add "Canceled <request>" from metadata.cancellation.
+- **Notes aren't audit entries.** They're comments, and they stay in the request log and Timeline. The audit
+  records decisions.
+- **System cancels** (the director decides whether they're in): the actor is Cadence (SERVICE tag). "Canceled
+  SET_MODE on EARENDIL-004: it expired before release" / "…: what it was approved against changed"
+  (release_basis_changed, U46's clause). If they're in, they're the only system rows in this source, so they need
+  the actor shown clearly.
+- The target kind `command_group` links to the group's page. Per-target values aren't separate rows; the
+  submitted line's count points there.
