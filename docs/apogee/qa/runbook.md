@@ -302,6 +302,9 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
   identity v2 shipped needs a lead or director decision first. This includes 11-14 00:38:36–00:40:40Z (001 and 009,
   collapsed 8:1 identities). A replay run always gets its own identities (realm + replay_run_id), so it never fixes or
   duplicates the live rows; it only adds its own. See `docs/apogee/plans/ingress-time-tags.md`.
+- **Archive ranges written before c3680ddd9 re-archive their packets once under new ids if replayed** (dev/test data
+  only). c3680ddd9 (domain, #71 (d)) makes a journaled packet's id stable across re-batching. It lands with #73's
+  restart, restart 2 on 11-14.
 - **Deploy identity v2 with a graceful stop (journal sealed), not a kill.** A crash with a persisted-but-unacked batch
   in flight re-persists it at boot under the new digest: one duplicate canonical identity per batch, once.
 
