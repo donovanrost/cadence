@@ -119,7 +119,7 @@ export function windowClosedClause(details: unknown, c: WindowContext): string {
   return "the command window is closed";
 }
 
-/** ux's ruled clauses (e8d04f6b2); `sc` is the spacecraft's name, or "this spacecraft". */
+/** ux's ruled clauses (e8d04f6b2); `sc` is the spacecraft's name, or "the contact's spacecraft". */
 const CLAUSES: Readonly<
   Record<
     Exclude<(typeof groupRefusalCodes | typeof stopCodes)[number], "command_window_closed">,
@@ -140,7 +140,7 @@ const CLAUSES: Readonly<
 /** One code's clause, lower-case and without a final stop; unknown codes use the server's message. */
 export function releaseClause(code: ReleaseCode, details: unknown, c: WindowContext): string {
   if (code === "command_window_closed") return windowClosedClause(details, c);
-  if (isKnown(code)) return CLAUSES[code](c.spacecraft ?? "this spacecraft");
+  if (isKnown(code)) return CLAUSES[code](c.spacecraft ?? "the contact's spacecraft");
   const message = decode(messageDetails, details);
   const text = message.ok ? message.value.message : null;
   return text ? text.replace(/[.!?]+$/, "") : code.unrecognized.replaceAll("_", " ");
@@ -249,32 +249,45 @@ export function unbookedSheetBody(
 
 /** What the request log needs to word a named release beyond the event (ux U46). */
 export type ReleaseLogContext = Readonly<{
-  /** "SVA 03:10Z" for the booked pass with this realized contact id, when the screen has it. */
-  passLabel?: ((realizedContactId: string) => string | null) | undefined;
-  spacecraft?: string | null | undefined;
+  /** "SVA 03:10Z" ("SVA 11-12 03:10Z" on another day, §4) for the booked pass with this id. */
+  passLabel?: ((realizedContactId: string, at: Date) => string | null) | undefined;
+  /** The contact's spacecraft, only when it's known to be that one (U25). */
+  spacecraftOf?: ((realizedContactId: string | null) => string | null) | undefined;
 }>;
 
+type ContactRef = Readonly<{ realized_contact_id?: string | null | undefined }>;
 type LabelSource = Readonly<{
   spacecraft?: Readonly<{ name: string }> | undefined;
-  pass: Readonly<{
-    realized_contact_id?: string | null | undefined;
-    station: Readonly<{ code: string | null; name: string | null }>;
-    starts_at: string;
-  }> | null;
+  pass:
+    | (ContactRef &
+        Readonly<{
+          station: Readonly<{ code: string | null; name: string | null }>;
+          starts_at: string;
+        }>)
+    | null;
+  contact?: ContactRef | null | undefined;
 }>;
 
-/** The group's uplink block as log context: its pass's label and its spacecraft. */
+/**
+ * The group's uplink block as log context. ux (U25): the spacecraft is named only when it's known
+ * to be the contact's: the group's only target, or the block's own pass or contact (whose
+ * spacecraft api names). Otherwise the clause says "the contact's spacecraft".
+ */
 export function releaseLogContext(
   uplink: LabelSource | null | undefined,
-  fallbackName: string | null,
+  onlyTarget: string | null,
 ): ReleaseLogContext {
   const pass = uplink?.pass ?? null;
+  const ours = (id: string | null) =>
+    id !== null &&
+    (pass?.realized_contact_id === id || uplink?.contact?.realized_contact_id === id);
   return {
-    spacecraft: uplink?.spacecraft?.name ?? fallbackName,
-    passLabel: (id) => {
+    spacecraftOf: (id) => onlyTarget ?? (ours(id) ? (uplink?.spacecraft?.name ?? null) : null),
+    passLabel: (id, at) => {
       if (!pass || pass.realized_contact_id !== id) return null;
       const code = pass.station.code ?? pass.station.name;
-      return code ? `${code} ${hhmm(pass.starts_at)}` : hhmm(pass.starts_at);
+      const when = shortAt(pass.starts_at, at);
+      return code ? `${code} ${when}` : when;
     },
   };
 }

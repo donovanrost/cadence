@@ -286,4 +286,55 @@ describe("U46 command window and named release words", () => {
     );
     expect(eventText(e, () => "Mira K.")).toBe("Mira K. released 2 uplinks into a booked pass");
   });
+
+  it("names the spacecraft only when it's known to be the contact's (U25), and dates the label", () => {
+    const stoppedAt = (rc: string, at: string) =>
+      groupOf({
+        events: [
+          {
+            id: "ev-11",
+            kind: "released_on_contact",
+            actor: { actor_kind: "user", user_id: "user-7" },
+            at,
+            payload: {
+              realized_contact_id: rc,
+              booked: true,
+              released_entry_ids: [],
+              not_attempted_entry_ids: ["e2"],
+              stopped: {
+                command_queue_entry_id: "e1",
+                command_request_id: "req-1",
+                reason: { code: "command_queue_entry_not_next_for_release", details: {} },
+              },
+            },
+          },
+        ],
+      }).events[0];
+    const u = decode(groupUplinkReader, {
+      spacecraft: { id: "sc-1", name: "EARENDIL-001" },
+      pass: {
+        reservation_id: "pass-1",
+        contact_id: "c-1",
+        station,
+        starts_at: "2026-11-14T03:10:00Z",
+        ends_at: "2026-11-14T03:19:00Z",
+        realized_contact_id: "rc-1",
+      },
+      readiness: null,
+    });
+    if (!u.ok) throw u.error;
+    const several = releaseLogContext(u.value, null);
+    const ours = stoppedAt("rc-1", "2026-11-15T00:10:00Z");
+    const other = stoppedAt("rc-7", "2026-11-14T03:14:00Z");
+    if (!ours || !other) throw new Error("no event");
+    expect(eventText(ours, () => "Mira K.", [], several)).toBe(
+      "Mira K. released 0 uplinks into the SVA 11-14 03:10Z pass · then stopped: an earlier queued uplink to EARENDIL-001 has to go first · 1 uplink still queued",
+    );
+    expect(eventText(other, () => "Mira K.", [], several)).toBe(
+      "Mira K. released 0 uplinks into a booked pass · then stopped: an earlier queued uplink to the contact's spacecraft has to go first · 1 uplink still queued",
+    );
+    expect(eventText(other, () => "Mira K.", [], releaseLogContext(u.value, "SC-1"))).toContain(
+      "an earlier queued uplink to SC-1 has to go first",
+    );
+  });
 });

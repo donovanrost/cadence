@@ -11,7 +11,10 @@ const events = computed(() =>
   [...props.group.events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)),
 );
 const release = computed(() =>
-  releaseLogContext(props.group.uplink, props.group.targets[0]?.name ?? null),
+  releaseLogContext(
+    props.group.uplink,
+    props.group.targets.length === 1 ? (props.group.targets[0]?.name ?? null) : null,
+  ),
 );
 </script>
 

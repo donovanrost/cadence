@@ -23,9 +23,14 @@ const now = useNow();
 
 const contact = computed(() => props.group.uplink?.contact ?? null);
 const armed = computed(() => contact.value?.armed_group_ids ?? []);
-/** The block describes the group's first target (api); only that spacecraft's members go. */
+/**
+ * The block describes the group's first target (api); only that spacecraft's members go. Named
+ * from api's uplink.spacecraft, or the group's only target; never guessed (U25).
+ */
 const spacecraft = computed(
-  () => props.group.uplink?.spacecraft?.name ?? props.group.targets[0]?.name ?? null,
+  () =>
+    props.group.uplink?.spacecraft?.name ??
+    (props.group.targets.length === 1 ? (props.group.targets[0]?.name ?? null) : null),
 );
 const body = computed(() => {
   const c = contact.value;

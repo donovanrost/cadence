@@ -223,7 +223,9 @@ export function eventText(
       // ux U46 audit line; the log's own column carries the time.
       const sent = p?.released_entry_ids?.length;
       const left = p?.not_attempted_entry_ids?.length ?? 0;
-      const label = p?.realized_contact_id ? release.passLabel?.(p.realized_contact_id) : null;
+      const label = p?.realized_contact_id
+        ? release.passLabel?.(p.realized_contact_id, new Date(e.at))
+        : null;
       const where =
         p?.booked === false
           ? "into a contact that wasn't a booked pass"
@@ -232,7 +234,7 @@ export function eventText(
             : "into a booked pass";
       const why = p?.stopped?.reason;
       const stop = p?.stopped
-        ? ` · then stopped${why ? `: ${releaseClause(why.code, why.details, { at: new Date(e.at), booked: p.booked, spacecraft: release.spacecraft })}` : ""}${left ? ` · ${plural(left, "uplink")} still queued` : ""}`
+        ? ` · then stopped${why ? `: ${releaseClause(why.code, why.details, { at: new Date(e.at), booked: p.booked, spacecraft: release.spacecraftOf?.(p.realized_contact_id ?? null) })}` : ""}${left ? ` · ${plural(left, "uplink")} still queued` : ""}`
         : "";
       return `${who} released ${sent != null ? plural(sent, "uplink") : "it"} ${where}${stop}`;
     }

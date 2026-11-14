@@ -82,7 +82,10 @@ const refusalOf = (t: Group["targets"][number]) => {
   return r ? refusalLine(r, { spacecraft: t.name }) : null;
 };
 const release = computed(() =>
-  releaseLogContext(props.group.uplink, props.group.targets[0]?.name ?? null),
+  releaseLogContext(
+    props.group.uplink,
+    props.group.targets.length === 1 ? (props.group.targets[0]?.name ?? null) : null,
+  ),
 );
 </script>
 
