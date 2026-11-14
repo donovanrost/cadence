@@ -135,7 +135,8 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
     end
 
     test "after its own connection went quiet opens the window, with when it went quiet", ctx do
-      {pass, port} = start_pass!(ctx, quiet_connection_ms: 100)
+      # A numeric string from a profile is coerced (api-ops).
+      {pass, port} = start_pass!(ctx, quiet_connection_ms: "100")
       _own = connect!(port, frame(1))
       assert_eventually(fn -> received(ctx, pass) > 0 end)
       adapter = adapter(ctx, pass)

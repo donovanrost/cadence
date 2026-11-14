@@ -6,6 +6,7 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
   """
   use ExUnit.Case, async: false
 
+  alias Cadence.ProviderAdapters.TCPSocket
   alias Cadence.Runtime.{ProcessNamespace, ProfileAcceptor}
 
   @frame_size 14
@@ -116,6 +117,96 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
     refute Process.alive?(acceptor)
     ref = Process.monitor(acceptor)
     assert_receive {:DOWN, ^ref, :process, ^acceptor, :noproc}, 1_000
+  end
+
+  # api-ops, lead: the linger fires just as the next contact on the profile registers, so
+  # start_child hands back the dying acceptor and the call exits :normal. Held suspended, the
+  # acceptor has its linger message queued ahead of the register call, so it ends first.
+  test "an acceptor whose linger fires as the next contact registers is replaced; it registers",
+       c do
+    listen = %{port: 0, host: "127.0.0.1", linger_ms: 50}
+    {a, _port} = register!(c, "contact-a", 1, listen: listen)
+    dying = ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+    stop_adapter(a)
+
+    assert eventually(fn -> :sys.get_state(dying).linger_ref != nil end)
+    :ok = :sys.suspend(dying)
+    Process.sleep(100)
+
+    registration = %{
+      adapter: self(),
+      realized_contact_id: "contact-b",
+      path_id: "downlink",
+      scid: 2,
+      expected_peer_address: nil,
+      frame_size: @frame_size
+    }
+
+    task =
+      Task.async(fn ->
+        ProfileAcceptor.register(c.namespace, c.mission, c.profile, listen, registration)
+      end)
+
+    # The linger message, then the register call, wait in the suspended acceptor's mailbox.
+    assert eventually(fn ->
+             match?({:message_queue_len, 2}, Process.info(dying, :message_queue_len))
+           end)
+
+    :ok = :sys.resume(dying)
+
+    assert {:ok, _port, fresh} = Task.await(task, 2_000)
+    refute Process.alive?(dying)
+    assert fresh != dying
+    assert fresh == ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+  end
+
+  # api-ops: a profile's quiet_connection_ms is a positive integer; a numeric string is coerced.
+  test "a shared-listener adapter refuses a quiet_connection_ms that isn't an integer", c do
+    opts = fn quiet ->
+      [
+        mission_id: c.mission,
+        realized_contact_id: "contact-config",
+        path_id: "downlink",
+        provider_binding_id: c.profile,
+        direction: :downlink,
+        ingress_executor_name: :unused,
+        configuration: %{
+          mode: :listen,
+          listener: "shared",
+          port: 0,
+          frame_size: @frame_size,
+          quiet_connection_ms: quiet
+        }
+      ]
+    end
+
+    for bad <- ["soon", "30s", 0, -1, 1.5] do
+      assert {:error,
+              {:tcp_provider_invalid_configuration, _profile, {:quiet_connection_ms, ^bad}}} =
+               GenServer.start(TCPSocket, opts.(bad))
+    end
+  end
+
+  # A crashing acceptor isn't restarted by its supervisor (adapters register again on :DOWN, which
+  # starts a fresh one). Restarts raced them for the port, failed :eaddrinuse and took the
+  # DynamicSupervisor past max_restarts; Runtime.Supervisor is one_for_all.
+  test "a killed acceptor is not restarted by its supervisor, which survives repeated kills", c do
+    supervisor = GenServer.whereis(ProfileAcceptor.supervisor_name(c.namespace))
+
+    for round <- 1..5 do
+      {_adapter, _port} = register!(c, "contact-#{round}", round)
+      acceptor = ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+      ref = Process.monitor(acceptor)
+      Process.exit(acceptor, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^acceptor, :killed}, 1_000
+
+      assert eventually(fn ->
+               ProfileAcceptor.whereis(c.namespace, c.mission, c.profile) == nil
+             end)
+    end
+
+    assert GenServer.whereis(ProfileAcceptor.supervisor_name(c.namespace)) == supervisor
+    assert Process.alive?(supervisor)
   end
 
   test "the listener closes after the last contact leaves (linger) and frees its port", c do

@@ -158,14 +158,27 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
     base_state = Session.initialize(base_state, opts)
 
-    case ensure_ingress_dependencies(base_state) do
-      {:ok, base_state} ->
-        start_socket_provider(configuration, base_state, provider_binding_id)
+    with :ok <- validate_configuration(configuration, provider_binding_id) do
+      case ensure_ingress_dependencies(base_state) do
+        {:ok, base_state} ->
+          start_socket_provider(configuration, base_state, provider_binding_id)
 
-      {:error, reason} ->
-        {:stop, {:tcp_provider_missing_ingress_dependency, provider_binding_id, reason}}
+        {:error, reason} ->
+          {:stop, {:tcp_provider_missing_ingress_dependency, provider_binding_id, reason}}
+      end
     end
   end
+
+  # (api-ops) A profile's quiet_connection_ms must be a positive integer (a numeric string is
+  # coerced in normalize_configuration/1); anything else would never compare as quiet.
+  defp validate_configuration(%{quiet_connection_ms: ms}, _provider_binding_id)
+       when is_integer(ms) and ms > 0,
+       do: :ok
+
+  defp validate_configuration(%{quiet_connection_ms: ms}, provider_binding_id),
+    do:
+      {:stop,
+       {:tcp_provider_invalid_configuration, provider_binding_id, {:quiet_connection_ms, ms}}}
 
   defp start_socket_provider(%{mode: :connect} = configuration, base_state, provider_binding_id) do
     case connect_socket(configuration.host, configuration.port) do
@@ -706,13 +719,23 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       # (ux U50) How long our own connection goes without reads before a second connection for
       # this contact counts as a refusal (refuse_second_connection/2).
       quiet_connection_ms:
-        Map.get(
-          configuration,
+        configuration
+        |> Map.get(
           :quiet_connection_ms,
           Map.get(configuration, "quiet_connection_ms", @quiet_connection_ms)
         )
+        |> coerce_integer()
     }
   end
+
+  defp coerce_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {integer, ""} -> integer
+      _not_an_integer -> value
+    end
+  end
+
+  defp coerce_integer(value), do: value
 
   defp connect_socket(host, port) when is_binary(host) and is_integer(port) do
     :gen_tcp.connect(String.to_charlist(host), port, @tcp_opts)

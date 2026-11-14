@@ -25,7 +25,11 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   closes the listener `linger_ms` after the last one leaves.
   """
 
-  use GenServer, restart: :transient
+  # Temporary: an acceptor is never restarted by its supervisor. Its adapters register again on
+  # :DOWN (which starts a fresh one), so a supervisor restart only raced them for the port; a
+  # restart failing :eaddrinuse repeatedly took the DynamicSupervisor past max_restarts, and
+  # Runtime.Supervisor is one_for_all, so every contact's runtime with it.
+  use GenServer, restart: :temporary
 
   import Bitwise
 
@@ -60,16 +64,47 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   pid. A pid looked up afterwards could be a newer acceptor that never heard of the registration,
   or nil if this one died in between; monitoring a dead pid delivers `:DOWN` (`:noproc`) at once,
   so the caller's re-registration covers that race.
+
+  An acceptor can be ending as it's called: its linger fires just as the next contact on the
+  profile registers, and `start_child` hands back the dying pid. The call then exits `:normal`
+  (or `:noproc`, `:shutdown`); register starts a fresh acceptor and tries again (api-ops, lead:
+  a contact start mustn't fail on it). Any other exit, or a third ending one, is
+  `{:error, {:tcp_provider_listen_failed, profile_id, {:acceptor_exited, reason}}}`, which a
+  re-registering adapter retries.
   """
   @spec register(ProcessNamespace.t(), binary(), binary(), map(), registration()) ::
           {:ok, :inet.port_number(), pid()} | {:error, term()}
-  def register(namespace, mission_id, profile_id, listen, registration) do
+  def register(namespace, mission_id, profile_id, listen, registration),
+    do: register(namespace, mission_id, profile_id, listen, registration, 3)
+
+  defp register(namespace, mission_id, profile_id, listen, registration, attempts) do
+    case register_once(namespace, mission_id, profile_id, listen, registration) do
+      {:exit, reason} ->
+        if acceptor_ending?(reason) and attempts > 1 do
+          # The ended acceptor's name is released asynchronously; give the registry a moment.
+          Process.sleep(10)
+          register(namespace, mission_id, profile_id, listen, registration, attempts - 1)
+        else
+          {:error, {:tcp_provider_listen_failed, profile_id, {:acceptor_exited, reason}}}
+        end
+
+      result ->
+        result
+    end
+  end
+
+  defp register_once(namespace, mission_id, profile_id, listen, registration) do
     with {:ok, pid} <- ensure_started(namespace, mission_id, profile_id, listen) do
       GenServer.call(pid, {:register, registration})
     end
   catch
-    :exit, reason -> {:error, {:tcp_provider_listen_failed, profile_id, {:acceptor_exit, reason}}}
+    :exit, reason -> {:exit, reason}
   end
+
+  defp acceptor_ending?({reason, {GenServer, :call, _args}}), do: acceptor_ending?(reason)
+  defp acceptor_ending?(reason) when reason in [:noproc, :normal, :shutdown], do: true
+  defp acceptor_ending?({:shutdown, _detail}), do: true
+  defp acceptor_ending?(_reason), do: false
 
   @doc "The running acceptor of `{mission_id, profile_id}`, if any (adapters monitor it)."
   @spec whereis(ProcessNamespace.t(), binary(), binary()) :: pid() | nil
@@ -88,7 +123,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
       start:
         {__MODULE__, :start_link,
          [[name: name, mission_id: mission_id, profile_id: profile_id, listen: listen]]},
-      restart: :transient
+      restart: :temporary
     }
 
     case DynamicSupervisor.start_child(supervisor_name(namespace), spec) do
