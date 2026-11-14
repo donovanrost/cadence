@@ -35,4 +35,13 @@ defmodule CadenceWeb.LegacyAdminRedirectControllerTest do
     assert redirected_to(get(c.conn, "/admin/organizations/#{id}/invite")) ==
              "/console/admin/organizations/#{id}"
   end
+
+  test "L13: provider accounts and New go to the organization's list; one account to it", c do
+    console = "/console/#{c.org.slug}/org/provider-accounts"
+    assert redirected_to(get(c.conn, "/provider-accounts")) == console
+    assert redirected_to(get(c.conn, "/provider-accounts/new")) == console
+
+    assert redirected_to(get(c.conn, "/provider-accounts/provider_account_1")) ==
+             console <> "/provider_account_1"
+  end
 end

@@ -227,6 +227,16 @@ defmodule CadenceWeb.Router do
     get("/admin/organizations/:org_id", LegacyAdminRedirectController, :organization)
     get("/admin/organizations/:org_id/invite", LegacyAdminRedirectController, :organization)
 
+    # L13 cutover (owner: api; DECISIONS #79): provider accounts moved to the console's org pages.
+    get("/provider-accounts", LegacyAdminRedirectController, :provider_accounts)
+    get("/provider-accounts/new", LegacyAdminRedirectController, :provider_accounts)
+
+    get(
+      "/provider-accounts/:provider_account_id",
+      LegacyAdminRedirectController,
+      :provider_account
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -271,18 +281,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/settings/:section_id", HostPageLive, :show,
         metadata: %{host_policy: :mission}
-      )
-
-      live("/provider-accounts", HostPageLive, :index,
-        metadata: %{host_policy: :provider_accounts}
-      )
-
-      live("/provider-accounts/new", HostPageLive, :new,
-        metadata: %{host_policy: :provider_accounts}
-      )
-
-      live("/provider-accounts/:provider_account_id", HostPageLive, :show,
-        metadata: %{host_policy: :provider_accounts}
       )
 
       live("/missions/:mission_id", HostPageLive, :show, metadata: %{host_policy: :mission})

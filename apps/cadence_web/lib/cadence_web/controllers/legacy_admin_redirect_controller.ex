@@ -7,6 +7,8 @@ defmodule CadenceWeb.LegacyAdminRedirectController do
     `/admin/organizations[/new]` → `/console/admin/organizations`;
     `/admin/organizations/:org_id[/invite]` → `/console/admin/organizations/:org_id` (the console
     takes the organization id, and inviting happens from that page)
+  - L13 `/provider-accounts[/new]` → `/console/<org>/org/provider-accounts`;
+    `/provider-accounts/:provider_account_id` → `…/org/provider-accounts/:id`
   """
 
   use CadenceWeb, :controller
@@ -15,6 +17,11 @@ defmodule CadenceWeb.LegacyAdminRedirectController do
 
   def missions(conn, _params), do: org(conn, "/org/missions")
   def new_mission(conn, _params), do: org(conn, "/org/missions/new")
+
+  def provider_accounts(conn, _params), do: org(conn, "/org/provider-accounts")
+
+  def provider_account(conn, %{"provider_account_id" => id}),
+    do: org(conn, "/org/provider-accounts/" <> ConsolePaths.segment(id))
 
   def admin(conn, _params), do: redirect(conn, to: "/console/admin")
   def runtime(conn, _params), do: redirect(conn, to: "/console/admin/runtime")
