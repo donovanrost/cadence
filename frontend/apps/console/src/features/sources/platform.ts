@@ -24,13 +24,21 @@ const missions = (n: number) => plural(n, "mission");
 export const sheetTitle = (name: string, affected: number) =>
   `Switch ${name} for ${missions(affected)}?`;
 
-/** "This changes telemetry for all 12 missions that use it. They'll read from <to> instead of <from>." */
-export function blastLine(r: BlastRadius, to: string | null): string {
+/**
+ * "This changes telemetry for all 12 missions that use it. They'll read from <to> instead of <from>."
+ * Both sides are display names (qa: never a name against an id); `fromName` is the picker list's
+ * name for the current source, the server's from.display_name standing in.
+ */
+export function blastLine(
+  r: BlastRadius,
+  to: string | null,
+  fromName: string | null = null,
+): string {
   const n = r.affected_missions;
   const who =
     n === 1 ? "the one mission that uses it" : `all ${formatCount(n)} missions that use it`;
   const first = `This changes ${bindingNoun(r.binding.logical_source)} for ${who}.`;
-  const from = r.binding.from.display_name;
+  const from = fromName ?? r.binding.from.display_name;
   return to && from ? `${first} They'll read from ${to} instead of ${from}.` : first;
 }
 

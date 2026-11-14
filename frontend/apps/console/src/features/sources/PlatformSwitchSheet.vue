@@ -46,10 +46,12 @@ const name = computed(() => picked.value?.logical_source ?? "");
 const nameOf = (id: string) => props.sources.find((s) => s.id === id)?.display_name ?? null;
 const choices = computed(() =>
   props.sources
+    // Only another source can be chosen (qa): the current one isn't offered or preselected.
     .filter(
       (s) =>
-        s.id === picked.value?.data_source_id ||
-        (s.state !== "disabled" && s.logical_source?.key === picked.value?.logical_source),
+        s.id !== picked.value?.data_source_id &&
+        s.state !== "disabled" &&
+        s.logical_source?.key === picked.value?.logical_source,
     )
     .map((s) => ({ value: s.id, label: s.display_name })),
 );
@@ -57,7 +59,11 @@ const lines = computed(() => {
   const r = shown.value;
   if (!r) return null;
   return {
-    blast: words.blastLine(r, target.value ? nameOf(target.value) : null),
+    blast: words.blastLine(
+      r,
+      target.value ? nameOf(target.value) : null,
+      nameOf(r.binding.from.id),
+    ),
     live: words.livePassesLine(r, new Date()),
   };
 });
@@ -73,7 +79,7 @@ const ready = computed(
 );
 function open(b: SwitchTarget) {
   picked.value = b;
-  [reason.value, typed.value, target.value] = ["", "", b.data_source_id];
+  [reason.value, typed.value, target.value] = ["", "", ""];
   [shown.value, changed.value, reasonError.value, failure.value] = [null, null, null, null];
   opens.value += 1;
   key.value = { missionId: props.missionId, bindingId: b.id, opens: opens.value };
@@ -136,7 +142,12 @@ function close() {
         <ApCallout v-if="changed" tone="caution">{{ words.changedLine(changed) }}</ApCallout>
         <p class="m-0 text-md text-text-2">{{ lines.blast }}</p>
         <ApCallout v-if="lines.live" tone="crit">{{ lines.live }}</ApCallout>
-        <ApSelect v-model="target" label="Read from" :options="choices" />
+        <ApSelect
+          v-model="target"
+          label="Read from"
+          :options="choices"
+          placeholder="Choose another source"
+        />
         <ApField
           v-model="reason"
           label="Reason"

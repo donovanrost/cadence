@@ -116,6 +116,16 @@ describe("U53 platform binding switch words (ux)", () => {
     expect(blockedReason({ ...f, reason: "", typed: "" })).toBe("Give a reason first.");
   });
 
+  it("names both sides by display name, the picker's name for the current source first", () => {
+    const r = radius(12, 0);
+    expect(blastLine(r, "Northlight archive", "Cadence managed store")).toBe(
+      "This changes telemetry for all 12 missions that use it. They'll read from Northlight archive instead of Cadence managed store.",
+    );
+    expect(blastLine(r, null, "Cadence managed store")).toBe(
+      "This changes telemetry for all 12 missions that use it.",
+    );
+  });
+
   it("reports the outcome from the recorded counts", () => {
     expect(outcomeLine("default_flight_telemetry", "Northlight archive", 12)).toBe(
       "Switched default_flight_telemetry to Northlight archive. 12 missions read from it now.",
