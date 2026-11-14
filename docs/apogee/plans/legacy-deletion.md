@@ -356,9 +356,15 @@ their params, and library, playlists, new, settings, activity and diagnostics st
   - `applications/ops_console/actions/dashboard_workflows.ex` (1175 lines) and `dashboard_deep_actions.ex`,
     trimming `action_provider.ex:11-12,26-27`;
   - `Reads.Dashboards.Creation` (only `reads/application_surfaces/ops_console.ex:31,580` uses it);
-  - then the module entries L8a kept: `directory.ts`, `creation.ts`, `workspace.ts`,
-    `features/{directory,creation,workspace,dashboard}` and their `ownership.test.ts`, plus storybook's
-    `TelemetryChart`/`DashboardWidgetDrawer` stories. Re-grep: `charts.ts` re-exports `features/workspace`.
+  - then the module entries L8a kept: `directory.ts`, `creation.ts`,
+    `features/{directory,creation,dashboard}` and their `ownership.test.ts`, plus storybook's
+    `TelemetryChart`/`DashboardWidgetDrawer` stories;
+  - of `features/workspace`, only the parts nothing else uses: `OpsDashboardShow.vue` and its test, `charts.ts`,
+    the `workspace.ts` re-export and `package.json`'s `./charts` export (fe-ops 840017e8a). The rest of
+    `workspace.ts` and `features/workspace` goes in L8b: the legacy playlists and sharing pages
+    (`playlists/{PlaylistPresentation.vue,contracts.ts,validation.ts}`,
+    `sharing/{SharedDashboardView.vue,contracts.ts,validation.ts}`) import it, and
+    `workspace_snapshot_test.exs` and `dashboard_workspace_read_test.exs` run its `producer-contract-check.mjs`.
   - Explore's `add_to_dashboard` action in `telemetry_explore.ex`: its dispatch (:132-150) and the helpers only it
     uses: `widget_type/1` (:177-180), `dashboard_target/3` (:192+), `candidate_query/4` (:244-260),
     `default_title/1` (:263) and `dashboard_path/3`. Keep `explore_path`, `navigation_result` and
@@ -390,7 +396,9 @@ their params, and library, playlists, new, settings, activity and diagnostics st
   - the `:ops_dashboard_author` policy and `DashboardAuthorAuth`'s `on_mount`/`authorize/3`;
   - `DashboardExportController` (the console has its own export) and its route;
   - their tests and the producer-check assertions in the settings, library, playlists, shared-views and
-    execution-diagnostics tests.
+    execution-diagnostics tests, and in `workspace_snapshot_test.exs` and `dashboard_workspace_read_test.exs`
+    (they run `features/workspace`'s `producer-contract-check.mjs`, which goes here with the rest of
+    `workspace.ts`/`features/workspace`, left by the federated batch).
 - **Keep:** the domain behind them: `SharedViews`, `SettingsAuthoring`, `Reads.Dashboards.{Settings,Library,
   Playlists}`, `LibraryAuthoring`, `PlaylistAuthoring`. The console endpoints wrap them.
   `Playlists.present/search` can go.
