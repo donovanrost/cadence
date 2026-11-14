@@ -412,13 +412,13 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 - `_39GI9_run` settled in 0.18 s (00:41:52.104Z → .288Z, journal enabled); the metadata has no counts.
   Tracked as unshown (director). See `pass-001-2026-11-14.md`.
 
-### 58. 001 pass 11-14: first dispatch failed with `eaddrinuse` (owner api-ops)
+### 58. 001 pass 11-14: first dispatch failed with `eaddrinuse` (owner domain)
 
 - 00:34:00.839Z `PathCoordinator … tcp_provider_listen_failed "provider_profile_i4467s4fie_3F" :eaddrinuse`;
-  recovered 00:35:01Z, so the release came 73 s after AOS.
+  recovered 00:35:01Z, so the release came 73 s after AOS. domain: 006's overlapping Santiago contact held :42105 until 00:34:18Z.
 
-### 59. 001 pass 11-14: one ingress persistence failure (owner domain)
+### 59. 001 pass 11-14: one ingress persistence failure (owner api-ops)
 
-- 00:39:09.829Z `cadence.telemetry.ingress.persistence_failed`, `_39GI9_run`, downlink path, `error_class=unknown`.
+- 00:39:09.829Z `cadence.telemetry.ingress.persistence_failed`, `_39GI9_run`, downlink path, `error_class=unknown`. api-ops: a 15 s Postgres lock wait, retried with nothing lost; ~2 min time-tag bunching for 001/009 from 00:38:36Z to 00:40:40Z. The error_class fix comes after 01:00Z.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
