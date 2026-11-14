@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
-import { useRemoteQuery } from "@/api";
+import { fieldErrors, useRemoteQuery } from "@/api";
 import { failureOutcome, SchemaForm, type FormValues } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote } from "@/ui";
+import { ApButton, ApCallout, ApEmptyState, ApField, ApPanel, ApRemote } from "@/ui";
 import PolicyDecision from "./PolicyDecision.vue";
 import {
   buildDocument,
@@ -12,6 +12,7 @@ import {
   groupSummaries,
   groupTitles,
   initialValues,
+  REASON_MAX,
   savePolicy,
 } from "./policy.ts";
 
@@ -21,6 +22,9 @@ const { state, refetch } = useRemoteQuery(() => props.missionId, fetchPolicy);
 const values = ref<FormValues>({});
 const errors = ref<Readonly<Record<string, string>>>({});
 const busy = ref(false);
+/** ux U20: the saver's optional note, stored with the version (api 7e454da56). */
+const reason = ref("");
+const reasonError = ref<string | null>(null);
 const note = ref<{ tone: "nominal" | "crit"; text: string } | null>(null);
 watch(
   state,
@@ -39,12 +43,18 @@ async function save() {
   const built = buildDocument(policy, values.value);
   if (!built.ok) return void (errors.value = built.errors);
   errors.value = {};
+  const why = reason.value.trim();
+  reasonError.value = why.length > REASON_MAX ? `Use at most ${REASON_MAX} characters.` : null;
+  if (reasonError.value) return;
   busy.value = true;
   try {
     const result = await savePolicy(props.missionId, {
       document: built.document,
       expected_version: policy.version,
+      reason: why,
     });
+    if (result.ok) reason.value = "";
+    else reasonError.value = fieldErrors(result.error)["reason"] ?? null;
     note.value = result.ok
       ? {
           tone: "nominal",
@@ -101,7 +111,12 @@ async function save() {
         :title="policy.version === null ? 'Create policy' : 'Save a new version'"
       >
         <div class="flex flex-col gap-3">
-          <!-- ux U20: no Why field until the server stores it (api is adding it); then it returns optional. -->
+          <ApField
+            v-model="reason"
+            label="Why"
+            hint="Recorded with the version"
+            :error="reasonError"
+          />
           <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
           <div>
             <ApButton variant="primary" :disabled="busy" disabled-reason="Saving…" @click="save">{{

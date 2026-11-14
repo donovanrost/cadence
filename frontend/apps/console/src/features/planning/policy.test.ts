@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { buildDocument, groups, initialValues, policyReader } from "./policy.ts";
+import { buildDocument, groups, initialValues, pendingLine, policyReader } from "./policy.ts";
 
 const field = (path: string, group: string, advanced: boolean, type = "integer") => ({
   path,
@@ -84,5 +84,25 @@ describe("money fields (DECISIONS #63, U34)", () => {
         scoring: { cost_efficiency_weight: 100 },
       },
     });
+  });
+});
+
+describe("pending policy line (ux U20)", () => {
+  const pending = { version: 4, requested_by: { name: "Mira K." }, reason: null };
+  it("ends at the time without a reason, and with the reason when there is one", () => {
+    expect(pendingLine(pending, "11-14 02:10Z")).toBe(
+      "Policy v4 was proposed by Mira K. at 11-14 02:10Z.",
+    );
+    expect(pendingLine({ ...pending, reason: "Shorter passes" }, "11-14 02:10Z")).toBe(
+      "Policy v4 was proposed by Mira K. at 11-14 02:10Z: Shorter passes.",
+    );
+    expect(pendingLine({ ...pending, reason: "Shorter passes." }, "11-14 02:10Z")).toBe(
+      "Policy v4 was proposed by Mira K. at 11-14 02:10Z: Shorter passes.",
+    );
+  });
+  it("leaves out who when the saver isn't known", () => {
+    expect(pendingLine({ ...pending, requested_by: null }, "11-14 02:10Z")).toBe(
+      "Policy v4 was proposed at 11-14 02:10Z.",
+    );
   });
 });

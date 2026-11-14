@@ -36,6 +36,8 @@ export const policyReader = (value: unknown, path = "") => {
         version: integer,
         requested_by: nullable(object({ name: string })),
         requested_at: timestamp,
+        // free-text: the saver's note (api 7e454da56), trimmed, at most 500 characters; null when none.
+        reason: nullable(string),
       }),
     ),
     schema: array(schemaFieldReader, 500),
@@ -61,9 +63,14 @@ export function fetchPolicy(missionId: MissionId, signal: AbortSignal): Promise<
 
 export function savePolicy(
   missionId: MissionId,
-  body: Readonly<{ document: unknown; expected_version: number | null }>,
+  body: Readonly<{ document: unknown; expected_version: number | null; reason: string }>,
 ) {
-  const payload = body.expected_version === null ? { document: body.document } : body;
+  // A first save has no version to expect; an empty reason means none (api 7e454da56).
+  const payload = {
+    document: body.document,
+    ...(body.expected_version === null ? {} : { expected_version: body.expected_version }),
+    ...(body.reason === "" ? {} : { reason: body.reason }),
+  };
   return request(
     base(missionId),
     object({ version: integer, state: decoders.known(policyVersionStates) }),
@@ -174,3 +181,25 @@ export const groupSummaries: Readonly<Record<string, string>> = {
   scoring:
     "How the scheduler weighs priority, deadlines and coverage against each other. The defaults suit most missions.",
 };
+
+/** The saver's note (api): at most 500 characters once trimmed. */
+export const REASON_MAX = 500;
+
+/**
+ * ux U20: "Policy v4 was proposed by Mira K. at 11-14 02:10Z: <reason>." The sentence ends at the time
+ * when there's no reason, and leaves out "by" when the saver isn't known.
+ */
+export function pendingLine(
+  pending: Readonly<{
+    version: number;
+    requested_by: { name: string } | null;
+    reason: string | null;
+  }>,
+  at: string,
+): string {
+  const who = pending.requested_by ? ` by ${pending.requested_by.name}` : "";
+  const line = `Policy v${pending.version} was proposed${who} at ${at}`;
+  if (!pending.reason) return `${line}.`;
+  // The reason is the saver's own sentence: don't double its full stop.
+  return `${line}: ${pending.reason}${/[.!?]$/.test(pending.reason) ? "" : "."}`;
+}

@@ -3,7 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { errorCode, failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApPanel, formatShort } from "@/ui";
-import { decidePolicy, type Policy } from "./policy.ts";
+import { decidePolicy, pendingLine, type Policy } from "./policy.ts";
 
 /** A pending policy version: approve or reject (reviewer ≠ author, enforced by the server). */
 const props = defineProps<{ missionId: MissionId; policy: Policy }>();
@@ -41,10 +41,8 @@ async function decide(decision: "approve" | "reject") {
   <ApPanel v-if="policy.pending" index="P5" title="Waiting for approval">
     <div class="flex flex-col gap-3">
       <p class="m-0 text-md text-text-3">
-        Policy v{{ policy.pending.version }} was saved
-        {{ policy.pending.requested_by ? `by ${policy.pending.requested_by.name} ` : ""
-        }}{{ formatShort(new Date(policy.pending.requested_at)) }}. It becomes active when another
-        admin approves it.
+        {{ pendingLine(policy.pending, formatShort(new Date(policy.pending.requested_at))) }} It
+        becomes active when another admin approves it.
       </p>
       <template v-if="policy.permissions.includes('planning.approve')">
         <ApField
