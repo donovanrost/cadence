@@ -180,7 +180,7 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttentionTest do
                span_to: "2026-11-14T01:00:00Z"
              })
 
-    assert %{noun: "Import"} =
+    assert %{noun: "Telemetry import"} =
              JobOutcomeWords.words(:telemetry_historical_data_workflow, %{workflow: "import"})
 
     assert %{

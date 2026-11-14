@@ -88,7 +88,7 @@ defmodule Cadence.Contacts.JobOutcomeWords do
   end
 
   def words(:telemetry_historical_data_workflow, context) do
-    noun = if context[:workflow] == "import", do: "Import", else: "Backfill"
+    noun = if context[:workflow] == "import", do: "Telemetry import", else: "Backfill"
     phrases(with_span(noun, context), "in the telemetry for that span", "write the span twice")
   end
 
