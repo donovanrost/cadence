@@ -132,12 +132,12 @@ const verifier = d.object({
  * U51: one group per distinct verifier set for a command, largest first; `verifiers: []` is "no
  * verifier". Targets with that command's Catalog NO-GO are in no group.
  */
-const verifierGroup = d.object({
+export const verifierGroupReader = d.object({
   verifiers: d.array(verifier, 100),
   catalog_revisions: d.array(revision, 100),
   spacecraft_ids: d.array(d.token, 10_000),
 });
-export type VerifierGroup = Decoded<typeof verifierGroup>;
+export type VerifierGroup = Decoded<typeof verifierGroupReader>;
 export type CatalogRevision = Decoded<typeof revision>;
 
 export const preflightReader = d.object({
@@ -165,7 +165,7 @@ export const preflightReader = d.object({
       d.object({
         position: d.integer,
         command_id: d.token,
-        verifier_groups: d.array(verifierGroup, 100),
+        verifier_groups: d.array(verifierGroupReader, 100),
       }),
       16,
     ),

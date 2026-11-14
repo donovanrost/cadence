@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { preflightReader } from "./api.ts";
+import { perPoint, pointCaption, seriesReader } from "./series.ts";
 import {
   groupMeta,
   groupsAt,
@@ -129,5 +130,48 @@ describe("U51 when targets differ", () => {
     const p = preflight(tonight, [target(0, "sc-1", rev(4)), target(1, "sc-2", null)]);
     expect(p.targets[1]?.catalog_revision).toBeNull();
     expect(targetRevisions(p)).toBeNull();
+  });
+});
+
+describe("U51 U2: one plot per verifier point", () => {
+  const series = (points: unknown) => {
+    const r = decode(seriesReader, {
+      verifier: null,
+      point: null,
+      commanded: null,
+      band: null,
+      window: null,
+      targets: [],
+      target_count: 500,
+      truncated: false,
+      summary: { met: 0, not_met: 0, pending: 0 },
+      points,
+    });
+    if (!r.ok) throw new Error(r.error.message);
+    return r.value;
+  };
+  const mode = {
+    point_id: "HK.sc_mode",
+    name: "sc_mode",
+    verifier_name: "Mode applied",
+    position: 0,
+    spacecraft_ids: ["sc-1"],
+  };
+  const accepted = {
+    ...mode,
+    point_id: "HK.cmd_count",
+    verifier_name: "Accepted on board",
+    spacecraft_ids: many,
+  };
+
+  it("plots per point only when there's more than one, captioned with its targets", () => {
+    expect(perPoint(series(undefined))).toBe(false);
+    expect(perPoint(series([mode]))).toBe(false);
+    const s = series([accepted, mode]);
+    expect(perPoint(s)).toBe(true);
+    const [a, m] = s.points ?? [];
+    if (!a || !m) throw new Error("two points");
+    expect(pointCaption(a, nameOf)).toBe("Accepted on board · 499 targets");
+    expect(pointCaption(m, nameOf)).toBe("Mode applied · EARENDIL-001");
   });
 });

@@ -22,6 +22,7 @@ import {
   type HoldAck,
   type Preflight,
   type WriteOutcome,
+  verifierGroupReader,
 } from "./api.ts";
 
 /** One group (commanding.md §GET /command-groups/:id): Approve and Uplink & verify read this. */
@@ -101,6 +102,8 @@ const command = d.object({
   critical: d.boolean,
   hazardous: d.boolean,
   argument_values_json: d.string,
+  /** U51 (api): how each group of targets verifies it, from each member's pinned revision. */
+  verifier_groups: d.optional(d.array(verifierGroupReader, 100)),
   // api f1bed1880: each target's own values ([] when none); optional for older reads.
   per_target: d.optional(
     d.array(d.object({ spacecraft_id: d.token, argument_values_json: d.string }), 2_000),

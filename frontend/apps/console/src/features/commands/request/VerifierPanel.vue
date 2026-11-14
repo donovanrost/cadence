@@ -1,50 +1,45 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
-import { formatClock, ApEmptyState, ApPanel, ApRemote, ApTimeSeries, ApCallout } from "@/ui";
-import { formatValue } from "@/features/alarms/index.ts";
-import { notPlottable, pointName, seriesChart, seriesMeta } from "../groups/series.ts";
+import { ApPanel } from "@/ui";
+import { perPoint, seriesMeta } from "../groups/series.ts";
 import type { VerifierSeriesQuery } from "./useVerifierSeries.ts";
+import VerifierPlot from "./VerifierPlot.vue";
+import VerifierPointPlot from "./VerifierPointPlot.vue";
 
 /**
- * U2 · Verifier (CommandFlow C3, M26): the plotted command's verifier point over the request
- * window, one faint line per target (failed ones brighter), the commanded value dashed and the band
- * dotted. UplinkView owns the read (N Needs you shares it).
+ * U2 · Verifier (CommandFlow C3, M26). UplinkView owns the default read (N Needs you shares it).
+ * U51: when targets watch different verifier points, one plot per point, each with its targets.
  */
-const props = defineProps<{ series: VerifierSeriesQuery }>();
+const props = defineProps<{
+  series: VerifierSeriesQuery;
+  missionId: MissionId;
+  groupId: string;
+  nameOf: (spacecraftId: string) => string;
+}>();
 const ready = computed(() => props.series.ready.value);
-const why = computed(() => (ready.value ? notPlottable(ready.value) : null));
-const chart = computed(() => (ready.value ? seriesChart(ready.value) : null));
-const tick = (t: number) => formatClock(new Date(t)).slice(0, 5);
-const value = (v: number) => formatValue(v) ?? "";
+const points = computed(() => (perPoint(ready.value) ? (ready.value?.points ?? []) : []));
 </script>
 
 <template>
-  <ApPanel index="U2" title="Verifier" :meta="ready ? seriesMeta(ready) : undefined" flush>
-    <ApRemote
-      :state="series.state.value"
-      loading-label="LOADING VERIFIER…"
-      @retry="series.refetch()"
-    >
-      <ApEmptyState v-if="why" state="off" :headline="why" />
-      <div v-else-if="chart && ready" class="flex flex-col gap-2 p-3">
-        <ApCallout v-if="ready.telemetry === 'degraded'" tone="stale">
-          Telemetry history unavailable: samples may be missing.
-        </ApCallout>
-        <ApTimeSeries
-          :series="[]"
-          :comparison="chart.lines"
-          :window="chart.window"
-          :now="Date.now()"
-          :label="`${pointName(ready)} for ${ready.targets.length} targets`"
-          :format-tick="tick"
-          :format-value="value"
-          :height="180"
-          :series-name="pointName(ready)"
-        />
-        <p v-if="ready.truncated" class="m-0 font-mono text-xs text-text-4">
-          Showing {{ ready.targets.length }} of {{ ready.target_count }} targets.
-        </p>
-      </div>
-    </ApRemote>
+  <!-- The header tallies the default point; with several, each plot's caption says whose it is. -->
+  <ApPanel
+    index="U2"
+    title="Verifier"
+    :meta="ready && !points.length ? seriesMeta(ready) : undefined"
+    flush
+  >
+    <template v-if="points.length">
+      <VerifierPointPlot
+        v-for="p in points"
+        :key="`${p.position}:${p.point_id}`"
+        :mission-id="missionId"
+        :group-id="groupId"
+        :point="p"
+        :name-of="nameOf"
+        class="border-t border-hairline first:border-t-0"
+      />
+    </template>
+    <VerifierPlot v-else :state="series.state.value" @retry="series.refetch()" />
   </ApPanel>
 </template>

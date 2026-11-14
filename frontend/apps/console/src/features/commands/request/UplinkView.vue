@@ -147,7 +147,12 @@ const release = computed(() =>
       />
     </ApStatStrip>
     <NeedsYouPanel :group="group" :series="series.ready.value" />
-    <VerifierPanel :series="series" />
+    <VerifierPanel
+      :series="series"
+      :mission-id="missionId"
+      :group-id="group.id"
+      :name-of="(id) => group.targets.find((t) => t.spacecraft_id === id)?.name ?? id"
+    />
     <ApPanel index="U1" title="Targets" :meta="`${group.target_count}`" flush>
       <TargetMatrix :group="group" :fleet="fleetRows" />
       <ul class="m-0 list-none border-t border-hairline p-0">

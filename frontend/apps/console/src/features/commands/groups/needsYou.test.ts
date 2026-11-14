@@ -33,6 +33,7 @@ const failed = (id: string, reason: string) => ({
 });
 const series = (samples: { t: string; value_json: string | null }[]): VerifierSeries => ({
   telemetry: undefined,
+  points: undefined,
   verifier: { position: 0, command_id: "c", command_name: "SET_MODE" },
   point: { id: "THERM.sp", name: "batt_setpoint", unit: "°C", type: "numeric" },
   reason: null,

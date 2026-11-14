@@ -7,7 +7,7 @@ import type { ComparisonSeries, TimeWindow } from "@/ui";
  * one faint line per target (its own samples only, #38), the commanded value dashed and the band
  * dotted. Numeric points plot; others, and transport-only verifiers, say why not.
  */
-const seriesReader = d.object({
+export const seriesReader = d.object({
   verifier: d.nullable(
     d.object({ position: d.integer, command_id: d.token, command_name: d.nullable(d.string) }),
   ),
@@ -40,16 +40,36 @@ const seriesReader = d.object({
   truncated: d.boolean,
   summary: d.object({ met: d.integer, not_met: d.integer, pending: d.integer }),
   telemetry: d.optional(d.token),
+  /**
+   * U51 (api): every telemetry verifier point in the group, with the targets whose own verifiers
+   * watch it, by position then verifier order. Plot one with `?point=`; the default is the first.
+   */
+  points: d.optional(
+    d.array(
+      d.object({
+        point_id: d.token,
+        name: d.string,
+        // free-text: the verifier's name ("Mode applied")
+        verifier_name: d.string,
+        position: d.integer,
+        spacecraft_ids: d.array(d.token, 10_000),
+      }),
+      50,
+    ),
+  ),
 });
 export type VerifierSeries = Decoded<typeof seriesReader>;
+export type VerifierPoint = NonNullable<VerifierSeries["points"]>[number];
 
 export function fetchVerifierSeries(
   missionId: MissionId,
   groupId: string,
   signal?: AbortSignal,
+  point?: string,
 ): Promise<ApiResult<VerifierSeries>> {
+  const q = point ? `?point=${encodeURIComponent(point)}` : "";
   return request(
-    `/missions/${encodeURIComponent(missionId)}/command-groups/${encodeURIComponent(groupId)}/verifier-series`,
+    `/missions/${encodeURIComponent(missionId)}/command-groups/${encodeURIComponent(groupId)}/verifier-series${q}`,
     seriesReader,
     signal ? { signal } : {},
   );
@@ -132,4 +152,14 @@ export function seriesChart(s: VerifierSeries): {
     flat(v).map((l) => ({ ...l, tone: "text-3" as const, dash: "dotted" as const, name: "Band" })),
   );
   return { window, lines: [...lines, ...flat(num(s.commanded?.value_json)), ...band] };
+}
+
+/** U51: plot one panel per point when the group's targets watch more than one. */
+export const perPoint = (s: VerifierSeries | null) => (s?.points?.length ?? 0) > 1;
+
+/** A point plot's caption: `Mode applied · EARENDIL-001`, or `… · 499 targets` above 3. */
+export function pointCaption(p: VerifierPoint, nameOf: (spacecraftId: string) => string): string {
+  const n = p.spacecraft_ids.length;
+  const who = n <= 3 ? p.spacecraft_ids.map(nameOf).join(", ") : `${n} targets`;
+  return [p.verifier_name, who].filter(Boolean).join(" · ");
 }

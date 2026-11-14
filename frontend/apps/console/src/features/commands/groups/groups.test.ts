@@ -388,6 +388,7 @@ describe("M24 encode preview", () => {
 describe("M26 verifier series (U2)", () => {
   const base: VerifierSeries = {
     telemetry: undefined,
+    points: undefined,
     verifier: { position: 1, command_id: "c", command_name: "SET_TEMP" },
     point: { id: "THERM.sp", name: "batt_setpoint", unit: "°C", type: "numeric" },
     reason: null,
