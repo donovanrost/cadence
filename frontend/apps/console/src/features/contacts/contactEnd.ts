@@ -35,7 +35,10 @@ const CODE_WORDS: Readonly<Record<string, string>> = {
 };
 function split(e: ContactEnded): Readonly<{ code: string | null; text: string | null }> {
   const r = e.reason?.trim() || null;
-  if (e.reason_code !== undefined) return { code: e.reason_code, text: r };
+  if (e.reason_code !== undefined) {
+    const c = e.reason_code;
+    return { code: c === null ? null : isKnown(c) ? c : c.unrecognized, text: r };
+  }
   return r && CODE.test(r) ? { code: r, text: null } : { code: null, text: r };
 }
 /** The raw provider code behind a Cadence cancel, for Technical details. */

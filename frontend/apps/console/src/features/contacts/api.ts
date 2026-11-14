@@ -51,6 +51,8 @@ const passEnder = d.object({
 });
 export type PassEnder = Decoded<typeof passEnder>;
 
+/** U56: provider reason codes the console words; others are left out of the sentence. */
+export const providerReasonCodes = ["delivery_descriptor_conflicts_with_transport"] as const;
 /** U55 (api): how Cadence's side of the contact was stopped; the booking itself is unchanged. */
 export const contactEndCauses = [
   "operator",
@@ -70,7 +72,7 @@ const contactEnded = d.object({
   // free-text: the operator's reason, or the provider's own text for a Cadence cancel
   reason: d.nullable(d.string),
   /** U56 (domain 7754c6205): the provider's code, apart from its text; absent on older reads. */
-  reason_code: d.optional(d.nullable(d.token)),
+  reason_code: d.optional(d.nullable(d.knownText(providerReasonCodes))),
 });
 export type ContactEnded = Decoded<typeof contactEnded>;
 
