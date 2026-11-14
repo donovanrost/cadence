@@ -19,9 +19,9 @@ defmodule Cadence.Applications.OpsConsoleTest do
 
     assert Enum.at(definition.surfaces, 1).actions == []
 
-    assert length(definition.surfaces) == 35
-    assert length(definition.actions) == 89
-    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 34
+    assert length(definition.surfaces) == 23
+    assert length(definition.actions) == 53
+    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 22
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
              Enum.map(definition.surfaces, & &1.surface_id)
@@ -32,7 +32,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
   test "contributes exact release identity for each surface" do
     contributions = OpsConsole.release_contributions()
 
-    assert length(contributions) == 35
+    assert length(contributions) == 23
 
     assert Enum.take(contributions, 1) |> Enum.map(&ReleaseContribution.key/1) == [
              {"ops_console", 1, "workspace", 1}
