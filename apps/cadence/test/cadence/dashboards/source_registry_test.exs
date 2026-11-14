@@ -11,6 +11,7 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
     SourceRegistry
   }
 
+  alias Cadence.Dashboards.SourceRegistry.ExecutionMonitoring
   alias Cadence.DataSources.SourceCapabilities
 
   alias Cadence.Management.DataSources
@@ -709,6 +710,105 @@ defmodule Cadence.Dashboards.SourceRegistryTest do
 
     assert_received {:dashboard_source_test_adapter_resolve, "flight-questdb"}
     refute_received {:dashboard_source_test_adapter_resolve, "flight-questdb"}
+  end
+
+  test "Cadence's own Postgres failing under a TSDB source never trips its circuit" do
+    breaker = start_supervised!({SourceCircuitBreaker, name: nil})
+
+    opts =
+      breaker
+      |> source_circuit_opts(mode: :platform_store, now_ms: 1_000)
+      |> Keyword.put(:source_circuit_failure_threshold, 1)
+
+    for _attempt <- 1..3 do
+      result = SourceRegistry.resolve(source_request(), opts)
+
+      assert [%{code: :source_unavailable, details: %{cause: :platform_store}}] =
+               result.warnings
+
+      assert_received {:dashboard_source_test_adapter_resolve, "flight-questdb"}
+    end
+
+    assert %{state: :closed, failure_count: 0} =
+             SourceCircuitBreaker.status(
+               breaker,
+               {"org-1", "mission-1", :telemetry, "flight-questdb", :flight, "flight"},
+               failure_threshold: 1
+             )
+  end
+
+  test "a read task timed out waiting on Cadence's Postgres doesn't trip a TSDB source's circuit" do
+    breaker = start_supervised!({SourceCircuitBreaker, name: nil})
+
+    opts =
+      breaker
+      |> source_circuit_opts(mode: :ok, now_ms: 1_000)
+      |> Keyword.put(:source_circuit_failure_threshold, 1)
+
+    for _attempt <- 1..2 do
+      result = SourceRegistry.unavailable(source_request(), {:platform_store_timeout, 100}, opts)
+
+      assert [%{code: :source_unavailable, details: %{cause: :platform_store, reason: reason}}] =
+               result.warnings
+
+      assert reason =~ "waiting on Cadence's database"
+    end
+
+    assert %{state: :closed, failure_count: 0} =
+             SourceCircuitBreaker.status(
+               breaker,
+               {"org-1", "mission-1", :telemetry, "flight-questdb", :flight, "flight"},
+               failure_threshold: 1
+             )
+
+    # The same wait under a Postgres-backed source is that source timing out.
+    projection =
+      Keyword.update!(opts, :data_sources, fn sources ->
+        Enum.map(sources, &%{&1 | kind: :projection})
+      end)
+
+    assert [%{details: details}] =
+             SourceRegistry.unavailable(
+               source_request(),
+               {:platform_store_timeout, 100},
+               projection
+             ).warnings
+
+    refute Map.has_key?(details, :cause)
+  end
+
+  test "a task blocked on a Postgres query reads as platform store, one waiting elsewhere as source" do
+    {:ok, conn} =
+      Postgrex.start_link(Keyword.drop(Cadence.Repo.config(), [:name, :pool, :pool_size]))
+
+    querying = spawn(fn -> Postgrex.query!(conn, "SELECT pg_sleep(5)", []) end)
+    waiting = spawn(fn -> receive do: (:never -> :ok) end)
+    Process.sleep(200)
+
+    assert ExecutionMonitoring.blocked_on(querying) == :platform_store
+    assert ExecutionMonitoring.blocked_on(waiting) == :source
+
+    Process.exit(querying, :kill)
+    Process.exit(waiting, :kill)
+  end
+
+  test "a Postgres-backed source's database failure is the source failing" do
+    breaker = start_supervised!({SourceCircuitBreaker, name: nil})
+
+    opts =
+      breaker
+      |> source_circuit_opts(mode: :platform_store, now_ms: 1_000)
+      |> Keyword.put(:source_circuit_failure_threshold, 1)
+      |> Keyword.update!(:data_sources, fn sources ->
+        Enum.map(sources, &%{&1 | kind: :projection})
+      end)
+
+    first = SourceRegistry.resolve(source_request(), opts)
+    second = SourceRegistry.resolve(source_request(), opts)
+
+    assert [%{code: :source_unavailable, details: details}] = first.warnings
+    refute Map.has_key?(details, :cause)
+    assert [%{code: :source_degraded}] = second.warnings
   end
 
   test "command queue depth reader exceptions become source-unavailable warnings" do
