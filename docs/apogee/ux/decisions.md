@@ -1049,8 +1049,8 @@ U47's (`SVB 03:10Z pass`, `SVB contact`, or the spacecraft alone).
   - Stored: "Their telemetry was still stored: 12 frames and 40 packets, without an archived copy of the raw
     records." With both stored counts 0: "None of their telemetry was stored."
   - Choice: "Retry once the cause is fixed, or discard them if they can't be archived."
-  - The server's `error` is free text and goes in Technical details only, as do error_code, counts.entries and
-    the item id.
+  - The server's `error` is free text and goes in Technical details only, as do error_code and the item id. There's
+    no entry count: operators read frames and packets.
 - **Actions:** `Retry` (secondary) and `Discard…` (danger, sheet). Operators only; without the capability: "Operators
   retry or discard records that couldn't be archived."
   - Retry has no confirm, and it's synchronous (domain's final shape). When everything is archived, the row
