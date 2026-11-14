@@ -1354,13 +1354,17 @@ The console gains 8g's two lifecycle actions on Contacts' selected pass. Both st
 - **window_moved** `{before, after, provider_change}`: an accepted provider timing shift moved the contact.
   - **Times:** a shift is often seconds, so these lines give HH:MM:SSZ (§4's minutes form would hide a 30 s move).
     The date is added when it isn't today.
-  - **Direction:** both ends move the same way: "30 s later" / "2 min earlier" (under a minute in s; above, min,
-    or "1 min 30 s"). Otherwise the length changed: "changed this pass's window".
-  - **Contact history:** "Northlight moved this pass 30 s later: now 12:11:27–12:19:27Z (was 12:10:57–12:18:57Z)."
-    It links `Open the change` to the provider change (U44), which says who accepted it and when. Changed length:
-    "Northlight changed this pass's window: now 12:11:27–12:21:27Z (was 12:10:57–12:18:57Z)."
-  - **Timeline:** "EARENDIL-003 · BRS 12:11Z pass moved 30 s later by Northlight: 12:11:27–12:19:27Z". The label
-    uses the new AOS.
+  - **What moved**, from start_delta_s and end_delta_s. Durations: under a minute in s; above, min, or "1 min
+    30 s". The direction is "later" or "earlier", never "+30 s".
+    | change | history (pass panel) | timeline (api's mission-event sentence) |
+    | --- | --- | --- |
+    | both ends, same | "Northlight moved this pass 30 s later: now 12:11:27–12:19:27Z (was 12:10:57–12:18:57Z)." | "EARENDIL-003 · BRS 12:11Z pass moved 30 s later by Northlight: 12:11:27–12:19:27Z" |
+    | start only | "Northlight moved this pass's AOS 30 s later: now 12:11:27–12:18:57Z (was …)." | "… pass AOS moved 30 s later by Northlight: 12:11:27–12:18:57Z" |
+    | end only | "Northlight moved this pass's LOS 60 s later: now 13:04:30–13:13:30Z (was …)." | "EARENDIL-007 · PUQ 13:04Z pass LOS moved 60 s later by Northlight: 13:04:30–13:13:30Z" |
+    | both, differently | "Northlight changed this pass's window: now … (was …)." | "… pass window changed by Northlight: …" |
+  - The history line links `Open the change` to the provider change (U44, from provider_reservation_change_id),
+    which says who accepted it. The timeline row links to the pass. Its label uses the new AOS. Stored sentences
+    give the date when it differs from the event's own day (§4).
   - While live: the history line adds "Cadence now listens until 12:19:27Z." when the end moved.
   - Without the provider's name: "The provider moved…". A hand-started contact can't be moved by a provider, so
     there's no "contact" form.
