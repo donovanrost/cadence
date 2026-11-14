@@ -891,7 +891,10 @@ configuration failure P3. The amendments to fe-ops' drafts:
     missed. It's shape and colour, never colour alone, and not a bar fill. This needs an ApGantt bar prop
     `attention: caution | crit | null` (fe-setup, ui package). It shows the top item by U45's order.
     The mark sits on a small dark backing so ▲ stays visible on caution-filled bars. The Gantt legend lists the
-    marks only while one is on screen, as with U30's Unconfirmed: `▲ Not started` · `◆ Missed`.
+    marks only while one is on screen, as with U30's Unconfirmed: `▲ Needs attention` · `◆ Missed` (revised,
+    fe-ops 11-13). ▲ marks any pass whose top item is open and caution-level (not started, a decision with a
+    deadline, a resolution), so actionable passes show on the chart. ◆ marks a missed pass. The description and the
+    panel tag say which.
   - **Bar description** (screen readers): ", hasn't started" / ", was missed", plus ", and 2 more items" when
     there are more.
   - **Selected pass panel:** the tag `▲ NOT STARTED` / `◆ MISSED` beside the state tag, then `+2`, which lists
