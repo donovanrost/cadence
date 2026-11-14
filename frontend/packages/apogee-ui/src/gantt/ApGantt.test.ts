@@ -120,6 +120,17 @@ describe("ApGantt labels", () => {
     expect(mark("301").attributes("style")).toContain("left:");
     // The bar itself keeps its kind; no fill change.
     expect(wrapper.find('[data-bar="301"]').classes()).toContain("ap-bar--own");
+    // Legend lists each mark on screen, with ux's fixed words.
+    const legend = wrapper.find("ul").text();
+    expect(legend).toContain("Needs attention");
+    expect(legend).toContain("Missed");
+    wrapper.unmount();
+  });
+
+  it("leaves the marks out of the legend when no bar has one", () => {
+    const wrapper = gantt();
+    expect(wrapper.find("ul").text()).not.toContain("Needs attention");
+    expect(wrapper.find("ul").text()).not.toContain("Missed");
     wrapper.unmount();
   });
 });

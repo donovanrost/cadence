@@ -103,12 +103,17 @@ const BAR_WORDS = { unconfirmed: "Unconfirmed" } as const;
 const barKinds = computed(() =>
   (["unconfirmed"] as const).filter((k) => props.bars.some((b) => b.kind === k)),
 );
+/** Attention marks (ux U45): legended only while one is on screen, fixed words. */
+const MARK_WORDS = { caution: "Needs attention", crit: "Missed" } as const;
+const markStates = computed(() =>
+  (["caution", "crit"] as const).filter((k) => props.bars.some((b) => b.attention === k)),
+);
 </script>
 
 <template>
   <div ref="root" role="group" :aria-label="label" class="flex min-w-0 flex-col">
     <ul
-      v-if="bandKinds.length > 0 || barKinds.length > 0"
+      v-if="bandKinds.length > 0 || barKinds.length > 0 || markStates.length > 0"
       class="m-0 mb-2 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 font-mono text-xs text-text-3 uppercase"
     >
       <li v-for="k in bandKinds" :key="k" class="flex items-center gap-1.5">
@@ -122,6 +127,9 @@ const barKinds = computed(() =>
         <span aria-hidden="true" class="relative inline-block h-3 w-5" :class="`ap-bar--${k}`" />{{
           BAR_WORDS[k]
         }}
+      </li>
+      <li v-for="k in markStates" :key="`mark-${k}`" class="flex items-center gap-1.5">
+        <ApStatusMark :state="k" />{{ MARK_WORDS[k] }}
       </li>
     </ul>
     <div class="relative flex flex-col gap-px">
