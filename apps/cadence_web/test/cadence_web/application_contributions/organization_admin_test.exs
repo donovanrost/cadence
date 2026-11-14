@@ -71,74 +71,10 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       query: %{id: "cadence.organization.notifications_bell", version: 1},
       actions: ["mark_notification_read"],
       exposed_module: "./Application"
-    },
-    %{
-      id: "admin_home",
-      purpose: :overview,
-      scope: :admin,
-      placement: :application_workspace,
-      navigation: %{label: "Overview", order: 70, fallback_path: "/"},
-      query: %{id: "cadence.platform_admin.home", version: 1},
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_runtime",
-      purpose: :activity,
-      scope: :admin,
-      placement: :application_workspace,
-      navigation: %{label: "Runtime", order: 80, fallback_path: "/runtime"},
-      query: %{id: "cadence.platform_admin.runtime", version: 1},
-      actions: ["refresh_runtime", "filter_runtime_decisions"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_organizations",
-      purpose: :collection,
-      scope: :admin,
-      placement: :application_workspace,
-      navigation: %{label: "Organizations", order: 90, fallback_path: "/organizations"},
-      query: %{id: "cadence.platform_admin.organizations", version: 1},
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_organization_new",
-      purpose: :configuration,
-      scope: :admin,
-      placement: :application_workspace,
-      navigation: %{label: "New Organization", order: 100, fallback_path: "/organizations/new"},
-      query: %{id: "cadence.platform_admin.organization.new", version: 1},
-      actions: ["validate_organization", "create_organization"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_organization_show",
-      purpose: :subject_detail,
-      scope: :admin,
-      placement: :application_workspace,
-      navigation: %{label: "Organization", order: 110, fallback_path: "/organizations/:subject"},
-      query: %{id: "cadence.platform_admin.organization.show", version: 1},
-      actions: ["issue_service_identity", "dismiss_service_token", "open_organization"],
-      exposed_module: "./Application"
-    },
-    %{
-      id: "admin_organization_invite",
-      purpose: :configuration,
-      scope: :admin,
-      placement: :application_workspace,
-      navigation: %{
-        label: "Invite User",
-        order: 120,
-        fallback_path: "/organizations/:subject/invite"
-      },
-      query: %{id: "cadence.platform_admin.organization.invite", version: 1},
-      actions: ["validate_invitation", "invite_organization_member"],
-      exposed_module: "./Application"
     }
   ]
 
-  test "contributes every post-auth organization and platform-admin surface" do
+  test "contributes every post-auth organization surface (L7: platform admin is in the console)" do
     assert :ok = OrganizationAdmin.validate()
 
     assert Enum.map(OrganizationAdmin.surfaces(), & &1.id) == [
@@ -146,13 +82,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
              "provider_accounts",
              "provider_account_new",
              "provider_account_show",
-             "notifications_bell",
-             "admin_home",
-             "admin_runtime",
-             "admin_organizations",
-             "admin_organization_new",
-             "admin_organization_show",
-             "admin_organization_invite"
+             "notifications_bell"
            ]
 
     assert Enum.map(OrganizationAdmin.surfaces(), &{&1.id, &1.scope}) == [
@@ -160,13 +90,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
              {"provider_accounts", :organization},
              {"provider_account_new", :organization},
              {"provider_account_show", :organization},
-             {"notifications_bell", :user},
-             {"admin_home", :admin},
-             {"admin_runtime", :admin},
-             {"admin_organizations", :admin},
-             {"admin_organization_new", :admin},
-             {"admin_organization_show", :admin},
-             {"admin_organization_invite", :admin}
+             {"notifications_bell", :user}
            ]
 
     assert Enum.all?(OrganizationAdmin.release_contributions(), fn release ->
@@ -212,7 +136,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
     end
   end
 
-  test "publishes the exact 17-row surface action ledger with 17 unique actions" do
+  test "publishes the exact 8-row surface action ledger with 8 unique actions" do
     expected = [
       {"provider_account_new", 1, "validate_provider_account_form"},
       {"provider_account_new", 1, "register_provider_account"},
@@ -221,16 +145,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       {"provider_account_show", 1, "revoke_provider_credential"},
       {"provider_account_show", 1, "grant_provider_account_mission"},
       {"provider_account_show", 1, "revoke_provider_account_mission"},
-      {"notifications_bell", 1, "mark_notification_read"},
-      {"admin_runtime", 1, "refresh_runtime"},
-      {"admin_runtime", 1, "filter_runtime_decisions"},
-      {"admin_organization_new", 1, "validate_organization"},
-      {"admin_organization_new", 1, "create_organization"},
-      {"admin_organization_show", 1, "issue_service_identity"},
-      {"admin_organization_show", 1, "dismiss_service_token"},
-      {"admin_organization_show", 1, "open_organization"},
-      {"admin_organization_invite", 1, "validate_invitation"},
-      {"admin_organization_invite", 1, "invite_organization_member"}
+      {"notifications_bell", 1, "mark_notification_read"}
     ]
 
     surface_pairs =
@@ -239,12 +154,12 @@ defmodule Cadence.Applications.OrganizationAdminTest do
 
     action_pairs = Enum.map(OrganizationAdminAction.all(), &{&1.surface_id, &1.version, &1.id})
 
-    assert length(surface_pairs) == 17
-    assert length(action_pairs) == 17
-    assert length(Enum.uniq(Enum.map(action_pairs, &elem(&1, 2)))) == 17
+    assert length(surface_pairs) == 8
+    assert length(action_pairs) == 8
+    assert length(Enum.uniq(Enum.map(action_pairs, &elem(&1, 2)))) == 8
     assert surface_pairs == expected
     assert action_pairs == expected
-    assert length(OrganizationAdmin.definition().actions) == 17
+    assert length(OrganizationAdmin.definition().actions) == 8
   end
 
   test "rejects duplicate provider binding rows" do
@@ -254,9 +169,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
              OrganizationAdminAction.validate_bindings(OrganizationAdminAction.all() ++ [first])
   end
 
-  test "keeps organization opening host-owned" do
-    assert OrganizationAdminAction.host_owned?("admin_organization_show", "open_organization")
-
+  test "keeps sign-in, invitations, bootstrap and admin mode host-owned" do
     assert OrganizationAdmin.host_owned_flows() == %{
              sign_in: "Phoenix authentication and session establishment",
              invitation_acceptance: "Phoenix validates and persists membership acceptance",

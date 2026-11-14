@@ -1,8 +1,6 @@
 defmodule Cadence.Applications.OrganizationAdminProviderTest do
   use CadenceWeb.ConnCase, async: false
 
-  alias Cadence.Accounts.User
-
   alias Cadence.Applications.{
     ActionContractLedger,
     ActionDispatcher,
@@ -30,12 +28,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     user = TestFixtures.persist_user!(user_id: "org-provider-user")
     membership = TestFixtures.grant_membership!(user, organization, role: :organization_admin)
 
-    admin =
-      TestFixtures.persist_user!(
-        user_id: "platform-provider-user",
-        capabilities: [:platform_admin]
-      )
-
     {:ok,
      organization: organization,
      organization_scope:
@@ -44,23 +36,16 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
          organization_id: organization.organization_id,
          organization_membership: membership
        }),
-     user_scope: Scope.new(%{user: user}),
-     admin_scope: Scope.new(%{user: admin, admin_mode?: true})}
+     user_scope: Scope.new(%{user: user})}
   end
 
-  test "registers all eleven surfaces with executable query and action authorities" do
+  test "registers all five surfaces with executable query and action authorities" do
     assert Enum.map(OrganizationAdmin.surface_query_contributions(), & &1.query_id) == [
              "cadence.organization.home",
              "cadence.organization.provider_accounts.list",
              "cadence.organization.provider_accounts.new",
              "cadence.organization.provider_account.show",
-             "cadence.organization.notifications_bell",
-             "cadence.platform_admin.home",
-             "cadence.platform_admin.runtime",
-             "cadence.platform_admin.organizations",
-             "cadence.platform_admin.organization.new",
-             "cadence.platform_admin.organization.show",
-             "cadence.platform_admin.organization.invite"
+             "cadence.organization.notifications_bell"
            ]
 
     assert Enum.all?(OrganizationAdmin.surface_query_contributions(), fn contribution ->
@@ -93,11 +78,9 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert :ok = ActionContractLedger.validate()
 
     ledgers = ActionContractLedger.ledgers()
-    assert length(ledgers.declared) == 58
+    assert length(ledgers.declared) == 49
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
-
-    assert OrganizationAdminAction.host_owned?("admin_organization_show", "open_organization")
 
     refute OrganizationAdminAction.host_owned?(
              "provider_account_new",
@@ -105,11 +88,10 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
            )
   end
 
-  test "loads executable organization, user, and admin presentations", %{
+  test "loads executable organization and user presentations", %{
     organization: organization,
     organization_scope: organization_scope,
-    user_scope: user_scope,
-    admin_scope: admin_scope
+    user_scope: user_scope
   } do
     assert {:ok, %{"data" => %{page: _page, form: _form}}} =
              OrganizationAdminQuery.load(
@@ -127,22 +109,12 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                HostContext.user(user_scope.user.user_id),
                query_request("notifications_bell", "cadence.organization.notifications_bell")
              )
-
-    assert {:ok, %{"data" => data}} =
-             OrganizationAdminQuery.load(
-               admin_scope,
-               HostContext.admin(),
-               query_request("admin_home", "cadence.platform_admin.home")
-             )
-
-    assert data == %{}
   end
 
   test "executes every organization-admin query family through non-LiveView providers", %{
     organization: organization,
     organization_scope: organization_scope,
-    user_scope: user_scope,
-    admin_scope: admin_scope
+    user_scope: user_scope
   } do
     {account, _version, _credential} = persist_provider_account!(organization)
 
@@ -163,23 +135,8 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
        "cadence.organization.notifications_bell", %{}}
     ]
 
-    admin_queries = [
-      {admin_scope, HostContext.admin(), "admin_home", "cadence.platform_admin.home", %{}},
-      {admin_scope, HostContext.admin(), "admin_runtime", "cadence.platform_admin.runtime", %{}},
-      {admin_scope, HostContext.admin(), "admin_organizations",
-       "cadence.platform_admin.organizations", %{}},
-      {admin_scope, HostContext.admin(), "admin_organization_new",
-       "cadence.platform_admin.organization.new", %{}},
-      {admin_scope, HostContext.admin(), "admin_organization_show",
-       "cadence.platform_admin.organization.show",
-       %{"organization_id" => organization.organization_id}},
-      {admin_scope, HostContext.admin(), "admin_organization_invite",
-       "cadence.platform_admin.organization.invite",
-       %{"organization_id" => organization.organization_id}}
-    ]
-
     for {scope, context, surface_id, query_id, params} <-
-          organization_queries ++ user_queries ++ admin_queries do
+          organization_queries ++ user_queries do
       assert {:ok, %{"data" => data}} =
                OrganizationAdminQuery.load(
                  scope,
@@ -206,17 +163,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
 
     assert {:ok, %{page: _page, account_grants: _grants}} =
              Providers.ProviderAccountShow.props(organization_scope, account.provider_account_id)
-
-    assert is_map(Providers.AdminHome.props())
-    assert is_map(Providers.AdminRuntime.props())
-    assert is_map(Providers.AdminOrganizationList.props())
-    assert is_map(Providers.AdminOrganizationNew.props())
-
-    assert {:ok, %{organization_id: ^organization_id}} =
-             Providers.AdminOrganizationShow.props(organization.organization_id)
-
-    assert {:ok, %{organization_id: ^organization_id}} =
-             Providers.AdminOrganizationInvite.props(organization.organization_id)
   end
 
   test "Communications renders real provider account DTOs without legacy Vue implementations", %{
@@ -349,16 +295,12 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert actions["validate_provider_account_form"].effect == :none
     assert actions["validate_provider_account"].effect == :external
     assert actions["validate_provider_account"].intent == :maintenance
-    assert actions["refresh_runtime"].effect == :none
-    assert actions["dismiss_service_token"].effect == :none
-    assert actions["open_organization"].effect == :external
   end
 
   test "executes every provider-owned action family without route-module helpers", %{
     organization: organization,
     organization_scope: organization_scope,
-    user_scope: user_scope,
-    admin_scope: admin_scope
+    user_scope: user_scope
   } do
     assert {:ok, %{patch: %{form: provider_form}}} =
              execute_action(
@@ -405,87 +347,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                "mark_notification_read",
                %{}
              )
-
-    assert {:ok, %{patch: _runtime}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_runtime",
-               "refresh_runtime",
-               %{}
-             )
-
-    assert {:ok, %{patch: _filtered_runtime}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_runtime",
-               "filter_runtime_decisions",
-               %{"runtime_decision_filters" => %{"dashboard_id" => "missing"}}
-             )
-
-    assert {:ok, %{patch: %{form: _organization_form}}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_organization_new",
-               "validate_organization",
-               %{"organization" => %{}}
-             )
-
-    assert {:error, %ActionFailure{code: "invalid_organization"}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_organization_new",
-               "create_organization",
-               %{}
-             )
-
-    assert {:error, %ActionFailure{code: "invalid_input"}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_organization_show",
-               "issue_service_identity",
-               %{}
-             )
-
-    assert {:ok, %{patch: %{issued_service_token: nil}}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_organization_show",
-               "dismiss_service_token",
-               %{}
-             )
-
-    assert {:error, %ActionFailure{code: "host_owned_action"}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_organization_show",
-               "open_organization",
-               %{}
-             )
-
-    assert {:ok, %{patch: %{form: _invite_form}}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_organization_invite",
-               "validate_invitation",
-               %{"invite" => %{}}
-             )
-
-    assert {:error, %ActionFailure{code: "invalid_input"}} =
-             execute_action(
-               admin_scope,
-               HostContext.admin(),
-               "admin_organization_invite",
-               "invite_organization_member",
-               %{}
-             )
   end
 
   test "authorizes organization actions without installation and rejects user actions there", %{
@@ -529,7 +390,8 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
 
     assert ApplicationSurfaces.installation_exempt?("organization_admin", :organization)
     assert ApplicationSurfaces.installation_exempt?("organization_admin", :user)
-    assert ApplicationSurfaces.installation_exempt?("organization_admin", :admin)
+    # L7: platform admin is in the console; the remote no longer installs at :admin.
+    refute ApplicationSurfaces.installation_exempt?("organization_admin", :admin)
 
     refute ApplicationSurfaces.installation_exempt?("mission_catalog", :user)
     refute ApplicationSurfaces.installation_exempt?("mission_catalog", :admin)
@@ -564,7 +426,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert ActionDispatcher.installation_exempt?("mission_catalog", :organization)
     assert ActionDispatcher.installation_exempt?("organization_admin", :organization)
     assert ActionDispatcher.installation_exempt?("organization_admin", :user)
-    assert ActionDispatcher.installation_exempt?("organization_admin", :admin)
+    refute ActionDispatcher.installation_exempt?("organization_admin", :admin)
 
     refute ActionDispatcher.installation_exempt?("mission_catalog", :user)
     refute ActionDispatcher.installation_exempt?("mission_catalog", :admin)
@@ -592,8 +454,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
   test "rejects cross-scope contexts and cross-scope subjects", %{
     organization: organization,
     organization_scope: organization_scope,
-    user_scope: user_scope,
-    admin_scope: admin_scope
+    user_scope: user_scope
   } do
     assert {:error, :scope_mismatch} =
              OrganizationAdminQuery.load(
@@ -607,13 +468,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                user_scope,
                HostContext.user("different-user"),
                query_request("notifications_bell", "cadence.organization.notifications_bell")
-             )
-
-    assert {:error, :forbidden} =
-             OrganizationAdminQuery.load(
-               organization_scope,
-               HostContext.admin(),
-               query_request("admin_home", "cadence.platform_admin.home")
              )
 
     assert {:error, :application_surface_subject_required} =
@@ -637,19 +491,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                )
              )
 
-    assert {:error, :forbidden} =
-             OrganizationAdminAction.execute(
-               Scope.new(%{user: %User{user_id: "not-an-admin"}}),
-               HostContext.admin(),
-               %ActionRequest{
-                 application_key: "organization_admin",
-                 application_version: 1,
-                 action_id: "refresh_runtime",
-                 surface_id: "admin_runtime",
-                 surface_version: 1
-               }
-             )
-
     assert {:error, :scope_mismatch} =
              OrganizationAdminAction.execute(
                organization_scope,
@@ -662,8 +503,6 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                  surface_version: 1
                }
              )
-
-    assert admin_scope.user.user_id != user_scope.user.user_id
   end
 
   test "requires the exact provider-owned surface binding before action execution", %{

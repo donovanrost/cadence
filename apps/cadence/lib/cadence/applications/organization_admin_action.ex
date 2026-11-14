@@ -64,69 +64,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
       surface_id: "notifications_bell",
       effect: :durable,
       host_owned?: false
-    },
-    %{
-      id: "refresh_runtime",
-      version: 1,
-      surface_id: "admin_runtime",
-      effect: :none,
-      host_owned?: false
-    },
-    %{
-      id: "filter_runtime_decisions",
-      version: 1,
-      surface_id: "admin_runtime",
-      effect: :none,
-      host_owned?: false
-    },
-    %{
-      id: "validate_organization",
-      version: 1,
-      surface_id: "admin_organization_new",
-      effect: :none,
-      host_owned?: false
-    },
-    %{
-      id: "create_organization",
-      version: 1,
-      surface_id: "admin_organization_new",
-      effect: :durable,
-      host_owned?: false
-    },
-    %{
-      id: "issue_service_identity",
-      version: 1,
-      surface_id: "admin_organization_show",
-      effect: :durable,
-      host_owned?: false
-    },
-    %{
-      id: "dismiss_service_token",
-      version: 1,
-      surface_id: "admin_organization_show",
-      effect: :none,
-      host_owned?: false
-    },
-    %{
-      id: "open_organization",
-      version: 1,
-      surface_id: "admin_organization_show",
-      effect: :external,
-      host_owned?: true
-    },
-    %{
-      id: "validate_invitation",
-      version: 1,
-      surface_id: "admin_organization_invite",
-      effect: :none,
-      host_owned?: false
-    },
-    %{
-      id: "invite_organization_member",
-      version: 1,
-      surface_id: "admin_organization_invite",
-      effect: :durable,
-      host_owned?: false
     }
   ]
 
@@ -170,12 +107,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
 
   def execute(_scope, _host_context, _request),
     do: {:error, failure("invalid_action", "The organization action request is invalid.")}
-
-  defp execute_action(_scope, _host_context, %ActionRequest{action_id: "open_organization"}),
-    do: {:error, failure("host_owned_action", "Organization switching remains Phoenix-owned.")}
-
-  defp execute_action(_scope, _host_context, %ActionRequest{action_id: "dismiss_service_token"}),
-    do: {:ok, %{patch: %{issued_service_token: nil}}}
 
   defp execute_action(_scope, _host_context, %ActionRequest{
          action_id: "validate_provider_account_form",
@@ -225,92 +156,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     end
   end
 
-  defp execute_action(_scope, _host_context, %ActionRequest{
-         action_id: "refresh_runtime",
-         params: params
-       }),
-       do: {:ok, %{patch: Providers.AdminRuntime.props(params)}}
-
-  defp execute_action(_scope, _host_context, %ActionRequest{
-         action_id: "filter_runtime_decisions",
-         params: params
-       }),
-       do:
-         {:ok,
-          %{
-            patch: Providers.AdminRuntime.props(input_map(params, "runtime_decision_filters"))
-          }}
-
-  defp execute_action(_scope, _host_context, %ActionRequest{
-         action_id: "validate_organization",
-         params: params
-       }),
-       do:
-         {:ok,
-          %{
-            patch: %{
-              form: Providers.AdminOrganizationNew.form(input_map(params, "organization"))
-            }
-          }}
-
-  defp execute_action(scope, _host_context, %ActionRequest{
-         action_id: "create_organization",
-         params: params
-       }) do
-    values = input_map(params, "organization")
-    display_name = normalize_text(value(values, "display_name"))
-    slug = normalize_text(value(values, "slug"))
-
-    if is_binary(display_name) and is_binary(slug) do
-      case Providers.AdminOrganizationNew.create(scope, %{
-             "display_name" => display_name,
-             "slug" => slug
-           }) do
-        {:ok, result} -> {:ok, result}
-        {:error, reason} -> {:error, reason}
-      end
-    else
-      {:error, failure("invalid_organization", "Display name and slug are required.")}
-    end
-  end
-
-  defp execute_action(scope, _host_context, %ActionRequest{
-         action_id: "issue_service_identity",
-         params: params
-       }) do
-    with {:ok, organization_id} <- required_param(params, "organization_id"),
-         {:ok, result} <-
-           Providers.AdminOrganizationShow.issue_service_identity(
-             scope,
-             organization_id,
-             input_map(params, "service_identity")
-           ) do
-      {:ok, %{patch: result}}
-    end
-  end
-
-  defp execute_action(_scope, _host_context, %ActionRequest{
-         action_id: "validate_invitation",
-         params: params
-       }),
-       do:
-         {:ok,
-          %{
-            patch: %{
-              form: Providers.AdminOrganizationInvite.form(input_map(params, "invite"))
-            }
-          }}
-
-  defp execute_action(scope, _host_context, %ActionRequest{
-         action_id: "invite_organization_member",
-         params: params
-       }) do
-    with {:ok, organization_id} <- required_param(params, "organization_id"),
-         {:ok, values} <- required_input_map(params, "invite") do
-      Providers.AdminOrganizationInvite.create(scope, organization_id, values)
-    end
-  end
-
   defp execute_action(_scope, _host_context, _request),
     do: {:error, failure("unsupported_action", "The organization action is not implemented.")}
 
@@ -336,12 +181,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     if action_id in user_actions(), do: :ok, else: {:error, :unsupported_application_action_scope}
   end
 
-  defp ensure_action_context(%Scope{} = scope, %HostContext{placement: :admin}, action_id) do
-    if Scope.admin_mode?(scope) and action_id in admin_actions(),
-      do: :ok,
-      else: {:error, :forbidden}
-  end
-
   defp ensure_action_context(_scope, _host_context, _action_id), do: {:error, :scope_mismatch}
 
   defp organization_actions do
@@ -357,20 +196,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
   end
 
   defp user_actions, do: ["mark_notification_read"]
-
-  defp admin_actions do
-    [
-      "refresh_runtime",
-      "filter_runtime_decisions",
-      "validate_organization",
-      "create_organization",
-      "issue_service_identity",
-      "dismiss_service_token",
-      "open_organization",
-      "validate_invitation",
-      "invite_organization_member"
-    ]
-  end
 
   defp required_input_map(params, key) do
     value = input_map(params, key)
@@ -409,31 +234,12 @@ defmodule Cadence.Applications.OrganizationAdminAction do
   defp atom_key("grant"), do: :grant
   defp atom_key("grant-id"), do: :grant_id
   defp atom_key("notification_id"), do: :notification_id
-  defp atom_key("organization"), do: :organization
-  defp atom_key("organization_id"), do: :organization_id
-  defp atom_key("service_identity"), do: :service_identity
-  defp atom_key("runtime_decision_filters"), do: :runtime_decision_filters
-  defp atom_key("invite"), do: :invite
-  defp atom_key("display_name"), do: :display_name
-  defp atom_key("slug"), do: :slug
   defp atom_key("mission_id"), do: :mission_id
   defp atom_key("allowed_services"), do: :allowed_services
   defp atom_key("allowed_stations"), do: :allowed_stations
   defp atom_key("max_quota"), do: :max_quota
   defp atom_key("grant_reason"), do: :grant_reason
-  defp atom_key("email"), do: :email
-  defp atom_key("membership_role"), do: :membership_role
-  defp atom_key("grant_platform_admin"), do: :grant_platform_admin
   defp atom_key(_key), do: nil
-
-  defp normalize_text(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      text -> text
-    end
-  end
-
-  defp normalize_text(_value), do: nil
 
   defp failure(code, message), do: %ActionFailure{code: code, message: message}
 
