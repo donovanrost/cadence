@@ -85,8 +85,9 @@ journal_enabled = System.get_env("CADENCE_INGRESS_JOURNAL_ENABLED")
 
 if config_env() == :prod or (is_binary(journal_path) and journal_path != "") or
      (is_binary(journal_enabled) and journal_enabled != "") do
+  # On unless a deployment turns it off (DECISIONS #95).
   enabled? =
-    case journal_enabled || "false" do
+    case journal_enabled || "true" do
       value when value in ["true", "1"] -> true
       value when value in ["false", "0"] -> false
       invalid -> raise "invalid CADENCE_INGRESS_JOURNAL_ENABLED: #{inspect(invalid)}"

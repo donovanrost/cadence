@@ -70,8 +70,10 @@ config :cadence,
     safety_poll_interval_ms: 60_000,
     max_concurrency: 4
   ],
+  # On by default (DECISIONS #95): received bytes are journaled before processing. The off path
+  # stays supported and tested (the :ingest_journal_matrix tag, CADENCE_TEST_INGRESS_JOURNAL=off).
   ingress_journal: [
-    enabled?: false,
+    enabled?: true,
     base_path: Path.expand("../../../var/ingress_journal", __DIR__),
     max_bytes: 8 * 1_024 * 1_024 * 1_024,
     segment_bytes: 256 * 1_024 * 1_024,
