@@ -11,6 +11,11 @@ defineProps<{ rows: readonly FleetSpacecraft[]; total: number }>();
 /** Last TLM and Next contact move every 10 s, so 500 rows don't re-render each second. */
 const now = useCoarseNow();
 
+/**
+ * Lead (scale, 11-15): at 1,000 craft a full table is 14,000 nodes and a reorder takes ~117 ms, so
+ * only the rows in view render (ApTable's windowing). Rows are one line; 41 px pins their height.
+ */
+const ROW_HEIGHT = 41;
 const columns: readonly ApColumn[] = [
   { key: "name", label: "Name" },
   { key: "scid", label: "SCID", mono: true, align: "end" },
@@ -53,6 +58,7 @@ const rowState = (sc: FleetSpacecraft) =>
     :row-key="(sc) => sc.id"
     caption="Fleet"
     :row-state="rowState"
+    :virtual="{ rowHeight: ROW_HEIGHT }"
   >
     <template #cell-name="{ row }">
       <RouterLink
