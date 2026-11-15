@@ -133,6 +133,11 @@ The rendering engine differs, but the look is the same.
   merge into one mark, titled "4 events 02:10Z–02:14Z". Watermark and evidence events aren't chart marks: they're
   a stream, not events an operator reads.
 - **No glows or box-shadows** anywhere in the chart. Remove the engine's.
+- **A range with no samples** (dashboards, 11-15). The time-series widget still draws its frame: the x axis from
+  the dashboard's range, no y labels, the stale hatch across the whole plot, and the contact bands and event marks
+  over it. A centred `text-3` caption reads "No samples in this range." (the hatch's own word, "samples"). It never
+  says why: Cadence can't tell telemetry that was dropped from telemetry that never came (U20). Tiles, tables and
+  state widgets keep their plain message.
 
 ## Chart tokens (K2): Apogee values for the 29 base `--chart-color-*`
 Alpha variants derive from these, so only the bases change. They're RGB triplets.
