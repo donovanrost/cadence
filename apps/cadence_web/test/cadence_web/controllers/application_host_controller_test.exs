@@ -128,6 +128,28 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert has_element?(view, "#application-shell")
   end
 
+  test "an organization-scope catalog says no applications are installed at that level" do
+    # §11c A + L13 (lead): no organization-scope surface is left; the route answers plainly.
+    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
+
+    problem =
+      member_conn
+      |> get(
+        "/api/cadence/application-host/v1/catalog?scope=organization&organization_id=#{organization.organization_id}"
+      )
+      |> json_response(404)
+
+    assert problem["code"] == "no_organization_applications"
+    assert problem["message"] == "No applications are installed at the organization level."
+  end
+
+  test "a mission-scope catalog keeps its own answer (only the organization scope changed)" do
+    {member_conn, _organization, _mission, _scope} = signed_in_scope_and_mission()
+
+    assert %{"code" => "application_unavailable"} =
+             member_conn |> get(catalog_path("mission_missing")) |> json_response(404)
+  end
+
   test "catalog manifest URLs preserve the browser request origin" do
     {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
 

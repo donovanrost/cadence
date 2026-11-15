@@ -69,10 +69,20 @@ defmodule CadenceWeb.ApplicationHostController do
       |> put_resp_header("cache-control", "no-store")
       |> json(catalog)
     else
-      {:error, reason} -> catalog_problem(conn, reason)
+      {:error, reason} -> catalog_problem(conn, catalog_reason(reason, params))
       _other -> catalog_problem(conn, :application_catalog_unavailable)
     end
   end
+
+  # §11c A + L13: no application has an organization-scope surface any more, so an organization
+  # catalog is empty. Say that, not mission_not_found; the route stays until a later #80 shrink.
+  defp catalog_reason(:application_catalog_unavailable, params) do
+    if requested_scope(params) == "organization",
+      do: :no_organization_applications,
+      else: :application_catalog_unavailable
+  end
+
+  defp catalog_reason(reason, _params), do: reason
 
   @spec query(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def query(conn, params) when is_map(params) do
@@ -854,6 +864,15 @@ defmodule CadenceWeb.ApplicationHostController do
       :not_found,
       "application_unavailable",
       "The requested application is not available in this scope."
+    )
+  end
+
+  defp catalog_problem(conn, :no_organization_applications) do
+    problem(
+      conn,
+      :not_found,
+      "no_organization_applications",
+      "No applications are installed at the organization level."
     )
   end
 

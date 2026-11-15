@@ -78,6 +78,7 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 **Application host** (`W/controllers/application_host_controller.ex`, `W/application_host_bridge.ex`). This is the transport for the
 federated application surfaces that the old host SPA (`frontend/apps/host`) renders.
 - `GET .../catalog` (mission, spacecraft, or org/user/admin by `scope`) returns the admitted applications/surfaces and `sessionId`.
+  With `scope=organization` it answers `404 no_organization_applications` ("No applications are installed at the organization level."): since §11c A + L13 no application has an organization-scope surface (the route stays until a later #80 shrink).
 - `POST .../query` body: `applicationKey, applicationVersion, surfaceId, surfaceVersion, queryId, queryVersion, params`.
   `Applications.HostQueryRegistry` handles comms-overview compatibility first. Everything else is `ApplicationSurfaces.load`
   returning `{host, declarative_surface, application_surface_rows, ...}` or `{host, navigation, trusted_surface}`. These are
