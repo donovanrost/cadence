@@ -1513,3 +1513,9 @@ event is emitted only for these:
 - Not per N minutes: a heartbeat on the Timeline is still noise.
 - Falling behind itself is U47's Now item (ingress backpressure), not a Timeline line.
 - Fold label: `Telemetry stored` for the per-contact lines.
+- **Kinds and placement** (api, 11-15): each case gets its own kind (source_watermark_settled /
+  source_watermark_caught_up / the existing source_watermark_retreated). Old `advanced` rows keep their sentence
+  until they age out. All three stay in the Timeline's **data** category (opt-in): one settle line per pass for
+  every spacecraft would swamp the default view. The settle line also shows **always on the pass itself**
+  (Contacts' selected-pass history), where it answers "did this pass's data get stored?". The EventBus fact keeps
+  firing on every advance (live charts depend on it); only the operational_events row is coalesced.
