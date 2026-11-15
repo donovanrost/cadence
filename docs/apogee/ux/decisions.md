@@ -1735,6 +1735,9 @@ The buffer has a cap **per pass** (per stream), and all of them share **one disk
     size is set where Cadence is deployed."
   - "Refusing" shows only when appends are actually failing for lack of space. api-ops confirms refused_since.
   - Resolutions: "Back under 60% at 03:30Z." After a full spell: "Telemetry was refused from 03:21Z to 03:24Z."
-  - Data (api-ops, 11-15): percent, used_bytes, capacity_bytes, signed rate, eta_full_s, holders [{kind contact,
-    realized_contact_id, label, bytes, state storing | kept, kept_until?}] plus own_more_count,
-    other_missions_bytes, refusing, refused_since.
+  - Data (api-ops, confirmed 11-15): percent, used_bytes, size_bytes, rate_bytes_per_hour (signed), eta_full_s,
+    holders [{realized_contact_id, label, bytes, state: storing | kept, kept_until}] (this mission's own, up to 3),
+    more_count, other_missions_bytes, refusing, refused_since. Without `kept_until`, a kept holder reads "…: 1.2
+    GB, kept for review".
+  - If lead's early removal lands (kept copies removed oldest first above 80%), the drain sentence adds "Above 80%,
+    copies kept for review are removed first, oldest first."
