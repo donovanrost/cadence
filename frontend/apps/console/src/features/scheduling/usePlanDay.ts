@@ -81,8 +81,13 @@ export function usePlanDay(
     (_k, signal) => fetchPlans(missionId.value, day.value, signal),
   );
   const draft = useRemoteQuery(runId, (id, signal) => fetchDraft(missionId.value, id, signal));
+  /** U61: `?plan=` opens one plan of the day (a refusal's or a superseded line's Open R44). */
+  const pinnedPlan = computed(() =>
+    typeof route.query.plan === "string" && route.query.plan ? route.query.plan : null,
+  );
   const planId = computed(() => {
     if (runId.value) return null;
+    if (pinnedPlan.value) return pinnedPlan.value;
     const p = plans.state.value;
     return p.status === "ready" ? (planOfDay(p.value.plans)?.id ?? null) : null;
   });

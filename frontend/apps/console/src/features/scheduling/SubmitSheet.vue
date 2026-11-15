@@ -11,6 +11,7 @@ import {
   type PlanDetail,
 } from "./api.ts";
 import { planErrorText } from "./errors.ts";
+import { lifecycleRefusal, planOfDayRoute } from "./lifecycle.ts";
 import { contactsShortText, coverage, gapGroups } from "./coverage.ts";
 import type { SpacecraftName } from "./names.ts";
 
@@ -26,6 +27,8 @@ const props = defineProps<{
   commitLabel: string;
   confirm: string;
   busy: boolean;
+  /** The day on screen, for a U61 refusal's Open (K1's `?plan=`). */
+  day?: string | undefined;
 }>();
 const emit = defineEmits<{ submit: [acks: Acknowledgement[], note?: string]; close: [] }>();
 /** U36: resubmitting a sent-back draft: previous reasons prefilled, an optional note. */
@@ -135,6 +138,12 @@ const title = computed(() =>
     ? `Accept ${plural(groups.value.length, "gap")} · ${contactsShortText(coverage(props.plan).contactsShort)}`
     : "Submit the plan",
 );
+/** U61: a refusal that names another plan offers to open it. */
+const refusalOpen = computed(() => {
+  const open = error.value ? lifecycleRefusal(error.value)?.open : null;
+  const day = open?.day ?? props.day ?? null;
+  return open && day ? { label: open.label, to: planOfDayRoute(day, open.planId) } : null;
+});
 const errorText = computed(() => {
   const e = error.value;
   if (!e) return null;
@@ -250,7 +259,19 @@ defineExpose({ open, close });
         }}</span>
       </span>
     </ApCallout>
-    <ApCallout v-if="errorText" tone="caution">{{ errorText }}</ApCallout>
+    <ApCallout v-if="errorText" tone="caution">
+      <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span>{{ errorText }}</span>
+        <ApButton
+          v-if="refusalOpen"
+          variant="ghost"
+          size="compact"
+          :to="refusalOpen.to"
+          @click="close"
+          >{{ refusalOpen.label }}</ApButton
+        >
+      </span>
+    </ApCallout>
     <template #footer>
       <span v-if="groups.length > 0" class="mr-auto font-mono text-xs text-text-4 uppercase"
         >Audited · visible to the approver</span

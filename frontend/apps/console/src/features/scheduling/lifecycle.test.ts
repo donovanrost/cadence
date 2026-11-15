@@ -76,7 +76,7 @@ describe("U61 approval refusals", () => {
     expect(r?.text).toBe(
       "Not approved: R39 (booking) already covers 212 of these requirements for 11-16. Open R39, or send this plan back.",
     );
-    expect(r?.open).toEqual({ planId: "contact_plan_39", label: "Open R39" });
+    expect(r?.open).toEqual({ planId: "contact_plan_39", label: "Open R39", day: "2026-11-16" });
   });
 
   it("words a replaced plan and an all-expired one", () => {

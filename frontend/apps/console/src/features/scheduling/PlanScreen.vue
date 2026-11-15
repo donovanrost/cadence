@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { ResolveBookingActions } from "@/features/resolutions/index.ts";
 import { useRoute, type RouteLocationRaw } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
@@ -28,6 +28,8 @@ import PassResolutionsCallout from "./PassResolutionsCallout.vue";
 import ProposalCallout from "./ProposalCallout.vue";
 import { usePassResolutions } from "./usePassResolutions.ts";
 import SupersededCallout from "./SupersededCallout.vue";
+import PlanLifecycleCallouts from "./PlanLifecycleCallouts.vue";
+import type { Expired } from "./lifecycle.ts";
 import UnconfirmedCallout from "./UnconfirmedCallout.vue";
 import { stationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
@@ -73,6 +75,9 @@ const draftedBy = computed(() =>
 );
 const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
 const sheetError = ref<ApiError | null>(null);
+/** U61: passes an approval left out because they had already started (until the day changes). */
+const expired = ref<Expired | null>(null);
+watch(day, () => (expired.value = null));
 /** U26: drafted passes inside station outage/maintenance (blocking) or degraded (at risk) windows. */
 const hits = computed(() =>
   view.value.kind === "plan"
@@ -136,6 +141,7 @@ async function onSubmit(acks: Acknowledgement[], note?: string) {
   const result = await submit(view.value.plan, acks, note);
   // A draft superseded meanwhile (409 plan_superseded): submit already re-read the plan, so close
   // the sheet and let it land in the superseded state, which says nothing was submitted.
+  if (result.ok) expired.value = result.value.expired;
   if (result.ok || isPlanSuperseded(result.error)) sheet.value?.close();
   else sheetError.value = result.error;
 }
@@ -220,6 +226,7 @@ const clock = computed(() =>
   <PassResolutionsCallout :passes="resolutions" />
   <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
   <template v-if="view.kind === 'plan'">
+    <PlanLifecycleCallouts :day="day" :superseded-by="view.plan.superseded_by" :expired="expired" />
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
     <ApCallout v-else-if="sentBack" tone="caution">{{ sentBack }}</ApCallout>
     <ApCallout v-else-if="resubmitted" tone="info">
@@ -334,6 +341,7 @@ const clock = computed(() =>
       :commit-label="primary.label"
       :confirm="primary.confirm"
       :busy="busy"
+      :day="day"
       @submit="onSubmit"
     />
   </template>

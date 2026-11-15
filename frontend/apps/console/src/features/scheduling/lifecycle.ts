@@ -70,7 +70,8 @@ export const supersededByLine = (s: SupersededBy, now: Date = new Date()) =>
 /** Where a refusal points: the plan to open, or the day to plan the rest of. */
 export type LifecycleRefusal = Readonly<{
   text: string;
-  open: Readonly<{ planId: string; label: string }> | null;
+  /** The plan to open; `day` when the refusal names it (else the day on screen). */
+  open: Readonly<{ planId: string; label: string; day: string | null }> | null;
   planRestOf: string | null;
 }>;
 
@@ -87,7 +88,7 @@ export function lifecycleRefusal(error: ApiError, now: Date = new Date()): Lifec
     const state = typeof p.state === "string" ? COVERING_WORDS[p.state] : p.state.unrecognized;
     return {
       text: `Not approved: R${p.revision} (${state}) already covers ${formatCount(p.requirements)} of these requirements for ${dayLabel(p.day)}. Open R${p.revision}, or send this plan back.`,
-      open: { planId: p.plan_id, label: `Open R${p.revision}` },
+      open: { planId: p.plan_id, label: `Open R${p.revision}`, day: p.day },
       planRestOf: null,
     };
   }
@@ -96,7 +97,7 @@ export function lifecycleRefusal(error: ApiError, now: Date = new Date()): Lifec
     return p
       ? {
           text: `Not approved: R${p.revision} replaced this plan at ${at(p.at, now)}.`,
-          open: { planId: p.plan_id, label: `Open R${p.revision}` },
+          open: { planId: p.plan_id, label: `Open R${p.revision}`, day: null },
           planRestOf: null,
         }
       : { text: "Not approved: a newer plan replaced this one.", open: null, planRestOf: null };
@@ -123,3 +124,17 @@ export function partialApproval(e: Expired): string {
       : `${formatCount(e.count)} had already started, so they weren't booked`;
   return `Approved. Booking ${plural(e.reservable_count, "pass", "passes")}; ${left}.`;
 }
+
+/** One left-out pass under `Show 36`: `EARENDIL-001 · SVA · AOS 00:10Z`. */
+export function expiredLine(item: Expired["items"][number], now: Date = new Date()): string {
+  const station = item.station?.code ?? item.station?.name ?? item.station?.ref ?? null;
+  return [item.spacecraft?.name ?? item.spacecraft?.id ?? null, station, `AOS ${at(item.aos, now)}`]
+    .filter((p): p is string => p !== null)
+    .join(" · ");
+}
+
+/** K1 opened on one plan of the day (`?plan=`), for a refusal's or a superseded line's Open. */
+export const planOfDayRoute = (day: string, planId: string) => ({
+  name: "ops.contacts.plan" as const,
+  query: { day, plan: planId },
+});
