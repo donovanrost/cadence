@@ -17,6 +17,14 @@ defmodule CadenceWeb.LegacyAdminRedirectControllerTest do
     assert redirected_to(get(build_conn(), "/")) == "/sign-in"
   end
 
+  test "§11c A2: organization settings and a section go to the console's org settings", c do
+    console = "/console/#{c.org.slug}/org/settings"
+    assert redirected_to(get(c.conn, "/settings")) == console
+
+    assert redirected_to(get(c.conn, "/settings/cadence.governance")) ==
+             console <> "/cadence.governance"
+  end
+
   test "L4: the missions list and New mission go to the organization's console pages", c do
     assert redirected_to(get(c.conn, "/missions")) == "/console/#{c.org.slug}/org/missions"
 

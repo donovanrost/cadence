@@ -3,6 +3,7 @@ defmodule CadenceWeb.LegacyAdminRedirectController do
   Legacy organization and platform pages that moved to the console (DECISIONS #79), one hop each:
 
   - §11c A1 `/` → `/console/<org>` (signed out → `/sign-in`; no organization → `/console`)
+  - §11c A2 `/settings[/:section_id]` → `/console/<org>/org/settings[/:section_id]`
   - L4 `/missions` → `/console/<org>/org/missions`; `/missions/new` → `…/org/missions/new`
   - L7 `/admin` → `/console/admin`; `/admin/runtime` → `/console/admin/runtime`;
     `/admin/organizations[/new]` → `/console/admin/organizations`;
@@ -17,6 +18,11 @@ defmodule CadenceWeb.LegacyAdminRedirectController do
   alias CadenceWeb.ConsolePaths
 
   def home(conn, _params), do: org(conn, "")
+
+  def settings(conn, %{"section_id" => id}),
+    do: org(conn, "/org/settings/" <> ConsolePaths.segment(id))
+
+  def settings(conn, _params), do: org(conn, "/org/settings")
 
   def missions(conn, _params), do: org(conn, "/org/missions")
   def new_mission(conn, _params), do: org(conn, "/org/missions/new")
