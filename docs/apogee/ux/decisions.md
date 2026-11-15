@@ -1520,3 +1520,41 @@ event is emitted only for these:
   every spacecraft would swamp the default view. The settle line also shows **always on the pass itself**
   (Contacts' selected-pass history), where it answers "did this pass's data get stored?". The EventBus fact keeps
   firing on every advance (live charts depend on it); only the operational_events row is coalesced.
+
+### U61 · Now item: a day whose first contact window approaches without an approved plan (lead; 11-16 had no bookings) (api / domain / fe-ops)
+11-16's plan sat in pending_approval from 11-11, and nothing was booked. Say plainly that **nothing is booked**,
+name who it waits on, and let the countdown raise the priority. One item per UTC day.
+- **Titles, by the day's plan state** (the newest plan for that day):
+  - pending approval: `Plan for 11-16 is awaiting approval`
+  - sent back: `Plan for 11-16 was sent back`
+  - only a draft: `Plan for 11-16 is still a draft`
+  - none: `11-16 has no plan yet`
+- **Meta:** `FIRST WINDOW 00:00Z · T−6h · 1,512 REQUIREMENTS` (§4, with the date when it isn't today; the T− is
+  live).
+- **Body:** the state sentence, then the consequence, then whatever's waiting:
+  - pending: "R41 has waited for approval since 11-11 22:10Z. Nothing is booked for 11-16's 1,512 requirements until
+    it's approved. Waiting on an org admin: Ana R. or Owen P." (approvers named when the policy lists them; never
+    the author, U-rule reviewer ≠ author).
+  - sent back: "Ana R. sent R41 back at 11-12 09:40Z: “Too many KSAT passes.” Nothing is booked for 11-16's 1,512
+    requirements until a new plan is approved."
+  - draft: "R43 (Mira K.) hasn't been submitted. Nothing is booked for 11-16's 1,512 requirements until a plan is
+    approved."
+  - none: "Nothing is planned or booked for 11-16's 1,512 requirements."
+- **Action**, one:
+  - pending, for an approver who isn't the author: `Review`, to the plan's decision.
+  - pending, for anyone else: `Open plan`. The author also gets "You can't approve your own plan."
+  - sent back or draft: `Open plan`.
+  - none: `Plan 11-16` (Contacts › Plan for that day).
+  - There's nothing to acknowledge: the only way the item goes is by the day getting a plan.
+- **Priority and status** (due_at = the first window):
+  - Raised at T−24h as P2, caution.
+  - P1 from T−6h.
+  - Once the first window opens with no approved plan, the title becomes `11-16 started with no approved plan` with
+    crit ◆: windows are passing unbooked. It stays P1 until the day ends or a plan is approved.
+  - N (24h and 6h) is policy-tunable later. Domain proposes defaults if they differ.
+- **Resolutions:**
+  - "Approved by Ana R. at 18:02Z." The row fades; booking then shows on Contacts.
+  - "Nothing is left to plan for 11-16." (every requirement closed or canceled).
+  - The day ended: "11-16 ended with no approved plan." (crit, kept in recently resolved).
+- **Data (api/domain):** day, first_window_at, requirements_count, `plan {id, revision, state, author, submitted_at,
+  sent_back {by, at, comment}} | null`, `approvers [{name}]`, `viewer_can_approve`.
