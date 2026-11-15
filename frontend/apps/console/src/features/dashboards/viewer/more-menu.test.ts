@@ -10,7 +10,10 @@ const items = [
 ];
 let wrapper: ReturnType<typeof open> | null = null;
 function open() {
-  return mount(MoreMenu, { props: { items, label: "More section actions" }, attachTo: document.body });
+  return mount(MoreMenu, {
+    props: { items, label: "More section actions" },
+    attachTo: document.body,
+  });
 }
 afterEach(() => {
   wrapper?.unmount();
@@ -81,5 +84,19 @@ describe("⋯ menu button (design-language §6)", () => {
     await wrapper.findAll('[role="menuitem"]')[1]?.trigger("click");
     expect(wrapper.emitted("select")?.[0]).toEqual(["down"]);
     expect(document.activeElement).toBe(trigger);
+  });
+  it("does nothing on Enter or Space on a disabled item: no action, still open, reason read", async () => {
+    const w = await opened();
+    const up = w.findAll('[role="menuitem"]')[0];
+    expect(document.activeElement).toBe(up?.element);
+    // A focused <button> turns Enter/Space into a click; send both, as a browser would.
+    for (const key of ["Enter", " "]) {
+      await press(document.activeElement, key);
+      await up?.trigger("click");
+    }
+    expect(w.emitted("select")).toBeUndefined();
+    expect(w.find('[role="menu"]').exists()).toBe(true);
+    expect(document.activeElement).toBe(up?.element);
+    expect(up?.attributes("aria-describedby")).toBeTruthy();
   });
 });
