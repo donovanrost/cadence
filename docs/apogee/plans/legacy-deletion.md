@@ -631,8 +631,9 @@ which the console uses.
 ## Covered-already host pages (BACKLOG §11c; lead 11-13)
 Every other legacy browser route that HPL or ApplicationHostLive serves. Dispatch goes through `routes.json`
 (`kind` / `contribution`) to a `CadenceWeb.*Page` module. Surface specs live in
-`applications/{organization_admin,mission_catalog,spacecraft,comms,ops_console}.ex`. **No legacy URL redirects to
-the console yet**: each target below is where the old URL should go (with the slug lookup).
+`applications/{organization_admin,mission_catalog,spacecraft,comms,ops_console}.ex`. **Unless its row says
+otherwise, no legacy URL here redirects to the console yet**: each target below is where the old URL should go
+(with the slug lookup).
 
 **Don't edit server copy for legacy-backed settings sections before §11c (B)/(C)** (director 11-15): the host
 admits a section only if its metadata equals the server definition, so a copy change on the server alone shows
@@ -640,8 +641,8 @@ admits a section only if its metadata equals the server definition, so a copy ch
 
 | R | Legacy | Page / surface | Console | Status |
 | --- | --- | --- | --- | --- |
-| 239 | `/` | AdministrationPage, organization_home | `org.home` | covered |
-| 242-243 | `/settings[/:section]` | SettingsPage | `org.settings` | covered |
+| 239 | `/` | AdministrationPage, organization_home | `org.home` | redirect + deletion built (fe-setup/legacy-11c-a) |
+| 242-243 | `/settings[/:section]` | SettingsPage (org routes only; the module stays) | `org.settings` | redirect + deletion built (fe-setup/legacy-11c-a) |
 | 245, 249 | `/missions/:id/settings[/:section]` | SettingsPage | `setup.settings` | covered (the console renders every registry section, incl. `cadence.pass_review`, which the legacy host never had a contribution for; devops 11-15) |
 | 265 | `/missions/:id` | MissionPage, mission_overview | `mission.home` (→ `ops.now`) | covered |
 | 267, 271 | `…/spacecraft`, `/new` | SpacecraftPage | `setup.spacecraft`, `.new` | covered |
@@ -666,13 +667,11 @@ admits a section only if its metadata equals the server definition, so a copy ch
 | 547 | `…/ops/explore` | OpsExplorationPage | `ops.telemetry` | **parked (L20)** |
 | 445, 578 | `…/ops/data-operations[/manage]` | OpsHistoricalWorkflowsPage | none | **parked (L16)** |
 
-**Legacy dashboards are host-served.** Each `dashboards.*` contribution renders
-`frontend/modules/dashboards-and-exploration` through `ops-workspace/features/module-pages`; the surfaces are
-`ops_console.ex` :106-251.
-- **Live in the console, so covered:** R:418 directory, :398 new, :559 view, :410 edit. See **L8** above.
-- **Console routes still pending (L8):** R:402 library, :406 and :430 playlists, :414 settings, :551 activity,
-  :555 diagnostics, and :422 and :426 shares and snapshots.
-- **Downloads to keep** until L8 and L18 decide: R:230 export and R:155 artifact download.
+**Legacy dashboards are gone from the host (L8 done and live).** Every legacy dashboard URL (directory, new,
+view, edit, library, playlists and present, settings, activity, diagnostics, shares, snapshots) redirects once to
+the console through `LegacyDashboardRedirectController`, and the host pages and `dashboards.*` surfaces are
+deleted; `/:id/export` 404s by design. See **L8** above.
+- **Download to keep** until L18 decides: R:155 artifact download.
 
 **Redirect-only controllers.** All of them still point at legacy pages:
 - `LegacyOpsRedirect` R:224 goes to `/ops/explore` (L20).
@@ -688,7 +687,7 @@ fields (B), what's gone by design (C), and four bugs (D). Its gaps go to lead be
 
 **Not covered: these block deleting the host app.**
 - **Rows not built yet:** L17 (R:291, :295), L22 (R:287), L14 (R:493), L15 (R:485, built but off), L18 (R:327,
-  :155) and L8's pending dashboard routes.
+  :155).
 - **Rows already blocked in this manifest:** L10, L12, L13 and L19.
 - **Parked:** L16 (R:445, :578) and L20 (R:547).
 
