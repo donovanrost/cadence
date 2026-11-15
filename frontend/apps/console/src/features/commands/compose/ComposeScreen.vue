@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
-import { describeApiError, useRemoteQuery } from "@/api/index.ts";
+import { describeApiError } from "@/api/index.ts";
+import { useTargetEndpoints } from "./useTargetEndpoints.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
 import { TelemetryDegraded, useFleet } from "@/features/fleet/index.ts";
 import { useCommandAccess } from "../access.ts";
 import { catalogRevisionWords, fetchCommand } from "../api.ts";
-import { fetchEndpoints, type TargetEndpoints } from "../groups/api.ts";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import DeliveryPanel from "./DeliveryPanel.vue";
 import DraftNotices from "./DraftNotices.vue";
@@ -78,18 +78,7 @@ const log = ref("");
 const title = ref(typeof route.query.title === "string" ? route.query.title : "");
 /** Uplink endpoints per target (DECISIONS #41) and the operator's explicit overrides. */
 const overrides = ref<Record<string, string>>({});
-const endpointRead = useRemoteQuery(
-  () => (targets.value.length ? targets.value.map((sc) => sc.id).join(",") : null),
-  (ids, signal) => fetchEndpoints(missionId.value, ids.split(","), signal),
-);
-const endpoints = computed(
-  () =>
-    new Map<string, TargetEndpoints>(
-      endpointRead.state.value.status === "ready"
-        ? endpointRead.state.value.value.map((e) => [e.spacecraft_id, e])
-        : [],
-    ),
-);
+const endpoints = useTargetEndpoints(missionId, () => targets.value.map((sc) => sc.id));
 function setOverride(spacecraftId: string, endpointId: string | null) {
   const { [spacecraftId]: _drop, ...rest } = overrides.value;
   overrides.value = endpointId === null ? rest : { ...rest, [spacecraftId]: endpointId };
