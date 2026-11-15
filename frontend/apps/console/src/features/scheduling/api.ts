@@ -11,6 +11,7 @@ import {
   type Reader,
 } from "@/api";
 import { startEstimateReader } from "./start-limit.ts";
+import { expiredReader, supersededByReader } from "./lifecycle.ts";
 
 /** Contracts: docs/apogee/api/scheduling.md §4 (S3 drafts, S6 plans, plan detail with S2 demand). */
 const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/contact-plans`;
@@ -371,6 +372,9 @@ export const planDetailReader = d.object({
   /** U30 (api b122f667): placed bookings unanswered past the window, on any state; else null. */
   unconfirmed: (value: unknown, path?: string) =>
     value === undefined ? null : unconfirmedReader(value, path),
+  /** U61: the plan that replaced this one (a newer plan for the day); absent on older servers. */
+  superseded_by: (value: unknown, path?: string) =>
+    value === undefined ? null : supersededByReader(value, path),
 });
 export type PlanDetail = Decoded<typeof planDetailReader>;
 export type PlanIssue = PlanDetail["conflicts"][number];
@@ -560,6 +564,9 @@ const submitReader = d.object({
   plan_id: d.token,
   state: planState,
   outcome: d.oneOf(["pending_approval", "executing", "replayed"]),
+  /** U61: passes left out because they had already started; absent on older servers. */
+  expired: (value: unknown, path?: string) =>
+    value === undefined ? null : expiredReader(value, path),
 });
 export type SubmitResult = Decoded<typeof submitReader>;
 

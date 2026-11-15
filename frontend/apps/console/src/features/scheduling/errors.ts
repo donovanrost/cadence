@@ -8,6 +8,7 @@ import {
   type ApiError,
   type ErrorCode,
 } from "@/api";
+import { lifecycleRefusal } from "./lifecycle.ts";
 
 /** U36 race: `details.decided_by` names who decided the version (api, once shipped). */
 const decidedBy = d.object({ decided_by: d.object({ name: d.nullable(d.string) }) });
@@ -42,6 +43,9 @@ const UNCLEAR =
 
 export function planErrorText(error: ApiError): string {
   if (outcomeUnknown(error)) return UNCLEAR;
+  // U61: refusals with their own words (and an Open / Plan-the-rest action for the screen).
+  const refusal = lifecycleRefusal(error);
+  if (refusal) return refusal.text;
   // U36: after resubmission exists, this only means someone decided the version meanwhile.
   if (isError(error, "contact_plan_version_already_decided")) {
     const by = detailsOf(error, decidedBy)?.decided_by.name ?? null;

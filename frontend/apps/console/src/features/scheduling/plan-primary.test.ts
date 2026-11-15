@@ -28,6 +28,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   chain_head: null,
   superseded: null,
   repair_of: null,
+  superseded_by: null,
   ...over,
 });
 const gap = { requirement_id: "r1", requirement_version: 1, spacecraft_id: "sc1", why: [] };
