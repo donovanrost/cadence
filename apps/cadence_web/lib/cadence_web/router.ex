@@ -257,6 +257,15 @@ defmodule CadenceWeb.Router do
       :settings
     )
 
+    # §11c (B3, api; DECISIONS #79): the spacecraft list and New spacecraft go to the console's Setup.
+    get("/missions/:mission_id/spacecraft", LegacyMissionSetupRedirectController, :spacecraft)
+
+    get(
+      "/missions/:mission_id/spacecraft/new",
+      LegacyMissionSetupRedirectController,
+      :new_spacecraft
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -291,14 +300,6 @@ defmodule CadenceWeb.Router do
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-
-      live("/missions/:mission_id/spacecraft", HostPageLive, :index,
-        metadata: %{host_policy: :spacecraft}
-      )
-
-      live("/missions/:mission_id/spacecraft/new", HostPageLive, :new,
-        metadata: %{host_policy: :spacecraft}
-      )
 
       live("/missions/:mission_id/spacecraft/profiles", HostPageLive, :index,
         metadata: %{host_policy: :spacecraft}

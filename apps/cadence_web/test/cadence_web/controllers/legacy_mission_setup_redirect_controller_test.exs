@@ -33,4 +33,12 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
     assert redirected_to(get(c.conn, c.legacy <> "/settings/cadence.governance")) ==
              c.console <> "/setup/settings/cadence.governance"
   end
+
+  test "B3: the spacecraft list and New spacecraft go to Setup", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/spacecraft")) ==
+             c.console <> "/setup/spacecraft"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/new")) ==
+             c.console <> "/setup/spacecraft/new"
+  end
 end
