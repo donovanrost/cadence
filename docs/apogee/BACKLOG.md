@@ -302,7 +302,8 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | axe + keyboard traversal + focus order on every route, 1440 and 390, as admin and member; file per screen; **use ux's checklist docs/apogee/ux/a11y-checklist.md** (sheets 7 checks, per screen 5, hand-opened surfaces incl. everything since 11-13, 390-only) | qa | after the 11-15 live items |
-| Keyboard move of a dashboard widget (ux checklist gap) | dashboards + ux | — |
+| ~~Keyboard move of a dashboard widget~~ already existed (8e14ea148, 6247a1d37); focus after section Remove fixed (c7f4b1b5b, qa PASS) | dashboards | — |
+| Menu-button pattern (ux design-language §6) for MoreMenu + AccountMenu: focus into the menu, arrows/Home/End, Esc returns focus, Tab moves on, disabled items focusable with their reason | dashboards (kit; lead reviews) | — |
 | **Kit time range track (user bug, director 11-15):** RangeTrack.vue's pointerdown always starts a new range (:48), so grabbing an end collapses it, and 'select' only fires on pointerup (:57). Build: start/end handles moving one end (min 1 min), body drag moves the window (ux), empty-track drag draws new, live 'preview' updating From/To with commit on release and Esc to cancel, focusable handles with arrow nudges + aria-valuetext, tests; check all 5 callers (PlotPanel, Timeline, RangeSheet, BookPassSheet constraints, KitScreen) | dashboards (kit; lead reviews) + ux | — |
 | Fixes per screen | the screen's owner | qa's findings |
 | ~~Kit-level fixes (focus trap/return, scrollable regions, contrast on hatches)~~ done: `ApSheet` trap/return (86187004) and focusable scroll body (ffeecd46), ApPanel scroll bodies, hatch labels on a solid base (U30 #4). Sweep 11-13: scrolling ApTable and the ApTakeoverHeader steps row get tabindex, role and a name while they scroll (8fa0f9e9e) | lead | — |
