@@ -1679,6 +1679,16 @@ Operators know catalog revisions; the mission model revision is the compiled for
 - **Report body** (api's merged wire): a neutral tag `RISK LOW` / `RISK MEDIUM`, or `▲ RISK HIGH` (caution) for high.
   Then one line per section, "Commands: 3 added · 1 changed · 0 removed" (zero parts dropped). "Failing parts" are
   the replay's failed cases, by name and reason, under the verdict.
+- **Section kinds in words** (api's known vocabulary; an unknown kind reads its key with spaces):
+  - command → Commands; command_argument → Command arguments; command_argument_type → Argument types;
+    command_encoding → Command encodings; command_constraint → Command constraints; command_verifier → Command
+    verifiers.
+  - parameter → Telemetry points; parameter_type → Point types; container → Containers; calibrator → Calibrators;
+    algorithm → Algorithms; monitoring_policy → Monitoring policies.
+  - stream → Streams; service → Services; extension → Extensions; unit → Units; space_system → Space systems.
+- **Audit** (org audit, kind config): "Approved catalog rev 4 (comparison passed against rev 3; replay not run)" /
+  "Rejected catalog rev 4", with the reason in the reason column. Never "mission model", as on the screen.
+- A blank reject reason reads "Give a reason first." (not "Enter a reason").
 - **Decided:** the panel collapses to one line with the report behind `Show report`: "Approved by Ana R. at 11-15
   09:12Z." / "Rejected by Ana R. at 11-15 09:12Z: “Wrong FSW build.”" The row tag follows.
 - **Nothing to approve:** no panel, and no tag on the row. The index adds nothing.
@@ -1720,9 +1730,9 @@ mission.
 - **Actions** (only those the server offers, per viewer):
   - `Open pass` on each holder link.
   - `Catch up archive…` when the server offers the archive catch-up, with a confirm naming what it does.
-  - `Raise the cap…`, a configuration change in Setup › Data sources (a change set; org admins).
-  - Otherwise the caption "Operators can open what's holding it; raising the cap is an org admin's change in Setup ›
-    Data sources."
+  - No `Raise the cap…` (lead): the cap is deployment config (the journal's max bytes and its volume), shared by
+    every organization on the deployment, not an org setting. A caption says who: "Raising the cap is a deployment
+    change by whoever runs your Cadence, and it needs disk too."
   - Waiting is the default, so there's no button for it.
 - **Resolutions:** "Back under 60% at 03:30Z." The row fades. After a full spell, the line adds "Telemetry was
   refused from 03:21Z to 03:24Z." (refused, not lost, unless the server counts losses; then U47's frames-lost
