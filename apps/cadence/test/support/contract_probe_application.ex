@@ -10,7 +10,7 @@ defmodule Cadence.TestSupport.ContractProbeApplication do
   `Cadence.Applications.FixtureContributors`). Production publication and the release output check
   both forbid the remote, so it can't ship.
 
-  - `mission_contracts` (mission scope) and `runtime_contracts` (spacecraft scope) show what the
+  - `mission_contracts` (mission scope) and `spacecraft_contracts` (spacecraft scope) show what the
     host handed the remote (scope and ids) and the release serving it.
   - `record_probe` (mission scope) echoes a nonce. It changes nothing, so a smoke can count
     requests without side effects.
@@ -39,9 +39,9 @@ defmodule Cadence.TestSupport.ContractProbeApplication do
       order: 90
     },
     %{
-      id: "runtime_contracts",
+      id: "spacecraft_contracts",
       scope: :spacecraft,
-      query: "cadence.contract_probe.snapshot",
+      query: "cadence.contract_probe.spacecraft",
       order: 91
     }
   ]

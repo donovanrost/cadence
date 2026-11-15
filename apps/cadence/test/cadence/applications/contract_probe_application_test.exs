@@ -38,7 +38,7 @@ defmodule Cadence.Applications.ContractProbeApplicationTest do
     assert "contract_probe" in Enum.map(CatalogRegistry.all(), & &1.definition.application_key)
     assert ReleaseRegistry.validate() == :ok
 
-    for surface <- ["mission_contracts", "runtime_contracts"] do
+    for surface <- ["mission_contracts", "spacecraft_contracts"] do
       assert {:ok, %{release_id: "contract-probe-v1"}} =
                ReleaseRegistry.fetch("contract_probe", 1, surface, 1)
     end
@@ -46,6 +46,6 @@ defmodule Cadence.Applications.ContractProbeApplicationTest do
     assert {:ok, ContractProbeApplication.Action} = ActionProviderRegistry.fetch("contract_probe")
     query_ids = Enum.map(SurfaceProviderRegistry.contributions(), & &1.query_id)
     assert "cadence.contract_probe.mission" in query_ids
-    assert "cadence.contract_probe.snapshot" in query_ids
+    assert "cadence.contract_probe.spacecraft" in query_ids
   end
 end
