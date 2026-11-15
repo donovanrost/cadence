@@ -1572,6 +1572,11 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
     `Plan the rest of 11-16`.
   - Partial approval: "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked." The
     left-out passes are listed under `Show 36`, with spacecraft, station and AOS.
+  - Under "Needs a second person's approval" (governance `independent`):
+    - An admin's Submit answers "Sent for approval. This mission needs a second person's approval, so another org
+      admin approves it: Ana R. or Owen P." The plan then reads `AWAITING APPROVAL` (no auto-approve).
+    - Refusal `contact_plan_self_approval_forbidden`: "Not approved: you submitted this plan, so another org admin
+      has to approve it." There's no Approve button for the submitter in the first place. This is the backstop.
 
 ### U62 · Time range track interaction (ApTimeRange's RangeTrack; a user bug via the director) (dashboards builds / lead)
 Used by the telemetry plot, the Timeline, the dashboard range, Book a pass and the kit. dashboards' base behaviour
@@ -1598,4 +1603,7 @@ cancels; dragging on the empty track draws a new range; handles are focusable wi
 - **A live range** (`now−6h`): dragging the end handle back to the track's now-edge keeps the range live. Any other
   drag, or a body move, makes it absolute, and the picker then shows the absolute range (as a snapshot freezes one,
   Dashboards Q5).
+- **Cursors:** `ew-resize` on handles, `grab`/`grabbing` on the body, `crosshair` on the empty track.
+- **Future spans** (Book a pass): the track's span is `now … now+48 h`, and a handle can't go before now. The tick
+  labels are relative to now: "Now · +12h · +24h · +36h · +48h", where a past span reads "−24h … Now".
 - Nothing here needs the user.
