@@ -26,7 +26,15 @@ defmodule Cadence.Control.ConfigurationGeneration do
 
   alias Cadence.Activations
   alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Applications.SpacecraftConfiguration.{Active, CatalogAuthority, Drafts, Review}
+
+  alias Cadence.Applications.SpacecraftConfiguration.{
+    Active,
+    ApplicationInputs,
+    CatalogAuthority,
+    Drafts,
+    Review
+  }
+
   alias Cadence.Catalog
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Commanding.{Cancellation, RequestActivity}
@@ -401,15 +409,18 @@ defmodule Cadence.Control.ConfigurationGeneration do
       end
     end)
     |> case do
-      {:ok, items, rows, _cache} -> restamped(mission, items, rows)
+      {:ok, items, rows, cache} -> projected(mission, items, rows, cache)
       {:error, reason} -> {:error, reason}
     end
   end
 
-  # derive/5 projected each spacecraft's stored decom config, so their bases moved (11-15 drift fix).
-  defp restamped(mission, items, rows) do
-    :ok = Drafts.restamp_bases(mission, rows)
-    {:ok, items}
+  # derive/5 projected each spacecraft's stored decom config; its packet inputs follow (as a Save
+  # does), and then the revisions are stamped with the bases that moved (11-15 drift fixes).
+  defp projected(mission, items, rows, cache) do
+    with :ok <- ApplicationInputs.resync_packet_inputs(mission, rows, cache),
+         :ok <- Drafts.restamp_bases(mission, rows) do
+      {:ok, items}
+    end
   end
 
   defp next_binding_set(_mission, active, []), do: {:ok, active.binding_set}

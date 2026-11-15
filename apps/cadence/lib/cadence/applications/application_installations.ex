@@ -226,6 +226,29 @@ defmodule Cadence.Applications.ApplicationInstallations do
     end
   end
 
+  @doc """
+  An installed installation by id, without a caller scope: for the change-set apply, which was
+  authorized where it was submitted and holds the configuration lock (packet-input resync, 11-15).
+  """
+  # todo(authz): unscoped by design for the apply; callers must already be authorized.
+  @spec fetch_installed_by_id(binary(), binary()) ::
+          {:ok, ApplicationInstallation.t()} | {:error, term()}
+  def fetch_installed_by_id(organization_id, installation_id) do
+    case Repo.get_by(InstallationRow,
+           organization_id: organization_id,
+           application_installation_id: installation_id
+         ) do
+      %InstallationRow{lifecycle_state: "installed"} = row ->
+        {:ok, InstallationRow.to_domain(row)}
+
+      %InstallationRow{} ->
+        {:error, :application_installation_not_installed}
+
+      nil ->
+        {:error, :application_not_installed}
+    end
+  end
+
   @spec fetch_installed(Scope.t(), HostContext.t(), binary()) ::
           {:ok, ApplicationInstallation.t()} | {:error, fetch_error()}
   def fetch_installed(%Scope{} = current_scope, %HostContext{} = host_context, application_key)

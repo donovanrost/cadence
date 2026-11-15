@@ -223,6 +223,60 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
     end
   end
 
+  @doc """
+  After a change-set apply derived `rows` (configuration revisions), re-points each of their
+  spacecraft's packet inputs whose selection no longer matches the new document, as a Save does
+  (`sync_existing_packets/5`), from the per-catalog inputs the apply already loaded (`cache`,
+  `Review.cached_inputs/3`): one read of the inputs, no per-spacecraft catalog decode (11-15).
+  """
+  @spec resync_packet_inputs(map(), [struct()], map()) :: :ok | {:error, term()}
+  def resync_packet_inputs(_mission, [], _cache), do: :ok
+
+  def resync_packet_inputs(mission, rows, cache) do
+    documents = Map.new(rows, &{&1.spacecraft_id, &1.document})
+
+    mission.organization_id
+    |> PacketBindings.list_for_mission(mission.mission_id,
+      application_key: "telemetry_decom",
+      spacecraft_ids: Map.keys(documents)
+    )
+    |> Enum.reject(&selection_matches?(&1, documents[&1.spacecraft_id]))
+    |> Enum.reduce_while(:ok, fn input, :ok ->
+      document = documents[input.spacecraft_id]
+
+      case resync_input(mission, input, document, cache[document["catalog_revision_id"]]) do
+        {:ok, _configuration} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, {reason, input.spacecraft_id}}}
+      end
+    end)
+  end
+
+  defp resync_input(mission, input, document, %{telemetry: telemetry}) do
+    packets =
+      for packet <- telemetry.packet_definitions,
+          packet.apid in document["handled_apids"],
+          do: packet.packet_definition_id
+
+    PacketBindings.resync(
+      mission.organization_id,
+      HostContext.spacecraft(mission.mission_id, input.spacecraft_id),
+      input,
+      %{
+        input_id: input.input_id,
+        input_version: input.input_version,
+        expected_configuration_version: input.configuration_version,
+        catalog_revision_id: document["catalog_revision_id"],
+        source_endpoint_ref: document["telemetry_source_endpoint_id"],
+        selected_packet_ids: packets,
+        enabled: document["telemetry_enabled"]
+      },
+      telemetry
+    )
+  end
+
+  defp resync_input(_mission, _input, _document, nil),
+    do: {:error, :spacecraft_configuration_catalog_not_loaded}
+
   defp selection_matches?(input, document) do
     input.enabled == document["telemetry_enabled"] and
       input.bindings |> Enum.map(& &1.apid) |> Enum.uniq() |> Enum.sort() ==

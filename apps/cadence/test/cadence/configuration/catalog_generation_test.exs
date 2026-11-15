@@ -2,6 +2,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   @moduledoc "Catalog-path generations (DECISIONS #36/#65)."
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Applications.{ApplicationInstallations, HostContext, PacketBindings}
   alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts, Review}
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
@@ -11,6 +12,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.Runtime.{MissionCoordinator, MissionModelPlanDecoder, MissionRuntimeSpec}
   alias Cadence.Telemetry.PacketDefinition
 
@@ -128,6 +130,48 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     assert snapshot.external_changes
     assert snapshot.document["handled_apids"] == [42, 43]
     assert snapshot.document["catalog_revision_id"] == c.rev2
+  end
+
+  # 11-15: Save re-points a spacecraft's packet inputs at its new catalog; a change-set move left
+  # them on the old one. The apply now does it from the catalog it already loaded.
+  test "a change-set catalog move re-points the spacecraft's packet inputs", c do
+    host = HostContext.spacecraft(c.mission.mission_id, c.craft.spacecraft_id)
+
+    {:ok, installation} =
+      ApplicationInstallations.fetch_installed(c.scope, host, "telemetry_decom")
+
+    {:ok, config} =
+      TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+
+    assert {:ok, input} =
+             PacketBindings.replace(c.scope, host, installation.application_installation_id, %{
+               input_id: "telemetry-fields",
+               input_version: 1,
+               catalog_revision_id: c.rev1,
+               source_endpoint_ref: config.source_endpoint_id,
+               selected_packet_ids: packet_ids(c, c.rev1, [42])
+             })
+
+    profile = profile!(c, c.rev1)
+    apply!(c, [update("spacecraft_profile", profile, "catalog_revision_id", c.rev2)])
+
+    assert [moved] =
+             PacketBindings.list_for_mission(c.org, c.mission.mission_id,
+               application_key: "telemetry_decom",
+               spacecraft_ids: [c.craft.spacecraft_id]
+             )
+
+    assert moved.configuration_version == input.configuration_version + 1
+    assert Enum.map(moved.bindings, & &1.catalog_revision_id) == [c.rev2]
+    assert Enum.map(moved.bindings, & &1.apid) == [42]
+    # Its basis moved with it, and the revision was stamped with the new one.
+    refute Drafts.snapshot(c.mission, c.craft).external_changes
+  end
+
+  defp packet_ids(c, catalog_id, apids) do
+    {:ok, revision} = Cadence.Catalog.fetch_revision(c.org, c.mission.mission_id, catalog_id)
+    {:ok, telemetry} = TelemetryProjection.load(c.org, c.mission.mission_id, revision)
+    for p <- telemetry.packet_definitions, p.apid in apids, do: p.packet_definition_id
   end
 
   defp assert_projected(c, catalog) do
