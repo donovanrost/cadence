@@ -3,6 +3,8 @@ defmodule CadenceWeb.Console.EventAPITest do
 
   import Ecto.Query
 
+  alias Cadence.OperationalEvents
+  alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
   alias Cadence.SpacecraftStore.SpacecraftRow
@@ -138,5 +140,64 @@ defmodule CadenceWeb.Console.EventAPITest do
              |> get_json("/events?#{window()}&kind=contact&limit=1")
              |> json_response(200)
              |> get_in(["data", "events"])
+  end
+
+  test "the default kinds skip housekeeping rows in SQL; kind=data still returns them", c do
+    # domain 11-15 21:08Z: per-write watermark rows (~92% of dev) timed the Timeline out.
+    now = DateTime.utc_now()
+
+    range =
+      "from=#{DateTime.add(now, -86_400 * 3_650)}&to=#{DateTime.add(now, 60)}"
+      |> String.replace("+", "%2B")
+
+    events = fn kinds ->
+      c
+      |> get_json("/events?#{range}&kind=#{kinds}&limit=200")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+    end
+
+    housekeeping? = &String.match?(&1["raw_kind"], ~r/^source_|watermark/)
+
+    for i <- 1..3 do
+      at = DateTime.add(now, -60 * i)
+
+      {:ok, _} =
+        %{
+          event_id: "watermark-#{i}-#{System.unique_integer([:positive])}",
+          organization_id: c.org.organization_id,
+          mission_id: c.mission.mission_id,
+          occurred_at: at,
+          recorded_at: at,
+          effective_at: at,
+          category: :data_source,
+          kind: :source_watermark_advanced,
+          severity: :info,
+          subject: %{kind: :data_source, id: "questdb"},
+          current: %{complete_through: DateTime.to_iso8601(at)}
+        }
+        |> OperationalEvent.new()
+        |> OperationalEvents.persist_event()
+    end
+
+    data = events.("data")
+    assert Enum.any?(data, housekeeping?)
+
+    default = events.("limit,flight_event,contact,command,config,operator")
+    assert default != []
+    refute Enum.any?(default, housekeeping?)
+
+    hour =
+      "from=#{DateTime.add(now, -3_600)}&to=#{DateTime.add(now, 60)}"
+      |> String.replace("+", "%2B")
+
+    density =
+      c
+      |> get_json("/events/density?#{hour}&bucket_s=600&kind=data")
+      |> json_response(200)
+
+    assert Enum.sum(
+             for b <- density["data"]["buckets"], k <- ~w(critical caution nominal info), do: b[k]
+           ) > 0
   end
 end

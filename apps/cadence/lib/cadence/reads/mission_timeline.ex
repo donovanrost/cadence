@@ -195,7 +195,8 @@ defmodule Cadence.Reads.MissionTimeline do
       :severity,
       :cursor,
       :from_occurred_at,
-      :to_occurred_at
+      :to_occurred_at,
+      :exclude_housekeeping
     ])
     |> Keyword.put(:limit, source_limit)
     |> Keyword.put(:order, :desc)
@@ -203,7 +204,7 @@ defmodule Cadence.Reads.MissionTimeline do
 
   defp operational_read_opts(opts, source_limit) do
     opts
-    |> Keyword.take([:kind, :from_occurred_at, :to_occurred_at, :cursor])
+    |> Keyword.take([:kind, :from_occurred_at, :to_occurred_at, :cursor, :exclude_housekeeping])
     |> Keyword.put(:category, operational_categories(Keyword.get(opts, :category)))
     |> Keyword.put(:time_axis, :effective)
     |> Keyword.put(:limit, source_limit)

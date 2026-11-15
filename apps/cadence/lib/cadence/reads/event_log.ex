@@ -76,6 +76,7 @@ defmodule Cadence.Reads.EventLog do
         spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
         config_revisions: true,
         off_plan_bookings: true,
+        exclude_housekeeping: skip_housekeeping?(opts[:kinds]),
         limit: remaining,
         cursor: cursor
       )
@@ -110,6 +111,7 @@ defmodule Cadence.Reads.EventLog do
         spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
         config_revisions: true,
         off_plan_bookings: true,
+        exclude_housekeeping: skip_housekeeping?(opts[:kinds]),
         limit: @density_cap
       )
 
@@ -270,6 +272,10 @@ defmodule Cadence.Reads.EventLog do
     |> Cadence.SpacecraftStore.list_spacecraft(mission_id)
     |> Map.new(&{&1.spacecraft_id, {&1.display_name, &1.scid}})
   end
+
+  # 21:08Z 500s (domain): the default Timeline excludes `data`, so its rows needn't be read.
+  defp skip_housekeeping?([_ | _] = kinds), do: "data" not in kinds
+  defp skip_housekeeping?(_all), do: false
 
   defp kind_selected?(_event, nil), do: true
   defp kind_selected?(_event, []), do: true
