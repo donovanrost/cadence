@@ -112,4 +112,14 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
     assert redirected_to(get(c.conn, c.legacy <> "/catalog/revisions/rev_missing")) ==
              c.console <> "/setup/catalog"
   end
+
+  test "B9: routing rules, New and one rule go to Setup comms", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/routing")) == c.console <> "/setup/comms"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/routing/new")) ==
+             c.console <> "/setup/comms"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/routing/rule_1")) ==
+             c.console <> "/setup/comms"
+  end
 end

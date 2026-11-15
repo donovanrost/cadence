@@ -381,6 +381,16 @@ defmodule CadenceWeb.Router do
       :catalog_revision
     )
 
+    # §11c (B9, api; DECISIONS #79): routing rules go to the console's Setup comms.
+    get("/missions/:mission_id/comms/routing", LegacyMissionSetupRedirectController, :comms)
+    get("/missions/:mission_id/comms/routing/new", LegacyMissionSetupRedirectController, :comms)
+
+    get(
+      "/missions/:mission_id/comms/routing/:routing_rule_id",
+      LegacyMissionSetupRedirectController,
+      :comms
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -430,18 +440,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/catalog/artifacts/:artifact_id", HostPageLive, :show,
         metadata: %{host_policy: :catalog}
-      )
-
-      live("/missions/:mission_id/comms/routing", HostPageLive, :index,
-        metadata: %{host_policy: :comms}
-      )
-
-      live("/missions/:mission_id/comms/routing/new", HostPageLive, :new,
-        metadata: %{host_policy: :comms}
-      )
-
-      live("/missions/:mission_id/comms/routing/:routing_rule_id", HostPageLive, :show,
-        metadata: %{host_policy: :comms}
       )
 
       live("/missions/:mission_id/comms/validation", HostPageLive, :index,

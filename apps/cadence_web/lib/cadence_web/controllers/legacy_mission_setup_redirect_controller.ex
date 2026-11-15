@@ -18,6 +18,7 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
       (one page; the bare show, `/identity` and `/edit` stay, L17/L22)
   - B6 `/missions/:id/catalog/revisions/:id` → `…/setup/catalog/<its database>` (looked up in the
       signed-in organization), else `…/setup/catalog`
+  - B9 `/missions/:id/comms/routing[/new | /:id]` → `…/setup/comms` (its Routing rules tab)
 
   Slugs come from the signed-in organization (`CadenceWeb.ConsolePaths`), falling back to
   `/console`.
