@@ -636,9 +636,16 @@ defmodule Cadence.Contacts.ProviderReservations do
   Sets when the reconciler reads the reservation next: `now` + its band (`poll_interval_s/2`). A
   write of `next_due_at` alone, so it stays HOT. Nothing for a reservation the reconciler no longer
   polls (terminal, or a provisional failure past its LOS).
+
+  Only if nobody wrote since this struct was read (its `updated_at` still matches, api-ops): a
+  cancel or a window move landing between the reconciler's write and this one left the row due
+  now, and a band from the stale struct would hide it for up to 10 min.
   """
   @spec schedule_next_poll(ProviderReservation.t(), DateTime.t()) :: :ok
-  def schedule_next_poll(%ProviderReservation{} = reservation, %DateTime{} = now) do
+  def schedule_next_poll(
+        %ProviderReservation{updated_at: %DateTime{} = written_at} = reservation,
+        %DateTime{} = now
+      ) do
     if polled?(reservation, now) do
       next_due_at = DateTime.add(now, poll_interval_s(reservation, now), :second)
 
@@ -646,13 +653,17 @@ defmodule Cadence.Contacts.ProviderReservations do
         where:
           row.organization_id == ^reservation.organization_id and
             row.mission_id == ^reservation.mission_id and
-            row.provider_reservation_id == ^reservation.provider_reservation_id
+            row.provider_reservation_id == ^reservation.provider_reservation_id and
+            row.updated_at == ^written_at
       )
       |> Repo.update_all(set: [next_due_at: next_due_at])
     end
 
     :ok
   end
+
+  # Never written (no stamp): nothing to compare against, so it stays due now.
+  def schedule_next_poll(%ProviderReservation{}, %DateTime{}), do: :ok
 
   defp polled?(%ProviderReservation{lifecycle_state: state} = reservation, now) do
     Atom.to_string(state) in @nonterminal_states or

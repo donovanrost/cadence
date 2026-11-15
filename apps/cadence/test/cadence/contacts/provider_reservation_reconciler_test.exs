@@ -376,6 +376,11 @@ defmodule Cadence.Contacts.ProviderReservationReconcilerTest do
                )
 
       assert next_due_at(reservation) == nil
+
+      # The race (api-ops): a schedule from the struct read before that write doesn't overwrite
+      # its due-now.
+      ProviderReservations.schedule_next_poll(current, DateTime.utc_now())
+      assert next_due_at(reservation) == nil
     end
   end
 
