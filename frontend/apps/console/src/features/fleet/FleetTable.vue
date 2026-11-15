@@ -7,7 +7,12 @@ import { nextContact } from "./filters.ts";
 import { fleetOpState, fleetStateWord } from "./matrix.ts";
 
 /** Fleet table: Name links to the spacecraft (Investigate); state is mark + word (+ worst point). */
-defineProps<{ rows: readonly FleetSpacecraft[]; total: number }>();
+defineProps<{
+  rows: readonly FleetSpacecraft[];
+  total: number;
+  /** The table is its own scroll box (FleetScreen decides: OpsLists.md › Fleet, option A). */
+  boxed?: boolean;
+}>();
 /** Last TLM and Next contact move every 10 s, so 500 rows don't re-render each second. */
 const now = useCoarseNow();
 
@@ -56,9 +61,10 @@ const rowState = (sc: FleetSpacecraft) =>
     :columns="columns"
     :rows="rows"
     :row-key="(sc) => sc.id"
-    caption="Fleet"
+    caption="Fleet table"
     :row-state="rowState"
     :virtual="{ rowHeight: ROW_HEIGHT }"
+    :scroll-box="boxed"
   >
     <template #cell-name="{ row }">
       <RouterLink

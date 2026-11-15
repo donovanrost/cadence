@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, type ComponentPublicInstance } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useMissionScope } from "@/shell/index.ts";
+import { useMissionScope, useSmallScreen } from "@/shell/index.ts";
 import { plural, ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import type { Fleet, FleetSpacecraft } from "./api.ts";
 import TelemetryDegraded from "./TelemetryDegraded.vue";
@@ -21,6 +21,7 @@ import {
 } from "./filters.ts";
 import { fleetSubset } from "./stats.ts";
 import { useFleet } from "./useFleet.ts";
+import { useTableBox } from "./useTableBox.ts";
 
 /** Fleet (OpsLists.md §Fleet): the filterable, accessible twin of the Now matrix. */
 const scope = useMissionScope();
@@ -35,6 +36,23 @@ const views = [
   { value: "matrix", label: "Matrix" },
 ] as const;
 const filter = computed(() => parseFilter(route.query));
+
+/**
+ * OpsLists.md › Fleet, option A: with room, the table panel fills to the bottom and is the one
+ * vertical scroller (headings and Name stay). With under 360px for it, the screen scrolls
+ * instead (option C). Phones get the row list, and the matrix keeps its layout.
+ */
+const screen = ref<HTMLElement | null>(null);
+const panel = ref<ComponentPublicInstance | null>(null);
+const small = useSmallScreen();
+const tableView = computed(() => view.value === "table" && !small.value);
+const boxed = useTableBox(screen, panel, tableView);
+const screenClass = computed(() =>
+  boxed.value ? "" : tableView.value ? "overflow-auto" : "max-console:overflow-auto",
+);
+const panelClass = computed(() =>
+  boxed.value ? "min-h-0 flex-1" : tableView.value ? "flex-none" : "console:min-h-0 console:flex-1",
+);
 
 const go = (query: Parameters<typeof router.replace>[0]) =>
   router.replace(query).catch((error: unknown) => console.error("Navigation failed", error));
@@ -61,7 +79,7 @@ const title = computed(() => {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
+  <div ref="screen" class="flex min-h-0 flex-1 flex-col gap-3" :class="screenClass">
     <ApPageHeader :label="`${scope.mission.name} · fleet`" :title="title">
       <ApSegmented
         :model-value="view"
@@ -77,11 +95,12 @@ const title = computed(() => {
         <FleetFilters :filter="filter" :spacecraft="value.spacecraft" @change="setFilter" />
         <FleetStatStrip :fleet="narrowed(value).subset" />
         <ApPanel
+          ref="panel"
           index="F1"
           :title="view === 'table' ? 'Fleet table' : 'Fleet matrix'"
           pane
           flush
-          class="console:min-h-0 console:flex-1"
+          :class="panelClass"
         >
           <ApEmptyState
             v-if="narrowed(value).rows.length === 0"
@@ -92,6 +111,7 @@ const title = computed(() => {
           <template v-else-if="view === 'table'">
             <FleetTable
               class="max-md:hidden"
+              :boxed="boxed"
               :rows="narrowed(value).rows"
               :total="value.counts.total"
             />
