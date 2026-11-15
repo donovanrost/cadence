@@ -25,7 +25,7 @@ export const manifest = defineApplicationManifest({
     applicationKey: "organization_admin",
     version: 1,
     displayName: "Organization Administration",
-    description: "Manage organization membership, providers, notifications, and administration.",
+    description: "Show your notifications and mark them read.",
     installableScopes: ["user"] as const,
   },
   surfaces: SURFACE_CONTRACTS.map((surface) => ({

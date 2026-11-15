@@ -70,8 +70,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
       application_key: @application_key,
       version: @version,
       display_name: "Organization Administration",
-      description:
-        "Manage organization membership, providers, notifications, and administration.",
+      description: "Show your notifications and mark them read.",
       trust: :first_party,
       installation_policy: :platform,
       availability: :available,

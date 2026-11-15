@@ -365,7 +365,7 @@ const expected = [
     manifest: organizationAdmin,
     package: { packageId: "cadence.organization-admin", version: 1 },
     displayName: "Organization Administration",
-    description: "Manage organization membership, providers, notifications, and administration.",
+    description: "Show your notifications and mark them read.",
     installableScopes: ["user"] as const,
     releaseId: () => "organization-admin-v1",
     surfaces: [
