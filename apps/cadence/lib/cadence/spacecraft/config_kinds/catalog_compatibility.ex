@@ -60,7 +60,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.CatalogCompatibility do
            builder.catalog_impact(organization_id, mission_id, touched) do
       change_items(changes, Map.get(impact, :labels, %{})) ++
         waiting_items(impact.waiting) ++
-        in_flight_items(impact.in_flight) ++ pending_items(impact.pending)
+        in_flight_items(impact.in_flight) ++
+        pending_items(impact.pending) ++
+        unapproved_items(Map.get(impact, :unapproved, []), Map.get(impact, :labels, %{}))
     else
       _nothing -> []
     end
@@ -81,6 +83,22 @@ defmodule Cadence.Spacecraft.ConfigKinds.CatalogCompatibility do
             "#{label.(to)} instead of #{label.(from)}."
       })
     end)
+  end
+
+  # #92 (a): a generation can't introduce a mission model nobody approved (Control.ModelApprovalGate).
+  defp unapproved_items(targets, labels) do
+    for target <- targets do
+      item(:mission_model_not_approved, target.spacecraft_ids, true, %{
+        details: %{
+          catalog_revision_id: target.catalog_revision_id,
+          mission_model_revision_id: target.mission_model_revision_id
+        },
+        sentence:
+          "Catalog #{Map.get(labels, target.catalog_revision_id, target.catalog_revision_id)}'s " <>
+            "mission model isn't approved yet, so #{count(target.spacecraft_ids)} can't move to it. " <>
+            "An organization administrator approves it first."
+      })
+    end
   end
 
   defp waiting_items([]), do: []

@@ -6,6 +6,7 @@ defmodule Cadence.Catalog do
 
   import Ecto.Query
 
+  alias Cadence.Persistence.JsonDocument
   alias Ecto.Changeset
 
   alias Cadence.Catalog.{
@@ -316,6 +317,33 @@ defmodule Cadence.Catalog do
     |> Enum.reduce(%{}, fn %ImportRun{catalog_database_id: catalog_database_id} = run, acc ->
       Map.put_new(acc, catalog_database_id, run)
     end)
+  end
+
+  @doc """
+  Who imported a mission-model revision: the user ids recorded on the catalog revisions that name
+  it (empty when no importer was recorded). The model approval's importer/approver separation
+  (`MissionModels.RevisionDecisions`, DECISIONS #92 a) reads it.
+  """
+  @spec model_importers(binary(), binary(), binary()) :: [binary()]
+  def model_importers(organization_id, mission_id, mission_model_revision_id) do
+    from(row in RevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.mission_model_revision_id == ^mission_model_revision_id,
+      select: row.created_by
+    )
+    |> Repo.all()
+    |> Enum.map(&recorded_user_id/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp recorded_user_id(created_by) do
+    case JsonDocument.unwrap_value(created_by) do
+      %{"user_id" => id} when is_binary(id) and id != "" -> id
+      %{"id" => id} when is_binary(id) and id != "" -> id
+      _not_recorded -> nil
+    end
   end
 
   @spec fetch_revision(binary(), binary(), binary()) :: {:ok, Revision.t()} | {:error, term()}

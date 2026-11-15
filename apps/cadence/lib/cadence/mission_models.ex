@@ -130,6 +130,19 @@ defmodule Cadence.MissionModels do
     |> Enum.map(&RevisionRow.to_domain/1)
   end
 
+  @doc "The status of each of `revision_ids` (one query, no documents decoded): `%{id => status}`."
+  @spec revision_statuses(binary(), binary(), [binary()]) :: %{binary() => atom()}
+  def revision_statuses(_organization_id, _mission_id, []), do: %{}
+
+  def revision_statuses(organization_id, mission_id, revision_ids) do
+    RevisionRow
+    |> where([row], row.mission_id == ^mission_id and row.revision_id in ^revision_ids)
+    |> organization_filter(organization_id)
+    |> select([row], {row.revision_id, row.status})
+    |> Repo.all()
+    |> Map.new(fn {id, status} -> {id, String.to_existing_atom(status)} end)
+  end
+
   @spec fetch_plan(binary() | nil, binary(), binary(), atom()) ::
           {:ok, RuntimePlan.t()} | {:error, term()}
   def fetch_plan(organization_id, mission_id, revision_id, target)
@@ -226,12 +239,12 @@ defmodule Cadence.MissionModels do
   end
 
   @doc "Approves a candidate revision; see `Cadence.MissionModels.RevisionDecisions`."
-  defdelegate approve_revision(organization_id, mission_id, revision_id, actor, opts \\ []),
+  defdelegate approve_revision(scope, mission_id, revision_id, comparison_report_id, opts \\ []),
     to: RevisionDecisions,
     as: :approve
 
   @doc "Rejects a revision; see `Cadence.MissionModels.RevisionDecisions`."
-  defdelegate reject_revision(organization_id, mission_id, revision_id, actor, opts \\ []),
+  defdelegate reject_revision(scope, mission_id, revision_id, opts \\ []),
     to: RevisionDecisions,
     as: :reject
 

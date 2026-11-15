@@ -9,7 +9,7 @@ defmodule Cadence.Control.MissionModelPromotion do
   """
 
   alias Cadence.Catalog.FleetSnapshot
-  alias Cadence.Control.SpacecraftModelBindings
+  alias Cadence.Control.{ModelApprovalGate, SpacecraftModelBindings}
 
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.Catalog.MissionModel.{Revision, RuntimePlan}
@@ -21,8 +21,23 @@ defmodule Cadence.Control.MissionModelPromotion do
   @doc false
   def validate_activation_metadata(organization_id, mission_id, binding_set, metadata) do
     if FleetSnapshot.fleet?(metadata),
-      do: SpacecraftModelBindings.validate(organization_id, mission_id, metadata),
+      do: validate_fleet(organization_id, mission_id, binding_set, metadata),
       else: validate_model_metadata(organization_id, mission_id, binding_set, metadata)
+  end
+
+  # The fleet branch checked each spacecraft's catalog and model but never approval or
+  # qualification (#92 a, director 11-15); a revision it introduces now needs both.
+  defp validate_fleet(organization_id, mission_id, binding_set, metadata) do
+    with :ok <- SpacecraftModelBindings.validate(organization_id, mission_id, metadata),
+         {:ok, entries} <- FleetSnapshot.entries(metadata) do
+      ModelApprovalGate.check(
+        organization_id,
+        mission_id,
+        entries,
+        ModelApprovalGate.running_entries(organization_id, mission_id),
+        binding_set
+      )
+    end
   end
 
   defp validate_model_metadata(organization_id, mission_id, binding_set, metadata) do

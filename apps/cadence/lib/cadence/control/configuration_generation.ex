@@ -38,7 +38,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
   alias Cadence.Catalog
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Commanding.{Cancellation, RequestActivity}
-  alias Cadence.Control.{ConfigurationApids, ConfigurationSwitches}
+  alias Cadence.Control.{ConfigurationApids, ConfigurationSwitches, ModelApprovalGate}
   alias Cadence.Governance
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels.CatalogApids
@@ -310,7 +310,8 @@ defmodule Cadence.Control.ConfigurationGeneration do
       labels: revision_labels(organization_id, mission_id, changes),
       waiting: RequestActivity.waiting(organization_id, mission_id, endpoints),
       in_flight: RequestActivity.in_flight(organization_id, mission_id, endpoints),
-      pending: pending_configuration(organization_id, mission_id, changed)
+      pending: pending_configuration(organization_id, mission_id, changed),
+      unapproved: ModelApprovalGate.unapproved_targets(organization_id, mission_id, changes)
     }
   end
 
@@ -482,7 +483,16 @@ defmodule Cadence.Control.ConfigurationGeneration do
   defp activate(input, active, binding_set, changed) do
     mission_id = input.set.mission_id
 
-    with {:ok, fleet} <- FleetSnapshot.store(mission_id, Map.merge(active.entries, changed)),
+    # A revision this generation introduces must be approved and its comparison passed (#92 a).
+    with :ok <-
+           ModelApprovalGate.check(
+             input.set.organization_id,
+             mission_id,
+             changed,
+             active.entries,
+             binding_set
+           ),
+         {:ok, fleet} <- FleetSnapshot.store(mission_id, Map.merge(active.entries, changed)),
          metadata = metadata(fleet, input, changed),
          {:ok, request} <-
            ManagementActivations.request_from_change_set(%{

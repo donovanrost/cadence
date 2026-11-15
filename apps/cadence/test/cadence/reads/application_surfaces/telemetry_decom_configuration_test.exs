@@ -13,6 +13,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecomConfigurationTest do
   }
 
   alias Cadence.Auth.Scope
+  alias Cadence.MissionModelApproval
   alias Cadence.MissionModels
   alias Cadence.Missions
   alias Cadence.Reads.ApplicationSurfaces
@@ -23,7 +24,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecomConfigurationTest do
 
   setup do
     {spacecraft, revision, endpoint} =
-      TelemetryDecomFixtures.setup_imported_mission!(@organization_id, @mission_id)
+      TelemetryDecomFixtures.setup_imported_mission!(@organization_id, @mission_id,
+        approve: false
+      )
 
     scope = TelemetryDecomFixtures.user_scope(@organization_id, "decom-configuration")
     host = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
@@ -113,11 +116,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecomConfigurationTest do
     assert page["lifecycle_actions"]["enable"]["disabled"]
 
     assert {:ok, _} =
-             MissionModels.approve_revision(
+             MissionModelApproval.approve!(
                @organization_id,
                @mission_id,
-               c.revision.mission_model_revision_id,
-               %{"kind" => "user", "id" => c.scope.user.user_id}
+               c.revision.mission_model_revision_id
              )
 
     assert {:ok, page} = Configuration.load(c.scope, c.host, c.mission)

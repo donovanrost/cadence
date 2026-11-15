@@ -17,6 +17,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecom.Review
   alias Cadence.Applications.TelemetryDecomFixtures
+  alias Cadence.MissionModelApproval
   alias Cadence.MissionModels
 
   @organization_id "org-decom-data"
@@ -279,7 +280,10 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
   describe "activation preflight" do
     test "requires mission model approval as well as configuration and compilation" do
-      {spacecraft, revision, endpoint} = setup_imported_mission!()
+      {spacecraft, revision, endpoint} =
+        TelemetryDecomFixtures.setup_imported_mission!(@organization_id, @mission_id,
+          approve: false
+        )
       scope = user_scope("preflight-ready")
       host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
 
@@ -316,11 +320,10 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                Enum.find(unapproved.checks, &(&1.id == "mission-model-approval"))
 
       assert {:ok, _} =
-               MissionModels.approve_revision(
+               MissionModelApproval.approve!(
                  @organization_id,
                  @mission_id,
-                 revision.mission_model_revision_id,
-                 %{"kind" => "user", "id" => scope.user.user_id}
+                 revision.mission_model_revision_id
                )
 
       assert {:ok, ready} = ApplicationPreflight.load(scope, host_context, definition)

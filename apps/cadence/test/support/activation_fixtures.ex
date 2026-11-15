@@ -4,6 +4,7 @@ defmodule Cadence.ActivationFixtures do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Catalog.MissionModel.{Compiler, Declaration, Layer, Reference}
   alias Cadence.Control.MissionModelPromotion
+  alias Cadence.MissionModelApproval
   alias Cadence.MissionModels
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
@@ -114,11 +115,10 @@ defmodule Cadence.ActivationFixtures do
   defp compile_and_approve_model(binding_set) do
     with {:ok, compilation} <- MissionModels.compile_layers([model_layer(binding_set)]),
          {:ok, revision} <-
-           MissionModels.approve_revision(
+           MissionModelApproval.approve!(
              binding_set.organization_id,
              binding_set.mission_id,
-             compilation.revision.revision_id,
-             %{"kind" => "test_fixture", "id" => "activation-fixture"}
+             compilation.revision.revision_id
            ) do
       {:ok, revision, compilation.plans}
     end

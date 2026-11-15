@@ -87,6 +87,17 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
 
+  # DECISIONS #92 (a): an organization administrator approves a mission-model revision, never a
+  # service; the importer/approver separation lives in MissionModels.RevisionDecisions.
+  def authorize(%Scope{actor_kind: :service}, :approve_mission_model, _params),
+    do: {:error, :human_mission_model_approver_required}
+
+  def authorize(%Scope{} = current_scope, :approve_mission_model, %{
+        organization_id: organization_id
+      }) do
+    authorize_organization_capability(current_scope, organization_id, :organization_admin)
+  end
+
   def authorize(%Scope{} = current_scope, :approve_contact_plans, %{
         organization_id: organization_id
       }) do

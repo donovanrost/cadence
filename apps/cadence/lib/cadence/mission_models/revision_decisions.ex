@@ -1,59 +1,104 @@
 defmodule Cadence.MissionModels.RevisionDecisions do
   @moduledoc """
   Approving or rejecting a mission-model revision (`MissionModels.approve_revision/5`,
-  `reject_revision/5`). Approval needs a candidate (or already approved) revision whose four
-  runtime plans are ready. Either decision records who made it: the actor's kind and id are
-  required (lead 11-15).
+  `reject_revision/4`): the human gate a revision passes before a generation may introduce it
+  (DECISIONS #92 (a), director 11-15; `Control.ModelApprovalGate`).
+
+  - Only an organization administrator decides (`:approve_mission_model`), never a service.
+  - Approval names the comparison report the approver saw. It must be this revision's and must
+    have passed; a report whose replay didn't run (no qualification corpus) passes, and says so.
+  - Under 'independent' approval (the mission's governance setting) whoever imported the revision
+    can't approve it (`:mission_model_self_approval_forbidden`). A revision whose importer wasn't
+    recorded can be approved by any administrator; the approval records that.
+  - Approval needs a candidate (or already approved) revision whose four runtime plans are ready.
   """
 
   import Ecto.Query
 
+  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Catalog
   alias Cadence.Catalog.MissionModel.Revision
+  alias Cadence.Governance.ActivationPolicy
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{RevisionRow, RuntimePlanRow}
+  alias Cadence.MissionModels.{Comparison, RevisionRow, RuntimePlanRow}
   alias Cadence.Repo
 
-  @spec approve(binary(), binary(), binary(), map(), keyword()) ::
+  @spec approve(Scope.t(), binary(), binary(), binary(), keyword()) ::
           {:ok, Revision.t()} | {:error, term()}
-  def approve(organization_id, mission_id, revision_id, actor, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(revision_id) and
-             is_map(actor) do
-    with :ok <- require_actor(actor),
+  def approve(%Scope{} = scope, mission_id, revision_id, comparison_report_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(revision_id) and is_binary(comparison_report_id) do
+    organization_id = scope.organization_id
+
+    with :ok <- authorize(scope, mission_id),
+         {:ok, actor} <- actor(scope),
          {:ok, %Revision{} = revision} <-
            MissionModels.fetch_revision(organization_id, mission_id, revision_id),
          :ok <- require_approvable(revision),
          :ok <- require_ready_plans(organization_id, mission_id, revision_id),
-         {:ok, row} <- fetch_revision_row(organization_id, mission_id, revision_id),
-         {:ok, approved_row} <-
-           row
-           |> RevisionRow.status_changeset(
-             :approved,
-             actor,
-             normalized_datetime(Keyword.get(opts, :at, DateTime.utc_now()))
-           )
-           |> Repo.update() do
-      {:ok, RevisionRow.to_domain(approved_row)}
+         {:ok, comparison} <- Comparison.fetch(organization_id, mission_id, comparison_report_id),
+         :ok <- passed_for(comparison, revision_id),
+         {:ok, importers} <- independent(organization_id, mission_id, revision_id, actor),
+         {:ok, row} <- fetch_revision_row(organization_id, mission_id, revision_id) do
+      evidence =
+        Map.merge(actor, %{
+          "comparison_report_id" => comparison_report_id,
+          "replay" => get_in(comparison, ["replay", "status"]),
+          "importer_recorded" => importers != []
+        })
+
+      row
+      |> RevisionRow.status_changeset(:approved, evidence, at(opts))
+      |> Repo.update()
+      |> to_domain()
     end
   end
 
-  @spec reject(binary(), binary(), binary(), map(), keyword()) ::
+  @spec reject(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, Revision.t()} | {:error, term()}
-  def reject(organization_id, mission_id, revision_id, actor, opts \\ [])
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(revision_id) and
-             is_map(actor) do
-    with :ok <- require_actor(actor),
-         {:ok, row} <- fetch_revision_row(organization_id, mission_id, revision_id),
-         {:ok, rejected_row} <-
-           row
-           |> RevisionRow.status_changeset(
-             :rejected,
-             actor,
-             normalized_datetime(Keyword.get(opts, :at, DateTime.utc_now()))
-           )
-           |> Repo.update() do
-      {:ok, RevisionRow.to_domain(rejected_row)}
+  def reject(%Scope{} = scope, mission_id, revision_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(revision_id) do
+    with :ok <- authorize(scope, mission_id),
+         {:ok, actor} <- actor(scope),
+         {:ok, row} <- fetch_revision_row(scope.organization_id, mission_id, revision_id) do
+      row
+      |> RevisionRow.status_changeset(:rejected, actor, at(opts))
+      |> Repo.update()
+      |> to_domain()
     end
   end
+
+  defp authorize(%Scope{} = scope, mission_id) do
+    Policy.authorize(scope, :approve_mission_model, %{
+      organization_id: scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp actor(%Scope{actor_kind: :user, user: %{user_id: id} = user}) when is_binary(id),
+    do: {:ok, %{"kind" => "user", "id" => id, "display_name" => user.display_name}}
+
+  defp actor(%Scope{}), do: {:error, :human_mission_model_approver_required}
+
+  defp passed_for(%{"candidate_revision_id" => id, "status" => "passed"}, id), do: :ok
+
+  defp passed_for(%{"candidate_revision_id" => id}, id),
+    do: {:error, :mission_model_comparison_not_passed}
+
+  defp passed_for(_comparison, _id), do: {:error, :mission_model_comparison_mismatch}
+
+  defp independent(organization_id, mission_id, revision_id, %{"id" => actor_id}) do
+    importers = Catalog.model_importers(organization_id, mission_id, revision_id)
+    separation = ActivationPolicy.evidence(organization_id, mission_id)["separation_of_duties"]
+
+    if separation == true and actor_id in importers,
+      do: {:error, :mission_model_self_approval_forbidden},
+      else: {:ok, importers}
+  end
+
+  defp to_domain({:ok, row}), do: {:ok, RevisionRow.to_domain(row)}
+  defp to_domain({:error, reason}), do: {:error, reason}
+
+  defp at(opts), do: opts |> Keyword.get(:at, DateTime.utc_now()) |> normalized_datetime()
 
   defp fetch_revision_row(organization_id, mission_id, revision_id) do
     case Repo.get_by(RevisionRow,
@@ -65,14 +110,6 @@ defmodule Cadence.MissionModels.RevisionDecisions do
       row -> {:ok, row}
     end
   end
-
-  # lead 11-15: a decision names who made it. approved_by/rejected_by were stored empty when a
-  # caller passed %{}; now a decision needs the actor's kind and id.
-  defp require_actor(%{"kind" => kind, "id" => id})
-       when is_binary(kind) and kind != "" and is_binary(id) and id != "",
-       do: :ok
-
-  defp require_actor(_actor), do: {:error, :mission_model_decision_actor_required}
 
   defp require_approvable(%Revision{status: :candidate}), do: :ok
   defp require_approvable(%Revision{status: :approved}), do: :ok

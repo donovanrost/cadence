@@ -5,6 +5,7 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
+  alias Cadence.MissionModelApproval
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.SemanticRuntime
@@ -157,13 +158,24 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
         database.catalog_database_id,
         artifact,
         "cadence_yaml",
-        metadata: %{"revision_label" => revision_label}
+        metadata: %{"revision_label" => revision_label},
+        requested_by: Keyword.get(opts, :requested_by, %{})
       )
 
     {:ok, completed} = Catalog.execute_enqueued_run(run.import_run_id)
 
     {:ok, revision} =
       Catalog.fetch_revision_by_import_run(organization_id, mission_id, completed.import_run_id)
+
+    # Approved, as a catalog a test moves spacecraft onto would be (#92 a's gate); the gate's own
+    # tests pass `approve: false`.
+    if Keyword.get(opts, :approve, true),
+      do:
+        MissionModelApproval.approve!(
+          organization_id,
+          mission_id,
+          revision.mission_model_revision_id
+        )
 
     revision
   end
@@ -175,11 +187,10 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
 
   defp qualify_revision!(organization_id, mission_id, revision) do
     {:ok, _approved_model} =
-      Cadence.MissionModels.approve_revision(
+      MissionModelApproval.approve!(
         organization_id,
         mission_id,
-        revision.mission_model_revision_id,
-        %{"kind" => "test_fixture", "id" => "telemetry-decom"}
+        revision.mission_model_revision_id
       )
 
     {:ok, plans} =

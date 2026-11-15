@@ -10,6 +10,7 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition, as: LimitDefinition
+  alias Cadence.MissionModelApproval
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -93,11 +94,10 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
     assert {:ok, compilation} = Cadence.MissionModels.compile_layers([layer])
 
     assert {:ok, revision} =
-             Cadence.MissionModels.approve_revision(
+             MissionModelApproval.approve!(
                organization_id,
                mission_id,
-               compilation.revision.revision_id,
-               %{"kind" => "test_fixture", "id" => "control-plane-api"}
+               compilation.revision.revision_id
              )
 
     revision

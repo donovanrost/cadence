@@ -257,9 +257,12 @@ defmodule Cadence.MissionModels.Comparison do
         run_case(qualification_case, baseline_plans, candidate_plans)
       end)
 
+    # Option C (director 11-15): with no approved qualification cases replay doesn't run, and the
+    # report says so ("not_run", qualification_corpus_required) for the approver to see; the static
+    # comparison and the human approval are the gate. A mission that has cases must pass them.
     status =
       cond do
-        cases == [] -> :failed
+        cases == [] -> :not_run
         Enum.all?(results, &(&1["status"] == "passed")) -> :passed
         true -> :failed
       end
@@ -356,7 +359,7 @@ defmodule Cadence.MissionModels.Comparison do
   end
 
   defp build_report(mission_id, candidate, baseline, binding_set_id, version, static, replay) do
-    status = if replay.status in [:not_required, :passed], do: :passed, else: :failed
+    status = if replay.status in [:not_required, :not_run, :passed], do: :passed, else: :failed
 
     report = %{
       "engine" => "mission_model_comparison_v1",

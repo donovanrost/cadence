@@ -8,10 +8,11 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
   alias Cadence.Control.Activations, as: ControlActivations
-  alias Cadence.Control.{Configuration, ConfigurationRollback}
+  alias Cadence.Control.{Configuration, ConfigurationRollback, ModelApprovalGate}
   alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.MissionModelApproval
   alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.Runtime.{MissionCoordinator, MissionModelPlanDecoder, MissionRuntimeSpec}
   alias Cadence.Telemetry.PacketDefinition
@@ -183,6 +184,72 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     snapshot = Drafts.snapshot(c.mission, c.craft)
     refute snapshot.external_changes
     assert snapshot.document["catalog_revision_id"] == catalog
+  end
+
+  # DECISIONS #92 (a): the change-set path introduced model revisions without approval.
+  test "a change set can't move spacecraft onto a mission model nobody approved", c do
+    rev3 =
+      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
+        revision_label: "Rev 3",
+        approve: false
+      )
+
+    profile = profile!(c, c.rev1)
+
+    {:ok, staged} =
+      stage(c, [
+        update("spacecraft_profile", profile, "catalog_revision_id", rev3.catalog_revision_id)
+      ])
+
+    assert {:ok, %{checks: checks}} =
+             Configuration.preview(c.scope, c.mission.mission_id, staged.change_set_id)
+
+    assert %{blocking: true, sentence: sentence, details: details} =
+             checks
+             |> Enum.flat_map(& &1.items)
+             |> Enum.find(&(&1[:reason] == :mission_model_not_approved))
+
+    assert sentence =~ "mission model isn't approved yet, so 1 spacecraft can't move to it."
+    assert details.mission_model_revision_id == rev3.mission_model_revision_id
+    assert {:error, {:holds_blocking, _preview}} = submit(c, staged)
+
+    MissionModelApproval.approve!(c.org, c.mission.mission_id, rev3.mission_model_revision_id)
+    assert {:ok, %{state: :applied}} = submit(c, staged)
+  end
+
+  test "the per-spacecraft review can't introduce a mission model nobody approved", c do
+    rev3 =
+      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
+        revision_label: "Rev 3",
+        approve: false
+      )
+
+    result = try_configure(c.scope, c.mission, c.craft, rev3.catalog_revision_id)
+    assert {:error, {:mission_model_revision_not_approved, [id]}} = result
+    assert id == rev3.mission_model_revision_id
+
+    MissionModelApproval.approve!(c.org, c.mission.mission_id, id)
+
+    assert {:ok, %{status: :succeeded}} =
+             try_configure(c.scope, c.mission, c.craft, rev3.catalog_revision_id)
+  end
+
+  test "a running model nobody approved is grandfathered: other changes still apply", c do
+    {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    {:ok, entry} = FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
+    running = entry["mission_model"]["revision_id"]
+
+    Repo.query!(
+      "UPDATE mission_model_revisions SET status = 'candidate' WHERE revision_id = $1",
+      [running]
+    )
+
+    # The gate would refuse it if a generation introduced it...
+    assert ModelApprovalGate.unapproved(c.org, c.mission.mission_id, [running]) == [running]
+
+    # ...but it's running, so a change set that keeps the spacecraft on it still applies.
+    assert {:ok, %{state: :applied}} =
+             apply!(c, [switch(c.craft.spacecraft_id, "commanding_enabled", false)])
   end
 
   test "waiting commands are canceled with catalog_changed; a command in flight blocks the apply",
@@ -429,6 +496,14 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     id
   end
 
+  defp switch(id, key, value),
+    do: %{
+      kind: "spacecraft",
+      action: :update,
+      entity_id: id,
+      changes: [%{path: key, value: value}]
+    }
+
   defp update(kind, id, path, value),
     do: %{kind: kind, action: :update, entity_id: id, changes: [%{path: path, value: value}]}
 
@@ -449,6 +524,10 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   end
 
   defp configure(scope, mission, craft, catalog) do
+    {:ok, %{status: :succeeded}} = try_configure(scope, mission, craft, catalog)
+  end
+
+  defp try_configure(scope, mission, craft, catalog) do
     current = Drafts.snapshot(mission, craft)
 
     document =
@@ -468,6 +547,6 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
       Review.request_many(scope, mission.mission_id, %{craft.spacecraft_id => token})
 
     {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
-    {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
+    ControlActivations.execute(approved)
   end
 end

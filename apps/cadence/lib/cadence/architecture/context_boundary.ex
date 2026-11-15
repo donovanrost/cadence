@@ -91,6 +91,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/semantic_runtime/commit_row.ex" => :runtime,
     "lib/cadence/semantic_runtime/checkpoint.ex" => :runtime,
     "lib/cadence/control/mission_model_promotion.ex" => :catalog,
+    "lib/cadence/control/model_approval_gate.ex" => :catalog,
     "lib/cadence/extensions/registry.ex" => :composition,
     "lib/cadence/applications/registry.ex" => :composition,
     "lib/cadence/applications/organization_admin.ex" => :composition,
