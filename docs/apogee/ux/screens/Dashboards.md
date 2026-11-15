@@ -137,7 +137,8 @@ The rendering engine differs, but the look is the same.
   the dashboard's range, no y labels, the stale hatch across the whole plot, and the contact bands and event marks
   over it. A centred `text-3` caption reads "No samples in this range." (the hatch's own word, "samples"). It never
   says why: Cadence can't tell telemetry that was dropped from telemetry that never came (U20). Tiles, tables and
-  state widgets keep their plain message.
+  state widgets keep their plain message. A **live** range draws `now − window … now`, rolling with the
+  refresh, with the now-line, because a live pass with no samples matters most.
 
 ## Chart tokens (K2): Apogee values for the 29 base `--chart-color-*`
 Alpha variants derive from these, so only the bases change. They're RGB triplets.
