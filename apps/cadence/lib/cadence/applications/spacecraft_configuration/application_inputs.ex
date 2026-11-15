@@ -229,6 +229,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
   (`sync_existing_packets/5`), from the per-catalog inputs the apply already loaded (`cache`,
   `Review.cached_inputs/3`): one read of the inputs, no per-spacecraft catalog decode (11-15).
   """
+  @not_installed [:application_installation_not_installed, :application_not_installed]
+
   @spec resync_packet_inputs(map(), [struct()], map()) :: :ok | {:error, term()}
   def resync_packet_inputs(_mission, [], _cache), do: :ok
 
@@ -246,6 +248,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
 
       case resync_input(mission, input, document, cache[document["catalog_revision_id"]]) do
         {:ok, _configuration} -> {:cont, :ok}
+        # A leftover input of an app no longer installed is inert; a Save skips it too (api-ops).
+        {:error, reason} when reason in @not_installed -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, {reason, input.spacecraft_id}}}
       end
     end)
@@ -280,7 +284,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
   defp selection_matches?(input, document) do
     input.enabled == document["telemetry_enabled"] and
       input.bindings |> Enum.map(& &1.apid) |> Enum.uniq() |> Enum.sort() ==
-        document["handled_apids"] and
+        (document["handled_apids"] || []) |> Enum.uniq() |> Enum.sort() and
       Enum.all?(
         input.bindings,
         &(&1.catalog_revision_id == document["catalog_revision_id"] and

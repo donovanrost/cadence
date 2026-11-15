@@ -155,12 +155,17 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
     assert {:ok, %{checks: checks}} =
              Configuration.preview(c.scope, c.mission.mission_id, on.change_set_id)
 
-    assert %{blocking: true, sentence: sentence} =
+    assert %{blocking: true, sentence: sentence, spacecraft_ids: [^id], details: details} =
              checks
              |> Enum.flat_map(& &1.items)
              |> Enum.find(&(&1[:reason] == :telemetry_app_not_installed))
 
-    assert sentence =~ "the telemetry app isn't installed on it. Install it first."
+    assert sentence ==
+             "Telemetry can't be turned on for #{c.craft.display_name}: the telemetry app " <>
+               "isn't installed on it. Install the app in Setup › Apps first."
+
+    assert %{app_key: "telemetry_decom", app_name: name} = details
+    assert is_binary(name)
     assert {:error, {:holds_blocking, _preview}} = submit(c, on)
     assert ConfigurationSwitches.not_installed(c.org, c.mission.mission_id, [id]) == [id]
   end

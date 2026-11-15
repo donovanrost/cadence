@@ -10,15 +10,16 @@ defmodule Cadence.Spacecraft.ConfigKinds.SwitchCompatibility do
   - `telemetry_disabled` (acknowledge): after the apply its telemetry isn't decoded.
   - `telemetry_packet_inputs_required` (blocking): telemetry turned on for a spacecraft whose
     configuration names no packets to decode.
-  - `telemetry_app_not_installed` (blocking): telemetry turned on for a spacecraft without the
-    telemetry app installed. Install it first: a change set doesn't install applications
-    (director 11-15).
+  - `telemetry_app_not_installed` (blocking, one item for every such spacecraft): telemetry
+    turned on without the telemetry app installed. A change set doesn't install applications
+    (director 11-15). `details`: `app_key`, `app_name` (the console links Setup › Apps). U63.
 
   Never staged. The configured generation builder reads what would change.
   """
 
   @behaviour Cadence.Platform.ConfigKind
 
+  alias Cadence.Applications.Registry
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Platform.ConfigurationSettings
 
@@ -63,7 +64,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SwitchCompatibility do
       Enum.flat_map(impact.commanding_off, &commanding_items/1) ++
         Enum.map(impact.telemetry_off, &telemetry_off_item/1) ++
         Enum.map(impact.missing_inputs, &missing_inputs_item/1) ++
-        Enum.map(impact.not_installed, &not_installed_item/1)
+        not_installed_items(impact.not_installed)
     else
       _nothing -> []
     end
@@ -111,13 +112,35 @@ defmodule Cadence.Spacecraft.ConfigKinds.SwitchCompatibility do
             "packets to decode. Set its handled APIDs first."
       })
 
-  defp not_installed_item(%{id: id, name: name}),
-    do:
-      item(:telemetry_app_not_installed, id, true, %{
+  @telemetry_app "telemetry_decom"
+
+  defp not_installed_items([]), do: []
+
+  defp not_installed_items([first | _] = spacecraft) do
+    [
+      item(:telemetry_app_not_installed, first.id, true, %{
+        spacecraft_ids: Enum.map(spacecraft, & &1.id),
+        details: %{app_key: @telemetry_app, app_name: app_name(@telemetry_app)},
         sentence:
-          "Telemetry can't be turned on for #{name}: the telemetry app isn't installed on it. " <>
-            "Install it first."
+          "Telemetry can't be turned on for #{who(spacecraft)}: the telemetry app isn't " <>
+            "installed on #{if length(spacecraft) == 1, do: "it", else: "them"}. " <>
+            "Install the app in Setup › Apps first."
       })
+    ]
+  end
+
+  # ux U63: up to three named in full; more are counted (the console lists them under Show).
+  defp who([one]), do: one.name
+  defp who([a, b]), do: "#{a.name} and #{b.name}"
+  defp who([a, b, c]), do: "#{a.name}, #{b.name} and #{c.name}"
+  defp who(spacecraft), do: "#{length(spacecraft)} spacecraft"
+
+  defp app_name(key) do
+    case Registry.fetch(key) do
+      {:ok, definition} -> definition.display_name
+      {:error, _reason} -> nil
+    end
+  end
 
   defp commands(1), do: "1 command waiting"
   defp commands(n), do: "#{n} commands waiting"
