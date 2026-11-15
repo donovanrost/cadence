@@ -1,6 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import {
   codeOf,
+  isError,
   decoders,
   outcomeUnknown,
   request,
@@ -337,6 +338,14 @@ export function failureOutcome(
         return { changed: false, sentence: `Nothing was ${verb}. ${parts.join(" · ")}` };
     }
   }
+  // U63: the server's sentence already says "Not applied: …" and names the spacecraft (ux).
+  if (
+    (isError(error, "telemetry_app_not_installed") ||
+      isError(error, "telemetry_packet_inputs_required")) &&
+    "message" in error &&
+    error.message
+  )
+    return { changed: false, sentence: error.message };
   return { changed: false, sentence: `Nothing was ${verb}. ${rejectionSentence(error)}` };
 }
 

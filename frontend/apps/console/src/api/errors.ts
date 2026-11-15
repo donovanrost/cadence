@@ -102,6 +102,9 @@ export const errorCodes = [
   "application_unavailable",
   "surface_not_found",
   "host_session_mismatch",
+  // U63 (api 396c59fd5): an apply refused per spacecraft; the message names them (ux's words).
+  "telemetry_app_not_installed",
+  "telemetry_packet_inputs_required",
   // Commanding
   "command_catalog_not_active",
   "command_not_found",

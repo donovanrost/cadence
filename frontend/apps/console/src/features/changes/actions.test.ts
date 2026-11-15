@@ -295,3 +295,34 @@ describe("#65 blocking holds", () => {
     ).toContain("It can't be acknowledged");
   });
 });
+
+describe("U63 apply refusals (api 396c59fd5)", () => {
+  it("shows the server's sentence alone, without a second 'Nothing was applied'", () => {
+    const message =
+      "Not applied: the telemetry app isn't installed on EARENDIL-312. Install the app in Setup › Apps first.";
+    expect(
+      failureOutcome(
+        {
+          kind: "conflict",
+          code: "telemetry_app_not_installed",
+          message,
+          details: { spacecraft_ids: ["sc_1"] },
+        },
+        "applied",
+      ),
+    ).toEqual({ changed: false, sentence: message });
+    const inputs =
+      "Not applied: telemetry can't be turned on for EARENDIL-312 until its packet inputs are set up.";
+    expect(
+      failureOutcome(
+        {
+          kind: "conflict",
+          code: "telemetry_packet_inputs_required",
+          message: inputs,
+          details: null,
+        },
+        "applied",
+      ).sentence,
+    ).toBe(inputs);
+  });
+});
