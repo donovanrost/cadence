@@ -1617,3 +1617,15 @@ cancels; dragging on the empty track draws a new range; handles are focusable wi
 - **Future spans** (Book a pass): the track's span is `now … now+48 h`, and a handle can't go before now. The tick
   labels are relative to now: "Now · +12h · +24h · +36h · +48h", where a past span reads "−24h … Now".
 - Nothing here needs the user.
+
+### U63 · Preview hold `telemetry_app_not_installed` (domain's change-set parity, db20d6bb8) (domain / api / fe-setup)
+Blocking. The item shape is telemetry_packet_inputs_required's. Name the spacecraft (U25: full names, never "-313").
+- One: "Telemetry can't be turned on for EARENDIL-312: the telemetry app isn't installed on it. Install the app in
+  Setup › Apps first."
+- Several (up to 3 named): "Telemetry can't be turned on for EARENDIL-312, EARENDIL-313 and EARENDIL-314: the
+  telemetry app isn't installed on them. Install the app in Setup › Apps first." Above 3: "…for 12 spacecraft…",
+  with the names under `Show`.
+- The link `Open Setup › Apps` goes to `M/setup/apps/<telemetry app key>`, the app's own page, where install
+  happens. If the app has a display name, it replaces "the telemetry app" ("the Telemetry decom app isn't
+  installed").
+- Check label (the HOLD row's word): `Telemetry app not installed`.
