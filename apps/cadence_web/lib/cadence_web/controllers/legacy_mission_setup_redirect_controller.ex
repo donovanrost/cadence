@@ -11,6 +11,8 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
       (artifacts stay, L18)
   - B7 `/missions/:id/comms` → `…/setup/comms`; `…/comms/transports[/new]` → `…/setup/comms/transports`;
       `…/comms/transports/:id` → `…/setup/comms/transports/:id`
+  - B8 `/missions/:id/comms/ground-stations[/new]` → `…/setup/stations`;
+      `…/comms/ground-stations/:id[/edit]` → `…/setup/stations/:id`
 
   Slugs come from the signed-in organization (`CadenceWeb.ConsolePaths`), falling back to
   `/console`.
@@ -51,6 +53,11 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
 
   def transport(conn, %{"transport_id" => id} = params),
     do: go(conn, params, "/setup/comms/transports/" <> ConsolePaths.segment(id))
+
+  def stations(conn, params), do: go(conn, params, "/setup/stations")
+
+  def station(conn, %{"ground_station_id" => id} = params),
+    do: go(conn, params, "/setup/stations/" <> ConsolePaths.segment(id))
 
   defp go(conn, %{"mission_id" => mission_id}, rest) do
     org = conn.assigns.current_scope && conn.assigns.current_scope.organization_id

@@ -78,4 +78,18 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
     assert redirected_to(get(c.conn, c.legacy <> "/comms/transports/tr_1")) ==
              c.console <> "/setup/comms/transports/tr_1"
   end
+
+  test "B8: ground stations, New, one station and its edit go to Setup stations", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/ground-stations")) ==
+             c.console <> "/setup/stations"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/ground-stations/new")) ==
+             c.console <> "/setup/stations"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/ground-stations/gs_1")) ==
+             c.console <> "/setup/stations/gs_1"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/ground-stations/gs_1/edit")) ==
+             c.console <> "/setup/stations/gs_1"
+  end
 end
