@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { plural, ApButton, ApCallout, ApChip, ApPanel, ApSelect } from "@/ui";
+import { formatCount, plural, ApButton, ApCallout, ApChip, ApPanel, ApSelect } from "@/ui";
 import {
   FleetMatrix,
   fleetStates,
@@ -48,6 +48,18 @@ const keepLeft = () =>
   set({ explicit: [...props.query.explicit, ...left.value.map((sc) => sc.id)] });
 const dropLeft = () =>
   (dropped.value = new Set([...dropped.value, ...left.value.map((sc) => sc.id)]));
+
+/**
+ * The target list (lead, scale 11-15): rendered only while its <details> is open, and capped at
+ * LIST_CAP rows until 'Show all', so 1,000 targets don't cost 6,000 nodes on every Compose mount.
+ */
+const LIST_CAP = 200;
+const listOpen = ref(false);
+const showAll = ref(false);
+const onToggle = (e: Event) => {
+  if (e.target instanceof HTMLDetailsElement) listOpen.value = e.target.open;
+};
+const listed = computed(() => (showAll.value ? props.targets : props.targets.slice(0, LIST_CAP)));
 
 const planes = computed(() =>
   [...new Set(props.fleet.flatMap((sc) => (sc.plane === null ? [] : [sc.plane])))].sort(
@@ -172,12 +184,12 @@ function addOne(id: string) {
           />
         </div>
       </details>
-      <details v-if="targets.length">
+      <details v-if="targets.length" @toggle="onToggle">
         <summary class="ap-label cursor-pointer">
           Show {{ plural(targets.length, "target") }}
         </summary>
-        <ul class="m-0 max-h-48 list-none overflow-auto p-0 pt-2">
-          <li v-for="sc in targets" :key="sc.id" class="flex gap-3 py-0.5 font-mono text-sm">
+        <ul v-if="listOpen" class="m-0 max-h-48 list-none overflow-auto p-0 pt-2">
+          <li v-for="sc in listed" :key="sc.id" class="flex gap-3 py-0.5 font-mono text-sm">
             <RouterLink
               :to="{ name: 'ops.spacecraft', params: { scId: sc.scid } }"
               class="text-readout no-underline hover:underline"
@@ -186,6 +198,11 @@ function addOne(id: string) {
             <span class="text-text-3">SCID {{ sc.scid }}</span>
             <span class="text-text-3">{{ sc.profile?.name ?? "no profile" }}</span>
             <span v-if="revisions?.get(sc.id)" class="text-text-4">{{ revisions.get(sc.id) }}</span>
+          </li>
+          <li v-if="!showAll && targets.length > LIST_CAP" class="pt-1">
+            <ApButton size="compact" variant="ghost" @click="showAll = true"
+              >Show all {{ formatCount(targets.length) }}</ApButton
+            >
           </li>
         </ul>
       </details>
