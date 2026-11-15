@@ -1,0 +1,50 @@
+# Accessibility checklist: interactions and newer surfaces (ux, for qa's §6 pass)
+
+qa's run 2 (`qa/a11y/README.md`) covered axe, h1 and landmarks, and Tab traversal, read-only, on 36 screens. This
+list covers what that method can't see: what happens when something is **opened, confirmed or closed**. It also
+covers surfaces built after 11-13. The rules are design-language §6. Each line is one pass/fail check. Run at 1440
+and 390 as admin and member, as before, and record results in the screen's `qa/a11y/<screen>.md`.
+
+## A. Every sheet and dialog (check each one listed in C)
+1. **Opens with focus inside it:** on the first field. For a **danger** sheet, focus goes to the safe button
+   (`Cancel`, `Keep contact`), never to the danger action.
+2. **Named:** the dialog's accessible name is its title (`aria-labelledby`).
+3. **Trapped:** Tab and Shift+Tab cycle inside it, never reaching the page behind.
+4. **Esc closes** it without acting.
+5. **Focus returns** to the control that opened it, after Cancel, Esc **and** after the action. If that control
+   is gone (the row resolved), focus goes to the row's new state line or the list heading, never to `<body>`.
+6. **Required-field errors** ("Give a reason first.") are announced: `aria-invalid` plus `aria-describedby` on the
+   field, not colour alone.
+7. A **disabled action's reason** is reachable by keyboard (focusable text, or `aria-describedby` on the button),
+   not only on hover.
+
+## B. Every screen
+1. Tab order follows reading order: rail → top bar → page header actions → panels left→right, top→bottom.
+2. Status is shape + colour + word. A ▲/◆ mark is `aria-hidden` and its word is read. Where there's no word (matrix
+   cells, plot marks, out-of-range cells), there's an `aria-label`.
+3. Disclosures (`Technical details`, `Show`, `Show all 98`, Timeline folds, dashboard sections) are buttons or
+   `<summary>` with `aria-expanded`, toggled by Enter and Space.
+4. Live updates (Now rows arriving or resolving, counts changing) never move focus. A new crit flash honours
+   `prefers-reduced-motion`.
+5. Charts are `role="img"` with a sentence, not "chart".
+
+## C. Surfaces to check by hand (opened, confirmed, closed)
+| Screen | What to open or do | Specific checks |
+| --- | --- | --- |
+| Now | A U45–U57 row: `Mark as seen`, `Acknowledge`, `Retry…` / `Close without retry…` (U54), `Discard…` (U49) | A on each sheet; after acting, focus lands on the row's resolved line; rows arriving above don't steal focus; the row title link comes before its buttons |
+| Contacts › selected pass | `Cancel contact…` / `End contact now…` (U55); `Release commands…` (U46); `Release` (booking); `Book a pass` | A, with focus on `Keep contact` / `Cancel`; the blocks (U45–U50, U57) read in order with each `Technical details` collapsed; refusal lines appear without moving focus |
+| Book a pass sheet | Search → pick an offer → book | Offers are a list with names; a `LISTENER OVERLAP` offer reads its sentence (U58) before the book button |
+| Compose | Catalog listbox; `VERIFIERS DIFFER` block `Show` (U51); Per-target table | ↑↓ in the listbox, ↵ adds; `Show` lists names and keeps focus on the list; the chip's tag is read |
+| Approve | The own-values table (per-target values); `Show all 98` | An out-of-range cell is focusable, with ▲ and the reason in its name; the table has a caption naming the command |
+| Uplink & verify | Per-point verifier plots (U51); a target row's `OWN VALUES` line | Each plot has a sentence and a caption naming its targets |
+| Dashboards viewer | Kiosk (Esc out); Present (←/→, Space, Esc); a section's disclosure; `⋯` menu | Keys work with focus anywhere in the takeover; after Esc, focus returns to `⋯ › Kiosk`; collapsed sections say `3 WIDGETS` |
+| Dashboards edit | `Add section` sheet; a heading's `Edit` and `⋯` (Move up/down/Remove section…); Remove's in-place callout; `Save…` | A; a disabled Move's reason ("It's already first.") is read; after Remove, focus goes to the next heading; **can a widget be moved without a mouse?** (record it as a gap if not) |
+| Admin › data source bindings | `Switch…` (U53): type-to-confirm; `History` | A; the confirm input is labelled `Type default_flight_telemetry to confirm`; Switch's disabled reason is read; when counts change the line is announced (polite) and the typed name clears |
+| Mission settings | Per-field `Override` / `Change` / `Reset to inherited`; a ratio field's hint and `Use 90%` | `Use 90%` follows the field in Tab order; Reset's outcome line is announced |
+| Contact planning | Requirement page: `Plan 11-14`, the inline `book a pass` link; occurrence `Close…` / `Cancel…` | A; the inline link is distinguishable without colour (underline) |
+| Timeline | A fold group; a row's link | Fold buttons have `aria-expanded` and the group's label ("Telemetry stored") |
+
+## D. 390 only
+1. The bottom tab bar is reachable and in order after the page content, and it doesn't cover the focused element
+   (scroll into view).
+2. Sheets are full-height, and focus doesn't land behind the on-screen keyboard.
