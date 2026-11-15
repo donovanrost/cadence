@@ -252,6 +252,48 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
              try_configure(c.scope, c.mission, c.craft, rev3.catalog_revision_id)
   end
 
+  test "an approval's default baseline is the database's previous model, skipping imports without one",
+       c do
+    {:ok, rev1} = Cadence.Catalog.fetch_revision(c.org, c.mission.mission_id, c.rev1)
+    db = rev1.catalog_database_id
+
+    middle =
+      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
+        catalog_database_id: db,
+        revision_label: "Rev 2b",
+        yaml: yaml_with_apid(43)
+      )
+
+    latest =
+      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
+        catalog_database_id: db,
+        revision_label: "Rev 3b",
+        yaml: yaml_with_apid(44)
+      )
+
+    assert ModelApprovalGate.default_baseline(
+             c.org,
+             c.mission.mission_id,
+             latest.mission_model_revision_id
+           ) ==
+             middle.mission_model_revision_id
+
+    # An import in between that produced no model is skipped.
+    Repo.query!(
+      "UPDATE catalog_revisions SET mission_model_revision_id = NULL WHERE catalog_revision_id = $1",
+      [
+        middle.catalog_revision_id
+      ]
+    )
+
+    # (The catalog's own answer: the fleet fallback would also give rev 1's model here.)
+    assert Cadence.Catalog.previous_model_revision(
+             c.org,
+             c.mission.mission_id,
+             latest.mission_model_revision_id
+           ) == rev1.mission_model_revision_id
+  end
+
   test "a running model nobody approved is grandfathered: other changes still apply", c do
     {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
     {:ok, entry} = FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
@@ -512,6 +554,20 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     )
 
     id
+  end
+
+  defp yaml_with_apid(apid) do
+    """
+    packets:
+      - name: P#{apid}
+        apid: #{apid}
+        items:
+          - name: v
+            data_type: uint
+            bit_offset: 0
+            bit_size: 8
+    commands: []
+    """
   end
 
   defp switch(id, key, value),

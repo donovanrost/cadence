@@ -115,13 +115,23 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
     revision_label = Keyword.get(opts, :revision_label, "Rev 1")
     suffix = Integer.to_string(System.unique_integer([:positive]))
 
-    {:ok, database} =
-      Catalog.create_database(organization_id, mission_id, %{
-        name: "Bus " <> suffix,
-        slug: "bus-" <> suffix,
-        catalog_family: :combined,
-        default_importer_key: "cadence_yaml"
-      })
+    # catalog_database_id: import into an existing database (its next revision number).
+    database =
+      case Keyword.get(opts, :catalog_database_id) do
+        nil ->
+          {:ok, database} =
+            Catalog.create_database(organization_id, mission_id, %{
+              name: "Bus " <> suffix,
+              slug: "bus-" <> suffix,
+              catalog_family: :combined,
+              default_importer_key: "cadence_yaml"
+            })
+
+          database
+
+        id ->
+          %{catalog_database_id: id}
+      end
 
     yaml =
       Keyword.get(

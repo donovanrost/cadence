@@ -359,7 +359,14 @@ defmodule Cadence.Catalog do
            |> limit(1)
            |> Repo.one() do
       scoped
-      |> where([row], row.catalog_database_id == ^database and row.revision_number < ^number)
+      # A catalog revision that didn't change the model (nil or this same revision) isn't a
+      # baseline: comparing against itself reads as 'nothing changed' (api-ops).
+      |> where(
+        [row],
+        row.catalog_database_id == ^database and row.revision_number < ^number and
+          not is_nil(row.mission_model_revision_id) and
+          row.mission_model_revision_id != ^mission_model_revision_id
+      )
       |> order_by([row], desc: row.revision_number)
       |> limit(1)
       |> select([row], row.mission_model_revision_id)

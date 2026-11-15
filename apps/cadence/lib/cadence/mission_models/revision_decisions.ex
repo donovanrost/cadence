@@ -39,6 +39,10 @@ defmodule Cadence.MissionModels.RevisionDecisions do
     end
   end
 
+  # Approving an approved revision again changes nothing: the first approver stays on record.
+  defp approve_locked(%RevisionRow{status: "approved"} = row, _actor, _report, _opts),
+    do: {:ok, row}
+
   defp approve_locked(row, actor, comparison_report_id, opts) do
     %{organization_id: organization_id, mission_id: mission_id, revision_id: revision_id} = row
 
@@ -79,6 +83,7 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   The mission's model decisions people made, newest first, for the organization audit:
   `[%{revision_id, decision: :approved | :rejected, at, by: %{"id", "display_name"}, evidence}]`.
   """
+  # todo(authz): no scope here; callers authorize (the organization audit source).
   @spec list_decisions(binary(), binary()) :: [map()]
   def list_decisions(organization_id, mission_id) do
     from(row in RevisionRow,
@@ -147,10 +152,18 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   defp reject_locked(%RevisionRow{}, _actor, _reason, _opts),
     do: {:error, :mission_model_revision_not_approvable}
 
+  @reason_max 2_000
+
   defp reason(reason) when is_binary(reason) do
     case String.trim(reason) do
-      "" -> {:error, :mission_model_decision_reason_required}
-      trimmed -> {:ok, trimmed}
+      "" ->
+        {:error, :mission_model_decision_reason_required}
+
+      trimmed when byte_size(trimmed) > @reason_max ->
+        {:error, :mission_model_decision_reason_too_long}
+
+      trimmed ->
+        {:ok, trimmed}
     end
   end
 

@@ -185,6 +185,31 @@ defmodule Cadence.MissionModels.RevisionDecisionsTest do
     assert Enum.count(results, &(&1 == {:error, :mission_model_revision_not_approvable})) == 1
   end
 
+  test "approving again keeps the first approver; a reason has a length limit", c do
+    revision = import!(c)
+    report = compare!(c, revision)
+    other = scope(c.organization, "admin-b", :organization_admin)
+
+    {:ok, _} =
+      MissionModels.approve_revision(c.admin, c.mid, revision, report["comparison_report_id"])
+
+    {:ok, _} =
+      MissionModels.approve_revision(other, c.mid, revision, report["comparison_report_id"])
+
+    approved_by = RevisionRow |> Repo.get!(revision) |> Map.get(:approved_by)
+    assert %{"id" => "admin-a"} = JsonDocument.unwrap_value(approved_by)
+
+    candidate = import!(c, revision_label: "Rev 2", yaml: other_yaml())
+
+    assert {:error, :mission_model_decision_reason_too_long} =
+             MissionModels.reject_revision(
+               c.admin,
+               c.mid,
+               candidate,
+               String.duplicate("x", 2_001)
+             )
+  end
+
   test "people's decisions are listed for the audit, fixtures' aren't", c do
     revision = import!(c)
     report = compare!(c, revision)
