@@ -13,6 +13,7 @@ defmodule Cadence.Configuration.Submission do
   using the returned `impacts`.
   """
 
+  alias Cadence.Platform.ReadMemo
   alias Cadence.SpacecraftTypeStore
 
   alias Cadence.Configuration.{
@@ -257,11 +258,15 @@ defmodule Cadence.Configuration.Submission do
     end)
   end
 
-  # The memo covers the pipeline and the generation build that follows it in the same
-  # transaction: both re-read the same profile versions per spacecraft.
+  # The memos cover the pipeline and the generation build that follows it in the same
+  # transaction: both re-read the same profile versions per spacecraft, and the build re-read the
+  # same catalog and mission-model revisions per spacecraft (step 4, 11-15: 499 craft idled the
+  # transaction past its timeout).
   defp apply_transaction(set, fun) do
-    SpacecraftTypeStore.with_version_memo(fn ->
-      Repo.transaction(fun, timeout: @apply_timeout_ms)
+    ReadMemo.with_memo(fn ->
+      SpacecraftTypeStore.with_version_memo(fn ->
+        Repo.transaction(fun, timeout: @apply_timeout_ms)
+      end)
     end)
   rescue
     DBConnection.ConnectionError -> landed(set)

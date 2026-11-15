@@ -9,6 +9,7 @@ defmodule Cadence.MissionModels.TelemetryProjection do
   alias Cadence.Catalog.MissionModel.{Revision, RuntimePlan}
   alias Cadence.Catalog.Revision, as: CatalogRevision
   alias Cadence.MissionModels
+  alias Cadence.Platform.ReadMemo
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.Telemetry.PacketDefinition
 
@@ -23,6 +24,14 @@ defmodule Cadence.MissionModels.TelemetryProjection do
           {:ok, t()} | {:error, term()}
   def load(organization_id, mission_id, %CatalogRevision{} = catalog_revision)
       when is_binary(mission_id) do
+    # Per catalog revision, once per fleet-wide apply (Platform.ReadMemo, step 4).
+    ReadMemo.fetch(
+      {:telemetry_projection, organization_id, mission_id, catalog_revision.catalog_revision_id},
+      fn -> load_projection(organization_id, mission_id, catalog_revision) end
+    )
+  end
+
+  defp load_projection(organization_id, mission_id, catalog_revision) do
     with {:ok, revision_id} <- mission_model_revision_id(catalog_revision),
          {:ok, %Revision{} = revision} <-
            MissionModels.fetch_revision(organization_id, mission_id, revision_id),
