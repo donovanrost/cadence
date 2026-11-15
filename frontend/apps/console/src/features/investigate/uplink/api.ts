@@ -55,7 +55,8 @@ const uplinkReader = d.object({
       provider: d.optional(provider),
       starts_at: d.timestamp,
       ends_at: d.timestamp,
-      uplink_evidence: d.token,
+      /** ops.md: booked (the provider confirmed the uplink leg) or attested. */
+      uplink_evidence: d.known(["booked", "attested"] as const),
       uplink_confirmed: d.nullable(d.boolean),
       attested_by: d.nullable(actor),
     }),

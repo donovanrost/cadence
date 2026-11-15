@@ -39,8 +39,8 @@ export const occurrenceReader = d.object({
   opened_at: d.timestamp,
   cleared_at: d.nullable(d.timestamp),
   duration_s: d.nullable(d.integer),
-  /** back_in_limits | source_stopped | null (still open). */
-  ended: d.nullable(d.token),
+  /** null while still open; an unknown way of ending reads "Cleared". */
+  ended: d.nullable(d.known(["back_in_limits", "source_stopped"] as const)),
   cleared_unacknowledged: d.boolean,
   acknowledged_by: d.nullable(actor),
   first_value: d.nullable(engineeringValue),

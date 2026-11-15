@@ -112,7 +112,8 @@ export function fetchAlarms(
   );
 }
 
-const CONDITION_WORDS: Readonly<Record<string, string>> = {
+const conditions = ["red_low", "red_high", "yellow_low", "yellow_high"] as const;
+const CONDITION_WORDS: Readonly<Record<(typeof conditions)[number], string>> = {
   red_low: "below red limit",
   red_high: "above red limit",
   yellow_low: "below yellow limit",
@@ -121,7 +122,8 @@ const CONDITION_WORDS: Readonly<Record<string, string>> = {
 
 /** "below red limit" etc. from the raw condition; null when the condition is unknown. */
 export function conditionWords(condition: string | null): string | null {
-  return condition === null ? null : (CONDITION_WORDS[condition] ?? null);
+  const known = conditions.find((c) => c === condition);
+  return known ? CONDITION_WORDS[known] : null;
 }
 
 /**

@@ -26,6 +26,7 @@ watch(
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName));
+// keyed-by-text: the second key of a G-chord, as KeyboardEvent.key gives it (lower-cased)
 const CHORDS: Readonly<Record<string, ParamlessRouteName>> = { n: "ops.now", c: "ops.contacts" };
 let armedUntil = 0;
 

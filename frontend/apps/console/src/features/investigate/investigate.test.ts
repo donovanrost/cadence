@@ -363,7 +363,7 @@ describe("Uplink tab words (aa1f493e)", () => {
       station: { ref: null, id: null, code: "KIR", name: null },
       starts_at: "2026-11-10T02:31:00Z",
       ends_at: "2026-11-10T02:39:00Z",
-      uplink_evidence: "attested",
+      uplink_evidence: "attested" as const,
       uplink_confirmed: false,
       attested_by: null,
       provider: undefined,

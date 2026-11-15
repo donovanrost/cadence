@@ -3,7 +3,13 @@ import { plural, type OpState } from "@/ui";
 import type { GroupState, MemberStage } from "./api.ts";
 import { checkLabel } from "./checks.ts";
 import { releaseClause, type ReleaseLogContext } from "./release.ts";
-import type { GroupEvent, GroupMember } from "./show.ts";
+import {
+  outcomeKeys,
+  reasonText,
+  type GroupEvent,
+  type GroupMember,
+  type OutcomeKey,
+} from "./show.ts";
 
 /**
  * Words for command groups (CommandFlow: "sent is not done"; only Verify turns green). Progress
@@ -126,19 +132,6 @@ export function statusTag(
 
 export type PersonName = (userId: string | null) => string;
 
-/** #51 failure reasons and `completed` outcome keys (commanding.md; L22 adds spacecraft_archived). */
-export const outcomeKeys = [
-  "verified",
-  "no_verifier",
-  "verify_failed",
-  "verify_timed_out",
-  "catalog_changed",
-  "release_failed",
-  "spacecraft_archived",
-  "canceled",
-  "rejected",
-] as const;
-type OutcomeKey = (typeof outcomeKeys)[number];
 /** In operator words; a new key is a compile error here (typing rule 2). */
 const OUTCOME_WORDS: Readonly<Record<OutcomeKey, string>> = {
   verified: "verified",
@@ -204,14 +197,14 @@ export function eventText(
     case "note":
       return `${who} noted${note}`;
     case "aborted":
-      return `${who} aborted${p?.reason ? `: “${p.reason}”` : ""} · ${p?.canceled ?? 0} canceled, ${p?.already_started?.length ?? 0} already started`;
+      return `${who} aborted${p?.reason ? `: “${reasonText(p.reason)}”` : ""} · ${p?.canceled ?? 0} canceled, ${p?.already_started?.length ?? 0} already started`;
     case "hold_acknowledged":
       return `${who} acknowledged the ${p?.key ? checkLabel(p.key) : "a"} HOLD${p?.at_decision ? " at GO" : ""}${note}`;
     case "member_canceled":
-      return `${who} canceled one uplink${p?.reason ? `: “${p.reason}”` : ""}`;
+      return `${who} canceled one uplink${p?.reason ? `: “${reasonText(p.reason)}”` : ""}`;
     case "member_failed": {
       const stopped = p?.later_members_stopped ?? 0;
-      return `${who}: ${memberName(e, targets)} ${outcomeWord(p?.reason ?? "failed")}${stopped ? ` · ${plural(stopped, "later uplink")} stopped` : ""}`;
+      return `${who}: ${memberName(e, targets)} ${outcomeWord(p?.reason ? reasonText(p.reason) : "failed")}${stopped ? ` · ${plural(stopped, "later uplink")} stopped` : ""}`;
     }
     case "completed": {
       const m = p?.members;

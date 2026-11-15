@@ -87,7 +87,21 @@ const RANK: Readonly<Record<EventSeverity, number>> = {
  * Fold labels in operator words (ux timeline 11). "Ended (not verified)": a contact's end is the
  * booking's, not proof of a flown pass (S9). Unknown kinds fall back to the sentence-case key.
  */
-const FOLD_WORDS: Readonly<Record<string, string>> = {
+const foldKinds = [
+  "realized_contact_interval",
+  "scheduled_contact_interval",
+  "scheduled_contact_canceled",
+  "realized_contact_ended_early",
+  "limit_violation",
+  "binding_set_activated",
+  "source_watermark_advanced",
+  "source_watermark_settled",
+  "source_watermark_caught_up",
+  "source_watermark_retreated",
+  "catalog_revision_registered",
+  "dashboard_published",
+] as const;
+const FOLD_WORDS: Readonly<Record<(typeof foldKinds)[number], string>> = {
   realized_contact_interval: "Contacts ended (not verified)",
   scheduled_contact_interval: "Contacts scheduled",
   // U55 (api): one kind for every cancel, by an operator, by Cadence (U56) or by the provider.
@@ -105,8 +119,8 @@ const FOLD_WORDS: Readonly<Record<string, string>> = {
 };
 export function kindLabel(e: MissionEvent): string {
   const key = e.raw_kind ?? e.kind;
-  const known = FOLD_WORDS[key];
-  if (known) return known;
+  const known = foldKinds.find((k) => k === key);
+  if (known) return FOLD_WORDS[known];
   const w = key.replaceAll("_", " ");
   return w.charAt(0).toUpperCase() + w.slice(1);
 }

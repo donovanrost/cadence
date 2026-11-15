@@ -17,11 +17,13 @@ export function catalogQuery(text: string, only: string | null): string | null {
   return text.length >= 2 ? text : null;
 }
 
-const SIGNIFICANCE: Readonly<Record<string, string>> = {
-  critical: "Critical",
-  hazardous: "Hazardous",
-  warning: "Warning",
-};
+/** Routine has no word: it isn't a risk. */
+const SIGNIFICANCE: Readonly<Partial<Record<NonNullable<CommandSummary["significance"]>, string>>> =
+  {
+    critical: "Critical",
+    hazardous: "Hazardous",
+    warning: "Warning",
+  };
 
 function commandSubtitle(c: CommandSummary): string {
   const args =
@@ -69,7 +71,9 @@ export function commandItems(commands: readonly CommandSummary[], text: string):
     .sort((a, b) => a.rank - b.rank);
 }
 
-const HEALTH: Readonly<Record<string, { word: string; state: OpState }>> = {
+const HEALTH: Readonly<
+  Record<NonNullable<Station["health"]>["status"], { word: string; state: OpState }>
+> = {
   nominal: { word: "Nominal", state: "nominal" },
   degraded: { word: "Degraded", state: "caution" },
   down: { word: "Down", state: "crit" },

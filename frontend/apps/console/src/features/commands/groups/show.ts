@@ -7,6 +7,8 @@ import {
   type ApiResult,
   type Decoded,
   type Reader,
+  isKnown,
+  type Unrecognized,
 } from "@/api/index.ts";
 import { groupUplinkReader } from "@/features/contacts/readiness.ts";
 import { catalogRevisionReader, significance } from "../api.ts";
@@ -140,6 +142,23 @@ const eventActor = d.variant("actor_kind", {
   system: d.object({ actor_kind: d.oneOf(["system"] as const) }),
 });
 
+/** #51 failure reasons and `completed` outcome keys (commanding.md; L22 adds spacecraft_archived). */
+export const outcomeKeys = [
+  "verified",
+  "no_verifier",
+  "verify_failed",
+  "verify_timed_out",
+  "catalog_changed",
+  "release_failed",
+  "spacecraft_archived",
+  "canceled",
+  "rejected",
+] as const;
+export type OutcomeKey = (typeof outcomeKeys)[number];
+/** A log reason as text: member_failed's key, or an operator's abort / cancel sentence as said. */
+export const reasonText = (reason: OutcomeKey | Unrecognized): string =>
+  isKnown(reason) ? reason : reason.unrecognized;
+
 const event = d.object({
   id: d.token,
   kind: d.knownText(eventKinds),
@@ -149,9 +168,8 @@ const event = d.object({
     d.object({
       note: d.optional(d.nullable(d.string)),
       // One field, two meanings as the log sends it: member_failed's reason key (worded in
-      // words.ts, with a fallback) or an operator's abort / cancel sentence.
-      // free-text: see above
-      reason: d.optional(d.nullable(d.string)),
+      // words.ts) or an operator's abort / cancel sentence, which arrives unrecognized, as said.
+      reason: d.optional(d.nullable(d.knownText(outcomeKeys))),
       members: d.optional(eventMembers),
       approved: d.optional(d.integer),
       excluded: d.optional(d.array(d.token, 1_000)),

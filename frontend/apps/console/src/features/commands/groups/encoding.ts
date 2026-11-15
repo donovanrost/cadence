@@ -2,6 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import {
   detailsOf,
   isError,
+  isKnown,
   decoders as d,
   describeApiError,
   request,
@@ -28,15 +29,22 @@ export type EncodingView =
   | Readonly<{ ok: true; encoding: Encoding }>
   | Readonly<{ ok: false; reason: string }>;
 
-const REASONS: Readonly<Record<string, string>> = {
+/** commanding.md encode_unavailable: why a request's bytes can't be shown. */
+const encodeReasons = [
+  "revision_superseded",
+  "revision_not_active",
+  "basis_unavailable",
+  "encode_failed",
+] as const;
+const REASONS: Readonly<Record<(typeof encodeReasons)[number], string>> = {
   revision_superseded: "the catalog revision it was submitted against has been superseded",
   revision_not_active: "its catalog revision isn't active",
   basis_unavailable: "its encoding basis isn't available",
   encode_failed: "encoding failed",
 };
 const unavailable = d.object({
-  // free-text: the encoder's reason key, worded by REASONS above with a fallback
-  reason: d.token,
+  /** A reason REASONS words; a newer one reads as words. */
+  reason: d.knownText(encodeReasons),
   detail: d.optional(d.nullable(d.string)),
 });
 
@@ -55,7 +63,9 @@ export async function fetchEncoding(
   const why = isError(e, "encode_unavailable") ? detailsOf(e, unavailable) : null;
   if (why) {
     {
-      const words = REASONS[why.reason] ?? why.reason.replaceAll("_", " ");
+      const words = isKnown(why.reason)
+        ? REASONS[why.reason]
+        : why.reason.unrecognized.replaceAll("_", " ");
       // Only an encoder failure's detail is words; the others carry a revision id.
       const detail = why.reason === "encode_failed" ? why.detail : null;
       return { ok: false, reason: `${words}${detail ? ` (${detail})` : ""}` };

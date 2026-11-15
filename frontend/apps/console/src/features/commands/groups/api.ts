@@ -8,6 +8,8 @@ import {
   type ApiResult,
   type Decoded,
   type Reader,
+  isKnown,
+  type Unrecognized,
 } from "@/api/index.ts";
 import { groupUplinkReader } from "@/features/contacts/readiness.ts";
 
@@ -91,8 +93,15 @@ const perTarget = d.object({
   routes: d.optional(d.array(route, 100)),
 });
 
+/** commanding.md: why a group needs a second GO (DECISIONS #61). */
+export const twoPersonReasonKeys = [
+  "hazardous_command",
+  "critical_command",
+  "policy_hint",
+  "fleet_reach",
+] as const;
 const twoPersonReason = d.object({
-  key: d.token,
+  key: d.knownText(twoPersonReasonKeys),
   command_id: d.optional(d.token),
   name: d.optional(d.string),
   targets: d.optional(d.integer),
@@ -113,8 +122,23 @@ const evidence = d.object({
   commands: d.optional(d.integer),
 });
 
+/** commanding.md preflight: the checks the console labels; a newer one still shows, by its key. */
+export const checkKeys = [
+  "identity",
+  "catalog",
+  "size",
+  "conflicts",
+  "contact",
+  "two_person",
+  "changed_since_submit",
+] as const;
+export type CheckKey = (typeof checkKeys)[number];
+/** A check's key as text: acks and lists key by it, and an ack sends it back to the server. */
+export const checkKeyText = (key: CheckKey | Unrecognized): string =>
+  isKnown(key) ? key : key.unrecognized;
+
 const check = d.object({
-  key: d.token,
+  key: d.knownText(checkKeys),
   result,
   per_target: d.array(perTarget, 1_000),
   evidence,

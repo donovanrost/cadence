@@ -124,6 +124,7 @@ export async function request<T>(
   options: RequestOptions = {},
 ): Promise<ApiResult<T>> {
   const method = options.method ?? "GET";
+  // keyed-by-text: HTTP header names, not a vocabulary; more are added per request below
   const headers: Record<string, string> = { accept: "application/json" };
   // FormData goes as-is so the browser sets the multipart boundary; anything else is JSON.
   const multipart = options.body instanceof FormData;

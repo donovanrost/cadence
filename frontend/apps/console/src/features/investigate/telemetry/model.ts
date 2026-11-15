@@ -9,17 +9,11 @@ export const MAX_PLOTTED = 3;
 
 export type PointFilter = "out" | "stale" | "all";
 
-const LIMIT_STATE: Readonly<Record<string, OpState>> = {
-  critical: "crit",
-  caution: "caution",
-  nominal: "nominal",
-  no_data: "stale",
-};
-
 /** T1 mark: crit / caution / stale / nominal, or off for a point without limits. */
 export function pointMark(p: TelemetryPoint): OpState {
   if (!p.latest) return "stale";
-  return p.latest.limit_state in LIMIT_STATE ? latestMark(p.latest) : "off";
+  // limit_state is a closed vocabulary (telemetry api), so every latest has a mark.
+  return latestMark(p.latest);
 }
 
 const isOut = (p: TelemetryPoint) =>

@@ -1,6 +1,15 @@
 import type { Scid } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
-import type { CheckResult, Preflight, PreflightCheck, TwoPersonReason } from "./api.ts";
+import { isKnown, type Unrecognized } from "@/api/index.ts";
+import {
+  checkKeys,
+  checkKeyText,
+  type CheckKey,
+  type CheckResult,
+  type Preflight,
+  type PreflightCheck,
+  type TwoPersonReason,
+} from "./api.ts";
 import type { GroupEvent } from "./show.ts";
 
 /**
@@ -20,7 +29,7 @@ export const RESULT_WORD: Readonly<Record<CheckResult, string>> = {
   no_go: "NO-GO",
 };
 
-const LABELS: Readonly<Record<string, string>> = {
+const LABELS: Readonly<Record<CheckKey, string>> = {
   identity: "Identity",
   catalog: "Catalog",
   size: "Size",
@@ -30,7 +39,16 @@ const LABELS: Readonly<Record<string, string>> = {
   changed_since_submit: "Since submit",
 };
 
-const IDENTITY_WORDS: Readonly<Record<string, string>> = {
+/** commanding.md: why a target's identity doesn't resolve (per_target reason). */
+const identityFailures = [
+  "no_uplink_route",
+  "multiple_primary_uplink_routes",
+  "no_source_endpoint",
+  "ambiguous_source_endpoint",
+  "source_endpoint_not_found",
+  "missing_scid",
+] as const;
+const IDENTITY_WORDS: Readonly<Record<(typeof identityFailures)[number], string>> = {
   no_uplink_route: "has no primary uplink route",
   multiple_primary_uplink_routes: "has several primary uplink routes",
   no_source_endpoint: "has no uplink endpoint",
@@ -38,6 +56,12 @@ const IDENTITY_WORDS: Readonly<Record<string, string>> = {
   source_endpoint_not_found: "endpoint not found",
   missing_scid: "has no SCID",
 };
+
+/** A per-target identity failure in words; a code the console doesn't know reads as words. */
+function identityWords(reason: string): string {
+  const known = identityFailures.find((k) => k === reason);
+  return known ? IDENTITY_WORDS[known] : reason.replaceAll("_", " ");
+}
 
 export type TargetName = (spacecraftId: string) => string;
 
@@ -74,7 +98,7 @@ export function reasonWord(r: TwoPersonReason): string {
     case "fleet_reach":
       return `${r.targets ?? "Many"} targets is fleet reach (${r.threshold ?? 10} or more)`;
     default:
-      return r.key.replaceAll("_", " ");
+      return (isKnown(r.key) ? r.key : r.key.unrecognized).replaceAll("_", " ");
   }
 }
 
@@ -92,7 +116,7 @@ function sentence(check: PreflightCheck, pf: Preflight, nameOf: TargetName): str
       return failed
         .map(
           (t) =>
-            `${nameOf(t.spacecraft_id)} ${typeof t.reason === "string" ? (IDENTITY_WORDS[t.reason] ?? t.reason.replaceAll("_", " ")) : "doesn't resolve"}`,
+            `${nameOf(t.spacecraft_id)} ${typeof t.reason === "string" ? identityWords(t.reason) : "doesn't resolve"}`,
         )
         .slice(0, 4)
         .join("; ");
@@ -123,7 +147,7 @@ function sentence(check: PreflightCheck, pf: Preflight, nameOf: TargetName): str
         ? "Same targets, catalog and values as submitted"
         : "Something changed since it was submitted (catalog, targets or values)";
     default:
-      return `${words(check.key)}: ${RESULT_WORD[check.result]}`;
+      return `${words(checkKeyText(check.key))}: ${RESULT_WORD[check.result]}`;
   }
 }
 
@@ -139,8 +163,8 @@ export function checkRows(pf: Preflight, nameOf: TargetName): CheckRow[] {
   return pf.checks.map((c) => {
     const profileId = routingProfile(c);
     return {
-      key: c.key,
-      label: LABELS[c.key] ?? words(c.key),
+      key: checkKeyText(c.key),
+      label: checkLabel(c.key),
       sentence: sentence(c, pf, nameOf),
       state: RESULT_STATE[c.result],
       verdict: RESULT_WORD[c.result],
@@ -161,10 +185,15 @@ export function checkMeta(pf: Preflight): string {
 /** The first NO-GO, in words, for the commit button's reason. */
 export function noGoReason(pf: Preflight, nameOf: TargetName): string | null {
   const bad = pf.checks.find((c) => c.result === "no_go");
-  return bad ? `${LABELS[bad.key] ?? bad.key} NO-GO: ${sentence(bad, pf, nameOf)}.` : null;
+  return bad ? `${checkLabel(bad.key)} NO-GO: ${sentence(bad, pf, nameOf)}.` : null;
 }
 
-export const checkLabel = (key: string) => LABELS[key] ?? words(key);
+/** A check's label from its key (decoded, or as text): the console's word, else the key in words. */
+export function checkLabel(key: Unrecognized | string): string {
+  const text = typeof key === "string" ? key : key.unrecognized;
+  const known = checkKeys.find((k) => k === text);
+  return known ? LABELS[known] : words(text);
+}
 
 /** An operator's acks so far, by check key: the note and the hold_basis it was written against. */
 export type HoldAcks = Readonly<Record<string, Readonly<{ basis: string | null; note: string }>>>;
@@ -181,7 +210,7 @@ export function gatingHolds(pf: Preflight): PreflightCheck[] {
 
 /** An ack counts while its note is written and its basis matches the HOLD as it stands now. */
 export const ackCounts = (c: PreflightCheck, acks: HoldAcks) => {
-  const a = acks[c.key];
+  const a = acks[checkKeyText(c.key)];
   return (
     c.ackable !== false &&
     a !== undefined &&
@@ -208,9 +237,9 @@ export function holdAcksToSend(
   return gatingHolds(pf)
     .filter((c) => ackCounts(c, acks))
     .map((c) => ({
-      key: c.key,
+      key: checkKeyText(c.key),
       hold_basis: c.hold_basis ?? null,
-      note: (acks[c.key]?.note ?? "").trim(),
+      note: (acks[checkKeyText(c.key)]?.note ?? "").trim(),
     }));
 }
 
@@ -258,8 +287,8 @@ export function goAcksToSend(pf: Preflight | null, events: readonly GroupEvent[]
   return reviewHolds(pf, events)
     .open.filter((c) => ackCounts(c, acks))
     .map((c) => ({
-      key: c.key,
+      key: checkKeyText(c.key),
       hold_basis: c.hold_basis ?? null,
-      note: (acks[c.key]?.note ?? "").trim(),
+      note: (acks[checkKeyText(c.key)]?.note ?? "").trim(),
     }));
 }

@@ -35,6 +35,7 @@ export function useMenuButton(root: Readonly<Ref<HTMLElement | null>>) {
   function onMenuKey(event: KeyboardEvent) {
     const list = items();
     const at = list.findIndex((item) => item === document.activeElement);
+    // keyed-by-text: KeyboardEvent.key values, the DOM's own strings (looked up by event.key)
     const next: Readonly<Record<string, number>> = {
       ArrowDown: at + 1,
       ArrowUp: at - 1,

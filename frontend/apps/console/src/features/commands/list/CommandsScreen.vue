@@ -13,7 +13,14 @@ import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
 import { fetchComposeDraft } from "../compose/saved.ts";
 import { savedWhen } from "../compose/useComposeDraft.ts";
 import CommandTable from "./CommandTable.vue";
-import { COMMAND_TABS, TAB_LABELS, tabCounts, tabFromQuery, tabRows } from "./list.ts";
+import {
+  COMMAND_TABS,
+  TAB_LABELS,
+  tabCounts,
+  tabFromQuery,
+  tabRows,
+  type CommandTab,
+} from "./list.ts";
 
 /** Commands (IA rail 04): requests grouped by state; `?awaiting=me` is the GO-poll entry. */
 const scope = useMissionScope();
@@ -66,7 +73,7 @@ const headline = computed(() => {
   if (n.awaiting) return `${n.awaiting} await your GO`;
   return n.pending ? `${n.pending} waiting for a GO` : "No requests waiting";
 });
-const EMPTY: Record<string, string> = {
+const EMPTY: Readonly<Record<CommandTab, string>> = {
   awaiting: "Nothing awaits your GO.",
   pending: "No requests are waiting for a GO.",
   queued: "No released requests.",
@@ -100,7 +107,7 @@ const EMPTY: Record<string, string> = {
         @retry="groups.refetch"
       >
         <template #default="{ value }">
-          <ApEmptyState v-if="tabRows(value, tab).length === 0" :headline="EMPTY[tab] ?? ''" />
+          <ApEmptyState v-if="tabRows(value, tab).length === 0" :headline="EMPTY[tab]" />
           <CommandTable v-else :rows="tabRows(value, tab)" :name-of="nameOf" :stations="stations" />
         </template>
       </ApRemote>
