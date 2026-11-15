@@ -11,6 +11,12 @@ defmodule CadenceWeb.LegacyAdminRedirectControllerTest do
     %{conn: TestFixtures.member_conn(user), org: org}
   end
 
+  test "§11c A1: the app root goes to the organization's console home; signed out to sign-in",
+       c do
+    assert redirected_to(get(c.conn, "/")) == "/console/#{c.org.slug}"
+    assert redirected_to(get(build_conn(), "/")) == "/sign-in"
+  end
+
   test "L4: the missions list and New mission go to the organization's console pages", c do
     assert redirected_to(get(c.conn, "/missions")) == "/console/#{c.org.slug}/org/missions"
 
