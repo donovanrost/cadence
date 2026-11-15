@@ -22,7 +22,9 @@ async function leave() {
   await leaveAdminMode();
   // Leaving on an admin page returns home (Auth.md); elsewhere nothing moves.
   if (router.currentRoute.value.path.startsWith("/admin"))
-    await router.push("/").catch((e: unknown) => console.error("Navigation failed", e));
+    await router
+      .push({ name: "home" })
+      .catch((e: unknown) => console.error("Navigation failed", e));
 }
 </script>
 
