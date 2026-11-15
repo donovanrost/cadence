@@ -1,6 +1,8 @@
 defmodule Cadence.Applications.CatalogRegistry do
   @moduledoc "Generic core registry for application-owned compatibility catalog contributions."
 
+  alias Cadence.Applications.FixtureContributors
+
   alias Cadence.Applications.{
     ApplicationDefinition,
     CatalogContribution,
@@ -79,7 +81,8 @@ defmodule Cadence.Applications.CatalogRegistry do
   def fetch_default(_scope), do: {:error, :unknown_catalog_contribution}
 
   defp contributors do
-    @contributors ++ @additional_contributors
+    @contributors ++
+      @additional_contributors ++ FixtureContributors.exporting(:catalog_contributions, 0)
   end
 
   defp collect(contributors), do: collect_contributors(contributors)

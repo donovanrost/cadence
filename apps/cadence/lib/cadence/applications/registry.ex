@@ -6,6 +6,8 @@ defmodule Cadence.Applications.Registry do
   never converts operator-controlled input into atoms.
   """
 
+  alias Cadence.Applications.FixtureContributors
+
   alias Cadence.Applications.{
     ActionDefinition,
     ApplicationDefinition,
@@ -36,18 +38,19 @@ defmodule Cadence.Applications.Registry do
 
   @spec all() :: [ApplicationDefinition.t()]
   def all,
-    do: [
-      TelemetryDecom.definition(),
-      derived_telemetry(),
-      limits(),
-      CommsApplication.definition(),
-      LegacyCommsOverview.definition(),
-      MissionCatalog.definition(),
-      Spacecraft.definition(),
-      OpsConsole.definition(),
-      cfdp(),
-      OrganizationAdmin.definition()
-    ]
+    do:
+      [
+        TelemetryDecom.definition(),
+        derived_telemetry(),
+        limits(),
+        CommsApplication.definition(),
+        LegacyCommsOverview.definition(),
+        MissionCatalog.definition(),
+        Spacecraft.definition(),
+        OpsConsole.definition(),
+        cfdp(),
+        OrganizationAdmin.definition()
+      ] ++ Enum.map(FixtureContributors.exporting(:definition, 0), & &1.definition())
 
   @spec available() :: [ApplicationDefinition.t()]
   def available do

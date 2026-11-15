@@ -1,6 +1,7 @@
 defmodule Cadence.Applications.ActionProviderRegistry do
   @moduledoc "Generic bounded registry for application-owned action providers."
 
+  alias Cadence.Applications.FixtureContributors
   alias Cadence.Applications.JSONBoundary
 
   @max_providers 16
@@ -125,7 +126,7 @@ defmodule Cadence.Applications.ActionProviderRegistry do
     do: {:error, :invalid_application_action_provider_registry}
 
   defp additional_contributors do
-    @additional_contributors
+    @additional_contributors ++ FixtureContributors.exporting(:action_provider, 0)
   end
 
   defp valid_provider?(provider) when is_atom(provider) do

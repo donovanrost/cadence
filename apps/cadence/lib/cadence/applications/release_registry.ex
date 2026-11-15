@@ -1,6 +1,8 @@
 defmodule Cadence.Applications.ReleaseRegistry do
   @moduledoc "Generic core registry for application-owned frontend release contributions."
 
+  alias Cadence.Applications.FixtureContributors
+
   alias Cadence.Applications.{
     Comms,
     DerivedTelemetry,
@@ -63,7 +65,8 @@ defmodule Cadence.Applications.ReleaseRegistry do
   def validate(_contributors), do: {:error, :invalid_release_contribution_registry}
 
   defp contributors do
-    @contributors ++ @additional_contributors
+    @contributors ++
+      @additional_contributors ++ FixtureContributors.exporting(:release_contributions, 0)
   end
 
   @spec fetch(binary(), pos_integer(), binary(), pos_integer()) ::
