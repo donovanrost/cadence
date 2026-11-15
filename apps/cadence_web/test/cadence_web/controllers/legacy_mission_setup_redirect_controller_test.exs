@@ -65,4 +65,17 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
     assert redirected_to(get(c.conn, c.legacy <> "/catalog/imports/run_1")) ==
              c.console <> "/setup/catalog/import/run_1"
   end
+
+  test "B7: comms, transports, New transport and one transport go to Setup comms", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/comms")) == c.console <> "/setup/comms"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/transports")) ==
+             c.console <> "/setup/comms/transports"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/transports/new")) ==
+             c.console <> "/setup/comms/transports"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/transports/tr_1")) ==
+             c.console <> "/setup/comms/transports/tr_1"
+  end
 end

@@ -306,6 +306,27 @@ defmodule CadenceWeb.Router do
       :catalog_import
     )
 
+    # §11c (B7, api; DECISIONS #79): comms and transports go to the console's Setup comms.
+    get("/missions/:mission_id/comms", LegacyMissionSetupRedirectController, :comms)
+
+    get(
+      "/missions/:mission_id/comms/transports",
+      LegacyMissionSetupRedirectController,
+      :transports
+    )
+
+    get(
+      "/missions/:mission_id/comms/transports/new",
+      LegacyMissionSetupRedirectController,
+      :transports
+    )
+
+    get(
+      "/missions/:mission_id/comms/transports/:transport_id",
+      LegacyMissionSetupRedirectController,
+      :transport
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -371,20 +392,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/catalog/artifacts/:artifact_id", HostPageLive, :show,
         metadata: %{host_policy: :catalog}
-      )
-
-      live("/missions/:mission_id/comms", HostPageLive, :index, metadata: %{host_policy: :comms})
-
-      live("/missions/:mission_id/comms/transports", HostPageLive, :index,
-        metadata: %{host_policy: :comms}
-      )
-
-      live("/missions/:mission_id/comms/transports/new", HostPageLive, :new,
-        metadata: %{host_policy: :comms}
-      )
-
-      live("/missions/:mission_id/comms/transports/:transport_id", HostPageLive, :show,
-        metadata: %{host_policy: :comms}
       )
 
       live("/missions/:mission_id/comms/ground-stations", HostPageLive, :index,
