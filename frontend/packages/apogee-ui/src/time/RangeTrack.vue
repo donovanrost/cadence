@@ -80,7 +80,8 @@ function down(event: PointerEvent) {
   };
   if (event.currentTarget instanceof HTMLElement)
     event.currentTarget.setPointerCapture(event.pointerId);
-  window.addEventListener("keydown", onEsc);
+  // Capture: a drag's Esc must reach us before an enclosing ApSheet's dialog closes on it.
+  window.addEventListener("keydown", onEsc, true);
 }
 function move(event: PointerEvent) {
   const d = drag.value;
@@ -102,11 +103,15 @@ function end() {
   stopEsc();
   if (previewing) emit("preview", null);
 }
+/** Esc mid-drag cancels only the drag; with no drag it passes on (and closes the sheet). */
 function onEsc(event: KeyboardEvent) {
-  if (event.key === "Escape" && drag.value) end();
+  if (event.key !== "Escape" || !drag.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  end();
 }
 function stopEsc() {
-  window.removeEventListener("keydown", onEsc);
+  window.removeEventListener("keydown", onEsc, true);
 }
 function commit(r: TimeRange) {
   emit("select", r);
