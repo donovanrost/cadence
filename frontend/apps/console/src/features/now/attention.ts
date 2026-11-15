@@ -702,6 +702,14 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
           ? `The contact ended at ${at}.`
           : `Ended at ${at}.`;
   }
+  if (r.id.startsWith("attention:plan_coverage:")) {
+    // U61: approved, nothing left to plan, or the day ended unplanned (crit, kept in the list).
+    const day = r.id.slice("attention:plan_coverage:".length).slice(5, 10);
+    if (r.action === "approved")
+      return `Approved by ${r.resolved_by.name ?? "an org admin"} at ${at}.`;
+    if (r.action === "nothing_left") return `Nothing is left to plan for ${day}.`;
+    if (r.action === "day_ended") return `${day} ended with no approved plan.`;
+  }
   if (r.id.startsWith("attention:job_outcome_unknown:")) {
     // U54: retried (queued again) or closed with what the operator found.
     const who = r.resolved_by.name ?? "an operator";

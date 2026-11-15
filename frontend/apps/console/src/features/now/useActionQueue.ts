@@ -18,6 +18,8 @@ import type { RetryOutcome } from "./useQueueCommand.ts";
 export function useActionQueue(
   missionId: Ref<MissionId | null>,
   missionName: Ref<string | null> = ref(null),
+  /** U61: the signed-in user (a plan's author reads "You can't approve your own plan."). */
+  viewerId: string | null = null,
 ) {
   const query = useRemoteQuery(missionId, (id, signal) => fetchActionQueue(id, signal));
   const prompt = throttle(query.refetch, FLEET_REFETCH_GAP_MS);
@@ -50,12 +52,12 @@ export function useActionQueue(
     const s = query.state.value;
     if (s.status !== "ready") return null;
     const p = patches.value;
-    if (p.size === 0) return presentQueue(s.value, new Date(), missionName.value);
+    if (p.size === 0) return presentQueue(s.value, new Date(), missionName.value, viewerId);
     const items = s.value.items.map((i) => {
       const a = i.attention ? p.get(i.attention.id) : undefined;
       return a ? { ...i, attention: a } : i;
     });
-    return presentQueue({ ...s.value, items }, new Date(), missionName.value);
+    return presentQueue({ ...s.value, items }, new Date(), missionName.value, viewerId);
   });
   // U31: a resolved attention row stays 5 s, faded, reading "Resolved by …".
   const fading = shallowRef<Fading[]>([]);

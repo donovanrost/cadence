@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useMissionScope } from "@/shell/index.ts";
+import { useMissionScope, useSession } from "@/shell/index.ts";
 import { ApPanel, ApRemote } from "@/ui";
 import {
   TelemetryDegraded,
@@ -36,9 +36,11 @@ const a3Need = computed(() => {
   const rows = snapshot.value ? layoutMatrix(snapshot.value.spacecraft).rows.length : 0;
   return `${matrixNaturalHeight(rows) + A3_CHROME_PX}px`;
 });
+const session = useSession();
 const actionQueue = useActionQueue(
   computed(() => scope.value.mission.id),
   computed(() => scope.value.mission.name),
+  session.user.id,
 );
 const queue = computed(() =>
   actionQueue.items.value.status === "ready" ? actionQueue.items.value.value : [],

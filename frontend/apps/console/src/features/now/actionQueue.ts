@@ -32,6 +32,7 @@ import { runtimeRow } from "./runtime.ts";
 import { activationRow } from "./activation.ts";
 import { contactStartRow } from "./contactStart.ts";
 import { archiveRow } from "./archive.ts";
+import { coverageRow } from "./coverage.ts";
 import { ingressRow } from "./ingress.ts";
 import { jobRow } from "./jobs.ts";
 import { listenerRow } from "./listener.ts";
@@ -286,7 +287,12 @@ function alarmRows(item: ServerItem): QueueItem[] {
   }));
 }
 
-function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueItem[] {
+function rowFor(
+  item: ServerItem,
+  missionName: string | null,
+  now: Date,
+  viewerId: string | null = null,
+): QueueItem[] {
   switch (item.kind) {
     case null:
       // A kind this console doesn't know yet: no row rather than a wrong one.
@@ -394,6 +400,7 @@ function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueI
         return [archiveRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "listener_refusal")
         return [listenerRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
+      if (a.source === "plan_coverage") return [coverageRow(base(item), item.id, a, viewerId, now)];
       if (a.source === "job_outcome_unknown")
         return [jobRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "provider_change") {
@@ -498,6 +505,8 @@ export function presentQueue(
   now: Date = new Date(),
   /** U38's row title names the mission (it has no spacecraft). */
   missionName: string | null = null,
+  /** U61: the signed-in user, so a plan's author reads "You can't approve your own plan." */
+  viewerId: string | null = null,
 ): QueueItem[] {
   const missed = queue.items.flatMap((i) => {
     const m = i.kind === "missed_pass" ? missedOf(i) : null;
@@ -520,7 +529,7 @@ export function presentQueue(
       placedFolds.add(foldKey(s));
       return [foldedSettlementRow(fold, now)];
     }
-    if (item.kind !== "missed_pass") return rowFor(item, missionName, now);
+    if (item.kind !== "missed_pass") return rowFor(item, missionName, now, viewerId);
     if (placed) return [];
     placed = true;
     return missedRows;
