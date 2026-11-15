@@ -54,8 +54,12 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
     # 64:ff9b:1::/48 local-use NAT64 (RFC 8215).
     {{0x0064, 0xFF9B, 0x0001, 0, 0, 0, 0, 0}, 48},
     {{0x0100, 0, 0, 0, 0, 0, 0, 0}, 64},
-    # 2001::/32 Teredo and 2002::/16 6to4 embed IPv4; refused outright.
-    {{0x2001, 0, 0, 0, 0, 0, 0, 0}, 32},
+    # 6to4 (2002::/16) embeds IPv4; refused outright, as is Teredo below.
+    # 2001::/23 IETF protocol assignments (Teredo's 2001::/32 included).
+    {{0x2001, 0, 0, 0, 0, 0, 0, 0}, 23},
+    # 3fff::/20 documentation (RFC 9637) and 5f00::/16 SRv6 SIDs.
+    {{0x3FFF, 0, 0, 0, 0, 0, 0, 0}, 20},
+    {{0x5F00, 0, 0, 0, 0, 0, 0, 0}, 16},
     {{0x2001, 0x0DB8, 0, 0, 0, 0, 0, 0}, 32},
     {{0x2002, 0, 0, 0, 0, 0, 0, 0}, 16},
     {{0xFC00, 0, 0, 0, 0, 0, 0, 0}, 7},
@@ -70,6 +74,18 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
     {{169, 254, 0, 0}, 16},
     {{0xFE80, 0, 0, 0, 0, 0, 0, 0}, 10},
     {{0xFD00, 0x0EC2, 0, 0, 0, 0, 0, 0x0254}, 128}
+  ]
+
+  # IPv6 ranges that carry IPv4 addresses. An allow entry may not fall in one: the operator
+  # names the IPv4 range itself (api: '::ffff:0:0/96' would otherwise re-allow all of IPv4).
+  @v4_embedding [
+    {{0, 0, 0, 0, 0, 0, 0, 0}, 96},
+    {{0, 0, 0, 0, 0, 0xFFFF, 0, 0}, 96},
+    {{0, 0, 0, 0, 0xFFFF, 0, 0, 0}, 96},
+    {{0x0064, 0xFF9B, 0, 0, 0, 0, 0, 0}, 96},
+    {{0x0064, 0xFF9B, 0x0001, 0, 0, 0, 0, 0}, 48},
+    {{0x2002, 0, 0, 0, 0, 0, 0, 0}, 16},
+    {{0x2001, 0, 0, 0, 0, 0, 0, 0}, 32}
   ]
 
   @min_prefix %{4 => 8, 8 => 32}
@@ -130,6 +146,10 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
   """
   @spec allowed?(:inet.ip_address(), [{tuple(), non_neg_integer()}]) :: boolean()
   def allowed?(address, allow) when is_list(allow) do
+    # IPv4 carried inside IPv6 (::ffff:a.b.c.d, 64:ff9b::a.b.c.d) is judged as that IPv4 address,
+    # so the never-allowed and allowlist checks see what the socket actually reaches (api).
+    address = embedded_v4(address)
+
     cond do
       Enum.any?(@never_allowed, &in_cidr?(address, &1)) -> false
       Enum.any?(allow, &in_cidr?(address, &1)) -> true
@@ -160,6 +180,15 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
 
     if Enum.any?(@never_allowed, &overlaps?({network, bits}, &1)),
       do: raise(ArgumentError, "provider outbound allow #{cidr}: link-local or metadata space")
+
+    # ::1/128 is IPv6 loopback, not a carried IPv4 address (dev allows it for the simulator).
+    if {network, bits} != {{0, 0, 0, 0, 0, 0, 0, 1}, 128} and
+         Enum.any?(@v4_embedding, &overlaps?({network, bits}, &1)),
+       do:
+         raise(
+           ArgumentError,
+           "provider outbound allow #{cidr}: an IPv6 range that carries IPv4; name the IPv4 range"
+         )
 
     {network, bits}
   end
@@ -231,9 +260,12 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
   defp configured_allow,
     do: :cadence |> Application.get_env(:provider_outbound, []) |> Keyword.get(:allow, [])
 
-  # An IPv4-mapped (::ffff:a.b.c.d) or well-known NAT64 address is judged by the IPv4 inside it.
-  defp denied?({0, 0, 0, 0, 0, 0xFFFF, high, low}), do: denied?(v4_of(high, low))
-  defp denied?({0x0064, 0xFF9B, 0, 0, 0, 0, high, low}), do: denied?(v4_of(high, low))
+  # An IPv4-mapped (::ffff:a.b.c.d) or well-known NAT64 (64:ff9b::a.b.c.d) address is the IPv4
+  # address inside it.
+  defp embedded_v4({0, 0, 0, 0, 0, 0xFFFF, high, low}), do: v4_of(high, low)
+  defp embedded_v4({0x0064, 0xFF9B, 0, 0, 0, 0, high, low}), do: v4_of(high, low)
+  defp embedded_v4(address), do: address
+
   defp denied?({_, _, _, _} = v4), do: Enum.any?(@denied_v4, &in_cidr?(v4, &1))
   defp denied?({_, _, _, _, _, _, _, _} = v6), do: Enum.any?(@denied_v6, &in_cidr?(v6, &1))
 

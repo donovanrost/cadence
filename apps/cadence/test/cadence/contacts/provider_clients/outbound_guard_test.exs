@@ -97,7 +97,7 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuardTest do
   end
 
   describe "the allowlist is validated (never an off-switch)" do
-    for cidr <- ["0.0.0.0/0", "::/0", "10.0.0.0/7", "2001::/16"] do
+    for cidr <- ["0.0.0.0/0", "::/0", "10.0.0.0/7", "2400::/16"] do
       test "#{cidr} is too wide" do
         assert_raise ArgumentError, ~r/wider than/, fn ->
           OutboundGuard.parse_allow!([unquote(cidr)])
@@ -119,8 +119,26 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuardTest do
       end
     end
 
+    test "IPv4 inside IPv6 is judged as that IPv4, whatever the allowlist" do
+      allow = OutboundGuard.parse_allow!(["10.43.0.0/16", "2606:4700::/32"])
+      refute OutboundGuard.allowed?({0, 0, 0, 0, 0, 0xFFFF, 0xA9FE, 0xA9FE}, allow)
+      refute OutboundGuard.allowed?({0x64, 0xFF9B, 0, 0, 0, 0, 0xA9FE, 0xA9FE}, allow)
+      # ...and an allowed IPv4 range admits its mapped form too.
+      assert OutboundGuard.allowed?({0, 0, 0, 0, 0, 0xFFFF, 0x0A2B, 0x0709}, allow)
+    end
+
+    for cidr <- ["::ffff:0:0/96", "::ffff:a9fe:0/112", "64:ff9b::/96", "2002::/32", "::/96"] do
+      test "#{cidr} (IPv4 carried in IPv6) can't be allowed" do
+        assert_raise ArgumentError, fn -> OutboundGuard.parse_allow!([unquote(cidr)]) end
+      end
+    end
+
     test "even a hand-built allow entry can't re-allow metadata" do
       refute OutboundGuard.allowed?({169, 254, 169, 254}, [{{169, 254, 169, 254}, 32}])
+    end
+
+    test "IPv6 loopback ::1/128 is still allowable (dev's simulator)" do
+      assert [{{0, 0, 0, 0, 0, 0, 0, 1}, 128}] = OutboundGuard.parse_allow!(["::1/128"])
     end
 
     test "the environment's configured list validates" do
