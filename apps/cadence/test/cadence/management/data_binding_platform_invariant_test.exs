@@ -66,6 +66,17 @@ defmodule Cadence.Management.DataBindingPlatformInvariantTest do
              })
   end
 
+  test "an organization's binding can't become platform-wide, even onto a platform source", c do
+    own = %{binding("own-binding-#{c.suffix}", c.platform) | organization_id: "org-x-#{c.suffix}"}
+    assert {:ok, %DataBinding{}} = DataSources.persist_data_binding(own)
+
+    assert {:error, :platform_binding_scope_change} =
+             DataSources.persist_data_binding(%{own | organization_id: nil})
+
+    assert {:ok, %DataBinding{organization_id: "org-x-" <> _}} =
+             DataSources.fetch_data_binding(own.binding_id)
+  end
+
   test "disable, enable and supersede can't repoint it to a private source either", c do
     attrs = %{data_source_id: c.org_owned.data_source_id}
 

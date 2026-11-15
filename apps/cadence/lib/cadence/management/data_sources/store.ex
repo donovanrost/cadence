@@ -1,6 +1,10 @@
 defmodule Cadence.Management.DataSources.Store do
   @moduledoc """
   Persistence boundary for desired data-source definitions and bindings.
+
+  Boot (`ensure_default_managed_sources!/0`) inserts a default binding only when it's missing, so a
+  platform admin's switch survives a restart. The flip side: a code change to a default binding's
+  fields doesn't reach an existing database at boot; it needs a migration or an explicit switch.
   """
 
   import Ecto.Query
@@ -659,10 +663,13 @@ defmodule Cadence.Management.DataSources.Store do
   # stays platform-wide and only ever points at a platform-shared source (DataSource.
   # platform_shared?/1). Enforced here, at the one write path, whatever the caller: the console
   # switch, a disable/enable/supersede with attrs, a smoke task given that binding id, or boot.
-  defp platform_binding_invariant(%DataBinding{organization_id: nil}, %DataBinding{
-         organization_id: organization_id
-       })
-       when not is_nil(organization_id),
+  # A binding's organization never changes, in either direction: no organization takes over a
+  # platform binding, and no organization's binding becomes every tenant's fallback (api-ops).
+  defp platform_binding_invariant(
+         %DataBinding{organization_id: before},
+         %DataBinding{organization_id: now}
+       )
+       when before != now,
        do: {:error, :platform_binding_scope_change}
 
   defp platform_binding_invariant(_previous, %DataBinding{organization_id: nil} = binding) do
