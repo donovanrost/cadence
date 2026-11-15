@@ -1739,5 +1739,6 @@ The buffer has a cap **per pass** (per stream), and all of them share **one disk
     holders [{realized_contact_id, label, bytes, state: storing | kept, kept_until}] (this mission's own, up to 3),
     more_count, other_missions_bytes, refusing, refused_since. Without `kept_until`, a kept holder reads "…: 1.2
     GB, kept for review".
-  - If lead's early removal lands (kept copies removed oldest first above 80%), the drain sentence adds "Above 80%,
-    copies kept for review are removed first, oldest first."
+  - **Early removal** (once the director doesn't object; api-ops builds it with this item): the drain line adds
+    "Above 80%, Cadence removes review copies of passes already stored, oldest first." A resolution after removals
+    adds "Freed by removing review copies of 6 stored passes." The kept holders are the first to go.
