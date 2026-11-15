@@ -192,7 +192,7 @@ state (83 policies) and algorithm memory are a few KB.
 | Boot cost per partition | none extra (it's in the snapshot row) | one indexed query, ~146 rows |
 | Correct after a crash mid-pass? | **Yes**: recovery replays from the snapshot position, which re-applies every update since, so `latest` comes out exact | Yes, but adds nothing: the replay would rebuild the same values |
 
-**Recommendation: (a).** Keep `latest` in the snapshot. It costs about 1 MB an hour per spacecraft
+**Decided (director, 2026-11-15): (a).** At dev's ~0.4 contact-hours per spacecraft-day that is about 0.55 MB per spacecraft-day, against about 99 MB today. **Recommendation was (a).** Keep `latest` in the snapshot. It costs about 1 MB an hour per spacecraft
 in a pass, against 10–15 MB and 40k upserts for (b), and it needs no second store to stay in step.
 The replay from the snapshot position makes it exact.
 
