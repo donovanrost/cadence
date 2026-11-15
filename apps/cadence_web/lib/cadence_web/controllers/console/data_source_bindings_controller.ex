@@ -35,13 +35,22 @@ defmodule CadenceWeb.Console.DataSourceBindingsController do
     end
   end
 
-  @doc "The binding's history, newest first (50)."
+  @doc """
+  The binding's history, newest first (50). A platform-wide binding's history is the platform
+  admins' record: outside admin mode it shows what happened and when, without the admin's name,
+  their reason or the platform-wide counts (other tenants' scale).
+  """
+  # todo(authz): Cedar should decide who may read a platform binding's full history (platform
+  # admins in admin mode today; tenants see it redacted).
   def events(conn, %{"binding_id" => binding_id}) do
     case binding(conn, binding_id) do
       {:ok, binding} ->
-        json(conn, %{
-          data: ConfigJSON.encode(%{events: PlatformBindings.events(binding.binding_id)})
-        })
+        events =
+          binding.binding_id
+          |> PlatformBindings.events()
+          |> redact_for(binding, conn)
+
+        json(conn, %{data: ConfigJSON.encode(%{events: events})})
 
       {:error, reason} ->
         Problem.respond(conn, reason)
@@ -58,6 +67,15 @@ defmodule CadenceWeb.Console.DataSourceBindingsController do
       binding -> {:ok, binding}
     end
   end
+
+  defp redact_for(events, binding, conn) do
+    if PlatformBindings.shared?(binding) and not Scope.admin_mode?(conn.assigns.current_scope),
+      do: Enum.map(events, &redact/1),
+      else: events
+  end
+
+  defp redact(event),
+    do: %{event | actor: nil, reason: nil, affected_missions: nil, live_passes_total: nil}
 
   defp shared(binding),
     do: if(PlatformBindings.shared?(binding), do: :ok, else: {:error, :binding_not_shared})

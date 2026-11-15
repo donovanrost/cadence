@@ -607,7 +607,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          :ok <- writable(scope, binding),
          :ok <- different_source?(binding, data_source_id),
          {:ok, source} <- scoped_source(organization_id, mission_id, data_source_id),
-         :ok <- compatible_source?(source, binding) do
+         :ok <- compatible_source?(source, binding),
+         :ok <- shared_target?(source, binding) do
       if PlatformBindings.shared?(binding),
         do: switch_shared_binding(scope, request, binding, source, shared_switch),
         else: persist_switch(scope, request, binding, data_source_id, %{})
@@ -906,6 +907,17 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     do: {:error, :same_data_source}
 
   defp different_source?(%DataBinding{}, _data_source_id), do: :ok
+
+  # A platform-wide binding serves every tenant that falls back to it, so it may only point at a
+  # platform-shared source: switching it to one organization's own source would send every other
+  # tenant's data there (api-ops' sweep, 11-15). A mission's own binding may use either.
+  defp shared_target?(%DataSource{organization_id: nil}, %DataBinding{}), do: :ok
+
+  defp shared_target?(%DataSource{}, %DataBinding{} = binding) do
+    if PlatformBindings.shared?(binding),
+      do: {:error, :platform_target_required},
+      else: :ok
+  end
 
   defp compatible_source?(%DataSource{} = source, %DataBinding{} = binding) do
     if DataSource.active?(source) and

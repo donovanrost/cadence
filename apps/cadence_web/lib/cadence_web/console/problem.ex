@@ -134,6 +134,8 @@ defmodule CadenceWeb.Console.Problem do
     blast_radius_changed:
       {409, "What this switch affects changed while you were confirming. Check it again."},
     binding_not_shared: {409, "That binding is this mission's own; no platform-wide sheet."},
+    platform_target_required:
+      {422, "A platform-wide binding can only use a platform-shared source."},
     blast_radius_unavailable:
       {503, "Cadence couldn't count what this switch affects, so it won't switch it now."},
     data_source_state: {409, "The data source is already in that state."},

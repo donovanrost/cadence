@@ -766,12 +766,15 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
 - `GET /data-source-bindings/:binding_id/events` → `{events: [{at, actor: {id, name} | null,
   kind: switched | registered | changed | enabled | disabled | superseded, from: {id,
   display_name} | null, to: …, reason | null, affected_missions | null, live_passes_total |
-  null}]}`, newest first, 50. A platform-wide switch's entry carries its reason and counts.
+  null}]}`, newest first, 50. A platform-wide switch's entry carries its reason and counts. For a
+  platform-wide binding outside admin mode, `actor`, `reason`, `affected_missions` and
+  `live_passes_total` are `null` (the platform admins' record; tenants see what happened and when).
 - `PUT /data-source-bindings/:binding_id {data_source_id, expected_data_source_id?}` → `{binding}`.
   - `409 binding_changed {current_data_source_id}` when `expected_data_source_id` is stale.
   - `422` when the source doesn't serve the binding's logical source or isn't enabled.
   - The binding must be the mission's own, or (a platform admin in admin mode) a platform-wide one.
-    It may point at a shared source.
+    A mission's own binding may point at its own or a shared source; a platform-wide binding only at
+    a platform-shared source: `422 platform_target_required {field: "data_source_id"}` otherwise.
   - A platform-wide binding (#90) also takes `reason` (required, 1–500 characters),
     `expected_affected_missions` and `expected_live_passes_total` (the counts the sheet showed;
     required). The server recounts: if either differs, `409 blast_radius_changed` with the fresh

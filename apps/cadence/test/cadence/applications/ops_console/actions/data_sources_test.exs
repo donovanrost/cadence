@@ -287,6 +287,42 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
                )
     end
 
+    test "a platform-wide binding never points at an organization's own source, even for an admin",
+         c do
+      {:ok, _binding} =
+        DataSources.persist_data_binding(%DataBinding{
+          binding_id: "platform-shared-binding-target",
+          organization_id: nil,
+          mission_id: nil,
+          realm: "flight",
+          logical_source: :telemetry,
+          data_source_id: c.shared.data_source_id
+        })
+
+      own = persist_source!("own-target-source", @organization_id, @mission_id, :mission_isolated)
+
+      assert {:error, :platform_target_required} =
+               DataSourcesAction.execute(
+                 platform_admin(),
+                 HostContext.mission(@mission_id),
+                 "data_sources",
+                 request("change-binding", %{
+                   "binding" => %{
+                     "binding_id" => "platform-shared-binding-target",
+                     "data_source_id" => own.data_source_id,
+                     "reason" => "Use ours.",
+                     "expected_affected_missions" => 1,
+                     "expected_live_passes_total" => 0
+                   }
+                 })
+               )
+
+      assert {:ok, %DataBinding{data_source_id: unchanged}} =
+               DataSources.fetch_data_binding("platform-shared-binding-target")
+
+      assert unchanged == c.shared.data_source_id
+    end
+
     test "a platform admin in admin mode may change a shared source", c do
       admin =
         Scope.new(%{
@@ -309,6 +345,20 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
                  request("disable-source", %{"data-source-id" => c.shared.data_source_id})
                )
     end
+  end
+
+  defp platform_admin do
+    Scope.new(%{
+      user:
+        User.new(%{
+          user_id: "user-platform-admin-target",
+          email: "pa-target@example.test",
+          display_name: "PA",
+          capabilities: [:platform_admin]
+        }),
+      organization_id: @organization_id,
+      admin_mode?: true
+    })
   end
 
   defp execute(request),

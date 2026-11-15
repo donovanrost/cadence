@@ -315,6 +315,9 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
         material_env_profile: "That credential profile isn't this organization's."
       })
 
+  defp error(conn, {:error, :platform_target_required}),
+    do: Problem.respond(conn, :platform_target_required, %{field: "data_source_id"})
+
   defp error(conn, {:error, :incompatible_data_source}),
     do: Problem.respond(conn, :invalid_params, %{field: "data_source_id"})
 

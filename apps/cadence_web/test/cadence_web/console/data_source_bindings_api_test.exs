@@ -39,6 +39,7 @@ defmodule CadenceWeb.Console.DataSourceBindingsAPITest do
     %{
       admin: admin,
       member: member,
+      org: org,
       mission: mission,
       binding: binding,
       to: to,
@@ -145,6 +146,90 @@ defmodule CadenceWeb.Console.DataSourceBindingsAPITest do
              "Switched platform binding #{c.binding.binding_id} from Cadence managed store to " <>
                "Northlight archive · #{missions} mission#{if missions == 1, do: "", else: "s"}, " <>
                "0 live passes: “Northlight takes the archive.”"
+  end
+
+  # api-ops' sweep (11-15): a platform-wide binding serves every tenant that falls back to it, so
+  # pointing it at one organization's own source would send everyone's data there.
+  test "a platform-wide binding refuses an organization's own source as its target", c do
+    {:ok, own} =
+      DataSources.persist_data_source(%DataSource{
+        data_source_id: "org_own_store_#{System.unique_integer([:positive])}",
+        owner: :cadence,
+        kind: :managed_tsdb,
+        adapter: Cadence.Dashboards.Sources.Telemetry,
+        organization_id: c.org.organization_id,
+        mission_id: c.mission.mission_id,
+        isolation_level: :mission_isolated,
+        capabilities: %{latest?: true},
+        metadata: %{storage: :questdb, display_name: "Our own store"}
+      })
+
+    path = c.base <> "/data-source-bindings/#{c.binding.binding_id}"
+    conn = admin_conn(c)
+
+    %{"data" => %{"affected_missions" => missions}} =
+      conn |> get(path <> "/blast-radius") |> json_response(200)
+
+    assert %{
+             "error" => %{
+               "code" => "platform_target_required",
+               "details" => %{"field" => "data_source_id"}
+             }
+           } =
+             conn
+             |> put(path, %{
+               "data_source_id" => own.data_source_id,
+               "expected_data_source_id" => c.binding.data_source_id,
+               "reason" => "Use ours.",
+               "expected_affected_missions" => missions,
+               "expected_live_passes_total" => 0
+             })
+             |> json_response(422)
+
+    assert {:ok, %DataBinding{data_source_id: unchanged}} =
+             DataSources.fetch_data_binding(c.binding.binding_id)
+
+    assert unchanged == c.binding.data_source_id
+
+    assert [] =
+             PlatformEvents.list(limit: 5) |> Enum.filter(&(&1.target_id == c.binding.binding_id))
+  end
+
+  test "outside admin mode, a platform binding's history hides the admin, the reason and the counts",
+       c do
+    path = c.base <> "/data-source-bindings/#{c.binding.binding_id}"
+    conn = admin_conn(c)
+
+    %{"data" => %{"affected_missions" => missions}} =
+      conn |> get(path <> "/blast-radius") |> json_response(200)
+
+    conn
+    |> put(path, %{
+      "data_source_id" => c.to.data_source_id,
+      "expected_data_source_id" => c.binding.data_source_id,
+      "reason" => "Northlight takes the archive.",
+      "expected_affected_missions" => missions,
+      "expected_live_passes_total" => 0
+    })
+    |> json_response(200)
+
+    assert %{"data" => %{"events" => [switch | _]}} =
+             c.member
+             |> TestFixtures.member_conn()
+             |> get(path <> "/events")
+             |> json_response(200)
+
+    assert %{
+             "kind" => "switched",
+             "to" => %{"display_name" => "Northlight archive"},
+             "actor" => nil,
+             "reason" => nil,
+             "affected_missions" => nil,
+             "live_passes_total" => nil
+           } = switch
+
+    assert %{"data" => %{"events" => [%{"reason" => "Northlight takes the archive."} | _]}} =
+             conn |> get(path <> "/events") |> json_response(200)
   end
 
   defp admin_conn(c) do
