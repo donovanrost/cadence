@@ -92,7 +92,7 @@ query (⌘K) → fleet status tag (Ops) → clocks → account.
 - **Fleet status tag** (Ops): worst state across the fleet (`◆ FLEET · ATTENTION`, `▲ FLEET ·
   CAUTION`, hatched `FLEET · STALE`, `■ FLEET · NOMINAL`); click → Now.
 - **Account menu**: name + role, Your account, Switch organization, Platform
-  admin ↗ (capability-gated), Sign out.
+  admin (capability-gated; the console admin area, L7), Sign out.
 
 **Rail.** Ops 200px numbered 01–07 with live counts (Fleet size, Alarms open in crit tint,
 Commands open, Contacts `n AOS`). Setup 220px with Mission / Organization groups and counts

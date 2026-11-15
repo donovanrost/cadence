@@ -49,7 +49,7 @@ lbl "EARENDIL · ALARMS"   h1 "17 active"            tabs: Active 17 · Acknowle
 ## Telemetry (`M/telemetry`, rail 06)
 **Question:** "Plot this point for these spacecraft over that window."
 ```
-lbl "EARENDIL · TELEMETRY"   h1 "Explore"                  [Dashboards ↗] (DECISIONS #11)
+lbl "EARENDIL · TELEMETRY"   h1 "Explore"      (Explore · Dashboards are tabs under the header, L8)
 ┌ T1 Points (aside 320, scrolls) ┐ ┌ T2 Plot (flex) ──────────────────────────────────┐
 │ search · spacecraft chips      │ │ range: ApTimePicker range variant (presets first) │
 │ point list (name, desc, unit)  │ │ ApTimeSeries, one series per sc×point (max 6)     │

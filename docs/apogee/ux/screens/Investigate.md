@@ -115,7 +115,8 @@ layout. T1 scrolls. Reads only M23, M10, M11 and M8.
     Never two y-axes on one plot.
   - Pass spans as faint AOS–LOS bands with station codes, and the live tail from M8.
   - Hover shows a crosshair readout of every plotted value at that time.
-  - Links: `Open in Explore` (same points and range), `Dashboards ↗` (DECISIONS #11).
+  - Links: `Open in Explore` (same points and range), `Dashboards` (in the console:
+    Telemetry › Dashboards, L8).
 - **T3 Values:** the focused point's samples in the range (time to the second, value + unit, limit state),
   newest first, plus `Export CSV`. Clicking a plot focuses it.
 - **Empty and errors:**

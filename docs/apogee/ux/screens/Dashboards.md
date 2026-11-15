@@ -8,7 +8,7 @@ quality come from the ground definitions, never from panel config. Binding modes
 
 ## Where it sits
 - **Rail:** Ops › 06 Telemetry has two views, `Explore` and `Dashboards`, as tabs under its header. There's no new
-  rail item. `Dashboards ↗` links become in-console links (IA, OpsLists, Investigate).
+  rail item. `Dashboards ↗` links became in-console links (IA, OpsLists, Investigate: amended 11-15, §11b).
 - **Directory** `M/telemetry/dashboards`: a normal reading page in the shell, with search, a tag filter, starred,
   an ApTable (Name link · Tags (chips) · Spacecraft · Updated by/when) and the primary `New dashboard`. There's no
   folder model, so there's no Folder column (Q4).
