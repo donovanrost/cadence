@@ -634,7 +634,7 @@ the console yet**: each target below is where the old URL should go (with the sl
 | --- | --- | --- | --- | --- |
 | 239 | `/` | AdministrationPage, organization_home | `org.home` | covered |
 | 242-243 | `/settings[/:section]` | SettingsPage | `org.settings` | covered |
-| 245, 249 | `/missions/:id/settings[/:section]` | SettingsPage | `setup.settings` | covered |
+| 245, 249 | `/missions/:id/settings[/:section]` | SettingsPage | `setup.settings` | covered (the console renders every registry section, incl. `cadence.pass_review`, which the legacy host never had a contribution for; devops 11-15) |
 | 265 | `/missions/:id` | MissionPage, mission_overview | `mission.home` (→ `ops.now`) | covered |
 | 267, 271 | `…/spacecraft`, `/new` | SpacecraftPage | `setup.spacecraft`, `.new` | covered |
 | 275-283 | `…/spacecraft/profiles[/new\|/:id]` | SpacecraftPage | `setup.profiles`, `setup.profile.new`, `setup.profile` | covered |
