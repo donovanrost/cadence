@@ -30,21 +30,20 @@ defmodule CadenceWeb.SettingsPageTest do
     }
   end
 
-  test "ordinary members discover organization and mission settings without an installation", c do
-    for path <- ["/settings", c.path] do
-      {:ok, view, _} = live(c.conn, path)
-      assert %{"status" => "ready", "data" => data} = page(view)
-      assert data["can_edit"]
+  # §11c A: organization settings left the host for the console (/settings redirects there).
+  test "ordinary members discover mission settings without an installation", c do
+    {:ok, view, _} = live(c.conn, c.path)
+    assert %{"status" => "ready", "data" => data} = page(view)
+    assert data["can_edit"]
 
-      assert Enum.map(data["sections"], & &1["id"]) == [
-               "cadence.governance",
-               "cadence.pass_review",
-               "commanding.defaults"
-             ]
+    assert Enum.map(data["sections"], & &1["id"]) == [
+             "cadence.governance",
+             "cadence.pass_review",
+             "commanding.defaults"
+           ]
 
-      assert Enum.all?(data["sections"], &(not Map.has_key?(&1, "provider")))
-      assert has_element?(view, "#application-shell")
-    end
+    assert Enum.all?(data["sections"], &(not Map.has_key?(&1, "provider")))
+    assert has_element?(view, "#application-shell")
   end
 
   test "writes persist at their exact scope, reject stale tokens, and record the actor", c do

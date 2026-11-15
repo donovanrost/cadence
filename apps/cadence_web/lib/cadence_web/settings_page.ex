@@ -5,8 +5,6 @@ defmodule CadenceWeb.SettingsPage do
   alias Cadence.Platform.ScopedReadUpdates
 
   @routes [
-    "/settings",
-    "/settings/:section_id",
     "/missions/:mission_id/settings",
     "/missions/:mission_id/settings/:section_id"
   ]

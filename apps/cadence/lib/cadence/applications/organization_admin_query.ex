@@ -8,12 +8,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
 
   @query_contracts [
     %{
-      id: "cadence.organization.home",
-      version: 1,
-      surface_id: "organization_home",
-      stream?: false
-    },
-    %{
       id: "cadence.organization.notifications_bell",
       version: 1,
       surface_id: "notifications_bell",
@@ -55,12 +49,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
          :ok <- validate_context(scope, host_context, request.surface_id),
          {:ok, data} <- surface_data(scope, host_context, request.surface_id, request.params) do
       {:ok, %{"navigation" => %{}, "data" => data}}
-    end
-  end
-
-  defp surface_data(scope, %HostContext{placement: :organization}, "organization_home", _params) do
-    with {:ok, organization} <- Cadence.Organizations.fetch_organization(scope.organization_id) do
-      {:ok, %{organization_id: organization.organization_id}}
     end
   end
 
@@ -122,10 +110,6 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
 
   defp validate_context(_scope, _host_context, _surface_id),
     do: {:error, :scope_mismatch}
-
-  defp authorize_organization_surface(scope, organization_id, "organization_home") do
-    Policy.authorize(scope, :operate_organization, %{organization_id: organization_id})
-  end
 
   defp authorize_organization_surface(scope, organization_id, _surface_id) do
     Policy.authorize(scope, :read_organization, %{organization_id: organization_id})

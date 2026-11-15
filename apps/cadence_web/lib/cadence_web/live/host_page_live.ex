@@ -10,7 +10,6 @@ defmodule CadenceWeb.HostPageLive do
 
   alias CadenceWeb.{
     ActivationApprovals,
-    AdministrationPage,
     ApplicationManagement,
     CatalogPage,
     CatalogUpload,
@@ -716,7 +715,6 @@ defmodule CadenceWeb.HostPageLive do
             ),
           ops_landing_page: OpsLandingPage.load(socket.assigns.current_scope, info),
           timeline_page: OpsTimelinePage.load(socket.assigns.current_scope, info),
-          administration_page: AdministrationPage.load(socket.assigns.current_scope, info),
           mission_page: MissionPage.load(socket.assigns.current_scope, info),
           spacecraft_page: SpacecraftPage.load(socket.assigns.current_scope, info),
           spacecraft_module_page: SpacecraftModulePage.load(socket.assigns.current_scope, info),
@@ -808,7 +806,6 @@ defmodule CadenceWeb.HostPageLive do
       catalog: CatalogUpload.presentation(assigns),
       timeline_page: assigns[:timeline_page],
       ops_landing_page: assigns[:ops_landing_page],
-      administration_page: assigns[:administration_page],
       mission_page: MissionPage.presentation(assigns),
       spacecraft_page: SpacecraftPage.presentation(assigns),
       spacecraft_module_page: assigns[:spacecraft_module_page],

@@ -43,7 +43,8 @@ defmodule CadenceWeb.HostPageLiveTest do
     {conn, organization, mission} = navigation_fixture()
     second = TestFixtures.persist_mission!(organization)
     spacecraft = TestFixtures.persist_spacecraft!(mission)
-    {:ok, view, _html} = live(conn, "/")
+    # §11c A: "/" left the host (it redirects to the console), so navigation starts in a mission.
+    {:ok, view, _html} = live(conn, "/missions/#{second.mission_id}/ops/explore")
     pid = view.pid
 
     for {path, _variant, mission_id} <- [
@@ -55,8 +56,7 @@ defmodule CadenceWeb.HostPageLiveTest do
            "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/explore", "ops", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/activations", "ops", mission.mission_id},
-          {"/missions/#{second.mission_id}/ops/explore", "ops", second.mission_id},
-          {"/", "sidebar", nil}
+          {"/missions/#{second.mission_id}/ops/explore", "ops", second.mission_id}
         ] do
       render_hook(view, "host:context", %{"path" => path})
       shell = LiveVue.Test.get_vue(view, id: "application-shell")
@@ -119,9 +119,9 @@ defmodule CadenceWeb.HostPageLiveTest do
     {conn, _organization, mission} = navigation_fixture()
 
     # L7 moved /admin and L13 /provider-accounts to the console; data-operations/manage keeps the
-    # organization-admin policy.
+    # organization-admin policy. §11c A: "/" redirects to the console, so start on the mission.
     for target <- ["/missions/#{mission.mission_id}/ops/data-operations/manage"] do
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}")
 
       assert {:error, {:redirect, %{to: "/"}}} =
                render_hook(view, "host:context", %{"path" => target})
@@ -142,18 +142,19 @@ defmodule CadenceWeb.HostPageLiveTest do
   end
 
   test "revoked browser sessions cannot keep navigating on an existing socket" do
-    {conn, _organization, _mission} = navigation_fixture()
-    {:ok, view, _html} = live(conn, "/")
+    {conn, _organization, mission} = navigation_fixture()
+    path = "/missions/#{mission.mission_id}"
+    {:ok, view, _html} = live(conn, path)
     :ok = Cadence.Auth.revoke_user_session(Plug.Conn.get_session(conn, :user_session_token))
 
     assert {:error, {:redirect, %{to: "/sign-in"}}} =
-             render_hook(view, "host:context", %{"path" => "/"})
+             render_hook(view, "host:context", %{"path" => path})
   end
 
   test "query parameters cannot replace authorized path resources" do
     {conn, organization, mission} = navigation_fixture()
     other = TestFixtures.persist_mission!(organization)
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, "/missions/#{other.mission_id}/spacecraft")
     path = "/missions/#{mission.mission_id}?mission_id=#{other.mission_id}&host_policy=admin"
     render_hook(view, "host:context", %{"path" => path})
     snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
@@ -162,8 +163,8 @@ defmodule CadenceWeb.HostPageLiveTest do
   end
 
   test "invalid context targets leave the authorized snapshot unchanged" do
-    {conn, _organization, _mission} = navigation_fixture()
-    {:ok, view, _html} = live(conn, "/")
+    {conn, _organization, mission} = navigation_fixture()
+    {:ok, view, _html} = live(conn, "/missions/#{mission.mission_id}")
     initial = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
 
     for path <- [

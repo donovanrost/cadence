@@ -20,20 +20,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
 
   @surface_contracts [
     %{
-      id: "organization_home",
-      fallback_path: "/",
-      scope: :organization,
-      component: "OrganizationHome",
-      purpose: :overview,
-      placement: :application_workspace,
-      navigation_label: "Overview",
-      navigation_order: 10,
-      query: "cadence.organization.home",
-      query_version: 1,
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
       id: "notifications_bell",
       scope: :user,
       component: "NotificationsBell",
@@ -56,11 +42,6 @@ defmodule Cadence.Applications.OrganizationAdmin do
   }
 
   @compatibility_wrappers [
-    %{
-      surface_id: "organization_home",
-      live_view: "CadenceWeb.HostPageLive",
-      component: "OrganizationHome"
-    },
     %{
       surface_id: "notifications_bell",
       live_view: "CadenceWeb.NotificationsBell",
@@ -94,7 +75,9 @@ defmodule Cadence.Applications.OrganizationAdmin do
       trust: :first_party,
       installation_policy: :platform,
       availability: :available,
-      installable_scopes: [:organization, :user],
+      # §11c A + L13: no organization-scope surface is left (home and provider accounts are in
+      # the console), so the remote installs at user scope only (the notifications bell).
+      installable_scopes: [:user],
       actions: action_definitions(),
       surfaces: Enum.map(@surface_contracts, &surface_definition/1)
     }

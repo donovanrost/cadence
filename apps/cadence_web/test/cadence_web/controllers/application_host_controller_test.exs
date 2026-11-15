@@ -128,38 +128,13 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert has_element?(view, "#application-shell")
   end
 
-  test "organization-scope host shells retain the authenticated browser gate", %{conn: conn} do
-    assert conn
-           |> get("/applications/organization_admin/organization_home/federated")
-           |> redirected_to() == "/sign-in"
-  end
-
-  test "organization-scope catalog route builds a positive host context without a mission id" do
-    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
-
-    catalog =
-      member_conn
-      |> get(
-        "/api/cadence/application-host/v1/catalog?scope=organization&organization_id=#{organization.organization_id}"
-      )
-      |> json_response(200)
-
-    assert catalog["session"]["context"]["scope"] == "organization"
-    assert catalog["session"]["context"]["organizationId"] == organization.organization_id
-    assert catalog["session"]["context"]["missionId"] == nil
-  end
-
   test "catalog manifest URLs preserve the browser request origin" do
-    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
+    {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
 
     path =
-      "/api/cadence/application-host/v1/catalog?" <>
-        URI.encode_query(%{
-          "application_key" => "organization_admin",
-          "surface_id" => "organization_home",
-          "scope" => "organization",
-          "organization_id" => organization.organization_id
-        })
+      catalog_path(mission.mission_id) <>
+        "?" <>
+        URI.encode_query(%{"application_key" => "comms_overview", "surface_id" => "overview"})
 
     for origin <- [
           "http://localhost:4001",
@@ -170,56 +145,8 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
       assert [%{"release" => %{"manifestUrl" => manifest_url}}] = catalog["applications"]
 
-      assert manifest_url ==
-               origin <> "/assets/application-host/organization-admin/mf-manifest.json"
+      assert manifest_url == origin <> "/assets/application-host/comms/mf-manifest.json"
     end
-  end
-
-  test "organization home catalog and query use the authenticated root surface contract" do
-    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
-
-    catalog_url =
-      "/api/cadence/application-host/v1/catalog?" <>
-        URI.encode_query(%{
-          "application_key" => "organization_admin",
-          "organization_id" => organization.organization_id,
-          "scope" => "organization",
-          "surface_id" => "organization_home"
-        })
-
-    {catalog_conn, catalog} =
-      member_conn
-      |> get(catalog_url)
-      |> then(fn conn -> {conn, json_response(conn, 200)} end)
-
-    assert [
-             %{
-               "applicationKey" => "organization_admin",
-               "surface" => %{"surfaceId" => "organization_home"}
-             }
-           ] =
-             catalog["applications"]
-
-    response =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> post_json("/api/cadence/application-host/v1/query", %{
-        "applicationKey" => "organization_admin",
-        "applicationVersion" => 1,
-        "surfaceId" => "organization_home",
-        "surfaceVersion" => 1,
-        "queryId" => "cadence.organization.home",
-        "queryVersion" => 1,
-        "params" => %{},
-        "scope" => %{
-          "scope" => "organization",
-          "organizationId" => organization.organization_id
-        }
-      })
-
-    assert json_response(response, 200)["trusted_surface"] == %{
-             "organization_id" => organization.organization_id
-           }
   end
 
   test "mission catalog accepts the browser context query on its scoped route" do
@@ -257,28 +184,6 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     assert [%{"applicationKey" => "comms_overview", "surface" => %{"surfaceId" => "overview"}}] =
              catalog["applications"]
-  end
-
-  test "organization federated shells retain scope ids with exact catalog filters" do
-    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
-
-    shell =
-      member_conn
-      |> get("/applications/organization_admin/organization_home/federated")
-      |> html_response(200)
-
-    expected_catalog_url =
-      "/api/cadence/application-host/v1/catalog?" <>
-        URI.encode_query(%{
-          "application_key" => "organization_admin",
-          "organization_id" => organization.organization_id,
-          "scope" => "organization",
-          "surface_id" => "organization_home"
-        })
-
-    document = LazyHTML.from_fragment(shell)
-    root = LazyHTML.query(document, "#cadence-federation-root")
-    assert [^expected_catalog_url] = LazyHTML.attribute(root, "data-catalog-url")
   end
 
   test "generic shell fallbacks target the existing mission and spacecraft LiveViews" do

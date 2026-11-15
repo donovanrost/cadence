@@ -124,7 +124,7 @@ defmodule CadenceWeb.CatalogUploadTest do
     {:ok, view, _} = live(conn, path)
     old = params(view, %{"name" => "Stale"})
     upload_file(view, @yaml)
-    render_hook(view, "host:context", %{"path" => "/settings"})
+    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}/settings"})
     refute has_element?(view, "#catalog-native-upload-form")
     render_hook(view, "host:context", %{"path" => path})
     refute params(view)["catalog_upload"]["token"] == old["catalog_upload"]["token"]

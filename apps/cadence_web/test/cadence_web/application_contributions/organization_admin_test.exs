@@ -9,16 +9,6 @@ defmodule Cadence.Applications.OrganizationAdminTest do
 
   @expected_surface_contracts [
     %{
-      id: "organization_home",
-      purpose: :overview,
-      scope: :organization,
-      placement: :application_workspace,
-      navigation: %{label: "Overview", order: 10, fallback_path: "/"},
-      query: %{id: "cadence.organization.home", version: 1},
-      actions: [],
-      exposed_module: "./Application"
-    },
-    %{
       id: "notifications_bell",
       purpose: :activity,
       scope: :user,
@@ -30,16 +20,14 @@ defmodule Cadence.Applications.OrganizationAdminTest do
     }
   ]
 
-  test "contributes every post-auth organization surface (L7: platform admin, L13: provider accounts are in the console)" do
+  test "contributes every post-auth organization surface (L7: platform admin, L13: provider accounts and §11c A: home are in the console)" do
     assert :ok = OrganizationAdmin.validate()
 
     assert Enum.map(OrganizationAdmin.surfaces(), & &1.id) == [
-             "organization_home",
              "notifications_bell"
            ]
 
     assert Enum.map(OrganizationAdmin.surfaces(), &{&1.id, &1.scope}) == [
-             {"organization_home", :organization},
              {"notifications_bell", :user}
            ]
 

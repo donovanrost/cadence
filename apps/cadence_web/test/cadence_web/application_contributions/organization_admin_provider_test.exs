@@ -36,9 +36,8 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
      user_scope: Scope.new(%{user: user})}
   end
 
-  test "registers both surfaces with executable query and action authorities" do
+  test "registers the notifications bell with executable query and action authorities" do
     assert Enum.map(OrganizationAdmin.surface_query_contributions(), & &1.query_id) == [
-             "cadence.organization.home",
              "cadence.organization.notifications_bell"
            ]
 
@@ -49,7 +48,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert {:ok, OrganizationAdminQuery} =
              SurfaceProviderRegistry.fetch(
                "organization_admin",
-               "cadence.organization.home"
+               "cadence.organization.notifications_bell"
              )
 
     assert {:ok, OrganizationAdminAction} =
@@ -79,20 +78,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     refute OrganizationAdminAction.host_owned?("notifications_bell", "mark_notification_read")
   end
 
-  test "loads executable organization and user presentations", %{
-    organization: organization,
-    organization_scope: organization_scope,
-    user_scope: user_scope
-  } do
-    assert {:ok, %{"data" => %{organization_id: organization_id}}} =
-             OrganizationAdminQuery.load(
-               organization_scope,
-               HostContext.organization(organization.organization_id),
-               query_request("organization_home", "cadence.organization.home")
-             )
-
-    assert organization_id == organization.organization_id
-
+  test "loads the executable user presentation", %{user_scope: user_scope} do
     assert {:ok, %{"data" => %{context: %{version: 1, unread_count: 0, notifications: []}}}} =
              OrganizationAdminQuery.load(
                user_scope,
@@ -102,22 +88,14 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
   end
 
   test "executes every organization-admin query family through non-LiveView providers", %{
-    organization: organization,
-    organization_scope: organization_scope,
     user_scope: user_scope
   } do
-    organization_queries = [
-      {organization_scope, HostContext.organization(organization.organization_id),
-       "organization_home", "cadence.organization.home", %{}}
-    ]
-
     user_queries = [
       {user_scope, HostContext.user(user_scope.user.user_id), "notifications_bell",
        "cadence.organization.notifications_bell", %{}}
     ]
 
-    for {scope, context, surface_id, query_id, params} <-
-          organization_queries ++ user_queries do
+    for {scope, context, surface_id, query_id, params} <- user_queries do
       assert {:ok, %{"data" => data}} =
                OrganizationAdminQuery.load(
                  scope,
@@ -151,7 +129,9 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     organization: organization,
     organization_scope: organization_scope
   } do
-    assert {:error, :scope_mismatch} =
+    # §11c A + L13: the remote installs at user scope only, so the organization context is refused
+    # before the action's own scope check.
+    assert {:error, :unsupported_application_host_context} =
              ActionDispatcher.authorize(
                organization_scope,
                HostContext.organization(organization.organization_id),
@@ -170,10 +150,12 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     organization_scope: organization_scope
   } do
     refute ApplicationSurfaces.organization_installation_exempt?("mission_catalog")
-    assert ApplicationSurfaces.organization_installation_exempt?("organization_admin")
+
+    # §11c A + L13: no organization-scope surface is left; the remote installs at user scope only.
+    refute ApplicationSurfaces.organization_installation_exempt?("organization_admin")
     refute ApplicationSurfaces.installation_exempt?("mission_catalog", :organization)
 
-    assert ApplicationSurfaces.installation_exempt?("organization_admin", :organization)
+    refute ApplicationSurfaces.installation_exempt?("organization_admin", :organization)
     assert ApplicationSurfaces.installation_exempt?("organization_admin", :user)
     # L7: platform admin is in the console; the remote no longer installs at :admin.
     refute ApplicationSurfaces.installation_exempt?("organization_admin", :admin)
@@ -197,7 +179,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
 
   test "uses the same installation exemption matrix in the action dispatcher" do
     refute ActionDispatcher.installation_exempt?("mission_catalog", :organization)
-    assert ActionDispatcher.installation_exempt?("organization_admin", :organization)
+    refute ActionDispatcher.installation_exempt?("organization_admin", :organization)
     assert ActionDispatcher.installation_exempt?("organization_admin", :user)
     refute ActionDispatcher.installation_exempt?("organization_admin", :admin)
 
@@ -232,7 +214,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
              OrganizationAdminQuery.load(
                organization_scope,
                HostContext.organization("different-organization"),
-               query_request("organization_home", "cadence.organization.home")
+               query_request("notifications_bell", "cadence.organization.notifications_bell")
              )
 
     assert {:error, :scope_mismatch} =

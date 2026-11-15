@@ -49,7 +49,7 @@ defmodule CadenceWeb.CatalogPageTest do
       assert_page(view, page, feature, validator)
     end
 
-    render_hook(view, "host:context", %{"path" => "/settings"})
+    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}/settings"})
     assert snapshot(view)["catalog"] == nil
   end
 
@@ -94,7 +94,7 @@ defmodule CadenceWeb.CatalogPageTest do
     assert [run] = Catalog.list_import_runs(mission.organization_id, mission.mission_id)
     assert run.artifact_id == artifact.artifact_id
 
-    render_hook(view, "host:context", %{"path" => "/settings"})
+    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}/settings"})
     render_hook(view, "host:catalog", %{"event" => "reimport", "path" => path})
     assert length(Catalog.list_import_runs(mission.organization_id, mission.mission_id)) == 1
   end
