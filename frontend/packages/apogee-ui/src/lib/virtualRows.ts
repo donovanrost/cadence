@@ -48,7 +48,11 @@ export function rowWindow(
   return { start, end, before: start * rowHeight, after: (count - end) * rowHeight };
 }
 
-/** The nearest ancestor that scrolls vertically, else null (the document). */
+/**
+ * The nearest ancestor of `el` (exclusive) that scrolls vertically, else null (the document). Start
+ * above the table's own wrapper: its overflow-x: auto makes the computed overflow-y auto too, but
+ * it never scrolls vertically.
+ */
 export function scrollingAncestor(el: HTMLElement | null): HTMLElement | null {
   let node = el?.parentElement ?? null;
   while (node) {
@@ -68,6 +72,8 @@ export function useRowWindow(
   count: Readonly<Ref<number>>,
   options: Readonly<Ref<VirtualOptions | undefined>>,
   scroller: Readonly<Ref<HTMLElement | null | undefined>>,
+  /** Where the scroller search starts (exclusive): the table's own wrapper. */
+  container: Readonly<Ref<HTMLElement | null>> = body,
 ): Readonly<Ref<RowWindow | null>> {
   const win = ref<RowWindow | null>(null);
   const focused = ref<number | null>(null);
@@ -123,7 +129,7 @@ export function useRowWindow(
       win.value = null;
       return;
     }
-    target = scroller.value ?? scrollingAncestor(body.value) ?? window;
+    target = scroller.value ?? scrollingAncestor(container.value ?? body.value) ?? window;
     target.addEventListener("scroll", schedule, { passive: true });
     if (target === window) window.addEventListener("resize", schedule);
     else if (typeof ResizeObserver !== "undefined") {

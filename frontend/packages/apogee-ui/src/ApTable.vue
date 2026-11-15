@@ -51,6 +51,7 @@ const win = useRowWindow(
   computed(() => props.rows.length),
   computed(() => props.virtual),
   computed(() => props.scroller),
+  wrapper,
 );
 /** The rows to render, each with its 0-based index in `rows`. */
 const shown = computed(() => {

@@ -125,6 +125,33 @@ describe("ApTable virtual", () => {
     scroller.remove();
   });
 
+  it("without a scroller prop, finds the scrolling ancestor above the table's own wrapper", async () => {
+    const pane = scrollerOf(400);
+    pane.style.overflowY = "auto";
+    const w = mount(ApTable<Row>, {
+      attachTo: pane,
+      props: {
+        columns: [{ key: "name", label: "Name" }],
+        rows,
+        rowKey: (r: Row) => r.id,
+        virtual: { rowHeight: 40, overscan: 5 },
+      },
+    });
+    w.find("tbody").element.getBoundingClientRect = () =>
+      new DOMRect(0, 40 - pane.scrollTop, 800, 0);
+    // In a browser the wrapper's overflow-x: auto makes overflow-y compute auto; say so here, and
+    // re-run the scroller search (a new options object re-attaches).
+    if (!(w.element instanceof HTMLElement)) throw new Error("wrapper");
+    w.element.style.overflowY = "auto";
+    await w.setProps({ virtual: { rowHeight: 40, overscan: 5 } });
+    pane.dispatchEvent(new Event("scroll"));
+    await frame();
+    // The wrapper must not be taken as the scroller (its 0 px height would render ~6 rows).
+    expect(indexes(w)).toHaveLength(16);
+    w.unmount();
+    pane.remove();
+  });
+
   it("re-windows when the scroller changes", async () => {
     const small = scrollerOf(400);
     const w = mountTable(small);
