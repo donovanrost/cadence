@@ -243,22 +243,18 @@ const missionContext = computed(() => {
     ? { organizationId, missionId, ...(resourceId ? { resourceId } : {}) }
     : null;
 });
+// §11c A: settings routes are mission-only (organization settings live in the console).
 const settingsContext = computed<SettingsContext | null>(() => {
   const current = context.value;
-  if (!current?.user || !current.organization) return null;
-  const identity = {
+  if (!current?.user || !current.organization || !current.mission) return null;
+  return {
     actorId: current.user.user_id,
     organizationId: current.organization.organization_id,
     organizationName: current.organization.display_name,
+    scope: "mission",
+    missionId: current.mission.mission_id,
+    missionName: current.mission.display_name,
   };
-  return current.mission
-    ? {
-        ...identity,
-        scope: "mission",
-        missionId: current.mission.mission_id,
-        missionName: current.mission.display_name,
-      }
-    : { ...identity, scope: "organization", missionId: null, missionName: null };
 });
 watch(
   () => context.value?.user?.user_id,
