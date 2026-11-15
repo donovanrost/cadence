@@ -19,6 +19,7 @@ defmodule Cadence.Reads.EventLog do
 
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.MissionEvents.Entry
+  alias Cadence.Reads.EventLog.DensityCounts, as: EventDensityCounts
 
   alias Cadence.Reads.{
     EventContacts,
@@ -104,6 +105,17 @@ defmodule Cadence.Reads.EventLog do
   @doc "Severity counts per `bucket_s` bucket aligned to `from` (at most #{@density_cap} events read)."
   @spec density(binary(), binary(), map()) :: map()
   def density(organization_id, mission_id, opts) do
+    # lead 11-15: counted in SQL, never loading rows, unless a spacecraft or plane filter needs the
+    # page's per-entry spacecraft resolution (fewer rows).
+    case spacecraft_filter(organization_id, mission_id, opts) do
+      nil -> EventDensityCounts.density(organization_id, mission_id, opts)
+      _filtered -> loaded_density(organization_id, mission_id, opts)
+    end
+  end
+
+  @doc false
+  # The per-entry density (spacecraft and plane filters); also the SQL path's parity reference.
+  def loaded_density(organization_id, mission_id, opts) do
     entries =
       MissionTimeline.list_for_mission(organization_id, mission_id,
         from_occurred_at: opts.from,
@@ -274,8 +286,13 @@ defmodule Cadence.Reads.EventLog do
   end
 
   # 21:08Z 500s (domain): the default Timeline excludes `data`, so its rows needn't be read.
-  defp skip_housekeeping?([_ | _] = kinds), do: "data" not in kinds
-  defp skip_housekeeping?(_all), do: false
+  @doc false
+  def skip_housekeeping?([_ | _] = kinds), do: "data" not in kinds
+  def skip_housekeeping?(_all), do: false
+
+  @doc false
+  # The page's console kind and severity for an entry built from a density group.
+  def classify_entry(%Entry{} = entry), do: {kind(entry), severity(entry)}
 
   defp kind_selected?(_event, nil), do: true
   defp kind_selected?(_event, []), do: true

@@ -695,8 +695,10 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
 
 `{"data": {"bucket_s": 900, "buckets": [{"t", "critical", "caution", "nominal", "info"}], "truncated": false}}`.
 Same filters, `plane` included (no cursor). `bucket_s` is 60–86400 (default: about 96 buckets over the window). Buckets
-are aligned to `from`; empty buckets are omitted. The window is at most 31 days, and at most 5,000
-events are counted (`truncated: true` beyond that).
+are aligned to `from`; empty buckets are omitted. The window is at most 31 days. Without a
+`spacecraft_id` or `plane` filter every event is counted in the database (lead 11-15; no rows
+are loaded, so `truncated` is `false`); with one, at most 5,000 events are read (`truncated: true`
+beyond that). Both count the same way as the list (same kinds, severities and duplicate rule).
 
 ## `GET /api/console/v1/missions/:mission_id/telemetry/points` (M23, owner: api)
 
