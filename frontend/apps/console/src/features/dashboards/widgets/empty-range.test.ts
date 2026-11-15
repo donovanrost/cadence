@@ -2,11 +2,11 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { field, frame, snapshotJson } from "../fixtures.test-support.ts";
-import { workspaceSnapshot } from "../model/snapshot.ts";
+import { workspaceSnapshot, type WidgetType } from "../model/snapshot.ts";
 import WidgetBody from "./WidgetBody.vue";
 
 /** The first placement of a `type` board whose primary frames carry no samples. */
-function emptyBoard(type: string) {
+function emptyBoard(type: WidgetType) {
   const base = snapshotJson(type);
   const r = decode(workspaceSnapshot, {
     ...base,
@@ -20,7 +20,7 @@ function emptyBoard(type: string) {
   if (!placement) throw new Error("fixture");
   return { placement, context: r.value.context };
 }
-const body = (type: string) => {
+const body = (type: WidgetType) => {
   const { placement, context } = emptyBoard(type);
   // The real chart needs the design tokens (not in jsdom); a stub shows whether it's drawn and how.
   return mount(WidgetBody, {

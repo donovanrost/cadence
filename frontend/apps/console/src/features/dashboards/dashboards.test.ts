@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { workspaceSnapshot } from "./model/snapshot.ts";
+import { workspaceSnapshot, type WidgetType } from "./model/snapshot.ts";
 import { limitMark, table, valueTile, worstLimitState } from "./model/widget-data.ts";
 import { selectionFromQuery, selectionParams } from "./model/time-range.ts";
 import { snapshotJson } from "./fixtures.test-support.ts";
@@ -50,7 +50,7 @@ describe("workspace snapshot decoder", () => {
 });
 
 describe("widget projections", () => {
-  const ready = (type: string) => {
+  const ready = (type: WidgetType) => {
     const r = read(snapshotJson(type));
     if (!r.ok || r.value.placements[0]?.status !== "ready") throw new Error("fixture");
     return r.value.placements[0];

@@ -163,13 +163,17 @@ export function withParams(search: string, changes: Record<string, string | null
   return query ? `?${query}` : "";
 }
 
-const UNIT_SECONDS: Readonly<Record<string, number>> = {
+type Unit = "s" | "m" | "h" | "d" | "w";
+const UNIT_SECONDS: Readonly<Record<Unit, number>> = {
   s: 1,
   m: 60,
   h: 3_600,
   d: 86_400,
   w: 604_800,
 };
+
+/** The regex's [smhdw] capture as a unit. */
+const isUnit = (u: string): u is Unit => Object.hasOwn(UNIT_SECONDS, u);
 
 /**
  * The selection in a viewer URL: `from=now-6h&to=now` slides (capped at 24 h), ISO bounds are
@@ -178,7 +182,8 @@ const UNIT_SECONDS: Readonly<Record<string, number>> = {
 export function selectionFromQuery(from: string, to: string): TimeSelection {
   const relative = /^now-(\d+)([smhdw])$/.exec(from);
   if (relative && to === "now") {
-    const seconds = Number(relative[1]) * (UNIT_SECONDS[relative[2] ?? ""] ?? 0);
+    const unit = relative[2];
+    const seconds = Number(relative[1]) * (unit && isUnit(unit) ? UNIT_SECONDS[unit] : 0);
     return seconds > 0 && seconds <= maxSlidingSeconds
       ? { kind: "sliding", seconds }
       : { kind: "default" };

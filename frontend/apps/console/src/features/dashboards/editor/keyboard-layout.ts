@@ -1,11 +1,14 @@
 import type { LayoutEdit, OutlinePlacement } from "./contracts.ts";
 
-const STEP: Readonly<Record<string, readonly [number, number]>> = {
+type ArrowKey = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown";
+const STEP: Readonly<Record<ArrowKey, readonly [number, number]>> = {
   ArrowLeft: [-1, 0],
   ArrowRight: [1, 0],
   ArrowUp: [0, -1],
   ArrowDown: [0, 1],
 };
+/** A KeyboardEvent.key the layout moves by (the DOM gives plain text). */
+const isArrow = (key: string): key is ArrowKey => Object.hasOwn(STEP, key);
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
 
 /** "column 2, row 3, 4 × 3" (1-based), for the Move button's description and announcements. */
@@ -28,9 +31,8 @@ export function keyboardLayout(
   shift: boolean,
   columns: number,
 ): LayoutEdit | null {
-  const step = STEP[key];
-  if (!step) return null;
-  const [dx, dy] = step;
+  if (!isArrow(key)) return null;
+  const [dx, dy] = STEP[key];
   const x = p.layout.x ?? 0;
   const y = p.layout.y ?? 0;
   const c = p.constraints;

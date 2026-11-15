@@ -1,3 +1,4 @@
+import type { WidgetType } from "./model/snapshot.ts";
 /**
  * D5 payloads as JSON (what the server sends), for decoder and screen tests. The snapshot mirrors
  * `Cadence.Reads.Dashboards.WorkspaceSnapshot`; ported from the module's snapshot fixture.
@@ -23,7 +24,7 @@ export const frame = (shape: string, fields: Field[], role = "primary") => ({
   fields,
 });
 
-const frames: Record<string, ReturnType<typeof frame>[]> = {
+const frames: Partial<Record<WidgetType, ReturnType<typeof frame>[]>> = {
   value_tile: [
     frame("scalar", [field("time", "time", [1000]), field("voltage", "number", [28.4], "V")]),
   ],
@@ -44,7 +45,7 @@ const frames: Record<string, ReturnType<typeof frame>[]> = {
   ],
 };
 
-export function snapshotJson(type = "value_tile") {
+export function snapshotJson(type: WidgetType = "value_tile") {
   return {
     version: 1,
     organization_id: "org",
@@ -106,7 +107,7 @@ export function snapshotJson(type = "value_tile") {
   };
 }
 
-export function viewJson(type = "value_tile") {
+export function viewJson(type: WidgetType = "value_tile") {
   return {
     dashboard: {
       id: "dashboard",
