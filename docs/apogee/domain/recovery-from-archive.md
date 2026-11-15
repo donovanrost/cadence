@@ -173,10 +173,40 @@ read is the cost, and N=8 bounds memory to about 64 MB of decompressed segments.
 - **Output ids:** each partition's outputs get a monotonic sequence, for idempotency and for
   mission-root partitions' positions.
 
+## `latest`: in the snapshot, or the Postgres current-value store? (director's item 2)
+
+**Measured on dev** (read-only, a 1% sample of `semantic_runtime_commits`; 393,649 rows,
+15 GB):
+- the full semantic state term averages **23.8 KB** (max 24.6 KB) per spacecraft;
+- the busiest partitions commit about **300 times an hour in a pass** (one commit per processed
+  batch).
+
+`latest` holds about 146 points per spacecraft on this catalog and is most of that term. Monitoring
+state (83 policies) and algorithm memory are a few KB.
+
+| | (a) `latest` in the 60 s snapshot | (b) Postgres current-value store on by default |
+|---|---|---|
+| Writes per spacecraft-hour **in a pass** | ≤ 60 snapshot rows + 1 at end of pass | ~300 batches × up to ~146 upserted points ≈ **40k row upserts** |
+| Bytes per spacecraft-hour in a pass | ≈ 60 × ~24 KB ≈ **1.4 MB** (vs ≈ 60 × ~4 KB = 0.25 MB without `latest`) | ≈ 40k × ~300 B of tuple + WAL ≈ **10–15 MB** |
+| Out of a pass | none (the end-of-pass snapshot is exact) | none |
+| Boot cost per partition | none extra (it's in the snapshot row) | one indexed query, ~146 rows |
+| Correct after a crash mid-pass? | **Yes**: recovery replays from the snapshot position, which re-applies every update since, so `latest` comes out exact | Yes, but adds nothing: the replay would rebuild the same values |
+
+**Recommendation: (a).** Keep `latest` in the snapshot. It costs about 1 MB an hour per spacecraft
+in a pass, against 10–15 MB and 40k upserts for (b), and it needs no second store to stay in step.
+The replay from the snapshot position makes it exact.
+
+Bonus: at partition start, seed the ETS current-value store (which the live UI reads, and which a
+restart empties) from the snapshot's `latest`, so the console shows values right after a restart.
+That holds whichever option is chosen.
+
+The Postgres store stays what its moduledoc says it is: for tests and rebuild flows.
+
 ## Prerequisites and open questions
 
 1. **Journal on by default:** b6d7bc9a6 isn't on the team branch.
-2. **Postgres current-value store on by default,** or keep `latest` in the snapshot.
+2. **`latest` stays in the snapshot** (see the comparison above); the Postgres current-value store
+   stays off.
 3. **Identity v2 audit:** every id derived from `evidence_id` re-keyed to (stream, offset), plus
    deterministic ids for semantic outputs and action requests.
 4. **The capture-first path for non-TCP/non-TM adapters,** or an explicit "snapshot only" there.
