@@ -478,6 +478,7 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 | 7 | Auth and roles (`features/auth`, `api/session.ts`, `features/account/invitations.ts`) | fe-ops (auth) + lead (session) |
 | 8 | Error-details handling (comes with A2) | lead, then each owner switches to `fieldErrors()` |
 | 9 | Query-key reparsing (comes with A4) | each owner |
+| — | fe-ops 11-15 audit (fe-ops/typing-12b: e81a16f85 commands, 8c25144c6 contacts, 2ae4fd6f7 auth, c1d6afe69 Compose query key): the gate only checks fields named state/status/kind/reason/code, so enum-like fields under other names slipped past → a structure rule flagging Record<string,string> word maps on decoded fields and d.token compared to literals (fe-ops proposes, lead OKs, baseline + ratchet); entities.stationRef mints StationId and readiness moves onto it (fe-ops, lead's file) | fe-ops + lead |
 | 10 | `features/planning/*`, `features/profiles/newProfile.ts`: a shared `JsonObject` type and path helper | fe-setup |
 
 **A5 shared entity decoders: sites left for their owners** (fe-setup's survey 11-13; `api/entities.ts` makes name / scid / code nullable, so rendering sites need a fallback):
