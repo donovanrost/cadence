@@ -21,6 +21,8 @@ export function utcTimeLabels(
   });
 }
 
+const blankLabels = (_u: uPlot, splits: number[]) => splits.map(() => "");
+
 /** Owns uPlot creation, options and range-selection listeners. */
 export class ChartPlot {
   private rangeSelectionOverlay: Element | null = null;
@@ -105,6 +107,8 @@ export class ChartPlot {
           ? { label: unit || this.surface.el.dataset.unit || "" }
           : {}),
         side: index % 2 === 0 ? (3 as const) : (1 as const),
+        // No samples in range: the frame keeps its time axis, but a value axis would be invented.
+        ...(this.surface.model.xs.length === 0 ? { values: blankLabels } : {}),
       })),
     ];
   }

@@ -205,6 +205,8 @@ function plotSignature(model: ChartModel) {
     options,
     axisMode: model.axisMode,
     hidden: [...model.hiddenSeriesIds],
+    // An empty range draws a different frame (blank y labels, the stale hatch): rebuild on change.
+    empty: model.xs.length === 0,
     series: model.seriesList.map(({ id, label, unit, role, compare_of }) => ({
       id,
       label,

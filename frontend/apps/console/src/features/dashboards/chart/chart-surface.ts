@@ -102,17 +102,18 @@ export class ChartSurface {
   }
 
   intervalBounds(marker: ChartInterval) {
-    if (!marker.starts_at_ms || this.model.xs.length === 0) return null;
+    // Drawn on an empty range too (ux: a pass with no samples is what an operator needs to see).
+    if (!marker.starts_at_ms) return null;
 
     const plotBounds = this.chartPlotBounds();
     const plotLeft = plotBounds.left;
     const plotRight = plotLeft + plotBounds.width;
     const startSeconds = marker.starts_at_ms / 1000;
+    const xDomain = this.chartXDomain();
     const endSeconds = marker.ends_at_ms
       ? marker.ends_at_ms / 1000
-      : this.model.xs[this.model.xs.length - 1];
-    if (endSeconds === undefined) return null;
-    const xDomain = this.chartXDomain();
+      : (this.model.xs.at(-1) ?? xDomain.max);
+    if (!Number.isFinite(endSeconds)) return null;
 
     if (endSeconds < xDomain.min || startSeconds > xDomain.max) return null;
 

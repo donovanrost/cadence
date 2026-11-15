@@ -4,6 +4,7 @@ import TelemetryChart from "../chart/TelemetryChart.vue";
 import type { ChartAnnotation } from "../chart/chart-markers.ts";
 import type { ReadyPlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import { overlayMarkers } from "../model/overlay-markers.ts";
+import { hasData } from "../model/widget-data.ts";
 import { snapshotSeries } from "../model/snapshot-series.ts";
 
 /** Time series on the ported uPlot engine, from the snapshot's decimated envelope frames. */
@@ -26,6 +27,13 @@ const series = computed(() => {
     return null;
   }
 });
+/**
+ * No samples in range (ux, Overlays): the chart still draws its frame (x axis from the range, the
+ * stale hatch, bands and marks) under a caption that never says why, since dropped and never sent
+ * look the same. A live range has no fixed from/to to draw, so it gets the caption alone.
+ */
+const empty = computed(() => !hasData(props.placement));
+const frameable = computed(() => Boolean(props.context.from && props.context.to));
 /** Limits and contacts from the placement's overlay frames (ux Dashboards.md 'Overlays'). */
 const overlay = computed(() => overlayMarkers(props.placement));
 /** An unrecognized annotation kind draws as a point, as the chart always did. */
@@ -67,9 +75,9 @@ const optional = computed(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col overflow-hidden px-1 pb-1">
+  <div class="relative flex h-full min-h-0 flex-col overflow-hidden px-1 pb-1">
     <TelemetryChart
-      v-if="series"
+      v-if="series && (!empty || frameable)"
       :chart_id="chartId"
       :widget_id="placement.authored_id"
       :placement_id="placement.id"
@@ -90,6 +98,12 @@ const optional = computed(() => {
       :engine_backed="true"
       v-bind="optional"
     />
-    <p v-else class="m-auto text-sm text-text-3">This chart's data can't be plotted.</p>
+    <p v-else-if="!empty" class="m-auto text-sm text-text-3">This chart's data can't be plotted.</p>
+    <p
+      v-if="empty"
+      class="pointer-events-none absolute inset-0 m-0 grid place-items-center text-sm text-text-3"
+    >
+      No samples in this range.
+    </p>
   </div>
 </template>

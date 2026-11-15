@@ -48,6 +48,7 @@ export class ChartEvents {
     if (!this.eventLayer || !this.surface.chart) return;
     this.eventLayer.replaceChildren();
     this.fillLayer.replaceChildren();
+    if (this.surface.model.xs.length === 0) this.renderEmptyHatch();
     const markers = this.surface.model.eventMarkers;
     this.renderContactBands(markers.filter(isContact));
     this.renderMissionEvents(markers.filter(isMissionEvent));
@@ -107,6 +108,17 @@ export class ChartEvents {
       labelled.add(key);
       this.renderBandLabel(band.left, name);
     }
+  }
+
+  /** No samples in range (ux, Overlays): the stale hatch across the plot, under bands and marks. */
+  private renderEmptyHatch() {
+    const plot = this.surface.chartPlotBounds();
+    const hatch = document.createElement("div");
+    Object.assign(hatch.style, {
+      ...this.bandBox(plot.left, plot.width),
+      backgroundImage: "var(--apogee-hatch-stale-cell)",
+    });
+    this.fillLayer.appendChild(hatch);
   }
 
   private bandBox(left: number, width: number) {

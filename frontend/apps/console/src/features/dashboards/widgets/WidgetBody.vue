@@ -29,7 +29,9 @@ const ready = computed(() => (props.placement.status === "ready" ? props.placeme
 const message = computed(() => {
   if (props.placement.status === "unavailable") return unavailable[props.placement.reason];
   if (props.placement.widget.type === "unrecognized") return unavailable.unsupported_widget;
-  if (!hasData(props.placement)) return "No data in this range.";
+  // A time series draws its frame on an empty range (bands and marks still matter; ux, Overlays).
+  if (!hasData(props.placement) && props.placement.widget.type !== "time_series")
+    return "No data in this range.";
   return null;
 });
 </script>
