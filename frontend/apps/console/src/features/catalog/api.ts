@@ -41,6 +41,18 @@ const revision = object({
   spacecraft_count: count,
   imported_at: timestamp,
   actor: nullable(object({ name: string })),
+  /**
+   * ux U65 (api, 11-15): the compiled mission model behind this revision and its approval state;
+   * null for a revision without one, absent on older reads (no tag then).
+   */
+  model: optional(
+    nullable(
+      object({
+        revision_id: token,
+        status: decoders.knownText(["candidate", "approved", "rejected", "retired"] as const),
+      }),
+    ),
+  ),
 });
 
 // api: no separate "pending"; a queued run reads as running.

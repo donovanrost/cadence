@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { ApPanel, ApTable, formatCount, formatShort, type ApColumn } from "@/ui";
+import { computed } from "vue";
+import { ApPanel, ApTable, ApTag, formatCount, formatShort, type ApColumn } from "@/ui";
+import { approvalTag } from "./approval/words.ts";
 import type { CatalogRevision } from "./api.ts";
 import { ARTIFACT_LIVE } from "./artifact.ts";
 
 /** Revisions of one catalog database, newest first. */
-defineProps<{ revisions: readonly CatalogRevision[] }>();
+const props = defineProps<{ revisions: readonly CatalogRevision[] }>();
+/** U65 tag per revision id (NEEDS APPROVAL / APPROVED / REJECTED), or none. */
+const tags = computed(
+  () => new Map(props.revisions.map((r) => [r.id, r.model ? approvalTag(r.model.status) : null])),
+);
 
 const columns: readonly ApColumn[] = [
   { key: "number", label: "Revision", mono: true },
@@ -24,7 +30,17 @@ const columns: readonly ApColumn[] = [
       :row-key="(r) => r.id"
       caption="Catalog revisions"
     >
-      <template #cell-number="{ row }">rev {{ row.number }}</template>
+      <template #cell-number="{ row }">
+        <!-- U65: a revision with a mission model opens its approval page. -->
+        <RouterLink
+          v-if="row.model"
+          :to="{ name: 'setup.catalog.model', params: { revisionId: row.model.revision_id } }"
+          class="text-primary no-underline hover:underline"
+          >rev {{ row.number }}</RouterLink
+        >
+        <template v-else>rev {{ row.number }}</template>
+        <ApTag v-if="tags.get(row.id)" class="ml-2" v-bind="tags.get(row.id) ?? {}" />
+      </template>
       <template #cell-label="{ row }">{{ row.label ?? "—" }}</template>
       <template #cell-file="{ row }">
         <RouterLink

@@ -79,6 +79,14 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "catalog", title: "Source file" },
   },
   {
+    // ux U65: a catalog revision's approval, by its mission model revision (api's wire).
+    path: "setup/catalog/models/:revisionId",
+    name: "setup.catalog.model",
+    component: () => import("@/features/catalog/approval/ModelRevisionScreen.vue"),
+    props: (to) => ({ revisionId: paramText(to.params, "revisionId") }),
+    meta: { mode: "setup", nav: "catalog", title: "Catalog revision" },
+  },
+  {
     // ux §7 #8: one Catalog page with a database picker; the old path opens it on that database.
     path: "setup/catalog/:databaseId",
     name: "setup.catalog.database",

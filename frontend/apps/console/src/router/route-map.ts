@@ -246,6 +246,12 @@ export interface ConsoleRoutes {
     { importId?: RawOpt },
     { importId?: string }
   >;
+  "setup.catalog.model": InMission<
+    "setup.catalog.model",
+    "/setup/catalog/models/:revisionId",
+    { revisionId: Raw },
+    { revisionId: string }
+  >;
   "setup.catalog.database": InMission<
     "setup.catalog.database",
     "/setup/catalog/:databaseId",
@@ -397,6 +403,7 @@ export const consoleRouteNames: Readonly<Record<ConsoleRouteName, true>> = {
   "setup.catalog": true,
   "setup.catalog.import": true,
   "setup.catalog.database": true,
+  "setup.catalog.model": true,
   "setup.catalog.artifact": true,
   "setup.changes": true,
   "setup.activation": true,
