@@ -54,7 +54,7 @@ org home, not found.
 | 1 | Table scroll wrapper (`overflow-x-auto`) at 390 has no tab stop, role or name (axe `scrollable-region-focusable`, serious) | catalog-import run, K3 pass review, person, profile History, spacecraft detail | lead (kit) |
 | 2 | Wizard step bar scrolls sideways at 390 with no tab stop (same rule) | new spacecraft, all four steps | lead (kit) |
 | 3 | In-text "Audit log" link marked by colour only (axe `link-in-text-block`, serious) | provider account | fe-setup |
-| 4 | Dashboards directory makes the page scroll sideways by 134 px at 390 | Telemetry › Dashboards | dashboards |
+| 4 | ~~Dashboards directory makes the page scroll sideways by 134 px at 390~~ fixed 9b9a99649: below 768 the directory is ux's Mobile rows (DirectoryRows.vue), ux accepted | Telemetry › Dashboards | dashboards |
 | 5 | A member who opens an admin-only org page by URL gets a 403, "You do not have permission to do that." with a Retry that can't succeed, and an empty org-level rail | Audit, Provider accounts, People › Services, person | fe-setup |
 | 6 | `GET /command-draft` 404 with no draft logs a console error on every load | Commands, Compose, Request | api / fe-ops |
 | 7 | Requirements read 500 (qa #53) | Contact planning | api |
