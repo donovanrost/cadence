@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { ApButton, ApCallout } from "@/ui";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
 import type { Command, LayoutEdit, Outline, OutlinePlacement, Preview } from "./contracts.ts";
@@ -32,6 +32,35 @@ const sections = computed(() =>
   outline.value.sections.map((s) => ({ section: s, placements: inSection(s.id) })),
 );
 const empty = computed(() => outline.value.placements.length === 0);
+
+/**
+ * After 'Remove section', focus goes to the next section's heading, else the previous one's, else
+ * Add section (ux a11y checklist). The section leaves only when the staged preview refreshes, so
+ * the move waits until its heading is gone.
+ */
+const root = ref<HTMLElement | null>(null);
+const pendingFocus = ref<{ removed: string; target: string | null } | null>(null);
+function onSectionStage(command: Command, index: number) {
+  if (command.event === "remove_section") {
+    const list = sections.value;
+    const target = list[index + 1]?.section.id ?? list[index - 1]?.section.id ?? null;
+    pendingFocus.value = { removed: command.input.section_id, target };
+  }
+  emit("stage", command);
+}
+watch(
+  () => sections.value.map((s) => s.section.id),
+  async (ids) => {
+    const pending = pendingFocus.value;
+    if (!pending || ids.includes(pending.removed)) return;
+    pendingFocus.value = null;
+    await nextTick();
+    const heading = pending.target
+      ? root.value?.querySelector<HTMLElement>(`[data-section-heading="${pending.target}"]`)
+      : null;
+    (heading ?? document.querySelector<HTMLElement>("[data-add-section]"))?.focus();
+  },
+);
 const onLayout = (layouts: LayoutEdit[]) => emit("stage", { event: "layout", input: { layouts } });
 const onRemove = (p: OutlinePlacement) =>
   emit("stage", { event: "remove_widget", input: { placement_id: p.id } });
@@ -46,7 +75,7 @@ const onRemove = (p: OutlinePlacement) =>
       ></template
     >
   </ApCallout>
-  <div class="flex flex-col gap-3">
+  <div ref="root" class="flex flex-col gap-3">
     <section v-if="loose.length || !sections.length" class="flex flex-col gap-2">
       <h2 v-if="sections.length" class="m-0 font-display text-sm uppercase text-text-4">
         Not in a section
@@ -68,7 +97,7 @@ const onRemove = (p: OutlinePlacement) =>
         :last="i === sections.length - 1"
         @add-widget="emit('edit', null, s.section.id)"
         @edit="emit('editSection', s.section)"
-        @stage="emit('stage', $event)"
+        @stage="onSectionStage($event, i)"
       />
       <p v-if="!s.placements.length" class="m-0 text-sm text-text-3">No widgets yet.</p>
       <EditSection

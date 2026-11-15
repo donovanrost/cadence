@@ -15,7 +15,11 @@ const props = defineProps<{ section: Section; count: number; first: boolean; las
 const emit = defineEmits<{ addWidget: []; edit: []; stage: [command: Command] }>();
 const confirming = ref(false);
 const items = computed(() => [
-  { id: "up" as const, label: "Move up", disabled: props.first ? "It's already first." : undefined },
+  {
+    id: "up" as const,
+    label: "Move up",
+    disabled: props.first ? "It's already first." : undefined,
+  },
   {
     id: "down" as const,
     label: "Move down",
@@ -23,7 +27,9 @@ const items = computed(() => [
   },
   { id: "remove" as const, label: "Remove section…" },
 ]);
-const widgets = computed(() => (props.count === 1 ? "1 widget stays" : `${props.count} widgets stay`));
+const widgets = computed(() =>
+  props.count === 1 ? "1 widget stays" : `${props.count} widgets stay`,
+);
 
 function onMenu(id: Action) {
   const section_id = props.section.id;
@@ -41,7 +47,12 @@ function remove() {
 <template>
   <header class="flex flex-col gap-1">
     <div class="flex items-center gap-2">
-      <h2 class="m-0 mr-auto font-display text-sm uppercase tracking-title text-text-2">
+      <!-- tabindex -1: focus lands here when the section above it is removed (ux a11y). -->
+      <h2
+        tabindex="-1"
+        :data-section-heading="section.id"
+        class="m-0 mr-auto font-display text-sm uppercase tracking-title text-text-2"
+      >
         {{ section.title }}
       </h2>
       <ApButton variant="ghost" size="compact" @click="emit('addWidget')">Add widget here</ApButton>
