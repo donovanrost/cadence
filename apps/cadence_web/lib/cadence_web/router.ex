@@ -352,6 +352,9 @@ defmodule CadenceWeb.Router do
       :station
     )
 
+    # §11c (B11, api; DECISIONS #79): the mission's applications go to the console's Setup apps.
+    get("/missions/:mission_id/applications", LegacyMissionSetupRedirectController, :applications)
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -529,10 +532,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/ops/data-operations/manage", HostPageLive, :manage,
         metadata: %{host_policy: :ops_admin}
-      )
-
-      live("/missions/:mission_id/applications", HostPageLive, :index,
-        metadata: %{host_policy: :mission}
       )
 
       live("/missions/:mission_id/spacecraft/:spacecraft_id/applications", HostPageLive, :index,
