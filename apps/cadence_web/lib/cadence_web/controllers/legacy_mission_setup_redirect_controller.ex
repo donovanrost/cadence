@@ -16,6 +16,8 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
   - B11 `/missions/:id/applications` → `…/setup/apps`
   - B5 `/missions/:id/spacecraft/:sid/readiness | /routing | /commanding` → `…/setup/spacecraft/:sid`
       (one page; the bare show, `/identity` and `/edit` stay, L17/L22)
+  - B6 `/missions/:id/catalog/revisions/:id` → `…/setup/catalog/<its database>` (looked up in the
+      signed-in organization), else `…/setup/catalog`
 
   Slugs come from the signed-in organization (`CadenceWeb.ConsolePaths`), falling back to
   `/console`.
@@ -23,6 +25,7 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Catalog
   alias CadenceWeb.ConsolePaths
 
   def home(conn, params), do: go(conn, params, "")
@@ -66,6 +69,18 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
 
   def spacecraft_page(conn, %{"spacecraft_id" => id} = params),
     do: go(conn, params, "/setup/spacecraft/" <> ConsolePaths.segment(id))
+
+  def catalog_revision(conn, %{"mission_id" => mission_id, "catalog_revision_id" => id} = params) do
+    org = conn.assigns.current_scope && conn.assigns.current_scope.organization_id
+
+    case org && Catalog.fetch_revision(org, mission_id, id) do
+      {:ok, %{catalog_database_id: db}} when is_binary(db) ->
+        go(conn, params, "/setup/catalog/" <> ConsolePaths.segment(db))
+
+      _missing ->
+        go(conn, params, "/setup/catalog")
+    end
+  end
 
   defp go(conn, %{"mission_id" => mission_id}, rest) do
     org = conn.assigns.current_scope && conn.assigns.current_scope.organization_id

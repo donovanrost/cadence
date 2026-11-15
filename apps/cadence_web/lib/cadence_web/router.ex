@@ -374,6 +374,13 @@ defmodule CadenceWeb.Router do
       :spacecraft_page
     )
 
+    # §11c (B6R, api; DECISIONS #79): a catalog revision goes to its database in the console's Setup catalog.
+    get(
+      "/missions/:mission_id/catalog/revisions/:catalog_revision_id",
+      LegacyMissionSetupRedirectController,
+      :catalog_revision
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -419,10 +426,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/spacecraft/:spacecraft_id/edit", HostPageLive, :edit,
         metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/catalog/revisions/:catalog_revision_id", HostPageLive, :show,
-        metadata: %{host_policy: :catalog}
       )
 
       live("/missions/:mission_id/catalog/artifacts/:artifact_id", HostPageLive, :show,

@@ -107,4 +107,9 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
     assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/sc_1/commanding")) ==
              c.console <> "/setup/spacecraft/sc_1"
   end
+
+  test "B6: an unknown catalog revision falls back to the Setup catalog", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/catalog/revisions/rev_missing")) ==
+             c.console <> "/setup/catalog"
+  end
 end
