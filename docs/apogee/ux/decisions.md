@@ -1512,7 +1512,8 @@ event is emitted only for these:
   a replay run: "…moved back to 03:12Z for a replay."
 - Not per N minutes: a heartbeat on the Timeline is still noise.
 - Falling behind itself is U47's Now item (ingress backpressure), not a Timeline line.
-- Fold label: `Telemetry stored` for the per-contact lines.
+- Fold labels: `Telemetry stored` (settled), `Telemetry caught up` (caught_up), `Telemetry moved back` (retreated,
+  which has no label of its own today). Old `advanced` rows keep "Data sources caught up".
 - **Kinds and placement** (api, 11-15): each case gets its own kind (source_watermark_settled /
   source_watermark_caught_up / the existing source_watermark_retreated). Old `advanced` rows keep their sentence
   until they age out. All three stay in the Timeline's **data** category (opt-in): one settle line per pass for
