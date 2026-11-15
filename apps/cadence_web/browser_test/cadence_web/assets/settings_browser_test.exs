@@ -66,12 +66,28 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
       )
     end
 
+    # §11c(B) moved the mission settings page to the console too: the mission's settings are set
+    # through the domain API the console's Setup › Settings uses.
+    for {section, values} <- [
+          {"cadence.governance", %{"approval_requirement" => "direct"}},
+          {"commanding.defaults", %{"shelf" => "minimized"}}
+        ] do
+      assert {:ok, %{state: :active}} =
+               Cadence.Management.ConsoleSettings.save(
+                 scope,
+                 mission.mission_id,
+                 section,
+                 values,
+                 nil
+               )
+    end
+
     {output, status} = run_phase.("mission")
     assert status == 0, output
     assert output =~ "SETTINGS_MISSION_PHASE_OK"
 
-    # §11c removed the legacy organization settings page (the console owns it now), so the
-    # organization requirement is set through the same domain API the console's page uses.
+    # Then the organization requires independent approval with no mission override (§11c(A)
+    # moved the organization settings page to the console).
     assert {:ok, %{state: :active}} =
              Cadence.Management.ConsoleSettings.save(
                scope,

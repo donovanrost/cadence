@@ -4795,165 +4795,38 @@ async function assertRemoteSurface({
   };
 }
 
-/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} missionId @param {string} origin @param {AbortSignal|undefined} signal */
-async function assertMissionEntryNavigation(client, diagnostics, missionId, origin, signal) {
-  const root = `/missions/${encodeURIComponent(missionId)}`;
-  // §11c removed the legacy organization pages (L4 the mission directory), so the host has no
-  // organization-level page to enter a mission from. This enters the overview from the mission's
-  // settings page through the sidebar: a host navigation with incremental props. The ops pages
-  // have no overview link.
-  await navigate(client, `${origin}${root}/settings`, {
+/**
+ * The legacy host keeps its shell across in-app navigation. After §11c(B) the only legacy pages
+ * that link each other are the ops pages (the ops rail); every sidebar link leaves for the console.
+ * So this clicks through the rail and browser history and checks the shell, the rail and the
+ * LiveView root survive with no Phoenix navigation.
+ * @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} missionId @param {string} origin @param {AbortSignal|undefined} signal
+ */
+async function assertPersistentHostNavigation(client, diagnostics, missionId, origin, signal) {
+  reportProgress("checking persistent shell navigation through the ops rail and browser history");
+  const ops = `/missions/${encodeURIComponent(missionId)}/ops`;
+  await navigate(client, `${origin}${ops}/explore`, {
     expectedOrigin: origin,
-    expectedPath: `${root}/settings`,
+    expectedPath: `${ops}/explore`,
     diagnostics,
     signal,
   });
-  await waitForExpression(
-    client,
-    `Boolean(document.querySelector('[aria-label="Primary navigation"] a[href="${root}"]') && window.liveSocket?.isConnected())`,
-    "mission settings with its overview link",
-    { signal },
-  );
-  assert.equal(
-    await evaluate(
-      client,
-      `(() => {
-    const shell = document.querySelector('#application-shell');
-    if (shell?.dataset.useDiff !== 'true') return false;
-    const link = [...document.querySelectorAll('[aria-label="Primary navigation"] a')]
-      .find(link => new URL(link.href).pathname === ${JSON.stringify(root)});
-    if (!link) return false;
-    window.__missionEntryShell = shell;
-    link.click(); return true;
-  })()`,
-      "click the mission overview from mission settings with incremental props",
-      { signal },
-    ),
-    true,
-    "mission settings must expose the overview link and incremental host",
-  );
-  await waitForExpression(
-    client,
-    `(() => {
-    const shell = document.querySelector('#application-shell');
-    const nav = shell?.querySelector('[aria-label="Primary navigation"]');
-    return location.pathname === ${JSON.stringify(root)} && window.__missionEntryShell === shell &&
-      nav?.querySelector('a[href="${root}"][aria-current="page"]') &&
-      nav.querySelector('a[href="${root}/spacecraft"]') &&
-      nav.querySelector('a[href="${root}/applications"]') &&
-      !nav.querySelector('a[href="/missions"]') &&
-      document.querySelector('#spacecraft-readiness-section') &&
-      document.querySelectorAll('#cadence-federation-root').length === 0 &&
-      !document.querySelector('#core-mission-error');
-  })()`,
-    "core mission overview and authorized mission navigation",
-    { signal },
-  );
-  diagnostics.assertClean("mission entry navigation with production incremental props");
-  reportProgress("core mission entry retains the host and updates its authorized sidebar");
-}
-
-/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} missionId @param {AbortSignal|undefined} signal */
-async function assertPersistentHostNavigation(client, diagnostics, missionId, signal) {
-  reportProgress("checking persistent shell navigation and browser history");
-  const root = `/missions/${encodeURIComponent(missionId)}`;
-  assert.equal(
-    await evaluate(
-      client,
-      `(() => {
-    const shell = document.querySelector('#application-shell');
-    const sidebar = shell?.querySelector('[data-sidebar-collapsible]');
-    if (!shell || !sidebar) return false;
-    window.__cadenceNavigationProbe = { shell, sidebar, liveRoot: shell.closest('[data-phx-main]'), phoenixNavigations: 0 };
-    window.addEventListener("phx:navigate", () => window.__cadenceNavigationProbe.phoenixNavigations++);
-    sidebar.querySelector('button[title="Toggle sidebar"]').click();
-    return true;
-  })()`,
-      "seed persistent shell identity",
-      { signal },
-    ),
-    true,
-  );
-
-  const seenQueries = new Set(diagnostics.completed(() => true).map((record) => record.requestId));
-  /** @param {string} path @param {string} application @param {string} surface */
-  const ready = async (path, application, surface) => {
+  /** @param {string} path */
+  const ready = async (path) => {
     try {
-      const coreContent =
-        path === root
-          ? "#spacecraft-readiness-section"
-          : path === `${root}/spacecraft`
-            ? "#spacecraft-list-content"
-            : path === `${root}/comms`
-              ? "#comms-overview-content"
-              : null;
-      if (coreContent) {
-        await waitForExpression(
-          client,
-          `(() => {
-          const probe = window.__cadenceNavigationProbe;
-          const shell = document.querySelector('#application-shell');
-          const header = document.querySelector('#host-page-heading');
-          const title = header?.querySelector('h1');
-          return location.pathname === ${JSON.stringify(path)} && probe?.shell === shell &&
-            probe.phoenixNavigations === 0 && probe.liveRoot === shell?.closest('[data-phx-main]') &&
-            probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&
-            shell.querySelectorAll(${JSON.stringify(coreContent)}).length === 1 &&
-            document.querySelectorAll('#cadence-federation-root').length === 0 &&
-            header?.dataset.pageHeadingSource === 'page' && title?.textContent.trim() &&
-            document.querySelectorAll('h1').length === 1 &&
-            getComputedStyle(title).fontSize === '24px';
-        })()`,
-          `persistent core host navigation to ${path}`,
-          { signal },
-        );
-        return;
-      }
       await waitForExpression(
         client,
         `(() => {
-      const probe = window.__cadenceNavigationProbe;
-      const shell = document.querySelector('#application-shell');
-      const mount = document.querySelector('[data-remote-state="ready"]');
-      if (document.querySelectorAll("#cadence-federation-root").length !== 1) return false;
-      return location.pathname === ${JSON.stringify(path)} && probe?.shell === shell && probe.phoenixNavigations === 0 &&
-        probe.liveRoot === shell?.closest('[data-phx-main]') &&
-        probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&
-        mount?.dataset.mountedApplication === ${JSON.stringify(application)} &&
-        mount?.dataset.mountedSurface === ${JSON.stringify(surface)} &&
-        !document.querySelector('#remote-error') && !document.querySelector('#phoenix-host-error');
-    })()`,
-        `persistent host navigation to ${path}`,
-        { signal },
-      );
-      const query = await waitForResponse(
-        diagnostics,
-        (record) => {
-          if (
-            seenQueries.has(record.requestId) ||
-            record.method !== "POST" ||
-            !new URL(record.url).pathname.endsWith("/query")
-          )
-            return false;
-          const body = diagnosticObject(JSON.parse(record.postData ?? "{}"), "navigation request");
-          return body.applicationKey === application && body.surfaceId === surface;
-        },
-        `${application} ${surface} navigation query`,
-        { signal },
-      );
-      assert.equal(query.response?.status, 200, "navigated screen query succeeds");
-      seenQueries.add(query.requestId);
-      await waitForExpression(
-        client,
-        `(() => {
-          const header = document.querySelector('#host-page-heading');
-          const title = header?.querySelector('h1');
-          const body = document.querySelector('#host-page-content');
-          return header?.dataset.pageHeadingSource === 'page' && title?.textContent.trim() && document.querySelectorAll('h1').length === 1 &&
-            !body?.querySelector('h1') && header.querySelector('nav[aria-label="Breadcrumb"]') &&
-            getComputedStyle(title).fontSize === '24px';
-        })()`,
-        "one host-owned page heading after the remote query",
+        const probe = window.__cadenceNavigationProbe;
+        const shell = document.querySelector('#application-shell');
+        return location.pathname === ${JSON.stringify(path)} && probe?.shell === shell &&
+          probe.phoenixNavigations === 0 && probe.liveRoot === shell?.closest('[data-phx-main]') &&
+          probe.rail === document.querySelector('#ops-nav-rail') &&
+          Boolean(document.querySelector('main h1') && document.querySelector('#host-page-content > *')) &&
+          !document.querySelector('[data-host-page-loading], #ops-module-loading, #ops-module-unavailable, [data-host-page-load-failed]') &&
+          document.querySelectorAll('#cadence-federation-root').length === 0;
+      })()`,
+        `persistent ops navigation to ${path}`,
         { signal },
       );
     } catch (error) {
@@ -4966,92 +4839,53 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
       await evaluate(
         client,
         `(() => {
-      const link = [...document.querySelectorAll('[data-sidebar-collapsible] a, #ops-nav-rail a')]
+      const link = [...document.querySelectorAll('#ops-nav-rail a')]
         .find(link => new URL(link.href).pathname === ${JSON.stringify(path)});
       if (!link) return false;
       link.click(); return true;
     })()`,
-        `click host link ${path}`,
+        `click ops rail link ${path}`,
         { signal },
       ),
       true,
-      `host link ${path} exists`,
-    );
-  };
-  /** @param {string} group */
-  const expand = async (group) => {
-    await evaluate(
-      client,
-      `(() => {
-      const button = document.querySelector('button[aria-controls="mission-sidebar-${group}-content"]');
-      if (button?.getAttribute('aria-expanded') === 'false') button.click();
-    })()`,
-      `expand ${group} navigation`,
-      { signal },
+      `ops rail link ${path} exists`,
     );
   };
 
-  const managementReady = async () => {
-    await waitForExpression(
-      client,
-      `(() => {
-      const probe = window.__cadenceNavigationProbe;
-      const shell = document.querySelector('#application-shell');
-      return location.pathname === ${JSON.stringify(`${root}/applications`)} &&
-        probe?.shell === shell && probe.phoenixNavigations === 0 && probe.liveRoot === shell?.closest('[data-phx-main]') &&
-        probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&
-        shell.querySelectorAll('#mission-applications-page').length === 1 &&
-        document.querySelectorAll('#host-page-heading h1').length === 1 &&
-        document.querySelectorAll('h1').length === 1 &&
-        document.querySelectorAll('#cadence-federation-root').length === 0;
-    })()`,
-      "persistent application management page",
-      { signal },
-    );
-  };
-
-  await click(`${root}/applications`);
-  await managementReady();
-  await click(`${root}/spacecraft`);
-  await ready(`${root}/spacecraft`, "spacecraft", "list");
-  await evaluate(client, "history.back()", "back to application management", { signal });
-  await managementReady();
-  await evaluate(client, "history.forward()", "forward to spacecraft", { signal });
-  await ready(`${root}/spacecraft`, "spacecraft", "list");
-  reportProgress("Applications and Spacecraft share the shell through clicks and browser history");
-
-  await click(root);
-  await ready(root, "mission_catalog", "mission_overview");
+  await waitForExpression(
+    client,
+    "Boolean(document.querySelector('#ops-nav-rail') && window.liveSocket?.isConnected())",
+    "ops rail",
+    { signal },
+  );
   assert.equal(
     await evaluate(
       client,
-      "document.querySelector('[data-sidebar-collapsible]')?.classList.contains('sidebar-collapsed')",
-      "sidebar retains local collapsed state",
+      `(() => {
+    const shell = document.querySelector('#application-shell');
+    const rail = document.querySelector('#ops-nav-rail');
+    if (!shell || !rail) return false;
+    window.__cadenceNavigationProbe = { shell, rail, liveRoot: shell.closest('[data-phx-main]'), phoenixNavigations: 0 };
+    window.addEventListener("phx:navigate", () => window.__cadenceNavigationProbe.phoenixNavigations++);
+    return true;
+  })()`,
+      "seed persistent shell identity",
       { signal },
     ),
     true,
-    "sidebar retains collapsed state after navigation",
   );
-  await evaluate(client, "history.back()", "return to mission navigation", { signal });
-  await ready(`${root}/spacecraft`, "spacecraft", "list");
-  await evaluate(
-    client,
-    "document.querySelector('button[title=\"Toggle sidebar\"]').click()",
-    "expand sidebar",
-    { signal },
-  );
-  await expand("comms");
-  await click(`${root}/comms`);
-  await ready(`${root}/comms`, "comms", "overview");
-  await evaluate(client, "history.back()", "host navigation back", { signal });
-  await ready(`${root}/spacecraft`, "spacecraft", "list");
-  await evaluate(client, "history.forward()", "host navigation forward", { signal });
-  await ready(`${root}/comms`, "comms", "overview");
+  await ready(`${ops}/explore`);
+  await click(`${ops}/alarms`);
+  await ready(`${ops}/alarms`);
+  await click(`${ops}/timeline`);
+  await ready(`${ops}/timeline`);
+  await evaluate(client, "history.back()", "ops navigation back", { signal });
+  await ready(`${ops}/alarms`);
+  await evaluate(client, "history.forward()", "ops navigation forward", { signal });
+  await ready(`${ops}/timeline`);
   await diagnostics.drainLateEvents(300, signal);
   diagnostics.assertClean("persistent host navigation");
-  reportProgress(
-    "shell identity, sidebar state, feature navigation, and back/forward navigation retained",
-  );
+  reportProgress("shell identity, ops rail and back/forward navigation retained");
 }
 
 /** @param {import("./browser-diagnostics.ts").RepresentativeOptions} options */
@@ -5192,7 +5026,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     origin,
     diagnostics,
     signal,
-    `/missions/${encodeURIComponent(missionId)}`,
+    `/missions/${encodeURIComponent(missionId)}/ops`,
   );
   reportProgress("authenticated browser session ready");
   await waitForExpression(
@@ -5205,10 +5039,11 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   reportProgress("authenticated LiveView websocket asserted");
   // The shell and socket can be ready while the lazy landing page is still loading.
   // Finish this visit before navigating away so its module request has a terminal event.
+  // §11c(B): the mission's ops page is the legacy landing (the mission home went to the console).
   await waitForExpression(
     client,
-    "Boolean(document.querySelector('#spacecraft-readiness-section'))",
-    "authenticated mission overview landing page",
+    "Boolean(document.querySelector('main h1') && document.querySelector('#host-page-content > *') && !document.querySelector('[data-host-page-loading], #ops-module-loading'))",
+    "authenticated mission ops landing page",
     { signal },
   );
 
@@ -5279,8 +5114,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     );
   }
   reportProgress("representative mission, ops, and spacecraft remotes mounted");
-  await assertMissionEntryNavigation(client, diagnostics, missionId, origin, signal);
-  await assertPersistentHostNavigation(client, diagnostics, missionId, signal);
+  await assertPersistentHostNavigation(client, diagnostics, missionId, origin, signal);
 
   const comms = await assertRemoteSurface({
     client,

@@ -5,10 +5,11 @@ import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts
 import { signInThroughConsole } from "./console_sign_in.mjs";
 const [base, mission, requester, reviewer, first, second, out, phase] = process.argv.slice(2);
 assert.ok(base && mission && requester && reviewer && first && second && out);
-// Two phases around the organization requirement, which the driver sets between them through
-// the domain API (§11c removed the legacy organization settings page): "mission" sets the
-// mission's settings and activates directly; "enforced" checks the mission now inherits the
-// organization's requirement and goes through independent review.
+// Spacecraft activation under scoped settings, in two phases. §11c moved the settings pages to
+// the console, so the driver sets them through the domain API the console uses: before "mission"
+// the mission applies changes without approval (one operator activates directly); before
+// "enforced" the organization requires independent approval with no mission override (submit,
+// then a teammate approves).
 assert.ok(phase === "mission" || phase === "enforced", "phase must be mission or enforced");
 const input = createInterface({ input: process.stdin });
 /** @type {unknown} */
@@ -44,12 +45,6 @@ async function login(current, email, path) {
     path,
   });
 }
-/** @param {import("playwright").Page} current */
-async function save(current) {
-  await current.getByRole("button", { name: "Save changes", exact: true }).click();
-  await current.getByText("Changes saved.", { exact: true }).waitFor();
-}
-const settings = `/missions/${mission}/settings`;
 const firstPath = `/missions/${mission}/spacecraft/${first}?section=changes`;
 const secondPath = `/missions/${mission}/spacecraft/${second}?section=changes`;
 try {
@@ -70,52 +65,20 @@ try {
 }
 
 async function missionPhase() {
+  // The driver set this mission to "Applies without approval" (one authorized operator), so the
+  // requester activates directly.
   await login(page, requester, firstPath);
-  await page
-    .getByRole("navigation", { name: "Settings", exact: true })
-    .getByRole("link", { name: "Settings", exact: true })
-    .click();
-  await page.waitForURL(base + settings);
-  await page.getByRole("radio", { name: /^One authorized operator/ }).check();
-  await page
-    .getByRole("navigation", { name: "Settings sections" })
-    .getByRole("link", { name: "Commanding" })
-    .click();
-  await page.getByRole("radio", { name: /^Minimized/ }).check();
-  await save(page);
-  await page
-    .getByRole("navigation", { name: "Settings sections" })
-    .getByRole("link", { name: /Governance/ })
-    .click();
-  assert.equal(
-    await page.getByRole("radio", { name: /^One authorized operator/ }).isChecked(),
-    true,
-  );
-  await save(page);
-  await page.screenshot({ path: `${out}/mission-settings.png`, animations: "disabled" });
-  assert.equal(await page.locator("h1").count(), 1);
-  await page.goto(base + firstPath);
   await page.locator("#spacecraft-activate").click();
   await page.getByText("Configuration activated", { exact: true }).waitFor();
   assert.equal(await page.locator("#spacecraft-activate").count(), 0);
-  await page.getByRole("link", { name: "View catalog", exact: true }).click();
-  await page.locator("#catalog-spacecraft-usage").waitFor();
-  assert.equal(await page.locator("#catalog-qualification").count(), 0);
-  assert.equal(await page.getByRole("button", { name: "Approve catalog model" }).count(), 0);
-  await page.getByRole("link", { name: "Review changes for KESTREL-01", exact: true }).click();
-  await page.waitForURL(base + firstPath);
-  await page.getByText("Configuration activated", { exact: true }).waitFor();
+  assert.equal(await page.locator("h1").count(), 1);
 }
 
 async function enforcedPhase() {
-  await login(page, requester, settings);
+  // The driver then required independent approval organization-wide (no mission override), so
+  // the same requester can only submit for review and a teammate approves.
+  await login(page, requester, secondPath);
   await login(teammate, reviewer, secondPath);
-  await page.getByText("Required by organization", { exact: true }).first().waitFor();
-  assert.equal(
-    await page.getByRole("radio", { name: /^One authorized operator/ }).isDisabled(),
-    true,
-  );
-  await page.goto(base + secondPath);
   await page.locator("#spacecraft-submit-review").click();
   await page.getByText("Awaiting review", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Approve & activate" }).count(), 0);
@@ -128,10 +91,7 @@ async function enforcedPhase() {
   await page.getByText("Configuration activated", { exact: true }).waitFor();
   assert.equal(await teammate.locator("#spacecraft-submit-review").count(), 0);
   await teammate.screenshot({ path: `${out}/approved-configuration.png`, animations: "disabled" });
-  await page.goto(base + settings + "/commanding.defaults");
-  await page.getByRole("radio", { name: /^Minimized/ }).waitFor();
-  assert.equal(await page.getByRole("radio", { name: /^Minimized/ }).isChecked(), true);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: `${out}/settings-mobile.png`, animations: "disabled" });
+  await page.screenshot({ path: `${out}/spacecraft-mobile.png`, animations: "disabled" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 }
