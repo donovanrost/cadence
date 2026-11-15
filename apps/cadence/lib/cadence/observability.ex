@@ -8,6 +8,7 @@ defmodule Cadence.Observability do
 
   alias Cadence.Observability.LogExporter
   alias Cadence.Observability.Metrics.{MissionHealthSampler, Reporter, RuntimeSampler}
+  alias Cadence.Observability.RepoTracing
   alias OpenTelemetry.{Ctx, Span}
 
   require Logger
@@ -17,7 +18,12 @@ defmodule Cadence.Observability do
 
   @spec setup_repo_tracing() :: :ok
   def setup_repo_tracing do
-    OpentelemetryEcto.setup(@repo_event_prefix, db_statement: :disabled)
+    # Our handler, not OpentelemetryEcto's: the same spans, but its context lookup copied the
+    # whole process dictionary on every query (RepoTracing, step 4, 11-15).
+    case RepoTracing.setup(@repo_event_prefix, db_statement: :disabled) do
+      :ok -> :ok
+      {:error, :already_exists} -> :ok
+    end
   end
 
   @spec log_exporter_child_spec() :: Supervisor.child_spec() | nil
