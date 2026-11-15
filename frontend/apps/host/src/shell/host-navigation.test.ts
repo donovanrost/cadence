@@ -74,7 +74,8 @@ function clickLink(
   href: string,
   attrs = "",
   options: MouseEventInit = {},
-  current = "https://cadence.test/missions/m-1",
+  // §11c B: the mission home left the host, so links are clicked from the Ops landing.
+  current = "https://cadence.test/missions/m-1/ops",
 ) {
   const navigate = vi.fn();
   cleanups.push(installHostNavigation(document, { href: current } as Location, navigate));
@@ -93,7 +94,7 @@ function clickLink(
 
 test("ordinary links across feature areas are handled by the Vue host", () => {
   const { link, preventedByNavigation } = clickLink(
-    "/missions/m-1/comms",
+    "/missions/m-1/ops/alarms",
     'data-phx-link="redirect"',
   );
   expect(link.dataset.phxLink).toBe("redirect");
@@ -101,8 +102,8 @@ test("ordinary links across feature areas are handled by the Vue host", () => {
 });
 
 test("plain remote links and query changes use the same host navigation", () => {
-  expect(clickLink("/missions/m-1/spacecraft").navigate).toHaveBeenCalledWith(
-    "/missions/m-1/spacecraft",
+  expect(clickLink("/missions/m-1/ops/timeline").navigate).toHaveBeenCalledWith(
+    "/missions/m-1/ops/timeline",
     false,
   );
   expect(
@@ -111,10 +112,11 @@ test("plain remote links and query changes use the same host navigation", () => 
   ).toBe("replace");
 });
 
+// §11c B: the mission's management pages left the host; these mission-sidebar pages remain.
 test.each([
-  ["/missions/m-1/applications", "/missions/m-1/spacecraft"],
-  ["/missions/m-1/spacecraft", "/missions/m-1/applications"],
-  ["/missions/m-1/spacecraft/s-1/applications", "/missions/m-1/spacecraft"],
+  ["/missions/m-1/spacecraft/s-1", "/missions/m-1/catalog/artifacts/a-1"],
+  ["/missions/m-1/catalog/artifacts/a-1", "/missions/m-1/spacecraft/s-1"],
+  ["/missions/m-1/spacecraft/s-1/identity", "/missions/m-1/spacecraft/s-1"],
 ])("management navigation stays in the host: %s to %s", (from, to) => {
   const { link, preventedByNavigation } = clickLink(
     to,

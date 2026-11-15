@@ -1,5 +1,4 @@
 import "../module-pages.test-support";
-import { containing } from "../../../../test-support/matchers";
 import { nativeElement, required } from "../../../../test-support/mounted-contract";
 import {
   fixture as timelineFixture,
@@ -40,24 +39,12 @@ vi.mock("./host-browser-history", async () => {
 import { hostBrowserHistory } from "./host-browser-history";
 import BrowserHost from "./BrowserHost.vue";
 import OpsModulePage from "../ops-workspace/features/module-pages/OpsModulePage.vue";
-import { spacecraftRoutingSnapshot } from "../../../../modules/communications/src/features/routing/spacecraft-routing.test-support";
-import MissionPage from "../mission-and-spacecraft/MissionPage.vue";
-import MissionModulePage from "../mission-and-spacecraft/features/module-pages/MissionModulePage.vue";
-import { missionSnapshots } from "../mission-and-spacecraft/features/module-pages/mission-pages.test-support";
-import { groundStationFormPayload } from "../../../../modules/communications/src/features/ground-stations/fixtures.test-support";
 import SpacecraftPage from "../mission-and-spacecraft/SpacecraftPage.vue";
 import ActivationApprovalsPage from "../capability-management/features/activation-approvals/ActivationApprovalsPage.vue";
 import { inboxFixture } from "../capability-management/features/activation-approvals/fixtures.test-support";
-import { identityFixture } from "../mission-and-spacecraft/features/spacecraft-identity/fixtures.test-support";
-import { profileFixture } from "../mission-and-spacecraft/features/profile-creation/fixtures.test-support";
 
-import { spacecraftDirectoryFixture } from "../mission-and-spacecraft/features/spacecraft-directory/fixtures.test-support";
-import { overviewFixture } from "../mission-and-spacecraft/features/mission-overview/fixtures.test-support";
-import { installationSnapshot } from "../capability-management/features/application-installations/fixtures.test-support";
 import { createHostRouter, hostRoute, shellForRoute } from "./host-navigation";
 import routes from "../routes.json";
-import { databaseIndexFixture } from "../catalog/features/databases/fixtures.test-support";
-import { artifactFixture } from "../catalog/features/artifacts/fixtures.test-support";
 import { monitorFixture } from "../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
 import { workspaceFixture as commandWorkspaceFixture } from "../../../../modules/commanding/src/features/workspace/fixtures.test-support";
 import { readMonitorQuery } from "../../../../modules/commanding/src/features/mission-commands/monitor-query";
@@ -67,26 +54,8 @@ import {
 } from "../../../../modules/dashboards-and-exploration/src/features/exploration/fixtures.test-support";
 
 function snapshot(path: string, mission: string | null = null) {
-  const page = mission && path === `/missions/${mission}` ? "mission_overview" : null;
   return {
     path,
-    presentation: null,
-    error: null,
-    spacecraft_page:
-      path.split("?")[0] === `/missions/${mission}/spacecraft`
-        ? {
-            page: "spacecraft_list",
-            version: 1,
-            status: "ready",
-            data: spacecraftDirectoryFixture(),
-          }
-        : null,
-    mission_page: page && {
-      page,
-      version: 1,
-      status: "ready",
-      data: overviewFixture(required(mission)),
-    },
     context: {
       version: 1,
       platform_admin: false,
@@ -114,12 +83,16 @@ function requestedPath(index: number): string {
 let wrapper: VueWrapper | undefined;
 const view = () => required(wrapper);
 /**
- * The tests' neutral page. L4 removed the mission list and §11c A removed Organization settings, so
- * it is now Mission settings (same SettingsPage component).
+ * A mission's neutral host page (it renders unavailable without catalog data). L4 removed the
+ * mission list, §11c A organization settings and §11c B mission settings and the mission home, so
+ * the tests stand on the catalog artifact page (L18), the host's last mission-sidebar page.
  */
-const settingsPath = "/missions/mission-1/settings";
-const onSettings = (root: VueWrapper = view()) =>
-  root.findComponent({ name: "SettingsPage" }).exists();
+const missionPage = (mission: string) => `/missions/${mission}/catalog/artifacts/artifact-1`;
+const neutralPath = missionPage("mission-1");
+const onNeutral = (root: VueWrapper = view()) =>
+  root.findComponent({ name: "CatalogPage" }).exists();
+const hostPath = (root: VueWrapper = view()) =>
+  root.get("[data-host-path]").attributes("data-host-path");
 async function flushHostUpdates() {
   await flushPromises();
   if (wrapper)
@@ -333,94 +306,13 @@ test("compiled Explore navigates real query and sample identities through host h
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   expect(transport.requests.every((request) => request.event === "host:context")).toBe(true);
 });
-test("mission setup uses page-bound host actions and only confirmed saves navigate", async () => {
-  const state = setupSnapshot();
-  wrapper = mount(BrowserHost, {
-    props: { snapshot: state },
-  });
-  await flushHostUpdates();
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  await view().get("#ground_station_display_name").setValue("Host station");
-  expect(transport.requests[0]).toEqual(
-    containing({
-      event: "host:mission-page",
-      payload: containing({
-        id: state.mission_module_page.id,
-        token: state.mission_module_page.token,
-        path: state.path,
-        event: "validate",
-      }),
-    }),
-  );
-  await reply(0, { status: "ok", data: { result: { valid: true } } });
-  await view().get("#ground-station-form").trigger("submit");
-  expect(required(transport.requests[1]).payload.event).toBe("save");
-  await reply(1, {
-    status: "ok",
-    data: {
-      result: { navigation: { href: "/missions/mission-1/comms/ground-stations/station-1" } },
-    },
-  });
-  expect(transport.requests[2]).toEqual(
-    containing({
-      event: "host:context",
-      payload: { path: "/missions/mission-1/comms/ground-stations/station-1" },
-    }),
-  );
-  await reply(2, snapshot("/missions/mission-1/comms/ground-stations/station-1", "mission-1"));
-});
-test("pending navigation rejects old mission actions and late save replies cannot navigate", async () => {
-  const state = setupSnapshot();
-  wrapper = mount(BrowserHost, { attachTo: document.body, props: { snapshot: state } });
-  await flushHostUpdates();
-  const hostAction = required(view().getComponent(MissionModulePage).props("execute"));
-  const payload = {
-    id: state.mission_module_page.id,
-    token: state.mission_module_page.token,
-    event: "validate",
-    input: {},
-  };
-  await expect(hostAction({ ...payload, token: "foreign" })).rejects.toThrow();
-  await view().get("#ground_station_display_name").setValue("Late station");
-  await reply(0, { status: "ok", data: { result: { valid: true } } });
-  await view().get("#ground-station-form").trigger("submit");
-  await click(settingsPath);
-  await expect(hostAction(payload)).rejects.toThrow();
-  await reply(2, snapshot(settingsPath, "mission-1"));
-  await reply(1, {
-    status: "ok",
-    data: {
-      result: { navigation: { href: "/missions/mission-1/comms/ground-stations/station-1" } },
-    },
-  });
-  expect(transport.requests).toHaveLength(3);
-  expect(onSettings()).toBe(true);
-});
-test("spacecraft routing composes Communications without mounting a federated surface", async () => {
-  const base = snapshot("/missions/mission-1/spacecraft/spacecraft-1/routing", "mission-1");
-  const state = {
-    ...base,
-    context: {
-      ...base.context,
-      spacecraft: { spacecraft_id: "spacecraft-1", display_name: "Nova-1" },
-    },
-    spacecraft_module_page: spacecraftRoutingSnapshot(),
-  };
-  wrapper = mount(BrowserHost, {
-    props: { snapshot: state },
-  });
-  await flushHostUpdates();
-  expect(view().find("#spacecraft-routing-rule-rule-1").exists()).toBe(true);
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  expect(transport.pushEvent).not.toHaveBeenCalled();
-});
 beforeEach(() => {
   transport.requests = [];
   transport.pushEvent.mockImplementation((event, payload, reply) =>
     transport.requests.push({ event, payload, reply }),
   );
-  window.history.replaceState({}, "", settingsPath);
-  hostBrowserHistory.replace(settingsPath);
+  window.history.replaceState({}, "", neutralPath);
+  hostBrowserHistory.replace(neutralPath);
 });
 afterEach(() => {
   wrapper?.unmount();
@@ -430,7 +322,7 @@ afterEach(() => {
 async function start() {
   wrapper = mount(BrowserHost, {
     attachTo: document.body,
-    props: { snapshot: snapshot(settingsPath, "mission-1") },
+    props: { snapshot: snapshot(neutralPath, "mission-1") },
   });
   await flushHostUpdates();
   return view();
@@ -464,9 +356,9 @@ test("activation decisions bind path and token and cannot replace a later visit 
   const pending = execute(input);
   expect(required(transport.requests[1]).event).toBe("host:activation");
   expect(required(transport.requests[1]).payload).toEqual({ path, token: "review-token", input });
-  // §11c A removed the organization /settings route; leave through the mission's settings instead.
-  await click(settingsPath);
-  await reply(2, snapshot(settingsPath, "mission-1"));
+  // §11c A and B retired the settings routes; leave through the catalog artifact page (L18) instead.
+  await click(neutralPath);
+  await reply(2, snapshot(neutralPath, "mission-1"));
   await click(path);
   const successor = {
     ...original,
@@ -496,30 +388,30 @@ test("host remounts within the same Vue app and ignores the previous instance's 
         render() {
           return h(BrowserHost, {
             key: this.revision,
-            snapshot: snapshot(settingsPath, "mission-1"),
+            snapshot: snapshot(neutralPath, "mission-1"),
           });
         },
       }),
       { attachTo: document.body },
     );
     await flushHostUpdates();
-    expect(onSettings()).toBe(true);
-    await click("/missions/old-mission");
+    expect(onNeutral()).toBe(true);
+    await click(missionPage("old-mission"));
     expect(transport.requests).toHaveLength(1);
     await view().setData({ revision: 1 });
     await flushHostUpdates();
-    expect(onSettings()).toBe(true);
-    await reply(0, snapshot("/missions/old-mission", "old-mission"));
-    expect(onSettings()).toBe(true);
-    await click("/missions/current-mission");
+    expect(onNeutral()).toBe(true);
+    await reply(0, snapshot(missionPage("old-mission"), "old-mission"));
+    expect(onNeutral()).toBe(true);
+    await click(missionPage("current-mission"));
     expect(transport.requests).toHaveLength(2);
-    await reply(1, snapshot("/missions/current-mission", "current-mission"));
-    expect(view().getComponent(MissionPage).props("page")).toBe("mission_overview");
+    await reply(1, snapshot(missionPage("current-mission"), "current-mission"));
+    expect(hostPath()).toBe(missionPage("current-mission"));
     hostBrowserHistory.go(-1);
     await flushHostUpdates();
     expect(transport.requests).toHaveLength(3);
-    await reply(2, snapshot(settingsPath, "mission-1"));
-    expect(onSettings()).toBe(true);
+    await reply(2, snapshot(neutralPath, "mission-1"));
+    expect(onNeutral()).toBe(true);
     expect(listen).toHaveBeenCalledTimes(2);
     expect(destroyHistory).not.toHaveBeenCalled();
   } finally {
@@ -528,247 +420,14 @@ test("host remounts within the same Vue app and ignores the previous instance's 
   }
 });
 
-test("installation actions are path-bound and an old reply cannot replace a revisited inventory", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/applications";
-  const inventory = () => ({
-    ...snapshot(path, "mission-a"),
-    application_management: installationSnapshot(),
-  });
-  await click(path);
-  await reply(0, inventory());
-  expect(app.find("#mission-applications-list").exists()).toBe(true);
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  await app.get("#limits-install").trigger("click");
-  expect(transport.requests[1]).toMatchObject({
-    event: "host:manage",
-    payload: { path, event: "install", key: "limits" },
-  });
-  await app.get("#limits-install").trigger("click");
-  expect(transport.requests).toHaveLength(2);
-  await click(settingsPath);
-  await reply(2, snapshot(settingsPath, "mission-1"));
-  await click(path);
-  const fresh = inventory();
-  if (!("applications_component" in fresh.application_management.data))
-    throw new Error("Expected mission installation data");
-  required(
-    fresh.application_management.data.applications_component.props.applications[0],
-  ).display_name = "Latest inventory";
-  await reply(3, fresh);
-  await reply(1, inventory());
-  expect(app.get("#mission-applications-list").text()).toContain("Latest inventory");
-  expect(transport.requests).toHaveLength(4);
-});
-
-test("a failed installation action stays contained in the feature and releases its controls", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/applications";
-  await click(path);
-  await reply(0, {
-    ...snapshot(path, "mission-a"),
-    application_management: installationSnapshot(),
-  });
-  const sidebar = app.get("[data-sidebar-collapsible]").element;
-  await app.get("#limits-install").trigger("click");
-  required(required(transport.requests[1]).reply)({ ok: false });
-  await flushHostUpdates();
-  expect(app.find("#application-installation-action-error").exists()).toBe(true);
-  expect(app.get("#limits-install").attributes("disabled")).toBeUndefined();
-  expect(app.get("[data-sidebar-collapsible]").element).toBe(sidebar);
-});
-
-test("spacecraft creation sends an explicit profile version and token, then returns through host authorization", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/spacecraft/new";
-  await click(path);
-  await reply(0, {
-    ...snapshot(path, "mission-a"),
-    spacecraft_page: {
-      page: "spacecraft_new",
-      version: 1,
-      status: "ready",
-      form_token: "spacecraft-token",
-      data: identityFixture(),
-    },
-  });
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  await app.get("#spacecraft-display-name").setValue("Vehicle");
-  await reply(1, { status: "ok", errors: {} });
-  await app.get("#spacecraft-spacecraft-type-id").setValue(JSON.stringify(["profile-one", 1]));
-  await reply(2, { status: "ok", errors: {} });
-  await app.get("#spacecraft-form").trigger("submit");
-  expect(transport.requests[3]).toMatchObject({
-    event: "host:spacecraft",
-    payload: {
-      path,
-      token: "spacecraft-token",
-      event: "save",
-      input: { spacecraft: { spacecraft_type_id: "profile-one", spacecraft_type_version: 1 } },
-    },
-  });
-  await reply(3, { status: "ok", errors: {}, data: { href: "/missions/mission-a/spacecraft" } });
-  expect(transport.requests[4]).toMatchObject({
-    event: "host:context",
-    payload: { path: "/missions/mission-a/spacecraft" },
-  });
-  await reply(4, snapshot("/missions/mission-a/spacecraft", "mission-a"));
-  expect(app.find("#spacecraft-list-content").exists()).toBe(true);
-});
-
-test("a stale spacecraft save cannot redirect after leaving and revisiting the creation page", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/spacecraft/new";
-  const creation = (token: string) => ({
-    ...snapshot(path, "mission-a"),
-    spacecraft_page: {
-      page: "spacecraft_new",
-      version: 1,
-      status: "ready",
-      form_token: token,
-      data: identityFixture(),
-    },
-  });
-  await click(path);
-  await reply(0, creation("old"));
-  await app.get("#spacecraft-form").trigger("submit");
-  await click(settingsPath);
-  await reply(2, snapshot(settingsPath, "mission-1"));
-  await click(path);
-  await reply(3, creation("new"));
-  await reply(1, { status: "ok", errors: {}, data: { href: "/missions/mission-a/spacecraft" } });
-  expect(transport.requests).toHaveLength(4);
-  expect(app.find("#spacecraft-form").exists()).toBe(true);
-});
-
-test("mission entry commits page and sidebar together after authorized context arrives", async () => {
-  const app = await start();
-  const sidebar = app.get("[data-sidebar-collapsible]").element;
-  await click("/missions/mission-a");
-  expect(required(transport.requests[0]).payload).toEqual({ path: "/missions/mission-a" });
-  expect(app.find('a[href="/missions/mission-a/spacecraft"]').exists()).toBe(false);
-  await reply(0, snapshot("/missions/mission-a", "mission-a"));
-  expect(app.get("[data-sidebar-collapsible]").element).toBe(sidebar);
-  expect(app.get('a[href="/missions/mission-a"]').attributes("aria-current")).toBe("page");
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  expect(app.getComponent(MissionPage).props("page")).toBe("mission_overview");
-  expect(app.find("#spacecraft-readiness-sc-one").exists()).toBe(true);
-});
-
-test("core Catalog navigation renders real pages without a federation surface", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/catalog";
-  await click(path);
-  await reply(0, {
-    ...snapshot(path, "mission-a"),
-    catalog: { page: "catalog_index", version: 1, status: "ready", data: databaseIndexFixture() },
-  });
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  expect(app.find("#database-row-one").exists()).toBe(true);
-  expect(app.findAll("h1")).toHaveLength(1);
-  const artifactPath = `${path}/artifacts/one`;
-  await click(artifactPath);
-  await reply(1, {
-    ...snapshot(artifactPath, "mission-a"),
-    catalog: {
-      page: "catalog_artifact_show",
-      version: 1,
-      status: "ready",
-      data: artifactFixture(),
-    },
-  });
-  await app.get("#catalog-artifact-reimport-button").trigger("click");
-  expect(transport.requests[2]).toMatchObject({
-    event: "host:catalog",
-    payload: { event: "reimport", path: artifactPath },
-  });
-  // Completing an old action must not redirect a newly visited page.
-  await click(settingsPath);
-  await reply(3, snapshot(settingsPath, "mission-1"));
-  await reply(2, { href: `${path}/imports/new-run` });
-  expect(transport.requests).toHaveLength(4);
-  expect(onSettings(app)).toBe(true);
-});
-
-test("spacecraft query navigation preserves the search node and late replies cannot replace a newer query", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/spacecraft";
-  await click(path);
-  await reply(0, snapshot(path, "mission-a"));
-  const search = app.get<HTMLInputElement>("#spacecraft-roster-toolbar-search");
-  search.element.focus();
-  const shell = required(nativeElement(app.element));
-  await app.get("#spacecraft-sort-name").trigger("click");
-  await flushHostUpdates();
-  const sortedPath = requestedPath(1);
-  const sorted = snapshot(sortedPath, "mission-a");
-  required(sorted.spacecraft_page).data.presentation.roster.sort_by = "display_name";
-  await reply(1, sorted);
-  expect(app.get("#spacecraft-roster-toolbar-search").element).toBe(search.element);
-  expect(document.activeElement).toBe(search.element);
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  await app.get("#spacecraft-next-page").trigger("click");
-  await flushHostUpdates();
-  const oldPath = requestedPath(2);
-  await app.get("#spacecraft-tile-missing-scid").trigger("click");
-  await flushHostUpdates();
-  const filteredPath = requestedPath(3);
-  const filtered = snapshot(filteredPath, "mission-a");
-  required(filtered.spacecraft_page).data.presentation.roster.search = "Latest query";
-  await reply(3, filtered);
-  await reply(2, snapshot(oldPath, "mission-a"));
-  expect(
-    app.get<HTMLInputElement | HTMLSelectElement>("#spacecraft-roster-toolbar-search").element
-      .value,
-  ).toBe("Latest query");
-  expect(app.element).toBe(shell);
-});
-
-test("malformed core spacecraft data preserves navigation and a retry recovers the page", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/spacecraft";
-  await click(path);
-  const invalid = snapshot(path, "mission-a");
-  // @ts-expect-error Deliberately malformed producer data must render the contained error.
-  required(invalid.spacecraft_page).data = {};
-  await reply(0, invalid);
-  const sidebar = app.get("[data-sidebar-collapsible]").element;
-  expect(app.find("#core-spacecraft-error").exists()).toBe(true);
-  await app.get("#core-spacecraft-retry").trigger("click");
-  await reply(1, snapshot(path, "mission-a"));
-  expect(app.get("[data-sidebar-collapsible]").element).toBe(sidebar);
-  expect(app.find("#spacecraft-list-content").exists()).toBe(true);
-});
-
-test("a scheduled spacecraft search cannot redirect back while another page is authorizing", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/spacecraft";
-  await click(path);
-  await reply(0, snapshot(path, "mission-a"));
-  vi.useFakeTimers();
-  try {
-    await app.get("#spacecraft-roster-toolbar-search").setValue("delayed");
-    await click(settingsPath);
-    await vi.advanceTimersByTimeAsync(350);
-    expect(transport.requests).toHaveLength(2);
-    expect(requestedPath(1)).toBe(settingsPath);
-    await reply(1, snapshot(settingsPath, "mission-1"));
-    expect(onSettings(app)).toBe(true);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
 test("late navigation and live-prop responses cannot replace the committed mission", async () => {
   const app = await start();
-  await click("/missions/mission-a");
-  await click("/missions/mission-b");
-  await reply(1, snapshot("/missions/mission-b", "mission-b"));
-  await reply(0, snapshot("/missions/mission-a", "mission-a"));
-  await app.setProps({ snapshot: snapshot("/missions/mission-a", "mission-a") });
-  expect(app.getComponent(MissionPage).props("snapshot")).toMatchObject({
-    data: { overview: { mission: { slug: "mission-b" } } },
-  });
+  await click(missionPage("mission-a"));
+  await click(missionPage("mission-b"));
+  await reply(1, snapshot(missionPage("mission-b"), "mission-b"));
+  await reply(0, snapshot(missionPage("mission-a"), "mission-a"));
+  await app.setProps({ snapshot: snapshot(missionPage("mission-a"), "mission-a") });
+  expect(hostPath(app)).toBe(missionPage("mission-b"));
   expect(app.find('a[href="/missions/mission-b/spacecraft"]').exists()).toBe(true);
 });
 
@@ -789,52 +448,30 @@ test("compiled contact navigation use the same host guard and query parameters c
   });
 });
 
-test("mission read pages retain the host shell and bind detail identity to the path without a remote", async () => {
-  const app = await start();
-  const shell = required(nativeElement(app.element));
-  const path = "/missions/mission-1/comms/transports";
-  await click(path);
-  const state = { ...snapshot(path, "mission-1"), mission_module_page: missionSnapshots()[2] };
-  await reply(0, state);
-  expect(app.find("#comms-transports-directory-rows").exists()).toBe(true);
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  const detail = path + "/transports-1?transport_id=forged&mission_id=forged";
-  await click(detail);
-  const next = { ...snapshot(detail, "mission-1"), mission_module_page: missionSnapshots()[3] };
-  await reply(1, next);
-  expect(app.element).toBe(shell);
-  expect(app.getComponent(MissionModulePage).props("context")).toEqual({
-    organizationId: "org-1",
-    missionId: "mission-1",
-    resourceId: "transports-1",
-  });
-  expect(app.find("#mission-module-unavailable").exists()).toBe(false);
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-});
-
 test("denied context preserves the displayed page and reports a recoverable failure", async () => {
   const app = await start();
-  await click("/missions/missing");
+  await click(missionPage("missing"));
   required(required(transport.requests[0]).reply)({ ok: false });
   await flushHostUpdates();
-  expect(onSettings(app)).toBe(true);
+  expect(onNeutral(app)).toBe(true);
   expect(app.get("#host-navigation-error").attributes("role")).toBe("alert");
 });
 
 test("Back and Forward reenter the guard without replacing the Vue shell", async () => {
   const app = await start();
   const shell = required(nativeElement(app.element));
-  await click("/missions/mission-a/spacecraft");
-  await reply(0, snapshot("/missions/mission-a/spacecraft", "mission-a"));
+  const spacecraftPath = "/missions/mission-a/spacecraft/sc-1";
+  await click(spacecraftPath);
+  await reply(0, snapshot(spacecraftPath, "mission-a"));
   hostBrowserHistory.go(-1);
   await flushHostUpdates();
-  expect(requestedPath(1)).toBe(settingsPath);
-  await reply(1, snapshot(settingsPath, "mission-1"));
+  expect(requestedPath(1)).toBe(neutralPath);
+  await reply(1, snapshot(neutralPath, "mission-1"));
   hostBrowserHistory.go(1);
   await flushHostUpdates();
-  await reply(2, snapshot("/missions/mission-a/spacecraft", "mission-a"));
+  await reply(2, snapshot(spacecraftPath, "mission-a"));
   expect(app.element).toBe(shell);
-  expect(app.getComponent(SpacecraftPage).props("page")).toBe("spacecraft_list");
+  expect(app.getComponent(SpacecraftPage).props("page")).toBe("spacecraft_configuration");
 });
 
 // Application surfaces are served by the Phoenix application host, not this router.
@@ -859,83 +496,17 @@ test("every catalog path selects its declared frontend route, including static/d
 
 test("reconnection refreshes the displayed resource rather than the initial transport URL", async () => {
   const app = await start();
-  await click("/missions/mission-a");
-  await reply(0, snapshot("/missions/mission-a", "mission-a"));
+  await click(missionPage("mission-a"));
+  await reply(0, snapshot(missionPage("mission-a"), "mission-a"));
   // A LiveView reconnect can resend its original bootstrap snapshot.
-  await app.setProps({ snapshot: snapshot(settingsPath, "mission-1") });
+  await app.setProps({ snapshot: snapshot(neutralPath, "mission-1") });
   window.dispatchEvent(new Event("cadence:transport-reconnected"));
   await flushHostUpdates();
-  expect(requestedPath(1)).toBe("/missions/mission-a");
-  const refreshed = snapshot("/missions/mission-a", "mission-a");
+  expect(requestedPath(1)).toBe(missionPage("mission-a"));
+  const refreshed = snapshot(missionPage("mission-a"), "mission-a");
   required(refreshed.context.mission).display_name = "Renamed Mission";
   await reply(1, refreshed);
   expect(app.text()).toContain("Renamed Mission");
-});
-
-test("profile creation is a token-bound core action and navigates only to its profile directory", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/spacecraft/profiles/new";
-  await click(path);
-  await reply(0, {
-    ...snapshot(path, "mission-a"),
-    spacecraft_page: {
-      page: "profile_new",
-      version: 1,
-      status: "ready",
-      form_token: "profile-token",
-      data: profileFixture(),
-    },
-  });
-  expect(app.find("#host-route-unavailable").exists()).toBe(false);
-  await app.get("#profile-display_name").setValue("Bus");
-  await reply(1, { status: "ok", errors: {} });
-  await app.get("#profile-frame_size").setValue("1024");
-  await reply(2, { status: "ok", errors: {} });
-  await app.get("#spacecraft-profile-form").trigger("submit");
-  expect(transport.requests[3]).toMatchObject({
-    event: "host:spacecraft",
-    payload: {
-      path,
-      token: "profile-token",
-      event: "save",
-      input: { spacecraft_type: { display_name: "Bus", frame_size: 1024 } },
-    },
-  });
-  await reply(3, {
-    status: "ok",
-    errors: {},
-    data: { href: "/missions/mission-a/spacecraft/profiles" },
-  });
-  expect(transport.requests[4]).toMatchObject({
-    event: "host:context",
-    payload: { path: "/missions/mission-a/spacecraft/profiles" },
-  });
-});
-
-test("a late profile save cannot redirect a later mission page", async () => {
-  const app = await start();
-  const path = "/missions/mission-a/spacecraft/profiles/new";
-  await click(path);
-  await reply(0, {
-    ...snapshot(path, "mission-a"),
-    spacecraft_page: {
-      page: "profile_new",
-      version: 1,
-      status: "ready",
-      form_token: "old-profile-token",
-      data: profileFixture(),
-    },
-  });
-  await app.get("#spacecraft-profile-form").trigger("submit");
-  await click(settingsPath);
-  await reply(2, snapshot(settingsPath, "mission-1"));
-  await reply(1, {
-    status: "ok",
-    errors: {},
-    data: { href: "/missions/mission-a/spacecraft/profiles" },
-  });
-  expect(transport.requests).toHaveLength(3);
-  expect(onSettings(app)).toBe(true);
 });
 
 function fleetSnapshot(path: string) {
@@ -982,11 +553,11 @@ test("fleet directory is host-composed and captured reads retain evidence across
   await reply(2, { ...fresh, status: "unavailable" });
   expect(view().find("#fleet-run-fresh-run").exists()).toBe(true);
   await view().get("#host-page-refresh").trigger("click");
-  await click(settingsPath);
-  await reply(4, snapshot(settingsPath, "mission-1"));
+  await click(neutralPath);
+  await reply(4, snapshot(neutralPath, "mission-1"));
   await reply(3, fresh);
   expect(view().find("#ops-fleet-planning-page").exists()).toBe(false);
-  expect(onSettings()).toBe(true);
+  expect(onNeutral()).toBe(true);
 });
 
 test("live commanding notices are isolated to the captured path and token and stop after departure", async () => {
@@ -1029,8 +600,8 @@ test("live commanding notices are isolated to the captured path and token and st
   expect(view().get<HTMLInputElement>("#workspace-shared-argument-0").element.value).toBe(
     "unfinished",
   );
-  await click(settingsPath);
-  await reply(3, snapshot(settingsPath, "mission-1"));
+  await click(neutralPath);
+  await reply(3, snapshot(neutralPath, "mission-1"));
   handler(notice);
   await flushPromises();
   expect(transport.requests).toHaveLength(4);
@@ -1101,16 +672,10 @@ test("core timeline filters, selected evidence and older pages restore through p
 });
 
 const routeComponents = {
-  settings: "SettingsPage",
-  mission: "MissionPage",
   spacecraft: "SpacecraftPage",
-  spacecraft_module: "SpacecraftModulePage",
   catalog: "CatalogPage",
-  mission_module: "MissionModulePage",
   ops_module: "OpsModulePage",
   activation_approvals: "ActivationApprovalsPage",
-  notifications: "NotificationsPage",
-  application_management: "InstallationManagementPage",
 };
 const routeStubs = Object.fromEntries(
   [...Object.values(routeComponents), "WorkspaceLanding", "TimelinePage"].map((name) => [
@@ -1144,12 +709,14 @@ test.each(hostRoutes)("the host handles $path ($kind)", async (entry) => {
 });
 
 test("an unrecognized catalog kind is contained by the host", async () => {
-  const route = required(routes.find((route) => route.path === "/missions/:mission_id/settings"));
+  const route = required(
+    routes.find((route) => route.path === "/missions/:mission_id/catalog/artifacts/:artifact_id"),
+  );
   const kind = route.kind;
   try {
     route.kind = "unsupported-test-kind";
     wrapper = mount(BrowserHost, {
-      props: { snapshot: snapshot(settingsPath, "mission-1") },
+      props: { snapshot: snapshot(neutralPath, "mission-1") },
       global: { stubs: routeStubs },
     });
     await flushHostUpdates();
@@ -1161,33 +728,10 @@ test("an unrecognized catalog kind is contained by the host", async () => {
 });
 
 test("nested LiveVue patches pass through snapshot admission", async () => {
-  const state = reactive(snapshot(settingsPath, "mission-1"));
+  const state = reactive(snapshot(neutralPath, "mission-1"));
   wrapper = mount(BrowserHost, { props: { snapshot: state } });
   await flushPromises();
   state.context.organization.display_name = "Patched organization";
   await nextTick();
   expect(wrapper.text()).toContain("Patched organization");
 });
-
-function setupSnapshot() {
-  const base = snapshot("/missions/mission-1/comms/ground-stations/new", "mission-1");
-  const state = {
-    ...base,
-    mission_module_page: {
-      id: "comms.ground-station-new",
-      slot: "mission.page",
-      version: 1,
-      status: "ready",
-      token: "11111111-1111-4111-8111-111111111111",
-      context: { organizationId: "org-1", missionId: "mission-1" },
-      data: {
-        phase: "editing",
-        model: {
-          navigation: { fallback_href: base.path, breadcrumbs: [] },
-          data: groundStationFormPayload("new"),
-        },
-      },
-    },
-  };
-  return state;
-}

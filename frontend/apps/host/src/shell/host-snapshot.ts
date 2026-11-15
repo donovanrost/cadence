@@ -19,22 +19,15 @@ function envelope<T>(read: (value: unknown) => T) {
   };
 }
 const contributedPage = envelope(object({ id: optional(string), token: maybe(string) }));
-const missionPage = envelope(object({ creation_token: maybe(string) }));
 const spacecraftPage = envelope(object({ form_token: maybe(string), page: optional(string) }));
 const activationPage = envelope(object({ token: maybe(string) }));
 const featurePayload = (value: unknown) => value;
 const snapshotFields = object({
   path: string,
   context: readHostContext,
-  error: maybe(string),
-  application_management: featurePayload,
   activation_approvals: maybe(activationPage),
-  settings_page: maybe(activationPage),
   ops_page: maybe(contributedPage),
-  mission_module_page: maybe(contributedPage),
-  spacecraft_module_page: featurePayload,
   spacecraft_page: maybe(spacecraftPage),
-  mission_page: maybe(missionPage),
   catalog: featurePayload,
   ops_landing_page: featurePayload,
   timeline_page: featurePayload,

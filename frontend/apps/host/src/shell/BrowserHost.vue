@@ -26,15 +26,7 @@ import {
   createConfigurationPort,
   readConfiguration,
 } from "../mission-and-spacecraft/configuration";
-import type { SettingsContext, SettingsWriteResult } from "@cadence/plugin-sdk/settings";
-import { createSettingsDrafts, type SettingsAction } from "../settings";
-const SettingsPage = lazyHostPage("SettingsPage", () => import("../settings/SettingsPage.vue"));
 
-const InstallationManagementPage = lazyHostPage(
-  "InstallationManagementPage",
-  () =>
-    import("../capability-management/features/application-installations/InstallationManagementPage.vue"),
-);
 const CatalogPage = lazyHostPage("CatalogPage", () => import("../catalog/CatalogPage.vue"));
 const WorkspaceLanding = lazyHostPage(
   "WorkspaceLanding",
@@ -44,21 +36,9 @@ const TimelinePage = lazyHostPage(
   "TimelinePage",
   () => import("../ops-workspace/features/timeline/TimelinePage.vue"),
 );
-const MissionPage = lazyHostPage(
-  "MissionPage",
-  () => import("../mission-and-spacecraft/MissionPage.vue"),
-);
 const SpacecraftPage = lazyHostPage(
   "SpacecraftPage",
   () => import("../mission-and-spacecraft/SpacecraftPage.vue"),
-);
-const SpacecraftModulePage = lazyHostPage(
-  "SpacecraftModulePage",
-  () => import("../mission-and-spacecraft/features/module-pages/SpacecraftModulePage.vue"),
-);
-const MissionModulePage = lazyHostPage(
-  "MissionModulePage",
-  () => import("../mission-and-spacecraft/features/module-pages/MissionModulePage.vue"),
 );
 const OpsModulePage = lazyHostPage(
   "OpsModulePage",
@@ -74,7 +54,6 @@ const props = defineProps<{ snapshot: unknown }>();
 const initialSnapshot = readHostSnapshot(props.snapshot);
 const live = useLiveVue();
 const configurationDrafts = createConfigurationDrafts();
-const settingsDrafts = createSettingsDrafts();
 const configurationPort = createConfigurationPort(configurationRequest);
 // A native Phoenix navigation can mount this host after the history module loaded.
 hostBrowserHistory.replace(initialSnapshot.path + window.location.hash);
@@ -159,12 +138,7 @@ function guardNavigation(guard: () => boolean) {
   };
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (
-    settingsDrafts.hasUnsaved() ||
-    configurationDrafts.hasUnsaved() ||
-    (leaveGuard && !leaveGuard())
-  )
-    event.preventDefault();
+  if (configurationDrafts.hasUnsaved() || (leaveGuard && !leaveGuard())) event.preventDefault();
 }
 router.beforeEach(async (to, from) => {
   if (stopped) return false;
@@ -243,25 +217,6 @@ const missionContext = computed(() => {
     ? { organizationId, missionId, ...(resourceId ? { resourceId } : {}) }
     : null;
 });
-// §11c A: settings routes are mission-only (organization settings live in the console).
-const settingsContext = computed<SettingsContext | null>(() => {
-  const current = context.value;
-  if (!current?.user || !current.organization || !current.mission) return null;
-  return {
-    actorId: current.user.user_id,
-    organizationId: current.organization.organization_id,
-    organizationName: current.organization.display_name,
-    scope: "mission",
-    missionId: current.mission.mission_id,
-    missionName: current.mission.display_name,
-  };
-});
-watch(
-  () => context.value?.user?.user_id,
-  (actor, previous) => {
-    if (previous && actor !== previous) settingsDrafts.clear();
-  },
-);
 const spacecraftContext = computed(() => {
   const mission = missionContext.value,
     spacecraftId = committed.value?.params.spacecraft_id;
@@ -315,13 +270,6 @@ async function navigateSettled(href: string, replace = false): Promise<OpsPageNa
     if (!stopped) failure.value = errorMessage(error);
     return "failed";
   }
-}
-async function manage(event: string, payload: Record<string, unknown>) {
-  const path = currentPage().snapshot.path;
-  const requestGeneration = generation;
-  const snapshot = readHostSnapshot(await request("host:manage", { ...payload, event, path }));
-  if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path)
-    committed.value = { ...currentPage(), snapshot };
 }
 async function reconnect() {
   if (!committed.value) return;
@@ -394,68 +342,6 @@ async function configurationRequest(event: string, input: Record<string, unknown
   committed.value = { ...currentPage(), snapshot: host };
   return result;
 }
-async function refreshSettings() {
-  const captured = currentPage();
-  const requestGeneration = generation;
-  const snapshot = readHostSnapshot(
-    await request("host:context", { path: captured.snapshot.path }),
-  );
-  if (
-    stopped ||
-    pending.value ||
-    requestGeneration !== generation ||
-    currentPage().snapshot.path !== captured.snapshot.path ||
-    snapshot.path !== captured.snapshot.path ||
-    snapshot.context.user?.user_id !== captured.snapshot.context.user?.user_id
-  )
-    throw Error("The settings context changed.");
-  committed.value = { ...currentPage(), snapshot };
-}
-async function settingsAction(action: SettingsAction): Promise<SettingsWriteResult> {
-  const captured = currentPage();
-  const requestGeneration = generation;
-  const actorId = captured.snapshot.context.user?.user_id;
-  const current = () =>
-    !stopped &&
-    !pending.value &&
-    generation === requestGeneration &&
-    currentPage().snapshot.path === captured.snapshot.path &&
-    currentPage().snapshot.settings_page?.token === action.token &&
-    context.value?.user?.user_id === actorId;
-  if (!current()) return { status: "rejected", message: "This settings page is no longer active." };
-  try {
-    const response = requireRecord(
-      await request("host:settings", {
-        path: captured.snapshot.path,
-        token: action.token,
-        input: { revision_token: action.revisionToken, document: action.document },
-      }),
-    );
-    if (!current()) return { status: "unconfirmed" };
-    const host = readHostSnapshot(response.page);
-    if (
-      host.path !== captured.snapshot.path ||
-      host.context.user?.user_id !== actorId ||
-      host.context.organization?.organization_id !==
-        captured.snapshot.context.organization?.organization_id ||
-      host.settings_page?.token !== action.token
-    )
-      return { status: "unconfirmed" };
-    const result = requireRecord(response.result);
-    committed.value = { ...currentPage(), snapshot: host };
-    if (result.status === "ok" && typeof result.revision_id === "string")
-      return {
-        status: "saved",
-        revisionId: result.revision_id,
-        snapshot: field(host.settings_page, "data", "settings"),
-      };
-    if (result.status === "rejected" && typeof result.message === "string")
-      return { status: "rejected", message: result.message };
-    return { status: "unconfirmed" };
-  } catch {
-    return { status: "unconfirmed" };
-  }
-}
 async function activationDecision(input: unknown) {
   const path = currentPage().snapshot.path;
   const requestGeneration = generation;
@@ -500,17 +386,6 @@ async function opsPageRead(payload: Record<string, unknown>) {
     throw new Error("Inactive Ops page read response.");
   return result;
 }
-async function missionPageAction(payload: Record<string, unknown>) {
-  const path = currentPage().snapshot.path,
-    requestGeneration = generation;
-  const page = currentPage().snapshot.mission_module_page;
-  if (pending.value || payload.id !== page?.id || payload.token !== page?.token)
-    throw new Error("Inactive mission page.");
-  const result = await request("host:mission-page", { ...payload, path });
-  if (stopped || generation !== requestGeneration || currentPage().snapshot.path !== path)
-    throw new Error("Inactive mission page response.");
-  return result;
-}
 // Routing is private to this host; descendants navigate through the host bridge.
 // Installing a plugin here would redefine app-wide $route when this component remounts.
 void router.replace(hostBrowserHistory.location).catch((error) => {
@@ -527,7 +402,6 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   configurationDrafts.clear();
-  settingsDrafts.clear();
   window.removeEventListener("beforeunload", beforeUnload);
   stopped = true;
   generation++;
@@ -559,30 +433,8 @@ onBeforeUnmount(() => {
     >
       <p v-if="failure" id="host-navigation-error" role="alert">{{ failure }}</p>
       <div :aria-busy="pending" :data-host-path="committed.snapshot.path">
-        <div v-if="route.kind === 'application_management'" :id="route.mountId" class="contents">
-          <InstallationManagementPage
-            :scope="route.scope"
-            :snapshot="committed.snapshot.application_management"
-            :execute="manage"
-            :refresh="reconnect"
-          />
-          <p v-if="committed.snapshot.error" id="application-management-error" role="alert">
-            {{ committed.snapshot.error }}
-          </p>
-        </div>
-        <SettingsPage
-          v-else-if="route.kind === 'settings' && settingsContext"
-          :id="route.mountId"
-          :snapshot="committed.snapshot.settings_page"
-          :context="settingsContext"
-          :section-id="committed.params.section_id ?? 'cadence.governance'"
-          :drafts="settingsDrafts"
-          :execute="settingsAction"
-          :refresh="refreshSettings"
-          :navigating="pending"
-        />
         <ActivationApprovalsPage
-          v-else-if="route.kind === 'activation_approvals' && missionContext"
+          v-if="route.kind === 'activation_approvals' && missionContext"
           :id="route.mountId"
           :snapshot="committed.snapshot.activation_approvals"
           :context="{
@@ -605,26 +457,6 @@ onBeforeUnmount(() => {
           :navigate="navigate"
           :navigate-settled="navigateSettled"
           :guard-navigation="guardNavigation"
-          :refresh="reconnect"
-          :refreshing="pending"
-        />
-        <MissionModulePage
-          v-else-if="route.kind === 'mission_module' && missionContext"
-          :id="route.mountId"
-          :contribution-id="route.contribution"
-          :snapshot="committed.snapshot.mission_module_page"
-          :execute="missionPageAction"
-          :navigate="navigate"
-          :context="missionContext"
-          :refresh="reconnect"
-          :refreshing="pending"
-        />
-        <SpacecraftModulePage
-          v-else-if="route.kind === 'spacecraft_module' && spacecraftContext"
-          :id="route.mountId"
-          :contribution-id="route.contribution"
-          :snapshot="committed.snapshot.spacecraft_module_page"
-          :context="spacecraftContext"
           :refresh="reconnect"
           :refreshing="pending"
         />
@@ -662,14 +494,6 @@ onBeforeUnmount(() => {
           :organization-id="missionContext.organizationId"
           :mission-id="missionContext.missionId"
           :navigate="navigate"
-          :refresh="reconnect"
-        />
-        <MissionPage
-          v-else-if="route.kind === 'mission'"
-          :id="route.mountId"
-          :page="route.missionPage"
-          :class="route.viewClass"
-          :snapshot="committed.snapshot.mission_page"
           :refresh="reconnect"
         />
         <CatalogPage

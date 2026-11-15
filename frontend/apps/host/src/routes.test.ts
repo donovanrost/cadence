@@ -3,12 +3,8 @@ import { required } from "../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import routes from "./routes.json";
 import { catalogPages } from "./catalog/pages";
-import { missionPages } from "./mission-and-spacecraft/pages";
 import { spacecraftPages } from "./mission-and-spacecraft/spacecraft-pages";
-import { loadedSpacecraftPages as spacecraftModulePages } from "./module-pages.test-support";
-import { loadedMissionPages as missionModulePages } from "./module-pages.test-support";
 import { loadedOpsPages as opsPages } from "./module-pages.test-support";
-import { resolveHostComponent } from "./shell/registry";
 test("plan review retains the exact version and independently paged evidence", () => {
   const route = required(
     routes.find((r) => r.path === "/missions/:mission_id/ops/plans/:contact_plan_id"),
@@ -75,27 +71,6 @@ test("Explore is a compiled mission query page with navigation but no action aut
   expect(required(opsPages["dashboards.exploration"]).navigation).toBe(true);
   expect(required(opsPages["dashboards.exploration"]).actions).toBeUndefined();
 });
-test("COMMS validation preserves its bounded findings page in the URL", () => {
-  const route = required(routes.find((r) => r.path === "/missions/:mission_id/comms/validation"));
-  expect(route).toMatchObject({
-    kind: "mission_module",
-    contribution: "comms.validation",
-    queryKeys: ["page"],
-  });
-});
-
-test("Communications collections forward the bounded producer query keys", () => {
-  const collections = routes.filter(
-    (route) =>
-      route.kind === "mission_module" &&
-      ["comms.transports", "comms.routing", "comms.ground-stations"].includes(
-        required(route.contribution),
-      ),
-  );
-  expect(collections).toHaveLength(3);
-  for (const route of collections)
-    expect(route.queryKeys).toEqual(["q", "page", "pageSize", "sort", "dir"]);
-});
 test("each core host route resolves to its registered owner", () => {
   expect(new Set(routes.map((route) => route.path)).size).toBe(routes.length);
   for (const route of routes) {
@@ -106,26 +81,6 @@ test("each core host route resolves to its registered owner", () => {
       expect(route).not.toHaveProperty("surface");
       continue;
     }
-    if (route.kind === "mission_module") {
-      expect(missionModulePages[required(route.contribution)], route.path).toBeDefined();
-      expect(route.scope).toBe("mission");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
-    if (route.kind === "spacecraft_module") {
-      expect(spacecraftModulePages[required(route.contribution)], route.path).toBeDefined();
-      expect(route.scope).toBe("spacecraft");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
-    if (route.kind === "settings") {
-      expect(["organization", "mission"]).toContain(route.scope);
-      expect(route.path).toMatch(/settings(?:\/:section_id)?$/);
-      expect(route.queryKeys).toEqual([]);
-      continue;
-    }
     if (route.kind === "activation_approvals") {
       expect(route.path).toBe("/missions/:mission_id/ops/activations");
       expect(route).not.toHaveProperty("application");
@@ -134,12 +89,6 @@ test("each core host route resolves to its registered owner", () => {
     }
     if (route.kind === "spacecraft") {
       expect(spacecraftPages[required(route.spacecraftPage)], route.path).toBeDefined();
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
-    if (route.kind === "mission") {
-      expect(missionPages[required(route.missionPage)], route.path).toBeDefined();
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
       continue;
@@ -177,12 +126,6 @@ test("each core host route resolves to its registered owner", () => {
         "before_at",
         "before_id",
       ]);
-      continue;
-    }
-    if (route.kind === "application_management") {
-      expect(resolveHostComponent(required(route.component))).toBeDefined();
-      expect(route.queryKeys).toEqual([]);
-      expect(["mission", "spacecraft"]).toContain(route.scope);
       continue;
     }
     if (route.kind === "application_surface") {
