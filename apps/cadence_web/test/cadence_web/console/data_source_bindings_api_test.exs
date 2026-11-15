@@ -232,6 +232,20 @@ defmodule CadenceWeb.Console.DataSourceBindingsAPITest do
              conn |> get(path <> "/events") |> json_response(200)
   end
 
+  # qa (11-15): a registered or changed event's from/to had a null display_name, which the
+  # console's reader rightly refuses.
+  test "every history entry names its sources, not only a switch's", c do
+    path = c.base <> "/data-source-bindings/#{c.binding.binding_id}/events"
+
+    assert %{"data" => %{"events" => [_ | _] = events}} =
+             c.member |> TestFixtures.member_conn() |> get(path) |> json_response(200)
+
+    refs = Enum.flat_map(events, &[&1["from"], &1["to"]]) |> Enum.reject(&is_nil/1)
+    assert refs != []
+    assert Enum.all?(refs, &is_binary(&1["display_name"]))
+    assert %{"display_name" => "Cadence managed store"} = List.last(events)["to"]
+  end
+
   defp admin_conn(c) do
     c.admin
     |> TestFixtures.member_conn()

@@ -102,6 +102,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
   def events(binding_id, limit \\ 50) do
     events = DataSources.list_data_binding_events(binding_id, limit: limit)
     actors = actors(events)
+    sources = source_refs(events)
 
     Enum.map(events, fn event ->
       payload = event.payload || %{}
@@ -110,13 +111,41 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
         at: event.occurred_at,
         actor: event.actor_id && %{id: event.actor_id, name: Map.get(actors, event.actor_id)},
         kind: event_kind(event),
-        from: payload["from"] || id_ref(event.previous_data_source_id),
-        to: payload["to"] || id_ref(event.current_data_source_id),
+        from: named(payload["from"], event.previous_data_source_id, sources),
+        to: named(payload["to"], event.current_data_source_id, sources),
         reason: payload["reason"],
         affected_missions: payload["affected_missions"],
         live_passes_total: payload["live_passes_total"]
       }
     end)
+  end
+
+  # Every from/to names its source (qa, 11-15: a registered or changed event's had a null name).
+  # A switch's payload already carries the names it had then; otherwise the source's current name,
+  # or its id when the source is gone.
+  defp named(%{"id" => id, "display_name" => name} = ref, _id, _sources)
+       when is_binary(id) and is_binary(name),
+       do: ref
+
+  defp named(%{"id" => id}, _fallback, sources) when is_binary(id), do: Map.fetch!(sources, id)
+  defp named(_ref, id, sources) when is_binary(id), do: Map.fetch!(sources, id)
+  defp named(_ref, nil, _sources), do: nil
+
+  defp source_refs(events) do
+    events
+    |> Enum.flat_map(fn event ->
+      payload = event.payload || %{}
+
+      [
+        get_in(payload, ["from", "id"]),
+        get_in(payload, ["to", "id"]),
+        event.previous_data_source_id,
+        event.current_data_source_id
+      ]
+    end)
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+    |> Map.new(&{&1, source_ref(&1)})
   end
 
   defp event_kind(event) do
@@ -125,9 +154,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
        do: "switched",
        else: to_string(event.event_type)
   end
-
-  defp id_ref(nil), do: nil
-  defp id_ref(id), do: %{"id" => id, "display_name" => nil}
 
   defp actors(events) do
     events
@@ -150,7 +176,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.PlatformBindings do
   def source_ref(data_source_id) when is_binary(data_source_id) do
     case DataSources.fetch_data_source(data_source_id) do
       {:ok, source} -> source_ref(source)
-      _missing -> %{"id" => data_source_id, "display_name" => nil}
+      _missing -> %{"id" => data_source_id, "display_name" => data_source_id}
     end
   end
 
