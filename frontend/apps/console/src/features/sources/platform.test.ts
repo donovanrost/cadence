@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
+import type { DataSource } from "./api.ts";
 import {
   blastRadiusReader,
   type BindingEvent,
@@ -13,7 +14,9 @@ import {
   changedLine,
   countsDiffer,
   eventLine,
+  historyWho,
   livePassesLine,
+  platformTargets,
   outcomeLine,
   sheetTitle,
   switchLabel,
@@ -171,5 +174,56 @@ describe("U53 platform binding switch words (ux)", () => {
     ).toBe("Switched from Cadence managed store to Northlight archive.");
     expect(eventLine({ ...base, kind: "disabled" }, "x")).toBe("Disabled.");
     expect(eventLine({ ...base, kind: { unrecognized: "re_pointed" } }, "x")).toBe("re pointed");
+  });
+
+  it("names a platform admin when a platform-wide binding's event comes without its actor", () => {
+    const e: BindingEvent = {
+      at: "2026-11-14T03:21:00Z",
+      actor: null,
+      kind: "switched",
+      from: null,
+      to: { id: "s2", display_name: "Northlight archive" },
+      reason: null,
+      affected_missions: null,
+      live_passes_total: null,
+    };
+    expect(historyWho(e, true)).toBe("A platform admin");
+    expect(historyWho(e, false)).toBe("Cadence");
+    expect(historyWho({ ...e, actor: { kind: "user", id: "u1", name: "Mira K." } }, true)).toBe(
+      "Mira K.",
+    );
+  });
+});
+
+describe("platformTargets (api-ops: 422 platform_target_required)", () => {
+  const src = (id: string, over: Partial<DataSource> = {}): DataSource => ({
+    id,
+    display_name: id,
+    kind: "byo_tsdb",
+    owner: "customer",
+    health: { status: "healthy", checked_at: "2026-11-13T01:00:00Z" },
+    last_received_at: null,
+    expected_interval_s: null,
+    stale: null,
+    credentials: null,
+    state: "enabled",
+    logical_source: { key: "flight_telemetry", label: "Flight telemetry" },
+    isolation_level: "customer_owned",
+    storage: "questdb",
+    credentials_ref: null,
+    shared: true,
+    tsdb_actions: undefined,
+    ...over,
+  });
+  it("offers only other active platform-shared sources of the same logical source", () => {
+    const sources = [
+      src("current"),
+      src("archive"),
+      src("own", { shared: false }),
+      src("off", { state: "disabled" }),
+      src("other", { logical_source: { key: "events", label: "Events" } }),
+    ];
+    const current = { data_source_id: "current", logical_source: "flight_telemetry" };
+    expect(platformTargets(sources, current).map((s) => s.id)).toEqual(["archive"]);
   });
 });

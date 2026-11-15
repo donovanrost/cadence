@@ -75,6 +75,8 @@ export const errorCodes = [
   "blast_radius_changed",
   "binding_not_shared",
   "blast_radius_unavailable",
+  // api-ops: a platform-wide binding can only read from a platform-shared source.
+  "platform_target_required",
   // Providers and provider accounts (L12, L13)
   "provider_not_found",
   "grant_revoked",

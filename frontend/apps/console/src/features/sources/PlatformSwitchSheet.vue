@@ -45,14 +45,8 @@ const unavailable = computed(() => radius.state.value.status === "failed");
 const name = computed(() => picked.value?.logical_source ?? "");
 const nameOf = (id: string) => props.sources.find((s) => s.id === id)?.display_name ?? null;
 const choices = computed(() =>
-  props.sources
-    // Only another source can be chosen (qa): the current one isn't offered or preselected.
-    .filter(
-      (s) =>
-        s.id !== picked.value?.data_source_id &&
-        s.state !== "disabled" &&
-        s.logical_source?.key === picked.value?.logical_source,
-    )
+  words
+    .platformTargets(props.sources, picked.value)
     .map((s) => ({ value: s.id, label: s.display_name })),
 );
 const lines = computed(() => {

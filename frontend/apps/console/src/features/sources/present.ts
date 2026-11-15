@@ -91,6 +91,8 @@ export function tsdbJobs(
 /** One sentence for a refused write (U20). */
 export function sourceFailure(error: ApiError): string {
   if (isError(error, "platform_source")) return SHARED_LINE;
+  if (isError(error, "platform_target_required"))
+    return "A platform-wide binding can only use a platform-shared source.";
   if (isError(error, "data_source_state")) {
     const state = detailsOf(
       error,

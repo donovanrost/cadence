@@ -1,4 +1,5 @@
 import { formatCount, formatHourMinute, formatShort, plural } from "@/ui";
+import type { DataSource } from "./api.ts";
 import type { BindingEvent, BlastRadius, MissionBinding } from "./bindings.ts";
 
 /** ux U53 (DECISIONS #90): the words for switching a platform-wide binding. */
@@ -114,6 +115,32 @@ const name = (x: { display_name: string } | null) => x?.display_name ?? "an unkn
  * A binding's history line (actor and time have their own columns). A platform-wide switch reads
  * 'Switched platform binding X from A to B · 12 missions, 3 live passes: “reason”'.
  */
+/**
+ * What a platform-wide binding can switch to: another active, platform-shared source serving the
+ * same logical source. The current one isn't offered (qa); the organization's own sources aren't
+ * either (api-ops: 422 platform_target_required).
+ */
+export const platformTargets = (
+  sources: readonly DataSource[],
+  current: Readonly<{ data_source_id: string; logical_source: string }> | null,
+) =>
+  sources.filter(
+    (s) =>
+      s.id !== current?.data_source_id &&
+      s.shared === true &&
+      s.state !== "disabled" &&
+      s.logical_source?.key === current?.logical_source,
+  );
+
+/**
+ * Who changed a binding. Outside admin mode a platform-wide binding's events come without the
+ * actor (api-ops): a platform admin made them, so say that rather than "Cadence".
+ */
+export function historyWho(e: BindingEvent, shared: boolean): string {
+  if (e.actor?.name) return e.actor.name;
+  return shared ? "A platform admin" : "Cadence";
+}
+
 export function eventLine(e: BindingEvent, logicalSource: string): string {
   if (typeof e.kind !== "string") return e.kind.unrecognized.replaceAll("_", " ");
   switch (e.kind) {
