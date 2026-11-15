@@ -12,6 +12,9 @@ const verdict = oneOf(["go", "hold", "no_go"]);
  */
 const holdDetails = object({
   point_id: decoders.optional(nullable(string)),
+  /** U63 telemetry_app_not_installed (domain e587668da): the app to install, and its display name. */
+  app_key: decoders.optional(nullable(token)),
+  app_name: decoders.optional(nullable(string)),
   used_by: decoders.optional(
     array(object({ point_id: string, name: nullable(string), definition_id: token }), 200),
   ),

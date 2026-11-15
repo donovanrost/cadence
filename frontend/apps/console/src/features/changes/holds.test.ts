@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { previewReader } from "./actions.ts";
-import { alarmPoints, whyPlaceholder } from "./holds.ts";
+import { alarmPoints, appHolds, checkTitle, whyPlaceholder } from "./holds.ts";
+import { blockingReason } from "./actions.ts";
 
 /** Fixtures: ux U43 (limits HOLD) and U40 (archive HOLDs); domain's details {point_id, …}. */
 function preview(items: readonly object[], action: "update" | "delete" = "update") {
@@ -46,5 +47,41 @@ describe("acknowledgeable HOLDs (U40, U43)", () => {
 
   it("lists each alarmed point once for 'Open in Alarms'", () => {
     expect(alarmPoints(preview([alarm, alarm]))).toEqual(["EPS.VBAT"]);
+  });
+});
+
+describe("telemetry_app_not_installed (U63, domain e587668da)", () => {
+  const hold = {
+    kind: "spacecraft",
+    entity_id: "sc_1",
+    spacecraft_ids: ["sc_1", "sc_2", "sc_3", "sc_4"],
+    reason: "telemetry_app_not_installed",
+    blocking: true,
+    sentence:
+      "Telemetry can't be turned on for 4 spacecraft: the telemetry app isn't installed on them. Install the app in Setup › Apps first.",
+    details: { app_key: "telemetry_decom", app_name: "Telemetry decom" },
+  };
+
+  it("blocks Apply with the server's sentence and links to the app's page", () => {
+    const p = preview([hold]);
+    expect(blockingReason(p)).toBe(`Can't apply yet: ${hold.sentence}`);
+    expect(appHolds(p)).toEqual([
+      {
+        appKey: "telemetry_decom",
+        appName: "Telemetry decom",
+        spacecraftIds: ["sc_1", "sc_2", "sc_3", "sc_4"],
+      },
+    ]);
+  });
+
+  it("titles a check that holds only this reason, and not a mixed one", () => {
+    const p = preview([hold]);
+    expect(checkTitle(p.checks[0]?.items ?? [])).toBe("Telemetry app not installed");
+    const mixed = preview([hold, alarm]);
+    expect(checkTitle(mixed.checks[0]?.items ?? [])).toBeNull();
+  });
+
+  it("links nothing without an app key", () => {
+    expect(appHolds(preview([{ ...hold, details: {} }]))).toEqual([]);
   });
 });

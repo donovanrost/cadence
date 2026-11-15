@@ -6,7 +6,8 @@ import { groupedLines, humanize, type Preview } from "./actions.ts";
 import AlarmLinks from "./AlarmLinks.vue";
 import DependentLinks from "./DependentLinks.vue";
 import { dependents } from "./dependents.ts";
-import { alarmPoints } from "./holds.ts";
+import { alarmPoints, appHolds, checkTitle } from "./holds.ts";
+import AppInstallLinks from "./AppInstallLinks.vue";
 
 /** K2 Checks: the server's dry run of the staged set (validation, conflicts; more kinds in P2). */
 /** `leftBy` names what the conflict's base came from ("r8"), for the conflict sentence. */
@@ -21,7 +22,7 @@ const labels: Readonly<Record<string, string>> = {
 function rows(preview: Preview): readonly ApCheckRow[] {
   return preview.checks.map((check) => ({
     key: check.key,
-    label: labels[check.key] ?? humanize(check.key),
+    label: checkTitle(check.items) ?? labels[check.key] ?? humanize(check.key),
     sentence:
       check.items.length === 0
         ? check.key === "conflicts"
@@ -84,6 +85,7 @@ const meta = computed(() =>
         <ApCheckRows :rows="rows(value)" />
         <DependentLinks :points="dependents(value)" />
         <AlarmLinks :points="alarmPoints(value)" />
+        <AppInstallLinks :holds="appHolds(value)" />
         <details v-if="technical.length > 0" class="border-t border-hairline px-4 py-2.5">
           <summary class="ap-label cursor-pointer">Technical details</summary>
           <ul class="m-0 mt-2 flex list-none flex-col gap-1 p-0 font-mono text-xs text-text-3">

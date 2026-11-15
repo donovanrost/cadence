@@ -57,3 +57,38 @@ export function alarmPoints(preview: Preview): readonly string[] {
   );
   return [...new Set(points)];
 }
+
+/** U63: an app a HOLD says to install first, with the spacecraft that need it (one per app). */
+export type AppHold = Readonly<{
+  appKey: string;
+  appName: string | null;
+  spacecraftIds: readonly string[];
+}>;
+
+/** U63: holds that name an app to install (telemetry_app_not_installed), merged per app. */
+export function appHolds(preview: Preview): readonly AppHold[] {
+  const byKey = new Map<string, { appName: string | null; ids: Set<string> }>();
+  for (const c of preview.checks)
+    for (const i of c.items) {
+      const key = i.reason === "telemetry_app_not_installed" ? i.details?.app_key : null;
+      if (!key) continue;
+      const entry = byKey.get(key) ?? { appName: i.details?.app_name ?? null, ids: new Set() };
+      for (const id of i.spacecraft_ids ?? (i.entity_id ? [i.entity_id] : [])) entry.ids.add(id);
+      byKey.set(key, entry);
+    }
+  return [...byKey.entries()].map(([appKey, e]) => ({
+    appKey,
+    appName: e.appName,
+    spacecraftIds: [...e.ids],
+  }));
+}
+
+/** U63: a check whose every item is one titled reason reads as that title (ux). */
+const REASON_TITLES: Readonly<Record<string, string>> = {
+  telemetry_app_not_installed: "Telemetry app not installed",
+};
+export function checkTitle(items: readonly PreviewItem[]): string | null {
+  const [first] = items;
+  const title = first?.reason ? REASON_TITLES[first.reason] : undefined;
+  return title && items.every((i) => i.reason === first?.reason) ? title : null;
+}
