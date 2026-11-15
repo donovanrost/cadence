@@ -12,6 +12,8 @@ missing endpoint or decision; an item with no blocker can start now.
 
 ## 0. Live operations and freezes (read first)
 
+- **PAUSED (director 11-15, the user's foundational question):** is the Mission Model (ADR-020, XTCE-inspired) under-implemented, and should the WHOLE mission be one model with spacecraft as instances of shared definitions (XTCE SpaceSystem style) instead of per-spacecraft pinning + per-craft materialisation? domain + an independent reviewer analyse it read-only. Paused until decided: the limits and derived-telemetry ConfigKinds (#77 stages 2–3), the shared binding-template / config-model step 1 design. Unaffected: step 4 retry, the drift fix + repair, the change-set parity gaps (a)/(b), security, OTel, deletions.
+
 - **qa #65 step 3 rerun: ARMED** (director, 11-12). Command group `3r7djzn3ia_P9CS`: SET_MODE 4 to
   EARENDIL-001 on 001's own Svalbard pass **11-14 00:33:52-00:41:52Z** (not_before 00:25Z, expires
   00:42Z; uplink booking confirmed). Negative check: 005 INV 00:27:53-00:35:53Z.
