@@ -19,25 +19,27 @@ defmodule Cadence.Control.ModelApprovalGate do
   alias Cadence.MissionModels.Comparison
 
   @doc """
-  The revisions `entries` (spacecraft id => fleet entry) run that `running` (the active
-  generation's entries) don't: `%{revision_id => %{spacecraft_ids: [id], baselines: [id | nil]}}`.
-  A baseline is the revision that spacecraft ran before.
+  What `entries` (spacecraft id => fleet entry) introduce, per spacecraft: an entry whose model
+  revision differs from the one that spacecraft runs in `running` (the active generation).
+  `%{revision_id => %{spacecraft_ids: [id], baselines: [revision_id | nil]}}`; a baseline is the
+  revision a moved spacecraft ran before. Grandfathering is per (revision, spacecraft) (director
+  11-15): only a spacecraft already on a revision keeps it unapproved; moving any other onto it
+  needs the approval.
   """
   @spec introduced(map(), map()) :: map()
   def introduced(entries, running) do
-    running_ids = running |> Map.values() |> Enum.map(&revision_id/1) |> MapSet.new()
-
     entries
-    |> Enum.reject(fn {_id, entry} ->
-      is_nil(revision_id(entry)) or MapSet.member?(running_ids, revision_id(entry))
+    |> Enum.flat_map(fn {id, entry} ->
+      revision = revision_id(entry)
+      before = running_revision(running, id)
+      if is_nil(revision) or revision == before, do: [], else: [{revision, id, before}]
     end)
-    |> Enum.group_by(fn {_id, entry} -> revision_id(entry) end, &elem(&1, 0))
-    |> Map.new(fn {revision, ids} ->
+    |> Enum.group_by(&elem(&1, 0))
+    |> Map.new(fn {revision, rows} ->
       {revision,
        %{
-         spacecraft_ids: Enum.sort(ids),
-         baselines:
-           ids |> Enum.map(&revision_id(running[&1] || running["__mission__"])) |> Enum.uniq()
+         spacecraft_ids: rows |> Enum.map(&elem(&1, 1)) |> Enum.sort(),
+         baselines: rows |> Enum.map(&elem(&1, 2)) |> Enum.uniq()
        }}
     end)
   end
@@ -68,6 +70,24 @@ defmodule Cadence.Control.ModelApprovalGate do
     end
   end
 
+  @doc """
+  What an approval of `revision_id` compares against by default: the revision its catalog
+  database's previous import produced; else the revision most spacecraft run now; else nil
+  (everything counts as added).
+  """
+  @spec default_baseline(binary(), binary(), binary()) :: binary() | nil
+  def default_baseline(organization_id, mission_id, revision_id) do
+    Catalog.previous_model_revision(organization_id, mission_id, revision_id) ||
+      organization_id
+      |> running_entries(mission_id)
+      |> Map.values()
+      |> Enum.map(&revision_id/1)
+      |> Enum.reject(&(is_nil(&1) or &1 == revision_id))
+      |> Enum.frequencies()
+      |> Enum.max_by(&elem(&1, 1), fn -> {nil, 0} end)
+      |> elem(0)
+  end
+
   @doc "The ones among `revision_ids` that aren't approved."
   @spec unapproved(binary(), binary(), [binary()]) :: [binary()]
   def unapproved(organization_id, mission_id, revision_ids) do
@@ -77,36 +97,18 @@ defmodule Cadence.Control.ModelApprovalGate do
 
   @doc """
   For the preview: the target catalogs of `changes` (`%{spacecraft_id => %{to: catalog_id}}`)
-  whose mission model the active generation doesn't run and isn't approved:
-  `[%{catalog_revision_id, mission_model_revision_id, spacecraft_ids}]`.
+  whose mission model isn't approved, with the spacecraft it would be introduced to (those not
+  already running it): `[%{catalog_revision_id, catalog_revision_number, catalog_database_id,
+  mission_model_revision_id, spacecraft_ids}]`.
   """
   @spec unapproved_targets(binary(), binary(), map()) :: [map()]
   def unapproved_targets(organization_id, mission_id, changes) do
-    running =
-      organization_id
-      |> running_entries(mission_id)
-      |> Map.values()
-      |> MapSet.new(&revision_id/1)
+    running = running_entries(organization_id, mission_id)
 
     targets =
       changes
       |> Enum.group_by(fn {_id, change} -> change.to end, &elem(&1, 0))
-      |> Enum.flat_map(fn {catalog_id, ids} ->
-        case catalog_id && Catalog.fetch_revision(organization_id, mission_id, catalog_id) do
-          {:ok, %{mission_model_revision_id: revision}} when is_binary(revision) ->
-            [
-              %{
-                catalog_revision_id: catalog_id,
-                mission_model_revision_id: revision,
-                spacecraft_ids: Enum.sort(ids)
-              }
-            ]
-
-          _none ->
-            []
-        end
-      end)
-      |> Enum.reject(&MapSet.member?(running, &1.mission_model_revision_id))
+      |> Enum.flat_map(&target(organization_id, mission_id, &1, running))
 
     unapproved =
       MapSet.new(
@@ -114,6 +116,25 @@ defmodule Cadence.Control.ModelApprovalGate do
       )
 
     Enum.filter(targets, &MapSet.member?(unapproved, &1.mission_model_revision_id))
+  end
+
+  defp target(organization_id, mission_id, {catalog_id, ids}, running) do
+    with true <- is_binary(catalog_id),
+         {:ok, %{mission_model_revision_id: revision} = catalog} when is_binary(revision) <-
+           Catalog.fetch_revision(organization_id, mission_id, catalog_id),
+         [_ | _] = moving <- Enum.reject(ids, &(running_revision(running, &1) == revision)) do
+      [
+        %{
+          catalog_revision_id: catalog_id,
+          catalog_revision_number: catalog.revision_number,
+          catalog_database_id: catalog.catalog_database_id,
+          mission_model_revision_id: revision,
+          spacecraft_ids: Enum.sort(moving)
+        }
+      ]
+    else
+      _none -> []
+    end
   end
 
   defp approved(organization_id, mission_id, revision_ids) do
@@ -162,6 +183,9 @@ defmodule Cadence.Control.ModelApprovalGate do
       end
     end
   end
+
+  defp running_revision(running, spacecraft_id),
+    do: revision_id(running[spacecraft_id] || running["__mission__"])
 
   defp revision_id(%{"mission_model" => %{"revision_id" => id}}) when is_binary(id), do: id
   defp revision_id(_entry), do: nil

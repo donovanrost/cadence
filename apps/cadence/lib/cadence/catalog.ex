@@ -338,6 +338,35 @@ defmodule Cadence.Catalog do
     |> Enum.uniq()
   end
 
+  @doc """
+  The mission-model revision produced by the catalog revision just before the one that produced
+  `mission_model_revision_id` in the same catalog database, or nil (a first import). The default
+  baseline a model approval compares against (#92 a).
+  """
+  @spec previous_model_revision(binary(), binary(), binary()) :: binary() | nil
+  def previous_model_revision(organization_id, mission_id, mission_model_revision_id) do
+    scoped =
+      where(
+        RevisionRow,
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+
+    with %{catalog_database_id: database, revision_number: number} <-
+           scoped
+           |> where([row], row.mission_model_revision_id == ^mission_model_revision_id)
+           |> order_by([row], asc: row.revision_number)
+           |> limit(1)
+           |> Repo.one() do
+      scoped
+      |> where([row], row.catalog_database_id == ^database and row.revision_number < ^number)
+      |> order_by([row], desc: row.revision_number)
+      |> limit(1)
+      |> select([row], row.mission_model_revision_id)
+      |> Repo.one()
+    end
+  end
+
   defp recorded_user_id(created_by) do
     case JsonDocument.unwrap_value(created_by) do
       %{"user_id" => id} when is_binary(id) and id != "" -> id

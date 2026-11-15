@@ -88,18 +88,26 @@ defmodule Cadence.Spacecraft.ConfigKinds.CatalogCompatibility do
   # #92 (a): a generation can't introduce a mission model nobody approved (Control.ModelApprovalGate).
   defp unapproved_items(targets, labels) do
     for target <- targets do
+      label = Map.get(labels, target.catalog_revision_id, rev(target.catalog_revision_number))
+
       item(:mission_model_not_approved, target.spacecraft_ids, true, %{
-        details: %{
-          catalog_revision_id: target.catalog_revision_id,
-          mission_model_revision_id: target.mission_model_revision_id
-        },
+        details:
+          Map.take(target, [
+            :catalog_revision_id,
+            :catalog_revision_number,
+            :catalog_database_id,
+            :mission_model_revision_id
+          ]),
+        # ux U65.
         sentence:
-          "Catalog #{Map.get(labels, target.catalog_revision_id, target.catalog_revision_id)}'s " <>
-            "mission model isn't approved yet, so #{count(target.spacecraft_ids)} can't move to it. " <>
-            "An organization administrator approves it first."
+          "Catalog #{label} isn't approved yet, so #{count(target.spacecraft_ids)} can't move " <>
+            "to it. An org admin approves it in Setup › Catalog first."
       })
     end
   end
+
+  defp rev(number) when is_integer(number), do: "rev #{number}"
+  defp rev(_number), do: "revision"
 
   defp waiting_items([]), do: []
 

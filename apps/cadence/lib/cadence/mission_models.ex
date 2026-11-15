@@ -244,9 +244,14 @@ defmodule Cadence.MissionModels do
     as: :approve
 
   @doc "Rejects a revision; see `Cadence.MissionModels.RevisionDecisions`."
-  defdelegate reject_revision(scope, mission_id, revision_id, opts \\ []),
+  defdelegate reject_revision(scope, mission_id, revision_id, reason, opts \\ []),
     to: RevisionDecisions,
     as: :reject
+
+  @doc "People's model decisions in the mission, for the organization audit."
+  defdelegate list_model_decisions(organization_id, mission_id),
+    to: RevisionDecisions,
+    as: :list_decisions
 
   defp persist_compilation(layers, %CompilerResult{} = result) do
     multi =

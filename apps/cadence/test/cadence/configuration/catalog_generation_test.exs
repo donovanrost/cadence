@@ -209,7 +209,25 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
              |> Enum.flat_map(& &1.items)
              |> Enum.find(&(&1[:reason] == :mission_model_not_approved))
 
-    assert sentence =~ "mission model isn't approved yet, so 1 spacecraft can't move to it."
+    assert sentence ==
+             "Catalog rev #{rev3.revision_number} isn't approved yet, so 1 spacecraft can't " <>
+               "move to it. An org admin approves it in Setup › Catalog first."
+
+    assert details.catalog_revision_number == rev3.revision_number
+    assert details.catalog_database_id == rev3.catalog_database_id
+
+    # The default baseline for its approval: no earlier import in its database, so the revision
+    # the fleet runs now.
+    {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    {:ok, entry} = FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
+
+    assert ModelApprovalGate.default_baseline(
+             c.org,
+             c.mission.mission_id,
+             rev3.mission_model_revision_id
+           ) ==
+             entry["mission_model"]["revision_id"]
+
     assert details.mission_model_revision_id == rev3.mission_model_revision_id
     assert {:error, {:holds_blocking, _preview}} = submit(c, staged)
 
