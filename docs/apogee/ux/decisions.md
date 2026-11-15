@@ -1696,3 +1696,37 @@ Operators know catalog revisions; the mission model revision is the compiled for
   first." The link `Open rev 4` goes to the Approval panel.
 - **Apply refusals:** not_approved: "Not applied: catalog rev 4 isn't approved yet." comparison_failed: "Not
   applied: catalog rev 4's comparison didn't pass." with `Open the report`.
+
+### U66 · Now item: the telemetry buffer filling up (lead; the ingest journal as a whole) (api-ops / api / fe-ops)
+U47 is one pass backing up. This is the whole buffer, where a FULL buffer refuses telemetry from every link at
+once. Visible text says "buffer", as in U47. The journal, streams and paths go in Technical details. One item per
+mission.
+- **Thresholds:** raised at 70% (caution, P2). At 90% it's crit and P1. It clears below 60%, so it doesn't flap at
+  70%.
+- **Title:**
+  - `Telemetry buffer 72% full`
+  - crit: `Telemetry buffer 91% full: at 100% all telemetry stops`
+  - full: `Telemetry buffer full: Cadence is refusing telemetry from every pass`
+- **Meta:** `3.1 GB OF 4.3 GB · +180 MB/MIN · FULL IN ~6 MIN`. The growth and time to full show only while it's
+  growing. While shrinking: `−90 MB/MIN · DRAINING`.
+- **Body:**
+  - What it is: "Cadence holds incoming telemetry here until it's stored. At 100% it stops accepting telemetry from
+    every pass at once."
+  - What's holding it (the largest first, up to 3, each a link): "Most of it is waiting on EARENDIL-008 · SVB 03:10Z
+    pass (1.2 GB), the Northlight archive stream (800 MB), and 3 more."
+  - What drains it: "It drains as storage catches up. If it's shrinking, nothing needs doing."
+  - Full: "Telemetry arriving now is refused and isn't kept. It can't be recovered." (only when the server says it's
+    refusing).
+- **Actions** (only those the server offers, per viewer):
+  - `Open pass` on each holder link.
+  - `Catch up archive…` when the server offers the archive catch-up, with a confirm naming what it does.
+  - `Raise the cap…`, a configuration change in Setup › Data sources (a change set; org admins).
+  - Otherwise the caption "Operators can open what's holding it; raising the cap is an org admin's change in Setup ›
+    Data sources."
+  - Waiting is the default, so there's no button for it.
+- **Resolutions:** "Back under 60% at 03:30Z." The row fades. After a full spell, the line adds "Telemetry was
+  refused from 03:21Z to 03:24Z." (refused, not lost, unless the server counts losses; then U47's frames-lost
+  words).
+- **Technical details:** journal path, cap, stream ids, and the refusal counter.
+- **Data asks:** percent, used and cap bytes, rate (signed, per minute), eta_full, `holders [{kind: contact |
+  stream, label, realized_contact_id?, bytes}]`, refusing (bool) with refused_since, and actions.
