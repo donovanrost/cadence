@@ -12,3 +12,7 @@ config :cadence, Cadence.Repo,
   show_sensitive_data_on_connection_error: true,
   stacktrace: true,
   pool_size: 10
+
+# Provider HTTP calls refuse private and reserved networks (OutboundGuard, api-ops 11-15); this
+# environment allows loopback only, for the local simulator. Production allows nothing extra.
+config :cadence, :provider_outbound, allow: ["127.0.0.1/32", "::1/128"]

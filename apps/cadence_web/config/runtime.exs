@@ -32,6 +32,19 @@ if config_env() == :prod do
   end
 end
 
+# Provider HTTP calls refuse private and reserved networks (OutboundGuard). A deployment whose
+# provider legitimately lives on a private network (a lab's in-cluster simulator) names those
+# ranges explicitly: CADENCE_PROVIDER_OUTBOUND_ALLOW="10.43.0.0/16,fd00::/8". There is no switch
+# that turns the check off.
+case System.get_env("CADENCE_PROVIDER_OUTBOUND_ALLOW") do
+  ranges when is_binary(ranges) and ranges != "" ->
+    config :cadence, :provider_outbound,
+      allow: ranges |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+
+  _unset ->
+    :ok
+end
+
 case System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
   endpoint when is_binary(endpoint) and endpoint != "" ->
     config :opentelemetry,

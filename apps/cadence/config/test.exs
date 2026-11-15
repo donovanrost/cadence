@@ -74,3 +74,7 @@ config :cadence, data_source_probe_scheduler: [enabled?: false]
 config :cadence, data_source_watermark_events: [enabled?: false]
 
 config :logger, level: :warning
+
+# Provider HTTP calls refuse private and reserved networks (OutboundGuard, api-ops 11-15); this
+# environment allows loopback only, for the local simulator. Production allows nothing extra.
+config :cadence, :provider_outbound, allow: ["127.0.0.1/32", "::1/128"]
