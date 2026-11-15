@@ -366,19 +366,9 @@ const expected = [
     package: { packageId: "cadence.organization-admin", version: 1 },
     displayName: "Organization Administration",
     description: "Manage organization membership, providers, notifications, and administration.",
-    installableScopes: ["organization", "user"] as const,
+    installableScopes: ["user"] as const,
     releaseId: () => "organization-admin-v1",
     surfaces: [
-      [
-        "organization_home",
-        "overview",
-        "organization",
-        "application_workspace",
-        "Overview",
-        10,
-        "cadence.organization.home",
-        [],
-      ],
       [
         "notifications",
         "activity",

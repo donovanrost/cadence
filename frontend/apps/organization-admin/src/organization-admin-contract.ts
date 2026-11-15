@@ -16,17 +16,6 @@ type OrganizationAdminSurfaceContract = {
 
 export const SURFACE_CONTRACTS = [
   {
-    surfaceId: "organization_home",
-    scope: "organization",
-    component: "OrganizationHome",
-    purpose: "overview",
-    placement: "application_workspace" as const,
-    navigation: { label: "Overview", order: 10 },
-    query: { id: "cadence.organization.home", version: 1 },
-    actions: [] as const,
-    exposedModule: "./Application",
-  },
-  {
     surfaceId: "notifications",
     scope: "user",
     component: "NotificationsPage",

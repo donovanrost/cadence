@@ -1,10 +1,5 @@
 [
   {
-    "consumer": "apps/host/src/administration/features/organization-home/organization-home.test.ts",
-    "environment": "CADENCE_ORGANIZATION_HOME_DOCUMENT",
-    "producer": "apps/cadence/test/cadence/reads/administration/organization_home_test.exs"
-  },
-  {
     "consumer": "apps/host/src/ops-workspace/features/timeline/timeline.test.ts",
     "environment": "CADENCE_TIMELINE_DOCUMENT",
     "producer": "apps/cadence/test/cadence/reads/ops_workspace/timeline_test.exs"

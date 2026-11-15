@@ -8,8 +8,8 @@ describe("organization admin federated application", () => {
   it("publishes the complete distinct post-auth surface manifest", () => {
     expect(manifest.application.applicationKey).toBe("organization_admin");
     expect(manifest.package.trust).toBe("first_party");
-    expect(manifest.surfaces).toHaveLength(3);
-    expect(new Set(manifest.surfaces.map((surface) => surface.surfaceId)).size).toBe(3);
+    expect(manifest.surfaces).toHaveLength(2);
+    expect(new Set(manifest.surfaces.map((surface) => surface.surfaceId)).size).toBe(2);
     expect(manifest.package.packageId).toBe("cadence.organization-admin");
     expect(
       manifest.surfaces.every((surface) => surface.renderer.exposedModule === "./Application"),

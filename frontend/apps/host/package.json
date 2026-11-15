@@ -8,7 +8,6 @@
     "./capability-management": "./src/capability-management/index.ts",
     "./catalog": "./src/catalog/index.ts",
     "./missions": "./src/mission-and-spacecraft/index.ts",
-    "./administration": "./src/administration/index.ts",
     "./ops-workspace": "./src/ops-workspace/index.ts",
     "./auth-and-navigation": "./src/auth-and-navigation/index.ts"
   },

@@ -1,20 +1,5 @@
 [
   {
-    "path": "/",
-    "header": { "kind": "resource" },
-    "scope": "organization",
-    "mountId": "organization-home-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "",
-    "metadata": {
-      "page_title": "Home",
-      "nav_item": "organization_home"
-    },
-    "kind": "administration",
-    "administrationPage": "organization_home"
-  },
-  {
     "path": "/missions/:mission_id",
     "header": { "kind": "resource" },
     "scope": "mission",
@@ -913,33 +898,6 @@
       "page_title": "Applications",
       "nav_item": "spacecraft"
     }
-  },
-  {
-    "path": "/settings",
-    "scope": "organization",
-    "mountId": "settings-page-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "nav_item": "settings",
-      "page_title": "Organization settings"
-    },
-    "kind": "settings"
-  },
-  {
-    "path": "/settings/:section_id",
-    "header": { "kind": "collection" },
-    "scope": "organization",
-    "mountId": "settings-page-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "nav_item": "settings",
-      "page_title": "Organization settings"
-    },
-    "kind": "settings"
   },
   {
     "path": "/missions/:mission_id/settings",

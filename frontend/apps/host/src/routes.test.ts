@@ -179,14 +179,6 @@ test("each core host route resolves to its registered owner", () => {
       ]);
       continue;
     }
-    if (route.kind === "administration") {
-      expect(route.path).toBe("/");
-      expect(route.administrationPage).toBe("organization_home");
-      expect(route.scope).toBe("organization");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      continue;
-    }
     if (route.kind === "application_management") {
       expect(resolveHostComponent(required(route.component))).toBeDefined();
       expect(route.queryKeys).toEqual([]);

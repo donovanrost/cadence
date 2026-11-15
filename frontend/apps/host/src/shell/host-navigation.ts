@@ -21,14 +21,6 @@ function normalizeHostRoute(route: CatalogRoute) {
       if (route.catalogPage)
         return { ...route, kind: "catalog" as const, catalogPage: route.catalogPage };
       break;
-    case "administration":
-      if (route.administrationPage)
-        return {
-          ...route,
-          kind: "administration" as const,
-          administrationPage: route.administrationPage,
-        };
-      break;
     case "mission_module":
       if (route.contribution)
         return { ...route, kind: "mission_module" as const, contribution: route.contribution };

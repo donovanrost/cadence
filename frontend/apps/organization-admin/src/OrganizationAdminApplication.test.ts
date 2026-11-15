@@ -57,11 +57,10 @@ function propsFor(
 }
 
 function queryBridgeMock() {
-  const mock = vi.fn((request: HostQueryRequest) =>
+  const mock = vi.fn((_request: HostQueryRequest) =>
     Promise.resolve<unknown>({
       queryVersion: 1,
-      presentation:
-        request.queryId === "cadence.organization.home" ? { organization_id: "org-1" } : {},
+      presentation: {},
     }),
   );
   const bridge: HostBridge["query"] = async <TResult>(request: HostQueryRequest) =>
@@ -118,10 +117,7 @@ describe("Organization Admin federated adapter", () => {
         "data-organization-admin-surface": contract.surfaceId,
         "data-organization-admin-renderer": contract.component,
       });
-      if (contract.surfaceId === "organization_home") {
-        expect(wrapper.get("#organization-home-destination a").attributes("href")).toBe("/");
-        expect(wrapper.find("#organization-recent-missions").exists()).toBe(false);
-      } else if (contract.surfaceId === "notifications") {
+      if (contract.surfaceId === "notifications") {
         expect(wrapper.get("#notifications-destination").attributes("href")).toBe("/notifications");
         expect(wrapper.find("#notifications-panel").exists()).toBe(false);
       } else {

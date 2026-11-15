@@ -36,10 +36,6 @@ const InstallationManagementPage = lazyHostPage(
     import("../capability-management/features/application-installations/InstallationManagementPage.vue"),
 );
 const CatalogPage = lazyHostPage("CatalogPage", () => import("../catalog/CatalogPage.vue"));
-const AdministrationPage = lazyHostPage(
-  "AdministrationPage",
-  () => import("../administration/AdministrationPage.vue"),
-);
 const WorkspaceLanding = lazyHostPage(
   "WorkspaceLanding",
   () => import("../ops-workspace/features/landing/WorkspaceLanding.vue"),
@@ -670,14 +666,6 @@ onBeforeUnmount(() => {
           :organization-id="missionContext.organizationId"
           :mission-id="missionContext.missionId"
           :navigate="navigate"
-          :refresh="reconnect"
-        />
-        <AdministrationPage
-          v-else-if="route.kind === 'administration'"
-          :id="route.mountId"
-          :page="route.administrationPage"
-          :snapshot="committed.snapshot.administration_page"
-          :organization-id="context.organization?.organization_id"
           :refresh="reconnect"
         />
         <MissionPage

@@ -39,8 +39,6 @@ const settingsHeader = () => ({
   facts: [props.context.organizationName],
 });
 useManagementHeaders({
-  "/settings": settingsHeader,
-  "/settings/:section_id": settingsHeader,
   "/missions/:mission_id/settings": settingsHeader,
   "/missions/:mission_id/settings/:section_id": settingsHeader,
 });
