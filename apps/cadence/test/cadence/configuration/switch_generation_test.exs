@@ -2,6 +2,7 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
   @moduledoc "Commanding and telemetry switches as change-set fields (L22)."
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
@@ -137,6 +138,31 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
     {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
     assert {:ok, entry} = FleetSnapshot.entry(active.metadata, id)
     assert entry["telemetry_capability_ids"] != []
+  end
+
+  # Save installs the telemetry app when telemetry turns on; a change set doesn't (an installation
+  # is its own governed act, director 11-15), so it holds and the apply refuses.
+  test "turning telemetry on without the telemetry app installed is a blocking hold", c do
+    id = c.craft.spacecraft_id
+    {:ok, off} = stage(c, [switch_op(id, "telemetry_enabled", false)])
+    assert {:ok, %{state: :applied}} = submit(c, off)
+
+    host = HostContext.spacecraft(c.mission.mission_id, id)
+    assert {:ok, _} = ApplicationInstallations.uninstall(c.scope, host, "telemetry_decom")
+
+    {:ok, on} = stage(c, [switch_op(id, "telemetry_enabled", true)])
+
+    assert {:ok, %{checks: checks}} =
+             Configuration.preview(c.scope, c.mission.mission_id, on.change_set_id)
+
+    assert %{blocking: true, sentence: sentence} =
+             checks
+             |> Enum.flat_map(& &1.items)
+             |> Enum.find(&(&1[:reason] == :telemetry_app_not_installed))
+
+    assert sentence =~ "the telemetry app isn't installed on it. Install it first."
+    assert {:error, {:holds_blocking, _preview}} = submit(c, on)
+    assert ConfigurationSwitches.not_installed(c.org, c.mission.mission_id, [id]) == [id]
   end
 
   test "an edit that doesn't move a switch doesn't take it over" do

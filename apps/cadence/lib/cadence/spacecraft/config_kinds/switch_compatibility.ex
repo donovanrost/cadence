@@ -10,6 +10,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.SwitchCompatibility do
   - `telemetry_disabled` (acknowledge): after the apply its telemetry isn't decoded.
   - `telemetry_packet_inputs_required` (blocking): telemetry turned on for a spacecraft whose
     configuration names no packets to decode.
+  - `telemetry_app_not_installed` (blocking): telemetry turned on for a spacecraft without the
+    telemetry app installed. Install it first: a change set doesn't install applications
+    (director 11-15).
 
   Never staged. The configured generation builder reads what would change.
   """
@@ -59,7 +62,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SwitchCompatibility do
 
       Enum.flat_map(impact.commanding_off, &commanding_items/1) ++
         Enum.map(impact.telemetry_off, &telemetry_off_item/1) ++
-        Enum.map(impact.missing_inputs, &missing_inputs_item/1)
+        Enum.map(impact.missing_inputs, &missing_inputs_item/1) ++
+        Enum.map(impact.not_installed, &not_installed_item/1)
     else
       _nothing -> []
     end
@@ -105,6 +109,14 @@ defmodule Cadence.Spacecraft.ConfigKinds.SwitchCompatibility do
         sentence:
           "Telemetry can't be turned on for #{name}: its configuration doesn't name the " <>
             "packets to decode. Set its handled APIDs first."
+      })
+
+  defp not_installed_item(%{id: id, name: name}),
+    do:
+      item(:telemetry_app_not_installed, id, true, %{
+        sentence:
+          "Telemetry can't be turned on for #{name}: the telemetry app isn't installed on it. " <>
+            "Install it first."
       })
 
   defp commands(1), do: "1 command waiting"

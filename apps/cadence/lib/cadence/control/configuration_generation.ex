@@ -92,6 +92,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
          :ok <- nothing_in_flight(org, set.mission_id, Map.keys(targets)),
          :ok <- nothing_in_flight(org, set.mission_id, commanding_off, :commanding),
          :ok <- telemetry_inputs(switches, active.entries),
+         :ok <- telemetry_installed(org, set.mission_id, switches),
          apids = apid_changes(mission, touched, active.entries),
          :ok <- apids_defined(apids),
          derivations = derivations(targets, switches, ConfigurationApids.derivations(apids)),
@@ -154,6 +155,19 @@ defmodule Cadence.Control.ConfigurationGeneration do
          ) do
       [] -> :ok
       ids -> {:error, {:telemetry_packet_inputs_required, ids}}
+    end
+  end
+
+  # Telemetry turned on needs the telemetry app installed; the apply doesn't install it (an
+  # installation is its own governed act; the preview shows this as a blocking HOLD).
+  defp telemetry_installed(org, mission_id, switches) do
+    case ConfigurationSwitches.not_installed(
+           org,
+           mission_id,
+           ConfigurationSwitches.telemetry_on(switches)
+         ) do
+      [] -> :ok
+      ids -> {:error, {:telemetry_app_not_installed, ids}}
     end
   end
 

@@ -14,6 +14,7 @@ defmodule Cadence.Control.ConfigurationSwitches do
   and the spacecraft records.
   """
 
+  alias Cadence.Applications.ApplicationInstallations
   alias Cadence.Applications.SpacecraftConfiguration.Active
   alias Cadence.Commanding.RequestActivity
   alias Cadence.Missions
@@ -55,8 +56,35 @@ defmodule Cadence.Control.ConfigurationSwitches do
           id <- telemetry_on(targets),
           not packet_inputs?(entries[id]),
           do: %{id: id, name: name.(id)}
+        ),
+      not_installed:
+        for(
+          id <- not_installed(organization_id, mission_id, telemetry_on(targets)),
+          do: %{id: id, name: name.(id)}
         )
     }
+  end
+
+  @doc """
+  The spacecraft among `ids` without an installed telemetry app (one query). A Save installs it
+  when telemetry turns on; a change set doesn't, because installing an application is its own
+  governed act (director 11-15), so the preview holds and the apply refuses instead.
+  """
+  @spec not_installed(binary(), binary(), [binary()]) :: [binary()]
+  def not_installed(_organization_id, _mission_id, []), do: []
+
+  def not_installed(organization_id, mission_id, ids) do
+    installed =
+      ApplicationInstallations.configuration_bases(
+        organization_id,
+        mission_id,
+        ids,
+        "telemetry_decom"
+      )
+
+    Enum.reject(ids, fn id ->
+      Enum.any?(Map.get(installed, id, []), fn {_id, _version, state} -> state == "installed" end)
+    end)
   end
 
   defp active_entries(organization_id, mission_id) do
