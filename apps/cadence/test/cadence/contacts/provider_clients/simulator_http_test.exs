@@ -46,7 +46,10 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
 
     assert_received {:request, opts}
     assert opts[:method] == :post
-    assert opts[:url] == "http://simulator.test/provider/v1/opportunities/search"
+    # The outbound guard sends to the checked address and keeps the name for Host/TLS.
+    assert opts[:url] == "http://127.0.0.1/provider/v1/opportunities/search"
+    assert opts[:connect_options][:hostname] == "simulator.test"
+    assert opts[:redirect] == false
     assert opts[:json] == params
     refute Map.has_key?(opts[:json], "run_id")
     assert {"authorization", "Bearer provider-secret"} in opts[:headers]
@@ -76,7 +79,7 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
              )
 
     assert_received {:request, opts}
-    assert opts[:url] == "http://simulator.test/provider/v1/contacts"
+    assert opts[:url] == "http://127.0.0.1/provider/v1/contacts"
     assert opts[:json] == attrs
     assert {"idempotency-key", "booking-123"} in opts[:headers]
     assert {"x-request-id", "request-123"} in opts[:headers]
@@ -132,7 +135,7 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
     assert_received {:request, opts}
     assert opts[:method] == :patch
     assert opts[:retry] == false
-    assert opts[:url] == "http://simulator.test/provider/v1/contacts/contact-123"
+    assert opts[:url] == "http://127.0.0.1/provider/v1/contacts/contact-123"
     assert opts[:json] == attrs
     assert {"idempotency-key", "change-123"} in opts[:headers]
   end
@@ -200,10 +203,10 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTPTest do
 
       body =
         case {opts[:method], opts[:url]} do
-          {:post, "http://simulator.test/provider/v1/delivery-profiles"} ->
+          {:post, "http://127.0.0.1/provider/v1/delivery-profiles"} ->
             %{"data" => delivery_profile_document()}
 
-          {:get, "http://simulator.test/provider/v1/contacts"} ->
+          {:get, "http://127.0.0.1/provider/v1/contacts"} ->
             %{"data" => [contact_document()]}
         end
 

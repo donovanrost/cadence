@@ -75,6 +75,84 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuardTest do
     end
   end
 
+  describe "IPv6 forms that embed, translate or route to reserved space" do
+    for {label, address} <- [
+          {"IPv4-compatible ::7f00:1", {0, 0, 0, 0, 0, 0, 0x7F00, 1}},
+          {"site-local fec0::1", {0xFEC0, 0, 0, 0, 0, 0, 0, 1}},
+          {"IPv4-translated ::ffff:0:a00:1", {0, 0, 0, 0, 0xFFFF, 0, 0x0A00, 1}},
+          {"local-use NAT64 64:ff9b:1::1", {0x64, 0xFF9B, 1, 0, 0, 0, 0, 1}},
+          {"well-known NAT64 of 10.0.0.1", {0x64, 0xFF9B, 0, 0, 0, 0, 0x0A00, 1}},
+          {"6to4 2002:a00:1::1", {0x2002, 0x0A00, 1, 0, 0, 0, 0, 1}},
+          {"Teredo 2001::1", {0x2001, 0, 0, 0, 0, 0, 0, 1}},
+          {"IPv6 metadata fd00:ec2::254", {0xFD00, 0xEC2, 0, 0, 0, 0, 0, 0x254}}
+        ] do
+      test "#{label} is refused" do
+        refute OutboundGuard.allowed?(unquote(Macro.escape(address)), [])
+      end
+    end
+
+    test "a public IPv6 address is allowed" do
+      assert OutboundGuard.allowed?({0x2606, 0x4700, 0, 0, 0, 0, 0, 0x1111}, [])
+    end
+  end
+
+  describe "the allowlist is validated (never an off-switch)" do
+    for cidr <- ["0.0.0.0/0", "::/0", "10.0.0.0/7", "2001::/16"] do
+      test "#{cidr} is too wide" do
+        assert_raise ArgumentError, ~r/wider than/, fn ->
+          OutboundGuard.parse_allow!([unquote(cidr)])
+        end
+      end
+    end
+
+    for cidr <- ["169.254.169.254/32", "169.254.0.0/16", "fe80::/64", "fd00:ec2::254/128"] do
+      test "#{cidr} can never be allowed" do
+        assert_raise ArgumentError, ~r/link-local or metadata/, fn ->
+          OutboundGuard.parse_allow!([unquote(cidr)])
+        end
+      end
+    end
+
+    for cidr <- ["10.0.0", "10.0.0.0/33", "not-an-address/8", "10.0.0.0/x"] do
+      test "#{inspect(cidr)} is malformed" do
+        assert_raise ArgumentError, fn -> OutboundGuard.parse_allow!([unquote(cidr)]) end
+      end
+    end
+
+    test "even a hand-built allow entry can't re-allow metadata" do
+      refute OutboundGuard.allowed?({169, 254, 169, 254}, [{{169, 254, 169, 254}, 32}])
+    end
+
+    test "the environment's configured list validates" do
+      assert :ok = OutboundGuard.validate_config!()
+    end
+  end
+
+  describe "the injectable transport sits behind the check" do
+    test "a refused address never reaches :send" do
+      send_fun = fn _opts -> flunk("sent a refused request") end
+
+      assert {:error, {:outbound_address_denied, "10.0.0.5"}} =
+               OutboundGuard.request([url: "http://10.0.0.5/x"], send: send_fun, allow: [])
+    end
+
+    test "an allowed request reaches :send already rewritten" do
+      OutboundGuard.request([url: "https://provider.example/x"],
+        resolver: resolver(%{"provider.example" => [{93, 184, 216, 34}]}),
+        send: capture(),
+        allow: []
+      )
+
+      assert_received {:sent, opts}
+      assert opts[:url] == "https://93.184.216.34/x"
+    end
+
+    test "a non-HTTP URL is refused without naming it" do
+      assert {:error, {:outbound_address_denied, :unsupported_url}} =
+               OutboundGuard.request([url: "file:///etc/passwd"], send: capture(), allow: [])
+    end
+  end
+
   describe "an allowed address" do
     test "connects to the CHECKED address, keeps the name for Host/TLS, and follows no redirects" do
       assert {:ok, %Req.Response{status: 200}} =
@@ -121,11 +199,12 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuardTest do
                )
     end
 
-    test "the configured allowlist is the default (test and dev allow loopback only)" do
-      assert OutboundGuard.allowed?({127, 0, 0, 1}, ["127.0.0.1/32", "::1/128"])
-      refute OutboundGuard.allowed?({169, 254, 169, 254}, ["127.0.0.1/32", "::1/128"])
-      assert OutboundGuard.allowed?({10, 43, 7, 9}, ["10.43.0.0/16"])
-      refute OutboundGuard.allowed?({10, 44, 0, 1}, ["10.43.0.0/16"])
+    test "an allowlist admits exactly its ranges" do
+      allow = OutboundGuard.parse_allow!(["127.0.0.1/32", "10.43.0.0/16"])
+      assert OutboundGuard.allowed?({127, 0, 0, 1}, allow)
+      assert OutboundGuard.allowed?({10, 43, 7, 9}, allow)
+      refute OutboundGuard.allowed?({10, 44, 0, 1}, allow)
+      refute OutboundGuard.allowed?({169, 254, 169, 254}, allow)
     end
   end
 
@@ -160,6 +239,83 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuardTest do
                  allow: ["127.0.0.1/32"]
                )
     end
+  end
+
+  describe "over TLS (api's review: Mint's :hostname drives SNI and verification, not the IP)" do
+    test "a certificate for the provider's name verifies against the checked address" do
+      %{port: port, cacerts: cacerts} = tls_server!("provider.test")
+
+      assert {:ok, %Req.Response{status: 200}} =
+               OutboundGuard.request(
+                 [
+                   url: "https://provider.test:#{port}/provider/v1/account",
+                   retry: false,
+                   connect_options: [transport_opts: [cacerts: cacerts]]
+                 ],
+                 resolver: fn "provider.test" -> {:ok, [{127, 0, 0, 1}]} end,
+                 allow: ["127.0.0.1/32"]
+               )
+    end
+
+    test "a certificate for another name fails, though the address is the same" do
+      %{port: port, cacerts: cacerts} = tls_server!("other.test")
+
+      assert {:error, %Req.TransportError{reason: reason}} =
+               OutboundGuard.request(
+                 [
+                   url: "https://provider.test:#{port}/provider/v1/account",
+                   retry: false,
+                   connect_options: [transport_opts: [cacerts: cacerts]]
+                 ],
+                 resolver: fn "provider.test" -> {:ok, [{127, 0, 0, 1}]} end,
+                 allow: ["127.0.0.1/32"]
+               )
+
+      # The client refused the certificate by name (not a cipher or protocol failure).
+      assert inspect(reason) =~ "hostname_check_failed"
+    end
+  end
+
+  # A one-request TLS server whose certificate names `dns_name`, from OTP's test PKI.
+  defp tls_server!(dns_name) do
+    san = {:Extension, {2, 5, 29, 17}, false, [dNSName: String.to_charlist(dns_name)]}
+
+    %{server_config: server, client_config: client} =
+      :public_key.pkix_test_data(%{
+        server_chain: %{
+          root: [key: {:rsa, 2048, 65_537}, digest: :sha256],
+          intermediates: [],
+          peer: [key: {:rsa, 2048, 65_537}, digest: :sha256, extensions: [san]]
+        },
+        client_chain: %{
+          root: [key: {:rsa, 2048, 65_537}, digest: :sha256],
+          intermediates: [],
+          peer: [key: {:rsa, 2048, 65_537}, digest: :sha256]
+        }
+      })
+
+    {:ok, listen} =
+      :ssl.listen(0, server ++ [ip: {127, 0, 0, 1}, active: false, reuseaddr: true])
+
+    {:ok, {_ip, port}} = :ssl.sockname(listen)
+
+    owner = self()
+
+    server_pid =
+      spawn(fn ->
+        with {:ok, socket} <- :ssl.transport_accept(listen, 5_000),
+             {:ok, tls} <- :ssl.handshake(socket, 5_000),
+             {:ok, _request} <- :ssl.recv(tls, 0, 5_000) do
+          :ssl.send(tls, "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok")
+          :ssl.close(tls)
+        end
+
+        send(owner, :tls_served)
+      end)
+
+    :ok = :ssl.controlling_process(listen, server_pid)
+    on_exit(fn -> :ssl.close(listen) end)
+    %{port: port, cacerts: Keyword.fetch!(client, :cacerts)}
   end
 
   defp serve(listen) do

@@ -5,13 +5,22 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
   platform's own network.
 
   - The host is resolved BEFORE connecting, and the request connects to the checked address
-    (the original name only rides along for the Host header and TLS), so a name can't resolve
-    to one address for the check and another for the connection.
-  - Private, loopback, link-local (cloud metadata included), carrier-grade NAT, multicast and
-    other reserved ranges are refused, unless this environment's configuration explicitly
-    allows them (`config :cadence, :provider_outbound, allow: ["127.0.0.1/32"]` on dev for the
-    simulator). There is no switch that turns the check off.
+    (the original name only rides along for the Host header, SNI and certificate verification,
+    via Mint's `:hostname`), so a name can't resolve to one address for the check and another for
+    the connection. Any refused answer refuses the call.
+  - Private, loopback, link-local (cloud metadata included), carrier-grade NAT, documentation,
+    multicast and other reserved ranges are refused, IPv6 forms that embed or translate IPv4
+    included, unless this environment's configuration explicitly allows a range
+    (`config :cadence, :provider_outbound, allow: ["127.0.0.1/32"]` on dev for the simulator;
+    `CADENCE_PROVIDER_OUTBOUND_ALLOW` for a deployment). The allowlist is validated at boot
+    (`validate_config!/0`): no range wider than /8 (IPv4) or /32 (IPv6), and link-local and
+    metadata addresses can never be allowed. There is no switch that turns the check off.
   - Redirects are never followed: a public address can't bounce the request inward.
+  - The transport is injectable only BEHIND the guard (`:send`): a caller can replace how a
+    checked request is sent, never skip the check.
+
+  Req starts one Finch pool per distinct `connect_options`, so one pool per provider host name;
+  fine at this scale.
 
   `{:error, {:outbound_address_denied, host}}` when refused; the request isn't sent and no
   credential leaves Cadence.
@@ -28,6 +37,7 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
     {{172, 16, 0, 0}, 12},
     {{192, 0, 0, 0}, 24},
     {{192, 0, 2, 0}, 24},
+    {{192, 88, 99, 0}, 24},
     {{192, 168, 0, 0}, 16},
     {{198, 18, 0, 0}, 15},
     {{198, 51, 100, 0}, 24},
@@ -37,23 +47,43 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
   ]
 
   @denied_v6 [
-    {{0, 0, 0, 0, 0, 0, 0, 0}, 128},
-    {{0, 0, 0, 0, 0, 0, 0, 1}, 128},
-    {{0x0064, 0xFF9B, 0, 0, 0, 0, 0, 0}, 96},
+    # ::/96 IPv4-compatible (with :: and ::1).
+    {{0, 0, 0, 0, 0, 0, 0, 0}, 96},
+    # ::ffff:0:0:0/96 IPv4-translated (::ffff:0:a.b.c.d).
+    {{0, 0, 0, 0, 0xFFFF, 0, 0, 0}, 96},
+    # 64:ff9b:1::/48 local-use NAT64 (RFC 8215).
+    {{0x0064, 0xFF9B, 0x0001, 0, 0, 0, 0, 0}, 48},
     {{0x0100, 0, 0, 0, 0, 0, 0, 0}, 64},
+    # 2001::/32 Teredo and 2002::/16 6to4 embed IPv4; refused outright.
+    {{0x2001, 0, 0, 0, 0, 0, 0, 0}, 32},
     {{0x2001, 0x0DB8, 0, 0, 0, 0, 0, 0}, 32},
+    {{0x2002, 0, 0, 0, 0, 0, 0, 0}, 16},
     {{0xFC00, 0, 0, 0, 0, 0, 0, 0}, 7},
     {{0xFE80, 0, 0, 0, 0, 0, 0, 0}, 10},
+    {{0xFEC0, 0, 0, 0, 0, 0, 0, 0}, 10},
     {{0xFF00, 0, 0, 0, 0, 0, 0, 0}, 8}
   ]
 
+  # Never allowable, whatever an allowlist says: link-local (cloud metadata lives there) and the
+  # IPv6 metadata address.
+  @never_allowed [
+    {{169, 254, 0, 0}, 16},
+    {{0xFE80, 0, 0, 0, 0, 0, 0, 0}, 10},
+    {{0xFD00, 0x0EC2, 0, 0, 0, 0, 0, 0x0254}, 128}
+  ]
+
+  @min_prefix %{4 => 8, 8 => 32}
+
   @doc """
   `Req.request/1` behind the guard: resolves and checks the URL's host, then sends to the checked
-  address with redirects off. Options: `:resolver` (`host -> {:ok, [ip]} | {:error, reason}`)
-  and `:allow` (CIDR strings) override the defaults, for tests.
+  address with redirects off. Options: `:send` (how a CHECKED request is sent; `Req.request/1`
+  by default), and for tests `:resolver` (`host -> {:ok, [ip]} | {:error, reason}`) and `:allow`
+  (CIDR strings, validated like the configuration).
   """
   @spec request(keyword(), keyword()) :: {:ok, Req.Response.t()} | {:error, term()}
   def request(req_opts, guard_opts \\ []) when is_list(req_opts) and is_list(guard_opts) do
+    send_fun = Keyword.get(guard_opts, :send) || (&Req.request/1)
+
     with {:ok, target} <- target(Keyword.fetch!(req_opts, :url), guard_opts) do
       req_opts
       |> Keyword.put(:url, target.url)
@@ -63,7 +93,7 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
         [hostname: target.hostname],
         &Keyword.put(&1, :hostname, target.hostname)
       )
-      |> then(&Keyword.get(guard_opts, :send, fn opts -> Req.request(opts) end).(&1))
+      |> send_fun.()
     end
   end
 
@@ -90,15 +120,57 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
         end
 
       _other ->
-        {:error, {:outbound_address_denied, url}}
+        {:error, {:outbound_address_denied, :unsupported_url}}
     end
   end
 
-  @doc "Whether `address` (an `:inet` tuple) is allowed under the CIDR strings `allow`."
-  @spec allowed?(:inet.ip_address(), [binary()]) :: boolean()
+  @doc """
+  Whether `address` (an `:inet` tuple) may be called under the parsed allowlist `allow`
+  (`parse_allow!/1`). Link-local and metadata addresses never are.
+  """
+  @spec allowed?(:inet.ip_address(), [{tuple(), non_neg_integer()}]) :: boolean()
   def allowed?(address, allow) when is_list(allow) do
-    Enum.any?(allow, &in_cidr?(address, parse_cidr!(&1))) or not denied?(address)
+    cond do
+      Enum.any?(@never_allowed, &in_cidr?(address, &1)) -> false
+      Enum.any?(allow, &in_cidr?(address, &1)) -> true
+      true -> not denied?(address)
+    end
   end
+
+  @doc """
+  Parses and validates an allowlist of CIDR strings. Raises on a malformed entry, a range wider
+  than /8 (IPv4) or /32 (IPv6), or one that overlaps link-local or metadata space.
+  """
+  @spec parse_allow!([binary()]) :: [{tuple(), non_neg_integer()}]
+  def parse_allow!(cidrs) when is_list(cidrs), do: Enum.map(cidrs, &parse_allowed_cidr!/1)
+
+  @doc "Validates the configured allowlist (called at boot, so a bad entry stops the node)."
+  @spec validate_config!() :: :ok
+  def validate_config! do
+    configured_allow() |> parse_allow!() |> then(&:persistent_term.put({__MODULE__, :allow}, &1))
+    :ok
+  end
+
+  defp parse_allowed_cidr!(cidr) do
+    {network, bits} = parse_cidr!(cidr)
+    min = Map.fetch!(@min_prefix, tuple_size(network))
+
+    if bits < min,
+      do: raise(ArgumentError, "provider outbound allow #{cidr}: wider than /#{min}")
+
+    if Enum.any?(@never_allowed, &overlaps?({network, bits}, &1)),
+      do: raise(ArgumentError, "provider outbound allow #{cidr}: link-local or metadata space")
+
+    {network, bits}
+  end
+
+  defp overlaps?({network, bits}, {other, other_bits})
+       when tuple_size(network) == tuple_size(other) do
+    shortest = min(bits, other_bits)
+    in_cidr?(network, {other, shortest}) or in_cidr?(other, {network, shortest})
+  end
+
+  defp overlaps?(_range, _other), do: false
 
   defp all_allowed(addresses, host, allow) do
     if Enum.all?(addresses, &allowed?(&1, allow)),
@@ -106,8 +178,10 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
       else: {:error, {:outbound_address_denied, host}}
   end
 
+  # A resolver only maps names to addresses; whatever it answers is still checked. The test
+  # environment configures one for its fake provider hosts (`:provider_outbound, :resolver`).
   defp resolve(host, guard_opts) do
-    resolver = Keyword.get(guard_opts, :resolver, &resolve_dns/1)
+    resolver = Keyword.get(guard_opts, :resolver) || configured_resolver() || (&resolve_dns/1)
 
     case resolver.(host) do
       {:ok, [_ | _] = addresses} -> {:ok, addresses}
@@ -136,13 +210,28 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
     end
   end
 
+  # Tests pass CIDR strings; the node uses the list validated at boot.
   defp allow(guard_opts) do
-    Keyword.get_lazy(guard_opts, :allow, fn ->
-      :cadence |> Application.get_env(:provider_outbound, []) |> Keyword.get(:allow, [])
-    end)
+    case Keyword.fetch(guard_opts, :allow) do
+      {:ok, cidrs} ->
+        parse_allow!(cidrs)
+
+      :error ->
+        :persistent_term.get({__MODULE__, :allow}, nil) || parse_allow!(configured_allow())
+    end
   end
 
-  # An IPv4-mapped (::ffff:a.b.c.d) or NAT64 address is judged by the IPv4 address inside it.
+  defp configured_resolver do
+    case :cadence |> Application.get_env(:provider_outbound, []) |> Keyword.get(:resolver) do
+      {module, function} -> &apply(module, function, [&1])
+      nil -> nil
+    end
+  end
+
+  defp configured_allow,
+    do: :cadence |> Application.get_env(:provider_outbound, []) |> Keyword.get(:allow, [])
+
+  # An IPv4-mapped (::ffff:a.b.c.d) or well-known NAT64 address is judged by the IPv4 inside it.
   defp denied?({0, 0, 0, 0, 0, 0xFFFF, high, low}), do: denied?(v4_of(high, low))
   defp denied?({0x0064, 0xFF9B, 0, 0, 0, 0, high, low}), do: denied?(v4_of(high, low))
   defp denied?({_, _, _, _} = v4), do: Enum.any?(@denied_v4, &in_cidr?(v4, &1))
@@ -163,16 +252,34 @@ defmodule Cadence.Contacts.ProviderClients.OutboundGuard do
   defp to_integer(address, width),
     do: address |> Tuple.to_list() |> Enum.reduce(0, &(&2 <<< width ||| &1))
 
-  defp parse_cidr!(cidr) do
-    [address, bits] =
-      case String.split(cidr, "/") do
-        [address, bits] -> [address, bits]
-        [address] -> [address, nil]
+  defp parse_cidr!(cidr) when is_binary(cidr) do
+    {address, bits} =
+      case String.split(String.trim(cidr), "/") do
+        [address, bits] -> {address, bits}
+        [address] -> {address, nil}
+        _other -> raise ArgumentError, "provider outbound allow #{inspect(cidr)}: malformed"
       end
 
-    {:ok, parsed} = :inet.parse_address(String.to_charlist(address))
-    max = if tuple_size(parsed) == 4, do: 32, else: 128
-    {parsed, if(bits, do: String.to_integer(bits), else: max)}
+    case :inet.parse_strict_address(String.to_charlist(address)) do
+      {:ok, parsed} ->
+        max = if tuple_size(parsed) == 4, do: 32, else: 128
+        {parsed, prefix!(bits, max, cidr)}
+
+      {:error, _reason} ->
+        raise ArgumentError, "provider outbound allow #{inspect(cidr)}: malformed"
+    end
+  end
+
+  defp parse_cidr!(cidr),
+    do: raise(ArgumentError, "provider outbound allow #{inspect(cidr)}: malformed")
+
+  defp prefix!(nil, max, _cidr), do: max
+
+  defp prefix!(bits, max, cidr) do
+    case Integer.parse(bits) do
+      {value, ""} when value >= 0 and value <= max -> value
+      _other -> raise ArgumentError, "provider outbound allow #{inspect(cidr)}: malformed prefix"
+    end
   end
 
   defp address_host({_, _, _, _} = v4), do: v4 |> :inet.ntoa() |> to_string()

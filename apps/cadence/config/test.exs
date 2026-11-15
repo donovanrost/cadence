@@ -77,4 +77,7 @@ config :logger, level: :warning
 
 # Provider HTTP calls refuse private and reserved networks (OutboundGuard, api-ops 11-15); this
 # environment allows loopback only, for the local simulator. Production allows nothing extra.
-config :cadence, :provider_outbound, allow: ["127.0.0.1/32", "::1/128"]
+config :cadence, :provider_outbound,
+  allow: ["127.0.0.1/32", "::1/128"],
+  # The suite's fake provider hosts (*.test) resolve to loopback; answers are still checked.
+  resolver: {Cadence.TestSupport.ProviderHosts, :resolve}

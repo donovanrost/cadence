@@ -278,9 +278,15 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
     with {:ok, base_url} <- require_context(context.base_url, :base_url),
          {:ok, environment_ref} <- require_context(context.environment_ref, :environment_ref),
          {:ok, credential} <- resolve_credential(context, opts) do
-      # The default goes through the outbound guard (private and reserved networks refused,
-      # resolved before connecting, no redirects); tests inject their own transport.
-      req_request = Keyword.get(opts, :req_request, &OutboundGuard.request/1)
+      # Every request goes through the outbound guard (private and reserved networks refused,
+      # resolved before connecting, no redirects). An injected :req_request only replaces how a
+      # CHECKED request is sent (api's review): it can never skip the check.
+      guard_opts = [
+        send: Keyword.get(opts, :req_request),
+        resolver: Keyword.get(opts, :outbound_resolver)
+      ]
+
+      req_request = &OutboundGuard.request(&1, guard_opts)
 
       request_opts = [
         method: method,
