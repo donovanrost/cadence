@@ -1556,5 +1556,19 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
   - "Approved by Ana R. at 18:02Z." The row fades; booking then shows on Contacts.
   - "Nothing is left to plan for 11-16." (every requirement closed or canceled).
   - The day ended: "11-16 ended with no approved plan." (crit, kept in recently resolved).
-- **Data (api/domain):** day, first_window_at, requirements_count, `plan {id, revision, state, author, submitted_at,
-  sent_back {by, at, comment}} | null`, `approvers [{name}]`, `viewer_can_approve`.
+- **Data:** day, first_window_at, requirements_count, `plan {id, revision, state, author, submitted_at,
+  sent_back {by, at, comment}} | null`, `approvers [{name}]`, `viewer_can_approve`. Domain's source is
+  `plan_coverage` (47aabe3ba), one per day from today to +2.
+- **At crit** (domain: a pending plan lapses at its first selected pass, and mid-day only a new plan for the rest of
+  the day can book). The action is `Plan the rest of 11-16`, never `Review`. Body: "11-16's first window opened at
+  00:00Z and nothing is booked. R41 can't be approved now; a new plan for the rest of the day can still book its
+  1,104 open requirements."
+- **Lifecycle words** (domain's proposal, director's ruling):
+  - A superseded plan's state line: "Superseded by R44 (Mira K.) at 10:05Z."
+  - Refusal `contact_plan_day_already_planned`: "Not approved: R39 (approved) already covers 212 of these
+    requirements for 11-16. Open R39, or send this plan back." The state word is approved / booking / booked.
+  - Approving a superseded plan: "Not approved: R44 replaced this plan at 10:05Z." with `Open R44`.
+  - All expired: "Not approved: all 36 of its passes have already started, so nothing could be booked." with
+    `Plan the rest of 11-16`.
+  - Partial approval: "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked." The
+    left-out passes are listed under `Show 36`, with spacecraft, station and AOS.
