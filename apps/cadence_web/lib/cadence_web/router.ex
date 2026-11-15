@@ -266,6 +266,25 @@ defmodule CadenceWeb.Router do
       :new_spacecraft
     )
 
+    # §11c (B4, api; DECISIONS #79): spacecraft profiles go to the console's Setup profiles.
+    get(
+      "/missions/:mission_id/spacecraft/profiles",
+      LegacyMissionSetupRedirectController,
+      :profiles
+    )
+
+    get(
+      "/missions/:mission_id/spacecraft/profiles/new",
+      LegacyMissionSetupRedirectController,
+      :new_profile
+    )
+
+    get(
+      "/missions/:mission_id/spacecraft/profiles/:profile_id",
+      LegacyMissionSetupRedirectController,
+      :profile
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -300,18 +319,6 @@ defmodule CadenceWeb.Router do
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-
-      live("/missions/:mission_id/spacecraft/profiles", HostPageLive, :index,
-        metadata: %{host_policy: :spacecraft}
-      )
-
-      live("/missions/:mission_id/spacecraft/profiles/new", HostPageLive, :new,
-        metadata: %{host_policy: :spacecraft}
-      )
-
-      live("/missions/:mission_id/spacecraft/profiles/:profile_id", HostPageLive, :show,
-        metadata: %{host_policy: :spacecraft}
-      )
 
       live("/missions/:mission_id/spacecraft/:spacecraft_id", HostPageLive, :show,
         metadata: %{host_policy: :spacecraft_show}

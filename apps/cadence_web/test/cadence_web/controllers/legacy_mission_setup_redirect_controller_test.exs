@@ -41,4 +41,15 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
     assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/new")) ==
              c.console <> "/setup/spacecraft/new"
   end
+
+  test "B4: profiles, New profile and one profile go to Setup profiles", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/profiles")) ==
+             c.console <> "/setup/profiles"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/profiles/new")) ==
+             c.console <> "/setup/profiles/new"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/profiles/profile_1")) ==
+             c.console <> "/setup/profiles/profile_1"
+  end
 end
