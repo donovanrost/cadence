@@ -47,6 +47,12 @@ Commit 4d92b1f5e.
 | Pass review `provider.account_id`, `freshness[].provider_id` extra keys | doc→server | doc fix below |
 | U55 `contact_ended.cause` / `by` / `at` null on a canceled contact with no action record; the console decoded non-null | shape change | **fixed** contract confirmed nullable (lead 11-14): null only without an action record; `at` from the lifecycle cancel time; `by` null, never half; fe-ops reader 68b3180b6; test that a new cancel fills all three |
 
+## Telemetry points
+
+| Item | Direction | State |
+| --- | --- | --- |
+| Points read couldn't say 'no limits defined': `limit_state: no_data` meant both 'no definition' and 'not evaluated yet' (ux T1) | shape change (additive) | **fixed**: `has_limits: boolean` on each point (ux 11-15 chose it over a `limit_state: none`); fe-ops' optional reader first |
+
 ## Planning (all on the contact path except reads): listed, server fixes HOLD
 
 | Item | Direction | State |

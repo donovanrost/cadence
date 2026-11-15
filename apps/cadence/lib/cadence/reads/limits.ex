@@ -90,6 +90,17 @@ defmodule Cadence.Reads.Limits do
     |> List.first()
   end
 
+  @doc """
+  The point ids that have an active limit definition in the mission (ux T1 'No limits':
+  the points read's `has_limits`).
+  """
+  @spec limited_point_ids(binary(), binary()) :: MapSet.t(binary())
+  def limited_point_ids(organization_id, mission_id) do
+    organization_id
+    |> Limits.active_limit_definitions(mission_id)
+    |> MapSet.new(& &1.point_id)
+  end
+
   @spec latest_states_for_mission(binary(), keyword()) :: [Event.t()]
   def latest_states_for_mission(mission_id, opts \\ [])
       when is_binary(mission_id) and is_list(opts) do

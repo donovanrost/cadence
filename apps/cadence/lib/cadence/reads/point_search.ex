@@ -31,11 +31,20 @@ defmodule Cadence.Reads.PointSearch do
       |> Enum.sort_by(& &1.id)
       |> Enum.filter(&matches?(&1, query))
       |> Enum.take(limit)
+      |> with_has_limits(organization_id, mission_id)
 
     case opts[:spacecraft_id] do
       nil -> Enum.map(points, &Map.put(&1, :latest, nil))
       spacecraft_id -> with_latest(organization_id, mission_id, spacecraft_id, points)
     end
+  end
+
+  # ux T1: whether the point has an active limit definition at all, so 'No limits' (false) reads
+  # apart from 'Not checked yet' (true, with limit_state no_data). Point-level: a point's limits
+  # exist with or without a sample.
+  defp with_has_limits(points, organization_id, mission_id) do
+    limited = Limits.limited_point_ids(organization_id, mission_id)
+    Enum.map(points, &Map.put(&1, :has_limits, MapSet.member?(limited, &1.id)))
   end
 
   defp raw(organization_id, mission_id) do

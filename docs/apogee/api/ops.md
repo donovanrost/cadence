@@ -727,5 +727,9 @@ must be a mission spacecraft), and `limit` 1–200 (default 50).
     If the history store can't be read, it's also `null` for that request.
   - `limit_state` is `critical | caution | nominal | no_data`, from the limit projection on
     either source; never `null`.
+- `has_limits` (on each point, with or without `spacecraft_id`; ux T1): `true` when the point has
+  an active limit definition. `false` reads "No limits" ("No limits are defined for this point.");
+  `true` with `limit_state: no_data` reads "Not checked yet". Neither is nominal or counted in "Out
+  of limits". `limit_state` keeps its values.
 - `description` is often `null`: packet fields don't carry one yet.
 - Errors: `422 invalid_params` (`limit`, `spacecraft_id`).

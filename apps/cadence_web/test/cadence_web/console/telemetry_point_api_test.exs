@@ -80,4 +80,32 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
     # The limit state still comes from the limit projection; never null.
     assert state in ~w(critical caution nominal no_data)
   end
+
+  test "each point says whether it has limits at all (ux T1 'No limits'), with or without latest",
+       c do
+    points = c |> get_json("?limit=200") |> json_response(200) |> get_in(["data", "points"])
+    by_id = Map.new(points, &{&1["id"], &1})
+
+    assert by_id["HK.counter"]["has_limits"] == true
+    assert by_id["HK.voltage"]["has_limits"] == true
+    assert by_id["HK.voltage"]["latest"] == nil
+
+    # Retire the voltage limits: the point is still listed, now with no limits defined.
+    voltage =
+      c.org.organization_id
+      |> Cadence.Limits.active_limit_definitions(c.mission.mission_id)
+      |> Enum.find(&(&1.point_id == "HK.voltage"))
+
+    assert {:ok, _} =
+             Cadence.Limits.retire_limit_definition(
+               c.org.organization_id,
+               c.mission.mission_id,
+               voltage
+             )
+
+    after_retire =
+      c |> get_json("?q=voltage") |> json_response(200) |> get_in(["data", "points"])
+
+    assert [%{"id" => "HK.voltage", "has_limits" => false}] = after_retire
+  end
 end
