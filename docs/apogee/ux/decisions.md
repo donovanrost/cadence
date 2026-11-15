@@ -1691,7 +1691,9 @@ Operators know catalog revisions; the mission model revision is the compiled for
   - stream → Streams; service → Services; extension → Extensions; unit → Units; space_system → Space systems.
 - **Audit** (org audit, kind config): "Approved catalog rev 4 (comparison passed against rev 3; replay not run)" /
   "Rejected catalog rev 4", with the reason in the reason column. Never "mission model", as on the screen.
-- A blank reject reason reads "Give a reason first." (not "Enter a reason").
+- A blank reject reason reads "Give a reason first." (not "Enter a reason"). Too long (api's
+  mission_model_decision_reason_too_long): "Keep the reason under 2,000 characters." The field shows a counter
+  from 1,800 characters, so it's rarely hit.
 - **Decided:** the panel collapses to one line with the report behind `Show report`: "Approved by Ana R. at 11-15
   09:12Z." / "Rejected by Ana R. at 11-15 09:12Z: “Wrong FSW build.”" The row tag follows.
 - **Nothing to approve:** no panel, and no tag on the row. The index adds nothing.
