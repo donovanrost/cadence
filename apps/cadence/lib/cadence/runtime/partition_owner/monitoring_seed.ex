@@ -14,6 +14,8 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
 
   import Ecto.Query
 
+  require Logger
+
   alias Cadence.Repo
   alias Cadence.Runtime.PartitionKey
   alias Cadence.SemanticObservations.LatestAlarmStateRow
@@ -26,8 +28,16 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
   """
   def maybe_seed(activation, %PartitionKey{} = key, plan, %State{} = state, writer) do
     if plan.monitoring != [] and state.monitoring_state == %{} do
+      entries = entries(activation, plan)
+
+      # Visible in the log, so a live check can see each empty start and what it seeded (qa).
+      Logger.info(
+        "semantic monitoring seed: #{length(entries)} active alarm state(s) for " <>
+          "#{PartitionKey.identifier(key)} (#{activation.mission_id})"
+      )
+
       with {:ok, _result, seeded, next_writer} <-
-             Store.seed(activation, key, writer, state, entries(activation, plan), plan) do
+             Store.seed(activation, key, writer, state, entries, plan) do
         {:ok, seeded, next_writer}
       end
     else
