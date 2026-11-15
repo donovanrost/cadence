@@ -75,6 +75,14 @@ Row: `[P1] [mark] [title link / secondary / meta] [action]`.
   (`IN CONTACT · AWARUA · LOS T−03:20`).
 - Action (compact button): `Engage` (alarm → Investigate), `Review` (GO poll → request review),
   `Station` (→ station / Replan), `Install` (→ Setup › Apps). The top P1 row's action is primary.
+- **Over 100 open** (fe-ops and lead, 11-15; render budget at 1,000 craft). The first 100 rows render in server
+  order (U11), then one row-width button says what's hidden **by status**, with marks and words, and zero counts
+  left out: `Show 900 more · ▲ 412 caution · 488 other`. Crit is named only when some is hidden: `Show 900 more ·
+  ◆ 3 crit · ▲ 409 caution · 488 other`, and then the button row is crit-tinted, because something crit is out of
+  sight.
+  - No caption claiming the rest are "less urgent": equal priorities tie across the cut (U20).
+  - The meta stays `1,000 OPEN · SORTED BY URGENCY`. Showing the rest keeps scroll position and focus, on the first
+    newly shown row.
 - **Data:** `[{id, priority, state, kind: alarm|flight_event|missed_pass|approval|stale_group|
   station|setup|attention (U31), title, spacecraft?: {id, name, scid}, evidence, raised_at, next_aos?: {station,
   at}, live_contact?: {station, los_at}, target: {kind, id}}]`.
