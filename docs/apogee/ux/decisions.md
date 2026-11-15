@@ -1572,6 +1572,16 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
     `Plan the rest of 11-16`.
   - Partial approval: "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked." The
     left-out passes are listed under `Show 36`, with spacecraft, station and AOS.
+  - **A new draft on a day whose plan is pending** (domain's supersede-on-draft):
+    - K1's action is `Draft a new plan…` before the day starts, and `Plan the rest of 11-16…` once it has started.
+      It's secondary; for approvers, the primary stays `Review`.
+    - The confirm sheet is caution, because the pending plan can't be approved afterwards. Title `Draft a new plan
+      for 11-16?`. Body "R41 (Mira K., sent for approval 11-11 22:10Z) is waiting for approval. A new draft
+      replaces it: R41 can't be approved after this." Once the day has started, it adds "The new plan covers the
+      rest of 11-16, from 13:40Z."
+    - Actions `Draft a new plan` / `Plan the rest of 11-16`, with `Keep R41` as the default focus.
+    - With only a draft (nothing pending): no confirm, because drafts are already superseded by a new one, as
+      today.
   - Under "Needs a second person's approval" (governance `independent`):
     - An admin's Submit answers "Sent for approval. This mission needs a second person's approval, so another org
       admin approves it: Ana R. or Owen P." The plan then reads `AWAITING APPROVAL` (no auto-approve).
