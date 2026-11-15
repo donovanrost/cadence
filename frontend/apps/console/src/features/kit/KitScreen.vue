@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import CommandKit from "./CommandKit.vue";
 import GanttKit from "./GanttKit.vue";
+import TableKit from "./TableKit.vue";
 import {
   ApPageHeader,
   ApPanel,
@@ -67,5 +68,6 @@ const warn = (t: number) =>
     </ApPanel>
     <CommandKit />
     <GanttKit />
+    <TableKit />
   </div>
 </template>
