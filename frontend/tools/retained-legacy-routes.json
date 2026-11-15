@@ -22,7 +22,7 @@
           "file": "apps/host/src/mission-and-spacecraft/features/mission-overview/MissionOverview.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the mission_catalog federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/spacecraft",
@@ -43,7 +43,7 @@
           "file": "apps/host/src/mission-and-spacecraft/features/spacecraft-directory/SpacecraftListPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/spacecraft/new",
@@ -64,7 +64,7 @@
           "file": "apps/host/src/mission-and-spacecraft/features/spacecraft-identity/SpacecraftIdentityForm.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/spacecraft/profiles",
@@ -85,7 +85,7 @@
           "file": "apps/host/src/mission-and-spacecraft/features/spacecraft-profiles/SpacecraftTypeListPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/spacecraft/profiles/new",
@@ -106,7 +106,7 @@
           "file": "apps/host/src/mission-and-spacecraft/features/profile-creation/SpacecraftTypeNew.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/spacecraft/profiles/:profile_id",
@@ -127,7 +127,7 @@
           "file": "apps/host/src/mission-and-spacecraft/features/spacecraft-profiles/SpacecraftTypeShow.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/spacecraft/:spacecraft_id/readiness",
@@ -148,7 +148,7 @@
           "file": "apps/host/src/mission-and-spacecraft/features/spacecraft-readiness/SpacecraftReadiness.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/spacecraft/:spacecraft_id/routing",
@@ -169,7 +169,7 @@
           "file": "modules/communications/src/features/routing/SpacecraftRouting.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/catalog",
@@ -190,7 +190,7 @@
           "file": "apps/host/src/catalog/features/databases/CatalogIndex.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the mission_catalog federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/catalog/new",
@@ -211,7 +211,7 @@
           "file": "apps/host/src/catalog/features/databases/CatalogDatabaseNew.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the mission_catalog federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/catalog/databases/:catalog_database_id",
@@ -232,7 +232,7 @@
           "file": "apps/host/src/catalog/features/databases/CatalogDatabaseShow.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the mission_catalog federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/catalog/revisions/:catalog_revision_id",
@@ -253,7 +253,7 @@
           "file": "apps/host/src/catalog/features/revisions/CatalogRevisionShow.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the mission_catalog federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/catalog/imports/:import_run_id",
@@ -274,7 +274,7 @@
           "file": "apps/host/src/catalog/features/imports/CatalogImportRunShow.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the mission_catalog federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms",
@@ -295,7 +295,7 @@
           "file": "modules/communications/src/features/overview/CommsOverviewPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/transports",
@@ -316,7 +316,7 @@
           "file": "modules/communications/src/features/transports/TransportDirectory.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/transports/new",
@@ -341,7 +341,7 @@
           "file": "modules/communications/src/features/transports/TransportDirectory.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/transports/:transport_id",
@@ -363,7 +363,7 @@
           "file": "modules/communications/src/features/transports/TransportDetail.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/ground-stations",
@@ -384,7 +384,7 @@
           "file": "modules/communications/src/features/ground-stations/GroundStationDirectory.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/ground-stations/new",
@@ -409,7 +409,7 @@
           "file": "modules/communications/src/features/ground-stations/GroundStationDirectory.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/ground-stations/:ground_station_id/edit",
@@ -431,7 +431,7 @@
           "file": "modules/communications/src/features/ground-stations/GroundStationDetail.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/ground-stations/:ground_station_id",
@@ -453,7 +453,7 @@
           "file": "modules/communications/src/features/ground-stations/GroundStationDetail.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/routing",
@@ -474,7 +474,7 @@
           "file": "modules/communications/src/features/routing/RoutingDirectory.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/routing/new",
@@ -503,7 +503,7 @@
           "file": "modules/communications/src/features/routing/SpacecraftRouting.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) and the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/routing/:routing_rule_id",
@@ -525,7 +525,7 @@
           "file": "modules/communications/src/features/routing/RoutingDetail.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/comms/validation",
@@ -546,7 +546,7 @@
           "file": "modules/communications/src/features/setup-validation/CommsValidation.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the comms federated app (comms_overview surface) (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/applications",
@@ -567,7 +567,7 @@
           "file": "apps/host/src/capability-management/features/application-installations/MissionApplicationsPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the mission_catalog federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/spacecraft/:spacecraft_id/applications",
@@ -588,7 +588,7 @@
           "file": "apps/host/src/capability-management/features/application-installations/SpacecraftApplicationsPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Still rendered by the spacecraft federated app (its page header is typed by this path); remove the entry when the federated batch deletes that surface."
     },
     {
       "path": "/missions/:mission_id/settings",
@@ -608,7 +608,7 @@
           "file": "apps/host/src/settings/SettingsPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Only storybook's Settings story still renders SettingsPage.vue with this header; remove the entry when (C) deletes SettingsPage.vue."
     },
     {
       "path": "/missions/:mission_id/settings/:section_id",
@@ -631,7 +631,7 @@
           "file": "apps/host/src/settings/SettingsPage.vue"
         }
       ],
-      "reason": "§11c B redirects this page to the console; the kept federated surface or component above still types its page header by it."
+      "reason": "§11c B redirects this page to the console. Only storybook's Settings story still renders SettingsPage.vue with this header; remove the entry when (C) deletes SettingsPage.vue."
     }
   ]
 }
