@@ -607,13 +607,15 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     )
   end
 
+  # §11c removed organization_home; organization_admin keeps only the user-scoped
+  # notifications_bell, which is the release's surface (no page of it is visited).
   defp organization_admin_metadata(slot) do
     metadata(
       "organization_admin",
       "cadence.organization-admin",
-      "organization_home",
-      "cadence.organization.home",
-      [],
+      "notifications_bell",
+      "cadence.organization.notifications_bell",
+      ["mark_notification_read"],
       "cadence_organization_admin",
       "federation-browser-organization-admin-#{slot_name(slot)}",
       released_at(slot)

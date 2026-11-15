@@ -48,7 +48,7 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
     File.mkdir_p!(out)
     port = Runner.start_browser_endpoint_on_ephemeral_port!(c.sandbox_owner)
 
-    {output, status} =
+    run_phase = fn phase ->
       Runner.run_dashboard_viewport_smoke(
         [
           Path.expand("../../../../../frontend/tools/phoenix/settings_browser.mjs", __DIR__),
@@ -58,12 +58,30 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
           reviewer.email,
           first.spacecraft_id,
           second.spacecraft_id,
-          out
+          out,
+          phase
         ],
         stdin: Jason.encode!(%{password: TestFixtures.default_password()}) <> "\n",
-        timeout: 270_000
+        timeout: 135_000
       )
+    end
 
+    {output, status} = run_phase.("mission")
+    assert status == 0, output
+    assert output =~ "SETTINGS_MISSION_PHASE_OK"
+
+    # §11c removed the legacy organization settings page (the console owns it now), so the
+    # organization requirement is set through the same domain API the console's page uses.
+    assert {:ok, %{state: :active}} =
+             Cadence.Management.ConsoleSettings.save(
+               scope,
+               nil,
+               "cadence.governance",
+               %{"allow_override" => false},
+               nil
+             )
+
+    {output, status} = run_phase.("enforced")
     assert status == 0, output
     assert output =~ "SETTINGS_BROWSER_OK"
     assert {:ok, %{generation: 2}} = Cadence.Runtime.Missions.applied_spec(mission.mission_id)

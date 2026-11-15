@@ -3,8 +3,13 @@ import { chromium } from "playwright";
 import { createInterface } from "node:readline";
 import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts";
 import { signInThroughConsole } from "./console_sign_in.mjs";
-const [base, mission, requester, reviewer, first, second, out] = process.argv.slice(2);
+const [base, mission, requester, reviewer, first, second, out, phase] = process.argv.slice(2);
 assert.ok(base && mission && requester && reviewer && first && second && out);
+// Two phases around the organization requirement, which the driver sets between them through
+// the domain API (§11c removed the legacy organization settings page): "mission" sets the
+// mission's settings and activates directly; "enforced" checks the mission now inherits the
+// organization's requirement and goes through independent review.
+assert.ok(phase === "mission" || phase === "enforced", "phase must be mission or enforced");
 const input = createInterface({ input: process.stdin });
 /** @type {unknown} */
 const secret = await new Promise((resolve, reject) =>
@@ -29,13 +34,14 @@ for (const current of [page, teammate]) {
   current.setDefaultTimeout(20000);
   current.on("pageerror", (error) => errors.push(error.message));
 }
-/** @param {import("playwright").Page} current @param {string} email */
-async function login(current, email) {
+/** @param {import("playwright").Page} current @param {string | undefined} email @param {string} path */
+async function login(current, email, path) {
   await signInThroughConsole(current, {
     // A function declaration doesn't see the argv assertion's narrowing.
     base: fixtureString(base),
-    email,
+    email: fixtureString(email),
     password: fixtureString(fixtureRecord(secret).password),
+    path,
   });
 }
 /** @param {import("playwright").Page} current */
@@ -47,9 +53,24 @@ const settings = `/missions/${mission}/settings`;
 const firstPath = `/missions/${mission}/spacecraft/${first}?section=changes`;
 const secondPath = `/missions/${mission}/spacecraft/${second}?section=changes`;
 try {
-  await login(page, requester);
-  await login(teammate, reviewer);
-  await page.goto(base + firstPath);
+  if (phase === "mission") await missionPhase();
+  else await enforcedPhase();
+  assert.deepEqual(errors, []);
+  process.stdout.write(
+    phase === "mission" ? "SETTINGS_MISSION_PHASE_OK\n" : "SETTINGS_BROWSER_OK\n",
+  );
+} catch (error) {
+  await page.screenshot({ path: `${out}/failure-${phase}.png`, animations: "disabled" });
+  process.stderr.write(
+    `${String(error)}\n${(await page.locator("body").innerText()).slice(0, 10000)}\n${errors.join("\n")}\n`,
+  );
+  process.exitCode = 1;
+} finally {
+  await browser.close();
+}
+
+async function missionPhase() {
+  await login(page, requester, firstPath);
   await page
     .getByRole("navigation", { name: "Settings", exact: true })
     .getByRole("link", { name: "Settings", exact: true })
@@ -84,13 +105,11 @@ try {
   await page.getByRole("link", { name: "Review changes for KESTREL-01", exact: true }).click();
   await page.waitForURL(base + firstPath);
   await page.getByText("Configuration activated", { exact: true }).waitFor();
-  await page.goto(base + "/settings");
-  await page
-    .getByRole("checkbox", { name: "Allow missions to override this requirement" })
-    .uncheck();
-  await save(page);
-  await page.screenshot({ path: `${out}/organization-settings.png`, animations: "disabled" });
-  await page.goto(base + settings);
+}
+
+async function enforcedPhase() {
+  await login(page, requester, settings);
+  await login(teammate, reviewer, secondPath);
   await page.getByText("Required by organization", { exact: true }).first().waitFor();
   assert.equal(
     await page.getByRole("radio", { name: /^One authorized operator/ }).isDisabled(),
@@ -115,14 +134,4 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `${out}/settings-mobile.png`, animations: "disabled" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  assert.deepEqual(errors, []);
-  process.stdout.write("SETTINGS_BROWSER_OK\n");
-} catch (error) {
-  await page.screenshot({ path: `${out}/failure.png`, animations: "disabled" });
-  process.stderr.write(
-    `${String(error)}\n${(await page.locator("body").innerText()).slice(0, 10000)}\n${errors.join("\n")}\n`,
-  );
-  process.exitCode = 1;
-} finally {
-  await browser.close();
 }

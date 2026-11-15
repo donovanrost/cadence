@@ -4402,9 +4402,10 @@ async function armNextActionCsrfRejection(client, signal) {
 
 /**
  * Signs the browser session in through the console's JSON API (L5), from the console sign-in
- * document, then opens the organization home. Returns that navigation's request generation, which
- * owns the authenticated LiveView socket.
- * @param {CdpPort} client @param {string} loginUrl @param {string} email @param {string} password @param {string} expectedOrigin @param {Diagnostics} diagnostics @param {AbortSignal|undefined} signal
+ * document, then opens `landingPath`, a legacy host page (since §11c the app root redirects to the
+ * console). Returns that navigation's request generation, which owns the authenticated LiveView
+ * socket.
+ * @param {CdpPort} client @param {string} loginUrl @param {string} email @param {string} password @param {string} expectedOrigin @param {Diagnostics} diagnostics @param {AbortSignal|undefined} signal @param {string} landingPath
  */
 async function submitSignIn(
   client,
@@ -4414,6 +4415,7 @@ async function submitSignIn(
   expectedOrigin,
   diagnostics,
   signal,
+  landingPath,
 ) {
   const login = assertSignInUrl(loginUrl, expectedOrigin);
   const state = await evaluateRecord(
@@ -4451,16 +4453,16 @@ async function submitSignIn(
   if (diagnostics && signInRequest)
     diagnostics.bindRequestGeneration(generation, await signInRequest);
 
-  const landing = await navigate(client, `${expectedOrigin}/`, {
+  const landing = await navigate(client, `${expectedOrigin}${landingPath}`, {
     expectedOrigin,
-    expectedPath: "/",
+    expectedPath: landingPath,
     diagnostics,
     signal,
   });
   await waitForExpression(
     client,
-    `location.pathname === "/" && !location.pathname.startsWith(${JSON.stringify(CONSOLE_SIGN_IN_PATH)})`,
-    "authenticated redirect",
+    `location.pathname === ${JSON.stringify(landingPath)}`,
+    "authenticated landing",
     { signal },
   );
   return landing;
@@ -4796,18 +4798,20 @@ async function assertRemoteSurface({
 /** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} missionId @param {string} origin @param {AbortSignal|undefined} signal */
 async function assertMissionEntryNavigation(client, diagnostics, missionId, origin, signal) {
   const root = `/missions/${encodeURIComponent(missionId)}`;
-  // L4 deleted the core mission directory (/missions now redirects to the console), so the
-  // mission is entered from the organization home's recent missions.
-  await navigate(client, `${origin}/`, {
+  // §11c removed the legacy organization pages (L4 the mission directory), so the host has no
+  // organization-level page to enter a mission from. This enters the overview from the mission's
+  // settings page through the sidebar: a host navigation with incremental props. The ops pages
+  // have no overview link.
+  await navigate(client, `${origin}${root}/settings`, {
     expectedOrigin: origin,
-    expectedPath: "/",
+    expectedPath: `${root}/settings`,
     diagnostics,
     signal,
   });
   await waitForExpression(
     client,
-    "Boolean(document.querySelector('#organization-recent-missions') && window.liveSocket?.isConnected())",
-    "organization home recent missions",
+    `Boolean(document.querySelector('[aria-label="Primary navigation"] a[href="${root}"]') && window.liveSocket?.isConnected())`,
+    "mission settings with its overview link",
     { signal },
   );
   assert.equal(
@@ -4816,17 +4820,17 @@ async function assertMissionEntryNavigation(client, diagnostics, missionId, orig
       `(() => {
     const shell = document.querySelector('#application-shell');
     if (shell?.dataset.useDiff !== 'true') return false;
-    const link = [...document.querySelectorAll('#organization-recent-missions a')]
+    const link = [...document.querySelectorAll('[aria-label="Primary navigation"] a')]
       .find(link => new URL(link.href).pathname === ${JSON.stringify(root)});
     if (!link) return false;
     window.__missionEntryShell = shell;
     link.click(); return true;
   })()`,
-      "click mission from the organization home with incremental props",
+      "click the mission overview from mission settings with incremental props",
       { signal },
     ),
     true,
-    "organization home must expose its authorized mission link and incremental host",
+    "mission settings must expose the overview link and incremental host",
   );
   await waitForExpression(
     client,
@@ -4876,8 +4880,8 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
   const ready = async (path, application, surface) => {
     try {
       const coreContent =
-        path === "/"
-          ? "#organization-home-page"
+        path === root
+          ? "#spacecraft-readiness-section"
           : path === `${root}/spacecraft`
             ? "#spacecraft-list-content"
             : path === `${root}/comms`
@@ -5016,8 +5020,8 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
   await ready(`${root}/spacecraft`, "spacecraft", "list");
   reportProgress("Applications and Spacecraft share the shell through clicks and browser history");
 
-  await click("/");
-  await ready("/", "organization_admin", "organization_home");
+  await click(root);
+  await ready(root, "mission_catalog", "mission_overview");
   assert.equal(
     await evaluate(
       client,
@@ -5188,6 +5192,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     origin,
     diagnostics,
     signal,
+    `/missions/${encodeURIComponent(missionId)}`,
   );
   reportProgress("authenticated browser session ready");
   await waitForExpression(
@@ -5202,27 +5207,13 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   // Finish this visit before navigating away so its module request has a terminal event.
   await waitForExpression(
     client,
-    "Boolean(document.querySelector('#organization-home-page'))",
-    "authenticated organization landing page",
+    "Boolean(document.querySelector('#spacecraft-readiness-section'))",
+    "authenticated mission overview landing page",
     { signal },
   );
 
   /** @type {import("./browser-diagnostics.ts").RepresentativeConfig[]} */
   const representativeConfigs = [
-    {
-      argName: "--organization-admin-url",
-      expectedPath: "/applications/organization_admin/organization_home/federated",
-      applicationKey: "organization_admin",
-      surfaceId: "organization_home",
-      expectedScope: "organization",
-      readyExpression:
-        "Boolean(document.querySelector('#organization-admin-application') && document.querySelector('#organization-home-destination') && !document.querySelector('#organization-admin-error') && !document.querySelector('#remote-error'))",
-      catalogPath: "/api/cadence/application-host/v1/catalog",
-      queryPath: "/api/cadence/application-host/v1/query",
-      queryId: "cadence.organization.home",
-      expectedReleaseId: releases.nMinus1.organization_admin,
-      readPublishedHostBody: true,
-    },
     {
       argName: "--mission-catalog-url",
       // L1-L4 federated deleted mission_list; mission_overview is Mission Catalog's sample surface.
@@ -5236,6 +5227,8 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
       queryId: "cadence.mission_catalog.mission_overview",
       expectedReleaseId: releases.nMinus1.mission_catalog,
+      // The first representative loads the shared host bundle: read its body once here.
+      readPublishedHostBody: true,
     },
     {
       argName: "--ops-url",
@@ -5285,7 +5278,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       }),
     );
   }
-  reportProgress("representative mission, ops, organization, and spacecraft remotes mounted");
+  reportProgress("representative mission, ops, and spacecraft remotes mounted");
   await assertMissionEntryNavigation(client, diagnostics, missionId, origin, signal);
   await assertPersistentHostNavigation(client, diagnostics, missionId, signal);
 
@@ -5775,7 +5768,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
         { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
         { applicationKey: "mission_catalog", releaseId: releases.nMinus1.mission_catalog },
         { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
-        { applicationKey: "organization_admin", releaseId: releases.nMinus1.organization_admin },
         { applicationKey: "spacecraft", releaseId: releases.nMinus1.spacecraft },
       ],
       "generation N reload",
@@ -5837,7 +5829,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
         { applicationKey: "telemetry_decom", releaseId: releases.n.telemetry_decom },
         { applicationKey: "mission_catalog", releaseId: releases.n.mission_catalog },
         { applicationKey: "ops_console", releaseId: releases.n.ops_console },
-        { applicationKey: "organization_admin", releaseId: releases.n.organization_admin },
         { applicationKey: "spacecraft", releaseId: releases.n.spacecraft },
       ],
       "generation N-1 rollback",
@@ -5849,7 +5840,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
         { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
         { applicationKey: "mission_catalog", releaseId: releases.nMinus1.mission_catalog },
         { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
-        { applicationKey: "organization_admin", releaseId: releases.nMinus1.organization_admin },
         { applicationKey: "spacecraft", releaseId: releases.nMinus1.spacecraft },
       ],
       "generation N-1 rollback",

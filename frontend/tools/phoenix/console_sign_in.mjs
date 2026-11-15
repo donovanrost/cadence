@@ -81,13 +81,16 @@ export function assertConsoleSignedIn(result) {
 }
 
 /**
- * Playwright: sign the page's browser context in, then open `path` (default: the organization home).
- * The in-page fetches need a same-origin document, so the page first opens the JSON health
- * endpoint (signed out, and it boots no app).
+ * Playwright: sign the page's browser context in, then open `path`. The path is required: since
+ * §11c the legacy app root redirects to the console, so a default would silently leave the
+ * Phoenix host. The in-page fetches need a same-origin document, so the page first opens the JSON
+ * health endpoint (signed out, and it boots no app).
  * @param {import("playwright").Page} page
- * @param {{base: string, email: string, password: string, path?: string}} options
+ * @param {{base: string, email: string, password: string, path: string}} options
  */
-export async function signInThroughConsole(page, { base, email, password, path = "/" }) {
+export async function signInThroughConsole(page, { base, email, password, path }) {
+  if (typeof path !== "string" || !path.startsWith("/"))
+    throw new Error("signInThroughConsole needs an absolute path to open after signing in");
   await page.goto(base + "/api/health");
   const result = await page.evaluate(
     consoleSignInInPage,

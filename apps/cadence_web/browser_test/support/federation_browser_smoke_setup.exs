@@ -104,8 +104,6 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "#{base_url}/missions/#{context.mission.mission_id}/applications/mission_catalog/mission_overview/federated",
       "--ops-url",
       "#{base_url}/missions/#{context.mission.mission_id}/applications/ops_console/commands/federated",
-      "--organization-admin-url",
-      "#{base_url}/applications/organization_admin/organization_home/federated",
       "--spacecraft-url",
       "#{base_url}/missions/#{context.mission.mission_id}/applications/spacecraft/list/federated",
       "--login-url",
