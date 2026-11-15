@@ -1628,4 +1628,13 @@ Blocking. The item shape is telemetry_packet_inputs_required's. Name the spacecr
 - The link `Open Setup › Apps` goes to `M/setup/apps/<telemetry app key>`, the app's own page, where install
   happens. If the app has a display name, it replaces "the telemetry app" ("the Telemetry decom app isn't
   installed").
-- Check label (the HOLD row's word): `Telemetry app not installed`.
+- Check label (the HOLD row's word): `Telemetry app not installed`. That's the console's title for the reason: the
+  server keeps every hold in the `compatibility` check, as one item for all affected spacecraft (domain e587668da).
+  The link uses `details.app_key` and the name `details.app_name`.
+- **Apply-time refusals** (the backstop when the preview didn't catch it; api words them, never a generic
+  failure):
+  - `telemetry_app_not_installed`: "Not applied: the telemetry app isn't installed on EARENDIL-312. Install the app
+    in Setup › Apps first."
+  - `telemetry_packet_inputs_required`: "Not applied: telemetry can't be turned on for EARENDIL-312 until its
+    packet inputs are set up."
+  - Both follow the same naming rule for several spacecraft.
