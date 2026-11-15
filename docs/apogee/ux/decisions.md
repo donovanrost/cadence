@@ -1498,3 +1498,18 @@ then the target count). The reason column takes the note or reason.
   - Mixed reasons in one fold make one entry per reason, never one line that blurs them.
 - The target kind `command_group` links to the group's page. Per-target values aren't separate rows; the
   submitted line's count points there.
+
+### U60 · What the Timeline says about sources catching up (domain's storage-growth part 2, item 3) (domain / api)
+An advance on every storage write isn't news, and "Data sources caught up" once a second is noise. The Timeline
+shows **changes of state**. Every advance stays in the watermark table (part 3) as evidence, and the operational
+event is emitted only for these:
+- **Once per contact, at settle:** "EARENDIL-008 · SVB 03:10Z pass: telemetry stored through 03:19:40Z (LOS
+  03:19:57Z)". It tells the operator the pass's data reached the store, and how close to LOS. It's emitted only
+  when the contact had any advance.
+- **Caught up after falling behind** (the source was ≥ 60 s behind, domain's threshold): "Telemetry from
+  EARENDIL-008 caught up at 03:22Z after falling 2 min behind." This matches U47's "Caught up at 03:22Z."
+- **Moved back** (a retreat: replay or correction): "EARENDIL-008's stored telemetry moved back to 03:12Z." With
+  a replay run: "…moved back to 03:12Z for a replay."
+- Not per N minutes: a heartbeat on the Timeline is still noise.
+- Falling behind itself is U47's Now item (ingress backpressure), not a Timeline line.
+- Fold label: `Telemetry stored` for the per-contact lines.
