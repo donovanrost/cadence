@@ -42,7 +42,12 @@ defmodule Cadence.Runtime.PartitionOwner do
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{AlarmRules, PlanDecoder, Result, Scope, State, Store, Update}
 
-  alias Cadence.Runtime.PartitionOwner.{PartitionBuilder, RuntimeRecords}
+  alias Cadence.Runtime.PartitionOwner.{
+    MonitoringSeed,
+    PartitionBuilder,
+    RuntimeRecords,
+    SemanticTimerSchedule
+  }
 
   @max_async_outputs 20
 
@@ -641,7 +646,16 @@ defmodule Cadence.Runtime.PartitionOwner do
     if plan.algorithms == [] and plan.monitoring == [] do
       {:ok, SemanticRuntime.new(), nil, %{}, []}
     else
-      with {:ok, semantic_state, writer} <- Store.recover_writer(activation, partition_key, plan),
+      with {:ok, recovered, recovered_writer} <-
+             Store.recover_writer(activation, partition_key, plan),
+           {:ok, semantic_state, writer} <-
+             MonitoringSeed.maybe_seed(
+               activation,
+               partition_key,
+               plan,
+               recovered,
+               recovered_writer
+             ),
            {:ok, cursors} <- Store.timer_cursors(activation, partition_key),
            {:ok, pending_timers} <- Store.pending_timer_results(activation, partition_key) do
         {:ok, semantic_state, writer, cursors, pending_timers}
@@ -871,7 +885,15 @@ defmodule Cadence.Runtime.PartitionOwner do
          :ok <- maybe_persist_semantic_timer(state, entry, result, derived_samples) do
       next_entry =
         entry
-        |> Map.put(:due_at, DateTime.add(entry.due_at, entry.interval_ms, :millisecond))
+        |> Map.put(
+          :due_at,
+          SemanticTimerSchedule.next_due(
+            entry.due_at,
+            entry.interval_ms,
+            TimerService.current_time(state.timer_service),
+            TimerService.live?(state.timer_service)
+          )
+        )
         |> schedule_semantic_timer(state.timer_service)
 
       {:ok,
@@ -1595,7 +1617,13 @@ defmodule Cadence.Runtime.PartitionOwner do
               timer_ref: nil,
               algorithm_id: algorithm.algorithm_id,
               interval_ms: interval_ms,
-              due_at: DateTime.add(anchor, interval_ms, :millisecond)
+              due_at:
+                SemanticTimerSchedule.first_due(
+                  anchor,
+                  interval_ms,
+                  TimerService.current_time(timer_service),
+                  TimerService.live?(timer_service)
+                )
             }
           ]
         else

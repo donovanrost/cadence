@@ -410,6 +410,37 @@ defmodule Cadence.SemanticRuntimeStoreTest do
     assert Repo.get!(CommitRow, writer.commit_sequence).input_kind == "updates"
   end
 
+  test "a monitoring seed is a commit: recovery and a replay from genesis reproduce it" do
+    {runtime_spec, input_id} = runtime_spec()
+    key = PartitionKey.new(%{affinity: :source_endpoint, value: "pobc-seed"})
+    plan = PlanDecoder.decode(runtime_spec.runtime_plans)
+    assert {:ok, %State{} = empty, writer} = Store.recover_writer(runtime_spec, key, plan)
+
+    seed = [{Scope.new("semantic-store-mission", "spacecraft-a"), "policy:seeded", :critical}]
+
+    assert {:ok, _result, seeded, writer} =
+             Store.seed(runtime_spec, key, writer, empty, seed, plan)
+
+    assert seeded == SemanticRuntime.seed_monitoring(empty, seed)
+    assert Repo.one!(from(r in CommitRow, where: r.input_kind == "seed", select: count()))
+
+    at = ~U[2026-08-12 12:00:00Z]
+    input = update("update:after-seed", input_id, 10, at)
+
+    assert {:ok, _result, state, _writer} =
+             Store.process(runtime_spec, key, writer, seeded, [input], plan)
+
+    # From the checkpoint, and from genesis with no checkpoint at all.
+    assert {:ok, ^state, _writer} = Store.recover_writer(runtime_spec, key, plan)
+    Repo.delete_all(Checkpoint)
+    assert {:ok, ^state, _writer} = Store.recover_writer(runtime_spec, key, plan)
+    assert {:ok, ^state} = Store.recover(runtime_spec, key, plan)
+
+    # No entries: nothing is committed.
+    assert {:ok, _result, ^state, ^writer} =
+             Store.seed(runtime_spec, key, writer, state, [], plan)
+  end
+
   test "missing, incompatible and corrupt checkpoints fall back to verified full recovery" do
     {spec, key, plan, state, _} = checkpoint_history()
     observe_checkpoints()
