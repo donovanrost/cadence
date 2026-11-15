@@ -79,6 +79,7 @@ describe("palette telemetry (M23)", () => {
     id,
     name: id.split(".").at(-1) ?? id,
     description: null,
+    has_limits: undefined,
     unit: "V",
     subsystem: "EPS",
     type: "numeric",

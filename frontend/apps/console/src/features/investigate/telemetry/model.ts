@@ -1,5 +1,5 @@
 import type { OpState } from "@/ui";
-import { isHistorical, latestMark, type TelemetryPoint } from "@/features/telemetry/index.ts";
+import { isHistorical, pointLimits, type TelemetryPoint } from "@/features/telemetry/index.ts";
 
 /**
  * Investigate › Telemetry (Investigate.md §Telemetry): every value on this spacecraft now (M23),
@@ -11,15 +11,16 @@ export type PointFilter = "out" | "stale" | "all";
 
 /** T1 mark: crit / caution / stale / nominal, or off for a point without limits. */
 export function pointMark(p: TelemetryPoint): OpState {
-  if (!p.latest) return "stale";
-  // limit_state is a closed vocabulary (telemetry api), so every latest has a mark.
-  return latestMark(p.latest);
+  return pointLimits(p).mark;
 }
 
 const isOut = (p: TelemetryPoint) =>
   p.latest?.limit_state === "critical" || p.latest?.limit_state === "caution";
+/** No recent value, or an old one. A point with no limits or not checked yet isn't stale for that. */
 const isStale = (p: TelemetryPoint) =>
-  !p.latest || p.latest.limit_state === "no_data" || isHistorical(p.latest);
+  !p.latest ||
+  isHistorical(p.latest) ||
+  (p.latest.limit_state === "no_data" && pointLimits(p).word === null);
 
 export function filterCounts(points: readonly TelemetryPoint[]) {
   return { out: points.filter(isOut).length, stale: points.filter(isStale).length };

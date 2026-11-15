@@ -29,6 +29,11 @@ const point = d.object({
   // Typing rule (1), lead: a new point type mustn't fail the whole points read; it reads
   // "unrecognized", which isn't plotted (only numeric is) and lists as text.
   type: d.known(["numeric", "enum", "text"] as const),
+  /**
+   * api 11-15 (ux Investigate.md T1): whether the point has an active limit definition; on the
+   * point because limits exist without a sample. Absent on older reads (marks as today).
+   */
+  has_limits: d.optional(d.boolean),
   latest: d.optional(
     d.nullable(
       d.object({
@@ -50,6 +55,28 @@ const LIMIT_MARK: Readonly<Record<PointLatest["limit_state"], OpState>> = {
   nominal: "nominal",
   no_data: "stale",
 };
+
+/** A point's mark, and the words when it has no limits or hasn't been checked (ux T1). */
+export type PointLimits = Readonly<{ mark: OpState; word: string | null; title: string | null }>;
+
+/**
+ * ux Investigate.md T1: no limits defined, or defined but no sample checked yet, read as a dashed
+ * `off` with words, never the nominal mark (that would claim a check that didn't happen, U20).
+ * Otherwise the latest's own mark. A read without has_limits marks as before.
+ */
+export function pointLimits(
+  p: Readonly<Pick<TelemetryPoint, "has_limits" | "latest">>,
+): PointLimits {
+  if (p.has_limits === false)
+    return { mark: "off", word: "No limits", title: "No limits are defined for this point." };
+  if (p.has_limits === true && p.latest?.limit_state === "no_data")
+    return {
+      mark: "off",
+      word: "Not checked yet",
+      title: "Limits are defined, but no sample has been checked yet.",
+    };
+  return { mark: latestMark(p.latest), word: null, title: null };
+}
 
 /** A history value (api 551cb796) is old: stale, unless its limits are out right now. */
 export const isHistorical = (l: PointLatest) => l.source === "history";

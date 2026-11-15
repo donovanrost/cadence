@@ -4,6 +4,8 @@ export {
   fetchPoints,
   isHistorical,
   latestMark,
+  pointLimits,
+  type PointLimits,
   type LatestValues,
   type PointLatest,
   type TelemetryPoint,

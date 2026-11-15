@@ -1,6 +1,6 @@
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import { latestMark, type TelemetryPoint } from "@/features/telemetry/index.ts";
+import { pointLimits, type TelemetryPoint } from "@/features/telemetry/index.ts";
 import type { PaletteItem } from "./results.ts";
 
 /**
@@ -43,7 +43,7 @@ export function pointItems(
         .filter((s): s is string => Boolean(s))
         .join(" · "),
       hint: "PLOT",
-      state: latest ? latestMark(latest) : null,
+      state: latest ? pointLimits(p).mark : null,
       to: {
         name: "ops.telemetry",
         query: { ...(spacecraft ? { sc: String(spacecraft.scid) } : {}), p: p.id },

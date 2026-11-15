@@ -15,7 +15,7 @@ import {
 import { describeApiError, type Scid } from "@/api/index.ts";
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import { fetchPoints, latestMark, type TelemetryPoint } from "./api.ts";
+import { fetchPoints, pointLimits, type TelemetryPoint } from "./api.ts";
 
 /**
  * T1 · Spacecraft chips + point search (M23). An empty search lists the mission's points; with a
@@ -154,7 +154,7 @@ function addManual() {
           @click="emit('addPoint', point.id)"
         >
           <span class="flex items-center gap-2 font-mono text-sm text-readout normal-case">
-            <ApStatusMark v-if="point.latest" :state="latestMark(point.latest)" />
+            <ApStatusMark v-if="point.latest" :state="pointLimits(point).mark" />
             {{ point.id }}
             <span v-if="points.includes(point.id)" class="text-xs text-text-4 uppercase"
               >added</span

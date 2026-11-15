@@ -17,7 +17,7 @@ import {
   type ApColumn,
 } from "@/ui";
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
-import { fetchPoints } from "@/features/telemetry/index.ts";
+import { fetchPoints, pointLimits } from "@/features/telemetry/index.ts";
 import { fetchPasses } from "@/features/contacts/index.ts";
 import type { TimeBand } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
@@ -225,8 +225,11 @@ const latest = (p: (typeof all.value)[number]) =>
               <span v-if="p.latest?.received_at" class="block text-xs text-text-3">{{
                 formatRelative(new Date(p.latest.received_at), now)
               }}</span>
-              <span v-else-if="pointMark(p) === 'off'" class="block text-xs text-text-3"
-                >No limits</span
+              <span
+                v-if="pointLimits(p).word"
+                class="block text-xs text-text-3"
+                :title="pointLimits(p).title ?? undefined"
+                >{{ pointLimits(p).word }}</span
               >
             </span>
           </li>

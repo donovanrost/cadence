@@ -11,6 +11,7 @@ import { argsSummary, evidenceWords, releaseRule } from "./uplink/api.ts";
 import { byDay, bytesWords, causeWithOwner, rebooked, recentTag, ruleWords } from "./passes/api.ts";
 import { catalogCaution, jsonWords, protocolLine, routingWords } from "./configuration/api.ts";
 import { filterCounts, pointMark, pointsFrom, toCsv, visiblePoints } from "./telemetry/model.ts";
+import { pointLimits } from "@/features/telemetry/index.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftId as spacecraftIdReader, decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
@@ -456,20 +457,26 @@ describe("Configuration tab words (api-ops 8d8f5c83)", () => {
 });
 
 describe("Telemetry tab (Investigate.md §Telemetry)", () => {
-  const pt = (id: string, state: string | null, subsystem = "EPS") => ({
+  const pt = (
+    id: string,
+    state: "nominal" | "caution" | "critical" | "no_data" | null,
+    subsystem = "EPS",
+    hasLimits?: boolean,
+  ) => ({
     id,
     name: id.toLowerCase(),
     description: null,
     unit: null,
     subsystem,
     type: "numeric" as const,
+    has_limits: hasLimits,
     latest:
       state === null
         ? null
         : {
             value: 1,
             received_at: null,
-            limit_state: state as "nominal",
+            limit_state: state,
             source: undefined,
           },
   });
@@ -480,6 +487,27 @@ describe("Telemetry tab (Investigate.md §Telemetry)", () => {
     expect(filterCounts(ps)).toEqual({ out: 2, stale: 1 });
     expect(pointMark(pt("C", null))).toBe("stale");
     expect(pointsFrom("a,b,c,d")).toEqual(["a", "b", "c"]);
+  });
+
+  it("has_limits (ux T1): no limits or not checked yet read as dashed off, never nominal or out", () => {
+    const none = pt("N", "nominal", "EPS", false);
+    const unchecked = pt("U", "no_data", "EPS", true);
+    expect(pointMark(none)).toBe("off");
+    expect(pointLimits(none)).toEqual({
+      mark: "off",
+      word: "No limits",
+      title: "No limits are defined for this point.",
+    });
+    expect(pointLimits(unchecked)).toEqual({
+      mark: "off",
+      word: "Not checked yet",
+      title: "Limits are defined, but no sample has been checked yet.",
+    });
+    // An older read without has_limits marks as before: no_data is stale.
+    expect(pointMark(pt("O", "no_data"))).toBe("stale");
+    expect(pointMark(pt("L", "nominal", "EPS", true))).toBe("nominal");
+    expect(filterCounts([none, unchecked, pt("B", "critical")])).toEqual({ out: 1, stale: 0 });
+    expect(filterCounts([pt("O", "no_data")])).toEqual({ out: 0, stale: 1 });
     expect(toCsv("P", [{ t: 0, min: 1, mean: 2, max: 3 }])).toBe(
       "time,point,min,mean,max\n1970-01-01T00:00:00.000Z,P,1,2,3",
     );
