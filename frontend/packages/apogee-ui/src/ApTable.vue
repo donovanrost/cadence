@@ -129,6 +129,8 @@ defineSlots<
             :class="[
               column.align === 'end' ? 'text-right tabular' : 'text-left',
               column.mono ? 'font-mono whitespace-nowrap' : '',
+              // Windowing needs every row at rowHeight: a narrow table scrolls sideways, never wraps.
+              virtual ? 'whitespace-nowrap' : '',
             ]"
           >
             <slot :name="`cell-${column.key}`" :row="row">

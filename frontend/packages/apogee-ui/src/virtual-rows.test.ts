@@ -76,6 +76,23 @@ const indexes = (w: ReturnType<typeof mountTable>) =>
   w.findAll("tbody tr[aria-rowindex]").map((r) => Number(r.attributes("aria-rowindex")));
 
 describe("ApTable virtual", () => {
+  it("never wraps a virtual row's cells (every row must be rowHeight tall)", () => {
+    const scroller = scrollerOf(400);
+    const virtual = mountTable(scroller);
+    expect(virtual.find("tbody tr[aria-rowindex] td").classes()).toContain("whitespace-nowrap");
+    virtual.unmount();
+    scroller.remove();
+    const plain = mount(ApTable<Row>, {
+      props: {
+        columns: [{ key: "name", label: "Name" }],
+        rows: rows.slice(0, 3),
+        rowKey: (r: Row) => r.id,
+      },
+    });
+    expect(plain.find("tbody td").classes()).not.toContain("whitespace-nowrap");
+    plain.unmount();
+  });
+
   it("is off by default: every row, no aria counts", () => {
     const w = mount(ApTable<Row>, {
       props: {
