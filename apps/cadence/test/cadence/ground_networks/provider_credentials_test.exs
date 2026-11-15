@@ -128,6 +128,28 @@ defmodule Cadence.GroundNetworks.ProviderCredentialsTest do
     assert audit_text =~ "fingerprint-v2"
   end
 
+  test "an env credential may only name a variable this environment allows" do
+    assert {:error, :env_credential_name_not_allowed} =
+             ProviderCredentials.create(
+               @organization_id,
+               @account_id,
+               credential_attrs(
+                 provider_credential_ref: "provider-credential-env-denied",
+                 backend_type: :env,
+                 backend_key: "SECRET_KEY_BASE"
+               ),
+               manage_backend?: false,
+               now: @now
+             )
+
+    assert {:error, :provider_credential_not_found} =
+             ProviderCredentials.fetch(
+               @organization_id,
+               @account_id,
+               "provider-credential-env-denied"
+             )
+  end
+
   test "enforces Provider Account scope and local-only environment policy" do
     assert {:ok, credential} =
              ProviderCredentials.create(

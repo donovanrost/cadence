@@ -1,5 +1,15 @@
 defmodule Cadence.Secrets.EnvBackend do
-  @moduledoc "Local-only environment-backed secret resolver."
+  @moduledoc """
+  Local-only environment-backed secret resolver.
+
+  It's refused unless the environment explicitly enables the local backend
+  (`allow_env_secret_backend?`). Even then, a variable NAMED BY A TENANT (a provider credential's
+  key, or a data-source descriptor's `*_env` fields) is read only if this environment allows that
+  name (api-ops' security sweep, 11-15): `config :cadence, :env_credentials, allow: [names],
+  allow_prefixes: [prefixes]` (default prefix `CADENCE_TENANT_`), so a tenant can't make Cadence
+  read the platform's own secrets. Profiles named in configuration are the operator's and aren't
+  restricted. Errors carry the variable's name at most, never its value.
+  """
 
   @behaviour Cadence.Secrets.Backend
 
@@ -12,8 +22,33 @@ defmodule Cadence.Secrets.EnvBackend do
 
   @profile_metadata_keys [:material_env_profile, :material_profile]
 
+  @default_prefixes ["CADENCE_TENANT_"]
+
   @impl true
   def capabilities(_opts), do: [:resolve]
+
+  @doc """
+  Whether a tenant may name `env_var` as a credential here: listed in `allow`, or starting with
+  one of `allow_prefixes` (`config :cadence, :env_credentials`; `opts` override, for tests).
+  """
+  @spec allowed_name?(binary(), keyword()) :: boolean()
+  def allowed_name?(env_var, opts \\ [])
+
+  def allowed_name?(env_var, opts) when is_binary(env_var) and env_var != "" do
+    config = Application.get_env(:cadence, :env_credentials, [])
+    names = Keyword.get(opts, :env_allow, Keyword.get(config, :allow, []))
+
+    prefixes =
+      Keyword.get(
+        opts,
+        :env_allow_prefixes,
+        Keyword.get(config, :allow_prefixes, @default_prefixes)
+      )
+
+    env_var in names or Enum.any?(prefixes, &String.starts_with?(env_var, &1))
+  end
+
+  def allowed_name?(_env_var, _opts), do: false
 
   @impl true
   @spec resolve(struct() | map(), keyword()) :: {:ok, map()} | {:error, term()}
@@ -35,7 +70,10 @@ defmodule Cadence.Secrets.EnvBackend do
   defp resolve_provider_env(env_var, opts) do
     env_reader = Keyword.get(opts, :env_reader, &System.get_env/1)
 
-    case read_env(env_reader, env_var) do
+    case allowed_name?(env_var, opts) && read_env(env_reader, env_var) do
+      false ->
+        {:error, :env_credential_name_not_allowed}
+
       value when is_binary(value) and value != "" ->
         {:ok,
          %{
@@ -65,7 +103,7 @@ defmodule Cadence.Secrets.EnvBackend do
         |> Keyword.get(:env_material_profiles, %{})
 
     case map_value(profiles, profile_key) do
-      nil -> fetch_inline_profile(profile_key, descriptor)
+      nil -> profile_key |> fetch_inline_profile(descriptor) |> inline_names_allowed(opts)
       profile when is_map(profile) -> {:ok, profile}
       profile -> {:error, {:invalid_env_material_profile, profile}}
     end
@@ -85,6 +123,16 @@ defmodule Cadence.Secrets.EnvBackend do
       profile -> {:ok, profile}
     end
   end
+
+  # An inline profile comes from the tenant's own descriptor: every variable it names must be one
+  # this environment allows, before any is read.
+  defp inline_names_allowed({:ok, profile}, opts) do
+    if Enum.all?(Map.values(profile), &allowed_name?(&1, opts)),
+      do: {:ok, profile},
+      else: {:error, :env_credential_name_not_allowed}
+  end
+
+  defp inline_names_allowed(error, _opts), do: error
 
   defp normalize_profile_keys(profile) do
     Enum.reduce(profile, %{}, fn {key, value}, acc ->

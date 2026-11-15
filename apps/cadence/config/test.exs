@@ -81,3 +81,14 @@ config :cadence, :provider_outbound,
   allow: ["127.0.0.1/32", "::1/128"],
   # The suite's fake provider hosts (*.test) resolve to loopback; answers are still checked.
   resolver: {Cadence.TestSupport.ProviderHosts, :resolve}
+
+# Env-backed credentials (local only): the variable names a tenant may use here (EnvBackend,
+# api-ops 11-15). Anything else is refused on save and on resolve.
+config :cadence, :env_credentials,
+  allow: [
+    "EARENDIL_DEMO_PROVIDER_TOKEN",
+    "CADENCE_PROVIDER_ACCOUNT_TOKEN",
+    "PROVIDER_TEST_TOKEN",
+    "CADENCE_PROVIDER_TEST_TOKEN"
+  ],
+  allow_prefixes: ["CADENCE_TENANT_", "CADENCE_TEST_"]

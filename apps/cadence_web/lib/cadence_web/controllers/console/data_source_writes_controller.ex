@@ -300,6 +300,14 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
   defp error(conn, {:error, :blast_radius_unavailable}),
     do: Problem.respond(conn, :blast_radius_unavailable)
 
+  defp error(conn, {:error, :env_credential_name_not_allowed}),
+    do:
+      Problem.respond(conn, :invalid_params, %{
+        field: "http_endpoint_env",
+        http_endpoint_env:
+          "This environment doesn't allow that variable for a source. Ask a platform admin."
+      })
+
   defp error(conn, {:error, :incompatible_data_source}),
     do: Problem.respond(conn, :invalid_params, %{field: "data_source_id"})
 

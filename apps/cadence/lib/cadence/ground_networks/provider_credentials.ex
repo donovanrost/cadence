@@ -41,6 +41,7 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
       |> Map.put(:provider_account_id, provider_account_id)
 
     with {:ok, credential} <- build_credential(attrs),
+         :ok <- env_key_allowed(credential),
          {:ok, backend_metadata} <- maybe_mutate_backend(:create, credential, opts) do
       credential = maybe_put_backend_reference(credential, backend_metadata)
       audit_entry = audit_entry(credential, :created, :succeeded, backend_metadata, opts)
@@ -358,6 +359,13 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
 
   defp maybe_filter_status(query, status) when is_binary(status),
     do: where(query, [row], row.status == ^status)
+
+  # An env-backed credential names a variable; only names this environment allows (EnvBackend).
+  defp env_key_allowed(%ProviderCredential{backend_type: :env, backend_key: key}) do
+    if EnvBackend.allowed_name?(key), do: :ok, else: {:error, :env_credential_name_not_allowed}
+  end
+
+  defp env_key_allowed(%ProviderCredential{}), do: :ok
 
   defp build_credential(attrs) do
     {:ok, ProviderCredential.new(attrs)}

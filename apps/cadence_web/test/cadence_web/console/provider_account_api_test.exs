@@ -187,7 +187,16 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
            |> json_response(200)
            |> get_in(["data", "accounts"]) == []
 
-    env = put_in(body, ["credential", "backend"], "env")
+    # An env credential may only name a variable this environment allows (api-ops 11-15).
+    denied = put_in(body, ["credential", "backend"], "env")
+
+    assert json_response(conn.() |> post(base <> "/provider-accounts", denied), 422)["error"][
+             "details"
+           ]
+           |> Map.take(["credential.key", "credential.backend"])
+           |> map_size() == 1
+
+    env = put_in(denied, ["credential", "key"], "CADENCE_TENANT_SIM_TOKEN")
     env_conn = conn.() |> post(base <> "/provider-accounts", env)
 
     if ResolverConfiguration.provider_options()[

@@ -10,7 +10,7 @@ defmodule Cadence.Management.ProviderAccountWrites do
   alias Cadence.Auth.Scope
 
   alias Cadence.GroundNetworks.{MissionProvider, ProviderAccounts, ProviderCredentials}
-  alias Cadence.Secrets.ResolverConfiguration
+  alias Cadence.Secrets.{EnvBackend, ResolverConfiguration}
 
   @backends %{"external" => :external, "env" => :env}
 
@@ -160,6 +160,7 @@ defmodule Cadence.Management.ProviderAccountWrites do
     ref = Cadence.Ids.new("provider_credential")
 
     with :ok <- backend_allowed(@backends[backend]),
+         :ok <- key_allowed(@backends[backend], key),
          {:ok, _credential} <-
            ProviderCredentials.create(
              scope,
@@ -188,6 +189,22 @@ defmodule Cadence.Management.ProviderAccountWrites do
   end
 
   defp backend_allowed(_backend), do: :ok
+
+  # An environment variable is read only if this environment allows that name (EnvBackend), so a
+  # credential can't name the platform's own secrets.
+  defp key_allowed(:env, key) do
+    if EnvBackend.allowed_name?(key),
+      do: :ok,
+      else:
+        {:error,
+         {:invalid_params,
+          %{
+            "credential.key" =>
+              "This environment doesn't allow that variable for credentials. Ask a platform admin."
+          }}}
+  end
+
+  defp key_allowed(_backend, _key), do: :ok
 
   defp provider_type(key) do
     case Enum.find(MissionProvider.provider_types(), &(to_string(&1) == key)) do

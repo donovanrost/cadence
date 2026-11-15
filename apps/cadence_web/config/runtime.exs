@@ -34,12 +34,26 @@ end
 
 # Provider HTTP calls refuse private and reserved networks (OutboundGuard). A deployment whose
 # provider legitimately lives on a private network (a lab's in-cluster simulator) names those
-# ranges explicitly: CADENCE_PROVIDER_OUTBOUND_ALLOW="10.43.0.0/16,fd00::/8". There is no switch
-# that turns the check off.
+# ranges explicitly: CADENCE_PROVIDER_OUTBOUND_ALLOW="10.43.0.0/16" (no range wider than /8 or
+# /32, never link-local or metadata space; validated at boot). There is no switch that turns the
+# check off.
 case System.get_env("CADENCE_PROVIDER_OUTBOUND_ALLOW") do
   ranges when is_binary(ranges) and ranges != "" ->
     config :cadence, :provider_outbound,
       allow: ranges |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+
+  _unset ->
+    :ok
+end
+
+# Env-backed credentials, where an environment enables the local backend: the variable names a
+# tenant may use (EnvBackend). CADENCE_ENV_CREDENTIALS_ALLOW="EARENDIL_DEMO_PROVIDER_TOKEN,...";
+# names starting with CADENCE_TENANT_ are always allowed.
+case System.get_env("CADENCE_ENV_CREDENTIALS_ALLOW") do
+  names when is_binary(names) and names != "" ->
+    config :cadence, :env_credentials,
+      allow: names |> String.split(",", trim: true) |> Enum.map(&String.trim/1),
+      allow_prefixes: ["CADENCE_TENANT_"]
 
   _unset ->
     :ok

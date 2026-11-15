@@ -82,6 +82,34 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
            }
   end
 
+  test "register-source refuses an endpoint variable this environment doesn't allow" do
+    request =
+      request("register-source", %{
+        "source" => %{
+          "data_source_id" => "action-env-source",
+          "logical_source" => "telemetry",
+          "kind" => "byo_tsdb",
+          "isolation_level" => "mission_isolated",
+          "credentials_ref" => "inline-byo",
+          "credential_provider" => "questdb",
+          "endpoint_ref" => "",
+          "material_env_profile" => "",
+          "http_endpoint_env" => "DATABASE_URL",
+          "storage" => "questdb"
+        }
+      })
+
+    assert {:error, :env_credential_name_not_allowed} =
+             DataSourcesAction.execute(
+               scope(),
+               HostContext.mission(@mission_id),
+               "data_sources",
+               request
+             )
+
+    assert {:error, _not_found} = DataSources.fetch_data_source("action-env-source")
+  end
+
   test "rejects a resource from another mission before domain mutation" do
     persist_mission_scope(@organization_id, "mission-other")
 

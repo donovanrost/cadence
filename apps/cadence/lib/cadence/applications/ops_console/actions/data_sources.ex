@@ -16,6 +16,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   alias Cadence.Jobs
   alias Cadence.Jobs.Job
   alias Cadence.Management.DataSources
+  alias Cadence.Secrets.EnvBackend
 
   @surface_ids ["data_sources", "data_source_registration", "data_source_settings"]
   @surface_version 1
@@ -377,6 +378,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          {:ok, endpoint_ref} <- optional_text(params, "endpoint_ref"),
          {:ok, material_env_profile} <- optional_text(params, "material_env_profile"),
          {:ok, http_endpoint_env} <- optional_text(params, "http_endpoint_env"),
+         :ok <- env_name_allowed(http_endpoint_env),
          {:ok, display_name} <- optional_text(params, "display_name") do
       {:ok,
        %{
@@ -395,6 +397,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          adapter_definition: adapter_definition
        }}
     end
+  end
+
+  # A variable the source's descriptor names is read by the env backend only if this environment
+  # allows the name (EnvBackend.allowed_name?/2); say so on save rather than at the first probe.
+  defp env_name_allowed(nil), do: :ok
+
+  defp env_name_allowed(env_var) do
+    if EnvBackend.allowed_name?(env_var),
+      do: :ok,
+      else: {:error, :env_credential_name_not_allowed}
   end
 
   defp parse_logical_source(params) do
