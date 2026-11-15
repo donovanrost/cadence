@@ -41,7 +41,7 @@ defmodule Cadence.Applications.FixtureContributorsTest do
   end
 
   test "every configured fixture contributor exists in the test environment" do
-    for contributor <- FixtureContributors.all() do
+    for contributor <- FixtureContributors.configured() do
       assert Code.ensure_loaded?(contributor), "#{inspect(contributor)} is not compiled"
     end
   end

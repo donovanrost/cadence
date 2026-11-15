@@ -14,19 +14,38 @@ defmodule Cadence.Applications.FixtureContributors do
   for the compiling environment sets it, and only `config/test.exs` does (a guard test reads the
   dev and prod configs). A runtime config can't add one: a value that differs from the compiled
   one makes the application refuse to boot.
+
+  Even in the test environment the fixtures are OFF until a test turns them on
+  (`enable/0` … `disable/0`, from a synchronous test), so the product registries every other
+  test asserts on stay exactly the product's.
   """
 
   @contributors Application.compile_env(:cadence, :fixture_application_contributors, [])
+  @enabled_key :fixture_applications_enabled
 
-  @doc "Every fixture contributor (empty outside the test environment)."
+  @doc "The compiled fixture contributors (empty outside the test environment), enabled or not."
+  @spec configured() :: [module()]
+  def configured, do: @contributors
+
+  @doc "The fixture contributors the registries see now: none unless a test enabled them."
   @spec all() :: [module()]
-  def all, do: @contributors
+  def all, do: if(enabled?(), do: @contributors, else: [])
 
-  @doc "The fixture contributors that implement `function/arity` (a registry's callback)."
+  @doc "The enabled fixture contributors that implement `function/arity` (a registry's callback)."
   @spec exporting(atom(), non_neg_integer()) :: [module()]
   def exporting(function, arity) when is_atom(function) and is_integer(arity) do
-    Enum.filter(@contributors, fn contributor ->
+    Enum.filter(all(), fn contributor ->
       Code.ensure_loaded?(contributor) and function_exported?(contributor, function, arity)
     end)
   end
+
+  @doc "Turns the compiled fixtures on (a no-op where none are compiled, i.e. dev and prod)."
+  @spec enable() :: :ok
+  def enable, do: Application.put_env(:cadence, @enabled_key, true)
+
+  @doc "Turns them off again."
+  @spec disable() :: :ok
+  def disable, do: Application.delete_env(:cadence, @enabled_key)
+
+  defp enabled?, do: @contributors != [] and Application.get_env(:cadence, @enabled_key, false)
 end
