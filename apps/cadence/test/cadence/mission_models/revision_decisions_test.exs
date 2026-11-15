@@ -231,6 +231,20 @@ defmodule Cadence.MissionModels.RevisionDecisionsTest do
              MissionModels.list_model_decisions(c.org, c.mid)
 
     assert evidence["replay"] == "not_run"
+    assert evidence["retroactive"] == false
+  end
+
+  test "a retroactive approval says so", c do
+    revision = import!(c)
+    report = compare!(c, revision)
+
+    {:ok, _} =
+      MissionModels.approve_revision(c.admin, c.mid, revision, report["comparison_report_id"],
+        retroactive: true
+      )
+
+    assert [%{evidence: %{"retroactive" => true}}] =
+             MissionModels.list_model_decisions(c.org, c.mid)
   end
 
   defp import!(c, opts \\ []) do

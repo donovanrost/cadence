@@ -55,7 +55,10 @@ defmodule Cadence.MissionModels.RevisionDecisions do
         Map.merge(actor, %{
           "comparison_report_id" => comparison_report_id,
           "replay" => get_in(comparison, ["replay", "status"]),
-          "importer_recorded" => importers != []
+          "importer_recorded" => importers != [],
+          # Approved after it already ran (the pre-gate revisions, lead 11-15): the caller says so
+          # (ModelApprovalGate.running?/3), and the audit tells it.
+          "retroactive" => Keyword.get(opts, :retroactive, false) == true
         })
 
       row |> RevisionRow.status_changeset(:approved, evidence, at(opts)) |> Repo.update()

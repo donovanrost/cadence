@@ -88,6 +88,15 @@ defmodule Cadence.Control.ModelApprovalGate do
       |> elem(0)
   end
 
+  @doc "Whether any spacecraft in the active generation runs `revision_id` (a retroactive approval)."
+  @spec running?(binary(), binary(), binary()) :: boolean()
+  def running?(organization_id, mission_id, revision_id) do
+    organization_id
+    |> running_entries(mission_id)
+    |> Map.values()
+    |> Enum.any?(&(revision_id(&1) == revision_id))
+  end
+
   @doc "The ones among `revision_ids` that aren't approved."
   @spec unapproved(binary(), binary(), [binary()]) :: [binary()]
   def unapproved(organization_id, mission_id, revision_ids) do

@@ -304,6 +304,8 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
       [running]
     )
 
+    assert ModelApprovalGate.running?(c.org, c.mission.mission_id, running)
+
     # The gate would refuse it if a generation introduced it...
     assert ModelApprovalGate.unapproved(c.org, c.mission.mission_id, [running]) == [running]
 
