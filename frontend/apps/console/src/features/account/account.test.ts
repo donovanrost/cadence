@@ -34,4 +34,15 @@ describe("passwordFailure", () => {
       }).text,
     ).toContain("can't be changed here");
   });
+
+  it("puts the server's new-password rule under the new password (422 invalid_params)", () => {
+    expect(
+      passwordFailure({
+        kind: "invalid",
+        code: "invalid_params",
+        message: "x",
+        details: { new_password: ["should be at least 12 character(s)"] },
+      }),
+    ).toEqual({ text: null, fields: { next: "should be at least 12 character(s)" } });
+  });
 });

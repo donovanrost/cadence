@@ -1,4 +1,4 @@
-import { codeOf, recordOf } from "@/api";
+import { fieldErrors, isError } from "@/api";
 import {
   decoders as d,
   request,
@@ -59,19 +59,15 @@ export function passwordProblems(
 export function passwordFailure(
   e: ApiError,
 ): Readonly<{ text: string | null; fields: Record<string, string> }> {
-  const code = codeOf(e);
-  if (code === "current_password_incorrect")
+  if (isError(e, "current_password_incorrect"))
     return { text: null, fields: { current: "That isn't your current password." } };
-  if (code === "password_managed_externally")
+  if (isError(e, "password_managed_externally"))
     return {
       text: "Your password is managed by this environment's configuration, so it can't be changed here.",
       fields: {},
     };
-  if (code === "invalid_params" && "details" in e && e.details && typeof e.details === "object") {
-    const v = recordOf(e.details)?.["new_password"];
-    const t = Array.isArray(v) ? v.filter((x) => typeof x === "string").join(" ") : v;
-    if (typeof t === "string" && t) return { text: null, fields: { next: t } };
-  }
+  const next = fieldErrors(e)["new_password"];
+  if (next) return { text: null, fields: { next } };
   if (outcomeUnknown(e))
     return {
       text: "No clear answer from the server, so your password may or may not have changed. Try signing in with the new one in another window before changing it again.",
