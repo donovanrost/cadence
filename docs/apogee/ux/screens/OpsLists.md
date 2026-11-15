@@ -24,6 +24,15 @@ stat strip (same 6 tiles as Now, filtered)
   Last TLM (mono `2s`, stale-tinted past the threshold) · Next contact (`T−38m FBK`, omitted when
   unknown). Sort by state precedence by default, then name. Virtualized past 200 rows; footer
   count `500 OF 500`.
+- **Sticky headings** (lead and fe-ops, 11-15: option A). The table panel is its own scroll box, both ways, so the
+  heading row stays while rows scroll and horizontal scroll still works on phones. Conditions:
+  - The panel fills to the viewport bottom, and **the page itself doesn't scroll**: one vertical scroller, never two.
+  - Below 360px of available height (a short window, or a phone in landscape), it falls back to C: the page
+    scrolls, and the headings scroll with it.
+  - The **Name** column is sticky on the left while scrolling sideways, so a row's state never loses its
+    spacecraft.
+  - The scroll box is the kit's focusable, named region ("Fleet table"). Arrow keys and PgUp/PgDn scroll it.
+    Tabbing to a row's link scrolls the row into view below the sticky heading, never under it.
 - **Empty filter result:** "No spacecraft match plane 07 + critical." + `Clear filters`.
 - Data: the Now per-spacecraft list + `last_tlm_at`, `next_contact`.
 
