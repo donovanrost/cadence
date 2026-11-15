@@ -105,6 +105,21 @@ The rendering engine differs, but the look is the same.
   - Hover or selection brings the series to `readout`. The only colours on a chart are operational states
     (design-language §2).
 
+### Enumerated points (calibration labels, #92 c; a follow-up after the first version)
+A point whose engineering value is a label (HK.sc_mode: SAFE / NOMINAL / SCIENCE) is a state, not a number. It
+never plots on a numeric axis of raw states.
+- **One enumerated point:** a step line with a **categorical y axis**, carrying the defined labels in raw-value order
+  (mono 11, `text-3`). Long labels are truncated, with the full label in the tooltip. The tooltip reads "SAFE (2)":
+  the label, then the raw value.
+- **Several, or mixed with numeric points:** each enumerated point gets its own **state row** above the plot, a
+  horizontal band whose segments carry the label inside when it fits (else in the tooltip). The numeric points
+  keep the plot below. Two enumerations never share an axis.
+- **Colour:** neutral steps as for series 2–8, unless the ground definition gives a state an operational status
+  (SAFE = caution). Then that segment takes the status with its mark and word, as for limits. Never colour by the
+  label alone.
+- A raw value with no label reads "7 (no label)" in `text-4`. It isn't hidden, and it isn't given a made-up name
+  (U25).
+
 ### Overlays (snapshot `limits` and `events` frames; dashboards asked)
 - **Thresholds:** dashed 1px, caution yellow and crit red, with `--apogee-wash-crit` beyond red only (no caution
   wash). They step where a definition changes mid-window, with a 1px vertical tick at the change and the change
