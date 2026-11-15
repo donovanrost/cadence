@@ -15,15 +15,22 @@ Run before deploying a branch to an environment. Each line names why it exists.
 3. **Ingress journal disk** (on by default, DECISIONS #95). Every downlink's received bytes are
    journaled before processing, at `CADENCE_INGRESS_JOURNAL_PATH` (default
    `/var/lib/cadence/ingress_journal`): put it on a persistent volume, not the container's writable
-   layer. Size: about the downlink's own byte rate plus a little framing, ~50 MB per contact-hour
-   per downlink at the dev simulator's rate (one 8-minute pass ≈ 7 MB); scale with your links' bit
-   rates. A contact's stream is deleted 72 h after the contact settles, and only once every byte
-   is in the ingress archive (JournalReclaim). So the volume must hold 72 h of contact plus any
-   undrained backlog: `CADENCE_INGRESS_JOURNAL_MAX_BYTES` (default 8 GiB) caps it, and a full journal
-   refuses new bytes (`ingress_journal_full`, the capacity_exhausted event), so size the cap and the
-   volume to the 72 h figure with headroom. To run without it, set
-   `CADENCE_INGRESS_JOURNAL_ENABLED=false` (supported; without it a stop during a pass loses that
-   pass's unprocessed bytes).
+   layer. A contact's stream is deleted 72 h after the contact settles, and only once every byte is
+   in the ingress archive (JournalReclaim). The cap `CADENCE_INGRESS_JOURNAL_MAX_BYTES` is ONE
+   budget for every link, and a full journal refuses new bytes for ALL of them at once
+   (`ingress_journal_full`, the capacity_exhausted event), so the default 8 GiB fits only a small
+   fleet. Size it:
+   - **Rule:** cap ≈ Σ over downlinks (link byte rate × contact seconds within 72 h) × 1.5, plus the
+     largest undrained backlog you expect (an archive outage). Set
+     `CADENCE_INGRESS_JOURNAL_MAX_BYTES` to that and give the volume more than the cap.
+   - **Worked example:** N craft × passes/day × pass seconds × 3 days × byte rate × 1.5. At the dev
+     simulator's rate (~14 KB/s, ~50 MB per contact-hour; one 8-minute pass ≈ 7 MB) with 5 passes of
+     8 min a day: 10 craft ≈ 0.8 GiB; 100 craft ≈ 10 GiB (over the default); 500 craft ≈ 49 GiB;
+     500 craft at a 2 Mbit/s S-band link ≈ 880 GiB.
+   - **Dev:** the default path in a checkout is the repository's `var/ingress_journal`, on the host's
+     own disk (the disk that filled on 11-14); fine at 10 craft, but watch host free space.
+   To run without it, set `CADENCE_INGRESS_JOURNAL_ENABLED=false` (supported; then a stop during a
+   pass loses that pass's unprocessed bytes).
 4. **Struct changes** (runbook gate, 84aaa0811): if the release adds or removes a struct field, plan
    a node restart, not an in-node reload; in-flight processes hold the old struct.
 
