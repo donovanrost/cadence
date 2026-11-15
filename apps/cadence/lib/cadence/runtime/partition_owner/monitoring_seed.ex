@@ -10,6 +10,16 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeed do
   evaluates its own evidence's scopes, so another craft's entry is never consulted, and an endpoint
   that carries several spacecraft gets all of theirs. The seed is committed through
   `Store.seed/6`, so a replay from genesis reproduces it.
+
+  `semantic_latest_alarm_states` is a projection, written AFTER the semantic commit: the ingress
+  persistence projector persists each processed batch (`Runtime.Persistence`, then
+  `SemanticObservations.persist_many/1`, which writes the transition, the latest state and the
+  episode in one transaction). So a seed taken right after a basis change can be one step stale
+  (api-ops), and both cases are benign:
+  - stale-active (the clear hasn't been projected yet): the first normal sample emits a second
+    `→ normal`, and the episode is already cleared, so it's absorbed;
+  - stale-normal (the raise hasn't been projected yet): today's pre-seed behaviour, so the next
+    violation raises again, and Episodes treats a same-severity raise as a value update.
   """
 
   import Ecto.Query

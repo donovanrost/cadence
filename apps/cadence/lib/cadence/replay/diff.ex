@@ -2,6 +2,11 @@ defmodule Cadence.Replay.Diff do
   @moduledoc """
   Compares replay telemetry outputs against live canonical telemetry for the same
   evidence and point identifiers.
+
+  Expected, not divergence: a replay over a period that included downtime fires every semantic
+  timer tick, but a live partition that started late fired only one late tick and then resumed on
+  the grid (`Runtime.PartitionOwner.SemanticTimerSchedule`, 11-15). Timer-derived outputs for the
+  skipped ticks show up in the replay with no live counterpart (`missing_live`).
   """
 
   alias Cadence.Control.Replay.Store, as: ReplayStore
