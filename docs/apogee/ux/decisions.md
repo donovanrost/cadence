@@ -1572,3 +1572,30 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
     `Plan the rest of 11-16`.
   - Partial approval: "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked." The
     left-out passes are listed under `Show 36`, with spacecraft, station and AOS.
+
+### U62 · Time range track interaction (ApTimeRange's RangeTrack; a user bug via the director) (dashboards builds / lead)
+Used by the telemetry plot, the Timeline, the dashboard range, Book a pass and the kit. dashboards' base behaviour
+stands: a handle moves one end; minimum 1 min and start < end; From/To update live and commit on release; Esc
+cancels; dragging on the empty track draws a new range; handles are focusable with arrow nudges. Decisions:
+- **(a) Dragging the band's body moves the whole window** and keeps its length (cursor `grab` / `grabbing`). The body
+  is the band minus the handles' hit areas. The band is also a tab stop: ←/→ pan it by the step in (c).
+- **(b) Handles:** a 2px `readout` bar the full track height, with a 12×20px grip (two `text-3` hairlines) at the
+  middle.
+  - Hit area: 24px wide with a fine pointer, 44px with `pointer: coarse` (390 and touch). It's centred on the bar,
+    may overhang the track, and never steals the body's area below 16px of band width (handles then sit outside the
+    band's ends).
+  - Hover: the grip in `raised`. Dragging: the bar and grip in `bright`. Focus: §6's ring around the grip. No
+    status colour.
+  - `role="slider"` with `aria-valuetext` "From 11-14 03:10Z" / "To 11-14 04:40Z".
+- **(c) Arrow steps depend on the zoom:** the step is the "nice" unit nearest 1/100 of the visible track span (1, 5,
+  15 or 30 min, 1, 6 or 12 h, 1 d), never under 1 min. Shift (and PageUp/PageDown) is the next nice unit ×10 up.
+  Home/End go to the track's bounds. Dragging snaps to whole minutes.
+- **(d) During a drag**, From/To show the previewed values in `text-2` with a `readout` field border, marking them
+  "pending". A small mono tooltip above the active handle shows its time, which matters at 390, where the fields
+  may be off screen. On release the fields return to normal (committed) and a polite live region says "Range 11-14
+  03:10Z–04:40Z". Esc restores the old values everywhere.
+- **Click without a drag** (under 4px of movement) on the empty track does nothing: it never resets the range.
+- **A live range** (`now−6h`): dragging the end handle back to the track's now-edge keeps the range live. Any other
+  drag, or a body move, makes it absolute, and the picker then shows the absolute range (as a snapshot freezes one,
+  Dashboards Q5).
+- Nothing here needs the user.
