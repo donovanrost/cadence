@@ -321,6 +321,11 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 - **Archive ranges written before c3680ddd9 re-archive their packets once under new ids if replayed** (dev/test data
   only). c3680ddd9 (domain, #71 (d)) makes a journaled packet's id stable across re-batching. It lands with #73's
   restart, restart 2 on 11-14.
+- **Rollback below aa7c64264 (semantic empty-start seed, domain 11-15):** once a partition has a `'seed'` commit
+  (input `{:seed_monitoring, …}`), OLD code can't replay it ("unsupported input"). That only bites if that partition's
+  checkpoint is also lost. Before rolling back past it, check the partition checkpoints are intact (api-ops note C).
+- **Replay.Diff after aa7c64264 shows timer outputs with no live counterpart over downtime:** a live clock now skips
+  to now after downtime (one late tick), a replay clock keeps every tick. Expected, not divergence (api-ops note B).
 - **Deploy identity v2 with a graceful stop (journal sealed), not a kill.** A crash with a persisted-but-unacked batch
   in flight re-persists it at boot under the new digest: one duplicate canonical identity per batch, once.
 
