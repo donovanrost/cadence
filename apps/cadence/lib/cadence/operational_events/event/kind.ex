@@ -57,6 +57,9 @@ defmodule Cadence.OperationalEvents.Event.Kind do
     :source_watermark_changed,
     :source_watermark_observed,
     :source_watermark_retreated,
+    # ux U60 (domain storage-growth part 2): readers first; domain's writer emits them.
+    :source_watermark_settled,
+    :source_watermark_caught_up,
     :source_watermark_unknown,
     :telemetry_backfill_approved,
     :telemetry_backfill_completed,

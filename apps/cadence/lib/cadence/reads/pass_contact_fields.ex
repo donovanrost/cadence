@@ -19,6 +19,7 @@ defmodule Cadence.Reads.PassContactFields do
   alias Cadence.Contacts.{ContactAction, ListenerRefusalAttention, OpenContacts, PassContacts}
   alias Cadence.Contacts.UplinkPasses
   alias Cadence.Control.UplinkReadiness.Groups
+  alias Cadence.Reads.PassTelemetryStored
 
   @terminal [:canceled, :completed, :expired]
 
@@ -43,30 +44,36 @@ defmodule Cadence.Reads.PassContactFields do
 
   @spec detail(binary(), binary(), map(), DateTime.t()) :: map()
   def detail(org, mission, pass, now) do
+    realized = realized_contact_id(org, mission, pass.scheduled_contact_id)
+
     %{
       queued_commands: queued(org, mission, pass, now),
       window_moves: PassContacts.window_moves(org, pass.scheduled_contact_id),
-      second_connections_refused: second_connections(org, mission, pass.scheduled_contact_id)
+      second_connections_refused: second_connections(org, mission, realized),
+      # ux U60: did this pass's data reach the store (domain's settle event).
+      telemetry_stored: PassTelemetryStored.read(org, mission, realized, craft_name(pass))
     }
+  end
+
+  defp realized_contact_id(_org, _mission, nil), do: nil
+
+  defp realized_contact_id(org, mission, scheduled_contact_id) do
+    case OpenContacts.latest_for_scheduled(org, mission, scheduled_contact_id) do
+      nil -> nil
+      contact -> contact.realized_contact_id
+    end
   end
 
   # U50: second connections the pass's listener refused while its own was up (Technical details).
   # nil when the pass has no realized contact or the live count was lost to a restart.
   defp second_connections(_org, _mission, nil), do: nil
 
-  defp second_connections(org, mission, scheduled_contact_id) do
-    case OpenContacts.latest_for_scheduled(org, mission, scheduled_contact_id) do
-      nil ->
-        nil
+  defp second_connections(org, mission, realized_contact_id),
+    do: ListenerRefusalAttention.second_connections_refused(org, mission, realized_contact_id)
 
-      contact ->
-        ListenerRefusalAttention.second_connections_refused(
-          org,
-          mission,
-          contact.realized_contact_id
-        )
-    end
-  end
+  defp craft_name(%{spacecraft: %{name: name}}) when is_binary(name), do: name
+  defp craft_name(%{spacecraft: %{id: id}}) when is_binary(id), do: id
+  defp craft_name(_pass), do: "a spacecraft"
 
   @doc "Which of cancel or end applies now (never both), or nil."
   @spec action(map() | nil, DateTime.t()) :: binary() | nil

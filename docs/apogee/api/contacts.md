@@ -303,6 +303,12 @@ Pass rows (`GET /passes`, `GET /passes/:id`) carry:
   CORRECTED accepted window, after this pass, skipping canceled, phantom and uplink-dropped contacts;
   it is not "the next scheduled_contacts row". Neither action cancels queued requests: they wait
   for the next contact.
+- `telemetry_stored: {through, los, settled_at, text} | null` (ux U60): did this pass's data reach
+  the store, and how close to LOS. From the latest `source_watermark_settled` event on the pass's
+  realized contact: `through` = what's stored through, `los` = the pass's LOS, `settled_at` = when
+  it settled, `text` = "EARENDIL-008 · SVB 03:10Z pass: telemetry stored through 03:19:40Z (LOS
+  03:19:57Z)". `null` without a realized contact or before it settles (and until domain's
+  coalescing writer ships). Detail only.
 - `window_moves: [{at, before {starts_at, ends_at}, after {…}, classification: observed |
   acknowledgment_required, provider_change_id}]`, newest first: the provider's moves of this pass.
 
