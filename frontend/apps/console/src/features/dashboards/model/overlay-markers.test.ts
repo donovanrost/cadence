@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { field, frame, snapshotJson } from "../fixtures.test-support.ts";
+import { contactTitle } from "../chart/chart-events.ts";
 import { overlayMarkers } from "./overlay-markers.ts";
 import { workspaceSnapshot, type ReadyPlacement } from "./snapshot.ts";
 
@@ -177,5 +178,34 @@ describe("overlay frames as chart markers", () => {
       ["c-2", true, null],
       ["c-3", null, null],
     ]);
+  });
+  it("reads 003's ZKgUX as dev stores it: a booking that never started (domain 1b43c321c)", () => {
+    const at = (iso: string) => Date.parse(iso);
+    const p = placementWith([
+      frame(
+        "intervals",
+        [
+          field("starts_at", "time", [at("2026-11-10T03:05:57Z")]),
+          field("ends_at", "time", [at("2026-11-10T03:13:57Z")]),
+          field("kind", "enum", ["realized_contact"]),
+          field("status", "enum", ["stopped"]),
+          field("contact_id", "string", ["scheduled_contact_ZKgUX7v3IM50LiWbGHnL83Ug_run"]),
+          field("station", "string", ["FAI"]),
+          field("started", "boolean", [false]),
+          field("close_reason", "string", ["window_ended"]),
+          field("scheduled_starts_at", "time", [at("2026-11-10T03:05:57Z")]),
+          field("scheduled_ends_at", "time", [at("2026-11-10T03:13:57Z")]),
+        ],
+        "events",
+      ),
+    ]);
+    const [band] = overlayMarkers(p).eventMarkers;
+    if (band?.marker_type !== "contact_interval") throw new Error("expected a contact band");
+    expect([band.started, band.close_reason, (band.ends_at_ms ?? 0) - band.starts_at_ms]).toEqual([
+      false,
+      "window_ended",
+      8 * 60_000,
+    ]);
+    expect(contactTitle(band, false)).toBe("FAI pass · didn't start: its window ended first");
   });
 });
