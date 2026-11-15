@@ -22,15 +22,30 @@ function emptyBoard(type: string) {
 }
 const body = (type: string) => {
   const { placement, context } = emptyBoard(type);
-  return mount(WidgetBody, { props: { placement, context, now: 0, group: "g", chartId: "c" } });
+  // The real chart needs the design tokens (not in jsdom); a stub shows whether it's drawn and how.
+  return mount(WidgetBody, {
+    props: {
+      placement,
+      context,
+      now: Date.parse("2026-11-14T10:00:00Z"),
+      group: "g",
+      chartId: "c",
+    },
+    global: { stubs: { TelemetryChart: true } },
+  });
 };
 
 describe("an empty range (ux, Overlays)", () => {
   it("keeps a time series (bands and marks still draw) and says 'No samples', never why", () => {
-    // The fixture is live (no fixed from/to), so it shows the caption without a frame to draw.
     const w = body("time_series");
     expect(w.text()).toContain("No samples in this range.");
     expect(w.text()).not.toContain("No data in this range.");
+  });
+  it("draws an empty LIVE range as now−window…now with the now-line (the chart's live mode)", () => {
+    const chart = body("time_series").findComponent({ name: "TelemetryChart" });
+    expect(chart.exists()).toBe(true);
+    expect(chart.props("time_mode")).toBe("live");
+    expect(chart.props("time_to")).toBe("2026-11-14T10:00:00.000Z");
   });
   it("keeps the plain message on tiles", () => {
     expect(body("value_tile").text()).toContain("No data in this range.");

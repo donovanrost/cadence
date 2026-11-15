@@ -201,6 +201,9 @@ function plotSignature(model: ChartModel) {
   delete options.limit_markers;
   delete options.event_markers;
   delete options.annotations;
+  // The range only sets the x scale, which setData recomputes; a rolling range mustn't rebuild.
+  delete options.time_from;
+  delete options.time_to;
   return JSON.stringify({
     options,
     axisMode: model.axisMode,

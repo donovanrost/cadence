@@ -51,6 +51,7 @@ const message = computed(() => {
       :context="context"
       :group="group"
       :chart-id="chartId"
+      :now="now"
     />
     <TableWidget
       v-else-if="ready.widget.type === 'data_table' || ready.widget.type === 'status_matrix'"

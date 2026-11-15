@@ -13,6 +13,8 @@ const props = defineProps<{
   context: WorkspaceSnapshot["context"];
   group: string;
   chartId: string;
+  /** The board's clock (ms): rolls an empty live range. */
+  now: number;
 }>();
 
 const options = computed(() => props.placement.widget.options);
@@ -30,10 +32,14 @@ const series = computed(() => {
 /**
  * No samples in range (ux, Overlays): the chart still draws its frame (x axis from the range, the
  * stale hatch, bands and marks) under a caption that never says why, since dropped and never sent
- * look the same. A live range has no fixed from/to to draw, so it gets the caption alone.
+ * look the same. A live range draws now−window…now, rolling with the board's clock, with the
+ * now-line (the chart's own live mode).
  */
 const empty = computed(() => !hasData(props.placement));
-const frameable = computed(() => Boolean(props.context.from && props.context.to));
+const liveEmpty = computed(() => empty.value && props.context.time_mode === "live");
+const frameable = computed(
+  () => liveEmpty.value || Boolean(props.context.from && props.context.to),
+);
 /** Limits and contacts from the placement's overlay frames (ux Dashboards.md 'Overlays'). */
 const overlay = computed(() => overlayMarkers(props.placement));
 /** An unrecognized annotation kind draws as a point, as the chart always did. */
@@ -50,7 +56,15 @@ const annotations = computed(() =>
 // Every refresh delivers a complete snapshot (moving window included). Append mode would wait
 // for a stream heartbeat the console doesn't send yet (plan: live step 3).
 const timeMode = computed(() =>
-  props.context.time_mode === "live" ? "snapshot" : props.context.time_mode,
+  liveEmpty.value
+    ? "live"
+    : props.context.time_mode === "live"
+      ? "snapshot"
+      : props.context.time_mode,
+);
+/** An empty live range's window end; a new value each tick rolls the frame (no rebuild). */
+const timeTo = computed(() =>
+  liveEmpty.value ? new Date(props.now).toISOString() : (props.context.to ?? ""),
 );
 const optional = computed(() => {
   const o = options.value;
@@ -92,7 +106,7 @@ const optional = computed(() => {
       :time_mode="timeMode"
       :time_axis="placement.frames[0]?.time_axis ?? context.time_axis"
       :time_from="context.from ?? ''"
-      :time_to="context.to ?? ''"
+      :time_to="timeTo"
       :data_realm="context.realm"
       :data_view="context.data_view"
       :engine_backed="true"
