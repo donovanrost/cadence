@@ -355,6 +355,25 @@ defmodule CadenceWeb.Router do
     # §11c (B11, api; DECISIONS #79): the mission's applications go to the console's Setup apps.
     get("/missions/:mission_id/applications", LegacyMissionSetupRedirectController, :applications)
 
+    # §11c (B5, api; DECISIONS #79): a spacecraft's readiness, routing and commanding go to its console Setup page.
+    get(
+      "/missions/:mission_id/spacecraft/:spacecraft_id/readiness",
+      LegacyMissionSetupRedirectController,
+      :spacecraft_page
+    )
+
+    get(
+      "/missions/:mission_id/spacecraft/:spacecraft_id/routing",
+      LegacyMissionSetupRedirectController,
+      :spacecraft_page
+    )
+
+    get(
+      "/missions/:mission_id/spacecraft/:spacecraft_id/commanding",
+      LegacyMissionSetupRedirectController,
+      :spacecraft_page
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -399,18 +418,6 @@ defmodule CadenceWeb.Router do
       )
 
       live("/missions/:mission_id/spacecraft/:spacecraft_id/edit", HostPageLive, :edit,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/spacecraft/:spacecraft_id/readiness", HostPageLive, :show,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/spacecraft/:spacecraft_id/routing", HostPageLive, :show,
-        metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/missions/:mission_id/spacecraft/:spacecraft_id/commanding", HostPageLive, :show,
         metadata: %{host_policy: :spacecraft_show}
       )
 
