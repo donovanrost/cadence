@@ -18,8 +18,8 @@ Run before deploying a branch to an environment. Each line names why it exists.
    layer. A contact's stream is deleted 72 h after the contact settles, and only once every byte is
    in the ingress archive (JournalReclaim). The cap `CADENCE_INGRESS_JOURNAL_MAX_BYTES` is ONE
    budget for every link, and a full journal refuses new bytes for ALL of them at once
-   (`ingress_journal_full`, the capacity_exhausted event), so the default 8 GiB fits only a small
-   fleet. Size it:
+   (`ingress_journal_full`, the capacity_exhausted event). The default 8 GiB suits only about 80
+   craft or fewer at the dev simulator's rate (5 passes of 8 min a day). Size it:
    - **Rule:** cap ≈ Σ over downlinks (link byte rate × contact seconds within 72 h) × 1.5, plus the
      largest undrained backlog you expect (an archive outage). Set
      `CADENCE_INGRESS_JOURNAL_MAX_BYTES` to that and give the volume more than the cap.
