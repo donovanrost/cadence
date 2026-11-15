@@ -324,6 +324,11 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 - **Archive ranges written before c3680ddd9 re-archive their packets once under new ids if replayed** (dev/test data
   only). c3680ddd9 (domain, #71 (d)) makes a journaled packet's id stable across re-batching. It lands with #73's
   restart, restart 2 on 11-14.
+- **A rollback target must be approved; approve it before you need it** (director, 11-15). Once the
+  mission-model approval gate is live, a move can only land on an approved, qualified revision,
+  and that includes moving BACK. **Post-move checklist: before closing a rollout, approve the
+  previous revision as the rollback target** (a recorded approval with its comparison report, by an
+  org admin who didn't import it; QA Org Admin 2 when the importer is QA Org Admin).
 - **Rollback below aa7c64264 (semantic empty-start seed, domain 11-15):** once a partition has a `'seed'` commit
   (input `{:seed_monitoring, …}`), OLD code can't replay it ("unsupported input"). That only bites if that partition's
   checkpoint is also lost. Before rolling back past it, check the partition checkpoints are intact (api-ops note C).
