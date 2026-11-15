@@ -19,6 +19,9 @@ const props = defineProps<{
 
 const options = computed(() => props.placement.widget.options);
 const series = computed(() => {
+  // No samples: nothing to parse (a past range's empty frames needn't be parseable; qa's fixed
+  // 11-10 range threw here and drew no frame), but the frame, bands and marks still draw.
+  if (!hasData(props.placement)) return { primary: [], compare: [] };
   const frames = (role: string) => props.placement.frames.filter((f) => f.role === role);
   try {
     return {
@@ -117,7 +120,8 @@ const optional = computed(() => {
       v-if="empty"
       class="pointer-events-none absolute inset-0 m-0 grid place-items-center text-sm text-text-3"
     >
-      No samples in this range.
+      <!-- Backed so it reads over the stale hatch (qa). -->
+      <span class="border border-hairline bg-panel px-2 py-0.5">No samples in this range.</span>
     </p>
   </div>
 </template>
