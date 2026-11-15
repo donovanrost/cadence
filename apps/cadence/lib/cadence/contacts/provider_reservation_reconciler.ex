@@ -10,6 +10,7 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
 
   alias Cadence.Contacts.{
     ProviderClients.Registry,
+    ProviderReservation,
     ProviderReservations,
     ReservationContactRepair
   }
@@ -50,13 +51,14 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
         organization_id,
         mission_id: Keyword.get(opts, :mission_id),
         due_before: due_before,
+        now: now,
         limit: Keyword.get(opts, :limit, 100)
       )
 
     results =
       reservations
       |> Task.async_stream(
-        &reconcile_one(&1, opts),
+        &reconcile_one(&1, Keyword.put(opts, :poll_now, now)),
         max_concurrency: Keyword.get(opts, :max_concurrency, @default_max_concurrency),
         ordered: false,
         timeout: :infinity
@@ -126,6 +128,34 @@ defmodule Cadence.Contacts.ProviderReservationReconciler do
           | {:error, Cadence.Contacts.ProviderReservation.t(), term()}
           | {:error, term()}
   def reconcile_reservation(reservation, opts \\ []) do
+    reservation
+    |> read_and_apply(opts)
+    |> schedule_next_poll(Keyword.get_lazy(opts, :poll_now, &DateTime.utc_now/0))
+  end
+
+  # The next read by the band of the reservation as this read left it (api-ops: after the answer,
+  # so a move into the 30 min window polls at 5 s from this poll; on an error the band too, never
+  # due-now, so a provider outage isn't a hot poll). A lost lock race leaves it to the other
+  # writer, which made it due now.
+  defp schedule_next_poll({:error, _reservation, :provider_reservation_changed} = result, _now),
+    do: result
+
+  defp schedule_next_poll(result, now) do
+    case result do
+      {:ok, %ProviderReservation{} = updated} ->
+        ProviderReservations.schedule_next_poll(updated, now)
+
+      {:error, %ProviderReservation{} = read, _reason} ->
+        ProviderReservations.schedule_next_poll(read, now)
+
+      _no_reservation ->
+        :ok
+    end
+
+    result
+  end
+
+  defp read_and_apply(reservation, opts) do
     with {:ok, provider} <-
            GroundNetworks.fetch_provider_version(
              reservation.organization_id,

@@ -569,6 +569,7 @@ defmodule Cadence.Contacts.ProviderReservations do
   def list_due_for_reconciliation(organization_id, opts)
       when is_binary(organization_id) and is_list(opts) do
     due_before = Keyword.get(opts, :due_before, DateTime.utc_now())
+    now = Keyword.get(opts, :now, DateTime.utc_now())
     limit = Keyword.get(opts, :limit, 100)
 
     ProviderReservationRow
@@ -578,14 +579,84 @@ defmodule Cadence.Contacts.ProviderReservations do
         (row.lifecycle_state in ^@nonterminal_states or
            (row.lifecycle_state == "failed" and
               fragment("?->'value'->>'source'", row.last_error_document) in ^@cadence_side_sources and
-              row.ends_at > ^due_before)) and
-        (is_nil(row.last_reconciled_at) or row.last_reconciled_at <= ^due_before)
+              row.ends_at > ^due_before))
     )
+    |> due_by_schedule(now, due_before)
     |> maybe_filter_mission(Keyword.get(opts, :mission_id))
-    |> order_by([row], asc_nulls_first: row.last_reconciled_at, asc: row.inserted_at)
+    |> order_by([row], asc_nulls_first: row.next_due_at, asc: row.inserted_at)
     |> limit(^limit)
     |> Repo.all()
     |> Enum.map(&ProviderReservationRow.to_domain/1)
+  end
+
+  # Due by its own schedule (next_due_at, by distance to the pass; NULL = now), and not read
+  # within the backoff, so an external write right after a poll doesn't re-read it at once.
+  defp due_by_schedule(query, now, due_before) do
+    where(
+      query,
+      [row],
+      (is_nil(row.next_due_at) or row.next_due_at <= ^now) and
+        (is_nil(row.last_reconciled_at) or row.last_reconciled_at <= ^due_before)
+    )
+  end
+
+  # How long until the reconciler reads a reservation again (domain 11-15, api-ops' review). In
+  # flight (an operator is waiting: requested, cancel sent) it's a state band whatever the
+  # distance; otherwise by distance to the pass, from its window as just updated. Events still
+  # read at once (ProviderEvents), so the bands are the safety net.
+  @state_band_s %{requesting: 10, pending: 10, canceling: 10, unknown: 30}
+
+  @doc false
+  @spec poll_interval_s(ProviderReservation.t(), DateTime.t()) :: pos_integer()
+  def poll_interval_s(%ProviderReservation{} = reservation, %DateTime{} = now) do
+    distance = distance_band_s(reservation, now)
+
+    case Map.fetch(@state_band_s, reservation.lifecycle_state) do
+      {:ok, state_band} -> min(state_band, distance)
+      :error -> distance
+    end
+  end
+
+  defp distance_band_s(%{starts_at: starts_at, ends_at: ends_at}, now)
+       when is_struct(starts_at, DateTime) and is_struct(ends_at, DateTime) do
+    to_aos = DateTime.diff(starts_at, now)
+
+    cond do
+      DateTime.compare(now, ends_at) != :lt -> 30
+      to_aos <= 30 * 60 -> 5
+      to_aos <= 2 * 3_600 -> 30
+      to_aos <= 24 * 3_600 -> 60
+      true -> 600
+    end
+  end
+
+  defp distance_band_s(_no_window, _now), do: 60
+
+  @doc """
+  Sets when the reconciler reads the reservation next: `now` + its band (`poll_interval_s/2`). A
+  write of `next_due_at` alone, so it stays HOT. Nothing for a reservation the reconciler no longer
+  polls (terminal, or a provisional failure past its LOS).
+  """
+  @spec schedule_next_poll(ProviderReservation.t(), DateTime.t()) :: :ok
+  def schedule_next_poll(%ProviderReservation{} = reservation, %DateTime{} = now) do
+    if polled?(reservation, now) do
+      next_due_at = DateTime.add(now, poll_interval_s(reservation, now), :second)
+
+      from(row in ProviderReservationRow,
+        where:
+          row.organization_id == ^reservation.organization_id and
+            row.mission_id == ^reservation.mission_id and
+            row.provider_reservation_id == ^reservation.provider_reservation_id
+      )
+      |> Repo.update_all(set: [next_due_at: next_due_at])
+    end
+
+    :ok
+  end
+
+  defp polled?(%ProviderReservation{lifecycle_state: state} = reservation, now) do
+    Atom.to_string(state) in @nonterminal_states or
+      (cadence_side_failure?(reservation) and DateTime.compare(reservation.ends_at, now) == :gt)
   end
 
   # Tests only (api-ops' map): records an answer WITHOUT its contact side effects. Production

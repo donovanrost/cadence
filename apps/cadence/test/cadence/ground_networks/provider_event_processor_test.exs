@@ -67,6 +67,32 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
     assert %DateTime{} = reconciled.last_reconciled_at
   end
 
+  test "a pushed event reads the provider at once, whatever the poll band (lead 11-15)",
+       context do
+    now = ~U[2026-07-15 12:00:00.000000Z]
+
+    # The reconciler won't read this booking for another 10 min.
+    {1, _} =
+      from(row in Cadence.Control.Contacts.Store.ProviderReservationRow,
+        where: row.provider_reservation_id == ^context.reservation.provider_reservation_id
+      )
+      |> Repo.update_all(set: [next_due_at: DateTime.add(now, 600, :second)])
+
+    assert {:ok, _entry} = ingest_contact_event(context, "event-not-due", now)
+
+    assert {:ok, %{claimed: 1, processed: 1}} =
+             ProviderEventProcessor.process_once(processor_opts(context, now))
+
+    assert {:ok, read} =
+             ProviderReservations.fetch(
+               context.organization_id,
+               context.mission_id,
+               context.reservation.provider_reservation_id
+             )
+
+    assert read.attempt_count == context.reservation.attempt_count + 1
+  end
+
   test "restart after domain commit reclaims processing and converges", context do
     now = ~U[2026-07-15 12:00:00.000000Z]
     assert {:ok, entry} = ingest_contact_event(context, "event-domain-restart", now)

@@ -56,6 +56,9 @@ defmodule Cadence.Control.Contacts.Store.ProviderReservationRow do
     field(:operator_review_document, :map, default: %{})
     field(:attempt_count, :integer, default: 0)
     field(:last_reconciled_at, :utc_datetime_usec)
+    # When the reconciler reads it next (domain 11-15): row-only, not on the domain struct, so a
+    # poll's scheduling write never trips the stale check in ProviderReservations.transition.
+    field(:next_due_at, :utc_datetime_usec)
     field(:metadata, :map, default: %{})
 
     field(:resolution_evidence, :map, default: %{})
@@ -170,6 +173,10 @@ defmodule Cadence.Control.Contacts.Store.ProviderReservationRow do
     ])
     |> validate_number(:provider_revision, greater_than: 0)
     |> validate_number(:attempt_count, greater_than_or_equal_to: 0)
+    # Any write makes it due now: an operator action, a cancel, an accepted window move. The
+    # reconciler's own poll then schedules the next read from the band (ProviderReservations.
+    # schedule_next_poll/3), so its writes never pin the row at due-now (api-ops' condition A).
+    |> put_change(:next_due_at, nil)
     |> put_accepted_window()
     |> validate_time_range()
     |> unique_constraint([:mission_id, :provider_contact_ref],
