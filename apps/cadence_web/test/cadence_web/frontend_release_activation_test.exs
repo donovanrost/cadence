@@ -743,17 +743,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     no_history_catalog_response = get(member_conn, catalog_path(mission.mission_id))
 
-    assert {:ok, management_view, _html} =
-             Phoenix.LiveViewTest.live(
-               member_conn,
-               "/missions/#{mission.mission_id}/applications"
-             )
-
-    assert is_map(
-             LiveVue.Test.get_vue(management_view, id: "application-shell").props["snapshot"][
-               "presentation"
-             ]
-           )
+    # §11c B11: the legacy application management page redirects to the console's Setup apps.
 
     query_response =
       post_host_bridge(

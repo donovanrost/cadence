@@ -10,28 +10,15 @@ defmodule CadenceWeb.HostPageLive do
 
   alias CadenceWeb.{
     ActivationApprovals,
-    ApplicationManagement,
     CatalogPage,
-    CatalogUpload,
-    CommunicationsSetupPage,
     HostContext,
     HostPageAuthorization,
-    MissionModulePage,
-    MissionPage,
     OpsLandingPage,
     OpsTimelinePage,
-    SpacecraftModulePage,
     SpacecraftPage
   }
 
   alias Plug.Conn.{InvalidQueryError, Query}
-
-  @external_resource Path.expand("../../../../../frontend/apps/host/src/routes.json", __DIR__)
-  @management_paths @external_resource
-                    |> File.read!()
-                    |> Jason.decode!()
-                    |> Enum.filter(&(&1["kind"] == "application_management"))
-                    |> Enum.map(& &1["path"])
 
   @impl true
   def mount(_params, session, socket) do
@@ -449,21 +436,6 @@ defmodule CadenceWeb.HostPageLive do
     end
   end
 
-  def handle_event("host:manage", %{"path" => path, "event" => event} = params, socket)
-      when event in ["install", "disable", "uninstall"] do
-    # Bind every mutation to its explicit resource path and reauthorize it. A stale
-    # page can never accidentally mutate whichever mission was visited afterwards.
-    with true <- path == socket.assigns.host_path,
-         {:ok, %{route: route}} when route in @management_paths <- resolve_path(path),
-         {:ok, socket} <- prepare_context(socket, path) do
-      {:noreply, socket} = ApplicationManagement.handle_event(event, params, socket)
-      {:reply, %{ok: true, snapshot: snapshot(socket.assigns)}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _invalid -> {:reply, %{ok: false}, socket}
-    end
-  end
-
   def handle_event("host:catalog", %{"path" => path, "event" => "reimport"}, socket) do
     with true <- path == socket.assigns.host_path,
          {:ok, %{route: "/missions/:mission_id/catalog/artifacts/:artifact_id", params: params}} <-
@@ -476,18 +448,6 @@ defmodule CadenceWeb.HostPageLive do
              params["artifact_id"]
            ) do
       {:reply, %{ok: true, snapshot: %{href: result["href"]}}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _invalid -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(event, %{"catalog_upload" => %{"path" => path}} = params, socket)
-      when event in ["catalog:upload:validate", "catalog:upload:save", "catalog:upload:cancel"] do
-    with true <- CatalogUpload.matches?(socket, params),
-         {:ok, socket} <- prepare_context(socket, path),
-         true <- CatalogUpload.matches?(socket, params) do
-      CatalogUpload.handle_event(event, params, socket)
     else
       {:halt, socket} -> {:noreply, socket}
       _invalid -> {:reply, %{ok: false}, socket}
@@ -565,24 +525,6 @@ defmodule CadenceWeb.HostPageLive do
   end
 
   def handle_event(
-        "host:mission-page",
-        %{"event" => event, "input" => input, "path" => path} = params,
-        socket
-      )
-      when event in ["validate", "save"] do
-    with true <- CommunicationsSetupPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CommunicationsSetupPage.matches?(socket, params) do
-      {result, socket} = CommunicationsSetupPage.action(socket, event, input)
-      {:reply, %{ok: true, snapshot: result}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event(
         "host:spacecraft-configuration",
         %{"path" => path, "event" => event, "input" => input},
         socket
@@ -609,31 +551,6 @@ defmodule CadenceWeb.HostPageLive do
           {:noreply, socket}
 
         :error ->
-          {:reply, %{ok: false}, socket}
-      end
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
-  def handle_event("host:settings", %{"path" => path, "token" => token, "input" => input}, socket) do
-    with true <- SettingsPage.matches?(socket, path, token),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- SettingsPage.matches?(socket, path, token) do
-      result =
-        SettingsPage.action(socket.assigns.current_scope, socket.assigns.settings_session, input)
-
-      case prepare_context(socket, path) do
-        {:ok, socket} ->
-          {:reply, %{ok: true, snapshot: %{result: result, page: snapshot(socket.assigns)}},
-           socket}
-
-        {:halt, socket} ->
-          {:noreply, socket}
-
-        _ ->
           {:reply, %{ok: false}, socket}
       end
     else
@@ -678,20 +595,6 @@ defmodule CadenceWeb.HostPageLive do
   def handle_info({:command_workspace_reconcile, token}, socket),
     do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.reconcile(socket, token)}
 
-  def handle_info(:catalog_upload_drain, socket) do
-    case socket.assigns[:catalog_upload_session] do
-      %{phase: :waiting, path: path} ->
-        case prepare_context(socket, path) do
-          {:ok, socket} -> {:noreply, socket}
-          {:halt, socket} -> {:noreply, socket}
-          :error -> {:noreply, socket}
-        end
-
-      _ ->
-        {:noreply, socket}
-    end
-  end
-
   # L21: the notifications page is gone (DECISIONS #79); these broadcasts refresh nothing here.
   def handle_info({event, _record}, socket)
       when event in [:notification_created, :notification_updated, :invitation_accepted],
@@ -715,10 +618,7 @@ defmodule CadenceWeb.HostPageLive do
             ),
           ops_landing_page: OpsLandingPage.load(socket.assigns.current_scope, info),
           timeline_page: OpsTimelinePage.load(socket.assigns.current_scope, info),
-          mission_page: MissionPage.load(socket.assigns.current_scope, info),
           spacecraft_page: SpacecraftPage.load(socket.assigns.current_scope, info),
-          spacecraft_module_page: SpacecraftModulePage.load(socket.assigns.current_scope, info),
-          mission_module_page: MissionModulePage.load(socket.assigns.current_scope, info),
           spacecraft_identity_session:
             SpacecraftPage.identity_session(
               socket.assigns[:spacecraft_identity_session],
@@ -729,8 +629,6 @@ defmodule CadenceWeb.HostPageLive do
           catalog: CatalogPage.load(socket.assigns.current_scope, info)
         )
         |> SpacecraftConfigurationPage.subscribe(info)
-        |> CatalogUpload.prepare(info, path)
-        |> CommunicationsSetupPage.prepare(info, path)
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)
         |> CadenceWeb.OpsCommandPage.prepare(info, path)
         |> CadenceWeb.OpsCommandHistoryPage.prepare(info, path)
@@ -745,13 +643,6 @@ defmodule CadenceWeb.HostPageLive do
         |> CadenceWeb.OpsPlanReviewPage.prepare(info, path)
         |> CadenceWeb.OpsContactSchedulingPage.prepare(info, path)
         |> CadenceWeb.OpsHistoricalWorkflowsPage.prepare(info, path)
-
-      socket =
-        if info.route in @management_paths do
-          ApplicationManagement.load(socket)
-        else
-          assign(socket, presentation: nil, management_error: nil, application_host_context: nil)
-        end
 
       socket =
         if socket.assigns[:ops_context_active?] do
@@ -799,50 +690,22 @@ defmodule CadenceWeb.HostPageLive do
         assigns
         |> HostContext.from_assigns()
         |> Map.drop([:nav_context, :nav_item, :ops_nav_item, :active_dashboard_id]),
-      presentation: assigns[:presentation],
-      application_management: ApplicationManagement.snapshot(assigns),
       activation_approvals: ActivationApprovals.presentation(assigns),
-      settings_page: assigns[:settings_page],
-      catalog: CatalogUpload.presentation(assigns),
+      catalog: assigns[:catalog],
       timeline_page: assigns[:timeline_page],
       ops_landing_page: assigns[:ops_landing_page],
-      mission_page: MissionPage.presentation(assigns),
       spacecraft_page: SpacecraftPage.presentation(assigns),
-      spacecraft_module_page: assigns[:spacecraft_module_page],
-      mission_module_page: assigns[:mission_module_page],
-      ops_page: assigns[:ops_page],
-      error: assigns[:management_error]
+      ops_page: assigns[:ops_page]
     }
   end
 
   @impl true
   def render(assigns) do
-    assigns =
-      assign(assigns,
-        snapshot: snapshot(assigns),
-        catalog_upload_form: CatalogUpload.form(assigns)
-      )
+    assigns = assign(assigns, snapshot: snapshot(assigns))
 
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue id="application-shell" v-component="BrowserHost" snapshot={@snapshot} v-ssr={false} />
-      <.form
-        :if={@catalog_upload_form}
-        for={@catalog_upload_form}
-        id="catalog-native-upload-form"
-        class="hidden"
-        data-catalog-path={@catalog_upload_session.path}
-        data-catalog-token={@catalog_upload_session.token}
-        phx-change="catalog:upload:validate"
-        phx-submit="catalog:upload:save"
-      >
-        <input id={@catalog_upload_form[:path].id} type="hidden" name={@catalog_upload_form[:path].name} value={@catalog_upload_form[:path].value} />
-        <input id={@catalog_upload_form[:token].id} type="hidden" name={@catalog_upload_form[:token].name} value={@catalog_upload_form[:token].value} />
-        <input id={@catalog_upload_form[:name].id} type="hidden" name={@catalog_upload_form[:name].name} value={@catalog_upload_form[:name].value} />
-        <input id={@catalog_upload_form[:revision_label].id} type="hidden" name={@catalog_upload_form[:revision_label].name} value={@catalog_upload_form[:revision_label].value} />
-        <input id={@catalog_upload_form[:revision_notes].id} type="hidden" name={@catalog_upload_form[:revision_notes].name} value={@catalog_upload_form[:revision_notes].value} />
-        <.live_file_input upload={@uploads.catalog_artifact} />
-      </.form>
     </Layouts.app>
     """
   end

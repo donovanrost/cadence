@@ -2,7 +2,6 @@ defmodule CadenceWeb.CatalogPageTest do
   use CadenceWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
-  alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Catalog
   alias CadenceWeb.TestFixtures
 
@@ -16,64 +15,54 @@ defmodule CadenceWeb.CatalogPageTest do
     {:ok, conn: TestFixtures.member_conn(user), mission: mission}
   end
 
-  test "all six core Catalog pages load without installations or releases and satisfy real consumer validators",
+  # §11c B: the catalog index, database, revision and import pages redirect to the console's
+  # Setup catalog; the artifact page (L18) is the host's last Catalog page.
+  test "the artifact page loads without installations or releases and satisfies its consumer validator",
        %{conn: conn, mission: mission} do
-    base = "/missions/#{mission.mission_id}/catalog"
-    {:ok, view, _} = live(conn, base)
-    assert has_element?(view, "#application-shell")
-    assert_page(view, "catalog_index", "databases", "assertDatabaseIndex")
-
-    render_hook(view, "host:context", %{"path" => base <> "/new"})
-    data = assert_page(view, "catalog_database_new", "databases", "assertDatabaseNew")
-    assert data["page"]["cancel"]["href"] == base
-
     database = TestFixtures.persist_catalog_database!(mission)
     run = TestFixtures.start_catalog_revision_import!(database)
     run = TestFixtures.complete_catalog_import_run!(run)
-    revision = TestFixtures.fetch_catalog_revision_for_run!(run)
+    path = "/missions/#{mission.mission_id}/catalog/artifacts/#{run.artifact_id}"
+    {:ok, view, _} = live(conn, path)
+    assert has_element?(view, "#application-shell")
+    assert_page(view, "catalog_artifact_show", "artifacts", "assertArtifact")
 
-    pages = [
-      {base, "catalog_index", "databases", "assertDatabaseIndex"},
-      {base <> "/databases/#{database.catalog_database_id}", "catalog_database_show", "databases",
-       "assertDatabaseShow"},
-      {base <> "/revisions/#{revision.catalog_revision_id}", "catalog_revision_show", "revisions",
-       "assertRevision"},
-      {base <> "/artifacts/#{run.artifact_id}", "catalog_artifact_show", "artifacts",
-       "assertArtifact"},
-      {base <> "/imports/#{run.import_run_id}", "catalog_import_run_show", "imports",
-       "assertImportRun"}
-    ]
-
-    for {path, page, feature, validator} <- pages do
-      render_hook(view, "host:context", %{"path" => path})
-      assert_page(view, page, feature, validator)
-    end
-
-    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}/settings"})
+    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}/ops"})
     assert snapshot(view)["catalog"] == nil
   end
 
-  test "matched path identity defeats query overrides and cross-mission detail reads", %{
+  test "matched path identity defeats query overrides and cross-mission artifact reads", %{
     conn: conn,
     mission: mission
   } do
     other_org = TestFixtures.persist_org!()
     other_mission = TestFixtures.persist_mission!(other_org)
-    other = TestFixtures.persist_catalog_database!(other_mission, name: "Private database")
-    base = "/missions/#{mission.mission_id}/catalog"
-    path = base <> "/databases/#{other.catalog_database_id}"
-    {:ok, view, _} = live(conn, path <> "?mission_id=#{other_mission.mission_id}")
+    other = TestFixtures.persist_catalog_artifact!(other_mission)
+    base = "/missions/#{mission.mission_id}/catalog/artifacts"
+
+    {:ok, view, _} =
+      live(conn, base <> "/#{other.artifact_id}?mission_id=#{other_mission.mission_id}")
+
     assert %{"status" => "unavailable"} = snapshot(view)["catalog"]
     refute Map.has_key?(snapshot(view)["catalog"], "data")
 
-    own = TestFixtures.persist_catalog_database!(mission)
+    own = TestFixtures.persist_catalog_artifact!(mission)
 
-    path =
-      base <>
-        "/databases/#{own.catalog_database_id}?catalog_database_id=#{other.catalog_database_id}"
+    render_hook(view, "host:context", %{
+      "path" => base <> "/#{own.artifact_id}?artifact_id=#{other.artifact_id}"
+    })
 
-    render_hook(view, "host:context", %{"path" => path})
-    assert snapshot(view)["catalog"]["data"]["database"]["id"] == own.catalog_database_id
+    href =
+      get_in(snapshot(view), [
+        "catalog",
+        "data",
+        "presentation",
+        "artifact_show",
+        "artifact",
+        "download_href"
+      ])
+
+    assert href == base <> "/#{own.artifact_id}/download"
   end
 
   test "reimport is bound to the displayed artifact path, not input identifiers", %{
@@ -94,81 +83,14 @@ defmodule CadenceWeb.CatalogPageTest do
     assert [run] = Catalog.list_import_runs(mission.organization_id, mission.mission_id)
     assert run.artifact_id == artifact.artifact_id
 
-    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}/settings"})
+    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}/ops"})
     render_hook(view, "host:catalog", %{"event" => "reimport", "path" => path})
     assert length(Catalog.list_import_runs(mission.organization_id, mission.mission_id)) == 1
   end
 
-  test "catalog usage pages refresh on spacecraft saves without another navigation", %{
-    conn: conn,
-    mission: mission
-  } do
-    craft = TestFixtures.persist_spacecraft!(mission)
-
-    revision =
-      TelemetryDecomFixtures.persist_imported_revision!(
-        mission.organization_id,
-        mission.mission_id
-      )
-
-    {:ok, database} =
-      Catalog.fetch_database(
-        mission.organization_id,
-        mission.mission_id,
-        revision.catalog_database_id
-      )
-
-    base = "/missions/#{mission.mission_id}/catalog"
-
-    paths = [
-      base,
-      base <> "/databases/#{database.catalog_database_id}",
-      base <> "/revisions/#{revision.catalog_revision_id}"
-    ]
-
-    views =
-      Enum.map(paths, fn path ->
-        {:ok, view, _} = live(conn, path)
-        view
-      end)
-
-    spacecraft_path = "/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}"
-    {:ok, editor, _} = live(conn, spacecraft_path)
-    data = snapshot(editor)["spacecraft_page"]["data"]
-
-    render_hook(editor, "host:spacecraft-configuration", %{
-      "path" => spacecraft_path,
-      "event" => "save",
-      "input" => %{
-        "token" => data["token"],
-        "document" =>
-          Map.put(data["document"], "catalog_revision_id", revision.catalog_revision_id)
-      }
-    })
-
-    assert snapshot(editor)["spacecraft_page"]["data"]["saved_version"] == 1
-
-    # Sandbox writes stay in an outer transaction, so production post-commit
-    # invalidations are suppressed. Deliver that notification to the subscribers.
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
-      "read-updates:spacecraft_configuration_changed:#{mission.organization_id}:#{mission.mission_id}",
-      {:spacecraft_configuration_changed, mission.organization_id, mission.mission_id}
-    )
-
-    [index, detail, revision_view] = Enum.map(views, &snapshot(&1)["catalog"]["data"])
-
-    assert hd(index["presentation"]["card"]["rows"])["spacecraft_usage"] == %{
-             "active_count" => 0,
-             "saved_count" => 1
-           }
-
-    assert detail["database"]["spacecraft_usage"] == %{"active_count" => 0, "saved_count" => 1}
-    assert [%{"saved" => true, "active" => false}] = revision_view["spacecraft_usage"]["usage"]
-  end
-
   test "refresh reauthorizes a revoked user session", %{conn: conn, mission: mission} do
-    path = "/missions/#{mission.mission_id}/catalog"
+    artifact = TestFixtures.persist_catalog_artifact!(mission)
+    path = "/missions/#{mission.mission_id}/catalog/artifacts/#{artifact.artifact_id}"
     {:ok, view, _} = live(conn, path)
     :ok = Cadence.Auth.revoke_user_session(get_session(conn, :user_session_token))
     render_hook(view, "host:context", %{"path" => path})

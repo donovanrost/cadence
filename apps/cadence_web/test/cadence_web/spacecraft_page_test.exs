@@ -22,154 +22,9 @@ defmodule CadenceWeb.SpacecraftPageTest do
      path: "/missions/#{mission.mission_id}/spacecraft"}
   end
 
-  test "empty directory and profiles load without frontend installations and satisfy consumer contracts",
-       %{conn: conn, path: path} do
-    {:ok, view, _} = live(conn, path)
-
-    data =
-      assert_page(view, "spacecraft_list", "spacecraft-directory", "assertSpacecraftDirectory")
-
-    assert data["presentation"]["roster"]["fleet_empty"]
-    assert data["presentation"]["profiles"]["empty"]
-    render_hook(view, "host:context", %{"path" => path <> "/profiles"})
-    profiles = assert_page(view, "profile_list", "spacecraft-profiles", "assertProfileDirectory")
-    assert profiles["presentation"]["card"] == nil
-    assert profiles["presentation"]["empty_state"]["title"] == "No Spacecraft Profiles"
-  end
-
-  test "directory filters, sort, search, pagination and drift counts describe actual spacecraft",
-       %{conn: conn, path: path, mission: mission} do
-    profile = TestFixtures.persist_spacecraft_profile!(mission)
-
-    for {name, scid} <- [{"Zulu", 42}, {"Alpha", 43}] do
-      TestFixtures.persist_spacecraft!(mission,
-        display_name: name,
-        scid: scid,
-        spacecraft_type_id: profile.spacecraft_type_id,
-        spacecraft_type_version: 1
-      )
-    end
-
-    missing = TestFixtures.persist_spacecraft!(mission, display_name: "Unconfigured")
-
-    assert {:ok, _} =
-             SpacecraftTypeStore.persist_spacecraft_type(mission.organization_id, %{
-               profile
-               | version: 2
-             })
-
-    {:ok, view, _} = live(conn, path)
-
-    data =
-      assert_page(view, "spacecraft_list", "spacecraft-directory", "assertSpacecraftDirectory")
-
-    assert Enum.find(
-             data["presentation"]["summary_tiles"],
-             &(&1["id"] == "spacecraft-tile-drift")
-           )["value"] == 2
-
-    for filter <- ["missing_scid", "missing_profile"] do
-      render_hook(view, "host:context", %{"path" => path <> "?filter=" <> filter})
-      roster = assert_directory(view)
-      assert [%{"id" => id}] = roster["rows"]
-      assert id == "spacecraft-#{missing.spacecraft_id}"
-    end
-
-    render_hook(view, "host:context", %{
-      "path" => path <> "?filter=profile_drift&sort=display_name&dir=asc&pageSize=1&page=2"
-    })
-
-    roster = assert_directory(view)
-    assert roster["total_count"] == 2
-    assert roster["page_size"] == 1
-    assert roster["page"] == 2
-    assert roster["sort_by"] == "display_name"
-    assert [%{"display_name" => "Zulu"}] = roster["rows"]
-
-    render_hook(view, "host:context", %{
-      "path" => path <> "?q=Alpha&sort=display_name&dir=desc&page=999"
-    })
-
-    roster = assert_directory(view)
-    assert roster["search"] == "Alpha"
-    assert roster["sort_dir"] == "desc"
-    assert roster["page"] == 1
-    assert [%{"display_name" => "Alpha"}] = roster["rows"]
-    render_hook(view, "host:context", %{"path" => path <> "?q=nomatch"})
-    roster = assert_directory(view)
-    refute roster["fleet_empty"]
-    assert roster["filtered_empty"]
-  end
-
-  test "profile detail supplies complete labels and immutable history, with path-owned identity",
-       %{conn: conn, mission: mission, org: org, path: path} do
-    profile = TestFixtures.persist_spacecraft_profile!(mission)
-
-    assert {:ok, _} =
-             SpacecraftTypeStore.persist_spacecraft_type(org.organization_id, %{
-               profile
-               | version: 2,
-                 display_name: "Latest Profile"
-             })
-
-    other = TestFixtures.persist_mission!(org)
-    other_profile = TestFixtures.persist_spacecraft_profile!(other)
-    {:ok, view, _} = live(conn, path <> "/profiles")
-    directory = assert_page(view, "profile_list", "spacecraft-profiles", "assertProfileDirectory")
-    assert [%{"display_name" => "Latest Profile"}] = directory["presentation"]["card"]["rows"]
-    detail_path = path <> "/profiles/" <> profile.spacecraft_type_id
-
-    render_hook(view, "host:context", %{
-      "path" =>
-        detail_path <>
-          "?mission_id=#{other.mission_id}&profile_id=#{other_profile.spacecraft_type_id}"
-    })
-
-    detail = assert_page(view, "profile_show", "spacecraft-profiles", "assertProfileDetail")
-    assert detail["profile"]["profile_id"] == profile.spacecraft_type_id
-    assert detail["profile"]["version"] == "v2"
-    assert Enum.sort(Enum.map(detail["versions"], & &1["version"])) == ["v1", "v2"]
-    assert length(detail["navigation"]["breadcrumbs"]) == 4
-
-    render_hook(view, "host:context", %{
-      "path" => path <> "/profiles/" <> other_profile.spacecraft_type_id
-    })
-
-    assert %{"status" => "unavailable"} = snapshot(view)
-    refute Map.has_key?(snapshot(view), "data")
-    assert has_element?(view, "#application-shell")
-  end
-
-  test "malformed queries are contained and a valid refresh recovers", %{conn: conn, path: path} do
-    {:ok, view, _} = live(conn, path)
-
-    for query <- ["q[nested]=bad", "filter=unknown", "q=" <> String.duplicate("x", 256)] do
-      render_hook(view, "host:context", %{"path" => path <> "?" <> query})
-      assert %{"status" => "unavailable"} = snapshot(view)
-    end
-
-    render_hook(view, "host:context", %{"path" => path <> "?pageSize=9999"})
-    assert assert_directory(view)["page_size"] == 100
-  end
-
-  test "cross-organization reads and revoked-session refreshes cannot expose spacecraft", %{
-    conn: conn,
-    path: path
-  } do
-    other_org = TestFixtures.persist_org!()
-    other_mission = TestFixtures.persist_mission!(other_org)
-    TestFixtures.persist_spacecraft!(other_mission)
-    {:ok, view, _} = live(conn, path)
-
-    assert {:error, {:redirect, _}} =
-             live(conn, "/missions/#{other_mission.mission_id}/spacecraft")
-
-    :ok = Cadence.Auth.revoke_user_session(get_session(conn, :user_session_token))
-    render_hook(view, "host:context", %{"path" => path <> "/profiles"})
-    assert_redirect(view, "/sign-in")
-  end
-
-  test "overview and readiness use the exact pinned profile and satisfy real consumer contracts",
+  # §11c B3-B5: the spacecraft directory, profiles and readiness pages redirect to the console's
+  # Setup; the host keeps the spacecraft page itself (with identity and edit, L17/L22).
+  test "the spacecraft page uses the exact pinned profile and satisfies its consumer contract",
        %{conn: conn, mission: mission, path: path} do
     profile =
       TestFixtures.persist_spacecraft_profile!(mission, display_name: "Pinned Flight Profile")
@@ -201,37 +56,9 @@ defmodule CadenceWeb.SpacecraftPageTest do
     assert overview["document"]["protocol"]["downlink"] == to_string(profile.downlink_protocol)
     assert overview["scid"] == 0
     assert overview["active"] == nil
-    render_hook(view, "host:context", %{"path" => base <> "/readiness"})
-
-    data =
-      assert_page(
-        view,
-        "spacecraft_readiness",
-        "spacecraft-readiness",
-        "assertSpacecraftReadiness"
-      )
-
-    assert data["context"] == %{
-             "organizationId" => mission.organization_id,
-             "missionId" => mission.mission_id,
-             "spacecraftId" => craft.spacecraft_id
-           }
-
-    assert Enum.map(data["panels"], & &1["title"]) == ["Identity", "Profile", "Applications"]
-    assert hd(data["panels"])["status"]["tone"] == "ready"
-
-    assert Enum.map(data["contributions"], & &1["id"]) == [
-             "comms.routing",
-             "application.telemetry_decom"
-           ]
-
-    assert hd(data["contributions"])["status"]["tone"] == "info"
-    refute data["page"]["status"]["tone"] == "ready"
-    render_hook(view, "host:context", %{"path" => base})
-    assert_page(view, "spacecraft_configuration", "spacecraft-configuration", "readConfiguration")
   end
 
-  test "unbound and missing pinned profiles remain distinguishable without losing core pages",
+  test "unbound and missing pinned profiles still load the spacecraft page",
        %{conn: conn, mission: mission, path: path} do
     unbound = TestFixtures.persist_spacecraft!(mission)
 
@@ -241,7 +68,7 @@ defmodule CadenceWeb.SpacecraftPageTest do
         spacecraft_type_version: 1
       )
 
-    for {craft, tone} <- [{unbound, "attention"}, {missing, "blocked"}] do
+    for craft <- [unbound, missing] do
       base = path <> "/" <> craft.spacecraft_id
       {:ok, view, _} = live(conn, base)
 
@@ -255,20 +82,6 @@ defmodule CadenceWeb.SpacecraftPageTest do
 
       assert data["document"]["protocol"] == nil
       assert data["links"]["identity"] == base <> "/identity"
-      render_hook(view, "host:context", %{"path" => base <> "/readiness"})
-
-      readiness =
-        assert_page(
-          view,
-          "spacecraft_readiness",
-          "spacecraft-readiness",
-          "assertSpacecraftReadiness"
-        )
-
-      profile_panel =
-        Enum.find(readiness["panels"], &(&1["id"] == "spacecraft-readiness-profile"))
-
-      assert profile_panel["status"]["tone"] == tone
     end
   end
 
@@ -279,29 +92,17 @@ defmodule CadenceWeb.SpacecraftPageTest do
     other_craft = TestFixtures.persist_spacecraft!(other_mission)
     {:ok, view, _} = live(conn, path <> "/" <> craft.spacecraft_id)
 
-    render_hook(view, "host:context", %{
-      "path" => path <> "/" <> other_craft.spacecraft_id <> "/readiness"
-    })
-
+    render_hook(view, "host:context", %{"path" => path <> "/" <> other_craft.spacecraft_id})
     assert_redirect(view, path)
     {:ok, view, _} = live(conn, path <> "/" <> craft.spacecraft_id)
     :ok = Cadence.Auth.revoke_user_session(get_session(conn, :user_session_token))
 
-    render_hook(view, "host:context", %{
-      "path" => path <> "/" <> craft.spacecraft_id <> "/readiness"
-    })
-
+    render_hook(view, "host:context", %{"path" => path <> "/" <> craft.spacecraft_id})
     assert_redirect(view, "/sign-in")
   end
 
   defp snapshot(view),
     do: LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["spacecraft_page"]
-
-  defp assert_directory(view),
-    do:
-      assert_page(view, "spacecraft_list", "spacecraft-directory", "assertSpacecraftDirectory")[
-        "presentation"
-      ]["roster"]
 
   defp assert_page(view, page, feature, validator) do
     assert has_element?(view, "#application-shell")

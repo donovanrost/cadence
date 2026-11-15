@@ -86,7 +86,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     end
   end
 
-  test "the generic compatibility shell is protected and the Comms LiveView remains the fallback",
+  test "the generic compatibility shell is protected and its Comms fallback reaches the console",
        %{
          conn: conn
        } do
@@ -122,10 +122,11 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     refute federated_html =~ "plugin-host.css"
     assert federated_html =~ ~s(href="/assets/app.css")
 
-    {:ok, view, _html} =
-      live(member_conn, "/missions/#{mission.mission_id}/comms")
+    # §11c B7: the fallback href is the legacy Comms URL, which now redirects to the console.
+    assert {:error, {:redirect, %{to: "/console/" <> fallback}}} =
+             live(member_conn, "/missions/#{mission.mission_id}/comms")
 
-    assert has_element?(view, "#application-shell")
+    assert String.ends_with?(fallback, "/setup/comms")
   end
 
   test "an organization-scope catalog says no applications are installed at that level" do
