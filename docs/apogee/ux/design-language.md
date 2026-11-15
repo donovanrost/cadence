@@ -199,6 +199,15 @@ themselves.
   Every icon-only control has `aria-label`. Status marks carry `aria-hidden` and the word next to
   them carries meaning; where the word is absent (matrix, plot dots) supply an `aria-label` or a
   text alternative.
+- **Action menus** (`⋯`, account menu; one kit pattern, 11-15). Use the WAI-ARIA menu button:
+  - The trigger has `aria-haspopup="menu"` and `aria-expanded`. Opening it focuses the first item.
+  - ↑/↓ cycle through the items, Home/End jump, and Enter or Space activates.
+  - Esc closes the menu and returns focus to the trigger. Tab closes it and lets focus move on.
+  - `role="menu"` / `menuitem`.
+  - **Disabled items stay focusable** (`aria-disabled`, never skipped), with the reason as their description, so the
+    reason ("It's already first.") is reachable. Activating one does nothing.
+  - A list of links that only opens on hover or Tab is a disclosure instead: no `aria-haspopup`, keep
+    `aria-expanded`.
 - Charts and the constellation are `role="img"` with a sentence `aria-label` that states the
   finding ("crossing the 24 V red limit in the last orbit"), not "chart".
 - Motion: a newly arrived `crit` flashes once (≤600ms). Nothing else animates. Live values swap
