@@ -42,6 +42,10 @@ the tree moves.
 - **Legacy frontend.** Each row's Vue pages live under `frontend/apps/host`, `frontend/apps/{mission-catalog,
   organization-admin,ops-console}` and `frontend/modules/*`. They go with their routes. Whether `frontend/apps/host`
   can go whole is open (lead).
+- **Don't edit server copy for legacy-backed settings sections before §11c(B)/(C) (director, 11-15).** The legacy
+  host admits a settings section only if its contribution's metadata EQUALS the server definition
+  (`SettingsSectionBoundary`); a one-sided copy edit hid governance on the legacy settings pages from 11-13 to
+  11-15 (3bb80ce99, fixed by devops f817c9ea0). devops' contract test guards it.
 - **Docs** that map old URLs: `ux/information-architecture.md`, `ARCHITECTURE.md`, `api/session.md`,
   `ux/screens/Auth.md`. Update them in the same batch.
 
