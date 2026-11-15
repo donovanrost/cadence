@@ -160,6 +160,21 @@ const pass = d.object({
     ),
   ),
   /**
+   * GET /passes/:id only (U60, api): the latest settle of this pass's telemetry, with the server's
+   * sentence; null with no realized contact or nothing settled yet.
+   */
+  telemetry_stored: d.optional(
+    d.nullable(
+      d.object({
+        through: d.timestamp,
+        los: d.nullable(d.timestamp),
+        settled_at: d.timestamp,
+        // free-text: the server's U60 sentence ("… pass: telemetry stored through 03:19:40Z …")
+        text: d.string,
+      }),
+    ),
+  ),
+  /**
    * GET /passes/:id only (U56, api; domain part 2): every window move a provider change made,
    * newest first; [] when never moved.
    */

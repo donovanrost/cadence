@@ -178,6 +178,12 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
     expect(kindLabel({ ...canceled(1, "info"), raw_kind: "station_went_dark" })).toBe(
       "Station went dark",
     );
+    // U60: the watermark state changes fold in operator words; old advanced rows keep theirs.
+    const fold = (raw_kind: string) => kindLabel({ ...canceled(1, "info"), raw_kind });
+    expect(fold("source_watermark_settled")).toBe("Telemetry stored");
+    expect(fold("source_watermark_caught_up")).toBe("Telemetry caught up");
+    expect(fold("source_watermark_retreated")).toBe("Telemetry moved back");
+    expect(fold("source_watermark_advanced")).toBe("Data sources caught up");
   });
 });
 

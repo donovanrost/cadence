@@ -96,6 +96,10 @@ const FOLD_WORDS: Readonly<Record<string, string>> = {
   limit_violation: "Limit violations",
   binding_set_activated: "Configurations activated",
   source_watermark_advanced: "Data sources caught up",
+  // U60 (api 1bc887596): state changes only; old `advanced` rows keep their label until they age out.
+  source_watermark_settled: "Telemetry stored",
+  source_watermark_caught_up: "Telemetry caught up",
+  source_watermark_retreated: "Telemetry moved back",
   catalog_revision_registered: "Catalog revisions registered",
   dashboard_published: "Dashboards published",
 };

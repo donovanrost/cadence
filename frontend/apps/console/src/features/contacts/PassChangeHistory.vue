@@ -61,6 +61,11 @@ const moves = computed(() => {
   }));
 });
 const shown = computed(() => new Set(changes.value.map((c) => c.id)));
+/** U60: always on the pass, it answers "did this pass's data get stored?". */
+const stored = computed(() => {
+  const s = read.state.value;
+  return s.status === "ready" ? (s.value.telemetry_stored?.text ?? null) : null;
+});
 /** "Open the change": the change's own entry below (U44 says who accepted it). */
 function openChange(id: string) {
   const el = document.getElementById(`provider-change-${id}`);
@@ -74,6 +79,7 @@ function changed() {
 </script>
 
 <template>
+  <p v-if="stored" class="m-0 text-sm text-text-2">{{ stored }}</p>
   <section
     v-if="entries.length || moves.length"
     class="flex flex-col gap-2"

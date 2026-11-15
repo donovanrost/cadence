@@ -70,6 +70,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   contact_action: undefined,
   contact_ended: undefined,
   window_moves: undefined,
+  telemetry_stored: undefined,
   ...overrides,
 });
 
