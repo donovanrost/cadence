@@ -32,6 +32,14 @@ export function reasonWords(
       return { text: `The runtime isn't running. ${KEEPS_TRYING}`, needsFix: false };
     case "apply_failed":
       return { text: `Applying it failed${why}. ${KEEPS_TRYING}`, needsFix: false };
+    // contact_start's reasons (U45) share the field; its own row words them.
+    case "listener_in_use":
+    case "listener_unavailable":
+    case "connect_failed":
+    case "ingress_pipeline_failed":
+    case "uplink_session_failed":
+    case "no_runtime_spec":
+    case "unknown":
     case null:
     case undefined:
     default:
