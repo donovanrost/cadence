@@ -110,6 +110,46 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
     assert {:error, _not_found} = DataSources.fetch_data_source("action-env-source")
   end
 
+  test "register-source can't select another organization's credential profile" do
+    previous = Application.get_env(:cadence, :data_source_credentials)
+
+    Application.put_env(:cadence, :data_source_credentials,
+      env_material_profiles: %{
+        "other_org_questdb" => %{"organization_id" => "org-someone-else", "password_env" => "X"}
+      }
+    )
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:cadence, :data_source_credentials, previous),
+        else: Application.delete_env(:cadence, :data_source_credentials)
+    end)
+
+    request =
+      request("register-source", %{
+        "source" => %{
+          "data_source_id" => "action-profile-source",
+          "logical_source" => "telemetry",
+          "kind" => "byo_tsdb",
+          "isolation_level" => "mission_isolated",
+          "credentials_ref" => "own-ref",
+          "credential_provider" => "questdb",
+          "endpoint_ref" => "",
+          "material_env_profile" => "other_org_questdb",
+          "http_endpoint_env" => "",
+          "storage" => "questdb"
+        }
+      })
+
+    assert {:error, :env_material_profile_not_allowed} =
+             DataSourcesAction.execute(
+               scope(),
+               HostContext.mission(@mission_id),
+               "data_sources",
+               request
+             )
+  end
+
   test "rejects a resource from another mission before domain mutation" do
     persist_mission_scope(@organization_id, "mission-other")
 

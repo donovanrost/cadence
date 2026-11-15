@@ -361,8 +361,14 @@ defmodule Cadence.GroundNetworks.ProviderCredentials do
     do: where(query, [row], row.status == ^status)
 
   # An env-backed credential names a variable; only names this environment allows (EnvBackend).
-  defp env_key_allowed(%ProviderCredential{backend_type: :env, backend_key: key}) do
-    if EnvBackend.allowed_name?(key), do: :ok, else: {:error, :env_credential_name_not_allowed}
+  defp env_key_allowed(%ProviderCredential{
+         backend_type: :env,
+         backend_key: key,
+         organization_id: organization_id
+       }) do
+    if EnvBackend.allowed_name?(key, organization_id),
+      do: :ok,
+      else: {:error, :env_credential_name_not_allowed}
   end
 
   defp env_key_allowed(%ProviderCredential{}), do: :ok

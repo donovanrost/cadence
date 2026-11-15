@@ -1,15 +1,27 @@
 defmodule Cadence.Secrets.EnvBackendTest do
   @moduledoc """
-  A variable a tenant names as a credential is read only if this environment allows the name
-  (api-ops' security sweep, 11-15), and its value never appears in an error.
+  What a tenant names for the env backend is scoped to its organization (api-ops' security
+  sweep, api's review, 11-15): a variable it may read, and a configured material profile it may
+  select. Refused names are never read, and no error carries a value.
   """
   use ExUnit.Case, async: true
 
   alias Cadence.Secrets.{EnvBackend, Resolver}
 
   @local [secret_backend: EnvBackend, allow_env_secret_backend?: true]
+  @org_a "org-northlight"
+  @org_b "org_b"
 
-  # Fails the test if the backend reads a variable it should have refused by name first.
+  @profiles %{
+    "org_a_questdb" => %{
+      "organization_id" => "org-northlight",
+      "username_env" => "QUESTDB_A_USER",
+      "password_env" => "QUESTDB_A_PASSWORD"
+    },
+    "platform_questdb" => %{username_env: "QUESTDB_USER", password_env: "QUESTDB_PASSWORD"}
+  }
+
+  # Fails the test if the backend reads a variable it should have refused first.
   defp env_reader(values) do
     fn name ->
       case Map.fetch(values, name) do
@@ -19,61 +31,77 @@ defmodule Cadence.Secrets.EnvBackendTest do
     end
   end
 
+  test "an organization's prefix is its id, upper-cased, non-alphanumerics as _" do
+    assert EnvBackend.tenant_prefix(@org_a) == "CADENCE_TENANT_ORG_NORTHLIGHT_"
+  end
+
   describe "a provider credential's variable (backend_key)" do
-    test "an allowed name resolves" do
-      descriptor = %{reference: "cred", backend_key: "CADENCE_TENANT_NORTHLIGHT_TOKEN"}
+    test "the organization's own prefix resolves" do
+      name = EnvBackend.tenant_prefix(@org_a) <> "TOKEN"
+      descriptor = %{reference: "cred", backend_key: name, organization_id: @org_a}
 
       assert {:ok, %{material: %{value: "tenant-token"}}} =
                Resolver.resolve(
                  descriptor,
-                 @local ++
-                   [
-                     env_reader:
-                       env_reader(%{"CADENCE_TENANT_NORTHLIGHT_TOKEN" => "tenant-token"})
-                   ]
+                 @local ++ [env_reader: env_reader(%{name => "tenant-token"})]
                )
+    end
+
+    test "another organization's prefix is refused without being read" do
+      name = EnvBackend.tenant_prefix(@org_a) <> "TOKEN"
+      descriptor = %{reference: "cred", backend_key: name, organization_id: @org_b}
+
+      assert {:error, :env_credential_name_not_allowed} =
+               Resolver.resolve(descriptor, @local ++ [env_reader: env_reader(%{})])
+    end
+
+    test "the bare tenant prefix names nobody" do
+      refute EnvBackend.allowed_name?(EnvBackend.tenant_prefix(@org_a), @org_a, env_allow: [])
+      refute EnvBackend.allowed_name?("CADENCE_TENANT_X", nil, env_allow: [])
     end
 
     for name <-
           ~w(SECRET_KEY_BASE DATABASE_URL RELEASE_COOKIE CADENCE_OPPORTUNITY_CAPABILITY_SECRET) do
       test "the platform's own #{name} is refused without being read" do
-        descriptor = %{reference: "cred", backend_key: unquote(name)}
+        descriptor = %{reference: "cred", backend_key: unquote(name), organization_id: @org_a}
 
         assert {:error, :env_credential_name_not_allowed} =
                  Resolver.resolve(descriptor, @local ++ [env_reader: env_reader(%{})])
       end
     end
 
-    test "an explicit allow list admits exactly its names" do
-      descriptor = %{reference: "cred", backend_key: "EARENDIL_DEMO_PROVIDER_TOKEN"}
+    test "an operator-listed name is allowed for any organization, exactly" do
       reader = env_reader(%{"EARENDIL_DEMO_PROVIDER_TOKEN" => "demo"})
 
-      assert {:ok, _resolved} =
-               Resolver.resolve(
-                 descriptor,
-                 @local ++
-                   [
-                     env_reader: reader,
-                     env_allow: ["EARENDIL_DEMO_PROVIDER_TOKEN"],
-                     env_allow_prefixes: []
-                   ]
-               )
+      opts =
+        @local ++
+          [
+            env_reader: reader,
+            env_allow: ["EARENDIL_DEMO_PROVIDER_TOKEN"],
+            env_allow_prefixes: []
+          ]
+
+      listed = %{
+        reference: "cred",
+        backend_key: "EARENDIL_DEMO_PROVIDER_TOKEN",
+        organization_id: @org_b
+      }
+
+      assert {:ok, _resolved} = Resolver.resolve(listed, opts)
 
       assert {:error, :env_credential_name_not_allowed} =
-               Resolver.resolve(
-                 %{descriptor | backend_key: "EARENDIL_DEMO_PROVIDER_TOKEN_2"},
-                 @local ++ [env_reader: reader, env_allow: ["EARENDIL_DEMO_PROVIDER_TOKEN"]]
-               )
+               Resolver.resolve(%{listed | backend_key: "EARENDIL_DEMO_PROVIDER_TOKEN_2"}, opts)
     end
   end
 
   describe "a data-source descriptor's inline *_env names" do
-    test "every named variable must be allowed, before any is read" do
+    test "every named variable must be the organization's, before any is read" do
       descriptor = %{
         reference: "source-cred",
+        organization_id: @org_a,
         credentials_ref: "inline-profile",
         metadata: %{
-          "http_endpoint_env" => "CADENCE_TENANT_BYO_ENDPOINT",
+          "http_endpoint_env" => EnvBackend.tenant_prefix(@org_a) <> "ENDPOINT",
           "password_env" => "DATABASE_URL"
         }
       }
@@ -85,14 +113,15 @@ defmodule Cadence.Secrets.EnvBackendTest do
                )
     end
 
-    test "allowed names resolve" do
+    test "the organization's own names resolve" do
+      endpoint = EnvBackend.tenant_prefix(@org_a) <> "ENDPOINT"
+      token = EnvBackend.tenant_prefix(@org_a) <> "TOKEN"
+
       descriptor = %{
         reference: "source-cred",
+        organization_id: @org_a,
         credentials_ref: "inline-profile",
-        metadata: %{
-          "http_endpoint_env" => "CADENCE_TENANT_BYO_ENDPOINT",
-          "bearer_token_env" => "CADENCE_TENANT_BYO_TOKEN"
-        }
+        metadata: %{"http_endpoint_env" => endpoint, "bearer_token_env" => token}
       }
 
       assert {:ok, %Cadence.Secrets.ResolvedSecret{}} =
@@ -101,51 +130,93 @@ defmodule Cadence.Secrets.EnvBackendTest do
                  @local ++
                    [
                      env_reader:
-                       env_reader(%{
-                         "CADENCE_TENANT_BYO_ENDPOINT" => "http://byo.example:9000",
-                         "CADENCE_TENANT_BYO_TOKEN" => "tenant-token"
-                       }),
+                       env_reader(%{endpoint => "http://byo.example:9000", token => "t"}),
                      env_material_profiles: %{}
                    ]
                )
     end
+  end
 
-    test "an operator-configured profile isn't restricted (it's the platform's own)" do
-      descriptor = %{reference: "source-cred", credentials_ref: "managed"}
+  describe "a configured material profile" do
+    test "serves its own organization" do
+      descriptor = %{reference: "s", organization_id: @org_a, credentials_ref: "org_a_questdb"}
 
-      assert {:ok, %{material: %{password: "managed-password"}}} =
+      assert {:ok, %{material: %{password: "a-password"}}} =
                Resolver.resolve(
                  descriptor,
                  @local ++
                    [
                      env_reader:
                        env_reader(%{
-                         "QUESTDB_USER" => "admin",
-                         "QUESTDB_PASSWORD" => "managed-password"
+                         "QUESTDB_A_USER" => "a",
+                         "QUESTDB_A_PASSWORD" => "a-password"
                        }),
-                     env_material_profiles: %{
-                       "managed" => %{
-                         username_env: "QUESTDB_USER",
-                         password_env: "QUESTDB_PASSWORD"
-                       }
-                     }
+                     env_material_profiles: @profiles
+                   ]
+               )
+    end
+
+    test "can't be selected by another organization (by credentials_ref or material_env_profile)" do
+      for descriptor <- [
+            %{reference: "s", organization_id: @org_b, credentials_ref: "org_a_questdb"},
+            %{
+              reference: "s",
+              organization_id: @org_b,
+              credentials_ref: "b-own",
+              metadata: %{"material_env_profile" => "org_a_questdb"}
+            }
+          ] do
+        assert {:error, :env_material_profile_not_allowed} =
+                 Resolver.resolve(
+                   descriptor,
+                   @local ++ [env_reader: env_reader(%{}), env_material_profiles: @profiles]
+                 )
+      end
+
+      refute EnvBackend.profile_allowed?("org_a_questdb", @org_b,
+               env_material_profiles: @profiles
+             )
+
+      assert EnvBackend.profile_allowed?("org_a_questdb", @org_a,
+               env_material_profiles: @profiles
+             )
+    end
+
+    test "an unowned profile serves only platform sources" do
+      refute EnvBackend.profile_allowed?("platform_questdb", @org_a,
+               env_material_profiles: @profiles
+             )
+
+      assert EnvBackend.profile_allowed?("platform_questdb", nil,
+               env_material_profiles: @profiles
+             )
+
+      descriptor = %{reference: "s", organization_id: nil, credentials_ref: "platform_questdb"}
+
+      assert {:ok, _resolved} =
+               Resolver.resolve(
+                 descriptor,
+                 @local ++
+                   [
+                     env_reader:
+                       env_reader(%{"QUESTDB_USER" => "admin", "QUESTDB_PASSWORD" => "p"}),
+                     env_material_profiles: @profiles
                    ]
                )
     end
   end
 
   test "a missing allowed variable errors by name, never with a value" do
-    descriptor = %{reference: "cred", backend_key: "CADENCE_TENANT_MISSING"}
+    name = EnvBackend.tenant_prefix(@org_a) <> "MISSING"
+    descriptor = %{reference: "cred", backend_key: name, organization_id: @org_a}
 
-    assert {:error, reason} =
+    assert {:error, {:secret_reference_not_found, :env}} =
              Resolver.resolve(descriptor, @local ++ [env_reader: fn _name -> nil end])
-
-    assert reason == {:secret_reference_not_found, :env}
   end
 
   test "the local backend stays refused unless the environment enables it" do
     assert {:error, :env_secret_backend_local_only} =
-             Resolver.resolve(%{reference: "cred", backend_key: "CADENCE_TENANT_X"},
+             Resolver.resolve(%{reference: "cred", backend_key: "CADENCE_TEST_X"},
                secret_backend: EnvBackend
              )
   end

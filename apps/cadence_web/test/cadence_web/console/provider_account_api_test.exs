@@ -196,7 +196,17 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
            |> Map.take(["credential.key", "credential.backend"])
            |> map_size() == 1
 
-    env = put_in(denied, ["credential", "key"], "CADENCE_TENANT_SIM_TOKEN")
+    # ...another organization's prefix is refused too; its own prefix works.
+    other = put_in(denied, ["credential", "key"], "CADENCE_TENANT_SOMEONE_ELSE_TOKEN")
+
+    assert json_response(conn.() |> post(base <> "/provider-accounts", other), 422)["error"][
+             "details"
+           ]
+           |> Map.take(["credential.key", "credential.backend"])
+           |> map_size() == 1
+
+    own_key = Cadence.Secrets.EnvBackend.tenant_prefix(org.organization_id) <> "SIM_TOKEN"
+    env = put_in(denied, ["credential", "key"], own_key)
     env_conn = conn.() |> post(base <> "/provider-accounts", env)
 
     if ResolverConfiguration.provider_options()[

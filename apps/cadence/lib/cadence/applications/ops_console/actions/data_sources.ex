@@ -378,7 +378,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          {:ok, endpoint_ref} <- optional_text(params, "endpoint_ref"),
          {:ok, material_env_profile} <- optional_text(params, "material_env_profile"),
          {:ok, http_endpoint_env} <- optional_text(params, "http_endpoint_env"),
-         :ok <- env_name_allowed(http_endpoint_env),
          {:ok, display_name} <- optional_text(params, "display_name") do
       {:ok,
        %{
@@ -397,16 +396,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          adapter_definition: adapter_definition
        }}
     end
-  end
-
-  # A variable the source's descriptor names is read by the env backend only if this environment
-  # allows the name (EnvBackend.allowed_name?/2); say so on save rather than at the first probe.
-  defp env_name_allowed(nil), do: :ok
-
-  defp env_name_allowed(env_var) do
-    if EnvBackend.allowed_name?(env_var),
-      do: :ok,
-      else: {:error, :env_credential_name_not_allowed}
   end
 
   defp parse_logical_source(params) do
@@ -535,8 +524,29 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     # persist_data_source upserts by id: registering an existing id (a platform-shared source's,
     # or another organization's) would overwrite it.
     with :ok <- new_source_id(attrs.data_source_id),
+         :ok <- env_scope(attrs, organization_id),
          :ok <- maybe_register_credentials(attrs, organization_id, mission_id, payload, scope) do
       DataSources.persist_data_source(source, actor_id: actor_id(scope), payload: payload)
+    end
+  end
+
+  # What the source names for the env backend is scoped to its organization (EnvBackend): an
+  # endpoint variable it may use, and no other organization's configured material profile. Said
+  # on save, not at the first probe.
+  defp env_scope(attrs, organization_id) do
+    cond do
+      is_binary(attrs.http_endpoint_env) and
+          not EnvBackend.allowed_name?(attrs.http_endpoint_env, organization_id) ->
+        {:error, :env_credential_name_not_allowed}
+
+      not EnvBackend.profile_allowed?(attrs.material_env_profile, organization_id) ->
+        {:error, :env_material_profile_not_allowed}
+
+      not EnvBackend.profile_allowed?(attrs.credentials_ref, organization_id) ->
+        {:error, :env_material_profile_not_allowed}
+
+      true ->
+        :ok
     end
   end
 

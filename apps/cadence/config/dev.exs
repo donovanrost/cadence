@@ -17,8 +17,9 @@ config :cadence, Cadence.Repo,
 # environment allows loopback only, for the local simulator. Production allows nothing extra.
 config :cadence, :provider_outbound, allow: ["127.0.0.1/32", "::1/128"]
 
-# Env-backed credentials (local only): the variable names a tenant may use here (EnvBackend,
-# api-ops 11-15). Anything else is refused on save and on resolve.
+# Env-backed credentials (local only): variable names any organization may use here, beyond its
+# own CADENCE_TENANT_<ORG>_ prefix (EnvBackend, api-ops 11-15). Anything else is refused on save
+# and on resolve.
 config :cadence, :env_credentials,
   allow: ["EARENDIL_DEMO_PROVIDER_TOKEN"],
-  allow_prefixes: ["CADENCE_TENANT_"]
+  allow_prefixes: []

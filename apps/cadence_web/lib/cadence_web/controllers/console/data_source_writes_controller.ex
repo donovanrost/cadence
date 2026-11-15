@@ -308,6 +308,13 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
           "This environment doesn't allow that variable for a source. Ask a platform admin."
       })
 
+  defp error(conn, {:error, :env_material_profile_not_allowed}),
+    do:
+      Problem.respond(conn, :invalid_params, %{
+        field: "material_env_profile",
+        material_env_profile: "That credential profile isn't this organization's."
+      })
+
   defp error(conn, {:error, :incompatible_data_source}),
     do: Problem.respond(conn, :invalid_params, %{field: "data_source_id"})
 

@@ -48,12 +48,12 @@ end
 
 # Env-backed credentials, where an environment enables the local backend: the variable names a
 # tenant may use (EnvBackend). CADENCE_ENV_CREDENTIALS_ALLOW="EARENDIL_DEMO_PROVIDER_TOKEN,...";
-# names starting with CADENCE_TENANT_ are always allowed.
+# each organization may also use its own CADENCE_TENANT_<ORG>_ prefix.
 case System.get_env("CADENCE_ENV_CREDENTIALS_ALLOW") do
   names when is_binary(names) and names != "" ->
     config :cadence, :env_credentials,
       allow: names |> String.split(",", trim: true) |> Enum.map(&String.trim/1),
-      allow_prefixes: ["CADENCE_TENANT_"]
+      allow_prefixes: []
 
   _unset ->
     :ok

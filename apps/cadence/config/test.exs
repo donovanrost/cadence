@@ -82,8 +82,9 @@ config :cadence, :provider_outbound,
   # The suite's fake provider hosts (*.test) resolve to loopback; answers are still checked.
   resolver: {Cadence.TestSupport.ProviderHosts, :resolve}
 
-# Env-backed credentials (local only): the variable names a tenant may use here (EnvBackend,
-# api-ops 11-15). Anything else is refused on save and on resolve.
+# Env-backed credentials (local only): variable names any organization may use here, beyond its
+# own CADENCE_TENANT_<ORG>_ prefix (EnvBackend, api-ops 11-15). Anything else is refused on save
+# and on resolve.
 config :cadence, :env_credentials,
   allow: [
     "EARENDIL_DEMO_PROVIDER_TOKEN",
@@ -91,4 +92,4 @@ config :cadence, :env_credentials,
     "PROVIDER_TEST_TOKEN",
     "CADENCE_PROVIDER_TEST_TOKEN"
   ],
-  allow_prefixes: ["CADENCE_TENANT_", "CADENCE_TEST_"]
+  allow_prefixes: ["CADENCE_TEST_"]
