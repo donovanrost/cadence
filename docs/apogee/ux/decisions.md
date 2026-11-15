@@ -1652,3 +1652,34 @@ No screen work until phase 3. These are the editors' spec then:
 - When this ships, the governance help in SettingsAuditProviders.md loses its carve-out ("App settings that save
   immediately, such as limits, aren't covered."), and fe-setup changes the server copy with devops (the
   legacy-host contract rule).
+
+### U65 · Catalog revision approval (domain's model approval gate, 742567770) (domain / api / fe-setup)
+Operators know catalog revisions; the mission model revision is the compiled form behind one. Visible text says
+"catalog rev 4", and the mission model revision id goes in Technical details.
+- **Where:** a revision's row in Setup › Catalog carries `NEEDS APPROVAL` (caution) / `APPROVED` / `REJECTED`. The
+  revision's page gets an **Approval** panel above C1 (Diff) while its model needs approval.
+- **Approval panel, the comparison report against the revision it would replace:**
+  - Verdict line: `■ Comparison passed against rev 3` / `◆ Comparison didn't pass against rev 3`, with the failing
+    parts listed.
+  - **Replay** (the director's condition): when `replay.status = not_run`, a caution callout **at the top of the
+    panel**: "Replay: not run. There's no qualification corpus, so this revision hasn't been replayed against
+    recorded telemetry." It's never folded away and never shown as passed.
+  - Importer: "Imported by Mira K. at 11-14 22:10Z." Not recorded: `▲ Importer not recorded`, plus "Cadence doesn't
+    know who imported this revision." (U20).
+  - Runtime plans: `Ready` / `▲ Not ready yet`.
+  - Decision (ApDecision): `Approve rev 4` (primary) and `Reject…` (secondary, with a confirm). The importer, under
+    "Needs a second person's approval", sees "You imported this revision, so another org admin has to approve
+    it." and no buttons.
+- **Approve refusals:**
+  - self_approval_forbidden: "Not approved: you imported this revision, so another org admin has to approve it."
+  - comparison_not_passed: "Not approved: the comparison with rev 3 didn't pass."
+  - comparison_mismatch: "Not approved: the comparison is out of date. Run it again." (`Run comparison`)
+  - runtime_plans_not_ready: "Not approved: Cadence is still preparing this revision. Try again in a moment."
+  - revision_not_approvable: "Not approved: this revision was already approved, rejected or replaced." (or the
+    state, when it's sent)
+  - human_approver_required: "Not approved: a person has to approve this, not a service identity."
+- **Preview hold** `mission_model_not_approved` (blocking; check title `Catalog revision not approved`): "Catalog
+  rev 4 isn't approved yet, so 499 spacecraft can't move to it. An org admin approves it in Setup › Catalog
+  first." The link `Open rev 4` goes to the Approval panel.
+- **Apply refusals:** not_approved: "Not applied: catalog rev 4 isn't approved yet." comparison_failed: "Not
+  applied: catalog rev 4's comparison didn't pass." with `Open the report`.
