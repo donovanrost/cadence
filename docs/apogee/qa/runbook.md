@@ -84,7 +84,10 @@ mise exec -- mix cadence.questdb.migrate
 #    Ingress journal ON (director, 2026-11-12; qa #48): without it a TM frame that fails processing
 #    is dropped and a contact still reads 'settled'. The journal lives in this worktree's var/
 #    (gitignored), capped at 2 GB (default 8 GB) because the laptop disk runs ~90% full: check
-#    `df -h .` first and keep ≥ 10 GB free. Check after boot: rpc
+#    `df -h .` first and keep ≥ 10 GB free. The journal shares the HOST disk that filled on 11-14
+#    (devops, 11-15; #95 makes it on by default everywhere): fine at 10 live craft, but it grows
+#    during passes and reclaims only ~72 h after settle, so count var/ingress_journal in the disk
+#    checks (`du -sh var/ingress_journal`) and keep the 2 GB cap here. Check after boot: rpc
 #    Application.get_env(:cadence, :ingress_journal)[:enabled?] == true on cadence_apogee.
 CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127.0.0.1:9200 \
   CADENCE_QUESTDB_HOST=127.0.0.1 CADENCE_QUESTDB_PORT=8822 EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
