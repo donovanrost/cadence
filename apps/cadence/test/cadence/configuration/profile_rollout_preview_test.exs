@@ -105,12 +105,12 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
       assert reads(by_query, reader) <= bound, "#{reader}: #{top(by_query)}"
     end
 
-    # Still per spacecraft (each one's revision, capability instances and binding rules are written
-    # row by row, and its source endpoint is read per packet): 25,519 for 500 on 11-15. Going
+    # Still per spacecraft: each one's derived revision, and its capability instances and binding
+    # rules row by row (one of each per packet, 20 of the 31): 15,520 for 500 on 11-15. Going
     # set-based is the next step; this bound catches any new per-spacecraft query.
-    assert queries <= @fleet * 56, "#{queries} queries for #{@fleet} spacecraft: #{top(by_query)}"
+    assert queries <= @fleet * 34, "#{queries} queries for #{@fleet} spacecraft: #{top(by_query)}"
 
-    # The transaction itself (a 120 s timeout): 10.6 s for 500 spacecraft on a dev-sized catalog on
+    # The transaction itself (a 120 s timeout): 7.8 s for 500 spacecraft on a dev-sized catalog on
     # 11-15. Before the fix it grew super-linearly (120 spacecraft: 48 s) and rolled back on dev.
     assert transaction_ms < 60_000, "#{transaction_ms} ms in the transaction for #{@fleet}"
     assert ms < 90_000, "#{ms} ms for #{@fleet} spacecraft"

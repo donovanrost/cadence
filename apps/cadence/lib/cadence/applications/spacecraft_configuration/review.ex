@@ -248,6 +248,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   def catalog_inputs(mission, catalog_id) do
     with {:ok, catalog} <-
            Catalog.fetch_revision(mission.organization_id, mission.mission_id, catalog_id),
+         :ok <- has_mission_model(catalog),
          {:ok, model} <-
            MissionModels.fetch_revision(
              mission.organization_id,
@@ -264,6 +265,12 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
       {:ok, %{model: MissionModels.manifest(model, plans), telemetry: telemetry}}
     end
   end
+
+  # The refusal the decom path gave before (api-ops): fetch_revision would raise on a nil id.
+  defp has_mission_model(%{mission_model_revision_id: id}) when is_binary(id) and id != "",
+    do: :ok
+
+  defp has_mission_model(_catalog), do: {:error, :catalog_revision_missing_mission_model}
 
   @doc "Inputs for `catalog_id` from `cache`, loading them on the first use: `{:ok, inputs, cache}`."
   @spec cached_inputs(map(), map(), binary()) :: {:ok, map(), map()} | {:error, term()}
