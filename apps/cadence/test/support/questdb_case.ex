@@ -23,6 +23,8 @@ defmodule Cadence.TestSupport.QuestDBCase do
 
   alias Cadence.OutageTelemetryWriter
   alias Cadence.Telemetry.Storage.QuestDB.{RestClient, SchemaMigrator, SQL}
+  alias Cadence.Telemetry.Storage.Writers
+  alias Cadence.TestSupport.TCPContactFixture
 
   @endpoint_env "CADENCE_QUESTDB_HTTP_ENDPOINT"
   @migrated_key {__MODULE__, :migrated}
@@ -80,6 +82,44 @@ defmodule Cadence.TestSupport.QuestDBCase do
 
       {:error, reason} ->
         raise "QuestDB read failed: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Sends one fixture frame per sequence count to a `TCPContactFixture` contact and waits until
+  QuestDB holds that many of the mission's rows since `since`; returns them (`rows/3`). Raises if
+  they don't all arrive.
+  """
+  @spec ingest_frames!(map(), Enumerable.t(), DateTime.t()) :: [map()]
+  def ingest_frames!(%{mission_id: mission_id, port: port}, counts, %DateTime{} = since) do
+    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, packet: 0, active: false])
+    on_exit(fn -> :gen_tcp.close(socket) end)
+
+    expected =
+      Enum.reduce(counts, 0, fn count, sent ->
+        :ok = :gen_tcp.send(socket, TCPContactFixture.frame(count))
+        Process.sleep(50)
+        sent + 1
+      end)
+
+    case read_back(fn -> enough_rows(rows(mission_id, since), expected) end) do
+      rows when is_list(rows) and length(rows) >= expected -> rows
+      rows -> raise "expected #{expected} rows in QuestDB, got #{length(List.wrap(rows))}"
+    end
+  end
+
+  defp enough_rows(rows, expected) when length(rows) >= expected, do: {:ok, rows}
+  defp enough_rows(rows, _expected), do: rows
+
+  @doc """
+  Writes telemetry envelopes straight through the QuestDB writer (no ingest), for tests that need
+  exact rows: duplicates, retries, out-of-order, NULLs. Raises on a write error.
+  """
+  @spec write_observations!([map()], keyword()) :: :ok
+  def write_observations!(envelopes, opts \\ []) when is_list(envelopes) and is_list(opts) do
+    case Writers.QuestDB.persist_envelopes(envelopes, opts) do
+      :ok -> :ok
+      {:error, reason} -> raise "QuestDB write failed: #{inspect(reason)}"
     end
   end
 

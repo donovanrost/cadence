@@ -2,7 +2,7 @@ defmodule Cadence.TestSupport.TCPContactFixture do
   @moduledoc """
   A live TCP downlink contact for end-to-end ingest tests: one spacecraft, an HK packet (APID 42,
   `sc_mode`) bound to definition-bound telemetry, and a listening TCP provider of 14-byte TM
-  frames. `start_tcp_contact!/0` returns `%{mission_id, port}`; `frame/1` builds one frame
+  frames. `start_tcp_contact!/0` returns `%{organization_id, mission_id, spacecraft_id, port}`; `frame/1` builds one frame
   carrying one packet with the given CCSDS sequence count.
   """
 
@@ -101,7 +101,13 @@ defmodule Cadence.TestSupport.TCPContactFixture do
       )
 
     [provider] = snapshot.provider_runtimes
-    %{mission_id: mission_id, port: provider.port}
+
+    %{
+      organization_id: organization_id,
+      mission_id: mission_id,
+      spacecraft_id: spacecraft.spacecraft_id,
+      port: provider.port
+    }
   end
 
   defp activate_hk_binding!(organization_id, mission_id, id) do
