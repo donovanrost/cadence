@@ -4,6 +4,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
 import SubmitSheet from "./SubmitSheet.vue";
+import { station } from "./fixtures.ts";
 
 const gap = (id: string) => ({
   requirement_id: id,
@@ -180,7 +181,7 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
         {
           snapshot_id: "p1",
           spacecraft_id: "sc-a",
-          station: { ref: "kir", id: "gs-kir", code: "KIR", name: "Kiruna" },
+          station: station({ ref: "kir", id: "gs-kir", code: "KIR", name: "Kiruna" }),
           starts_at: "2026-11-11T00:12:00Z",
           ends_at: "2026-11-11T00:20:00Z",
           synthetic: true,

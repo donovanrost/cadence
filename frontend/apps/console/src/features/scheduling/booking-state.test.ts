@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanPass } from "./api.ts";
-import { booking } from "./fixtures.ts";
+import { booking, station } from "./fixtures.ts";
 import { bookingLook, isBooking, reasonWords, rejectedRows } from "./booking-state.ts";
 
 const pass = (id: string, b: PlanPass["booking"]): PlanPass => ({
   snapshot_id: id,
   spacecraft_id: "sc1",
-  station: { ref: "svb", id: "gs_svb", code: "SVB-1", name: "Svalbard" },
+  station: station({ ref: "svb", id: "gs_svb", code: "SVB-1", name: "Svalbard" }),
   starts_at: "2026-11-13T03:00:00Z",
   ends_at: "2026-11-13T03:08:00Z",
   synthetic: false,

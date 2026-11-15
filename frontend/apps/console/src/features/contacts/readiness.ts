@@ -1,7 +1,8 @@
 import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import {
-  stationId as stationIdReader,
+  stationRef,
+  type StationRef,
   type StationId,
   decoders as d,
   detailsOf,
@@ -64,13 +65,6 @@ export const passReadinessReader = d.object({
 });
 export type PassReadiness = Decoded<typeof passReadinessReader>;
 
-const contactStation = d.object({
-  ref: d.nullable(d.string),
-  id: d.nullable(stationIdReader),
-  // free-text: a station call sign (SVA, KIR), not a vocabulary
-  code: d.nullable(d.string),
-  name: d.nullable(d.string),
-});
 export const starterKinds = ["user", "service", "system"] as const;
 /** U46 (api): who started the contact, and the groups a named release on it would send. */
 const contactFields = {
@@ -93,7 +87,7 @@ const contactFields = {
 const passRef = d.object({
   reservation_id: d.token,
   contact_id: d.nullable(d.token),
-  station: contactStation,
+  station: stationRef,
   starts_at: d.timestamp,
   ends_at: d.optional(d.timestamp),
   booked: d.optional(d.boolean),
@@ -103,7 +97,7 @@ const passRef = d.object({
 const handContact = d.object({
   realized_contact_id: d.token,
   booked: d.boolean,
-  station: contactStation,
+  station: stationRef,
   starts_at: d.nullable(d.timestamp),
   ends_at: d.nullable(d.timestamp),
   started_by: contactFields.started_by,
@@ -257,7 +251,6 @@ export type StationLookup = Readonly<{
   byRef: (ref: string | null | undefined) => StationInfo | null;
 }>;
 const NO_STATIONS: StationLookup = { byId: () => null, byRef: () => null };
-type StationRef = Omit<Decoded<typeof contactStation>, "name">;
 const codeFor = (st: StationRef, s: StationLookup) =>
   st.code ?? s.byId(st.id)?.code ?? s.byRef(st.ref)?.code ?? null;
 const providerFor = (st: StationRef, s: StationLookup) =>
@@ -317,7 +310,7 @@ export function readinessTag(
  * Otherwise it goes on the next pass (KIR 02:31Z) unless it expires at 03:00Z." The next pass is
  * booked, not promised ready; with none booked: "No later pass is booked for it yet."
  */
-type PassAt = Readonly<{ station: StationRef & { name: string | null }; starts_at: string }>;
+type PassAt = Readonly<{ station: StationRef; starts_at: string }>;
 /** What the line reads of a group's uplink block (Investigate's lane passes its own pass). */
 export type BlockedUplink = Readonly<{
   pass: PassAt | null;

@@ -2,11 +2,12 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
 import { planHeaderTail } from "./plan-primary.ts";
 import { shortWhen, unconfirmedView } from "./unconfirmed.ts";
+import { station } from "./fixtures.ts";
 
 const pass = (id: string, sc: string, start: string) => ({
   snapshot_id: id,
   spacecraft_id: sc,
-  station: { ref: "KIR", id: "gs-kir", code: "KIR", name: "Kiruna" },
+  station: station({ ref: "KIR", id: "gs-kir", code: "KIR", name: "Kiruna" }),
   starts_at: start,
   ends_at: start,
   synthetic: true,

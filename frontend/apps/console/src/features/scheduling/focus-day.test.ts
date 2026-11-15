@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import { focusDay, gapEffect, gapSentence, gapText } from "./focus-day.ts";
+import { station } from "./fixtures.ts";
 
 const day = { from: Date.parse("2026-11-13T00:00:00Z"), to: Date.parse("2026-11-14T00:00:00Z") };
-const station = { ref: "svb", id: "gs_svb", code: "SVB", name: "Svalbard" };
+const svb = station({ ref: "svb", id: "gs_svb", code: "SVB", name: "Svalbard" });
 const pass = (id: string, sc: string, from: string, to: string) => ({
   snapshot_id: id,
   spacecraft_id: sc,
-  station,
+  station: svb,
   starts_at: `2026-11-13T${from}:00Z`,
   ends_at: `2026-11-13T${to}:00Z`,
   synthetic: false,

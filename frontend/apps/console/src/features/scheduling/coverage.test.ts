@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { contactsShortText, coverage, spacecraftNotCovered } from "./coverage.ts";
+import { station } from "./fixtures.ts";
 
 const sc = (id: string, have: number, need: number | null, met: boolean) => ({
   spacecraft_id: id,
@@ -37,7 +38,7 @@ describe("distinctWindows (ux K1 #5)", () => {
     const alt = (id: string, req: string) => ({
       snapshot_id: id,
       requirement_id: req,
-      station: { ref: "earendil-fairbanks", id: "gs_1", code: "FAI", name: "Fairbanks" },
+      station: station({ ref: "earendil-fairbanks", id: "gs_1", code: "FAI", name: "Fairbanks" }),
       starts_at: "2026-11-11T12:09:00Z",
       ends_at: "2026-11-11T12:17:00Z",
       synthetic: true,
@@ -58,12 +59,18 @@ describe("station labels (ux U25)", () => {
   it("prefer the confirmed code, then the name, never a guess", async () => {
     const { stationCode, stationName } = await import("./api.ts");
     expect(
-      stationCode({ ref: "earendil-fairbanks", id: "gs_1", code: "FAI", name: "Fairbanks" }),
+      stationCode(
+        station({ ref: "earendil-fairbanks", id: "gs_1", code: "FAI", name: "Fairbanks" }),
+      ),
     ).toBe("FAI");
     expect(
-      stationCode({ ref: "earendil-fairbanks", id: "gs_1", code: null, name: "Fairbanks (Demo)" }),
+      stationCode(
+        station({ ref: "earendil-fairbanks", id: "gs_1", code: null, name: "Fairbanks (Demo)" }),
+      ),
     ).toBe("Fairbanks (Demo)");
-    expect(stationCode({ ref: "earendil-x", id: null, code: null, name: null })).toBe("earendil-x");
+    expect(stationCode(station({ ref: "earendil-x", id: null, code: null, name: null }))).toBe(
+      "earendil-x",
+    );
     expect(stationName(null)).toBe("unknown station");
   });
 });

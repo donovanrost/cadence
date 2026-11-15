@@ -6,6 +6,7 @@ import {
   type Decoded,
   type Scid,
   type SpacecraftId,
+  stationRef,
 } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
@@ -15,14 +16,6 @@ import { GROUP_AT, type QueueItem } from "./queue.ts";
  * client-side when 3 or more share a station and cause; the group takes its members' highest
  * priority. Words only; the server ranks.
  */
-
-const stationRef = d.object({
-  ref: d.nullable(d.string),
-  id: d.nullable(d.token),
-  // free-text: a station's call sign, not a vocabulary
-  code: d.nullable(d.string),
-  name: d.nullable(d.string),
-});
 
 export const missedPassReader = d.object({
   reservation_id: d.token,

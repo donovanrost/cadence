@@ -10,6 +10,7 @@ import {
   type Reader,
   type Unrecognized,
 } from "./decode.ts";
+import { stationId } from "./ids.ts";
 
 /**
  * Shared entity decoders (typing plan §12 A5, docs/apogee/typing-audit.md §1.5): one reader per
@@ -59,7 +60,8 @@ export type SpacecraftRef = Decoded<typeof spacecraftRef>;
  */
 export const stationRef = object({
   ref: orNull(string),
-  id: orNull(token),
+  /** §12C: a StationId (never a code), so it keys the stations index directly. */
+  id: orNull(stationId),
   code: orNull(string),
   name: orNull(string),
 });

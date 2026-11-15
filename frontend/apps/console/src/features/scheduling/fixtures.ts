@@ -1,3 +1,4 @@
+import { decode, stationRef, type StationRef } from "@/api/index.ts";
 import type { PlanPass } from "./api.ts";
 
 type Booking = NonNullable<PlanPass["booking"]>;
@@ -18,4 +19,16 @@ export function booking(
     resolved: null,
     ...extra,
   };
+}
+
+/** Test fixture: a station reference, decoded (the id is a StationId, §12C). */
+export function station(raw: {
+  ref: string | null;
+  id: string | null;
+  code: string | null;
+  name: string | null;
+}): StationRef {
+  const r = decode(stationRef, raw);
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
 }

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanPass } from "./api.ts";
-import { booking } from "./fixtures.ts";
+import { booking, station } from "./fixtures.ts";
 import { expiredRows, offerClock, unsentPasses } from "./offer-clock.ts";
 
 const now = new Date("2026-11-13T01:00:00Z");
-const station = { ref: "svb-1", id: "gs_svb", code: "SVB-1", name: "Svalbard" };
+const svb = station({ ref: "svb-1", id: "gs_svb", code: "SVB-1", name: "Svalbard" });
 const pass = (
   id: string,
   start: string,
@@ -13,7 +13,7 @@ const pass = (
 ): PlanPass => ({
   snapshot_id: id,
   spacecraft_id: "sc12",
-  station,
+  station: svb,
   starts_at: `2026-11-13T${start}:00Z`,
   ends_at: `2026-11-13T${start}:00Z`,
   synthetic: false,
