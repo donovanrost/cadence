@@ -13,6 +13,7 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
 
     %{
       conn: TestFixtures.member_conn(user),
+      mission: mission,
       legacy: "/missions/#{mission.mission_id}",
       other: "/missions/#{other.mission_id}",
       console: "/console/#{org.slug}/#{mission.slug}"
@@ -130,5 +131,19 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
   test "B11: a spacecraft's applications go to its Setup page", c do
     assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/sc_1/applications")) ==
              c.console <> "/setup/spacecraft/sc_1"
+  end
+
+  test "B6: a catalog revision goes to its own database in the Setup catalog (fe-setup)", c do
+    database = TestFixtures.persist_catalog_database!(c.mission)
+
+    revision =
+      database
+      |> TestFixtures.start_catalog_revision_import!()
+      |> TestFixtures.complete_catalog_import_run!()
+      |> TestFixtures.fetch_catalog_revision_for_run!()
+
+    assert redirected_to(
+             get(c.conn, c.legacy <> "/catalog/revisions/#{revision.catalog_revision_id}")
+           ) == c.console <> "/setup/catalog/#{database.catalog_database_id}"
   end
 end
