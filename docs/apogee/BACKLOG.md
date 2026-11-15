@@ -298,7 +298,8 @@ missing endpoint or decision; an item with no blocker can start now.
 ## 6. Phase 4 · Accessibility pass
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| axe + keyboard traversal + focus order on every route, 1440 and 390, as admin and member; file per screen | qa | — |
+| axe + keyboard traversal + focus order on every route, 1440 and 390, as admin and member; file per screen; **use ux's checklist docs/apogee/ux/a11y-checklist.md** (sheets 7 checks, per screen 5, hand-opened surfaces incl. everything since 11-13, 390-only) | qa | after the 11-15 live items |
+| Keyboard move of a dashboard widget (ux checklist gap) | dashboards + ux | — |
 | Fixes per screen | the screen's owner | qa's findings |
 | ~~Kit-level fixes (focus trap/return, scrollable regions, contrast on hatches)~~ done: `ApSheet` trap/return (86187004) and focusable scroll body (ffeecd46), ApPanel scroll bodies, hatch labels on a solid base (U30 #4). Sweep 11-13: scrolling ApTable and the ApTakeoverHeader steps row get tabindex, role and a name while they scroll (8fa0f9e9e) | lead | — |
 
