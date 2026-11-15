@@ -9,7 +9,6 @@ defmodule Cadence.MissionModels.TelemetryProjection do
   alias Cadence.Catalog.MissionModel.{Revision, RuntimePlan}
   alias Cadence.Catalog.Revision, as: CatalogRevision
   alias Cadence.MissionModels
-  alias Cadence.Platform.ReadMemo
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.Telemetry.PacketDefinition
 
@@ -24,21 +23,19 @@ defmodule Cadence.MissionModels.TelemetryProjection do
           {:ok, t()} | {:error, term()}
   def load(organization_id, mission_id, %CatalogRevision{} = catalog_revision)
       when is_binary(mission_id) do
-    # Per catalog revision, once per fleet-wide apply (Platform.ReadMemo, step 4).
-    ReadMemo.fetch(
-      {:telemetry_projection, organization_id, mission_id, catalog_revision.catalog_revision_id},
-      fn -> load_projection(organization_id, mission_id, catalog_revision) end
-    )
-  end
-
-  defp load_projection(organization_id, mission_id, catalog_revision) do
     with {:ok, revision_id} <- mission_model_revision_id(catalog_revision),
          {:ok, %Revision{} = revision} <-
            MissionModels.fetch_revision(organization_id, mission_id, revision_id),
          {:ok, plans} <-
-           MissionModels.fetch_runtime_plans(organization_id, mission_id, revision_id),
-         {:ok, packet_definitions} <-
-           MissionModelPlanDecoder.telemetry_packet_definitions(plans) do
+           MissionModels.fetch_runtime_plans(organization_id, mission_id, revision_id) do
+      build(catalog_revision, revision, plans)
+    end
+  end
+
+  @doc "The projection from an already-read mission-model revision and its runtime plans."
+  @spec build(CatalogRevision.t(), Revision.t(), map()) :: {:ok, t()} | {:error, term()}
+  def build(%CatalogRevision{} = catalog_revision, %Revision{} = revision, plans) do
+    with {:ok, packet_definitions} <- MissionModelPlanDecoder.telemetry_packet_definitions(plans) do
       {:ok,
        %{
          catalog_revision: catalog_revision,

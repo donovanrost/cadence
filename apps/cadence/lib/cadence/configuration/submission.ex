@@ -13,7 +13,8 @@ defmodule Cadence.Configuration.Submission do
   using the returned `impacts`.
   """
 
-  alias Cadence.Platform.ReadMemo
+  require Logger
+
   alias Cadence.SpacecraftTypeStore
 
   alias Cadence.Configuration.{
@@ -258,18 +259,36 @@ defmodule Cadence.Configuration.Submission do
     end)
   end
 
-  # The memos cover the pipeline and the generation build that follows it in the same
-  # transaction: both re-read the same profile versions per spacecraft, and the build re-read the
-  # same catalog and mission-model revisions per spacecraft (step 4, 11-15: 499 craft idled the
-  # transaction past its timeout).
+  # The memo covers the pipeline and the generation build that follows it in the same
+  # transaction: both re-read the same profile versions per spacecraft.
   defp apply_transaction(set, fun) do
-    ReadMemo.with_memo(fn ->
-      SpacecraftTypeStore.with_version_memo(fn ->
-        Repo.transaction(fun, timeout: @apply_timeout_ms)
-      end)
-    end)
+    SpacecraftTypeStore.with_version_memo(fn -> timed_transaction(set, fun) end)
   rescue
     DBConnection.ConnectionError -> landed(set)
+  end
+
+  # [:cadence, :configuration, :apply_transaction]: how long the apply held its transaction, which
+  # has a 120 s timeout (step 4, 11-15). Logged too when it is slow.
+  defp timed_transaction(set, fun) do
+    started = System.monotonic_time()
+    result = Repo.transaction(fun, timeout: @apply_timeout_ms)
+    duration = System.monotonic_time() - started
+    ms = System.convert_time_unit(duration, :native, :millisecond)
+
+    :telemetry.execute(
+      [:cadence, :configuration, :apply_transaction],
+      %{duration: duration},
+      %{
+        mission_id: set.mission_id,
+        change_set_id: set.change_set_id,
+        ok?: match?({:ok, _}, result)
+      }
+    )
+
+    if ms > 10_000,
+      do: Logger.warning("change set #{set.change_set_id} held its apply transaction #{ms} ms")
+
+    result
   end
 
   # The connection dropped mid-transaction (qa #19), so COMMIT may or may not have reached

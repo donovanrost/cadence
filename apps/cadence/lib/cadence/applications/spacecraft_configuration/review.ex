@@ -14,6 +14,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   alias Cadence.Governance
   alias Cadence.Management.Activations
   alias Cadence.MissionModels
+  alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.Platform.ScopedReadUpdates
 
   def request(scope, mission_id, spacecraft_id, expected_token, opts \\ []) do
@@ -71,7 +72,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   end
 
   defp prepare_drafts(scope, mission, tokens) do
-    Enum.reduce_while(Enum.sort(tokens), {:ok, []}, fn {id, token}, {:ok, prepared} ->
+    tokens
+    |> Enum.sort()
+    |> Enum.reduce_while({:ok, [], %{}}, fn {id, token}, {:ok, prepared, cache} ->
       with {:ok, _, spacecraft} <- ConfigurationDrafts.authorize(scope, mission.mission_id, id),
            current = ConfigurationDrafts.snapshot(mission, spacecraft),
            :ok <- ConfigurationDrafts.exact_token(current.token, token),
@@ -79,19 +82,24 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            :ok <- ready(current.row.document),
            :ok <- CatalogAuthority.check(mission, spacecraft, current.row.catalog_revision_id),
            :ok <- CatalogAuthority.switches_check(spacecraft, current.row.document),
-           {:ok, item} <- compile(mission, id, current.row) do
+           {:ok, inputs, cache} <- cached_inputs(cache, mission, current.row.catalog_revision_id),
+           {:ok, item} <- compile(mission, id, current.row, inputs) do
         review = %{
           "spacecraft_id" => id,
           "configuration_revision_id" => current.row.configuration_revision_id,
           "configuration_token" => current.token
         }
 
-        {:cont, {:ok, [Map.put(item, :review, review) | prepared]}}
+        {:cont, {:ok, [Map.put(item, :review, review) | prepared], cache}}
       else
         false -> {:halt, {:error, :spacecraft_configuration_review_unavailable}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+    |> case do
+      {:ok, prepared, _cache} -> {:ok, prepared}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -101,10 +109,21 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   """
   @spec compile(map(), binary(), struct()) :: {:ok, map()} | {:error, term()}
   def compile(mission, spacecraft_id, row) do
+    with {:ok, inputs} <- catalog_inputs(mission, row.catalog_revision_id) do
+      compile(mission, spacecraft_id, row, inputs)
+    end
+  end
+
+  @doc """
+  `compile/3` with the catalog's inputs already loaded (`catalog_inputs/2`). A fleet-wide compile
+  loads them once per distinct catalog and passes them to every spacecraft on it: step 4 (11-15)
+  re-read and re-decoded them for each of 499 spacecraft.
+  """
+  @spec compile(map(), binary(), struct(), map()) :: {:ok, map()} | {:error, term()}
+  def compile(mission, spacecraft_id, row, %{model: model, telemetry: telemetry}) do
     with {:ok, sources} <- ConfigurationActive.source_ids(mission, spacecraft_id),
          true <- sources != [] || {:error, :spacecraft_configuration_review_unavailable},
-         {:ok, contribution} <- contribution(mission, spacecraft_id, row),
-         {:ok, model} <- model_manifest(mission, row.catalog_revision_id) do
+         {:ok, contribution} <- contribution(mission, spacecraft_id, row, telemetry) do
       {:ok,
        %{
          id: spacecraft_id,
@@ -143,7 +162,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
 
   def ready(_document), do: :ok
 
-  defp contribution(mission, spacecraft_id, row) do
+  defp contribution(mission, spacecraft_id, row, telemetry) do
     document = row.document
 
     configs =
@@ -166,7 +185,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
     TelemetryDecom.compile_mission_contribution(
       mission.organization_id,
       mission.mission_id,
-      configs
+      configs,
+      telemetry: telemetry
     )
   end
 
@@ -218,7 +238,14 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
     }
   end
 
-  defp model_manifest(mission, catalog_id) do
+  @doc """
+  What every spacecraft on `catalog_id` compiles against: `%{model: manifest, telemetry:
+  projection}`. Read once (the catalog revision, its mission-model revision and runtime plans) and
+  passed explicitly, never memoized in the process dictionary: OpentelemetryEcto copies the whole
+  dictionary on every query (step 4, 11-15).
+  """
+  @spec catalog_inputs(map(), binary()) :: {:ok, map()} | {:error, term()}
+  def catalog_inputs(mission, catalog_id) do
     with {:ok, catalog} <-
            Catalog.fetch_revision(mission.organization_id, mission.mission_id, catalog_id),
          {:ok, model} <-
@@ -232,8 +259,22 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
              mission.organization_id,
              mission.mission_id,
              model.revision_id
-           ) do
-      {:ok, MissionModels.manifest(model, plans)}
+           ),
+         {:ok, telemetry} <- TelemetryProjection.build(catalog, model, plans) do
+      {:ok, %{model: MissionModels.manifest(model, plans), telemetry: telemetry}}
+    end
+  end
+
+  @doc "Inputs for `catalog_id` from `cache`, loading them on the first use: `{:ok, inputs, cache}`."
+  @spec cached_inputs(map(), map(), binary()) :: {:ok, map(), map()} | {:error, term()}
+  def cached_inputs(cache, mission, catalog_id) do
+    case Map.fetch(cache, catalog_id) do
+      {:ok, inputs} ->
+        {:ok, inputs, cache}
+
+      :error ->
+        with {:ok, inputs} <- catalog_inputs(mission, catalog_id),
+             do: {:ok, inputs, Map.put(cache, catalog_id, inputs)}
     end
   end
 end

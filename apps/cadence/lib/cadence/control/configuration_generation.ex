@@ -363,8 +363,11 @@ defmodule Cadence.Control.ConfigurationGeneration do
     end
   end
 
+  # One compile input per distinct catalog, passed to every spacecraft on it (Review.
+  # cached_inputs/3): step 4 (11-15) read and decoded it once per spacecraft, 499 times.
   defp derive_configurations(mission, entries, derivations, %{applier: applier}) do
-    Enum.reduce_while(derivations, {:ok, []}, fn {id, changes}, {:ok, items} ->
+    derivations
+    |> Enum.reduce_while({:ok, [], %{}}, fn {id, changes}, {:ok, items, cache} ->
       with running when is_binary(running) <-
              entries[id]["configuration_revision_id"] ||
                {:error, :spacecraft_configuration_required},
@@ -376,12 +379,17 @@ defmodule Cadence.Control.ConfigurationGeneration do
                changes,
                applier["id"]
              ),
-           {:ok, item} <- Review.compile(mission, id, row) do
-        {:cont, {:ok, [item | items]}}
+           {:ok, inputs, cache} <- Review.cached_inputs(cache, mission, row.catalog_revision_id),
+           {:ok, item} <- Review.compile(mission, id, row, inputs) do
+        {:cont, {:ok, [item | items], cache}}
       else
         {:error, reason} -> {:halt, {:error, {reason, id}}}
       end
     end)
+    |> case do
+      {:ok, items, _cache} -> {:ok, items}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp next_binding_set(_mission, active, []), do: {:ok, active.binding_set}

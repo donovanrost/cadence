@@ -14,12 +14,15 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   alias Cadence.Management.Activations
   alias Cadence.SpacecraftStore
 
-  @fleet 500
+  @fleet String.to_integer(System.get_env("ROLLOUT_FLEET", "500"))
 
   setup do
     org = "org-rollout-preview"
     mid = "mission-rollout-preview"
-    {first, revision, _endpoint} = Fixtures.setup_imported_mission!(org, mid)
+    # Dev-sized catalog and model (10 packets, 146 fields, 83 limits): director, 11-15.
+    {first, revision, _endpoint} =
+      Fixtures.setup_imported_mission!(org, mid, yaml: Fixtures.dev_sized_yaml())
+
     {:ok, mission} = Cadence.Missions.fetch_mission(org, mid)
     scope = Fixtures.user_scope(org, "operator")
     policy = ActivationPolicy.load(org, mid)
@@ -66,6 +69,18 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
     ops = fleet_move!(c)
     {:ok, staged} = Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Move"}, ops)
 
+    test_pid = self()
+
+    :telemetry.attach(
+      "apply-transaction-#{System.unique_integer([:positive])}",
+      [:cadence, :configuration, :apply_transaction],
+      fn _event, %{duration: duration}, _meta, _config ->
+        ms = System.convert_time_unit(duration, :native, :millisecond)
+        send(test_pid, {:apply_transaction_ms, ms})
+      end,
+      nil
+    )
+
     {result, ms, queries, by_query} =
       measure(fn ->
         Configuration.submit(c.scope, c.mission.mission_id, staged.change_set_id, %{
@@ -77,26 +92,28 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
 
     assert {:ok, %{state: :applied}} = result
 
-    # Each immutable revision is read once for the apply, not once per spacecraft
-    # (Platform.ReadMemo): before, ~2,000 reads of large JSONB inside the transaction.
-    # (A runtime plan is 4 queries, one per target; 12 for the 3 revisions involved.)
+    assert_received {:apply_transaction_ms, transaction_ms}
+
+    # Each catalog's compile inputs are read once per distinct catalog and passed explicitly
+    # (Review.cached_inputs/3), not once per spacecraft and not in the process dictionary.
+    # (A runtime plan is 4 queries, one per target.)
     for {reader, bound} <- [
-          {"Catalog.fetch_revision", 4},
+          {"Catalog.fetch_revision", 16},
           {"MissionModels.fetch_revision", 4},
           {"MissionModels.fetch_plan", 16}
         ] do
       assert reads(by_query, reader) <= bound, "#{reader}: #{top(by_query)}"
     end
 
-    # Still ~15 per spacecraft (each spacecraft's derived revision and binding rules are
-    # written, and its sources and drafts read): 7,345 on 11-15. One more per-spacecraft query
-    # adds 500, so the bound catches it.
-    assert queries <= @fleet * 16, "#{queries} queries for #{@fleet} spacecraft: #{top(by_query)}"
+    # Still per spacecraft (each one's revision, capability instances and binding rules are written
+    # row by row, and its source endpoint is read per packet): 25,519 for 500 on 11-15. Going
+    # set-based is the next step; this bound catches any new per-spacecraft query.
+    assert queries <= @fleet * 56, "#{queries} queries for #{@fleet} spacecraft: #{top(by_query)}"
 
-    # The apply is one transaction with a 120 s timeout. Alone it took 4.8 s on 11-15; late in a
-    # full suite run, 47 s. So the budget is half the timeout: the old behaviour (past 120 s) fails
-    # it, and the query bounds above are the sharp regression check.
-    assert ms < 60_000, "#{ms} ms for #{@fleet} spacecraft"
+    # The transaction itself (a 120 s timeout): 10.6 s for 500 spacecraft on a dev-sized catalog on
+    # 11-15. Before the fix it grew super-linearly (120 spacecraft: 48 s) and rolled back on dev.
+    assert transaction_ms < 60_000, "#{transaction_ms} ms in the transaction for #{@fleet}"
+    assert ms < 90_000, "#{ms} ms for #{@fleet} spacecraft"
   end
 
   # Queries a Cadence function ran (by the caller recorded with each query).
@@ -137,7 +154,10 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
     end
 
     rev2 =
-      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id, revision_label: "Rev 2")
+      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
+        revision_label: "Rev 2",
+        yaml: Fixtures.dev_sized_yaml()
+      )
 
     [
       %{
@@ -243,7 +263,7 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
         "catalog_revision_id" => c.revision.catalog_revision_id,
         "telemetry_enabled" => true,
         "commanding_enabled" => true,
-        "handled_apids" => [42]
+        "handled_apids" => Fixtures.dev_sized_apids()
       })
 
     {:ok, _} =

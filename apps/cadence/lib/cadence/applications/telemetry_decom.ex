@@ -859,13 +859,17 @@ defmodule Cadence.Applications.TelemetryDecom do
   end
 
   @doc false
-  @spec compile_mission_contribution(binary(), binary(), [Config.t()]) ::
+  @spec compile_mission_contribution(binary(), binary(), [Config.t()], keyword()) ::
           {:ok, MissionBindingContribution.t()} | {:error, term()}
-  def compile_mission_contribution(organization_id, mission_id, configs)
+  def compile_mission_contribution(organization_id, mission_id, configs, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(configs) do
+    # `telemetry:` a projection the caller already loaded for these configs' catalog, so a
+    # fleet-wide compile reads and decodes it once, not once per spacecraft (step 4, 11-15).
+    preloaded = Keyword.get(opts, :telemetry)
+
     {capability_instances, rules, errors} =
       Enum.reduce(configs, {[], [], []}, fn config, {ci_acc, rule_acc, error_acc} ->
-        case fetch_telemetry_for_config(organization_id, mission_id, config) do
+        case telemetry_for_config(organization_id, mission_id, config, preloaded) do
           {:ok, telemetry} ->
             compilation = compile_runtime_artifacts(telemetry, config, 1)
 
@@ -905,6 +909,17 @@ defmodule Cadence.Applications.TelemetryDecom do
         {:error, {:config_compile_failed, errors}}
     end
   end
+
+  defp telemetry_for_config(
+         _organization_id,
+         _mission_id,
+         %Config{catalog_revision_id: id},
+         %{catalog_revision: %{catalog_revision_id: id}} = telemetry
+       ),
+       do: {:ok, telemetry}
+
+  defp telemetry_for_config(organization_id, mission_id, config, _preloaded),
+    do: fetch_telemetry_for_config(organization_id, mission_id, config)
 
   defp fetch_telemetry_for_config(organization_id, mission_id, %Config{} = config) do
     with {:ok, %Revision{} = revision} <-

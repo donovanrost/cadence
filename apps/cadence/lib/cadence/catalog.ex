@@ -29,7 +29,7 @@ defmodule Cadence.Catalog do
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
-  alias Cadence.Platform.{EventBus, ReadMemo}
+  alias Cadence.Platform.EventBus
 
   alias Cadence.Repo
 
@@ -322,18 +322,15 @@ defmodule Cadence.Catalog do
   def fetch_revision(organization_id, mission_id, catalog_revision_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(catalog_revision_id) do
-    # Immutable by id: read once per fleet-wide apply (Platform.ReadMemo, step 4).
-    ReadMemo.fetch({:catalog_revision, organization_id, mission_id, catalog_revision_id}, fn ->
-      case Repo.get_by(
-             RevisionRow,
-             organization_id: organization_id,
-             mission_id: mission_id,
-             catalog_revision_id: catalog_revision_id
-           ) do
-        nil -> {:error, :catalog_revision_not_found}
-        %RevisionRow{} = row -> {:ok, RevisionRow.to_domain(row)}
-      end
-    end)
+    case Repo.get_by(
+           RevisionRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           catalog_revision_id: catalog_revision_id
+         ) do
+      nil -> {:error, :catalog_revision_not_found}
+      %RevisionRow{} = row -> {:ok, RevisionRow.to_domain(row)}
+    end
   end
 
   @spec fetch_revision_by_import_run(binary(), binary(), binary()) ::

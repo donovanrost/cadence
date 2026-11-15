@@ -12,7 +12,6 @@ defmodule Cadence.Configuration.Pipeline do
   """
 
   alias Cadence.Configuration.{Document, Kinds, Ledger}
-  alias Cadence.Platform.ReadMemo
   alias Cadence.SpacecraftTypeStore
 
   @type op :: %{
@@ -46,10 +45,8 @@ defmodule Cadence.Configuration.Pipeline do
     ops = with_actor(ops, Keyword.get(opts, :actor))
 
     # Kinds re-read the same profile versions once per spacecraft; one read each for the run.
-    ReadMemo.with_memo(fn ->
-      SpacecraftTypeStore.with_version_memo(fn ->
-        run_ops(organization_id, mission_id, base_revision, ops)
-      end)
+    SpacecraftTypeStore.with_version_memo(fn ->
+      run_ops(organization_id, mission_id, base_revision, ops)
     end)
   end
 

@@ -22,7 +22,6 @@ defmodule Cadence.MissionModels do
     RuntimePlanRow
   }
 
-  alias Cadence.Platform.ReadMemo
   alias Cadence.Repo
 
   @doc "Builds the exact revision and compiled-plan identity manifest for activation requests."
@@ -110,17 +109,14 @@ defmodule Cadence.MissionModels do
           {:ok, Revision.t()} | {:error, term()}
   def fetch_revision(organization_id, mission_id, revision_id)
       when is_binary(mission_id) and is_binary(revision_id) do
-    # Immutable by id: read once per fleet-wide apply (Platform.ReadMemo, step 4).
-    ReadMemo.fetch({:mission_model_revision, organization_id, mission_id, revision_id}, fn ->
-      RevisionRow
-      |> where([row], row.mission_id == ^mission_id and row.revision_id == ^revision_id)
-      |> organization_filter(organization_id)
-      |> Repo.one()
-      |> case do
-        nil -> {:error, :mission_model_revision_not_found}
-        row -> {:ok, RevisionRow.to_domain(row)}
-      end
-    end)
+    RevisionRow
+    |> where([row], row.mission_id == ^mission_id and row.revision_id == ^revision_id)
+    |> organization_filter(organization_id)
+    |> Repo.one()
+    |> case do
+      nil -> {:error, :mission_model_revision_not_found}
+      row -> {:ok, RevisionRow.to_domain(row)}
+    end
   end
 
   @spec list_revisions(binary() | nil, binary(), keyword()) :: [Revision.t()]
@@ -156,13 +152,6 @@ defmodule Cadence.MissionModels do
           {:ok, %{required(atom()) => RuntimePlan.t()}} | {:error, term()}
   def fetch_runtime_plans(organization_id, mission_id, revision_id)
       when is_binary(mission_id) and is_binary(revision_id) do
-    ReadMemo.fetch(
-      {:mission_model_runtime_plans, organization_id, mission_id, revision_id},
-      fn -> load_runtime_plans(organization_id, mission_id, revision_id) end
-    )
-  end
-
-  defp load_runtime_plans(organization_id, mission_id, revision_id) do
     [:telemetry, :algorithm, :monitoring, :command]
     |> Enum.reduce_while({:ok, %{}}, fn target, {:ok, plans} ->
       case fetch_plan(organization_id, mission_id, revision_id, target) do

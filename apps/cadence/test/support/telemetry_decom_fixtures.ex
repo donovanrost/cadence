@@ -17,7 +17,51 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
     persist_spacecraft!(organization_id, mission_id, display_name: "Nova-1")
   end
 
-  def setup_imported_mission!(organization_id, mission_id) do
+  @doc """
+  A catalog the size of dev's (mission-earendil-demo, rev 4 / model 732618, 11-15): 10 packets with
+  dev's field counts (146 fields), 83 of them with limits, and 12 commands. A fleet-scale test on a
+  one-packet catalog proved nothing about step 4's apply (director, 11-15).
+  """
+  def dev_sized_yaml do
+    packets =
+      Enum.zip([
+        ~w(ADCS CCSDS_HDR COMM DEBUG EPS HK PAYLOAD SCIENCE_DATA STRESS_TEST THERM),
+        dev_sized_apids(),
+        [15, 7, 9, 5, 14, 10, 8, 3, 64, 11]
+      ])
+
+    {packet_yaml, _limited} =
+      Enum.map_reduce(packets, 0, fn {name, apid, fields}, limited ->
+        {items, limited} =
+          Enum.map_reduce(0..(fields - 1), limited, &dev_sized_item(name, &1, &2))
+
+        {"  - name: #{name}\n    apid: #{apid}\n    items:\n" <> Enum.join(items), limited}
+      end)
+
+    commands =
+      for i <- 1..12 do
+        "  - name: CMD_#{i}\n    opcode: #{i}\n    parameters:\n      - name: value\n" <>
+          "        data_type: uint\n        required: true\n        bit_offset: 0\n        bit_length: 8\n"
+      end
+
+    "packets:\n" <> Enum.join(packet_yaml) <> "commands:\n" <> Enum.join(commands)
+  end
+
+  defp dev_sized_item(packet, index, limited) do
+    limits =
+      if limited < 83,
+        do: "      limits:\n        yellow_high: 200\n        red_high: 250\n",
+        else: ""
+
+    {"      - name: #{String.downcase(packet)}_#{index}\n        data_type: uint\n" <>
+       "        bit_offset: #{rem(index, 8) * 8}\n        bit_size: 8\n" <>
+       String.replace(limits, "      ", "        "), limited + 1}
+  end
+
+  @doc "The apids `dev_sized_yaml/0` declares, in its packet order."
+  def dev_sized_apids, do: [30, 2, 40, 255, 20, 1, 50, 100, 101, 10]
+
+  def setup_imported_mission!(organization_id, mission_id, opts \\ []) do
     spacecraft = setup_spacecraft!(organization_id, mission_id)
 
     endpoint =
@@ -25,7 +69,7 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
         display_name: "Primary"
       )
 
-    revision = persist_imported_revision!(organization_id, mission_id)
+    revision = persist_imported_revision!(organization_id, mission_id, opts)
     {spacecraft, revision, endpoint}
   end
 
