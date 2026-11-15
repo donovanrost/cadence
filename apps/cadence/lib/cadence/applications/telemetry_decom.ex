@@ -237,14 +237,14 @@ defmodule Cadence.Applications.TelemetryDecom do
       enabled: document["telemetry_enabled"]
     }
 
-    inputs = %{
-      handled_apids: document["handled_apids"] || [],
-      source_endpoint_id: document["telemetry_source_endpoint_id"]
-    }
-
-    case store_config(organization_id, mission_id, spacecraft_id, attrs, inputs) do
-      {:ok, _binding} -> :ok
-      {:error, reason} -> {:error, reason}
+    # Parsed as configure/4 parses it, so the stored row is the same type either way (api-ops).
+    with {:ok, handled_apids} <- APIDSelection.parse(document["handled_apids"]),
+         {:ok, _binding} <-
+           store_config(organization_id, mission_id, spacecraft_id, attrs, %{
+             handled_apids: handled_apids,
+             source_endpoint_id: document["telemetry_source_endpoint_id"]
+           }) do
+      :ok
     end
   end
 
