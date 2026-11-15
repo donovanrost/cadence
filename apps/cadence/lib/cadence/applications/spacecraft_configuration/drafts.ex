@@ -133,26 +133,66 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
            latest(organization_id, mission_id, running.spacecraft_id) ||
              {:error, :spacecraft_configuration_not_found} do
       document = Map.merge(running.document, changes)
-      catalog_revision_id = document["catalog_revision_id"]
 
-      Repo.insert(
-        ConfigurationRevisionRow.changeset(%{
-          configuration_revision_id: Ids.new("spacecraft_configuration"),
-          organization_id: organization_id,
-          mission_id: mission_id,
-          spacecraft_id: running.spacecraft_id,
-          version: latest.version + 1,
-          catalog_revision_id: catalog_revision_id,
-          document: document,
-          content_sha256: ContentHash.term_sha256(document),
-          application_basis: running.application_basis,
-          created_by: actor_id
-        })
-      )
+      # The stored decom config follows, as a Save's does (ApplicationInputs.persist); its basis
+      # changes with it, so the caller re-stamps the new revisions (restamp_bases/2).
+      with :ok <-
+             TelemetryDecom.project_configuration(
+               organization_id,
+               mission_id,
+               running.spacecraft_id,
+               document
+             ) do
+        insert_derived(organization_id, mission_id, running, latest, document, actor_id)
+      end
     else
       {:error, reason} -> {:error, reason}
       _newer -> {:error, :spacecraft_configuration_pending}
     end
+  end
+
+  defp insert_derived(organization_id, mission_id, running, latest, document, actor_id) do
+    catalog_revision_id = document["catalog_revision_id"]
+
+    Repo.insert(
+      ConfigurationRevisionRow.changeset(%{
+        configuration_revision_id: Ids.new("spacecraft_configuration"),
+        organization_id: organization_id,
+        mission_id: mission_id,
+        spacecraft_id: running.spacecraft_id,
+        version: latest.version + 1,
+        catalog_revision_id: catalog_revision_id,
+        document: document,
+        content_sha256: ContentHash.term_sha256(document),
+        application_basis: running.application_basis,
+        created_by: actor_id
+      })
+    )
+  end
+
+  @doc """
+  Stamps revisions `derive/5` just wrote with their spacecraft's current application basis (one read
+  of the bases, one update), after the projection changed it. Without it the post-activation check
+  (`TelemetryDecom`'s applied ids) would see every moved spacecraft as changed elsewhere.
+  """
+  def restamp_bases(_mission, []), do: :ok
+
+  def restamp_bases(mission, rows) when is_list(rows) do
+    bases = ConfigurationApplications.bases(mission, Enum.map(rows, & &1.spacecraft_id))
+
+    Repo.query!(
+      """
+      UPDATE spacecraft_configuration_revisions AS r SET application_basis = v.basis
+      FROM unnest($1::text[], $2::text[]) AS v(id, basis)
+      WHERE r.configuration_revision_id = v.id
+      """,
+      [
+        Enum.map(rows, & &1.configuration_revision_id),
+        Enum.map(rows, &Map.fetch!(bases, &1.spacecraft_id))
+      ]
+    )
+
+    :ok
   end
 
   def fetch(organization_id, mission_id, id) do

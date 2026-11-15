@@ -223,7 +223,45 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
+  @doc """
+  Records an already-validated configuration document as the spacecraft's stored config, without
+  re-validating it against its catalog: the change-set apply's `Review.compile` checks it in the same
+  transaction. Before 11-15 a change-set move left this row on the old catalog (001 on dev), which the
+  decom and packet-input surfaces and `Drafts.snapshot`'s overlay then acted on.
+  """
+  @spec project_configuration(binary(), binary(), binary(), map()) :: :ok | {:error, term()}
+  def project_configuration(organization_id, mission_id, spacecraft_id, document)
+      when is_map(document) do
+    attrs = %{
+      catalog_revision_id: document["catalog_revision_id"],
+      enabled: document["telemetry_enabled"]
+    }
+
+    inputs = %{
+      handled_apids: document["handled_apids"] || [],
+      source_endpoint_id: document["telemetry_source_endpoint_id"]
+    }
+
+    case store_config(organization_id, mission_id, spacecraft_id, attrs, inputs) do
+      {:ok, _binding} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
+    case store_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
+      {:ok, binding} ->
+        {:ok,
+         binding
+         |> config_from_binding()
+         |> overlay_packet_binding_selection()}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp store_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
     existing =
       case ApplicationBindingStore.fetch(
              organization_id,
@@ -260,16 +298,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         metadata: Map.get(attrs, :metadata, %{})
       })
 
-    case ApplicationBindingStore.upsert(config_to_binding(config)) do
-      {:ok, binding} ->
-        {:ok,
-         binding
-         |> config_from_binding()
-         |> overlay_packet_binding_selection()}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    ApplicationBindingStore.upsert(config_to_binding(config))
   end
 
   defp preserved_applied_stamp(

@@ -367,7 +367,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
   # cached_inputs/3): step 4 (11-15) read and decoded it once per spacecraft, 499 times.
   defp derive_configurations(mission, entries, derivations, %{applier: applier}) do
     derivations
-    |> Enum.reduce_while({:ok, [], %{}}, fn {id, changes}, {:ok, items, cache} ->
+    |> Enum.reduce_while({:ok, [], [], %{}}, fn {id, changes}, {:ok, items, rows, cache} ->
       with running when is_binary(running) <-
              entries[id]["configuration_revision_id"] ||
                {:error, :spacecraft_configuration_required},
@@ -381,15 +381,21 @@ defmodule Cadence.Control.ConfigurationGeneration do
              ),
            {:ok, inputs, cache} <- Review.cached_inputs(cache, mission, row.catalog_revision_id),
            {:ok, item} <- Review.compile(mission, id, row, inputs) do
-        {:cont, {:ok, [item | items], cache}}
+        {:cont, {:ok, [item | items], [row | rows], cache}}
       else
         {:error, reason} -> {:halt, {:error, {reason, id}}}
       end
     end)
     |> case do
-      {:ok, items, _cache} -> {:ok, items}
+      {:ok, items, rows, _cache} -> restamped(mission, items, rows)
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # derive/5 projected each spacecraft's stored decom config, so their bases moved (11-15 drift fix).
+  defp restamped(mission, items, rows) do
+    :ok = Drafts.restamp_bases(mission, rows)
+    {:ok, items}
   end
 
   defp next_binding_set(_mission, active, []), do: {:ok, active.binding_set}

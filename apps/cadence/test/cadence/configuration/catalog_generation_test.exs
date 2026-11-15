@@ -3,6 +3,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts, Review}
+  alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
   alias Cadence.Control.Activations, as: ControlActivations
@@ -88,6 +89,7 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     assert latest.catalog_revision_id == c.rev2
     assert latest.configuration_revision_id == entry["configuration_revision_id"]
     assert CatalogAuthority.mismatches(c.org, c.mission.mission_id) == []
+    assert_projected(c, c.rev2)
 
     # Rolling it back goes the same way.
     {:ok, rollback} = ConfigurationRollback.stage(c.scope, c.mission.mission_id, revision - 1)
@@ -99,6 +101,44 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
              FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
 
     assert rev1 == c.rev1
+    assert_projected(c, c.rev1)
+  end
+
+  # 11-15 (001 on dev): a change-set move left the stored decom config on the old catalog. The
+  # decom and packet-input surfaces read it, and Drafts.snapshot overlaid it on the document once
+  # the application basis changed, so the next Save reverted the move.
+  test "a later application change doesn't revert a change-set catalog move", c do
+    profile = profile!(c, c.rev1)
+    apply!(c, [update("spacecraft_profile", profile, "catalog_revision_id", c.rev2)])
+
+    # Something else changes the spacecraft's application basis (the decom surface's own write).
+    {:ok, config} =
+      TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+
+    :ok =
+      TelemetryDecom.project_configuration(c.org, c.mission.mission_id, c.craft.spacecraft_id, %{
+        "catalog_revision_id" => config.catalog_revision_id,
+        "telemetry_enabled" => true,
+        "handled_apids" => [42, 43],
+        "telemetry_source_endpoint_id" => config.source_endpoint_id
+      })
+
+    # The snapshot overlays the stored config; its catalog must be the one the move applied.
+    snapshot = Drafts.snapshot(c.mission, c.craft)
+    assert snapshot.external_changes
+    assert snapshot.document["handled_apids"] == [42, 43]
+    assert snapshot.document["catalog_revision_id"] == c.rev2
+  end
+
+  defp assert_projected(c, catalog) do
+    assert {:ok, config} =
+             TelemetryDecom.fetch_config(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+
+    assert config.catalog_revision_id == catalog
+
+    snapshot = Drafts.snapshot(c.mission, c.craft)
+    refute snapshot.external_changes
+    assert snapshot.document["catalog_revision_id"] == catalog
   end
 
   test "waiting commands are canceled with catalog_changed; a command in flight blocks the apply",

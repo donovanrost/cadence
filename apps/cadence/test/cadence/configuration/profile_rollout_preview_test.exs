@@ -6,6 +6,7 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
+  alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
@@ -94,6 +95,14 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
 
     assert_received {:apply_transaction_ms, transaction_ms}
 
+    # Every spacecraft's stored decom config follows the move (11-15: it kept the old catalog).
+    [%{changes: [%{value: rev2}]}] = ops
+
+    assert c.org
+           |> TelemetryDecom.list_configs(c.mission.mission_id)
+           |> Enum.map(& &1.catalog_revision_id)
+           |> Enum.frequencies() == %{rev2 => @fleet}
+
     # Each catalog's compile inputs are read once per distinct catalog and passed explicitly
     # (Review.cached_inputs/3), not once per spacecraft and not in the process dictionary.
     # (A runtime plan is 4 queries, one per target.)
@@ -105,10 +114,12 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
       assert reads(by_query, reader) <= bound, "#{reader}: #{top(by_query)}"
     end
 
-    # Still per spacecraft: each one's derived revision, and its capability instances and binding
-    # rules row by row (one of each per packet, 20 of the 31): 15,520 for 500 on 11-15. Going
-    # set-based is the next step; this bound catches any new per-spacecraft query.
-    assert queries <= @fleet * 34, "#{queries} queries for #{@fleet} spacecraft: #{top(by_query)}"
+    # Still per spacecraft: each one's derived revision, its stored decom config (projected since
+    # the 11-15 drift fix: 4 statements), and its capability instances and binding rules row by row
+    # (one of each per packet, 20 of the 35): 17,524 for 500 on 11-15. The model review
+    # (config-materialization-model.md) decides what replaces them; this bound catches any new
+    # per-spacecraft query.
+    assert queries <= @fleet * 37, "#{queries} queries for #{@fleet} spacecraft: #{top(by_query)}"
 
     # The transaction itself (a 120 s timeout): 7.8 s for 500 spacecraft on a dev-sized catalog on
     # 11-15. Before the fix it grew super-linearly (120 spacecraft: 48 s) and rolled back on dev.
