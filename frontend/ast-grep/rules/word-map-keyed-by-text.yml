@@ -1,0 +1,68 @@
+{
+  "id": "word-map-keyed-by-text",
+  "language": "TypeScript",
+  "severity": "error",
+  "message": "A word map keyed by text: key it by the vocabulary's union (Record<Union, …>) so a renamed or misspelled key is a compile error (typing plan §12B, rule A). Not a word map (headers, a query-param bag, keyboard keys)? Put `// keyed-by-text: <why>` on the line above.",
+  "rule":
+    {
+      "kind": "variable_declarator",
+      "all":
+        [
+          { "has": { "field": "type", "regex": "Record<\\s*string\\s*," } },
+          { "has": { "field": "value", "kind": "object", "has": { "kind": "pair" } } },
+          {
+            "not":
+              {
+                "inside":
+                  {
+                    "any": [{ "kind": "lexical_declaration" }, { "kind": "export_statement" }],
+                    "follows": { "kind": "comment", "regex": "keyed-by-text:\\s*\\S.{8,}" },
+                    "stopBy": "end",
+                  },
+              },
+          },
+        ],
+    },
+  "files": ["apps/console/src/**"],
+  "ignores":
+    [
+      "**/*.test.ts",
+      "ast-grep/fixtures/**",
+      # Not migrated yet (BACKLOG §12B rule A, 11-15): each owner removes their file as they migrate.
+      "apps/console/src/api/http.ts",
+      "apps/console/src/features/alarms/api.ts",
+      "apps/console/src/features/apps/saveOutcome.ts",
+      "apps/console/src/features/apps/surfaces.ts",
+      "apps/console/src/features/audit/api.ts",
+      "apps/console/src/features/changes/ChecksPanel.vue",
+      "apps/console/src/features/changes/EntryList.vue",
+      "apps/console/src/features/changes/actions.ts",
+      "apps/console/src/features/commands/groups/checks.ts",
+      "apps/console/src/features/commands/groups/encoding.ts",
+      "apps/console/src/features/commands/list/CommandsScreen.vue",
+      "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
+      "apps/console/src/features/dashboards/fixtures.test-support.ts",
+      "apps/console/src/features/dashboards/model/time-range.ts",
+      "apps/console/src/features/investigate/telemetry/model.ts",
+      "apps/console/src/features/now/attention.ts",
+      "apps/console/src/features/now/queue.ts",
+      "apps/console/src/features/now/sources.ts",
+      "apps/console/src/features/palette/PaletteRoot.vue",
+      "apps/console/src/features/palette/sources.ts",
+      "apps/console/src/features/people/admin.ts",
+      "apps/console/src/features/people/policies.ts",
+      "apps/console/src/features/planning/RequirementGroups.vue",
+      "apps/console/src/features/planning/TemplateEditor.vue",
+      "apps/console/src/features/planning/policy.ts",
+      "apps/console/src/features/profiles/newProfile.ts",
+      "apps/console/src/features/review/api.ts",
+      "apps/console/src/features/review/format.ts",
+      "apps/console/src/features/scheduling/PlanStatePanel.vue",
+      "apps/console/src/features/scheduling/api.ts",
+      "apps/console/src/features/scheduling/booking-state.ts",
+      "apps/console/src/features/spacecraft/add/ServerChecks.vue",
+      "apps/console/src/features/spacecraft/detail.ts",
+      "apps/console/src/features/timeline/model.ts",
+      "apps/console/src/shell/menu-button.ts",
+    ],
+}
