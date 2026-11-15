@@ -116,6 +116,69 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
              )
   end
 
+  describe "telemetry contract 3: calibration per field (#92 (c))" do
+    test "a contract-3 plan carries each field's calibrator and enumerations, persisted as JSON" do
+      %{telemetry: plan} = compilation().plans
+
+      [packet] =
+        plan.plan |> Jason.encode!() |> Jason.decode!() |> Map.fetch!("packet_definitions")
+
+      [temperature, ready] = packet["fields"]
+
+      calibrated =
+        put_in(packet["fields"], [
+          Map.put(temperature, "calibrator", %{
+            "type" => "polynomial",
+            "coefficients" => [-40.0, 0.01]
+          }),
+          Map.put(ready, "enumerations", [
+            %{"value" => 0, "label" => "NOT_READY"},
+            %{"value" => 1, "label" => "READY"}
+          ])
+        ])
+
+      contract_3 = %RuntimePlan{
+        plan
+        | target_contract_version: "3",
+          plan: %{
+            "runtime_contract" => "mission_model_telemetry_v1",
+            "packet_definitions" => [calibrated]
+          }
+      }
+
+      assert {:ok, [%PacketDefinition{fields: [temp_field, ready_field]}]} =
+               MissionModelPlanDecoder.telemetry_packet_definitions(%{telemetry: contract_3})
+
+      assert temp_field.calibrator == %{type: :polynomial, coefficients: [-40.0, 0.01]}
+      assert temp_field.enumerations == []
+      assert ready_field.calibrator == nil
+
+      assert ready_field.enumerations == [
+               %{value: 0, label: "NOT_READY"},
+               %{value: 1, label: "READY"}
+             ]
+    end
+
+    test "a contract-2 plan (every revision stored before) decodes with no calibration" do
+      %{telemetry: plan} = compilation().plans
+      assert plan.target_contract_version == "2"
+
+      assert {:ok, [%PacketDefinition{fields: fields}]} =
+               MissionModelPlanDecoder.telemetry_packet_definitions(%{telemetry: plan})
+
+      assert Enum.all?(fields, &(&1.calibrator == nil and &1.enumerations == []))
+    end
+
+    test "an unknown contract still fails closed" do
+      %{telemetry: plan} = compilation().plans
+
+      assert {:error, {:unsupported_mission_model_runtime_plan, :telemetry, "4"}} =
+               MissionModelPlanDecoder.telemetry_packet_definitions(%{
+                 telemetry: %RuntimePlan{plan | target_contract_version: "4"}
+               })
+    end
+  end
+
   defp compilation do
     source =
       Source.new(%{

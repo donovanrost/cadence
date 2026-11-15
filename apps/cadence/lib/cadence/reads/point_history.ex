@@ -46,7 +46,12 @@ defmodule Cadence.Reads.PointHistory do
            opts
          ) do
       {:ok, %{buckets: buckets}} ->
-        {:ok, result(width_ms, Enum.flat_map(buckets, &native_bucket/1), false)}
+        case Enum.flat_map(buckets, &native_bucket/1) do
+          # Native decimation aggregates numeric engineering values only. An enumerated point's
+          # engineering value is its label (calibration, #92 (c)), so it plots its raw states.
+          [] -> fallback(organization_id, mission_id, point_id, opts, from, width_ms)
+          native -> {:ok, result(width_ms, native, false)}
+        end
 
       {:error, {:unsupported_history_capability, _backend, _capability}} ->
         fallback(organization_id, mission_id, point_id, opts, from, width_ms)
@@ -64,8 +69,8 @@ defmodule Cadence.Reads.PointHistory do
   end
 
   @doc """
-  Buckets samples by generation time (receipt time when absent), numeric values
-  only. Buckets sit on the same grid as QuestDB's `ALIGN TO CALENDAR`: multiples
+  Buckets samples by generation time (receipt time when absent): numeric engineering values, or
+  the raw value when the engineering value isn't a number (an enumerated point's label). Buckets sit on the same grid as QuestDB's `ALIGN TO CALENDAR`: multiples
   of the width from UTC midnight of the window's first day.
   """
   @spec bucket_samples([Sample.t()], DateTime.t(), pos_integer()) :: [bucket()]
@@ -79,7 +84,8 @@ defmodule Cadence.Reads.PointHistory do
     samples
     |> Enum.flat_map(fn %Sample{} = sample ->
       at = sample.generation_time || sample.receipt_time
-      value = numeric(sample.engineering_value)
+      # The engineering value when it's a number; else the raw value (an enumerated state).
+      value = numeric(sample.engineering_value) || numeric(sample.raw_value)
 
       if at && value,
         do: [{div(DateTime.to_unix(at, :millisecond) - origin, width_ms), value}],
