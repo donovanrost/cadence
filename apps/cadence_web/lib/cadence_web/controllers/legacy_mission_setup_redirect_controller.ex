@@ -20,6 +20,7 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
       signed-in organization), else `…/setup/catalog`
   - B9 `/missions/:id/comms/routing[/new | /:id]` → `…/setup/comms` (its Routing rules tab)
   - B10 `/missions/:id/comms/validation` → `…/setup` (Setup readiness)
+  - B11 `/missions/:id/spacecraft/:sid/applications` → `…/setup/spacecraft/:sid` (its apps section)
 
   Slugs come from the signed-in organization (`CadenceWeb.ConsolePaths`), falling back to
   `/console`.

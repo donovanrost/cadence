@@ -126,4 +126,9 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
   test "B10: comms validation goes to Setup readiness", c do
     assert redirected_to(get(c.conn, c.legacy <> "/comms/validation")) == c.console <> "/setup"
   end
+
+  test "B11: a spacecraft's applications go to its Setup page", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/sc_1/applications")) ==
+             c.console <> "/setup/spacecraft/sc_1"
+  end
 end
