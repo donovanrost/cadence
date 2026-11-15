@@ -13,20 +13,20 @@ Run before deploying a branch to an environment. Each line names why it exists.
    active realized contact, nothing starting within 15 minutes, no armed command group. A stop during
    a live pass replays its journal on boot (issue 60).
 3. **Ingress journal disk** (on by default, DECISIONS #95). Every downlink's received bytes are
-   journaled before processing, at `CADENCE_INGRESS_JOURNAL_PATH` (default
-   `/var/lib/cadence/ingress_journal`): put it on a persistent volume, not the container's writable
-   layer. A contact's stream is deleted 72 h after the contact settles, and only once every byte is
-   in the ingress archive (JournalReclaim). The cap `CADENCE_INGRESS_JOURNAL_MAX_BYTES` is ONE
-   budget for every link, and a full journal refuses new bytes for ALL of them at once
-   (`ingress_journal_full`, the capacity_exhausted event). The default 8 GiB suits only about 80
-   craft or fewer at the dev simulator's rate (5 passes of 8 min a day). Size it:
-   - **Rule:** cap ≈ Σ over downlinks (link byte rate × contact seconds within 72 h) × 1.5, plus the
-     largest undrained backlog you expect (an archive outage). Set
-     `CADENCE_INGRESS_JOURNAL_MAX_BYTES` to that and give the volume more than the cap.
+   journaled before processing, one stream per contact path, under `CADENCE_INGRESS_JOURNAL_PATH`
+   (default `/var/lib/cadence/ingress_journal`): put it on a persistent volume, not the
+   container's writable layer. A contact's stream is deleted 72 h after the contact settles, and
+   only once every byte is in the ingress archive (JournalReclaim).
+   - **Per stream:** `CADENCE_INGRESS_JOURNAL_MAX_BYTES` (default 8 GiB) caps ONE stream; a full
+     stream refuses only its contact's bytes (`ingress_journal_full`; Now shows it at 80 %). The
+     default is far above one pass (an 8-minute pass at the dev simulator's rate is about 7 MB).
+   - **The volume:** nothing caps the SUM of all streams. When the volume fills, every stream's
+     appends fail and telemetry from every pass is lost at once. Size the VOLUME by the rule:
+     bytes ≈ Σ over downlinks (link byte rate × contact seconds within 72 h) × 1.5, plus the
+     largest undrained backlog you expect (an archive outage).
    - **Worked example:** N craft × passes/day × pass seconds × 3 days × byte rate × 1.5. At the dev
-     simulator's rate (~14 KB/s, ~50 MB per contact-hour; one 8-minute pass ≈ 7 MB) with 5 passes of
-     8 min a day: 10 craft ≈ 0.8 GiB; 100 craft ≈ 10 GiB (over the default); 500 craft ≈ 49 GiB;
-     500 craft at a 2 Mbit/s S-band link ≈ 880 GiB.
+     simulator's rate (~14 KB/s, ~50 MB per contact-hour) with 5 passes of 8 min a day: 10 craft ≈
+     0.8 GiB, 100 craft ≈ 10 GiB, 500 craft ≈ 49 GiB; 500 craft at a 2 Mbit/s S-band link ≈ 880 GiB.
    - **Dev:** the default path in a checkout is the repository's `var/ingress_journal`, on the host's
      own disk (the disk that filled on 11-14); fine at 10 craft, but watch host free space.
    To run without it, set `CADENCE_INGRESS_JOURNAL_ENABLED=false` (supported; then a stop during a
