@@ -20,6 +20,7 @@ defmodule Cadence.Reads.EventSentences do
     ConfigRevisionEvents,
     ContactEndingEvents,
     OffPlanBookingEvents,
+    WatermarkEvents,
     WindowMoveEvents
   }
 
@@ -49,6 +50,26 @@ defmodule Cadence.Reads.EventSentences do
     do:
       {"#{source(entry)} has data through #{time(current(entry)["complete_through"])}",
        source_ref(entry), nil}
+
+  # ux U60: the coalesced watermark events (WatermarkEvents); old per-write "advanced" rows above.
+  defp sentence("source_watermark_settled", entry, ctx),
+    do:
+      {WatermarkEvents.settled(
+         craft(entry, ctx),
+         current(entry),
+         payload(entry),
+         entry.occurred_at
+       ), contact_ref(entry), nil}
+
+  defp sentence("source_watermark_caught_up", entry, ctx),
+    do: {WatermarkEvents.caught_up(craft(entry, ctx), payload(entry)), source_ref(entry), nil}
+
+  defp sentence("source_watermark_retreated", %Entry{spacecraft_id: id} = entry, ctx)
+       when is_binary(id) do
+    reason = retreat_reason(entry)
+    text = WatermarkEvents.retreated(craft(entry, ctx), current(entry), reason == "data replay")
+    {text, source_ref(entry), if(reason, do: :caution, else: :info)}
+  end
 
   defp sentence("source_watermark_retreated", entry, _ctx) do
     base = "#{source(entry)} went back to #{time(current(entry)["complete_through"])}"

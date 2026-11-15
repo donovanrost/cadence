@@ -643,6 +643,15 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
   the more severe.
 - `activation` subjects have no console page yet; leave them unlinked (Setup's change history is
   the nearest place).
+- Watermark events (ux U60, domain storage-growth.md part 2): the per-write
+  `source_watermark_advanced` is being replaced by events on a change of state (old rows keep
+  "… caught up to …" until they age out). All are category `data` (the Timeline's opt-in
+  filter). `raw_kind` `source_watermark_settled`, once per contact at settle: "EARENDIL-008 · SVB
+  03:10Z pass: telemetry stored through 03:19:40Z (LOS 03:19:57Z)", subject the contact (also
+  for Contacts' selected-pass history). `source_watermark_caught_up`, after being ≥ 60 s behind:
+  "Telemetry from EARENDIL-008 caught up at 03:22Z after falling 2 min behind", subject the
+  data source. `source_watermark_retreated` with a spacecraft: "EARENDIL-008's stored telemetry
+  moved back to 03:12Z" (+ " for a replay", `caution`); without one, as before.
 - `refs.subject` is the link target `{kind: "data_source" | "contact" | "dashboard" |
   "catalog_revision" | "activation" | "config_revision" | "pass", id, name}`, or `null` when there is none.
 - **`POST /telemetry/latest {point_ids, spacecraft_ids}`** (Compose B2 "Now", fe-ops) →

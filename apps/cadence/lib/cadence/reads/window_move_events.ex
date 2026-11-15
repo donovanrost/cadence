@@ -42,7 +42,9 @@ defmodule Cadence.Reads.WindowMoveEvents do
     end
   end
 
-  defp label(craft, ref, starts_at, occurred_at) do
+  @doc "\"EARENDIL-007 · PUQ 13:04Z pass\" (the date only when it isn't the event's day)."
+  @spec label(binary(), binary() | nil, term(), DateTime.t() | nil) :: binary()
+  def label(craft, ref, starts_at, occurred_at) do
     station = if is_binary(ref), do: " · #{ref}", else: ""
 
     case parse(starts_at) do

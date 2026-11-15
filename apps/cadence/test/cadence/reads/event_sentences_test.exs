@@ -72,6 +72,74 @@ defmodule Cadence.Reads.EventSentencesTest do
              EventSentences.describe(replay, @ctx)
   end
 
+  test "ux U60: settled per contact, caught up after falling behind, a named retreat" do
+    settled =
+      entry(:source_watermark_settled, %{
+        occurred_at: ~U[2026-11-15 03:21:00Z],
+        subject_id: "realized-1",
+        spacecraft_id: "sc-4",
+        realized_contact_id: "realized-1",
+        scheduled_contact_id: "scheduled-1",
+        metadata: %{
+          "current" => %{"value" => %{"complete_through" => "2026-11-15T03:19:40.120Z"}},
+          "payload" => %{
+            "value" => %{
+              "ground_station_ref" => "SVB",
+              "starts_at" => "2026-11-15T03:10:02Z",
+              "ends_at" => "2026-11-15T03:19:57Z"
+            }
+          }
+        }
+      })
+
+    assert %{
+             text:
+               "EARENDIL-004 · SVB 03:10Z pass: telemetry stored through 03:19:40Z (LOS 03:19:57Z)",
+             subject: %{kind: "contact", id: "realized-1"},
+             severity: nil
+           } = EventSentences.describe(settled, @ctx)
+
+    caught_up =
+      entry(:source_watermark_caught_up, %{
+        subject_id: "questdb",
+        spacecraft_id: "sc-4",
+        metadata: %{
+          "current" => %{"value" => %{"complete_through" => "2026-11-15T03:21:58Z"}},
+          "payload" => %{
+            "value" => %{"behind_max_seconds" => 120, "caught_up_at" => "2026-11-15T03:22:04Z"}
+          }
+        }
+      })
+
+    assert %{
+             text: "Telemetry from EARENDIL-004 caught up at 03:22Z after falling 2 min behind",
+             subject: %{kind: "data_source", id: "questdb"}
+           } = EventSentences.describe(caught_up, @ctx)
+
+    replay =
+      entry(:source_watermark_retreated, %{
+        spacecraft_id: "sc-4",
+        metadata:
+          "retreated"
+          |> source_doc("telemetry_storage_write", "2026-11-15T03:12:30Z")
+          |> Map.put("replay_run_id", "replay-1")
+      })
+
+    assert %{
+             text: "EARENDIL-004's stored telemetry moved back to 03:12Z for a replay",
+             severity: :caution
+           } = EventSentences.describe(replay, @ctx)
+
+    # Fields missing: the sentence still reads, never crashes.
+    assert %{text: "a spacecraft · SVB pass: telemetry stored through an unknown time"} =
+             EventSentences.describe(
+               entry(:source_watermark_settled, %{
+                 metadata: %{"payload" => %{"value" => %{"ground_station_ref" => "SVB"}}}
+               }),
+               @ctx
+             )
+  end
+
   test "contacts, dashboards and catalog revisions read as sentences with their subject and actor" do
     contact =
       entry(:realized_contact_interval, %{
