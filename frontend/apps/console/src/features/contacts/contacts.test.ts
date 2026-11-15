@@ -9,6 +9,7 @@ import {
   spacecraftId as spacecraftIdReader,
   scid as scidReader,
   decode,
+  type ApiError,
 } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
 import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
@@ -531,6 +532,14 @@ describe("D2 Release words (50c5e572, ux)", () => {
     );
     expect(releaseErrorWords(e("not_sent"), "Northlight").text).toBe(
       "Nothing changed: the cancel wasn't sent (Window locked).",
+    );
+    // DECISIONS #78: a refused off-plan release names who may release it, as the caption does.
+    const forbidden: ApiError = { kind: "forbidden", code: "forbidden", message: "No." };
+    expect(releaseErrorWords(forbidden, "Northlight", "Mira K.").text).toBe(
+      "Mira K. or an org admin can release this booking.",
+    );
+    expect(releaseErrorWords(forbidden, "Northlight").text).toBe(
+      "Org admins can release a booking.",
     );
     expect(releaseErrorWords(e("unknown"), "Northlight")).toEqual({
       tone: "caution",

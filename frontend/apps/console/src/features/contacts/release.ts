@@ -22,6 +22,7 @@ export async function releasePass(
   passId: string,
   expectedRevision: number,
   provider: string,
+  bookedBy: string | null = null,
 ): Promise<ReleaseOutcome> {
   const r = await request(
     `/missions/${encodeURIComponent(missionId)}/passes/${encodeURIComponent(passId)}/release`,
@@ -37,12 +38,22 @@ export async function releasePass(
           ? `${provider} accepted the cancel. The pass leaves the plan.`
           : `Cancel sent to ${provider}. It hasn't confirmed yet.`,
     };
-  return releaseErrorWords(r.error, provider);
+  return releaseErrorWords(r.error, provider, bookedBy);
 }
+
+/**
+ * Who may release (DECISIONS #78): an off-plan booking's own operator or an org admin; a planned
+ * one, org admins. The same words as the panel's caption, so a refusal names the booker too.
+ */
+export const whoMayRelease = (bookedBy: string | null) =>
+  bookedBy
+    ? `${bookedBy} or an org admin can release this booking.`
+    : "Org admins can release a booking.";
 
 export function releaseErrorWords(
   e: Parameters<typeof describeApiError>[0],
   provider: string,
+  bookedBy: string | null = null,
 ): ReleaseOutcome {
   const f = isError(e, "provider_cancel_failed") ? detailsOf(e, failed) : null;
   if (f) {
@@ -62,7 +73,7 @@ export function releaseErrorWords(
     return { tone: "caution", text: "The pass changed while you looked; it's been reloaded." };
   if (isError(e, "pass_not_releasable"))
     return { tone: "crit", text: "Nothing changed: this pass can't be released any more." };
-  if (e.kind === "forbidden") return { tone: "crit", text: "Org admins can release a booking." };
+  if (e.kind === "forbidden") return { tone: "crit", text: whoMayRelease(bookedBy) };
   if (e.kind === "unavailable" || e.kind === "malformed")
     return {
       tone: "caution",

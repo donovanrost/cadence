@@ -3,7 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import { fetchQueuedGroups, type Pass, type QueuedGroups } from "./api.ts";
-import { releasePass, type ReleaseOutcome } from "./release.ts";
+import { releasePass, whoMayRelease, type ReleaseOutcome } from "./release.ts";
 import { stationLabel } from "./gantt.ts";
 
 /**
@@ -52,7 +52,13 @@ async function release() {
   if (rev === null || rev === undefined) return;
   busy.value = true;
   try {
-    outcome.value = await releasePass(props.missionId, props.pass.id, rev, provider.value);
+    outcome.value = await releasePass(
+      props.missionId,
+      props.pass.id,
+      rev,
+      provider.value,
+      props.pass.off_plan?.booked_by?.name ?? null,
+    );
     sheet.value?.close();
     emit("changed");
   } finally {
@@ -76,11 +82,7 @@ async function release() {
       "
       class="m-0 text-sm text-text-2"
     >
-      {{
-        pass.off_plan?.booked_by?.name
-          ? `${pass.off_plan.booked_by.name} or an org admin can release this booking.`
-          : "Org admins can release a booking."
-      }}
+      {{ whoMayRelease(pass.off_plan?.booked_by?.name ?? null) }}
     </p>
     <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
     <ApSheet
