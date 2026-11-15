@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { resolvedWords } from "./attention.ts";
@@ -146,7 +147,7 @@ describe("ingress_backpressure on Now (ux U47)", () => {
   });
 
   it("says how it closed", () => {
-    const closed = (action: string, kind: "system" | "user", name: string | null) =>
+    const closed = (action: ResolutionAction, kind: "system" | "user", name: string | null) =>
       resolvedWords(
         {
           id: "attention:ingress_backpressure:frames_dropped:rc-8:pb-1",

@@ -7,6 +7,7 @@ import {
   type Scid,
   type SpacecraftId,
   stationRef,
+  type Unrecognized,
 } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
@@ -17,12 +18,23 @@ import { GROUP_AT, type QueueItem } from "./queue.ts";
  * priority. Words only; the server ranks.
  */
 
+/** Missed-pass causes the console words; anything else is the provider's own reason. */
+const missedCauses = [
+  "no_acquisition",
+  "station_unavailable",
+  "provider_canceled",
+  "provider_rejected",
+  "not_ingested",
+] as const;
+type MissedCause = (typeof missedCauses)[number];
+
 export const missedPassReader = d.object({
   reservation_id: d.token,
   station: stationRef,
   planned_aos: d.timestamp,
   outcome: d.knownText(["missed", "failed"] as const),
-  cause: d.nullable(d.string),
+  /** A key the console words (CAUSES), else the provider's own reason. */
+  cause: d.nullable(d.knownText(missedCauses)),
   owner: d.nullable(d.knownText(["provider", "us", "weather", "unknown"] as const)),
 });
 export const nextContactReader = d.object({
@@ -49,7 +61,7 @@ type MissedPass = Decoded<typeof missedPassReader>;
 type NextContact = Decoded<typeof nextContactReader>;
 type StationIssue = Decoded<typeof stationIssueReader>;
 
-const CAUSES: Readonly<Record<string, string>> = {
+const CAUSES: Readonly<Record<MissedCause, string>> = {
   no_acquisition: "no acquisition",
   station_unavailable: "station unavailable",
   provider_canceled: "canceled by the provider",
@@ -57,11 +69,13 @@ const CAUSES: Readonly<Record<string, string>> = {
   not_ingested: "no data ingested",
 };
 /** A known key in words; the provider's own reason in sentence case. */
-export function causeWords(cause: string | null): string {
+/** The cause as text for a grouping key: its key, or the provider's own words. */
+const causeKey = (cause: MissedCause | Unrecognized | null): string =>
+  cause === null ? "" : isKnown(cause) ? cause : cause.unrecognized;
+export function causeWords(cause: MissedCause | Unrecognized | null): string {
   if (!cause) return "cause unknown";
-  const known = CAUSES[cause];
-  if (known) return known;
-  const w = cause.replaceAll("_", " ").trim();
+  if (isKnown(cause)) return CAUSES[cause];
+  const w = cause.unrecognized.replaceAll("_", " ").trim();
   return w.charAt(0).toLowerCase() + w.slice(1);
 }
 const OWNER: Readonly<Record<"provider" | "us" | "weather" | "unknown", string | null>> = {
@@ -129,7 +143,7 @@ export function missedPassRows(items: readonly MissedItem[], horizonS: number): 
   for (const m of items) {
     const last = m.missed[0];
     const k = last
-      ? `${last.station.id ?? last.station.ref ?? code(last.station)}|${last.cause ?? ""}`
+      ? `${last.station.id ?? last.station.ref ?? code(last.station)}|${causeKey(last.cause)}`
       : m.id;
     groups.set(k, [...(groups.get(k) ?? []), m]);
   }

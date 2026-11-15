@@ -9,7 +9,13 @@ import {
   type ApiError,
   type ApiResult,
 } from "@/api/index.ts";
-import { attentionReader, serverKey, short, type Attention } from "@/features/now/index.ts";
+import {
+  actionText,
+  attentionReader,
+  serverKey,
+  short,
+  type Attention,
+} from "@/features/now/index.ts";
 
 /**
  * Contact drawer attention block (ux U32; contacts.md d2632794): the resolution record, what to do
@@ -67,11 +73,13 @@ const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
 export function resolutionRecord(a: Attention): string | null {
   const r = a.resolution;
   if (!r) return null;
-  const what = r.action.includes("not_booked")
+  // Keys and the operator's own action text alike (U32): read as text here.
+  const action = actionText(r.action);
+  const what = action.includes("not_booked")
     ? "Marked not booked"
-    : r.action.includes("book") || r.action.includes("attest")
+    : action.includes("book") || action.includes("attest")
       ? "Marked booked"
-      : r.action.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase());
+      : action.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase());
   return [
     `${what} by ${r.actor.name ?? "an operator"} ${hhmm(r.at)}`,
     r.provider_reference ? `ref ${r.provider_reference}` : null,
@@ -112,6 +120,9 @@ export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }
     case "missed":
     case "journal_near_full":
     case "frames_dropped":
+    case "quarantined":
+    case "listener_refusal":
+    case "outcome_unknown":
     case null:
     default:
       return { text: `Check the booking with ${provider}, then record what you did.`, plan: false };

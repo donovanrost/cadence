@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { resolvedWords } from "./attention.ts";
@@ -157,7 +158,7 @@ describe("contact_start on Now (ux U45)", () => {
   });
 
   it("says how it closed", () => {
-    const closed = (action: string, kind: "system" | "user", name: string | null) =>
+    const closed = (action: ResolutionAction, kind: "system" | "user", name: string | null) =>
       resolvedWords(
         {
           id: "attention:contact_start:rc-312",

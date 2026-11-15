@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import {
   attentionMeta,
   attentionReader,
+  resolvedReader,
   attentionWords,
   settlementEvidence,
   type SettlementFacts,
@@ -11,6 +13,13 @@ import {
   resolvedWords,
   withFading,
 } from "./attention.ts";
+
+/** A resolved entry as the wire sends it, decoded (fixtures via decoders). */
+const decodedResolved = (raw: unknown) => {
+  const r = decode(resolvedReader, raw);
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
+};
 
 const member = (scid: number, extra: Record<string, unknown> = {}) => ({
   id: `spacecraft-earendil-${String(scid).padStart(3, "0")}`,
@@ -287,13 +296,13 @@ describe("attention rows (U31, fafe581a)", () => {
     const before = present([item({ id: "setup:a", kind: "setup", priority: 3 }), attention()]);
     const after = present([item({ id: "setup:a", kind: "setup", priority: 3 })]);
     const resolved = [
-      {
+      decodedResolved({
         id: "attention:pass_resolution:at-1",
-        resolved_by: { kind: "user" as const, id: "u-1", name: "Mira K." },
+        resolved_by: { kind: "user", id: "u-1", name: "Mira K." },
         action: "resolved",
         resolved_at: "2026-11-09T11:00:00Z",
         note: null,
-      },
+      }),
     ];
     const fading = newlyResolved(before, after, resolved, [], 1_000);
     expect(fading.map((f) => [f.index, f.until, f.item.sentence, f.item.state])).toEqual([
@@ -346,17 +355,14 @@ describe("attention rows (U31, fafe581a)", () => {
   });
 
   it("says what closed it, never 'by Cadence'", () => {
-    const r = (
-      kind: "user" | "provider" | "system",
-      name: string | null,
-      action: string | null,
-    ) => ({
-      id: "x",
-      resolved_by: { kind, id: null, name },
-      action,
-      resolved_at: "2026-11-09T11:00:00Z",
-      note: null,
-    });
+    const r = (kind: "user" | "provider" | "system", name: string | null, action: string | null) =>
+      decodedResolved({
+        id: "x",
+        resolved_by: { kind, id: null, name },
+        action,
+        resolved_at: "2026-11-09T11:00:00Z",
+        note: null,
+      });
     expect(
       resolvedWords(r("provider", "Northlight", "confirmed"), new Date("2026-11-13T03:00:00Z")),
     ).toBe("Resolved: Northlight confirmed.");
@@ -582,13 +588,14 @@ describe("contact_settlement (U37, #71)", () => {
       "attention:contact_settlement:a",
     ]);
     // It fades only when its last member resolves.
-    const done = (id: string) => ({
-      id: `attention:contact_settlement:${id}`,
-      resolved_by: { kind: "system" as const, id: null, name: null },
-      action: "replayed",
-      resolved_at: "2026-11-12T01:00:00Z",
-      note: null,
-    });
+    const done = (id: string) =>
+      decodedResolved({
+        id: `attention:contact_settlement:${id}`,
+        resolved_by: { kind: "system", id: null, name: null },
+        action: "replayed",
+        resolved_at: "2026-11-12T01:00:00Z",
+        note: null,
+      });
     const one = present([two("a", "2026-11-11T18:49:00Z")]);
     expect(newlyResolved(rows, one, [done("b")], [], 0)).toEqual([]);
     const fading = newlyResolved(one, [], [done("a")], [], 0);
@@ -939,7 +946,7 @@ describe("activation_apply (domain 9b8456132; ux U41)", () => {
   });
 
   it("says how it closed", () => {
-    const closed = (action: string) =>
+    const closed = (action: ResolutionAction) =>
       resolvedWords(
         {
           id: "attention:activation_apply:act-1",

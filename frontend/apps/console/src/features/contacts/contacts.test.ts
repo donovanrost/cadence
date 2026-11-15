@@ -215,7 +215,7 @@ describe("attention block words (U32)", () => {
     raised_at: "2026-11-09T10:55:00Z",
     provider_message: null,
     resolution: {
-      action: "attested_booked",
+      action: { unrecognized: "attested_booked" },
       actor: { kind: "user", id: "u-1", name: "Mira K." },
       at: "2026-11-09T10:52:00Z",
       note: "Called the Northlight ops desk.",
@@ -231,7 +231,7 @@ describe("attention block words (U32)", () => {
     const notBooked = item({
       conflict: "late_confirmation",
       resolution: {
-        action: "marked_not_booked",
+        action: { unrecognized: "marked_not_booked" },
         actor: { kind: "user", id: "u-1", name: "Mira K." },
         at: "2026-11-09T10:52:00Z",
         note: null,

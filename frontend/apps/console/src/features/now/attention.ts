@@ -202,6 +202,32 @@ const holderReader = d.object({
   ends_at: d.nullable(d.timestamp),
 });
 
+/**
+ * How an attention item closed, as far as the console words it (U32, U37, U38, U41, U44, U45, U47,
+ * U49, U50, U54, U61). Anything else arrives as the server's own phrase and is shown as said.
+ */
+export const resolutionActions = [
+  "acknowledged",
+  "accepted",
+  "applied",
+  "approved",
+  "closed",
+  "day_ended",
+  "discarded",
+  "drained",
+  "ended",
+  "nothing_left",
+  "rejected",
+  "replayed",
+  "retried",
+  "started",
+  "superseded",
+] as const;
+export type ResolutionAction = (typeof resolutionActions)[number];
+/** The action as text: a known key, or the server's (or operator's) own words. */
+export const actionText = (action: ResolutionAction | Unrecognized): string =>
+  isKnown(action) ? action : action.unrecognized;
+
 export const attentionReader = d.object({
   id: d.token,
   source: d.knownText(attentionSources),
@@ -425,8 +451,8 @@ export const attentionReader = d.object({
   ...planCoverageFields,
   resolution: d.nullable(
     d.object({
-      // free-text: what the operator recorded doing (resolve's action_text, contacts.md)
-      action: d.token,
+      /** How it closed: a known key (archive 'discarded', a job 'closed'…), else the raw word. */
+      action: d.knownText(resolutionActions),
       actor: who,
       at: d.timestamp,
       note: d.nullable(d.string),
@@ -442,8 +468,8 @@ export const resolvedReader = d.object({
   resolved_by: who,
   // free-text: the decision's reason (provider_change, asked of api for U44)
   note: d.optional(d.nullable(d.string)),
-  // free-text: an open phrase or key ("uplink recovered", "replayed"); known keys get words (U32)
-  action: d.optional(d.nullable(d.string)),
+  /** A key the console words (U32…U61), else the server's own phrase ("uplink recovered"). */
+  action: d.optional(d.nullable(d.knownText(resolutionActions))),
   resolved_at: d.timestamp,
   /** api (U50): false for a hand-started contact; absent from older reads and other sources. */
   booked: d.optional(d.nullable(d.boolean)),
@@ -642,7 +668,7 @@ export type ResolvedEntry = Omit<Resolved, "booked"> &
   Readonly<{ booked?: boolean | null | undefined }>;
 
 /** Server actions that read better in words: U37's system 'replayed' = the telemetry got stored. */
-const ACTION_WORDS: Readonly<Record<string, string>> = {
+const ACTION_WORDS: Readonly<Partial<Record<ResolutionAction, string>>> = {
   replayed: "telemetry stored",
   // U38: the runtime caught up with the active configuration.
   applied: "configuration applied",
@@ -653,11 +679,11 @@ const ACTION_WORDS: Readonly<Record<string, string>> = {
  * "Resolved: Northlight confirmed"; the system its action alone ("Resolved: cancel confirmed").
  * Never "by Cadence".
  */
-const CHANGE_DECIDED: ReadonlyMap<string, string> = new Map([
-  ["approved", "Approved"],
-  ["rejected", "Rejected"],
-  ["acknowledged", "Acknowledged"],
-]);
+const CHANGE_DECIDED: Readonly<Partial<Record<ResolutionAction, string>>> = {
+  approved: "Approved",
+  rejected: "Rejected",
+  acknowledged: "Acknowledged",
+};
 
 export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string {
   // §4 short form: a row resolved before midnight keeps its date after it (ux).
@@ -665,7 +691,7 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
   // U41: a stuck activation closes by applying, or by a newer activation replacing it.
   // U44: a provider change says who decided, when and why; a newer change replaces it.
   if (r.id.startsWith("attention:provider_change:")) {
-    const decided = CHANGE_DECIDED.get(r.action ?? "");
+    const decided = r.action && isKnown(r.action) ? CHANGE_DECIDED[r.action] : undefined;
     if (r.action === "superseded") return "Replaced by a newer change.";
     if (decided) {
       const who = r.resolved_by.name ?? "an operator";
@@ -723,7 +749,11 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
     if (r.action === "superseded") return "Replaced by a newer request.";
     if (r.action === "applied") return `Applied at ${at}.`;
   }
-  const said = r.action ? (ACTION_WORDS[r.action] ?? r.action.replaceAll("_", " ")) : null;
+  const said = !r.action
+    ? null
+    : isKnown(r.action)
+      ? (ACTION_WORDS[r.action] ?? r.action.replaceAll("_", " "))
+      : r.action.unrecognized.replaceAll("_", " ");
   const action = said ? noStop(said) : null;
   const name = r.resolved_by.name ? noStop(r.resolved_by.name) : null;
   if (r.resolved_by.kind === "user") return `Resolved by ${name ?? "an operator"}.`;

@@ -35,7 +35,7 @@ export {
   valueWords,
 } from "./providerChange.ts";
 /** §4 short time: `18:49Z`, with the date when it isn't today. */
-export { short } from "./attention.ts";
+export { actionText, short } from "./attention.ts";
 export {
   holderPass,
   startEvidence,

@@ -1,7 +1,7 @@
 import type { SpacecraftTab } from "@/shell";
 import type { RouteLocationRaw } from "vue-router";
 import { plural, type OpState } from "@/ui";
-import type { Fleet, FleetSpacecraft } from "@/features/fleet/index.ts";
+import type { Fleet, FleetSpacecraft, RawLimitState } from "@/features/fleet/index.ts";
 import type { Attention } from "./attention.ts";
 
 /**
@@ -58,7 +58,8 @@ export type QueueListRow = Readonly<{
 /** Groups at or above this size collapse into one row (U11: group identical causes). */
 export const GROUP_AT = 3;
 
-const LIMIT_WORDS: Readonly<Record<string, string>> = {
+/** green and blue have no words: the row falls back to the limit state. */
+const LIMIT_WORDS: Readonly<Partial<Record<RawLimitState, string>>> = {
   red_low: "below red limit",
   red_high: "above red limit",
   yellow_low: "below yellow limit",
@@ -76,7 +77,8 @@ const spacecraftRoute = (
 function cause(sc: FleetSpacecraft): string {
   const point = sc.worst_point;
   if (!point) return sc.state === "critical" ? "out of limits" : "near limits";
-  const words = point.raw_limit_state ? LIMIT_WORDS[point.raw_limit_state] : undefined;
+  const raw = point.raw_limit_state;
+  const words = raw !== null && raw !== "unrecognized" ? LIMIT_WORDS[raw] : undefined;
   return `${point.point_name} ${words ?? point.limit_state}`;
 }
 

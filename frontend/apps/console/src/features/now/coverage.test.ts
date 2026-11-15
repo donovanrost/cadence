@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { resolvedWords } from "./attention.ts";
@@ -169,7 +170,7 @@ describe("plan_coverage on Now (ux U61)", () => {
   });
 
   it("says how it closed", () => {
-    const closed = (action: string, kind: "user" | "system", name: string | null) =>
+    const closed = (action: ResolutionAction, kind: "user" | "system", name: string | null) =>
       resolvedWords(
         {
           id: "attention:plan_coverage:2026-11-16",

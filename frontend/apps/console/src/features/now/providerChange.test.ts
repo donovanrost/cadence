@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { attentionReader, passChangeReader, resolvedWords } from "./attention.ts";
@@ -116,7 +117,7 @@ describe("provider changes in Now (U44)", () => {
   });
 
   it("says who decided, when and why; a newer change replaces it", () => {
-    const closed = (action: string, note: string | null) =>
+    const closed = (action: ResolutionAction, note: string | null) =>
       resolvedWords(
         {
           id: "attention:provider_change:chg-1",

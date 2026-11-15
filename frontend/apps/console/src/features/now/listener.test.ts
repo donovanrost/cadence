@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { resolvedWords } from "./attention.ts";
@@ -190,7 +191,7 @@ describe("listener_refusal on Now (ux U50)", () => {
   });
 
   it("says how it closed", () => {
-    const closed = (action: string, booked?: boolean) =>
+    const closed = (action: ResolutionAction, booked?: boolean) =>
       resolvedWords(
         {
           id: "attention:listener_refusal:rc-8",

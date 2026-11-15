@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { resolvedWords } from "./attention.ts";
@@ -174,7 +175,7 @@ describe("archive_quarantine on Now (ux U49)", () => {
     expect(discardTitle(row.discard)).toBe(
       "Discard 12 frames and 40 packets that couldn't be archived?",
     );
-    const closed = (action: string, note: string | null) =>
+    const closed = (action: ResolutionAction, note: string | null) =>
       resolvedWords(
         {
           id: "attention:archive_quarantine:rc-8:identity_conflict",
