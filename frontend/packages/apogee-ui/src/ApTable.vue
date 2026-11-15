@@ -53,11 +53,17 @@ const win = useRowWindow(
   computed(() => props.scroller),
   wrapper,
 );
+/** Before the first measurement a virtual table renders only this many rows, not all of them. */
+const FIRST_PAINT = 50;
 /** The rows to render, each with its 0-based index in `rows`. */
 const shown = computed(() => {
   const w = props.virtual ? win.value : null;
   const start = w?.start ?? 0;
-  const list = w ? props.rows.slice(w.start, w.end) : props.rows;
+  const list = w
+    ? props.rows.slice(w.start, w.end)
+    : props.virtual
+      ? props.rows.slice(0, FIRST_PAINT)
+      : props.rows;
   return list.map((row, i) => ({ row, index: start + i }));
 });
 

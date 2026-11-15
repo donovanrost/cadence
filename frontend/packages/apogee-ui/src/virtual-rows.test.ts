@@ -89,6 +89,14 @@ describe("ApTable virtual", () => {
     w.unmount();
   });
 
+  it("before the first measurement renders only the first 50 rows, not all of them", () => {
+    const scroller = scrollerOf(400);
+    const w = mountTable(scroller);
+    expect(indexes(w).length).toBeLessThanOrEqual(50);
+    w.unmount();
+    scroller.remove();
+  });
+
   it("renders a window with aria-rowcount and aria-rowindex, and follows the scroll", async () => {
     const scroller = scrollerOf(400);
     const w = mountTable(scroller);
