@@ -109,7 +109,7 @@ export const switchLabel = (affected: number) => `Switch for ${missions(affected
 export const visibleBindings = (rows: readonly MissionBinding[], showPlatform: boolean) =>
   showPlatform ? rows : rows.filter((b) => !b.shared);
 
-const name = (x: { display_name: string } | null) => x?.display_name ?? "an unknown source";
+const name = (x: { display_name: string | null } | null) => x?.display_name ?? "an unknown source";
 
 /**
  * A binding's history line (actor and time have their own columns). A platform-wide switch reads

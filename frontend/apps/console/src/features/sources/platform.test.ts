@@ -172,6 +172,18 @@ describe("U53 platform binding switch words (ux)", () => {
         "default_flight_telemetry",
       ),
     ).toBe("Switched from Cadence managed store to Northlight archive.");
+    expect(
+      eventLine(
+        {
+          ...base,
+          to: { id: "s3", display_name: null },
+          reason: null,
+          affected_missions: null,
+          live_passes_total: null,
+        },
+        "x",
+      ),
+    ).toBe("Switched from Cadence managed store to an unknown source.");
     expect(eventLine({ ...base, kind: "disabled" }, "x")).toBe("Disabled.");
     expect(eventLine({ ...base, kind: { unrecognized: "re_pointed" } }, "x")).toBe("re pointed");
   });

@@ -15,6 +15,8 @@ import {
 const base = (missionId: MissionId) =>
   `/missions/${encodeURIComponent(missionId)}/data-source-bindings`;
 const named = d.object({ id: d.token, display_name: d.string });
+/** A history event's source: its name may be missing (qa 11-15: a null to.display_name). */
+const eventSource = d.object({ id: d.token, display_name: d.nullable(d.string) });
 
 export const bindingStatuses = ["active", "disabled", "superseded"] as const;
 const missionBinding = d.object({
@@ -87,8 +89,8 @@ const bindingEvent = d.object({
   at: d.timestamp,
   actor: orNull(sharedActor),
   kind: d.knownText(bindingEventKinds),
-  from: d.nullable(named),
-  to: d.nullable(named),
+  from: d.nullable(eventSource),
+  to: d.nullable(eventSource),
   // free-text: the reason a platform admin typed for a platform-wide switch.
   reason: d.nullable(d.string),
   affected_missions: d.nullable(d.integer),
