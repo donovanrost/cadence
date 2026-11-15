@@ -26,4 +26,11 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
   test "B1: the mission home goes to the console mission", c do
     assert redirected_to(get(c.conn, c.legacy <> "")) == c.console <> ""
   end
+
+  test "B2: mission settings and a section go to Setup settings", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/settings")) == c.console <> "/setup/settings"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/settings/cadence.governance")) ==
+             c.console <> "/setup/settings/cadence.governance"
+  end
 end

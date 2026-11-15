@@ -248,6 +248,15 @@ defmodule CadenceWeb.Router do
     # §11c (B1, api; DECISIONS #79): the mission home goes to the console's mission (Now).
     get("/missions/:mission_id", LegacyMissionSetupRedirectController, :home)
 
+    # §11c (B2, api; DECISIONS #79): mission settings go to the console's Setup settings.
+    get("/missions/:mission_id/settings", LegacyMissionSetupRedirectController, :settings)
+
+    get(
+      "/missions/:mission_id/settings/:section_id",
+      LegacyMissionSetupRedirectController,
+      :settings
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -282,14 +291,6 @@ defmodule CadenceWeb.Router do
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/settings", HostPageLive, :show,
-        metadata: %{host_policy: :mission}
-      )
-
-      live("/missions/:mission_id/settings/:section_id", HostPageLive, :show,
-        metadata: %{host_policy: :mission}
-      )
-
 
       live("/missions/:mission_id/spacecraft", HostPageLive, :index,
         metadata: %{host_policy: :spacecraft}
