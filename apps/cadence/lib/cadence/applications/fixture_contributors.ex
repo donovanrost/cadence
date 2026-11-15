@@ -3,9 +3,10 @@ defmodule Cadence.Applications.FixtureContributors do
   Test-only application contributors, appended by each application registry.
 
   The registries (`Registry`, `CatalogRegistry`, `ReleaseRegistry`, `ActionProviderRegistry`,
-  `HostQueryRegistry`) are fixed module lists. The console federation smoke needs an application
-  that product deletions can't remove (the `contract_probe` fixture), so this one extension point
-  lets the test environment add contributor modules:
+  `HostQueryRegistry` and `Cadence.Reads.ApplicationSurfaces.ProviderRegistry`) are fixed module
+  lists. The console federation smoke needs an application that product deletions can't remove
+  (the `contract_probe` fixture), so this one extension point lets the test environment add
+  contributor modules:
 
       config :cadence, :fixture_application_contributors, [Cadence.TestSupport.ContractProbeApplication]
 

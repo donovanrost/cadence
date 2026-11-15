@@ -1,6 +1,8 @@
 defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
   @moduledoc "Generic bounded registry for application-owned surface query contributions."
 
+  alias Cadence.Applications.FixtureContributors
+
   alias Cadence.Applications.{
     JSONBoundary,
     SurfaceDefinition,
@@ -138,7 +140,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
   end
 
   defp additional_contributors do
-    @additional_contributors
+    @additional_contributors ++ FixtureContributors.exporting(:surface_query_contributions, 0)
   end
 
   defp valid_entries(contributions) do
