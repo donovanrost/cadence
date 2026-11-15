@@ -19,7 +19,10 @@ const basis = {
   activation_id: d.nullable(d.token),
 };
 
-const significance = d.nullable(d.oneOf(["routine", "warning", "critical", "hazardous"] as const));
+/** commanding.md: a command's significance (null when the catalog gives none). */
+export const significance = d.nullable(
+  d.oneOf(["routine", "warning", "critical", "hazardous"] as const),
+);
 
 const listFields = {
   id: d.token,

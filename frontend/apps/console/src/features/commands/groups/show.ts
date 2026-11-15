@@ -9,7 +9,7 @@ import {
   type Reader,
 } from "@/api/index.ts";
 import { groupUplinkReader } from "@/features/contacts/readiness.ts";
-import { catalogRevisionReader } from "../api.ts";
+import { catalogRevisionReader, significance } from "../api.ts";
 import { raw, releaseCode, releaseRefusalReader } from "./release.ts";
 import {
   actor,
@@ -98,7 +98,7 @@ const command = d.object({
   position: d.integer,
   command_id: d.token,
   name: d.nullable(d.string),
-  significance: d.nullable(d.token),
+  significance,
   critical: d.boolean,
   hazardous: d.boolean,
   argument_values_json: d.string,

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApSelect, ApTag } from "@/ui";
-import type { TargetEndpoints } from "../groups/api.ts";
+import { isKnown } from "@/api/index.ts";
+import type { EndpointFailure, TargetEndpoints } from "../groups/api.ts";
 
 /**
  * C4 endpoint for one target (DECISIONS #41): what routing resolves, or why it can't, and an
@@ -16,7 +17,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ change: [endpointId: string | null] }>();
 
-const FAILURE_WORDS: Readonly<Record<string, string>> = {
+const FAILURE_WORDS: Readonly<Record<EndpointFailure, string>> = {
   no_uplink_route: "No uplink route",
   multiple_primary_uplink_routes: "Several primary uplink routes",
 };
@@ -43,7 +44,9 @@ const choice = computed({
       ><span v-if="via" class="font-mono text-sm text-text-3">via {{ via }}</span></template
     >
     <span v-else class="font-mono text-sm text-caution-text">{{
-      FAILURE_WORDS[info.failure ?? ""] ?? "No uplink endpoint"
+      info.failure !== null && isKnown(info.failure)
+        ? FAILURE_WORDS[info.failure]
+        : "No uplink endpoint"
     }}</span>
     <ApSelect
       v-if="override || !resolved"

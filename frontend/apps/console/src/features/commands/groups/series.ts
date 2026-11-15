@@ -39,7 +39,8 @@ export const seriesReader = d.object({
   target_count: d.integer,
   truncated: d.boolean,
   summary: d.object({ met: d.integer, not_met: d.integer, pending: d.integer }),
-  telemetry: d.optional(d.token),
+  /** commanding.md: degraded = the history store didn't answer in 3 s, so samples are empty. */
+  telemetry: d.optional(d.known(["ok", "degraded"] as const)),
   /**
    * U51 (api): every telemetry verifier point in the group, with the targets whose own verifiers
    * watch it, by position then verifier order. Plot one with `?point=`; the default is the first.

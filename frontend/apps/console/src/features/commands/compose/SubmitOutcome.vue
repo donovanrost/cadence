@@ -10,9 +10,7 @@ defineEmits<{ check: [] }>();
 <template>
   <ApCallout v-if="state.status === 'rejected'" tone="crit">
     Not sent. Nothing changed: {{ state.message }}
-    <template v-if="state.code === 'preflight_stale' || state.code === 'holds_unacknowledged'">
-      The checks ran again; review them and send.</template
-    >
+    <template v-if="state.stale"> The checks ran again; review them and send.</template>
   </ApCallout>
   <ApCallout v-else-if="state.status === 'unclear'" tone="caution">
     It's unclear whether this was sent ({{ state.message }}). Check before sending again.

@@ -17,6 +17,7 @@ import {
 const encodingReader = d.object({
   command_request_id: d.token,
   command_id: d.token,
+  // free-text: decoded for completeness, never shown or branched on (no vocabulary in the contract)
   scope: d.token,
   size_bytes: d.integer,
   hex: d.string,

@@ -69,9 +69,15 @@ const nextContact = d.object({
 export type NextContact = Decoded<typeof nextContact>;
 
 /** A route named by an identity NO-GO (DECISIONS #41), so the screen can link to its routing. */
+/** commanding.md §GET /command-endpoints: why a target has no uplink endpoint. */
+export const endpointFailures = ["no_uplink_route", "multiple_primary_uplink_routes"] as const;
+export type EndpointFailure = (typeof endpointFailures)[number];
+const endpointFailure = d.nullable(d.knownText(endpointFailures));
+
 const route = d.object({
   id: d.token,
   name: d.nullable(d.string),
+  // free-text: decoded for completeness, never shown or branched on (no vocabulary in the contract)
   direction: d.nullable(d.token),
   profile_id: d.nullable(d.token),
 });
@@ -152,7 +158,8 @@ export const preflightReader = d.object({
       source_endpoint_id: d.nullable(d.token),
       name: d.nullable(d.string),
       scid: d.nullable(scidReader),
-      failure: d.nullable(d.token),
+      /** The same route resolution as the endpoint picker's. */
+      failure: endpointFailure,
       /** U51: the revision its commands resolve to; null = unresolved (already a Catalog NO-GO). */
       catalog_revision: d.optional(d.nullable(revision)),
     }),
@@ -323,10 +330,10 @@ export async function submitGroup(
 }
 
 /** Compose's endpoint picker (commanding.md §GET /command-endpoints, DECISIONS #41). */
-const targetEndpoints = d.object({
+export const targetEndpointsReader = d.object({
   spacecraft_id: d.token,
   resolved_source_endpoint_id: d.nullable(d.token),
-  failure: d.nullable(d.token),
+  failure: endpointFailure,
   routes: d.array(route, 100),
   endpoints: d.array(
     d.object({
@@ -338,8 +345,8 @@ const targetEndpoints = d.object({
     50,
   ),
 });
-export type TargetEndpoints = Decoded<typeof targetEndpoints>;
-const endpointList = d.object({ spacecraft: d.array(targetEndpoints, 1_000) });
+export type TargetEndpoints = Decoded<typeof targetEndpointsReader>;
+const endpointList = d.object({ spacecraft: d.array(targetEndpointsReader, 1_000) });
 
 export async function fetchEndpoints(
   missionId: MissionId,
