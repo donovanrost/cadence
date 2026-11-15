@@ -1674,10 +1674,13 @@ Operators know catalog revisions; the mission model revision is the compiled for
 - **No report yet:** "No comparison has been run for rev 4 yet." plus `Run comparison` (primary). Approve is
   disabled with the reason "Run the comparison first."
 - **Reject confirm** (caution): title `Reject catalog rev 4?`, body "Spacecraft can't move to rev 4 after this. To
-  try again, import a new revision." Actions `Reject rev 4` / `Cancel` (default). If domain adds a reason, it's
-  required and shown in the decided line. Approve has no confirm: the decision panel is the confirm.
+  try again, import a new revision." A required `Reason` (domain: reject takes one; blank → "Give a reason
+  first."). Actions `Reject rev 4` / `Cancel` (default). Approve has no confirm: the decision panel is the confirm.
+- **Report body** (api's merged wire): a neutral tag `RISK LOW` / `RISK MEDIUM`, or `▲ RISK HIGH` (caution) for high.
+  Then one line per section, "Commands: 3 added · 1 changed · 0 removed" (zero parts dropped). "Failing parts" are
+  the replay's failed cases, by name and reason, under the verdict.
 - **Decided:** the panel collapses to one line with the report behind `Show report`: "Approved by Ana R. at 11-15
-  09:12Z." / "Rejected by Ana R. at 11-15 09:12Z." The row tag follows.
+  09:12Z." / "Rejected by Ana R. at 11-15 09:12Z: “Wrong FSW build.”" The row tag follows.
 - **Nothing to approve:** no panel, and no tag on the row. The index adds nothing.
 - **Owner:** fe-ops builds the console side (fe-ops, 11-15).
 - **Approve refusals:**
