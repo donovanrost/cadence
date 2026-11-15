@@ -106,6 +106,10 @@ layout. T1 scrolls. Reads only M23, M10, M11 and M8.
   - Chips: `Out of limits N` · `Stale N` · `All`. The default is All, sorted with out-of-limits first, then by
     subsystem.
   - Row: state mark (crit / caution / stale hatch / nominal; dashed `off` with `No limits`), label (600) with
+    (api's `has_limits`, 11-15: `has_limits: false` reads `No limits`, titled "No limits are defined for this
+    point."; `has_limits: true` with `limit_state: no_data` reads `Not checked yet`, titled "Limits are defined,
+    but no sample has been checked yet.", also dashed `off`; neither is ever the nominal mark or counted in
+    `Out of limits`)
     the mono key under it, latest value + unit (U24 units, readout when live), age `T+2s` (stale per the
     server, U9).
   - A checkbox pins up to 3 points to T2. A 4th is disabled with the reason "Plot up to 3 points".
