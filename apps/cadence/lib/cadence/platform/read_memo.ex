@@ -11,6 +11,11 @@ defmodule Cadence.Platform.ReadMemo do
   Only `{:ok, value}` results are kept (a miss is read again), and only for the duration of the
   wrapped call. Nested `with_memo/1` calls share the outer memo. Outside one, `fetch/2` just reads.
   Like `SpacecraftTypeStore.with_version_memo/1`.
+
+  One field isn't immutable: a mission-model revision's `status` (approved or rejected through
+  `MissionModels.RevisionDecisions`). A status decision must not run inside `with_memo/1`, or a
+  later `MissionModels.fetch_revision/3` in the same memo returns the old status (api-ops). Nothing
+  does today.
   """
 
   @key :cadence_read_memo
