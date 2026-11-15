@@ -469,16 +469,16 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 | `vocabulary-field-decoded-as-text` | 0. Done 11-13: resolutions, dashboards 2, lead's, fe-setup's own, contacts 5, commands 6 and now 4 (fe-ops), and fe-ops' investigate 6, timeline, telemetry, fleet, alarms 2 (fe-setup, e3eaeedff..3dc518802) | 59 |
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |
-| 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |
+| 1 | ~~`features/contacts/readiness.ts` + `useStationCodes.ts`; fe-ops' `d.token` list~~ done (fe-ops audit 11-15: readiness state/reason known, QUALIFYING keyed, ids and refs separate lookups; the d.token list already typed or justified free-text; last: contactEnd's word maps keyed by their vocabularies, StationRef derived, 2bcd58689). Left by design: readiness keeps its own station decoder until api/entities' stationRef mints StationId (§12C) | fe-ops |
 | 2 | ~~`features/scheduling/*` (booking state and reason, plan issue codes, actor kinds)~~ done (95f07ecc, with runtime status and session role) | lead |
 | 3 | `features/dashboards/chart/*` (the `ChartMarker` string bag; Fix 10 marker union) | dashboards: built c7bc1ee7f (union; dead marker paths deleted; null limit threshold no longer draws at y=0); close once qa passes |
 | 4 | ~~Router link sites~~ done with A3's typed routes (dashboards: only RuntimeScreen.vue:53's full cross-org URL remains, by design) | dashboards |
-| 5 | `features/commands/groups/*` | fe-ops |
-| 6 | `features/now/*` | fe-ops |
-| 7 | Auth and roles (`features/auth`, `api/session.ts`, `features/account/invitations.ts`) | fe-ops (auth) + lead (session) |
+| 5 | ~~`features/commands/groups/*`~~ done (3ee6359db): significance, endpoint failure (+ FAILURE_WORDS keyed), verifier telemetry, submit refusal → typed; direction/scope marked free-text. These names escape the gate's key regex, so the audit was by hand | fe-ops |
+| 6 | ~~`features/now/*`~~ done: the 11-15 audit found nothing left (decoders known/knownText, word maps keyed, error checks through isError) | fe-ops |
+| 7 | ~~Auth and roles~~ done: auth, invitations and session use the shared role/roleText; the last leftover, passwordFailure, reads through isError/fieldErrors (25d008436) | fe-ops (auth) + lead (session) |
 | 8 | Error-details handling (comes with A2) | lead, then each owner switches to `fieldErrors()` |
-| 9 | Query-key reparsing (comes with A4) | each owner |
-| — | fe-ops 11-15 audit (fe-ops/typing-12b: e81a16f85 commands, 8c25144c6 contacts, 2ae4fd6f7 auth, c1d6afe69 Compose query key): the gate only checks fields named state/status/kind/reason/code, so enum-like fields under other names slipped past → a structure rule flagging Record<string,string> word maps on decoded fields and d.token compared to literals (fe-ops proposes, lead OKs, baseline + ratchet); entities.stationRef mints StationId and readiness moves onto it (fe-ops, lead's file) | fe-ops + lead |
+| 9 | Query-key reparsing (comes with A4) | each owner; fe-ops' last one done (Compose endpoints, typed key with the mission, bf923867a) |
+| — | fe-ops 11-15 audit (landed 22:30Z: 3ee6359db commands, 2bcd58689 contacts, 25d008436 auth, bf923867a Compose query key): the gate only checks fields named state/status/kind/reason/code, so enum-like fields under other names slipped past → a structure rule flagging Record<string,string> word maps on decoded fields and d.token compared to literals (fe-ops proposes, lead OKs, baseline + ratchet); entities.stationRef mints StationId and readiness moves onto it (fe-ops, lead's file) | fe-ops + lead |
 | 10 | `features/planning/*`, `features/profiles/newProfile.ts`: a shared `JsonObject` type and path helper | fe-setup |
 
 **A5 shared entity decoders: sites left for their owners** (fe-setup's survey 11-13; `api/entities.ts` makes name / scid / code nullable, so rendering sites need a fallback):
