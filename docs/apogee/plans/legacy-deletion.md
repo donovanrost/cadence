@@ -634,6 +634,10 @@ Every other legacy browser route that HPL or ApplicationHostLive serves. Dispatc
 `applications/{organization_admin,mission_catalog,spacecraft,comms,ops_console}.ex`. **No legacy URL redirects to
 the console yet**: each target below is where the old URL should go (with the slug lookup).
 
+**Don't edit server copy for legacy-backed settings sections before §11c (B)/(C)** (director 11-15): the host
+admits a section only if its metadata equals the server definition, so a copy change on the server alone shows
+"… settings are unavailable" on the legacy settings pages (3bb80ce99 did; devops' f817c9ea0 fixed it).
+
 | R | Legacy | Page / surface | Console | Status |
 | --- | --- | --- | --- | --- |
 | 239 | `/` | AdministrationPage, organization_home | `org.home` | covered |
