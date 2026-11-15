@@ -122,4 +122,8 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
     assert redirected_to(get(c.conn, c.legacy <> "/comms/routing/rule_1")) ==
              c.console <> "/setup/comms"
   end
+
+  test "B10: comms validation goes to Setup readiness", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/comms/validation")) == c.console <> "/setup"
+  end
 end

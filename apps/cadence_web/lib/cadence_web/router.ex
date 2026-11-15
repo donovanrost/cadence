@@ -391,6 +391,13 @@ defmodule CadenceWeb.Router do
       :comms
     )
 
+    # §11c (B10, api; DECISIONS #79): comms validation goes to the console's Setup readiness.
+    get(
+      "/missions/:mission_id/comms/validation",
+      LegacyMissionSetupRedirectController,
+      :readiness
+    )
+
     # L11 cutover (owner: api; DECISIONS #79): data sources moved to the console's Setup.
     get("/missions/:mission_id/ops/data-sources", LegacySetupRedirectController, :data_sources)
 
@@ -440,10 +447,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/catalog/artifacts/:artifact_id", HostPageLive, :show,
         metadata: %{host_policy: :catalog}
-      )
-
-      live("/missions/:mission_id/comms/validation", HostPageLive, :index,
-        metadata: %{host_policy: :comms}
       )
 
       live("/missions/:mission_id/ops", HostPageLive, :index, metadata: %{host_policy: :ops})

@@ -19,6 +19,7 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
   - B6 `/missions/:id/catalog/revisions/:id` → `…/setup/catalog/<its database>` (looked up in the
       signed-in organization), else `…/setup/catalog`
   - B9 `/missions/:id/comms/routing[/new | /:id]` → `…/setup/comms` (its Routing rules tab)
+  - B10 `/missions/:id/comms/validation` → `…/setup` (Setup readiness)
 
   Slugs come from the signed-in organization (`CadenceWeb.ConsolePaths`), falling back to
   `/console`.
@@ -82,6 +83,8 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectController do
         go(conn, params, "/setup/catalog")
     end
   end
+
+  def readiness(conn, params), do: go(conn, params, "/setup")
 
   defp go(conn, %{"mission_id" => mission_id}, rest) do
     org = conn.assigns.current_scope && conn.assigns.current_scope.organization_id
