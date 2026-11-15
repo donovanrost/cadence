@@ -42,6 +42,28 @@ function gantt() {
 }
 
 describe("ApGantt", () => {
+  it("puts interleaved bars in their own rows, in input order", () => {
+    const w = mount(ApGantt, {
+      props: {
+        label: "Rows",
+        rows: [
+          { id: "a", label: "A" },
+          { id: "b", label: "B" },
+        ],
+        bars: [bar("a1", "a", H), bar("b1", "b", H), bar("a2", "a", 2 * H), bar("b2", "b", 3 * H)],
+        window: { from: 0, to: 24 * H },
+      },
+    });
+    const ids = (row: number) =>
+      w
+        .findAll("[role=group] [role=group]")
+        [row]?.findAll("button")
+        .map((b) => b.attributes("data-bar"));
+    expect(ids(0)).toEqual(["a1", "a2"]);
+    expect(ids(1)).toEqual(["b1", "b2"]);
+    w.unmount();
+  });
+
   it("renders one tab stop and names every bar", () => {
     const wrapper = gantt();
     const buttons = wrapper.findAll("button");

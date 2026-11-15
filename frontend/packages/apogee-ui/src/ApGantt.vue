@@ -56,7 +56,11 @@ const focusId = ref<string | null>(null);
 const tabStop = computed(() => focusId.value ?? props.selected ?? props.bars[0]?.id ?? null);
 const byRow = computed(() => {
   const map = new Map<string, GanttBar[]>();
-  for (const bar of props.bars) map.set(bar.rowId, [...(map.get(bar.rowId) ?? []), bar]);
+  for (const bar of props.bars) {
+    const row = map.get(bar.rowId);
+    if (row) row.push(bar);
+    else map.set(bar.rowId, [bar]);
+  }
   return map;
 });
 const bandsFor = (rowId: string) =>
