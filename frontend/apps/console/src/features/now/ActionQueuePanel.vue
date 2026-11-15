@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { RouterLink } from "vue-router";
 import type { RemoteState } from "@/api/index.ts";
 import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
@@ -8,6 +8,8 @@ import type { Attention } from "./attention.ts";
 import DiscardSheet from "./DiscardSheet.vue";
 import JobSheets from "./JobSheets.vue";
 import QueueListSheet from "./QueueListSheet.vue";
+import QueueReveal from "./QueueReveal.vue";
+import { QUEUE_CAP } from "./queueCap.ts";
 import { useFreshFlash } from "./useFreshFlash.ts";
 import { jobOffers } from "./jobs.ts";
 import { useQueueCommand, type RetryOutcome } from "./useQueueCommand.ts";
@@ -59,6 +61,18 @@ const flashClass = (key: string) =>
       ? "bg-raised"
       : "bg-[var(--apogee-wash-crit)]"
     : "transition-colors duration-[450ms] motion-reduce:transition-none";
+/** Now.md A2 'Over 100 open': the first QUEUE_CAP rows until the operator shows the rest. */
+const revealed = ref(false);
+const shownOf = (items: readonly QueueItem[]) =>
+  revealed.value ? items : items.slice(0, QUEUE_CAP);
+const list = ref<HTMLElement | null>(null);
+/** Scroll stays put; focus goes to the first newly shown row's first control. */
+async function reveal() {
+  revealed.value = true;
+  await nextTick();
+  const row = list.value?.children.item(QUEUE_CAP);
+  row?.querySelector<HTMLElement>("a, button")?.focus({ preventScroll: true });
+}
 /** Static meta, then the live countdown when the row has a consequence time. */
 function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Record<string, never> {
   const due = item.due
@@ -82,9 +96,9 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
         <ApCallout v-if="items.length === 0" tone="nominal">
           Nothing needs you. {{ nominal }} spacecraft fresh and in limits.
         </ApCallout>
-        <ul v-else class="m-0 list-none p-0">
+        <ul v-else ref="list" class="m-0 list-none p-0">
           <ApListRow
-            v-for="(item, i) in items"
+            v-for="(item, i) in shownOf(items)"
             :key="item.key"
             :class="flashClass(item.key)"
             :priority="`P${item.priority}`"
@@ -158,6 +172,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
               >
             </template>
           </ApListRow>
+          <QueueReveal v-if="!revealed" :items="items" @reveal="reveal" />
         </ul>
       </template>
     </ApRemote>
