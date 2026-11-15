@@ -667,6 +667,23 @@ admits a section only if its metadata equals the server definition, so a copy ch
 | 547 | `…/ops/explore` | OpsExplorationPage | `ops.telemetry` | **parked (L20)** |
 | 445, 578 | `…/ops/data-operations[/manage]` | OpsHistoricalWorkflowsPage | none | **parked (L16)** |
 
+**§11c (B) built (fe-setup/legacy-11c-b, on the combined L10-L13 + (A) branch).** api's B1-B11 redirects
+(LegacyMissionSetupRedirectController) take over rows 245/249 (mission settings), 265 (mission home), 267/271
+(spacecraft, New), 275-283 (profiles), 299/303/307 (a spacecraft's readiness, routing, commanding), 311-331
+(catalog except artifacts), 335-380 (comms) and 582 plus the spacecraft's `…/applications` index; the host
+pages that only served them are deleted. Kept: the spacecraft page with identity and edit (L17/L22), catalog
+artifacts (L18), the ApplicationHostLive app pages (B12) and every federated surface. SettingsPage keeps only
+the settings live updates for the pages that embed sections (batch C's); SettingsPage.vue stays.
+
+**Retained legacy routes (lead 11-15).** The kept federated apps (comms_overview, mission_catalog, spacecraft)
+still type their page headers by 27 of the retired paths, and SettingsPage.vue by the two mission settings paths.
+`frontend/tools/retained-legacy-routes.json` keeps those 29 in the typed route catalog, each naming its
+consumers and why. plugin-sdk's `routes.test.ts` holds the list to shrinking only: never back in `routes.json`, a
+subset of a frozen baseline written in the test (never longer), and every entry with a live consumer that
+still references its path. **B12 and (C) remove entries as they delete those surfaces or components**, and the
+file and its tests once it is empty. Adding an entry means editing the frozen baseline too, which only a
+deletion batch's own commit may do.
+
 **Legacy dashboards are gone from the host (L8 done and live).** Every legacy dashboard URL (directory, new,
 view, edit, library, playlists and present, settings, activity, diagnostics, shares, snapshots) redirects once to
 the console through `LegacyDashboardRedirectController`, and the host pages and `dashboards.*` surfaces are
