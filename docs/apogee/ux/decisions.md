@@ -1638,3 +1638,17 @@ Blocking. The item shape is telemetry_packet_inputs_required's. Name the spacecr
   - `telemetry_packet_inputs_required`: "Not applied: telemetry can't be turned on for EARENDIL-312 until its
     packet inputs are set up."
   - Both follow the same naming rule for several spacecraft.
+
+### U64 · Limits and derived telemetry through change sets (DECISIONS #93; ADR-020 phase 3; the user adopted ux's four conditions) (domain / api / fe-setup / fe-ops)
+No screen work until phase 3. These are the editors' spec then:
+1. **In-pass relief stays outside change sets.** Acknowledging and shelving an alarm deal with a nuisance limit;
+   relief never needs a limit edit.
+2. **One step under "Applies without approval":** the editor offers `Apply now` (stage and apply in one, with the
+   preview inline: HOLDs such as U43's limit_alarm_active, and derived points that depend on it). There's no trip
+   to Setup › Changes. Under "Needs a second person's approval", the step is `Stage change`, as for any set.
+3. **An unrelated set in review never freezes limit or derived edits.** They need their own set, or immunity from
+   another set's freeze. Domain settles which before phase 0 work reaches them.
+4. **Editors show live and staged values side by side**, and who has a path staged (path_already_staged).
+- When this ships, the governance help in SettingsAuditProviders.md loses its carve-out ("App settings that save
+  immediately, such as limits, aren't covered."), and fe-setup changes the server copy with devops (the
+  legacy-host contract rule).
