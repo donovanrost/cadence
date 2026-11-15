@@ -48,6 +48,8 @@ const emit = defineEmits<{ booked: [pass: Pass] }>();
 const now = useNow();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const HOUR = 3_600_000;
+/** A booking is future: the track runs now…now+48h, so a drag can't pick a past window (ux U62). */
+const track = computed(() => ({ from: now.value.getTime(), to: now.value.getTime() + 48 * HOUR }));
 const spacecraftId = ref("");
 const range = ref<TimeRange>({ from: Date.now(), to: Date.now() + 24 * HOUR });
 const direction = ref<"downlink" | "uplink">("downlink");
@@ -147,7 +149,7 @@ const outcome = computed(() =>
   <ApSheet ref="sheet" title="Book a pass" width="wide" initial-focus="select">
     <div class="flex flex-wrap items-end gap-3">
       <ApSelect v-model="spacecraftId" label="Spacecraft" :options="scOptions" />
-      <ApTimeRange v-model="range" label="Window" :presets="presets" />
+      <ApTimeRange v-model="range" label="Window" :presets="presets" :span="track" />
       <ApSegmented v-model="direction" :options="directions" label="Direction" />
     </div>
     <div v-if="stations.length" role="group" aria-label="Stations" class="flex flex-wrap gap-1.5">

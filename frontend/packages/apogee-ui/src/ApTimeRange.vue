@@ -35,11 +35,21 @@ const span = computed<TimeRange>(
 );
 const fromText = ref("");
 const toText = ref("");
+/** A drag in progress on the track: the fields follow it until release or Esc (ux U62). */
+const previewing = ref(false);
+function showRange(r: TimeRange) {
+  fromText.value = formatAbsolute(new Date(r.from));
+  toText.value = formatAbsolute(new Date(r.to));
+}
+function onPreview(r: TimeRange | null) {
+  previewing.value = r !== null;
+  showRange(r ?? model.value);
+}
+const trackHours = computed(() => Math.round((span.value.to - span.value.from) / 3_600_000));
 watch(
   model,
   (r) => {
-    fromText.value = formatAbsolute(new Date(r.from));
-    toText.value = formatAbsolute(new Date(r.to));
+    showRange(r);
     // Presets that track "now" drift by seconds between renders; match within a minute.
     presetId.value =
       props.presets.find(
@@ -66,8 +76,8 @@ function commitFields() {
   if (f !== null && t !== null && f < t) model.value = { from: f, to: t };
 }
 const fieldClass = (bad: boolean) => [
-  "h-9 w-full border bg-well px-3 font-mono text-md text-readout outline-none focus:border-readout",
-  bad ? "border-caution" : "border-line",
+  "h-9 w-full border bg-well px-3 font-mono text-md outline-none focus:border-readout",
+  previewing.value ? "border-readout text-text-2" : bad ? "border-caution text-readout" : "border-line text-readout",
 ];
 </script>
 
@@ -116,8 +126,10 @@ const fieldClass = (bad: boolean) => [
       :span="span"
       :bands="bands"
       :selected="model"
-      :label="`${label}: ${fromText} to ${toText}, on a 24 hour track`"
+      :now="now.getTime()"
+      :label="`${label}: ${fromText} to ${toText}, on a ${trackHours} hour track`"
       @select="model = $event"
+      @preview="onPreview"
     />
   </fieldset>
 </template>
