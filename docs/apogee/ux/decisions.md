@@ -1707,36 +1707,26 @@ Operators know catalog revisions; the mission model revision is the compiled for
 - **Apply refusals:** not_approved: "Not applied: catalog rev 4 isn't approved yet." comparison_failed: "Not
   applied: catalog rev 4's comparison didn't pass." with `Open the report`.
 
-### U66 · Now item: the telemetry buffer filling up (lead; the ingest journal as a whole) (api-ops / api / fe-ops)
-U47 is one pass backing up. This is the whole buffer, where a FULL buffer refuses telemetry from every link at
-once. Visible text says "buffer", as in U47. The journal, streams and paths go in Technical details. One item per
-mission.
-- **Thresholds:** raised at 70% (caution, P2). At 90% it's crit and P1. It clears below 60%, so it doesn't flap at
-  70%.
-- **Title:**
-  - `Telemetry buffer 72% full`
-  - crit: `Telemetry buffer 91% full: at 100% all telemetry stops`
-  - full: `Telemetry buffer full: Cadence is refusing telemetry from every pass`
-- **Meta:** `3.1 GB OF 4.3 GB · +180 MB/MIN · FULL IN ~6 MIN`. The growth and time to full show only while it's
-  growing. While shrinking: `−90 MB/MIN · DRAINING`.
-- **Body:**
-  - What it is: "Cadence holds incoming telemetry here until it's stored. At 100% it stops accepting telemetry from
-    every pass at once."
-  - What's holding it (the largest first, up to 3, each a link): "Most of it is waiting on EARENDIL-008 · SVB 03:10Z
-    pass (1.2 GB), the Northlight archive stream (800 MB), and 3 more."
-  - What drains it: "It drains as storage catches up. If it's shrinking, nothing needs doing."
-  - Full: "Telemetry arriving now is refused and isn't kept. It can't be recovered." (only when the server says it's
-    refusing).
-- **Actions** (only those the server offers, per viewer):
-  - `Open pass` on each holder link.
-  - `Catch up archive…` when the server offers the archive catch-up, with a confirm naming what it does.
-  - No `Raise the cap…` (lead): the cap is deployment config (the journal's max bytes and its volume), shared by
-    every organization on the deployment, not an org setting. A caption says who: "Raising the cap is a deployment
-    change by whoever runs your Cadence, and it needs disk too."
-  - Waiting is the default, so there's no button for it.
-- **Resolutions:** "Back under 60% at 03:30Z." The row fades. After a full spell, the line adds "Telemetry was
-  refused from 03:21Z to 03:24Z." (refused, not lost, unless the server counts losses; then U47's frames-lost
-  words).
-- **Technical details:** journal path, cap, stream ids, and the refusal counter.
-- **Data asks:** percent, used and cap bytes, rate (signed, per minute), eta_full, `holders [{kind: contact |
-  stream, label, realized_contact_id?, bytes}]`, refusing (bool) with refused_since, and actions.
+### U66 · Telemetry buffer: the disk filling up, and one pass's buffer full (lead; api-ops read the code) (api-ops / api / fe-ops)
+The buffer has a cap **per pass** (per stream), and all of them share **one disk**. Two cases:
+- **One pass's buffer full:** only that pass refuses telemetry. That's U47 (ingress_backpressure), not a new item.
+  At 100%, U47's journal_near_full title becomes `EARENDIL-008 · SVB 03:10Z pass · buffer full: telemetry refused`,
+  and its body leads with "Cadence is refusing this pass's telemetry until storage catches up." Refused frames,
+  when counted, are U47's frames_dropped ("12 telemetry frames lost").
+- **The disk filling (this item, one per deployment as seen by each mission):** when it's full, every pass stops at
+  once. Visible text says "buffer disk". The volume path goes in Technical details.
+  - Thresholds: raised at 70% (caution, P2); crit and P1 at 90%; cleared below 60%.
+  - Titles: `Telemetry buffer disk 72% full` / `Telemetry buffer disk 91% full: at 100% all telemetry stops` /
+    `Telemetry buffer disk full: Cadence is refusing telemetry from every pass`.
+  - Meta: `31 GB OF 43 GB · +1.8 GB/H · FULL IN ~6 H` (the growth only while growing; shrinking: `DRAINING`).
+  - Body: "Every pass's telemetry waits on this disk until it's stored. When the disk is full, Cadence stops
+    accepting telemetry from every pass at once." Then the largest holders, up to 3, as links: "Most of it is
+    waiting on EARENDIL-008 · SVB 03:10Z pass (4.2 GB), EARENDIL-003 · KSAT 02:40Z pass (3.1 GB), and 12 more."
+    Then "It drains as storage catches up. If it's shrinking, nothing needs doing."
+  - Full: "Telemetry arriving now is refused and isn't kept. It can't be recovered." (only when refusing).
+  - Actions: `Open pass` on the holders. There's no cap control: the disk and the per-pass cap are deployment
+    config shared by every organization. Caption: "A larger buffer disk is a deployment change by whoever runs your
+    Cadence."
+  - Resolutions: "Back under 60% at 03:30Z." After a full spell: "Telemetry was refused from 03:21Z to 03:24Z."
+  - Data (api-ops confirms): disk used and size, signed rate per hour, eta_full, holders [{realized_contact_id,
+    label, bytes}], refusing with refused_since.
