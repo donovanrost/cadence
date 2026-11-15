@@ -257,7 +257,7 @@ export type StationLookup = Readonly<{
   byRef: (ref: string | null | undefined) => StationInfo | null;
 }>;
 const NO_STATIONS: StationLookup = { byId: () => null, byRef: () => null };
-type StationRef = Readonly<{ ref: string | null; id: StationId | null; code: string | null }>;
+type StationRef = Omit<Decoded<typeof contactStation>, "name">;
 const codeFor = (st: StationRef, s: StationLookup) =>
   st.code ?? s.byId(st.id)?.code ?? s.byRef(st.ref)?.code ?? null;
 const providerFor = (st: StationRef, s: StationLookup) =>

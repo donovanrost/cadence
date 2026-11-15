@@ -9,7 +9,14 @@ import {
   type ApiError,
 } from "@/api/index.ts";
 import { plural } from "@/ui";
-import { passReader, type ContactEnded, type Pass, type QueuedCommands } from "./api.ts";
+import {
+  contactEndCauses,
+  passReader,
+  providerReasonCodes,
+  type ContactEnded,
+  type Pass,
+  type QueuedCommands,
+} from "./api.ts";
 
 /**
  * U55: cancel a scheduled contact before AOS, or end one now while live. Both stop Cadence's
@@ -29,7 +36,8 @@ const quoted = (reason: string | null) => (reason ? `: “${reason.trim()}”` :
  * snake_case reason as a code.
  */
 const CODE = /^[a-z0-9_]+$/;
-const CODE_WORDS: Readonly<Record<string, string>> = {
+type ProviderReasonCode = (typeof providerReasonCodes)[number];
+const CODE_WORDS: Readonly<Record<ProviderReasonCode, string>> = {
   delivery_descriptor_conflicts_with_transport:
     "its delivery settings don't match the transport set up in Cadence",
 };
@@ -46,12 +54,17 @@ export const endedCode = (e: ContactEnded | null | undefined): string | null =>
   e && e.by?.kind === "system" ? split(e).code : null;
 function providerReason(e: ContactEnded): string {
   const { code, text } = split(e);
-  const words = code ? CODE_WORDS[code] : undefined;
+  // A legacy bare reason may be any snake_case text: match it against the codes the console words.
+  const known = providerReasonCodes.find((k) => k === code);
+  const words = known ? CODE_WORDS[known] : undefined;
   const parts = [words ?? null, text ? `“${text}”` : null].filter((p): p is string => p !== null);
   return parts.length ? ` (${parts.join(": ")})` : "";
 }
 
-const CADENCE_CANCELS: Readonly<Record<string, (p: string) => string>> = {
+/** Every cause but the operator's own cancel is Cadence's. */
+const CADENCE_CANCELS: Readonly<
+  Record<Exclude<(typeof contactEndCauses)[number], "operator">, (p: string) => string>
+> = {
   provider_failed: (p) => `${p} couldn't book this pass`,
   provider_canceled: (p) => `${p} canceled this pass`,
   provider_rejected: (p) => `${p} rejected the booking for this pass`,
@@ -65,7 +78,10 @@ export function endedLine(e: ContactEnded, provider: string | null, now: Date): 
   if (e.at === null) return `${what0}; when, who and why weren't recorded.`;
   const at = short(e.at, now);
   const p = provider ?? "The provider";
-  const cadence = e.cause !== null && isKnown(e.cause) ? CADENCE_CANCELS[e.cause] : undefined;
+  const cadence =
+    e.cause !== null && isKnown(e.cause) && e.cause !== "operator"
+      ? CADENCE_CANCELS[e.cause]
+      : undefined;
   if (cadence) return `Canceled by Cadence at ${at}: ${cadence(p)}${providerReason(e)}.`;
   if (e.by === null) return `${what0} at ${at}; who and why weren't recorded.`;
   if (e.by?.kind !== "user" || e.cause === null || !isKnown(e.cause))
