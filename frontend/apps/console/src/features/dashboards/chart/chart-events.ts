@@ -83,6 +83,10 @@ export class ChartEvents {
       return bounds ? [{ marker, ...bounds, realized: flew(marker) }] : [];
     });
     const flown = mergedSpans(bands.filter((b) => b.realized));
+    // Over the empty-range hatch, a band's own area knocks the hatch out, so its dashed or solid
+    // edges read against plain surface, not against stripes of the same weight (qa: ZKgUX).
+    if (this.surface.model.xs.length === 0)
+      for (const span of mergedSpans(bands)) this.renderKnockout(span);
     for (const span of flown) this.renderTint(span);
     // A contact that closed without starting is drawn as its booking (dashed, at the scheduled
     // window) and replaces the booking's own outline there: one outline, one tooltip (ux).
@@ -130,6 +134,15 @@ export class ChartEvents {
       height: `${this.surface.chart.bbox.height || this.surface.el.clientHeight}px`,
       boxSizing: "border-box",
     };
+  }
+
+  private renderKnockout(span: { left: number; width: number }) {
+    const plain = document.createElement("div");
+    Object.assign(plain.style, {
+      ...this.bandBox(span.left, span.width),
+      background: this.surface.themeColor("--chart-surface-96"),
+    });
+    this.fillLayer.appendChild(plain);
   }
 
   private renderTint(span: { left: number; width: number }) {
