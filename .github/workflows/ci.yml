@@ -7,6 +7,10 @@ on:
     branches: [develop, main]
   push:
     branches: [develop, main]
+  # Twice a day on develop (the default branch, where schedules run), so jobs on probation outside
+  # ci-ok keep collecting runs when no PRs land. Free on a public repo; `changes` treats it like a push.
+  schedule:
+    - cron: "17 5,17 * * *"
   workflow_dispatch:
 
 permissions:
