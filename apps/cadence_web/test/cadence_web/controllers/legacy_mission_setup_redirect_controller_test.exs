@@ -52,4 +52,17 @@ defmodule CadenceWeb.LegacyMissionSetupRedirectControllerTest do
     assert redirected_to(get(c.conn, c.legacy <> "/spacecraft/profiles/profile_1")) ==
              c.console <> "/setup/profiles/profile_1"
   end
+
+  test "B6: the catalog, its import and a database go to the Setup catalog", c do
+    assert redirected_to(get(c.conn, c.legacy <> "/catalog")) == c.console <> "/setup/catalog"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/catalog/new")) ==
+             c.console <> "/setup/catalog/import"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/catalog/databases/db_1")) ==
+             c.console <> "/setup/catalog/db_1"
+
+    assert redirected_to(get(c.conn, c.legacy <> "/catalog/imports/run_1")) ==
+             c.console <> "/setup/catalog/import/run_1"
+  end
 end
