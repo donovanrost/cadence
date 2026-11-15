@@ -578,6 +578,8 @@ defmodule Cadence.Runtime.PartitionOwner do
          packet_records: decode_result.packet_records,
          transfer_frame_records: decode_result.transfer_frame_records,
          protocol_anomalies: decode_result.protocol_anomalies,
+         # Where this stream may durably resume (TMFrameIngress.resume_offset/3); nil without one.
+         resume_offset: Map.get(decode_result, :resume_offset),
          dispatch_decisions: dispatch_decisions,
          outputs: outputs,
          semantic_result: semantic_result,

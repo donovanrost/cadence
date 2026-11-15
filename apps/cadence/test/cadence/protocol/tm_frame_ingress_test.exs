@@ -157,6 +157,58 @@ defmodule Cadence.Protocol.TMFrameIngressTest do
     refute Enum.map(plain.packet_records, & &1.packet_id) == ids
   end
 
+  # director 11-15: the processing ack ran past a partial frame or packet held in memory.
+  describe "resume_offset" do
+    test "an evidence ending mid-frame resumes at that frame's start" do
+      bytes = frame(1) <> frame(2)
+      {first, second} = String.split_at(bytes, 20)
+
+      {:ok, a, rest, pipeline, continuity} =
+        process(journal_evidence(first, 0, "e1"), initial_state())
+
+      assert byte_size(rest) == 6
+      assert a.resume_offset == 14
+
+      {:ok, b, <<>>, _pipeline, _continuity} =
+        process(journal_evidence(second, 20, "e2"), {pipeline, continuity, rest})
+
+      assert b.resume_offset == 28
+      assert length(a.packet_records ++ b.packet_records) == 2
+    end
+
+    test "a frame holding only the start of a packet resumes at that frame until it completes" do
+      # A packet with 10 data bytes: its header and 2 bytes in frame 1, the other 8 in frame 2.
+      packet = <<0::3, 0::1, 0::1, 42::11, 3::2, 7::14, 9::16>> <> :binary.copy(<<7>>, 10)
+      <<head::binary-size(8), tail::binary-size(8)>> = packet
+
+      {:ok, a, <<>>, pipeline, continuity} =
+        process(journal_evidence(raw_frame(1, 0, head), 0, "e1"), initial_state())
+
+      assert a.packet_records == []
+      assert a.resume_offset == 0
+
+      {:ok, b, <<>>, _pipeline, continuity} =
+        process(
+          journal_evidence(raw_frame(2, 2047, tail), 14, "e2"),
+          {pipeline, continuity, <<>>}
+        )
+
+      assert [_packet] = b.packet_records
+      assert b.resume_offset == 28
+      assert continuity.pending_frame_offsets == %{}
+    end
+
+    test "without journal offsets there is no resume point" do
+      {result, _state} = decode(frame(1), %{}, initial_state())
+      assert result.resume_offset == nil
+    end
+  end
+
+  defp raw_frame(count, fhp, payload) when byte_size(payload) == 8 do
+    <<0::2, 11::10, 2::3, 0::1, count::8, count::8, 0::1, 0::1, 0::1, 3::2, fhp::11,
+      payload::binary>>
+  end
+
   defp journal_evidence(bytes, offset, evidence_id) do
     RawEvidence.new(%{
       evidence_id: evidence_id,

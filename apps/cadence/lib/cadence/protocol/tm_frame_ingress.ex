@@ -59,12 +59,22 @@ defmodule Cadence.Protocol.TMFrameIngress do
       protocol_anomalies =
         build_pipeline_anomalies(raw_evidence, decode_anomalies, absolute_base_offset)
 
+      frame_offsets =
+        pending_frame_offsets(
+          next_continuity_state,
+          frame_infos,
+          absolute_base_offset,
+          next_pipeline_state
+        )
+
       {:ok,
        %{
          packet_records: packet_records,
          transfer_frame_records: transfer_frame_records,
-         protocol_anomalies: protocol_anomalies
-       }, rest, next_pipeline_state, next_continuity_state}
+         protocol_anomalies: protocol_anomalies,
+         resume_offset: resume_offset(raw_evidence, rest, frame_offsets)
+       }, rest, next_pipeline_state,
+       Map.put(next_continuity_state, :pending_frame_offsets, frame_offsets)}
     else
       {:error, reason, next_pipeline_state} ->
         {:error, reason, next_pipeline_state, continuity_state}
@@ -103,8 +113,41 @@ defmodule Cadence.Protocol.TMFrameIngress do
         {:ok, fresh_pipeline, <<>>, current}
       end
     else
-      {:ok, pipeline, remainder, current}
+      {:ok, pipeline, remainder,
+       Map.put(current, :pending_frame_offsets, Map.get(previous, :pending_frame_offsets, %{}))}
     end
+  end
+
+  @doc """
+  Where processing of this journal stream may durably resume after this evidence (an absolute
+  stream offset): the start of the earliest frame holding bytes of an incomplete frame (the
+  remainder) or of an incomplete packet (a reassembly buffer), else the evidence's end. A restart
+  that resumes there decodes the partial frame or packet again from its first byte, and nothing
+  before it twice (director 11-15: the processing ack ran past them, and they were lost). Nil
+  without journal offsets.
+  """
+  @spec resume_offset(RawEvidence.t(), binary(), map()) :: non_neg_integer() | nil
+  def resume_offset(%RawEvidence{} = raw_evidence, rest, frame_offsets) do
+    case metadata_value(raw_evidence.metadata || %{}, :journal_end_offset) do
+      end_offset when is_integer(end_offset) ->
+        Enum.min([end_offset - byte_size(rest) | Map.values(frame_offsets)])
+
+      _no_journal ->
+        nil
+    end
+  end
+
+  # The absolute offsets of the frames a buffered partial packet came from, keyed by
+  # {scid, vcid, frame_seq}: this evidence's frames added, then only those a buffer still names.
+  defp pending_frame_offsets(continuity, frame_infos, absolute_base_offset, pipeline) do
+    known =
+      Enum.reduce(frame_infos, Map.get(continuity, :pending_frame_offsets, %{}), fn info, acc ->
+        frame = info.frame
+        offset = absolute_base_offset + info.raw_frame_offset_bytes
+        Map.put(acc, {frame.scid, frame.vcid, frame.frame_seq}, offset)
+      end)
+
+    Map.take(known, TMFramePipeline.pending_source_frames(pipeline))
   end
 
   defp receive_boundary(previous, _current) when map_size(previous) == 0, do: nil

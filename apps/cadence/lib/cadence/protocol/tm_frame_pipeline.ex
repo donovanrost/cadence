@@ -24,6 +24,18 @@ defmodule Cadence.Protocol.TMFramePipeline do
   @spec stats(state()) :: map()
   def stats(state), do: Reassembly.stats(state)
 
+  @doc """
+  The frames each buffered partial packet came from, as `{scid, vcid, frame_seq}` (the resume
+  point after an incomplete packet, `TMFrameIngress.resume_offset/3`). Reads the reassembly's
+  buffers, which record their source frames.
+  """
+  @spec pending_source_frames(map()) :: [{non_neg_integer(), non_neg_integer(), term()}]
+  def pending_source_frames(%{packet_buffers_by_channel: buffers}) do
+    for {_key, entry} <- buffers, seq <- entry.source_frames, do: {entry.scid, entry.vcid, seq}
+  end
+
+  def pending_source_frames(_state), do: []
+
   @spec decode_sdu_octets(binary(), keyword(), state(), map()) ::
           {:ok, [SDUOctets.t()], binary(), state()} | {:error, term(), state()}
   def decode_sdu_octets(frame_bytes, codec_opts, state, ctx \\ %{})
