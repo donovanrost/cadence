@@ -19,12 +19,13 @@ test.describe("admin mode", () => {
 
     // Start outside admin mode, whatever an earlier run left behind.
     await accountMenu.click();
-    const leaveFirst = page.getByRole("button", { name: "Leave admin mode" });
+    const leaveFirst = page.getByRole("menuitem", { name: "Leave admin mode" });
     if (await leaveFirst.isVisible()) {
       await leaveFirst.click();
       await accountMenu.click();
     }
-    await page.getByRole("button", { name: "Enter admin mode" }).first().click();
+    // The account menu is a menu button (design-language §6): its items are menuitems.
+    await page.getByRole("menuitem", { name: "Enter admin mode" }).click();
 
     const form = page.locator("dialog[open]").last();
     const password = form.getByLabel("Password", { exact: true });
@@ -40,11 +41,11 @@ test.describe("admin mode", () => {
     await expect(form).toBeHidden();
 
     await accountMenu.click();
-    await expect(page.getByRole("link", { name: "Admin area" })).toBeVisible();
-    await page.getByRole("button", { name: "Leave admin mode" }).click();
+    await expect(page.getByRole("menuitem", { name: "Admin area" })).toBeVisible();
+    await page.getByRole("menuitem", { name: "Leave admin mode" }).click();
 
     await accountMenu.click();
-    await expect(page.getByRole("button", { name: "Enter admin mode" }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Leave admin mode" })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: "Enter admin mode" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Leave admin mode" })).toHaveCount(0);
   });
 });
