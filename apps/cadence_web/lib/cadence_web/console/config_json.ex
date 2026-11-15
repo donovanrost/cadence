@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   import Plug.Conn
 
+  alias Cadence.Reads.TelemetryApplyRefusals
   alias CadenceWeb.Console.Problem
 
   @status %{
@@ -26,6 +27,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     holds_not_acknowledged: 422,
     holds_blocking: 409,
     catalog_command_in_flight: 409,
+    telemetry_app_not_installed: 409,
+    telemetry_packet_inputs_required: 409,
     invalid_range: 422,
     forbidden: 403,
     change_set_not_found: 404,
@@ -60,6 +63,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
       "This change can't apply yet: commands in flight or configurations pending block it.",
     catalog_command_in_flight:
       "A command started while applying; nothing was applied. Try again when it finishes.",
+    # The apply's own refusals (api-ops 11-15); the preview's blocking hold normally says it first.
+    telemetry_app_not_installed: "Not applied: the telemetry app isn't installed.",
+    telemetry_packet_inputs_required: "Not applied: telemetry's packet inputs aren't set up.",
     invalid_range: "Choose an older revision first.",
     forbidden: "You do not have permission to do that.",
     change_set_not_found: "Change set not found.",
@@ -104,6 +110,26 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   def error(conn, {:catalog_command_in_flight, ids}) when is_list(ids),
     do: respond(conn, :catalog_command_in_flight, %{command_request_ids: ids})
+
+  # ux U63: the apply's telemetry refusals name the spacecraft (TelemetryApplyRefusals).
+  def error(conn, {tag, ids})
+      when tag in [:telemetry_app_not_installed, :telemetry_packet_inputs_required] and
+             is_list(ids) do
+    scope = conn.assigns[:current_scope]
+    mission = conn.assigns[:current_mission]
+
+    message =
+      TelemetryApplyRefusals.message(
+        tag,
+        ids,
+        scope && scope.organization_id,
+        mission && mission.mission_id
+      )
+
+    respond_raw(conn, Map.fetch!(@status, tag), Atom.to_string(tag), message, %{
+      spacecraft_ids: ids
+    })
+  end
 
   def error(conn, {tag, details}) when is_map_key(@status, tag),
     do: respond(conn, tag, encode(details))

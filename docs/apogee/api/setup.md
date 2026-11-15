@@ -163,9 +163,16 @@ reason, blocking, sentence, details?}`; sentences are ux's U40):
 | `commanding_command_in_flight` | **yes** | turning commanding off while one is being sent | `requests` |
 | `telemetry_disabled` | no | turning telemetry off | none |
 | `telemetry_packet_inputs_required` | **yes** | turning telemetry on without handled APIDs | none |
+| `telemetry_app_not_installed` | **yes** | turning telemetry on for spacecraft without the telemetry app (ux U63; domain e587668da) | `{app_key, app_name}` (`app_name` null without a registry display name); ONE item for all such spacecraft: `entity_id` the first, `spacecraft_ids` all. The console titles it "Telemetry app not installed" and links "Open Setup › Apps" to `/setup/apps/<app_key>` |
 
 `earliest_pass_at` is ISO 8601 UTC or null. The sentences already carry the counts and the §4
 short time. A blocking item can't be acknowledged away: submit answers `409 holds_blocking`.
+If an apply still meets one of the telemetry conditions (applied anyway, or a race after the
+preview), it answers in words, never a generic failure (ux U63): `409 telemetry_app_not_installed`
+or `409 telemetry_packet_inputs_required`, `details: {spacecraft_ids}`, `message` naming up to three
+spacecraft in full, else "12 spacecraft" ("Not applied: the telemetry app isn't installed on
+EARENDIL-312. Install the app in Setup › Apps first." / "Not applied: telemetry can't be turned on
+for EARENDIL-312 until its packet inputs are set up.").
 
 Defence in depth: a request whose spacecraft was archived anyway (queued between preview and
 apply) is never sent. At release it's canceled with `end_reason: spacecraft_archived`
