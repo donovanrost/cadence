@@ -178,6 +178,55 @@ Defence in depth: a request whose spacecraft was archived anyway (queued between
 apply) is never sent. At release it's canceled with `end_reason: spacecraft_archived`
 (commanding.md) and its lane moves on.
 
+## The model approval gate (U65, DECISIONS #92 a)
+
+A catalog import makes a mission-model revision; a generation can't introduce it until an
+organization administrator approves it against a comparison report. The console names a model
+by its catalog revision ("catalog rev 4"); the model revision id is Technical details. Base
+`/api/console/v1/missions/:mission_id/mission-model-revisions`.
+
+- `GET ?status=candidate|approved|rejected|retired` (default `candidate`) → `{revisions: [{id,
+  status, imported_at, imported_by {id, name} | null, catalog_revision {id, number, label,
+  database_id} | null, latest_comparison_status: passed|failed|null}]}`, newest first.
+- `GET /:id` → `{id, status, imported_at, imported_by, catalog_revision, decision {kind:
+  approved|rejected, by {id, name}, at, report_id | null, reason | null, retroactive} | null,
+  viewer_can_decide, viewer_is_importer, cannot_decide_because: not_admin | not_approvable |
+  self_approval | plans_not_ready | null, plans_ready, comparison: <cmp> | null}`. `imported_by`
+  null reads "Importer not recorded".
+- `POST /:id/comparison {}` → `201 <cmp>`, synchronous, against the mission's active binding set
+  and the revision this one replaces (the previous catalog revision's model in the same
+  database, else none). Reports dedupe on content.
+- `<cmp>` = `{report_id, passed, against {revision_id, catalog_revision_number} | null, replay
+  {status: not_required|not_run|passed|failed, reason: qualification_corpus_required | null,
+  cases, failed_cases [{name, reason}]}, risk: low|medium|high, totals {added, removed, changed},
+  sections [{kind, added, removed, changed}], affected_kinds [kind], changed_targets [target],
+  generated_at}`. `kind` and `target` are known vocabularies (read as known text). `not_run` is
+  "Replay: not run…" (a caution, never shown as passed); `not_required` is "Replay: not needed for
+  a low-risk change."
+- `POST /:id/approve {comparison_report_id}` and `POST /:id/reject {reason}` (reason required;
+  only a candidate) → `200` the read. Refusals, worded per ux U65: `403 forbidden` (not an org
+  admin), `403 human_mission_model_approver_required`, `403 mission_model_self_approval_forbidden`
+  (the importer, under 'independent'), `409 mission_model_comparison_not_passed`, `409
+  mission_model_comparison_mismatch` (another revision's report: run it again), `409
+  mission_model_runtime_plans_not_ready`, `409 mission_model_revision_not_approvable`, `404
+  mission_model_revision_not_found` / `mission_model_comparison_report_not_found`, `422
+  mission_model_decision_reason_required` ("Give a reason first."), `422
+  mission_model_decision_reason_too_long` (over 2,000 bytes), `422 invalid_params`. Approving an
+  already approved revision returns it unchanged (the first approver stays).
+- The catalog read's revision rows (`GET /catalog?database_id=`) carry `model {revision_id,
+  status} | null` for the row tag (NEEDS APPROVAL / APPROVED / REJECTED).
+- Preview HOLD `mission_model_not_approved` (blocking; compatibility check): `details
+  {catalog_revision_id, catalog_revision_number, catalog_database_id, mission_model_revision_id}`.
+- Apply refusals: `409 mission_model_revision_not_approved {mission_model_revision_ids,
+  catalog_revision_numbers}` ("Not applied: catalog rev 4 isn't approved yet.") and `409
+  mission_model_comparison_failed {mission_model_revision_id, comparison_report_id,
+  catalog_revision_number}` ("Not applied: catalog rev 4's comparison didn't pass.").
+- Audit (kind `config`, target `{kind: mission_model_revision, id, label: "catalog rev 4"}`):
+  "Approved catalog rev 4 (comparison passed against rev 3; replay not run)" / "Rejected catalog
+  rev 4" with the reason. An approval of a revision some spacecraft already run (grandfathered;
+  domain 71ce7d850) is retroactive: `decision.retroactive: true`, and the audit line reads
+  "(retroactive; comparison passed against rev 3; replay not run)".
+
 ## `GET /api/console/v1/missions/:mission_id/readiness`
 
 The shape is setup-shapes.md §R, with **singular** verdict keys (agreed with fe-setup). Refetch on

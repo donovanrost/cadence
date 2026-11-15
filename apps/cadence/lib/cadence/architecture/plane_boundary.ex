@@ -481,6 +481,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
   # when the owning plane intends the module to be consumed across the boundary.
   @public_cross_plane_sinks MapSet.new([
                               "lib/cadence/control/activations.ex",
+                              # U65 (domain 11-15): the model gate's default baseline for the console.
+                              "lib/cadence/control/model_approval_gate.ex",
                               "lib/cadence/control/alarms.ex",
                               "lib/cadence/control/activations/activation_execution.ex",
                               "lib/cadence/applications/telemetry_decom.ex",

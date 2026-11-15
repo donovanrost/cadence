@@ -950,6 +950,12 @@ defmodule CadenceWeb.Router do
       post("/passes/:id/release", PassController, :release)
       # U55 cancel or end a pass's contact (owner: api). Contract: docs/apogee/api/contacts.md
       post("/passes/:id/cancel-contact", PassContactController, :cancel)
+      # U65: the model approval gate (owner: api). Contract: docs/apogee/api/setup.md
+      get("/mission-model-revisions", MissionModelRevisionController, :index)
+      get("/mission-model-revisions/:id", MissionModelRevisionController, :show)
+      post("/mission-model-revisions/:id/comparison", MissionModelRevisionController, :compare)
+      post("/mission-model-revisions/:id/approve", MissionModelRevisionController, :approve)
+      post("/mission-model-revisions/:id/reject", MissionModelRevisionController, :reject)
       post("/passes/:id/end-contact", PassContactController, :finish)
       # U46 named release (owner: api). Contract: docs/apogee/api/commanding.md
       post(

@@ -26,6 +26,7 @@ defmodule Cadence.Reads.OrganizationAudit do
     AccountEvents,
     CommandEvents,
     ContactEvents,
+    ModelEvents,
     DashboardEvents,
     PolicyEvents,
     ProviderAccountEvents,
@@ -82,6 +83,7 @@ defmodule Cadence.Reads.OrganizationAudit do
        plan_events(organization_id, id) ++
        PolicyEvents.list(organization_id, id) ++
        ContactEvents.list(organization_id, id) ++
+       ModelEvents.list(organization_id, id) ++
        data_events(organization_id, id) ++
        DashboardEvents.list(organization_id, id) ++
        ConfigAudit.list(organization_id, id))

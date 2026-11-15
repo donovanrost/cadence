@@ -208,6 +208,25 @@ defmodule CadenceWeb.Console.Problem do
       {422,
        "This start goes over the limit of template requirements. Include fewer templates, or narrow their targets."},
     # U55: cancel or end a pass's contact (the console words each state itself).
+    # U65: the model approval gate (words: ux; codes: domain's).
+    human_mission_model_approver_required:
+      {403, "Not approved: a person has to approve this, not a service identity."},
+    mission_model_self_approval_forbidden:
+      {403, "Not approved: you imported this revision, so another org admin has to approve it."},
+    mission_model_comparison_not_passed: {409, "Not approved: the comparison didn't pass."},
+    mission_model_comparison_mismatch:
+      {409, "Not approved: the comparison is out of date. Run it again."},
+    mission_model_runtime_plans_not_ready:
+      {409, "Not approved: Cadence is still preparing this revision. Try again in a moment."},
+    mission_model_revision_not_approvable:
+      {409, "Not approved: this revision was already approved, rejected or replaced."},
+    mission_model_revision_not_found: {404, "Mission model revision not found."},
+    mission_model_comparison_report_not_found: {404, "Comparison report not found."},
+    mission_model_decision_reason_required: {422, "Give a reason first."},
+    mission_model_decision_reason_too_long: {422, "Keep the reason under 2,000 characters."},
+    mission_model_no_active_binding_set:
+      {409, "There's no active configuration to compare this revision against."},
+    mission_model_unavailable: {503, "Mission models are unavailable right now."},
     contact_not_cancelable: {409, "This contact can't be canceled now."},
     contact_not_live: {409, "This contact isn't live, so it can't be ended."},
     no_scheduled_contact: {404, "This pass has no contact in Cadence."},

@@ -76,4 +76,40 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
 
     assert Words.sentence(:telemetry_app_not_installed, ["A", "B"]) =~ "installed on A and B."
   end
+
+  test "U65: the model gate's apply refusals are coded 409s named by catalog revision" do
+    conn = ConfigJSON.error(build_conn(), {:mission_model_revision_not_approved, ["model_1"]})
+
+    assert %{
+             "error" => %{
+               "code" => "mission_model_revision_not_approved",
+               "message" => "Not applied: a catalog revision isn't approved yet.",
+               "details" => %{
+                 "mission_model_revision_ids" => ["model_1"],
+                 "catalog_revision_numbers" => [nil]
+               }
+             }
+           } = json_response(conn, 409)
+
+    conn =
+      ConfigJSON.error(build_conn(), {:mission_model_comparison_failed, "model_1", "report_1"})
+
+    assert %{
+             "error" => %{
+               "code" => "mission_model_comparison_failed",
+               "details" => %{"comparison_report_id" => "report_1"}
+             }
+           } = json_response(conn, 409)
+
+    alias Cadence.Reads.ModelApplyRefusals, as: Words
+
+    assert Words.sentence(:mission_model_revision_not_approved, [4]) ==
+             "Not applied: catalog rev 4 isn't approved yet."
+
+    assert Words.sentence(:mission_model_revision_not_approved, [4, 5]) ==
+             "Not applied: catalog revs 4 and 5 aren't approved yet."
+
+    assert Words.sentence(:mission_model_comparison_failed, [4]) ==
+             "Not applied: catalog rev 4's comparison didn't pass."
+  end
 end

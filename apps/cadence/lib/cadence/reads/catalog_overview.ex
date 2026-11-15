@@ -12,6 +12,7 @@ defmodule Cadence.Reads.CatalogOverview do
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, Revision}
+  alias Cadence.MissionModels
   alias Cadence.Reads.CatalogDiff
 
   @revision_limit 50
@@ -122,10 +123,30 @@ defmodule Cadence.Reads.CatalogOverview do
     %{
       id: id,
       current_revision: current(organization_id, mission_id, List.first(revisions)),
-      revisions: Enum.map(revisions, &Map.drop(&1, [:import_run_id, :model_revision_id])),
+      revisions:
+        revisions
+        |> with_model_status(organization_id, mission_id)
+        |> Enum.map(&Map.drop(&1, [:import_run_id, :model_revision_id])),
       import_runs:
         runs |> Enum.take(@run_limit) |> Enum.map(&run_row(&1, revision_by_run, labels))
     }
+  end
+
+  # U65 (fe-ops): each catalog revision's mission model and its approval status, for the row tag
+  # (NEEDS APPROVAL / APPROVED / REJECTED); one batched status lookup.
+  defp with_model_status(revisions, organization_id, mission_id) do
+    ids = revisions |> Enum.map(& &1.model_revision_id) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    statuses = MissionModels.revision_statuses(organization_id, mission_id, ids)
+
+    Enum.map(revisions, fn revision ->
+      model =
+        case revision.model_revision_id do
+          nil -> nil
+          id -> %{revision_id: id, status: Map.get(statuses, id)}
+        end
+
+      Map.put(revision, :model, model)
+    end)
   end
 
   defp revision(%Revision{} = revision, run, usage, labels, mission_id) do

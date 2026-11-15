@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   import Plug.Conn
 
+  alias Cadence.Reads.ModelApplyRefusals
   alias Cadence.Reads.TelemetryApplyRefusals
   alias CadenceWeb.Console.Problem
 
@@ -29,6 +30,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     catalog_command_in_flight: 409,
     telemetry_app_not_installed: 409,
     telemetry_packet_inputs_required: 409,
+    mission_model_revision_not_approved: 409,
+    mission_model_comparison_failed: 409,
     invalid_range: 422,
     forbidden: 403,
     change_set_not_found: 404,
@@ -66,6 +69,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
     # The apply's own refusals (api-ops 11-15); the preview's blocking hold normally says it first.
     telemetry_app_not_installed: "Not applied: the telemetry app isn't installed.",
     telemetry_packet_inputs_required: "Not applied: telemetry's packet inputs aren't set up.",
+    mission_model_revision_not_approved: "Not applied: the catalog revision isn't approved yet.",
+    mission_model_comparison_failed:
+      "Not applied: the catalog revision's comparison didn't pass.",
     invalid_range: "Choose an older revision first.",
     forbidden: "You do not have permission to do that.",
     change_set_not_found: "Change set not found.",
@@ -107,6 +113,35 @@ defmodule CadenceWeb.Console.ConfigJSON do
   @spec error(Plug.Conn.t(), term()) :: Plug.Conn.t()
   def error(conn, {:invalid_op, index, errors}),
     do: respond(conn, :invalid_op, %{index: index, errors: encode(errors)})
+
+  # U65: the model approval gate's apply refusals, named by catalog revision number.
+  def error(conn, {:mission_model_revision_not_approved, ids}) when is_list(ids) do
+    numbers = model_numbers(conn, ids)
+
+    respond_raw(
+      conn,
+      409,
+      "mission_model_revision_not_approved",
+      ModelApplyRefusals.sentence(:mission_model_revision_not_approved, Map.values(numbers)),
+      %{mission_model_revision_ids: ids, catalog_revision_numbers: Enum.map(ids, &numbers[&1])}
+    )
+  end
+
+  def error(conn, {:mission_model_comparison_failed, revision_id, report_id}) do
+    number = conn |> model_numbers([revision_id]) |> Map.get(revision_id)
+
+    respond_raw(
+      conn,
+      409,
+      "mission_model_comparison_failed",
+      ModelApplyRefusals.sentence(:mission_model_comparison_failed, [number]),
+      %{
+        mission_model_revision_id: revision_id,
+        comparison_report_id: report_id,
+        catalog_revision_number: number
+      }
+    )
+  end
 
   def error(conn, {:catalog_command_in_flight, ids}) when is_list(ids),
     do: respond(conn, :catalog_command_in_flight, %{command_request_ids: ids})
@@ -157,6 +192,17 @@ defmodule CadenceWeb.Console.ConfigJSON do
     |> put_status(status)
     |> Phoenix.Controller.json(Problem.body(code, message, details))
     |> halt()
+  end
+
+  defp model_numbers(conn, ids) do
+    scope = conn.assigns[:current_scope]
+    mission = conn.assigns[:current_mission]
+
+    ModelApplyRefusals.numbers(
+      scope && scope.organization_id,
+      mission && mission.mission_id,
+      ids
+    )
   end
 
   defp key(key) when is_atom(key), do: Atom.to_string(key)
