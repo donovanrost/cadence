@@ -321,6 +321,25 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
                DataSources.fetch_data_binding("platform-shared-binding-target")
 
       assert unchanged == c.shared.data_source_id
+
+      # A :shared source that still belongs to one organization isn't platform-shared either.
+      org_shared = persist_source!("org-shared-target-source", @organization_id, nil, :shared)
+
+      assert {:error, :platform_target_required} =
+               DataSourcesAction.execute(
+                 platform_admin(),
+                 HostContext.mission(@mission_id),
+                 "data_sources",
+                 request("change-binding", %{
+                   "binding" => %{
+                     "binding_id" => "platform-shared-binding-target",
+                     "data_source_id" => org_shared.data_source_id,
+                     "reason" => "Use the org's shared one.",
+                     "expected_affected_missions" => 1,
+                     "expected_live_passes_total" => 0
+                   }
+                 })
+               )
     end
 
     test "a platform admin in admin mode may change a shared source", c do

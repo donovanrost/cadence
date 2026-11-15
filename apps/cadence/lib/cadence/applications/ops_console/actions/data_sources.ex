@@ -910,14 +910,25 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
 
   # A platform-wide binding serves every tenant that falls back to it, so it may only point at a
   # platform-shared source: switching it to one organization's own source would send every other
-  # tenant's data there (api-ops' sweep, 11-15). A mission's own binding may use either.
-  defp shared_target?(%DataSource{organization_id: nil}, %DataBinding{}), do: :ok
-
-  defp shared_target?(%DataSource{}, %DataBinding{} = binding) do
-    if PlatformBindings.shared?(binding),
-      do: {:error, :platform_target_required},
-      else: :ok
+  # tenant's data there (api-ops' sweep, 11-15). Platform-shared means no organization, no mission
+  # AND :shared isolation (domain: a :shared source may still carry an organization). A mission's
+  # own binding may use either.
+  defp shared_target?(%DataSource{} = source, %DataBinding{} = binding) do
+    cond do
+      not PlatformBindings.shared?(binding) -> :ok
+      platform_source?(source) -> :ok
+      true -> {:error, :platform_target_required}
+    end
   end
+
+  defp platform_source?(%DataSource{
+         organization_id: nil,
+         mission_id: nil,
+         isolation_level: :shared
+       }),
+       do: true
+
+  defp platform_source?(%DataSource{}), do: false
 
   defp compatible_source?(%DataSource{} = source, %DataBinding{} = binding) do
     if DataSource.active?(source) and
