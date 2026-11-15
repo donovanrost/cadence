@@ -276,8 +276,8 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~Settings: section-level override~~ done (ux 823e4f7a1): the source tag on the section header, `Override for this mission` on an inherited section, `Use the organization's settings` on an overridden one | fe-setup | — |
-| Settings per-field override (**director 11-13: after api's three items; governance/approval fields stay explicit overrides in the migration, never auto-collapsed; a dry-run report per mission for qa and the director before the real run**; ux: no per-field Override / Reset to inherited until this lands): the mission document stores only the overridden paths; effective = the org value merged with them; each field's source is mission, organization or default; null removes the path. Plus a migration of today's full-copy overrides to sparse ones (a diff against the org value). api's estimate: half a day plus the migration | api | lead to schedule |
-| Audit: ~~actor filter~~ done (d21aad0b); kind chips (a Kind select exists), `Export CSV` | fe-setup | export: api or client-side |
+| ~~Settings per-field override~~ done (api a85b1799e + fe-setup 424a17138, qa-checked) | fe-setup | — |
+| ~~Audit: actor filter (d21aad0b), kind chips, `Export CSV` (client-side, features/audit/export.ts)~~ done | fe-setup | — |
 | ~~Provider accounts: version history~~ done (2fdd2692, dded6585) | fe-setup | — |
 
 ### Org / account
@@ -346,7 +346,7 @@ missing endpoint or decision; an item with no blocker can start now.
 10. ~~A1 current values + prior requests in the request brief~~ done (4f9cd275, a4c0e807).
 11. ~~M24 encode preview~~ done (4d0255f3; fe-ops 90d1c43c).
 12. ~~Now queue sources `missed_pass`, `station`~~ done by api-ops (81a4c8d0; fe-ops de131e9b). `flight_event` landed (a02c2cee, 1b3be7f7, e07969bb; flight-events.md §3a as built, 291744b7); closes when qa sees a row live.
-13. ~~Investigate History (c839d0b9) and Passes (324428aa) reads~~ done; fe-ops History d80c8d5d. ~~Compose draft persistence~~ done (a4d19e69). Waiting: palette search endpoint.
+13. ~~Investigate History (c839d0b9) and Passes (324428aa) reads~~ done; fe-ops History d80c8d5d. ~~Compose draft persistence~~ done (a4d19e69). Palette exists (PaletteRoot.vue); a server search is §2's api-ops row, only when fleets outgrow the client list.
 
 **domain**
 1. ~~qa #34~~ done (#59, e683b3e2).
@@ -410,7 +410,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 - **api-ops:** qa #51 → M26 → L6 admin-mode step-up → L5 SPA sign-in / invitation accept (JSON, with the attempt limit) → L7 admin endpoints → ~~L11 data-source writes~~ → security batch → L12 mission-provider writes → L13 provider-account grants.
 - **domain:** ~~#74~~, ~~booking fixes~~, ~~dashboards StatelessAuthoring + Q1~~ (done) → ~~XTCE alarm-range importer bug~~ (050dfacf) → ~~L22 (1)–(4)~~ → ~~L15 single bookings~~ → ~~post-L15 batch~~ → ~~dashboards Q6~~ (a594da7ec) → ~~L10 withdraw/superseded~~ (444c6126b) → **#77 / L9 B** (stage 1 done: derived_telemetry kind 5504322a8, HOLD derived_point_in_use with used_by[].definition_id; api's kind schema fa7e9e463; fe-setup stages derived points + U42 links; plan docs/apogee/domain/app-config-change-sets.md; director 11-13: (3)+(4) agreed, (1)+(2) with the user; start the derived_telemetry kind now without touching direct save paths) and the #74 template follow-up (no migration), shapes out to api + fe-setup, built in whichever order they're OK'd → ~~§8 item 9~~ (02f71d649) → ~~#74 templates~~ (e99fe3830) → ~~D20 override + revoked_by, library stale guard~~ (dd757dae0) → ~~#77 stage 2~~ limit_definition kind (c495f6d9f; registers via config.exs at qa's post-pass restart; api's schema after L19b).
 - **fe-setup:** ~~L21~~, ~~L9 frame~~, ~~L7~~ done; now proposing shapes and building against fixtures for ~~L4~~ → ~~L2/L3 UI~~ (48d652840) → ~~L11~~ (3eb56be4c), ~~L18 against fixtures~~ (d72327020, waits on api's review); ~~L12+L13 shapes + fixtures~~ (bc785ad6a, 06db9359c, 9c96febab) → ~~L10 UI~~ (1165841d8) → ~~qa §6 (3)+(5)~~ (1fdae0866: a 403 is an access state in ApRemote, members keep their rail) → ~~L19 UI~~ (704960442, waits on api's read) → ~~§12C setup adoption~~ (c32bc2db6), ~~Settings Override check~~ (with ux) → now: legacy deletion manifest (plans/legacy-deletion.md); L17 + L22 UI when api's kind schema lands.
-- **fe-ops:** L5 SPA auth screens (from lead), L14 decisions UI, ~~L15 single bookings UI~~ (9b71bbc5, behind a flag), ~~L20 empty-state links~~ (5d7e882d).
+- **fe-ops:** ~~L5 SPA auth screens~~ (qa PASS 11-13), ~~L14 decisions UI~~ (c782080d7/1fc6bc14e/4cb6b221d), ~~L15 single bookings UI~~ (9b71bbc5, behind a flag), ~~L20 empty-state links~~ (5d7e882d).
 - **lead:** ~~L6 admin-mode client~~ (3b819ce1), ~~L21 switcher footer~~ (0bb33f80); L5 screens handed to fe-ops (lead owns the architecture).
 - **dashboards:** L8 (plan 6dc7421b approved; slices in §11e).
 
@@ -465,7 +465,7 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 | 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |
 | 2 | ~~`features/scheduling/*` (booking state and reason, plan issue codes, actor kinds)~~ done (95f07ecc, with runtime status and session role) | lead |
 | 3 | `features/dashboards/chart/*` (the `ChartMarker` string bag; Fix 10 marker union) | dashboards: built c7bc1ee7f (union; dead marker paths deleted; null limit threshold no longer draws at y=0); close once qa passes |
-| 4 | Router link sites (comes with A3) | dashboards |
+| 4 | ~~Router link sites~~ done with A3's typed routes (dashboards: only RuntimeScreen.vue:53's full cross-org URL remains, by design) | dashboards |
 | 5 | `features/commands/groups/*` | fe-ops |
 | 6 | `features/now/*` | fe-ops |
 | 7 | Auth and roles (`features/auth`, `api/session.ts`, `features/account/invitations.ts`) | fe-ops (auth) + lead (session) |
