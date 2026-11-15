@@ -1670,6 +1670,16 @@ Operators know catalog revisions; the mission model revision is the compiled for
   - Decision (ApDecision): `Approve rev 4` (primary) and `Reject…` (secondary, with a confirm). The importer, under
     "Needs a second person's approval", sees "You imported this revision, so another org admin has to approve
     it." and no buttons.
+- **Panel title:** `Approval · catalog rev 4`, with the meta `AGAINST REV 3`.
+- **No report yet:** "No comparison has been run for rev 4 yet." plus `Run comparison` (primary). Approve is
+  disabled with the reason "Run the comparison first."
+- **Reject confirm** (caution): title `Reject catalog rev 4?`, body "Spacecraft can't move to rev 4 after this. To
+  try again, import a new revision." Actions `Reject rev 4` / `Cancel` (default). If domain adds a reason, it's
+  required and shown in the decided line. Approve has no confirm: the decision panel is the confirm.
+- **Decided:** the panel collapses to one line with the report behind `Show report`: "Approved by Ana R. at 11-15
+  09:12Z." / "Rejected by Ana R. at 11-15 09:12Z." The row tag follows.
+- **Nothing to approve:** no panel, and no tag on the row. The index adds nothing.
+- **Owner:** fe-ops builds the console side (fe-ops, 11-15).
 - **Approve refusals:**
   - self_approval_forbidden: "Not approved: you imported this revision, so another org admin has to approve it."
   - comparison_not_passed: "Not approved: the comparison with rev 3 didn't pass."
