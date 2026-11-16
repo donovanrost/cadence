@@ -2211,6 +2211,58 @@ change set like any override. There's no separate routes editor.
   each route: `From profile` or `This spacecraft only` (from the read's `origin`). `Add extra route` sits above the
   list.
 - A `This spacecraft only` route has `Edit` and `Remove…`, both staged.
+- **origin `legacy`** (hand-made per-spacecraft rules from the old routing save; dashboards' question, 11-16): tagged
+  `This spacecraft only` (untagged would read as from the profile), with a quiet second line "Set up on the old
+  routing page." and no actions; an A6 reason line under the row, "Older routes can't be changed here yet."
+  - lead's ruling: domain converts legacy rules into extra routes (`spacecraft_route`); any rule that can't map gets
+    a staged `Remove…` as the floor. Batch 2's deletion of the legacy save waits for it. Once converted they're
+    ordinary extra routes and the second line and reason go.
+  - lead ruled (11-16) on domain's assessment: **three routes per craft**, one per legacy rule (Earendil: 500 craft ×
+    3), so names, purposes, legs, roles and transports stay exactly as today. The QA mission's station-less rule
+    can't map; it gets a staged `Remove…` and keeps the interim words until removed.
+  - **The director chose the change-set path, in batches** (lead's answers, 11-16): each click stages the NEXT
+    batch (server default 50 craft), ALONE in its change set. The trial wait after batch 1 is a step for qa and the
+    director, not the UI, so it has no words. A real person applies each set, and the history names them (U29).
+    Each set's description (api): "Converted from the old routing page: batch 1 of 10, 150 routes on 50 spacecraft."
+  - **The temporary staging action** (lead; deleted with 9ac6dc8ee). On a spacecraft's routing page, when the list has
+    `legacy` rows, an info callout sits above the list:
+    - "Routes set up on the old routing page can't be changed here until they're converted to extra routes. They're
+      converted in batches, and nothing changes until each batch is applied." Progress: "450 of 1,500 routes
+      converted."
+    - The button `Stage batch 2 of 10` (secondary; busy "Staging…"). No confirm, because staging is undone by
+      discarding. On success it opens the change set.
+    - No permission (`can_stage` false; `manage_mission` = mission admins, organization admins): no button, and the
+      A6 line "Mission admins and organization admins can stage the conversion."
+    - A batch already staged (`staged_batch` / `conversion_already_staged`): the button is replaced by "Batch 3 is
+      staged in Mira K.'s change set. Apply or discard it before staging the next." + `Open change set`.
+    - The open change set has other changes (409 `open_change_set_not_empty`): "The mission's open change set has
+      other changes. Apply or discard them first, so this batch is reviewed on its own." + `Open change set`.
+    - Skipped routes (`skipped`, the rest still staged): "1 route wasn't converted: EARENDIL-389's transport has no
+      station. Remove it on that spacecraft's routing page." Several: "3 routes weren't converted." + the list, each
+      spacecraft by name linking to its routing.
+    - Nothing left: "No routes from the old routing page are left to convert." (The callout normally doesn't show
+      then.)
+    - Failure: "Couldn't stage the batch. Nothing was changed." + `Try again`.
+    - Stager ≠ reviewer is ENFORCED (api v3.2): conversion sets force approval, and approving applies them; the stager
+      may submit, and someone else reviews and applies. The change set's `viewer: {can_review, review_blocked_reason}`
+      is false + `reviewer_is_author` for the stager (every set gets the field; these words only where
+      `legacy_conversion` is set). Under the description: "Staged by Mira K. Someone else reviews and applies it." For
+      the stager, the review action is disabled with the A6 reason "You staged this batch, so someone else reviews and
+      applies it." Other sets keep today's reviewer_is_author sentence.
+    - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
+      routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
+      ("Batch 3 is already staged." / "Staged earlier."), never the id.
+    - After staging (fe-setup's flow): with no skipped routes, open the change set at once. With skipped routes (the
+      201's `unmappable`), stay on the routing page and show "Batch 2 is staged." + the skipped lines in the callout,
+      with `Open change set` as the next step, so the skipped list isn't lost to a navigation.
+    - Staging any OTHER change while a batch is staged (409 `conversion_in_progress`, domain; like
+      `rollback_in_progress`), wherever the change is staged: "Batch 3 of the route conversion is staged, so other
+      changes can't be staged in this mission until it's applied or discarded." + `Open change set`. The draft stays
+      in the form, unsaved. With no batch number in the details: "The route conversion is staged, so…". It needs
+      `{change_set_id, batch}` in the details.
+    - No "temporary" caption: the callout goes away by itself once the routes are converted.
+- Summaries: a rendered name equal to the default ("<station> · <spacecraft>") counts as unnamed, and a name that
+  already contains the spacecraft's name doesn't get " · EARENDIL-389" appended again (dashboards, 11-16).
 - Profile P3 lists extra routes as override rows, "Extra route via Inuvik · downlink primary", each linking to the
   spacecraft's routing. P3 doesn't add them.
 
@@ -2246,6 +2298,10 @@ change set like any override. There's no separate routes editor.
 - "Remove extra route INU · EARENDIL-389"
 
 The as-built create summary "Add an extra route for <spacecraft_id>" shows a raw id.
+- domain (11-16): the summary is the console's (the stage request's `summary`), so KindEditor writes it.
+- Edit and Remove name the route itself when it has a name, because one craft can have two routes at one station
+  (the converted Earendil pairs): "Remove extra route “Fairbanks (Demo) — uplink” · EARENDIL-389" (the rendered
+  name, quoted). A route with no name: "Remove extra route INU · EARENDIL-389".
 
 **Dropped by design** (the director takes it to the user): pinning a transport version, and routes over a transport
 with no station.
