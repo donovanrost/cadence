@@ -5,12 +5,16 @@ import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
 import { failureOutcome, reviewChangeSet, type SubmitResult } from "./actions.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
-/** Independent review (mission policy): approve & apply, or send back with a comment. */
+/**
+ * Independent review (mission policy): approve & apply, or send back. The server takes a comment
+ * for both decisions (changes.md review: 422 comment_required; qa 11-16), so both wait for one.
+ */
 const props = defineProps<{ missionId: MissionId; config: ConfigState; changeSet: ChangeSet }>();
 const emit = defineEmits<{ result: [result: SubmitResult]; changed: [] }>();
 const comment = ref("");
 const busy = ref(false);
 const failure = ref<string | null>(null);
+const NEEDS_COMMENT = "Add a comment first. It's recorded with your decision.";
 
 async function decide(decision: "approve" | "send_back") {
   if (busy.value) return;
@@ -39,13 +43,18 @@ async function decide(decision: "approve" | "send_back") {
       <p class="m-0 text-md text-text-3">
         Submitted by {{ changeSet.submitted_by?.name ?? "—" }}: “{{ changeSet.reason ?? "" }}”
       </p>
-      <ApField v-model="comment" label="Comment" placeholder="Required to send back" />
+      <ApField
+        v-model="comment"
+        label="Comment"
+        required
+        hint="Recorded with your decision, whether you approve or send it back."
+      />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
       <ApButton
         variant="primary"
         size="commit"
-        :disabled="busy"
-        disabled-reason="Working…"
+        :disabled="busy || comment.trim() === ''"
+        :disabled-reason="busy ? 'Working…' : NEEDS_COMMENT"
         @click="decide('approve')"
       >
         Approve &amp; apply as
@@ -53,7 +62,7 @@ async function decide(decision: "approve" | "send_back") {
       </ApButton>
       <ApButton
         :disabled="busy || comment.trim() === ''"
-        disabled-reason="Add a comment for the author."
+        :disabled-reason="busy ? 'Working…' : 'Add a comment for the author.'"
         @click="decide('send_back')"
         >Send back</ApButton
       >
