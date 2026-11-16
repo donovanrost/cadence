@@ -464,8 +464,9 @@ test("activation decisions bind path and token and cannot replace a later visit 
   const pending = execute(input);
   expect(required(transport.requests[1]).event).toBe("host:activation");
   expect(required(transport.requests[1]).payload).toEqual({ path, token: "review-token", input });
-  await click("/settings");
-  await reply(2, snapshot("/settings"));
+  // §11c A removed the organization /settings route; leave through the mission's settings instead.
+  await click(settingsPath);
+  await reply(2, snapshot(settingsPath, "mission-1"));
   await click(path);
   const successor = {
     ...original,
