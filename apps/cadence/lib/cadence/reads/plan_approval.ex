@@ -16,9 +16,11 @@ defmodule Cadence.Reads.PlanApproval do
     |> view()
   end
 
-  defp view(nil), do: nil
+  @doc false
+  # The approval shape for one decision (also the plan history's decisions, U69 A10).
+  def view(nil), do: nil
 
-  defp view(approval) do
+  def view(approval) do
     %{
       decision: approval.decision,
       actor: actor(approval),

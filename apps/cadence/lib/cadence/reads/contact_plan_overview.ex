@@ -106,6 +106,8 @@ defmodule Cadence.Reads.ContactPlanOverview do
       {:ok,
        summary
        |> Map.merge(%{
+         # U69 A10: the plan's newest version, for the historical-version banner.
+         latest_version: current.version,
          counts: %{summary.counts | conflicts: length(conflicts)},
          ready_to_approve: summary.ready_to_approve and availability.conflicts == [],
          passes: Enum.map(passes, &pass(&1, version, stations)),

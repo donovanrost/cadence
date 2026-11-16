@@ -251,6 +251,27 @@ reviewer). Plan detail carries the review rounds:
   [{requirement_id, reason}]} | null`: the round before, with its decision (who sent it back and
   why) and the gap reasons the author gave then (prefill the gaps sheet).
 
+Plan detail also carries `latest_version` (U69 A10): the plan's newest version, so a
+`?version=N` read of an older one can show the historical-version banner and "Review current
+version" (open it without `version`).
+
+### `GET /contact-plans/:plan_id/history` (U69 A10, owner: api)
+
+`{"data": {"plan_id", "latest_version", "versions": [...], "decisions": [...], "truncated"}}`:
+
+- `versions`, newest first: `{version, created_at, created_by: {kind: user | service_identity |
+  system, id, name} | null, rationale | null, content_sha256, selected, locked, rejected,
+  decision: approved | rejected | null (that version's latest decision), submitted: bool}`.
+  Open one with plan detail's `?version=`.
+- `decisions`, newest first, one per act across all rounds: `{kind: submitted | approved |
+  rejected, version, round | null, actor: {kind, id, name}, at, text | null (a submit's note or a
+  decision's reason), unchanged: bool | null (submits only), acknowledgements: [{requirement_id,
+  reason}] (submits), exceptions: [{requirement_id, requirement_version, reason}] (decisions),
+  automation_grant_id | null (a decision made under an automation approval policy)}`. The words
+  match detail's `submission` / `approval`.
+- At most 200 versions and 500 decisions, newest kept; `truncated: true` past either.
+  `404 plan_not_found`.
+
 `422 contact_plan_version_already_decided` now only means someone decided the version at the same
 moment; `details.decided_by: {kind, id, name} | null` names them ("already decided by Mira K.").
 

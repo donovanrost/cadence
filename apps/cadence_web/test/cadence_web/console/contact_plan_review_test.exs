@@ -160,11 +160,58 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
     assert %{"error" => %{"code" => "plan_changed"}} =
              submit.(1, "op-3", %{}) |> json_response(409)
 
-    assert %{"version" => 2} =
+    assert %{"version" => 2, "latest_version" => 2} =
              c.admin
              |> TestFixtures.member_conn()
              |> get(c.base <> "/" <> c.plan_id)
              |> json_response(200)
              |> Map.fetch!("data")
+
+    # U69 A10: an older version reads with the latest named, for the historical banner.
+    assert %{"version" => 1, "latest_version" => 2} =
+             c.admin
+             |> TestFixtures.member_conn()
+             |> get(c.base <> "/" <> c.plan_id <> "?version=1")
+             |> json_response(200)
+             |> Map.fetch!("data")
+
+    history =
+      c.admin
+      |> TestFixtures.member_conn()
+      |> get(c.base <> "/" <> c.plan_id <> "/history")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert %{"latest_version" => 2, "truncated" => false, "versions" => [v2, v1]} = history
+    assert %{"version" => 2, "decision" => nil, "submitted" => true} = v2
+    assert %{"version" => 1, "decision" => "rejected", "submitted" => true} = v1
+    assert %{"kind" => _, "id" => _} = v2["created_by"]
+
+    admin_id = c.admin.user_id
+
+    assert [
+             %{
+               "kind" => "submitted",
+               "version" => 2,
+               "round" => 2,
+               "unchanged" => true,
+               "text" => "Reasons are clearer now",
+               "actor" => %{"id" => ^member_id}
+             },
+             %{
+               "kind" => "rejected",
+               "version" => 1,
+               "round" => 1,
+               "text" => "Explain the gaps",
+               "actor" => %{"id" => ^admin_id}
+             },
+             %{"kind" => "submitted", "version" => 1, "round" => 1}
+           ] = history["decisions"]
+
+    assert %{"error" => %{"code" => "plan_not_found"}} =
+             c.admin
+             |> TestFixtures.member_conn()
+             |> get(c.base <> "/nope/history")
+             |> json_response(404)
   end
 end
