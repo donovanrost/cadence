@@ -25,6 +25,7 @@ import ViewerActions from "./ViewerActions.vue";
 import SnapshotSheet from "./SnapshotSheet.vue";
 import ViewerBody from "./ViewerBody.vue";
 import CockpitStatus from "./CockpitStatus.vue";
+import ViewerControls from "./ViewerControls.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
 import { liveSnapshot } from "../model/live-merge.ts";
 import { LIVE_PUSH, useDashboardLive } from "./useDashboardLive.ts";
@@ -207,6 +208,7 @@ const onRange = (s: TimeSelection) =>
     :close="{ name: 'ops.dashboards' }"
     close-label="Close dashboard"
     title-as="h1"
+    :clock="!small"
   >
     <template #actions>
       <EditActions
@@ -233,7 +235,19 @@ const onRange = (s: TimeSelection) =>
         @menu="onMenu"
       />
     </template>
-    <template #clocks><CockpitStatus /></template>
+    <template v-if="!small" #clocks><CockpitStatus /></template>
+    <!-- Phone (ux Dashboards.md §Phone): row 2 is scope and range; they decide every plot. -->
+    <template v-if="small && !editing" #subrow>
+      <ViewerControls
+        phone
+        :scope-options="view?.scope_options ?? []"
+        :spacecraft="runtime.spacecraftId"
+        :selection="selection"
+        :refresh="refresh"
+        @spacecraft="setQuery({ spacecraft: $event })"
+        @range="onRange"
+      />
+    </template>
   </TakeoverHeader>
   <ApCallout v-if="connection === 'offline'" tone="stale">
     Live connection lost. Values may be out of date; they'll refresh when it's back.

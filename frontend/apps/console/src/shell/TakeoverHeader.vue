@@ -15,6 +15,8 @@ const props = defineProps<{
   closeLabel?: string | undefined;
   /** h1 when the header title is the page title (wizards); p when the screen has its own h1. */
   titleAs?: "h1" | "p" | undefined;
+  /** False: no UTC clock (a phone layout, see ApTakeoverHeader). */
+  clock?: boolean | undefined;
 }>();
 const scope = useConsoleScope();
 const fullContext = computed(() => {
@@ -32,11 +34,13 @@ const fullContext = computed(() => {
       :close="close"
       :close-label="closeLabel"
       :title-as="titleAs ?? 'p'"
+      :clock="clock ?? true"
     >
       <template v-if="$slots.title" #title><slot name="title" /></template>
       <template v-if="$slots.steps" #steps><slot name="steps" /></template>
       <template v-if="$slots.clocks" #clocks><slot name="clocks" /></template>
       <template v-if="$slots.actions" #actions><slot name="actions" /></template>
+      <template v-if="$slots.subrow" #subrow><slot name="subrow" /></template>
     </ApTakeoverHeader>
   </Teleport>
 </template>

@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { ApButton, ApSelect } from "@/ui";
-import { selectionLabel, type TimeSelection } from "../model/time-range.ts";
+import { selectionLabel, shortSelectionLabel, type TimeSelection } from "../model/time-range.ts";
 import RangeSheet from "./RangeSheet.vue";
 import ScopeSelect from "./ScopeSelect.vue";
 import { refreshChoices, type RefreshChoice } from "./useDashboardView.ts";
 
-/** Header controls: spacecraft scope, range, refresh interval. Edit and ⋯ join in later slices. */
+/**
+ * Header controls: spacecraft scope, range, refresh interval. `phone` is the header's second row
+ * (ux Dashboards.md §Phone): the scope fills the row, the range button is short, and refresh lives
+ * in ⋯ instead.
+ */
 const props = defineProps<{
   scopeOptions: readonly { id: string; name: string }[];
   spacecraft: string;
   selection: TimeSelection;
   refresh: RefreshChoice;
+  phone?: boolean | undefined;
 }>();
 const emit = defineEmits<{
   spacecraft: [id: string];
@@ -31,12 +36,26 @@ const refreshOptions = refreshChoices.map((c) => ({ value: c.value, label: `Refr
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-2">
-    <ScopeSelect v-model="spacecraft" :options="scopeOptions" />
-    <ApButton variant="secondary" size="compact" @click="rangeSheet?.open()">
-      <span class="font-mono normal-case tracking-normal">{{ selectionLabel(selection) }}</span>
+  <div class="flex items-center gap-2" :class="phone ? 'w-full' : 'flex-wrap'">
+    <ScopeSelect
+      v-model="spacecraft"
+      :options="scopeOptions"
+      :keys="!phone"
+      :class="phone ? 'min-w-0 flex-1' : ''"
+    />
+    <!-- Alone (no scope) it sits right (ux). -->
+    <ApButton
+      variant="secondary"
+      size="compact"
+      :class="phone ? 'ml-auto flex-none' : ''"
+      @click="rangeSheet?.open()"
+    >
+      <span class="font-mono normal-case tracking-normal">{{
+        phone ? shortSelectionLabel(selection) : selectionLabel(selection)
+      }}</span>
     </ApButton>
     <ApSelect
+      v-if="!phone"
       v-model="refreshModel"
       label="Refresh interval"
       hidden-label

@@ -4,9 +4,12 @@ import { ApSelect, type ApSelectOption } from "@/ui";
 
 /**
  * Spacecraft scope for context-bound widgets (`?spacecraft=`). `[` / `]` step to the previous /
- * next spacecraft (ux), unless focus is in a text field.
+ * next spacecraft (ux), unless focus is in a text field; not on phones (`keys: false`).
  */
-const props = defineProps<{ options: readonly { id: string; name: string }[] }>();
+const props = withDefaults(
+  defineProps<{ options: readonly { id: string; name: string }[]; keys?: boolean | undefined }>(),
+  { keys: true },
+);
 const model = defineModel<string>({ required: true });
 const DEFAULT = "";
 const choices = computed<ApSelectOption<string>[]>(() => [
@@ -23,6 +26,7 @@ function step(direction: -1 | 1) {
   model.value = ids[next] ?? DEFAULT;
 }
 function onKey(event: KeyboardEvent) {
+  if (!props.keys) return;
   const target = event.target;
   if (target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable]"))
     return;

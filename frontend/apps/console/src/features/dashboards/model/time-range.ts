@@ -90,6 +90,33 @@ export function selectionLabel(selection: TimeSelection): string {
   }
 }
 
+/**
+ * The range button's phone form (ux Dashboards.md §Phone): `Last 1h`, `11-14 02:00–04:00Z`
+ * (`11-14 22:00–11-15 02:00Z` across days), `Live` for the widgets' own windows.
+ */
+export function shortSelectionLabel(selection: TimeSelection): string {
+  switch (selection.kind) {
+    case "default":
+      return "Live";
+    case "sliding": {
+      const { count, short } = span(selection.seconds);
+      return `Last ${count}${short}`;
+    }
+    case "absolute": {
+      const from = new Date(selection.from);
+      const to = new Date(selection.to);
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()))
+        return selectionLabel(selection);
+      const [fromDay, fromTime] = [
+        from.toISOString().slice(5, 10),
+        from.toISOString().slice(11, 16),
+      ];
+      const [toDay, toTime] = [to.toISOString().slice(5, 10), to.toISOString().slice(11, 16)];
+      return `${fromDay} ${fromTime}–${toDay === fromDay ? "" : `${toDay} `}${toTime}Z`;
+    }
+  }
+}
+
 /** Absolute bounds for a selection, frozen at `now`. */
 export function frozenBounds(selection: TimeSelection, now: number, fallbackSeconds = 3_600) {
   if (selection.kind === "absolute")
