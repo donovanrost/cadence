@@ -2,9 +2,11 @@ defmodule CadenceWeb.Console.FleetPush do
   @moduledoc """
   The opt-in `fleet` push for `CadenceWeb.Console.MissionChannel`.
 
-  After the client sends `fleet:subscribe`, the channel pushes one full
-  snapshot (`full: true`, `seq: 1`) and then deltas with `seq` increasing by
-  one per push. Rows are full `GET /fleet` rows and replace the client's row by
+  After the client sends `fleet:subscribe`, the channel replies `ok` at once and
+  then pushes one full snapshot (`full: true`, `seq: 1`), built from a message
+  it queues to itself (so the reply never waits on the fleet read), and then
+  deltas with `seq` increasing by one per push. The `:fleet` assign is `nil`
+  (off), `:pending` (subscribed, snapshot queued) or the push state (a map). Rows are full `GET /fleet` rows and replace the client's row by
   `id`. Material changes (state, limits, worst point, profile, geometry, the
   `stale` flag) are pushed within about a second of an `alarms`,
   `spacecraft`, `commanding` or `limits` change. Rows whose only change is
@@ -24,11 +26,23 @@ defmodule CadenceWeb.Console.FleetPush do
   @spec join(Socket.t()) :: Socket.t()
   def join(socket), do: Socket.assign(socket, :fleet, nil)
 
-  @doc "Starts the push: a full snapshot now, then deltas."
+  @doc """
+  Starts the push: queues the full snapshot (`:fleet_snapshot`, handled after the
+  reply) and marks the socket `:pending`. Subscribing again is a no-op.
+  """
   @spec subscribe(Socket.t()) :: Socket.t()
-  def subscribe(%Socket{assigns: %{fleet: %{}}} = socket), do: socket
+  def subscribe(%Socket{assigns: %{fleet: fleet}} = socket)
+      when fleet == :pending or is_map(fleet),
+      do: socket
 
   def subscribe(socket) do
+    send(self(), :fleet_snapshot)
+    Socket.assign(socket, :fleet, :pending)
+  end
+
+  # The full snapshot (seq 1) and the start of the tick. Anything the channel heard while pending
+  # is already in it: the snapshot is read after those messages were handled.
+  defp start(socket) do
     snapshot = load(socket)
     rows = snapshot.spacecraft
 
@@ -53,6 +67,10 @@ defmodule CadenceWeb.Console.FleetPush do
     Socket.assign(socket, :fleet, nil)
   end
 
+  # A queued snapshot is then dropped (handle/2 sees nil).
+  def unsubscribe(%Socket{assigns: %{fleet: :pending}} = socket),
+    do: Socket.assign(socket, :fleet, nil)
+
   def unsubscribe(socket), do: socket
 
   @doc "Schedules a material refresh (throttled to one per second) when `resource` affects the fleet."
@@ -66,9 +84,14 @@ defmodule CadenceWeb.Console.FleetPush do
 
   def note(socket, _resource), do: socket
 
-  @doc "Handles the push's own timer messages."
-  @spec handle(:fleet_refresh | :fleet_tick, Socket.t()) :: Socket.t()
-  def handle(_message, %Socket{assigns: %{fleet: nil}} = socket), do: socket
+  @doc "Handles the push's own messages: the queued snapshot and its timers."
+  @spec handle(:fleet_snapshot | :fleet_refresh | :fleet_tick, Socket.t()) :: Socket.t()
+  def handle(:fleet_snapshot, %Socket{assigns: %{fleet: :pending}} = socket), do: start(socket)
+  # Unsubscribed before it ran, or already started: nothing to send.
+  def handle(:fleet_snapshot, socket), do: socket
+
+  def handle(_message, %Socket{assigns: %{fleet: fleet}} = socket) when not is_map(fleet),
+    do: socket
 
   def handle(:fleet_refresh, socket) do
     socket

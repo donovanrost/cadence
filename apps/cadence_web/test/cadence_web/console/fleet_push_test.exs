@@ -65,7 +65,9 @@ defmodule CadenceWeb.Console.FleetPushTest do
       refute_push("fleet", _payload, 200)
 
       ref = Phoenix.ChannelTest.push(c.socket, "fleet:subscribe", %{})
-      assert_reply(ref, :ok, %{}, 5_000)
+      # The reply no longer waits on the fleet read; settle/1 makes reply and snapshot certain.
+      settle(c.socket)
+      assert_reply(ref, :ok, %{})
 
       assert_push(
         "fleet",
@@ -80,10 +82,12 @@ defmodule CadenceWeb.Console.FleetPushTest do
 
     test "the tick is a heartbeat; a spacecraft change arrives as a delta row", c do
       ref = Phoenix.ChannelTest.push(c.socket, "fleet:subscribe", %{})
-      assert_reply(ref, :ok, %{}, 5_000)
+      settle(c.socket)
+      assert_reply(ref, :ok, %{})
       assert_push("fleet", %{seq: 1})
 
       send(c.socket.channel_pid, :fleet_tick)
+      settle(c.socket)
       assert_push("fleet", %{seq: 2, full: false, spacecraft: [], heard: heard})
       assert heard == %{}
 
@@ -103,13 +107,43 @@ defmodule CadenceWeb.Console.FleetPushTest do
       )
     end
 
+    test "subscribing twice before the snapshot sends one snapshot", c do
+      # Suspended, the channel queues both subscribes before it handles either, so the second
+      # one meets the :pending state.
+      replies = queued(c.socket, ["fleet:subscribe", "fleet:subscribe"])
+      settle(c.socket)
+      Enum.each(replies, &assert_reply(&1, :ok, %{}))
+      assert_push("fleet", %{seq: 1, full: true})
+      refute_push("fleet", _payload, 50)
+    end
+
+    test "unsubscribing before the snapshot drops it", c do
+      # Queued in this order, the unsubscribe is handled before the snapshot the subscribe queues.
+      replies = queued(c.socket, ["fleet:subscribe", "fleet:unsubscribe"])
+      settle(c.socket)
+      Enum.each(replies, &assert_reply(&1, :ok, %{}))
+      refute_push("fleet", _payload, 50)
+    end
+
+    # fe-ops: a resubscribe on a seq gap is unsubscribe + subscribe back to back, maybe while the
+    # first snapshot is still queued. Exactly one full snapshot either way, never seq 1 twice.
+    test "subscribe, unsubscribe, subscribe back to back: exactly one snapshot", c do
+      replies = queued(c.socket, ["fleet:subscribe", "fleet:unsubscribe", "fleet:subscribe"])
+      settle(c.socket)
+      Enum.each(replies, &assert_reply(&1, :ok, %{}))
+      assert_push("fleet", %{seq: 1, full: true})
+      refute_push("fleet", %{seq: 1}, 50)
+    end
+
     test "unsubscribe stops the push", c do
       ref = Phoenix.ChannelTest.push(c.socket, "fleet:subscribe", %{})
-      assert_reply(ref, :ok, %{}, 5_000)
+      settle(c.socket)
+      assert_reply(ref, :ok, %{})
       assert_push("fleet", %{seq: 1})
 
       ref = Phoenix.ChannelTest.push(c.socket, "fleet:unsubscribe", %{})
-      assert_reply(ref, :ok, %{}, 5_000)
+      settle(c.socket)
+      assert_reply(ref, :ok, %{})
 
       send(c.socket.channel_pid, :fleet_tick)
 
@@ -123,5 +157,21 @@ defmodule CadenceWeb.Console.FleetPushTest do
       assert_push("invalidate", %{resources: ["commanding"]}, 2_000)
       refute_push("fleet", _payload, 1_200)
     end
+  end
+
+  # Two round trips to the channel: the first returns once it has handled everything queued
+  # before it (replies sent, the snapshot message queued), the second once it has handled that.
+  # Deterministic whatever the load: no reply or push waits on a timeout.
+  defp settle(socket) do
+    :sys.get_state(socket.channel_pid)
+    :sys.get_state(socket.channel_pid)
+  end
+
+  # Queues the events while the channel is suspended, so they reach it in exactly this order.
+  defp queued(socket, events) do
+    :sys.suspend(socket.channel_pid)
+    refs = Enum.map(events, &Phoenix.ChannelTest.push(socket, &1, %{}))
+    :sys.resume(socket.channel_pid)
+    refs
   end
 end

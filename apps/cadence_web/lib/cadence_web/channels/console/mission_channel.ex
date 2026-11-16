@@ -140,8 +140,9 @@ defmodule CadenceWeb.Console.MissionChannel do
     {:noreply, mark(socket, resource)}
   end
 
-  def handle_info(message, socket) when message in [:fleet_refresh, :fleet_tick],
-    do: {:noreply, FleetPush.handle(message, socket)}
+  def handle_info(message, socket)
+      when message in [:fleet_snapshot, :fleet_refresh, :fleet_tick],
+      do: {:noreply, FleetPush.handle(message, socket)}
 
   def handle_info(:flush, socket) do
     resources = socket.assigns.pending |> MapSet.to_list() |> Enum.sort()
