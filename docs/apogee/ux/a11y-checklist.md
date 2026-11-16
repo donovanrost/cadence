@@ -8,6 +8,12 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
 ## A. Every sheet and dialog (check each one listed in C)
 1. **Opens with focus inside it:** on the first field. For a **danger** sheet, focus goes to the safe button
    (`Cancel`, `Keep contact`), never to the danger action.
+   *Danger sheets with a required reason* (ReasonSheet's revokes, Send back; ux 11-16, from the setup audit): focus
+   goes to the **Reason** field. That's safe because the danger action stays disabled until a reason is given, and
+   Enter in a textarea adds a line, it doesn't submit. The field does **not** move above the consequence: the order
+   stays title → consequence sentence → Reason → failure → Cancel, then the action. Because focus skips the sentence,
+   the sheet must be described by it (`aria-describedby` on the dialog pointing at the sentence), so it's read on
+   open. Without that, it fails A1.
 2. **Named:** the dialog's accessible name is its title (`aria-labelledby`).
 3. **Trapped:** Tab and Shift+Tab cycle inside it, never reaching the page behind.
    *Exception, the non-modal side sheet* (Dashboards edit's Widget sheet, which keeps the board usable): Tab may
