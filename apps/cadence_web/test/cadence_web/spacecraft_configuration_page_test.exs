@@ -3,7 +3,11 @@ defmodule CadenceWeb.SpacecraftConfigurationPageTest do
   import Phoenix.LiveViewTest
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
   alias Cadence.Applications.TelemetryDecomFixtures, as: CatalogFixtures
+  alias Cadence.Catalog.MissionModel.Diagnostic
   alias Cadence.MissionModels
+  alias Cadence.MissionModels.RuntimePlanRow
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
   @contract Path.expand(
@@ -139,6 +143,49 @@ defmodule CadenceWeb.SpacecraftConfigurationPageTest do
         commands: []
         """
       )
+
+    # Polynomial calibrators execute since telemetry contract 3 (#92 c), so this catalog compiles
+    # clean; persist a legalization warning on its telemetry plan the way the compiler does.
+    {:ok, model} =
+      MissionModels.fetch_revision(
+        c.mission.organization_id,
+        c.mission.mission_id,
+        revision.mission_model_revision_id
+      )
+
+    {:ok, compiled_plan} =
+      MissionModels.fetch_plan(
+        c.mission.organization_id,
+        c.mission.mission_id,
+        revision.mission_model_revision_id,
+        :telemetry
+      )
+
+    {semantic_id, declaration} =
+      Enum.find(model.declarations, fn {_id, d} -> d.kind == :parameter end)
+
+    warning =
+      Diagnostic.new(%{
+        code: "MM_CALIBRATOR_RUNTIME_UNSUPPORTED",
+        severity: :warning,
+        stage: :legalization,
+        target: :telemetry,
+        semantic_id: semantic_id,
+        support: :preserved,
+        message: "calibrator is preserved but is not executable by telemetry target v1",
+        provenance: declaration.provenance
+      })
+
+    RuntimePlanRow
+    |> Repo.get_by!(plan_id: compiled_plan.plan_id)
+    |> Ecto.Changeset.change(
+      plan_document:
+        JsonDocument.wrap_value(%{
+          compiled_plan
+          | diagnostics: [warning | compiled_plan.diagnostics]
+        })
+    )
+    |> Repo.update!()
 
     assert {:ok, plan} =
              MissionModels.fetch_plan(
