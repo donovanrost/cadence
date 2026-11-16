@@ -77,7 +77,7 @@ Each state has a **fill** (shapes, bars, cells, stripes) and a **text** tint (wo
 | `optional` | 10×2 gray dash | #7D8A99 | #C9D3DD | A suggestion, explicitly *not* a warning (Setup findings). |
 
 **Aggregation precedence [decision]:** `crit > caution > stale > nominal`. `off` and `live` are
-orthogonal (a spacecraft can be live and caution). The fleet tag in the top bar shows the worst state
+orthogonal (a spacecraft can be live and caution). The top bar's fleet posture (IA §Top bar) counts each state
 across the fleet; stale beats nominal so "all green" is never claimed with stale members.
 
 **Readiness words** GO / HOLD / NO-GO use nominal / caution / crit text tints in an outline tag. The

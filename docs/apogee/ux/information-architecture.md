@@ -81,7 +81,7 @@ keeps the current section when the target mission has it, else goes to Now / Rea
 ## 2. Navigation
 
 **Top bar** (both modes, design-language §7 ApTopBar): brand → org/mission switcher → OPS│SETUP →
-query (⌘K) → fleet status tag (Ops) → clocks → account.
+query (⌘K) → fleet posture → clocks → account.
 
 - **Mission switcher** opens a searchable list of the org's missions (name, fleet size, worst state).
   Never a truncated list ("7 of 500" was review #10). Org switching lives in the account menu.
@@ -89,8 +89,20 @@ query (⌘K) → fleet status tag (Ops) → clocks → account.
   `UTC`, `MET` (only when the mission defines an epoch; otherwise omitted, not faked: U7). Setup:
   `CONFIG r5` (links to revisions; `r5 → r6 draft` while changes are staged) **only with a mission
   change set (U2)**; otherwise `UTC` alone.
-- **Fleet status tag** (Ops): worst state across the fleet (`◆ FLEET · ATTENTION`, `▲ FLEET ·
-  CAUTION`, hatched `FLEET · STALE`, `■ FLEET · NOMINAL`); click → Now.
+- **Fleet posture** (both modes, at mission scope; replaces the legacy context rail, §11c(C), ux 11-15). It sits in
+  the `topbar-status` slot, left of Setup's `CONFIG rN`. It's dashboards' cockpit cluster, without its clock: the
+  clocks above already carry UTC.
+  - Chips with mark, count and word, only for non-zero states, worst first: `◆ 2 crit · ▲ 1 caution · ▨ 3 stale`
+    (▨ = the kit's stale mark, the hatched square; ◆ is only ever crit). Crit and caution link to Alarms (Active);
+    stale links to Fleet `?state=stale`.
+  - Nothing to report: `■ Fleet nominal` (→ Now). Never nominal while any spacecraft is stale (precedence).
+  - Ground limits not installed: the crit and caution chips are replaced by `○ Ground limits off` (→ Setup › Apps).
+    Stale still counts. Never a clean nominal in that state, as with Alarms.
+  - Not loaded yet: nothing, never a placeholder nominal (U20).
+  - Live link lost: the chips keep their counts but turn stale-tinted, with `as of 23:52Z`.
+  - From 768 to 1279px: marks and counts only (`◆ 2 ▲ 1 ▨ 3`); each link's accessible name and title carries the
+    words ("2 spacecraft critical"). Below 768: not in the header; the tab bar's Alarms count and Now cover it.
+  - Count changes aren't announced; a new crit flashes the chip once (reduced motion: no flash).
 - **Account menu**: name + role, Your account, Switch organization, Platform
   admin (capability-gated; the console admin area, L7), Sign out.
 
