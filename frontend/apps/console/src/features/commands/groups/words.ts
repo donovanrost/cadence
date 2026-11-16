@@ -219,6 +219,14 @@ export function eventText(
         typeof m === "object" ? Object.entries(m).map(([k, n]) => `${n} ${outcomeWord(k)}`) : [];
       return [`${who} closed the run`, ...tally].join(" · ");
     }
+    case "expired": {
+      // ux U75: 'Expired at 04:00Z · 2 uplinks sent, 3 not sent' / '· nothing sent'.
+      const sent = p?.sent ?? 0;
+      const what = sent
+        ? `${plural(sent, "uplink")} sent, ${p?.not_sent ?? 0} not sent`
+        : "nothing sent";
+      return `Expired at ${shortWhen(e.at, new Date())} · ${what}`;
+    }
     case "released_on_contact": {
       // ux U46 audit line; the log's own column carries the time.
       const sent = p?.released_entry_ids?.length;
@@ -242,3 +250,7 @@ export function eventText(
       return `${who} · ${(isKnown(e.kind) ? e.kind : e.kind.unrecognized).replaceAll("_", " ")}`;
   }
 }
+
+/** §4 short form: '04:00Z' today, '11-15 04:00Z' otherwise. */
+export const shortWhen = (iso: string, now: Date) =>
+  `${iso.slice(0, 10) === now.toISOString().slice(0, 10) ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;

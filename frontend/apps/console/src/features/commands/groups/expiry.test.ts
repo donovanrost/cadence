@@ -49,3 +49,36 @@ describe("an expired request (ux U75, DECISIONS #97)", () => {
     expect(targetLook(target("c", ["canceled"], false))).toBe("excluded");
   });
 });
+
+describe("U75 from api's expiry fields (be3fa592b)", () => {
+  it("prefers the server's counts and words the list row", async () => {
+    const { expiredRowLabel } = await import("./expiryReader.ts");
+    const g = {
+      ...group([target("a", ["verified"], false)]),
+      expiry: { expires_at: "2026-11-16T04:00:00Z", expired: 3, sent: 2, total: 5 },
+    };
+    expect(expiryCounts(g)).toEqual({ sent: 2, expired: 3, total: 5 });
+    expect(expiredRowLabel({ expires_at: "x", expired: 3, sent: 2, total: 5 })).toBe(
+      "Expired · 2 of 5 sent",
+    );
+    expect(expiredRowLabel({ expires_at: "x", expired: 3, sent: 0, total: 3 })).toBe("Expired");
+  });
+  it("logs the expiry once: 'Expired at 04:00Z · 2 uplinks sent, 3 not sent'", async () => {
+    const { eventText } = await import("./words.ts");
+    const at = new Date().toISOString().slice(0, 10) + "T04:00:00Z";
+    const e = (payload: { sent: number; not_sent: number }) => {
+      const ev = groupOf({
+        events: [{ id: "ev", kind: "expired", actor: { actor_kind: "system" }, at, payload }],
+      }).events[0];
+      if (!ev) throw new Error("fixture");
+      return ev;
+    };
+    const nameOf = () => "Cadence";
+    expect(eventText(e({ sent: 2, not_sent: 3 }), nameOf, [], {})).toBe(
+      "Expired at 04:00Z · 2 uplinks sent, 3 not sent",
+    );
+    expect(eventText(e({ sent: 0, not_sent: 3 }), nameOf, [], {})).toBe(
+      "Expired at 04:00Z · nothing sent",
+    );
+  });
+});

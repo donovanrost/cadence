@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
+import { expiredRowLabel } from "../groups/expiryReader.ts";
 import { formatRelative, plural, useNow, ApTable, ApTag, type ApColumn } from "@/ui";
 import { groupBlockedLine, type StationLookup } from "@/features/contacts/readiness.ts";
 import type { GroupRow } from "../groups/api.ts";
@@ -56,9 +57,10 @@ const view = (r: GroupRow) => (r.awaiting_me ? "review" : undefined);
     </template>
     <template #cell-state="{ row }">
       <ApTag v-if="row.awaiting_me" state="caution" label="Awaits your GO" /><ApTag
-        v-else
-        v-bind="statusTag(row.state, row.progress, row.target_count)"
-      />
+        v-else-if="row.expiry"
+        state="off"
+        :label="expiredRowLabel(row.expiry)"
+      /><ApTag v-else v-bind="statusTag(row.state, row.progress, row.target_count)" />
     </template>
   </ApTable>
 </template>

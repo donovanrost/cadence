@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { expiryReader } from "./expiryReader.ts";
 import { resolvedArgumentsReader } from "./resolved.ts";
 import {
   scid as scidReader,
@@ -61,6 +62,8 @@ export const eventKinds = [
   "completed",
   // U46 (api): an operator released armed groups into a named contact.
   "released_on_contact",
+  // U75 (api be3fa592b): once per request, at its expires_at, when members ended expired.
+  "expired",
 ] as const;
 
 const member = d.object({
@@ -188,6 +191,9 @@ const event = d.object({
       key: d.optional(d.token),
       hold_basis: d.optional(d.nullable(d.string)),
       at_decision: d.optional(d.boolean),
+      // expired (U75): how many went out, and how many it ended.
+      sent: d.optional(d.integer),
+      not_sent: d.optional(d.integer),
       // member_failed (#51)
       spacecraft_id: d.optional(d.token),
       position: d.optional(d.integer),
@@ -229,6 +235,8 @@ export const groupReader = d.object({
   log_entry: d.nullable(d.string),
   sent_back_from: d.nullable(d.token),
   commands: d.array(command, 16),
+  /** U75: set once any member ended expired. */
+  expiry: expiryReader,
   release: d.nullable(
     d.object({
       not_before: d.nullable(d.timestamp),

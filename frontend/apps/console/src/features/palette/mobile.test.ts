@@ -40,6 +40,7 @@ const request = (id: string, title: string, extra: Partial<GroupRow> = {}): Grou
   awaiting_me: false,
   operation_id: null,
   priority: undefined,
+  expiry: undefined,
   progress: null,
   finished: null,
   uplink: null,

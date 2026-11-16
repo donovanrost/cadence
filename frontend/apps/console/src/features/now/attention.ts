@@ -10,6 +10,7 @@ import { plural } from "@/ui";
 import { formatBytes } from "@/features/catalog/importRun.ts";
 import { attentionUplinkReader, reasonSentence } from "@/features/contacts/readiness.ts";
 import { planCoverageFields } from "./coverageFields.ts";
+import { expiredGroupFields } from "./expiredGroup.ts";
 import { diskResolvedWords, journalDiskFields } from "./journalDisk.ts";
 
 /**
@@ -48,6 +49,8 @@ export const attentionSources = [
   "job_outcome_unknown",
   // U61 (api, domain 47aabe3ba): a day whose first window nears with no approved plan.
   "plan_coverage",
+  // U75 (api 5766e494a, #97): a command request that expired before all of it went out.
+  "expired_group",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -452,6 +455,8 @@ export const attentionReader = d.object({
   found_at: d.optional(d.nullable(d.timestamp)),
   /** plan_coverage (U61): the day, its first window, and its newest plan. */
   ...planCoverageFields,
+  /** expired_group (U75): the request, its targets and how much went out. */
+  ...expiredGroupFields,
   /** ingress_backpressure / journal_disk (U66): the shared buffer disk. */
   ...journalDiskFields,
   resolution: d.nullable(

@@ -1,6 +1,6 @@
 import { plural } from "@/ui";
 import type { Group, GroupMember, GroupTarget } from "./show.ts";
-import { memberStageWord } from "./words.ts";
+import { memberStageWord, shortWhen } from "./words.ts";
 
 /**
  * ux U75 (b383e4653, DECISIONS #97): a request has one expires_at, so its unreleased uplinks all
@@ -17,10 +17,6 @@ export const targetExpired = (t: GroupTarget) =>
 export const targetStageWord = (t: GroupTarget, group: Pick<Group, "state">) =>
   memberStageWord(t.stage, group.state, t.members.find((m) => m.stage === t.stage)?.end_reason);
 
-/** §4 short form: '04:00Z' today, '11-15 04:00Z' otherwise. */
-export const shortWhen = (iso: string, now: Date) =>
-  `${iso.slice(0, 10) === now.toISOString().slice(0, 10) ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
-
 /** Uplinks that went out: released, whatever happened after. */
 const SENT = new Set([
   "radiating",
@@ -32,6 +28,9 @@ const SENT = new Set([
 ]);
 
 export function expiryCounts(group: Group): { sent: number; expired: number; total: number } {
+  // api's own counts when the read carries them (U75), so the line and the list row agree.
+  if (group.expiry)
+    return { sent: group.expiry.sent, expired: group.expiry.expired, total: group.expiry.total };
   const members = group.targets.flatMap((t) => t.members);
   return {
     sent: members.filter((m) => SENT.has(m.stage)).length,
@@ -48,7 +47,7 @@ export function expiryCounts(group: Group): { sent: number; expired: number; tot
 export function expirySummary(group: Group, now: Date = new Date()): string | null {
   const { sent, expired, total } = expiryCounts(group);
   if (expired === 0) return null;
-  const at = group.release?.expires_at;
+  const at = group.expiry?.expires_at ?? group.release?.expires_at;
   // §4: the date when it isn't today (ux).
   const when = at ? ` at ${shortWhen(at, now)}` : "";
   if (sent === 0) return `The request expired${when} before any uplink went out.`;
