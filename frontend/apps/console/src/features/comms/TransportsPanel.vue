@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
-import { useMissionScope } from "@/shell";
-import { ApEmptyState, ApPanel, ApRemote, ApTable, formatCount, type ApColumn } from "@/ui";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import {
+  ApButton,
+  ApEmptyState,
+  ApPanel,
+  ApRemote,
+  ApTable,
+  formatCount,
+  type ApColumn,
+} from "@/ui";
 import { directionLabel, fetchTransports } from "./api.ts";
 
-/** Transports (rail 05 tab). Edits stage into the change set (transport kind). */
+/** Transports (rail 05 tab). Adds and edits stage into the change set (transport kind). */
 const scope = useMissionScope();
+const session = useSession();
+const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
 const { state, refetch } = useRemoteQuery(() => scope.value.mission.id, fetchTransports);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
@@ -28,6 +38,13 @@ const columns = computed(() =>
 
 <template>
   <ApPanel index="T1" title="Transports" flush>
+    <template v-if="canStage" #header>
+      <ApButton
+        size="compact"
+        :to="{ name: 'setup.comms.transports', params: { transportId: 'new' } }"
+        >Add transport</ApButton
+      >
+    </template>
     <ApEmptyState
       v-if="notProvided"
       state="off"
