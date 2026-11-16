@@ -132,9 +132,14 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   - All yours: "Discard your 3 staged changes? They can't be brought back." `Cancel` · `Discard 3 changes`.
   - Including other people's (`Discard all`): "Discard all 3 staged changes? 2 of them are other people's: Mira K.,
     Tomás R. They can't be brought back." Past two names: "Mira K., Tomás R. and 2 others".
-  - `Discard mine` when others' changes stay: "Discard your 2 staged changes? Mira K.'s 1 change stays staged."
-  - The action states the count: `Discard 1 change` or `Discard 3 changes`.
-  - The status bar's `Discard all` (§3) opens the same confirm, so the two never differ.
+  - With one other author: "Discard all 3 staged changes? 2 of them are Mira K.'s. They can't be brought back."
+  - `Discard mine` when others' changes stay: one other author, "Discard your 2 staged changes? Mira K.'s 1 change
+    stays staged."; more than one, "…? 3 changes by other people stay staged." (no list).
+  - **Authors without a name** (a service or system actor) are counted, never called "someone": "Mira K. and 1
+    other". With no named author: "2 of them are other people's." Several unnamed authors count separately.
+  - The action states the count: `Discard 1 change` or `Discard 3 changes`. The trigger is `Discard all…` /
+    `Discard mine…`: the `…` marks that it asks first.
+  - K1's header is the only discard. The console has no status-bar Discard, and none is wanted.
 
 ## 4. Revisions (`M/setup/revisions`, reading layout)
 - **List** (ApTable): Revision (mono link `r6`) · Applied (abs time) · By · Why (sentence,
