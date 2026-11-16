@@ -1,3 +1,4 @@
+import { flushPromises } from "@vue/test-utils";
 import { effectScope, nextTick, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { describe, expect, it } from "vite-plus/test";
@@ -272,30 +273,54 @@ describe("a full events read is never cut silently (parity D2, now A9d older pag
     events: ids.map((id) => ev(id, "2026-11-15T10:00:00Z")),
     nextCursor,
   });
+  const ok = (p: EventsPage) => Promise.resolve({ ok: true as const, value: p });
   it("offers older events while the server has a cursor, and appends them", async () => {
     const { useOlderEvents } = await import("./useOlderEvents.ts");
-    const first = ref<EventsPage | null>(page(["a"], "c1"));
     const pages: Record<string, EventsPage> = { c1: page(["b"], "c2"), c2: page(["c"], null) };
-    const o = useOlderEvents(first, (c) =>
-      Promise.resolve({ ok: true, value: pages[c] ?? page([], null) }),
+    const o = useOlderEvents(ref("k"), ref(page(["a"], "c1")), (c) =>
+      ok(pages[c] ?? page([], null)),
     );
     expect(o.hasMore.value).toBe(true);
-    await o.more();
+    expect(await o.more()).toEqual(["b"]);
     await o.more();
     expect(o.older.value.map((e) => e.id)).toEqual(["b", "c"]);
     expect(o.hasMore.value).toBe(false);
   });
-  it("starts over on a new first page, and says when a page fails", async () => {
+  it("keeps loaded older events through a live refetch, reloading up to what was shown (fe-ops)", async () => {
     const { useOlderEvents } = await import("./useOlderEvents.ts");
     const first = ref<EventsPage | null>(page(["a"], "c1"));
-    const o = useOlderEvents(first, () =>
-      Promise.resolve({ ok: false, error: { kind: "unavailable", status: 503, message: "Down." } }),
+    // After new events arrive, the first page's tail ('a') moves to the next page: no gap.
+    const pages: Record<string, EventsPage> = {
+      c1: page(["b"], null),
+      n1: page(["a", "b"], null),
+    };
+    const o = useOlderEvents(ref("k"), first, (c) => ok(pages[c] ?? page([], null)));
+    await o.more();
+    first.value = page(["new"], "n1");
+    await flushPromises();
+    expect(o.older.value.map((e) => e.id)).toEqual(["a", "b"]);
+  });
+  it("starts over only for other filters or window, and says when a page fails", async () => {
+    const { useOlderEvents } = await import("./useOlderEvents.ts");
+    const key = ref("k1");
+    const first = ref<EventsPage | null>(page(["a"], "c1"));
+    let fail = false;
+    const o = useOlderEvents(key, first, () =>
+      fail
+        ? Promise.resolve({
+            ok: false,
+            error: { kind: "unavailable", status: 503, message: "Down." },
+          })
+        : ok(page(["b"], "c2")),
     );
     await o.more();
+    fail = true;
+    await o.more();
     expect(o.error.value).toBe("Down.");
-    first.value = page(["z"], "x9");
+    expect(o.busy.value).toBe(false);
+    key.value = "k2";
     await nextTick();
-    expect(o.error.value).toBeNull();
     expect(o.older.value).toEqual([]);
+    expect(o.error.value).toBeNull();
   });
 });

@@ -152,6 +152,7 @@ const events = useRemoteQuery(key, (k, signal) =>
 );
 /** A9d: older pages through the first page's cursor; Older events replaces the cap note. */
 const older = useOlderEvents(
+  key,
   computed(() => (events.state.value.status === "ready" ? events.state.value.value : null)),
   (cursor) => {
     const k = key.value;
@@ -195,6 +196,20 @@ const dataAlerts = useRemoteQuery(
   computed(() => (defaultView.value ? key.value : null)),
   (k, signal) => fetchEvents(k.m, { ...windowOf(k.w), ...filters({ ...k, k: ["data"] }) }, signal),
 );
+/** After Older events, focus the first new row's time (ux U72's Load more rule). */
+async function loadOlder() {
+  const ids = await older.more();
+  await nextTick();
+  for (const id of ids) {
+    const time = document.querySelector<HTMLElement>(
+      `li[data-event-id="${CSS.escape(id)}"] button`,
+    );
+    if (time) {
+      time.focus();
+      return;
+    }
+  }
+}
 const shownEvents = computed(() => {
   if (events.state.value.status !== "ready") return null;
   const seen = new Set(events.state.value.value.events.map((e) => e.id));
@@ -344,7 +359,7 @@ const short = (iso: string) => {
                     variant="secondary"
                     :disabled="older.busy.value"
                     disabled-reason="Loading older events…"
-                    @click="older.more"
+                    @click="loadOlder"
                     >Older events</ApButton
                   >
                   <span v-if="older.error.value" class="text-sm text-caution-text" role="status">

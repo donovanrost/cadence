@@ -35,6 +35,7 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
         :time="`${formatClock(new Date(event.at))}Z`"
         :datetime="event.at"
         :state="severityState(event.severity)"
+        :data-event-id="event.id"
         :selected="selectedId === undefined ? undefined : selectedId === event.id"
         @select="emit('select', event.id)"
       >
