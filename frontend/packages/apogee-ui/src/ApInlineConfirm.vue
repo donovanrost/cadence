@@ -28,6 +28,8 @@ const props = withDefaults(
   defineProps<{
     /** The action button: a verb plus its object ('Remove account'), never OK/Yes/Confirm. */
     action: string;
+    /** The safe button's label when the screen has its own word ('Keep running'). */
+    cancelLabel?: string | undefined;
     /** False for an action that isn't destructive (primary instead of danger). */
     danger?: boolean | undefined;
     busy?: boolean | undefined;
@@ -40,7 +42,14 @@ const props = withDefaults(
     /** Where focus goes when the trigger is gone after the action (the row's new state line). */
     returnFocus?: HTMLElement | (() => HTMLElement | null) | null | undefined;
   }>(),
-  { danger: true, busy: false, busyReason: "Working…", blocked: null, refusal: null },
+  {
+    cancelLabel: "Cancel",
+    danger: true,
+    busy: false,
+    busyReason: "Working…",
+    blocked: null,
+    refusal: null,
+  },
 );
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
 defineSlots<{
@@ -136,9 +145,9 @@ onBeforeUnmount(() => {
     <div
       class="flex flex-wrap items-center justify-end gap-2 max-md:[&>button]:h-12 max-md:[&>button]:flex-1"
     >
-      <ApButton size="compact" variant="secondary" data-inline-cancel @click="cancel()"
-        >Cancel</ApButton
-      >
+      <ApButton size="compact" variant="secondary" data-inline-cancel @click="cancel()">{{
+        cancelLabel
+      }}</ApButton>
       <ApButton
         size="compact"
         :variant="danger ? 'danger' : 'primary'"
