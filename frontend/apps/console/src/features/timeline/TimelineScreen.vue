@@ -41,6 +41,7 @@ import {
 import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
 import EventDetail from "./EventDetail.vue";
+import EventTypeFilter from "./EventTypeFilter.vue";
 import EventLog from "./EventLog.vue";
 import { useTimelineDetail } from "./useTimelineDetail.ts";
 import {
@@ -120,12 +121,24 @@ function setKinds(next: EventKind[]) {
 }
 // While ?sc= waits on the fleet read to resolve, don't fetch fleet-wide events by mistake.
 /** A typed key (§12 A4; compared by value): no JSON round trip, and the MissionId stays one. */
+/** U71 A9b: the Event type filter's choices; EventTypeFilter writes them. */
+const rawKinds = computed(() =>
+  typeof route.query["raw_kind"] === "string"
+    ? route.query["raw_kind"].split(",").filter((s) => s !== "")
+    : [],
+);
+const filterWindow = computed(() => {
+  const r = resolveWindow(sel.value, new Date());
+  return { from: new Date(r.from), to: new Date(r.to) };
+});
 type Key = Readonly<{
   m: MissionId;
   w: WindowSel;
   k: readonly EventKind[];
   sc: string | null;
   p: number | null;
+  /** A9b: chosen event types (?raw_kind=). */
+  rk: readonly string[];
 }>;
 const key = computed((): Key | null =>
   typeof route.query.sc === "string" && fleet.state.value.status !== "ready"
@@ -136,12 +149,14 @@ const key = computed((): Key | null =>
         k: kinds.value,
         sc: scope.value.kind === "spacecraft" ? scope.value.id : null,
         p: scope.value.kind === "plane" ? scope.value.plane : null,
+        rk: rawKinds.value,
       },
 );
 const filters = (k: Key) => ({
   kinds: k.k,
   ...(k.sc ? { spacecraftId: k.sc } : {}),
   ...(k.p !== null ? { plane: k.p } : {}),
+  ...(k.rk.length ? { rawKinds: k.rk } : {}),
 });
 const windowOf = (w: WindowSel) => {
   const r = resolveWindow(w, new Date());
@@ -251,7 +266,10 @@ const short = (iso: string) => {
         <ApTimeRange v-model="pickerWindow" label="Window" :presets="presets" />
       </div>
     </ApPageHeader>
-    <KindToggles class="flex-none" :selected="kinds" @change="setKinds" />
+    <div class="flex flex-none flex-wrap items-center gap-3">
+      <KindToggles :selected="kinds" @change="setKinds" />
+      <EventTypeFilter :mission-id="missionId" :window="filterWindow" :kinds="kinds" />
+    </div>
     <ApPanel v-if="missing" index="E2" title="Event log" flush>
       <ApEmptyState
         state="off"

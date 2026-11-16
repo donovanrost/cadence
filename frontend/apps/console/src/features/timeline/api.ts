@@ -115,6 +115,8 @@ export type EventQuery = Readonly<{
   spacecraftId?: string;
   plane?: number;
   kinds?: readonly EventKind[];
+  /** U69 A9b: exact raw kinds (`?raw_kind=`), ANDed with `kinds`; at most 20. */
+  rawKinds?: readonly string[];
 }>;
 
 function params(query: EventQuery, extra: Record<string, string>) {
@@ -126,6 +128,7 @@ function params(query: EventQuery, extra: Record<string, string>) {
   if (query.spacecraftId) p.set("spacecraft_id", query.spacecraftId);
   if (query.plane !== undefined) p.set("plane", String(query.plane));
   if (query.kinds?.length) p.set("kind", query.kinds.join(","));
+  if (query.rawKinds?.length) p.set("raw_kind", query.rawKinds.join(","));
   return p.toString();
 }
 
@@ -202,4 +205,31 @@ export function fetchEvent(
     oneEventReader,
     signal ? { signal } : {},
   ).then((r) => (r.ok ? { ok: true, value: r.value.event } : r));
+}
+
+/** GET …/events/raw-kinds (U69 A9b picker, api 4a2f470d8): each raw kind in the window, most first. */
+export const rawKindsReader = d.object({
+  raw_kinds: d.array(
+    d.object({
+      // free-text: the event log's own entry kind, an open set (as `raw_kind` on an event).
+      raw_kind: d.string,
+      kind: d.known(eventKinds),
+      count: d.integer,
+    }),
+    500,
+  ),
+});
+export type RawKinds = Decoded<typeof rawKindsReader>["raw_kinds"];
+
+export function fetchRawKinds(
+  missionId: MissionId,
+  window: Readonly<{ from: Date; to: Date }>,
+  signal?: AbortSignal,
+): Promise<ApiResult<RawKinds>> {
+  const p = new URLSearchParams({ from: window.from.toISOString(), to: window.to.toISOString() });
+  return request(
+    `${base(missionId)}/raw-kinds?${p.toString()}`,
+    rawKindsReader,
+    signal ? { signal } : {},
+  ).then((r) => (r.ok ? { ok: true, value: r.value.raw_kinds } : r));
 }

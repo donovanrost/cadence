@@ -118,7 +118,10 @@ const FOLD_WORDS: Readonly<Record<(typeof foldKinds)[number], string>> = {
   dashboard_published: "Dashboards published",
 };
 export function kindLabel(e: MissionEvent): string {
-  const key = e.raw_kind ?? e.kind;
+  return rawKindLabel(e.raw_kind ?? e.kind);
+}
+/** A raw kind in the fold words ('Contacts canceled'), else sentence-cased (U71 A9b options). */
+export function rawKindLabel(key: string): string {
   const known = foldKinds.find((k) => k === key);
   if (known) return FOLD_WORDS[known];
   const w = key.replaceAll("_", " ");
