@@ -15,7 +15,8 @@ defmodule Cadence.Applications.OpsConsoleActionAdaptersTest do
     assert {:error, :unsupported_application_action} =
              Actions.DataSources.execute(@scope, @host_context, source_request)
 
-    assert {:error, :invalid_action_input} =
+    # The data operations surfaces bind no host action at all (their decisions are native-only).
+    assert {:error, :unsupported_application_action} =
              Actions.MissionOperations.execute(@scope, @host_context, mission_request)
   end
 

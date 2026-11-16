@@ -120,13 +120,7 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :operations,
       label: "Data Operations",
       path: "/missions/:mission_id/ops/data-operations",
-      actions: [
-        "validate-request",
-        "record-historical-workflow-request",
-        "transition-group",
-        "retry-group",
-        "request-correction"
-      ]
+      actions: []
     },
     %{
       id: "data_operations_manage",
@@ -134,13 +128,7 @@ defmodule Cadence.Applications.OpsConsole do
       label: "Manage Data Operations",
       path: "/missions/:mission_id/ops/data-operations/manage",
       query_params: ["group"],
-      actions: [
-        "validate-request",
-        "record-historical-workflow-request",
-        "transition-group",
-        "retry-group",
-        "request-correction"
-      ]
+      actions: []
     },
     %{
       id: "data_sources",
@@ -253,13 +241,7 @@ defmodule Cadence.Applications.OpsConsole do
       phoenix_events: []
     },
     "data_operations_manage" => %{
-      host_actions: [
-        "validate-request",
-        "record-historical-workflow-request",
-        "transition-group",
-        "retry-group",
-        "request-correction"
-      ],
+      host_actions: [],
       navigation: ["open_data_operations"],
       phoenix_events: []
     }

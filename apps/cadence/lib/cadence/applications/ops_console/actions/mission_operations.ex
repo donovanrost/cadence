@@ -8,46 +8,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   """
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
-  alias Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Control.Activations
-  alias Cadence.Control.TelemetryDataManagement
-  alias Cadence.Telemetry.DataManagement.WorkflowEventEvidence
-  alias Cadence.Telemetry.Storage
 
   @application_key "ops_console"
   @application_version 1
   @surface_version 1
 
-  @data_operation_surfaces ["data_operations", "data_operations_manage"]
-
-  @host_bindings [
-    {"activation_requests", "decide"},
-    {"data_operations", "validate-request"},
-    {"data_operations", "record-historical-workflow-request"},
-    {"data_operations", "transition-group"},
-    {"data_operations", "retry-group"},
-    {"data_operations", "request-correction"},
-    {"data_operations_manage", "validate-request"},
-    {"data_operations_manage", "record-historical-workflow-request"},
-    {"data_operations_manage", "transition-group"},
-    {"data_operations_manage", "retry-group"},
-    {"data_operations_manage", "request-correction"}
-  ]
-
-  @workflow_keys ~w(
-    workflow run_id realm data_source_id source_binding_id observable_id point_id point_ids
-    source_from source_to dashboard_id dashboard_version dashboard_time_mode
-    dashboard_replay_run_id dashboard_data_view dashboard_limit_mode
-    comparison_review_request_event_id comparison_review_request_kind comparison_review_open_count
-    comparison_review_open_placement_ids comparison_review_workflow_kind
-    comparison_review_workflow_action comparison_review_workflow_selection_kind
-    comparison_review_workflow_selection_count comparison_review_primary_data_view
-    comparison_review_compare_data_view comparison_review_scope_kind comparison_review_scope_ids
-    comparison_review_contact_ids comparison_review_resource_ids comparison_review_transport_ids
-    comparison_review_source_endpoint_ids comparison_review_ground_station_ids
-    comparison_review_scope_link_ids reason confirmed
-  )
+  # The data operations surfaces bind no host actions: their workflow decisions go through the
+  # native path (`HistoricalWorkflowActions`: reason, evidence and lock checks), never this one.
+  @host_bindings [{"activation_requests", "decide"}]
 
   @spec bindings() :: [{binary(), binary()}]
   def bindings, do: @host_bindings
@@ -134,41 +104,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     end
   end
 
-  defp validate_action_params(surface_id, "validate-request", params)
-       when surface_id in @data_operation_surfaces,
-       do: validate_workflow_values(params)
-
-  defp validate_action_params(
-         surface_id,
-         "record-historical-workflow-request",
-         params
-       )
-       when surface_id in @data_operation_surfaces,
-       do: validate_workflow_values(params)
-
-  defp validate_action_params(surface_id, "transition-group", params)
-       when surface_id in @data_operation_surfaces do
-    with :ok <- exact_keys(params, ["group-id", "stage"]),
-         :ok <- required_text(params, "group-id") do
-      member_text(params, "stage", ~w(approved rejected started completed failed))
-    end
-  end
-
-  defp validate_action_params(surface_id, "retry-group", params)
-       when surface_id in @data_operation_surfaces do
-    with :ok <- exact_keys(params, ["group-id"]) do
-      required_text(params, "group-id")
-    end
-  end
-
-  defp validate_action_params(surface_id, "request-correction", params)
-       when surface_id in @data_operation_surfaces do
-    with :ok <- exact_keys(params, ["group-id", "event-id"]),
-         :ok <- required_text(params, "group-id") do
-      required_text(params, "event-id")
-    end
-  end
-
   defp validate_action_params("activation_requests", "decide", params) do
     with :ok <- exact_keys(params, ["activation_decision", "decision"]),
          {:ok, decision_params} <-
@@ -182,12 +117,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   defp validate_action_params(_surface_id, _action_id, _params),
     do: {:error, :unsupported_application_action}
 
-  defp validate_workflow_values(params) do
-    with {:ok, values} <- nested_map(params, "historical_workflow_request", @workflow_keys) do
-      string_values(values)
-    end
-  end
-
   defp nested_map(params, key, allowed_keys) when is_map(params) do
     with {:ok, nested} <- Map.fetch(params, key),
          true <- is_map(nested),
@@ -200,8 +129,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     end
   end
 
-  defp nested_map(_params, _key, _allowed_keys), do: {:error, :invalid_action_input}
-
   defp exact_keys(map, expected) when is_map(map) do
     keys = Map.keys(map)
 
@@ -211,12 +138,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   end
 
   defp exact_keys(_map, _expected), do: {:error, :invalid_action_input}
-
-  defp string_values(map) when is_map(map) do
-    if Enum.all?(map, fn {key, value} -> is_binary(key) and is_binary(value) end),
-      do: :ok,
-      else: {:error, :invalid_action_input}
-  end
 
   defp required_text(map, key) do
     case Map.get(map, key) do
@@ -229,27 +150,14 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     if Map.get(map, key) in allowed, do: :ok, else: {:error, :invalid_action_input}
   end
 
-  defp authorize(scope, %HostContext{mission_id: mission_id}, surface_id, action)
-       when surface_id in @data_operation_surfaces and
-              action in [
-                "transition-group",
-                "retry-group",
-                "request-correction"
-              ] do
-    with :ok <- organization_admin(scope) do
-      Policy.authorize(scope, :operate_mission, mission_context(scope, mission_id))
-    end
-  end
-
   defp authorize(scope, %HostContext{mission_id: mission_id}, "activation_requests", "decide") do
     with :ok <- organization_admin(scope) do
       Policy.authorize(scope, :approve_activation, mission_context(scope, mission_id))
     end
   end
 
-  defp authorize(scope, %HostContext{mission_id: mission_id}, _surface_id, _action_id) do
-    Policy.authorize(scope, :operate_mission, mission_context(scope, mission_id))
-  end
+  defp authorize(_scope, _host_context, _surface_id, _action_id),
+    do: {:error, :unsupported_application_action}
 
   defp organization_admin(scope),
     do: Policy.authorize(scope, :manage_missions, %{organization_id: scope.organization_id})
@@ -266,197 +174,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     Activations.review(scope, mission_id, params)
   end
 
-  defp dispatch(
-         scope,
-         %HostContext{mission_id: mission_id},
-         surface_id,
-         %ActionRequest{action_id: "validate-request", params: params}
-       )
-       when surface_id in @data_operation_surfaces do
-    values = Map.fetch!(params, "historical_workflow_request")
-
-    case HistoricalWorkflowRequest.validate(scope, mission_id, values) do
-      {:ok, _request} -> {:ok, %{"valid" => true, "values" => values, "errors" => []}}
-      {:error, errors} -> {:ok, %{"valid" => false, "values" => values, "errors" => errors}}
-    end
-  end
-
-  defp dispatch(
-         scope,
-         %HostContext{mission_id: mission_id},
-         surface_id,
-         %ActionRequest{action_id: "record-historical-workflow-request", params: params}
-       )
-       when surface_id in @data_operation_surfaces do
-    values = Map.fetch!(params, "historical_workflow_request")
-
-    with true <- values["confirmed"] in ["true", "on", "confirmed"],
-         {:ok, events} <- record_request(scope, mission_id, values) do
-      {:ok, %{"eventIds" => Enum.map(events, & &1.backfill_lifecycle_event_id)}}
-    else
-      false -> {:error, :confirmation_required}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp dispatch(
-         scope,
-         %HostContext{mission_id: mission_id},
-         surface_id,
-         %ActionRequest{action_id: "transition-group", params: params}
-       )
-       when surface_id in @data_operation_surfaces do
-    group_id = params["group-id"]
-    stage = params["stage"]
-
-    with {:ok, events} <- group_events(scope.organization_id, mission_id, group_id),
-         {:ok, workflow} <- group_workflow(events),
-         {:ok, transitioned, jobs} <-
-           TelemetryDataManagement.record_historical_data_workflow_group_transition(
-             workflow,
-             stage,
-             events,
-             operation_actor_attrs(scope, mission_id),
-             []
-           ) do
-      {:ok,
-       %{
-         "eventIds" => Enum.map(transitioned, & &1.backfill_lifecycle_event_id),
-         "jobResults" => Enum.map(jobs, &job_result/1)
-       }}
-    end
-  end
-
-  defp dispatch(
-         scope,
-         %HostContext{mission_id: mission_id},
-         surface_id,
-         %ActionRequest{action_id: "retry-group", params: %{"group-id" => group_id}}
-       )
-       when surface_id in @data_operation_surfaces do
-    with {:ok, summary} <-
-           TelemetryDataManagement.retry_historical_data_workflow_group_failed_jobs(
-             group_id,
-             operation_actor_attrs(scope, mission_id),
-             []
-           ) do
-      {:ok, retry_summary(summary)}
-    end
-  end
-
-  defp dispatch(
-         scope,
-         %HostContext{mission_id: mission_id},
-         surface_id,
-         %ActionRequest{action_id: "request-correction", params: params}
-       )
-       when surface_id in @data_operation_surfaces do
-    group_id = params["group-id"]
-    event_id = params["event-id"]
-
-    with {:ok, event} <- failed_group_event(scope.organization_id, mission_id, group_id, event_id),
-         {:ok, workflow} <- group_workflow([event]),
-         {:ok, correction_event} <-
-           TelemetryDataManagement.record_historical_data_workflow_correction_request(
-             workflow,
-             operation_actor_attrs(scope, mission_id),
-             %{
-               "request_group_id" => group_id,
-               "original_event_id" => event_id,
-               "original_run_id" => event.backfill_run_id,
-               "original_job_id" => WorkflowEventEvidence.job_id(event)
-             },
-             []
-           ) do
-      {:ok, event_result(correction_event)}
-    end
-  end
-
   defp dispatch(_scope, _host_context, _surface_id, _request),
     do: {:error, :unsupported_application_action}
-
-  defp record_request(scope, mission_id, values) do
-    with {:ok, request} <- HistoricalWorkflowRequest.validate(scope, mission_id, values) do
-      TelemetryDataManagement.record_historical_data_workflow_request(
-        request.workflow,
-        request.attrs,
-        request.point_ids,
-        []
-      )
-    end
-  end
-
-  defp operation_actor_attrs(scope, mission_id) do
-    %{
-      organization_id: scope.organization_id,
-      mission_id: mission_id,
-      actor_id: actor_id(scope),
-      actor_kind: "operator"
-    }
-    |> compact()
-  end
-
-  defp actor_id(%Scope{actor_kind: :user, user: %{user_id: user_id}}), do: user_id
-  defp actor_id(%Scope{actor_kind: :user, user: %{id: user_id}}), do: user_id
-
-  defp actor_id(%Scope{actor_kind: :service, service_identity: %{service_identity_id: id}}),
-    do: id
-
-  defp actor_id(_scope), do: nil
-
-  defp group_events(organization_id, mission_id, group_id) do
-    Storage.fetch_backfill_lifecycle_group_events(mission_id, group_id,
-      organization_id: organization_id
-    )
-  end
-
-  defp failed_group_event(organization_id, mission_id, group_id, event_id) do
-    with {:ok, events} <- group_events(organization_id, mission_id, group_id),
-         %Storage.BackfillLifecycleEvent{} = event <-
-           Enum.find(events, fn candidate ->
-             candidate.backfill_lifecycle_event_id == event_id and
-               candidate.event_type in [:backfill_failed, :import_failed]
-           end) do
-      {:ok, event}
-    else
-      nil -> {:error, {:historical_workflow_event_not_found, event_id}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp group_workflow([event | _events]) do
-    case WorkflowEventEvidence.workflow(event) do
-      "backfill" -> {:ok, :backfill}
-      "import" -> {:ok, :import}
-      :backfill -> {:ok, :backfill}
-      :import -> {:ok, :import}
-      _workflow -> {:error, :unsupported_historical_data_workflow}
-    end
-  end
-
-  defp event_result(event) do
-    %{
-      "eventId" => event.backfill_lifecycle_event_id,
-      "eventType" => Atom.to_string(event.event_type),
-      "missionId" => event.mission_id,
-      "runId" => event.backfill_run_id
-    }
-  end
-
-  defp job_result({:ok, nil}), do: nil
-  defp job_result({:ok, job}), do: %{status: "started", job_id: job.job_id}
-  defp job_result({:error, reason}), do: %{status: "error", reason: inspect(reason)}
-  defp job_result(value), do: value
-
-  defp retry_summary(summary) do
-    summary
-    |> Map.take([:retried, :nonretryable, :skipped, :failed])
-    |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
-  end
-
-  defp compact(map) do
-    map
-    |> Enum.reject(fn {_key, value} -> value in [nil, "", %{}] end)
-    |> Map.new()
-  end
 end

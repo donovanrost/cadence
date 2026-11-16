@@ -20,7 +20,8 @@ defmodule Cadence.Applications.OpsConsoleTest do
     assert Enum.at(definition.surfaces, 1).actions == ["validate", "search", "reserve", "cancel"]
 
     assert length(definition.surfaces) == 18
-    assert length(definition.actions) == 39
+    # 34: the data operations surfaces declare no host actions (native path only).
+    assert length(definition.actions) == 34
     assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 17
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
@@ -161,23 +162,9 @@ defmodule Cadence.Applications.OpsConsoleTest do
              {"telemetry_explore", :operations, :mission, :ops_workspace,
               "cadence.ops.telemetry_explore", ["apply_filters", "apply_question"]},
              {"data_operations", :operations, :mission, :ops_workspace,
-              "cadence.ops.data_operations",
-              [
-                "validate-request",
-                "record-historical-workflow-request",
-                "transition-group",
-                "retry-group",
-                "request-correction"
-              ]},
+              "cadence.ops.data_operations", []},
              {"data_operations_manage", :operations, :mission, :ops_workspace,
-              "cadence.ops.data_operations_manage",
-              [
-                "validate-request",
-                "record-historical-workflow-request",
-                "transition-group",
-                "retry-group",
-                "request-correction"
-              ]},
+              "cadence.ops.data_operations_manage", []},
              {"data_sources", :configuration, :mission, :ops_workspace,
               "cadence.ops.data_sources",
               [

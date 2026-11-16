@@ -9,11 +9,11 @@ defmodule Cadence.Applications.OpsRouteActionLedgerTest do
     provider_pairs = MapSet.new(ActionProvider.binding_keys())
     residual_pairs = residual_pairs()
 
-    assert length(OpsConsole.definition().actions) == 39
-    assert length(OpsConsole.surface_action_pairs()) == 55
+    assert length(OpsConsole.definition().actions) == 34
+    assert length(OpsConsole.surface_action_pairs()) == 45
     assert OpsConsole.residual_action_ledger() == Map.new(OpsConsole.surface_ids(), &{&1, []})
     assert ActionProvider.duplicate_binding_keys() == []
-    assert length(ActionProvider.binding_keys()) == 55
+    assert length(ActionProvider.binding_keys()) == 45
     assert MapSet.size(provider_pairs) == length(ActionProvider.binding_keys())
     assert MapSet.size(residual_pairs) == residual_pair_count()
     assert MapSet.disjoint?(provider_pairs, residual_pairs)
