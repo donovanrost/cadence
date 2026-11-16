@@ -5,7 +5,9 @@ defmodule CadenceWeb.ApplicationHostSessionState do
   surface host (§11 L9), so both mint and pin it the same way:
 
   - the host session id (`x-cadence-poc-session` on non-GET bridge calls), one per cookie
-    session;
+    session AND per minting host: the legacy application host and the console's surface host
+    each mint their own, so the bridge knows which host a call came through
+    (`ActionRequest.origin`, the save trail's `via`; set by the host, never the client);
   - the pinned host scopes (§11 L19b): the scope document and mission of each catalog this
     session loaded, the 16 most recent, as digests (the cookie stays small). The bridge's
     query and actions must name one of them, so surfaces at several scopes stay open at once;
@@ -15,6 +17,7 @@ defmodule CadenceWeb.ApplicationHostSessionState do
   import Plug.Conn
 
   @session_key :application_host_session_id
+  @console_session_key :application_host_console_session_id
   @host_context_key :application_host_context
   @host_mission_key :application_host_mission_id
   @scopes_key :application_host_scopes
@@ -22,6 +25,9 @@ defmodule CadenceWeb.ApplicationHostSessionState do
 
   @spec session_key() :: atom()
   def session_key, do: @session_key
+
+  @spec console_session_key() :: atom()
+  def console_session_key, do: @console_session_key
 
   @spec host_context_key() :: atom()
   def host_context_key, do: @host_context_key
@@ -33,18 +39,33 @@ defmodule CadenceWeb.ApplicationHostSessionState do
   @spec mint_session_id() :: binary()
   def mint_session_id, do: 32 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
 
-  @doc "The browser session's host session id, minted and stored if it has none."
-  @spec ensure_session_id(Plug.Conn.t()) :: {Plug.Conn.t(), binary()}
-  def ensure_session_id(conn) do
-    case get_session(conn, @session_key) do
+  @doc "The browser session's console host session id (the console's surface host), minted if none."
+  @spec ensure_console_session_id(Plug.Conn.t()) :: {Plug.Conn.t(), binary()}
+  def ensure_console_session_id(conn) do
+    case get_session(conn, @console_session_key) do
       id when is_binary(id) and id != "" ->
         {conn, id}
 
       _none ->
         id = mint_session_id()
-        {put_session(conn, @session_key, id), id}
+        {put_session(conn, @console_session_key, id), id}
     end
   end
+
+  @doc """
+  Which host minted the session id a bridge call carries: `:legacy_host` or `:console`, or
+  `:error` when it matches neither.
+  """
+  @spec origin(Plug.Conn.t(), binary() | nil) :: {:ok, :legacy_host | :console} | :error
+  def origin(conn, header_id) when is_binary(header_id) and header_id != "" do
+    cond do
+      header_id == get_session(conn, @session_key) -> {:ok, :legacy_host}
+      header_id == get_session(conn, @console_session_key) -> {:ok, :console}
+      true -> :error
+    end
+  end
+
+  def origin(_conn, _header_id), do: :error
 
   @doc "Pins a host scope the bridge's query and actions may name (the most recent first)."
   @spec pin_scope(Plug.Conn.t(), map(), binary() | nil) :: Plug.Conn.t()

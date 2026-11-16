@@ -153,7 +153,8 @@ defmodule CadenceWeb.ApplicationHostController do
              route_context,
              params,
              idempotency_key,
-             now: now
+             now: now,
+             origin: conn.assigns[:application_host_origin]
            ),
          {:ok, {_disposition, response}} <-
            ApplicationActionIdempotency.run(

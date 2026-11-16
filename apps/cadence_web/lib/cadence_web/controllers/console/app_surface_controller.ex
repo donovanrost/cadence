@@ -36,7 +36,7 @@ defmodule CadenceWeb.Console.AppSurfaceController do
            ApplicationHostCatalog.admit_application(scope, route_context, key, surface_id,
              now: now
            ),
-         {conn, session_id} = ApplicationHostSessionState.ensure_session_id(conn),
+         {conn, session_id} = ApplicationHostSessionState.ensure_console_session_id(conn),
          {:ok, catalog} <- catalog(conn, scope, route_context, key, surface_id, session_id, now) do
       host_context = route_context.host_context
 

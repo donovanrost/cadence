@@ -87,7 +87,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
          {:ok, request} <- action_request(params, idempotency_key_digest),
          {:ok, admission} <- admit_surface(current_scope, route_context, request, opts),
          {:ok, action} <- declared_action(admission, request),
-         {:ok, dispatch_request} <- dispatch_request(request, admission, action),
+         {:ok, dispatch_request} <-
+           dispatch_request(request, admission, action, Keyword.get(opts, :origin)),
          :ok <-
            ActionDispatcher.authorize(
              current_scope,
@@ -250,7 +251,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
            params: params
          },
          _admission,
-         %ActionDefinition{action_id: action_id}
+         %ActionDefinition{action_id: action_id},
+         origin
        ) do
     {:ok,
      %ActionRequest{
@@ -260,7 +262,9 @@ defmodule CadenceWeb.ApplicationHostBridge do
        surface_id: surface_id,
        surface_version: surface_version,
        params: params,
-       idempotency_key: nil
+       idempotency_key: nil,
+       # The host the call came through (the session plug's minting host), never the client's.
+       origin: origin
      }}
   end
 
