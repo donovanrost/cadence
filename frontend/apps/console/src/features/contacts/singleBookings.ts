@@ -90,7 +90,8 @@ export type SearchInput = Readonly<{
   from: Date;
   to: Date;
   direction: "downlink" | "uplink";
-  stationIds: readonly string[];
+  /** A16b: the chosen routes' keys; none = every ready route. */
+  routeKeys: readonly string[];
 }>;
 
 const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/single-bookings`;
@@ -103,7 +104,7 @@ export function searchOffers(missionId: MissionId, input: SearchInput): Promise<
       from: input.from.toISOString(),
       to: input.to.toISOString(),
       direction: input.direction,
-      ...(input.stationIds.length ? { station_ids: input.stationIds } : {}),
+      ...(input.routeKeys.length ? { route_keys: input.routeKeys } : {}),
     },
   });
 }
@@ -207,7 +208,7 @@ export function offPlanLine(
 }
 
 /** Empty search: "No passes for EARENDIL-312 between 03:00Z and 09:00Z." */
-export function emptyWords(s: Search): string {
+export function emptyWords(s: Search, via = ""): string {
   const at = (iso: string) => formatShort(new Date(iso));
-  return `No passes for ${s.spacecraft.name} between ${at(s.window.from)} and ${at(s.window.to)}.`;
+  return `No passes for ${s.spacecraft.name}${via} between ${at(s.window.from)} and ${at(s.window.to)}.`;
 }

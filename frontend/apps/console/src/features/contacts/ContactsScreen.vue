@@ -241,9 +241,6 @@ const meta = computed(() => {
  */
 const access = useCommandAccess();
 const bookSheet = ref<InstanceType<typeof BookPassSheet> | null>(null);
-const stationRows = computed(() =>
-  stationsQuery.state.value.status === "ready" ? stationsQuery.state.value.value.stations : [],
-);
 function openBook(prefill: { spacecraftId?: string; from?: number; to?: number } = {}) {
   bookSheet.value?.open(prefill);
 }
@@ -418,7 +415,6 @@ const tabs: readonly ApTabLink[] = [
       ref="bookSheet"
       :mission-id="missionId"
       :fleet="[...byId.values()]"
-      :stations="stationRows"
       @booked="(p) => go({ contact: p.id })"
     />
   </div>

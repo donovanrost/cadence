@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
-import { describeApiError, isError } from "@/api/index.ts";
+import { describeApiError, isError, useRemoteQuery } from "@/api/index.ts";
 import {
   formatDuration,
   useNow,
@@ -13,11 +13,12 @@ import {
   ApTag,
   ApTextarea,
   ApTimeRange,
-  type RangePreset,
   type TimeRange,
 } from "@/ui";
+import RoutePicker from "./RoutePicker.vue";
+import { fetchRoutes, rangePresets, uplinkBlock, viaWords, windowProblem } from "./routes.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import type { GroundStation, Pass } from "./api.ts";
+import type { Pass } from "./api.ts";
 import {
   confirmLine,
   emptyWords,
@@ -39,21 +40,29 @@ import {
  * its token expires, book it outside a plan. Reserving is idempotent, so "unclear" offers Try again.
  * `booked` hands the new pass to Contacts so D3 shows the bar and D2 opens on it.
  */
-const props = defineProps<{
-  missionId: MissionId;
-  fleet: readonly FleetSpacecraft[];
-  stations: readonly GroundStation[];
-}>();
+const props = defineProps<{ missionId: MissionId; fleet: readonly FleetSpacecraft[] }>();
 const emit = defineEmits<{ booked: [pass: Pass] }>();
 const now = useNow();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const HOUR = 3_600_000;
-/** A booking is future: the track runs now…now+48h, so a drag can't pick a past window (ux U62). */
-const track = computed(() => ({ from: now.value.getTime(), to: now.value.getTime() + 48 * HOUR }));
 const spacecraftId = ref("");
+const routeKeys = ref<string[]>([]);
+/** A16b: the spacecraft's ready routes and the server's reach (how far ahead a search may go). */
+const routes = useRemoteQuery(
+  computed(() => (spacecraftId.value ? { m: props.missionId, sc: spacecraftId.value } : null)),
+  (k, signal) => fetchRoutes(k.m, k.sc, signal),
+);
+const routeData = computed(() =>
+  routes.state.value.status === "ready" ? routes.state.value.value : null,
+);
+/** A booking is future: the track runs now…the reach, so a drag can't pick a past window (U62). */
+const track = computed(() => {
+  const t = now.value.getTime();
+  const until = routeData.value ? Date.parse(routeData.value.limits.reach_until) : t + 48 * HOUR;
+  return { from: t, to: until };
+});
 const range = ref<TimeRange>({ from: Date.now(), to: Date.now() + 24 * HOUR });
 const direction = ref<"downlink" | "uplink">("downlink");
-const stationIds = ref<string[]>([]);
 const search = ref<Search | null>(null);
 const searching = ref(false);
 const searchError = ref<string | null>(null);
@@ -63,10 +72,9 @@ const booking = ref(false);
 const result = ref<{ reserve: Reserve; offer: Offer } | null>(null);
 const unclear = ref<string | null>(null);
 
-const presets = computed<RangePreset[]>(() => {
-  const t = now.value.getTime();
-  return [6, 24, 72].map((h) => ({ id: `${h}h`, label: `Next ${h} h`, from: t, to: t + h * HOUR }));
-});
+const presets = computed(() =>
+  rangePresets(now.value.getTime(), routeData.value?.limits.reach_until ?? null),
+);
 const scOptions = computed(() =>
   props.fleet.map((sc) => ({ value: sc.id, label: `${sc.name} · SCID ${sc.scid}` })),
 );
@@ -91,13 +99,20 @@ function open(prefill: { spacecraftId?: string; from?: number; to?: number } = {
 }
 defineExpose({ open });
 
-function toggleStation(id: string) {
-  stationIds.value = stationIds.value.includes(id)
-    ? stationIds.value.filter((s) => s !== id)
-    : [...stationIds.value, id];
-}
+/** Why Search can't run: no spacecraft, a bad window, or only downlink routes for an uplink. */
+const blocked = computed(
+  () =>
+    (spacecraftId.value ? null : "Choose a spacecraft") ??
+    windowProblem(range.value, routeData.value?.limits ?? null, now.value.getTime()) ??
+    uplinkBlock(
+      routeData.value?.routes ?? [],
+      routeKeys.value,
+      direction.value === "uplink",
+      scName.value,
+    ),
+);
 async function runSearch() {
-  if (!spacecraftId.value || searching.value) return;
+  if (blocked.value || searching.value) return;
   searching.value = true;
   searchError.value = null;
   chosen.value = null;
@@ -107,7 +122,7 @@ async function runSearch() {
     from: new Date(range.value.from),
     to: new Date(range.value.to),
     direction: direction.value,
-    stationIds: stationIds.value,
+    routeKeys: routeKeys.value,
   });
   searching.value = false;
   if (r.ok) search.value = r.value;
@@ -152,28 +167,30 @@ const outcome = computed(() =>
       <ApTimeRange v-model="range" label="Window" :presets="presets" :span="track" />
       <ApSegmented v-model="direction" :options="directions" label="Direction" />
     </div>
-    <div v-if="stations.length" role="group" aria-label="Stations" class="flex flex-wrap gap-1.5">
-      <ApButton
-        size="compact"
-        :variant="stationIds.length === 0 ? 'primary' : 'ghost'"
-        :aria-pressed="stationIds.length === 0"
-        @click="stationIds = []"
-        >Any</ApButton
-      >
-      <ApButton
-        v-for="st in stations"
-        :key="st.id"
-        size="compact"
-        :variant="stationIds.includes(st.id) ? 'primary' : 'ghost'"
-        :aria-pressed="stationIds.includes(st.id)"
-        @click="toggleStation(st.id)"
-        >{{ st.code ?? st.display_name ?? st.id }}</ApButton
-      >
-    </div>
+    <p
+      v-if="windowProblem(range, routeData?.limits ?? null, now.getTime())"
+      class="m-0 text-sm text-caution-text"
+    >
+      {{ windowProblem(range, routeData?.limits ?? null, now.getTime()) }}
+    </p>
+    <p
+      v-for="nr in routeData?.not_ready ?? []"
+      :key="nr.code"
+      class="m-0 text-sm text-caution-text"
+    >
+      {{ nr.message }}
+    </p>
+    <RoutePicker
+      v-if="routeData?.routes.length"
+      v-model="routeKeys"
+      :routes="routeData.routes"
+      :with-uplink="direction === 'uplink'"
+      :spacecraft="scName"
+    />
     <ApButton
       variant="secondary"
-      :disabled="!spacecraftId || searching"
-      :disabled-reason="searching ? 'Searching…' : 'Choose a spacecraft'"
+      :disabled="blocked !== null || searching"
+      :disabled-reason="searching ? 'Searching…' : (blocked ?? '')"
       @click="run(runSearch)()"
       >{{ searching ? "Searching…" : "Search" }}</ApButton
     >
@@ -187,7 +204,9 @@ const outcome = computed(() =>
         {{ search.hidden.no_uplink_route === 1 ? "station" : "stations" }} hidden: no uplink route
         to {{ search.spacecraft.name }}.
       </p>
-      <p v-if="search.offers.length === 0" class="m-0 text-text-3">{{ emptyWords(search) }}</p>
+      <p v-if="search.offers.length === 0" class="m-0 text-text-3">
+        {{ emptyWords(search, viaWords(routeData?.routes ?? [], routeKeys)) }}
+      </p>
       <ul v-else class="m-0 flex list-none flex-col p-0" aria-label="Offers">
         <!-- By token: the same opportunity can come back once per ready route (qa 11-13). -->
         <li v-for="o in search.offers" :key="o.token" class="border-t border-hairline py-2">
@@ -243,7 +262,7 @@ const outcome = computed(() =>
         </li>
       </ul>
       <p v-if="search.truncated" class="m-0 text-sm text-caution-text">
-        More offers than fit; narrow the window or the stations.
+        More offers than fit; narrow the window or the routes.
       </p>
     </template>
     <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>

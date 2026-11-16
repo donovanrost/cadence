@@ -105,6 +105,19 @@ describe("BookPassSheet", () => {
   it("searches, picks an offer, books it by token with the note", async () => {
     vi.useFakeTimers({ now, toFake: ["Date"] });
     const fetch = vi.fn();
+    // A16b: opening reads the spacecraft's routes and the reach first.
+    fetch.mockResolvedValueOnce(
+      reply({
+        spacecraft: { id: "sc-1", name: "EARENDIL-001" },
+        routes: [],
+        not_ready: [],
+        limits: {
+          max_window_s: 604_800,
+          max_reach_s: 1_209_600,
+          reach_until: "2026-11-27T03:00:00Z",
+        },
+      }),
+    );
     fetch.mockResolvedValueOnce(
       reply({
         spacecraft: { id: "sc-1", name: "EARENDIL-001", scid: 1 },
@@ -118,7 +131,7 @@ describe("BookPassSheet", () => {
     fetch.mockResolvedValueOnce(reply(reserve({ outcome: "requested" })));
     vi.stubGlobal("fetch", fetch);
     const w = mount(BookPassSheet, {
-      props: { missionId: missionIdReader("m"), fleet: [spacecraftRow(1)], stations: [] },
+      props: { missionId: missionIdReader("m"), fleet: [spacecraftRow(1)] },
       attachTo: document.body,
     });
     // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
@@ -139,7 +152,7 @@ describe("BookPassSheet", () => {
       .find((b) => b.text() === "Book this pass")
       ?.trigger("click");
     await flushPromises();
-    const [, init] = (fetch.mock.calls[1] ?? []) as [unknown, RequestInit | undefined];
+    const [, init] = (fetch.mock.calls[2] ?? []) as [unknown, RequestInit | undefined];
     const sent: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
     expect(sent).toEqual({ token: "tok-a", note: "Gap after LOS" });
     expect(w.text()).toContain("Requested. Waiting for Northlight to confirm.");
