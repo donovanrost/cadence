@@ -39,6 +39,7 @@ missing endpoint or decision; an item with no blocker can start now.
 - **No hand-ports to main (user, via the director, 11-14):** Cadence has no production deployment and no active users. Fixes land on the team branch and develop; main moves only by releases from develop (the director is asking the user how to bring it level). All main-port items are DROPPED; local main branches are kept but not worked on. #97 (the #38 release guard) and #96/#89/#77/#94 had already merged to main. Breaking API changes are allowed (recorded; readers first). The shared-:4011 rules are unchanged.
 
 - **Develop ports ON HOLD (director 11-14) until the user decides between porting to develop and merging the team branch.** Keep existing port branches as they are; build no new ones. Pending (team-branch commits that develop lacks), so nothing is lost either way:
+  - **Held port (11-16, class-level):** a legacy app-host action path for historical-data decisions skips the native path's reason/evidence/lock checks; develop has it too. Fix on the team branch: api (Elixir) + dashboards (federated manifest) remove the three actions from both data-operations surfaces, with a refusal test. Port to develop with the rest when the user decides.
   - archive conflict fix (domain 6fd819aa9 / af56337d2)
   - #73 field-definition ids + migration (5f038893b, 93dda4ae3)
   - journal trap_exit + checkpoint (5a6eaf204, 2a28be377); journal metadata no-truncate (api-ops 1e8ebe136)
