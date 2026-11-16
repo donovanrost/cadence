@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { KindEditor, type FormValues, type KindSchema } from "@/features/changes/index.ts";
 import { fetchStations } from "@/features/stations/index.ts";
-import { ApRemote } from "@/ui";
+import { ApButton, ApCallout, ApRemote } from "@/ui";
 import type { SpacecraftDetail } from "./detail.ts";
 import { fetchExtraRoute, routeSummary, stationWord } from "./routes.ts";
 
@@ -32,6 +32,13 @@ const stationById = computed(
           stations.state.value.value.map((s) => [String(s.id), s] as const)
         : [],
     ),
+);
+/**
+ * A 404 (the route is gone, or this server can't read one yet) is said plainly with the way back,
+ * not as a failure with a Retry that can't succeed (lead: no dead control).
+ */
+const missing = computed(
+  () => route.state.value.status === "failed" && route.state.value.error.kind === "not_found",
 );
 const done = computed(() => ({
   name: "setup.spacecraft.one" as const,
@@ -76,6 +83,10 @@ function summarize(action: "create" | "update", values: FormValues): string {
     :prepare="prepare"
     :summarize="summarize"
   />
+  <ApCallout v-else-if="missing" tone="info">
+    This extra route can't be opened for editing. It may have been removed.
+    <template #action><ApButton size="compact" :to="done">Back to routing</ApButton></template>
+  </ApCallout>
   <ApRemote
     v-else
     :state="route.state.value"

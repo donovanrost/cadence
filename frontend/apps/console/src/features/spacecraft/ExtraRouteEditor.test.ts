@@ -265,4 +265,31 @@ describe("U79 Add / Edit extra route", () => {
     );
     w.unmount();
   });
+
+  it("says plainly when the route can't be loaded (404), with the way back and no Retry", async () => {
+    vi.stubGlobal("fetch", (url: string) => {
+      const reply = url.endsWith("/schema")
+        ? { status: 200, body: { data: schema } }
+        : url.endsWith("/ground-stations")
+          ? { status: 200, body: { data: { stations: [] } } }
+          : {
+              status: 404,
+              body: { error: { code: "spacecraft_route_not_found", message: "Not found." } },
+            };
+      return Promise.resolve(new Response(JSON.stringify(reply.body), { status: reply.status }));
+    });
+    const w = await render("route-9");
+    expect(w.text()).toContain(
+      "This extra route can't be opened for editing. It may have been removed.",
+    );
+    expect(w.findAll("button").some((b) => b.text() === "Retry")).toBe(false);
+    expect(
+      w
+        .findAll("a")
+        .find((a) => a.text() === "Back to routing")
+        ?.attributes("href"),
+    ).toBe("/sc/sc-1");
+    expect(w.find("form").exists()).toBe(false);
+    w.unmount();
+  });
 });
