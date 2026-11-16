@@ -1,7 +1,6 @@
 {
   "_comment": "Typing plan §12B ratchet (director 11-13): each rule's ignores may only shrink. When you migrate a file, delete it from the rule's ignores AND from this list.",
-  "error-code-compared-as-text": [
-  ],
+  "error-code-compared-as-text": [],
   "vocabulary-field-decoded-as-text": [],
   "word-map-keyed-by-text": [
     "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
@@ -9,6 +8,5 @@
     "apps/console/src/features/dashboards/model/time-range.ts"
   ],
   "_comment_decoded_text": "Rule B (tools/decoded-text-compared.mjs): hits per file may only fall; a file not listed must have none. Lower or delete a file's count when you migrate it.",
-  "decoded-text-compared": {
-  }
+  "decoded-text-compared": {}
 }

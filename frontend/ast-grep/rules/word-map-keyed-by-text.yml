@@ -24,8 +24,7 @@
         ],
     },
   "files": ["apps/console/src/**"],
-  "ignores":
-    [
+  "ignores": [
       "**/*.test.ts",
       "ast-grep/fixtures/**",
       # Not migrated yet (BACKLOG §12B rule A, 11-15): each owner removes their file as they migrate.

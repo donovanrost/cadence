@@ -28,10 +28,7 @@ export default defineConfig({
         rules: {
           "typescript/no-unsafe-type-assertion": "error",
           // §12 A6: a switch over a plain string must say what happens to the values it doesn't list.
-          "typescript/switch-exhaustiveness-check": [
-            "error",
-            { requireDefaultForNonUnion: true },
-          ],
+          "typescript/switch-exhaustiveness-check": ["error", { requireDefaultForNonUnion: true }],
         },
       },
     ],

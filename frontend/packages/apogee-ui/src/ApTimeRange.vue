@@ -77,7 +77,11 @@ function commitFields() {
 }
 const fieldClass = (bad: boolean) => [
   "h-9 w-full border bg-well px-3 font-mono text-md outline-none focus:border-readout",
-  previewing.value ? "border-readout text-text-2" : bad ? "border-caution text-readout" : "border-line text-readout",
+  previewing.value
+    ? "border-readout text-text-2"
+    : bad
+      ? "border-caution text-readout"
+      : "border-line text-readout",
 ];
 </script>
 

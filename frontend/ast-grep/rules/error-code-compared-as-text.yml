@@ -2,7 +2,7 @@
   "id": "error-code-compared-as-text",
   "language": "TypeScript",
   "severity": "error",
-  "message": "Compare server error codes with isError(e, \"code\") from @/api: the code is checked against the known vocabulary (typing plan §12 A2).",
+  "message": 'Compare server error codes with isError(e, "code") from @/api: the code is checked against the known vocabulary (typing plan §12 A2).',
   "rule":
     {
       "any":
@@ -10,14 +10,13 @@
           { "pattern": "$E.code === $S" },
           { "pattern": "$E.code !== $S" },
           { "pattern": "$S === $E.code" },
-          { "pattern": "\"code\" in $E" },
+          { "pattern": '"code" in $E' },
           { "pattern": "'code' in $E" },
         ],
     },
   "constraints": { "E": { "regex": "^(e|err|error|[A-Za-z_.?]*[Ee]rror)$" } },
   "files": ["apps/console/src/**"],
-  "ignores":
-    [
+  "ignores": [
       "apps/console/src/api/**",
       "**/*.test.ts",
       "ast-grep/fixtures/**",

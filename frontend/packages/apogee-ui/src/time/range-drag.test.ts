@@ -41,9 +41,18 @@ describe("range track keys (ux U62)", () => {
     expect(keyStep({ from: 0, to: H }, false)).toBe(M);
   });
   it("nudges one end, pans the band, and goes to the bounds on Home/End", () => {
-    expect(keyed("start", "ArrowLeft", base, span, 15 * M)).toEqual({ from: 6 * H - 15 * M, to: 8 * H });
-    expect(keyed("end", "ArrowRight", base, span, 15 * M)).toEqual({ from: 6 * H, to: 8 * H + 15 * M });
-    expect(keyed("band", "ArrowRight", base, span, 15 * M)).toEqual({ from: 6 * H + 15 * M, to: 8 * H + 15 * M });
+    expect(keyed("start", "ArrowLeft", base, span, 15 * M)).toEqual({
+      from: 6 * H - 15 * M,
+      to: 8 * H,
+    });
+    expect(keyed("end", "ArrowRight", base, span, 15 * M)).toEqual({
+      from: 6 * H,
+      to: 8 * H + 15 * M,
+    });
+    expect(keyed("band", "ArrowRight", base, span, 15 * M)).toEqual({
+      from: 6 * H + 15 * M,
+      to: 8 * H + 15 * M,
+    });
     expect(keyed("start", "Home", base, span, 15 * M)).toEqual({ from: 0, to: 8 * H });
     expect(keyed("band", "End", base, span, 15 * M)).toEqual({ from: 22 * H, to: 24 * H });
     expect(keyed("start", "Tab", base, span, 15 * M)).toBeNull();

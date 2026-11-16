@@ -32,11 +32,7 @@ defineProps<{
     aria-orientation="horizontal"
     class="group absolute inset-y-0 z-10 flex w-6 cursor-ew-resize justify-center pointer-coarse:w-11"
     :class="
-      outside
-        ? part === 'start'
-          ? '-translate-x-full'
-          : 'translate-x-0'
-        : '-translate-x-1/2'
+      outside ? (part === 'start' ? '-translate-x-full' : 'translate-x-0') : '-translate-x-1/2'
     "
     :style="{ left: `${pct}%` }"
   >
