@@ -7,7 +7,8 @@ Real screen-reader output was not captured; roles, accessible names and live-reg
 for it.
 
 Commits on `ui/apogee-spa`: 55918344b (words), dbeb407d2 (focus), 8f73787ec (kit: side sheet
-refocus, `aria-required`), 4519ff3fe (Library › Rename uses the disabled reason).
+refocus, `aria-required`), 4519ff3fe (Library › Rename uses the disabled reason), f6d7e2057 (Present
+names each dashboard and focuses its h1).
 
 ## Passed
 
@@ -27,18 +28,21 @@ refocus, `aria-required`), 4519ff3fe (Library › Rename uses the disabled reaso
 Console errors: 0 on every page. No writes: the only non-GET calls were the viewer's own view
 tracking (`POST …/views`) and the edit-mode preview (`POST …/preview`).
 
-## Findings
+## Findings (both resolved 11-16)
 
-1. **Present doesn't announce the dashboard's name** (dashboards; ux decides). ux's check asks that
-   each advance announce the new dashboard's name. The region reads only the position ("2 of 6"),
-   and the visible h1 is the playlist's name, so a screen-reader user hears which slot, not which
-   dashboard.
-2. **Present opens with focus on `<body>`** (shell / dashboards). Same family as the
-   no-focus-on-route-change gap dashboards flagged to lead.
+1. ~~**Present doesn't announce the dashboard's name.**~~ Fixed f6d7e2057 (ux 05921ba02). Re-checked
+   on the same playlist: the polite region reads "Earendil — Fleet Watch, 1 of 6"; → "Earendil —
+   Spacecraft Overview, 2 of 6"; Space "Paused: Earendil — Spacecraft Overview, 2 of 6", then
+   "Playing: …"; ← back to "Earendil — Fleet Watch, 1 of 6"; the 30 s auto-advance announces the
+   next name. Focus never moved.
+2. ~~**Present opens with focus on `<body>`.**~~ The shell's route focus (2f246c0d2) moved it to
+   `<main>`, which ux didn't accept, because Present's h1 sits outside `<main>`. Fixed f6d7e2057 (ux
+   82d87ca69): Present now opens on its own h1, "Playlist · Earendil — Demo Rotation". Esc returns
+   to Playlists with focus on that row's Present link.
 
 ## Not checked
 
 - **Library › Rename with an empty name (4519ff3fe).** The Library is empty, and saving a widget to
   it is a write. The sheet's markup already carries "Rename" with "Give it a name." as its reason.
-- **D2** (ApSheet full-height at 390) and focus on route change: flagged to lead by dashboards;
-  kit/shell work.
+- D2 (sheets full height at 390) landed 22fd13334 + 909bdf88f and passed (qa-pass-checklist);
+  route-change focus landed 2f246c0d2 + 5ba25fed0 and passed.
