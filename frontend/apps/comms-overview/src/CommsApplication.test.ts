@@ -278,11 +278,13 @@ describe("Comms canonical federated application", () => {
     await wrapper.get("#routing-rule-form").trigger("submit");
     await flushPromises();
 
+    // unknown, not any: the matcher sits inside the expected call (oxlint no-unsafe-assignment).
+    const routingRule: unknown = expect.objectContaining({ display_name: "Saved rule" });
     expect(execute).toHaveBeenCalledWith({
       applicationKey: "comms",
       applicationVersion: 1,
       actionId: "save",
-      input: { routing_rule: expect.objectContaining({ display_name: "Saved rule" }) },
+      input: { routing_rule: routingRule },
       context,
     });
     expect(assign).toHaveBeenCalledWith("/missions/mission-1/comms/routing/rule-1");
