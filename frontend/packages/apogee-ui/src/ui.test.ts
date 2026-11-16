@@ -175,6 +175,27 @@ describe("ApCheckRows", () => {
     expect(wrapper.text()).toContain("Pass");
     expect(wrapper.get("li button").text()).toBe("Review");
   });
+
+  it("dims an earlier check's rows: no wash, neutral marks, verdict words kept (U27)", () => {
+    const rows = [
+      {
+        key: "c",
+        label: "Conflicts",
+        sentence: "1 problem",
+        state: "crit" as const,
+        verdict: "NO-GO",
+      },
+    ];
+    const live = mount(ApCheckRows, { props: { rows } });
+    expect(live.get("li").classes().join(" ")).toContain("wash-crit");
+    expect(live.find(".ap-mark--crit").exists()).toBe(true);
+
+    const dimmed = mount(ApCheckRows, { props: { rows, dimmed: true } });
+    expect(dimmed.get("li").classes().join(" ")).not.toContain("wash");
+    expect(dimmed.find(".ap-mark--crit").exists()).toBe(false);
+    expect(dimmed.find(".ap-mark--off").exists()).toBe(true);
+    expect(dimmed.text()).toContain("NO-GO");
+  });
 });
 
 describe("ApBreadcrumb literal", () => {

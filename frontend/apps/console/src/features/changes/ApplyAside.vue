@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import type { RemoteState } from "@/api";
 import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
 import {
@@ -11,6 +11,7 @@ import {
   type Preview,
   type SubmitResult,
 } from "./actions.ts";
+import { holdsKey, NOT_RUN_REASON, RECHECKING_REASON, type HeldChecks } from "./checks-view.ts";
 import { whyPlaceholder } from "./holds.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
@@ -20,11 +21,24 @@ const props = defineProps<{
   config: ConfigState;
   changeSet: ChangeSet;
   preview: RemoteState<Preview>;
+  /** ux B4: the previous checks while the current set's re-run (or failed). */
+  held: HeldChecks | null;
 }>();
 const emit = defineEmits<{ result: [result: SubmitResult]; changed: [] }>();
 
 const why = ref("");
 const acknowledged = ref(false);
+// ux B4: re-run checks clear the holds acknowledgement only if what they hold changed.
+let ackedHolds: string | null = null;
+watch(
+  () => (props.preview.status === "ready" ? holdsKey(props.preview.value) : null),
+  (key) => {
+    if (key === null) return;
+    if (ackedHolds !== null && key !== ackedHolds) acknowledged.value = false;
+    ackedHolds = key;
+  },
+  { immediate: true },
+);
 const busy = ref(false);
 const failure = ref<string | null>(null);
 /** U65: a refusal's link ('Open the report'). */
@@ -50,7 +64,10 @@ const blocked = computed((): string | null => {
     return `r${next.value} is in review; staging is paused.`;
   if (!props.config.permissions.has("config.apply"))
     return "You can stage changes but not apply them.";
-  if (verdict.value === null) return "Waiting for checks.";
+  if (verdict.value === null) {
+    if (props.held === null) return "Waiting for checks.";
+    return props.preview.status === "failed" ? NOT_RUN_REASON : RECHECKING_REASON;
+  }
   if (verdict.value === "no_go") return "A NO-GO check blocks apply. Fix it first.";
   if (blocking.value) return blocking.value;
   if (verdict.value === "hold" && !acknowledged.value) return "Acknowledge the holds first.";

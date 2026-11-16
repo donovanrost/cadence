@@ -6,6 +6,7 @@ import ChangeList from "./ChangeList.vue";
 import ChecksPanel from "./ChecksPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import type { Preview, PreviewItem, SubmitResult } from "./actions.ts";
+import type { HeldChecks } from "./checks-view.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /** The open set: K1 changes and K2 checks, beside K3 Apply (or review, for a reviewer). */
@@ -14,6 +15,10 @@ const props = defineProps<{
   config: ConfigState;
   changeSet: ChangeSet;
   preview: RemoteState<Preview>;
+  /** ux B4: the last checks, while new ones run or failed for a moved version. */
+  held: HeldChecks | null;
+  /** "Checks done: …" once new results replace re-running ones. */
+  checksDone: string | null;
   conflicts: ReadonlyMap<string, readonly PreviewItem[]>;
 }>();
 const emit = defineEmits<{ reload: []; result: [result: SubmitResult]; changed: [] }>();
@@ -33,6 +38,9 @@ const reviewing = () =>
       />
       <ChecksPanel
         :preview="preview"
+        :held="held"
+        :done="checksDone"
+        :now-count="changeSet.staged_count"
         :left-by="`r${changeSet.base_revision}`"
         @retry="emit('reload')"
       />
@@ -53,6 +61,7 @@ const reviewing = () =>
       :change-set="changeSet"
       :preview="preview"
       class="sticky top-0 min-w-0 flex-[1_1_340px]"
+      :held="held"
       @result="emit('result', $event)"
       @changed="emit('changed')"
     />

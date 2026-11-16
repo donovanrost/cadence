@@ -1,41 +1,31 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import type { ApiError, RemoteState } from "@/api";
-import { ApButton, ApCallout, ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
-import { groupedLines, type Preview } from "./actions.ts";
-import AlarmLinks from "./AlarmLinks.vue";
-import DependentLinks from "./DependentLinks.vue";
-import { dependents } from "./dependents.ts";
-import { alarmPoints, appHolds, checkTitle, modelHolds } from "./holds.ts";
-import { checkKeyText, checkLabel } from "./preview.ts";
-import AppInstallLinks from "./AppInstallLinks.vue";
-import ModelApprovalLinks from "./ModelApprovalLinks.vue";
+import { ApButton, ApCallout, ApPanel, ApRemote, refocusFirst } from "@/ui";
+import type { Preview } from "./actions.ts";
+import ChecksBody from "./ChecksBody.vue";
+import { checkingLine, heldLabel, RECHECK_FAILED, type HeldChecks } from "./checks-view.ts";
 
-/** K2 Checks: the server's dry run of the staged set (validation, conflicts; more kinds in P2). */
-/** `leftBy` names what the conflict's base came from ("r8"), for the conflict sentence. */
-const props = defineProps<{ preview: RemoteState<Preview>; leftBy?: string | undefined }>();
+/**
+ * K2 Checks: the server's dry run of the staged set (validation, conflicts; more kinds in P2).
+ * ux B4: when the set's version moves, the previous run's rows stay, dimmed and named, under a
+ * status line until the new ones replace them; the first load still reads "Running checks…".
+ */
+const props = withDefaults(
+  defineProps<{
+    preview: RemoteState<Preview>;
+    /** The previous run, while this one is loading or failed (null on a first load; rollback). */
+    held?: HeldChecks | null | undefined;
+    /** "Checks done: …" once new results replace re-running ones. */
+    done?: string | null | undefined;
+    /** How many changes the set has now, for "Checking again: …". */
+    nowCount?: number | undefined;
+    leftBy?: string | undefined;
+  }>(),
+  { held: null, done: null, nowCount: 0 },
+);
 defineEmits<{ retry: [] }>();
 
-function rows(preview: Preview): readonly ApCheckRow[] {
-  return preview.checks.map((check) => ({
-    key: checkKeyText(check.key),
-    label: checkTitle(check.items) ?? checkLabel(check.key),
-    sentence:
-      check.items.length === 0
-        ? check.key === "conflicts"
-          ? "Every change applies cleanly on the live revision"
-          : check.key === "compatibility"
-            ? "Profile framing matches every transport's ingress"
-            : "Every change is valid"
-        : plural(groupedLines(check.items).length, "problem"),
-    detail: groupedLines(check.items, props.leftBy).slice(0, 5).join(" · "),
-    ...(check.verdict === "go"
-      ? { state: "nominal" as const, verdict: "GO" }
-      : check.verdict === "hold"
-        ? { state: "caution" as const, verdict: "HOLD" }
-        : { state: "crit" as const, verdict: "NO-GO" }),
-  }));
-}
 /** Say why checks didn't run, by cause (ux pass 2 #7). */
 function failureText(error: ApiError): string {
   switch (error.kind) {
@@ -54,43 +44,56 @@ function failureText(error: ApiError): string {
       return `Checks couldn't run: ${"message" in error ? error.message : "sign in again."}`;
   }
 }
-/** Raw comparisons behind the plain sentences (ux: machine detail goes to Technical details). */
-const technical = computed(() =>
-  props.preview.status === "ready"
-    ? props.preview.value.checks.flatMap((c) =>
-        c.items.flatMap((i) => (i.detail ? [i.detail] : [])),
-      )
-    : [],
+const shown = computed(() =>
+  props.preview.status === "ready" ? props.preview.value : (props.held?.preview ?? null),
 );
+/** The verdict line gives way to the status line while the checks re-run. */
 const meta = computed(() =>
   props.preview.status === "ready"
     ? `Verdict ${props.preview.value.verdict.replace("_", "-")}`
     : undefined,
 );
+/** Always in the page (a live region must exist before it changes); visible only with text. */
+const status = computed(() => {
+  if (props.held) return props.preview.status === "failed" ? "" : checkingLine(props.nowCount);
+  return props.done ?? "";
+});
+// A control that survives the swap keeps focus; one that didn't lands on K2's heading.
+watch(
+  () => [props.held !== null, props.preview.status],
+  ([holding], [wasHolding]) => {
+    if (holding === true || wasHolding === true)
+      refocusFirst(document.querySelector<HTMLElement>("#checks h2"));
+  },
+  { flush: "post" },
+);
 </script>
 
 <template>
   <ApPanel id="checks" index="K2" title="Checks" :meta="meta" flush>
-    <ApCallout v-if="preview.status === 'failed'" tone="caution">
-      {{ failureText(preview.error) }}
+    <p
+      role="status"
+      :class="status ? 'm-0 border-b border-hairline px-4 py-2.5 text-md text-readout' : 'sr-only'"
+    >
+      {{ status }}
+    </p>
+    <ApCallout v-if="preview.status === 'failed'" :tone="held ? 'crit' : 'caution'">
+      {{ held ? RECHECK_FAILED : failureText(preview.error) }}
       <template #action
-        ><ApButton size="compact" @click="$emit('retry')">Reload</ApButton></template
+        ><ApButton size="compact" @click="$emit('retry')">{{
+          held ? "Try again" : "Reload"
+        }}</ApButton></template
       >
     </ApCallout>
-    <ApRemote v-else :state="preview" loading-label="Running checks…" @retry="$emit('retry')">
-      <template #default="{ value }">
-        <ApCheckRows :rows="rows(value)" />
-        <DependentLinks :points="dependents(value)" />
-        <AlarmLinks :points="alarmPoints(value)" />
-        <AppInstallLinks :holds="appHolds(value)" />
-        <ModelApprovalLinks :holds="modelHolds(value)" />
-        <details v-if="technical.length > 0" class="border-t border-hairline px-4 py-2.5">
-          <summary class="ap-label cursor-pointer">Technical details</summary>
-          <ul class="m-0 mt-2 flex list-none flex-col gap-1 p-0 font-mono text-xs text-text-3">
-            <li v-for="(t, i) in technical" :key="i">{{ t }}</li>
-          </ul>
-        </details>
-      </template>
+    <p v-if="held" class="m-0 px-4 pt-2.5 text-sm text-text-3">{{ heldLabel(held) }}</p>
+    <ChecksBody v-if="shown" :preview="shown" :dimmed="held !== null" :left-by="leftBy" />
+    <ApRemote
+      v-else-if="preview.status === 'loading'"
+      :state="preview"
+      loading-label="Running checks…"
+      @retry="$emit('retry')"
+    >
+      <template #default />
     </ApRemote>
   </ApPanel>
 </template>

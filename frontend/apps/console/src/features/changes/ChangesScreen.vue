@@ -10,6 +10,7 @@ import ChangeSetBoard from "./ChangeSetBoard.vue";
 import ChangesEmpty from "./ChangesEmpty.vue";
 import ChangesOutcome from "./ChangesOutcome.vue";
 import { blockingReason, previewChangeSet, type SubmitResult } from "./actions.ts";
+import { useHeldChecks } from "./checks-view.ts";
 import { conflictOps } from "./rebase.ts";
 import { refreshConfigState } from "./useConfigState.ts";
 import { fetchConfigState } from "./api.ts";
@@ -36,6 +37,15 @@ const previewKey = computed(() => {
     : null;
 });
 const preview = useRemoteQuery(previewKey, previewChangeSet);
+// ux B4: while the checks re-run for a moved version, K2 keeps the last ones (dimmed) and K3 waits.
+const openSet = computed(() =>
+  state.value.status === "ready" ? (state.value.value.change_set ?? null) : null,
+);
+const checks = useHeldChecks(
+  () => preview.state.value,
+  () => openSet.value?.staged_count ?? null,
+  () => openSet.value?.id ?? null,
+);
 
 /**
  * #65 (ux): a blocking hold clears without the set changing (commands finish, a configuration is
@@ -167,6 +177,8 @@ function meta(config: ConfigState): string | null {
           :config="value"
           :change-set="value.change_set"
           :preview="preview.state.value"
+          :held="checks.held.value"
+          :checks-done="checks.done.value"
           :conflicts="conflicts"
           @reload="reloadAll"
           @result="onResult"
