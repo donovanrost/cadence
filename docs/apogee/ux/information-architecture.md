@@ -108,7 +108,12 @@ query (⌘K) → fleet posture → clocks → account.
   - Not loaded yet: nothing, never a placeholder nominal (U20).
   - Live link lost: the chips keep their counts but turn stale-tinted, with `as of 23:52Z`.
   - From 768 to 1279px: marks and counts only (`◆ 2 ▲ 1 ▨ 3`); each link's accessible name and title carries the
-    words ("2 spacecraft critical"). Below 768: not in the header; the tab bar's Alarms count and Now cover it.
+    words ("2 spacecraft critical"). Word-only chips keep a short word: `○ Limits off`, `○ No telemetry`, `■ Nominal`.
+    Below 768: not in the header; the tab bar's Alarms count and Now cover it.
+  - **The top bar never wraps** (qa, 11-15). Every item is one line and `flex-none`, except the query trigger,
+    which is the only one that shrinks: its placeholder truncates with an ellipsis, with a minimum of about 160px.
+    If the bar still doesn't fit at that minimum, the posture goes compact before anything else gives way, at any
+    width.
   - Count changes aren't announced; a new crit flashes the chip once (reduced motion: no flash).
 - **Account menu**: name + role, Your account, Switch organization, Platform
   admin (capability-gated; the console admin area, L7), Sign out.
