@@ -3,7 +3,13 @@ defmodule Cadence.Reads.CommandGroupsTest do
 
   import Cadence.CommandGroupFixtures
 
-  alias Cadence.Commanding.{CommandQueueEntryRow, CommandReleaseAttempt, CommandReleaseAttemptRow}
+  alias Cadence.Commanding.{
+    Cancellation,
+    CommandQueueEntryRow,
+    CommandReleaseAttempt,
+    CommandReleaseAttemptRow
+  }
+
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupSubmission}
   alias Cadence.Reads.CommandGroups
@@ -133,7 +139,7 @@ defmodule Cadence.Reads.CommandGroupsTest do
 
     {:ok, _} =
       Repo.transaction(fn ->
-        Cadence.Commanding.Cancellation.cancel(
+        Cancellation.cancel(
           c.org,
           c.mission,
           [first.command_request_id],
