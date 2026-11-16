@@ -6,7 +6,14 @@ defmodule Cadence.Runtime.Supervisor do
   alias Cadence.IngressArchive
   alias Cadence.Platform.RootComposition
   alias Cadence.Protocol.RecordArchive
-  alias Cadence.Runtime.{ProcessNamespace, SessionQualification, SessionReadiness}
+
+  alias Cadence.Runtime.{
+    ProcessNamespace,
+    ProfileAcceptor,
+    SessionQualification,
+    SessionReadiness
+  }
+
   alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Storage}
 
   def child_spec(opts) do
@@ -62,8 +69,7 @@ defmodule Cadence.Runtime.Supervisor do
            name: SessionReadiness.name(process_namespace), policy: session_policy(composition)},
           # (A): one listener per listen-mode provider profile, handing peers to their contacts.
           {DynamicSupervisor,
-           strategy: :one_for_one,
-           name: Cadence.Runtime.ProfileAcceptor.supervisor_name(process_namespace)},
+           strategy: :one_for_one, name: ProfileAcceptor.supervisor_name(process_namespace)},
           {DynamicSupervisor,
            strategy: :one_for_one,
            name: process_namespace.mission_supervisor,

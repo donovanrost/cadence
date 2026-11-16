@@ -3,7 +3,7 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
-  alias Cadence.Secrets.ResolverConfiguration
+  alias Cadence.Secrets.{EnvBackend, ResolverConfiguration}
   alias CadenceWeb.TestFixtures
 
   test "lists accounts with status and permissions; members can't read" do
@@ -211,7 +211,7 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
            |> Map.take(["credential.key", "credential.backend"])
            |> map_size() == 1
 
-    own_key = Cadence.Secrets.EnvBackend.tenant_prefix(org.organization_id) <> "SIM_TOKEN"
+    own_key = EnvBackend.tenant_prefix(org.organization_id) <> "SIM_TOKEN"
     env = put_in(denied, ["credential", "key"], own_key)
     env_conn = conn.() |> post(base <> "/provider-accounts", env)
 
@@ -263,7 +263,7 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
 
     polled? = fn id ->
       Enum.any?(
-        Cadence.GroundNetworks.ProviderAccounts.list_polling_accounts(),
+        ProviderAccounts.list_polling_accounts(),
         fn {account, _version} -> account.provider_account_id == id end
       )
     end
