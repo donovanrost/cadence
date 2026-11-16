@@ -39,6 +39,16 @@ defmodule Cadence.Runtime.Contacts do
   def backlog(mission_id, realized_contact_id),
     do: ContactBacklog.read(ProcessNamespace.default(), mission_id, realized_contact_id)
 
+  @doc "What the contact's journal consumers gave up at the end (`ContactBacklog.incomplete_at_end/3`)."
+  @spec incomplete_at_end(binary(), binary()) :: [map()]
+  def incomplete_at_end(mission_id, realized_contact_id),
+    do:
+      ContactBacklog.incomplete_at_end(
+        ProcessNamespace.default(),
+        mission_id,
+        realized_contact_id
+      )
+
   @doc "Whether downlink ingress is journaled to disk (DECISIONS #71 holds only when it is)."
   @spec journal_enabled?() :: boolean()
   def journal_enabled?, do: JournalFileSystem.configured_policy().enabled?

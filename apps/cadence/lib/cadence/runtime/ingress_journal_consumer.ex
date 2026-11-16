@@ -182,7 +182,8 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         retry_delay_ms: state.retry_delay_ms,
         phase: if(state.in_flight, do: state.in_flight.phase, else: :idle),
         last_completed_at: state.last_completed_at,
-        last_error: state.last_error
+        last_error: state.last_error,
+        incomplete_at_end: state.incomplete_at_end
       }}, state}
   end
 

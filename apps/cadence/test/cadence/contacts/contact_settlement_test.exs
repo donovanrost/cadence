@@ -11,7 +11,13 @@ defmodule Cadence.Contacts.ContactSettlementTest do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Contacts
-  alias Cadence.Contacts.{ContactSettlementAttention, ContactSettler, ContactStore}
+
+  alias Cadence.Contacts.{
+    ContactSettlement,
+    ContactSettlementAttention,
+    ContactSettler,
+    ContactStore
+  }
 
   alias Cadence.Contacts.{
     Path,
@@ -184,6 +190,41 @@ defmodule Cadence.Contacts.ContactSettlementTest do
 
     assert {:ok, %{settling_realized_contact_ids: []}} =
              Contacts.reconcile(ctx.mission_id, DateTime.add(now, 20))
+  end
+
+  # Domain's partial-frame fix (11-15): what a stream gave up at its end is kept with the settlement.
+  test "the bytes a stream gave up at its end are stored per path, and absent when none", ctx do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    schedule!(ctx, "a", DateTime.add(now, -60), DateTime.add(now, 600), downlink: false)
+
+    {:ok, %{realized_scheduled_contact_ids: [a_run]}} = Contacts.reconcile(ctx.mission_id, now)
+    {:ok, contact} = ContactStore.fetch_realized(ctx.mission_id, a_run)
+
+    given_up = [
+      %{
+        path_id: "path-1",
+        provider_binding_id: "binding-1",
+        frame_bytes: 37,
+        packet_octets: 12,
+        journal_bytes: 49
+      }
+    ]
+
+    {:ok, _} = ContactSettlement.record(contact, :settled, %{}, :ok, nil, given_up)
+
+    assert settlement(ctx, a_run)["incomplete_at_end"] == [
+             %{
+               "path_id" => "path-1",
+               "provider_binding_id" => "binding-1",
+               "frame_bytes" => 37,
+               "packet_octets" => 12,
+               "journal_bytes" => 49
+             }
+           ]
+
+    {:ok, contact} = ContactStore.fetch_realized(ctx.mission_id, a_run)
+    {:ok, _} = ContactSettlement.record(contact, :settled, %{}, :ok, nil, [])
+    refute Map.has_key?(settlement(ctx, a_run), "incomplete_at_end")
   end
 
   test "a lost backlog (journal off) closes only when an operator marks it seen", ctx do

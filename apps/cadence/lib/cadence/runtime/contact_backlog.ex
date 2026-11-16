@@ -6,7 +6,13 @@ defmodule Cadence.Runtime.ContactBacklog do
   """
 
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
-  alias Cadence.Runtime.{Cluster, IngressPersistenceProjector, ProcessNamespace}
+
+  alias Cadence.Runtime.{
+    Cluster,
+    IngressJournalConsumer,
+    IngressPersistenceProjector,
+    ProcessNamespace
+  }
 
   @type journal :: %{
           path_id: binary(),
@@ -55,6 +61,28 @@ defmodule Cadence.Runtime.ContactBacklog do
       case IngressPersistenceProjector.snapshot(pid) do
         {:ok, snapshot} -> [snapshot]
         _gone -> []
+      end
+    end)
+  catch
+    :exit, _reason -> []
+  end
+
+  @doc """
+  What the contact's journal consumers gave up at the end of their streams (a frame or packet that
+  never completed, domain's partial-frame fix 11-15): `[%{path_id, provider_binding_id,
+  frame_bytes, packet_octets, journal_bytes}]`, only those that gave anything up.
+  """
+  @spec incomplete_at_end(term(), binary(), binary()) :: [map()]
+  def incomplete_at_end(namespace, mission_id, realized_contact_id) do
+    namespace
+    |> registered(:provider_ingress_journal_consumer, mission_id, realized_contact_id)
+    |> Enum.flat_map(fn {path_id, provider_binding_id, pid} ->
+      case IngressJournalConsumer.snapshot(pid) do
+        {:ok, %{incomplete_at_end: %{journal_bytes: bytes} = incomplete}} when bytes > 0 ->
+          [Map.merge(incomplete, %{path_id: path_id, provider_binding_id: provider_binding_id})]
+
+        _nothing ->
+          []
       end
     end)
   catch

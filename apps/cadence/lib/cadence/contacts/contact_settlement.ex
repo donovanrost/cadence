@@ -280,7 +280,14 @@ defmodule Cadence.Contacts.ContactSettlement do
           map() | nil
         ) ::
           {:ok, RealizedContact.t()} | {:error, term()}
-  def record(%RealizedContact{} = contact, outcome, backlog, stop, listener_refusal \\ nil) do
+  def record(
+        %RealizedContact{} = contact,
+        outcome,
+        backlog,
+        stop,
+        listener_refusal \\ nil,
+        incomplete \\ []
+      ) do
     with {:ok, current} <-
            ContactStore.fetch_realized(contact.mission_id, contact.realized_contact_id) do
       settlement =
@@ -288,6 +295,7 @@ defmodule Cadence.Contacts.ContactSettlement do
         |> Map.get("settlement", %{})
         |> Map.merge(outcome_fields(outcome, backlog, DateTime.utc_now()))
         |> put_stop(stop)
+        |> put_incomplete(incomplete)
 
       metadata =
         if listener_refusal,
@@ -345,6 +353,23 @@ defmodule Cadence.Contacts.ContactSettlement do
       "entries" => journal.entries,
       "bytes" => journal.bytes
     }
+  end
+
+  # What streams gave up at their end (a frame or packet that never completed), per path and
+  # binding; absent when nothing was (the console shows it only when there is some).
+  defp put_incomplete(settlement, []), do: Map.delete(settlement, "incomplete_at_end")
+
+  defp put_incomplete(settlement, incomplete) do
+    Map.put(
+      settlement,
+      "incomplete_at_end",
+      Enum.map(incomplete, fn item ->
+        Map.new(
+          [:path_id, :provider_binding_id, :frame_bytes, :packet_octets, :journal_bytes],
+          &{Atom.to_string(&1), Map.get(item, &1)}
+        )
+      end)
+    )
   end
 
   defp put_stop(settlement, :ok), do: Map.delete(settlement, "stop_error")
