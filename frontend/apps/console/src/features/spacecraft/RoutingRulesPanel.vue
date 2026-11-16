@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
+import { useConfigState } from "@/features/changes/index.ts";
 import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, type ApColumn } from "@/ui";
+import OlderRouteRemove from "./OlderRouteRemove.vue";
 import RemoveRouteSheet from "./RemoveRouteSheet.vue";
 import { directionLabel, type RoutingRule } from "./detail.ts";
+import { stagedRemovals } from "./older-route.ts";
 import { actionRows, routeTag, stationWord } from "./routes.ts";
 
 /**
@@ -20,6 +23,13 @@ const props = defineProps<{
 const active = computed(() => props.rules.filter((r) => r.active));
 const routeOf = computed(() => actionRows(active.value));
 const remover = ref<InstanceType<typeof RemoveRouteSheet> | null>(null);
+/** ux U79: an older route whose removal is in the open set (inferred from it, per api/lead). */
+const config = useConfigState(props.missionId);
+const removals = computed(() =>
+  config.state.value.status === "ready"
+    ? stagedRemovals(config.state.value.value.change_set)
+    : null,
+);
 const columns = computed((): readonly ApColumn[] => [
   { key: "name", label: "Rule" },
   { key: "source", label: "Source" },
@@ -93,6 +103,13 @@ function remove(rule: RoutingRule) {
           <ApButton size="compact" :to="{ query: { route: routeOf.get(row.id) } }">Edit</ApButton>
           <ApButton size="compact" variant="ghost" @click="remove(row)">Remove…</ApButton>
         </span>
+        <OlderRouteRemove
+          v-else-if="row.origin === 'legacy'"
+          :mission-id="missionId"
+          :rule="row"
+          :spacecraft-name="spacecraftName"
+          :staged="removals?.has(row.id) ?? false"
+        />
       </template>
     </ApTable>
     <RemoveRouteSheet ref="remover" :mission-id="missionId" :spacecraft-name="spacecraftName" />

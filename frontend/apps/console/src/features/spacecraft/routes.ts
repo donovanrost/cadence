@@ -33,7 +33,7 @@ export function routeTag(rule: RoutingRule): RouteTag | null {
   return {
     label: "This spacecraft only",
     note: "Set up on the old routing page.",
-    reason: "Older routes can't be changed here yet.",
+    reason: "Older routes can't be edited here until they're converted.",
   };
 }
 

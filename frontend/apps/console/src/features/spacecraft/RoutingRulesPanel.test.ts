@@ -3,6 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { decode, missionId } from "@/api/index.ts";
 import RoutingRulesPanel from "./RoutingRulesPanel.vue";
+
+// The panel reads the open set (useConfigState), which listens for config changes live.
+vi.mock("@/live", async (original) => ({
+  ...(await original<typeof import("@/live")>()),
+  useMissionInvalidation: () => undefined,
+}));
 import { detailReader } from "./detail.ts";
 
 const inu = { id: "gs-1", code: "INU", name: "Inuvik" };
@@ -106,7 +112,7 @@ describe("Setup › Spacecraft › Routing (U79)", () => {
     expect(old?.text()).toContain("Set up on the old routing page.");
     const reason = old
       ?.findAll("span")
-      .find((s) => s.text() === "Older routes can't be changed here yet.");
+      .find((s) => s.text() === "Older routes can't be edited here until they're converted.");
     expect(reason?.attributes("tabindex")).toBe("0");
     expect(old?.text()).not.toContain("Edit");
     w.unmount();
@@ -150,7 +156,7 @@ describe("Setup › Spacecraft › Routing (U79)", () => {
     expect(w.text()).toContain("This spacecraft only");
     expect(w.text()).not.toContain("Add extra route");
     expect(w.text()).not.toContain("Remove…");
-    expect(w.text()).not.toContain("Older routes can't be changed here yet.");
+    expect(w.text()).not.toContain("Older routes can't be edited here until they're converted.");
     w.unmount();
   });
 });

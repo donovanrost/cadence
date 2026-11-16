@@ -40,6 +40,8 @@ export const configKinds = [
   "switch_compatibility",
   "derived_telemetry",
   "limit_definition",
+  // U79 (director): an older route set up on the old routing page, removed through the set (domain).
+  "legacy_routing_rule",
 ] as const;
 export type ConfigKind = (typeof configKinds)[number];
 const configKindWords: Readonly<Record<ConfigKind, string>> = {
@@ -56,6 +58,7 @@ const configKindWords: Readonly<Record<ConfigKind, string>> = {
   switch_compatibility: "Commanding and telemetry switches",
   derived_telemetry: "Derived point",
   limit_definition: "Limits",
+  legacy_routing_rule: "Older route",
 };
 export const configKind = decoders.knownText(configKinds);
 /** A kind in words, or the server's word for a kind the console doesn't know yet. */

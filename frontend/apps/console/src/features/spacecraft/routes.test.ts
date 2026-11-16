@@ -62,7 +62,7 @@ describe("U79 route tags", () => {
     expect(legacy && routeTag(legacy)).toEqual({
       label: "This spacecraft only",
       note: "Set up on the old routing page.",
-      reason: "Older routes can't be changed here yet.",
+      reason: "Older routes can't be edited here until they're converted.",
     });
   });
 
