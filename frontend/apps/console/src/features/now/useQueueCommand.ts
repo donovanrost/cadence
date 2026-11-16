@@ -23,7 +23,9 @@ export const NO_ACCESS_MISSED = "Operators mark missed passes as seen.";
 /** ux U47: lost frames (ingress_backpressure) are acknowledged, not marked seen. */
 export const NO_ACCESS_ACK_LOST = "Operators acknowledge lost telemetry.";
 
-export type CommandKind = "retry" | "seen";
+export type CommandKind = "retry" | "seen" | "book";
+/** U61: a 403 from POST …/execute (the server's own rule, operate_mission today). */
+export const NO_ACCESS_BOOK = "You can't start booking for this plan.";
 const seenNoAccess = (a: Attention | undefined) =>
   a?.source === "contact_start"
     ? NO_ACCESS_MISSED
@@ -31,11 +33,13 @@ const seenNoAccess = (a: Attention | undefined) =>
       ? NO_ACCESS_ACK_LOST
       : NO_ACCESS_SEEN;
 export const noAccessText = (kind: CommandKind, targets: readonly Attention[]) =>
-  kind === "seen"
-    ? seenNoAccess(targets[0])
-    : targets[0]?.source === "archive_quarantine"
-      ? NO_ACCESS_ARCHIVE
-      : NO_ACCESS;
+  kind === "book"
+    ? NO_ACCESS_BOOK
+    : kind === "seen"
+      ? seenNoAccess(targets[0])
+      : targets[0]?.source === "archive_quarantine"
+        ? NO_ACCESS_ARCHIVE
+        : NO_ACCESS;
 
 /** POST …/acknowledge on a lost settlement (backlog.lost) or a missed pass (U45). */
 export function markSeen(missionId: MissionId, a: Attention) {
@@ -60,6 +64,26 @@ export async function seenTargets(
       return { text: describeApiError(r.error), items, emptied: false };
   }
   return { text: null, items, emptied: false };
+}
+
+/**
+ * U61 Start / Continue booking: POST …/contact-plans/:id/execute (idempotent; the server refuses
+ * with 403 whoever it wouldn't let book). The item leaves Now on the next read once booking runs.
+ */
+export async function bookTargets(
+  missionId: MissionId,
+  targets: readonly Attention[],
+): Promise<RetryOutcome> {
+  const planId = targets[0]?.plan?.id;
+  if (!planId) return { text: null, items: [], emptied: false };
+  const r = await request(
+    `/missions/${encodeURIComponent(missionId)}/contact-plans/${encodeURIComponent(planId)}/execute`,
+    d.object({ plan_id: d.token }),
+    { method: "POST", body: {} },
+  );
+  if (r.ok) return { text: "Booking started.", items: [], emptied: false };
+  if (r.error.kind === "forbidden") return { text: NO_ACCESS_BOOK, items: [], emptied: false };
+  return { text: describeApiError(r.error), items: [], emptied: false };
 }
 
 /** archive_quarantine's retry answers with counts beside the item (api, U49). */
@@ -145,10 +169,8 @@ export function useQueueCommand(
     running.value = new Set([...running.value, item.key]);
     try {
       const { kind, targets } = item.command;
-      const outcome = await (kind === "seen" ? seenTargets : retryTargets)(
-        missionId.value,
-        targets,
-      );
+      const act = kind === "seen" ? seenTargets : kind === "book" ? bookTargets : retryTargets;
+      const outcome = await act(missionId.value, targets);
       const { [item.key]: _old, ...rest } = notes.value;
       notes.value = outcome.text && !outcome.emptied ? { ...rest, [item.key]: outcome.text } : rest;
       onDone(item, outcome);
@@ -159,11 +181,13 @@ export function useQueueCommand(
 
   function sentenceFor(item: QueueItem, canRun: boolean): string {
     if (running.value.has(item.key))
-      return item.command?.kind !== "seen"
-        ? "Retrying…"
-        : item.command.targets[0]?.source === "ingress_backpressure"
-          ? "Acknowledging…"
-          : "Marking…";
+      return item.command?.kind === "book"
+        ? "Starting booking…"
+        : item.command?.kind !== "seen"
+          ? "Retrying…"
+          : item.command.targets[0]?.source === "ingress_backpressure"
+            ? "Acknowledging…"
+            : "Marking…";
     const base =
       item.command && !canRun
         ? `${item.sentence} ${noAccessText(item.command.kind, item.command.targets)}`

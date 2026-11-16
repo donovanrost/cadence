@@ -9,7 +9,7 @@ import type { QueueItem } from "./queue.ts";
 import { plural } from "@/ui";
 import { formatBytes } from "@/features/catalog/importRun.ts";
 import { attentionUplinkReader, reasonSentence } from "@/features/contacts/readiness.ts";
-import { planCoverageFields } from "./coverageFields.ts";
+import { coveragePlanStates, planCoverageFields } from "./coverageFields.ts";
 import { expiredGroupFields } from "./expiredGroup.ts";
 import { diskResolvedWords, journalDiskFields } from "./journalDisk.ts";
 
@@ -219,6 +219,8 @@ export const resolutionActions = [
   "approved",
   "closed",
   "day_ended",
+  // U61 (domain 702223355): booking began after the grace, or resumed after a stop.
+  "booking_started",
   "discarded",
   "drained",
   "ended",
@@ -485,6 +487,10 @@ export const resolvedReader = d.object({
   booked: d.optional(d.nullable(d.boolean)),
   /** U66 journal_disk only: when telemetry was refused before it cleared. */
   refused: d.optional(d.nullable(d.object({ from: d.timestamp, to: d.timestamp }))),
+  /** U61 plan_coverage (domain 702223355): the plan state it resolved from, R…, booking reached. */
+  from_state: d.optional(d.nullable(d.knownText(coveragePlanStates))),
+  plan_revision: d.optional(d.nullable(d.integer)),
+  booking: d.optional(d.nullable(d.object({ reserved: d.integer, total: d.integer }))),
 });
 
 const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
@@ -677,10 +683,16 @@ export function attentionMeta(a: Attention, now: Date = new Date()): string | nu
 
 export type Resolved = Decoded<typeof resolvedReader>;
 /** What the words read of a resolved entry; `booked` and `refused` are only on newer reads. */
-export type ResolvedEntry = Omit<Resolved, "booked" | "refused"> &
+export type ResolvedEntry = Omit<
+  Resolved,
+  "booked" | "refused" | "from_state" | "plan_revision" | "booking"
+> &
   Readonly<{
     booked?: boolean | null | undefined;
     refused?: Resolved["refused"];
+    from_state?: Resolved["from_state"];
+    plan_revision?: Resolved["plan_revision"];
+    booking?: Resolved["booking"];
   }>;
 
 /** Server actions that read better in words: U37's system 'replayed' = the telemetry got stored. */
@@ -753,7 +765,19 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
     if (r.action === "approved")
       return `Approved by ${r.resolved_by.name ?? "an org admin"} at ${at}.`;
     if (r.action === "nothing_left") return `Nothing is left to plan for ${day}.`;
-    if (r.action === "day_ended") return `${day} ended with no approved plan.`;
+    // ux 11fe550bf: booking began (from approved) or resumed (from interrupted).
+    if (r.action === "booking_started")
+      return r.from_state === "interrupted"
+        ? `Booking continued at ${at}.`
+        : `Booking started at ${at}.`;
+    if (r.action === "day_ended") {
+      const rv = r.plan_revision != null ? `R${r.plan_revision}` : "its plan";
+      if (r.from_state === "approved" && !r.booking)
+        return `${day} ended with ${rv} approved but not booked.`;
+      if (r.from_state === "interrupted" && r.booking)
+        return `${day} ended with ${r.booking.reserved} of ${r.booking.total} passes booked.`;
+      return `${day} ended with no approved plan.`;
+    }
   }
   if (r.id.startsWith("attention:job_outcome_unknown:")) {
     // U54: retried (queued again) or closed with what the operator found.

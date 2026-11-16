@@ -12,7 +12,7 @@ const person = d.object({ id: d.token, name: d.nullable(d.string) });
  * The day's newest plan, in the plan read's own lifecycle words. A sent-back plan is back in
  * `draft` with `sent_back` set; any other state still reads (knownText).
  */
-export const coveragePlanStates = ["pending_approval", "draft"] as const;
+export const coveragePlanStates = ["pending_approval", "draft", "approved", "interrupted"] as const;
 
 const coveragePlan = d.object({
   id: d.token,
@@ -20,6 +20,18 @@ const coveragePlan = d.object({
   state: d.knownText(coveragePlanStates),
   author: d.nullable(person),
   submitted_at: d.nullable(d.timestamp),
+  /** approved / interrupted only (domain 702223355). */
+  approved_at: d.optional(d.nullable(d.timestamp)),
+  /** interrupted only; last_progress_at is the last progress seen, not when it stopped. */
+  booking: d.optional(
+    d.nullable(
+      d.object({
+        reserved: d.integer,
+        total: d.integer,
+        last_progress_at: d.nullable(d.timestamp),
+      }),
+    ),
+  ),
   sent_back: d.nullable(
     d.object({
       by: d.nullable(person),
@@ -46,4 +58,6 @@ export const planCoverageFields = {
   approvers: d.optional(d.nullable(d.array(person, 200))),
   /** Per request: the viewer is an approver and not the author. */
   viewer_can_approve: d.optional(d.nullable(d.boolean)),
+  /** Per request: the viewer may POST …/execute (operate_mission): Start / Continue booking. */
+  viewer_can_book: d.optional(d.nullable(d.boolean)),
 };

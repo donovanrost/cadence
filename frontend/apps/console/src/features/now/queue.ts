@@ -41,7 +41,12 @@ export type QueueItem = Readonly<{
    * A write in place of the route action (U37 Retry storing): POST per target. The panel shows it
    * only with operate access, else "Operators can retry storing."
    */
-  command?: Readonly<{ label: string; kind: "retry" | "seen"; targets: readonly Attention[] }>;
+  command?: Readonly<{
+    label: string;
+    /** U61: 'book' is Start / Continue booking (POST …/contact-plans/:id/execute). */
+    kind: "retry" | "seen" | "book";
+    targets: readonly Attention[];
+  }>;
   /** U49: a second write beside Retry, `Discard…`, which opens a sheet for its required reason. */
   discard?: Attention;
   /** U54: `Retry…` and `Close without retry…`, each a sheet (operators only). */

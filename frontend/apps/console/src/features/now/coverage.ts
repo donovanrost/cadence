@@ -25,6 +25,10 @@ const sentBack = (a: Attention) => a.plan?.state === "draft" && a.plan.sent_back
 
 export function coverageTitle(a: Attention): string {
   const d = dayLabel(a.day);
+  // U61 (ux 366240d64): approved but booking never started, or a booking run that stopped. These
+  // keep their words past the first window (the plan is approved); only the mark turns crit.
+  if (a.plan?.state === "approved") return `Plan for ${d} is approved but booking hasn't started`;
+  if (a.plan?.state === "interrupted") return `Booking for ${d} stopped`;
   if (crit(a)) return `${d} started with no approved plan`;
   if (!a.plan) return `${d} has no plan yet`;
   if (a.plan.state === "pending_approval") return `Plan for ${d} is awaiting approval`;
@@ -51,6 +55,8 @@ export function coverageEvidence(
   now: Date = new Date(),
 ): string {
   const d = dayLabel(a.day);
+  const stalled = stalledEvidence(a, now);
+  if (stalled) return stalled;
   if (crit(a)) {
     const opened = a.first_window_at ? ` at ${short(a.first_window_at, now)}` : "";
     const open = formatCount(a.open_requirements_count ?? a.requirements_count ?? 0);
@@ -82,12 +88,45 @@ export function coverageEvidence(
   return `${rev(a)}${author} hasn't been submitted. Nothing is booked for ${requirements(a)} until a plan is approved.`;
 }
 
+/**
+ * ux 366240d64 / 11fe550bf: 'R41 was approved at 22:10Z, but booking hasn't started. …' and
+ * 'Booking for R41 stopped with 12 of 41 passes booked; its last progress was at 22:14Z. …'.
+ */
+function stalledEvidence(a: Attention, now: Date): string | null {
+  const p = a.plan;
+  if (!p) return null;
+  if (p.state === "approved") {
+    const at = p.approved_at ? ` at ${short(p.approved_at, now)}` : "";
+    return `${rev(a)} was approved${at}, but booking hasn't started. Nothing is booked for ${requirements(a)} until it does.`;
+  }
+  if (p.state !== "interrupted") return null;
+  const b = p.booking;
+  const last = b?.last_progress_at
+    ? `; its last progress was at ${short(b.last_progress_at, now)}`
+    : "";
+  if (!b || b.reserved === 0)
+    return `Booking for ${rev(a)} stopped before any pass was booked${last}.`;
+  return `Booking for ${rev(a)} stopped with ${b.reserved} of ${b.total} passes booked${last}. The other ${b.total - b.reserved} aren't booked until it continues.`;
+}
+
+/** Start / Continue booking (POST …/execute) for whoever the server lets book; else Open plan. */
+export function bookingCommand(a: Attention): QueueItem["command"] | null {
+  const s = a.plan?.state;
+  if (a.viewer_can_book !== true || (s !== "approved" && s !== "interrupted")) return null;
+  return {
+    label: s === "approved" ? "Start booking" : "Continue booking",
+    kind: "book",
+    targets: [a],
+  };
+}
+
 /** The one action (U61): Review / Open plan / Plan <day> / Plan the rest of <day>. */
 export function coverageAction(a: Attention): Readonly<{ label: string; to: RouteLocationRaw }> {
   const day = a.day ?? "";
   const d = dayLabel(a.day);
   const planDay: RouteLocationRaw = { name: "ops.contacts.plan", query: { day } };
-  if (crit(a)) return { label: `Plan the rest of ${d}`, to: planDay };
+  const stalled = a.plan?.state === "approved" || a.plan?.state === "interrupted";
+  if (crit(a) && !stalled) return { label: `Plan the rest of ${d}`, to: planDay };
   if (!a.plan) return { label: `Plan ${d}`, to: planDay };
   const open: RouteLocationRaw = { name: "ops.contacts.plan", query: { day, plan: a.plan.id } };
   const review = a.plan.state === "pending_approval" && a.viewer_can_approve === true;
@@ -102,8 +141,10 @@ export function coverageRow(
   now: Date = new Date(),
 ): QueueItem {
   const action = coverageAction(a);
+  const book = bookingCommand(a);
   return {
     ...base,
+    ...(book ? { command: book } : {}),
     // crit ◆ once the first window opens unplanned (the server ranks P1/P2).
     ...(crit(a) ? { state: "crit" as const } : {}),
     key,

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
-import { resolvedWords } from "./attention.ts";
+import { resolvedReader, resolvedWords } from "./attention.ts";
 
 const NOW = new Date("2026-11-15T18:28:00Z");
 
@@ -184,5 +184,76 @@ describe("plan_coverage on Now (ux U61)", () => {
     expect(closed("approved", "user", "Ana R.")).toBe("Approved by Ana R. at 18:02Z.");
     expect(closed("nothing_left", "system", null)).toBe("Nothing is left to plan for 11-16.");
     expect(closed("day_ended", "system", null)).toBe("11-16 ended with no approved plan.");
+  });
+});
+
+describe("plan_coverage: an approved plan that isn't booking (ux 366240d64, 11fe550bf)", () => {
+  const approved = {
+    id: "plan-41",
+    revision: 41,
+    state: "approved",
+    author: { id: "u-mira", name: "Mira K." },
+    submitted_at: null,
+    sent_back: null,
+    approved_at: "2026-11-15T22:10:00Z",
+    booking: null,
+  };
+  it("approved, not started: says so and offers Start booking to whoever may book", () => {
+    const row = rowOf({ plan: approved, viewer_can_book: true });
+    expect(row?.title).toBe("Plan for 11-16 is approved but booking hasn't started");
+    expect(row?.sentence).toBe(
+      "R41 was approved at 22:10Z, but booking hasn't started. Nothing is booked for 11-16's 1,512 requirements until it does.",
+    );
+    expect(row?.command?.label).toBe("Start booking");
+    expect(row?.command?.kind).toBe("book");
+    expect(row?.action.label).toBe("Open plan");
+    expect(rowOf({ plan: approved, viewer_can_book: false })?.command).toBeUndefined();
+  });
+  it("interrupted: how far it got and its last progress, with Continue booking", () => {
+    const stopped = {
+      ...approved,
+      state: "interrupted",
+      booking: { reserved: 12, total: 41, last_progress_at: "2026-11-15T22:14:00Z" },
+    };
+    const row = rowOf({ plan: stopped, viewer_can_book: true });
+    expect(row?.title).toBe("Booking for 11-16 stopped");
+    expect(row?.sentence).toBe(
+      "Booking for R41 stopped with 12 of 41 passes booked; its last progress was at 22:14Z. The other 29 aren't booked until it continues.",
+    );
+    expect(row?.command?.label).toBe("Continue booking");
+    const none = rowOf({
+      plan: {
+        ...stopped,
+        booking: { reserved: 0, total: 41, last_progress_at: "2026-11-15T22:14:00Z" },
+      },
+    });
+    expect(none?.sentence).toBe(
+      "Booking for R41 stopped before any pass was booked; its last progress was at 22:14Z.",
+    );
+  });
+  it("words booking_started and a stalled day's end", () => {
+    const r = (o: Record<string, unknown>) => {
+      const entry = decode(resolvedReader, {
+        id: "attention:plan_coverage:2026-11-16",
+        resolved_by: { kind: "system", id: null, name: null },
+        resolved_at: "2026-11-15T22:11:00Z",
+        note: null,
+        ...o,
+      });
+      if (!entry.ok) throw new Error(entry.error.message);
+      return resolvedWords(entry.value, NOW);
+    };
+    expect(r({ action: "booking_started", from_state: "approved" })).toBe(
+      "Booking started at 22:11Z.",
+    );
+    expect(r({ action: "booking_started", from_state: "interrupted" })).toBe(
+      "Booking continued at 22:11Z.",
+    );
+    expect(
+      r({ action: "day_ended", from_state: "approved", plan_revision: 41, booking: null }),
+    ).toBe("11-16 ended with R41 approved but not booked.");
+    expect(
+      r({ action: "day_ended", from_state: "interrupted", booking: { reserved: 12, total: 41 } }),
+    ).toBe("11-16 ended with 12 of 41 passes booked.");
   });
 });
