@@ -12,6 +12,8 @@ import {
 import { ApButton, ApCallout, ApField, ApPanel, ApRemote, ApSelect } from "@/ui";
 import CredentialFields from "./CredentialFields.vue";
 import { createAccount, fetchAdapterSchema, fieldErrors } from "./api.ts";
+import { INGESTION_PATH, type OfferedMode } from "./ingestion.ts";
+import IngestionField from "./IngestionField.vue";
 
 /** Add a provider account: adapter, name, adapter settings, credential reference. */
 const props = defineProps<{
@@ -32,9 +34,15 @@ const schema = useRemoteQuery(
   () => (adapter.value ? { orgId: props.organization.id, adapter: adapter.value } : null),
   fetchAdapterSchema,
 );
+/** U77: booking updates get their own field (ux's words), not the generic schema row. */
 const settingsOf = (fields: readonly SchemaField[]) =>
-  fields.filter((f) => !f.path.startsWith("credential."));
-watch(adapter, () => (values.value = {}));
+  fields.filter((f) => !f.path.startsWith("credential.") && f.path !== INGESTION_PATH);
+const hasIngestion = (fields: readonly SchemaField[]) =>
+  fields.some((f) => f.path === INGESTION_PATH);
+const mode = ref<OfferedMode>("polling");
+const providerName = () =>
+  props.adapters.find((a) => a.key === adapter.value)?.label ?? "the provider";
+watch(adapter, () => ((values.value = {}), (mode.value = "polling")));
 
 async function save() {
   if (schema.state.value.status !== "ready" || busy.value) return;
@@ -51,7 +59,10 @@ async function save() {
     const r = await createAccount(props.organization.id, {
       provider_key: adapter.value,
       name: name.value.trim(),
-      settings: Object.fromEntries(edits.changes.map((c) => [c.path, c.value])),
+      settings: {
+        ...Object.fromEntries(edits.changes.map((c) => [c.path, c.value])),
+        ...(hasIngestion(schema.state.value.value.fields) ? { [INGESTION_PATH]: mode.value } : {}),
+      },
       credential: { backend: backend.value, key: reference.value.trim() },
     });
     if (r.ok) {
@@ -92,6 +103,13 @@ async function save() {
             v-model="values"
             :schema="{ kind: s.kind, fields: settingsOf(s.fields) }"
             :errors="errors"
+          />
+          <IngestionField
+            v-if="hasIngestion(s.fields)"
+            v-model="mode"
+            :provider="providerName()"
+            :from="null"
+            :error="errors[INGESTION_PATH] ?? null"
           />
         </template>
       </ApRemote>

@@ -1,6 +1,7 @@
 import { decoders, recordOf, request, type ApiResult, type Decoded } from "@/api";
 import { schemaFieldReader, type KindSchema } from "@/features/changes/index.ts";
 import type { OpState } from "@/ui";
+import { ingestionModes } from "./ingestion.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /organizations/:id/provider-accounts` (PA1). */
 const { array, integer, nullable, object, string, timestamp, token } = decoders;
@@ -23,6 +24,8 @@ const account = object({
   missions: array(object({ id: token, name: string }), 500),
   added_at: timestamp,
   added_by: nullable(object({ name: string })),
+  /** The current version's event ingestion mode (api-ops, 11-16); absent on older reads. */
+  event_ingestion_mode: decoders.optional(nullable(decoders.knownText(ingestionModes))),
 });
 export const accountsReader = object({
   accounts: array(account, 500),
