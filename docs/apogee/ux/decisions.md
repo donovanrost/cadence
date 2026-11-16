@@ -241,6 +241,13 @@ ground_station change writing `code`); viewers see `—` with the suggestion in 
 only. Readiness: "3 stations have no confirmed code" (counts `code IS NULL`), fix → Ground stations. A
 suggestion is never shown where a code is used as an identity (routing rules, the Gantt rows, the
 palette): those fall back to the station name.
+**Editing a code-less station (lead, qa's live check, 11-16):** the Stations editor must not require a code to save
+other metadata, or operators invent one just to get past the form. While the stored code is null, `Code` is optional,
+with the 2–8 letter check only when something is typed. Help: "Leave empty to keep showing the station's name." With a
+`suggested_code`: "Suggested: INU" + `Use INU` (fills the field; it still saves only as part of the staged edit). Once a
+code is set it can be changed but not emptied, because pass titles and filters already use it. The form marks
+it required then; the server's refusal (domain) on the `code` field reads "INU is already used in pass titles and
+filters, so it can be changed but not removed." (the stored code).
 
 ### U26 · Passes inside station unavailability (K1, lead question)
 **Decision:** K1 flags it in place; it isn't left to K2.
