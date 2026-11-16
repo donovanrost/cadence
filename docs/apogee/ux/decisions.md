@@ -1780,8 +1780,19 @@ across spacecraft, and never overtakes a release in progress):
 
 **Resolved arguments** (the queue-step condition, ux review 2026-11-15). The server's value is shown only where it
 differs from what was entered.
-- **Shared values:** under A1's readout and stack line, one `text-3` line per differing argument, for example
-  `Sent as 2.50 V (entered 2.5)` or `TIMEOUT: default used, 30 s`.
+- **Shared values:** under A1's readout and stack line, one `text-3` line per differing argument, each naming its
+  argument (fe-ops 1fabb79af):
+  - `VOLTAGE: sent as 16,777,216 (entered 16,777,217)`
+  - `TIMEOUT: default used, 30 s`
+  - `MODE: fixed value used, 1`
+  - `GAIN: catalog value used, 4` (filled from the catalog when the pinned definition can't say whether it's the
+    default or fixed)
+- **"Sent as" only when it changes the value.** It shows when the sent value, rounded to the entered value's
+  decimal places, differs from what was entered. A float sent as 32-bit `0.100000001` for an entered `0.1` is the
+  same value and shows nothing; the exact encoding is in Technical details. (api: today the only sent-as difference
+  is 32-bit float encoding.)
+- **Some targets only:** the line starts with up to 3 names, then "and N more" (the full list in its title):
+  `EARENDIL-004, EARENDIL-009 · TIMEOUT: default used, 30 s`. When it applies to all targets, no names.
 - **Own-values table:** the cell shows the value sent, with `entered 2.5` under it in `text-4`. A `default` cell
   becomes `default · 30 s`.
 - **Arm** (Compose, no second GO): the arm confirm repeats the same lines under each command. Nobody arms without
