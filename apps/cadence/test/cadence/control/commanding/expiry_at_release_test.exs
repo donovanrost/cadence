@@ -17,6 +17,7 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
   }
 
   alias Cadence.Control.Commanding
+  alias Cadence.Control.Commanding.GroupRelease
   alias Cadence.Persistence.JsonDocument
 
   @org "org-group-release"
@@ -76,45 +77,55 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
     assert entry_state(expired) == "pending"
   end
 
-  test "a named-contact release ends an expired member as expired and releases the rest", c do
+  test "a named-contact release ends an expired member as expired and stops there", c do
     group = armed_group!(c, [c.alpha, c.alpha])
     [expired, fresh] = group.entries
     contact = uplink_contact!(c.alpha)
     expire!(expired)
 
-    assert {:ok, %{released_entry_ids: [^fresh], stopped: nil}} =
-             Commanding.release_group_to_contact(
-               c.scope,
-               @mission,
-               group.id,
-               contact.realized_contact_id,
-               confirm_unbooked: true,
-               attempted_at: @at
-             )
+    # An ordered stack: the member after an expired one never goes out on its own.
+    assert {:ok,
+            %{
+              released_entry_ids: [],
+              stopped: %{command_queue_entry_id: ^expired, reason: reason},
+              not_attempted_entry_ids: [^fresh]
+            }} = release(c, group, contact)
 
+    assert reason == {:command_queue_entry_expired, expired}
+    assert GroupRelease.encode_reason(reason)["code"] == "command_queue_entry_expired"
     assert ended_expired?(expired)
     assert attempts(expired) == 0
+    assert entry_state(fresh) == "pending"
+    assert attempts(fresh) == 0
   end
 
-  test "a named-contact release with only expired members releases nothing", c do
-    group = armed_group!(c, [c.alpha])
-    [expired] = group.entries
+  test "a named-contact release sends the members before an expired one, then stops", c do
+    group = armed_group!(c, [c.alpha, c.alpha])
+    [first, expired] = group.entries
     contact = uplink_contact!(c.alpha)
     expire!(expired)
 
-    assert {:error, {:command_group_nothing_to_release, _contact}} =
-             Commanding.release_group_to_contact(
-               c.scope,
-               @mission,
-               group.id,
-               contact.realized_contact_id,
-               confirm_unbooked: true,
-               attempted_at: @at
-             )
+    assert {:ok,
+            %{
+              released_entry_ids: [^first],
+              stopped: %{command_queue_entry_id: ^expired},
+              not_attempted_entry_ids: []
+            }} = release(c, group, contact)
 
     assert ended_expired?(expired)
-    assert attempts(expired) == 0
+    assert attempts(first) == 1
   end
+
+  defp release(c, group, contact),
+    do:
+      Commanding.release_group_to_contact(
+        c.scope,
+        @mission,
+        group.id,
+        contact.realized_contact_id,
+        confirm_unbooked: true,
+        attempted_at: @at
+      )
 
   # Expired before the release time and before now: the sweep hasn't run, so it's still pending.
   defp expire!(entry_id) do

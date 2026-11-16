@@ -74,8 +74,9 @@ defmodule Cadence.Control.Commanding.GroupRelease do
                realized_contact_id,
                at
              ),
-           {:ok, members} <- releasable_members(org, mission_id, group_id, contact, at) do
-        result = release_members(org, mission_id, members, contact, actor, opts)
+           {:ok, members} <- releasable_members(org, mission_id, group_id, contact) do
+        expired = expire(org, mission_id, members, at)
+        result = release_members(org, mission_id, members, expired, contact, actor, opts)
         :ok = record(org, mission_id, group_id, contact, actor, result)
         ScopedReadUpdates.publish(:commanding_changed, org, mission_id)
 
@@ -169,25 +170,11 @@ defmodule Cadence.Control.Commanding.GroupRelease do
   end
 
   # This contact's spacecraft's members still queued, in stack order, with their queue entries.
-  defp releasable_members(org, mission, group_id, %RealizedContact{} = contact, at) do
+  defp releasable_members(org, mission, group_id, %RealizedContact{} = contact) do
     own =
       Enum.filter(GroupStore.members(org, mission, group_id), &served?(org, mission, &1, contact))
 
-    # Members past their expiry end `expired` now; the claim would refuse them anyway.
-    expired =
-      own
-      |> Enum.filter(&(&1.lifecycle_state == :queued))
-      |> Enum.map(& &1.command_request_id)
-      |> then(&Cancellation.expire_requests(org, mission, &1, at))
-      |> MapSet.new()
-
-    if MapSet.size(expired) > 0, do: ScopedReadUpdates.publish(:commanding_changed, org, mission)
-
-    queued =
-      Enum.filter(
-        own,
-        &(&1.lifecycle_state == :queued and not MapSet.member?(expired, &1.command_request_id))
-      )
+    queued = Enum.filter(own, &(&1.lifecycle_state == :queued))
 
     entries =
       GroupStore.pending_entry_ids(org, mission, Enum.map(queued, & &1.command_request_id))
@@ -205,6 +192,21 @@ defmodule Cadence.Control.Commanding.GroupRelease do
     end
   end
 
+  defp release_member(org, mission, request_id, entry_id, expired, contact, actor, opts) do
+    if MapSet.member?(expired, request_id) do
+      {:error, {:command_queue_entry_expired, entry_id}}
+    else
+      Cadence.Commanding.release_command_queue_entry(
+        org,
+        mission,
+        entry_id,
+        contact.realized_contact_id,
+        actor,
+        attempted_at: Keyword.get(opts, :attempted_at, DateTime.utc_now())
+      )
+    end
+  end
+
   defp served?(org, mission, %CommandRequest{source_endpoint_ref: ref}, contact) do
     case ReleaseTargetGuard.target(org, mission, ref) do
       {:ok, spacecraft_id} ->
@@ -215,20 +217,26 @@ defmodule Cadence.Control.Commanding.GroupRelease do
     end
   end
 
-  defp release_members(org, mission, members, contact, actor, opts) do
+  # Members past their expiry end `expired` at once, but keep their place in the stack: the
+  # release stops at the first one, with the reason the claim gives (an ordered stack's later
+  # members never go out without it).
+  defp expire(org, mission, members, at) do
+    expired =
+      org
+      |> Cancellation.expire_requests(mission, Enum.map(members, &elem(&1, 0)), at)
+      |> MapSet.new()
+
+    if MapSet.size(expired) > 0, do: ScopedReadUpdates.publish(:commanding_changed, org, mission)
+    expired
+  end
+
+  defp release_members(org, mission, members, expired, contact, actor, opts) do
     initial = %{released_entry_ids: [], stopped: nil, not_attempted_entry_ids: []}
 
     members
     |> Enum.with_index()
     |> Enum.reduce_while(initial, fn {{request_id, entry_id}, index}, acc ->
-      case Cadence.Commanding.release_command_queue_entry(
-             org,
-             mission,
-             entry_id,
-             contact.realized_contact_id,
-             actor,
-             attempted_at: Keyword.get(opts, :attempted_at, DateTime.utc_now())
-           ) do
+      case release_member(org, mission, request_id, entry_id, expired, contact, actor, opts) do
         {:ok, _released} ->
           {:cont, %{acc | released_entry_ids: acc.released_entry_ids ++ [entry_id]}}
 

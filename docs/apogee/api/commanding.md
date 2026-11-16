@@ -425,8 +425,10 @@ The UI writes the sentences (title + sentence per key).
 
 Nothing outstanding from the design. Work past its `expires_at` is never released: the release
 claim refuses it under the request and lane locks. It ends `end_reason: expired` as soon as
-release reaches it (the lane's dispatch, or a named-contact release, closes its expired members
-first), and a sweep on every dispatcher reconcile (about a minute) cleans up the rest. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
+release reaches it: the lane's dispatch closes its expired entries first, and a named-contact
+release ends its expired members and STOPS at the first one in stack order (`stopped.reason.code`
+`command_queue_entry_expired`, the rest not attempted). A sweep on every dispatcher reconcile
+(about a minute) cleans up the rest. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
 (realtime.md).
 
 ## `GET /api/console/v1/missions/:mission_id/command-requests/:command_request_id/encoding` (M24, owner: api)

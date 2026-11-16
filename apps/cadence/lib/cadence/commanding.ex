@@ -404,6 +404,11 @@ defmodule Cadence.Commanding do
              is_map(released_by) and is_list(opts) do
     attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
     :ok = expire_lane(organization_id, mission_id, queue_lane_key, attempted_at)
+    dispatch_lane_head(organization_id, mission_id, queue_lane_key, released_by, opts)
+  end
+
+  defp dispatch_lane_head(organization_id, mission_id, queue_lane_key, released_by, opts) do
+    attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
 
     with :ok <-
            RequestQueueStore.ensure_lane_not_in_flight(
@@ -451,7 +456,7 @@ defmodule Cadence.Commanding do
         # The head failed closed; the lane's next entry may still release in this contact.
         {:error, reason}
         when reason in [:release_basis_changed, :earlier_command_failed, :spacecraft_archived] ->
-          dispatch_queue_lane(organization_id, mission_id, queue_lane_key, released_by, opts)
+          dispatch_lane_head(organization_id, mission_id, queue_lane_key, released_by, opts)
 
         result ->
           result
