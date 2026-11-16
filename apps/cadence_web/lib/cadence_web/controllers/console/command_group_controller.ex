@@ -18,7 +18,12 @@ defmodule CadenceWeb.Console.CommandGroupController do
     VerifierSeries
   }
 
-  alias CadenceWeb.Console.{CommandGroupJSON, CommandGroupParams, CommandGroupProblems}
+  alias CadenceWeb.Console.{
+    CommandGroupJSON,
+    CommandGroupListParams,
+    CommandGroupParams,
+    CommandGroupProblems
+  }
 
   def preflight(conn, params) do
     with {:ok, draft} <- CommandGroupParams.draft(params),
@@ -118,16 +123,26 @@ defmodule CadenceWeb.Console.CommandGroupController do
     end
   end
 
+  # U69 A5: searched (q, target, stage), filtered in SQL and paged by cursor.
   def index(conn, params) do
-    groups =
-      CommandGroups.list(org(conn), mission(conn), viewer(conn),
-        states: states(params["state"]),
-        awaiting_me: params["awaiting_me"] == "true",
-        mine: params["mine"] == "true"
-      )
+    with {:ok, opts} <- CommandGroupListParams.parse(params),
+         {:ok, page} <- CommandGroups.page(org(conn), mission(conn), viewer(conn), opts) do
+      groups = with_uplink(conn, page.groups)
 
-    groups = with_uplink(conn, groups)
-    json(conn, %{data: %{groups: Enum.map(groups, &CommandGroupJSON.summary/1)}})
+      json(conn, %{
+        data: %{groups: Enum.map(groups, &CommandGroupJSON.summary/1)},
+        meta: %{next_cursor: page.next_cursor}
+      })
+    else
+      {:error, :invalid_cursor} ->
+        CommandGroupProblems.respond(
+          conn,
+          {:error, {:invalid_params, %{cursor: "is not a valid cursor"}}}
+        )
+
+      error ->
+        CommandGroupProblems.respond(conn, error)
+    end
   end
 
   def show(conn, %{"command_group_id" => id}) do
@@ -236,15 +251,6 @@ defmodule CadenceWeb.Console.CommandGroupController do
   def policies(conn, _params) do
     json(conn, %{data: CommandGroupJSON.policies(CommandPolicy.policies())})
   end
-
-  defp states(nil), do: nil
-
-  defp states(value) when is_binary(value) do
-    allowed = MapSet.new(~w(approval_pending queued rejected sent_back aborted))
-    value |> String.split(",", trim: true) |> Enum.filter(&MapSet.member?(allowed, &1))
-  end
-
-  defp states(_value), do: nil
 
   defp org(conn), do: conn.assigns.current_scope.organization_id
   defp mission(conn), do: conn.assigns.current_mission.mission_id

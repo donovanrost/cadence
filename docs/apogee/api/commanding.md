@@ -237,6 +237,17 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
 - List query: `state` (comma list of `approval_pending | queued | rejected | sent_back | aborted`),
   `awaiting_me=true` (Approve queue: pending, not mine, and I'm the named approver or none was
   named), `mine=true`, `operation_id=` (returns 0 or 1 groups).
+  U69 A5 (parity ops (C)): `q` (≤100 chars, case-insensitive substring of the title, log entry,
+  group id, operation id, or a stacked command's id or name), `target=<spacecraft_id>` (groups with
+  it among their targets), `stage=` (comma list of `release_failed | verify_failed | indeterminate
+  | in_flight | queued_for_contact`: groups where ANY target is at one; `in_flight` = `radiating`
+  or `executed`; queued groups only; decided by the same progress the row shows, so the filter
+  and the badge agree), `limit` (1..200, default 100), `cursor` (opaque, from `meta.next_cursor`;
+  `null` = no more). Newest first (`requested_at`, then id). `awaiting_me` and `mine` filter in the
+  database, so a page is exact. The response gains `meta: {next_cursor}`. With `stage=` a page
+  can hold fewer than `limit` while `next_cursor` is set; keep following it. Bad `state`, `stage`,
+  `limit`, `q` or `cursor` → `422 invalid_params` naming the field (an unknown `state` used to be
+  ignored).
   Rows: `{id, state, title, requested_by, requested_at, requested_approver_user_id, member_count,
   target_count, command_count, second_go_required, awaiting_me, operation_id, priority, progress,
   finished}`. `priority` (U68): the group's release priority, 0..9 (default 3); lower releases

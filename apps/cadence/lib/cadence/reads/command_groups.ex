@@ -35,16 +35,30 @@ defmodule Cadence.Reads.CommandGroups do
         limit: Keyword.get(opts, :limit, 100)
       )
 
+    org
+    |> rows(mission, groups, viewer_id)
+    |> filter(Keyword.get(opts, :awaiting_me), Keyword.get(opts, :mine), viewer_id)
+  end
+
+  @doc """
+  U69 A5: the Commands list, searched and paged (`CommandGroups.Search`): `{:ok, %{groups,
+  next_cursor}}` or `{:error, :invalid_cursor}`.
+  """
+  @spec page(binary(), binary(), binary() | nil, keyword()) ::
+          {:ok, %{groups: [map()], next_cursor: binary() | nil}} | {:error, :invalid_cursor}
+  defdelegate page(org, mission, viewer_id, opts), to: Cadence.Reads.CommandGroups.Search
+
+  @doc false
+  # List rows for `groups`: the summary, awaiting_me, and a queued group's delivery progress.
+  def rows(org, mission, groups, viewer_id) do
     delivery = delivery(org, mission, groups)
 
-    groups
-    |> Enum.map(fn group ->
+    Enum.map(groups, fn group ->
       group
       |> summary()
       |> Map.put(:awaiting_me, awaiting?(group, viewer_id))
       |> Map.merge(Map.get(delivery, group.command_group_id, %{progress: nil, finished: nil}))
     end)
-    |> filter(Keyword.get(opts, :awaiting_me), Keyword.get(opts, :mine), viewer_id)
   end
 
   # Group state is the approval lifecycle only, so a delivered group still reads `queued`.
