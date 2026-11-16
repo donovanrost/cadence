@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { expiredRow } from "./expiredGroup.ts";
+import { scidMismatchRow } from "./scidMismatch.ts";
 import type { RouteLocationRaw } from "vue-router";
 import {
   spacecraftId as spacecraftIdReader,
@@ -407,6 +408,8 @@ function rowFor(
       if (a.source === "plan_coverage") return [coverageRow(base(item), item.id, a, viewerId, now)];
       if (a.source === "expired_group")
         return [expiredRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
+      if (a.source === "contact_scid_mismatch")
+        return [scidMismatchRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "job_outcome_unknown")
         return [jobRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "provider_change") {

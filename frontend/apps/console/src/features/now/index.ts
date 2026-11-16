@@ -15,6 +15,7 @@ export {
   type Attention,
 } from "./attention.ts";
 export { useSettlement } from "./useSettlement.ts";
+export { scidWords } from "./scidMismatch.ts";
 export {
   NO_ACCESS,
   NO_ACCESS_ACK_LOST,

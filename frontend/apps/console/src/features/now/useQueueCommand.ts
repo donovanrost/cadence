@@ -26,12 +26,16 @@ export const NO_ACCESS_ACK_LOST = "Operators acknowledge lost telemetry.";
 export type CommandKind = "retry" | "seen" | "book";
 /** U61: a 403 from POST …/execute (the server's own rule, operate_mission today). */
 export const NO_ACCESS_BOOK = "You can't start booking for this plan.";
+/** U81 §2: a pass whose frames carried another SCID. */
+export const NO_ACCESS_SCID = "Operators mark these passes as seen.";
 const seenNoAccess = (a: Attention | undefined) =>
-  a?.source === "contact_start"
-    ? NO_ACCESS_MISSED
-    : a?.source === "ingress_backpressure"
-      ? NO_ACCESS_ACK_LOST
-      : NO_ACCESS_SEEN;
+  a?.source === "contact_scid_mismatch"
+    ? NO_ACCESS_SCID
+    : a?.source === "contact_start"
+      ? NO_ACCESS_MISSED
+      : a?.source === "ingress_backpressure"
+        ? NO_ACCESS_ACK_LOST
+        : NO_ACCESS_SEEN;
 export const noAccessText = (kind: CommandKind, targets: readonly Attention[]) =>
   kind === "book"
     ? NO_ACCESS_BOOK

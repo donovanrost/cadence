@@ -36,6 +36,7 @@ import {
 import { targetOfAttention } from "./attention.ts";
 import SettlementBlock from "./SettlementBlock.vue";
 import CutOffNote from "./CutOffNote.vue";
+import ScidMismatchNote from "./ScidMismatchNote.vue";
 import ContactStartBlock from "./ContactStartBlock.vue";
 import ArchiveBlock from "./ArchiveBlock.vue";
 import IngressBlock from "./IngressBlock.vue";
@@ -256,6 +257,10 @@ const countdown = computed(() => {
       />
       <SettlementBlock :mission-id="missionId" :pass-id="pass.id" />
       <CutOffNote :cut-off="pass.incomplete_at_end" />
+      <ScidMismatchNote
+        :mismatch="pass.scid_mismatch"
+        :spacecraft="spacecraft?.name ?? pass.spacecraft?.name ?? null"
+      />
       <AttentionBlock
         v-if="resolutionItem"
         :mission-id="missionId"

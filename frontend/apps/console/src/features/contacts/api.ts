@@ -94,6 +94,21 @@ export const passStation = d.object({
   name: d.nullable(d.string),
 });
 
+/** A path's refused frames (domain: settlement scid_mismatch; sorted scids, at most 8). */
+const scidMismatch = d.object({
+  expected_scid: scidReader,
+  paths: d.array(
+    d.object({
+      station: d.nullable(passStation),
+      frames: d.integer,
+      scids: d.array(scidReader),
+      scid_count: d.integer,
+      path_id: d.token,
+      provider_binding_id: d.nullable(d.token),
+    }),
+  ),
+});
+
 const pass = d.object({
   id: d.token,
   kind: d.literal("contact"),
@@ -111,6 +126,8 @@ const pass = d.object({
   incomplete_at_end: d.optional(
     d.nullable(d.object({ frame_bytes: d.integer, packet_bytes: d.integer })),
   ),
+  /** U81 §2 (api, 11-16): frames refused for another SCID, one entry per path; null when none. */
+  scid_mismatch: d.optional(d.nullable(scidMismatch)),
   state: d.oneOf(reservationStates),
   // The provider's progress (domain KnownAtom); an unknown value reads "unrecognized".
   pass_phase: d.nullable(d.known(passPhases)),

@@ -13,6 +13,7 @@ import { coveragePlanStates, planCoverageFields } from "./coverageFields.ts";
 import { expiredGroupFields } from "./expiredGroup.ts";
 import { journalDiskFields } from "./journalDisk.ts";
 import { providerChangeReader } from "./providerChangeReader.ts";
+import { scidMismatchFields } from "./scidMismatch.ts";
 
 /**
  * Attention items in Now's queue (U31, DECISIONS #54; ops.md §action-queue `attention`): mission
@@ -278,6 +279,8 @@ export const attentionReader = d.object({
   ...expiredGroupFields,
   /** ingress_backpressure / journal_disk (U66): the shared buffer disk. */
   ...journalDiskFields,
+  /** contact_scid_mismatch (U81 §2): the pass's craft and its refused frames. */
+  ...scidMismatchFields,
   resolution: d.nullable(
     d.object({
       /** How it closed: a known key (archive 'discarded', a job 'closed'…), else the raw word. */

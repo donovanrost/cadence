@@ -114,6 +114,12 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
         ? `Closed without retry by ${who} at ${at}: “${r.note.trim()}”`
         : `Closed without retry by ${who} at ${at}.`;
   }
+  if (r.id.startsWith("attention:contact_scid_mismatch:")) {
+    // U81 §2: never as if someone saw it when it retired unseen.
+    if (r.action === "retired") return "Retired after 7 days without being seen.";
+    if (r.action === "seen")
+      return r.resolved_by.name ? `Seen by ${r.resolved_by.name} at ${at}.` : `Seen at ${at}.`;
+  }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";
     if (r.action === "applied") return `Applied at ${at}.`;

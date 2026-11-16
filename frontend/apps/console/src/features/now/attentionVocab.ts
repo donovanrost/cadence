@@ -27,6 +27,8 @@ export const attentionSources = [
   "plan_coverage",
   // U75 (api 5766e494a, #97): a command request that expired before all of it went out.
   "expired_group",
+  // U81 §2 (api, #102): most of a settled contact's frames carried another SCID.
+  "contact_scid_mismatch",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -115,6 +117,9 @@ export const resolutionActions = [
   "rejected",
   "replayed",
   "retried",
+  // U81 §2 contact_scid_mismatch: unseen 7 days after settle; marked seen (the person, with name).
+  "retired",
+  "seen",
   "started",
   "superseded",
 ] as const;
