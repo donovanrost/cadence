@@ -26,18 +26,19 @@ Out of C1: A6a–d, A7 (the /ops/alarms rows) → C2; A11/A13 built with L14 (re
 | --- | --- |
 | `/ops` | `ops.now` |
 | `/ops/planning`, `/ops/planning/new` | `ops.contacts.plan` |
-| `/ops/planning/runs/:id` | `ops.contacts.plan?run=<id>` |
-| `/ops/plans/:id` | `ops.contacts.plan?plan=<id>` |
+| `/ops/planning/runs/:id` | `ops.contacts.plan?day=<run day>&run=<id>` (the page's day comes only from `?day=`, default today; fe-setup) |
+| `/ops/plans/:id` | `ops.contacts.plan?day=<plan day>&plan=<id>` |
 | `/ops/contacts` | `ops.contacts` |
 | `/ops/contacts/records/:contact_id` | `ops.contacts.history?contact=<id>` (`/passes/:id` resolves scheduled and realized ids) |
 | `/ops/timeline` | `ops.timeline` |
 | `/ops/commands`, `/workspace`, `/stages`, `/stages/new`, `/stages/:id` | `ops.commands` (stages gone by design) |
 | `/ops/commands/new` | `ops.commands.new` |
-| `/ops/commands/requests/:id`, `…/queue` | `/commands/<group id>/review`: the console's `:requestId` is a COMMAND GROUP id (`RequestScreen` reads `/command-groups/:id`), so the redirect looks up the request's group (fe-ops); a 302 keeping the request id would 404 |
+| `/ops/commands/requests/:id`, `…/queue` | `/commands/<group id>/review`: the console's `:requestId` is a COMMAND GROUP id (`RequestScreen` reads `/command-groups/:id`), so the redirect looks up the request's group (fe-ops); a 302 keeping the request id would 404; a request with no group falls back to `ops.commands` (fe-setup) |
 | `/ops/commands/requests/:id/history` | `/commands/<group id>/uplink` (attempts + evidence), same lookup |
 | `/ops/contact-workspace`, `…/records/:id` | `ops.contacts`, `ops.contacts.history?contact=<id>` |
 
-**Retained** (still render; each names who keeps it): `/ops/alarms` (C2), `/ops/contacts/:provider_reservation_id`
+**Still rendered (HPL)** (not `retained-legacy-routes.json` entries; (B) brings that list back with a frozen baseline
+holding no /ops paths, so C1 can only shrink it, and the frontend half is rebuilt on the post-(B) head): `/ops/alarms` (C2), `/ops/contacts/:provider_reservation_id`
 (L14), `/ops/data-operations[/manage]`, `/ops/explore`, `/ops/activations` (L10's own batch), `/ops/telemetry/explore`.
 The ops frame (`host/src/ops-workspace/features/frame/*`) stays: it wraps every retained /ops page.
 
@@ -82,3 +83,15 @@ The ops frame (`host/src/ops-workspace/features/frame/*`) stays: it wraps every 
 - **Checks:** console + host vue-tsc, host vitest, ast-grep over packages and apps, lint/test:structure, the
   `producer-contracts` checks; the smokes to devops.
 - **Docs:** `ux/information-architecture.md:176-189`, `legacy-deletion.md` (a C1 section + the status row).
+
+## Review notes (fe-setup 11-16)
+- Build the catalog regen on the **post-(B) head** (daf03bebe brings `retained-legacy-routes.json` back, frozen).
+- Counts that ride with the server half (fe-setup), not the frontend half: the first-party manifest parity count
+  (40 published surfaces on head, minus C1's 9), `ops_route_action_ledger_test`, `catalog_registry_validity_test`
+  (one invalid surface definition empties the whole catalog).
+- Installed state: no persisted installation, nav pin or dashboard link may key on a deleted surface;
+  `HostRoutes.for_surface` on an unknown key must degrade, not 500 (fe-setup greps the server side).
+- Setup › Apps: an app with no setup surface left shows its name and status with no link (lead's condition;
+  dashboards' first frontend commit, with a test).
+- Gate for qa's dry: R1 and the A1/A2 armed run PASS first.
+- Host vue-tsc + host vitest in the batch.
