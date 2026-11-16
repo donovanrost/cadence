@@ -120,8 +120,8 @@ function limitItems(fleet: Fleet, state: "critical" | "caution"): QueueItem[] {
           titleTo: null,
           sentence: names(group),
           meta: null,
-          // Alarms has no state filter (it read ?state= and dropped it): open the list itself.
-          action: { label: "Alarms", to: { name: "ops.alarms" } },
+          // ux U69 A6: Alarms filters by severity (?severity=), the group's own.
+          action: { label: "Alarms", to: { name: "ops.alarms", query: { severity: state } } },
           spacecraftIds: group.map((sc) => sc.id),
         },
       ];

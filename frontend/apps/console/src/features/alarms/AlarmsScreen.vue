@@ -28,6 +28,8 @@ import {
   episodesCapNote,
 } from "./list.ts";
 import { useActiveEpisodes, useClearedEpisodes } from "./useAlarms.ts";
+import AlarmFilters from "./AlarmFilters.vue";
+import { filtered, filtersOf, severitiesOf, withFilter } from "./filters.ts";
 
 /**
  * Alarms (OpsLists.md §Alarms) on alarm episodes: "What's out of limits right now, and who has it?"
@@ -46,7 +48,19 @@ const tab = computed<AlarmTab>(() => {
     ? (t as AlarmTab)
     : "new";
 });
-const active = useActiveEpisodes(missionId);
+/** ux U69 A6: spacecraft + severity, in the URL, applied by the server. */
+const filters = computed(() => filtersOf(route.query));
+const severities = computed(() => severitiesOf(route.query));
+function setFilter(key: "sc" | "severity", value: string | null) {
+  router
+    .replace({ query: withFilter(route.query, key, value) })
+    .catch((e: unknown) => console.error("Navigation failed", e));
+}
+function clearFilters() {
+  const { sc: _sc, severity: _sev, ...rest } = route.query;
+  router.replace({ query: rest }).catch((e: unknown) => console.error("Navigation failed", e));
+}
+const active = useActiveEpisodes(missionId, filters);
 const cleared = useClearedEpisodes(
   missionId,
   // Also read when nothing is active: the empty state names the last clear.
@@ -55,6 +69,7 @@ const cleared = useClearedEpisodes(
       tab.value === "cleared" ||
       (active.state.value.status === "ready" && active.state.value.value.summary.active === 0),
   ),
+  filters,
 );
 const shown = computed(() => (tab.value === "cleared" ? cleared.state.value : active.state.value));
 
@@ -86,7 +101,12 @@ const headline = computed(() => {
   if (s.status !== "ready") return "Alarms";
   if (s.value.summary.active === 0)
     return limitsOff.value ? "Ground limits off" : "No active alarms";
-  const fresh = s.value.episodes.filter((e) => e.status === "new").length;
+  // Mission-wide like `active`, so a filter doesn't change the headline (episodes are filtered).
+  const { critical, caution } = s.value.summary;
+  const fresh =
+    critical && caution
+      ? critical.new + caution.new
+      : s.value.episodes.filter((e) => e.status === "new").length;
   return `${plural(s.value.summary.active, "alarm")} active · ${fresh} new`;
 });
 const tabs = computed(() =>
@@ -118,11 +138,13 @@ const lastCleared = computed(() =>
     : null,
 );
 const empty = computed(() =>
-  tab.value === "cleared"
-    ? "Nothing cleared in the last 24 h."
-    : tab.value === "acknowledged"
-      ? "No acknowledged alarms."
-      : "No unacknowledged alarms.",
+  filtered(filters.value)
+    ? "No alarms match these filters."
+    : tab.value === "cleared"
+      ? "Nothing cleared in the last 24 h."
+      : tab.value === "acknowledged"
+        ? "No acknowledged alarms."
+        : "No unacknowledged alarms.",
 );
 </script>
 
@@ -136,6 +158,14 @@ const empty = computed(() =>
       >
     </ApCallout>
     <ApTabLinks :links="tabs" :active="tab" label="Alarm status" />
+    <AlarmFilters
+      :spacecraft="fleetRows"
+      :spacecraft-id="filters.spacecraftId"
+      :severities="severities"
+      @spacecraft="(id) => setFilter('sc', id)"
+      @severities="(s) => setFilter('severity', s.join(',') || null)"
+      @clear="clearFilters"
+    />
     <div
       class="grid grid-cols-1 gap-3 console:min-h-0 console:flex-1 console:grid-cols-[minmax(0,1fr)_340px]"
     >
@@ -153,7 +183,9 @@ const empty = computed(() =>
         >
           <template #default="{ value }">
             <ApCallout
-              v-if="tab === 'new' && point === null && value.summary.active === 0"
+              v-if="
+                tab === 'new' && point === null && !filtered(filters) && value.summary.active === 0
+              "
               tone="nominal"
             >
               No active alarms.{{ lastCleared ? ` ${lastCleared}` : "" }}
@@ -166,7 +198,7 @@ const empty = computed(() =>
                 v-if="
                   episodesCapNote(
                     value.episodes.length,
-                    tab === 'new' ? value.summary.active : null,
+                    tab === 'new' && !filtered(filters) ? value.summary.active : null,
                   )
                 "
                 class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
@@ -174,7 +206,7 @@ const empty = computed(() =>
                 {{
                   episodesCapNote(
                     value.episodes.length,
-                    tab === "new" ? value.summary.active : null,
+                    tab === "new" && !filtered(filters) ? value.summary.active : null,
                   )
                 }}
               </p>

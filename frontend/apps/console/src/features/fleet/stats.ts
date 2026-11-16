@@ -63,13 +63,13 @@ export function statTiles(fleet: Fleet): StatTile[] {
       label: "Caution",
       ...knowable(c.caution, limitsUnknown, "near a limit"),
       state: accent(c.caution, "caution"),
-      to: { name: "ops.alarms" },
+      to: { name: "ops.alarms", query: { severity: "caution" } },
     },
     {
       label: "Critical",
       ...knowable(c.critical, limitsUnknown, critCaption),
       state: accent(c.critical, "crit"),
-      to: { name: "ops.alarms" },
+      to: { name: "ops.alarms", query: { severity: "critical" } },
     },
     {
       label: "Stale",

@@ -114,8 +114,8 @@ describe("statTiles (U13)", () => {
     const fleet = fleetOf([spacecraftRow(1)]);
     expect(statTiles(fleet).map((t) => [t.label, t.to])).toEqual([
       ["Nominal", { name: "ops.fleet", query: { state: "nominal" } }],
-      ["Caution", { name: "ops.alarms" }],
-      ["Critical", { name: "ops.alarms" }],
+      ["Caution", { name: "ops.alarms", query: { severity: "caution" } }],
+      ["Critical", { name: "ops.alarms", query: { severity: "critical" } }],
       ["Stale", { name: "ops.fleet", query: { state: "stale" } }],
       ["In contact", { name: "ops.contacts" }],
       ["Uplinks queued", { name: "ops.commands" }],
