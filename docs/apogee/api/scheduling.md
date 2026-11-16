@@ -260,7 +260,7 @@ version" (open it without `version`).
 `{"data": {"plan_id", "latest_version", "versions": [...], "decisions": [...], "truncated"}}`:
 
 - `versions`, newest first: `{version, created_at, created_by: {kind: user | service_identity |
-  system, id, name} | null, rationale | null, content_sha256, selected, locked, rejected,
+  system, id, name} | null (an automatic run reads `{kind: "system", name: "Cadence"}`, as detail), rationale | null, content_sha256, selected, locked, rejected,
   decision: approved | rejected | null (that version's latest decision), submitted: bool}`.
   Open one with plan detail's `?version=`.
 - `decisions`, newest first, one per act across all rounds: `{kind: submitted | approved |

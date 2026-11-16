@@ -115,6 +115,10 @@ defmodule Cadence.Reads.PlanHistory do
   # A version's `created_by` is an actor id: a person, a service identity, or Cadence's planner.
   defp creator(_org, nil), do: nil
 
+  # As plan detail's `created_by`: an automatic run's id reads as Cadence itself.
+  defp creator(_org, "cadence" <> _ = id), do: %{kind: "system", id: id, name: "Cadence"}
+  defp creator(_org, "system" <> _ = id), do: %{kind: "system", id: id, name: "Cadence"}
+
   defp creator(org, id) do
     case Accounts.fetch_user(id) do
       {:ok, user} ->
