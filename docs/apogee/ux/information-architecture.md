@@ -115,6 +115,15 @@ query (⌘K) → fleet posture → clocks → account.
     which is the only one that shrinks: its placeholder truncates with an ellipsis, with a minimum of about 160px.
     If the bar still doesn't fit at that minimum, the posture goes compact before anything else gives way, at any
     width.
+  - **When even that doesn't fit** (qa 11-15: Setup is 1358px wide at 1100–1280, so UTC and the account are
+    clipped): things give way in this order, each step only while the bar still overflows.
+    1. The brand drops its wordmark and keeps the mark (still the home link, named "Cadence").
+    2. The scope crumb drops the org name and keeps `EARENDIL ⌄`. The org stays in the switcher list and in the
+       crumb's accessible name ("Reflect Orbital / Earendil").
+    3. The query becomes an icon button (`⌕ ⌘K`, named "Search"). It opens the same palette.
+    4. The clock cluster drops next AOS and MET, and keeps `UTC`.
+  - **Never give way:** the mode switch, the posture's marks and counts, Setup's `CONFIG rN`, `UTC` and the account
+    menu. Nothing is ever clipped or pushed off-screen: the account menu is always reachable.
   - Count changes aren't announced; a new crit flashes the chip once (reduced motion: no flash).
 - **Account menu**: name + role, Your account, Switch organization, Platform
   admin (capability-gated; the console admin area, L7), Sign out.
