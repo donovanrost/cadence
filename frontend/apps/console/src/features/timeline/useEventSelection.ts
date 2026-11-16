@@ -1,7 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, watch, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useRemoteQuery } from "@/api/index.ts";
+import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { fetchEvent, type MissionEvent } from "./api.ts";
 
 /**
@@ -40,6 +40,12 @@ export function useEventSelection(
   const notFound = computed(
     () => lookup.state.value.status === "failed" && lookup.state.value.error.kind === "not_found",
   );
+  /** Any other failure says so, with Retry (fe-ops' review). */
+  const loadError = computed(() =>
+    lookup.state.value.status === "failed" && lookup.state.value.error.kind !== "not_found"
+      ? describeApiError(lookup.state.value.error)
+      : null,
+  );
   watch(fetched, (e) => {
     const w = options.window.value;
     if (!e || !w) return;
@@ -56,6 +62,8 @@ export function useEventSelection(
     selectedId,
     event: computed(() => inList.value ?? fetched.value),
     notFound,
+    loadError,
+    retry: () => lookup.refetch(),
     /** The row's time button: selects it, or clears when it's already selected (aria-pressed). */
     toggle: (id: string) => setEvent(selectedId.value === id ? null : id),
     clear: () => setEvent(null),

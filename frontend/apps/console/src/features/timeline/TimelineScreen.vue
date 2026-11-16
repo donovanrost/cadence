@@ -216,7 +216,10 @@ const detail = ref<InstanceType<typeof EventDetail> | null>(null);
 const detailSheet = ref<InstanceType<typeof ApSheet> | null>(null);
 let fromLink = selection.selectedId.value !== null;
 watch(selection.event, async (e) => {
-  if (!e) return void detailSheet.value?.close();
+  if (!e) {
+    detailSheet.value?.close();
+    return;
+  }
   if (!wide.value) detailSheet.value?.open();
   if (!fromLink) return;
   fromLink = false;
@@ -265,6 +268,12 @@ const short = (iso: string) => {
           @brush="brushTo"
         />
       </div>
+      <ApCallout v-if="selection.loadError.value" tone="caution">
+        Couldn't load this event: {{ selection.loadError.value }}
+        <template #action>
+          <ApButton size="compact" variant="secondary" @click="selection.retry">Retry</ApButton>
+        </template>
+      </ApCallout>
       <ApCallout v-if="selection.notFound.value" tone="info">
         This event isn't in the timeline any more.
         <template #action>
