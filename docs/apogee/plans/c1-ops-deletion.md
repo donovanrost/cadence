@@ -110,8 +110,12 @@ The ops frame (`host/src/ops-workspace/features/frame/*`) stays: it wraps every 
   spacecraft_catalogs,approved_command,workspace_settings}`; `actions/{contact_workflow,native_planning_input}` and
   `Planning.{ContactRecord,ContactSchedule,ContactDetail}` (L14); `actions/fleet_planning` (grants).
 
+## Assembly order (fe-setup, all on the post-(B) head)
+(B) lands → api's redirects re-cut → fe-setup's server half → dashboards' frontend half.
+
 ## Built
-- **Redirects (api):** `8d03c55ae` on `api/c1-ops-redirects` (on 4f579f750): `LegacyOpsRedirectController` C1 actions,
+- **Redirects (api):** `8d03c55ae` on `api/c1-ops-redirects` (on 4f579f750; **superseded: api re-cuts it on the
+  post-(B) head after a router conflict with (B); use api's new SHA**): `LegacyOpsRedirectController` C1 actions,
   19 GET routes, the 17 C1 live routes and the 2 contact-workspace routes removed; plan/run days via
   `ContactPlanOverview.day/3` and the run's horizon start; request → command group (review/uplink), no group → list.
   `legacy_ops_redirect_controller_test` 8/8. With the routes gone, 73 tests in 23 modules fail: all tests of the
