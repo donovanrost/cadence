@@ -17,6 +17,7 @@ defineEmits<{ run: []; approve: [reportId: string]; reject: [] }>();
   <div class="flex flex-wrap items-center gap-2">
     <ApButton
       v-if="reportId === null"
+      data-approval-run
       variant="primary"
       :disabled="busy !== null"
       disabled-reason="Comparing…"
@@ -24,6 +25,7 @@ defineEmits<{ run: []; approve: [reportId: string]; reject: [] }>();
       >Run comparison</ApButton
     >
     <ApButton
+      data-approval-approve
       :variant="reportId === null ? 'secondary' : 'primary'"
       :disabled="reportId === null || busy !== null"
       :disabled-reason="reportId === null ? 'Run the comparison first.' : 'Approving…'"

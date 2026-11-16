@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { useSession } from "@/shell";
-import { ApButton, ApCallout, ApPanel, plural } from "@/ui";
+import { ApButton, ApCallout, ApPanel, plural, refocusFirst } from "@/ui";
 import { discardChangeSet, failureOutcome, withdrawChange, type PreviewItem } from "./actions.ts";
 import ChangeConflict from "./ChangeConflict.vue";
 import { conflictRow } from "./rebase.ts";
@@ -52,9 +52,35 @@ async function run(
     emit("changed");
   }
 }
-const withdraw = (change: Change) => run(() => withdrawChange(props.missionId, change.id));
-const discard = () =>
-  run(() => discardChangeSet(props.missionId, props.changeSet.id, props.changeSet.version));
+// a11y A5: Withdraw, Discard mine and a conflict choice remove the focused control; once the set
+// re-reads, focus the row now at that place (the next, else the last). An emptied set unmounts
+// this list, and ChangesScreen lands on Nothing staged.
+let settleAt: number | null = null;
+const settleOn = (change: Change) => {
+  settleAt = Math.max(0, props.changeSet.changes.indexOf(change));
+};
+const settle = (change: Change) => {
+  settleOn(change);
+  emit("changed");
+};
+watch(
+  () => props.changeSet.changes,
+  () => {
+    if (settleAt === null) return;
+    const rows = document.querySelectorAll<HTMLElement>("[data-change-row]");
+    refocusFirst(rows[Math.min(settleAt, rows.length - 1)]);
+    settleAt = null;
+  },
+  { flush: "post" },
+);
+const withdraw = (change: Change) => {
+  settleOn(change);
+  return run(() => withdrawChange(props.missionId, change.id));
+};
+const discard = () => {
+  settleAt = 0;
+  return run(() => discardChangeSet(props.missionId, props.changeSet.id, props.changeSet.version));
+};
 const open = ref(new Set<string>());
 function toggle(id: string) {
   const next = new Set(open.value);
@@ -99,7 +125,7 @@ function toggle(id: string) {
           :op-ids="conflicting(change)"
           :row="rowOf(change)"
           :can-act="mayRemove(change)"
-          @done="emit('changed')"
+          @done="settle(change)"
         />
         <ChangeOps v-if="open.has(change.id)" :change="change" />
       </li>

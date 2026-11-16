@@ -15,6 +15,7 @@ defineProps<{ reason: "unavailable" | "nothing" }>();
     />
     <ApEmptyState
       v-else
+      data-changes-empty
       headline="Nothing staged"
       sentence="Edits in Setup collect here before they reach the fleet."
     />

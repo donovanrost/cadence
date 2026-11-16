@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { ApButton, ApCallout, ApPanel } from "@/ui";
+import { computed, ref, watch } from "vue";
+import { ApButton, ApCallout, ApPanel, focusFirstConnected, refocusFirst } from "@/ui";
 import type { ModelKey, ModelRevision } from "./api.ts";
 import ApprovalActions from "./ApprovalActions.vue";
 import ApprovalFacts from "./ApprovalFacts.vue";
@@ -39,12 +39,25 @@ const panelFailure = computed(() =>
 async function reject(reason: string) {
   if (await act.reject(reason)) sheet.value?.close();
 }
+// a11y A5: a decision or an arriving report swaps out the focused control (Approve, Reject…'s
+// returned focus, Run comparison); land on the decided line, else the now-enabled Approve.
+const mark = (name: string) => document.querySelector<HTMLElement>(`[data-approval-${name}]`);
+watch(
+  [decided, () => report.value?.report_id],
+  () => refocusFirst(mark("decided"), mark("approve")),
+  { flush: "post" },
+);
+/** The failure callout's Run comparison clears the callout it sits in, so focus the actions' own first. */
+function runAgain() {
+  focusFirstConnected(mark("run"));
+  void act.run();
+}
 </script>
 
 <template>
   <ApPanel index="A1" :title="title" :meta="meta">
     <div v-if="decided" class="flex flex-col gap-2">
-      <p class="m-0 text-md text-readout">
+      <p data-approval-decided class="m-0 text-md text-readout">
         {{ decided }}
         <ApButton
           v-if="report"
@@ -81,7 +94,7 @@ async function reject(reason: string) {
       <ApCallout v-if="panelFailure" tone="crit"
         >{{ panelFailure.text }}
         <template v-if="panelFailure.runAgain" #action
-          ><ApButton size="compact" @click="act.run">Run comparison</ApButton></template
+          ><ApButton size="compact" @click="runAgain">Run comparison</ApButton></template
         >
       </ApCallout>
     </div>

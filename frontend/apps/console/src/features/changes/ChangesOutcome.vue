@@ -45,7 +45,7 @@ const applied = computed(() => {
     set is applied as <span class="font-mono">r{{ next }}</span
     >.
   </ApCallout>
-  <ApCallout v-if="applied" :tone="applied.tone">
+  <ApCallout v-if="applied" data-changes-outcome :tone="applied.tone">
     {{ applied.text }}
     <template #action
       ><ApButton size="compact" :to="{ name: 'setup.revisions' }"
@@ -53,10 +53,10 @@ const applied = computed(() => {
       ></template
     >
   </ApCallout>
-  <ApCallout v-else-if="outcome?.state === 'in_review'" tone="info">
+  <ApCallout v-else-if="outcome?.state === 'in_review'" data-changes-outcome tone="info">
     Sent for review. An org member who didn't stage any of these changes approves or sends it back.
   </ApCallout>
-  <ApCallout v-else-if="outcome?.state === 'open'" tone="info">
+  <ApCallout v-else-if="outcome?.state === 'open'" data-changes-outcome tone="info">
     Sent back to the authors with your comment.
   </ApCallout>
 </template>

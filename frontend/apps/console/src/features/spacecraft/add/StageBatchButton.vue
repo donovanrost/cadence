@@ -9,7 +9,7 @@ import {
   type FailureOutcome,
 } from "@/features/changes/index.ts";
 import { useMissionScope } from "@/shell";
-import { ApButton, ApCallout, plural } from "@/ui";
+import { ApButton, ApCallout, focusFirstConnected, plural } from "@/ui";
 import { useDraft } from "./context.ts";
 import { clearDraft } from "./draft.ts";
 import { batchOps } from "./stage.ts";
@@ -40,6 +40,12 @@ const label = computed(() =>
     ? `Stage ${plural(ready.value.report.rows.length, "spacecraft", "spacecraft")}`
     : "Stage spacecraft",
 );
+
+/** a11y A5: Retry sits in the callout that stage() clears, so focus moves to Stage first. */
+function retry() {
+  focusFirstConnected(document.querySelector<HTMLElement>("[data-stage-batch]"));
+  void stage();
+}
 
 async function stage() {
   const batch = ops.value;
@@ -83,12 +89,13 @@ async function stage() {
       <ApButton v-if="failure.changed === null" size="compact" :to="{ name: 'setup.changes' }"
         >Staged changes</ApButton
       >
-      <ApButton v-else size="compact" @click="stage">Retry</ApButton>
+      <ApButton v-else size="compact" @click="retry">Retry</ApButton>
     </template>
   </ApCallout>
   <ApButton
     variant="primary"
     size="commit"
+    data-stage-batch
     :disabled="reason !== null || busy"
     :disabled-reason="reason ?? 'Staging…'"
     @click="stage"

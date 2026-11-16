@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ActivationsWaiting } from "@/features/activations/index.ts";
-import { computed, onScopeDispose, ref } from "vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApPageHeader, ApRemote, formatShort, plural } from "@/ui";
+import { ApPageHeader, ApRemote, formatShort, plural, refocusFirst } from "@/ui";
 import ChangeSetBoard from "./ChangeSetBoard.vue";
 import ChangesEmpty from "./ChangesEmpty.vue";
 import ChangesOutcome from "./ChangesOutcome.vue";
@@ -81,8 +81,28 @@ if (stagedNotice.value !== null)
 const outcome = ref<SubmitResult | null>(null);
 function onResult(result: SubmitResult) {
   outcome.value = result;
+  actAndRefetch();
+}
+// a11y A5: Apply, Request review, Approve & apply and Send back hide the board, and Discard all
+// empties it, taking the focused control; once the page re-reads, land on the outcome, else
+// Nothing staged. Rows that remain are ChangeList's to settle. Armed by an action only, so a first
+// load never moves focus.
+let acted = false;
+function actAndRefetch() {
+  acted = true;
   refetch();
 }
+const first = (selector: string) => document.querySelector<HTMLElement>(selector);
+watch(
+  [outcome, () => state.value],
+  () => {
+    if (!acted || state.value.status === "loading") return;
+    acted = false;
+    if (first("[data-change-row]")) return;
+    refocusFirst(first("[data-changes-outcome]"), first("[data-changes-empty]"));
+  },
+  { flush: "post" },
+);
 
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
@@ -150,7 +170,7 @@ function meta(config: ConfigState): string | null {
           :conflicts="conflicts"
           @reload="reloadAll"
           @result="onResult"
-          @changed="refetch"
+          @changed="actAndRefetch"
         />
       </template>
     </ApRemote>
