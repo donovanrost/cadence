@@ -2346,6 +2346,17 @@ fold into one item ("2 other missions in this organization also fly SCID 42 thro
 - One frame: "▲ A frame with SCID 57 arrived during EARENDIL-312's pass (SCID 42) at 02:08:11Z. Cadence kept it as raw
   evidence and made no telemetry from it."
 - Never a guess at whose SCID 57 is: it may be another tenant's. Technical details: VCID, frame sequence, evidence id.
+- **As built (domain's shape, 11-16): the contact's settlement key `scid_mismatch`**, shown in the contact record's
+  settlement view next to U67's note, but as a caution (▲, the line at full contrast), because unlike U67 it isn't
+  normal. It carries counts, not times, so the settlement line has no time range:
+  - "▲ 412 frames with SCID 3 arrived during this pass, which is EARENDIL-312's (SCID 1). Cadence kept them as raw
+    evidence and made no telemetry from them." One frame: "▲ 1 frame with SCID 3 … kept it … from it."
+  - Two or three SCIDs: "with SCIDs 3 and 7" / "with SCIDs 3, 7 and 9". More than three: "with 12 different SCIDs";
+    the list goes in Technical details. This needs the full count of distinct SCIDs (`scid_count`), because the list
+    stops at 8.
+  - Several paths: one line per path, with its station: "…arrived through Fairbanks during this pass…". The path is
+    named by its station, never by path or binding id (U25). One path: no station.
+  - Not "weren't decoded": an operator reads "made no telemetry from them".
 
 **3. Listen port taken by another mission** (domain 0a3426e7d, ListenClaims). Accepted as built, on the port field:
 "Another mission already listens on this host and port. Choose a different port." It names no mission and no
