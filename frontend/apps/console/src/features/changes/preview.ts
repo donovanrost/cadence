@@ -128,6 +128,9 @@ export const diffEntry = object({
 });
 export type DiffEntry = Decoded<typeof diffEntry>;
 
+/** Why an effect's spacecraft keeps its value (domain 2ef4ca79). */
+const keepCodes = ["older_profile_version", "catalog_override", "framing_governed"] as const;
+
 /** The preview's checks (Cadence.Configuration.Preview.summarize/1); a new one reads as its key. */
 export const checkKeys = ["validation", "conflicts", "compatibility"] as const;
 export type CheckKey = (typeof checkKeys)[number];
@@ -173,7 +176,7 @@ export const previewReader = object({
           // free-text: the server's sentence for why this spacecraft keeps its value.
           reason: string,
           /** domain 2ef4ca79: older_profile_version | catalog_override | framing_governed. */
-          code: decoders.optional(nullable(token)),
+          code: decoders.optional(nullable(decoders.knownText(keepCodes))),
         }),
         5000,
       ),

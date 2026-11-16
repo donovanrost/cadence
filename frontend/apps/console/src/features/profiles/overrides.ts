@@ -35,7 +35,9 @@ export function overridableFields(detail: Pick<ProfileDetail, "sections">): Over
   const all = detail.sections.flatMap((s) =>
     s.fields.filter((f) => f.overridable).map((field) => ({ section: s.label, field })),
   );
+  // compared-as-text: a schema field path, an open set the server's schema defines
   const catalog = all.filter((o) => o.field.path === "catalog_revision_id");
+  // compared-as-text: a schema field path, an open set the server's schema defines
   return [...catalog, ...all.filter((o) => o.field.path !== "catalog_revision_id")];
 }
 

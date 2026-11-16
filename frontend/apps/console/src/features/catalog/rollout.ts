@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { decoders, isKnown, request, type ApiResult, type Decoded, type Unrecognized } from "@/api";
 import type { HoldReason, Preview, StageOp } from "@/features/changes/index.ts";
 import { overrideOp } from "@/features/profiles/index.ts";
 import { plural } from "@/ui";
@@ -98,10 +98,8 @@ export function rolloutKeeps(p: Preview): ReadonlyMap<KeepCode, number> {
   return counts;
 }
 
-const keepCode = (code: string | null | undefined): KeepCode =>
-  code === "older_profile_version" || code === "catalog_override" || code === "framing_governed"
-    ? code
-    : "other";
+const keepCode = (code: Exclude<KeepCode, "other"> | Unrecognized | null | undefined): KeepCode =>
+  code !== null && code !== undefined && isKnown(code) ? code : "other";
 
 /** "Stage rev 15 for Earendil Block 1" / "for 2 profiles" / "for 3 spacecraft" (ux C3). */
 export function stageLabel(revision: number, choice: RolloutChoice, names: readonly string[]) {

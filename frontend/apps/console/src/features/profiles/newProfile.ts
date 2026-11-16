@@ -24,6 +24,7 @@ export type NewProfileForm = Readonly<{
 
 /** Blank: the kind schema minus the name, each field at its default. */
 export function blankForm(schema: KindSchema): NewProfileForm {
+  // compared-as-text: a schema field path, an open set the server's schema defines
   const fields = schema.fields.filter((f) => f.path !== "display_name");
   const values: FormValues = {};
   for (const f of fields)
@@ -45,6 +46,7 @@ export function duplicateForm(
       values[f.path] =
         f.value === null || f.value === undefined ? "" : displayValue(field, f.value);
     }
+  // keyed-by-text: a create document keyed by the kind schema's field paths, not a word map
   const carried: Record<string, unknown> = {
     // The server gives each copied rule a new id (RoutingRule.normalize), so drop the source's.
     routing_rules: rulesDocument(toDrafts(source.rules)).map(({ id: _id, ...rule }) => rule),
@@ -72,6 +74,7 @@ export function createOp(
   carried: Readonly<Record<string, unknown>>,
   changes: readonly Readonly<{ path: string; value: unknown }>[],
 ): StageOp {
+  // keyed-by-text: a create document keyed by the kind schema's field paths, not a word map
   const document: Record<string, unknown> = { ...carried, display_name: name.trim() };
   for (const c of changes) setPath(document, c.path, c.value);
   return { kind: "spacecraft_profile", action: "create", document };

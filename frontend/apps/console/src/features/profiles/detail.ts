@@ -128,6 +128,7 @@ export function fetchProfileDetail(
 /** A field's value as text: enum label, yes/no, number + unit, or "Not set". */
 export function fieldText(f: ProfileField): string {
   // domain 9251b745: a null APID list means every APID the catalog defines.
+  // compared-as-text: a schema field path, an open set the server's schema defines
   if (f.path === "handled_apids" && f.value === null) return "All of the catalog's APIDs";
   if (f.value === null)
     return f.default === null

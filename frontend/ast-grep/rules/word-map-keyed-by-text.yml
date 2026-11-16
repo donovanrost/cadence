@@ -32,7 +32,6 @@
       "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
       "apps/console/src/features/dashboards/fixtures.test-support.ts",
       "apps/console/src/features/dashboards/model/time-range.ts",
-      "apps/console/src/features/profiles/newProfile.ts",
       "apps/console/src/features/review/api.ts",
       "apps/console/src/features/review/format.ts",
       "apps/console/src/features/scheduling/PlanStatePanel.vue",
