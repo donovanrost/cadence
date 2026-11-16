@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApTable, formatCount, type ApColumn } from "@/ui";
+import { ApStatusMark, ApTable, formatCount, type ApColumn } from "@/ui";
 import { lastChangeText, manyOverrides, protocolLine, type ProfileSummary } from "./api.ts";
 
 /** Profile rows; the Name cell links to the profile page (Profile.md list). */
@@ -44,9 +44,14 @@ const columns = computed((): readonly ApColumn[] => {
       <span v-else class="font-sans text-text-3">Set per spacecraft</span>
     </template>
     <template #cell-overrides="{ row }">
-      <span :class="manyOverrides(row) ? 'text-caution-text' : ''">{{
-        formatCount(row.overrideCount ?? 0)
-      }}</span>
+      <!-- a11y B2: many overrides carry the caution mark and a word, not colour alone. -->
+      <span
+        class="inline-flex items-center gap-1.5"
+        :class="manyOverrides(row) ? 'text-caution-text' : ''"
+        ><ApStatusMark v-if="manyOverrides(row)" state="caution" />{{
+          formatCount(row.overrideCount ?? 0)
+        }}<span v-if="manyOverrides(row)" class="sr-only">, many overrides</span></span
+      >
     </template>
     <template #cell-changed="{ row }">{{
       row.lastChange ? lastChangeText(row.lastChange) : "—"

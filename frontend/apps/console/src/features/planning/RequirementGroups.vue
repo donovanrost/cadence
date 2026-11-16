@@ -24,7 +24,12 @@ const titles: Readonly<Record<string, string>> = { window: "Window", requirement
       :schema="{ kind: 'requirement', fields: g.fields }"
       :errors="errors"
     />
-    <details v-if="g.advanced.length > 0" class="mt-3">
+    <!-- a11y A6: an error on an Advanced field opens it, so the error isn't hidden. -->
+    <details
+      v-if="g.advanced.length > 0"
+      class="mt-3"
+      :open="g.advanced.some((f) => errors[f.path] !== undefined) || undefined"
+    >
       <summary class="ap-label cursor-pointer">Advanced</summary>
       <div class="mt-3">
         <SchemaForm

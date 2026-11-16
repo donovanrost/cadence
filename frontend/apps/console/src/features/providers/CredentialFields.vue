@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import { ApField, ApSegmented, ApTag } from "@/ui";
 
 /**
@@ -16,6 +16,8 @@ const options = [
   { value: "external", label: "Secret manager" },
   { value: "env", label: "Environment variable" },
 ];
+// a11y A6: the backend error is wired to its group (aria-describedby, aria-invalid), not only shown.
+const backendError = useId();
 const placeholder = computed(() =>
   backend.value === "env" ? "NORTHLIGHT_API_KEY" : `providers/${props.orgSlug}/northlight-prod`,
 );
@@ -26,10 +28,16 @@ const placeholder = computed(() =>
     <div class="flex flex-col gap-1.5">
       <span class="ap-label">Where the secret lives</span>
       <div class="flex flex-wrap items-center gap-2">
-        <ApSegmented v-model="backend" :options="options" label="Where the secret lives" />
+        <ApSegmented
+          v-model="backend"
+          :options="options"
+          label="Where the secret lives"
+          :aria-describedby="errors['credential.backend'] ? backendError : undefined"
+          :aria-invalid="errors['credential.backend'] ? 'true' : undefined"
+        />
         <ApTag v-if="backend === 'env'" state="caution" label="Dev only" />
       </div>
-      <span v-if="errors['credential.backend']" class="text-sm text-crit-text">{{
+      <span v-if="errors['credential.backend']" :id="backendError" class="text-sm text-crit-text">{{
         errors["credential.backend"]
       }}</span>
     </div>

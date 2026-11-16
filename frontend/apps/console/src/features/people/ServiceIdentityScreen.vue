@@ -9,6 +9,7 @@ import {
   ApPageHeader,
   ApPanel,
   ApRemote,
+  ApStatusMark,
   formatShort,
   useNow,
 } from "@/ui";
@@ -71,7 +72,10 @@ const warning = computed(() =>
               identity.key_created_at ? formatShort(new Date(identity.key_created_at)) : "—"
             }}</span>
           </p>
-          <p v-if="warning" class="m-0 mt-2 text-sm text-caution-text">{{ warning }}</p>
+          <!-- a11y B2: the caution mark, as the list has it, so the warning isn't colour alone. -->
+          <p v-if="warning" class="m-0 mt-2 flex items-center gap-2 text-sm text-caution-text">
+            <ApStatusMark state="caution" />{{ warning }}
+          </p>
         </ApPanel>
         <ServiceIdentityActions
           v-if="org"

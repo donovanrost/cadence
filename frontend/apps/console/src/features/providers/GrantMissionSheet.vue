@@ -96,7 +96,10 @@ defineExpose({ open });
         v-model="quota"
         label="Quota"
         inputmode="numeric"
-        :error="errors['max_quota'] ?? null"
+        :error="
+          errors['max_quota'] ??
+          (quota.trim() && quotaValue === null ? 'Quota is a whole number.' : null)
+        "
       />
       <ApTextarea v-model="reason" label="Why (optional)" :maxlength="2000" />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
