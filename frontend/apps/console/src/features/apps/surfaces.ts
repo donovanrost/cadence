@@ -76,6 +76,14 @@ export function retiredSurfaceHome(
   surface: string,
   spacecraftId: string | null,
 ): RouteLocationRaw | null {
+  // Comms batch 1 (lead 11-16): the app's create forms left; the console's add forms took over.
+  if (appKey === "comms") {
+    if (surface === "transport_new")
+      return { name: "setup.comms.transports", params: { transportId: "new" } };
+    if (surface === "ground_station_new")
+      return { name: "setup.stations", params: { stationId: "new" } };
+    return null;
+  }
   if (appKey !== "spacecraft") return null;
   if (surface === "new") return { name: "setup.spacecraft.new" };
   if (surface === "profile_new") return { name: "setup.profile.new" };

@@ -49,6 +49,19 @@ describe("retired surfaces (sweep row 2, ux)", () => {
     expect(retiredSurfaceHome("spacecraft", "show", "sc-1")).toBeNull();
     expect(retiredSurfaceHome("comms", "new", null)).toBeNull();
   });
+
+  it("send comms' removed create forms (batch 1) to the console's add forms", () => {
+    expect(retiredSurfaceHome("comms", "transport_new", null)).toEqual({
+      name: "setup.comms.transports",
+      params: { transportId: "new" },
+    });
+    expect(retiredSurfaceHome("comms", "ground_station_new", null)).toEqual({
+      name: "setup.stations",
+      params: { stationId: "new" },
+    });
+    // routing_new stays until batch 2; its form is the app's.
+    expect(retiredSurfaceHome("comms", "routing_new", null)).toBeNull();
+  });
 });
 
 describe("one-record surfaces (lead, qa 11-16)", () => {
