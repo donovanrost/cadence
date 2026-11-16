@@ -2374,6 +2374,9 @@ fold into one item ("2 other missions in this organization also fly SCID 42 thro
   the event, action `Open contact record`. It resolves when marked seen; the fade reads "Seen by Mira K. at
   04:12Z" (U29). Unseen, it retires 7 days after settle (api, lead 11-16); that fade reads "Retired after 7 days
   without being seen", never as if someone saw it. The Timeline row and the record line stay.
+  Now row (api's shape, 11-16): no countdown (nothing is due); meta `FBK 03:10Z · settled 04:12Z`. The pass time
+  is the realized start. Fallbacks: no spacecraft name → the title drops "EARENDIL-312 · " and the secondary reads
+  "not this pass's SCID 1"; no station → "on the 03:10Z pass". Never an id.
   Wire (api): action `seen` (resolved_by the person, with name; resolved_at = when seen; a null name reads "Seen at
   04:12Z", never the id) or `retired` (system, settle + 7 days). The words:
   - Title: "EARENDIL-312 · Most frames on the FBK 03:10Z pass carried another SCID."
