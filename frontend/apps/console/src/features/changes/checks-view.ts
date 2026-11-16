@@ -61,13 +61,19 @@ export function useHeldChecks(
     last.value = null;
     rechecked.value = false;
   });
+  // "Checks done" only after the checks were actually away (re-running or failed) with rows held;
+  // a plain refetch keeps the value, never leaves "ready", and so announces nothing (ux review).
+  let away = false;
   watch(
     state,
     (s) => {
-      if (s.status === "ready") {
-        rechecked.value = last.value !== null;
-        last.value = { preview: s.value, count: count() ?? 0 };
+      if (s.status !== "ready") {
+        away = last.value !== null;
+        return;
       }
+      rechecked.value = away;
+      away = false;
+      last.value = { preview: s.value, count: count() ?? 0 };
     },
     { immediate: true },
   );

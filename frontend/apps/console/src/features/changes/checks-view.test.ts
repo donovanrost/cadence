@@ -3,7 +3,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode, type RemoteState } from "@/api";
 import { previewReader, type Preview } from "./actions.ts";
 import ChecksPanel from "./ChecksPanel.vue";
-import { doneLine, holdsKey, type HeldChecks } from "./checks-view.ts";
+import { nextTick, shallowRef } from "vue";
+import { doneLine, holdsKey, useHeldChecks, type HeldChecks } from "./checks-view.ts";
 
 /** A preview with one check per verdict given ('go' | 'hold' | 'no_go'), each hold on `entity`. */
 function preview(verdicts: readonly ("go" | "hold" | "no_go")[], entity = "ld_1"): Preview {
@@ -36,6 +37,43 @@ describe("K2 re-check words (ux B4)", () => {
     expect(holdsKey(preview(["hold"]))).toBe(holdsKey(preview(["hold"])));
     expect(holdsKey(preview(["hold"]))).not.toBe(holdsKey(preview(["hold"], "ld_2")));
     expect(holdsKey(preview(["go"]))).toBe("[]");
+  });
+});
+
+describe("useHeldChecks", () => {
+  const ready = (value: Preview): RemoteState<Preview> => ({
+    status: "ready",
+    value,
+    receivedAt: new Date(),
+  });
+
+  it("holds the last run while the next loads, then announces it", async () => {
+    const s = shallowRef<RemoteState<Preview>>(ready(preview(["go"])));
+    const c = useHeldChecks(
+      () => s.value,
+      () => 12,
+      () => "cs_1",
+    );
+    expect(c.held.value).toBeNull();
+    s.value = { status: "loading" };
+    await nextTick();
+    expect(c.held.value?.count).toBe(12);
+    s.value = ready(preview(["hold"]));
+    await nextTick();
+    expect(c.held.value).toBeNull();
+    expect(c.done.value).toBe("Checks done: 1 hold.");
+  });
+
+  it("announces nothing for a plain refetch that never left ready (ux review)", async () => {
+    const s = shallowRef<RemoteState<Preview>>(ready(preview(["go"])));
+    const c = useHeldChecks(
+      () => s.value,
+      () => 12,
+      () => "cs_1",
+    );
+    s.value = ready(preview(["go"]));
+    await nextTick();
+    expect(c.done.value).toBeNull();
   });
 });
 
