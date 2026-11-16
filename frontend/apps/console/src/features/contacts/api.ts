@@ -127,9 +127,15 @@ const pass = d.object({
       day: d.optional(d.nullable(d.timestamp)),
     }),
   ),
-  /** U74 (api): the requirement it was booked for, with its name; optional until shipped. */
+  /** U74 (api f3aa9b272): the requirement it was booked for; its name on GET /passes/:id only. */
   requirement: d.optional(
-    d.nullable(d.object({ id: d.token, version: d.nullable(d.integer), name: d.string })),
+    d.nullable(
+      d.object({
+        id: d.token,
+        version: d.nullable(d.integer),
+        name: d.optional(d.string),
+      }),
+    ),
   ),
   /** qa #30: who ended a canceled/rejected/failed booking; absent on older servers. */
   ended_by: d.optional(d.nullable(passEnder)),

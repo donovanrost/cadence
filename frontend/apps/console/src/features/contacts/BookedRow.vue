@@ -1,16 +1,29 @@
 <script setup lang="ts">
+import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import type { Pass } from "./api.ts";
+import { useRemoteQuery } from "@/api/index.ts";
+import { fetchPass, type Pass } from "./api.ts";
 
 /**
  * D2's 'Booked' row (ux U74): 'From the 11-14 plan (R3) · for Block 1 daily', both links. A plan
  * without a day reads 'From a contact plan (R3)'; without a requirement the 'for' part is left out.
  * Off-plan bookings keep their own line, so this shows only for plan bookings.
  */
-const props = defineProps<{ pass: Pick<Pass, "plan" | "requirement"> }>();
-const plan = computed(() => props.pass.plan);
+const props = defineProps<{
+  missionId: MissionId;
+  pass: Pick<Pass, "id" | "plan" | "requirement">;
+}>();
+/** The plan's day and the requirement's name are on GET /passes/:id only (api f3aa9b272). */
+const detail = useRemoteQuery(
+  computed(() => (props.pass.plan ? { m: props.missionId, id: props.pass.id } : null)),
+  (k, signal) => fetchPass(k.m, k.id, signal),
+);
+const named = computed(() =>
+  detail.state.value.status === "ready" ? detail.state.value.value : props.pass,
+);
+const plan = computed(() => named.value.plan);
 const planWords = computed(() => {
   const p = plan.value;
   if (!p) return null;
@@ -29,7 +42,10 @@ const planTo = computed<RouteLocationRaw | null>(() => {
     },
   };
 });
-const requirement = computed(() => props.pass.requirement ?? null);
+const requirement = computed(() => {
+  const r = named.value.requirement;
+  return r?.name ? { id: r.id, name: r.name } : null;
+});
 </script>
 
 <template>

@@ -1,6 +1,6 @@
 import { mount, RouterLinkStub } from "@vue/test-utils";
-import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { decode, missionId } from "@/api/index.ts";
 import BookedRow from "./BookedRow.vue";
 import { contactRecordReader, reservationReader } from "./records.ts";
 import { sentenceCase, span, valueCells } from "./recordWords.ts";
@@ -37,6 +37,10 @@ const reservation = {
   ],
   audit: { entries: [], next_cursor: null },
 };
+
+// BookedRow reads GET /passes/:id for the names; here it falls back to the row's own fields.
+beforeEach(() => vi.stubGlobal("fetch", () => Promise.reject(new TypeError("offline"))));
+afterEach(() => vi.unstubAllGlobals());
 
 describe("pass records (ux U74, api A11/A13)", () => {
   it("decodes the reservation and words its value cells", () => {
@@ -89,7 +93,9 @@ describe("pass records (ux U74, api A11/A13)", () => {
   it("says where a plan booking came from, with both links", () => {
     const w = mount(BookedRow, {
       props: {
+        missionId: missionId("m"),
         pass: {
+          id: "p-1",
           plan: { id: "plan-1", version: 3, day: "2026-11-14" },
           requirement: { id: "req-1", version: 2, name: "Block 1 daily" },
         },
@@ -106,7 +112,7 @@ describe("pass records (ux U74, api A11/A13)", () => {
     });
     expect(links[1]?.props("to")).toMatchObject({ params: { requirementId: "req-1" } });
     const none = mount(BookedRow, {
-      props: { pass: { plan: null, requirement: undefined } },
+      props: { missionId: missionId("m"), pass: { id: "p-2", plan: null, requirement: undefined } },
       global: { stubs: { RouterLink: RouterLinkStub } },
     });
     expect(none.text()).toBe("");

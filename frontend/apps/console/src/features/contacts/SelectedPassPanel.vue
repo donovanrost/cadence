@@ -302,7 +302,7 @@ const countdown = computed(() => {
       <p v-if="pass.off_plan" class="m-0 text-sm text-text-2">
         {{ offPlanLine(pass.off_plan, now) }}
       </p>
-      <BookedRow v-else :pass="pass" />
+      <BookedRow v-else :mission-id="missionId" :pass="pass" />
       <p v-if="pass.contact_ended" class="m-0 text-sm text-text-2">
         {{ endedLine(pass.contact_ended, pass.source.provider_name, now) }}
       </p>
