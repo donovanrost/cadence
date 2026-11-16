@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { missionId as missionIdReader, decode } from "@/api/index.ts";
+import { missionId as missionIdReader, stationId, decode } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import BookPassSheet from "./BookPassSheet.vue";
 import {
@@ -23,7 +23,7 @@ const offer = (id: string, over: Partial<Offer> = {}): Offer => ({
   expires_at: "2026-11-13T03:14:32Z",
   starts_at: "2026-11-13T03:10:00Z",
   ends_at: "2026-11-13T03:19:12Z",
-  station: { ref: "sva", id: "sva", code: "SVA", name: "Svalbard" },
+  station: { ref: "sva", id: stationId("sva"), code: "SVA", name: "Svalbard" },
   antenna: null,
   provider: { id: "nl", name: "Northlight" },
   availability: "available",

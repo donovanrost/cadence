@@ -2,6 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import {
   scid as scidReader,
   decoders as d,
+  stationRef,
   request,
   type ApiResult,
   type Decoded,
@@ -29,14 +30,8 @@ const offerReader = d.object({
   starts_at: d.timestamp,
   ends_at: d.timestamp,
   // domain/api (L15): ref is always set; id, code and name are null for a provider station that
-  // matches no Cadence station.
-  station: d.object({
-    ref: d.string,
-    id: d.nullable(d.token),
-    // free-text: a station call sign (SVA), not a vocabulary
-    code: d.nullable(d.string),
-    name: d.nullable(d.string),
-  }),
+  // matches no Cadence station. §12 A5: the shared station reference.
+  station: stationRef,
   antenna: d.nullable(d.object({ id: d.token, label: d.nullable(d.string) })),
   provider: d.object({ id: d.token, name: d.nullable(d.string) }),
   // GroundNetworks.Opportunity: available | limited | unavailable.
@@ -47,6 +42,7 @@ const offerReader = d.object({
   overlaps: d.nullable(
     d.object({
       reservation_id: d.token,
+      // Not the shared spacecraftRef: the contract names an overlapping live craft (its sentence).
       spacecraft: d.object({ id: d.token, name: d.string }),
       // free-text: a station call sign, not a vocabulary
       station_code: d.nullable(d.string),
@@ -58,6 +54,7 @@ const offerReader = d.object({
 export type Offer = Decoded<typeof offerReader>;
 
 export const searchReader = d.object({
+  // Not the shared spacecraftRef: the searched craft is named in its sentences (name required).
   spacecraft: d.object({ id: d.token, name: d.string, scid: d.nullable(scidReader) }),
   window: d.object({ from: d.timestamp, to: d.timestamp }),
   offers: d.array(offerReader, 500),

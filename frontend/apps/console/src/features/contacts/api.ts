@@ -4,6 +4,8 @@ import {
   spacecraftId as spacecraftIdReader,
   scid as scidReader,
   actor,
+  spacecraftRef,
+  stationRef,
   decoders as d,
   request,
   type ApiResult,
@@ -79,20 +81,10 @@ const contactEnded = d.object({
 });
 export type ContactEnded = Decoded<typeof contactEnded>;
 
-/** A pass row's spacecraft identity; name is null for a deleted spacecraft. */
-export const passSpacecraft = d.object({
-  id: d.token,
-  name: d.nullable(d.string),
-  scid: d.nullable(scidReader),
-});
-/** A pass row's station, as booked or as a hand-started contact's ground_station_ref names it. */
-export const passStation = d.object({
-  ref: d.nullable(d.string),
-  id: d.nullable(d.token),
-  // free-text: a station call sign (SVA), not a vocabulary
-  code: d.nullable(d.string),
-  name: d.nullable(d.string),
-});
+/** A pass row's spacecraft: the shared reference (§12 A5); name is null for a deleted spacecraft. */
+export const passSpacecraft = spacecraftRef;
+/** A pass row's station (as booked, or a hand-started contact's ground_station_ref): stationRef. */
+export const passStation = stationRef;
 
 /** A path's refused frames (domain: settlement scid_mismatch; sorted scids, at most 8). */
 const scidMismatch = d.object({

@@ -50,7 +50,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   delivery_state: "pending",
   spacecraft_id: spacecraftIdReader("sc-312"),
   spacecraft: { id: "sc-312", name: "EARENDIL-312", scid: scidReader(312) },
-  station: { ref: "SVL", id: "gs-svl", code: "SVB", name: "Svalbard" },
+  station: { ref: "SVL", id: stationIdReader("gs-svl"), code: "SVB", name: "Svalbard" },
   antenna: null,
   starts_at: "2026-11-09T02:30:00Z",
   ends_at: "2026-11-09T02:38:00Z",

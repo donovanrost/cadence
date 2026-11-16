@@ -1,8 +1,9 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
 import {
-  scid as scidReader,
   decoders as d,
+  spacecraftRef,
+  stationRef,
   isKnown,
   knownText,
   request,
@@ -25,15 +26,8 @@ export const findingKinds = [
 ] as const;
 type FindingKind = (typeof findingKinds)[number];
 
-const station = d.nullable(
-  d.object({
-    ref: d.nullable(d.string),
-    id: d.nullable(d.token),
-    // free-text: a station call sign (SVB), not a vocabulary
-    code: d.nullable(d.string),
-    name: d.nullable(d.string),
-  }),
-);
+/** §12 A5: the shared station reference. */
+const station = d.nullable(stationRef);
 const finding = d.object({
   id: d.string,
   kind: knownText(findingKinds),
@@ -43,9 +37,7 @@ const finding = d.object({
   message: d.string,
   passes: d.array(d.object({ id: d.token, starts_at: d.timestamp }), 100),
   /** Coverage gaps name the spacecraft and the gap; D4 folds same-cause gaps by them (ux §7). */
-  spacecraft: d.optional(
-    d.nullable(d.object({ id: d.token, name: d.nullable(d.string), scid: d.nullable(scidReader) })),
-  ),
+  spacecraft: d.optional(d.nullable(spacecraftRef)),
   gap: d.optional(d.nullable(d.object({ from: d.timestamp, to: d.timestamp, seconds: d.integer }))),
 });
 const findingsReader = d.object({
