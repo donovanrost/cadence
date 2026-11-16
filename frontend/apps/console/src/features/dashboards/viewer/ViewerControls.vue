@@ -48,6 +48,7 @@ const refreshOptions = refreshChoices.map((c) => ({ value: c.value, label: `Refr
       variant="secondary"
       size="compact"
       :class="phone ? 'ml-auto flex-none' : ''"
+      :aria-label="phone && selection.kind === 'default' ? selectionLabel(selection) : undefined"
       @click="rangeSheet?.open()"
     >
       <span class="font-mono normal-case tracking-normal">{{

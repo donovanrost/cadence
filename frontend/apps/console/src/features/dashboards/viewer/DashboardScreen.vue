@@ -25,6 +25,7 @@ import ViewerActions from "./ViewerActions.vue";
 import SnapshotSheet from "./SnapshotSheet.vue";
 import ViewerBody from "./ViewerBody.vue";
 import CockpitStatus from "./CockpitStatus.vue";
+import PhoneStatusBar from "./PhoneStatusBar.vue";
 import ViewerControls from "./ViewerControls.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
 import { liveSnapshot } from "../model/live-merge.ts";
@@ -270,6 +271,11 @@ const onRange = (s: TimeSelection) =>
     @saved="onSaved"
   />
   <ViewerBody v-else :state="shown" :stale="connection === 'offline'" @retry="query.refetch" />
+  <!-- Phone: health stays on screen in a bottom bar (ux 45d26151f); kiosk has its own line. -->
+  <template v-if="small && !kiosk">
+    <div aria-hidden="true" class="h-[calc(48px+env(safe-area-inset-bottom))] flex-none" />
+    <PhoneStatusBar />
+  </template>
   <VersionsSheet
     ref="versions"
     :mission-id="missionId"

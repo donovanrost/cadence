@@ -1,6 +1,8 @@
-import { flushPromises, mount } from "@vue/test-utils";
-import { describe, expect, it } from "vite-plus/test";
+import { flushPromises, mount, RouterLinkStub } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { computed } from "vue";
 import { shortSelectionLabel } from "../model/time-range.ts";
+import PhoneStatusBar from "./PhoneStatusBar.vue";
 import { refreshWords } from "./refresh-words.ts";
 import ViewerActions from "./ViewerActions.vue";
 import ViewerControls from "./ViewerControls.vue";
@@ -61,5 +63,55 @@ describe("viewer header on a phone", () => {
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(w.emitted("refresh")?.[0]).toEqual(["off"]);
     w.unmount();
+  });
+});
+
+const fleet = vi.hoisted(() => ({
+  counts: { critical: 2, caution: 1, stale: 3 },
+}));
+vi.mock("@/shell", async (original) => ({
+  ...(await original<typeof import("@/shell")>()),
+  useMissionScope: () => computed(() => ({ mission: { id: "m1" } })),
+}));
+vi.mock("@/features/fleet/index.ts", () => ({
+  useFleet: () => ({
+    state: computed(() => ({ status: "ready", value: { counts: fleet.counts } })),
+  }),
+}));
+
+describe("phone status bar (ux 45d26151f): health stays on screen", () => {
+  const bar = () => mount(PhoneStatusBar, { global: { stubs: { RouterLink: RouterLinkStub } } });
+  it("reads mark, count and word per chip, each a link to Alarms or Fleet", () => {
+    fleet.counts = { critical: 2, caution: 1, stale: 3 };
+    const w = bar();
+    expect(w.get("section").attributes("aria-label")).toBe("Fleet health");
+    // Flex gaps space the parts visually; the words themselves are there in order.
+    const links = w.findAllComponents(RouterLinkStub);
+    expect(links.map((l) => l.text().replace(/\s+/g, ""))).toEqual(["2crit", "1caution", "3stale"]);
+    expect(w.findAll('[aria-hidden="true"]').filter((s) => s.text() === "·")).toHaveLength(2);
+    expect(w.get("time").text()).toMatch(/^\d\d:\d\dZ$/);
+    expect(links.map((l) => l.props("to"))).toEqual([
+      { name: "ops.alarms" },
+      { name: "ops.alarms" },
+      { name: "ops.fleet" },
+    ]);
+    expect(links[0]?.attributes("aria-label")).toBe("2 spacecraft critical");
+  });
+  it("says Fleet nominal when there's nothing to report", () => {
+    fleet.counts = { critical: 0, caution: 0, stale: 0 };
+    expect(bar().text()).toContain("Fleet nominal");
+  });
+  it("gives the short Live button its desktop name", () => {
+    const w = mount(ViewerControls, {
+      props: {
+        scopeOptions: [],
+        spacecraft: "",
+        selection: { kind: "default" },
+        refresh: "2s",
+        phone: true,
+      },
+    });
+    const live = w.findAll("button").find((b) => b.text() === "Live");
+    expect(live?.attributes("aria-label")).toBe("Live · widget windows");
   });
 });
