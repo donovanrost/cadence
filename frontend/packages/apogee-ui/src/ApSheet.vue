@@ -51,7 +51,12 @@ const phone = () => typeof window.matchMedia === "function" && window.matchMedia
 /** Center sheets always; a side sheet when opened on a phone. */
 const modal = ref(props.placement !== "side");
 
-const focusInitial = () => dialog.value?.querySelector<HTMLElement>(props.initialFocus)?.focus();
+/** The caller's target, else the ✕ (a sheet with no footer has nothing else to land on, a11y A1). */
+const focusInitial = () =>
+  (
+    dialog.value?.querySelector<HTMLElement>(props.initialFocus) ??
+    dialog.value?.querySelector<HTMLElement>("[data-sheet-close]:not(.hidden)")
+  )?.focus();
 /** Already open (only a side sheet can be: its page stays usable), the opener moves focus back in (ux a11y A3). */
 function open() {
   if (!dialog.value?.open) {
@@ -129,7 +134,9 @@ defineExpose({ open, close });
         v-if="dismissible"
         type="button"
         aria-label="Close"
-        class="ml-auto hidden size-12 flex-none cursor-pointer items-center justify-center border-0 bg-transparent text-xl text-text-3 hover:text-readout max-md:flex"
+        data-sheet-close
+        class="ml-auto size-12 flex-none cursor-pointer items-center justify-center border-0 bg-transparent text-xl text-text-3 hover:text-readout md:-my-2 md:size-9"
+        :class="$slots.footer ? 'hidden max-md:flex' : 'flex'"
         @click="close"
       >
         <span aria-hidden="true">✕</span>

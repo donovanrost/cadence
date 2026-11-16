@@ -7,6 +7,7 @@ import ApCheckRows from "./ApCheckRows.vue";
 import ApField from "./ApField.vue";
 import ApPageHeader from "./ApPageHeader.vue";
 import ApSegmented from "./ApSegmented.vue";
+import ApSelect from "./ApSelect.vue";
 import ApStatTile from "./ApStatTile.vue";
 
 describe("ApButton", () => {
@@ -62,6 +63,20 @@ describe("ApStatTile caption", () => {
     expect(wrapper.find(".shadow-\\[inset_0_2px_0_var\\(--color-caution\\)\\]").exists()).toBe(
       false,
     );
+  });
+});
+
+describe("ApSelect", () => {
+  it("marks a required select aria-required, and not aria-invalid until it has an error (ux a11y A6)", async () => {
+    const options = [{ value: "a", label: "A" }];
+    const wrapper = mount(ApSelect, {
+      props: { label: "Mission", required: true, options, modelValue: "" },
+    });
+    const select = wrapper.get("select");
+    expect(select.attributes("aria-required")).toBe("true");
+    expect(select.attributes("aria-invalid")).toBeUndefined();
+    await wrapper.setProps({ error: "Choose a mission." });
+    expect(select.attributes("aria-invalid")).toBe("true");
   });
 });
 

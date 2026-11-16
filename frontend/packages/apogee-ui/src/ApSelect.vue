@@ -15,6 +15,8 @@ const props = withDefaults(
     hint?: string | undefined;
     error?: string | null | undefined;
     disabled?: boolean | undefined;
+    /** Read as required (aria-required); for the disabled-reason pattern, never aria-invalid while untouched (ux A6). */
+    required?: boolean | undefined;
     name?: string | undefined;
     hiddenLabel?: boolean | undefined;
     /** compact = 32px (panel headers, filters), standard = 38px (forms). */
@@ -45,6 +47,8 @@ const describedBy = computed(
         v-model="model"
         :name="name"
         :disabled="disabled"
+        :required="required"
+        :aria-required="required ? 'true' : undefined"
         :aria-invalid="error ? 'true' : undefined"
         :aria-describedby="describedBy"
         class="w-full cursor-pointer appearance-none rounded-none [color-scheme:dark] border bg-well pr-8 pl-3 text-readout focus:border-readout disabled:cursor-not-allowed disabled:text-text-off"

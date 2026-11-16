@@ -136,6 +136,30 @@ describe("ApSheet", () => {
     wrapper.unmount();
   });
 
+  it("gives a sheet with no footer a Close ✕ at every width, and opens on it (a11y A1, A4)", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const wrapper = mount(ApSheet, {
+      attachTo: document.body,
+      props: { title: "History" },
+      slots: { default: "<p>Switched by Mira</p>" },
+    });
+    (wrapper.vm as { open: () => void }).open();
+    await nextTick();
+    const close = wrapper.get('button[aria-label="Close"]');
+    expect(close.classes()).not.toContain("hidden");
+    expect(document.activeElement).toBe(close.element);
+    wrapper.unmount();
+  });
+
+  it("keeps the ✕ to phones when the sheet has a footer", () => {
+    const wrapper = mount(ApSheet, {
+      props: { title: "Send back" },
+      slots: { footer: "<button>Cancel</button>" },
+    });
+    expect(wrapper.get('button[aria-label="Close"]').classes()).toContain("hidden");
+    wrapper.unmount();
+  });
+
   it("offers no Close ✕ on a sheet only its caller may close", () => {
     const wrapper = mount(ApSheet, { props: { title: "Your token", dismissible: false } });
     expect(wrapper.find('button[aria-label="Close"]').exists()).toBe(false);
