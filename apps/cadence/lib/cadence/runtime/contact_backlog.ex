@@ -77,14 +77,19 @@ defmodule Cadence.Runtime.ContactBacklog do
     namespace
     |> registered(:provider_ingress_journal_consumer, mission_id, realized_contact_id)
     |> Enum.flat_map(fn {path_id, provider_binding_id, pid} ->
-      case IngressJournalConsumer.snapshot(pid) do
-        {:ok, %{incomplete_at_end: %{journal_bytes: bytes} = incomplete}} when bytes > 0 ->
-          [Map.merge(incomplete, %{path_id: path_id, provider_binding_id: provider_binding_id})]
-
-        _nothing ->
-          []
-      end
+      consumer_incomplete(pid, %{path_id: path_id, provider_binding_id: provider_binding_id})
     end)
+  end
+
+  # One consumer gone (or a remote call timing out) leaves out only its own entry (api-ops).
+  defp consumer_incomplete(pid, ids) do
+    case IngressJournalConsumer.snapshot(pid) do
+      {:ok, %{incomplete_at_end: %{journal_bytes: bytes} = incomplete}} when bytes > 0 ->
+        [Map.merge(incomplete, ids)]
+
+      _nothing ->
+        []
+    end
   catch
     :exit, _reason -> []
   end

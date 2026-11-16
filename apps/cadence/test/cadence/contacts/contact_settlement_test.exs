@@ -193,7 +193,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
   end
 
   # Domain's partial-frame fix (11-15): what a stream gave up at its end is kept with the settlement.
-  test "the bytes a stream gave up at its end are stored per path, and absent when none", ctx do
+  test "the bytes a stream gave up at its end are stored per path, and a later empty read keeps them",
+       ctx do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     schedule!(ctx, "a", DateTime.add(now, -60), DateTime.add(now, 600), downlink: false)
 
@@ -222,9 +223,10 @@ defmodule Cadence.Contacts.ContactSettlementTest do
              }
            ]
 
+    # A later settle (the runtime already gone: it reads nothing) keeps the one record.
     {:ok, contact} = ContactStore.fetch_realized(ctx.mission_id, a_run)
-    {:ok, _} = ContactSettlement.record(contact, :settled, %{}, :ok, nil, [])
-    refute Map.has_key?(settlement(ctx, a_run), "incomplete_at_end")
+    {:ok, _} = ContactSettlement.record(contact, :absent, %{}, :ok, nil, [])
+    assert [%{"journal_bytes" => 49}] = settlement(ctx, a_run)["incomplete_at_end"]
   end
 
   test "a lost backlog (journal off) closes only when an operator marks it seen", ctx do

@@ -356,8 +356,9 @@ defmodule Cadence.Contacts.ContactSettlement do
   end
 
   # What streams gave up at their end (a frame or packet that never completed), per path and
-  # binding; absent when nothing was (the console shows it only when there is some).
-  defp put_incomplete(settlement, []), do: Map.delete(settlement, "incomplete_at_end")
+  # binding. An empty read keeps what an earlier settle stored: a later settle of the same contact
+  # runs with the runtime gone and reads nothing, and must not erase the one record (api-ops).
+  defp put_incomplete(settlement, []), do: settlement
 
   defp put_incomplete(settlement, incomplete) do
     Map.put(
