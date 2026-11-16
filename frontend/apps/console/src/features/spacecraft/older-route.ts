@@ -22,10 +22,19 @@ export function olderRouteSummary(rule: RoutingRule, spacecraftName: string | nu
   return `Remove older route ${routeWords(rule)}${spacecraftName ? ` · ${spacecraftName}` : ""}`;
 }
 
-/** The inline confirm's sentence (ux U79). */
+/**
+ * The inline confirm's sentence (ux U79). An unnamed route is 'the older route at INU', not 'INU',
+ * which would read like removing the station; with no station either, 'this older route'.
+ */
 export function removeOlderRouteSentence(rule: RoutingRule, spacecraftName: string | null) {
+  const station = rule.station?.code || rule.station?.name;
+  const what = rule.name
+    ? `“${rule.name}”`
+    : station
+      ? `the older route at ${station}`
+      : "this older route";
   const who = spacecraftName || "This spacecraft";
-  return `Stage removing ${routeWords(rule)}? ${who} stops using it once the change set is applied.`;
+  return `Stage removing ${what}? ${who} stops using it once the change set is applied.`;
 }
 
 /** The older routes whose removal is staged in the open set (inferred from its ops, per api/lead). */

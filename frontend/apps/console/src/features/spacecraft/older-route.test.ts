@@ -35,6 +35,17 @@ describe("older route removal words (ux U79)", () => {
     );
   });
 
+  it("confirms an unnamed route as the older route at its station, never as the station (ux)", () => {
+    const stationless = olderRules([{ id: "old-3", name: "", origin: "legacy", station: null }])[1];
+    if (!unnamed || !stationless) throw new Error("fixture");
+    expect(removeOlderRouteSentence(unnamed, "EARENDIL-389")).toBe(
+      "Stage removing the older route at INU? EARENDIL-389 stops using it once the change set is applied.",
+    );
+    expect(removeOlderRouteSentence(stationless, null)).toBe(
+      "Stage removing this older route? This spacecraft stops using it once the change set is applied.",
+    );
+  });
+
   it("finds no staged removal without an open set (the panel test reads a real one)", () => {
     expect(stagedRemovals(null).size).toBe(0);
     expect(stagedRemovals(undefined).size).toBe(0);
