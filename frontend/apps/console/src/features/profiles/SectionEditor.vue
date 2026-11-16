@@ -9,7 +9,7 @@ import {
   refreshConfigState,
   SchemaForm,
   stageChange,
-  type FailureOutcome,
+  useStageFailure,
 } from "@/features/changes/index.ts";
 import { ApPanel, plural } from "@/ui";
 import type { ProfileSection } from "./detail.ts";
@@ -41,7 +41,7 @@ const values = ref({ ...before });
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
 /** A refused or unclear Stage edit, with its link (e.g. U79 'Open change set'). */
-const failure = ref<FailureOutcome | null>(null);
+const failure = useStageFailure([values]);
 const counts = ref<PreviewCounts | null>(null);
 const edits = computed(() => diffEdits(schema, before, values.value));
 const dirty = computed(() =>
@@ -64,7 +64,6 @@ watch(
   values,
   () => {
     outcome.value = null;
-    failure.value = null;
     counts.value = null;
   },
   { deep: true },
@@ -73,6 +72,7 @@ watch(
 async function check() {
   if (!edits.value.ok || busy.value) return;
   busy.value = true;
+  failure.value = null;
   try {
     const r = await previewOps(
       { missionId: props.missionId, ops: [sectionOp(props.profile.id, edits.value.changes)] },

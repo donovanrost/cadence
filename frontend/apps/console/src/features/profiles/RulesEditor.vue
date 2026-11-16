@@ -11,7 +11,7 @@ import {
   refreshConfigState,
   stageChange,
   type StageOp,
-  type FailureOutcome,
+  useStageFailure,
 } from "@/features/changes/index.ts";
 import { fetchStations } from "@/features/stations/index.ts";
 import {
@@ -46,7 +46,7 @@ const rollout = ref<"all" | "none">("all");
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
 /** A refused or unclear Stage, with its link (e.g. U79 'Open change set'). */
-const failure = ref<FailureOutcome | null>(null);
+const failure = useStageFailure([drafts, rollout]);
 const problems = computed(() => draftProblems(drafts.value));
 if (drafts.value.length === 0) drafts.value.push(newRule([]));
 

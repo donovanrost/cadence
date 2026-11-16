@@ -10,8 +10,8 @@ import {
   refreshConfigState,
   stageChange,
   toValue,
-  type FailureOutcome,
   type FormValues,
+  useStageFailure,
 } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApPanel, ApTextarea } from "@/ui";
 import type { ProfileDetail } from "./detail.ts";
@@ -85,15 +85,8 @@ const blocked = computed((): string | null => {
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
 /** A refused or unclear Stage, with its link (e.g. U79 'Open change set'). */
-const failure = ref<FailureOutcome | null>(null);
-watch(
-  [target, path, values, reason],
-  () => {
-    outcome.value = null;
-    failure.value = null;
-  },
-  { deep: true },
-);
+const failure = useStageFailure([target, path, values, reason]);
+watch([target, path, values, reason], () => (outcome.value = null), { deep: true });
 /** ux: Stage is disabled while the last Check said NO-GO, with that line as the reason. */
 const noGo = computed(() => (outcome.value?.tone === "crit" ? outcome.value.text : null));
 const op = () =>
@@ -105,6 +98,7 @@ const op = () =>
 async function check() {
   if (blocked.value !== null || busy.value) return;
   busy.value = true;
+  failure.value = null;
   try {
     const key = overrideKey(path.value);
     const r = await previewOps(
