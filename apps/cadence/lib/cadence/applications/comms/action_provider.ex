@@ -10,16 +10,12 @@ defmodule Cadence.Applications.Comms.ActionProvider do
   alias Cadence.Management.CommunicationsSetup
 
   @application_key "comms"
-  @form_surfaces ~w(transport_new routing_new ground_station_new ground_station_edit)
+  @form_surfaces ~w(routing_new)
+  # Host-action sweep, batch 1: only routing_new binds (until the per-spacecraft Extra route
+  # ships); transports and ground stations are written only through the console's change sets.
   @surface_action_bindings [
-    {"transport_new", 1, "validate"},
-    {"transport_new", 1, "save"},
     {"routing_new", 1, "validate"},
-    {"routing_new", 1, "save"},
-    {"ground_station_new", 1, "validate"},
-    {"ground_station_new", 1, "save"},
-    {"ground_station_edit", 1, "validate"},
-    {"ground_station_edit", 1, "save"}
+    {"routing_new", 1, "save"}
   ]
 
   @impl true

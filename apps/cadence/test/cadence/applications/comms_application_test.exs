@@ -35,10 +35,7 @@ defmodule Cadence.Applications.CommsApplicationTest do
              "routing_detail",
              "ground_stations",
              "ground_station",
-             "transport_new",
-             "routing_new",
-             "ground_station_new",
-             "ground_station_edit"
+             "routing_new"
            ]
 
     assert Enum.map(Comms.surface_query_contributions(), & &1.query_id) == [
@@ -50,10 +47,7 @@ defmodule Cadence.Applications.CommsApplicationTest do
              "cadence.comms.routing_detail",
              "cadence.comms.ground_stations",
              "cadence.comms.ground_station",
-             "cadence.comms.transport_new",
-             "cadence.comms.routing_new",
-             "cadence.comms.ground_station_new",
-             "cadence.comms.ground_station_edit"
+             "cadence.comms.routing_new"
            ]
 
     assert Enum.map(Comms.definition().surfaces, &surface_contract/1) == [
@@ -211,24 +205,6 @@ defmodule Cadence.Applications.CommsApplicationTest do
                renderer: {:trusted, "cadence.comms.ground_station"}
              },
              %{
-               surface_id: "transport_new",
-               version: 1,
-               purpose: :configuration,
-               scope: :mission,
-               placement: :application_workspace,
-               subject_contract: nil,
-               navigation: %{
-                 label: "New Transport",
-                 order: 120,
-                 fallback_path: "/comms/transports/new",
-                 fallback_parent_path: "/comms/transports"
-               },
-               data_contract: %{query_id: "cadence.comms.transport_new", version: 1},
-               actions: ["validate", "save"],
-               refresh: :static,
-               renderer: {:trusted, "cadence.comms.transport_new"}
-             },
-             %{
                surface_id: "routing_new",
                version: 1,
                purpose: :configuration,
@@ -245,45 +221,6 @@ defmodule Cadence.Applications.CommsApplicationTest do
                actions: ["validate", "save"],
                refresh: :static,
                renderer: {:trusted, "cadence.comms.routing_new"}
-             },
-             %{
-               surface_id: "ground_station_new",
-               version: 1,
-               purpose: :configuration,
-               scope: :mission,
-               placement: :application_workspace,
-               subject_contract: nil,
-               navigation: %{
-                 label: "New Ground Station",
-                 order: 140,
-                 fallback_path: "/comms/ground-stations/new",
-                 fallback_parent_path: "/comms/ground-stations"
-               },
-               data_contract: %{query_id: "cadence.comms.ground_station_new", version: 1},
-               actions: ["validate", "save"],
-               refresh: :static,
-               renderer: {:trusted, "cadence.comms.ground_station_new"}
-             },
-             %{
-               surface_id: "ground_station_edit",
-               version: 1,
-               purpose: :configuration,
-               scope: :mission,
-               placement: :application_workspace,
-               subject_contract: %{
-                 schema_id: "cadence.comms.ground_station.subject",
-                 version: 1
-               },
-               navigation: %{
-                 label: "Edit Ground Station",
-                 order: 150,
-                 fallback_path: "/comms/ground-stations/:subject/edit",
-                 fallback_parent_path: "/comms/ground-stations"
-               },
-               data_contract: %{query_id: "cadence.comms.ground_station_edit", version: 1},
-               actions: ["validate", "save"],
-               refresh: :static,
-               renderer: {:trusted, "cadence.comms.ground_station_edit"}
              }
            ]
   end
@@ -291,8 +228,9 @@ defmodule Cadence.Applications.CommsApplicationTest do
   test "contributes one immutable module-federation release coordinate per surface" do
     contributions = Comms.release_contributions()
 
-    # L12 removed the three provider surfaces (list, new, show).
-    assert length(contributions) == 12
+    # L12 removed the three provider surfaces (list, new, show); host-action sweep batch 1 the
+    # transport and ground station forms.
+    assert length(contributions) == 9
     assert Enum.all?(contributions, &(ReleaseContribution.validate(&1) == :ok))
 
     assert Enum.uniq_by(contributions, &ReleaseContribution.release/1) == [
@@ -370,8 +308,12 @@ defmodule Cadence.Applications.CommsApplicationTest do
     assert Enum.map(Comms.definition().actions, &{&1.action_id, &1.effect})
            |> Enum.take(-2) == [{"validate", :none}, {"save", :durable}]
 
-    assert "transport_new" in Enum.map(Comms.definition().surfaces, & &1.surface_id)
-    assert "ground_station_edit" in Enum.map(Comms.definition().surfaces, & &1.surface_id)
+    surfaces = Enum.map(Comms.definition().surfaces, & &1.surface_id)
+    assert "routing_new" in surfaces
+
+    # Host-action sweep batch 1: the transport and ground station forms are gone.
+    for form <- ~w(transport_new ground_station_new ground_station_edit),
+        do: refute(form in surfaces)
   end
 
   defp surface_contract(surface) do

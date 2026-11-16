@@ -136,14 +136,8 @@ defmodule Cadence.Applications.RegistryTest do
               {:trusted, "cadence.comms.ground_stations"}},
              {"ground_station", %{query_id: "cadence.comms.ground_station", version: 1},
               {:trusted, "cadence.comms.ground_station"}},
-             {"transport_new", %{query_id: "cadence.comms.transport_new", version: 1},
-              {:trusted, "cadence.comms.transport_new"}},
              {"routing_new", %{query_id: "cadence.comms.routing_new", version: 1},
-              {:trusted, "cadence.comms.routing_new"}},
-             {"ground_station_new", %{query_id: "cadence.comms.ground_station_new", version: 1},
-              {:trusted, "cadence.comms.ground_station_new"}},
-             {"ground_station_edit", %{query_id: "cadence.comms.ground_station_edit", version: 1},
-              {:trusted, "cadence.comms.ground_station_edit"}}
+              {:trusted, "cadence.comms.routing_new"}}
            ]
 
     assert {:ok, transport} = Registry.fetch_surface(definition, :mission, "transport")

@@ -301,7 +301,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
                request("ops_console", "data_source_registration")
              )
 
-    for surface_id <- ~w(transport_new ground_station_new) do
+    for surface_id <- ~w(routing_new) do
       result =
         Comms.load(
           context.scope,

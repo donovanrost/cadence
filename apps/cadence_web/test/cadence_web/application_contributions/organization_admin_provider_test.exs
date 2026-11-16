@@ -71,7 +71,8 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert :ok = ActionContractLedger.validate()
 
     ledgers = ActionContractLedger.ledgers()
-    assert length(ledgers.declared) == 30
+    # 24: host-action sweep batch 1 (the comms transport and ground station forms bind nothing).
+    assert length(ledgers.declared) == 24
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
 

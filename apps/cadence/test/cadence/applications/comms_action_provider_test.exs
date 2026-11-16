@@ -5,7 +5,7 @@ defmodule Cadence.Applications.CommsActionProviderTest do
   alias Cadence.Applications.Comms.ActionProvider
   alias Cadence.Auth.Scope
   alias Cadence.Comms.GroundStationStore
-  alias Cadence.Comms.TransportStore
+  alias Cadence.Comms.{Transport, TransportStore}
   alias Cadence.Management.CommunicationsSetup
   alias Cadence.Spacecraft
 
@@ -41,104 +41,8 @@ defmodule Cadence.Applications.CommsActionProviderTest do
     end
   end
 
-  test "transport validation checks real configuration without persisting and satisfies its feature contract",
-       context do
-    {"transport_new", payload} = hd(form_payloads(context))
-
-    assert TransportStore.list_transports(
-             context.organization_id,
-             context.mission_id
-           ) == []
-
-    assert {:ok, result} = execute(context, "validate", "transport_new", payload)
-    assert result["transport_review"]["origin"] == "direct"
-    assert is_binary(result["transport_review"]["endpoint"])
-
-    assert TransportStore.list_transports(
-             context.organization_id,
-             context.mission_id
-           ) == []
-
-    path =
-      Path.expand(
-        "../../../../../frontend/modules/communications/src/features/transports/validation-receipt.ts",
-        __DIR__
-      )
-
-    script = """
-    import {admitValidation} from #{Jason.encode!(path)};
-    admitValidation(JSON.parse(process.argv[1]), JSON.parse(process.argv[2]));
-    """
-
-    node =
-      System.find_executable("node") ||
-        flunk("Node is required for the transport validation contract")
-
-    {output, status} =
-      System.cmd(
-        node,
-        [
-          "--no-warnings",
-          "--input-type=module",
-          "-e",
-          script,
-          Jason.encode!(result),
-          Jason.encode!(payload)
-        ],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
-
-    assert {:ok, receipt} = execute(context, "save", "transport_new", payload)
-
-    assert {:ok, transport} =
-             TransportStore.fetch_transport(
-               context.organization_id,
-               context.mission_id,
-               receipt["transportId"]
-             )
-
-    assert transport.configuration["port"] == 5000
-  end
-
-  test "transport validation rejects incomplete endpoints and unbound provider selections",
-       context do
-    {"transport_new", payload} = hd(form_payloads(context))
-
-    for invalid <- [
-          put_in(payload, ["transport", "port"], "70000"),
-          put_in(payload, ["transport", "display_name"], ""),
-          put_in(payload, ["transport", "origin"], "provider_managed"),
-          %{"transport" => %{"display_name" => "Not enough", "transport_kind" => "tcp_socket"}}
-        ] do
-      assert {:error, _reason} = execute(context, "validate", "transport_new", invalid)
-    end
-
-    assert TransportStore.list_transports(
-             context.organization_id,
-             context.mission_id
-           ) == []
-  end
-
-  test "saves each Comms form and returns navigation only after persistence", context do
-    assert {:ok, transport_receipt} =
-             execute(context, "save", "transport_new", %{
-               "transport" => %{
-                 "display_name" => "Lab TCP",
-                 "origin" => "direct",
-                 "transport_kind" => "tcp_socket",
-                 "tcp_mode" => "listen",
-                 "direction_capability" => "inbound",
-                 "host" => "0.0.0.0",
-                 "port" => "5000",
-                 "framing_mode" => "raw",
-                 "tls_enabled" => "false"
-               }
-             })
-
-    assert transport_receipt["navigation"]["kind"] == "navigate"
-    transport_id = transport_receipt["transportId"]
+  test "saves the routing form and returns navigation only after persistence", context do
+    transport = transport!(context)
 
     assert {:ok, routing_receipt} =
              execute(context, "save", "routing_new", %{
@@ -146,78 +50,44 @@ defmodule Cadence.Applications.CommsActionProviderTest do
                  "display_name" => "Aurora downlink",
                  "purpose_label" => "Live telemetry",
                  "spacecraft_id" => context.spacecraft_id,
-                 "transport_ref" => "#{transport_id}:1",
+                 "transport_ref" => "#{transport.transport_id}:#{transport.version}",
                  "direction" => "inbound",
                  "role" => "primary"
                }
              })
 
     assert routing_receipt["navigation"]["kind"] == "navigate"
+  end
 
-    assert {:ok, ground_station_receipt} =
-             execute(context, "save", "ground_station_new", %{
-               "ground_station" => %{
-                 "ground_station_id" => "dss-14",
-                 "display_name" => "Goldstone",
-                 "provider" => "DSN",
-                 "region" => "goldstone",
-                 "metadata_json" => "{}"
-               }
-             })
+  # Host-action sweep batch 1: transports and ground stations are written only through the
+  # console's change sets; their forms bind nothing and the provider refuses them.
+  test "refuses the removed transport and ground station forms", context do
+    for surface_id <- ~w(transport_new ground_station_new ground_station_edit),
+        action_id <- ["validate", "save"] do
+      assert {:error, :unsupported_application_action} =
+               execute(context, action_id, surface_id, %{"transport" => %{}})
+    end
 
-    assert ground_station_receipt["navigation"]["kind"] == "navigate"
+    assert TransportStore.list_transports(context.organization_id, context.mission_id) == []
 
-    assert {:ok, edit_receipt} =
-             execute(context, "save", "ground_station_edit", %{
-               "ground_station" => %{
-                 "ground_station_id" => "dss-14",
-                 "display_name" => "Goldstone Updated",
-                 "provider" => "DSN",
-                 "region" => "goldstone",
-                 "metadata_json" => ~s({"antenna_diameter_m":70})
-               }
-             })
-
-    assert edit_receipt["navigation"]["kind"] == "navigate"
-
-    assert {:ok, station} =
-             GroundStationStore.fetch_ground_station(
-               context.organization_id,
-               context.mission_id,
-               "dss-14"
-             )
-
-    assert station.display_name == "Goldstone Updated"
+    assert GroundStationStore.list_ground_stations(context.organization_id, context.mission_id) ==
+             []
   end
 
   test "rejects omitted and wrong-version shared form envelopes", context do
-    payload = %{"transport" => %{"display_name" => "Lab TCP"}}
+    payload = %{"routing_rule" => %{"display_name" => "Aurora downlink"}}
 
     for action_id <- ["validate", "save"] do
       assert {:error, :unsupported_application_action} =
                execute_without_surface(context, action_id, payload)
 
       assert {:error, :unsupported_application_action} =
-               execute(context, action_id, "transport_new", payload, surface_version: 2)
+               execute(context, action_id, "routing_new", payload, surface_version: 2)
     end
   end
 
-  test "rejects cross-surface and non-exact form payloads", context do
-    payloads = form_payloads(context)
-
-    for {surface_id, payload} <- payloads,
-        {other_surface_id, other_payload} <- payloads,
-        payload_key(payload) != payload_key(other_payload) do
-      assert {:error, :invalid_application_request} =
-               execute(context, "validate", surface_id, other_payload)
-
-      assert {:error, :invalid_application_request} =
-               execute(context, "save", surface_id, other_payload)
-
-      assert other_surface_id != surface_id
-    end
-
-    for {surface_id, payload} <- payloads do
+  test "rejects non-exact form payloads", context do
+    for {surface_id, payload} <- form_payloads(context) do
       payload = Map.put(payload, "unexpected", %{})
 
       assert {:error, :invalid_application_request} =
@@ -226,6 +96,9 @@ defmodule Cadence.Applications.CommsActionProviderTest do
       assert {:error, :invalid_application_request} =
                execute(context, "save", surface_id, payload)
     end
+
+    assert {:error, :invalid_application_request} =
+             execute(context, "validate", "routing_new", %{"transport" => %{}})
   end
 
   test "setup commands authorize without relying on a frontend adapter", context do
@@ -253,16 +126,16 @@ defmodule Cadence.Applications.CommsActionProviderTest do
     for payload <- [
           nil,
           [],
-          %{"transport" => %{"port" => 5000}},
-          %{"transport" => %{"display_name" => String.duplicate("x", 8193)}},
-          %{"transport" => %{"display_name" => <<255>>}}
+          %{"routing_rule" => %{"direction" => 5000}},
+          %{"routing_rule" => %{"display_name" => String.duplicate("x", 8193)}},
+          %{"routing_rule" => %{"display_name" => <<255>>}}
         ] do
       for event <- ["validate", "save"] do
         assert {:error, _} =
                  CommunicationsSetup.execute(
                    context.scope,
                    context.mission_id,
-                   "transport_new",
+                   "routing_new",
                    event,
                    payload
                  )
@@ -293,10 +166,7 @@ defmodule Cadence.Applications.CommsActionProviderTest do
              {surface.surface_id, surface.actions}
            end)
            |> Enum.filter(fn {_surface_id, actions} -> actions != [] end) == [
-             {"transport_new", ["validate", "save"]},
-             {"routing_new", ["validate", "save"]},
-             {"ground_station_new", ["validate", "save"]},
-             {"ground_station_edit", ["validate", "save"]}
+             {"routing_new", ["validate", "save"]}
            ]
   end
 
@@ -326,20 +196,6 @@ defmodule Cadence.Applications.CommsActionProviderTest do
 
   defp form_payloads(context) do
     [
-      {"transport_new",
-       %{
-         "transport" => %{
-           "display_name" => "Lab TCP",
-           "transport_kind" => "tcp_socket",
-           "origin" => "direct",
-           "tcp_mode" => "listen",
-           "direction_capability" => "inbound",
-           "host" => "0.0.0.0",
-           "port" => "5000",
-           "framing_mode" => "raw",
-           "tls_enabled" => "false"
-         }
-       }},
       {"routing_new",
        %{
          "routing_rule" => %{
@@ -350,23 +206,31 @@ defmodule Cadence.Applications.CommsActionProviderTest do
            "direction" => "inbound",
            "role" => "primary"
          }
-       }},
-      {"ground_station_new", ground_station_payload()},
-      {"ground_station_edit", ground_station_payload()}
+       }}
     ]
   end
 
-  defp ground_station_payload do
-    %{
-      "ground_station" => %{
-        "ground_station_id" => "dss-14",
-        "display_name" => "Goldstone",
-        "provider" => "DSN",
-        "region" => "goldstone",
-        "metadata_json" => "{}"
-      }
-    }
-  end
+  defp transport!(context) do
+    {:ok, transport} =
+      TransportStore.persist_transport(
+        context.organization_id,
+        Transport.new(%{
+          mission_id: context.mission_id,
+          display_name: "Lab TCP",
+          transport_kind: :tcp_socket,
+          direction_capability: :inbound,
+          adapter_key: :tcp_socket,
+          configuration: %{
+            "mode" => "listen",
+            "direction_capability" => "inbound",
+            "host" => "0.0.0.0",
+            "port" => "5000",
+            "framing_mode" => "raw",
+            "tls_enabled" => "false"
+          }
+        })
+      )
 
-  defp payload_key(payload), do: payload |> Map.keys() |> List.first()
+    transport
+  end
 end

@@ -80,51 +80,20 @@ defmodule Cadence.Applications.Comms do
       fallback_parent_path: "/comms/ground-stations"
     },
     %{
-      id: "transport_new",
-      purpose: :configuration,
-      label: "New Transport",
-      order: 120,
-      fallback_path: "/comms/transports/new",
-      fallback_parent_path: "/comms/transports"
-    },
-    %{
       id: "routing_new",
       purpose: :configuration,
       label: "New Routing Rule",
       order: 130,
       fallback_path: "/comms/routing/new",
       fallback_parent_path: "/comms/routing"
-    },
-    %{
-      id: "ground_station_new",
-      purpose: :configuration,
-      label: "New Ground Station",
-      order: 140,
-      fallback_path: "/comms/ground-stations/new",
-      fallback_parent_path: "/comms/ground-stations"
-    },
-    %{
-      id: "ground_station_edit",
-      purpose: :configuration,
-      label: "Edit Ground Station",
-      order: 150,
-      subject_schema: "cadence.comms.ground_station.subject",
-      fallback_path: "/comms/ground-stations/:subject/edit",
-      fallback_parent_path: "/comms/ground-stations"
     }
   ]
 
+  # Host-action sweep, batch 1: transports and ground stations are written only through the
+  # console's change sets. routing_new stays until the per-spacecraft Extra route ships (batch 2).
   @provider_actions [
-    %{
-      id: "validate",
-      surfaces: ~w(transport_new routing_new ground_station_new ground_station_edit),
-      effect: :none
-    },
-    %{
-      id: "save",
-      surfaces: ~w(transport_new routing_new ground_station_new ground_station_edit),
-      effect: :durable
-    }
+    %{id: "validate", surfaces: ~w(routing_new), effect: :none},
+    %{id: "save", surfaces: ~w(routing_new), effect: :durable}
   ]
 
   @spec identity() :: map()
