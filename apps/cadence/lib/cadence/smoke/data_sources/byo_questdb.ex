@@ -504,8 +504,13 @@ defmodule Cadence.Smoke.DataSources.BYOQuestDB do
       mission_id: context.mission_id,
       data_source_id: context.data_source_id,
       credential_material_resolver: {EnvMaterialResolver, :resolve},
+      # The smoke is the operator's: its profile is owned by the smoke's organization (EnvBackend
+      # scopes a profile to its organization_id; one with no owner serves only platform sources).
       env_material_profiles: %{
-        context.material_profile => %{http_endpoint_env: endpoint_env}
+        context.material_profile => %{
+          http_endpoint_env: endpoint_env,
+          organization_id: context.organization_id
+        }
       },
       env_reader: env_reader(endpoint_env, opts)
     ]
