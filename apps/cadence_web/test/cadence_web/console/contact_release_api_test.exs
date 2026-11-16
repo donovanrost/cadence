@@ -35,7 +35,8 @@ defmodule CadenceWeb.Console.ContactReleaseAPITest do
     do: post(c.conn, base() <> "/contacts/#{contact.realized_contact_id}/release", body)
 
   defp group(c, id),
-    do: c.conn |> get(base() <> "/command-groups/#{id}") |> json_response(200) |> Map.fetch!("data")
+    do:
+      c.conn |> get(base() <> "/command-groups/#{id}") |> json_response(200) |> Map.fetch!("data")
 
   test "a hand-started contact: confirm first, then each group in order, with a stop", c do
     first = c |> armed_group!([c.alpha, c.alpha, c.alpha, c.bravo]) |> with_targets!()
