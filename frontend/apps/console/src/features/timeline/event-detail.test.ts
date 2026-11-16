@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { scid } from "@/api/index.ts";
+import { scid, spacecraftId } from "@/api/index.ts";
 import type { MissionEvent } from "./api.ts";
 import { eventDetail, occurredText } from "./eventDetail.ts";
 
@@ -23,7 +23,7 @@ const event = (over: Partial<MissionEvent> = {}): MissionEvent => ({
   severity: "caution",
   text: "Contact canceled: KIR pass 02:31Z",
   detail: null,
-  spacecraft: { id: "sc_312", name: "EARENDIL-312", scid: scid(312) },
+  spacecraft: { id: spacecraftId("sc_312"), name: "EARENDIL-312", scid: scid(312) },
   refs: {
     alarm_id: null,
     point_id: null,

@@ -49,7 +49,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   pass_phase: "scheduled",
   delivery_state: "pending",
   spacecraft_id: spacecraftIdReader("sc-312"),
-  spacecraft: { id: "sc-312", name: "EARENDIL-312", scid: scidReader(312) },
+  spacecraft: { id: spacecraftIdReader("sc-312"), name: "EARENDIL-312", scid: scidReader(312) },
   station: { ref: "SVL", id: stationIdReader("gs-svl"), code: "SVB", name: "Svalbard" },
   antenna: null,
   starts_at: "2026-11-09T02:30:00Z",
@@ -229,7 +229,7 @@ describe("attention block words (U32)", () => {
     viewer_can_book: undefined,
     shared_with: undefined,
     ground_station_ref: undefined,
-    station: { ref: "svb-1", id: "st-1", code: "SVB-1", name: "Svalbard 1" },
+    station: { ref: "svb-1", id: stationIdReader("st-1"), code: "SVB-1", name: "Svalbard 1" },
     provider: { id: "p-1", name: "Northlight" },
     starts_at: "2026-11-14T03:00:00Z",
     raised_at: "2026-11-09T10:55:00Z",
@@ -501,7 +501,7 @@ describe("D4 findings (M22)", () => {
     id: `gap-${n}`,
     severity: "critical" as const,
     message: `EARENDIL-00${n} has no pass for 6h.`,
-    spacecraft: { id: `sc-${n}`, name: `EARENDIL-00${n}`, scid: scidReader(n) },
+    spacecraft: { id: spacecraftIdReader(`sc-${n}`), name: `EARENDIL-00${n}`, scid: scidReader(n) },
     gap: { from, to: "2026-11-13T06:04:34Z", seconds: 21_600 },
   });
   it("folds same-cause coverage gaps into one row with its members (ux §7)", () => {

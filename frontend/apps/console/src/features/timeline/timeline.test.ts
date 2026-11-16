@@ -2,7 +2,7 @@ import { flushPromises } from "@vue/test-utils";
 import { effectScope, nextTick, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { describe, expect, it } from "vite-plus/test";
-import { scid as scidReader, decode } from "@/api/index.ts";
+import { scid as scidReader, spacecraftId, decode } from "@/api/index.ts";
 import { eventsReader, type EventsPage, type MissionEvent } from "./api.ts";
 import {
   byHour,
@@ -79,7 +79,11 @@ describe("timeline", () => {
   });
 
   it("folds the same event across more than three spacecraft in one minute (ux 6)", () => {
-    const sc = (n: number) => ({ id: `sc-${n}`, name: `EARENDIL-${n}`, scid: scidReader(n) });
+    const sc = (n: number) => ({
+      id: spacecraftId(`sc-${n}`),
+      name: `EARENDIL-${n}`,
+      scid: scidReader(n),
+    });
     const realized = (n: number) => ({
       ...ev(`r${n}`, "2026-11-08T02:30:05Z"),
       kind: "contact" as const,
@@ -116,7 +120,7 @@ describe("timeline", () => {
 
 describe("event subjects (ux timeline #1)", () => {
   it("links the subject, and skips the spacecraft prefix the sentence already names", () => {
-    const sc = { id: "sc-4", name: "EARENDIL-004", scid: scidReader(4) };
+    const sc = { id: spacecraftId("sc-4"), name: "EARENDIL-004", scid: scidReader(4) };
     const contact = {
       ...ev("c", "2026-11-09T10:23:52Z"),
       kind: "contact" as const,
@@ -156,7 +160,7 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
       kind: "operator" as const,
       raw_kind: "realized_contact_interval",
       text: `Contact with EARENDIL-00${n} completed`,
-      spacecraft: { id: `sc-${n}`, name: `EARENDIL-00${n}`, scid: scidReader(n) },
+      spacecraft: { id: spacecraftId(`sc-${n}`), name: `EARENDIL-00${n}`, scid: scidReader(n) },
     });
     const [g] = byHour([1, 2, 3, 4].map(completed));
     expect(g?.rows).toHaveLength(1);

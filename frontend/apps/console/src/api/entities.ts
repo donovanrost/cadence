@@ -9,7 +9,7 @@ import {
   type Reader,
   type Unrecognized,
 } from "./decode.ts";
-import { scid, stationId } from "./ids.ts";
+import { scid, spacecraftId, stationId } from "./ids.ts";
 
 /**
  * Shared entity decoders (typing plan §12 A5, docs/apogee/typing-audit.md §1.5): one reader per
@@ -47,7 +47,8 @@ export const actorName = (a: Actor | null | undefined, fallback = "Not recorded"
 
 /** A spacecraft as other entities reference it: id always; name and SCID when sent. */
 export const spacecraftRef = object({
-  id: token,
+  /** §12C: a SpacecraftId, so it keys spacecraft reads and routes directly. */
+  id: spacecraftId,
   name: orNull(string),
   /** §12C: a Scid (the routes' address), so it reaches an ops.spacecraft link as is. */
   scid: orNull(scid),

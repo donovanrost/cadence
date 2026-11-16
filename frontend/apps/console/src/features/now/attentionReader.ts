@@ -1,4 +1,12 @@
-import { decoders as d, spacecraftId as spacecraftIdReader, type Decoded } from "@/api/index.ts";
+import {
+  actorKinds,
+  decoders as d,
+  orNull,
+  spacecraftRef,
+  stationRef,
+  spacecraftId as spacecraftIdReader,
+  type Decoded,
+} from "@/api/index.ts";
 import { attentionUplinkReader } from "@/features/contacts/readiness.ts";
 import {
   attentionConflicts,
@@ -21,29 +29,25 @@ import { scidMismatchFields } from "./scidMismatch.ts";
  * the pass's contact drawer holds the detail and the actions.
  */
 
-/** U32: who closed or acknowledged it. */
+/**
+ * U32: who closed or acknowledged it. The shared actor's shape (§12 A5) with one more kind:
+ * `provider`, the station provider resolving a booking (lead 11-16; not a Cadence service).
+ */
 const who = d.object({
-  kind: d.knownText(["user", "provider", "system"] as const),
-  id: d.nullable(d.token),
-  name: d.nullable(d.string),
+  kind: orNull(d.knownText([...actorKinds, "provider"] as const)),
+  id: orNull(d.string),
+  name: orNull(d.string),
 });
 
-const stationReader = d.object({
-  ref: d.nullable(d.string),
-  id: d.nullable(d.token),
-  // free-text: a station's call sign, not a vocabulary
-  code: d.nullable(d.string),
-  name: d.nullable(d.string),
-});
+/** §12 A5: the shared station reference. */
+const stationReader = stationRef;
 
 /** U45: the pass holding the station connection, served like the item's own pass fields. */
 const holderReader = d.object({
   realized_contact_id: d.nullable(d.token),
   contact_id: d.nullable(d.token),
   reservation_id: d.optional(d.nullable(d.token)),
-  spacecraft: d.optional(
-    d.nullable(d.object({ id: spacecraftIdReader, name: d.nullable(d.string) })),
-  ),
+  spacecraft: d.optional(d.nullable(spacecraftRef)),
   station: d.optional(d.nullable(stationReader)),
   starts_at: d.optional(d.nullable(d.timestamp)),
   ends_at: d.nullable(d.timestamp),

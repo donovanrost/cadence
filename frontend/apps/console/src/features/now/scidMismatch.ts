@@ -1,9 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import {
-  decoders as d,
-  scid as scidReader,
-  spacecraftId as spacecraftIdReader,
-} from "@/api/index.ts";
+import { decoders as d, scid as scidReader, spacecraftRef } from "@/api/index.ts";
 import { formatCount } from "@/ui";
 import type { Attention } from "./attention.ts";
 import { short } from "./attention.ts";
@@ -17,15 +13,7 @@ import type { QueueItem } from "./queue.ts";
  */
 export const scidMismatchFields = {
   /** The pass's craft; a null name is never replaced by its id. */
-  spacecraft: d.optional(
-    d.nullable(
-      d.object({
-        id: spacecraftIdReader,
-        name: d.nullable(d.string),
-        scid: d.nullable(scidReader),
-      }),
-    ),
-  ),
+  spacecraft: d.optional(d.nullable(spacecraftRef)),
   scid_mismatch: d.optional(
     d.nullable(
       d.object({
