@@ -52,12 +52,15 @@ defmodule CadenceWeb.Console.ContactPlanDaysAPITest do
              "plan" => %{"id" => id, "version" => 1, "state" => "draft"},
              "sent_back" => true,
              "requirements_count" => needed,
-             "booked_count" => nil,
-             "first_window_at" => nil
+             "booked_count" => nil
            } = planned
 
     assert id == c.plan_id and is_integer(needed)
     assert planned["day"] == Date.to_iso8601(day)
+
+    # U61: null until the day demand carries it, then a time in the plan's own day.
+    first = planned["first_window_at"]
+    assert first == nil or String.starts_with?(first, Date.to_iso8601(day))
 
     for empty <- [before, later] do
       assert %{"plan" => nil, "sent_back" => false, "requested_count" => nil} = empty
