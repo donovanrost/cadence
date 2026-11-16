@@ -8,8 +8,10 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
 
   import Cadence.ConfigurationFixtures
 
+  alias Cadence.Comms.ConfigKinds.SpacecraftRoute
   alias Cadence.Comms.RoutingRuleStore
   alias Cadence.Control.Configuration
+  alias Cadence.Reads.ConfigKindSchema
 
   setup do
     on_exit(with_approval_required(false))
@@ -68,18 +70,22 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
         kind: "spacecraft_route",
         action: :update,
         entity_id: id,
-        changes: [%{path: "legs", value: [%{"direction" => "downlink", "role" => "primary"}]}]
+        changes: [%{path: "uplink", value: "none"}]
       }
     ])
 
     assert [%{leg_direction: "downlink"}] = own_routes(ctx)
+
+    # The loaded document exposes the same two direction paths the form edits.
+    assert %{^id => %{"downlink" => "primary", "uplink" => "none"}} =
+             SpacecraftRoute.load(ctx.org, ctx.mission, [id])
 
     apply_ops(ctx, "Recovered", [%{kind: "spacecraft_route", action: :delete, entity_id: id}])
     assert own_routes(ctx) == []
   end
 
   test "a route the profile already gives is refused, in ux's words", ctx do
-    doc = %{extra(ctx) | "ground_station_id" => ctx.ids.svb, "legs" => [downlink()]}
+    doc = %{extra(ctx) | "ground_station_id" => ctx.ids.svb, "uplink" => "none"}
 
     assert {:ok, %{verdict: :no_go, checks: checks}} =
              Configuration.preview(
@@ -95,11 +101,7 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
 
   test "a leg the station's transport can't carry is refused", ctx do
     # Svalbard's only transport is inbound: no uplink leg there.
-    doc = %{
-      extra(ctx)
-      | "ground_station_id" => ctx.ids.svb,
-        "legs" => [%{"direction" => "uplink", "role" => "primary"}]
-    }
+    doc = %{extra(ctx) | "ground_station_id" => ctx.ids.svb, "downlink" => "none"}
 
     assert {:ok, %{verdict: :no_go, checks: checks}} =
              Configuration.preview(
@@ -110,6 +112,54 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
 
     assert %{items: [%{errors: [%{path: "ground_station_id"}]}]} =
              Enum.find(checks, &(&1.key == "validation"))
+  end
+
+  test "both directions none is refused on downlink, before anything stages", ctx do
+    doc = %{extra(ctx) | "downlink" => "none", "uplink" => "none"}
+
+    assert {:error, {:invalid_op, 0, [%{path: "downlink", message: message}]}} =
+             Configuration.preview(
+               ctx.alice,
+               ctx.mission,
+               {:ops, [create("spacecraft_route", doc)]}
+             )
+
+    assert message == "Choose a role for downlink, uplink or both"
+  end
+
+  test "transport choice errors are on transport_id, in ux's words", ctx do
+    # A transport at another station.
+    elsewhere = Map.put(extra(ctx), "transport_id", ctx.ids.svb_tcp)
+    assert [%{path: "transport_id", message: m1}] = validation_errors(ctx, elsewhere)
+    assert m1 == "Svalbard TCP isn't at Inuvik"
+
+    # Two transports at the station that can carry a leg, and none named.
+    apply_ops(ctx, "A second Inuvik transport", [
+      create("transport", station_transport("Inuvik spare", ctx.ids.inu, "bidirectional"))
+    ])
+
+    assert [%{path: "transport_id", message: m2} | _] = validation_errors(ctx, extra(ctx))
+    assert m2 == "Inuvik has 2 transports that can carry downlink; choose one"
+
+    # Naming one resolves it.
+    named = Map.put(extra(ctx), "transport_id", ctx.ids.inu_tcp)
+    assert validation_errors(ctx, named) == []
+  end
+
+  test "the form schema: required directions with ux's defaults; stations and transports listed",
+       ctx do
+    assert {:ok, fields} = ConfigKindSchema.fields("spacecraft_route", ctx.org, ctx.mission)
+    by_path = Map.new(fields, &{&1.path, &1})
+
+    assert Enum.map(fields, & &1.path) ==
+             ~w(spacecraft_id ground_station_id transport_id downlink uplink display_name purpose_label)
+
+    assert %{required: true, default: "primary"} = by_path["downlink"]
+    assert %{required: true, default: "none"} = by_path["uplink"]
+    assert %{value: "none", label: "Not used"} in by_path["uplink"].enum
+    assert by_path["spacecraft_id"].create_only
+    assert %{value: ctx.ids.inu, label: "Inuvik · INU"} in by_path["ground_station_id"].enum
+    assert %{value: ctx.ids.inu_tcp, label: "Inuvik TCP · Inuvik"} in by_path["transport_id"].enum
   end
 
   test "profile re-materialization leaves the extra route alone", ctx do
@@ -140,10 +190,21 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
       "spacecraft_id" => ctx.sc,
       "ground_station_id" => ctx.ids.inu,
       "purpose_label" => "Recovery",
-      "legs" => [downlink(), %{"direction" => "uplink", "role" => "primary"}]
+      "downlink" => "primary",
+      "uplink" => "primary"
     }
 
   defp downlink, do: %{"direction" => "downlink", "role" => "primary"}
+
+  defp validation_errors(ctx, doc) do
+    {:ok, %{checks: checks}} =
+      Configuration.preview(ctx.alice, ctx.mission, {:ops, [create("spacecraft_route", doc)]})
+
+    case Enum.find(checks, &(&1.key == "validation")) do
+      %{items: [%{errors: errors}]} -> errors
+      _clean -> []
+    end
+  end
 
   defp station_transport(name, station, direction) do
     name

@@ -11,8 +11,11 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
   Route materialization leaves these rows alone; delete archives them.
 
   Document: `%{"spacecraft_id", "ground_station_id", "transport_id" (optional: the station's
-  single transport that can carry each leg), "legs" => [%{"direction", "role"}], "display_name"
-  (optional, `{station}`-style tokens), "purpose_label"}`. The spacecraft is fixed once created.
+  single transport that can carry each leg), "downlink", "uplink" (each `none`, `primary`,
+  `candidate` or `contributing`; defaults primary and none; at least one not none), "display_name" (optional,
+  `{station}`-style tokens), "purpose_label"}`. The two direction fields are the legs: the kind
+  maps them server-side (lead, fe-setup: the console form stays fully generated), and a loaded
+  document exposes the same paths. The spacecraft is fixed once created.
   A route the spacecraft already has from its profile (same transport, direction and role) is
   refused. Booked and running contacts keep the routes they were booked with.
   """
@@ -23,9 +26,10 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.SpacecraftStore
 
-  @fields ~w(spacecraft_id ground_station_id transport_id legs display_name purpose_label)
+  @fields ~w(spacecraft_id ground_station_id transport_id downlink uplink display_name
+             purpose_label)
   @directions ~w(downlink uplink)
-  @roles ~w(primary candidate contributing)
+  @settings ~w(none primary candidate contributing)
 
   @impl true
   def kind, do: "spacecraft_route"
@@ -46,36 +50,45 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
   def normalize(:delete, _id, nil), do: {:ok, nil}
 
   def normalize(_action, _id, %{} = document) do
-    document =
-      Map.update(document, "legs", [], fn legs ->
-        if is_list(legs), do: Enum.map(legs, &default_role/1), else: legs
-      end)
+    document = document |> Map.put_new("downlink", "primary") |> Map.put_new("uplink", "none")
 
     errors =
       F.only(document, @fields) ++
         F.text(document, "spacecraft_id", 1..240, required: true, label: "Spacecraft") ++
-        F.text(document, "ground_station_id", 1..240, required: true, label: "Station") ++
+        station_errors(document) ++
         F.text(document, "transport_id", 1..240, label: "Transport") ++
         F.text(document, "display_name", 1..200, label: "Name") ++
         F.text(document, "purpose_label", 1..200, label: "Purpose") ++
-        leg_errors(document["legs"])
+        F.one_of(document, "downlink", @settings, required: true, label: "Downlink") ++
+        F.one_of(document, "uplink", @settings, required: true, label: "Uplink") ++
+        leg_errors(document)
 
     F.result(document, errors)
   end
 
   def normalize(_action, _id, _document),
-    do: {:error, [F.error("", "Enter the spacecraft, station and legs")]}
+    do: {:error, [F.error("", "Enter the spacecraft, station and directions")]}
 
   @impl true
   def validate(_organization_id, _mission_id, :delete, _id, _previous, nil), do: :ok
 
   def validate(_org, _mission, :update, _id, %{"spacecraft_id" => from}, %{"spacecraft_id" => to})
       when from != to,
-      do: {:error, [F.error("spacecraft_id", "An extra route stays on its spacecraft")]}
+      do:
+        {:error,
+         [
+           F.error(
+             "spacecraft_id",
+             "An extra route can't move to another spacecraft; remove it and add one there"
+           )
+         ]}
 
   def validate(organization_id, mission_id, _action, id, _previous, proposed) do
+    context = context(organization_id, mission_id)
+
     with {:ok, spacecraft} <- spacecraft(organization_id, mission_id, proposed),
-         {:ok, routes} <- plan(organization_id, mission_id, spacecraft, id, proposed) do
+         :ok <- transport_errors(context, proposed),
+         {:ok, routes} <- plan(context, spacecraft, id, proposed) do
       not_from_profile(organization_id, spacecraft, routes)
     end
   end
@@ -101,7 +114,8 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
 
   def write(organization_id, mission_id, _action, id, _previous, proposed, _options) do
     with {:ok, spacecraft} <- spacecraft(organization_id, mission_id, proposed),
-         {:ok, routes} <- plan(organization_id, mission_id, spacecraft, id, proposed),
+         {:ok, routes} <-
+           plan(context(organization_id, mission_id), spacecraft, id, proposed),
          :ok <- put_routes(organization_id, routes),
          wanted = MapSet.new(routes, & &1.routing_rule_id),
          :ok <-
@@ -114,7 +128,12 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
   end
 
   @impl true
-  def summary(:create, nil, proposed), do: "Add an extra route for #{proposed["spacecraft_id"]}"
+  # ux U25: names, never ids. A new route's name is rendered only when it's written, so a create
+  # without one says so plainly; previews and revisions name it from the stored document.
+  def summary(:create, nil, %{"display_name" => name}) when is_binary(name),
+    do: "Add extra route #{name}"
+
+  def summary(:create, nil, _proposed), do: "Add an extra route"
   def summary(:delete, previous, nil), do: "Remove extra route #{previous["display_name"]}"
   def summary(:update, previous, _proposed), do: "Edit extra route #{previous["display_name"]}"
 
@@ -128,15 +147,77 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
     end
   end
 
-  defp plan(organization_id, mission_id, spacecraft, id, proposed) do
-    context =
+  defp context(organization_id, mission_id),
+    do:
       RoutePlan.context(
         GroundStationStore.list_ground_stations(organization_id, mission_id),
         TransportStore.list_transports(organization_id, mission_id)
       )
 
-    RoutePlan.spacecraft_route(spacecraft, id, proposed, context)
+  defp plan(context, spacecraft, id, proposed),
+    do:
+      RoutePlan.spacecraft_route(
+        spacecraft,
+        id,
+        Map.put(proposed, "legs", legs(proposed)),
+        context
+      )
+
+  # ux's words for the transport choice, checked before planning: the named transport must be at
+  # the station and carry every leg; with none named, each leg needs exactly one at the station
+  # (none at all is RoutePlan's "has no active ... transport").
+  defp transport_errors(context, proposed) do
+    station = Map.get(context.stations, proposed["ground_station_id"])
+
+    errors =
+      case {station, proposed["transport_id"]} do
+        {nil, _transport} -> []
+        {station, nil} -> ambiguous(context, station, legs(proposed))
+        {station, id} -> named(Map.get(context.transports, id), station, legs(proposed))
+      end
+
+    if errors == [], do: :ok, else: {:error, errors}
   end
+
+  defp ambiguous(context, station, legs) do
+    for %{"direction" => direction} <- legs,
+        count = carriers(context, station, direction),
+        count > 1,
+        do:
+          F.error(
+            "transport_id",
+            "#{station.display_name} has #{count} transports that can carry #{direction}; choose one"
+          )
+  end
+
+  defp carriers(context, station, direction),
+    do:
+      context.transports_by_station
+      |> Map.get(station.ground_station_id, [])
+      |> Enum.count(&carries?(&1, direction))
+
+  defp named(nil, _station, _legs), do: [F.error("transport_id", "That transport doesn't exist")]
+
+  defp named(transport, station, legs) do
+    if transport.ground_station_id == station.ground_station_id,
+      do:
+        for(
+          %{"direction" => direction} <- legs,
+          not carries?(transport, direction),
+          do: F.error("transport_id", "#{transport.display_name} can't carry #{direction}")
+        ),
+      else: [
+        F.error("transport_id", "#{transport.display_name} isn't at #{station.display_name}")
+      ]
+  end
+
+  defp carries?(%{direction_capability: :bidirectional}, _direction), do: true
+  defp carries?(%{direction_capability: :inbound}, "downlink"), do: true
+  defp carries?(%{direction_capability: :outbound}, "uplink"), do: true
+  defp carries?(_transport, _direction), do: false
+
+  defp station_errors(%{"ground_station_id" => id}) when is_binary(id) and id != "", do: []
+  defp station_errors(_document), do: [F.error("ground_station_id", "Choose a station")]
 
   # ux's words: a route the profile already gives this spacecraft isn't an extra one.
   defp not_from_profile(organization_id, spacecraft, routes) do
@@ -197,36 +278,30 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
       "transport_id" => first.transport_id,
       "display_name" => first.display_name,
       "purpose_label" => first.purpose_label,
-      "legs" =>
-        rows
-        |> Enum.map(&%{"direction" => &1.leg_direction, "role" => Atom.to_string(&1.role)})
-        |> Enum.sort_by(& &1["direction"])
+      "downlink" => setting(rows, "downlink"),
+      "uplink" => setting(rows, "uplink")
     }
 
   defp document([]), do: nil
 
-  defp default_role(%{} = leg), do: Map.put_new(leg, "role", "primary")
-  defp default_role(leg), do: leg
-
-  defp leg_errors(legs) when is_list(legs) and legs != [] do
-    directions = Enum.map(legs, &(is_map(&1) && &1["direction"]))
-
-    cond do
-      not Enum.all?(legs, &valid_leg?/1) ->
-        [F.error("legs", "Each leg is a direction (downlink, uplink) and a role")]
-
-      length(Enum.uniq(directions)) != length(directions) ->
-        [F.error("legs", "Each direction once")]
-
-      true ->
-        []
+  defp setting(rows, direction) do
+    case Enum.find(rows, &(&1.leg_direction == direction)) do
+      nil -> "none"
+      row -> Atom.to_string(row.role)
     end
   end
 
-  defp leg_errors(_legs), do: [F.error("legs", "Add at least one leg")]
+  # The legs the two direction fields stand for.
+  defp legs(document),
+    do:
+      for(
+        direction <- @directions,
+        (role = document[direction]) not in [nil, "none"],
+        do: %{"direction" => direction, "role" => role}
+      )
 
-  defp valid_leg?(%{"direction" => direction, "role" => role} = leg),
-    do: map_size(leg) == 2 and direction in @directions and role in @roles
+  defp leg_errors(%{"downlink" => "none", "uplink" => "none"}),
+    do: [F.error("downlink", "Choose a role for downlink, uplink or both")]
 
-  defp valid_leg?(_leg), do: false
+  defp leg_errors(_document), do: []
 end
