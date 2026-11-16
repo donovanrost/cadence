@@ -36,13 +36,30 @@ defmodule Cadence.Configuration.Pipeline do
           halted?: boolean()
         }
 
-  @spec run(String.t(), String.t(), integer(), [op()]) :: result()
-  def run(organization_id, mission_id, base_revision, ops) do
+  @doc """
+  Runs `ops`. Option `:actor`: who applies them (the applier's `%{"kind", "id", ...}`), handed to
+  each kind's `write/7` and `effect/7` as `options[:actor]`, so a write records who made it (a
+  retire's `retired_by`, an archive's actor, the save trail). A preview passes none.
+  """
+  @spec run(String.t(), String.t(), integer(), [op()], keyword()) :: result()
+  def run(organization_id, mission_id, base_revision, ops, opts \\ []) do
+    ops = with_actor(ops, Keyword.get(opts, :actor))
+
     # Kinds re-read the same profile versions once per spacecraft; one read each for the run.
     ReadMemo.with_memo(fn ->
       SpacecraftTypeStore.with_version_memo(fn ->
         run_ops(organization_id, mission_id, base_revision, ops)
       end)
+    end)
+  end
+
+  # In memory only: the staged payload keeps its own options.
+  defp with_actor(ops, nil), do: ops
+
+  defp with_actor(ops, %{} = actor) do
+    Enum.map(ops, fn op ->
+      options = op.payload |> Map.get("options", %{}) |> Map.put(:actor, actor)
+      %{op | payload: Map.put(op.payload, "options", options)}
     end)
   end
 

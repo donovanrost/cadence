@@ -23,11 +23,19 @@ defmodule Cadence.Platform.SaveTrail do
       do: Map.merge(metadata || %{}, %{"saved_by" => %{"kind" => kind, "id" => id}, "via" => via})
 
   @doc """
-  A change set's write: `via` only. Its actor is the change set's own (`applied_by` on the
-  configuration revision it applied), which the kinds aren't given; an older trail is dropped.
+  A change set's write: `via` `"change_set"`, and `saved_by` its applier (the pipeline's
+  `options[:actor]`, the same as `applied_by` on the configuration revision). A preview has no
+  applier, so only `via`. An older trail in the staged document is dropped.
   """
-  @spec change_set(map() | nil) :: map()
-  def change_set(metadata), do: metadata |> without() |> Map.put("via", "change_set")
+  @spec change_set(map() | nil, map() | nil) :: map()
+  def change_set(metadata, options) do
+    metadata = without(metadata)
+
+    case options && Map.get(options, :actor) do
+      %{"kind" => _, "id" => _} = actor -> put(metadata, actor, "change_set")
+      _none -> Map.put(metadata, "via", "change_set")
+    end
+  end
 
   @doc "`metadata` without the trail (string or atom keys)."
   @spec without(map() | nil) :: map()

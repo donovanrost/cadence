@@ -78,7 +78,7 @@ defmodule Cadence.Governance.DerivedTelemetryKind do
   end
 
   @impl true
-  def write(_organization_id, mission_id, :create, id, nil, proposed, _options) do
+  def write(_organization_id, mission_id, :create, id, nil, proposed, options) do
     %{
       derived_definition_id: id,
       mission_id: mission_id,
@@ -86,14 +86,14 @@ defmodule Cadence.Governance.DerivedTelemetryKind do
       point_name: proposed["point_name"] || proposed["point_id"],
       expression: proposed["expression"],
       version: 1,
-      metadata: SaveTrail.change_set(proposed["metadata"])
+      metadata: SaveTrail.change_set(proposed["metadata"], options)
     }
     |> Definition.new()
     |> Governance.persist_derived_definition()
     |> stored()
   end
 
-  def write(organization_id, mission_id, :update, id, _previous, proposed, _options) do
+  def write(organization_id, mission_id, :update, id, _previous, proposed, options) do
     with {:ok, current} <-
            Governance.fetch_derived_definition(organization_id, mission_id, id, nil) do
       organization_id
@@ -104,7 +104,7 @@ defmodule Cadence.Governance.DerivedTelemetryKind do
           point_name: proposed["point_name"] || current.point_id,
           expression: proposed["expression"],
           expected_definition_id: id,
-          metadata: SaveTrail.change_set(proposed["metadata"])
+          metadata: SaveTrail.change_set(proposed["metadata"], options)
         },
         current.version
       )

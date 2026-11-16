@@ -106,7 +106,7 @@ defmodule Cadence.Control.LimitDefinitionKind do
     end
   end
 
-  def write(organization_id, mission_id, _action, _id, _previous, proposed, _options) do
+  def write(organization_id, mission_id, _action, _id, _previous, proposed, options) do
     point = proposed["point_id"]
     set = proposed["limit_set_name"]
     review = Limits.limit_definition_review(organization_id, mission_id, point, set)
@@ -118,7 +118,7 @@ defmodule Cadence.Control.LimitDefinitionKind do
         point_id: point,
         limit_set_name: set,
         thresholds: proposed["thresholds"] || %{},
-        metadata: SaveTrail.change_set(proposed["metadata"])
+        metadata: SaveTrail.change_set(proposed["metadata"], options)
       },
       review,
       publish_facts?: false

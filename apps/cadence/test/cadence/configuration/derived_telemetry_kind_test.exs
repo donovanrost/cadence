@@ -7,10 +7,12 @@ defmodule Cadence.Configuration.DerivedTelemetryKindTest do
   use Cadence.DataCase, async: false
 
   import Cadence.ConfigurationFixtures
+  import Ecto.Query
 
   alias Cadence.Control.Configuration
   alias Cadence.Governance
   alias Cadence.Governance.DerivedTelemetryKind, as: ConfigKind
+  alias Cadence.Governance.GovernedDerivedTelemetryDefinitionRow
 
   setup do
     on_exit(with_approval_required(false))
@@ -36,6 +38,25 @@ defmodule Cadence.Configuration.DerivedTelemetryKindTest do
 
     # A retired point's id isn't reused.
     assert validation_errors(ctx, [create(point("DERIVED.BUS_POWER", "1 + 1"))]) == ["point_id"]
+  end
+
+  # Sweep row 3 (director): a change set's writes carry its applier. The save trail names them, and
+  # a retire records them as retired_by (it was always nil: the kind never got the actor).
+  test "the applier is the save trail's saved_by and the retire's retired_by", ctx do
+    [id] = apply_ops(ctx, "Add", [create(point("DERIVED.TRAIL", "28 * 2"))])
+    alice_id = ctx.alice.user.user_id
+
+    assert {:ok, created} = Governance.fetch_derived_definition(ctx.org, ctx.mission, id, nil)
+    assert %{"via" => "change_set", "saved_by" => %{"id" => ^alice_id}} = created.metadata
+
+    apply_ops(ctx, "Retire", [%{kind: "derived_telemetry", action: :delete, entity_id: id}])
+
+    assert %{retired_by: ^alice_id} =
+             Repo.one(
+               from(r in GovernedDerivedTelemetryDefinitionRow,
+                 where: r.derived_definition_id == ^id and not is_nil(r.retired_at)
+               )
+             )
   end
 
   test "ids, expressions and source points are checked before anything applies", ctx do

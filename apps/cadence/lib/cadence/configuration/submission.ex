@@ -131,7 +131,7 @@ defmodule Cadence.Configuration.Submission do
     with :ok <- ActivationPolicy.validate(org, mission, policy),
          head = Ledger.lock_head(org, mission),
          ops = ChangeSetStore.staged_ops(set.change_set_id),
-         result = Pipeline.run(org, mission, set.base_revision_number, ops),
+         result = Pipeline.run(org, mission, set.base_revision_number, ops, actor: applier),
          :ok <- clean(result),
          changes = ChangeSetStore.changes(set.change_set_id),
          {:ok, generation} <-
