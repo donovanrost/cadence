@@ -136,7 +136,15 @@ defmodule Cadence.Platform.ConfigKind do
               deleting :: MapSet.t({String.t(), String.t()})
             ) :: :ok | {:error, term()}
 
+  @doc """
+  Why an entity this kind doesn't load (nothing current) can't be changed, as field errors:
+  staging refuses an update or delete of it with these instead of "This no longer exists".
+  """
+  @callback absent_errors(organization_id :: String.t(), mission_id :: String.t(), String.t()) ::
+              [field_error()]
+
   @optional_callbacks stage_check: 5,
+                      absent_errors: 3,
                       effect: 7,
                       normalize_options: 2,
                       finalize: 3,

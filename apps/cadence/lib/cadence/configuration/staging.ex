@@ -255,7 +255,7 @@ defmodule Cadence.Configuration.Staging do
 
   defp current(kind, organization_id, mission_id, entity_id) do
     case Map.get(kind.load(organization_id, mission_id, [entity_id]), entity_id) do
-      nil -> {:error, [%{path: "entity_id", message: "This no longer exists"}]}
+      nil -> {:error, absent(kind, organization_id, mission_id, entity_id)}
       document -> {:ok, Document.normalize(document)}
     end
   end
@@ -283,6 +283,14 @@ defmodule Cadence.Configuration.Staging do
         is_binary(Map.get(op, :entity_id)),
         into: MapSet.new(),
         do: {to_string(op.kind), op.entity_id}
+  end
+
+  # A kind can say why an entity it won't load can't be changed (ConfigKind.absent_errors/3),
+  # so the refusal reads right where it was tried instead of "This no longer exists".
+  defp absent(kind, organization_id, mission_id, entity_id) do
+    if function_exported?(kind, :absent_errors, 3),
+      do: kind.absent_errors(organization_id, mission_id, entity_id),
+      else: [%{path: "entity_id", message: "This no longer exists"}]
   end
 
   defp kind(%{kind: kind}) do
