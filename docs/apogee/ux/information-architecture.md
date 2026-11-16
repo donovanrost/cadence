@@ -122,8 +122,11 @@ query (⌘K) → fleet posture → clocks → account.
        crumb's accessible name ("Reflect Orbital / Earendil").
     3. The query becomes an icon button (`⌕ ⌘K`, named "Search"). It opens the same palette.
     4. The clock cluster drops next AOS and MET, and keeps `UTC`.
+    5. Last resort (dashboards): the bar wraps to a second row. A wrap is better than a clip.
   - **Never give way:** the mode switch, the posture's marks and counts, Setup's `CONFIG rN`, `UTC` and the account
-    menu. Nothing is ever clipped or pushed off-screen: the account menu is always reachable.
+    menu. Nothing is ever clipped or pushed off-screen: the account menu is always reachable. The posture never hides
+    and never shrinks to one worst mark: it's the director's condition for dropping the context rail, and counts are
+    what the rail gave.
   - Count changes aren't announced; a new crit flashes the chip once (reduced motion: no flash).
 - **Account menu**: name + role, Your account, Switch organization, Platform
   admin (capability-gated; the console admin area, L7), Sign out.
