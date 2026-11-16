@@ -165,6 +165,7 @@ describe("gap rows with names (api f3aa9b272)", () => {
         reason: "no window can cover it",
         requirement_label: "Block 1 daily",
         spacecraft: { id: "sc", name: "EARENDIL-389" },
+        requirement_window: undefined,
       }),
     ).toBe("EARENDIL-389 · Block 1 daily: no window can cover it");
     expect(
@@ -173,7 +174,30 @@ describe("gap rows with names (api f3aa9b272)", () => {
         reason: "no window can cover it",
         requirement_label: undefined,
         spacecraft: undefined,
+        requirement_window: undefined,
       }),
     ).toBe("no window can cover it");
+  });
+});
+
+describe("gap windows (ux U73, api 3386a8bf3)", () => {
+  it("puts the window after the label, dated only off the plan's day", async () => {
+    const { gapText } = await import("./plan-history.ts");
+    const gap = (from: string, to: string) => ({
+      requirement_id: "r1",
+      reason: "no window can cover it",
+      requirement_label: "Block 1 daily",
+      spacecraft: { id: "sc", name: "EARENDIL-389" },
+      requirement_window: { from, to },
+    });
+    expect(gapText(gap("2026-11-16T06:00:00Z", "2026-11-16T12:00:00Z"), "2026-11-16")).toBe(
+      "EARENDIL-389 · Block 1 daily · 06:00–12:00Z: no window can cover it",
+    );
+    expect(gapText(gap("2026-11-16T18:00:00Z", "2026-11-17T00:00:00Z"), "2026-11-16")).toBe(
+      "EARENDIL-389 · Block 1 daily · 18:00–00:00Z: no window can cover it",
+    );
+    expect(gapText(gap("2026-11-16T22:00:00Z", "2026-11-17T02:00:00Z"), "2026-11-16")).toBe(
+      "EARENDIL-389 · Block 1 daily · 11-16 22:00–11-17 02:00Z: no window can cover it",
+    );
   });
 });

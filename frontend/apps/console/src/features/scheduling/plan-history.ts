@@ -32,6 +32,8 @@ const gapNames = {
   // free-text: the requirement's template name, else its rule in words
   requirement_label: d.optional(d.nullable(d.string)),
   spacecraft: d.optional(d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }))),
+  /** api 3386a8bf3 (U73): the requirement version's window, so a recurring rule's gaps differ. */
+  requirement_window: d.optional(d.nullable(d.object({ from: d.timestamp, to: d.timestamp }))),
 };
 
 const decisionRow = d.object({
@@ -147,14 +149,38 @@ export function versionLine(v: VersionRow, current: number, now: Date = new Date
 
 type Gap = DecisionRow["acknowledgements"][number] | DecisionRow["exceptions"][number];
 /** 'EARENDIL-389 · Block 1 daily: no window can cover it' (U73); the reason alone without names. */
-export function gapText(g: Gap): string {
-  const name = [g.spacecraft?.name ?? null, g.requirement_label ?? null]
+/**
+ * A gap's window (ux U73, §4): times only when it lies on the plan's day, else both ends dated
+ * ('11-16 22:00–11-17 02:00Z'). An end at 00:00 belongs to the day before.
+ */
+export function gapWindow(
+  w: Readonly<{ from: string; to: string }>,
+  planDay: string | null,
+): string {
+  const toDay = new Date(Date.parse(w.to) - 1).toISOString().slice(0, 10);
+  const onDay = planDay !== null && w.from.slice(0, 10) === planDay && toDay === planDay;
+  const at = (iso: string) => `${iso.slice(11, 16)}`;
+  return onDay
+    ? `${at(w.from)}–${at(w.to)}Z`
+    : `${w.from.slice(5, 10)} ${at(w.from)}–${w.to.slice(5, 10)} ${at(w.to)}Z`;
+}
+
+export function gapText(g: Gap, planDay: string | null = null): string {
+  const name = [
+    g.spacecraft?.name ?? null,
+    g.requirement_label ?? null,
+    g.requirement_window ? gapWindow(g.requirement_window, planDay) : null,
+  ]
     .filter((p): p is string => Boolean(p))
     .join(" · ");
   return name ? `${name}: ${g.reason}` : g.reason;
 }
 
-export function decisionLine(e: DecisionRow, now: Date = new Date()): HistoryLine {
+export function decisionLine(
+  e: DecisionRow,
+  now: Date = new Date(),
+  planDay: string | null = null,
+): HistoryLine {
   const t = when(e.at, now);
   const r = `R${e.version}`;
   const base = { key: `d${e.version}-${e.at}`, at: e.at, counts: null, tags: [], view: null };
@@ -167,7 +193,7 @@ export function decisionLine(e: DecisionRow, now: Date = new Date()): HistoryLin
       ...base,
       line: n > 0 ? `${lead} · ${formatCount(n)} ${n === 1 ? "gap" : "gaps"} accepted` : lead,
       quote: quote(e.text),
-      details: e.acknowledgements.map((a) => ({ id: a.requirement_id, text: gapText(a) })),
+      details: e.acknowledgements.map((a) => ({ id: a.requirement_id, text: gapText(a, planDay) })),
       detailsLabel: n > 0 ? `Show ${formatCount(n)}` : null,
     };
   }
@@ -181,7 +207,7 @@ export function decisionLine(e: DecisionRow, now: Date = new Date()): HistoryLin
       ...base,
       line: n > 0 ? `${lead} · ${formatCount(n)} ${n === 1 ? "exception" : "exceptions"}` : lead,
       quote: quote(e.text),
-      details: e.exceptions.map((x) => ({ id: x.requirement_id, text: gapText(x) })),
+      details: e.exceptions.map((x) => ({ id: x.requirement_id, text: gapText(x, planDay) })),
       detailsLabel: n > 0 ? `Show ${formatCount(n)}` : null,
     };
   }
@@ -206,10 +232,14 @@ export function decisionLine(e: DecisionRow, now: Date = new Date()): HistoryLin
 }
 
 /** One list, newest first: version rows and decision rows in time order (U73). */
-export function historyLines(h: PlanHistory, now: Date = new Date()): readonly HistoryLine[] {
+export function historyLines(
+  h: PlanHistory,
+  now: Date = new Date(),
+  planDay: string | null = null,
+): readonly HistoryLine[] {
   return [
     ...h.versions.map((v) => versionLine(v, h.latest_version, now)),
-    ...h.decisions.map((e) => decisionLine(e, now)),
+    ...h.decisions.map((e) => decisionLine(e, now, planDay)),
   ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
 

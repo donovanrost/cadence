@@ -39,7 +39,11 @@ defineExpose({ open });
     >
       <template #default="{ value }">
         <ul class="m-0 flex list-none flex-col p-0">
-          <PlanHistoryRow v-for="row in historyLines(value)" :key="row.key" :row="row" />
+          <PlanHistoryRow
+            v-for="row in historyLines(value, new Date(), day)"
+            :key="row.key"
+            :row="row"
+          />
         </ul>
         <p v-if="value.truncated" class="m-0 pt-2 text-sm text-text-3">
           Older versions and decisions aren't shown.
