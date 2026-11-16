@@ -368,13 +368,19 @@ const short = (iso: string) => {
           aria-label="Event detail"
           class="border border-line bg-panel console:min-h-0 console:overflow-auto"
         >
-          <EventDetail ref="detail" :event="selection.event.value" @close="selection.clear" />
+          <EventDetail
+            ref="detail"
+            :mission-id="missionId"
+            :event="selection.event.value"
+            @close="selection.clear"
+          />
         </aside>
       </div>
       <ApSheet v-if="!wide" ref="detailSheet" title="Event" @closed="selection.clear">
         <EventDetail
           v-if="selection.event.value"
           ref="detail"
+          :mission-id="missionId"
           :event="selection.event.value"
           @close="detailSheet?.close()"
         />

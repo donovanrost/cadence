@@ -18,7 +18,8 @@ export type EventDetail = Readonly<{
   occurred: string;
   links: readonly Readonly<{ label: string; to: RouteLocationRaw }>[];
   status: string | null;
-  technical: readonly Readonly<{ label: string; value: string }>[];
+  /** `contact`: a scheduled or realized contact id, linked to History once it resolves (U78). */
+  technical: readonly Readonly<{ label: string; value: string; contact?: true }>[];
 }>;
 
 const SEVERITY_WORDS: Readonly<Record<EventSeverity, string>> = {
@@ -52,7 +53,7 @@ export function eventDetail(e: MissionEvent): EventDetail {
   const subjectTo = subjectLink(e);
   if (subject?.name && subjectTo) links.push({ label: subject.name, to: subjectTo });
   const status = statusWords(r?.status);
-  const technical: { label: string; value: string }[] = [
+  const technical: { label: string; value: string; contact?: true }[] = [
     { label: "Event id", value: e.id },
     ...(e.raw_kind ? [{ label: "Raw kind", value: e.raw_kind }] : []),
   ];
@@ -66,8 +67,12 @@ export function eventDetail(e: MissionEvent): EventDetail {
   add("Capability instance", r?.capability_instance_id);
   add("Activation", r?.activation_id);
   add("Correlation key", r?.correlation_key);
-  add("Scheduled contact", r?.scheduled_contact_id);
-  add("Realized contact", r?.realized_contact_id);
+  for (const [label, value] of [
+    ["Scheduled contact", r?.scheduled_contact_id],
+    ["Realized contact", r?.realized_contact_id],
+  ] as const) {
+    if (value) technical.push({ label, value, contact: true });
+  }
   if (subject && !(subject.name && subjectTo)) add(`Subject (${subject.kind})`, subject.id);
   add("Command request", e.refs.command_request_id);
   add("Contact", e.refs.contact_id);

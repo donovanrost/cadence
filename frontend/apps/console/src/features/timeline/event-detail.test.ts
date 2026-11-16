@@ -70,3 +70,13 @@ describe("Timeline event detail (ux U71 A8, api a87bee73d)", () => {
     expect(occurredText("2026-01-02T03:04:05Z")).toBe("Occurred 01-02 03:04:05Z");
   });
 });
+
+describe("Timeline contact ids (U78)", () => {
+  it("marks the scheduled and realized contact ids for History links", () => {
+    const d = eventDetail(event({ record: { ...baseRecord, realized_contact_id: "rc_1" } }));
+    expect(d.technical.filter((r) => r.contact).map((r) => [r.label, r.value])).toEqual([
+      ["Scheduled contact", "sc_c1"],
+      ["Realized contact", "rc_1"],
+    ]);
+  });
+});
