@@ -12,6 +12,8 @@ import type { Attention } from "./attention.ts";
  */
 
 export type QueueAction = Readonly<{ label: string; to: RouteLocationRaw }>;
+/** A sentence piece: text, or a link (U66's holders). */
+export type SentencePart = string | Readonly<{ text: string; to: RouteLocationRaw }>;
 
 export type QueueItem = Readonly<{
   key: string;
@@ -21,6 +23,8 @@ export type QueueItem = Readonly<{
   /** Route for the title link; null for group rows without one target. */
   titleTo: RouteLocationRaw | null;
   sentence: string;
+  /** The sentence with links in it; `sentence` is its plain text. */
+  sentenceParts?: readonly SentencePart[];
   meta: string | null;
   action: QueueAction;
   /** The action is primary whatever the row's place (U38: a configuration that needs a fix). */

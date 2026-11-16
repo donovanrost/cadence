@@ -34,6 +34,7 @@ import { contactStartRow } from "./contactStart.ts";
 import { archiveRow } from "./archive.ts";
 import { coverageRow } from "./coverage.ts";
 import { ingressRow } from "./ingress.ts";
+import { diskRow } from "./journalDisk.ts";
 import { jobRow } from "./jobs.ts";
 import { listenerRow } from "./listener.ts";
 import { changeEvidence, changeTitle, pastDeadline } from "./providerChange.ts";
@@ -394,6 +395,8 @@ function rowFor(
       if (a.source === "activation_apply") return [activationRow(base(item), item.id, a, now)];
       if (a.source === "contact_start")
         return [contactStartRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
+      if (a.source === "ingress_backpressure" && a.conflict === "journal_disk" && a.journal_disk)
+        return [diskRow(base(item), item.id, a.journal_disk)];
       if (a.source === "ingress_backpressure")
         return [ingressRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "archive_quarantine")

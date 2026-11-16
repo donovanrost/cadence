@@ -10,6 +10,7 @@ import { plural } from "@/ui";
 import { formatBytes } from "@/features/catalog/importRun.ts";
 import { attentionUplinkReader, reasonSentence } from "@/features/contacts/readiness.ts";
 import { planCoverageFields } from "./coverageFields.ts";
+import { diskResolvedWords, journalDiskFields } from "./journalDisk.ts";
 
 /**
  * Attention items in Now's queue (U31, DECISIONS #54; ops.md §action-queue `attention`): mission
@@ -69,6 +70,8 @@ export const attentionConflicts = [
   // ingress_backpressure (U47): the buffer is >= 80% full · frames were lost.
   "journal_near_full",
   "frames_dropped",
+  // U66: the buffer DISK every pass shares (one item per mission, no pass of its own).
+  "journal_disk",
   // archive_quarantine (U49): one item per contact and error code.
   "quarantined",
   // listener_refusal (U50): one item per open contact on the shared listener.
@@ -449,6 +452,8 @@ export const attentionReader = d.object({
   found_at: d.optional(d.nullable(d.timestamp)),
   /** plan_coverage (U61): the day, its first window, and its newest plan. */
   ...planCoverageFields,
+  /** ingress_backpressure / journal_disk (U66): the shared buffer disk. */
+  ...journalDiskFields,
   resolution: d.nullable(
     d.object({
       /** How it closed: a known key (archive 'discarded', a job 'closed'…), else the raw word. */
@@ -473,6 +478,8 @@ export const resolvedReader = d.object({
   resolved_at: d.timestamp,
   /** api (U50): false for a hand-started contact; absent from older reads and other sources. */
   booked: d.optional(d.nullable(d.boolean)),
+  /** U66 journal_disk only: when telemetry was refused before it cleared. */
+  refused: d.optional(d.nullable(d.object({ from: d.timestamp, to: d.timestamp }))),
 });
 
 const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
@@ -628,6 +635,7 @@ export function attentionWords(
     case "missed":
     case "journal_near_full":
     case "frames_dropped":
+    case "journal_disk":
     case "quarantined":
     case "listener_refusal":
     case "outcome_unknown":
@@ -663,9 +671,12 @@ export function attentionMeta(a: Attention, now: Date = new Date()): string | nu
 }
 
 export type Resolved = Decoded<typeof resolvedReader>;
-/** What the words read of a resolved entry; `booked` is only on newer reads. */
-export type ResolvedEntry = Omit<Resolved, "booked"> &
-  Readonly<{ booked?: boolean | null | undefined }>;
+/** What the words read of a resolved entry; `booked` and `refused` are only on newer reads. */
+export type ResolvedEntry = Omit<Resolved, "booked" | "refused"> &
+  Readonly<{
+    booked?: boolean | null | undefined;
+    refused?: Resolved["refused"];
+  }>;
 
 /** Server actions that read better in words: U37's system 'replayed' = the telemetry got stored. */
 const ACTION_WORDS: Readonly<Partial<Record<ResolutionAction, string>>> = {
@@ -705,6 +716,9 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
     if (r.action === "acknowledged")
       return `Marked as seen by ${r.resolved_by.name ?? "an operator"} at ${at}.`;
   }
+  // compared-as-text: an item id (an open set); this is the one journal_disk item's fixed id (U66)
+  if (r.id === "attention:ingress_backpressure:journal_disk")
+    return diskResolvedWords(at, r.refused);
   if (r.id.startsWith("attention:ingress_backpressure:")) {
     // U47: the buffer caught up, or an operator acknowledged the lost frames.
     if (r.action === "drained") return `Caught up at ${at}.`;

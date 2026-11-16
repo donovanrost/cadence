@@ -91,6 +91,7 @@ export function changeTitle(a: Attention, now: Date): string {
     case "missed":
     case "journal_near_full":
     case "frames_dropped":
+    case "journal_disk":
     case "quarantined":
     case "listener_refusal":
     case "outcome_unknown":

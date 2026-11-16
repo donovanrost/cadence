@@ -120,6 +120,7 @@ export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }
     case "missed":
     case "journal_near_full":
     case "frames_dropped":
+    case "journal_disk":
     case "quarantined":
     case "listener_refusal":
     case "outcome_unknown":

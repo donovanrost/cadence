@@ -106,6 +106,18 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
             :sentence="command.sentenceFor(item, access.abort)"
             v-bind="metaProps(item)"
           >
+            <!-- U66: a sentence with links (the buffer disk's holders). -->
+            <template v-if="item.sentenceParts" #sentence>
+              <template v-for="(part, n) in item.sentenceParts" :key="n">
+                <RouterLink
+                  v-if="typeof part !== 'string'"
+                  :to="part.to"
+                  class="text-readout underline hover:text-bright"
+                  >{{ part.text }}</RouterLink
+                >
+                <template v-else>{{ part }}</template>
+              </template>
+            </template>
             <template #title>
               <RouterLink
                 v-if="item.titleTo"

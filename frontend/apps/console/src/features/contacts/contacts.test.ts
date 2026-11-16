@@ -200,6 +200,7 @@ describe("attention block words (U32)", () => {
     found_at: undefined,
     day: undefined,
     first_window_at: undefined,
+    journal_disk: undefined,
     due_at: undefined,
     severity: undefined,
     requirements_count: undefined,
