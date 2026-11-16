@@ -2201,3 +2201,51 @@ next item). Until then they stay plain text, as today.
 - **Drawer titles** name the subject, since a sheet below 1100px takes its accessible name from the title:
   `Pass · EARENDIL-312 · Fairbanks`, and `Contact record · EARENDIL-312` for a hand-started contact.
 - An id the read can't find: "No contact record with this id." (U25: the id isn't repeated as if it were a name.)
+
+### U79 · A spacecraft's extra route (DECISIONS #3 per-spacecraft overrides; ux + domain answer to lead 11-16; domain 774471695 kind `spacecraft_route`) (domain / fe-setup)
+One spacecraft gets a route its profile doesn't give it, such as a recovery downlink via Inuvik. It's staged through a
+change set like any override. There's no separate routes editor.
+
+**Where:**
+- Its home is the spacecraft's page, in Setup › Spacecraft › <craft> › routing. The route list there carries a tag on
+  each route: `From profile` or `This spacecraft only` (from the read's `origin`). `Add extra route` sits above the
+  list.
+- A `This spacecraft only` route has `Edit` and `Remove…`, both staged.
+- Profile P3 lists extra routes as override rows, "Extra route via Inuvik · downlink primary", each linking to the
+  spacecraft's routing. P3 doesn't add them.
+
+**The form** (generated from domain's fixed-field schema, option (a)):
+| Path | Label | Options / help |
+|---|---|---|
+| spacecraft_id | `Spacecraft` | create-only, preset from the page |
+| ground_station_id | `Station` | `Inuvik · INU` |
+| transport_id | `Transport` | optional. Help: "Leave empty to use the station's transport for each direction." |
+| downlink | `Downlink` | `Not used` · `Primary` · `Candidate` · `Contributing`; preselected `Primary` |
+| uplink | `Uplink` | the same options; preselected `Not used` |
+| display_name | `Route name` | optional. Help: "Leave empty for “{station} · {spacecraft}”. You can use {station}, {spacecraft} and {scid}." |
+| purpose_label | `Purpose` | optional. Help: "Shown with the route, e.g. Anomaly recovery." |
+
+- `Not used` is a real option, not an empty select. So downlink and uplink are **required**, and their "none" value
+  is a non-empty value (`none`). Then the create-defaults rule (required fields preselect) gives `Primary` /
+  `Not used`, and "empty means inherit" never applies to them.
+
+**Errors** (on the field, with no final period, like the other F.error messages):
+- Both `Not used` (on downlink): "Choose a role for downlink, uplink or both".
+- No station: "Choose a station".
+- Several transports and none chosen: "Inuvik has 2 transports that can carry downlink; choose one".
+- A transport at another station: "INU S-band isn't at Inuvik".
+- A transport that can't carry a leg: "INU S-band can't carry uplink".
+- A duplicate (domain's, as built): "EARENDIL-389 already has this route from its profile."
+- Changing the spacecraft of an existing route: "An extra route can't move to another spacecraft; remove it and add
+  one there".
+- The API's "Each direction once" and "Add at least one leg" stay for API callers. The form can't produce them.
+
+**Change-set summary lines** use names, never ids (U25):
+- "Add extra route INU · EARENDIL-389"
+- "Edit extra route INU · EARENDIL-389"
+- "Remove extra route INU · EARENDIL-389"
+
+The as-built create summary "Add an extra route for <spacecraft_id>" shows a raw id.
+
+**Dropped by design** (the director takes it to the user): pinning a transport version, and routes over a transport
+with no station.

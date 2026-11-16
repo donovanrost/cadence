@@ -124,6 +124,18 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   - The spacecraft count appears only if the read gives it (fe-setup 11-14). **Never say "nothing changed" after
   commit** (change-sets §7).
 - **Empty:** "Nothing staged. Edits in Setup collect here before they reach the fleet."
+  - **An empty set that's still open** (its last change withdrawn or discarded; qa's probe 11-16): the right fix is
+    that the server closes a set when its last change goes, since an empty open set means nothing. Until it does,
+    the empty state adds a ghost `Close this change set` with no confirm, because nothing is lost. Afterwards the
+    plain empty state shows.
+- **Discard all / Discard mine always confirm** (qa's probe 11-16: it discarded at once). This is an ApInlineConfirm
+  under the K1 header, danger action, focus on `Cancel` (§7). It counts only the changes you may discard.
+  - All yours: "Discard your 3 staged changes? They can't be brought back." `Cancel` · `Discard 3 changes`.
+  - Including other people's (`Discard all`): "Discard all 3 staged changes? 2 of them are other people's: Mira K.,
+    Tomás R. They can't be brought back." Past two names: "Mira K., Tomás R. and 2 others".
+  - `Discard mine` when others' changes stay: "Discard your 2 staged changes? Mira K.'s 1 change stays staged."
+  - The action states the count: `Discard 1 change` or `Discard 3 changes`.
+  - The status bar's `Discard all` (§3) opens the same confirm, so the two never differ.
 
 ## 4. Revisions (`M/setup/revisions`, reading layout)
 - **List** (ApTable): Revision (mono link `r6`) · Applied (abs time) · By · Why (sentence,
