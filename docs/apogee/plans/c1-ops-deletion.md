@@ -109,3 +109,10 @@ The ops frame (`host/src/ops-workspace/features/frame/*`) stays: it wraps every 
   API is a separate product call); `management/commanding/{request_*,review_*,authoring_*,argument_document,
   spacecraft_catalogs,approved_command,workspace_settings}`; `actions/{contact_workflow,native_planning_input}` and
   `Planning.{ContactRecord,ContactSchedule,ContactDetail}` (L14); `actions/fleet_planning` (grants).
+
+## Built
+- **Redirects (api):** `8d03c55ae` on `api/c1-ops-redirects` (on 4f579f750): `LegacyOpsRedirectController` C1 actions,
+  19 GET routes, the 17 C1 live routes and the 2 contact-workspace routes removed; plan/run days via
+  `ContactPlanOverview.day/3` and the run's horizon start; request → command group (review/uplink), no group → list.
+  `legacy_ops_redirect_controller_test` 8/8. With the routes gone, 73 tests in 23 modules fail: all tests of the
+  deleted pages, deleted or trimmed in fe-setup's server half (api's list in its message, 11-16).
