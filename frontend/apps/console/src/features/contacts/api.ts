@@ -85,6 +85,13 @@ const pass = d.object({
   /** U55: which of Cancel contact… / End contact now… applies now (never both), or none. */
   contact_action: d.optional(d.nullable(d.known(["cancel", "end"] as const))),
   contact_ended: d.optional(d.nullable(contactEnded)),
+  /**
+   * ux U67 (api, 11-16): bytes at the end of the pass that didn't form a complete frame / packet,
+   * so weren't stored. null: nothing cut off, not settled yet, or an older read; never both 0.
+   */
+  incomplete_at_end: d.optional(
+    d.nullable(d.object({ frame_bytes: d.integer, packet_bytes: d.integer })),
+  ),
   state: d.oneOf(reservationStates),
   // The provider's progress (domain KnownAtom); an unknown value reads "unrecognized".
   pass_phase: d.nullable(d.known(passPhases)),

@@ -34,6 +34,7 @@ import {
 } from "@/features/now/index.ts";
 import { targetOfAttention } from "./attention.ts";
 import SettlementBlock from "./SettlementBlock.vue";
+import CutOffNote from "./CutOffNote.vue";
 import ContactStartBlock from "./ContactStartBlock.vue";
 import ArchiveBlock from "./ArchiveBlock.vue";
 import IngressBlock from "./IngressBlock.vue";
@@ -246,6 +247,7 @@ const countdown = computed(() => {
         @changed="$emit('changed')"
       />
       <SettlementBlock :mission-id="missionId" :pass-id="pass.id" />
+      <CutOffNote :cut-off="pass.incomplete_at_end" />
       <AttentionBlock
         v-if="resolutionItem"
         :mission-id="missionId"
