@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
-import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
-import { failureOutcome, reviewChangeSet, type SubmitResult } from "./actions.ts";
+import { ApButton, ApField, ApPanel } from "@/ui";
+import { reviewChangeSet, type SubmitResult } from "./actions.ts";
+import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
+import { refusalOutcome, type RefusalOutcome } from "./refusals.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /**
@@ -13,7 +15,7 @@ const props = defineProps<{ missionId: MissionId; config: ConfigState; changeSet
 const emit = defineEmits<{ result: [result: SubmitResult]; changed: [] }>();
 const comment = ref("");
 const busy = ref(false);
-const failure = ref<string | null>(null);
+const failure = ref<RefusalOutcome | null>(null);
 const NEEDS_COMMENT = "Add a comment first. It's recorded with your decision.";
 
 async function decide(decision: "approve" | "send_back") {
@@ -28,7 +30,7 @@ async function decide(decision: "approve" | "send_back") {
     });
     if (result.ok) emit("result", result.value);
     else {
-      failure.value = failureOutcome(result.error, "changed").sentence;
+      failure.value = refusalOutcome(result.error, "changed");
       emit("changed");
     }
   } finally {
@@ -49,7 +51,7 @@ async function decide(decision: "approve" | "send_back") {
         required
         hint="Recorded with your decision, whether you approve or send it back."
       />
-      <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+      <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <ApButton
         variant="primary"
         size="commit"

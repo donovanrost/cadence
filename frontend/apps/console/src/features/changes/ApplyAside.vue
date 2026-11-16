@@ -5,14 +5,8 @@ import type { RemoteState } from "@/api";
 import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
 import { NOTHING_RUNNING } from "./nothingRunning.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
-import {
-  blockingReason,
-  failureOutcome,
-  type FailureOutcome,
-  submitChangeSet,
-  type Preview,
-  type SubmitResult,
-} from "./actions.ts";
+import { blockingReason, submitChangeSet, type Preview, type SubmitResult } from "./actions.ts";
+import { refusalOutcome, type RefusalOutcome } from "./refusals.ts";
 import { holdsKey, NOT_RUN_REASON, RECHECKING_REASON, type HeldChecks } from "./checks-view.ts";
 import { whyPlaceholder } from "./holds.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
@@ -43,7 +37,7 @@ watch(
 );
 const busy = ref(false);
 /** With its link, e.g. U65 'Open the report'. */
-const failure = ref<FailureOutcome | null>(null);
+const failure = ref<RefusalOutcome | null>(null);
 const next = computed(() => props.config.head.revision + 1);
 const needsReview = computed(() => props.changeSet.approval_required === true);
 const nothingRunning = computed(
@@ -91,7 +85,7 @@ async function apply() {
     });
     if (result.ok) emit("result", result.value);
     else {
-      failure.value = failureOutcome(result.error, "applied");
+      failure.value = refusalOutcome(result.error, "applied");
       emit("changed");
     }
   } finally {
