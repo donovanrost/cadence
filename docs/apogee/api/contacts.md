@@ -115,6 +115,12 @@ This read alone adds `queued_command_groups: {count, next_pass}` for the D2 Rele
 - `next_pass` (`{reservation_id, contact_id, station, starts_at, ends_at}` or `null`) is the
   spacecraft's next commandable pass after it, where they'd go if this one were released.
 
+U74 'Booked' row: pass rows carry `requirement: {id, version} | null` (the requirement it was
+booked for), and pass detail (`GET /passes/:id`) names both: `plan: {id, version, day}` (`day` =
+the plan's UTC day, the day of its earliest selected pass, as plan detail derives it) and
+`requirement: {id, version, name}` (`name` as plan history's `requirement_label`: template name,
+else the rule in words). Both `null` for a pass booked outside a plan.
+
 ### `GET /api/console/v1/missions/:mission_id/passes/:id/reservation` (L14 / A11, owner: api)
 
 The pass's reservation for the drawer's Technical details (what the legacy reservation review

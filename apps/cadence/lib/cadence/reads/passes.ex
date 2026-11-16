@@ -145,6 +145,13 @@ defmodule Cadence.Reads.Passes do
       plan:
         reservation.contact_plan_id &&
           %{id: reservation.contact_plan_id, version: reservation.contact_plan_version},
+      # U74: the requirement it was booked for (ids; detail adds its name).
+      requirement:
+        reservation.contact_requirement_id &&
+          %{
+            id: reservation.contact_requirement_id,
+            version: reservation.contact_requirement_version
+          },
       reservation_id: reservation.provider_reservation_id,
       scheduled_contact_id: reservation.scheduled_contact_id,
       booking_evidence: booking_evidence(reservation),

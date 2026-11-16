@@ -114,7 +114,9 @@ defmodule Cadence.Reads.ContactPlanOverview.Demand do
     }
   end
 
-  defp rule_text(requirement) do
+  @doc "A requirement version's rule in words (\"2 downlink contacts of at least 8 min\")."
+  @spec rule_text(map()) :: binary()
+  def rule_text(requirement) do
     count = requirement.contact_count || 1
     direction = requirement.service_direction && to_string(requirement.service_direction)
 

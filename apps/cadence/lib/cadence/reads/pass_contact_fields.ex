@@ -19,7 +19,7 @@ defmodule Cadence.Reads.PassContactFields do
   alias Cadence.Contacts.{ContactAction, ListenerRefusalAttention, OpenContacts, PassContacts}
   alias Cadence.Contacts.UplinkPasses
   alias Cadence.Control.UplinkReadiness.Groups
-  alias Cadence.Reads.{PassIncompleteAtEnd, PassTelemetryStored}
+  alias Cadence.Reads.{PassBooking, PassIncompleteAtEnd, PassTelemetryStored}
 
   @terminal [:canceled, :completed, :expired]
 
@@ -55,6 +55,7 @@ defmodule Cadence.Reads.PassContactFields do
       # ux U67: bytes at the end that didn't form a complete frame or packet (domain's settlement).
       incomplete_at_end: PassIncompleteAtEnd.read(org, mission, realized)
     }
+    |> Map.merge(PassBooking.names(org, mission, pass))
   end
 
   defp realized_contact_id(_org, _mission, nil), do: nil

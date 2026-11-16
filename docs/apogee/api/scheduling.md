@@ -266,9 +266,14 @@ version" (open it without `version`).
 - `decisions`, newest first, one per act across all rounds: `{kind: submitted | approved |
   rejected, version, round | null, actor: {kind, id, name}, at, text | null (a submit's note or a
   decision's reason), unchanged: bool | null (submits only), acknowledgements: [{requirement_id,
-  reason}] (submits), exceptions: [{requirement_id, requirement_version, reason}] (decisions),
+  requirement_label, spacecraft: {id, name} | null, reason}] (submits), exceptions:
+  [{requirement_id, requirement_version, requirement_label, spacecraft, reason}] (decisions),
   automation_grant_id | null (a decision made under an automation approval policy)}`. The words
   match detail's `submission` / `approval`.
+- `requirement_label` (ux U73): a requirement has no name of its own, so it's its template's name
+  when a template generated it ("Block 1 daily"), else its rule in words ("2 downlink contacts of
+  at least 10 min", as `demand.rules[].text`); `null` only when the requirement can't be read.
+  Acknowledgements name the requirement's current version.
 - At most 200 versions and 500 decisions, newest kept; `truncated: true` past either.
   `404 plan_not_found`.
 

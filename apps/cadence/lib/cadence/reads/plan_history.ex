@@ -17,7 +17,7 @@ defmodule Cadence.Reads.PlanHistory do
   alias Cadence.Accounts
   alias Cadence.Auth
   alias Cadence.ContactPlanning.{ContactPlanApprovals, ContactPlans, PlanSubmissions}
-  alias Cadence.Reads.PlanApproval
+  alias Cadence.Reads.{PlanApproval, RequirementLabels}
 
   @max_versions 200
   @max_decisions 500
@@ -29,7 +29,7 @@ defmodule Cadence.Reads.PlanHistory do
         versions = ContactPlans.list_versions(org, mission, plan_id)
         approvals = ContactPlanApprovals.list(org, mission, plan_id)
         rounds = PlanSubmissions.list(org, mission, plan_id)
-        decisions = decisions(rounds, approvals)
+        decisions = org |> decisions_with_labels(mission, rounds, approvals)
 
         {:ok,
          %{
@@ -63,6 +63,42 @@ defmodule Cadence.Reads.PlanHistory do
       decision: latest && to_string(latest.decision),
       submitted: Enum.any?(rounds, &(&1.contact_plan_version == version.version))
     }
+  end
+
+  # ux U73: each acknowledgement and exception names its requirement and spacecraft.
+  defp decisions_with_labels(org, mission, rounds, approvals) do
+    decisions = decisions(rounds, approvals)
+
+    refs =
+      Enum.flat_map(decisions, fn d ->
+        Enum.map(d.acknowledgements, &{&1.requirement_id, nil}) ++
+          Enum.map(d.exceptions, &{&1.requirement_id, &1.requirement_version})
+      end)
+      |> Enum.reject(fn {id, _version} -> is_nil(id) end)
+
+    labels = RequirementLabels.load(org, mission, refs)
+
+    Enum.map(decisions, fn d ->
+      %{
+        d
+        | acknowledgements:
+            Enum.map(d.acknowledgements, &label(&1, labels, {&1.requirement_id, nil})),
+          exceptions:
+            Enum.map(
+              d.exceptions,
+              &label(&1, labels, {&1.requirement_id, &1.requirement_version})
+            )
+      }
+    end)
+  end
+
+  defp label(item, labels, ref) do
+    found = Map.get(labels, ref)
+
+    Map.merge(item, %{
+      requirement_label: found && found.name,
+      spacecraft: found && found.spacecraft
+    })
   end
 
   defp decisions(rounds, approvals) do
