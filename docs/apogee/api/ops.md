@@ -707,6 +707,19 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
   (filter client-side with `/fleet` plane data).
 - `refs.alarm_id` is `null` (alarm episodes link by point; see alarms.md).
 - Errors: `422 invalid_params` (`kind`, `limit`, `cursor`, `from`/`to`).
+- U69 A8a: each event carries `record: {status, source_record: {kind, id} | null,
+  source_endpoint_ref, scheduled_contact_id, realized_contact_id, path_id,
+  capability_instance_id, activation_id, correlation_key}` (each `null` when the producing record
+  has none): the producing record's own fields for the detail panel. `status` and
+  `source_record.kind` are the producing store's words (Technical details, shown as said).
+- Older events (A9d): pass `meta.next_cursor` as `?cursor=`; `null` = nothing older in the window.
+
+## `GET /api/console/v1/missions/:mission_id/events/:event_id` (U69 A8b, owner: api)
+
+`{"data": {"event": <one event, the row shape above, with record>}}`: a Timeline permalink. The id
+is a row's `id` (URL-encode it; ids contain `:`). Works for stored mission and operational events
+and for the rows the Timeline merges in (applied configuration revisions, off-plan bookings). Use
+`event.at` to centre the window. `404 event_not_found`.
 
 ## `GET /api/console/v1/missions/:mission_id/events/density`
 

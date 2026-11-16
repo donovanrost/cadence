@@ -30,6 +30,15 @@ defmodule Cadence.Reads.OffPlanBookingEvents do
     end)
   end
 
+  @doc "One off-plan booking's entry by its pass id (a Timeline permalink), else `:error`."
+  @spec entry_for(binary(), binary(), binary()) :: {:ok, Entry.t()} | :error
+  def entry_for(organization_id, mission_id, pass_id) do
+    case Passes.fetch(organization_id, mission_id, pass_id) do
+      {:ok, %{off_plan: %{} = off_plan} = pass} -> {:ok, entry(mission_id, pass, off_plan)}
+      _gone -> :error
+    end
+  end
+
   @doc "The operator sentence: who booked what, where and when it starts."
   @spec sentence(Entry.t(), binary()) :: binary()
   def sentence(%Entry{metadata: metadata, occurred_at: booked_at}, by) do

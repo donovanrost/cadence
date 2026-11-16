@@ -76,6 +76,19 @@ defmodule Cadence.Reads.ConfigRevisionEventsTest do
     assert applied.at == DateTime.add(@at, 60)
   end
 
+  test "a revision row reads back by its id (U69 A8b permalink); the baseline doesn't" do
+    {:ok, %{events: [rollback, applied]}} = page(%{kinds: ["config"]})
+
+    assert {:ok, %{id: id, text: "Rolled back to r1"}} =
+             EventLog.fetch(@org, @mission, rollback.id)
+
+    assert id == rollback.id
+    assert {:ok, %{text: "Applied r2 · 2 changes"}} = EventLog.fetch(@org, @mission, applied.id)
+
+    baseline = String.replace(applied.id, ~r/:2$/, ":1")
+    assert {:error, :event_not_found} = EventLog.fetch(@org, @mission, baseline)
+  end
+
   test "mission-wide: a spacecraft filter, another kind, or a window without them leaves them out" do
     assert {:ok, %{events: []}} = page(%{spacecraft_id: "spacecraft-1"})
     assert {:ok, %{events: []}} = page(%{kinds: ["limit"]})

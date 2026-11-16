@@ -103,6 +103,17 @@ defmodule CadenceWeb.Console.SingleBookingAPITest do
              Enum.find(events, &(&1["raw_kind"] == "contact_booked_off_plan"))
 
     assert detail == "“Eclipse test” Doesn't count toward contact rules."
+
+    # U69 A8b: the merged off-plan row reads back by its id (a permalink).
+    off_plan = Enum.find(events, &(&1["raw_kind"] == "contact_booked_off_plan"))
+
+    assert %{"id" => id_again, "detail" => ^detail} =
+             c
+             |> get_json("/events/" <> URI.encode_www_form(off_plan["id"]))
+             |> json_response(200)
+             |> get_in(["data", "event"])
+
+    assert id_again == off_plan["id"]
     assert text =~ ~r/ booked outside a plan by Mira K\.$/
 
     stale =

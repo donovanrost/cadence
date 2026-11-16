@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.EventController do
   @moduledoc """
-  Mission event log (`GET .../events`) and density (`GET .../events/density`)
-  for Investigate B2 and Timeline. Contract: docs/apogee/api/ops.md.
+  Mission event log (`GET .../events`), density (`GET .../events/density`) and one event
+  (`GET .../events/:event_id`, U69 A8b) for Investigate B2 and Timeline. Contract: docs/apogee/api/ops.md.
   """
 
   use CadenceWeb, :controller
@@ -88,6 +88,14 @@ defmodule CadenceWeb.Console.EventController do
 
   # About 96 buckets over the window, at least a minute.
   defp default_bucket(window), do: max(div(DateTime.diff(window.to, window.from), 96), 60)
+
+  @doc "U69 A8b: one event by its id (a Timeline permalink), in the row shape."
+  def show(conn, %{"event_id" => id}) do
+    case EventLog.fetch(org_id(conn), mission_id(conn), id) do
+      {:ok, event} -> json(conn, %{data: ConfigJSON.encode(%{event: event})})
+      {:error, :event_not_found} -> Problem.respond(conn, :event_not_found)
+    end
+  end
 
   defp error(conn, {:error, {:invalid_params, details}}),
     do: Problem.respond(conn, :invalid_params, details)

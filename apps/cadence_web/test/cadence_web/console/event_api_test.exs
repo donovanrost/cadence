@@ -49,6 +49,31 @@ defmodule CadenceWeb.Console.EventAPITest do
     assert Map.has_key?(body["meta"], "next_cursor")
   end
 
+  test "rows carry their record (A8a); one event reads back by id (A8b); unknown is 404", c do
+    events =
+      c |> get_json("/events?" <> window()) |> json_response(200) |> get_in(["data", "events"])
+
+    assert Enum.all?(events, fn event ->
+             Map.keys(event["record"]) |> Enum.sort() ==
+               ~w(activation_id capability_instance_id correlation_key path_id realized_contact_id
+                  scheduled_contact_id source_endpoint_ref source_record status)
+           end)
+
+    for event <- Enum.take(events, 3) do
+      shown =
+        c
+        |> get_json("/events/" <> URI.encode_www_form(event["id"]))
+        |> json_response(200)
+        |> get_in(["data", "event"])
+
+      assert Map.take(shown, ~w(id at kind raw_kind severity text record)) ==
+               Map.take(event, ~w(id at kind raw_kind severity text record))
+    end
+
+    body = c |> get_json("/events/mission_event:nope") |> json_response(404)
+    assert body["error"]["code"] == "event_not_found"
+  end
+
   test "ground health is data and limit-definition lifecycle is config, never flight_event", c do
     now = DateTime.utc_now()
 

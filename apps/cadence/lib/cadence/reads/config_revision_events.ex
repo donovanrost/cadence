@@ -32,6 +32,20 @@ defmodule Cadence.Reads.ConfigRevisionEvents do
     |> Enum.map(&entry(mission_id, &1))
   end
 
+  @doc "One applied revision's entry by its number (a Timeline permalink), else `:error`."
+  @spec entry_for(binary(), binary(), pos_integer()) :: {:ok, Entry.t()} | :error
+  def entry_for(organization_id, mission_id, number) when is_integer(number) and number > 0 do
+    case Status.list_revisions(organization_id, mission_id, limit: 1, before: number + 1) do
+      [%{revision: ^number, applied_at: %DateTime{}} = revision] ->
+        if to_string(revision.kind) == "baseline",
+          do: :error,
+          else: {:ok, entry(mission_id, revision)}
+
+      _other ->
+        :error
+    end
+  end
+
   @doc "The operator sentence for a revision entry."
   @spec sentence(Entry.t()) :: binary()
   def sentence(%Entry{metadata: %{"rolls_back_to" => target}}) when is_integer(target),

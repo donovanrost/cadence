@@ -19,6 +19,7 @@ defmodule Cadence.Reads.EventLog do
 
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.MissionEvents.Entry
+  alias Cadence.Reads.EventLog.ById
   alias Cadence.Reads.EventLog.DensityCounts, as: EventDensityCounts
 
   alias Cadence.Reads.{
@@ -58,6 +59,20 @@ defmodule Cadence.Reads.EventLog do
          events: entries |> Enum.map(&event(&1, context)) |> dedupe(),
          next_cursor: encode_cursor(next_cursor)
        }}
+    end
+  end
+
+  @doc "U69 A8b: one event, in the row shape, by its id (a Timeline permalink)."
+  @spec fetch(binary(), binary(), binary()) :: {:ok, map()} | {:error, :event_not_found}
+  def fetch(organization_id, mission_id, id) do
+    case ById.entry(organization_id, mission_id, id) do
+      {:ok, entry} ->
+        {[entry], contacts} = EventContacts.enrich(organization_id, mission_id, [entry])
+        context = Map.put(context(organization_id, mission_id, [entry]), :contacts, contacts)
+        {:ok, event(entry, context)}
+
+      :error ->
+        {:error, :event_not_found}
     end
   end
 
@@ -172,9 +187,29 @@ defmodule Cadence.Reads.EventLog do
         point_id: if(entry.subject_kind == :telemetry_point, do: entry.subject_id),
         command_request_id: (entry.metadata || %{})["command_request_id"],
         contact_id: entry.realized_contact_id || entry.scheduled_contact_id
-      }
+      },
+      record: record(entry)
     }
   end
+
+  # U69 A8a: the producing record's own fields, for the event detail panel.
+  defp record(%Entry{} = entry),
+    do: %{
+      status: text(entry.status),
+      source_record:
+        entry.source_record_kind &&
+          %{kind: text(entry.source_record_kind), id: entry.source_record_id},
+      source_endpoint_ref: entry.source_endpoint_ref,
+      scheduled_contact_id: entry.scheduled_contact_id,
+      realized_contact_id: entry.realized_contact_id,
+      path_id: entry.path_id,
+      capability_instance_id: entry.capability_instance_id,
+      activation_id: entry.activation_id,
+      correlation_key: entry.correlation_key
+    }
+
+  defp text(nil), do: nil
+  defp text(value), do: to_string(value)
 
   # L15: an off-plan booking's note.
   defp detail(%Entry{source_record_kind: :off_plan_booking} = entry),
