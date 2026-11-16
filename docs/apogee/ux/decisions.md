@@ -2017,3 +2017,44 @@ everything in them is mono key/values.
   - Scheduled and realized, each with its state, window (§4) and clock mode, plus "Realized at 03:09:02Z".
   - A table `Path · Provider binding · Transport binding`, with sources and intents as key/values.
   - Schedule revisions: "r3 · 02:59:40–03:08:52Z · scheduled", newest first, `Show earlier` at the foot.
+
+### U75 · An expired member halts its request (DECISIONS #97) (api / fe-ops)
+The noun is **request**, as in U46. The expired command is named by its stack name, with the target where the
+screen shows several ("Heater setpoint to EARENDIL-004"). Times are §4.
+- **Later members, closed:** stage `Not sent` (off).
+  - Detail: "Not sent: Heater setpoint expired at 04:00Z before it was released, so the rest of the request
+    stopped."
+- **Later members, still waiting** (if the server holds them rather than closing them): stage `Held` (caution,
+  since a human decides).
+  - Detail: "Held: Heater setpoint expired at 04:00Z before it was released, so the rest of the request waits."
+  - Actions: `Abort remaining` · `Edit and resend`.
+- **The expired member itself** keeps U68's line: "Expired at 04:00Z before it was released."
+- **Uplink & verify:**
+  - U1 cells: `Not sent` is drawn dashed (as excluded), and `Held` gets a caution outline. Both are in the legend.
+  - One N card per request, not per target: "Heater setpoint expired at 04:00Z before it was released, so 3 later
+    uplinks weren't sent." (or "…are held."). Its actions are the ones above, as the state allows.
+- **Request log:** "Stopped at 04:00Z: Heater setpoint expired before it was released · 3 uplinks not sent" (or "· 3
+  uplinks held").
+- **Commands list:** the row's state reads `Stopped · 1 expired`.
+- **Now:** one caution item per request, P2.
+  - Title: "EARENDIL-004 · Low power safe stopped: a command expired before it was sent" (several targets: "on 3
+    spacecraft").
+  - `Open` goes to the request.
+  - It resolves when the request is resent or aborted, or on `Mark as seen` once nothing is held.
+- **Approve** isn't involved; a halt happens after approval.
+
+### U76 · Planning replacements, final words (user accepted the four drops, 11-16) (fe-setup)
+**Re-plan header meta (K2),** under the title:
+- Format: "Window 02:45–10:45Z · from the outage's start, 8 h by the planning policy · attempt 2 of 3".
+- The cause names itself, for example "from Northlight's change at 02:45Z" or "from the station outage at 02:45Z".
+  The horizon is the policy's `repair_horizon_seconds`, in §4 duration form.
+- The last attempt is in caution: "attempt 3 of 3, the last the policy allows".
+- With none left: Apply is disabled with "No re-plan attempts left (3 of 3). The planning policy sets the limit."
+  plus a link `Planning policy` for admins.
+- The window isn't editable (U-review 2026-11-15 A14d).
+
+**Optional note on Submit and on Approve:**
+- Field `Note for the record (optional)`, with the hint "Saved with your name in the plan's history."
+- Over 2,000 characters: "Keep the note under 2,000 characters." The counter appears from 1,800, as with U65's
+  reasons.
+- It appears in U73's history quoted under its decision row. `Send back` keeps its required `Reason`.
