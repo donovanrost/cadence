@@ -255,6 +255,18 @@ are set when the job is tied to a booking, null otherwise.
   non-operators, `404 attention_item_not_found`.
 - Jobs relabelled `outcome_unknown` after the 11-14 jobs fix raise no item (no Retry).
 
+### A command group that expired before all of it went out: the `expired_group` source (ux U75, DECISIONS #97)
+
+One item per command group (`id` = the group id), raised by its `expired` timeline event
+(commanding.md), for 7 days or until marked as seen. **P2**; the queue row's `state` is `caution`
+when part of the group went out (`sent > 0`), `info` when none did. Keys beside the shared ones:
+`group {id, title}`, `spacecraft_id` (the target when the group has one, else null),
+`target_count`, `sent`, `total`, `expired_at`, `actions: ["acknowledge"]`.
+
+- `POST …/attention/expired_group/:id/acknowledge` (`operate_mission`): marks it as seen
+  (`resolution.action: "acknowledged"`); it leaves Now. `404 attention_item_not_found` when it isn't
+  open. No resolve.
+
 ### Connections a shared listener refused: the `listener_refusal` source (#87, ux U50)
 
 Now and the pass row carry `source` and `conflict` `"listener_refusal"`, `id` =

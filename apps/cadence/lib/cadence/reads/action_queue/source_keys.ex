@@ -101,6 +101,16 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :started_at,
       :found_at,
       :actions
+    ],
+    # ux U75 / DECISIONS #97: a command group whose deadline passed before all of it went out.
+    "expired_group" => [
+      :group,
+      :spacecraft_id,
+      :target_count,
+      :sent,
+      :total,
+      :expired_at,
+      :actions
     ]
   }
 

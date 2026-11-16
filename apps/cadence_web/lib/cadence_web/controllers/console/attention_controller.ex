@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.AttentionController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Commanding.Groups.ExpiredGroupAttention
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
 
   alias Cadence.Contacts.{
@@ -141,6 +142,8 @@ defmodule CadenceWeb.Console.AttentionController do
   # #88: no acknowledge (attention_item_not_open); resolve discards, with the reason required.
   defp source("archive_quarantine"), do: {:ok, ArchiveQuarantineAttention}
   defp source("job_outcome_unknown"), do: {:ok, JobOutcomeUnknownAttention}
+  # U75: an expired command group is marked as seen (acknowledge); nothing to resolve.
+  defp source("expired_group"), do: {:ok, ExpiredGroupAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}
 
   defp no_actor(params) do

@@ -144,7 +144,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       id: item_id(attention),
       priority: priority(p1?, attention, now),
       kind: :attention,
-      state: if(p1?, do: :critical, else: :caution),
+      state: state(p1?, attention),
       source: attention.source,
       since: attention.raised_at,
       due_at: due_at(attention),
@@ -254,6 +254,11 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
 
   defp priority(false, %{source: "provider_change"}, _now), do: 3
   defp priority(false, _attention, _now), do: 2
+
+  defp state(true, _attention), do: :critical
+  # U75: an expired group is caution when part of it went out, info when none did.
+  defp state(false, %{source: "expired_group", severity: "info"}), do: :info
+  defp state(false, _attention), do: :caution
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{source: "contact_settlement"}, _now), do: false
