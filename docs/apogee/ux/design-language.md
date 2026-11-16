@@ -424,6 +424,18 @@ Below 768px: no rail; bottom tab bar (58px items, display 11px, active inset top
 one column, alarm-first. Buttons 48px, full width. Building new uplinks is deliberately absent on
 mobile: GO / NO-GO, acknowledge and hand-off only. Detailed in `screens/Mobile.md`.
 
+**Sheets below 768px (ApSheet, every sheet; lead and dashboards' D2, 11-15): full-height**, never a bottom sheet with
+a max height. A sheet holds reasons, type-to-confirm and forms, and a short bottom sheet puts the field under the
+on-screen keyboard.
+- Edge to edge, sized to `100dvh`, so it shrinks with the keyboard instead of sitting behind it.
+- The title row (title + close ✕, 48px) is pinned at the top. The action row (safe button + action, full width,
+  48px) is pinned at the bottom, above `env(safe-area-inset-bottom)`.
+- Only the body between them scrolls: one scroller. A focused field scrolls into view above the action row.
+- No drag-to-dismiss and no backdrop tap: close, Cancel or Esc, as on desktop.
+- The non-modal side sheet (Dashboards' Widget sheet) is modal at this width, since the board can't sit beside it.
+  It then traps focus (a11y checklist A3) and takes `aria-modal`.
+- The `⋯` action menus aren't sheets and stay popovers.
+
 ## 10. Do / Don't
 
 | Do | Don't |

@@ -53,4 +53,5 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
 ## D. 390 only
 1. The bottom tab bar is reachable and in order after the page content, and it doesn't cover the focused element
    (scroll into view).
-2. Sheets are full-height, and focus doesn't land behind the on-screen keyboard.
+2. Sheets are full-height (design-language §9: title and actions pinned, only the body scrolls), and focus doesn't
+   land behind the on-screen keyboard. The Widget side sheet traps focus at this width.
