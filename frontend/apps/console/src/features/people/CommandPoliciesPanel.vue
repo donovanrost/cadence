@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRemoteQuery, type SessionOrganization } from "@/api";
+import { isKnown, useRemoteQuery, type SessionOrganization } from "@/api";
 import { ApEmptyState, ApPanel, ApRemote, ApSelect } from "@/ui";
 import { fetchCommandPolicies, policyText } from "./policies.ts";
 
@@ -30,7 +30,11 @@ const { state, refetch } = useRemoteQuery(
     <ApRemote v-else :state="state" loading-label="Loading policies…" @retry="refetch">
       <template #default="{ value }">
         <ul class="m-0 flex list-none flex-col gap-3 p-0">
-          <li v-for="p in value.policies" :key="p.key" class="flex flex-col gap-0.5">
+          <li
+            v-for="p in value.policies"
+            :key="isKnown(p.key) ? p.key : p.key.unrecognized"
+            class="flex flex-col gap-0.5"
+          >
             <span class="font-semibold text-readout">{{ policyText(p).title }}</span>
             <span class="text-md text-text-2">{{ policyText(p).sentence }}</span>
           </li>

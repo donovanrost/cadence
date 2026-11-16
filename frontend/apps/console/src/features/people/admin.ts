@@ -61,7 +61,16 @@ export function adminErrorText(e: ApiError): string {
 }
 
 /** People.md Access panel: capabilities as plain sentences, grouped; unknown tokens kept as-is. */
-const capabilityText: Readonly<Record<string, readonly [group: string, sentence: string]>> = {
+const worded = [
+  "command.request",
+  "command.abort",
+  "command.approve",
+  "org.invite",
+  "org.manage_members",
+] as const;
+const capabilityText: Readonly<
+  Record<(typeof worded)[number], readonly [group: string, sentence: string]>
+> = {
   "command.request": ["Command", "Request commands"],
   "command.abort": ["Command", "Abort commands in flight"],
   "command.approve": ["Approve", "Give a second GO on another person's command"],

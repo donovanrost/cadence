@@ -27,8 +27,8 @@ describe("policyText (U4)", () => {
       "Nobody can give the second GO on their own request.",
       "The server applies this policy; the console doesn't describe it yet.",
     ]);
-    expect(policyText(r.value.policies[4] ?? { key: "x", parameters: {} }).title).toBe(
-      "Night shift lock",
-    );
+    expect(
+      policyText(r.value.policies[4] ?? { key: { unrecognized: "x" }, parameters: {} }).title,
+    ).toBe("Night shift lock");
   });
 });
