@@ -38,6 +38,10 @@ Query: `state` = `active` (default) | `cleared` | `all`; `severity` = `critical`
 - Order (server-decided, don't re-sort): active = critical first, New before acknowledged, newest
   opened first. Cleared = newest cleared first.
 - `summary` counts all active episodes in the mission, ignoring filters.
+  `summary.latest_change` (U69 A6): the mission's newest state change, any episode, ignoring
+  filters: `{at, kind: raised | escalated | deescalated | cleared, spacecraft_id | null,
+  episode_id}`, or `null` when there's none. People's actions (acknowledge, assign, notes) aren't
+  changes. `raised` is the episode opening (the event log's word).
 - `permissions`: the **viewer's** lifecycle permissions on this mission. Show Acknowledge only with
   `alarm.acknowledge` and Assign / Hand off with `alarm.assign`. The server enforces them anyway (`403 forbidden`).
 - `status`: `new | acknowledged | cleared`. `cleared_unacknowledged`: it cleared before anyone

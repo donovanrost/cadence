@@ -126,8 +126,30 @@ defmodule Cadence.Alarms.Queries do
     %{
       active: Enum.reduce(counts, 0, fn {_s, _n, n}, acc -> acc + n end),
       critical: %{new: count.("critical", true), acknowledged: count.("critical", false)},
-      caution: %{new: count.("caution", true), acknowledged: count.("caution", false)}
+      caution: %{new: count.("caution", true), acknowledged: count.("caution", false)},
+      latest_change: latest_change(mission_id)
     }
+  end
+
+  @changes ~w(raised escalated deescalated cleared)
+
+  # U69 A6: the mission's newest state change, whichever episode (partial index
+  # alarm_episode_events_latest_change_idx). People's actions aren't changes.
+  defp latest_change(mission_id) do
+    from(ev in EpisodeEventRow,
+      join: ep in EpisodeRow,
+      on: ep.episode_id == ev.episode_id,
+      where: ev.mission_id == ^mission_id and ev.kind in @changes,
+      order_by: [desc: ev.at, desc: ev.event_id],
+      limit: 1,
+      select: %{
+        at: ev.at,
+        kind: ev.kind,
+        spacecraft_id: ep.spacecraft_id,
+        episode_id: ep.episode_id
+      }
+    )
+    |> Repo.one()
   end
 
   @spec view(EpisodeRow.t()) :: map()

@@ -36,6 +36,15 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
       assert "alarm.acknowledge" in data["permissions"]
       assert %{"active" => 1, "caution" => %{"new" => 1}} = data["summary"]
 
+      # U69 A6: the mission's newest state change, with its spacecraft.
+      assert %{
+               "kind" => "raised",
+               "spacecraft_id" => "spacecraft-001",
+               "at" => _,
+               "episode_id" => _
+             } =
+               data["summary"]["latest_change"]
+
       assert [episode] = data["episodes"]
 
       assert %{
