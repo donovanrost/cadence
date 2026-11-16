@@ -1,7 +1,7 @@
 defmodule Cadence.Configuration.ConfigInUseTest do
   @moduledoc """
   Archiving a transport or ground station is refused while anything still uses it (director
-  11-16, ux U82): at stage (nothing staged) and again at apply, with the same {:in_use, uses}.
+  11-16, ux U82): at stage (nothing staged) and again at apply, with the same {:in_use, %{entity, uses}}.
   """
   use Cadence.DataCase, async: false
 
@@ -42,7 +42,11 @@ defmodule Cadence.Configuration.ConfigInUseTest do
   test "a transport a route uses is refused at stage, naming the route", ctx do
     legacy!(ctx, ctx.ids.down, "Fairbanks (Demo) — primary")
 
-    assert {:error, {:in_use, uses}} = stage(ctx, archive("transport", ctx.ids.down))
+    assert {:error,
+            {:in_use, %{entity: %{kind: "transport", id: id, name: "FBK down"}, uses: uses}}} =
+             stage(ctx, archive("transport", ctx.ids.down))
+
+    assert id == ctx.ids.down
 
     assert %{
              routes: %{count: 1, items: [route]},
@@ -67,7 +71,7 @@ defmodule Cadence.Configuration.ConfigInUseTest do
       create("spacecraft_profile", profile_with_rule(ctx.ids.fbk), profile_id)
     ])
 
-    assert {:error, {:in_use, %{profile_routes: %{count: 1, items: [rule]}}}} =
+    assert {:error, {:in_use, %{uses: %{profile_routes: %{count: 1, items: [rule]}}}}} =
              stage(ctx, archive("transport", ctx.ids.down))
 
     assert %{profile: %{name: "Block 1"}, label: "TT&C"} = rule
@@ -76,15 +80,11 @@ defmodule Cadence.Configuration.ConfigInUseTest do
   test "a transport an open contact listens on is refused", ctx do
     open_contact!(ctx, ctx.ids.down)
 
-    assert {:error,
-            {:in_use,
-             %{
-               listening_now: %{
-                 count: 1,
-                 items: [%{spacecraft: %{name: "EARENDIL-312"}, station_code: "FBK"}]
-               }
-             }}} =
+    assert {:error, {:in_use, %{uses: %{listening_now: listening}}}} =
              stage(ctx, archive("transport", ctx.ids.down))
+
+    assert %{count: 1, items: [%{spacecraft: %{name: "EARENDIL-312"}, station_code: "FBK"}]} =
+             listening
   end
 
   test "a booked pass counts, with when the next one is" do
@@ -98,7 +98,12 @@ defmodule Cadence.Configuration.ConfigInUseTest do
   end
 
   test "a station its transport still sits at is refused, naming the transport", ctx do
-    assert {:error, {:in_use, %{transports: %{count: 1, items: [%{name: "FBK down"}]}}}} =
+    assert {:error,
+            {:in_use,
+             %{
+               entity: %{kind: "ground_station"},
+               uses: %{transports: %{count: 1, items: [%{name: "FBK down"}]}}
+             }}} =
              stage(ctx, archive("ground_station", ctx.ids.fbk))
   end
 
@@ -133,7 +138,9 @@ defmodule Cadence.Configuration.ConfigInUseTest do
 
     legacy!(ctx, ctx.ids.down, "Fairbanks (Demo) — primary")
 
-    assert {:error, {:in_use, %{routes: %{count: 1}}}} =
+    assert {:error,
+            {:in_use,
+             %{entity: %{kind: "transport", name: "FBK down"}, uses: %{routes: %{count: 1}}}}} =
              Configuration.submit(ctx.alice, ctx.mission, staged.change_set_id, %{
                reason: "Archive the downlink transport",
                expected_version: staged.version

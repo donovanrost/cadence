@@ -81,8 +81,12 @@ defmodule Cadence.Management.ConfigKinds.Transport do
   @impl true
   # Archiving: refused while anything still uses it (director 11-16, ux U82), at stage
   # (stage_check/4) and again here, which re-runs at preview and apply.
-  def validate(organization_id, mission_id, :delete, entity_id, _previous, nil),
-    do: in_use(ConfigUsers.transport_uses(organization_id, mission_id, entity_id))
+  def validate(organization_id, mission_id, :delete, entity_id, previous, nil),
+    do:
+      in_use(
+        entity(entity_id, previous),
+        ConfigUsers.transport_uses(organization_id, mission_id, entity_id)
+      )
 
   def validate(
         org,
@@ -196,21 +200,39 @@ defmodule Cadence.Management.ConfigKinds.Transport do
   @impl true
   def stage_check(organization_id, mission_id, :delete, entity_id, deleting) do
     uses = ConfigUsers.transport_uses(organization_id, mission_id, entity_id, except: deleting)
-    if ConfigUsers.in_use?(uses), do: {:error, {:in_use, uses}}, else: :ok
+
+    if ConfigUsers.in_use?(uses),
+      do:
+        {:error, {:in_use, %{entity: entity(organization_id, mission_id, entity_id), uses: uses}}},
+      else: :ok
   end
 
   def stage_check(_organization_id, _mission_id, _action, _entity_id, _deleting), do: :ok
 
-  defp in_use(uses) do
+  # The refusal carries what was archived and what uses it, as {:in_use, %{entity, uses}} (api).
+  defp in_use(entity, uses) do
     if ConfigUsers.in_use?(uses),
       do:
         {:error,
          [
            ""
            |> F.error("This transport is still in use, so it can't be archived.")
-           |> Map.put(:in_use, uses)
+           |> Map.put(:in_use, %{entity: entity, uses: uses})
          ]},
       else: :ok
+  end
+
+  defp entity(id, %{} = previous),
+    do: %{kind: "transport", id: id, name: previous["display_name"]}
+
+  defp entity(organization_id, mission_id, id) do
+    name =
+      case TransportStore.fetch_transport(organization_id, mission_id, id) do
+        {:ok, transport} -> transport.display_name
+        _gone -> nil
+      end
+
+    %{kind: "transport", id: id, name: name}
   end
 
   @impl true

@@ -229,20 +229,21 @@ defmodule Cadence.Configuration.Submission do
   defp clean(result), do: {:error, failure(Preview.summarize(result))}
 
   # An op refused because what it archives is still in use (ux U82) answers with the uses, the
-  # same {:in_use, uses} as at stage, so the console words both moments alike.
+  # same {:in_use, %{entity, uses}} as at stage, so the console words both moments alike; entity
+  # says which archive in the set it is (ux U82: its row carries the mark).
   defp failure(preview) do
     case in_use(preview) do
       nil -> {:checks_failed, preview}
-      uses -> {:in_use, uses}
+      refusal -> {:in_use, refusal}
     end
   end
 
+  # The first refused op's %{entity, uses}, as its kind put it on the error.
   defp in_use(%{checks: checks}) do
-    Enum.find_value(checks, fn check ->
-      Enum.find_value(check.items, fn item ->
-        Enum.find_value(Map.get(item, :errors, []), &Map.get(&1, :in_use))
-      end)
-    end)
+    errors =
+      for check <- checks, item <- check.items, error <- Map.get(item, :errors, []), do: error
+
+    Enum.find_value(errors, &Map.get(&1, :in_use))
   end
 
   defp checks(organization_id, set, params) do
@@ -381,8 +382,8 @@ defmodule Cadence.Configuration.Submission do
   defp failure_document({:checks_failed, preview}),
     do: Document.normalize(%{"reason" => "checks_failed", "checks" => preview.checks})
 
-  defp failure_document({:in_use, uses}),
-    do: Document.normalize(%{"reason" => "in_use", "uses" => uses})
+  defp failure_document({:in_use, %{entity: entity, uses: uses}}),
+    do: Document.normalize(%{"reason" => "in_use", "entity" => entity, "uses" => uses})
 
   defp failure_document(reason), do: %{"reason" => to_string(reason)}
 

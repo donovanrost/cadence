@@ -61,17 +61,19 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   # Archiving: refused while anything still uses it (director 11-16, ux U82), at stage
   # (stage_check/4) and again here, which re-runs at preview and apply. The uses come through the
   # :config_users adapter (Cadence.Control.ConfigUsers), so comms needs no edge to contacts.
-  def validate(organization_id, mission_id, :delete, entity_id, _previous, nil) do
+  def validate(organization_id, mission_id, :delete, entity_id, previous, nil) do
     case uses(organization_id, mission_id, entity_id) do
       nil ->
         :ok
 
       uses ->
+        entity = %{kind: "ground_station", id: entity_id, name: (previous || %{})["display_name"]}
+
         {:error,
          [
            ""
            |> F.error("This station is still in use, so it can't be archived.")
-           |> Map.put(:in_use, uses)
+           |> Map.put(:in_use, %{entity: entity, uses: uses})
          ]}
     end
   end
@@ -106,12 +108,25 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   @impl true
   def stage_check(organization_id, mission_id, :delete, entity_id, deleting) do
     case uses(organization_id, mission_id, entity_id, deleting) do
-      nil -> :ok
-      uses -> {:error, {:in_use, uses}}
+      nil ->
+        :ok
+
+      uses ->
+        {:error, {:in_use, %{entity: entity(organization_id, mission_id, entity_id), uses: uses}}}
     end
   end
 
   def stage_check(_organization_id, _mission_id, _action, _entity_id, _deleting), do: :ok
+
+  defp entity(organization_id, mission_id, id) do
+    name =
+      case GroundStationStore.fetch_ground_station(organization_id, mission_id, id) do
+        {:ok, station} -> station.display_name
+        _gone -> nil
+      end
+
+    %{kind: "ground_station", id: id, name: name}
+  end
 
   # nil when nothing uses it (or no adapter is configured).
   defp uses(organization_id, mission_id, station_id, deleting \\ MapSet.new()) do
