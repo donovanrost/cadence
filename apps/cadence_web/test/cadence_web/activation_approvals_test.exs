@@ -151,7 +151,8 @@ defmodule CadenceWeb.ActivationApprovalsTest do
     pending = request(context)
     {:ok, view, _} = live(context.conn, context.path)
     token = snapshot(view)["token"]
-    render_hook(view, "host:context", %{"path" => "/missions/#{context.mission.mission_id}"})
+    # §11c B redirects the mission home to the console; leave through the ops page instead.
+    render_hook(view, "host:context", %{"path" => "/missions/#{context.mission.mission_id}/ops"})
     render_hook(view, "host:context", %{"path" => context.path})
     refute snapshot(view)["token"] == token
     act(view, context.path, token, pending, "rejected")
