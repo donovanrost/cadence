@@ -2114,8 +2114,8 @@ A 4th Contacts tab: `Live · Plan · Review · History`. The tab label is `Histo
 
 **What it lists.** Booked passes whose window has **started**, newest first: History is the past, and upcoming
 passes are on Live and Plan. The current week runs to now.
-- A foot line in `text-3`: "Booked passes only. Contacts started by hand show in Timeline." (`Timeline` links to
-  Timeline with the Contacts kind.) It goes when hand-started rows arrive (below).
+- Hand-started contacts are listed too (api `include=hand_started`, live 11-16), so there's no "booked passes only"
+  foot line.
 
 **The week.**
 - A week is Monday 00:00Z to the next Monday 00:00Z (UTC, ISO weeks). `?week=` holds the Monday. Any other date
@@ -2162,14 +2162,13 @@ passes are on Live and Plan. The current week runs to now.
 - Empty week: "No passes between 11-09 and 11-15." This week: "No passes have started this week." Both offer
   `‹ Older week`.
 - Empty with filters: "No passes match: Canceled · EARENDIL-312 · 11-09 – 11-15." + `Clear filters`.
-- **Truncated** (api: the read keeps the **earliest** 500 by start, and `truncated` is set before the station and
-  state filters run). A truncated week is re-read one UTC day at a time and merged, so only a day over 500 is short.
-  - An info callout above the table, one sentence per short day: "11-12 has more than 500 passes, and only the
-    earliest 500 are shown, through 18:40Z." The time is the last shown pass's start.
-  - In the list, at the point where the missing passes belong (above that day's newest shown row), a `text-3` row:
-    "Passes on 11-12 after 18:40Z aren't shown."
-  - The callout ends "Pick a spacecraft to see the rest." (api: the spacecraft filter runs in the read, before the
-    cut). No advice to narrow by station or state: those run after the cut and can't bring the rows back.
+- **Truncated** (api, live 08:16Z: the read is `order=desc`, so a cut keeps the **newest** 500 by start; spacecraft
+  and states filter in the read, before the cut; station filters after it). A truncated week is re-read one UTC day at
+  a time and merged, so only a day over 500 is short.
+  - An info callout above the table, one sentence per short day: "11-12 has more than 500 passes, and only the newest
+    500 are shown, back to 05:12Z. Pick a spacecraft or state to see the rest." The time is the earliest shown start.
+  - In the list, below that day's oldest shown row, a `text-3` row: "Passes on 11-12 before 05:12Z aren't shown."
+  - No advice to narrow by station: it runs after the cut and can't bring the rows back.
   - Meta reads `500+ PASSES` on a day that's short, and counts stay "500+" wherever they include it.
 - Error: "Contact history couldn't load." + `Try again`.
 
