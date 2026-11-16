@@ -211,19 +211,14 @@ defmodule Cadence.Reads.VerifierSeries do
       window: window,
       targets:
         Enum.map(targets, fn target ->
-          instance = Map.get(by_target, target["index"])
-
-          %{
+          target["index"]
+          |> then(&Map.get(by_target, &1))
+          |> instance_fields()
+          |> Map.merge(%{
             spacecraft_id: target["spacecraft_id"],
             name: target["name"],
-            verifier_state: instance && instance.lifecycle_state,
-            # U68 R4: which verifier instance this target's state is, and why it failed.
-            verifier: instance && verifier_detail(instance),
-            # U69 A4a: "Verify by …" / "Verified at …" without a history read per target.
-            timeout_at: instance && instance.timeout_at,
-            matched_at: instance && instance.matched_at,
             samples: Map.get(samples, target["spacecraft_id"], [])
-          }
+          })
         end),
       target_count: length(point_targets),
       truncated: length(targets) < length(point_targets),
@@ -232,12 +227,22 @@ defmodule Cadence.Reads.VerifierSeries do
     }
   end
 
-  defp verifier_detail(instance),
+  # A target's verifier instance: its state, which instance and why it failed (U68 R4), and its
+  # verify-by and matched times (U69 A4a, "Verify by …" / "Verified at …"). All nil without one.
+  defp instance_fields(nil),
+    do: %{verifier_state: nil, verifier: nil, timeout_at: nil, matched_at: nil}
+
+  defp instance_fields(instance),
     do: %{
-      instance_id: instance.command_verifier_instance_id,
-      verifier_id: instance.verifier_id,
-      severity: instance.severity,
-      failure_code: instance.failure_reason
+      verifier_state: instance.lifecycle_state,
+      verifier: %{
+        instance_id: instance.command_verifier_instance_id,
+        verifier_id: instance.verifier_id,
+        severity: instance.severity,
+        failure_code: instance.failure_reason
+      },
+      timeout_at: instance.timeout_at,
+      matched_at: instance.matched_at
     }
 
   # A verifier's subject is a point id (`telemetry:THERM.setpoint`) or, from the mission model, the
