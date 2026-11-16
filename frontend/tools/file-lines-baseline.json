@@ -47,10 +47,6 @@
     "lines": 509,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "apps/console/src/router/route-map.ts": {
-    "lines": 508,
-    "owner": "lead"
-  },
   "modules/telemetry-decom/src/features/configuration/contracts.ts": {
     "lines": 506,
     "owner": "legacy (#80): frozen, leaves with its row"
