@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, useId } from "vue";
+import { focusFirstConnected } from "./lib/focus.ts";
 import { useScrollable } from "./lib/scrollable.ts";
 
 /**
@@ -81,20 +82,11 @@ function onKeydown(event: KeyboardEvent) {
     close();
   }
 }
-/** The page's main heading (tabindex -1, the route-focus target), else <main>; never <body>. */
-function landmark(): HTMLElement | null {
-  const target =
-    document.querySelector<HTMLElement>("main h1") ?? document.querySelector<HTMLElement>("main");
-  if (target && !target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
-  return target;
-}
+/** Back to the opener, else the caller's target, else the page's h1 (never <body>, A5). */
 function onClose() {
   const fallback =
     typeof props.returnFocus === "function" ? props.returnFocus() : props.returnFocus;
-  const target = opener?.isConnected
-    ? opener
-    : ((fallback?.isConnected ? fallback : null) ?? landmark());
-  target?.focus();
+  focusFirstConnected(opener, fallback);
   opener = null;
   emit("closed");
 }
