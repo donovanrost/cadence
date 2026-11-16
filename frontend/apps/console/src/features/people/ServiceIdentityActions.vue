@@ -67,7 +67,7 @@ async function revoke() {
         >
           <template #trigger="{ attrs }"><ApButton v-bind="attrs">Rotate key…</ApButton></template>
           Rotate {{ name }}'s key? The current token stops working immediately; anything using it
-          fails until it has the new one.
+          fails until it has the new one. The new token is shown once.
         </ApInlineConfirm>
         <ApInlineConfirm
           v-model:open="revoking"
