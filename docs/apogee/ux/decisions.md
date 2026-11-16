@@ -2268,6 +2268,22 @@ change set like any override. There's no separate routes editor.
       in the form, unsaved. With no batch number in the details: "The route conversion is staged, so…". It needs
       `{change_set_id, batch}` in the details.
     - No "temporary" caption: the callout goes away by itself once the routes are converted.
+  - **Remove legacy rule** (director, 11-16; required before batch 2; domain's delete-only kind
+    `legacy_routing_rule`, not temporary). Every `legacy`
+    row gets `Remove…` (staged), so the A6 line becomes "Older routes can't be edited here until they're converted."
+    - An inline confirm (ApInlineConfirm, focus on Cancel): "Stage removing “qa-pre-routing-175358”? EARENDIL-389
+      stops using it once the change set is applied." Buttons `Stage removal` / `Cancel`. It stages into the open
+      change set like any change (so a staged conversion batch refuses it with `conversion_in_progress`).
+    - Summary line (ConfigLabels, api): "Remove older route “qa-pre-routing-175358” · EARENDIL-389" (a rule with no
+      name: the station form, "Remove older route INU · EARENDIL-389"; no spacecraft name: drop " · …"). "Older
+      route", matching the callout and the A6 line; never "legacy" on screen.
+    - Once staged, the row reads `Removal staged` (a tag) with `Open change set`, until it's applied or discarded.
+    - Refusals: already converted, "This route was converted already. Remove it as an extra route."; anything else
+      (not a legacy rule, another mission's), "This rule can't be removed here." Never the rule's id.
+    - History after apply: "Removed older route “qa-pre-routing-175358” · applied by Mira K. · 11-17 09:12Z".
+    - Rollback over a removal (lead: (i), legacy only shrinks): a blocking item `legacy_route_not_restorable` in the
+      rollback preview: "The older route “qa-pre-routing-175358” · EARENDIL-389 was removed and can't be restored.
+      To route that way again, add an extra route." The rollback stays NO-GO while it stands.
 - Summaries: a rendered name equal to the default ("<station> · <spacecraft>") counts as unnamed, and a name that
   already contains the spacecraft's name doesn't get " · EARENDIL-389" appended again (dashboards, 11-16).
 - Profile P3 lists extra routes as override rows, "Extra route via Inuvik · downlink primary", each linking to the
