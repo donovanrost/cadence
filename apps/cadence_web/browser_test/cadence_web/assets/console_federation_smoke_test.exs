@@ -2,7 +2,7 @@ Code.require_file(Path.expand("../../support/federation_browser_smoke_setup.exs"
 
 defmodule CadenceWeb.Assets.ConsoleFederationSmokeTest do
   @moduledoc """
-  The federation contract on the console (it gates §11c(C)): the test-only contract_probe
+  The federation contract on the console (it gates §11c(C)): the test-only surface_fixture
   application's surfaces and a telemetry_decom canary, mounted by the console's app routes from
   signed, activated releases. Driver for frontend/tools/phoenix/console_federation_smoke.mjs.
   """
@@ -50,7 +50,7 @@ defmodule CadenceWeb.Assets.ConsoleFederationSmokeTest do
     release =
       FederationReleaseFixture.prepare_and_activate!(app_root,
         sandbox_owner: owner,
-        contract_probe: true
+        surface_fixture: true
       )
 
     on_exit(fn -> FederationReleaseFixture.cleanup!(release) end)
@@ -69,10 +69,10 @@ defmodule CadenceWeb.Assets.ConsoleFederationSmokeTest do
       context.mission.mission_id,
       "--spacecraft-id",
       context.spacecraft.spacecraft_id,
-      "--probe-n-minus-1-release-id",
-      Map.fetch!(release.release_ids.n_minus_1, "contract_probe"),
-      "--probe-n-release-id",
-      Map.fetch!(release.release_ids.n, "contract_probe"),
+      "--fixture-n-minus-1-release-id",
+      Map.fetch!(release.release_ids.n_minus_1, "surface_fixture"),
+      "--fixture-n-release-id",
+      Map.fetch!(release.release_ids.n, "surface_fixture"),
       "--federation-lifecycle-url",
       release.lifecycle.url
     ]

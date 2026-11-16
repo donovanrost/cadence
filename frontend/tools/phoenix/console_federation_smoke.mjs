@@ -1,7 +1,7 @@
 // The console federation smoke: the federation contract (signed-out containment, remote mount,
 // release N-1 -> N -> rollback, cache reuse, CSRF through the console's host bridge, a scope change
 // without a reload) proven on the CONSOLE, which hosts federated surfaces now, against the
-// test-only contract_probe application (product deletions can't remove it), plus one real surface
+// test-only surface_fixture application (product deletions can't remove it), plus one real surface
 // as a canary: telemetry_decom/packet_bindings. It gates §11c(C), which removes most of the legacy
 // host that federation_browser_smoke.mjs drives (lead, 11-15).
 //
@@ -39,28 +39,28 @@ async function record(client, expression, label, signal) {
 }
 
 /**
- * Waits for the probe surface and returns what it shows.
+ * Waits for the fixture surface and returns what it shows.
  * @param {import("./cdp-contract.ts").CdpPort} client
  * @param {string} surface @param {AbortSignal|undefined} signal
  */
-async function probeSurface(client, surface, signal) {
+async function fixtureSurface(client, surface, signal) {
   await waitForExpression(
     client,
-    `Boolean(document.querySelector('#contract-probe-smoke[data-surface=${JSON.stringify(surface)}] #contract-probe-context'))`,
-    `contract_probe ${surface} mounted with its host context`,
+    `Boolean(document.querySelector('#surface-fixture[data-surface=${JSON.stringify(surface)}] #surface-fixture-context'))`,
+    `surface_fixture ${surface} mounted with its host context`,
     { signal },
   );
   const shown = await record(
     client,
     `(() => ({
-      release: document.querySelector('#contract-probe-release')?.dataset.release ?? null,
-      context: document.querySelector('#contract-probe-context')?.textContent ?? '',
-      error: document.querySelector('#contract-probe-error')?.textContent ?? null,
+      release: document.querySelector('#surface-fixture-release')?.dataset.release ?? null,
+      context: document.querySelector('#surface-fixture-context')?.textContent ?? '',
+      error: document.querySelector('#surface-fixture-error')?.textContent ?? null,
     }))()`,
-    `contract_probe ${surface} state`,
+    `surface_fixture ${surface} state`,
     signal,
   );
-  assert.equal(shown.error, null, `contract_probe ${surface} query failed`);
+  assert.equal(shown.error, null, `surface_fixture ${surface} query failed`);
   return {
     release: shown.release,
     context: diagnosticObject(JSON.parse(String(shown.context)), `${surface} context`),
@@ -83,10 +83,10 @@ await runBrowserGate(
       const mission = arg(argv, "--mission-slug");
       const missionId = arg(argv, "--mission-id");
       const spacecraftId = arg(argv, "--spacecraft-id");
-      const probeNMinus1 = arg(argv, "--probe-n-minus-1-release-id");
+      const fixtureNMinus1 = arg(argv, "--fixture-n-minus-1-release-id");
       assert.ok(secret?.password, "login secret is required");
       const missionRoot = `/console/${org}/${mission}`;
-      const probeMission = `${missionRoot}/setup/apps/contract_probe/mission_contracts`;
+      const fixtureMission = `${missionRoot}/setup/apps/surface_fixture/mission_surface`;
       const canary = `${missionRoot}/setup/spacecraft/${spacecraftId}/apps/telemetry_decom/packet_bindings`;
 
       // 1. Signed out, the app surface bounces to the console's sign-in screen; that screen asks
@@ -98,7 +98,7 @@ await runBrowserGate(
       );
       let sessionProbeConfirmed = false;
       try {
-        const containment = await navigate(client, `${origin}${probeMission}`, {
+        const containment = await navigate(client, `${origin}${fixtureMission}`, {
           expectedOrigin: origin,
           expectedPath: CONSOLE_SIGN_IN_PATH,
           diagnostics,
@@ -146,23 +146,23 @@ await runBrowserGate(
       });
 
       // 3. The fixture's mission surface mounts from release N-1 with the mission context.
-      reportProgress("console: contract_probe mission surface (N-1)");
-      const mounted = await navigate(client, `${origin}${probeMission}`, {
+      reportProgress("console: surface_fixture mission surface (N-1)");
+      const mounted = await navigate(client, `${origin}${fixtureMission}`, {
         expectedOrigin: origin,
-        expectedPath: probeMission,
+        expectedPath: fixtureMission,
         diagnostics,
         signal,
       });
-      const missionView = await probeSurface(client, "mission_contracts", signal);
+      const missionView = await fixtureSurface(client, "mission_surface", signal);
       assert.equal(missionView.release, "n-minus-1", "the mission surface isn't release N-1");
       assert.equal(missionView.context.placement, "mission");
       assert.equal(missionView.context.mission_id, missionId);
-      const prefix = releaseArtifactPrefix("contract_probe", probeNMinus1);
+      const prefix = releaseArtifactPrefix("surface_fixture", fixtureNMinus1);
       assert.ok(
         diagnostics.completed((r) => new URL(r.url).pathname.startsWith(prefix), {
           generation: mounted,
         }).length > 0,
-        `no contract_probe artifact under ${prefix}`,
+        `no surface_fixture artifact under ${prefix}`,
       );
 
       // 4. Canary: a real product surface on the console, spacecraft scope.

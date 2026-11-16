@@ -100,4 +100,6 @@ config :cadence, :env_credentials,
 
 # The console federation smoke's test-only application (Cadence.Applications.FixtureContributors;
 # never set in dev or prod, a guard test checks).
-config :cadence, :fixture_application_contributors, [Cadence.TestSupport.ContractProbeApplication]
+config :cadence, :fixture_application_contributors, [
+  Cadence.TestSupport.SurfaceFixtureApplication
+]

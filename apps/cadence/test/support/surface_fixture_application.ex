@@ -1,18 +1,18 @@
-defmodule Cadence.TestSupport.ContractProbeApplication do
+defmodule Cadence.TestSupport.SurfaceFixtureApplication do
   @moduledoc """
   A test-only federated application for the console federation smoke (it gates §11c(C)).
 
   Product applications move and retire; the smoke's contract checks (remote mount, release N-1 →
   N → rollback, cache reuse, CSRF through the console's host bridge, scope changes) need one that
-  can't. This is the frontend's `contract_probe` remote (`frontend/apps/contract-probe`), known to
+  can't. This is the frontend's `surface_fixture` remote (`frontend/apps/surface-fixture`), known to
   the server only in the test environment, through
   `config :cadence, :fixture_application_contributors` (see
   `Cadence.Applications.FixtureContributors`). Production publication and the release output check
   both forbid the remote, so it can't ship.
 
-  - `mission_contracts` (mission scope) and `spacecraft_contracts` (spacecraft scope) show what the
+  - `mission_surface` (mission scope) and `spacecraft_surface` (spacecraft scope) show what the
     host handed the remote (scope and ids) and the release serving it.
-  - `record_probe` (mission scope) echoes a nonce. It changes nothing, so a smoke can count
+  - `record_nonce` (mission scope) echoes a nonce. It changes nothing, so a smoke can count
     requests without side effects.
   """
 
@@ -25,23 +25,23 @@ defmodule Cadence.TestSupport.ContractProbeApplication do
     SurfaceQueryContribution
   }
 
-  @application_key "contract_probe"
+  @application_key "surface_fixture"
   @version 1
-  @package_id "cadence.frontend-fixtures"
-  @remote_name "cadence_contract_probe"
-  @manifest_path "/assets/application-host/contract-probe/mf-manifest.json"
+  @package_id "cadence.surface-fixture"
+  @remote_name "cadence_surface_fixture"
+  @manifest_path "/assets/application-host/surface-fixture/mf-manifest.json"
 
   @surfaces [
     %{
-      id: "mission_contracts",
+      id: "mission_surface",
       scope: :mission,
-      query: "cadence.contract_probe.mission",
+      query: "cadence.surface_fixture.mission",
       order: 90
     },
     %{
-      id: "spacecraft_contracts",
+      id: "spacecraft_surface",
       scope: :spacecraft,
-      query: "cadence.contract_probe.spacecraft",
+      query: "cadence.surface_fixture.spacecraft",
       order: 91
     }
   ]
@@ -54,7 +54,7 @@ defmodule Cadence.TestSupport.ContractProbeApplication do
     %ApplicationDefinition{
       application_key: @application_key,
       version: @version,
-      display_name: "Contract Probe",
+      display_name: "Surface Fixture",
       description: "A test fixture for the console's federated surface contract.",
       trust: :first_party,
       installation_policy: :platform,
@@ -62,12 +62,12 @@ defmodule Cadence.TestSupport.ContractProbeApplication do
       installable_scopes: [:mission, :spacecraft],
       actions: [
         %ActionDefinition{
-          action_id: "record_probe",
+          action_id: "record_nonce",
           version: @version,
           intent: :diagnostic,
           scope: :mission,
-          input_contract: %{schema_id: "cadence.contract_probe.record_probe.input", version: 1},
-          result_contract: %{schema_id: "cadence.contract_probe.record_probe.result", version: 1},
+          input_contract: %{schema_id: "cadence.surface_fixture.record_nonce.input", version: 1},
+          result_contract: %{schema_id: "cadence.surface_fixture.record_nonce.result", version: 1},
           required_permission: "operate_mission",
           effect: :none,
           execution: :immediate,
@@ -98,7 +98,7 @@ defmodule Cadence.TestSupport.ContractProbeApplication do
         surface_id: surface.id,
         surface_version: @version,
         federation: :module_federation,
-        release_id: "contract-probe-v1",
+        release_id: "surface-fixture-v1",
         remote_name: @remote_name,
         manifest_path: @manifest_path,
         exposed_module: "./Application"
@@ -114,13 +114,13 @@ defmodule Cadence.TestSupport.ContractProbeApplication do
         application_version: @version,
         query_id: surface.query,
         query_version: 1,
-        provider: Cadence.TestSupport.ContractProbeApplication.Query
+        provider: Cadence.TestSupport.SurfaceFixtureApplication.Query
       }
     end)
   end
 
   @spec action_provider() :: module()
-  def action_provider, do: Cadence.TestSupport.ContractProbeApplication.Action
+  def action_provider, do: Cadence.TestSupport.SurfaceFixtureApplication.Action
 
   defp surface(%{id: id, scope: scope, query: query, order: order}) do
     %SurfaceDefinition{
@@ -129,24 +129,24 @@ defmodule Cadence.TestSupport.ContractProbeApplication do
       purpose: :overview,
       scope: scope,
       placement: :application_workspace,
-      navigation: %{label: "Contract probe", order: order},
+      navigation: %{label: "Surface fixture", order: order},
       data_contract: %{query_id: query, version: 1},
-      actions: if(scope == :mission, do: ["record_probe"], else: []),
+      actions: if(scope == :mission, do: ["record_nonce"], else: []),
       refresh: :after_action,
-      renderer: {:trusted, "cadence.contract_probe.#{id}"}
+      renderer: {:trusted, "cadence.surface_fixture.#{id}"}
     }
   end
 end
 
-defmodule Cadence.TestSupport.ContractProbeApplication.Query do
-  @moduledoc "The contract probe's surface reads: the host context it was given, nothing else."
+defmodule Cadence.TestSupport.SurfaceFixtureApplication.Query do
+  @moduledoc "The surface fixture's surface reads: the host context it was given, nothing else."
   @behaviour Cadence.Reads.ApplicationSurfaces.SurfaceQueryProvider
 
   alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Auth.Scope
 
   @impl true
-  def application_key, do: "contract_probe"
+  def application_key, do: "surface_fixture"
 
   @impl true
   def load(%Scope{} = scope, %HostContext{} = host, %SurfaceQueryRequest{} = request) do
@@ -161,15 +161,15 @@ defmodule Cadence.TestSupport.ContractProbeApplication.Query do
   end
 end
 
-defmodule Cadence.TestSupport.ContractProbeApplication.Action do
-  @moduledoc "The contract probe's one action: echoes the nonce, changes nothing."
+defmodule Cadence.TestSupport.SurfaceFixtureApplication.Action do
+  @moduledoc "The surface fixture's one action: echoes the nonce, changes nothing."
   @behaviour Cadence.Applications.ActionProvider
 
   @impl true
-  def application_key, do: "contract_probe"
+  def application_key, do: "surface_fixture"
 
   @impl true
-  def execute(_scope, _host, %{action_id: "record_probe", params: %{"nonce" => nonce}})
+  def execute(_scope, _host, %{action_id: "record_nonce", params: %{"nonce" => nonce}})
       when is_binary(nonce),
       do: {:ok, %{"accepted" => true, "nonce" => nonce}}
 

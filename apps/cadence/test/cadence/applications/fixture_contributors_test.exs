@@ -1,8 +1,8 @@
 defmodule Cadence.Applications.FixtureContributorsTest do
   @moduledoc """
   The registries' test-only extension point must stay test-only: no dev or prod configuration may
-  set `:fixture_application_contributors`, so a fixture application (contract_probe) can never
-  reach a deployment. Production publication separately forbids the contract-probe remote
+  set `:fixture_application_contributors`, so a fixture application (surface_fixture) can never
+  reach a deployment. Production publication separately forbids the surface-fixture remote
   (frontend/tools/frontend-release-output-check.test.mjs).
   """
   use ExUnit.Case, async: true

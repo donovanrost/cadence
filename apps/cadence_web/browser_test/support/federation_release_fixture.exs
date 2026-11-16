@@ -57,9 +57,9 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   def prepare_and_activate!(app_root, opts \\ []) when is_binary(app_root) do
     sandbox_owner = Keyword.fetch!(opts, :sandbox_owner)
     ops_surface = Keyword.get(opts, :ops_console_surface, "commands")
-    # The console federation smoke adds its test-only contract_probe application (the caller
+    # The console federation smoke adds its test-only surface_fixture application (the caller
     # enables Cadence.Applications.FixtureContributors first): two builds, N-1 and N, that differ.
-    contract_probe? = Keyword.get(opts, :contract_probe, false)
+    surface_fixture? = Keyword.get(opts, :surface_fixture, false)
     temp_root = temporary_root!()
 
     try do
@@ -113,9 +113,9 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           Path.join(temp_root, "release-build-spacecraft")
         )
 
-      probe_packages =
-        if contract_probe?,
-          do: contract_probe_packages!(node, temp_root),
+      fixture_packages =
+        if surface_fixture?,
+          do: surface_fixture_packages!(node, temp_root),
           else: %{n_minus_1: [], n: []}
 
       packages = %{
@@ -163,7 +163,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
               spacecraft_metadata(:n_minus_1),
               temp_root
             )
-          ] ++ probe_packages.n_minus_1,
+          ] ++ fixture_packages.n_minus_1,
         n:
           [
             package!(node, "comms-n", comms_build, comms_metadata(:n), temp_root),
@@ -196,7 +196,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
               temp_root
             ),
             package!(node, "spacecraft-n", spacecraft_build, spacecraft_metadata(:n), temp_root)
-          ] ++ probe_packages.n
+          ] ++ fixture_packages.n
       }
 
       application_count = length(packages.n_minus_1)
@@ -714,16 +714,17 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     end
   end
 
-  # contract_probe (test-only): built twice with distinct labels, so N-1 and N differ in content.
-  # No publication output to check and no check:release: the release output check forbids this
-  # remote by design (it never ships).
-  defp contract_probe_packages!(node, temp_root) do
+  # surface_fixture (test-only, the console federation smoke): built twice with distinct labels, so
+  # N-1 and N differ in content, and signed with this fixture's TEST key (the packager runs the
+  # release output check itself). It has no production publication output: production publication
+  # refuses any reference to it (production-publication-output-check.mjs).
+  defp surface_fixture_packages!(node, temp_root) do
     Map.new([:n_minus_1, :n], fn slot ->
       build =
         build_fixture_release!(
           node,
-          "@cadence/contract-probe-plugin",
-          Path.join(temp_root, "release-build-contract-probe-#{slot_name(slot)}"),
+          "@cadence/surface-fixture-plugin",
+          Path.join(temp_root, "release-build-surface-fixture-#{slot_name(slot)}"),
           slot_name(slot)
         )
 
@@ -731,9 +732,9 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
        [
          package!(
            node,
-           "contract-probe-#{slot_name(slot)}",
+           "surface-fixture-#{slot_name(slot)}",
            build,
-           contract_probe_metadata(slot),
+           surface_fixture_metadata(slot),
            temp_root
          )
        ]}
@@ -757,15 +758,15 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     output_directory
   end
 
-  defp contract_probe_metadata(slot) do
+  defp surface_fixture_metadata(slot) do
     metadata(
-      "contract_probe",
-      "cadence.frontend-fixtures",
-      "mission_contracts",
-      "cadence.contract_probe.mission",
-      ["record_probe"],
-      "cadence_contract_probe",
-      "federation-browser-contract-probe-#{slot_name(slot)}",
+      "surface_fixture",
+      "cadence.surface-fixture",
+      "mission_surface",
+      "cadence.surface_fixture.mission",
+      ["record_nonce"],
+      "cadence_surface_fixture",
+      "federation-browser-surface-fixture-#{slot_name(slot)}",
       released_at(slot)
     )
   end
