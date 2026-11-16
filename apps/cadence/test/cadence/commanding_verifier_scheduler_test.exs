@@ -139,8 +139,13 @@ defmodule Cadence.CommandingVerifierSchedulerTest do
 
     release_scheduler_bootstrap(scheduler_pid)
 
+    # Deterministic, not a wider window (lead 11-16). release's snapshot returned after bootstrap
+    # (timer_scheduled is already emitted). The zero-delay wakeup comes from the timer service, so
+    # we wait for timer_fired (a millisecond event); the slow part, the reconcile's DB writes, runs
+    # in that same handle_info, so the snapshot call after it returns only once the reconcile is
+    # done and its event is already in this mailbox.
     {_, metadata} =
-      assert_scheduler_event(:timer_scheduled, fn measurements, event_metadata ->
+      assert_scheduler_emitted(:timer_scheduled, fn measurements, event_metadata ->
         measurements.delay_ms == 0 and
           event_metadata.command_verifier_instance_id ==
             verifier_instance.command_verifier_instance_id
@@ -153,7 +158,9 @@ defmodule Cadence.CommandingVerifierSchedulerTest do
       measurements.count == 1
     end)
 
-    assert_scheduler_event(:reconcile, fn measurements, event_metadata ->
+    assert %{} = VerifierScheduler.snapshot(scheduler_pid)
+
+    assert_scheduler_emitted(:reconcile, fn measurements, event_metadata ->
       event_metadata.reason == :timer and measurements.timed_out_verifier_count == 1 and
         measurements.error_count == 0
     end)
@@ -354,6 +361,25 @@ defmodule Cadence.CommandingVerifierSchedulerTest do
       )
 
     on_exit(fn -> :telemetry.detach(handler_id) end)
+  end
+
+  # An event the scheduler already emitted before a synchronous call returned: no waiting.
+  defp assert_scheduler_emitted(event_name, predicate) do
+    event = @scheduler_event_prefix ++ [event_name]
+
+    receive do
+      {:verifier_scheduler_telemetry, ^event, measurements, metadata} ->
+        if predicate.(measurements, metadata) do
+          {measurements, metadata}
+        else
+          assert_scheduler_emitted(event_name, predicate)
+        end
+
+      {:verifier_scheduler_telemetry, _other_event, _measurements, _metadata} ->
+        assert_scheduler_emitted(event_name, predicate)
+    after
+      0 -> flunk("expected verifier scheduler telemetry event #{inspect(event)} already emitted")
+    end
   end
 
   defp assert_scheduler_event(event_name, predicate) do

@@ -77,7 +77,9 @@ defmodule Cadence.Reads.EventDensityTest do
     assert total.(EventLog.density(@org, c.mission, opts(c.now, @default))) == 1
   end
 
-  test "60k watermark rows: data-kind density reads no rows and answers fast", c do
+  # The guarantee is that the count happens in SQL: no query loads the rows (asserted by row counts,
+  # not wall-clock time, which flaked under load; lead 11-16).
+  test "60k watermark rows: data-kind density is counted in SQL without loading the rows", c do
     payload = %{"value" => %{"source_payload" => %{"sample_ids" => List.duplicate("x", 120)}}}
     stamp = %{c.now | microsecond: {0, 6}}
 
@@ -125,8 +127,7 @@ defmodule Cadence.Reads.EventDensityTest do
       nil
     )
 
-    {micros, density} =
-      :timer.tc(fn -> EventLog.density(@org, c.mission, opts(c.now, ["data"])) end)
+    density = EventLog.density(@org, c.mission, opts(c.now, ["data"]))
 
     :telemetry.detach(handler)
 
@@ -137,7 +138,5 @@ defmodule Cadence.Reads.EventDensityTest do
     assert Enum.max(rows, fn -> 0 end) < 1_000, "a query returned #{Enum.max(rows)} rows"
 
     assert Enum.sum(for b <- density.buckets, do: b.info) == 60_000
-    assert micros < 1_500_000, "density took #{div(micros, 1000)} ms"
-    IO.puts("density over 60k rows: #{div(micros, 1000)} ms")
   end
 end
