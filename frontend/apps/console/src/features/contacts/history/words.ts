@@ -3,7 +3,7 @@ import { contactOpState, contactStateWord } from "@/features/scheduling/index.ts
 import type { Pass } from "../api.ts";
 import { DAY_MS, isoDay, type StateFilter, type WeekSpan } from "./history.ts";
 import { isHandStarted } from "../handStarted.ts";
-import { rowStateKey, type HistoryRow } from "./history.ts";
+import { neverLive, rowStateKey, type HistoryRow } from "./history.ts";
 import type { ShortDay } from "./api.ts";
 
 /** ux U78 (6404f0dbd, 55e57636a, 64706b98b): Contacts › History words. */
@@ -22,7 +22,7 @@ export const dayTime = (t: number) => `${md(t)} ${hms(t)}Z`;
 export function windowText(row: HistoryRow): string {
   const start = Date.parse(row.starts_at);
   // Defined, never live: one time (api: its realized_at), shown as 'Created …' by the table (U78).
-  if (isHandStarted(row) && row.state === "defined") return dayTime(start);
+  if (neverLive(row)) return dayTime(start);
   const p = row;
   if (p.ends_at === null) return `${dayTime(start)} – no end yet`;
   const end = Date.parse(p.ends_at);

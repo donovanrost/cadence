@@ -71,6 +71,20 @@ describe("History rows (U78)", () => {
     expect(ledgerRows(rows, span, q("ended")).map((r) => r.id)).toEqual(["a"]);
   });
 
+  it("a contact Cadence closed before it went live matches no State, not even Ended (api not_started)", () => {
+    const swept = row({
+      id: "rc-9",
+      booked: false,
+      state: "stopped",
+      not_started: true,
+      starts_at: "2026-11-13T02:59:40Z",
+      ends_at: "2026-11-13T03:59:40Z",
+    });
+    const ended = parseHistoryQuery({ state: "ended" }, NOW).states;
+    expect(ledgerRows([swept], span, ended)).toEqual([]);
+    expect(ledgerRows([swept], span, []).map((r) => r.id)).toEqual(["rc-9"]);
+  });
+
   it("puts a cut day's row above that day's newest shown row", () => {
     const shown = ledgerRows(rows, span, []);
     const through = Date.parse("2026-11-13T05:00:00Z");

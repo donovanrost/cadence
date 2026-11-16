@@ -144,11 +144,21 @@ export function weekDays(span: WeekSpan): { from: number; to: number }[] {
 export type HistoryRow = Pass | HandStartedContact;
 
 /**
+ * A hand-started contact that never went live (api's `not_started`: defined, or stopped by Cadence's
+ * never-started sweep); before the key ships, state `defined` says so.
+ */
+export function neverLive(row: HistoryRow): boolean {
+  return isHandStarted(row) && (row.not_started ?? row.state === "defined");
+}
+
+/**
  * The State word a row reads under (U78): a pass by lead's contactState; a hand-started contact by
- * its own lifecycle (active is in contact, completed and stopped have ended; defined hasn't begun).
+ * its own lifecycle (active is in contact, completed and stopped have ended); one that never went
+ * live has no contact word ('Not started') and matches no State filter.
  */
 export function rowStateKey(row: HistoryRow): ContactState | null {
   if (!isHandStarted(row)) return contactState(row);
+  if (neverLive(row)) return null;
   switch (row.state) {
     case "active":
       return "in_contact";

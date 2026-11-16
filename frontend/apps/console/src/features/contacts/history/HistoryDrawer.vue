@@ -16,6 +16,8 @@ defineProps<{
   handStarted: HandStartedContact | null;
   loading: boolean;
   missing: boolean;
+  /** The read failed for another reason than not found (fe-ops 22b1e653a): D2 offers Try again. */
+  failed: boolean;
   spacecraft: { name: string; scid: Scid | null } | null;
 }>();
 defineEmits<{ changed: [] }>();
@@ -26,6 +28,7 @@ defineEmits<{ changed: [] }>();
     v-if="handStarted"
     :mission-id="missionId"
     :contact-id="handStarted.realized_contact_id"
+    :contact="handStarted"
   />
   <ApPanel v-else-if="missing" index="D2" title="Contact record" pane>
     <ApEmptyState state="off" headline="No contact record with this id." />
@@ -35,6 +38,7 @@ defineEmits<{ changed: [] }>();
     :mission-id="missionId"
     :pass="pass"
     :loading="loading"
+    :failed="failed"
     :spacecraft="spacecraft"
     @changed="$emit('changed')"
   />

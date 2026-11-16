@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { ApStatusMark, ApTable, ApTag, type ApColumn } from "@/ui";
 import { isHandStarted } from "../handStarted.ts";
-import type { HistoryRow } from "./history.ts";
+import { neverLive, type HistoryRow } from "./history.ts";
 import type { LedgerItem } from "./useHistory.ts";
 import IdCell from "./IdCell.vue";
 import { dayTime, shortDayRow, stateView, stationName, windowText } from "./words.ts";
@@ -52,7 +52,6 @@ const linkClass =
   "font-semibold whitespace-nowrap text-readout no-underline hover:text-bright hover:underline max-md:hit-44";
 const booked = (r: HistoryRow) => (isHandStarted(r) ? null : r);
 /** U78: a contact defined but never live shows when Cadence made its record, not a start. */
-const neverLive = (r: HistoryRow) => isHandStarted(r) && r.state === "defined";
 const createdLabel = (r: HistoryRow) =>
   `Created ${dayTime(Date.parse(r.starts_at))}, never started`;
 </script>

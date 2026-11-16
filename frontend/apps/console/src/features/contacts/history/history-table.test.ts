@@ -41,6 +41,20 @@ describe("History table (U78)", () => {
     }
   });
 
+  it("so does one Cadence's sweep closed (stopped, not_started)", () => {
+    const swept = item({
+      id: "rc-9",
+      booked: false,
+      state: "stopped",
+      not_started: true,
+      starts_at: "2026-11-13T02:59:40Z",
+      ends_at: "2026-11-13T03:59:40Z",
+    });
+    const w = render([swept]);
+    expect(w.get("a").text().replace(/\s+/g, " ")).toBe("Created 11-13 02:59:40Z");
+    expect(w.text()).toContain("Not started");
+  });
+
   it("a hand-started row is tagged and has no reservation, revision or schedule", () => {
     const w = render([
       item({ id: "rc-1", booked: false, state: "active", starts_at: "2026-11-16T02:00:00Z" }),
