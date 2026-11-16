@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { describeApiError } from "@/api/index.ts";
 import { useSession } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApPanel, ApSheet, ApTextarea, useNow } from "@/ui";
@@ -43,6 +43,8 @@ const goSheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const noGoSheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const note = ref("");
 const noteError = ref<string | null>(null);
+// ux a11y A1 exception: the NO-GO sheet opens on the note, so its consequence describes the dialog.
+const noGoConsequence = useId();
 const busy = ref(false);
 const outcome = ref<{ tone: "info" | "crit" | "caution"; text: string } | null>(null);
 const targetNames = computed(() => {
@@ -140,7 +142,10 @@ function openNoGo() {
         <ApButton class="min-h-12" :disabled="busy" @click="run('go')">Sign GO</ApButton>
       </template>
     </ApSheet>
-    <ApSheet ref="noGoSheet" title="NO-GO" initial-focus="textarea">
+    <ApSheet ref="noGoSheet" title="NO-GO" initial-focus="textarea" :described-by="noGoConsequence">
+      <p :id="noGoConsequence" class="m-0 text-base text-text-3">
+        A NO-GO closes this request: nothing is sent, and the author sees your note.
+      </p>
       <ApTextarea v-model="note" label="Note to the author" required :error="noteError" :rows="3" />
       <template #footer>
         <ApButton variant="ghost" class="min-h-12" @click="noGoSheet?.close()">Cancel</ApButton>
