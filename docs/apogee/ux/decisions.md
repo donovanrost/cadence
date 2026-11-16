@@ -2021,26 +2021,23 @@ everything in them is mono key/values.
 ### U75 · An expired member halts its request (DECISIONS #97) (api / fe-ops)
 The noun is **request**, as in U46. The expired command is named by its stack name, with the target where the
 screen shows several ("Heater setpoint to EARENDIL-004"). Times are §4.
-- **Later members, closed:** stage `Not sent` (off).
-  - Detail: "Not sent: Heater setpoint expired at 04:00Z before it was released, so the rest of the request
-    stopped."
-- **Later members, still waiting** (if the server holds them rather than closing them): stage `Held` (caution,
-  since a human decides).
+- **Later members are held** (lead, 11-16: as U46's "rest stay queued"). They never release by themselves; they wait
+  until an operator resends or aborts. Stage `Held` (caution, since a human decides).
   - Detail: "Held: Heater setpoint expired at 04:00Z before it was released, so the rest of the request waits."
   - Actions: `Abort remaining` · `Edit and resend`.
 - **The expired member itself** keeps U68's line: "Expired at 04:00Z before it was released."
 - **Uplink & verify:**
-  - U1 cells: `Not sent` is drawn dashed (as excluded), and `Held` gets a caution outline. Both are in the legend.
+  - U1 cells: `Held` gets a caution outline, and it's in the legend.
   - One N card per request, not per target: "Heater setpoint expired at 04:00Z before it was released, so 3 later
-    uplinks weren't sent." (or "…are held."). Its actions are the ones above, as the state allows.
-- **Request log:** "Stopped at 04:00Z: Heater setpoint expired before it was released · 3 uplinks not sent" (or "· 3
-  uplinks held").
+    uplinks are held." Its actions are the ones above.
+- **Request log:** "Stopped at 04:00Z: Heater setpoint expired before it was released · 3 uplinks held". An abort
+  or resend logs as today.
 - **Commands list:** the row's state reads `Stopped · 1 expired`.
 - **Now:** one caution item per request, P2.
   - Title: "EARENDIL-004 · Low power safe stopped: a command expired before it was sent" (several targets: "on 3
     spacecraft").
   - `Open` goes to the request.
-  - It resolves when the request is resent or aborted, or on `Mark as seen` once nothing is held.
+  - It resolves when the request is resent or aborted. While anything is held, it can't be marked as seen.
 - **Approve** isn't involved; a halt happens after approval.
 
 ### U76 · Planning replacements, final words (user accepted the four drops, 11-16) (fe-setup)
@@ -2058,3 +2055,27 @@ screen shows several ("Heater setpoint to EARENDIL-004"). Times are §4.
 - Over 2,000 characters: "Keep the note under 2,000 characters." The counter appears from 1,800, as with U65's
   reasons.
 - It appears in U73's history quoted under its decision row. `Send back` keeps its required `Reason`.
+
+### U77 · Provider account: how Cadence hears about booking changes (`event_ingestion_mode`; lead, gates the 11-16 deletion batch) (fe-setup)
+On Add account and Edit account. Show only the options the provider's model supports (Northlight's model: polling,
+hybrid, disabled). Order: as below.
+- **Label** `Booking updates` (not "Event ingestion").
+- **Help text:** "How Cadence hears when Northlight confirms, moves or cancels a booking."
+- **Options:**
+  - polling, `Cadence checks`: "Cadence asks Northlight for changes regularly."
+  - webhook, `Northlight sends`: "Northlight sends changes as they happen. Set up the webhook at Northlight first."
+  - hybrid, `Both`: "Northlight sends changes as they happen, and Cadence also checks in case one is missed."
+  - disabled, `Off`: "Cadence doesn't take in Northlight's changes."
+- **When `Off` is chosen:** a caution line under the field reads "While this is off, Cadence won't see Northlight
+  confirm, move or cancel bookings."
+  - On Add, it adds "Turn it on in Edit when the account is ready."
+- **Edit on a live account.** Saving makes a new account version, as other edits do. The line under the field
+  depends on the change:
+  - To `Off`, with active bookings: "While this is off, Cadence won't see Northlight confirm, move or cancel the 14
+    bookings made with this account." Without a count, "…the bookings made with this account." Save reads `Save and
+    turn off updates`.
+  - From `Off` to any other: "Cadence starts taking in Northlight's changes when you save." No claim about changes
+    made while it was off (U20).
+  - To `Northlight sends` from `Cadence checks` or `Both`: "Cadence will stop checking. Make sure Northlight's webhook
+    is set up, or changes will be missed."
+- **History and audit:** "Changed booking updates from Cadence checks to Off (v5) · Mira K. · 08:02Z".
