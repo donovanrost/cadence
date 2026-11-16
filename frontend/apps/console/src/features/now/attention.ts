@@ -100,9 +100,11 @@ export const runtimeReasons = [
   "runtime_not_running",
   "apply_failed",
 ] as const;
-/** U45 contact_start: why the pass didn't start (domain's 7 keys; null: no reason recorded). */
+/** U45 contact_start: why the pass didn't start (domain's keys; null: no reason recorded). */
 export const startReasons = [
   "listener_in_use",
+  // U81 §3: another mission listens on the port our transport uses.
+  "listen_endpoint_claimed",
   "listener_unavailable",
   "connect_failed",
   "ingress_pipeline_failed",
@@ -343,6 +345,11 @@ export const attentionReader = d.object({
   provider_profile_name: d.optional(d.nullable(d.string)),
   /** listener_in_use only: the pass still holding the station connection. */
   holder: d.optional(d.nullable(holderReader)),
+  /** listen_endpoint_claimed only (U81 §3): the port, and OUR transport that uses it. */
+  listen_port: d.optional(d.nullable(d.integer)),
+  transport_id: d.optional(d.nullable(d.token)),
+  // free-text: that transport's display name ("INU S-band")
+  transport_name: d.optional(d.nullable(d.string)),
   /** ingress_backpressure (U47): the downlink transport, its buffer, and what it dropped. */
   // free-text: the contact's pass name when it has one (api-ops)
   contact_label: d.optional(d.nullable(d.string)),

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
-import { resolvedWords } from "./attention.ts";
+import { attentionReader, resolvedWords } from "./attention.ts";
+import { startReasonAction } from "./contactStart.ts";
 import { NO_ACCESS_MISSED, NO_ACCESS_SEEN, noAccessText } from "./useQueueCommand.ts";
 
 const NOW = new Date("2026-11-14T03:13:00Z");
@@ -134,6 +135,34 @@ describe("contact_start on Now (ux U45)", () => {
     expect(said("unknown")).toBe("Starting failed.");
     expect(said("something_new")).toBe("Starting failed.");
     expect(said(null)).toBe("No reason was recorded.");
+  });
+
+  it("U81 §3: names our transport and its port, never the other mission", () => {
+    const claimed = (o: Record<string, unknown>) =>
+      rowOf({ reason: "listen_endpoint_claimed", holder: null, ...o })?.sentence;
+    const full = { listen_port: 5012, transport_id: "tr-9", transport_name: "INU S-band" };
+    expect(claimed(full)).toBe(
+      "Another mission already listens on the port INU S-band uses (5012). Change that transport's port.",
+    );
+    expect(claimed({ ...full, transport_name: null })).toBe(
+      "Another mission already listens on port 5012, which this pass's transport uses. Change that transport's port.",
+    );
+  });
+
+  it("U81 §3: Open transport goes to that transport's Setup page, only when it's known", () => {
+    const fix = (o: Record<string, unknown>) => {
+      const r = decode(
+        attentionReader,
+        item({ reason: "listen_endpoint_claimed", ...o }).attention,
+      );
+      if (!r.ok) throw new Error(r.error.message);
+      return startReasonAction(r.value);
+    };
+    expect(fix({ listen_port: 5012, transport_id: "tr-9", transport_name: null })).toEqual({
+      label: "Open transport",
+      to: { name: "setup.comms.transports", params: { transportId: "tr-9" } },
+    });
+    expect(fix({ listen_port: 5012, transport_id: null })).toBeNull();
   });
 
   it("missed: P2, the window, Mark as seen, no countdown", () => {
