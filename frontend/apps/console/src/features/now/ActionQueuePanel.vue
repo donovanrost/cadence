@@ -13,6 +13,7 @@ import { QUEUE_CAP } from "./queueCap.ts";
 import { useFreshFlash } from "./useFreshFlash.ts";
 import { jobOffers } from "./jobs.ts";
 import { useQueueCommand, type RetryOutcome } from "./useQueueCommand.ts";
+import { landFocus } from "./landFocus.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 
@@ -23,8 +24,13 @@ const now = useNow();
 const sheet = ref<InstanceType<typeof QueueListSheet> | null>(null);
 const discardSheet = ref<InstanceType<typeof DiscardSheet> | null>(null);
 /** U49: the discarded item comes back resolved; the row takes it as a Retry's does. */
+/** A write answered: the screen patches the row; focus lands on its resolved line (a11y C). */
+function retried(row: QueueItem, outcome: RetryOutcome) {
+  emit("retried", row, outcome);
+  void landFocus(list.value, row.key);
+}
 function discarded(row: QueueItem, item: Attention | null) {
-  emit("retried", row, { text: null, items: item ? [item] : [], emptied: false });
+  retried(row, { text: null, items: item ? [item] : [], emptied: false });
 }
 let discarding: QueueItem | null = null;
 /** U54: Retry… / Close without retry… open their sheets; the returned item patches the row. */
@@ -46,7 +52,7 @@ const scope = useMissionScope();
 const access = useCommandAccess();
 const command = useQueueCommand(
   computed(() => scope.value.mission.id),
-  (row, outcome) => emit("retried", row, outcome),
+  (row, outcome) => retried(row, outcome),
 );
 /**
  * A newly arrived crit P1 flashes once (design-language §6): the wash comes on at once and fades
@@ -100,6 +106,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
           <ApListRow
             v-for="(item, i) in shownOf(items)"
             :key="item.key"
+            :data-key="item.key"
             :class="flashClass(item.key)"
             :priority="`P${item.priority}`"
             :state="item.state"
