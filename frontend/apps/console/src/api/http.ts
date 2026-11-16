@@ -1,4 +1,4 @@
-import { decode, object, optional, string, token, type Reader } from "./decode.ts";
+import { decode, nullable, object, optional, string, token, type Reader } from "./decode.ts";
 
 /** Base path of the session-authenticated console JSON API. */
 export const API_BASE = "/api/console/v1";
@@ -113,16 +113,11 @@ export function outcomeUnknown(error: ApiError): boolean {
  */
 const SETTLED: ReadonlySet<string> = new Set(["apply_interrupted"]);
 
-/**
- * Calls a console API path (relative to API_BASE) and decodes the `data` member of a
- * successful response with `read`. Network failures and non-2xx responses become ApiError;
- * nothing undecoded leaves this function. Aborts propagate as AbortError rejections.
- */
-export async function request<T>(
+/** Sends one console API call; the body is read but not yet decoded. */
+async function send(
   path: string,
-  read: Reader<T>,
-  options: RequestOptions = {},
-): Promise<ApiResult<T>> {
+  options: RequestOptions,
+): Promise<{ ok: true; status: number; body: unknown } | { ok: false; error: ApiError }> {
   const method = options.method ?? "GET";
   // keyed-by-text: HTTP header names, not a vocabulary; more are added per request below
   const headers: Record<string, string> = { accept: "application/json" };
@@ -150,17 +145,54 @@ export async function request<T>(
 
   const body = await readJson(response);
   if (!response.ok) return { ok: false, error: toError(response.status, body) };
+  return { ok: true, status: response.status, body };
+}
+
+/**
+ * Calls a console API path (relative to API_BASE) and decodes the `data` member of a
+ * successful response with `read`. Network failures and non-2xx responses become ApiError;
+ * nothing undecoded leaves this function. Aborts propagate as AbortError rejections.
+ */
+export async function request<T>(
+  path: string,
+  read: Reader<T>,
+  options: RequestOptions = {},
+): Promise<ApiResult<T>> {
+  const sent = await send(path, options);
+  if (!sent.ok) return sent;
   // 204 No Content (e.g. DELETE /invitations/:id): no envelope; the reader decides what null means.
-  if (response.status === 204) {
+  if (sent.status === 204) {
     const empty = decode(read, null);
     return empty.ok
       ? { ok: true, value: empty.value }
       : { ok: false, error: { kind: "malformed", message: empty.error.message } };
   }
-  const envelope = decode(object({ data: read }), body);
+  const envelope = decode(object({ data: read }), sent.body);
   if (!envelope.ok)
     return { ok: false, error: { kind: "malformed", message: envelope.error.message } };
   return { ok: true, value: envelope.value.data };
+}
+
+const pageMeta = optional(nullable(object({ next_cursor: nullable(string) })));
+
+/**
+ * A cursor-paged read: `data` decoded with `read`, plus `meta.next_cursor` (null on the last
+ * page, or when the server sends no meta).
+ */
+export async function requestPage<T>(
+  path: string,
+  read: Reader<T>,
+  options: RequestOptions = {},
+): Promise<ApiResult<{ value: T; nextCursor: string | null }>> {
+  const sent = await send(path, options);
+  if (!sent.ok) return sent;
+  const envelope = decode(object({ data: read, meta: pageMeta }), sent.body);
+  if (!envelope.ok)
+    return { ok: false, error: { kind: "malformed", message: envelope.error.message } };
+  return {
+    ok: true,
+    value: { value: envelope.value.data, nextCursor: envelope.value.meta?.next_cursor ?? null },
+  };
 }
 
 /** Human sentence for an ApiError, for callouts and empty states. */

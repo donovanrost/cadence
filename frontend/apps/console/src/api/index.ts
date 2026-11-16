@@ -5,6 +5,7 @@ export {
   describeApiError,
   outcomeUnknown,
   request,
+  requestPage,
   setCsrfToken,
   type ApiError,
   type ApiResult,
