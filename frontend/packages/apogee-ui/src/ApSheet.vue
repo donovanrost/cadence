@@ -10,6 +10,11 @@ import { useScrollable } from "./lib/scrollable.ts";
  * exposed `open()` / `close()`; `closed` fires on every close (button, Escape or `close()`).
  * `placement="side"` is a 400px panel on the right, full height and NOT modal, so the page behind
  * stays usable (dashboards' widget sheet while editing); Escape still closes it.
+ *
+ * Below 768px (design-language §9) every sheet is full-height, edge to edge at 100dvh so it shrinks
+ * with the on-screen keyboard: the title row (with a close ✕) pinned on top, the action row (full
+ * width, 48px) pinned above the safe area, only the body scrolling between them. A side sheet is
+ * modal there (the page can't sit beside it), so it traps focus and takes aria-modal.
  */
 const props = withDefaults(
   defineProps<{
@@ -34,14 +39,20 @@ const titleId = useId();
 const body = ref<HTMLElement | null>(null);
 const scrolls = useScrollable(body);
 let opener: HTMLElement | null = null;
+/** Below md, as the shell's useSmallScreen; read on open (the kit can't import the shell). */
+const PHONE = "(max-width: 47.99rem)";
+const phone = () => typeof window.matchMedia === "function" && window.matchMedia(PHONE).matches;
+/** Center sheets always; a side sheet when opened on a phone. */
+const modal = ref(props.placement !== "side");
 
 const focusInitial = () => dialog.value?.querySelector<HTMLElement>(props.initialFocus)?.focus();
 /** Already open (only a side sheet can be: its page stays usable), the opener moves focus back in (ux a11y A3). */
 function open() {
   if (!dialog.value?.open) {
     opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (props.placement === "side") dialog.value?.show();
-    else dialog.value?.showModal();
+    modal.value = props.placement !== "side" || phone();
+    if (modal.value) dialog.value?.showModal();
+    else dialog.value?.show();
   }
   void nextTick(focusInitial);
 }
@@ -54,7 +65,7 @@ function onCancel(event: Event) {
 }
 /** A non-modal dialog gets no native Escape; the side sheet adds it. */
 function onKeydown(event: KeyboardEvent) {
-  if (props.placement === "side" && event.key === "Escape" && props.dismissible) {
+  if (!modal.value && event.key === "Escape" && props.dismissible) {
     event.stopPropagation();
     close();
   }
@@ -71,11 +82,11 @@ defineExpose({ open, close });
   <dialog
     ref="dialog"
     :aria-labelledby="titleId"
-    :aria-modal="placement === 'side' ? undefined : 'true'"
-    class="border border-line bg-panel p-0 text-readout"
+    :aria-modal="modal ? 'true' : undefined"
+    class="flex-col border border-line bg-panel p-0 text-readout open:flex max-md:inset-0 max-md:m-0 max-md:h-dvh max-md:max-h-none max-md:w-full max-md:max-w-none max-md:border-0"
     :class="
       placement === 'side'
-        ? 'fixed inset-y-0 right-0 left-auto z-40 m-0 h-dvh max-h-none w-[min(400px,100vw)] flex-col open:flex'
+        ? 'fixed inset-y-0 right-0 left-auto z-40 m-0 h-dvh max-h-none w-[min(400px,100vw)]'
         : [
             'm-auto backdrop:bg-[rgba(5,7,10,0.72)]',
             width === 'wide'
@@ -87,22 +98,39 @@ defineExpose({ open, close });
     @cancel="onCancel"
     @keydown="onKeydown"
   >
+    <header
+      class="flex flex-none items-center gap-3 px-5 pt-5 max-md:h-12 max-md:border-b max-md:border-hairline max-md:py-0 max-md:pr-0 max-md:pl-4"
+    >
+      <h2
+        :id="titleId"
+        class="m-0 min-w-0 truncate font-display text-xl font-semibold tracking-tag uppercase"
+      >
+        {{ title }}
+      </h2>
+      <button
+        v-if="dismissible"
+        type="button"
+        aria-label="Close"
+        class="ml-auto hidden size-12 flex-none cursor-pointer items-center justify-center border-0 bg-transparent text-xl text-text-3 hover:text-readout max-md:flex"
+        @click="close"
+      >
+        <span aria-hidden="true">✕</span>
+      </button>
+    </header>
     <div
       ref="body"
-      class="flex flex-col gap-3 overflow-auto p-5"
-      :class="placement === 'side' ? 'min-h-0 flex-1' : 'max-h-[70vh]'"
+      class="flex flex-col gap-3 overflow-auto px-5 pt-3 pb-5 max-md:min-h-0 max-md:flex-1 max-md:px-4 max-md:pt-4"
+      :class="placement === 'side' ? 'min-h-0 flex-1' : 'max-h-[70vh] max-md:max-h-none'"
       :tabindex="scrolls ? 0 : undefined"
       :role="scrolls ? 'group' : undefined"
       :aria-labelledby="scrolls ? titleId : undefined"
     >
-      <h2 :id="titleId" class="m-0 font-display text-xl font-semibold tracking-tag uppercase">
-        {{ title }}
-      </h2>
       <slot />
     </div>
+    <!-- Phone: buttons share the row at 48px, above the home indicator. -->
     <footer
       v-if="$slots.footer"
-      class="flex flex-wrap items-center justify-end gap-2 border-t border-hairline px-5 py-3"
+      class="flex flex-none flex-wrap items-center justify-end gap-2 border-t border-hairline px-5 py-3 max-md:px-4 max-md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:[&_button]:h-12 max-md:[&>a]:h-12 max-md:[&>a]:flex-1 max-md:[&>button]:flex-1"
     >
       <slot name="footer" />
     </footer>

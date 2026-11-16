@@ -1,7 +1,12 @@
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import ApSheet from "./ApSheet.vue";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("ApSheet", () => {
   function mountSheet(initialFocus?: string) {
@@ -94,6 +99,47 @@ describe("ApSheet", () => {
     wrapper.unmount();
     opener.remove();
     elsewhere.remove();
+  });
+
+  it("is modal on a phone even as a side sheet, with a Close ✕ (design-language §9)", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("max-width") }));
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal");
+    const wrapper = mount(ApSheet, {
+      attachTo: document.body,
+      props: { title: "Widget", placement: "side", initialFocus: "input" },
+      slots: { default: "<input aria-label='Name' />" },
+    });
+    const sheet = wrapper.vm as { open: () => void; close: () => void };
+    sheet.open();
+    await nextTick();
+    const dialog = wrapper.get("dialog");
+    // showModal: the page behind is inert, so focus is trapped (a11y A3 at this width).
+    expect(showModal).toHaveBeenCalledOnce();
+    expect(dialog.attributes("aria-modal")).toBe("true");
+    await wrapper.get('button[aria-label="Close"]').trigger("click");
+    expect(dialog.element.open).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("stays non-modal beside the page on a desktop", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal");
+    const wrapper = mount(ApSheet, {
+      attachTo: document.body,
+      props: { title: "Widget", placement: "side" },
+      slots: { default: "<input aria-label='Name' />" },
+    });
+    (wrapper.vm as { open: () => void }).open();
+    await nextTick();
+    expect(showModal).not.toHaveBeenCalled();
+    expect(wrapper.get("dialog").attributes("aria-modal")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("offers no Close ✕ on a sheet only its caller may close", () => {
+    const wrapper = mount(ApSheet, { props: { title: "Your token", dismissible: false } });
+    expect(wrapper.find('button[aria-label="Close"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it("refuses Escape when not dismissible, but still closes from the caller", async () => {
