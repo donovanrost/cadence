@@ -127,11 +127,17 @@ defmodule CadenceWeb.Console.CommsAPITest do
 
   test "kind schemas generate station and transport forms", c do
     station = get_data(c, "/config/kinds/ground_station/schema")
-    assert Enum.map(station["fields"], & &1["path"]) == ~w(display_name code provider region)
+
+    assert Enum.map(station["fields"], & &1["path"]) ==
+             ~w(display_name code provider region metadata)
+
     code = Enum.find(station["fields"], &(&1["path"] == "code"))
     assert %{"required" => true, "pattern" => "^[A-Z0-9]{2,8}$"} = code
     # No mission providers yet, so provider is free text rather than an empty enum.
     assert Enum.find(station["fields"], &(&1["path"] == "provider"))["type"] == "string"
+    # Comms parity (4): metadata is a JSON object, empty by default.
+    assert %{"type" => "json", "default" => %{}, "required" => false} =
+             Enum.find(station["fields"], &(&1["path"] == "metadata"))
 
     transport = get_data(c, "/config/kinds/transport/schema")
     paths = Enum.map(transport["fields"], & &1["path"])

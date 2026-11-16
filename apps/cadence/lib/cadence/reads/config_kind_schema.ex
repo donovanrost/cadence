@@ -5,7 +5,8 @@ defmodule Cadence.Reads.ConfigKindSchema do
   default, required, help, visible_when`), so console edit forms are generated.
 
   `ground_station` mirrors the kind's validation (name, code, provider,
-  region), with provider options from the mission's ground-network providers.
+  region), with provider options from the mission's ground-network providers, plus `metadata`
+  (`type: :json`, an object, default `{}`; comms parity 4).
   `transport` adds the transport kind's own configuration fields (today
   `tcp_socket`) under `configuration.*`, addressing the stored, normalized
   configuration document (e.g. `configuration.framing.mode`).
@@ -75,7 +76,10 @@ defmodule Cadence.Reads.ConfigKindSchema do
          do: field("provider", "Provider", :string, range: %{max: 200}),
          else: field("provider", "Provider", :enum, enum: providers)
        ),
-       field("region", "Region", :string, range: %{max: 200})
+       field("region", "Region", :string, range: %{max: 200}),
+       # Comms parity (4): legacy comms could edit station metadata. `:json` is an object only,
+       # default {} (the console reads it as of 5040bd149; the kind already checks it's a map).
+       field("metadata", "Metadata", :json, default: %{})
      ]}
   end
 
