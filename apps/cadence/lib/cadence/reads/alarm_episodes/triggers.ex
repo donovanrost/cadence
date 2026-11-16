@@ -5,10 +5,12 @@ defmodule Cadence.Reads.AlarmEpisodes.Triggers do
 
     * `limit_definition_id`, `limit_definition_version`, `limit_set_name`: from the episode's
       context, written at opening (the definition that OPENED it); `nil` for catalog monitoring.
-    * `trigger: %{sample_id, sample_type, point_id, at}`: a ground episode's opening limit event
-      (`opened_by_ref`), `at` its sample's generation time, else receipt. A catalog-monitoring
-      transition records no sample: `sample_id: nil`, `at: opened_at`.
-    * each show event with a source record gains `sample: %{id, at}` the same way.
+    * `trigger: %{sample_id, sample_type, point_id, at, receipt_time}`: a ground episode's opening
+      limit event (`opened_by_ref`), `at` its sample's generation time, else receipt;
+      `receipt_time` the sample's receipt time (§11c(D) D1: the one-sample read matches on it). A
+      catalog-monitoring transition records no sample: `sample_id: nil`, `at: opened_at`,
+      `receipt_time: nil`.
+    * each show event with a source record gains `sample: %{id, at, receipt_time}` the same way.
 
   Limit events are read schemaless by table, one query per page.
   """
@@ -54,11 +56,18 @@ defmodule Cadence.Reads.AlarmEpisodes.Triggers do
       sample_id: event.sample_id,
       sample_type: event.sample_type,
       point_id: episode.point.id,
-      at: event.at
+      at: event.at,
+      receipt_time: event.received
     }
 
   defp trigger(episode, nil),
-    do: %{sample_id: nil, sample_type: nil, point_id: episode.point.id, at: episode.opened_at}
+    do: %{
+      sample_id: nil,
+      sample_type: nil,
+      point_id: episode.point.id,
+      at: episode.opened_at,
+      receipt_time: nil
+    }
 
   defp put_event_samples(%{events: events} = episode, limit_events) when is_list(events),
     do: %{episode | events: Enum.map(events, &event_sample(&1, limit_events))}
@@ -68,8 +77,8 @@ defmodule Cadence.Reads.AlarmEpisodes.Triggers do
   defp event_sample(%{source_ref: ref} = event, limit_events) when is_binary(ref) do
     sample =
       case Map.get(limit_events, ref) do
-        %{sample_id: id, at: at} -> %{id: id, at: at}
-        nil -> %{id: nil, at: event.at}
+        %{sample_id: id, at: at, received: received} -> %{id: id, at: at, receipt_time: received}
+        nil -> %{id: nil, at: event.at, receipt_time: nil}
       end
 
     Map.put(event, :sample, sample)
@@ -96,7 +105,8 @@ defmodule Cadence.Reads.AlarmEpisodes.Triggers do
        %{
          sample_id: event.sample_id,
          sample_type: event.sample_type,
-         at: event.generated || event.received
+         at: event.generated || event.received,
+         received: event.received
        }}
     end)
   end

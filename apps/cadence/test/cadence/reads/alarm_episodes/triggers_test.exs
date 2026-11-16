@@ -24,8 +24,14 @@ defmodule Cadence.Reads.AlarmEpisodes.TriggersTest do
                limit_definition_id: nil,
                limit_definition_version: nil,
                limit_set_name: nil,
-               trigger: %{sample_id: nil, sample_type: nil, point_id: "HK.temp", at: ^opened_at},
-               events: [%{sample: %{id: nil, at: ^opened_at}}, %{sample: nil}]
+               trigger: %{
+                 sample_id: nil,
+                 sample_type: nil,
+                 point_id: "HK.temp",
+                 at: ^opened_at,
+                 receipt_time: nil
+               },
+               events: [%{sample: %{id: nil, at: ^opened_at, receipt_time: nil}}, %{sample: nil}]
              }
            ] = Triggers.put("org", "mission", [episode])
   end

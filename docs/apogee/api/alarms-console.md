@@ -63,8 +63,10 @@ Query: `state` = `active` (default) | `cleared` | `all`; `severity` = `critical`
   ground-limit definition that OPENED the episode (`null` for catalog monitoring). Deep link
   "Inspect producing vN": the limits app takes `?definition=<id>&version=<n>`.
   `trigger: {sample_id, sample_type: telemetry_sample | derived_telemetry_sample | null, point_id,
-  at}`: the sample that opened it, `at` its generation time, else receipt. Catalog-monitoring
-  transitions record no sample: `sample_id` and `sample_type` `null`, `at` = `opened_at`.
+  at, receipt_time}`: the sample that opened it, `at` its generation time, else receipt;
+  `receipt_time` its receipt time (§11c(D) D1: the one-sample read matches on it). Catalog-monitoring
+  transitions record no sample: `sample_id`, `sample_type` and `receipt_time` `null`, `at` =
+  `opened_at`.
 
 ## `GET /alarm-episodes/:episode_id`
 
@@ -72,12 +74,12 @@ One episode in the same shape plus `events`, oldest first:
 
 ```json
 {"events": [{"id": "…", "kind": "raised", "actor": null, "at": "…", "payload": {},
-  "sample": {"id": "…", "at": "…"}}]}
+  "sample": {"id": "…", "at": "…", "receipt_time": "…"}}]}
 ```
 
 `sample` (U68 R5): for an event a source record caused (`raised`, `escalated`, `deescalated`,
-`cleared` by an evaluation), the sample behind it (`id` `null` for catalog monitoring, `at` as
-`trigger.at`); `null` for people's actions.
+`cleared` by an evaluation), the sample behind it (`id` and `receipt_time` `null` for catalog
+monitoring, `at` and `receipt_time` as in `trigger`); `null` for people's actions.
 
 `kind`: `raised | escalated | deescalated | acknowledged | assigned | unassigned | note |
 handed_off | cleared`. `escalated` payload has `from`, `to`, `acknowledgement_cleared`; `cleared`

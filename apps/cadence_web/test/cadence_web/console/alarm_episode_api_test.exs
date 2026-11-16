@@ -68,12 +68,15 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
                  "sample_id" => sample_id,
                  "sample_type" => "telemetry_sample",
                  "point_id" => "HK.counter",
-                 "at" => at
+                 "at" => at,
+                 "receipt_time" => receipt_time
                }
              } = episode
 
       assert is_binary(definition_id) and is_integer(version) and is_binary(set_name)
       assert is_binary(sample_id) and is_binary(at)
+      # §11c(D) D1: the sample's receipt time, which the one-sample read matches on.
+      assert {:ok, _received, 0} = DateTime.from_iso8601(receipt_time)
     end
 
     test "filters and rejects bad filter values", c do
@@ -98,8 +101,13 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
     test "show includes the event log; acknowledge records it", c do
       id = episode_id(c)
 
-      assert [%{"kind" => "raised", "sample" => %{"id" => sample_id}} | _] =
+      assert [
+               %{"kind" => "raised", "sample" => %{"id" => sample_id, "receipt_time" => received}}
+               | _
+             ] =
                get_data(c, "/#{id}")["events"]
+
+      assert is_binary(received)
 
       assert sample_id == get_data(c, "")["episodes"] |> hd() |> get_in(["trigger", "sample_id"])
 
