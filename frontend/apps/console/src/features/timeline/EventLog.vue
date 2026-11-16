@@ -3,7 +3,14 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { formatClock, plural, ApEventLine } from "@/ui";
 import type { MissionEvent } from "./api.ts";
-import { byHour, needsSpacecraftPrefix, severityState, subjectLink } from "./model.ts";
+import {
+  byHour,
+  craftLink,
+  namedCraft,
+  needsSpacecraftPrefix,
+  severityState,
+  subjectLink,
+} from "./model.ts";
 
 /**
  * E2 · Events newest first under UTC hour headers. The server sentence names its subject and links
@@ -16,11 +23,14 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ select: [id: string] }>();
 const groups = computed(() => byHour(props.events));
-/** Distinct spacecraft of a folded row, in scid order. */
+/** Distinct named spacecraft of a folded row, in scid order (an unnamed one is left out). */
 const spacecraftOf = (members: readonly MissionEvent[]) =>
   [
     ...new Map(
-      members.flatMap((m) => (m.spacecraft ? [[m.spacecraft.id, m.spacecraft] as const] : [])),
+      members.flatMap((m) => {
+        const sc = namedCraft(m);
+        return sc ? [[sc.id, sc] as const] : [];
+      }),
     ).values(),
   ].sort((a, b) => a.scid - b.scid);
 </script>
@@ -69,11 +79,11 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
           </ul>
         </details>
         <template v-else>
-          <template v-if="event.spacecraft && needsSpacecraftPrefix(event)"
+          <template v-if="craftLink(event) && needsSpacecraftPrefix(event)"
             ><RouterLink
-              :to="{ name: 'ops.spacecraft', params: { scId: event.spacecraft.scid } }"
+              :to="craftLink(event)?.to ?? ''"
               class="text-readout no-underline hover:underline"
-              >{{ event.spacecraft.name }}</RouterLink
+              >{{ craftLink(event)?.label }}</RouterLink
             >
             ·
           </template>
@@ -84,8 +94,8 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
             >{{ event.text }}</RouterLink
           >
           <RouterLink
-            v-else-if="event.spacecraft"
-            :to="{ name: 'ops.spacecraft', params: { scId: event.spacecraft.scid } }"
+            v-else-if="craftLink(event)"
+            :to="craftLink(event)?.to ?? ''"
             class="text-readout no-underline hover:underline"
             >{{ event.text }}</RouterLink
           ><template v-else>{{ event.text }}</template

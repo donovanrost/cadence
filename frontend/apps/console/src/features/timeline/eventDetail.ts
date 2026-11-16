@@ -1,7 +1,7 @@
 import type { RouteLocationRaw } from "vue-router";
 import type { OpState } from "@/ui";
 import type { EventSeverity, MissionEvent } from "./api.ts";
-import { KIND_WORDS, kindLabel, severityState, subjectLink } from "./model.ts";
+import { craftLink, KIND_WORDS, kindLabel, severityState, subjectLink } from "./model.ts";
 
 /**
  * The event detail panel's content (ux decisions U71 A8; api a87bee73d), first-class fields in
@@ -44,11 +44,8 @@ function statusWords(status: string | null | undefined): string | null {
 export function eventDetail(e: MissionEvent): EventDetail {
   const r = e.record ?? null;
   const links: { label: string; to: RouteLocationRaw }[] = [];
-  if (e.spacecraft)
-    links.push({
-      label: e.spacecraft.name,
-      to: { name: "ops.spacecraft", params: { scId: e.spacecraft.scid } },
-    });
+  const craft = craftLink(e);
+  if (craft) links.push(craft);
   const subject = e.refs.subject ?? null;
   const subjectTo = subjectLink(e);
   if (subject?.name && subjectTo) links.push({ label: subject.name, to: subjectTo });

@@ -71,7 +71,13 @@ const event = d.object({
   severity: d.oneOf(eventSeverities),
   text: d.string,
   detail: d.nullable(d.string),
-  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: scidReader })),
+  /**
+   * api (11-16): name and scid are null for a craft outside the name context (an unknown or
+   * foreign id); the row shows no craft name then, never the id. The id drives the filter.
+   */
+  spacecraft: d.nullable(
+    d.object({ id: d.token, name: d.nullable(d.string), scid: d.nullable(scidReader) }),
+  ),
   refs: d.object({
     alarm_id: d.nullable(d.token),
     point_id: d.nullable(d.token),

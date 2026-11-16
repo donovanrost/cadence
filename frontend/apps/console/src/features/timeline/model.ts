@@ -1,4 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
+import type { Scid } from "@/api/index.ts";
 import type { OpState } from "@/ui";
 import type { Density, EventKind, EventSeverity, MissionEvent } from "./api.ts";
 
@@ -45,9 +46,25 @@ export function subjectLink(event: MissionEvent): RouteLocationRaw | null {
   }
 }
 
+/**
+ * The event's craft as a link, or null when it has none or the server couldn't name it (api 11-16:
+ * an id outside the mission's name context). Never the id in its place.
+ */
+export function namedCraft(e: MissionEvent): { id: string; name: string; scid: Scid } | null {
+  const sc = e.spacecraft;
+  if (!sc || sc.name === null || sc.scid === null) return null;
+  return { id: sc.id, name: sc.name, scid: sc.scid };
+}
+export function craftLink(e: MissionEvent): { label: string; to: RouteLocationRaw } | null {
+  const sc = namedCraft(e);
+  return sc ? { label: sc.name, to: { name: "ops.spacecraft", params: { scId: sc.scid } } } : null;
+}
+
 /** The server sentence names the spacecraft itself now; only prefix it when it doesn't. */
-export const needsSpacecraftPrefix = (event: MissionEvent) =>
-  event.spacecraft !== null && !event.text.includes(event.spacecraft.name);
+export const needsSpacecraftPrefix = (event: MissionEvent) => {
+  const name = event.spacecraft?.name ?? null;
+  return name !== null && !event.text.includes(name);
+};
 
 export const KIND_WORDS: Readonly<Record<EventKind, string>> = {
   limit: "Limits",
@@ -100,6 +117,8 @@ const foldKinds = [
   "source_watermark_retreated",
   "catalog_revision_registered",
   "dashboard_published",
+  // U81 §2 (domain, api e27f68540): most of a contact's frames carried another SCID.
+  "contact_scid_mismatch",
 ] as const;
 const FOLD_WORDS: Readonly<Record<(typeof foldKinds)[number], string>> = {
   realized_contact_interval: "Contacts ended (not verified)",
@@ -116,6 +135,7 @@ const FOLD_WORDS: Readonly<Record<(typeof foldKinds)[number], string>> = {
   source_watermark_retreated: "Telemetry moved back",
   catalog_revision_registered: "Catalog revisions registered",
   dashboard_published: "Dashboards published",
+  contact_scid_mismatch: "Frames with another SCID",
 };
 export function kindLabel(e: MissionEvent): string {
   return rawKindLabel(e.raw_kind ?? e.kind);
