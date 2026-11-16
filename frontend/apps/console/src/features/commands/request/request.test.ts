@@ -261,6 +261,7 @@ const rowOf = (progress: GroupRow["progress"]): GroupRow => ({
   second_go_required: false,
   awaiting_me: false,
   operation_id: null,
+  priority: undefined,
   progress,
   finished: undefined,
   uplink: undefined,

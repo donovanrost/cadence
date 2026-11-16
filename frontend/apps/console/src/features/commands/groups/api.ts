@@ -259,6 +259,8 @@ export const groupRow = d.object({
   second_go_required: d.boolean,
   awaiting_me: d.boolean,
   operation_id: d.nullable(d.string),
+  /** U68 (api d33d48f11): 0..9, lower sooner; null for very old groups. Optional until shipped. */
+  priority: d.optional(d.nullable(d.integer)),
   // cfef9e9a: null unless state is queued. `finished` = every target final (not success).
   progress: d.optional(d.nullable(progressReader)),
   finished: d.optional(d.nullable(d.boolean)),

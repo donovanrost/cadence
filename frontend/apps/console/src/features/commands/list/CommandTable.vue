@@ -4,6 +4,7 @@ import { formatRelative, plural, useNow, ApTable, ApTag, type ApColumn } from "@
 import { groupBlockedLine, type StationLookup } from "@/features/contacts/readiness.ts";
 import type { GroupRow } from "../groups/api.ts";
 import { statusTag, type PersonName } from "../groups/words.ts";
+import { priorityTag } from "../priority.ts";
 
 /** Command requests. The Title cell links to the request (name-cell link); no row actions yet. */
 defineProps<{ rows: readonly GroupRow[]; nameOf: PersonName; stations: StationLookup }>();
@@ -27,6 +28,11 @@ const view = (r: GroupRow) => (r.awaiting_me ? "review" : undefined);
         >{{ row.title }}</RouterLink
       >
       <ApTag v-if="row.second_go_required" class="ml-2" label="2-PERSON" />
+      <ApTag
+        v-if="priorityTag(row.priority)"
+        class="ml-2"
+        :label="priorityTag(row.priority) ?? ''"
+      />
       <!-- U33: rows carry no expiry, so the line names it only on the request page. -->
       <p
         v-if="groupBlockedLine(row.uplink, null, stations)"
