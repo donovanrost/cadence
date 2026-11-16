@@ -36,6 +36,10 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
    cells, plot marks, out-of-range cells), there's an `aria-label`.
 3. Disclosures (`Technical details`, `Show`, `Show all 98`, Timeline folds, dashboard sections) are buttons or
    `<summary>` with `aria-expanded`, toggled by Enter and Space.
+   - A popover that lists **links that navigate** (the mission switcher) is a disclosure too: `aria-expanded` +
+     `aria-controls`, no `aria-haspopup`, no menu roles; Tab moves through the links, Esc closes and returns focus
+     to the button. `role="menu"` (kit `ApMenuButton`/`ApMenuItem`, arrow keys) is only for menus of **actions**,
+     such as `⋯`. (lead's §6 call, 11-16)
 4. Live updates (Now rows arriving or resolving, counts changing) never move focus. A new crit flash honours
    `prefers-reduced-motion`.
 5. Charts are `role="img"` with a sentence, not "chart".
