@@ -14,7 +14,7 @@ defmodule Cadence.Reads.CommandPreflight do
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
   alias Cadence.Reads.{CommandGroups, Passes}
-  alias Cadence.Reads.CommandPreflight.VerifierGroups
+  alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
 
   @contact_horizon_s 6 * 3_600
   # DECISIONS #60: HOLDs the submitter may acknowledge with a note. Every other HOLD is hard.
@@ -111,11 +111,20 @@ defmodule Cadence.Reads.CommandPreflight do
       policy: validated.policy,
       targets:
         Enum.map(validated.targets, &Map.put(&1, :catalog_revision, Map.get(revisions, &1.index))),
-      commands: VerifierGroups.commands(draft.commands, validated.members, by_index, revisions),
+      commands:
+        draft.commands
+        |> VerifierGroups.commands(validated.members, by_index, revisions)
+        |> with_resolved(
+          ResolvedArguments.for_preflight(org, mission, validated.members, by_index)
+        ),
       members: length(validated.members),
       checks: checks
     }
   end
+
+  # U68 R1: where the server's values differ from what was entered, per stacked command.
+  defp with_resolved(commands, resolved),
+    do: Enum.map(commands, &Map.put(&1, :resolved_arguments, Map.get(resolved, &1.position, [])))
 
   defp identity_check(%{identity_failures: []}), do: check(:identity, :go, [], %{})
 

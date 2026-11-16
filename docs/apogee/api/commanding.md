@@ -197,6 +197,15 @@ No side effects. Returns:
     one group per distinct verifier set, compared without ids (two revisions give the same verifier
     different ids), largest first, then by first spacecraft id. `verifiers: []` is "No verifier:
     can't turn green". Targets with a NO-GO for that command are in no group.
+  - U68 R1 `commands[].resolved_arguments: [{name, entered_value_json | null, resolved_value_json,
+    sent_value_json | null, unit | null, source: entered | default | fixed | catalog,
+    spacecraft_ids: null | [id]}]`: only where the server's value differs from what was entered.
+    The server changes two things: a blank argument takes the catalog `default` or `fixed` value
+    (`entered_value_json: null`), and a float encoded as 32-bit IEEE 754 radiates the nearest
+    single-precision value (`sent_value_json`, else `null`). No unit conversion, no rounding of the
+    stored value. `spacecraft_ids: null` = every validated target of that command; a list = only
+    those (per-target values make rows differ). `catalog` = a filled value whose pinned definition
+    couldn't be read to say default or fixed. `[]` when nothing differs.
   - The group's policy classifies each command by the strictest of its targets' revisions
     (critical/hazardous if any is, the highest significance, the strictest release hint), not by
     whichever target came first.
@@ -229,7 +238,9 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   `awaiting_me=true` (Approve queue: pending, not mine, and I'm the named approver or none was
   named), `mine=true`, `operation_id=` (returns 0 or 1 groups).
   Rows: `{id, state, title, requested_by, requested_at, requested_approver_user_id, member_count,
-  target_count, command_count, second_go_required, awaiting_me, operation_id, progress, finished}`.
+  target_count, command_count, second_go_required, awaiting_me, operation_id, priority, progress,
+  finished}`. `priority` (U68): the group's release priority, 0..9 (default 3); lower releases
+  sooner, only within one target's queue lane.
 - `state` is the approval lifecycle only. A group stays `queued` after delivery. Delivery is in
   `progress` (`{stage: target count}`, same as show) and `finished` (`true` when every target is at
   a final stage: `verified | no_verifier | verify_failed | release_failed | canceled | rejected |
@@ -238,8 +249,9 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   Released tab = `queued` and not `finished` (qa #28).
 - Show adds `review_token` (send it back on decisions), `log_entry`, `sent_back_from`,
   `target_query`, `commands[] {position, command_id, name, significance, critical, hazardous,
-  argument_values_json, verifier_groups}` (`verifier_groups` as preflight's U51, from each
-  member's stored pinned revision; rejected or excluded members in no group), `release`,
+  argument_values_json, verifier_groups, resolved_arguments}` (`verifier_groups` as preflight's
+  U51 and `resolved_arguments` as preflight's U68 R1, from each member's stored values and pinned
+  revision; rejected or excluded members in no group or row), `release`,
   `policy`, `decision`, `decided_by/at`, `aborted_by/at`,
   `abort_reason`, `abort_result`, `progress` (`{stage: target count}`), `finished` (always a
   boolean on show), `events[] {id, kind, actor, at, payload}` (see Timeline events below),

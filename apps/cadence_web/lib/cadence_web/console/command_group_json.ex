@@ -46,9 +46,10 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
     group = view.group
 
     groups = Map.get(view, :verifier_groups, %{})
+    resolved = Map.get(view, :resolved_arguments, %{})
 
     view
-    |> Map.drop([:group, :verifier_groups])
+    |> Map.drop([:group, :verifier_groups, :resolved_arguments])
     |> Map.merge(%{
       review_token: GroupDecision.review_token(group),
       log_entry: group.log_entry,
@@ -57,7 +58,9 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
       commands:
         Enum.map(
           group.commands,
-          &Map.put(command(&1), "verifier_groups", Map.get(groups, &1["position"], []))
+          &(command(&1)
+            |> Map.put("verifier_groups", Map.get(groups, &1["position"], []))
+            |> Map.put("resolved_arguments", Map.get(resolved, &1["position"], [])))
         ),
       release: group.release,
       policy: group.policy,

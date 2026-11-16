@@ -21,7 +21,7 @@ defmodule Cadence.Reads.CommandGroups do
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.Reads.{CommandCatalog, Commands}
   alias Cadence.Reads.CommandGroups.ReleaseRefusals
-  alias Cadence.Reads.CommandPreflight.VerifierGroups
+  alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
 
   # Final member stages. `indeterminate` (an uncertain release) isn't: an operator must resolve
   # it, so its group isn't finished (and gets no `completed` event, DECISIONS #51).
@@ -122,7 +122,9 @@ defmodule Cadence.Reads.CommandGroups do
          finished: Enum.all?(targets, &(&1.stage in @finished)),
          events: events,
          # U2: per stacked command, which targets share which verifiers (as Compose's preflight).
-         verifier_groups: VerifierGroups.for_group(org, mission, group, members)
+         verifier_groups: VerifierGroups.for_group(org, mission, group, members),
+         # U68 R1: where the server's values differ from what was entered.
+         resolved_arguments: ResolvedArguments.for_group(org, mission, group, members)
        })}
     end
   end
@@ -186,7 +188,9 @@ defmodule Cadence.Reads.CommandGroups do
       target_count: length(group.targets),
       command_count: length(group.commands),
       second_go_required: group.policy["second_go_required"] == true,
-      operation_id: group.operation_id
+      operation_id: group.operation_id,
+      # U68: the Commands list tags High / Low (0..9, lower releases sooner in its lane).
+      priority: (group.release || %{})["priority"]
     }
   end
 
