@@ -449,7 +449,7 @@ Under `/organizations/:organization_id`, in the organization the path names:
 
 ### Provider accounts (PA1, organization admins)
 
-- `GET /provider-accounts` → `{accounts: [{id, name, provider: {key, label}, status: "connected" |
+- `GET /provider-accounts` → `{accounts: [{id, name, provider: {key, label}, event_ingestion_mode, status: "connected" |
   "credential_revoked" | "not_checked", status_detail, expires_at: null, last_success_at, missions: [{id,
   name}], added_at, added_by: {name} | null}], adapters: [{key, label}], permissions:
   ["provider_accounts.manage"]}`.
@@ -474,15 +474,24 @@ Under `/organizations/:organization_id`, in the organization the path names:
   provider credentials are enabled (development). Elsewhere `env` is refused with
   `details["credential.backend"]`.
 - `GET /provider-adapters/:key/schema` → `{key, fields}`: kind-schema fields `base_url`,
-  `environment_ref`, `region_ref`, `credential.backend`, `credential.key`. There's no secret-value
-  field. `404 provider_adapter_not_found`.
-- `POST /provider-accounts` `{provider_key, name, settings: {base_url, environment_ref, region_ref?},
-  credential: {backend, key}}` → `201 {id, version: 1}`. It registers the reference without
-  calling the provider; use Test afterwards.
+  `environment_ref`, `region_ref`, `event_ingestion_mode` (enum `polling` | `disabled`, default
+  `polling`), `credential.backend`, `credential.key`. There's no secret-value field. `404
+  provider_adapter_not_found`.
+- `POST /provider-accounts` `{provider_key, name, settings: {base_url, environment_ref, region_ref?,
+  event_ingestion_mode?}, credential: {backend, key}}` → `201 {id, version: 1}`. It registers the
+  reference without calling the provider; use Test afterwards.
+- `settings.event_ingestion_mode` (qa L12/L13, 11-16): whether Cadence fetches the provider's
+  contact events. `polling` | `webhook` | `hybrid` | `disabled`; omitted on create, `polling`. An
+  account that is `disabled` (or `webhook`) is never polled. The console offers `polling` and
+  `disabled` only (the schema's enum): webhook and hybrid need the provider set up to post to
+  Cadence, which the console doesn't configure. Anything else: `422
+  details["settings.event_ingestion_mode"]`, before anything is registered. The account row in
+  `GET /provider-accounts` carries `event_ingestion_mode`.
 - `PUT /provider-accounts/:id` `{name?, settings?, credential?}` → `201 {id, version}`. Settings and
-  credential make a new account version (a sent `credential` registers a new reference). A
-  rename alone writes no version (`version: null`); it's presentation, and it's audited. A blank
-  name or one over 120 bytes: `422 details.name`.
+  credential make a new account version (a sent `credential` registers a new reference). Sent
+  settings **merge** onto the current version: `{settings: {event_ingestion_mode: "disabled"}}`
+  alone changes only the mode. A rename alone writes no version (`version: null`); it's
+  presentation, and it's audited. A blank name or one over 120 bytes: `422 details.name`.
 - `DELETE /provider-accounts/:id` (optional `reason`) → `{id, state: "archived"}`. The account
   drops out of the list. While missions use it: `409 in_use` with `details.missions: [{id,
   name}]`. `409 already_retired`.

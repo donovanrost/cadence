@@ -75,6 +75,12 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
     schema = conn.() |> get(base <> "/provider-adapters/simulator/schema") |> json_response(200)
     paths = Enum.map(schema["data"]["fields"], & &1["path"])
     assert "credential.key" in paths and "base_url" in paths
+
+    # The console offers polling or off (ingestion), polling by default.
+    assert %{"type" => "enum", "default" => "polling", "enum" => choices} =
+             Enum.find(schema["data"]["fields"], &(&1["path"] == "event_ingestion_mode"))
+
+    assert Enum.map(choices, & &1["value"]) == ["polling", "disabled"]
     refute Enum.any?(schema["data"]["fields"], &(&1["type"] == "password"))
 
     body = %{
@@ -217,5 +223,96 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
 
     bad = conn.() |> post(base <> "/provider-accounts", Map.delete(body, "credential"))
     assert json_response(bad, 422)["error"]["details"]["credential"]
+  end
+
+  test "event ingestion: set on create, kept by other edits, changed by its own; never polled when disabled" do
+    org = TestFixtures.persist_org!()
+    admin = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(admin, org, role: :organization_admin)
+    base = "/api/console/v1/organizations/#{org.organization_id}"
+    conn = fn -> TestFixtures.member_conn(admin) end
+
+    body = %{
+      "provider_key" => "simulator",
+      "name" => "Quiet sim",
+      "settings" => %{
+        "base_url" => "http://sim.test",
+        "environment_ref" => "run-a",
+        "event_ingestion_mode" => "disabled"
+      },
+      "credential" => %{"backend" => "external", "key" => "providers/sim/quiet"}
+    }
+
+    # An unknown mode is refused on the field, before anything is registered.
+    refused = put_in(body, ["settings", "event_ingestion_mode"], "sometimes")
+
+    assert %{"settings.event_ingestion_mode" => _} =
+             conn.()
+             |> post(base <> "/provider-accounts", refused)
+             |> json_response(422)
+             |> get_in(["error", "details"])
+
+    mode = fn id ->
+      conn.()
+      |> get(base <> "/provider-accounts")
+      |> json_response(200)
+      |> get_in(["data", "accounts"])
+      |> Enum.find(&(&1["id"] == id))
+      |> Map.fetch!("event_ingestion_mode")
+    end
+
+    polled? = fn id ->
+      Enum.any?(
+        Cadence.GroundNetworks.ProviderAccounts.list_polling_accounts(),
+        fn {account, _version} -> account.provider_account_id == id end
+      )
+    end
+
+    assert %{"id" => id} =
+             conn.()
+             |> post(base <> "/provider-accounts", body)
+             |> json_response(201)
+             |> Map.fetch!("data")
+
+    assert mode.(id) == "disabled"
+    refute polled?.(id)
+
+    # Another setting's edit keeps the mode (a new version merges onto the current one).
+    conn.()
+    |> put(base <> "/provider-accounts/" <> id, %{"settings" => %{"region_ref" => "eu"}})
+    |> json_response(201)
+
+    assert mode.(id) == "disabled"
+
+    assert %{"version" => 3} =
+             conn.()
+             |> put(base <> "/provider-accounts/" <> id, %{
+               "settings" => %{"event_ingestion_mode" => "polling"}
+             })
+             |> json_response(201)
+             |> Map.fetch!("data")
+
+    assert mode.(id) == "polling"
+    assert polled?.(id)
+
+    assert %{"settings.event_ingestion_mode" => _} =
+             conn.()
+             |> put(base <> "/provider-accounts/" <> id, %{
+               "settings" => %{"event_ingestion_mode" => 1}
+             })
+             |> json_response(422)
+             |> get_in(["error", "details"])
+
+    # Without the setting, a create polls, as before.
+    {_, plain} = pop_in(body, ["settings", "event_ingestion_mode"])
+    plain = put_in(plain, ["credential", "key"], "providers/sim/plain")
+
+    assert %{"id" => plain_id} =
+             conn.()
+             |> post(base <> "/provider-accounts", plain)
+             |> json_response(201)
+             |> Map.fetch!("data")
+
+    assert mode.(plain_id) == "polling"
   end
 end

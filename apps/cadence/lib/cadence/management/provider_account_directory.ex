@@ -91,6 +91,8 @@ defmodule Cadence.Management.ProviderAccountDirectory do
       id: account.provider_account_id,
       name: account.display_name,
       provider: %{key: version.provider_type, label: label(version.provider_type)},
+      # polling | webhook | hybrid | disabled: whether Cadence polls the provider for events.
+      event_ingestion_mode: version.event_ingestion_mode,
       status: status(account),
       status_detail: detail(account),
       expires_at: nil,

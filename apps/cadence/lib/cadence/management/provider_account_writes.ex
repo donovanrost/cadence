@@ -13,6 +13,9 @@ defmodule Cadence.Management.ProviderAccountWrites do
   alias Cadence.Secrets.{EnvBackend, ResolverConfiguration}
 
   @backends %{"external" => :external, "env" => :env}
+  # ProviderAccountVersion's modes, as the API sends them.
+  @ingestion_modes ~w(polling webhook hybrid disabled)
+  @mode_help "Use polling, webhook, hybrid or disabled."
 
   @doc "The add/edit form for an adapter (kind-schema fields)."
   @spec schema(binary()) :: {:ok, [map()]} | {:error, :provider_adapter_not_found}
@@ -31,14 +34,13 @@ defmodule Cadence.Management.ProviderAccountWrites do
     # leaves nothing behind.
     with {:ok, name} <- create_name(params["name"]),
          :ok <- base_url(params["settings"]),
+         {:ok, settings} <- settings(params),
          {:ok, provider_type} <- provider_type(params["provider_key"]),
          {:ok, credential_ref} <- register_credential(scope, account_id, params["credential"]),
          {:ok, _account, version} <-
            ProviderAccounts.create(
              scope,
-             params
-             |> settings()
-             |> Map.merge(%{
+             Map.merge(settings, %{
                provider_account_id: account_id,
                display_name: name,
                provider_type: provider_type,
@@ -61,8 +63,9 @@ defmodule Cadence.Management.ProviderAccountWrites do
       do: {:ok, %{id: account_id, version: nil}}
 
   def update(%Scope{} = scope, account_id, params) do
-    with {:ok, credential} <- maybe_credential(scope, account_id, params["credential"]),
-         attrs = params |> settings() |> Map.merge(credential),
+    with {:ok, settings} <- settings(params),
+         {:ok, credential} <- maybe_credential(scope, account_id, params["credential"]),
+         attrs = Map.merge(settings, credential),
          {:ok, _account, version} <-
            ProviderAccounts.version(scope, account_id, attrs, validate_credential?: false) do
       {:ok, %{id: account_id, version: version.version}}
@@ -77,6 +80,25 @@ defmodule Cadence.Management.ProviderAccountWrites do
         help: "The provider's environment, for example production."
       ),
       text("region_ref", "Region"),
+      # The console offers polling or off; webhook and hybrid need the provider set up to post to
+      # Cadence, which the console doesn't configure (the API still takes them). Words: ux.
+      %{
+        path: "event_ingestion_mode",
+        label: "Contact events",
+        type: :enum,
+        enum: [
+          %{value: "polling", label: "Fetch from the provider"},
+          %{value: "disabled", label: "Off"}
+        ],
+        required: true,
+        default: "polling",
+        unit: nil,
+        range: nil,
+        help:
+          "Whether Cadence asks the provider for contact events. Turn it off for an account " <>
+            "you only test with.",
+        visible_when: nil
+      },
       %{
         path: "credential.backend",
         label: "Credential stored in",
@@ -135,17 +157,31 @@ defmodule Cadence.Management.ProviderAccountWrites do
 
   defp base_url(_settings), do: {:error, :invalid_provider_account_base_url}
 
+  # The settings a version takes from the request. `event_ingestion_mode` is one of the account's
+  # modes (ProviderAccountVersion); absent, a create polls and an update keeps the current mode.
   defp settings(params) do
     settings = params["settings"] || %{}
 
-    [:base_url, :environment_ref, :region_ref]
-    |> Enum.flat_map(fn key ->
-      case Map.fetch(settings, Atom.to_string(key)) do
-        {:ok, value} -> [{key, value}]
-        :error -> []
-      end
-    end)
-    |> Map.new()
+    taken =
+      [:base_url, :environment_ref, :region_ref, :event_ingestion_mode]
+      |> Enum.flat_map(fn key ->
+        case Map.fetch(settings, Atom.to_string(key)) do
+          {:ok, value} -> [{key, value}]
+          :error -> []
+        end
+      end)
+      |> Map.new()
+
+    case Map.fetch(taken, :event_ingestion_mode) do
+      :error ->
+        {:ok, taken}
+
+      {:ok, mode} when mode in @ingestion_modes ->
+        {:ok, taken}
+
+      {:ok, _other} ->
+        {:error, {:invalid_params, %{"settings.event_ingestion_mode" => @mode_help}}}
+    end
   end
 
   defp maybe_credential(_scope, _account_id, nil), do: {:ok, %{}}
