@@ -59,3 +59,25 @@ export function latestRows(data: readonly SeriesData[]) {
     };
   });
 }
+
+/**
+ * D11 (ux, §11c(D)): a capped history read (api: the fallback store keeps the EARLIEST 20,000 raw
+ * samples) covers the read's start to its last bucket's end. With several series cut, the plot is
+ * complete only up to the earliest such end. Null when no series was cut.
+ */
+export function cappedLine(rows: readonly SeriesData[]): string | null {
+  const cut = rows.filter((r) => r.history.truncated);
+  if (cut.length === 0) return null;
+  const from = Math.min(...cut.map((r) => Date.parse(r.history.from)));
+  const end = Math.min(
+    ...cut.map((r) => {
+      const last = r.history.buckets.at(-1);
+      return last ? Date.parse(last.t_end) : Date.parse(r.history.from);
+    }),
+  );
+  const iso = (t: number) => new Date(t).toISOString();
+  const days = iso(from).slice(0, 10) !== iso(end).slice(0, 10);
+  const at = (t: number) => `${days ? `${iso(t).slice(5, 10)} ` : ""}${iso(t).slice(11, 16)}Z`;
+  const endTime = `${iso(end).slice(11, 16)}Z`;
+  return `This range has more samples than one read returns (20,000). The plot shows ${at(from)} to ${at(end)}; samples after ${days ? at(end) : endTime} weren't read. Pick a shorter or later range to see the rest.`;
+}

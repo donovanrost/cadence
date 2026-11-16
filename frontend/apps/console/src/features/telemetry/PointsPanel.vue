@@ -72,6 +72,10 @@ const search = useRemoteQuery(
 const latestText = (p: TelemetryPoint) =>
   p.latest ? (withUnit(formatValue(p.latest.value), p.unit) ?? "—") : "No recent value";
 
+/** D12: the screen asks for a spacecraft by focusing the picker. */
+const scPicker = ref<HTMLElement | null>(null);
+defineExpose({ focusSpacecraft: () => scPicker.value?.querySelector("select")?.focus() });
+
 const manual = ref("");
 function addManual() {
   const id = manual.value.trim();
@@ -83,14 +87,16 @@ function addManual() {
 <template>
   <ApPanel index="T1" title="Points" pane flush>
     <div class="flex flex-col gap-3 p-4">
-      <ApSelect
-        :model-value="pick"
-        label="Add spacecraft"
-        hidden-label
-        size="compact"
-        :options="scOptions"
-        @update:model-value="onPick"
-      />
+      <div ref="scPicker" class="contents">
+        <ApSelect
+          :model-value="pick"
+          label="Add spacecraft"
+          hidden-label
+          size="compact"
+          :options="scOptions"
+          @update:model-value="onPick"
+        />
+      </div>
       <ApField v-model="q" label="Search points" type="search" placeholder="Name or description" />
       <div v-if="scids.length" class="flex flex-wrap gap-1.5">
         <ApChip

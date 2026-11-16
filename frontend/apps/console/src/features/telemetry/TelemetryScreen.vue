@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
@@ -83,6 +83,16 @@ const view = computed(() => {
   const i = intervals.state.value;
   return s.status === "ready" ? plotView(s.value, i.status === "ready" ? i.value : null) : null;
 });
+/** D12 (ux): points with no spacecraft (a redirected bookmark) ask for one, focus on the picker. */
+const noSc = computed(() => (selection.value.scids.length === 0 ? selection.value.points : []));
+const points = ref<{ focusSpacecraft: () => void } | null>(null);
+watch(
+  () => noSc.value.length > 0 && fleet.state.value.status === "ready",
+  (ask) => {
+    if (ask) points.value?.focusSpacecraft();
+  },
+  { flush: "post", immediate: true },
+);
 const rows = computed(() =>
   data.state.value.status === "ready" ? latestRows(data.state.value.value) : [],
 );
@@ -97,6 +107,7 @@ const rows = computed(() =>
         class="grid grid-cols-1 gap-3 console:min-h-0 console:flex-1 console:grid-cols-[320px_minmax(0,1fr)]"
       >
         <PointsPanel
+          ref="points"
           class="max-console:min-h-[320px]"
           :fleet="fleetRows"
           :scids="selection.scids"
@@ -116,7 +127,10 @@ const rows = computed(() =>
             :empty="picked.series.length === 0"
             :dropped="picked.dropped"
             :suggested="recent.suggested.value"
+            :points-without-sc="noSc"
+            :refresh-failed="data.refreshFailed.value"
             @retry="data.refetch"
+            @pick-sc="points?.focusSpacecraft()"
             @suggest="
               (r) =>
                 update({

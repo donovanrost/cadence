@@ -1,8 +1,9 @@
-import { computed, onScopeDispose, type Ref } from "vue";
+import { computed, onScopeDispose, shallowRef, watch, type Ref } from "vue";
 import {
   useRemoteQuery,
   type ApiResult,
   type MissionId,
+  type RemoteState,
   type Scid,
   type SpacecraftId,
 } from "@/api/index.ts";
@@ -13,6 +14,9 @@ import type { SeriesKey } from "./selection.ts";
 import { resolveWindow, type WindowSel } from "./window.ts";
 
 export type SeriesData = Readonly<{ key: SeriesKey; sc: FleetSpacecraft; history: History }>;
+
+/** A re-read failed while an earlier read of the same selection is still shown (ux, §11c(D)). */
+export type RefreshFailed = Readonly<{ at: Date; readAt: Date }>;
 
 type Request = Readonly<{
   m: MissionId;
@@ -61,5 +65,32 @@ export function useSeries(
   const throttled = throttle(query.refetch, FLEET_TELEMETRY_GAP_MS);
   useMissionInvalidation(missionId, ["telemetry"], throttled.call);
   onScopeDispose(throttled.cancel);
-  return query;
+
+  /**
+   * A failed re-read keeps the last plot of the SAME selection (ux U78-D: "Couldn't refresh at
+   * …; showing data read at …" + Try again) instead of dropping it; a new selection starts over.
+   */
+  const last = shallowRef<Extract<RemoteState<SeriesData[]>, { status: "ready" }> | null>(null);
+  const failedAt = shallowRef<Date | null>(null);
+  watch(
+    () => JSON.stringify(key.value),
+    () => {
+      last.value = null;
+      failedAt.value = null;
+    },
+  );
+  watch(query.state, (s) => {
+    if (s.status === "ready") {
+      last.value = s;
+      failedAt.value = null;
+    } else if (s.status === "failed" && last.value) failedAt.value = new Date();
+  });
+  const state = computed((): RemoteState<SeriesData[]> => {
+    const s = query.state.value;
+    return s.status === "failed" && last.value ? last.value : s;
+  });
+  const refreshFailed = computed((): RefreshFailed | null =>
+    failedAt.value && last.value ? { at: failedAt.value, readAt: last.value.receivedAt } : null,
+  );
+  return { state, refreshFailed, refetch: query.refetch };
 }

@@ -3,7 +3,7 @@ import { spacecraftId as spacecraftIdReader, scid as scidReader, decode } from "
 import { latestMark, pointsReader } from "./api.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { History } from "@/features/investigate/index.ts";
-import { latestRows, plotView } from "./plot.ts";
+import { cappedLine, latestRows, plotView } from "./plot.ts";
 import { MAX_SERIES, parseSelection, selectionQuery, seriesOf, STYLES } from "./selection.ts";
 import type { SeriesData } from "./useSeries.ts";
 import { parseWindow, resolveWindow, windowFromRange, windowQuery } from "./window.ts";
@@ -152,5 +152,25 @@ describe("M23 latest.source (551cb796, b8181eb9)", () => {
     expect(latestMark(latest("nominal", "live"))).toBe("nominal");
     expect(latestMark(latest("nominal"))).toBe("nominal");
     expect(latestMark(null)).toBe("stale");
+  });
+});
+
+describe("capped history line (D11, ux)", () => {
+  const cut = (buckets: [string, number][], from = "2026-11-08T09:00:00Z"): SeriesData => {
+    const d = data(1, buckets);
+    return { ...d, history: { ...d.history, from, truncated: true } };
+  };
+  it("names the part shown: the read's start to its last bucket's end, earliest cut wins", () => {
+    expect(cappedLine([data(1, [["2026-11-08T09:00:00Z", 1]])])).toBeNull();
+    expect(
+      cappedLine([cut([["2026-11-08T10:12:00Z", 1]]), cut([["2026-11-08T11:00:00Z", 1]])]),
+    ).toBe(
+      "This range has more samples than one read returns (20,000). The plot shows 09:00Z to 10:12Z; samples after 10:12Z weren't read. Pick a shorter or later range to see the rest.",
+    );
+  });
+  it("adds dates when the shown span crosses days", () => {
+    expect(cappedLine([cut([["2026-11-16T03:12:00Z", 1]], "2026-11-15T22:00:00Z")])).toBe(
+      "This range has more samples than one read returns (20,000). The plot shows 11-15 22:00Z to 11-16 03:12Z; samples after 11-16 03:12Z weren't read. Pick a shorter or later range to see the rest.",
+    );
   });
 });
