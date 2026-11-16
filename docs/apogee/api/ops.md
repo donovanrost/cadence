@@ -713,6 +713,18 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
   has none): the producing record's own fields for the detail panel. `status` and
   `source_record.kind` are the producing store's words (Technical details, shown as said).
 - Older events (A9d): pass `meta.next_cursor` as `?cursor=`; `null` = nothing older in the window.
+- U69 A9b `raw_kind=`: a comma list (at most 20) of exact raw kinds (`command_released`) or
+  prefixes ending in `*` (`command_*`); it ANDs with `kind=`. Same on `/events/density`, so the bar
+  matches the list. An exact-only list filters in the database; with a prefix, the filter runs per
+  fetched page (like `kind`), so keep following `next_cursor`. A bad item → `422 invalid_params`
+  (`details.raw_kind`).
+
+## `GET /api/console/v1/missions/:mission_id/events/raw-kinds?from&to` (U69 A9b picker, owner: api)
+
+`{"data": {"from", "to", "raw_kinds": [{"raw_kind": "command_released", "kind": "command", "count": 12}]}}`:
+every raw kind in the window with its console `kind` and how many events, most frequent first.
+Counted like `/events/density` (no rows loaded), plus the merged configuration revisions and
+off-plan bookings. Window at most 31 days (default the last day).
 
 ## `GET /api/console/v1/missions/:mission_id/events/:event_id` (U69 A8b, owner: api)
 

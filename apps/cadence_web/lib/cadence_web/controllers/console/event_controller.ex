@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.EventController do
   use CadenceWeb, :controller
 
   alias Cadence.Reads.EventLog
+  alias Cadence.Reads.EventLog.RawKinds
   alias CadenceWeb.Console.{ConfigJSON, Problem, WindowParams}
 
   @day_s 86_400
@@ -14,6 +15,7 @@ defmodule CadenceWeb.Console.EventController do
   def index(conn, params) do
     with {:ok, window} <- WindowParams.parse(params, default_span_s: @day_s, max_span_s: nil),
          {:ok, kinds} <- kinds(params["kind"]),
+         {:ok, raw_kinds} <- raw_kinds(params["raw_kind"]),
          {:ok, limit} <- int(params["limit"], :limit, 200, 1..500),
          {:ok, plane} <- int(params["plane"], :plane, nil, 0..10_000),
          {:ok, page} <-
@@ -23,6 +25,7 @@ defmodule CadenceWeb.Console.EventController do
              spacecraft_id: window.spacecraft_id,
              plane: plane,
              kinds: kinds,
+             raw_kinds: raw_kinds,
              limit: limit,
              cursor: params["cursor"]
            }) do
@@ -39,6 +42,7 @@ defmodule CadenceWeb.Console.EventController do
     with {:ok, window} <-
            WindowParams.parse(params, default_span_s: @day_s, max_span_s: 31 * @day_s),
          {:ok, kinds} <- kinds(params["kind"]),
+         {:ok, raw_kinds} <- raw_kinds(params["raw_kind"]),
          {:ok, bucket_s} <- int(params["bucket_s"], :bucket_s, default_bucket(window), 60..@day_s),
          {:ok, plane} <- int(params["plane"], :plane, nil, 0..10_000) do
       density =
@@ -48,12 +52,35 @@ defmodule CadenceWeb.Console.EventController do
           spacecraft_id: window.spacecraft_id,
           plane: plane,
           kinds: kinds,
+          raw_kinds: raw_kinds,
           bucket_s: bucket_s
         })
 
       json(conn, %{data: ConfigJSON.encode(density)})
     else
       error -> error(conn, error)
+    end
+  end
+
+  @doc "U69 A9b: the raw kinds in the window with their console kind and count (a picker)."
+  def raw_kind_list(conn, params) do
+    case WindowParams.parse(params, default_span_s: @day_s, max_span_s: 31 * @day_s) do
+      {:ok, window} ->
+        kinds = RawKinds.list(org_id(conn), mission_id(conn), window.from, window.to)
+
+        json(conn, %{
+          data: ConfigJSON.encode(%{from: window.from, to: window.to, raw_kinds: kinds})
+        })
+
+      error ->
+        error(conn, error)
+    end
+  end
+
+  defp raw_kinds(value) do
+    case RawKinds.parse(value) do
+      {:ok, patterns} -> {:ok, patterns}
+      {:error, message} -> {:error, {:invalid_params, %{raw_kind: message}}}
     end
   end
 

@@ -19,7 +19,7 @@ defmodule Cadence.Reads.EventLog do
 
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Reads.EventLog.ById
+  alias Cadence.Reads.EventLog.{ById, RawKinds}
   alias Cadence.Reads.EventLog.DensityCounts, as: EventDensityCounts
 
   alias Cadence.Reads.{
@@ -43,7 +43,7 @@ defmodule Cadence.Reads.EventLog do
   @doc """
   Options: `:from`, `:to`, `:spacecraft_id`, `:plane` (the spacecraft in that orbital plane,
   from spacecraft metadata; with `:spacecraft_id`, only that one if it's in the plane), `:kinds`
-  (console kinds), `:limit`, `:cursor`.
+  (console kinds), `:raw_kinds` (`EventLog.RawKinds` patterns), `:limit`, `:cursor`.
   """
   @spec page(binary(), binary(), map()) :: {:ok, map()} | {:error, :invalid_cursor}
   def page(organization_id, mission_id, opts) do
@@ -93,11 +93,19 @@ defmodule Cadence.Reads.EventLog do
         config_revisions: true,
         off_plan_bookings: true,
         exclude_housekeeping: skip_housekeeping?(opts[:kinds]),
+        # U69 A9b: exact raw kinds filter in SQL; prefixes per page, above.
+        kind: RawKinds.exact(opts[:raw_kinds]),
         limit: remaining,
         cursor: cursor
       )
 
-    selected = Enum.filter(page.entries, &kind_selected?(%{kind: kind(&1)}, opts[:kinds]))
+    selected =
+      Enum.filter(
+        page.entries,
+        &(kind_selected?(%{kind: kind(&1)}, opts[:kinds]) and
+            RawKinds.selected?(&1.kind, opts[:raw_kinds]))
+      )
+
     acc = acc ++ selected
 
     case page.next_cursor do
@@ -148,7 +156,9 @@ defmodule Cadence.Reads.EventLog do
       entries
       |> Enum.map(&event(&1, @no_names))
       |> dedupe()
-      |> Enum.filter(&kind_selected?(&1, opts[:kinds]))
+      |> Enum.filter(
+        &(kind_selected?(&1, opts[:kinds]) and RawKinds.selected?(&1.raw_kind, opts[:raw_kinds]))
+      )
       |> Enum.group_by(fn event -> div(DateTime.to_unix(event.at) - origin, opts.bucket_s) end)
 
     buckets =

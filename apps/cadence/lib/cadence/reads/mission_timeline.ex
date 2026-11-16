@@ -280,7 +280,7 @@ defmodule Cadence.Reads.MissionTimeline do
   defp atom_matches?(_value, nil), do: true
 
   defp atom_matches?(value, expected) do
-    Atom.to_string(value) in Enum.map(List.wrap(expected), &to_string/1)
+    to_string(value) in Enum.map(List.wrap(expected), &to_string/1)
   end
 
   defp value_matches?(_value, nil), do: true

@@ -74,6 +74,64 @@ defmodule CadenceWeb.Console.EventAPITest do
     assert body["error"]["code"] == "event_not_found"
   end
 
+  test "raw_kind filters the page and the bar; the picker counts raw kinds (A9b)", c do
+    all =
+      c |> get_json("/events?" <> window()) |> json_response(200) |> get_in(["data", "events"])
+
+    [%{"raw_kind" => raw} | _] = all
+    expected = Enum.count(all, &(&1["raw_kind"] == raw))
+
+    exact =
+      c
+      |> get_json("/events?#{window()}&raw_kind=#{raw}")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+
+    assert length(exact) == expected and Enum.all?(exact, &(&1["raw_kind"] == raw))
+
+    prefix = String.slice(raw, 0, 3) <> "*"
+
+    by_prefix =
+      c
+      |> get_json("/events?#{window()}&raw_kind=#{prefix}")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+
+    assert Enum.all?(by_prefix, &String.starts_with?(&1["raw_kind"], String.slice(raw, 0, 3)))
+    assert length(by_prefix) >= expected
+
+    bar =
+      c
+      |> get_json("/events/density?#{window()}&raw_kind=#{raw}")
+      |> json_response(200)
+      |> get_in(["data", "buckets"])
+
+    assert bar
+           |> Enum.map(&(&1["critical"] + &1["caution"] + &1["nominal"] + &1["info"]))
+           |> Enum.sum() ==
+             expected
+
+    picker =
+      c
+      |> get_json("/events/raw-kinds?" <> window())
+      |> json_response(200)
+      |> get_in(["data", "raw_kinds"])
+
+    assert %{"count" => count, "kind" => kind} = Enum.find(picker, &(&1["raw_kind"] == raw))
+
+    assert count == expected and
+             kind in ~w(limit flight_event contact command config operator data)
+
+    for bad <- ["Bad-Kind", "a*b", Enum.map_join(1..21, ",", &"k#{&1}")] do
+      body =
+        c
+        |> get_json("/events?#{window()}&raw_kind=" <> URI.encode_www_form(bad))
+        |> json_response(422)
+
+      assert %{"raw_kind" => _} = body["error"]["details"]
+    end
+  end
+
   test "ground health is data and limit-definition lifecycle is config, never flight_event", c do
     now = DateTime.utc_now()
 

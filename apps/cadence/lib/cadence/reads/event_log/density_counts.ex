@@ -8,6 +8,7 @@ defmodule Cadence.Reads.EventLog.DensityCounts do
 
   alias Cadence.MissionEvents.Entry
   alias Cadence.Reads.{ConfigRevisionEvents, EventDensity, EventLog, OffPlanBookingEvents}
+  alias Cadence.Reads.EventLog.RawKinds
 
   @spec density(binary(), binary(), map()) :: map()
   def density(organization_id, mission_id, opts) do
@@ -22,19 +23,21 @@ defmodule Cadence.Reads.EventLog.DensityCounts do
         opts.bucket_s,
         EventLog.skip_housekeeping?(opts[:kinds])
       )
-      |> Enum.map(fn group -> {group.bucket, classify(group), group.count} end)
+      |> Enum.map(fn group -> {group.bucket, classify(group), group.count, group.kind} end)
 
     extras =
       organization_id
       |> extra_entries(mission_id, opts)
       |> Enum.map(fn entry ->
         {div(DateTime.to_unix(entry.occurred_at) - origin, opts.bucket_s),
-         EventLog.classify_entry(entry), 1}
+         EventLog.classify_entry(entry), 1, to_string(entry.kind)}
       end)
 
     buckets =
       (counted ++ extras)
-      |> Enum.filter(fn {_bucket, {kind, _severity}, _count} -> selected?(kind, opts[:kinds]) end)
+      |> Enum.filter(fn {_bucket, {kind, _severity}, _count, raw} ->
+        selected?(kind, opts[:kinds]) and RawKinds.selected?(raw, opts[:raw_kinds])
+      end)
       |> Enum.group_by(&elem(&1, 0))
       |> Enum.sort_by(&elem(&1, 0))
       |> Enum.map(fn {index, rows} -> bucket(origin + index * opts.bucket_s, rows) end)
@@ -44,7 +47,7 @@ defmodule Cadence.Reads.EventLog.DensityCounts do
 
   defp bucket(at, rows) do
     totals =
-      Enum.reduce(rows, %{}, fn {_bucket, {_kind, severity}, count}, acc ->
+      Enum.reduce(rows, %{}, fn {_bucket, {_kind, severity}, count, _raw}, acc ->
         Map.update(acc, severity, count, &(&1 + count))
       end)
 
@@ -58,12 +61,13 @@ defmodule Cadence.Reads.EventLog.DensityCounts do
   end
 
   # A watermark retreat's severity comes from its sentence (caution with a replay or late data).
-  defp classify(%{kind: "source_watermark_retreated", retreat_reason: reason} = group) do
+  @doc false
+  def classify(%{kind: "source_watermark_retreated", retreat_reason: reason} = group) do
     {kind, _severity} = EventLog.classify_entry(entry(group))
     {kind, if(reason, do: :caution, else: :info)}
   end
 
-  defp classify(group), do: EventLog.classify_entry(entry(group))
+  def classify(group), do: EventLog.classify_entry(entry(group))
 
   defp entry(group) do
     %Entry{
