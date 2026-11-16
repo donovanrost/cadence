@@ -59,11 +59,14 @@ export function throttle(run: () => void, gapMs: number, clock: () => number = D
  * comes from the opt-in `fleet` push (full snapshot, then deltas) and GET /fleet is only the
  * first paint and the fallback: on a seq gap or inconsistent delta it resubscribes, and while the
  * socket is down it polls. Overlays that open over a screen (the palette) pass `live: false` so
- * closing them doesn't unsubscribe the screen underneath.
+ * closing them doesn't unsubscribe the screen underneath. `freshnessGapMs` spaces the refetches
+ * that telemetry hints cause (default FLEET_TELEMETRY_GAP_MS): an always-mounted reader that only
+ * needs counts, like the top bar's posture, passes a longer gap (lead 11-16, until a counts-only
+ * read exists). State hints keep FLEET_REFETCH_GAP_MS.
  */
 export function useFleet(
   missionId: Readonly<Ref<MissionId | null>>,
-  options: Readonly<{ live?: boolean }> = {},
+  options: Readonly<{ live?: boolean; freshnessGapMs?: number }> = {},
 ): FleetHandle {
   const query = useRemoteQuery(missionId, (id, signal) => fetchFleet(id, signal));
   const pushed = shallowRef<{ fleet: Fleet; seq: number; at: Date } | null>(null);
@@ -79,7 +82,7 @@ export function useFleet(
     ["alarms", "limits", "spacecraft", "commanding"],
     refetchUnlessLive,
   );
-  const telemetry = throttle(refetchUnlessLive, FLEET_TELEMETRY_GAP_MS);
+  const telemetry = throttle(refetchUnlessLive, options.freshnessGapMs ?? FLEET_TELEMETRY_GAP_MS);
   useMissionInvalidation(missionId, ["telemetry"], telemetry.call);
 
   if (options.live !== false) {

@@ -25,6 +25,9 @@ export type PostureInput = Readonly<{
   limits: Readonly<{ configured: boolean }>;
 }>;
 
+/** How often telemetry hints may refresh the posture's fleet read (lead 11-16). */
+export const POSTURE_FRESHNESS_GAP_MS = 60_000;
+
 const alarms: RouteLocationRaw = { name: "ops.alarms" };
 
 export function postureChips({ counts, limits }: PostureInput): PostureChip[] {

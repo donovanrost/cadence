@@ -5,7 +5,7 @@ import { useFleet } from "../useFleet.ts";
 import { useConnection } from "@/live";
 import { useMissionScope } from "@/shell";
 import { ApStatusMark, formatHourMinute, stateTextClass } from "@/ui";
-import { postureChips } from "./posture.ts";
+import { POSTURE_FRESHNESS_GAP_MS, postureChips } from "./posture.ts";
 
 /**
  * The top bar's fleet posture (ux information-architecture.md §Top bar, ca31e877a). It replaces
@@ -18,10 +18,13 @@ import { postureChips } from "./posture.ts";
  * - Changes aren't announced; a new crit flashes its chip once (no flash with reduced motion).
  */
 const scope = useMissionScope();
-// live: false. The fleet push is per screen; this cluster refetches on the mission's invalidations.
+// live: false: the fleet push is per screen, so this cluster refetches on the mission's hints.
+// It's on every screen and the read is ~300 KB, so telemetry hints refresh it at most once a
+// minute; the stale count may lag up to 60 s (lead). State hints still refetch within 2 s.
+// When api's counts-only posture read lands, read that instead.
 const fleet = useFleet(
   computed(() => scope.value.mission.id),
-  { live: false },
+  { live: false, freshnessGapMs: POSTURE_FRESHNESS_GAP_MS },
 );
 const connection = useConnection();
 const ready = computed(() =>
