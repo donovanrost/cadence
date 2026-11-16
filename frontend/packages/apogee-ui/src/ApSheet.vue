@@ -14,7 +14,8 @@ import { useScrollable } from "./lib/scrollable.ts";
  * Below 768px (design-language §9) every sheet is full-height, edge to edge at 100dvh so it shrinks
  * with the on-screen keyboard: the title row (with a close ✕) pinned on top, the action row (full
  * width, 48px) pinned above the safe area, only the body scrolling between them. A side sheet is
- * modal there (the page can't sit beside it), so it traps focus and takes aria-modal.
+ * modal there (the page can't sit beside it), so it traps focus and takes aria-modal. A long title
+ * wraps on desktop and clamps to two lines on a phone, never a one-line ellipsis (lead).
  */
 const props = withDefaults(
   defineProps<{
@@ -99,11 +100,11 @@ defineExpose({ open, close });
     @keydown="onKeydown"
   >
     <header
-      class="flex flex-none items-center gap-3 px-5 pt-5 max-md:h-12 max-md:border-b max-md:border-hairline max-md:py-0 max-md:pr-0 max-md:pl-4"
+      class="flex flex-none items-center gap-3 px-5 pt-5 max-md:min-h-12 max-md:border-b max-md:border-hairline max-md:py-1 max-md:pr-0 max-md:pl-4"
     >
       <h2
         :id="titleId"
-        class="m-0 min-w-0 truncate font-display text-xl font-semibold tracking-tag uppercase"
+        class="m-0 min-w-0 font-display text-xl font-semibold tracking-tag uppercase max-md:line-clamp-2"
       >
         {{ title }}
       </h2>
