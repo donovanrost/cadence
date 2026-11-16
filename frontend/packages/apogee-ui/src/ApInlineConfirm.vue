@@ -66,12 +66,19 @@ const self = { cancel: () => cancel(false) };
 
 function start(event: MouseEvent) {
   if (open.value) return;
-  if (openConfirm && openConfirm !== self) openConfirm.cancel();
   trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-  openConfirm = self;
   open.value = true;
 }
+/**
+ * Opened by the trigger slot, or by the caller through v-model:open (e.g. from a ⋯ menu item,
+ * whose menu hands focus back to its ⋯ first): then the focused element is the return target.
+ */
 watch(open, async (now, was) => {
+  if (now && !was) {
+    if (!trigger && document.activeElement instanceof HTMLElement) trigger = document.activeElement;
+    if (openConfirm && openConfirm !== self) openConfirm.cancel();
+    openConfirm = self;
+  }
   await nextTick();
   if (now && !was) {
     const field = panel.value?.querySelector<HTMLElement>("input, textarea, select");
@@ -81,7 +88,10 @@ watch(open, async (now, was) => {
       typeof props.returnFocus === "function" ? props.returnFocus() : props.returnFocus;
     focusFirstConnected(trigger, fallback);
   }
-  if (!now && openConfirm === self) openConfirm = null;
+  if (!now) {
+    if (openConfirm === self) openConfirm = null;
+    trigger = null;
+  }
   restoreFocus = true;
 });
 function cancel(returnFocusToTrigger = true) {

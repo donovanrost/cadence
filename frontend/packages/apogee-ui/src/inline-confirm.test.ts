@@ -112,6 +112,19 @@ describe("ApInlineConfirm (design-language §7)", () => {
     expect(w.find('[role="group"]').exists()).toBe(true);
     expect(active()?.textContent?.trim()).toBe("Cancel");
   });
+  it("opens through v-model too, returning focus to what was focused (a ⋯ menu's trigger)", async () => {
+    const w = host({ keepTrigger: false });
+    const menu = document.createElement("button");
+    menu.textContent = "⋯";
+    document.querySelector("main")?.append(menu);
+    menu.focus();
+    (w.vm as unknown as { open: boolean }).open = true;
+    await flushPromises();
+    expect(active()?.textContent?.trim()).toBe("Cancel");
+    await w.get('[role="group"]').trigger("keydown", { key: "Escape" });
+    await flushPromises();
+    expect(active()).toBe(menu);
+  });
   it("keeps one open at a time: opening another cancels the first without stealing focus back", async () => {
     const a = mount(Host, { attachTo: document.body });
     const b = mount(Host, { attachTo: document.body });
@@ -124,6 +137,8 @@ describe("ApInlineConfirm (design-language §7)", () => {
     expect(b.find('[role="group"]').exists()).toBe(true);
     expect(active()?.textContent?.trim()).toBe("Cancel");
     expect(b.get('[role="group"]').element.contains(active())).toBe(true);
+    // The first's trigger doesn't take focus back when the second closes it (lead).
+    expect(active()).not.toBe(a.get("button[aria-controls]").element);
     a.unmount();
     b.unmount();
   });
