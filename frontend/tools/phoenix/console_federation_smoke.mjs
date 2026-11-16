@@ -233,8 +233,8 @@ await runBrowserGate(
       await record(
         client,
         `(() => {
-          history.pushState(history.state, "", ${JSON.stringify(canary)});
-          dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
+          history.pushState(null, "", ${JSON.stringify(canary)});
+          dispatchEvent(new PopStateEvent("popstate", { state: null }));
           return { ok: true };
         })()`,
         "router navigation to the canary",
