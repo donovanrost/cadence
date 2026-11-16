@@ -240,8 +240,9 @@ Tabs: `General` · `Sharing` · `Activity` · `Diagnostics`.
 - **Present** (takeover, kiosk by default): each dashboard full-screen in turn. A 24px status line reads `PLAYLIST
   · Ops wall · Power overview · 2 of 5 · next in 0:18`, plus health and UTC. Keys: ←/→ step, Space pauses (`PAUSED`), Esc leaves. A
   dashboard that fails to load shows its error for one dwell and the rotation moves on.
-  - **Screen readers** (qa's a11y check b71d635f5): on open, focus goes to the takeover itself (focusable, named
-    "Ops wall playlist"), never to `<body>`. Esc returns focus to the `Present` that opened it.
+  - **Screen readers** (qa's a11y check b71d635f5): on open, Present puts focus on its own h1, the playlist's name
+    in the takeover header (`tabindex=-1`). It doesn't use the shell's `<main>` fallback (fe-ops 2f246c0d2), because
+    that h1 sits outside `<main>`. Esc returns focus to the `Present` that opened it.
   - A polite live region names the dashboard first, then its position. The countdown stays out of it:
 
     | When | Announcement |
