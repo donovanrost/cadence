@@ -25,7 +25,15 @@ const row = (o: Record<string, unknown>): ResolvedArgument => {
 const nameOf = (id: string) => id.replace("sc-", "EARENDIL-");
 
 describe("resolved arguments (ux U68, api R1)", () => {
-  it("words a filled default, a float sent as single precision, and names partial targets", () => {
+  it("compares sent values at the entered value's decimal places (ux a150a527a)", async () => {
+    const { sentDiffers } = await import("./resolved.ts");
+    expect(sentDiffers("0.1", "0.100000001")).toBe(false);
+    expect(sentDiffers("2.50", "2.5")).toBe(false);
+    expect(sentDiffers("16777217", "16777216")).toBe(true);
+    expect(sentDiffers("2.5", "2.6")).toBe(true);
+    expect(sentDiffers('"A"', '"B"')).toBe(true);
+  });
+  it("words a filled default, hides single-precision noise, shows a real change, names targets", () => {
     expect(resolvedLines([row({})], nameOf)).toEqual(["TIMEOUT: default used, 30 s"]);
     expect(
       resolvedLines(
@@ -41,7 +49,22 @@ describe("resolved arguments (ux U68, api R1)", () => {
         ],
         nameOf,
       ),
-    ).toEqual(["VOLTAGE: sent as 0.100000001 V (entered 0.1)"]);
+    ).toEqual([]);
+    expect(
+      resolvedLines(
+        [
+          row({
+            name: "COUNT",
+            entered_value_json: "16777217",
+            resolved_value_json: "16777217",
+            sent_value_json: "16777216",
+            unit: null,
+            source: "entered",
+          }),
+        ],
+        nameOf,
+      ),
+    ).toEqual(["COUNT: sent as 16777216 (entered 16777217)"]);
     expect(
       resolvedLines([row({ source: "fixed", spacecraft_ids: ["sc-004", "sc-009"] })], nameOf),
     ).toEqual(["EARENDIL-004, EARENDIL-009 · TIMEOUT: fixed value used, 30 s"]);

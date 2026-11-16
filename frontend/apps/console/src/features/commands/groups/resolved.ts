@@ -51,6 +51,33 @@ export function resolvedWords(r: ResolvedArgument): string {
   return `${r.name}: sent as ${sent ?? withUnit(r.resolved_value_json, r.unit)} (entered ${shownValue(r.entered_value_json)})`;
 }
 
+const PLAIN = /^-?\d+(?:\.(\d+))?$/;
+/**
+ * ux U68 (a150a527a): 'sent as' shows only when the sent value, rounded to the reference's decimal
+ * places, differs from it. 0.1 sent as 0.100000001 stays silent (single-precision noise would
+ * teach approvers to skip these lines); 16777217 sent as 16777216 shows. Non-plain numbers and
+ * other values compare as text.
+ */
+export function sentDiffers(reference: string, sent: string): boolean {
+  const m = PLAIN.exec(reference);
+  if (!m || !PLAIN.test(sent)) return reference !== sent;
+  const places = m[1]?.length ?? 0;
+  return Number(sent).toFixed(places) !== Number(reference).toFixed(places);
+}
+
+/** The rows worth a line: noise-only sent values dropped, and rows left with nothing to say. */
+export function shownRows(rows: readonly ResolvedArgument[] | undefined): ResolvedArgument[] {
+  return (rows ?? []).flatMap((r) => {
+    const reference = r.entered_value_json ?? r.resolved_value_json;
+    const sent =
+      r.sent_value_json !== null && sentDiffers(reference, r.sent_value_json)
+        ? r.sent_value_json
+        : null;
+    if (r.entered_value_json !== null && sent === null) return [];
+    return [{ ...r, sent_value_json: sent }];
+  });
+}
+
 /** Names for a target list: up to 3, then `and N more`. */
 function targetsText(ids: readonly string[], nameOf: (id: string) => string): string {
   const shown = ids.slice(0, 3).map(nameOf).join(", ");
@@ -62,7 +89,7 @@ export function resolvedLines(
   rows: readonly ResolvedArgument[] | undefined,
   nameOf: (id: string) => string,
 ): string[] {
-  return (rows ?? []).map((r) =>
+  return shownRows(rows).map((r) =>
     r.spacecraft_ids === null
       ? resolvedWords(r)
       : `${targetsText(r.spacecraft_ids, nameOf)} · ${resolvedWords(r)}`,
@@ -78,7 +105,7 @@ export function resolvedCell(
   argName: string,
   spacecraftId: string,
 ): { text: string; entered: string | null } | null {
-  const r = (rows ?? []).find(
+  const r = shownRows(rows).find(
     (x) =>
       x.name === argName && (x.spacecraft_ids === null || x.spacecraft_ids.includes(spacecraftId)),
   );
