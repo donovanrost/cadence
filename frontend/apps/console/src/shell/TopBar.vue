@@ -35,11 +35,8 @@ const placeholder = computed(() =>
 
 <template>
   <header
-    class="flex h-[56px] flex-none flex-nowrap items-stretch border-b border-hairline bg-chrome md:h-auto md:min-h-[52px] md:[&>*:not([data-topbar-flex])]:flex-none"
+    class="flex h-[56px] flex-none flex-nowrap items-stretch border-b border-hairline bg-chrome md:h-auto md:min-h-[52px] md:flex-wrap"
   >
-    <!-- The bar never wraps (ux IA §Top bar, d39a9c150). From 768 every item keeps its width except
-         the query trigger (or the spacer), the one that shrinks; the fleet posture goes compact
-         before anything else gives way. -->
     <MobileHeaderBar v-if="small && mobileHeader" :header="mobileHeader" />
     <template v-else>
       <BrandMark />
@@ -63,7 +60,7 @@ const placeholder = computed(() =>
         class="max-md:hidden"
         :placeholder="placeholder"
       />
-      <div v-else class="flex-1" data-topbar-flex="0" />
+      <div v-else class="flex-1" />
       <LinkStatus />
       <!-- Status from features, composed in App.vue: the fleet posture (both modes, ux IA §Top bar),
            then Setup's config revision. -->

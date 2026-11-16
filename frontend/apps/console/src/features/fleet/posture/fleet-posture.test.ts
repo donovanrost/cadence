@@ -54,33 +54,9 @@ describe("top bar fleet posture (ux IA §Top bar)", () => {
       "3 spacecraft stale",
     ]);
     expect(links[0]?.attributes("title")).toBe("2 spacecraft critical");
-    // Below 1600 (the test viewport) it's compact; the words stay in the name and title.
-    expect(links[0]?.text()).toBe("2");
+    // 768–1279: marks and counts; the word is visual from 1280.
+    expect(links[0]?.get("span.max-xl\\:hidden").text()).toBe("crit");
     expect(w.text()).not.toContain("UTC");
-  });
-  it("from 1600 shows the words beside the counts", () => {
-    vi.stubGlobal("matchMedia", () => ({
-      matches: true,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }));
-    const w = posture();
-    expect(w.get("[data-fleet-posture]").attributes("data-compact")).toBeUndefined();
-    expect(w.findAllComponents(RouterLinkStub)[0]?.text().replace(/\s+/g, "")).toBe("2crit");
-    vi.unstubAllGlobals();
-  });
-  it("below 1600 is compact: counts only, the words in each name and title", () => {
-    vi.stubGlobal("matchMedia", () => ({
-      matches: false,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }));
-    const w = posture();
-    expect(w.get("[data-fleet-posture]").attributes("data-compact")).toBe("true");
-    const links = w.findAllComponents(RouterLinkStub);
-    expect(links[0]?.text()).toBe("2");
-    expect(links[0]?.attributes("aria-label")).toBe("2 spacecraft critical");
-    vi.unstubAllGlobals();
   });
   it("keeps the counts when the live link drops, stale-tinted with 'as of'", async () => {
     const w = posture();

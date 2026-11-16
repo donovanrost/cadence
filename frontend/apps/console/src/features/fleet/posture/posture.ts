@@ -18,8 +18,6 @@ export type PostureChip = Readonly<{
   count: number | null;
   /** The visible word, after the count. */
   word: string;
-  /** Compact (below 1600px, or when the top bar is tight): "" for a counted chip (marks and counts). */
-  short: string;
   /** Accessible name and title: "2 spacecraft critical". */
   label: string;
   to: RouteLocationRaw;
@@ -50,7 +48,6 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
       state: "off",
       count: null,
       word: "Ground limits off",
-      short: "Limits off",
       label: "Ground limits off",
       to: { name: "setup.apps" },
     });
@@ -61,7 +58,6 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
         state: "crit",
         count: counts.critical,
         word: "crit",
-        short: "",
         label: `${counts.critical} spacecraft critical`,
         to: alarms,
       });
@@ -71,7 +67,6 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
         state: "caution",
         count: counts.caution,
         word: "caution",
-        short: "",
         label: `${counts.caution} spacecraft in caution`,
         to: alarms,
       });
@@ -82,7 +77,6 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
       state: "stale",
       count: counts.stale,
       word: "stale",
-      short: "",
       label: `${counts.stale} spacecraft stale`,
       to: { name: "ops.fleet", query: { state: "stale" } },
     });
@@ -93,7 +87,6 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
       state: "off",
       count: none ? null : counts.never_heard,
       word: none ? "No telemetry yet" : "not heard yet",
-      short: none ? "No telemetry yet" : "",
       label: none ? "No telemetry yet" : `${counts.never_heard} spacecraft not heard yet`,
       to: { name: "ops.fleet", query: { state: "never_heard" } },
     });
@@ -104,25 +97,8 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
       state: "nominal",
       count: null,
       word: "Fleet nominal",
-      short: "Nominal",
       label: "Fleet nominal",
       to: { name: "ops.now" },
     });
   return chips;
-}
-
-/** The posture keeps its words from 1600px (ux IA §Top bar, 9c49c76ab). */
-export const POSTURE_WIDE_QUERY = "(min-width: 100rem)";
-
-/**
- * Compact (marks and counts) or words (ux IA §Top bar, d39a9c150). Below 1600 it's always compact.
- * From 1600 the top bar never wraps, so when it overflows the posture goes compact first, before
- * anything else gives way. It returns to words only when the shrinking item (the query trigger,
- * above its minimum) has room for the extra width words need.
- */
-export function postureCompact(
-  s: Readonly<{ wide: boolean; compact: boolean; overflow: boolean; room: number; grow: number }>,
-): boolean {
-  if (!s.wide || s.overflow) return true;
-  return s.compact ? s.room < s.grow : false;
 }
