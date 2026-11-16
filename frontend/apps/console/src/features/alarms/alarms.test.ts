@@ -183,3 +183,29 @@ describe("a full episodes read is never cut silently (parity D3)", () => {
     expect(episodesCapNote(200, null)).toBe("Showing 200 alarms, the most one read returns.");
   });
 });
+
+describe("Alarms header's last change (ux U71 A12)", () => {
+  it("is a sentence: when, what happened, on which spacecraft", async () => {
+    const { lastChangeLine } = await import("./list.ts");
+    const now = new Date("2026-11-16T03:30:00Z");
+    const nameOf = (id: string) => (id === "sc-047" ? "EARENDIL-047" : null);
+    const at = "2026-11-16T02:51:10Z";
+    expect(lastChangeLine({ at, kind: "raised", spacecraft_id: "sc-047" }, nameOf, now)).toBe(
+      "Last change 02:51Z: a new alarm on EARENDIL-047.",
+    );
+    expect(lastChangeLine({ at, kind: "escalated", spacecraft_id: "sc-047" }, nameOf, now)).toBe(
+      "Last change 02:51Z: an alarm on EARENDIL-047 became critical.",
+    );
+    expect(lastChangeLine({ at, kind: "deescalated", spacecraft_id: "sc-047" }, nameOf, now)).toBe(
+      "Last change 02:51Z: an alarm on EARENDIL-047 eased to caution.",
+    );
+    expect(
+      lastChangeLine(
+        { at: "2026-11-15T23:05:00Z", kind: "cleared", spacecraft_id: null },
+        nameOf,
+        now,
+      ),
+    ).toBe("Last change 11-15 23:05Z: an alarm on the mission cleared.");
+    expect(lastChangeLine(null, nameOf, now)).toBeNull();
+  });
+});

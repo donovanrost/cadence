@@ -215,3 +215,41 @@ export function episodesCapNote(shown: number, active: number | null): string | 
     ? `Showing ${shown} of ${active} active alarms. Filter by point to see the rest.`
     : `Showing ${EPISODES_LIMIT} alarms, the most one read returns.`;
 }
+
+/** ux U71 A12: what happened, as a clause: 'a new alarm on X', '… became critical', 'eased to caution'. */
+function changeClause(kind: Readonly<{ unrecognized: string }> | string, on: string): string {
+  if (kind === "raised") return `a new alarm ${on}`;
+  if (kind === "escalated") return `an alarm ${on} became critical`;
+  if (kind === "deescalated") return `an alarm ${on} eased to caution`;
+  if (kind === "cleared") return `an alarm ${on} cleared`;
+  return `an alarm ${on} changed`;
+}
+
+/**
+ * ux U71 A12: the Alarms header's sentence, 'Last change 02:51Z: a new alarm on EARENDIL-047.'
+ * (the date when not today; 'on the mission' without a spacecraft), or null when there's none.
+ */
+export function lastChangeLine(
+  change:
+    | Readonly<{
+        at: string;
+        kind:
+          | Readonly<{ unrecognized: string }>
+          | "raised"
+          | "escalated"
+          | "deescalated"
+          | "cleared";
+        spacecraft_id: string | null;
+      }>
+    | null
+    | undefined,
+  nameOf: (id: string) => string | null,
+  now: Date,
+): string | null {
+  if (!change) return null;
+  const iso = change.at;
+  const today = iso.slice(0, 10) === now.toISOString().slice(0, 10);
+  const when = `${today ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
+  const name = change.spacecraft_id ? nameOf(change.spacecraft_id) : null;
+  return `Last change ${when}: ${changeClause(change.kind, name ? `on ${name}` : "on the mission")}.`;
+}

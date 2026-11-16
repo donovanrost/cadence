@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import {
   plural,
@@ -22,6 +22,7 @@ import {
   alarmRows,
   byPoint,
   groupAlarmRows,
+  lastChangeLine,
   lastClearedLine,
   tabCounts,
   type AlarmTab,
@@ -139,6 +140,29 @@ const shownOf = (episodes: Episodes) =>
     tabRows(episodes).length,
     episodes.length,
   );
+/** ux U69 A6: the header's newest change, mission-wide (filters don't change it). */
+const lastChange = computed(() =>
+  active.state.value.status === "ready"
+    ? lastChangeLine(
+        active.state.value.value.summary.latest_change,
+        (id) => fleetRows.value.find((sc) => sc.id === id)?.name ?? null,
+        now.value,
+      )
+    : null,
+);
+/** ux U71 A12: the sentence links to its episode in Investigate (needs the spacecraft's SCID). */
+const lastChangeTo = computed<RouteLocationRaw | null>(() => {
+  const s = active.state.value;
+  const c = s.status === "ready" ? s.value.summary.latest_change : null;
+  const sc = c?.spacecraft_id ? fleetRows.value.find((x) => x.id === c.spacecraft_id) : null;
+  return c && sc
+    ? {
+        name: "ops.spacecraft",
+        params: { scId: sc.scid, tab: "investigate" },
+        query: { alarm: c.episode_id },
+      }
+    : null;
+});
 /** OpsLists §Alarms empty: "No active alarms. Last cleared 01:12Z on EARENDIL-047." */
 const lastCleared = computed(() =>
   cleared.state.value.status === "ready"
@@ -156,7 +180,17 @@ const empty = computed(() =>
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
-    <ApPageHeader :label="`${scope.mission.name} · alarms`" :title="headline" />
+    <ApPageHeader :label="`${scope.mission.name} · alarms`" :title="headline">
+      <template v-if="lastChange" #subtitle>
+        <RouterLink
+          v-if="lastChangeTo"
+          :to="lastChangeTo"
+          class="font-mono text-sm text-text-3 hover:text-readout"
+          >{{ lastChange }}</RouterLink
+        >
+        <span v-else class="font-mono text-sm text-text-3">{{ lastChange }}</span>
+      </template>
+    </ApPageHeader>
     <ApCallout v-if="limitsOff" tone="off">
       Ground limits aren't configured on this mission, so only live catalog alarms appear.
       <template #action

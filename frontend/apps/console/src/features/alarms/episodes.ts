@@ -70,7 +70,20 @@ export type EpisodeDetail = Decoded<typeof episodeDetail>;
 export const ALARM_PERMISSIONS = ["alarm.acknowledge", "alarm.assign"] as const;
 
 export const episodesReader = d.object({
-  summary: d.object({ active: d.integer }),
+  summary: d.object({
+    active: d.integer,
+    /** U69 A6 (api 7c79147e7): the mission's newest state change; optional until it ships. */
+    latest_change: d.optional(
+      d.nullable(
+        d.object({
+          at: d.timestamp,
+          kind: d.knownText(["raised", "escalated", "deescalated", "cleared"] as const),
+          spacecraft_id: d.nullable(d.token),
+          episode_id: d.token,
+        }),
+      ),
+    ),
+  }),
   permissions: d.array(d.token, 20),
   episodes: d.array(episode, 200),
 });
