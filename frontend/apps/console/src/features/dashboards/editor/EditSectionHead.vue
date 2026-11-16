@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
-import { ApButton, ApCallout } from "@/ui";
+import { computed, ref } from "vue";
+import { ApButton, ApInlineConfirm } from "@/ui";
 import MoreMenu from "../viewer/MoreMenu.vue";
 import type { Command, Outline } from "./contracts.ts";
 
@@ -32,25 +32,15 @@ const widgets = computed(() =>
 );
 
 /**
- * The in-place confirm is a danger decision (a11y A1, A5): it opens on Cancel, never on Remove,
- * and Cancel hands focus back to the ⋯ that opened it.
+ * Remove section… on a non-empty section opens the kit's in-place confirm (design-language §7):
+ * it opens on Cancel, Esc backs out, and focus returns to the ⋯ that opened it.
  */
-const head = ref<HTMLElement | null>(null);
-async function onMenu(id: Action) {
+function onMenu(id: Action) {
   const section_id = props.section.id;
   if (id !== "remove")
     emit("stage", { event: "move_section", input: { section_id, direction: id } });
   else if (props.count === 0) emit("stage", { event: "remove_section", input: { section_id } });
-  else {
-    confirming.value = true;
-    await nextTick();
-    head.value?.querySelector<HTMLElement>("[data-keep-section]")?.focus();
-  }
-}
-async function cancel() {
-  confirming.value = false;
-  await nextTick();
-  head.value?.querySelector<HTMLElement>("[aria-haspopup]")?.focus();
+  else confirming.value = true;
 }
 function remove() {
   confirming.value = false;
@@ -59,7 +49,7 @@ function remove() {
 </script>
 
 <template>
-  <header ref="head" class="flex flex-col gap-1">
+  <header class="flex flex-col gap-1">
     <div class="flex items-center gap-2">
       <!-- tabindex -1: focus lands here when the section above it is removed (ux a11y). -->
       <h2
@@ -76,17 +66,9 @@ function remove() {
     <p v-if="section.description" class="m-0 line-clamp-2 text-sm text-text-3">
       {{ section.description }}
     </p>
-    <ApCallout v-if="confirming" tone="caution">
+    <ApInlineConfirm v-model:open="confirming" action="Remove section" @confirm="remove">
       Remove the section “{{ section.title }}”? Its {{ widgets }} on the dashboard, at the top,
       outside any section.
-      <template #action>
-        <span class="flex gap-2">
-          <ApButton size="compact" variant="danger" @click="remove">Remove section</ApButton>
-          <ApButton size="compact" variant="secondary" data-keep-section @click="cancel"
-            >Cancel</ApButton
-          >
-        </span>
-      </template>
-    </ApCallout>
+    </ApInlineConfirm>
   </header>
 </template>
