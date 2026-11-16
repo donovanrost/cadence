@@ -1,27 +1,9 @@
 import { formatClock, formatHourMinute } from "@/ui";
 import type { VerifierSeries } from "./series.ts";
+import type { GroupMember, GroupTarget } from "./show.ts";
 
 /** ux U69 A4a: verify times per target, with seconds. */
-type SeriesTarget = VerifierSeries["targets"][number];
 const at = (iso: string) => `${formatClock(new Date(iso))}Z`;
-
-/**
- * 'Verify by 03:12:30Z' / 'Verified at 03:11:58Z' / 'Timed out at 03:12:30Z: no matching
- * telemetry' / 'Failed at …'; null when the server gave no time.
- */
-export function verifyTime(t: SeriesTarget | undefined): string | null {
-  if (!t) return null;
-  if (t.verifier_state === "pending" && t.timeout_at) return `Verify by ${at(t.timeout_at)}`;
-  if (t.verifier_state === "satisfied" && t.matched_at) return `Verified at ${at(t.matched_at)}`;
-  if (t.verifier_state === "timed_out" && t.timeout_at)
-    return `Timed out at ${at(t.timeout_at)}: no matching telemetry`;
-  if (t.verifier_state === "failed" && t.matched_at) return `Failed at ${at(t.matched_at)}`;
-  return null;
-}
-
-/** A target's verify time from the series, when the series covers it. */
-export const verifyTimeOf = (s: VerifierSeries | null, spacecraftId: string) =>
-  verifyTime(s?.targets.find((t) => t.spacecraft_id === spacecraftId));
 
 /**
  * The pending count's end (ux U69 A4a): ' · window closes 03:12:30Z', or ' · windows close 03:12Z–03:20Z'
@@ -40,3 +22,21 @@ export function windowEnd(s: Pick<VerifierSeries, "targets">): string {
   const from = formatHourMinute(new Date(first)).replace(/Z$/, "");
   return ` · windows close ${from}–${formatHourMinute(new Date(last))}`;
 }
+
+/**
+ * ux U69 A4a from the member (api 3438b783c), so transport-only verifiers have their time too:
+ * 'Verify by …' while it's being verified, then 'Verified at …', 'Timed out at …: no matching
+ * telemetry' or 'Failed at …'; null otherwise.
+ */
+export function memberVerifyTime(m: GroupMember | undefined): string | null {
+  if (!m) return null;
+  if (m.verified_at) return `Verified at ${at(m.verified_at)}`;
+  if (m.timed_out_at) return `Timed out at ${at(m.timed_out_at)}: no matching telemetry`;
+  if (m.failed_at) return `Failed at ${at(m.failed_at)}`;
+  if (m.stage === "executed" && m.verify_by) return `Verify by ${at(m.verify_by)}`;
+  return null;
+}
+
+/** A target's verify time: the member at the target's own stage (the one its tag names). */
+export const targetVerifyTime = (t: GroupTarget | undefined) =>
+  memberVerifyTime(t?.members.find((m) => m.stage === t.stage));

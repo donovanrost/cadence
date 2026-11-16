@@ -72,6 +72,10 @@ const member = d.object({
   stage,
   end_reason: d.nullable(d.knownText(endReasons)),
   verify_by: d.nullable(d.timestamp),
+  /** api 3438b783c: when it verified, timed out or failed (null when it doesn't apply). */
+  verified_at: d.optional(d.nullable(d.timestamp)),
+  timed_out_at: d.optional(d.nullable(d.timestamp)),
+  failed_at: d.optional(d.nullable(d.timestamp)),
   occurred_at: d.nullable(d.timestamp),
   /** U46: its latest named-release stop; a window-closed stop leaves it queued. */
   release_refusal: d.optional(d.nullable(releaseRefusalReader)),

@@ -36,7 +36,7 @@ import VerifierPanel from "./VerifierPanel.vue";
 import HistorySheet from "./HistorySheet.vue";
 import { abortable, pipeline } from "./uplink.ts";
 import { useVerifierSeries } from "./useVerifierSeries.ts";
-import { verifyTimeOf } from "../groups/verifyTimes.ts";
+import { targetVerifyTime } from "../groups/verifyTimes.ts";
 
 /**
  * C3 · Uplink & verify v1: pipeline tiles, each target's trail, the request log, and Abort
@@ -170,7 +170,7 @@ const release = computed(() =>
       :name-of="(id) => group.targets.find((t) => t.spacecraft_id === id)?.name ?? id"
     />
     <ApPanel index="U1" title="Targets" :meta="`${group.target_count}`" flush>
-      <TargetMatrix :group="group" :fleet="fleetRows" :series="series.ready.value" />
+      <TargetMatrix :group="group" :fleet="fleetRows" />
       <ul class="m-0 list-none border-t border-hairline p-0">
         <li
           v-for="t in group.targets"
@@ -216,10 +216,10 @@ const release = computed(() =>
           </p>
           <!-- ux U69 A4a: verify by / verified at / timed out at, with seconds. -->
           <p
-            v-if="verifyTimeOf(series.ready.value, t.spacecraft_id)"
+            v-if="targetVerifyTime(t)"
             class="col-span-4 col-start-2 m-0 font-mono text-sm text-text-3"
           >
-            {{ verifyTimeOf(series.ready.value, t.spacecraft_id) }}
+            {{ targetVerifyTime(t) }}
           </p>
           <p v-if="refusalOf(t)" class="col-span-4 col-start-2 m-0 text-sm text-caution-text">
             {{ refusalOf(t) }}

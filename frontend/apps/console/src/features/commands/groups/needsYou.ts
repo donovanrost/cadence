@@ -2,7 +2,7 @@ import { isKnown } from "@/api/index.ts";
 import { formatHourMinute, plural, type OpState } from "@/ui";
 import { formatValue } from "@/features/alarms/index.ts";
 import { pointName, type VerifierSeries } from "./series.ts";
-import { verifyTimeOf } from "./verifyTimes.ts";
+import { targetVerifyTime } from "./verifyTimes.ts";
 import type { Group, GroupMember, GroupTarget } from "./show.ts";
 import { memberStageWord, NEEDS_YOU, STAGE_STATE } from "./words.ts";
 
@@ -88,7 +88,7 @@ function card(group: Group, series: VerifierSeries | null, t: GroupTarget): Need
   };
   if (t.stage === "verify_failed") {
     // ux U69 A4a: when it timed out or failed, with seconds.
-    const time = verifyTimeOf(series, t.spacecraft_id);
+    const time = targetVerifyTime(t);
     return {
       ...base,
       explanation:

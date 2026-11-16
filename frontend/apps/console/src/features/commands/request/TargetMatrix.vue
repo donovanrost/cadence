@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { verifyTimeOf } from "../groups/verifyTimes.ts";
-import type { VerifierSeries } from "../groups/series.ts";
+import { targetVerifyTime } from "../groups/verifyTimes.ts";
 import { layoutMatrix, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { Group } from "../groups/show.ts";
 import { LOOK_OF, LOOK_WORDS, legendLooks, type CellLook } from "../groups/matrix.ts";
@@ -15,8 +14,6 @@ import { memberStageWord } from "../groups/words.ts";
 const props = defineProps<{
   group: Group;
   fleet: readonly FleetSpacecraft[];
-  /** ux U69 A4a: each cell's title adds its verify time when the series covers it. */
-  series?: VerifierSeries | null | undefined;
 }>();
 const stageOf = computed(
   () => new Map(props.group.targets.map((t) => [t.spacecraft_id, t.stage] as const)),
@@ -64,7 +61,7 @@ const summary = computed(() =>
                 ? [
                     sc.name,
                     memberStageWord(stageOf.get(sc.id) ?? 'queued_for_contact', group.state),
-                    verifyTimeOf(series ?? null, sc.id),
+                    targetVerifyTime(group.targets.find((t) => t.spacecraft_id === sc.id)),
                   ]
                     .filter(Boolean)
                     .join(' · ')
