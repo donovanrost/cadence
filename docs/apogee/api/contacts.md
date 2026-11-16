@@ -115,6 +115,31 @@ This read alone adds `queued_command_groups: {count, next_pass}` for the D2 Rele
 - `next_pass` (`{reservation_id, contact_id, station, starts_at, ends_at}` or `null`) is the
   spacecraft's next commandable pass after it, where they'd go if this one were released.
 
+### `GET /api/console/v1/missions/:mission_id/passes/:id/reservation` (L14 / A11, owner: api)
+
+The pass's reservation for the drawer's Technical details (what the legacy reservation review
+showed):
+
+```json
+{"data": {"reservation": {"id", "provider_revision", "lifecycle_state", "provider": {"id", "version"},
+  "transport": {"id", "version"} | null, "plan": {"id", "version"} | null,
+  "requirement": {"id", "version"} | null, "scheduled_contact_id": null, "last_reconciled_at": null},
+ "values": [{"field": "starts_at", "requested_json": "\"…\"", "confirmed_json": "\"…\"",
+   "accepted_json": "\"…\"", "restricted": false, "differs": true}],
+ "audit": {"entries": [{"id", "action", "outcome", "recorded_at", "change_id"}], "next_cursor": null}}}
+```
+
+- `values`: the 13 provider fields, in this order: `provider_contact_ref, opportunity_ref,
+  spacecraft_ref, ground_station_ref, antenna_or_service_pool_ref, service_profile_ref,
+  delivery_profile_ref, starts_at, ends_at, status, pass_phase, delivery_state, status_reason`.
+  Each `*_json` is the JSON value, `null` = not set. A structured or oversized (over 512 bytes)
+  value is withheld: its cell is `null` and the row says `restricted: true`. `differs`: the
+  three aren't all equal (a missing value counts; withheld cells compare as withheld).
+- `lifecycle_state`, `action`, `outcome` are the store's and provider audit's own words (shown as
+  said; `action`/`outcome` at most 120 characters).
+- `audit`: newest first, 25 per page; `?audit_cursor=<next_cursor>`. A cursor not on this
+  reservation → `422 invalid_params` (`details.audit_cursor`). `404 pass_not_found`.
+
 ### Provider changes (§11 L14): the `provider_change` attention source
 
 A provider changed a booked pass (`ProviderReservationChange`) and someone must decide. One item
