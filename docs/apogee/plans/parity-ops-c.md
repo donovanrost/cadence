@@ -84,7 +84,7 @@ day, L 2-3 days (console side; api's own size is theirs). "Frontend" = the data 
 | A5c commands **paging** past 1,000 | 2 | M | api: cursor | build |
 | A6a alarms **spacecraft filter** | 2 | S | frontend (`spacecraft_id=` exists, `alarms/episodes.ts:87`) | build |
 | A6b alarms **severity filter** | 2 | S | frontend over the read (≤200), or api `severity=` | build |
-| A6c mission-wide **nominal / info conditions** | 2 | M | api: a current limit-state read (per point, mission-wide) | build (or user call) |
+| A6c mission-wide **nominal / info conditions** | 2 | M | api: a current limit-state read (per point, mission-wide) | **user (11-16): build after #92 phase 3; legacy /ops/alarms stays until then** |
 | A6d alarms **paging** past 200 (+ the notice, bug D3) | 2 | M | api: cursor | build |
 | A8a Timeline **event detail** panel | 2 | M | frontend for id, occurred, subject, 4 refs; api: status, source record, source endpoint, realized contact, path, capability instance, activation, correlation | build |
 | A8b Timeline **permalink** `?event=` | 2 | S | api: read one event by id | build |
@@ -95,9 +95,9 @@ day, L 2-3 days (console side; api's own size is theirs). "Frontend" = the data 
 | A10 plan **version + decision history**, open an older version | 3 | M | api: versions list, read by version, decisions list | build |
 | A12 contact **ledgers beyond the Live window** (a Contacts History view) | 3 | M | mostly frontend (passes read by window; review read); api if paging | build |
 | A16a Book a pass offer **cost, antenna, availability, synthetic** | 3 | S | frontend (decoded `singleBookings.ts:40-47`) | build |
-| A16b Book a pass **route choice + search past 48 h** | 3 | M | api: search by route; the range limit | build (or user call) |
+| A16b Book a pass **route choice + search past 48 h** | 3 | M | api: search by route; the range limit | **user (11-16): build: route picker + start/end range, server-set max reach** |
 | A11, A13 reservation links/audit; contact record paths, bindings, endpoints, intents | with L14 | M | api: a contact-record read | with L14 (not in (C)) |
-| A14 horizon, recurring toggle, input review, repair window; A15 approve without booking; A17 run directory | design | — | — | ux + director (user call if dropped) |
+| A14 horizon, recurring toggle, input review, repair window; A15 approve without booking; A17 run directory | design | — | — | ux + director (user call if dropped); **A14 held with the user (11-16)** |
 | C1-C5 stages, queue step, review checkboxes, context rail, workspace layout | — | — | — | accept-drop only if ux confirms (asked 11-16) |
 | B evidence/identity fields | fold-in | S each | mostly frontend where decoded; api for resolved arguments, approval id + content sha, queue entry details, provider reference + revision, plan/opportunity hashes | build, per screen as touched |
 
