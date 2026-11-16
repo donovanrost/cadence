@@ -17,9 +17,8 @@ defmodule Cadence.Reads.EventLog do
     recovering → nominal).
   """
 
-  alias Cadence.Dashboards.DocumentStore
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Reads.EventLog.{ById, RawKinds}
+  alias Cadence.Reads.EventLog.{ById, Classify, Context, RawKinds}
   alias Cadence.Reads.EventLog.DensityCounts, as: EventDensityCounts
 
   alias Cadence.Reads.{
@@ -53,7 +52,7 @@ defmodule Cadence.Reads.EventLog do
         collect(organization_id, mission_id, opts, cursor, opts.limit, [], @max_rounds)
 
       {entries, contacts} = EventContacts.enrich(organization_id, mission_id, entries)
-      context = Map.put(context(organization_id, mission_id, entries), :contacts, contacts)
+      context = Map.put(Context.load(organization_id, mission_id, entries), :contacts, contacts)
 
       {:ok,
        %{
@@ -69,7 +68,7 @@ defmodule Cadence.Reads.EventLog do
     case ById.entry(organization_id, mission_id, id) do
       {:ok, entry} ->
         {[entry], contacts} = EventContacts.enrich(organization_id, mission_id, [entry])
-        context = Map.put(context(organization_id, mission_id, [entry]), :contacts, contacts)
+        context = Map.put(Context.load(organization_id, mission_id, [entry]), :contacts, contacts)
         {:ok, event(entry, context)}
 
       :error ->
@@ -103,7 +102,7 @@ defmodule Cadence.Reads.EventLog do
     selected =
       Enum.filter(
         page.entries,
-        &(kind_selected?(%{kind: kind(&1)}, opts[:kinds]) and
+        &(kind_selected?(%{kind: Classify.kind(&1)}, opts[:kinds]) and
             RawKinds.selected?(&1.kind, opts[:raw_kinds]) and
             severe_enough?(&1, opts[:severity_at_least]))
       )
@@ -188,9 +187,9 @@ defmodule Cadence.Reads.EventLog do
     %{
       id: entry.mission_event_id,
       at: entry.occurred_at,
-      kind: kind(entry),
+      kind: Classify.kind(entry),
       raw_kind: entry.kind && to_string(entry.kind),
-      severity: described.severity || severity(entry),
+      severity: described.severity || Classify.severity(entry),
       text: described.text,
       detail: detail(entry),
       spacecraft: spacecraft(entry.spacecraft_id, context.spacecraft),
@@ -230,21 +229,6 @@ defmodule Cadence.Reads.EventLog do
 
   defp detail(_entry), do: nil
 
-  defp kind(%Entry{kind: kind} = entry) when is_atom(kind) or is_binary(kind) do
-    raw = to_string(kind)
-
-    cond do
-      housekeeping?(raw) -> "data"
-      String.starts_with?(raw, "limit_definition_") -> "config"
-      String.contains?(raw, "contact") -> "contact"
-      true -> classify(entry)
-    end
-  end
-
-  defp kind(entry), do: classify(entry)
-
-  @severity_rank %{critical: 3, caution: 2, nominal: 1, info: 0}
-
   # The same fact can reach the timeline from two sources (a projected mission event and its
   # operational event): same kind, subject and second. Keep one, the more severe.
   defp dedupe(events) do
@@ -252,42 +236,12 @@ defmodule Cadence.Reads.EventLog do
     |> Enum.chunk_by(&{&1.raw_kind, subject_id(&1), DateTime.truncate(&1.at, :second)})
     |> Enum.map(fn
       [event] -> event
-      same -> Enum.max_by(same, &Map.fetch!(@severity_rank, &1.severity))
+      same -> Enum.max_by(same, &Classify.rank(&1.severity))
     end)
   end
 
   defp subject_id(%{refs: %{subject: %{id: id}}}), do: id
   defp subject_id(%{refs: refs}), do: refs.contact_id
-
-  defp housekeeping?(raw),
-    do: String.starts_with?(raw, "source_") or String.contains?(raw, "watermark")
-
-  defp classify(%Entry{source_record_kind: :limit_event}), do: "limit"
-  defp classify(%Entry{kind: :limit_violation}), do: "limit"
-  defp classify(%Entry{source_record_kind: :contact_action}), do: "contact"
-  defp classify(%Entry{source_record_kind: :managed_action_request}), do: "command"
-
-  defp classify(%Entry{source_record_kind: source})
-       when source in [:combined_downlink_record, :downlink_diagnostic], do: "contact"
-
-  defp classify(%Entry{kind: :binding_set_activated}), do: "config"
-  defp classify(%Entry{source_record_kind: :config_revision}), do: "config"
-  defp classify(%Entry{category: :transport}), do: "contact"
-  defp classify(%Entry{category: :runtime}), do: "config"
-  defp classify(%Entry{category: :health}), do: "data"
-  defp classify(%Entry{}), do: "operator"
-
-  defp severity(%Entry{status: status})
-       when status in [:cleared, :resolved, "cleared", "resolved"],
-       do: :nominal
-
-  defp severity(%Entry{kind: kind})
-       when kind in [:source_health_recovered, "source_health_recovered"],
-       do: :nominal
-
-  defp severity(%Entry{severity: severity}) when severity in [:critical, :error], do: :critical
-  defp severity(%Entry{severity: :warning}), do: :caution
-  defp severity(%Entry{}), do: :info
 
   defp spacecraft(nil, _names), do: nil
 
@@ -298,59 +252,19 @@ defmodule Cadence.Reads.EventLog do
     end
   end
 
-  # Names the sentences use: spacecraft always, people and dashboards only when the page has them.
-  defp context(organization_id, mission_id, entries) do
-    users =
-      entries
-      |> Enum.map(&EventSentences.actor_id(&1.actor))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> Map.new(fn id ->
-        case Cadence.Accounts.fetch_user(id) do
-          {:ok, user} -> {id, user.display_name || user.email}
-          _missing -> {id, nil}
-        end
-      end)
-
-    dashboards =
-      if Enum.any?(entries, &String.starts_with?(to_string(&1.kind), "dashboard_")),
-        do:
-          organization_id
-          |> DocumentStore.list_dashboard_summaries(mission_id)
-          |> Map.new(&{&1.dashboard_id, &1.name}),
-        else: %{}
-
-    %{
-      spacecraft: spacecraft_names(organization_id, mission_id),
-      users: users,
-      dashboards: dashboards
-    }
-  end
-
-  defp spacecraft_names(organization_id, mission_id) do
-    organization_id
-    |> Cadence.SpacecraftStore.list_spacecraft(mission_id)
-    |> Map.new(&{&1.spacecraft_id, {&1.display_name, &1.scid}})
-  end
-
-  # 21:08Z 500s (domain): the default Timeline excludes `data`, so its rows needn't be read.
   @doc false
-  def skip_housekeeping?([_ | _] = kinds), do: "data" not in kinds
-  def skip_housekeeping?(_all), do: false
+  defdelegate skip_housekeeping?(kinds), to: Classify
 
   @doc false
   # The page's console kind and severity for an entry built from a density group.
-  def classify_entry(%Entry{} = entry), do: {kind(entry), severity(entry)}
+  defdelegate classify_entry(entry), to: Classify, as: :entry
+
+  @doc false
+  defdelegate at_least?(severity, floor), to: Classify
 
   # U69 A9a: the severity the row shows (its sentence's, else the entry's), at or above the floor.
   defp severe_enough?(_entry, nil), do: true
   defp severe_enough?(entry, floor), do: at_least?(event(entry, @no_names).severity, floor)
-
-  @doc false
-  def at_least?(_severity, nil), do: true
-
-  def at_least?(severity, floor),
-    do: Map.get(@severity_rank, severity, 0) >= Map.fetch!(@severity_rank, floor)
 
   defp kind_selected?(_event, nil), do: true
   defp kind_selected?(_event, []), do: true
