@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.ContactPlan
   alias Cadence.Control.{PlanningTemplates, Scheduling}
   alias Cadence.Reads.{ContactPlanOverview, PlanAlternatives, PlanningSetup}
@@ -186,7 +187,8 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   @doc "Re-executes an approved plan whose execution was interrupted (idempotent per item)."
   def execute(conn, %{"plan_id" => plan_id}) do
-    with {:ok, plan} <- ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id),
+    with :ok <- may_execute(conn),
+         {:ok, plan} <- ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id),
          true <-
            PlanDetail.effective_state(conn, plan).state in [:interrupted, :approved] or
              :not_resumable,
@@ -195,6 +197,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
       start_execution(conn, plan_id, version, sha)
       conn |> put_status(:accepted) |> json(%{data: %{plan_id: plan_id, state: :executing}})
     else
+      {:error, :forbidden} -> Problem.respond(conn, :forbidden)
       {:error, :plan_not_found} -> Problem.respond(conn, :plan_not_found)
       :not_resumable -> Problem.respond(conn, :plan_not_resumable)
       {:error, _reason} -> Problem.respond(conn, :plan_not_resumable)
@@ -217,6 +220,22 @@ defmodule CadenceWeb.Console.ContactPlanController do
       end
 
     json(conn, %{data: %{plan_id: plan_id, state: state, outcome: outcome}})
+  end
+
+  # The capability execution enforces (ContactPlanExecutions: a person needs :operate_mission),
+  # checked at the request so a refused caller gets 403, not a 202 and a run that fails later.
+  # A service identity's automation grant is still checked by the run itself.
+  defp may_execute(conn) do
+    case scope(conn) do
+      %{actor_kind: :service} ->
+        :ok
+
+      scope ->
+        Policy.authorize(scope, :operate_mission, %{
+          organization_id: scope.organization_id,
+          mission_id: mission_id(conn)
+        })
+    end
   end
 
   defp start_execution(conn, plan_id, version, sha) do
