@@ -2249,3 +2249,61 @@ The as-built create summary "Add an extra route for <spacecraft_id>" shows a raw
 
 **Dropped by design** (the director takes it to the user): pinning a transport version, and routes over a transport
 with no station.
+
+### U80 · Investigate's Sample aside (§11c(D) D1; api's one-sample read, final shape 11-16) (api / fe-ops)
+One place for the words. The review (`reviews/2026-11-16-parity-ops-d.md` D1) has the reasoning.
+
+**Opening it:**
+- From U71's `Show the sample that raised it (02:08:11Z)` on an alarm. Keep that label; never "Open exact sample".
+- From History events that carry a sample, and from escalation lines (`Show sample`).
+- T3's rows are buckets, not samples, so nothing opens from T3 for now.
+- Every opener goes to the Telemetry tab. There the aside **replaces T1** while open, in T1's column at 360px, so
+  the plot keeps its width. It's titled `Sample · <point name>`, with Close (×, "Close sample").
+  - Focus goes to its heading on open.
+  - Esc or Close brings T1 back and returns focus to the opener, else to T1's search.
+  - Below 1100px it's a sheet. The chart rings the sample.
+- URL: `?sample=<id>&received=<receipt ISO>` (`received` is optional; it makes the read exact), beside
+  `points`/`focus`/`at`. Closing drops both. A reload of a sample that no longer resolves shows the not_found status,
+  never a blank aside.
+
+**Rows** (kv, in this order):
+| Row | Value |
+|---|---|
+| Value | engineering `text` + `engineering_unit` (U24), mono |
+| Raw | raw `text`, mono |
+| Quality | `Good`, or `▲ Suspect` / `▲ Bad` (caution mark + word) |
+| Generated | `02:08:11.204Z` (§4, with milliseconds; the date when not today) |
+| Received | `02:08:12.880Z · 1.7 s later` (under 60 s with one decimal, then `3 min later`, `2 h later`; omitted when generation is unknown or receipt isn't after it) |
+| Packet | `HK_EPS v4` (the definition's name and version) |
+| Record | see below; no row when `validity_state` is null |
+| Came in through | `Fairbanks · binding Earendil telemetry v3`: `endpoint_label`, then `binding <label> v<version>`. If neither resolves, `data_source_name`; if nothing does, no row |
+| Realm | only when not flight: `Rehearsal`, `Replay · run 14`, `Simulation` |
+
+**Value states:**
+- `ready`: the text.
+- `not_recorded`: "Not recorded".
+- `unsupported`: "Can't be shown for this point type".
+- `limited`: "Too large to show here", with no text (over 4 KB, 64 nodes or 4 levels).
+- JSON or hex values show in mono.
+
+**Record** (`validity_state`):
+- canonical: "The record Cadence uses"
+- duplicate: "A duplicate: Cadence uses another copy"
+- conflict: "▲ Conflicts with another record for this time"
+- superseded: "Replaced by a later revision"
+- advisory: "Kept for reference: not the record Cadence uses"
+
+**Names** (U25): a null name drops its part of the line ("Came in through Fairbanks"), or reads "an unnamed binding"
+where the line needs it. An id never stands in for a name.
+
+**Technical details:** sample id, point id, packet id, evidence id, packet definition id, data source, binding and
+endpoint ids, the replay run id, and the full JSON or hex.
+
+**Statuses** (in the aside's body, instead of the rows):
+- not_found: "Cadence couldn't find this sample in the history store."
+- ambiguous: "More than one sample matches 02:08:11Z, so Cadence can't tell which one this is." + `Show 02:08:11Z on
+  the plot` (closes the aside and keeps `at`, so the plot rings that time and T3 shows its buckets; T3 has buckets,
+  not samples, so the label doesn't promise samples)
+- timeout: "Reading the sample took too long." + `Try again`
+- unsupported: "This data source can't look up a single sample."
+- unavailable: "The history store can't be reached right now." + `Try again`
