@@ -1,4 +1,4 @@
-import { isKnown } from "@/api";
+import { isKeyOf, isKnown } from "@/api";
 import { formatHourMinute, type GanttBarKind } from "@/ui";
 import { stationCode, type BookingState, type PlanPass, type PlanState } from "./api.ts";
 
@@ -20,6 +20,7 @@ const LOOKS: Readonly<Record<BookingState, BookingLook>> = {
 export function bookingLook(booking: PlanPass["booking"]): BookingLook | null {
   if (!booking || !isKnown(booking.state)) return null;
   const look = LOOKS[booking.state];
+  // compared-as-text: booking reasons are provider and Cadence codes, an open set; 'sending' is Cadence's in-flight marker
   return booking.state === "never_sent" && booking.reason === "sending"
     ? { ...look, word: "Requested · sending" }
     : look;
@@ -30,8 +31,11 @@ const REPLAN: Next = "replan";
 const SETUP: Next = "setup";
 const ACCOUNT: Next = "account";
 
-/** ux K1 booking reasons (ScheduleFlow, f05d68e9): the reason text and the next step shown. */
-const REASONS: Readonly<Record<string, readonly [string, Next | null]>> = {
+/**
+ * ux K1 booking reasons (ScheduleFlow, f05d68e9): the reason text and the next step shown. Keyed by
+ * the codes the console words (rule A); a provider's own code reads through reasonWords' fallbacks.
+ */
+const REASONS = {
   no_capacity: ["the station has no capacity then", REPLAN],
   conflict: ["it clashes with another booking at the provider", REPLAN],
   invalid_request: ["the provider refused the request as invalid", null],
@@ -68,13 +72,13 @@ const REASONS: Readonly<Record<string, readonly [string, Next | null]>> = {
   provider_configuration_failure: ["the provider setup failed", SETUP],
   provider_rejected: ["the provider rejected it", null],
   provider_failed: ["the provider couldn't book it", null],
-};
+} as const satisfies Readonly<Record<string, readonly [string, Next | null]>>;
 /** Operator resolutions: "marked not booked by Mira K. at 10:52Z" (U29; else "by an operator"). */
-const OPERATOR: Readonly<Record<string, string>> = {
+const OPERATOR = {
   operator_not_booked: "marked not booked",
   operator_rejected: "marked rejected",
   operator_not_sent: "marked not sent",
-};
+} as const;
 /** Codes that mean Cadence built a bad request: say so, and keep the code for Technical details. */
 const CADENCE_FIX = new Set([
   "missing_provider_booking_field",
@@ -95,8 +99,8 @@ export function reasonWords(
 ): { text: string; next: Next | null } {
   const quoted = booking?.detail ? ` ("${booking.detail}")` : "";
   if (!code) return { text: `the provider didn't say why${quoted}`, next: null };
-  const operator = OPERATOR[code];
-  if (operator) {
+  if (isKeyOf(OPERATOR, code)) {
+    const operator = OPERATOR[code];
     const r = booking?.resolved;
     const who = r?.by.name ? `by ${r.by.name}` : "by an operator";
     return {
@@ -109,8 +113,10 @@ export function reasonWords(
       text: "Cadence couldn't build the booking request. This needs a Cadence fix",
       next: null,
     };
-  const known = REASONS[code];
-  if (known) return { text: `${known[0]}${quoted}`, next: known[1] };
+  if (isKeyOf(REASONS, code)) {
+    const known = REASONS[code];
+    return { text: `${known[0]}${quoted}`, next: known[1] };
+  }
   // Other status-based answers (domain fix): provider_<status>.
   if (code.startsWith("provider_"))
     return {

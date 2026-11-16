@@ -1,5 +1,6 @@
 import {
   actor,
+  isKeyOf,
   actorKinds,
   decoders as d,
   request,
@@ -494,7 +495,8 @@ export function continueDraft(missionId: MissionId, runId: string) {
   );
 }
 
-const REASONS: Readonly<Record<string, string>> = {
+/** Why a requirement went unmet (S2 demand), keyed by the codes the console words (rule A). */
+const REASONS = {
   outside_requirement_window: "No window inside the required time",
   direction_not_executable: "No window supports the required direction",
   provider_unavailable: "Provider reports no availability",
@@ -507,11 +509,13 @@ const REASONS: Readonly<Record<string, string>> = {
   preferred_duration_not_met: "Shorter than the preferred duration",
   // #74 (domain 1cf19879); provisional words until ux rules.
   max_gap_exceeded: "A gap between contacts is longer than the rule allows",
-};
+} as const;
 
 /** Plain words for a reason code; unknown codes are shown as words, never dropped. */
 export function reasonText(code: string): string {
-  return REASONS[code] ?? code.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+  return isKeyOf(REASONS, code)
+    ? REASONS[code]
+    : code.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 
 export const setupReader = d.object({

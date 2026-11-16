@@ -32,9 +32,6 @@
       "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
       "apps/console/src/features/dashboards/fixtures.test-support.ts",
       "apps/console/src/features/dashboards/model/time-range.ts",
-      "apps/console/src/features/scheduling/PlanStatePanel.vue",
-      "apps/console/src/features/scheduling/api.ts",
-      "apps/console/src/features/scheduling/booking-state.ts",
       "apps/console/src/features/spacecraft/detail.ts",
     ],
 }

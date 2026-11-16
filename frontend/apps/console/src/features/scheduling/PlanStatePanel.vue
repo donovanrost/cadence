@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { linkByName, type ParamlessRouteName } from "@/shell";
 import { computed } from "vue";
-import { describeApiError } from "@/api";
+import { describeApiError, isKeyOf } from "@/api";
 import { ApCallout, ApPanel, ApStatusMark, formatCount, formatRelative, useNow } from "@/ui";
 import { runPhases, runPhaseText } from "./api.ts";
 import type { PlanView } from "./plan-state.ts";
@@ -10,19 +10,30 @@ import type { PlanView } from "./plan-state.ts";
 const props = defineProps<{ view: Exclude<PlanView, { kind: "plan" }> }>();
 const now = useNow();
 const PHASES = runPhases;
-const MISSING: Readonly<Record<string, { text: string; link: string; route: ParamlessRouteName }>> =
-  {
-    fleet_planning_policy: {
-      text: "No planning policy",
-      link: "Policy",
-      route: "setup.contact-planning.policy",
-    },
-    contact_requirements: {
-      text: "No active contact rule",
-      link: "Requirements",
-      route: "setup.contact-planning",
-    },
-  };
+/** Setup gaps the console words (rule A); another gap reads as its key in words. */
+const MISSING = {
+  fleet_planning_policy: {
+    text: "No planning policy",
+    link: "Policy",
+    route: "setup.contact-planning.policy",
+  },
+  contact_requirements: {
+    text: "No active contact rule",
+    link: "Requirements",
+    route: "setup.contact-planning",
+  },
+} as const satisfies Readonly<
+  Record<string, { text: string; link: string; route: ParamlessRouteName }>
+>;
+/** Each missing piece with its words and link, or null words for one the console doesn't word yet. */
+const missing = computed(() =>
+  props.view.kind === "not_set_up"
+    ? props.view.missing.map((item) => ({
+        item,
+        gap: isKeyOf(MISSING, item) ? MISSING[item] : null,
+      }))
+    : [],
+);
 const elapsed = computed(() =>
   props.view.kind === "drafting" && props.view.startedAt
     ? formatRelative(new Date(props.view.startedAt), now.value).replace(/^T\+/, "")
@@ -39,19 +50,19 @@ const elapsed = computed(() =>
       >
       <ul class="m-0 mt-3 list-none border border-hairline p-0">
         <li
-          v-for="item in view.missing"
+          v-for="{ item, gap } in missing"
           :key="item"
           class="flex items-center gap-3 border-t border-hairline px-4 py-2.5 first:border-t-0"
         >
           <ApStatusMark state="off" />
           <span class="flex-1 text-base text-readout">{{
-            MISSING[item]?.text ?? item.replaceAll("_", " ")
+            gap?.text ?? item.replaceAll("_", " ")
           }}</span>
           <RouterLink
-            v-if="MISSING[item]"
-            :to="linkByName(MISSING[item].route)"
+            v-if="gap"
+            :to="linkByName(gap.route)"
             class="max-md:hit-44 font-mono text-sm text-readout"
-            >{{ MISSING[item].link }} →</RouterLink
+            >{{ gap.link }} →</RouterLink
           >
         </li>
       </ul>
