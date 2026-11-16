@@ -79,7 +79,7 @@ defmodule Cadence.Catalog.VerifierArgumentCriteriaTest do
 
     test "against the label, or raw against a number, doesn't" do
       for criteria <- [value_criteria("NOMINAL", nil), value_criteria("1", false)] do
-        assert {:ok, _compilation} = compile(source(criteria))
+        assert {:ok, _compilation} = compile(source(criteria), telemetry_calibration: true)
       end
     end
   end
@@ -87,7 +87,8 @@ defmodule Cadence.Catalog.VerifierArgumentCriteriaTest do
   defp compile_with_warnings(source) do
     {:ok, import_result} = CadenceYamlDatabase.import(source, %{import_run_id: "verifier-args"})
     [layer] = import_result.bundle.declaration_layers
-    Compiler.compile([layer])
+    # Calibration is off unless the server turns it on (Target.calibration?/1).
+    Compiler.compile([layer], telemetry_calibration: true)
   end
 
   defp value_criteria(value, calibrated) do
@@ -101,12 +102,12 @@ defmodule Cadence.Catalog.VerifierArgumentCriteriaTest do
     |> Enum.map_join("\n", &("          " <> &1))
   end
 
-  defp compile(source) do
+  defp compile(source, opts \\ []) do
     {:ok, import_result} = CadenceYamlDatabase.import(source, %{import_run_id: "verifier-args"})
     [layer] = import_result.bundle.declaration_layers
 
     # Lowering errors are the command plan's diagnostics, not the revision's.
-    case Compiler.compile([layer]) do
+    case Compiler.compile([layer], opts) do
       {:ok, compilation} ->
         case compilation.revision.diagnostics ++ compilation.plans.command.diagnostics do
           [] -> {:ok, compilation}

@@ -14,8 +14,12 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
   @telemetry_runtime_contract "mission_model_telemetry_v1"
   @command_runtime_contract "mission_model_command_v1"
 
-  @spec telemetry(Revision.t(), [Declaration.t()]) :: {map(), [Diagnostic.t()]}
-  def telemetry(%Revision{} = revision, declarations) do
+  @doc """
+  The telemetry plan. With `calibration?` (telemetry contract 3, `Target.calibration?/1`) each
+  field carries its calibrator and enumerations; without it, the plan is contract 2's.
+  """
+  @spec telemetry(Revision.t(), [Declaration.t()], boolean()) :: {map(), [Diagnostic.t()]}
+  def telemetry(%Revision{} = revision, declarations, calibration? \\ false) do
     index = Map.new(declarations, &{&1.semantic_id, &1})
 
     {packet_definitions, diagnostics} =
@@ -23,7 +27,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
       |> declarations_of(:container)
       |> Enum.reject(&value(&1.definition, :abstract, false))
       |> Enum.map_reduce([], fn declaration, diagnostics ->
-        case lower_container(declaration, revision, index) do
+        case lower_container(declaration, revision, index, calibration?) do
           {:ok, document} -> {document, diagnostics}
           {:error, errors} -> {nil, diagnostics ++ errors}
         end
@@ -36,8 +40,9 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
      }, diagnostics}
   end
 
-  @spec command(Revision.t(), [Declaration.t()]) :: {map(), [Diagnostic.t()]}
-  def command(%Revision{} = revision, declarations) do
+  @doc "The command plan; with `calibration?`, calibrated comparisons on state parameters warn."
+  @spec command(Revision.t(), [Declaration.t()], boolean()) :: {map(), [Diagnostic.t()]}
+  def command(%Revision{} = revision, declarations, calibration? \\ false) do
     index = Map.new(declarations, &{&1.semantic_id, &1})
 
     {artifacts, diagnostics} =
@@ -53,10 +58,14 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
 
     artifacts = Enum.reject(artifacts, &is_nil/1)
 
+    # Without calibration a comparison reads the raw value, so there's nothing to warn about.
     lints =
-      artifacts
-      |> Enum.flat_map(&(&1.constraint_plans ++ &1.verifier_plans))
-      |> CalibratedComparisons.warnings(revision.declarations, index)
+      if calibration?,
+        do:
+          artifacts
+          |> Enum.flat_map(&(&1.constraint_plans ++ &1.verifier_plans))
+          |> CalibratedComparisons.warnings(revision.declarations, index),
+        else: []
 
     {%{
        "target" => "command",
@@ -68,7 +77,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
      }, diagnostics ++ lints}
   end
 
-  defp lower_container(container, revision, index) do
+  defp lower_container(container, revision, index, calibration?) do
     entries = value(container.definition, :entries, [])
 
     cond do
@@ -95,7 +104,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
          ]}
 
       true ->
-        case lower_fields(container, entries, index) do
+        case lower_fields(container, entries, index, calibration?) do
           {:ok, fields} ->
             {:ok,
              document(%{
@@ -115,7 +124,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     end
   end
 
-  defp lower_fields(container, entries, index) do
+  defp lower_fields(container, entries, index, calibration?) do
     entries
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {entry, position}, {:ok, fields} ->
@@ -141,11 +150,10 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
           size_bits: size_bits,
           data_type: data_type,
           byte_order: telemetry_byte_order(type),
-          engineering_unit: engineering_unit(parameter, index) || engineering_unit(type, index),
-          # Contract 3: decom computes engineering values from these (raw stays raw).
-          calibrator: calibrator(type, index),
-          enumerations: enumerations(type)
+          engineering_unit: engineering_unit(parameter, index) || engineering_unit(type, index)
         }
+
+        field = calibration(field, type, index, calibration?)
 
         {:cont, {:ok, [field | fields]}}
       else
@@ -499,6 +507,13 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     do: "less_equal"
 
   defp comparison_operator(operator), do: operator
+
+  # Contract 3: decom computes engineering values from these (raw stays raw). Contract 2's field
+  # has neither key, so its plan is unchanged.
+  defp calibration(field, type, index, true),
+    do: Map.merge(field, %{calibrator: calibrator(type, index), enumerations: enumerations(type)})
+
+  defp calibration(field, _type, _index, false), do: field
 
   # The type's polynomial calibrator, lowest-order coefficient first; nil when it has none or one
   # that doesn't execute yet (target legalization reports those).

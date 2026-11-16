@@ -315,7 +315,8 @@ defmodule Cadence.Catalog.Xtce13ImporterTest do
   defp calibrated(xml) do
     assert {:ok, result} = Xtce13.import(source(xml), %{import_run_id: "calibration"})
     assert [layer] = result.bundle.declaration_layers
-    assert {:ok, compilation} = Compiler.compile([layer])
+    # Calibration is off unless the server turns it on (Target.calibration?/1).
+    assert {:ok, compilation} = Compiler.compile([layer], telemetry_calibration: true)
     {layer, compilation}
   end
 

@@ -49,8 +49,8 @@ defmodule Cadence.Catalog.MissionModel.Compiler do
           metadata: Keyword.get(opts, :metadata, %{})
         })
 
-      targets = Keyword.get(opts, :targets, Map.keys(Target.contracts()))
-      plans = Map.new(targets, &{&1, Target.compile(revision, &1)})
+      targets = Keyword.get(opts, :targets, Map.keys(Target.contracts(opts)))
+      plans = Map.new(targets, &{&1, Target.compile(revision, &1, opts)})
       {:ok, %CompilerResult{revision: revision, plans: plans}}
     end
   end

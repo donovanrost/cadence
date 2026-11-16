@@ -120,7 +120,7 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
       CadenceYamlDatabase.import(source(database), %{import_run_id: "calibration-import"})
 
     [layer] = import_result.bundle.declaration_layers
-    assert {:ok, compilation} = Compiler.compile([layer])
+    assert {:ok, compilation} = Compiler.compile([layer], telemetry_calibration: true)
     assert compilation.plans.telemetry.target_contract_version == "3"
 
     refute Enum.any?(
@@ -189,7 +189,11 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
           other
       end)
 
-    assert {:ok, compilation} = Compiler.compile([%{layer | declarations: declarations}])
+    assert {:ok, compilation} =
+             Compiler.compile([%{layer | declarations: declarations}],
+               telemetry_calibration: true
+             )
+
     codes = Enum.map(compilation.plans.telemetry.diagnostics, & &1.code)
     assert "MM_ENUMERATION_VALUE_INVALID" in codes
     assert "MM_ENUMERATION_VALUE_DUPLICATE" in codes
