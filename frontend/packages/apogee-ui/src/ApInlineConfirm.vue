@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
     ref="panel"
     role="group"
     :aria-labelledby="`${id}-q`"
-    class="flex flex-col gap-3 bg-raised px-4 py-3 text-base text-readout"
+    class="flex w-full basis-full flex-col gap-3 bg-raised px-4 py-3 text-base text-readout"
     @keydown="onKeydown"
   >
     <div class="flex flex-col">
