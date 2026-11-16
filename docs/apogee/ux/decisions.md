@@ -2485,8 +2485,8 @@ Staged like any change. It needs domain's in-use check, which refuses while some
 
 **Where:** `Archive…` in the row's `⋯` menu on Setup › Comms › Transports and Setup › Stations, and in the edit
 page's header actions. It's not a primary button anywhere.
-- **Provider-managed transports get no Archive.** They come from a provider account, so the A6 line in their menu
-  reads "This transport comes from KSAT, so it can't be archived here." (domain to confirm how one goes, if at all).
+- **Provider-managed transports are archived the same way** (domain, 11-16: they're created through a change set
+  and the kind archives any origin, with the same in-use check). The same confirm and words; no special line.
 
 **Confirm** (ApInlineConfirm, as for removing an older route; focus on Cancel):
 - Transport: "Stage archiving INU S-band? Once the change set is applied, it can't be chosen for new routes or
