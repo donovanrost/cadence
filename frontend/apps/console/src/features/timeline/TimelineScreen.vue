@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -42,7 +42,7 @@ import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
 import EventDetail from "./EventDetail.vue";
 import EventLog from "./EventLog.vue";
-import { useEventSelection } from "./useEventSelection.ts";
+import { useTimelineDetail } from "./useTimelineDetail.ts";
 import {
   densityBucketS,
   scopeOptions,
@@ -221,50 +221,16 @@ const shownEvents = computed(() => {
   return defaultView.value && d.status === "ready" ? withAlertingData(main, d.value.events) : main;
 });
 const held = useHeldNewest(shownEvents, scroller);
-/**
- * Event detail (ux decisions U71 A8): a row's time selects it (?event=<id>). From 1100 the detail is
- * an aside beside the log; below, a sheet. A permalink centres the window on the event and focuses
- * the panel's title.
- */
-const listWindow = computed(() =>
-  events.state.value.status === "ready"
-    ? {
-        from: Date.parse(events.state.value.value.from),
-        to: Date.parse(events.state.value.value.to),
-      }
-    : null,
-);
-function centreOn(at: number) {
-  const w = listWindow.value;
-  const span = w ? w.to - w.from : 86_400_000;
-  const to = Math.min(at + span / 2, Date.now());
-  setWindow({ kind: "custom", from: to - span, to });
-}
-const selection = useEventSelection({
-  missionId,
-  shown: shownEvents,
-  window: listWindow,
-  centreOn,
-});
-const wideQuery =
-  typeof window.matchMedia === "function" ? window.matchMedia("(min-width: 68.75rem)") : null;
-const wide = ref(wideQuery?.matches ?? true);
-const onWide = (e: MediaQueryListEvent) => (wide.value = e.matches);
-wideQuery?.addEventListener("change", onWide);
-onBeforeUnmount(() => wideQuery?.removeEventListener("change", onWide));
+/** Event detail and permalinks (ux U71 A8): useTimelineDetail.ts. */
 const detail = ref<InstanceType<typeof EventDetail> | null>(null);
 const detailSheet = ref<InstanceType<typeof ApSheet> | null>(null);
-let fromLink = selection.selectedId.value !== null;
-watch(selection.event, async (e) => {
-  if (!e) {
-    detailSheet.value?.close();
-    return;
-  }
-  if (!wide.value) detailSheet.value?.open();
-  if (!fromLink) return;
-  fromLink = false;
-  await nextTick();
-  detail.value?.focusTitle();
+const { selection, wide } = useTimelineDetail({
+  detail,
+  detailSheet,
+  missionId,
+  shown: shownEvents,
+  page: computed(() => (events.state.value.status === "ready" ? events.state.value.value : null)),
+  setWindow,
 });
 
 const missing = computed(
