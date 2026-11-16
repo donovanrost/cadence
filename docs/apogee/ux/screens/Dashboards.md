@@ -238,8 +238,18 @@ Tabs: `General` · `Sharing` · `Activity` · `Diagnostics`.
   - Editor (sheet `wide`): name, dwell, wallboard mode, and an ordered dashboard list (add, ↑ ↓, remove).
   - Delete confirms.
 - **Present** (takeover, kiosk by default): each dashboard full-screen in turn. A 24px status line reads `PLAYLIST
-  · Ops wall · 2 of 5 · next in 0:18`, plus health and UTC. Keys: ←/→ step, Space pauses (`PAUSED`), Esc leaves. A
+  · Ops wall · Power overview · 2 of 5 · next in 0:18`, plus health and UTC. Keys: ←/→ step, Space pauses (`PAUSED`), Esc leaves. A
   dashboard that fails to load shows its error for one dwell and the rotation moves on.
+  - **Screen readers** (qa's a11y check b71d635f5): on open, focus goes to the takeover itself (focusable, named
+    "Ops wall playlist"), never to `<body>`. Esc returns focus to the `Present` that opened it.
+  - A polite live region names the dashboard first, then its position. The countdown stays out of it:
+
+    | When | Announcement |
+    | --- | --- |
+    | Open, each step (←/→, auto-advance) | "Power overview, 2 of 5" |
+    | Space pauses | "Paused: Power overview, 2 of 5" |
+    | Space resumes | "Playing: Power overview, 2 of 5" |
+    | A dashboard can't load | "Power overview couldn't load, 2 of 5" |
 
 ## Export
 `⋯ › Export` downloads the dashboard bundle (JSON). A toast reads "Exported Ops overview v7." There's no import in
