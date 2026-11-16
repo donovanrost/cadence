@@ -1555,7 +1555,10 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
 - **Resolutions:**
   - "Approved by Ana R. at 18:02Z." The row fades; booking then shows on Contacts.
   - "Nothing is left to plan for 11-16." (every requirement closed or canceled).
-  - The day ended: "11-16 ended with no approved plan." (crit, kept in recently resolved).
+  - The day ended: "11-16 ended with no approved plan." (crit, kept in recently resolved). When it ended stalled:
+    "11-16 ended with R41 approved but not booked." or "11-16 ended with 12 of 41 passes booked."
+  - `booking_started` (domain; no actor, since nobody did it): "Booking started at 22:11Z." From an interrupted
+    item: "Booking continued at 22:20Z." 
 - **Data:** day, first_window_at, requirements_count, `plan {id, revision, state, author, submitted_at,
   sent_back {by, at, comment}} | null`, `approvers [{name}]`, `viewer_can_approve`. Domain's source is
   `plan_coverage` (47aabe3ba), one per day from today to +2.
