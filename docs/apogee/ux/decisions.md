@@ -2479,3 +2479,40 @@ organization; keep it so.
   (5012). Change that transport's port." With no transport name: "Another mission already listens on port 5012,
   which this pass's transport uses. Change that transport's port." Second action `Open transport` (the transport's
   Setup page; none without a transport). The transport by name; never the mission, even if one is sent.
+
+### U82 · Archiving a transport or a ground station (director; lead, fe-setup, 11-16) (domain / api / fe-setup)
+Staged like any change. It needs domain's in-use check, which refuses while something still uses the item.
+
+**Where:** `Archive…` in the row's `⋯` menu on Setup › Comms › Transports and Setup › Stations, and in the edit
+page's header actions. It's not a primary button anywhere.
+- **Provider-managed transports get no Archive.** They come from a provider account, so the A6 line in their menu
+  reads "This transport comes from KSAT, so it can't be archived here." (domain to confirm how one goes, if at all).
+
+**Confirm** (ApInlineConfirm, as for removing an older route; focus on Cancel):
+- Transport: "Stage archiving INU S-band? Once the change set is applied, it can't be chosen for new routes or
+  passes. Its history stays." Buttons `Stage archive` / `Cancel`.
+- Station: "Stage archiving Inuvik · INU? Once the change set is applied, it can't be chosen for new routes or
+  passes. Its history stays."
+- No reason field: the change set's own review covers it.
+
+**In use** (domain's refusal, on stage; shown in place of the confirm, crit, with nothing staged):
+- Lead: "INU S-band is still in use, so it can't be archived:" then one line per kind of use, each naming up to 3,
+  then "and 4 more":
+  - "Routes: EARENDIL-312 · Inuvik (Demo) — downlink, EARENDIL-389 · Inuvik — uplink and 4 more" (an extra or older
+    route by spacecraft and route name; links to that spacecraft's routing);
+  - "Profile routes: Earendil standard" (the profile by name; links to its routing section);
+  - "Booked passes: 2, the next at 11-17 03:10Z" (links to Contacts › Plan for that station);
+  - "Listening now: the EARENDIL-312 FBK 03:10Z pass" (a pass whose listener holds its port; links to Contacts ›
+    Live);
+  - a station also lists "Transports: INU S-band, INU X-band" (links to each).
+- Then: "Move or remove these first." No id ever. A use with no name is counted ("1 route on a spacecraft with no
+  name").
+- domain sends counts and up to 3 named items per kind; the console words them.
+
+**Summary and history:**
+- Summary: "Archive transport INU S-band" / "Archive station Inuvik · INU" (a station with no code: its name only).
+- History: "Archived transport INU S-band · applied by Mira K. · 11-17 09:12Z".
+
+**Archived rows:** hidden by default. A `Show archived` switch in the list header shows them under the active ones,
+with an `ARCHIVED` tag (no status colour), the name at full contrast, and no actions but opening. Pickers (routes,
+bookings) never offer archived items.
