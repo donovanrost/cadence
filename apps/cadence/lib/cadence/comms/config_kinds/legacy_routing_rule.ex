@@ -110,24 +110,29 @@ defmodule Cadence.Comms.ConfigKinds.LegacyRoutingRule do
   end
 
   # ux U79: 'The older route “<name>” · <spacecraft> was removed and can't be restored. To route
-  # that way again, add an extra route.' (no name: the route's station form is api's label; here
-  # the name is dropped; no spacecraft name: ' · …' dropped).
+  # that way again, add an extra route.'
   defp not_restorable(organization_id, mission_id, document) do
-    named = if is_binary(document["display_name"]), do: " “#{document["display_name"]}”", else: ""
-
     craft =
       case SpacecraftStore.fetch_spacecraft(
              organization_id,
              mission_id,
              document["spacecraft_id"]
            ) do
-        {:ok, %{display_name: name}} when is_binary(name) -> " · #{name}"
-        _unknown -> ""
+        {:ok, %{display_name: name}} when is_binary(name) -> name
+        _unknown -> nil
       end
 
-    "The older route#{named}#{craft} was removed and can't be restored. " <>
-      "To route that way again, add an extra route."
+    "The older route#{route_words(document["display_name"], craft)} was removed and can't be " <>
+      "restored. To route that way again, add an extra route."
   end
+
+  # ux U79: named, ' “<name>” · <craft>'; unnamed, ' for <craft>'; neither, nothing.
+  defp route_words(name, craft) when is_binary(name) and is_binary(craft),
+    do: " “#{name}” · #{craft}"
+
+  defp route_words(name, nil) when is_binary(name), do: " “#{name}”"
+  defp route_words(nil, craft) when is_binary(craft), do: " for #{craft}"
+  defp route_words(_name, _craft), do: ""
 
   defp document(rule),
     do: %{

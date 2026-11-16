@@ -7,6 +7,7 @@ defmodule Cadence.Configuration.LegacyRoutingRuleKindTest do
 
   import Cadence.ConfigurationFixtures
 
+  alias Cadence.Comms.ConfigKinds.LegacyRoutingRule
   alias Cadence.Comms.{RoutingRule, RoutingRuleStore, TransportStore}
   alias Cadence.Control.{Configuration, ConfigurationRollback, LegacyRouteConversion}
 
@@ -107,6 +108,18 @@ defmodule Cadence.Configuration.LegacyRoutingRuleKindTest do
 
     assert {:ok, %{lifecycle_state: :archived}} =
              RoutingRuleStore.fetch_routing_rule_state(ctx.org, ctx.mission, ctx.rule)
+  end
+
+  # The store requires a name, so this is the defensive form (ux U79): no dangling ' · '.
+  test "an unnamed older route reads 'for <spacecraft>' in the restore refusal", ctx do
+    assert {:error, [%{path: "", message: message}]} =
+             LegacyRoutingRule.validate(ctx.org, ctx.mission, :create, "x", nil, %{
+               "spacecraft_id" => ctx.sc
+             })
+
+    assert message ==
+             "The older route for EARENDIL-389 was removed and can't be restored. " <>
+               "To route that way again, add an extra route."
   end
 
   defp remove(id), do: %{kind: "legacy_routing_rule", action: :delete, entity_id: id}
