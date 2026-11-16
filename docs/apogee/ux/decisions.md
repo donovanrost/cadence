@@ -2361,6 +2361,23 @@ fold into one item ("2 other missions in this organization also fly SCID 42 thro
     path_id, provider_binding_id}]}`, paths by frames, most first. The station clause uses station.name, else
     station.code, else no clause; one path gets no clause. path_id and provider_binding_id go in Technical details
     only.
+  - domain (11-16): the station is the contact's own, the same on every path. So lines group by station: entries
+    with the same station (or none) make ONE line, frames summed. Its SCIDs are the union when every entry's list
+    is complete (scid_count = list length); otherwise "with at least 9 different SCIDs" (the largest scid_count or
+    the union's size, whichever is more). The station clause shows only when two or more stations remain.
+- **Director's ruling (11-16): refused frames land on the record (above), plus one operational event per contact
+  when most of its frames are refused.** The event is a Timeline row (▲ caution) AND a Now item (lead's question,
+  ux's call 11-16). Why Now: for the operator it's a pass that gave their craft little or no telemetry, and maybe a
+  station pointed at another craft. No Now source says that per pass today: the queue's "No telemetry for over N
+  minutes" is spacecraft staleness, which a craft heard on another pass never trips, and contact_settlement is about
+  storage. The Now item: acknowledgeable (`Mark as seen`), one per contact, P2 caution, same title and secondary as
+  the event, action `Open contact record`. It resolves only when marked seen; the fade reads "Seen by Mira K. at
+  04:12Z" (U29). The words:
+  - Title: "EARENDIL-312 · Most frames on the FBK 03:10Z pass carried another SCID."
+  - Secondary: "412 of 430 frames carried SCID 3, not EARENDIL-312's SCID 1. Cadence kept them as raw evidence and
+    made no telemetry from them." SCID lists follow the record line's rules. The event needs the contact's total
+    frame count.
+  - Action `Open contact record` (History ?contact=, U78).
 
 **3. Listen port taken by another mission** (domain 0a3426e7d, ListenClaims). Accepted as built, on the port field:
 "Another mission already listens on this host and port. Choose a different port." It names no mission and no
