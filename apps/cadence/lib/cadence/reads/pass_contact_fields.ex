@@ -19,7 +19,7 @@ defmodule Cadence.Reads.PassContactFields do
   alias Cadence.Contacts.{ContactAction, ListenerRefusalAttention, OpenContacts, PassContacts}
   alias Cadence.Contacts.UplinkPasses
   alias Cadence.Control.UplinkReadiness.Groups
-  alias Cadence.Reads.PassTelemetryStored
+  alias Cadence.Reads.{PassIncompleteAtEnd, PassTelemetryStored}
 
   @terminal [:canceled, :completed, :expired]
 
@@ -51,7 +51,9 @@ defmodule Cadence.Reads.PassContactFields do
       window_moves: PassContacts.window_moves(org, pass.scheduled_contact_id),
       second_connections_refused: second_connections(org, mission, realized),
       # ux U60: did this pass's data reach the store (domain's settle event).
-      telemetry_stored: PassTelemetryStored.read(org, mission, realized, craft_name(pass))
+      telemetry_stored: PassTelemetryStored.read(org, mission, realized, craft_name(pass)),
+      # ux U67: bytes at the end that didn't form a complete frame or packet (domain's settlement).
+      incomplete_at_end: PassIncompleteAtEnd.read(org, mission, realized)
     }
   end
 

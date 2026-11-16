@@ -31,6 +31,7 @@ defmodule CadenceWeb.Console.PassContactAPITest do
              "contact_ended" => nil,
              "window_moves" => [],
              "telemetry_stored" => nil,
+             "incomplete_at_end" => nil,
              "queued_commands" => %{"count" => 0, "expiring_before_next" => nil}
            } = pass(c)
   end

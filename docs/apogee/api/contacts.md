@@ -303,6 +303,12 @@ Pass rows (`GET /passes`, `GET /passes/:id`) carry:
   CORRECTED accepted window, after this pass, skipping canceled, phantom and uplink-dropped contacts;
   it is not "the next scheduled_contacts row". Neither action cancels queued requests: they wait
   for the next contact.
+- `incomplete_at_end: {frame_bytes, packet_bytes} | null` (ux U67): bytes at the end of the pass
+  that didn't form a complete frame or packet, so they weren't stored, summed over the contact's
+  paths from domain's settlement (`realized_contacts.metadata.settlement.incomplete_at_end`).
+  `null` when nothing was cut off or the contact hasn't settled; one side may be 0. A quiet note in
+  the settlement view only ("6 bytes at the end of the pass didn't form a complete frame, so they
+  weren't stored."); never on Now or the Timeline. Detail only.
 - `telemetry_stored: {through, los, settled_at, text} | null` (ux U60): did this pass's data reach
   the store, and how close to LOS. From the latest `source_watermark_settled` event on the pass's
   realized contact: `through` = what's stored through, `los` = the pass's LOS, `settled_at` = when
