@@ -22,7 +22,10 @@ const LATE_HEADING_MS = 8000;
 function upgradeWhenHeadingArrives(target: HTMLElement, stillMine: () => boolean, waitMs: number) {
   if (typeof MutationObserver === "undefined") return;
   const observer = new MutationObserver(() => {
-    if (!stillMine() || document.activeElement !== target) return void observer.disconnect();
+    if (!stillMine() || document.activeElement !== target) {
+      observer.disconnect();
+      return;
+    }
     const h1 = target.querySelector<HTMLElement>("h1");
     if (!h1) return;
     observer.disconnect();
