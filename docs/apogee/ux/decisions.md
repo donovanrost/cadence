@@ -1878,3 +1878,49 @@ differs from what was entered.
 
 **Technical details** (one disclosure per block): attempt, path, binding, packet, evidence and record ids; generated
 time; recorded at; and the exact float encoding (U68).
+
+### U71 · Alarm proof, Timeline event detail, event-type filter, Alarms' last change (§11c(C) A7, A8, A9b, A12; api 0619ac94a, a87bee73d, 4a2f470d8) (fe-ops)
+**A7 Alarm proof.** It goes where an alarm is explained, in Investigate. The Alarms row stays lean: its source tag
+and the spacecraft link are enough.
+- **B1:** a `text-3` line under the header meta.
+  - Ground limits: "From ground limit v3 in limit set DEFAULT · `View limit v3`". The link opens the limits app's
+    Definitions surface with `?definition=&version=`.
+  - Catalog monitoring (no definition): "From the catalog's limits", with no link.
+- **The triggering sample:** `Show the sample that raised it (02:08:11Z)` on the same line.
+  - It opens the Telemetry tab on that point, centred on `trigger.at`, with that sample ringed.
+- **Escalations:** in H3 and the event log, "Became critical at 02:31:40Z" carries its own `Show sample`.
+- **Technical details:** definition id, sample id.
+
+**A8 Timeline event detail.**
+- **Opening it:** each row's time is a button (`aria-pressed`). The row's subject link stays as it is.
+- **Where it shows:** selecting a row opens an aside panel (380px, Investigate's aside), so the log stays in view.
+  Below 1100px it's a sheet.
+- **First-class fields**, in this order:
+  1. The sentence as the title.
+  2. Mark + severity word.
+  3. Its group and type (`Contacts · Contacts canceled`).
+  4. "Occurred 11-15 02:51:03Z" (with seconds and date).
+  5. The subject and the refs as named links: spacecraft, pass (its label), command, data source, dashboard.
+     A ref without a name stays in Technical details.
+  6. The status in words, when the record has one. A status code without a word goes to Technical details.
+- **Technical details:** event id, raw kind, source record kind and id, source endpoint, path, capability instance,
+  activation, correlation key (free text, mono).
+- **Copy link** in the panel copies the `?event=<id>` permalink.
+  - Opening that link centres the window on the event, selects its row (white left bar), opens the panel and
+    focuses the panel's title.
+  - An id that isn't there any more: "This event isn't in the timeline any more." + `Clear`.
+
+**A9b Event-type filter.**
+- A multi-select labelled `Event type` (not "raw kind"), next to the group toggles, in the URL as `?raw_kind=`.
+  - Options use the fold words (`kindLabel`) with counts: "Contacts canceled (214)", most frequent first.
+  - It lists only types in the groups currently shown.
+  - Type-ahead only; no typed prefixes or wildcards.
+- With types chosen, the strip and the log show only those, and `Clear filters` resets both filters.
+
+**A12 Alarms' last change** (`summary.latest_change`). The header meta is a sentence, linked to the episode in
+Investigate (`?alarm=`):
+- raised: "Last change 02:51Z: a new alarm on EARENDIL-047."
+- escalated: "Last change 02:51Z: an alarm on EARENDIL-047 became critical."
+- deescalated: "Last change 02:51Z: an alarm on EARENDIL-047 eased to caution."
+- cleared: "Last change 02:51Z: an alarm on EARENDIL-047 cleared."
+- No spacecraft: "on the mission". No change at all: omitted. §4 date when not today.
