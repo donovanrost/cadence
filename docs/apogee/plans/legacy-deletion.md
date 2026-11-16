@@ -682,6 +682,10 @@ admits a section only if its metadata equals the server definition, so a copy ch
 Repoint each to its console target (`setup.comms`, `setup.comms.transports`, `setup.spacecraft.app`,
 `ops.telemetry`) when its target page goes. `AuthRedirectController` (R:109-111) already points at the console.
 
+**§11c(C) action/information parity (fe-ops, 11-16):** the "covered" ops rows above are covered at route level.
+The per-action and per-field audit is in [parity-ops-c.md](parity-ops-c.md): 17 capability gaps (A), the evidence
+fields (B), what's gone by design (C), and four bugs (D). Its gaps go to lead before fe-setup builds (C).
+
 **Not covered: these block deleting the host app.**
 - **Rows not built yet:** L17 (R:291, :295), L22 (R:287), L14 (R:493), L15 (R:485, built but off), L18 (R:327,
   :155) and L8's pending dashboard routes.
