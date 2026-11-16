@@ -78,8 +78,25 @@ shows the problem and `Open in Plan`. **Empty:** nominal callout "No conflicts o
   - D4 coverage-gap rows offer `Book a pass`, prefilled with the spacecraft and the gap window.
   - Investigate › Passes P3's empty state links to the same sheet.
 - **Sheet** (ApSheet `wide`), titled `Book a pass`:
-  1. **Search:** Spacecraft (select, prefilled) · Window (ApTimeRange, default the next 24 h) · Direction
-     (segmented `Downlink` / `With uplink`) · Stations (`Any`, or chips). Primary `Search`.
+  1. **Search:** Spacecraft (select, prefilled) · Window · Direction (segmented `Downlink` / `With uplink`) ·
+     Route. Primary `Search`.
+     - **Route** (A16b, user ruling 11-16; replaces the Stations chips):
+       - Label `Route`, hint "Station, provider and path." Default `Any route`, or chips for chosen routes, grouped by
+         station: `SVA · Northlight`.
+       - The path is added only when a station has several: `SVA · Northlight · S-band`.
+       - Routes with an uplink path carry the `UP` tag. The others read `downlink only` in `text-3`.
+     - **No uplink path:** with `With uplink`, such routes are hidden, with one line: "2 routes hidden: no uplink path
+       to EARENDIL-312." If every chosen route is downlink-only, `Search` is disabled with "SVA · Northlight has no
+       uplink path to EARENDIL-312. Choose Downlink or another route."
+     - **Window** (ApTimeRange):
+       - Presets `Next 6 h` · `Next 24 h` (default) · `Next 48 h` · `Next 7 days`. A preset beyond the server's
+         maximum reach is left out.
+       - Past the reach: "Search up to 7 days ahead (until 11-23 04:00Z)." The number and date come from the
+         server, never hard-coded.
+       - A start in the past: "Start from now or later." A server cap on the window's length, if there is one:
+         "Search a window of up to 3 days."
+     - Empty, naming the routes when chosen: "No passes for EARENDIL-312 via SVA · Northlight between 11-16 03:00Z
+       and 11-18 09:00Z."
   2. **Offers**, sorted by AOS. Each row: station code + name · provider · `03:10Z–03:19Z` (§4) · `9m 12s` · `UP`
      tag when uplink-capable · the offer's countdown `EXPIRES T−14:32` (the 15-min token; caution under 2 min).
      - An offer that overlaps a booked pass of the same spacecraft or antenna is shown disabled, with "Overlaps
