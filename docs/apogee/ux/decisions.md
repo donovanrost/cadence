@@ -1849,12 +1849,12 @@ differs from what was entered.
 - Resolved by an operator (U29, actor and time together):
   - not_sent: "Resolved as not sent by Mira K. at 03:20:05Z."
   - rejected: "Resolved as rejected by Mira K. at 03:20:05Z."
-  - Resolved by Cadence itself (a non-user resolver, once api confirms that's what it means): "Resolved as not sent
-    by Cadence at 03:20:05Z." That's the voice used for Cadence's own acts elsewhere (U56). An API key or service
-    account shows its name when api sends one.
-  - Without a recorded actor: "Resolved as not sent at 03:20:05Z; who resolved it wasn't recorded."
-- Telemetry evidence takes the point's unit once api sends it ("= 8.0 °C (raw 412)"). Until then the value shows
-  without a unit, never a guessed one.
+  - The resolver is a person or a service identity, never Cadence (api 1b61e57ac: an automatic timeout stays
+    "Outcome unclear" and isn't a resolution). An API credential shows by its display name: "Resolved as not sent
+    by ops-automation at 03:20:05Z."
+  - With no name: "Resolved as not sent at 03:20:05Z; who resolved it isn't known." (fe-ops 293aa2cd2)
+- Telemetry evidence carries the catalog unit ("= 8.0 °C (raw 412)"). A point without one shows no unit, never a
+  guessed one.
 
 **Verifiers:**
 - Each row is the verifier's name, then its outcome.
