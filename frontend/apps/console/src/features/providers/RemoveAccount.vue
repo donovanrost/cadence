@@ -3,10 +3,14 @@ import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { decoders } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
-import { ApButton, ApCallout } from "@/ui";
+import { ApButton, ApInlineConfirm } from "@/ui";
 import { removeAccount, type ProviderAccount } from "./api.ts";
 
-/** Remove (archive) an account; blocked with the reason while missions use it. */
+/**
+ * Remove (archive) an account; blocked with the reason while missions use it. The confirm is the
+ * kit's in-place one (design-language §7): it opens on Cancel, Esc backs out, and focus returns to
+ * the trigger. A refusal is read under the sentence, and the confirm stays open to retry or cancel.
+ */
 const props = defineProps<{ orgId: string; account: ProviderAccount }>();
 const emit = defineEmits<{ removed: [] }>();
 const router = useRouter();
@@ -23,6 +27,7 @@ const inUse = (details: unknown) => {
 
 async function remove() {
   busy.value = true;
+  failure.value = null;
   try {
     const r = await removeAccount(props.orgId, props.account.id);
     if (r.ok) {
@@ -33,7 +38,6 @@ async function remove() {
     failure.value = missions
       ? `Used by ${missions.join(", ")}. Unlink it from ${missions.length === 1 ? "that mission" : "them"} first.`
       : failureOutcome(r.error, "changed").sentence;
-    confirming.value = false;
   } finally {
     busy.value = false;
   }
@@ -48,25 +52,22 @@ async function remove() {
       Unlink it from {{ account.missions.length === 1 ? "that mission" : "them" }} before removing
       it.
     </p>
-    <div v-else class="flex flex-wrap items-center gap-2">
-      <ApButton v-if="!confirming" variant="danger" size="compact" @click="confirming = true"
-        >Remove account</ApButton
-      >
-      <template v-else>
-        <span class="text-sm text-text-2"
-          >Remove {{ account.name }}? Missions can't book with it afterwards.</span
+    <ApInlineConfirm
+      v-else
+      v-model:open="confirming"
+      action="Remove account"
+      :busy="busy"
+      busy-reason="Removing…"
+      :refusal="failure"
+      @confirm="remove"
+      @cancel="failure = null"
+    >
+      <template #trigger="{ attrs }">
+        <ApButton variant="danger" size="compact" class="self-start" v-bind="attrs"
+          >Remove account…</ApButton
         >
-        <ApButton
-          variant="danger"
-          size="compact"
-          :disabled="busy"
-          disabled-reason="Removing…"
-          @click="remove"
-          >Remove</ApButton
-        >
-        <ApButton variant="ghost" size="compact" @click="confirming = false">Keep</ApButton>
       </template>
-    </div>
-    <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+      Remove {{ account.name }}? Missions can't book with it afterwards.
+    </ApInlineConfirm>
   </div>
 </template>
