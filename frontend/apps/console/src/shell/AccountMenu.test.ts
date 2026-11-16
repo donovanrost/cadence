@@ -44,7 +44,9 @@ describe("account menu as a menu button (design-language §6)", () => {
   it("cycles its items (Your account, Sign out) and closes back to the trigger on Esc", async () => {
     const w = await opened();
     const key = (k: string) =>
-      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: k, bubbles: true }),
+      );
     key("ArrowDown");
     await nextTick();
     expect(document.activeElement?.textContent?.trim()).toBe("Sign out");

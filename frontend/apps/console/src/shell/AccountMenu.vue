@@ -67,7 +67,12 @@ function done() {
         <p class="m-0 text-base font-semibold">{{ name }}</p>
         <p class="m-0 font-mono text-xs text-text-3">{{ session.user.email }}</p>
       </div>
-      <RouterLink :to="{ name: 'account' }" :class="itemClass" role="menuitem" tabindex="-1" @click="done"
+      <RouterLink
+        :to="{ name: 'account' }"
+        :class="itemClass"
+        role="menuitem"
+        tabindex="-1"
+        @click="done"
         >Your account</RouterLink
       >
       <template v-if="otherOrganizations.length > 1">
@@ -77,7 +82,9 @@ function done() {
           :key="org.id"
           :to="{ name: 'org.home', params: { org: org.slug } }"
           :class="itemClass"
-          role="menuitem" tabindex="-1" @click="done"
+          role="menuitem"
+          tabindex="-1"
+          @click="done"
           >{{ org.name }}</RouterLink
         >
       </template>
@@ -86,19 +93,26 @@ function done() {
         v-if="invitations > 0"
         :to="{ name: 'account' }"
         :class="[itemClass, 'text-caution-text']"
-        role="menuitem" tabindex="-1" @click="done"
+        role="menuitem"
+        tabindex="-1"
+        @click="done"
         >{{ invitations === 1 ? "1 invitation" : `${invitations} invitations` }}</RouterLink
       >
       <template v-if="eligible">
         <template v-if="admin.active.value">
-          <RouterLink :to="{ name: 'admin' }" :class="itemClass" role="menuitem" tabindex="-1" @click="done"
+          <RouterLink
+            :to="{ name: 'admin' }"
+            :class="itemClass"
+            role="menuitem"
+            tabindex="-1"
+            @click="done"
             >Admin area</RouterLink
           >
           <button
             type="button"
             :class="[itemClass, 'cursor-pointer border-0 bg-transparent text-left']"
-          role="menuitem"
-          tabindex="-1"
+            role="menuitem"
+            tabindex="-1"
             @click="leaveAdmin"
           >
             Leave admin mode

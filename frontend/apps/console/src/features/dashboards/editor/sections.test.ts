@@ -43,7 +43,10 @@ describe("section heading in edit mode (ux, Sections in edit mode)", () => {
     expect(w.text()).toContain(
       "Remove the section “Power”? Its 3 widgets stay on the dashboard, at the top, outside any section.",
     );
-    await w.findAll("button").find((b) => b.text() === "Remove section")?.trigger("click");
+    await w
+      .findAll("button")
+      .find((b) => b.text() === "Remove section")
+      ?.trigger("click");
     expect(w.emitted("stage")?.[0]).toEqual([
       { event: "remove_section", input: { section_id: "dash_section_power" } },
     ]);

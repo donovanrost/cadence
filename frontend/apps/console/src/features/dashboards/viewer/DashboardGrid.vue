@@ -18,7 +18,12 @@ const now = useNow();
 const order = (p: WorkspacePlacement) => (p.layout.y ?? 1e6) * 1000 + (p.layout.x ?? 0);
 const sections = computed(() => {
   const groups = [
-    { id: null as string | null, title: null as string | null, description: null, collapsed: false },
+    {
+      id: null as string | null,
+      title: null as string | null,
+      description: null,
+      collapsed: false,
+    },
     ...props.snapshot.sections,
   ].map((s) => ({
     ...s,
