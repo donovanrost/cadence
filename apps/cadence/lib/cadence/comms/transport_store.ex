@@ -7,7 +7,14 @@ defmodule Cadence.Comms.TransportStore do
 
   alias Ecto.Changeset
 
-  alias Cadence.Comms.{ProviderTransportBasis, Transport, TransportKind, TransportRow}
+  alias Cadence.Comms.{
+    ListenClaims,
+    ProviderTransportBasis,
+    Transport,
+    TransportKind,
+    TransportRow
+  }
+
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Listing
@@ -24,8 +31,21 @@ defmodule Cadence.Comms.TransportStore do
     with {:ok, scoped_transport} <- put_organization_scope(transport, organization_id),
          {:ok, _mission} <-
            Missions.fetch_mission(scoped_transport.organization_id, scoped_transport.mission_id),
-         {:ok, normalized_transport} <- normalize_transport(scoped_transport, opts),
-         {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
+         {:ok, normalized_transport} <- normalize_transport(scoped_transport, opts) do
+      # SAFETY: a listen host:port is one mission's (ListenClaims); fail closed at save.
+      ListenClaims.guard(
+        normalized_transport.mission_id,
+        claimed_configuration(normalized_transport),
+        fn -> insert_transport(normalized_transport) end
+      )
+    else
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp insert_transport(normalized_transport) do
+    with {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
          {:ok, _row} <-
            Repo.insert(TransportRow.changeset(transport_with_provider),
              on_conflict: :nothing,
@@ -42,6 +62,12 @@ defmodule Cadence.Comms.TransportStore do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # Only an active transport claims its listen endpoint; an archived one releases it.
+  defp claimed_configuration(%Transport{lifecycle_state: :active, configuration: config}),
+    do: config
+
+  defp claimed_configuration(%Transport{}), do: nil
 
   @spec fetch_transport(binary(), binary(), binary()) :: {:ok, Transport.t()} | {:error, term()}
   def fetch_transport(organization_id, mission_id, transport_id)

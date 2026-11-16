@@ -15,7 +15,15 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
 
   import Ecto.Query
 
-  alias Cadence.Comms.{GroundStationStore, Transport, TransportKind, TransportRow, TransportStore}
+  alias Cadence.Comms.{
+    GroundStationStore,
+    ListenClaims,
+    Transport,
+    TransportKind,
+    TransportRow,
+    TransportStore
+  }
+
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Repo
 
@@ -107,7 +115,7 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
 
   def validate(
         _organization_id,
-        _mission_id,
+        mission_id,
         _action,
         _entity_id,
         _previous,
@@ -116,10 +124,16 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
     kind = Enum.find(Transport.transport_kinds(), &(Atom.to_string(&1) == doc["transport_kind"]))
 
     with {:ok, entry} <- TransportKind.fetch(kind),
-         {:ok, _configuration} <- entry.module.normalize_config(doc["configuration"]) do
+         {:ok, configuration} <- entry.module.normalize_config(doc["configuration"]),
+         # SAFETY: a listen host:port is one mission's; the store refuses it too, at write.
+         :ok <- ListenClaims.check(mission_id, ListenClaims.endpoint(configuration)) do
       :ok
     else
-      _invalid -> {:error, [F.error("configuration", "Transport settings are not valid")]}
+      {:error, {:listen_endpoint_claimed, _endpoint}} ->
+        {:error, [F.error("configuration.port", ListenClaims.message())]}
+
+      _invalid ->
+        {:error, [F.error("configuration", "Transport settings are not valid")]}
     end
   end
 

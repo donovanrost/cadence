@@ -2,6 +2,7 @@ defmodule Cadence.Control.Contacts do
   @moduledoc "Control-plane executor for exact realized Contact runtime handoffs."
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Comms.ListenClaims
 
   alias Cadence.ContactPlanning.{
     ConfirmationWindow,
@@ -270,7 +271,11 @@ defmodule Cadence.Control.Contacts do
 
   @spec start_realized_contact(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
   def start_realized_contact(%RealizedContact{} = realized_contact) do
-    with {:ok, %RealizedContactRuntimeSpec{} = spec} <- runtime_spec(realized_contact) do
+    # SAFETY: a listen host:port is one mission's (ListenClaims). A pass whose pinned listener
+    # another mission also claims doesn't start, so neither mission's listener can take the
+    # other's peer (fail closed).
+    with :ok <- ListenClaims.check_paths(realized_contact.mission_id, realized_contact.paths),
+         {:ok, %RealizedContactRuntimeSpec{} = spec} <- runtime_spec(realized_contact) do
       RuntimeContacts.start(spec)
     end
   end
