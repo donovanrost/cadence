@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ApPanel, ApSegmented, ApTable, type ApColumn } from "@/ui";
+import { ApPanel, ApSegmented, ApTable, ApTag, type ApColumn } from "@/ui";
 import type { ImportRunDetail } from "./importRun.ts";
 
 /** C1 Diff: changes sorted by risk (breaking first), filterable (Catalog.md § C1). */
@@ -37,6 +37,14 @@ const columns: readonly ApColumn[] = [
   { key: "change", label: "Change" },
 ];
 const glyph = (op: string) => (op === "added" ? "+" : op === "removed" ? "−" : "~");
+/** a11y B2: the glyph is aria-hidden; its word is read instead, and Breaking is a word, not just the wash. */
+type Op = Diff["changes"][number]["op"];
+const OP_WORD = {
+  added: "Added",
+  changed: "Changed",
+  removed: "Removed",
+} as const satisfies Record<Op, string>;
+const opWord = (op: Op) => OP_WORD[op];
 </script>
 
 <template>
@@ -57,13 +65,19 @@ const glyph = (op: string) => (op === "added" ? "+" : op === "removed" ? "−" :
       :row-state="(c) => (c.breaking ? 'caution' : null)"
     >
       <template #cell-op="{ row }"
-        ><span class="text-[15px] font-semibold">{{ glyph(row.op) }}</span></template
+        ><span class="text-[15px] font-semibold" aria-hidden="true">{{ glyph(row.op) }}</span
+        ><span class="sr-only">{{ opWord(row.op) }}</span></template
       >
       <template #cell-kind="{ row }">{{
         row.kind === "command" ? "CMD" : row.kind === "telemetry" ? "TLM" : "—"
       }}</template>
       <template #cell-change="{ row }"
-        ><span class="text-text-2">{{ row.change ?? "—" }}</span></template
+        ><span class="flex flex-wrap items-center gap-2"
+          ><ApTag v-if="row.breaking" state="caution" label="Breaking" /><span
+            class="text-text-2"
+            >{{ row.change ?? "—" }}</span
+          ></span
+        ></template
       >
       <template v-if="diff.truncated" #footer>
         <p class="m-0 border-t border-hairline px-4 py-2.5 font-mono text-xs text-text-3 uppercase">

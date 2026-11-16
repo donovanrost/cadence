@@ -113,14 +113,14 @@ const rolloutOptions = [
           <div class="flex flex-wrap gap-2">
             <ApButton
               :disabled="busy || problems.length > 0"
-              disabled-reason="Fix the rules first."
+              :disabled-reason="busy ? 'Working…' : (problems[0] ?? '')"
               @click="check"
               >Check with the server</ApButton
             >
             <ApButton
               variant="primary"
               :disabled="busy || problems.length > 0"
-              disabled-reason="Fix the rules first."
+              :disabled-reason="busy ? 'Working…' : (problems[0] ?? '')"
               @click="stage"
               >Stage rule change</ApButton
             >

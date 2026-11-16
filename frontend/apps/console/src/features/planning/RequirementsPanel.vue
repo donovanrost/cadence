@@ -39,6 +39,17 @@ const query = computed(() =>
       },
 );
 const list = useRemoteQuery(query, fetchRequirements);
+// a11y A5: Newer/Older sit outside ApRemote, so the focused one stays while the next page loads;
+// they keep the last page's next_page and wait (Loading…) until the new one arrives.
+const nextPage = ref<number | null>(null);
+watch(
+  () => list.state.value,
+  (s) => {
+    if (s.status === "ready") nextPage.value = s.value.next_page;
+  },
+  { immediate: true },
+);
+const loading = computed(() => list.state.value.status === "loading");
 </script>
 
 <template>
@@ -77,13 +88,14 @@ const list = useRemoteQuery(query, fetchRequirements);
           "
         />
         <RequirementsTable v-else :rows="value.requirements" :templates="templates" />
-        <RequirementsPager
-          v-if="page > 1 || value.next_page"
-          :page="page"
-          :next-page="value.next_page"
-          @go="page = $event"
-        />
       </template>
     </ApRemote>
+    <RequirementsPager
+      v-if="filter !== 'template' && (page > 1 || nextPage !== null)"
+      :page="page"
+      :next-page="nextPage"
+      :busy="loading"
+      @go="page = $event"
+    />
   </ApPanel>
 </template>

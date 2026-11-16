@@ -66,6 +66,11 @@ export const tokens = [
   "{direction}",
 ] as const;
 
+/** The name template's tokens the server won't know, in the order typed. */
+export function unknownTokens(nameTemplate: string): string[] {
+  return (nameTemplate.match(/\{[^}]*\}/g) ?? []).filter((t) => !tokens.some((k) => k === t));
+}
+
 /** Browser checks only (the server's dry run decides): label, a station, a leg, known tokens. */
 export function draftProblems(drafts: readonly RuleDraft[]): string[] {
   const problems: string[] = [];
@@ -74,9 +79,7 @@ export function draftProblems(drafts: readonly RuleDraft[]): string[] {
     if (!d.label.trim()) problems.push(`Rule ${i + 1}: give it a label.`);
     if (d.stationIds.length === 0) problems.push(`${name}: pick at least one station.`);
     if (d.legs.length === 0) problems.push(`${name}: add a downlink or uplink leg.`);
-    const unknown = (d.nameTemplate.match(/\{[^}]*\}/g) ?? []).filter(
-      (t) => !tokens.some((k) => k === t),
-    );
+    const unknown = unknownTokens(d.nameTemplate);
     if (unknown.length > 0) problems.push(`${name}: unknown token ${unknown.join(", ")}.`);
   });
   return problems;
