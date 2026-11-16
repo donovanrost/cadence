@@ -177,7 +177,8 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
            "production federation publication is missing #{inspect(missing)}; run mix test.browser.federation"
   end
 
-  defp persist_context! do
+  @doc "The federation smokes' fixture: org admin, mission, spacecraft, transport and packet model."
+  def persist_context! do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!(display_name: "Federation Browser Organization")
     membership = TestFixtures.grant_membership!(user, organization)

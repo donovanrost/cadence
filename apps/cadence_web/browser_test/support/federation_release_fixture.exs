@@ -57,6 +57,9 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   def prepare_and_activate!(app_root, opts \\ []) when is_binary(app_root) do
     sandbox_owner = Keyword.fetch!(opts, :sandbox_owner)
     ops_surface = Keyword.get(opts, :ops_console_surface, "commands")
+    # The console federation smoke adds its test-only contract_probe application (the caller
+    # enables Cadence.Applications.FixtureContributors first): two builds, N-1 and N, that differ.
+    contract_probe? = Keyword.get(opts, :contract_probe, false)
     temp_root = temporary_root!()
 
     try do
@@ -110,78 +113,93 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           Path.join(temp_root, "release-build-spacecraft")
         )
 
+      probe_packages =
+        if contract_probe?,
+          do: contract_probe_packages!(node, temp_root),
+          else: %{n_minus_1: [], n: []}
+
       packages = %{
-        n_minus_1: [
-          package!(
-            node,
-            "comms-n-minus-1",
-            comms_build,
-            comms_metadata(:n_minus_1),
-            temp_root
-          ),
-          package!(
-            node,
-            "telemetry-decom-n-minus-1",
-            telemetry_build,
-            telemetry_metadata(:n_minus_1),
-            temp_root
-          ),
-          package!(
-            node,
-            "mission-catalog-n-minus-1",
-            mission_catalog_build,
-            mission_catalog_metadata(:n_minus_1),
-            temp_root
-          ),
-          package!(
-            node,
-            "ops-console-n-minus-1",
-            ops_console_build,
-            ops_console_metadata(:n_minus_1, ops_surface),
-            temp_root
-          ),
-          package!(
-            node,
-            "organization-admin-n-minus-1",
-            organization_admin_build,
-            organization_admin_metadata(:n_minus_1),
-            temp_root
-          ),
-          package!(
-            node,
-            "spacecraft-n-minus-1",
-            spacecraft_build,
-            spacecraft_metadata(:n_minus_1),
-            temp_root
-          )
-        ],
-        n: [
-          package!(node, "comms-n", comms_build, comms_metadata(:n), temp_root),
-          package!(node, "telemetry-decom-n", telemetry_build, telemetry_metadata(:n), temp_root),
-          package!(
-            node,
-            "mission-catalog-n",
-            mission_catalog_build,
-            mission_catalog_metadata(:n),
-            temp_root
-          ),
-          package!(
-            node,
-            "ops-console-n",
-            ops_console_build,
-            ops_console_metadata(:n, ops_surface),
-            temp_root
-          ),
-          package!(
-            node,
-            "organization-admin-n",
-            organization_admin_build,
-            organization_admin_metadata(:n),
-            temp_root
-          ),
-          package!(node, "spacecraft-n", spacecraft_build, spacecraft_metadata(:n), temp_root)
-        ]
+        n_minus_1:
+          [
+            package!(
+              node,
+              "comms-n-minus-1",
+              comms_build,
+              comms_metadata(:n_minus_1),
+              temp_root
+            ),
+            package!(
+              node,
+              "telemetry-decom-n-minus-1",
+              telemetry_build,
+              telemetry_metadata(:n_minus_1),
+              temp_root
+            ),
+            package!(
+              node,
+              "mission-catalog-n-minus-1",
+              mission_catalog_build,
+              mission_catalog_metadata(:n_minus_1),
+              temp_root
+            ),
+            package!(
+              node,
+              "ops-console-n-minus-1",
+              ops_console_build,
+              ops_console_metadata(:n_minus_1, ops_surface),
+              temp_root
+            ),
+            package!(
+              node,
+              "organization-admin-n-minus-1",
+              organization_admin_build,
+              organization_admin_metadata(:n_minus_1),
+              temp_root
+            ),
+            package!(
+              node,
+              "spacecraft-n-minus-1",
+              spacecraft_build,
+              spacecraft_metadata(:n_minus_1),
+              temp_root
+            )
+          ] ++ probe_packages.n_minus_1,
+        n:
+          [
+            package!(node, "comms-n", comms_build, comms_metadata(:n), temp_root),
+            package!(
+              node,
+              "telemetry-decom-n",
+              telemetry_build,
+              telemetry_metadata(:n),
+              temp_root
+            ),
+            package!(
+              node,
+              "mission-catalog-n",
+              mission_catalog_build,
+              mission_catalog_metadata(:n),
+              temp_root
+            ),
+            package!(
+              node,
+              "ops-console-n",
+              ops_console_build,
+              ops_console_metadata(:n, ops_surface),
+              temp_root
+            ),
+            package!(
+              node,
+              "organization-admin-n",
+              organization_admin_build,
+              organization_admin_metadata(:n),
+              temp_root
+            ),
+            package!(node, "spacecraft-n", spacecraft_build, spacecraft_metadata(:n), temp_root)
+          ] ++ probe_packages.n
       }
+
+      application_count = length(packages.n_minus_1)
 
       admitted =
         Map.new(packages, fn {slot, slot_packages} ->
@@ -205,7 +223,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
 
       assert %{
                "data" => %{
-                 "identityCount" => 6,
+                 "identityCount" => ^application_count,
                  "outcome" => "initial",
                  "sequence" => 1,
                  "status" => "activated"
@@ -215,7 +233,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
       assert {:ok, %{source: :database, entries: entries}} =
                ApplicationReleaseRegistry.snapshot(now: @activation_now)
 
-      assert length(entries) == 6
+      assert length(entries) == application_count
       assert_registry_paths!(entries, admitted.n_minus_1)
 
       accepted_snapshot = ApplicationReleaseRegistry.snapshot(now: @activation_now)
@@ -694,6 +712,62 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
       nil -> nil
       %{publication: publication} -> snapshot_release(publication)
     end
+  end
+
+  # contract_probe (test-only): built twice with distinct labels, so N-1 and N differ in content.
+  # No publication output to check and no check:release: the release output check forbids this
+  # remote by design (it never ships).
+  defp contract_probe_packages!(node, temp_root) do
+    Map.new([:n_minus_1, :n], fn slot ->
+      build =
+        build_fixture_release!(
+          node,
+          "@cadence/contract-probe-plugin",
+          Path.join(temp_root, "release-build-contract-probe-#{slot_name(slot)}"),
+          slot_name(slot)
+        )
+
+      {slot,
+       [
+         package!(
+           node,
+           "contract-probe-#{slot_name(slot)}",
+           build,
+           contract_probe_metadata(slot),
+           temp_root
+         )
+       ]}
+    end)
+  end
+
+  defp build_fixture_release!(node, package_name, output_directory, label) do
+    corepack = System.find_executable("corepack") || raise "corepack executable is required"
+
+    assert {_output, 0} =
+             System.cmd(corepack, ["pnpm", "--filter", package_name, "build:release"],
+               cd: Path.join(@repo_root, "frontend"),
+               env: [
+                 {"PATH", Path.dirname(node) <> ":" <> System.get_env("PATH", "")},
+                 {"CADENCE_RELEASE_OUTPUT_DIR", output_directory},
+                 {"CADENCE_FIXTURE_RELEASE_LABEL", label}
+               ],
+               stderr_to_stdout: true
+             )
+
+    output_directory
+  end
+
+  defp contract_probe_metadata(slot) do
+    metadata(
+      "contract_probe",
+      "cadence.frontend-fixtures",
+      "mission_contracts",
+      "cadence.contract_probe.mission",
+      ["record_probe"],
+      "cadence_contract_probe",
+      "federation-browser-contract-probe-#{slot_name(slot)}",
+      released_at(slot)
+    )
   end
 
   defp release_ids(admitted) do

@@ -8,10 +8,23 @@ import tailwindcss from "@tailwindcss/vite";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "node:path";
-import { defineConfig, lazyPlugins } from "vite-plus";
+import { defineConfig, lazyPlugins, type ViteUserConfig } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
 const federatedEntry = resolve(__dirname, "src/federated-application.ts");
+
+// Like the product remotes: no Vite manifest (.vite/) in a release; the packager refuses it.
+function releaseOutputPlugin() {
+  return {
+    name: "cadence-contract-probe-release-output",
+    enforce: "post" as const,
+    apply: "build" as const,
+    config(config: ViteUserConfig) {
+      config.build ??= {};
+      config.build.manifest = false;
+    },
+  };
+}
 
 export default defineConfig(({ command, mode }) => {
   // `--mode release` (build:release): a signed-release build for the console federation smoke's
@@ -66,6 +79,7 @@ export default defineConfig(({ command, mode }) => {
               }
             : federationConfig,
         ),
+        ...(releaseBuild ? [releaseOutputPlugin()] : []),
       ]) ?? [],
   };
 });

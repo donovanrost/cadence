@@ -4292,7 +4292,7 @@ async function armNextManifestFailure(client, signal) {
 }
 
 /** @param {CdpPort} client @param {string} identifier @param {AbortSignal|undefined} signal */
-async function removeNewDocumentScript(client, identifier, signal) {
+export async function removeNewDocumentScript(client, identifier, signal) {
   if (!identifier) return;
   await client.send(
     "Page.removeScriptToEvaluateOnNewDocument",
@@ -4371,7 +4371,7 @@ async function assertContainedRemoteFailureAndRetry({
 }
 
 /** @param {CdpPort} client @param {AbortSignal|undefined} signal */
-async function armNextActionCsrfRejection(client, signal) {
+export async function armNextActionCsrfRejection(client, signal) {
   const result = await client.send(
     "Page.addScriptToEvaluateOnNewDocument",
     {
@@ -4933,7 +4933,7 @@ async function assertRepresentativeRemoteSurface({
 }
 
 /** @param {string} lifecycleUrl @param {"promote"|"rollback"} transition @param {Record<import("./browser-diagnostics.ts").ApplicationKey,string>} expectedReleaseIds */
-async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseIds) {
+export async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseIds) {
   const endpoint = assertHttpUrl(
     new URL(`/${transition}`, `${lifecycleUrl.replace(/\/$/, "")}/`).href,
     undefined,
@@ -6615,7 +6615,7 @@ function diagnosticString(value, label) {
 }
 
 /** @param {unknown} value @param {string} label */
-function diagnosticObject(value, label) {
+export function diagnosticObject(value, label) {
   assert.ok(isRecord(value), `${label} was not an object`);
   return value;
 }
