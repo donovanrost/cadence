@@ -80,3 +80,18 @@ migration through qa, then the console's Changes screens gain the kind):
 ## Not in this plan
 Alarm definitions (roadmap), WASM apps (deferred), and console screen design (ux/fe-setup), beyond
 naming the HOLD sentences ux will word.
+
+## Phase 3 scope notes (#92 phase 3 / #93; 2026-11-16)
+Carried into phase 3's design, where limits and derived telemetry become change-set layers:
+- **An unchanged edit is an empty change set** (lead, 11-16). Today a direct save of unchanged
+  content mints the next version (both stores' `append` always does); that stays as is while the
+  stores are feature-frozen (#92 phase 0). In phase 3 an edit that changes nothing stages nothing;
+  ux words what the operator sees.
+- **Cutover of the direct saves.** Phase 0 is a work freeze, so nothing refuses a save yet. The
+  recommendation (domain, sweep row 3): refuse `save_limit_definition` / `save_definition` at their
+  providers, which covers the console and the legacy host with one test, in the same batch that
+  adds the change-set path, so there's never a window with no way to fix a limit (#93 (b)(c)).
+  Lead and the director confirm the timing.
+- **The save trail is already uniform** (row 3, 358b31d1b + 7db8b68d7 with api's W1): every
+  version records `saved_by` and `via` (`console`, `legacy_host`, `change_set`), stripped from
+  content comparisons. Phase 3's layers keep it.
