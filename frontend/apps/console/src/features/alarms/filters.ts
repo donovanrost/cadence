@@ -1,31 +1,33 @@
 import type { LocationQuery } from "vue-router";
+import { EPISODES_LIMIT } from "./list.ts";
+import type { Episode } from "./episodes.ts";
 
-/** ux U69 A6: the Alarms filter row, in the URL (?sc=, ?severity=), applied by the server. */
-export type Severity = "critical" | "caution";
+/**
+ * ux U69 A6: the Alarms filter row, in the URL (?sc=, ?severity=). Applied to the one episodes
+ * read, so the picker can count each spacecraft's alarms and the list can say 'N of M shown'.
+ */
+export type Severity = Episode["severity"];
 export const SEVERITIES: readonly Severity[] = ["critical", "caution"];
 export const SEVERITY_WORDS = { critical: "Critical", caution: "Caution" } as const;
-export type EpisodeFilters = Readonly<{ spacecraftId: string | null; severity: Severity | null }>;
-export const NO_FILTERS: EpisodeFilters = { spacecraftId: null, severity: null };
+export type EpisodeFilters = Readonly<{ spacecraftId: string | null; severities: Severity[] }>;
 
 const isSeverity = (s: string): s is Severity => (SEVERITIES as readonly string[]).includes(s);
 
-/** The severities ticked in ?severity= (comma-separated; unknown words ignored). */
-export function severitiesOf(query: LocationQuery): Severity[] {
-  const raw = query.severity;
-  const text = typeof raw === "string" ? raw : "";
-  return SEVERITIES.filter((s) => text.split(",").filter(isSeverity).includes(s));
-}
-
-/** Both ticked is the same as none: the server takes one severity or all. */
+/** ?sc= and ?severity= (comma-separated; unknown words ignored; both ticked = no filter). */
 export function filtersOf(query: LocationQuery): EpisodeFilters {
-  const ticked = severitiesOf(query);
+  const raw = typeof query.severity === "string" ? query.severity.split(",") : [];
+  const ticked = SEVERITIES.filter((s) => raw.filter(isSeverity).includes(s));
   return {
     spacecraftId: typeof query.sc === "string" && query.sc ? query.sc : null,
-    severity: ticked.length === 1 ? (ticked[0] ?? null) : null,
+    severities: ticked.length === SEVERITIES.length ? [] : ticked,
   };
 }
 
-export const filtered = (f: EpisodeFilters) => f.spacecraftId !== null || f.severity !== null;
+export const filtered = (f: EpisodeFilters) => f.spacecraftId !== null || f.severities.length > 0;
+
+export const matches = (e: Episode, f: EpisodeFilters) =>
+  (f.spacecraftId === null || e.spacecraft_id === f.spacecraftId) &&
+  (f.severities.length === 0 || f.severities.includes(e.severity));
 
 /** The query with one filter changed; empty values leave the URL. */
 export function withFilter(
@@ -35,4 +37,35 @@ export function withFilter(
 ): LocationQuery {
   const { [key]: _drop, ...rest } = query;
   return value ? { ...rest, [key]: value } : rest;
+}
+
+/**
+ * ux: the picker lists only spacecraft with alarms in the current tab, each with its count
+ * ('EARENDIL-312 (3)'), by name; the selected one stays even at 0.
+ */
+export function spacecraftOptions(
+  episodes: readonly Episode[],
+  selected: string | null,
+  nameOf: (id: string) => string,
+): { value: string; label: string }[] {
+  const counts = new Map<string, number>();
+  for (const e of episodes)
+    if (e.spacecraft_id) counts.set(e.spacecraft_id, (counts.get(e.spacecraft_id) ?? 0) + 1);
+  if (selected !== null && !counts.has(selected)) counts.set(selected, 0);
+  return [...counts]
+    .map(([id, n]) => ({ value: id, label: `${nameOf(id)} (${n})` }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+}
+
+/** ux (Fleet's form): 'No critical alarms on EARENDIL-312.' / 'No caution alarms.' / 'No alarms on …'. */
+export function filteredEmpty(f: EpisodeFilters, nameOf: (id: string) => string): string {
+  const sev = f.severities.length === 1 ? `${f.severities[0]} ` : "";
+  const on = f.spacecraftId === null ? "" : ` on ${nameOf(f.spacecraftId)}`;
+  return `No ${sev}alarms${on}.`;
+}
+
+/** 'N of M shown' where the table starts; a capped read says the count covers only that read. */
+export function shownLine(shown: number, total: number, read: number): string {
+  const line = `${shown} of ${total} shown`;
+  return read >= EPISODES_LIMIT ? `${line} · from the first ${EPISODES_LIMIT} alarms` : line;
 }

@@ -8,7 +8,8 @@ import { SEVERITIES, SEVERITY_WORDS, type Severity } from "./filters.ts";
  * By point stays in L2 and they all combine. Clear filters resets this row.
  */
 const props = defineProps<{
-  spacecraft: readonly { id: string; name: string }[];
+  /** Spacecraft with alarms in the tab, each with its count (ux): 'EARENDIL-312 (3)'. */
+  options: readonly { value: string; label: string }[];
   spacecraftId: string | null;
   severities: readonly Severity[];
 }>();
@@ -17,10 +18,7 @@ const emit = defineEmits<{
   severities: [s: Severity[]];
   clear: [];
 }>();
-const options = computed(() => [
-  { value: "", label: "Any spacecraft" },
-  ...props.spacecraft.map((s) => ({ value: s.id, label: s.name })),
-]);
+const options = computed(() => [{ value: "", label: "Any spacecraft" }, ...props.options]);
 const sc = computed({
   get: () => props.spacecraftId ?? "",
   set: (v: string) => emit("spacecraft", v || null),

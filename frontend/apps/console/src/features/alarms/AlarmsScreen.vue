@@ -29,7 +29,8 @@ import {
 } from "./list.ts";
 import { useActiveEpisodes, useClearedEpisodes } from "./useAlarms.ts";
 import AlarmFilters from "./AlarmFilters.vue";
-import { filtered, filtersOf, severitiesOf, withFilter } from "./filters.ts";
+import { filtered, filteredEmpty, matches, shownLine, spacecraftOptions } from "./filters.ts";
+import { useAlarmFilters } from "./useAlarmFilters.ts";
 
 /**
  * Alarms (OpsLists.md §Alarms) on alarm episodes: "What's out of limits right now, and who has it?"
@@ -48,19 +49,9 @@ const tab = computed<AlarmTab>(() => {
     ? (t as AlarmTab)
     : "new";
 });
-/** ux U69 A6: spacecraft + severity, in the URL, applied by the server. */
-const filters = computed(() => filtersOf(route.query));
-const severities = computed(() => severitiesOf(route.query));
-function setFilter(key: "sc" | "severity", value: string | null) {
-  router
-    .replace({ query: withFilter(route.query, key, value) })
-    .catch((e: unknown) => console.error("Navigation failed", e));
-}
-function clearFilters() {
-  const { sc: _sc, severity: _sev, ...rest } = route.query;
-  router.replace({ query: rest }).catch((e: unknown) => console.error("Navigation failed", e));
-}
-const active = useActiveEpisodes(missionId, filters);
+/** ux U69 A6: spacecraft + severity, in the URL, applied to the one read (counts need it all). */
+const { filters, setFilter, clearFilters } = useAlarmFilters();
+const active = useActiveEpisodes(missionId);
 const cleared = useClearedEpisodes(
   missionId,
   // Also read when nothing is active: the empty state names the last clear.
@@ -69,7 +60,6 @@ const cleared = useClearedEpisodes(
       tab.value === "cleared" ||
       (active.state.value.status === "ready" && active.state.value.value.summary.active === 0),
   ),
-  filters,
 );
 const shown = computed(() => (tab.value === "cleared" ? cleared.state.value : active.state.value));
 
@@ -101,12 +91,7 @@ const headline = computed(() => {
   if (s.status !== "ready") return "Alarms";
   if (s.value.summary.active === 0)
     return limitsOff.value ? "Ground limits off" : "No active alarms";
-  // Mission-wide like `active`, so a filter doesn't change the headline (episodes are filtered).
-  const { critical, caution } = s.value.summary;
-  const fresh =
-    critical && caution
-      ? critical.new + caution.new
-      : s.value.episodes.filter((e) => e.status === "new").length;
+  const fresh = s.value.episodes.filter((e) => e.status === "new").length;
   return `${plural(s.value.summary.active, "alarm")} active · ${fresh} new`;
 });
 const tabs = computed(() =>
@@ -127,10 +112,33 @@ function toggle(key: string) {
   if (!next.delete(key)) next.add(key);
   expanded.value = next;
 }
-const rowsOf = (episodes: Parameters<typeof alarmRows>[0]) => {
-  const rows = alarmRows(episodes, fleetRows.value, tab.value, point.value, now.value);
+type Episodes = Parameters<typeof alarmRows>[0];
+/** The tab's rows under the point filter, before the filter row. */
+const tabRows = (episodes: Episodes) =>
+  alarmRows(episodes, fleetRows.value, tab.value, point.value, now.value);
+const rowsOf = (episodes: Episodes) => {
+  const rows = tabRows(episodes.filter((e) => matches(e, filters.value)));
   return point.value === null ? groupAlarmRows(rows, expanded.value) : rows;
 };
+const nameOf = (id: string) => fleetRows.value.find((sc) => sc.id === id)?.name ?? id;
+/** Picker: spacecraft with alarms in this tab (severity applied), each with its count. */
+const scOptions = (episodes: Episodes) =>
+  spacecraftOptions(
+    tabRows(episodes.filter((e) => matches(e, { ...filters.value, spacecraftId: null }))).map(
+      (r) => r.episode,
+    ),
+    filters.value.spacecraftId,
+    nameOf,
+  );
+const options = computed(() =>
+  shown.value.status === "ready" ? scOptions(shown.value.value.episodes) : [],
+);
+const shownOf = (episodes: Episodes) =>
+  shownLine(
+    tabRows(episodes.filter((e) => matches(e, filters.value))).length,
+    tabRows(episodes).length,
+    episodes.length,
+  );
 /** OpsLists §Alarms empty: "No active alarms. Last cleared 01:12Z on EARENDIL-047." */
 const lastCleared = computed(() =>
   cleared.state.value.status === "ready"
@@ -138,13 +146,11 @@ const lastCleared = computed(() =>
     : null,
 );
 const empty = computed(() =>
-  filtered(filters.value)
-    ? "No alarms match these filters."
-    : tab.value === "cleared"
-      ? "Nothing cleared in the last 24 h."
-      : tab.value === "acknowledged"
-        ? "No acknowledged alarms."
-        : "No unacknowledged alarms.",
+  tab.value === "cleared"
+    ? "Nothing cleared in the last 24 h."
+    : tab.value === "acknowledged"
+      ? "No acknowledged alarms."
+      : "No unacknowledged alarms.",
 );
 </script>
 
@@ -159,9 +165,9 @@ const empty = computed(() =>
     </ApCallout>
     <ApTabLinks :links="tabs" :active="tab" label="Alarm status" />
     <AlarmFilters
-      :spacecraft="fleetRows"
+      :options="options"
       :spacecraft-id="filters.spacecraftId"
-      :severities="severities"
+      :severities="filters.severities"
       @spacecraft="(id) => setFilter('sc', id)"
       @severities="(s) => setFilter('severity', s.join(',') || null)"
       @clear="clearFilters"
@@ -190,15 +196,27 @@ const empty = computed(() =>
             >
               No active alarms.{{ lastCleared ? ` ${lastCleared}` : "" }}
             </ApCallout>
+            <ApEmptyState
+              v-else-if="rowsOf(value.episodes).length === 0 && filtered(filters)"
+              :headline="filteredEmpty(filters, nameOf)"
+            >
+              <ApButton size="compact" @click="clearFilters">Clear filters</ApButton>
+            </ApEmptyState>
             <ApEmptyState v-else-if="rowsOf(value.episodes).length === 0" :headline="empty" />
             <template v-else>
+              <p
+                v-if="filtered(filters)"
+                class="m-0 border-b border-hairline px-4 py-2 font-mono text-xs text-text-3 uppercase"
+              >
+                {{ shownOf(value.episodes) }}
+              </p>
               <AlarmTable class="max-md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
               <AlarmRowList class="md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
               <p
                 v-if="
                   episodesCapNote(
                     value.episodes.length,
-                    tab === 'new' && !filtered(filters) ? value.summary.active : null,
+                    tab === 'new' ? value.summary.active : null,
                   )
                 "
                 class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
@@ -206,7 +224,7 @@ const empty = computed(() =>
                 {{
                   episodesCapNote(
                     value.episodes.length,
-                    tab === "new" && !filtered(filters) ? value.summary.active : null,
+                    tab === "new" ? value.summary.active : null,
                   )
                 }}
               </p>

@@ -70,12 +70,7 @@ export type EpisodeDetail = Decoded<typeof episodeDetail>;
 export const ALARM_PERMISSIONS = ["alarm.acknowledge", "alarm.assign"] as const;
 
 export const episodesReader = d.object({
-  summary: d.object({
-    active: d.integer,
-    /** Per severity, mission-wide like `active` (filters don't change them). */
-    critical: d.optional(d.object({ new: d.integer, acknowledged: d.integer })),
-    caution: d.optional(d.object({ new: d.integer, acknowledged: d.integer })),
-  }),
+  summary: d.object({ active: d.integer }),
   permissions: d.array(d.token, 20),
   episodes: d.array(episode, 200),
 });
@@ -85,16 +80,11 @@ const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId
 
 export function fetchEpisodes(
   missionId: MissionId,
-  query: Readonly<{
-    spacecraftId?: string | null;
-    severity?: "critical" | "caution" | null;
-    state?: "active" | "cleared" | "all";
-  }>,
+  query: Readonly<{ spacecraftId?: string; state?: "active" | "cleared" | "all" }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<Episodes>> {
   const params = new URLSearchParams({ state: query.state ?? "active", limit: "200" });
   if (query.spacecraftId) params.set("spacecraft_id", query.spacecraftId);
-  if (query.severity) params.set("severity", query.severity);
   return request(
     `${base(missionId)}?${params.toString()}`,
     episodesReader,
