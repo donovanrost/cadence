@@ -116,16 +116,10 @@ defmodule Cadence.Management.ConfigKinds.Transport do
     kind = Enum.find(Transport.transport_kinds(), &(Atom.to_string(&1) == doc["transport_kind"]))
 
     with {:ok, entry} <- TransportKind.fetch(kind),
-         {:ok, configuration} <- entry.module.normalize_config(doc["configuration"]),
-         # SAFETY: a listen host:port is one mission's; the store refuses it too, at write.
-         :ok <- ListenClaims.check(mission_id, ListenClaims.endpoint(configuration)) do
-      :ok
+         {:ok, configuration} <- entry.module.normalize_config(doc["configuration"]) do
+      listen_claim(mission_id, configuration)
     else
-      {:error, {:listen_endpoint_claimed, _endpoint}} ->
-        {:error, [F.error("configuration.port", ListenClaims.message())]}
-
-      _invalid ->
-        {:error, [F.error("configuration", "Transport settings are not valid")]}
+      _invalid -> {:error, [F.error("configuration", "Transport settings are not valid")]}
     end
   end
 
@@ -147,9 +141,9 @@ defmodule Cadence.Management.ConfigKinds.Transport do
 
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
 
-  # SAFETY: a listen host:port is one mission's (listener guard). A provider-managed transport's
-  # derived configuration listens too (provider_connects), so its preview refuses a claimed port
-  # like a direct one, instead of passing and failing at apply.
+  # SAFETY: a listen host:port is one mission's (listener guard); the store refuses it too, at
+  # write. Both origins check here: a provider-managed transport's derived configuration listens
+  # too (provider_connects), so it's refused at validate like a direct one.
   defp listen_claim(mission_id, configuration) do
     case ListenClaims.check(mission_id, ListenClaims.endpoint(configuration)) do
       :ok ->

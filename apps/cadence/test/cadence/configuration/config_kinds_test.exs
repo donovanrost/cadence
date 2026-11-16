@@ -6,6 +6,7 @@ defmodule Cadence.Configuration.ConfigKindsTest do
 
   alias Cadence.Comms.{ListenClaims, TransportStore}
   alias Cadence.Control.Configuration
+  alias Cadence.Management.ConfigKinds.Transport, as: TransportConfigKind
   alias Cadence.Management.Transports
   alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
@@ -109,6 +110,35 @@ defmodule Cadence.Configuration.ConfigKindsTest do
                Enum.find(checks, &(&1.key == "validation"))
 
       assert message == ListenClaims.message()
+
+      # And at validate itself, not only through the store guard the preview's write also hits
+      # (api-ops' review): the derived endpoint is what's checked.
+      assert {:error, [%{path: "configuration.port", message: ^message}]} =
+               TransportConfigKind.validate(
+                 ctx.org,
+                 ctx.mission,
+                 :create,
+                 "transport-x",
+                 nil,
+                 doc
+               )
+
+      # A direct transport on the same claimed port: the same refusal, from the same mapping.
+      direct =
+        "Direct"
+        |> transport_doc()
+        |> put_in(["configuration", "port"], "5100")
+        |> Map.merge(%{"origin" => "direct", "transport_kind" => "tcp_socket"})
+
+      assert {:error, [%{path: "configuration.port", message: ^message}]} =
+               TransportConfigKind.validate(
+                 ctx.org,
+                 ctx.mission,
+                 :create,
+                 "transport-y",
+                 nil,
+                 direct
+               )
     end
   end
 
