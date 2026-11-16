@@ -71,13 +71,7 @@ const onAbort = () => run().catch((e: unknown) => console.error("Abort failed", 
       </template>
       Abort the uplinks that haven't started? They're canceled; ones already radiating keep running.
       <template #fields>
-        <ApTextarea
-          v-model="reason"
-          label="Why abort"
-          :rows="2"
-          required
-          hint="Uplinks already radiating keep running."
-        />
+        <ApTextarea v-model="reason" label="Why abort" :rows="2" required />
       </template>
     </ApInlineConfirm>
   </div>
