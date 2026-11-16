@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import ApBreadcrumb from "./ApBreadcrumb.vue";
 import ApButton from "./ApButton.vue";
 import ApCheckRows from "./ApCheckRows.vue";
+import ApEventLine from "./ApEventLine.vue";
 import ApField from "./ApField.vue";
 import ApPageHeader from "./ApPageHeader.vue";
 import ApSegmented from "./ApSegmented.vue";
@@ -77,6 +78,25 @@ describe("ApSelect", () => {
     expect(select.attributes("aria-invalid")).toBeUndefined();
     await wrapper.setProps({ error: "Choose a mission." });
     expect(select.attributes("aria-invalid")).toBe("true");
+  });
+});
+
+describe("ApEventLine", () => {
+  it("is a plain row without `selected`, and a toggle with it (ux U71 A8)", async () => {
+    const plain = mount(ApEventLine, { props: { time: "02:51:03Z", state: "caution" } });
+    expect(plain.find("button").exists()).toBe(false);
+    const row = mount(ApEventLine, {
+      props: { time: "02:51:03Z", state: "caution", selected: false },
+    });
+    const button = row.get("button");
+    expect(button.attributes("aria-pressed")).toBe("false");
+    await button.trigger("click");
+    expect(row.emitted("select")).toHaveLength(1);
+    await row.setProps({ selected: true });
+    expect(row.get("button").attributes("aria-pressed")).toBe("true");
+    expect(row.get("li").classes().join(" ")).toContain(
+      "shadow-[inset_2px_0_0_var(--color-readout)]",
+    );
   });
 });
 
