@@ -112,7 +112,7 @@ defmodule Cadence.Control.LegacyRouteConversionTest do
     assert {:error, {:conversion_already_staged, %{batch: 1, author: %{name: "Mira"}}}} =
              LegacyRouteConversion.stage_next_batch(ctx.stager, ctx.mission, 2)
 
-    assert {:error, :conversion_in_progress} =
+    assert {:error, {:conversion_in_progress, %{change_set_id: _, batch: 1}}} =
              Configuration.stage(ctx.reviewer, ctx.mission, %{summary: "Other"}, [
                create("ground_station", %{"display_name" => "Elsewhere"})
              ])
@@ -169,6 +169,40 @@ defmodule Cadence.Control.LegacyRouteConversionTest do
 
     assert {:ok, %{routes_converted: 4, routes_total: 7, next_batch: 2, staged_batch: nil}} =
              LegacyRouteConversion.progress(ctx.stager, ctx.mission, 2)
+  end
+
+  # lead: the block on other staging lasts only while a batch is staged-not-applied. A discard
+  # lifts it as an apply does, so a discarded batch never leaves the mission frozen.
+  test "discarding a staged batch lifts the block and leaves the legacy rules as they were",
+       ctx do
+    before = plan(ctx)
+    {:ok, staged} = LegacyRouteConversion.stage_next_batch(ctx.stager, ctx.mission, 2)
+    {:ok, set} = Configuration.change_set(ctx.stager, ctx.mission, staged.change_set_id)
+
+    assert {:error, {:conversion_in_progress, %{change_set_id: _, batch: 1}}} =
+             Configuration.stage(ctx.reviewer, ctx.mission, %{summary: "Other"}, [
+               create("ground_station", %{"display_name" => "Elsewhere"})
+             ])
+
+    assert {:ok, _discarded} =
+             Configuration.discard(ctx.stager, ctx.mission, staged.change_set_id, set.version)
+
+    assert plan(ctx) == before
+
+    assert {:ok, %{staged_batch: nil, next_batch: 1, routes_converted: 0}} =
+             LegacyRouteConversion.progress(ctx.stager, ctx.mission, 2)
+
+    # Other staging works again, and the same batch can be staged again later.
+    assert {:ok, other} =
+             Configuration.stage(ctx.reviewer, ctx.mission, %{summary: "Other"}, [
+               create("ground_station", %{"display_name" => "Elsewhere"})
+             ])
+
+    assert {:ok, _} =
+             Configuration.discard(ctx.reviewer, ctx.mission, other.change_set_id, other.version)
+
+    assert {:ok, %{batch: 1, route_count: 4}} =
+             LegacyRouteConversion.stage_next_batch(ctx.stager, ctx.mission, 2)
   end
 
   test "a batch needs an empty open change set", ctx do

@@ -75,20 +75,27 @@ defmodule Cadence.Configuration.Staging do
     cond do
       rollback?(source) and staged != [] -> {:error, :change_set_open}
       Enum.any?(staged, &rollback?(&1.source)) -> {:error, :rollback_in_progress}
-      true -> conversion_alone(staged, conversion?(source))
+      true -> conversion_alone(set, staged, conversion?(source))
     end
   end
 
-  defp conversion_alone(staged, staging_conversion?) do
-    holds_conversion? = Enum.any?(staged, &conversion?(&1.source))
+  defp conversion_alone(set, staged, staging_conversion?) do
+    batch = Enum.find(staged, &conversion?(&1.source))
 
     cond do
-      staging_conversion? and holds_conversion? -> {:error, :conversion_already_staged}
+      staging_conversion? and batch != nil -> {:error, :conversion_already_staged}
       staging_conversion? and staged != [] -> {:error, :open_change_set_not_empty}
-      holds_conversion? -> {:error, :conversion_in_progress}
+      batch != nil -> {:error, {:conversion_in_progress, in_progress(set, batch)}}
       true -> :ok
     end
   end
+
+  # ux U79: which batch holds the set, for "Batch 3 of the route conversion is staged, …".
+  defp in_progress(set, change),
+    do: %{
+      change_set_id: set.change_set_id,
+      batch: get_in(change.source, ["legacy_route_conversion", "batch"])
+    }
 
   defp rollback?(%{"rollback" => %{}}), do: true
   defp rollback?(_source), do: false
