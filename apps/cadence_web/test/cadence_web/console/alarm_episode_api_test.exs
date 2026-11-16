@@ -84,6 +84,13 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
 
       assert %{"code" => "invalid_params", "details" => %{"state" => _, "limit" => _}} =
                body["error"]
+
+      # U69 A6d: pages by meta.next_cursor; a bad cursor is a 422.
+      assert %{"meta" => %{"next_cursor" => nil}} =
+               c |> conn() |> get(path(c, "")) |> json_response(200)
+
+      body = c |> conn() |> get(path(c, "?cursor=nope")) |> json_response(422)
+      assert %{"details" => %{"cursor" => _}} = body["error"]
     end
   end
 

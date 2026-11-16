@@ -9,7 +9,7 @@ defmodule Cadence.Alarms.Queries do
 
   import Ecto.Query
 
-  alias Cadence.Alarms.{EpisodeEventRow, EpisodeRow}
+  alias Cadence.Alarms.{EpisodeCursor, EpisodeEventRow, EpisodeRow}
   alias Cadence.Repo
 
   @max_limit 200
@@ -56,21 +56,36 @@ defmodule Cadence.Alarms.Queries do
   end
 
   @spec list(String.t(), filters()) :: [map()]
-  def list(mission_id, filters \\ %{}) do
+  def list(mission_id, filters \\ %{}), do: page(mission_id, filters).episodes
+
+  @doc """
+  U69 A6d: one page in the list's order and the key after its last row (`nil` when it's the
+  last page). `filters[:after]` is a key from a previous page (`Alarms.EpisodeCursor`).
+  """
+  @spec page(String.t(), filters()) :: %{episodes: [map()], next: EpisodeCursor.key() | nil}
+  def page(mission_id, filters \\ %{}) do
     state = Map.get(filters, :state, "active")
     limit = filters |> Map.get(:limit, 50) |> min(@max_limit) |> max(1)
 
-    EpisodeRow
-    |> where([e], e.mission_id == ^mission_id)
-    |> state_filter(state)
-    |> field_filter(:severity, Map.get(filters, :severity))
-    |> field_filter(:spacecraft_id, Map.get(filters, :spacecraft_id))
-    |> field_filter(:source, Map.get(filters, :source))
-    |> assignee_filter(Map.get(filters, :assignee_id))
-    |> ordered(state)
-    |> limit(^limit)
-    |> Repo.all()
-    |> Enum.map(&view/1)
+    rows =
+      EpisodeRow
+      |> where([e], e.mission_id == ^mission_id)
+      |> state_filter(state)
+      |> field_filter(:severity, Map.get(filters, :severity))
+      |> field_filter(:spacecraft_id, Map.get(filters, :spacecraft_id))
+      |> field_filter(:source, Map.get(filters, :source))
+      |> assignee_filter(Map.get(filters, :assignee_id))
+      |> EpisodeCursor.after_key(state, Map.get(filters, :after))
+      |> ordered(state)
+      |> limit(^(limit + 1))
+      |> Repo.all()
+
+    shown = Enum.take(rows, limit)
+
+    next =
+      if length(rows) > limit, do: EpisodeCursor.key(List.last(shown), state)
+
+    %{episodes: Enum.map(shown, &view/1), next: next}
   end
 
   @spec get(String.t(), String.t()) :: {:ok, map()} | {:error, :episode_not_found}

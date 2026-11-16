@@ -22,6 +22,14 @@ defmodule Cadence.Control.Alarms do
          do: {:ok, Queries.list(mission.mission_id, filters)}
   end
 
+  @doc "U69 A6d: one page of episodes and the key after it (`Queries.page/2`)."
+  @spec page_episodes(Scope.t(), String.t(), Queries.filters()) ::
+          {:ok, %{episodes: [map()], next: term()}} | {:error, term()}
+  def page_episodes(%Scope{} = scope, mission_id, filters \\ %{}) do
+    with {:ok, mission} <- authorize(scope, mission_id, :read),
+         do: {:ok, Queries.page(mission.mission_id, filters)}
+  end
+
   @spec get_episode(Scope.t(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def get_episode(%Scope{} = scope, mission_id, episode_id) do
     with {:ok, mission} <- authorize(scope, mission_id, :read),

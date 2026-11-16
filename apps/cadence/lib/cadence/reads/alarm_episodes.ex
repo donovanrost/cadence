@@ -8,6 +8,7 @@ defmodule Cadence.Reads.AlarmEpisodes do
   (`Cadence.Reads.PointInfo`); it is `nil` when the catalog has no unit for the point.
   """
 
+  alias Cadence.Alarms.EpisodeCursor
   alias Cadence.Auth.Scope
   alias Cadence.Control.Alarms
   alias Cadence.Limits
@@ -15,12 +16,24 @@ defmodule Cadence.Reads.AlarmEpisodes do
   alias Cadence.Reads.PointInfo
   alias Cadence.SpacecraftStore
 
+  @doc """
+  One page of episodes with the summary and `next_cursor` (U69 A6d; `nil` on the last page).
+  `filters[:cursor]` is a previous page's `next_cursor`.
+  """
   @spec list(Scope.t(), String.t(), map()) ::
-          {:ok, %{episodes: [map()], summary: map()}} | {:error, term()}
+          {:ok, %{episodes: [map()], summary: map(), next_cursor: binary() | nil}}
+          | {:error, term()}
   def list(%Scope{} = scope, mission_id, filters \\ %{}) do
-    with {:ok, episodes} <- Alarms.list_episodes(scope, mission_id, filters),
+    with {:ok, after_key} <- EpisodeCursor.decode(Map.get(filters, :cursor)),
+         filters = filters |> Map.delete(:cursor) |> Map.put(:after, after_key),
+         {:ok, page} <- Alarms.page_episodes(scope, mission_id, filters),
          {:ok, summary} <- Alarms.summary(scope, mission_id) do
-      {:ok, %{episodes: enrich(scope.organization_id, mission_id, episodes), summary: summary}}
+      {:ok,
+       %{
+         episodes: enrich(scope.organization_id, mission_id, page.episodes),
+         summary: summary,
+         next_cursor: EpisodeCursor.encode(page.next)
+       }}
     end
   end
 

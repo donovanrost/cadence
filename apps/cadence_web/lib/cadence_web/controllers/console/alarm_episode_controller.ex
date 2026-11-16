@@ -19,10 +19,19 @@ defmodule CadenceWeb.Console.AlarmEpisodeController do
     with {:ok, filters} <- filters(params),
          {:ok, list} <- AlarmEpisodes.list(scope(conn), mission_id(conn), filters),
          {:ok, permissions} <- Alarms.permissions(scope(conn), mission_id(conn)) do
-      json(conn, %{data: AlarmEpisodeJSON.list(list, permissions)})
+      json(conn, %{
+        data: AlarmEpisodeJSON.list(list, permissions),
+        meta: %{next_cursor: list.next_cursor}
+      })
     else
-      {:error, {:invalid_params, details}} -> Problem.respond(conn, :invalid_params, details)
-      {:error, reason} -> problem(conn, reason)
+      {:error, {:invalid_params, details}} ->
+        Problem.respond(conn, :invalid_params, details)
+
+      {:error, :invalid_cursor} ->
+        Problem.respond(conn, :invalid_params, %{cursor: "is not a valid cursor"})
+
+      {:error, reason} ->
+        problem(conn, reason)
     end
   end
 
@@ -123,7 +132,9 @@ defmodule CadenceWeb.Console.AlarmEpisodeController do
          source: params["source"],
          spacecraft_id: blank_to_nil(params["spacecraft_id"]),
          assignee_id: blank_to_nil(params["assignee_id"]),
-         limit: elem(limit(params["limit"]), 1)
+         limit: elem(limit(params["limit"]), 1),
+         # U69 A6d: a previous page's meta.next_cursor.
+         cursor: blank_to_nil(params["cursor"])
        }}
     else
       {:error, {:invalid_params, errors}}

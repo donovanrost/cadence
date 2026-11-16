@@ -37,6 +37,12 @@ Query: `state` = `active` (default) | `cleared` | `all`; `severity` = `critical`
 
 - Order (server-decided, don't re-sort): active = critical first, New before acknowledged, newest
   opened first. Cleared = newest cleared first.
+- U69 A6d paging: the response carries `meta: {next_cursor}` (`null` on the last page); pass it
+  back as `?cursor=` with the same filters for the next page, in the same order (active: critical
+  first, unacknowledged first, newest opened; cleared: newest cleared). A row that keeps its
+  place never repeats or goes missing; one that moves between pages (acknowledged, escalated)
+  shows where it now sorts, so it can appear twice or not at all. A cursor from another `state`
+  matches nothing; a malformed one is `422 invalid_params` (`details.cursor`).
 - `summary` counts all active episodes in the mission, ignoring filters.
   `summary.latest_change` (U69 A6): the mission's newest state change, any episode, ignoring
   filters: `{at, kind: raised | escalated | deescalated | cleared, spacecraft_id | null,
