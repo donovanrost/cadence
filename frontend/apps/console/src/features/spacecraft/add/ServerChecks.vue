@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
-import { itemLine, previewOps, type Preview } from "@/features/changes/index.ts";
+import {
+  checkKeyText,
+  checkLabel,
+  itemLine,
+  previewOps,
+  type Preview,
+} from "@/features/changes/index.ts";
 import { useMissionScope } from "@/shell";
 import { ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
 import { useDraft } from "./context.ts";
@@ -21,14 +27,10 @@ const key = computed(() =>
 );
 const preview = useRemoteQuery(key, previewOps);
 
-const labels: Readonly<Record<string, string>> = {
-  validation: "Validation",
-  conflicts: "Conflicts",
-};
 function rows(p: Preview): readonly ApCheckRow[] {
   return p.checks.map((check) => ({
-    key: check.key,
-    label: labels[check.key] ?? check.key,
+    key: checkKeyText(check.key),
+    label: checkLabel(check.key),
     sentence:
       check.items.length === 0
         ? check.key === "conflicts"

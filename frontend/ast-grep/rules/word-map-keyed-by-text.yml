@@ -32,8 +32,6 @@
       "apps/console/src/features/apps/saveOutcome.ts",
       "apps/console/src/features/apps/surfaces.ts",
       "apps/console/src/features/audit/api.ts",
-      "apps/console/src/features/changes/ChecksPanel.vue",
-      "apps/console/src/features/changes/EntryList.vue",
       "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
       "apps/console/src/features/dashboards/fixtures.test-support.ts",
       "apps/console/src/features/dashboards/model/time-range.ts",
@@ -48,7 +46,6 @@
       "apps/console/src/features/scheduling/PlanStatePanel.vue",
       "apps/console/src/features/scheduling/api.ts",
       "apps/console/src/features/scheduling/booking-state.ts",
-      "apps/console/src/features/spacecraft/add/ServerChecks.vue",
       "apps/console/src/features/spacecraft/detail.ts",
     ],
 }

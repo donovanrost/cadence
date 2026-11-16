@@ -128,12 +128,34 @@ export const diffEntry = object({
 });
 export type DiffEntry = Decoded<typeof diffEntry>;
 
+/** The preview's checks (Cadence.Configuration.Preview.summarize/1); a new one reads as its key. */
+export const checkKeys = ["validation", "conflicts", "compatibility"] as const;
+export type CheckKey = (typeof checkKeys)[number];
+const CHECK_LABELS: Readonly<Record<CheckKey, string>> = {
+  validation: "Validation",
+  conflicts: "Conflicts",
+  compatibility: "Compatibility",
+};
+/** A check's row label; an unknown check reads as its key in words. */
+export const checkLabel = (key: CheckKey | Unrecognized): string =>
+  isKnown(key) ? CHECK_LABELS[key] : humanizeKey(key.unrecognized);
+/** The check's key as text (row keys). */
+export const checkKeyText = (key: CheckKey | Unrecognized): string =>
+  isKnown(key) ? key : key.unrecognized;
+const humanizeKey = (key: string) => {
+  const words = key
+    .replace(/[_.:-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
 export const previewReader = object({
   verdict,
   diffs: decoders.optional(array(diffEntry, 5000)),
   checks: array(
     object({
-      key: token,
+      key: decoders.knownText(checkKeys),
       verdict,
       /** #65: true when an item can't be acknowledged away (apply waits for it to clear). */
       blocking: decoders.optional(boolean),

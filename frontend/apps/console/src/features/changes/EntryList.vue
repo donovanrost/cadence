@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { ApPanel, plural } from "@/ui";
 import { humanize } from "./actions.ts";
-import { configKindText } from "./shapes.ts";
+import { configKindText, type EntryOp } from "./shapes.ts";
+import { isKnown, type Unrecognized } from "@/api";
 import FieldRows from "./FieldRows.vue";
 import type { RevisionEntry } from "./shapes.ts";
 
 /** What a revision changed: per entity, `path  − before  + after` rows (Changes.md §4). */
 defineProps<{ entries: readonly RevisionEntry[] }>();
-const verbs: Readonly<Record<string, string>> = {
+const verbs: Readonly<Record<EntryOp, string>> = {
   create: "Added",
   update: "Changed",
   delete: "Removed",
   archive: "Archived",
 };
-const verb = (op: string) => verbs[op] ?? humanize(op);
+const verb = (op: EntryOp | Unrecognized) => (isKnown(op) ? verbs[op] : humanize(op.unrecognized));
+const opText = (op: EntryOp | Unrecognized) => (isKnown(op) ? op : op.unrecognized);
 </script>
 
 <template>
@@ -26,7 +28,7 @@ const verb = (op: string) => verbs[op] ?? humanize(op);
       >
         <p
           class="m-0 text-sm text-text-2"
-          :title="`${entry.op} ${entry.kind} ${entry.entity_id ?? ''}`"
+          :title="`${opText(entry.op)} ${entry.kind} ${entry.entity_id ?? ''}`"
         >
           <span class="text-text-3"
             >{{ verb(entry.op) }} {{ configKindText(entry.kind).toLowerCase() }}</span

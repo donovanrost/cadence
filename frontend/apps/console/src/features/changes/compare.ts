@@ -1,7 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import { configKind } from "./shapes.ts";
 import { decoders as d, request, type ApiResult } from "@/api";
-import { field, type RevisionEntry } from "./shapes.ts";
+import { entryOps, field, type RevisionEntry } from "./shapes.ts";
 
 /** GET /config/compare?from=&to= (Changes.md §4 Compare): the combined diff between two revisions. */
 const compareReader = d.object({
@@ -12,7 +12,7 @@ const compareReader = d.object({
       kind: configKind,
       entity_id: d.nullable(d.token),
       entity_name: d.optional(d.nullable(d.string)),
-      op: d.token,
+      op: d.knownText(entryOps),
       /** Revisions in (from, to] that touched this entity. */
       revisions: d.array(d.integer, 1000),
       fields: d.array(field, 2000),

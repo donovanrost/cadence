@@ -2,11 +2,12 @@
 import { computed } from "vue";
 import type { ApiError, RemoteState } from "@/api";
 import { ApButton, ApCallout, ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
-import { groupedLines, humanize, type Preview } from "./actions.ts";
+import { groupedLines, type Preview } from "./actions.ts";
 import AlarmLinks from "./AlarmLinks.vue";
 import DependentLinks from "./DependentLinks.vue";
 import { dependents } from "./dependents.ts";
 import { alarmPoints, appHolds, checkTitle, modelHolds } from "./holds.ts";
+import { checkKeyText, checkLabel } from "./preview.ts";
 import AppInstallLinks from "./AppInstallLinks.vue";
 import ModelApprovalLinks from "./ModelApprovalLinks.vue";
 
@@ -15,15 +16,10 @@ import ModelApprovalLinks from "./ModelApprovalLinks.vue";
 const props = defineProps<{ preview: RemoteState<Preview>; leftBy?: string | undefined }>();
 defineEmits<{ retry: [] }>();
 
-const labels: Readonly<Record<string, string>> = {
-  validation: "Validation",
-  conflicts: "Conflicts",
-};
-
 function rows(preview: Preview): readonly ApCheckRow[] {
   return preview.checks.map((check) => ({
-    key: check.key,
-    label: checkTitle(check.items) ?? labels[check.key] ?? humanize(check.key),
+    key: checkKeyText(check.key),
+    label: checkTitle(check.items) ?? checkLabel(check.key),
     sentence:
       check.items.length === 0
         ? check.key === "conflicts"

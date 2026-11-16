@@ -69,14 +69,24 @@ export function fromDocument(
   return values;
 }
 
+/**
+ * The schema units the console formats itself (U24): seconds as durations, micros as currency
+ * units, ratio as a percent. Units are otherwise open display text from the server's schema, so
+ * this maps the text to the few the console knows once; anything else is shown as sent.
+ */
+const formattedUnits = ["s", "micros", "ratio"] as const;
+type FormattedUnit = (typeof formattedUnits)[number];
+export const formattedUnit = (f: Readonly<{ unit: string | null }>): FormattedUnit | null =>
+  formattedUnits.find((u) => u === f.unit) ?? null;
+
 /** U24: format by schema unit (seconds as durations, micros as currency units). */
 export function displayValue(f: SchemaField, v: unknown): string {
-  if (typeof v === "number" && f.unit === "s") return formatSeconds(v);
+  if (typeof v === "number" && formattedUnit(f) === "s") return formatSeconds(v);
   if (typeof v === "boolean") return v ? "true" : "false";
   if (Array.isArray(v))
     return v.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(", ");
-  if (typeof v === "number" && f.unit === "micros") return (v / 1_000_000).toFixed(2);
-  if (typeof v === "number" && f.unit === "ratio") return `${trimNumber(v * 100)}%`;
+  if (typeof v === "number" && formattedUnit(f) === "micros") return (v / 1_000_000).toFixed(2);
+  if (typeof v === "number" && formattedUnit(f) === "ratio") return `${trimNumber(v * 100)}%`;
   return typeof v === "string" ? v : JSON.stringify(v);
 }
 
@@ -127,12 +137,12 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
   switch (f.type) {
     case "integer": {
       let n: number;
-      if (f.unit === "s") {
+      if (formattedUnit(f) === "s") {
         const secs = parseDuration(t);
         if (secs === null)
           return { ok: false, message: `${f.label}: write a duration like 48h, 2d or 90m.` };
         n = secs;
-      } else if (f.unit === "micros") {
+      } else if (formattedUnit(f) === "micros") {
         if (!/^\d+(\.\d{1,6})?$/.test(t))
           return { ok: false, message: `${f.label}: write an amount like 1250.00.` };
         n = Math.round(Number(t) * 1_000_000);
@@ -141,9 +151,9 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
         n = Number(t);
       }
       const bound = (b: number) =>
-        f.unit === "s"
+        formattedUnit(f) === "s"
           ? formatSeconds(b)
-          : f.unit === "micros"
+          : formattedUnit(f) === "micros"
             ? (b / 1_000_000).toFixed(2)
             : String(b);
       if (f.range?.min != null && n < f.range.min)
@@ -214,7 +224,7 @@ export function diffEdits(schema: KindSchema, before: FormValues, after: FormVal
 
 /** Decimal fields; `ratio` is written as a percent ("95%" or "95") and stored as 0.95. */
 function toNumber(f: SchemaField, t: string): FieldCheck {
-  const ratio = f.unit === "ratio";
+  const ratio = formattedUnit(f) === "ratio";
   const text = ratio ? t.replace(/%$/, "").trim() : t;
   if (!/^-?\d+(\.\d+)?$/.test(text))
     return { ok: false, message: `${f.label}: write a number${ratio ? " like 95%" : ""}.` };
@@ -249,7 +259,7 @@ export function ratioSlip(
   f: SchemaField,
   text: string,
 ): Readonly<{ line: string; fix: string; label: string }> | null {
-  if (f.unit !== "ratio") return null;
+  if (formattedUnit(f) !== "ratio") return null;
   const t = text.trim();
   if (!/^\d*\.?\d+$/.test(t)) return null;
   const n = Number(t);

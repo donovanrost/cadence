@@ -16,7 +16,7 @@ export {
   type StageOp,
   type StageResult,
 } from "./actions.ts";
-export { type HoldReason } from "./preview.ts";
+export { checkKeyText, checkLabel, type CheckKey, type HoldReason } from "./preview.ts";
 export { refreshConfigState, useConfigState } from "./useConfigState.ts";
 export { default as SchemaForm } from "./SchemaForm.vue";
 export { default as KindEditor } from "./KindEditor.vue";

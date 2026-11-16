@@ -51,6 +51,9 @@ export const configKind = decoders.knownText(configKinds);
 export const configKindText = (k: ConfigKind | Unrecognized) =>
   decoders.vocabularyText(k, configKindWords);
 export const opActions = ["create", "update", "delete"] as const;
+/** A revision entry's op: the staged actions (Configuration.Staging) plus archive (older ledgers). */
+export const entryOps = [...opActions, "archive"] as const;
+export type EntryOp = (typeof entryOps)[number];
 
 const raw: Reader<unknown> = (value) => value;
 
@@ -182,7 +185,7 @@ export const entry = object({
   kind: configKind,
   entity_id: nullable(token),
   entity_name: optional(nullable(string)),
-  op: token,
+  op: decoders.knownText(entryOps),
   paths: array(string, 500),
   fields: array(field, 2000),
 });
