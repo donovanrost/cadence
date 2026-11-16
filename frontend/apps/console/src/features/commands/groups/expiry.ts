@@ -1,4 +1,4 @@
-import { formatHourMinute, plural } from "@/ui";
+import { plural } from "@/ui";
 import type { Group, GroupMember, GroupTarget } from "./show.ts";
 import { memberStageWord } from "./words.ts";
 
@@ -16,6 +16,10 @@ export const targetExpired = (t: GroupTarget) =>
 /** A target's tag word: its stage, read with the end reason of the member at that stage. */
 export const targetStageWord = (t: GroupTarget, group: Pick<Group, "state">) =>
   memberStageWord(t.stage, group.state, t.members.find((m) => m.stage === t.stage)?.end_reason);
+
+/** §4 short form: '04:00Z' today, '11-15 04:00Z' otherwise. */
+export const shortWhen = (iso: string, now: Date) =>
+  `${iso.slice(0, 10) === now.toISOString().slice(0, 10) ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
 
 /** Uplinks that went out: released, whatever happened after. */
 const SENT = new Set([
@@ -41,11 +45,12 @@ export function expiryCounts(group: Group): { sent: number; expired: number; tot
  * other 3 weren't sent.' / 'The request expired at 04:00Z before any uplink went out.'; null when
  * nothing expired.
  */
-export function expirySummary(group: Group): string | null {
+export function expirySummary(group: Group, now: Date = new Date()): string | null {
   const { sent, expired, total } = expiryCounts(group);
   if (expired === 0) return null;
   const at = group.release?.expires_at;
-  const when = at ? ` at ${formatHourMinute(new Date(at))}` : "";
+  // §4: the date when it isn't today (ux).
+  const when = at ? ` at ${shortWhen(at, now)}` : "";
   if (sent === 0) return `The request expired${when} before any uplink went out.`;
   return `The request expired${when} after ${sent} of ${plural(total, "uplink")} went out. The other ${expired} weren't sent.`;
 }
