@@ -322,7 +322,13 @@ defmodule Cadence.Telemetry.StorageTest do
              )
 
     assert event.sample_count == 2
-    assert Enum.sort(event.payload["sample_ids"]) == ["batch-counter", "batch-voltage"]
+    assert event.payload["observation_count"] == 2
+
+    # The batch's first and last sample, not the whole list (disk, 11-16).
+    refute Map.has_key?(event.payload, "sample_ids")
+
+    assert Enum.sort([event.payload["first_sample_id"], event.payload["last_sample_id"]]) ==
+             ["batch-counter", "batch-voltage"]
   end
 
   test "replay telemetry writes record replay-scoped source watermarks" do
@@ -355,7 +361,9 @@ defmodule Cadence.Telemetry.StorageTest do
     assert status.source_binding_id == "replay_telemetry"
     assert status.replay_run_id == "replay-run-1"
     assert status.payload["replay_run_id"] == "replay-run-1"
-    assert status.payload["sample_ids"] == ["sample-replay-watermark"]
+    refute Map.has_key?(status.payload, "sample_ids")
+    assert status.payload["first_sample_id"] == "sample-replay-watermark"
+    assert status.payload["last_sample_id"] == "sample-replay-watermark"
   end
 
   test "replay historical writes record replay-scoped backfill lifecycle events" do
