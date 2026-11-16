@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { postureChips } from "./posture.ts";
+import { postureChips, postureCompact } from "./posture.ts";
 
 const fleet = (
   critical: number,
@@ -65,5 +65,26 @@ describe("fleet posture chips (ux IA §Top bar, ca31e877a)", () => {
       word: "Ground limits off",
       to: { name: "setup.apps" },
     });
+  });
+  it("keeps short words for count-less chips when compact (ux 9c49c76ab)", () => {
+    expect(postureChips(fleet(0, 0, 0, false))[0]?.short).toBe("Limits off");
+    expect(postureChips(fleet(0, 0, 0))[0]?.short).toBe("Nominal");
+    expect(postureChips(fleet(0, 0, 0, true, 500))[0]?.short).toBe("No telemetry yet");
+    expect(postureChips(fleet(2, 0, 0))[0]?.short).toBe("");
+  });
+});
+
+describe("posture compact (ux IA §Top bar, d39a9c150)", () => {
+  const base = { wide: true, compact: false, overflow: false, room: 0, grow: 0 };
+  it("is compact below 1600, whatever the room", () => {
+    expect(postureCompact({ ...base, wide: false, room: 999 })).toBe(true);
+  });
+  it("goes compact when the never-wrapping bar overflows, before anything else gives way", () => {
+    expect(postureCompact({ ...base, overflow: true })).toBe(true);
+    expect(postureCompact(base)).toBe(false);
+  });
+  it("returns to words only when the shrinking item has room for them", () => {
+    expect(postureCompact({ ...base, compact: true, room: 100, grow: 180 })).toBe(true);
+    expect(postureCompact({ ...base, compact: true, room: 200, grow: 180 })).toBe(false);
   });
 });

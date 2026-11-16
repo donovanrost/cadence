@@ -8,7 +8,8 @@ const palette = usePalette();
 <template>
   <button
     type="button"
-    class="flex flex-[1_1_240px] cursor-pointer items-center gap-2.5 border-0 border-r border-hairline bg-transparent px-[18px] text-left text-base text-text-4 hover:bg-raised"
+    data-topbar-flex="160"
+    class="flex min-w-[160px] flex-[1_1_240px] cursor-pointer items-center gap-2.5 border-0 border-r border-hairline bg-transparent px-[18px] text-left text-base whitespace-nowrap text-text-4 hover:bg-raised"
     aria-keyshortcuts="Meta+K Control+K /"
     @click="palette.show"
   >
@@ -24,7 +25,8 @@ const palette = usePalette();
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
     </svg>
-    <span class="flex-1">{{ placeholder }}</span>
+    <!-- One line; it truncates as the bar tightens (ux IA §Top bar). -->
+    <span class="min-w-0 flex-1 truncate">{{ placeholder }}</span>
     <kbd class="border border-line px-1.5 py-px font-mono text-xs text-text-3">⌘K</kbd>
   </button>
 </template>
