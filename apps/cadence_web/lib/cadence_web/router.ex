@@ -873,6 +873,8 @@ defmodule CadenceWeb.Router do
       # Compose B2 "Now" (owner: api): latest values for a few points across many spacecraft.
       post("/telemetry/latest", TelemetryLatestController, :latest)
       get("/telemetry/points/:point_id/history", PointController, :history)
+      # §11c(D) D1 (owner: api): one sample for Investigate's Sample aside.
+      get("/telemetry/samples/:sample_id", TelemetrySampleController, :show)
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
       get("/action-queue", ActionQueueController, :show)
       get("/counts", OpsCountsController, :show)

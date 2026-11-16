@@ -38,13 +38,20 @@ defmodule Cadence.Reads.DataSourceDirectory do
     |> Enum.sort_by(&{&1.owner != :cadence, &1.display_name})
   end
 
+  @doc "A data source's name as the console shows it (its display name, else a derived one)."
+  @spec name(DataSource.t()) :: binary()
+  def name(%DataSource{} = source) do
+    metadata = unwrap(source.metadata)
+    metadata["display_name"] || display_name(source, metadata)
+  end
+
   defp row(%DataSource{} = source, health, last_received_at, now) do
     metadata = unwrap(source.metadata)
     interval = metadata["expected_interval_seconds"]
 
     %{
       id: source.data_source_id,
-      display_name: metadata["display_name"] || display_name(source, metadata),
+      display_name: name(source),
       kind: source.kind,
       owner: source.owner,
       status: source.status,

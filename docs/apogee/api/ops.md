@@ -780,3 +780,34 @@ must be a mission spacecraft), and `limit` 1–200 (default 50).
   of limits". `limit_state` keeps its values.
 - `description` is often `null`: packet fields don't carry one yet.
 - Errors: `422 invalid_params` (`limit`, `spacecraft_id`).
+
+## One sample (§11c(D) D1, owner: api)
+
+`GET /api/console/v1/missions/:mission_id/telemetry/samples/:sample_id?point_id=&spacecraft_id=&receipt_time=&at=`
+→ `{data: {status, sample}}`. `point_id` and `spacecraft_id` (the console spacecraft id) are
+required; `receipt_time` (ISO-8601) makes the match exact: pass it when you have it (the alarm
+episode's `trigger.receipt_time`, an event's `sample.receipt_time`). Without it, `at` (the
+sample's generation time) bounds the search to ±60 s; with neither, the last 24 hours, which may
+answer `ambiguous`. Display rows are never paged (limit 1), and source execution's 5 s budget ends
+a slow read as `timeout`. It runs the same authorized read the legacy Explore
+page's "Selected sample" made (the dashboard source resolver, then physical inspection on the
+resolved bindings) and its allowlisted projection.
+
+- `status`: `ready | not_found | ambiguous | timeout | unsupported | unavailable`; `sample` is `null`
+  unless `ready`.
+- `sample`: `{point_id, point_name, sample_id, spacecraft_id, receipt_time, generation_time,
+  quality: good | suspect | bad, raw_value, engineering_value, engineering_unit, source, record}`.
+  - `raw_value` / `engineering_value`: `{state: ready | not_recorded | limited | unsupported, text,
+    format: json | hex | null}`; `limited` = too large to show (no text), not a cut-off value.
+  - `engineering_unit`: from the point's catalog definition, or `null`.
+  - `source`: `{realm: flight | rehearsal | replay | simulation, data_source_id, data_source_name,
+    source_binding_id, binding_label, binding_version, source_endpoint_id, endpoint_label,
+    replay_run_id, replay_run_label}`.
+  - `record`: `{packet_id, evidence_id, packet_definition_id, packet_definition_name,
+    packet_definition_version, validity_state: canonical | duplicate | conflict | superseded |
+    advisory | null}` (`advisory`: kept for reference, never the record of truth).
+- Every name/label is `null` when it can't be resolved. The console never shows the id in its place
+  (ux U25): it drops that part of the line; ids appear in Technical details only.
+- Errors: `422 invalid_params` (`point_id` / `spacecraft_id` missing, `receipt_time` or `at` not
+  ISO-8601);
+  `404 mission_not_found`. The read authorizes like Explore did (operate the mission).
