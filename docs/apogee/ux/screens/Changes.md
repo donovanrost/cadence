@@ -124,10 +124,9 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   - The spacecraft count appears only if the read gives it (fe-setup 11-14). **Never say "nothing changed" after
   commit** (change-sets §7).
 - **Empty:** "Nothing staged. Edits in Setup collect here before they reach the fleet."
-  - **An empty set that's still open** (its last change withdrawn or discarded; qa's probe 11-16): the right fix is
-    that the server closes a set when its last change goes, since an empty open set means nothing. Until it does,
-    the empty state adds a ghost `Close this change set` with no confirm, because nothing is lost. Afterwards the
-    plain empty state shows.
+  - **An empty set never stays open** (qa's probe 11-16; lead's server fix): withdrawing the last change closes the
+    set as `discarded`, the same terminal state as Discard. The console just shows this empty state. There's no
+    `Close` button and no words about why it closed, since discarded sets aren't listed anywhere.
 - **Discard all / Discard mine always confirm** (qa's probe 11-16: it discarded at once). This is an ApInlineConfirm
   under the K1 header, danger action, focus on `Cancel` (§7). It counts only the changes you may discard.
   - All yours: "Discard your 3 staged changes? They can't be brought back." `Cancel` · `Discard 3 changes`.
