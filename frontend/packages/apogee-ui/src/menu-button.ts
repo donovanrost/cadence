@@ -40,7 +40,9 @@ export function useMenuButton(
   /** On the trigger: ↓ opens on the first item, ↑ on the last; Esc closes an open menu. */
   function onTriggerKey(event: KeyboardEvent) {
     if (event.key === "Escape" && open.value) {
+      // Only the menu closes: an enclosing sheet or takeover must not see this Esc.
       event.preventDefault();
+      event.stopPropagation();
       dismiss();
       return;
     }

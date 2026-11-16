@@ -162,4 +162,88 @@ describe("ApMenuButton (design-language §6)", () => {
     await nextTick();
     expect(w.find('[role="menu"]').exists()).toBe(false);
   });
+
+  it("keeps Esc to itself: an enclosing sheet never sees it, from an item or from the trigger", async () => {
+    const outer = vi.fn((event: KeyboardEvent) => event.key);
+    document.body.addEventListener("keydown", outer);
+    try {
+      const w = await opened();
+      await press(document.activeElement, "Escape");
+      expect(document.activeElement).toBe(trigger(w));
+      await w.get("button[aria-haspopup]").trigger("click");
+      await nextTick();
+      (trigger(w) as HTMLElement).focus();
+      await press(trigger(w), "Escape");
+      expect(w.find('[role="menu"]').exists()).toBe(false);
+      expect(outer).not.toHaveBeenCalled();
+      // A closed menu leaves Esc alone, so the sheet can still close on it.
+      await press(trigger(w), "Escape");
+      expect(outer).toHaveBeenCalledOnce();
+    } finally {
+      document.body.removeEventListener("keydown", outer);
+    }
+  });
+});
+
+describe("ApMenuItem type=submit (Sign out)", () => {
+  it("still submits the form around it after the menu closes", async () => {
+    const submitted = vi.fn((event: SubmitEvent) => event.preventDefault());
+    const Form = defineComponent({
+      setup() {
+        return () =>
+          h(
+            ApMenuButton,
+            { label: "Account menu" },
+            {
+              default: () => [
+                h(ApMenuItem, () => "Your account"),
+                h("form", { role: "none", onSubmit: submitted }, [
+                  h(ApMenuItem, { type: "submit" }, () => "Sign out"),
+                ]),
+              ],
+            },
+          );
+      },
+    });
+    wrapper = mount(Form, { attachTo: document.body });
+    await wrapper.get("button[aria-haspopup]").trigger("click");
+    await nextTick();
+    const signOut = wrapper.findAll('[role="menuitem"]')[1];
+    expect(signOut?.attributes("type")).toBe("submit");
+    (signOut?.element as HTMLButtonElement).click();
+    await nextTick();
+    expect(submitted).toHaveBeenCalledOnce();
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+  });
+
+  it("a disabled submit item submits nothing", async () => {
+    const submitted = vi.fn((event: SubmitEvent) => event.preventDefault());
+    const Form = defineComponent({
+      setup() {
+        return () =>
+          h(
+            ApMenuButton,
+            { label: "Account menu" },
+            {
+              default: () => [
+                h("form", { role: "none", onSubmit: submitted }, [
+                  h(
+                    ApMenuItem,
+                    { type: "submit", disabled: "Signing out already." },
+                    () => "Sign out",
+                  ),
+                ]),
+              ],
+            },
+          );
+      },
+    });
+    wrapper = mount(Form, { attachTo: document.body });
+    await wrapper.get("button[aria-haspopup]").trigger("click");
+    await nextTick();
+    (wrapper.get('[role="menuitem"]').element as HTMLButtonElement).click();
+    await nextTick();
+    expect(submitted).not.toHaveBeenCalled();
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+  });
 });

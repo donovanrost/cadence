@@ -24,7 +24,8 @@ const emit = defineEmits<{ select: [] }>();
 const menu = inject(apMenuKey, null);
 const whyId = useId();
 const itemClass = computed(() => [
-  "flex h-10 w-full items-center border-0 bg-transparent px-3.5 text-left text-base no-underline focus:bg-raised-hi",
+  // The kit's :focus-visible outline (apogee.css), drawn inside so the next item can't cover it.
+  "flex h-10 w-full items-center border-0 bg-transparent px-3.5 text-left text-base no-underline focus:bg-raised-hi focus-visible:-outline-offset-2",
   props.disabled === undefined
     ? "cursor-pointer text-readout hover:bg-raised-hi"
     : "cursor-default text-text-4",
@@ -60,7 +61,8 @@ function choose(event: MouseEvent) {
     @click="choose"
   >
     <slot />
-    <span v-if="disabled !== undefined" :id="whyId" class="ml-auto pl-3 text-sm">{{
+    <!-- The item dims; its reason is information and keeps a readable tier (>= 4.5:1). -->
+    <span v-if="disabled !== undefined" :id="whyId" class="ml-auto pl-3 text-sm text-text-3">{{
       disabled
     }}</span>
   </button>
