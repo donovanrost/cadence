@@ -54,43 +54,90 @@ is written insert-or-get: **one statement, `ON CONFLICT` on a unique index, no e
 So an alarm transition costs about **6 statements** today, and a replayed action request inserts a
 **second request**.
 
-**The design (revised per the director, 11-15: ordered ids, no hashing).** A SHA-256 content id is
-~87 bytes and uniformly random, so each insert lands on a random B-tree page (page splits, cache
-misses, full-page images in WAL after each checkpoint), and the long key repeats in the primary key
-and every index and foreign key that references it. Today's `Ids.new` (~45 bytes) is a monotonic
-sequence that appends at the right edge. So the new deterministic ids are **ordered and built from
-their inputs:**
+**The design (revised twice on 11-15 with the director: no hashing, then time first).**
+
+*Why not a content id:* a SHA-256 content id is ~87 bytes and uniformly random. Each insert lands on
+a random B-tree page, causing page splits, cache misses and full-page images in WAL after each
+checkpoint, and the long key repeats in every index and foreign key.
+
+*Why not stream first:* the bench showed it (below). With N streams interleaved, only one appends at
+the index's right edge; the other N-1 split interior pages 50/50 and leave them half full.
+
+*The id, time first:*
 
 ```
-<kind>_<stream key>_<offset>_<index>        e.g.  mar_k3v9q2m8x1zt_00000a3f1c80_0002
+<kind>_<receipt µs, 10><stream key, 6><offset, 8><index, 2>      e.g.  aep_65ahf2ggn6000k3v0000a3f100
 ```
 
-- `kind`: 3 letters (`mar` managed action request, `aep` alarm episode, `aev` episode event).
-- `stream key`: 12 base32 characters naming (partition identity, journal stream). It is derived
-  **once per stream** (when the partition first sees it) and cached; no per-record hash.
-- `offset`: the input frame's journal byte offset, 12 hex digits zero-padded (up to 256 TB per
-  stream).
-- `index`: the output's index within that input, 4 hex digits.
+All four fields are fixed-width base32hex (`0-9a-v`). The columns use C collation, so the id sorts
+like the numbers. That is **30 bytes**: today's ids are 39 (action requests), 30 (episodes) and 28
+(events).
+- `kind`: `mar` (managed action request), `aep` (alarm episode), `aev` (episode event).
+- `receipt µs`: the input frame's receipt time, in µs since 2020-01-01 (2^50 µs is about 35 years).
+  It comes from the journal entry and is carried unchanged through the archive, so a replay derives
+  the same id. Ids from all streams increase together with time, so inserts append at the right
+  edge, as `Ids.new` does today.
+- `stream key`: an **ordinal allocated per (partition identity, journal stream)**, not a hash (see
+  the collision analysis below). It is allocated with a get-or-create in a small
+  `partition_stream_keys` table, durably, before the first effect that uses it commits. That is one
+  statement per new stream per partition, about once per contact. 32^6 is about 1.07 billion
+  ordinals.
+- `offset`: the frame's journal byte offset (32^8 bytes = 1 TiB per stream; a stream is one
+  contact's path).
+- `index`: the output's index within that input (up to 1,024).
+- **Timer-driven effects** (no input frame): the receipt time is the timer's fire time, and the
+  stream key is the partition's `timer` ordinal.
 
-That is **34 bytes**, shorter than today's ~45. Within a stream the ids increase with the offset, so
-each active stream appends at its own right edge: a handful of hot leaf pages, not random ones. A new
-stream (one per contact) starts at one new place in the index, once.
-
-- **Timer-driven effects** (no input frame): the stream key names (partition identity, `timer`), and
-  the offset is the timer's fire time in microseconds, zero-padded. Still ordered, still replay-safe.
-- **Text, not a composite key.** A composite (stream key bigint, offset bigint, index smallint) would
-  be 18 bytes, but these ids are referenced as strings (episode events → episodes, transitions,
-  the API); keeping the text column keeps every reference and reader unchanged.
-- **Managed action request:** `INSERT ... ON CONFLICT (action_request_id) DO NOTHING`. Still 1
-  statement; a replay inserts nothing.
-- **Episode and episode event:** both ids come from the input. The episode is inserted (or the open
-  one updated) as today, then the event with `ON CONFLICT (event_id) DO NOTHING RETURNING`: no row
-  back means a replay, so the episode change is skipped. That replaces the `seen?` read, so a
-  transition goes from about 6 statements to about 5.
+*Writing it:*
+- **Managed action request:** `INSERT ... ON CONFLICT (action_request_id) DO NOTHING RETURNING`,
+  one statement.
+- **Episode and episode event:** the episode is inserted (or the open one updated) as today. Then the
+  event is written with `ON CONFLICT (event_id) DO NOTHING RETURNING`. No row back means a replay,
+  so the episode change is skipped. That replaces the `seen?` read, so a transition goes from about
+  6 statements to about 5.
 - **Sources that never replay** (acknowledgements, ground-limit reconcile) keep `Ids.new`.
-- **Transitions and evaluations** keep their content ids for now (see the volumes below). They are
-  replay-stable only if `update_id` (the sample id) is: that is on the identity-v2 audit
-  (recovery-from-archive.md (b)).
+
+**No silent drops (the director's condition 1).** `RETURNING` gives back no row only on a conflict,
+which only happens on replay. Then, and only then, the writer reads the existing row and checks two
+things:
+- **The source:** the existing id's stream ordinal resolves to the same (partition, journal stream).
+  It also checks that offset, index and receipt time match.
+- **The effect:** the stored effect matches the new one (action kind and document, or the episode
+  event's kind and payload).
+
+Equal means a replay, so it carries on. Anything different is a **hard error and an alert**
+(`MM_REPLAY_ID_CONFLICT`): either two different effects share an id, or the replay was not
+deterministic. Both are bugs, and neither is swallowed. The normal path pays nothing; a replay pays
+one read per already-written effect.
+
+**The collision analysis.** Two different effects share an id only if they agree on kind, receipt µs,
+stream key, offset and index.
+- **Within one (partition, stream):** (offset, index) is unique by construction. No collision is
+  possible.
+- **Across streams, with an allocated ordinal:** the keys differ by construction. **No collision is
+  possible.** The conflict check above is then a tripwire for bugs, not for chance.
+- **Why not a hashed 6-character key (30 bits):** a key collision between two concurrently active
+  streams has probability 2^-30 per pair.
+  - Take 1,000 craft with about 100 streams active at once, 10-minute contacts, over 10 years. That
+    is about 5,000 concurrent pairs × 525,600 windows ≈ 2.6 × 10^9 pair-windows, so about 2.4
+    pairs share a key.
+  - Such a pair then collides when the same offset is received in the same µs on both streams. For
+    identical framing started together, that is up to ~0.1 per pair.
+  - So **up to ~0.2 expected collisions over the fleet's life.** Small, but it rests on luck, so
+    the key is allocated rather than hashed.
+- **The partition is in the key** because one input frame can produce effects in two partitions
+  (a craft and the mission root), at the same offset and index.
+
+**Replay stability (the director's condition 2).** Ids are stable only if the receipt time is exactly
+the journal entry's, carried unchanged through the archive and identity v2, including **per-frame
+receipt times**, along with the offsets and the stream ordinal. A required test (with the identity-v2
+work): run a pass and record every effect id; crash the partition; recover from snapshot + archive;
+assert the replayed effects' ids are **byte-identical**, and that no new rows appear. Timer
+effects: the same assertion across a restart, with fire times.
+
+*Transitions and evaluations* keep their content ids for now (see the volumes below). They are
+replay-stable only if `update_id` (the sample id) is: that is on the identity-v2 audit
+(recovery-from-archive.md (b)).
 
 **Volumes of the existing content-id tables** (dev, `pg_stat_user_tables`, since the stats reset
 2026-11-14 21:22Z; a catalog read):
@@ -105,10 +152,11 @@ stream (one per contact) starts at one new place in the index, once.
 Evaluations are persisted **only on a transition** (`SemanticObservations.add_result/2`), so both
 content-id tables scale with alarm transitions, not with samples. **Neither is high-volume; no
 follow-up is needed now.** Watch item: if #92 step 2 moves the Limits policies onto this path and a
-flapping parameter drives transitions per sample, give them the same ordered id then.
+flapping parameter drives transitions per sample, give them the same time-first id then.
 
-**The expected cost:** per record, the same or one statement fewer; no per-record hash; ids 34 bytes
-instead of ~45; inserts append per stream.
+**The expected cost:** per record, the same or one statement fewer; no per-record hash; ids 30 bytes
+(today 28 to 39); inserts append at the right edge; one get-or-create statement per new stream per
+partition.
 
 ## Before/after measurement (the gate for both)
 
@@ -132,6 +180,43 @@ projector in a pass; handlers attached and always detached):
 - measure the WAL bytes per insert (`pg_current_wal_lsn()` delta) and each index's size after;
 - each run spans at least one natural checkpoint (5 min). No manual `CHECKPOINT`: the server is
   shared with :4011.
+
+**Synthetic results (11-16 04:15-04:29Z, test partition 12).** These are copies of the three tables
+with their real indexes and the episode→event FK. Each run inserts 100k rows per table, as 1,000
+commits of 100 rows from 4 interleaved streams (25 frames × 4 outputs), paced over about 6 minutes.
+The WAL is attributed per relation with `pg_waldump`.
+- Run 1 compared today, hashed and stream-first ids and spanned 2 natural checkpoints.
+- Run 2 compared today and time-first ids and spanned 1.
+
+PK size, MB:
+
+| Ids | Requests | Episodes | Events |
+|---|---|---|---|
+| today (`Ids.new`: 39 / 30 / 28 bytes) | 5.8 | 4.9 | 4.9 |
+| hashed (`content_id`, 87 bytes) | 14 | 13 | 13 |
+| stream-first (29 bytes), run 1 | 7.8 | 7.8 | 7.8 |
+| **time-first (30 bytes), run 2** | **4.9** | **4.9** | **4.9** |
+
+Index WAL, MB, with full-page writes in brackets:
+
+| Ids | Requests | Episodes | Events |
+|---|---|---|---|
+| today, run 1 | 37.4 (74) | 27.4 (12) | 19.7 (9) |
+| hashed, run 1 | 58.8 (1,729) | 47.6 (1,566) | 61.4 (3,228) |
+| stream-first, run 1 | 39.3 (91) | 30.3 (29) | 25.9 (42) |
+| today, run 2 | 37.2 (40) | 27.4 (7) | 19.6 (6) |
+| **time-first, run 2** | **36.3 (40)** | **27.4 (7)** | **19.6 (6)** |
+
+- **Stream-first is worse than today:** with N streams, N-1 insertion points split interior pages
+  50/50.
+- **Time-first matches today, and beats it for action requests:** its PK is 16% smaller (30 vs 39
+  bytes), with 2.5% less index WAL.
+- For episodes and events, time-first is identical to today to the byte. The 2 bytes events gain
+  vanish in alignment padding.
+- It meets the director's bar: the PK is at or below today's size and the index WAL is within the
+  noise.
+- The bench has a single writer, which flatters today's and time-first ids equally. With concurrent
+  partitions, both insert a little left of the edge.
 
 **#98 bench:** `:timer.tc` of `MonitoringEvaluator.evaluate` over the partition's plan and a
 recorded batch, 10k samples, before vs after, with 007's delta present.
