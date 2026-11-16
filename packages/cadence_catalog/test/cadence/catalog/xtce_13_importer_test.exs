@@ -184,6 +184,158 @@ defmodule Cadence.Catalog.Xtce13ImporterTest do
     assert :ok = Xtce13.validate(source(first))
   end
 
+  describe "calibration (#92 (c))" do
+    test "a polynomial DefaultCalibrator becomes the type's calibrator, lowest order first" do
+      encoding = """
+      <IntegerDataEncoding sizeInBits="16" encoding="unsigned">
+        <DefaultCalibrator>
+          <PolynomialCalibrator>
+            <Term coefficient="2.5" exponent="2"/>
+            <Term coefficient="-40" exponent="0"/>
+          </PolynomialCalibrator>
+        </DefaultCalibrator>
+      </IntegerDataEncoding>
+      """
+
+      {layer, compilation} = calibrated(integer_type(encoding))
+
+      calibrator = Enum.find(layer.declarations, &(&1.kind == :calibrator))
+      assert calibrator.qualified_name == "/Vehicle/calibrators/TempType/default"
+      assert calibrator.definition.algorithm_type == :polynomial
+      assert calibrator.definition.coefficients == [-40.0, 0.0, 2.5]
+
+      type = Enum.find(layer.declarations, &(&1.kind == :parameter_type))
+      assert [reference] = Enum.filter(type.references, &(&1.role == :calibrator))
+      assert reference.source_ref == calibrator.qualified_name
+
+      refute Enum.any?(compilation.plans.telemetry.diagnostics, fn diagnostic ->
+               String.starts_with?(diagnostic.code, "MM_CALIBRATOR")
+             end)
+    end
+
+    test "a spline and a context calibrator are declared and reported, never dropped" do
+      encoding = """
+      <IntegerDataEncoding sizeInBits="16" encoding="unsigned">
+        <DefaultCalibrator>
+          <SplineCalibrator>
+            <SplinePoint raw="0" calibrated="-10"/>
+            <SplinePoint raw="100" calibrated="90"/>
+          </SplineCalibrator>
+        </DefaultCalibrator>
+        <ContextCalibratorList>
+          <ContextCalibrator>
+            <ContextMatch>
+              <Comparison parameterRef="temp" value="1"/>
+            </ContextMatch>
+            <Calibrator>
+              <PolynomialCalibrator><Term coefficient="1" exponent="1"/></PolynomialCalibrator>
+            </Calibrator>
+          </ContextCalibrator>
+        </ContextCalibratorList>
+      </IntegerDataEncoding>
+      """
+
+      {layer, compilation} = calibrated(integer_type(encoding))
+
+      kinds =
+        for declaration <- layer.declarations,
+            declaration.kind == :calibrator,
+            do: {declaration.qualified_name, declaration.definition.algorithm_type}
+
+      assert Enum.sort(kinds) == [
+               {"/Vehicle/calibrators/TempType/context_1", :context},
+               {"/Vehicle/calibrators/TempType/default", :spline}
+             ]
+
+      unsupported =
+        Enum.filter(
+          compilation.plans.telemetry.diagnostics,
+          &(&1.code == "MM_CALIBRATOR_RUNTIME_UNSUPPORTED")
+        )
+
+      assert length(unsupported) == 2
+      assert Enum.all?(unsupported, &(&1.severity == :warning))
+    end
+
+    test "an unreadable polynomial says so at import" do
+      encoding = """
+      <IntegerDataEncoding sizeInBits="16" encoding="unsigned">
+        <DefaultCalibrator>
+          <PolynomialCalibrator><Term coefficient="1" exponent="40"/></PolynomialCalibrator>
+        </DefaultCalibrator>
+      </IntegerDataEncoding>
+      """
+
+      assert {:ok, result} =
+               Xtce13.import(source(integer_type(encoding)), %{import_run_id: "calibration"})
+
+      assert Enum.any?(result.diagnostics, &(&1.code == "XTCE_CALIBRATOR_DEGREE_UNSUPPORTED"))
+      [layer] = result.bundle.declaration_layers
+      refute Enum.any?(layer.declarations, &(&1.kind == :calibrator))
+    end
+
+    test "an EnumerationList becomes the type's states; a small range expands" do
+      type = """
+      <EnumeratedParameterType name="TempType">
+        <IntegerDataEncoding sizeInBits="8" encoding="unsigned"/>
+        <EnumerationList>
+          <Enumeration value="0" label="OFF"/>
+          <Enumeration value="1" label="ON"/>
+          <Enumeration value="2" maxValue="4" label="FAULT"/>
+          <Enumeration value="5" maxValue="100000" label="WILD"/>
+        </EnumerationList>
+      </EnumeratedParameterType>
+      """
+
+      assert {:ok, result} =
+               Xtce13.import(source(calibration_document(type)), %{import_run_id: "e"})
+
+      assert Enum.any?(result.diagnostics, &(&1.code == "XTCE_ENUMERATION_RANGE_UNSUPPORTED"))
+
+      [layer] = result.bundle.declaration_layers
+      type = Enum.find(layer.declarations, &(&1.kind == :parameter_type))
+
+      assert type.definition.enumerations == [
+               %{value: 0, label: "OFF"},
+               %{value: 1, label: "ON"},
+               %{value: 2, label: "FAULT"},
+               %{value: 3, label: "FAULT"},
+               %{value: 4, label: "FAULT"},
+               %{value: 5, label: "WILD"}
+             ]
+    end
+  end
+
+  defp calibrated(xml) do
+    assert {:ok, result} = Xtce13.import(source(xml), %{import_run_id: "calibration"})
+    assert [layer] = result.bundle.declaration_layers
+    assert {:ok, compilation} = Compiler.compile([layer])
+    {layer, compilation}
+  end
+
+  defp integer_type(encoding) do
+    calibration_document("""
+    <IntegerParameterType name="TempType">
+    #{encoding}
+    </IntegerParameterType>
+    """)
+  end
+
+  defp calibration_document(type) do
+    """
+    <SpaceSystem xmlns="http://www.omg.org/spec/XTCE/20250214" name="Vehicle">
+      <TelemetryMetaData>
+        <ParameterTypeSet>
+    #{type}
+        </ParameterTypeSet>
+        <ParameterSet>
+          <Parameter name="temp" parameterTypeRef="TempType"/>
+        </ParameterSet>
+      </TelemetryMetaData>
+    </SpaceSystem>
+    """
+  end
+
   defp declaration?(declarations, kind, qualified_name) do
     Enum.any?(declarations, fn declaration ->
       declaration.kind == kind and declaration.qualified_name == qualified_name
