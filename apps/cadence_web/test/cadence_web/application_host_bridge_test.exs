@@ -150,36 +150,32 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
            )
   end
 
-  test "admits only validate and save mission actions on the Spacecraft edit surface" do
+  # Host-action sweep row 2: the Spacecraft form surfaces (new, profile_new, edit) and their
+  # validate/save actions are gone; the console's change sets edit spacecraft.
+  test "Spacecraft declares no form surface and no mission-scope action" do
     definition = Spacecraft.definition()
-    edit_surface = Enum.find(definition.surfaces, &(&1.surface_id == "edit"))
+    surface_ids = Enum.map(definition.surfaces, & &1.surface_id)
 
-    assert %SurfaceDefinition{surface_id: "edit", scope: :spacecraft} = edit_surface
+    for form <- ~w(new profile_new edit), do: refute(form in surface_ids)
 
-    for action_id <- ["validate", "save"] do
-      assert {:ok, %ActionDefinition{scope: :mission} = action} =
-               ApplicationDefinition.fetch_action(definition, action_id)
+    for action_id <- ~w(validate save),
+        do: assert({:error, _} = ApplicationDefinition.fetch_action(definition, action_id))
 
-      assert ApplicationHostBridge.action_scope_compatible?(
-               definition,
-               edit_surface,
-               action
-             )
-    end
+    refute Enum.any?(definition.actions, &(&1.scope == :mission))
   end
 
   test "rejects a mission action on a different Spacecraft surface" do
     definition = Spacecraft.definition()
     show_surface = Enum.find(definition.surfaces, &(&1.surface_id == "show"))
-    {:ok, validate_action} = ApplicationDefinition.fetch_action(definition, "validate")
+    {:ok, install} = ApplicationDefinition.fetch_action(definition, "install")
+    mission_action = %ActionDefinition{install | action_id: "probe", scope: :mission}
 
     assert %SurfaceDefinition{surface_id: "show", scope: :spacecraft} = show_surface
-    assert validate_action.scope == :mission
 
     refute ApplicationHostBridge.action_scope_compatible?(
              definition,
              show_surface,
-             validate_action
+             mission_action
            )
   end
 

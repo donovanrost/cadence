@@ -6,12 +6,6 @@ defmodule Cadence.Applications.SpacecraftActionProviderBindingTest do
   alias Cadence.Auth.Scope
 
   @expected [
-    {"new", 1, "validate"},
-    {"new", 1, "save"},
-    {"profile_new", 1, "validate"},
-    {"profile_new", 1, "save"},
-    {"edit", 1, "validate"},
-    {"edit", 1, "save"},
     {"applications", 1, "install"},
     {"applications", 1, "disable"},
     {"applications", 1, "uninstall"},
@@ -20,7 +14,9 @@ defmodule Cadence.Applications.SpacecraftActionProviderBindingTest do
     {"telemetry_decom", 1, "disable"}
   ]
 
-  test "freezes the exact 12-row Spacecraft surface/action ledger" do
+  # Host-action sweep row 2: the new, profile_new and edit form surfaces are gone (console change
+  # sets only).
+  test "freezes the exact 6-row Spacecraft surface/action ledger" do
     definition_pairs =
       Spacecraft.definition().surfaces
       |> Enum.flat_map(fn surface ->
@@ -30,7 +26,7 @@ defmodule Cadence.Applications.SpacecraftActionProviderBindingTest do
     assert definition_pairs == @expected
     assert ActionProvider.surface_action_bindings() == @expected
     assert :ok = ActionProvider.validate_bindings(@expected)
-    assert length(Enum.uniq(@expected)) == 12
+    assert length(Enum.uniq(@expected)) == 6
   end
 
   test "rejects omitted, wrong-version, cross-surface, and undeclared bindings" do

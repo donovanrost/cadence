@@ -1,7 +1,11 @@
 defmodule Cadence.Spacecraft.ProfileCreation do
-  @moduledoc "Scoped profile creation independent of frontend release delivery."
+  @moduledoc """
+  Scoped profile checks independent of frontend release delivery. `validate` still answers;
+  `save` is REFUSED (host-action sweep row 2): profiles are added only through the console's
+  change sets (the spacecraft_profile kind).
+  """
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.{ExtensionCatalog, Missions, SpacecraftType, SpacecraftTypeStore}
+  alias Cadence.{ExtensionCatalog, Missions}
 
   def available_applications do
     ExtensionCatalog.available_applications_for_scope(:spacecraft)
@@ -105,20 +109,15 @@ defmodule Cadence.Spacecraft.ProfileCreation do
 
   defp complete("validate", _organization_id, _mission_id, _attrs), do: {:ok, %{"valid" => true}}
 
-  defp complete("save", organization_id, mission_id, attrs) do
-    with {:ok, profile} <-
-           SpacecraftTypeStore.persist_spacecraft_type(
-             organization_id,
-             SpacecraftType.new(Map.put(attrs, :mission_id, mission_id))
-           ) do
-      {:ok,
+  defp complete("save", _organization_id, _mission_id, _attrs),
+    do:
+      {:error,
        %{
-         "profileId" => profile.spacecraft_type_id,
-         "version" => profile.version,
-         "href" => "/missions/#{mission_id}/spacecraft/profiles"
+         "display_name" => [
+           "Not saved: spacecraft profiles are added in the console now, where every change " <>
+             "is reviewed before it applies. Add it in Setup › Spacecraft."
+         ]
        }}
-    end
-  end
 
   defp invalid(field, message), do: {:error, %{field => [message]}}
 end

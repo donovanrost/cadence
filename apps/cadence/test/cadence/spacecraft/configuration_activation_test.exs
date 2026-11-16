@@ -347,9 +347,22 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                  c.scope,
                  c.mission.mission_id,
                  current.spacecraft_id,
+                 "validate",
+                 input
+               )
+
+      # Host-action sweep row 2: a save is refused (the console's change sets edit spacecraft);
+      # the governed-pin rule below is checked through validate, which still applies it.
+      assert {:error, %{"display_name" => [refused]}} =
+               Identity.action(
+                 c.scope,
+                 c.mission.mission_id,
+                 current.spacecraft_id,
                  "save",
                  input
                )
+
+      assert refused =~ "Setup › Spacecraft"
 
       legacy_input = Map.update!(input, "spacecraft", &Map.delete(&1, "spacecraft_type_version"))
 
@@ -372,7 +385,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                  c.scope,
                  c.mission.mission_id,
                  current.spacecraft_id,
-                 "save",
+                 "validate",
                  Map.update!(input, "spacecraft", &Map.merge(&1, replacement))
                )
 
@@ -380,7 +393,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
       if pinned do
         assert {:error, %{"spacecraft_type_id" => [_]}} =
-                 Identity.action(c.scope, c.mission.mission_id, nil, "save", input)
+                 Identity.action(c.scope, c.mission.mission_id, nil, "validate", input)
       end
     end
   end

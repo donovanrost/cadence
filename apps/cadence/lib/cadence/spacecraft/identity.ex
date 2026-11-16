@@ -1,5 +1,10 @@
 defmodule Cadence.Spacecraft.Identity do
-  @moduledoc "Scoped spacecraft identity changes independent of frontend release delivery."
+  @moduledoc """
+  Scoped spacecraft identity checks independent of frontend release delivery. `validate` still
+  answers; `save` is REFUSED (host-action sweep row 2): spacecraft are edited only through the
+  console's change sets (reason, review, expected version, actor). Every caller (the native edit
+  page and the spacecraft host action) gets the refusal here, with ux's words on the Name field.
+  """
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.{Missions, Spacecraft, SpacecraftStore, SpacecraftTypeStore}
@@ -18,19 +23,42 @@ defmodule Cadence.Spacecraft.Identity do
              organization_id: scope.organization_id,
              mission_id: mission_id
            }),
-         {:ok, _mission} <- Missions.fetch_mission(scope.organization_id, mission_id),
-         {:ok, attrs} <- fields(input) do
-      with_current(
-        scope.organization_id,
-        mission_id,
-        spacecraft_id,
-        &apply_fields(event, scope.organization_id, mission_id, &1, attrs)
-      )
+         {:ok, _mission} <- Missions.fetch_mission(scope.organization_id, mission_id) do
+      validate_or_refuse(event, scope.organization_id, mission_id, spacecraft_id, input)
     end
   end
 
   def action(_scope, _mission_id, _spacecraft_id, _event, _input),
     do: {:error, :invalid_spacecraft_action}
+
+  defp validate_or_refuse("save", organization_id, mission_id, spacecraft_id, _input),
+    do: with_current(organization_id, mission_id, spacecraft_id, &refusal/1)
+
+  defp validate_or_refuse("validate", organization_id, mission_id, spacecraft_id, input) do
+    with {:ok, attrs} <- fields(input) do
+      with_current(
+        organization_id,
+        mission_id,
+        spacecraft_id,
+        &apply_fields("validate", organization_id, mission_id, &1, attrs)
+      )
+    end
+  end
+
+  # ux's words (lead 11-16): the console's Setup › Spacecraft is the only write path.
+  defp refusal(current) do
+    name =
+      case current do
+        %Spacecraft{display_name: name} when is_binary(name) and name != "" -> name
+        _none -> "this spacecraft"
+      end
+
+    invalid(
+      "display_name",
+      "Not saved: spacecraft are edited in the console now, where every change is reviewed " <>
+        "before it applies. Edit #{name} in Setup › Spacecraft."
+    )
+  end
 
   defp apply_fields(event, organization_id, mission_id, current, attrs) do
     with {:ok, binding} <- binding(organization_id, mission_id, current, attrs) do
@@ -186,46 +214,6 @@ defmodule Cadence.Spacecraft.Identity do
 
   defp complete("validate", _organization_id, _mission_id, _current, _attrs),
     do: {:ok, %{"valid" => true}}
-
-  defp complete("save", organization_id, mission_id, current, attrs) do
-    result =
-      case current do
-        nil ->
-          SpacecraftStore.persist_spacecraft(
-            organization_id,
-            Spacecraft.new(Map.put(attrs, :mission_id, mission_id))
-          )
-
-        %Spacecraft{} ->
-          SpacecraftStore.update_spacecraft(organization_id, struct(current, attrs))
-      end
-
-    case result do
-      {:ok, saved} ->
-        {:ok,
-         %{
-           "spacecraftId" => saved.spacecraft_id,
-           "displayName" => saved.display_name,
-           "href" => "/missions/#{mission_id}/spacecraft"
-         }}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:error, changeset_errors(changeset)}
-
-      {:error, _reason} = error ->
-        error
-    end
-  end
-
-  defp changeset_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {message, options} ->
-      Enum.reduce(options, message, fn {key, value}, text ->
-        String.replace(text, "%{#{key}}", to_string(value))
-      end)
-    end)
-    |> Map.take([:display_name, :scid, :spacecraft_type_id, :spacecraft_type_version])
-    |> Map.new(fn {key, errors} -> {to_string(key), errors} end)
-  end
 
   defp invalid_profile,
     do: invalid("spacecraft_type_id", "Select an available profile version, or choose None.")

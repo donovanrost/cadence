@@ -40,16 +40,6 @@ defmodule Cadence.Applications.Spacecraft do
       query_id: "cadence.spacecraft.list"
     },
     %{
-      id: "new",
-      scope: :mission,
-      purpose: :configuration,
-      label: "New spacecraft",
-      order: 20,
-      fallback_path: "/missions/:mission_id/spacecraft/new",
-      query_id: "cadence.spacecraft.new",
-      actions: ["validate", "save"]
-    },
-    %{
       id: "profile_list",
       scope: :mission,
       purpose: :overview,
@@ -57,16 +47,6 @@ defmodule Cadence.Applications.Spacecraft do
       order: 30,
       fallback_path: "/missions/:mission_id/spacecraft/profiles",
       query_id: "cadence.spacecraft.profiles"
-    },
-    %{
-      id: "profile_new",
-      scope: :mission,
-      purpose: :configuration,
-      label: "New spacecraft profile",
-      order: 40,
-      fallback_path: "/missions/:mission_id/spacecraft/profiles/new",
-      query_id: "cadence.spacecraft.profile.new",
-      actions: ["validate", "save"]
     },
     %{
       id: "profile_show",
@@ -87,17 +67,6 @@ defmodule Cadence.Applications.Spacecraft do
       fallback_path: "/missions/:mission_id/spacecraft/:subject",
       subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
       query_id: "cadence.spacecraft.show"
-    },
-    %{
-      id: "edit",
-      scope: :spacecraft,
-      purpose: :configuration,
-      label: "Edit spacecraft",
-      order: 20,
-      fallback_path: "/missions/:mission_id/spacecraft/:subject/identity",
-      subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
-      query_id: "cadence.spacecraft.edit",
-      actions: ["validate", "save"]
     },
     %{
       id: "readiness",
@@ -233,28 +202,6 @@ defmodule Cadence.Applications.Spacecraft do
 
   defp action_definitions do
     [
-      %ActionDefinition{
-        action_id: "validate",
-        version: 1,
-        intent: :diagnostic,
-        scope: :mission,
-        required_permission: "operate_mission",
-        effect: :none,
-        execution: :immediate,
-        input_contract: %{schema_id: "cadence.spacecraft.form", version: 1},
-        result_contract: %{schema_id: "cadence.spacecraft.validation", version: 1}
-      },
-      %ActionDefinition{
-        action_id: "save",
-        version: 1,
-        intent: :configuration,
-        scope: :mission,
-        required_permission: "operate_mission",
-        effect: :durable,
-        execution: :immediate,
-        input_contract: %{schema_id: "cadence.spacecraft.form", version: 1},
-        result_contract: %{schema_id: "cadence.spacecraft.saved", version: 1}
-      },
       %ActionDefinition{
         action_id: "install",
         version: 1,
