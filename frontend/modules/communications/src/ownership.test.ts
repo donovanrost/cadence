@@ -8,13 +8,11 @@ import * as communications from "./index";
 const features = {
   overview: ["CommsOverview", "CommsOverviewPage"],
   "setup-validation": ["CommsValidation"],
-  transports: ["CommsTransportList", "CommsTransportListPage", "CommsTransportNew"],
+  // §11c comms batch 1: CommsTransportNew and CommsGroundStationForm lost their federated surfaces;
+  // the module keeps them for its orphaned mission-page variants (comms cleanup).
+  transports: ["CommsTransportList", "CommsTransportListPage"],
   routing: ["CommsRoutingList", "CommsRoutingListPage", "CommsRoutingNew"],
-  "ground-stations": [
-    "CommsGroundStationForm",
-    "CommsGroundStationList",
-    "CommsGroundStationListPage",
-  ],
+  "ground-stations": ["CommsGroundStationList", "CommsGroundStationListPage"],
 } as const;
 const directory = dirname(fileURLToPath(import.meta.url));
 const legacy = import.meta.glob("../../../apps/comms-overview/src/*.vue", {

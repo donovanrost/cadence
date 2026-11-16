@@ -3,9 +3,7 @@ import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import { computed, onBeforeUnmount, onErrorCaptured, ref, shallowRef, watch } from "vue";
 import {
   admitFormSurface,
-  TransportCreation,
   RoutingCreation,
-  GroundStationEditor,
   FormActionFailure,
 } from "@cadence/communications/form-surfaces";
 import type { Component } from "vue";
@@ -22,10 +20,8 @@ const surfaceComponents: Record<string, Component> = {
   routing_detail: CommsCanonicalSurface,
   ground_stations: CommsCanonicalSurface,
   ground_station: CommsCanonicalSurface,
-  transport_new: TransportCreation,
+  // §11c comms batch 1 (director): only the routing form remains, until per-spacecraft Extra route.
   routing_new: RoutingCreation,
-  ground_station_new: GroundStationEditor,
-  ground_station_edit: GroundStationEditor,
 };
 
 const pageProps = shallowRef<Record<string, unknown>>();
@@ -138,11 +134,7 @@ function pagePropsFor(value: unknown): Record<string, unknown> {
     throw new Error("The Comms surface navigation is invalid.");
   }
 
-  if (
-    ["transport_new", "routing_new", "ground_station_new", "ground_station_edit"].includes(
-      props.surface.surfaceId,
-    )
-  ) {
+  if (props.surface.surfaceId === "routing_new") {
     if (typeof props.context.missionId !== "string")
       throw new Error("A mission is required for a Communications form.");
     const form = admitFormSurface(

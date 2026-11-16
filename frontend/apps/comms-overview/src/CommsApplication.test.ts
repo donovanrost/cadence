@@ -9,7 +9,7 @@ import type {
   MissionHostContext,
 } from "@cadence/plugin-sdk";
 import CommsApplication from "./CommsApplication.vue";
-import CommsGroundStationForm from "./CommsGroundStationForm.vue";
+import CommsRoutingNew from "./CommsRoutingNew.vue";
 import { canonicalManifest } from "./federated-application";
 
 const context: MissionHostContext = {
@@ -31,10 +31,7 @@ const surfaceIds = [
   "routing_detail",
   "ground_stations",
   "ground_station",
-  "transport_new",
   "routing_new",
-  "ground_station_new",
-  "ground_station_edit",
 ] as const;
 
 describe("Comms canonical federated application", () => {
@@ -50,7 +47,7 @@ describe("Comms canonical federated application", () => {
     expect(wrapper.text()).not.toContain("private upstream diagnostics");
     wrapper.unmount();
   });
-  it.each(["transport_new", "routing_new", "ground_station_new", "ground_station_edit"] as const)(
+  it.each(["routing_new"] as const)(
     "rejects malformed %s form props before mount and recovers on retry",
     async (surfaceId) => {
       const query = vi
@@ -70,11 +67,11 @@ describe("Comms canonical federated application", () => {
   );
 
   it("contains a form renderer exception without exposing its private message", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("ground_station_new"));
-    const setup = vi.spyOn(CommsGroundStationForm, "setup").mockImplementation(() => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("routing_new"));
+    const setup = vi.spyOn(CommsRoutingNew, "setup").mockImplementation(() => {
       throw new Error("private form failure");
     });
-    const wrapper = mount(CommsApplication, { props: propsFor("ground_station_new", query) });
+    const wrapper = mount(CommsApplication, { props: propsFor("routing_new", query) });
     try {
       await flushPromises();
       expect(setup).toHaveBeenCalled();
@@ -137,8 +134,8 @@ describe("Comms canonical federated application", () => {
 
   it.each(["navigation", "unmount"])("ignores a save receipt after %s", async (mode) => {
     let finish!: (value: unknown) => void;
-    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("ground_station_new"));
-    const props = propsFor("ground_station_new", query);
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("routing_new"));
+    const props = propsFor("routing_new", query);
     props.bridge.execute = vi
       .fn()
       .mockResolvedValueOnce({ result: { valid: true } })
@@ -150,9 +147,9 @@ describe("Comms canonical federated application", () => {
     props.bridge.navigate = vi.fn();
     const wrapper = mount(CommsApplication, { props });
     await flushPromises();
-    await wrapper.get("#ground_station_display_name").setValue("Saved station");
+    await wrapper.get("#routing_rule_display_name").setValue("Saved rule");
     await flushPromises();
-    await wrapper.get("#ground-station-form").trigger("submit");
+    await wrapper.get("#routing-rule-form").trigger("submit");
     // oxlint-disable-next-line typescript/unbound-method -- Compare the mock function identity; this expression does not invoke it.
     expect(props.bridge.execute).toHaveBeenLastCalledWith(containing({ actionId: "save" }));
     if (mode === "unmount") wrapper.unmount();
@@ -160,7 +157,7 @@ describe("Comms canonical federated application", () => {
       await wrapper.setProps(
         propsFor("transports", vi.fn<TestQuery>().mockResolvedValue(surfacePayload("transports"))),
       );
-    finish({ result: { navigation: { href: "/missions/mission-1/comms/ground-stations/old" } } });
+    finish({ result: { navigation: { href: "/missions/mission-1/comms/routing/old" } } });
     await flushPromises();
     expect(props.bridge.navigate).not.toHaveBeenCalled();
     if (mode === "navigation") {
@@ -259,8 +256,8 @@ describe("Comms canonical federated application", () => {
   });
 
   it("uses a save receipt navigation outcome without requerying", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("ground_station_new"));
-    const props = propsFor("ground_station_new", query);
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("routing_new"));
+    const props = propsFor("routing_new", query);
     const execute = vi
       .fn()
       .mockResolvedValueOnce({ result: { valid: true } })
@@ -268,7 +265,7 @@ describe("Comms canonical federated application", () => {
         receiptId: "receipt-2",
         completedAt: "2026-09-04T00:00:00Z",
         result: {
-          navigation: { kind: "navigate", href: "/missions/mission-1/comms/ground-stations/gs-1" },
+          navigation: { kind: "navigate", href: "/missions/mission-1/comms/routing/rule-1" },
         },
       });
     props.bridge.execute = execute as HostBridge["execute"];
@@ -276,27 +273,19 @@ describe("Comms canonical federated application", () => {
     const wrapper = mount(CommsApplication, { props });
 
     await flushPromises();
-    await wrapper.get("#ground_station_display_name").setValue("Saved station");
+    await wrapper.get("#routing_rule_display_name").setValue("Saved rule");
     await flushPromises();
-    await wrapper.get("#ground-station-form").trigger("submit");
+    await wrapper.get("#routing-rule-form").trigger("submit");
     await flushPromises();
 
     expect(execute).toHaveBeenCalledWith({
       applicationKey: "comms",
       applicationVersion: 1,
       actionId: "save",
-      input: {
-        ground_station: {
-          ground_station_id: "",
-          display_name: "Saved station",
-          provider: "",
-          region: "",
-          metadata_json: "{}",
-        },
-      },
+      input: { routing_rule: expect.objectContaining({ display_name: "Saved rule" }) },
       context,
     });
-    expect(assign).toHaveBeenCalledWith("/missions/mission-1/comms/ground-stations/gs-1");
+    expect(assign).toHaveBeenCalledWith("/missions/mission-1/comms/routing/rule-1");
     expect(query).toHaveBeenCalledTimes(1);
     assign.mockRestore();
     wrapper.unmount();
@@ -350,92 +339,6 @@ function formNavigation(label: string) {
   };
 }
 
-function transportFormPayload() {
-  const field = (key: string, id: string, type = "text", value = "") => ({
-    key,
-    id,
-    name: `transport[${key}]`,
-    type,
-    label: key,
-    required: false,
-    placeholder: null,
-    options: [],
-    value,
-    provider_managed_id: null,
-  });
-  return {
-    page: {
-      id: "comms-transport-new-page",
-      title: "New Transport",
-      subtitle: "Transport",
-      breadcrumbs: [],
-    },
-    form: {
-      id: "transport-form",
-      selected_origin: "direct",
-      can_submit: false,
-      sections: {
-        identity: { id: "identity", number: "01", title: "Identity" },
-        origin: { id: "origin", number: "02", title: "Origin" },
-        source: { id: "source", number: "03", title: "Source" },
-        provider_capability: { id: "capability", number: "04", title: "Capability" },
-        review: { id: "review", number: "06", title: "Review" },
-      },
-      fields: {
-        display_name: field("display_name", "transport-display-name"),
-        origin: field("origin", "transport-origin", "select", "direct"),
-        transport_kind: field("transport_kind", "transport-kind", "select", "tcp_socket"),
-        mission_provider_id: field("mission_provider_id", "transport-provider", "select"),
-        service_profile_id: field("service_profile_id", "transport-service-profile", "select"),
-        delivery_profile_id: field("delivery_profile_id", "transport-delivery-profile", "select"),
-      },
-      origin_cards: [],
-      direct_configuration: {
-        id: "transport-direct-configuration",
-        kind: "transport_kind",
-        description: null,
-        active: true,
-        sections: [],
-      },
-      provider: {
-        active: false,
-        versions: [],
-        profile_fields_id: "profiles",
-        ready_count: 0,
-        selected: null,
-        empty_state: {
-          id: "empty",
-          visible: true,
-          message: "",
-          action: { label: "", href: "/missions/mission-1/comms/providers" },
-        },
-        operator_summary: null,
-        derivation_error: null,
-      },
-      provider_derived: {
-        active: false,
-        id: "derived",
-        number: "05",
-        title: "Derived",
-        description: "",
-        configuration: { id: "configuration", rows: [], empty_text: "" },
-      },
-      review: {
-        configuration_summary_id: "summary",
-        ownership: { label: "", value: "", source: "" },
-        readiness: { label: "", status: "attention", value: "", endpoint: "" },
-        error: null,
-        error_id: "error",
-        diagnostics: { id: "diagnostics", label: "", json_id: "json", json: "{}" },
-      },
-      actions: {
-        submit: { id: "create-transport-button", label: "Create" },
-        cancel: { id: "cancel", label: "Cancel", href: "/missions/mission-1/comms/transports" },
-      },
-    },
-  };
-}
-
 function routingFormPayload() {
   const field = (key: string, type = "text") => ({
     id: `routing_rule_${key}`,
@@ -476,59 +379,6 @@ function routingFormPayload() {
   };
 }
 
-function groundStationFormPayload(mode: "new" | "edit") {
-  const field = (key: string, type = "text") => ({
-    id: `ground_station_${key}`,
-    name: `ground_station[${key}]`,
-    type,
-    label: key,
-    required: false,
-    disabled: mode === "edit" && key === "ground_station_id",
-    placeholder: null,
-    value:
-      key === "metadata_json"
-        ? "{}"
-        : mode === "edit" && key === "ground_station_id"
-          ? "station-1"
-          : "",
-  });
-  return {
-    page: {
-      id: "comms-ground-station-form-page",
-      heading: mode === "new" ? "New Ground Station" : "Edit Ground Station",
-      subtitle: "Ground station",
-      breadcrumbs: [],
-    },
-    mode,
-    form: {
-      id: "ground-station-form",
-      sections: {
-        identity: { id: "identity", number: "01", title: "Identity" },
-        network: { id: "network", number: "02", title: "Network" },
-        metadata: { id: "metadata", number: "03", title: "Metadata" },
-      },
-      fields: {
-        ground_station_id: field("ground_station_id"),
-        display_name: field("display_name"),
-        provider: field("provider"),
-        region: field("region"),
-        metadata_json: field("metadata_json", "textarea"),
-      },
-      actions: {
-        submit: {
-          id: mode === "new" ? "create-ground-station-button" : "save-ground-station-button",
-          label: "Save",
-        },
-        cancel: {
-          id: "cancel",
-          label: "Cancel",
-          href: "/missions/mission-1/comms/ground-stations" + (mode === "edit" ? "/station-1" : ""),
-        },
-      },
-    },
-  };
-}
-
 function bridgeFor(query: TestQuery): HostBridge {
   return {
     query: async <TResult>(request: HostQueryRequest) => (await query(request)) as TResult,
@@ -540,26 +390,10 @@ function bridgeFor(query: TestQuery): HostBridge {
 function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
   if (surfaceId === "overview") return overviewPayload();
 
-  if (surfaceId === "transport_new") {
-    return {
-      navigation: formNavigation("New Transport"),
-      data: transportFormPayload(),
-    };
-  }
-
   if (surfaceId === "routing_new") {
     return {
       navigation: formNavigation("New Routing Rule"),
       data: routingFormPayload(),
-    };
-  }
-
-  if (surfaceId === "ground_station_new" || surfaceId === "ground_station_edit") {
-    return {
-      navigation: formNavigation(
-        surfaceId === "ground_station_new" ? "New Ground Station" : "Edit Ground Station",
-      ),
-      data: groundStationFormPayload(surfaceId === "ground_station_new" ? "new" : "edit"),
     };
   }
 
