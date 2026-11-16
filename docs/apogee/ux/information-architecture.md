@@ -107,8 +107,9 @@ query (⌘K) → fleet posture → clocks → account.
     Stale still counts. Never a clean nominal in that state, as with Alarms.
   - Not loaded yet: nothing, never a placeholder nominal (U20).
   - Live link lost: the chips keep their counts but turn stale-tinted, with `as of 23:52Z`.
-  - From 768 to 1279px: marks and counts only (`◆ 2 ▲ 1 ▨ 3`); each link's accessible name and title carries the
-    words ("2 spacecraft critical"). Word-only chips keep a short word: `○ Limits off`, `○ No telemetry`, `■ Nominal`.
+  - From 768 to 1599px (dashboards and qa, 11-15: the worded cluster is ~450px): marks and counts only (`◆ 2 ▲ 1
+    ▨ 3`). Each link's accessible name and title carries the words ("2 spacecraft critical"). Chips without a
+    count keep a short word: `○ Limits off`, `○ No telemetry yet`, `■ Nominal`. Words from 1600px.
     Below 768: not in the header; the tab bar's Alarms count and Now cover it.
   - **The top bar never wraps** (qa, 11-15). Every item is one line and `flex-none`, except the query trigger,
     which is the only one that shrinks: its placeholder truncates with an ellipsis, with a minimum of about 160px.
