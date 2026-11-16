@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApCallout, ApRemote, ApSheet } from "@/ui";
@@ -23,10 +23,25 @@ const failure = ref<string | null>(null);
 const busy = ref(false);
 const blocked = computed(() => blockedReason(draft.value, ready.value, busy.value));
 
+// a11y A1: when the choices are still loading, the sheet opens on Cancel (the fields aren't there
+// yet); once they load, move focus to Name unless the user is already in the form.
+const form = ref<HTMLFormElement | null>(null);
+let nameOnLoad = false;
+watch(
+  ready,
+  (r) => {
+    if (!r || !nameOnLoad) return;
+    nameOnLoad = false;
+    if (!form.value?.contains(document.activeElement)) form.value?.querySelector("input")?.focus();
+  },
+  { flush: "post" },
+);
+
 function open() {
   draft.value = blankDraft;
   failure.value = null;
   opened.value = true;
+  nameOnLoad = ready.value === null;
   sheet.value?.open();
 }
 async function submit() {
@@ -53,7 +68,7 @@ defineExpose({ open });
       @retry="options.refetch"
     >
       <template #default="{ value: o }">
-        <form class="flex flex-col gap-3" @submit.prevent="submit">
+        <form ref="form" class="flex flex-col gap-3" @submit.prevent="submit">
           <RegisterFields v-model="draft" :options="o" />
           <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
         </form>

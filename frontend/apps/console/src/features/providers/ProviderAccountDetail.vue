@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import type { SessionOrganization } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApPanel } from "@/ui";
+import { ApButton, ApCallout, ApPanel, useInPlaceSwap } from "@/ui";
 import AccountEditForm from "./AccountEditForm.vue";
 import AccountGrants from "./AccountGrants.vue";
 import AccountStatusLine from "./AccountStatusLine.vue";
@@ -17,11 +17,13 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ changed: [] }>();
 const busy = ref(false);
-const editing = ref(false);
+// a11y A1/A5: Edit swaps to the form (focus its first field); Save and Cancel swap back to Edit.
+const manage = ref<HTMLElement | null>(null);
+const edit = useInPlaceSwap(manage);
 const result = ref<{ tone: "nominal" | "info" | "crit"; text: string } | null>(null);
 function saved(text: string) {
-  editing.value = false;
   result.value = { tone: "nominal", text };
+  void edit.hide();
   emit("changed");
 }
 
@@ -48,21 +50,24 @@ async function test() {
     </template>
     <div class="flex flex-col gap-4">
       <AccountStatusLine :account="account" />
-      <div v-if="canManage" class="flex flex-col gap-2">
+      <div v-if="canManage" ref="manage" class="flex flex-col gap-2">
         <div class="flex gap-2">
           <ApButton :disabled="busy" disabled-reason="Testing…" @click="test"
             >Test reference</ApButton
           >
-          <ApButton v-if="!editing" variant="ghost" @click="editing = true">Edit</ApButton>
+          <ApButton v-if="!edit.open.value" data-swap-opener variant="ghost" @click="edit.show"
+            >Edit</ApButton
+          >
         </div>
         <ApCallout v-if="result" :tone="result.tone">{{ result.text }}</ApCallout>
         <AccountEditForm
-          v-if="editing"
+          v-if="edit.open.value"
+          data-swap-editor
           :org-id="organization.id"
           :org-slug="organization.slug"
           :account="account"
           @saved="saved"
-          @cancel="editing = false"
+          @cancel="edit.hide()"
         />
       </div>
       <AccountGrants

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { ApButton, ApCallout, ApField } from "@/ui";
 import { ratioSlip, type SchemaField } from "./kindSchema.ts";
 
@@ -22,10 +23,16 @@ const inputMode = (f: SchemaField) =>
     : f.type === "integer" && f.unit !== "s"
       ? ("numeric" as const)
       : undefined;
+// a11y C/A5: applying the fix removes the callout and its focused button; put focus back in the field.
+const box = ref<HTMLElement | null>(null);
+function applyFix(fix: string) {
+  text.value = fix;
+  box.value?.querySelector("input")?.focus();
+}
 </script>
 
 <template>
-  <div class="flex flex-col gap-2">
+  <div ref="box" class="flex flex-col gap-2">
     <ApField
       v-model="text"
       :label="field.label"
@@ -39,7 +46,7 @@ const inputMode = (f: SchemaField) =>
     <ApCallout v-if="ratioSlip(field, text)" tone="caution">
       {{ ratioSlip(field, text)?.line }}
       <template #action>
-        <ApButton size="compact" @click="text = ratioSlip(field, text)?.fix ?? text">{{
+        <ApButton size="compact" @click="applyFix(ratioSlip(field, text)?.fix ?? text)">{{
           ratioSlip(field, text)?.label
         }}</ApButton>
       </template>

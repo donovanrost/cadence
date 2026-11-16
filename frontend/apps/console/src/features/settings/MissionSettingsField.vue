@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { diffEdits, SchemaForm, type FormValues } from "@/features/changes/index.ts";
-import { ApButton, ApInlineConfirm, ApTag } from "@/ui";
+import { ApButton, ApInlineConfirm, ApTag, refocusFirst, useInPlaceSwap } from "@/ui";
 import { fieldTag, initialValues, resetConfirm, valueText, type SettingsField } from "./api.ts";
 
 /**
@@ -23,7 +23,14 @@ const emit = defineEmits<{
 }>();
 const setHere = computed(() => props.field.source === "mission");
 const schema = computed(() => ({ kind: "settings", fields: [props.field] }));
-const editing = ref(false);
+// a11y A1/A5: Override and Change swap in the field (focus it); Save and Cancel swap back to the
+// opener. A reset or save that flips the source re-renders the buttons; land on the opener then.
+const root = ref<HTMLElement | null>(null);
+const edit = useInPlaceSwap(root);
+const editing = edit.open;
+watch(setHere, () => refocusFirst(root.value?.querySelector<HTMLElement>("[data-swap-opener]")), {
+  flush: "post",
+});
 /** Governance's Reset confirms in place, naming the organization's value (ApInlineConfirm, §7). */
 const confirming = ref(false);
 function reset() {
@@ -37,24 +44,30 @@ function start() {
   before.value = initialValues({ fields: [props.field] });
   values.value = { ...before.value };
   errors.value = {};
-  editing.value = true;
+  void edit.show();
 }
 function save() {
   const edits = diffEdits(schema.value, before.value, values.value);
   if (!edits.ok) return void (errors.value = edits.errors);
   if (edits.changes.length === 0) return void emit("unchanged");
   emit("save", Object.fromEntries(edits.changes.map((c) => [c.path, c.value])));
-  editing.value = false;
+  void edit.hide();
 }
 </script>
 
 <template>
-  <div class="flex flex-col gap-2 bg-panel px-4 py-3">
+  <div ref="root" class="flex flex-col gap-2 bg-panel px-4 py-3">
     <div class="flex items-start justify-between gap-3">
       <span class="ap-label">{{ field.label }}</span>
       <ApTag v-if="fieldTag(field)" state="off" :label="fieldTag(field) ?? ''" />
     </div>
-    <SchemaForm v-if="editing" v-model="values" :schema="schema" :errors="errors" />
+    <SchemaForm
+      v-if="editing"
+      data-swap-editor
+      v-model="values"
+      :schema="schema"
+      :errors="errors"
+    />
     <span v-else class="font-mono text-md" :class="setHere ? 'text-readout' : 'text-text-4'">{{
       valueText(field)
     }}</span>
@@ -69,10 +82,12 @@ function save() {
           @click="save"
           >Save</ApButton
         >
-        <ApButton size="compact" variant="ghost" @click="editing = false">Cancel</ApButton>
+        <ApButton size="compact" variant="ghost" @click="edit.hide()">Cancel</ApButton>
       </template>
       <template v-else>
-        <ApButton size="compact" @click="start">{{ setHere ? "Change" : "Override" }}</ApButton>
+        <ApButton size="compact" data-swap-opener @click="start">{{
+          setHere ? "Change" : "Override"
+        }}</ApButton>
         <ApInlineConfirm
           v-if="setHere && confirmReset"
           v-model:open="confirming"

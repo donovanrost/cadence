@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { useConsoleScope } from "@/shell";
 import {
   ApBreadcrumb,
@@ -10,6 +10,7 @@ import {
   ApPanel,
   ApSegmented,
   ApSelect,
+  refocusFirst,
 } from "@/ui";
 import TokenOnce from "./TokenOnce.vue";
 import {
@@ -61,7 +62,12 @@ async function create() {
       scope: reach.value,
       missionId: missionId.value || null,
     });
-    if (r.ok) return void (issued.value = r.value);
+    if (r.ok) {
+      issued.value = r.value;
+      // a11y A5: the form (and its focused Create) is replaced; land on "Created", then Copy is next.
+      await nextTick();
+      return refocusFirst(document.querySelector<HTMLElement>("[data-service-created]"));
+    }
     const f = serviceFailure(r.error);
     errors.value = { ...f.fields };
     failure.value = f.text;
@@ -82,7 +88,9 @@ async function create() {
     <ApPageHeader label="Service identities" title="New service identity" size="reading" />
     <ApPanel v-if="issued" index="U3" :title="issued.service_identity.name">
       <div class="flex flex-col gap-4">
-        <ApCallout tone="nominal">Created. Give this token to the pipeline that uses it.</ApCallout>
+        <ApCallout data-service-created tone="nominal"
+          >Created. Give this token to the pipeline that uses it.</ApCallout
+        >
         <TokenOnce :token="issued.api_token" />
         <ApButton
           :to="{ name: 'org.people.service', params: { serviceId: issued.service_identity.id } }"

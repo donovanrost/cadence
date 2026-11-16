@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
 import { ApBreadcrumb, ApEmptyState, ApPageHeader, ApRemote } from "@/ui";
 import InvitationPanel from "./InvitationPanel.vue";
-import { fetchPeople } from "./api.ts";
+import { fetchPeople, type Invitation } from "./api.ts";
 
 /** People.md Invitations: the email link's page (one h1 per page, qa #36). */
 const scope = useConsoleScope();
@@ -17,11 +17,23 @@ const org = computed(() =>
 );
 const id = computed(() => String(route.params.invitationId ?? ""));
 const { state, refetch } = useRemoteQuery(() => org.value?.id ?? null, fetchPeople);
-const invitation = computed(() =>
+const found = computed(() =>
   state.value.status === "ready"
     ? (state.value.value.invitations.find((i) => i.id === id.value) ?? null)
     : null,
 );
+// a11y A5: Resend moves the route to the new id before the list re-reads. Until the new row arrives,
+// keep the panel on the old one, so its "Sent again" note and the focus on Resend survive.
+const held = ref<{ to: string; row: Invitation } | null>(null);
+const invitation = computed(
+  () => found.value ?? (held.value?.to === id.value ? held.value.row : null),
+);
+function moving(to: string) {
+  if (found.value) held.value = { to, row: found.value };
+}
+watch(found, (row) => {
+  if (row && row.id === held.value?.to) held.value = null;
+});
 const canManage = computed(
   () =>
     state.value.status === "ready" && state.value.value.permissions.includes("org.manage_members"),
@@ -50,6 +62,7 @@ const canManage = computed(
           :org-id="org.id"
           :invitation="invitation"
           :can-manage="canManage"
+          @moving="moving"
           @changed="refetch"
         />
       </template>

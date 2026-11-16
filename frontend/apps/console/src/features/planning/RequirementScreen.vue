@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, type ApCrumb } from "@/ui";
+import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, useInPlaceSwap, type ApCrumb } from "@/ui";
 import RequirementEditor from "./RequirementEditor.vue";
 import RequirementView from "./RequirementView.vue";
 import { fetchRequirement, windowText } from "./requirements.ts";
@@ -26,10 +26,14 @@ const { state, refetch } = useRemoteQuery(
 const session = useSession();
 // Requirement writes need organization admin (api 8g, 403 otherwise).
 const canEdit = computed(() => canAdministerOrganization(session, scope.value.organization));
-const editing = ref(false);
+// a11y A1/A5: Edit swaps the view for the editor (focus its first field); Save and Cancel swap back
+// and return focus to Edit.
+const root = ref<HTMLElement | null>(null);
+const edit = useInPlaceSwap(root);
+const editing = edit.open;
 function closed() {
-  editing.value = false;
   refetch();
+  void edit.hide();
 }
 const title = computed(() => {
   if (isNew.value) return "New requirement";
@@ -53,13 +57,13 @@ const editable = computed(
 </script>
 
 <template>
-  <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
+  <div ref="root" class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApBreadcrumb :crumbs="crumbs" />
     <ApPageHeader :title="title" size="reading">
       <template v-if="!isNew && state.status === 'ready'" #subtitle
         ><span class="font-mono text-sm text-text-3">v{{ state.value.version }}</span></template
       >
-      <ApButton v-if="editable && !editing" @click="editing = true">Edit</ApButton>
+      <ApButton v-if="editable && !editing" data-swap-opener @click="edit.show">Edit</ApButton>
     </ApPageHeader>
     <RequirementEditor
       v-if="isNew && canEdit"
@@ -74,12 +78,10 @@ const editable = computed(
       @retry="refetch"
     >
       <template #default="{ value }">
-        <RequirementEditor
-          v-if="editing"
-          :mission-id="missionId"
-          :requirement="value"
-          @close="closed"
-        />
+        <!-- The swap marker sits on a wrapper: RequirementEditor's root is ApRemote's slot once loaded. -->
+        <div v-if="editing" data-swap-editor class="contents">
+          <RequirementEditor :mission-id="missionId" :requirement="value" @close="closed" />
+        </div>
         <RequirementView
           v-else
           :mission-id="missionId"

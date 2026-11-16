@@ -32,7 +32,9 @@ const chip = (f: ProfileField) => {
     flush
   >
     <template v-if="canEdit" #header>
-      <ApButton size="compact" variant="primary" @click="$emit('edit')">Edit</ApButton>
+      <ApButton size="compact" variant="primary" data-swap-opener @click="$emit('edit')"
+        >Edit</ApButton
+      >
     </template>
     <ApCallout v-if="section.key === 'catalog'" tone="info">
       A catalog change goes through a change set: when it's applied, spacecraft on this profile move

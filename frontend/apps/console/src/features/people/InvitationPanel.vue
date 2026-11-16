@@ -10,7 +10,7 @@ import { roleLabel, type Invitation } from "./api.ts";
  * place with the kit's ApInlineConfirm (O5, design-language §7).
  */
 const props = defineProps<{ orgId: string; invitation: Invitation; canManage: boolean }>();
-const emit = defineEmits<{ changed: [] }>();
+const emit = defineEmits<{ changed: []; moving: [to: string] }>();
 const router = useRouter();
 const busy = ref(false);
 const confirming = ref(false);
@@ -27,6 +27,7 @@ async function resend() {
         tone: "nominal",
         text: `Sent again to ${props.invitation.email}. The old link no longer works.`,
       };
+      emit("moving", r.value.id);
       await router.replace({ name: "org.people.invitation", params: { invitationId: r.value.id } });
     } else note.value = { tone: "caution", text: adminErrorText(r.error) };
     emit("changed");
