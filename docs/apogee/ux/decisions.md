@@ -2181,8 +2181,16 @@ filter.
 - With no end yet (`ends_at` null): `11-16 02:59:40Z – no end yet`. That's true whether the contact is still open or
   its end was never recorded, so it claims neither (U20). Duration reads `—`.
 - Defined but never live (`defined`): State `○ Not started` (the off mark; neutral, not a fault). It's not a
-  pass that was missed. The Window cell shows the one time the row has, with no end part.
+  pass that was missed. Its one time is when Cadence created the record (api's `realized_at`), not a start, so the
+  Window cell labels it: `Created 11-16 02:59:40Z` ("Created" in `text-3` sans, the time mono). It sorts by that
+  time. The phone's Start column shows it the same way. The row link's accessible name ends "never started".
 - `stopped` reads `Ended · not verified`, like a completed pass: never green without flown evidence.
+- **Swept without going live** (domain's orphan sweep closes a never-live contact after an hour as `stopped`): it
+  reads like a defined one, never `Ended`, which would claim an hour-long contact that never happened (U20). This
+  needs api's additive `not_started: true` on `booked: false` rows (true for `defined` too).
+  - State `○ Not started`, and the Window cell `Created 11-16 02:59:40Z` (`starts_at` here is the creation time).
+  - The drawer's record adds one line: "Closed by Cadence at 03:59:40Z: it never went live." (`ends_at`).
+  - Until the field ships, such rows read as shipped (`Ended · not verified`).
 - Count lines add them: "1,284 passes and 3 hand-started contacts". The foot line goes.
 - The drawer shows the A13 record alone, titled "Contact record", with no reservation section and no pass actions.
 
