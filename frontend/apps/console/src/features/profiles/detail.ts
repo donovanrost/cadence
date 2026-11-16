@@ -61,6 +61,22 @@ const rule = object({
 });
 export type ProfileRule = Decoded<typeof rule>;
 
+/** U79 (api C, additive): a spacecraft's own extra route on this profile, one entry per route. */
+const extraRoute = object({
+  spacecraft: object({ id: spacecraftId, name: string }),
+  route_id: token,
+  name: string,
+  station: nullable(object({ id: token, code: nullable(string), name: nullable(string) })),
+  legs: array(
+    object({
+      direction: oneOf(["downlink", "uplink"]),
+      role: oneOf(["primary", "candidate", "contributing"]),
+    }),
+    2,
+  ),
+});
+export type ExtraRouteRow = Decoded<typeof extraRoute>;
+
 const override = object({
   spacecraft: spacecraftRef,
   section: token,
@@ -97,6 +113,8 @@ export const profileDetailReader = object({
   applications: raw,
   rules: array(rule, 200),
   overrides: array(override, 5000),
+  /** Optional until api serves it (U79 C); absent reads as none. */
+  extra_routes: decoders.optional(array(extraRoute, 5000)),
   routing_model: oneOf(["per_spacecraft", "profile"]),
   versions: array(
     object({

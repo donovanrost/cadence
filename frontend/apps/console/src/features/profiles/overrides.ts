@@ -70,3 +70,15 @@ export function existingLine(o: ProfileOverride, f: ProfileField | undefined): s
   const why = o.reason ? ` (${o.actor?.name ? `${o.actor.name}: ` : ""}${o.reason})` : "";
   return `${overrideCraft(o)} already overrides this: ${valueText(f, o.spacecraft_value)}${since}${why}`;
 }
+
+/** U79 P3 line: "Extra route via Inuvik · downlink primary" (the station by name, then code). */
+export function extraRouteLine(
+  route: Readonly<{
+    station: Readonly<{ code: string | null; name: string | null }> | null;
+    legs: readonly Readonly<{ direction: string; role: string }>[];
+  }>,
+): string {
+  const station = route.station?.name || route.station?.code || "a removed station";
+  const legs = route.legs.map((l) => `${l.direction} ${l.role}`).join(", ");
+  return legs ? `Extra route via ${station} · ${legs}` : `Extra route via ${station}`;
+}
