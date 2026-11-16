@@ -19,7 +19,7 @@ function by(id: string, name: string | null) {
 }
 const me = "u_me";
 
-describe("Discard confirm words (ux 11-16)", () => {
+describe("Discard confirm words (ux 11-16, screens/Changes.md)", () => {
   it("all yours: names the count and that they can't come back", () => {
     expect(discardConfirm([by(me, "Me"), by(me, "Me"), by(me, "Me")], me, true)).toEqual({
       sentence: "Discard your 3 staged changes? They can't be brought back.",
@@ -27,27 +27,49 @@ describe("Discard confirm words (ux 11-16)", () => {
     });
   });
 
-  it("discard all with others' changes names them, past two as 'and N others'", () => {
+  it("discard all, one other author: whose they are", () => {
+    expect(
+      discardConfirm([by(me, "Me"), by("u_m", "Mira K."), by("u_m", "Mira K.")], me, true).sentence,
+    ).toBe("Discard all 3 staged changes? 2 of them are Mira K.'s. They can't be brought back.");
+  });
+
+  it("discard all, several authors: the list, past two names (and unnamed) as 'and N others'", () => {
     const two = [by(me, "Me"), by("u_m", "Mira K."), by("u_t", "Tomás R.")];
     expect(discardConfirm(two, me, true).sentence).toBe(
       "Discard all 3 staged changes? 2 of them are other people's: Mira K., Tomás R. They can't be brought back.",
     );
-    const four = [...two, by("u_a", "Ana P."), by("u_b", "Ben O.")];
-    expect(discardConfirm(four, me, true).sentence).toBe(
+    expect(
+      discardConfirm([...two, by("u_a", "Ana P."), by("svc_1", null)], me, true).sentence,
+    ).toBe(
       "Discard all 5 staged changes? 4 of them are other people's: Mira K., Tomás R. and 2 others. They can't be brought back.",
+    );
+    expect(discardConfirm([by("u_m", "Mira K."), by("svc_1", null)], me, true).sentence).toBe(
+      "Discard all 2 staged changes? 2 of them are other people's: Mira K. and 1 other. They can't be brought back.",
     );
   });
 
-  it("discard mine counts only yours and says whose stay staged", () => {
+  it("discard all, no named author: no list", () => {
+    expect(
+      discardConfirm([by(me, "Me"), by("svc_1", null), by("svc_2", null)], me, true).sentence,
+    ).toBe(
+      "Discard all 3 staged changes? 2 of them are other people's. They can't be brought back.",
+    );
+  });
+
+  it("discard mine: one named author says whose; otherwise 'by other people', no list", () => {
     expect(discardConfirm([by(me, "Me"), by(me, "Me"), by("u_m", "Mira K.")], me, false)).toEqual({
       sentence: "Discard your 2 staged changes? Mira K.'s 1 change stays staged.",
       action: "Discard 2 changes",
     });
-  });
-
-  it("says 'someone' for an author without a name", () => {
+    expect(
+      discardConfirm(
+        [by(me, "Me"), by("u_m", "Mira K."), by("u_t", "Tomás R."), by("svc_1", null)],
+        me,
+        false,
+      ).sentence,
+    ).toBe("Discard your 1 staged change? 3 changes by other people stay staged.");
     expect(discardConfirm([by(me, "Me"), by("svc_1", null)], me, false).sentence).toBe(
-      "Discard your 1 staged change? someone's 1 change stays staged.",
+      "Discard your 1 staged change? 1 change by other people stays staged.",
     );
   });
 });
