@@ -1588,6 +1588,23 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
     - Refusal `contact_plan_self_approval_forbidden`: "Not approved: you submitted this plan, so another org admin
       has to approve it." There's no Approve button for the submitter in the first place. This is the backstop.
 
+- **Approved but not booking** (domain 11-16: nothing runs or watches booking after approval). A day counts as
+  covered only when its newest plan's **derived** state is `executing` or later. `approved` and `interrupted`
+  don't cover, so a stalled run reopens the item.
+  - **Approved, not started**, shown only after a 2-minute grace from `approved_at`:
+    - Title: `Plan for 11-16 is approved but booking hasn't started`.
+    - Body: "R41 was approved at 22:10Z, but booking hasn't started. Nothing is booked for 11-16's 1,512
+      requirements until it does."
+    - Action: `Start booking`.
+  - **Interrupted:**
+    - Title: `Booking for 11-16 stopped`.
+    - Body: "Booking for R41 stopped at 22:14Z with 12 of 41 passes booked. The other 29 aren't booked until it
+      continues."
+    - Action: `Continue booking`. With nothing booked yet: "…stopped at 22:14Z before any pass was booked."
+  - Both actions call POST `/execute`, which is idempotent per pass. Someone who can't book gets `Open plan`
+    instead.
+  - Priority and marks follow the thresholds above.
+
 ### U62 · Time range track interaction (ApTimeRange's RangeTrack; a user bug via the director) (dashboards builds / lead)
 Used by the telemetry plot, the Timeline, the dashboard range, Book a pass and the kit. dashboards' base behaviour
 stands: a handle moves one end; minimum 1 min and start < end; From/To update live and commit on release; Esc

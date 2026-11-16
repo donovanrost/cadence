@@ -95,10 +95,11 @@ words match U61's titles, so the strip and Now say the same thing:
 | `failed` | `Booking failed` | ▲ caution |
 | `unconfirmed` | `4 unconfirmed` | ▲ caution |
 | `executing` | `Booking…` | none |
-| `approved`, booking not started yet | `Approved` (not `Booking…`: nothing has gone out yet, U20) | none |
+| `approved`, booking not started yet | `Approved` (not `Booking…`: nothing has gone out yet, U20) | none, then U61's (after 2 min) |
 | `pending_approval` | `Awaiting approval` | none, then U61's |
 | sent back | `Sent back` | none, then U61's |
-| `draft`, `drafting`, `interrupted`, `superseded` | `Draft` | none, then U61's |
+| `draft`, `drafting`, `interrupted` (drafting), `superseded` | `Draft` | none, then U61's |
+| `interrupted` (booking) | `Booking stopped · 12 of 41` | ▲ caution |
 | no plan with requirements (a stray `canceled` reads the same) | `No plan` | none, then U61's |
 | no requirements | `Nothing to plan` | none |
 
