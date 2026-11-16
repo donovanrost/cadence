@@ -6,6 +6,7 @@ import { useRemoteQuery } from "@/api";
 import { ApButton, ApCallout, ApPanel, ApRemote } from "@/ui";
 import { failureOutcome, stageChange } from "./actions.ts";
 import {
+  createDefaults,
   diffEdits,
   fetchKindSchema,
   fromDocument,
@@ -63,7 +64,8 @@ watch(
   ([s, doc]) => {
     if (s.status !== "ready") return;
     before.value = fromDocument(s.value, doc);
-    values.value = { ...before.value };
+    // ux: a create preselects required defaults, staged explicitly (they differ from `before`).
+    values.value = props.entityId ? { ...before.value } : createDefaults(s.value, before.value);
   },
   { immediate: true },
 );

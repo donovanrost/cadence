@@ -72,6 +72,22 @@ export function fromDocument(
 }
 
 /**
+ * ux 11-16, create forms only: a REQUIRED field starts on its schema default, or on the only
+ * option of a one-option enum, and is staged explicitly. Optional fields stay empty (empty means
+ * inherit the default), and edit forms are untouched.
+ */
+export function createDefaults(schema: KindSchema, values: FormValues): FormValues {
+  const out: FormValues = { ...values };
+  for (const f of schema.fields) {
+    if (!f.required || (out[f.path] ?? "") !== "") continue;
+    const only = f.type === "enum" && f.enum?.length === 1 ? f.enum[0] : undefined;
+    const preset = f.default !== null && f.default !== undefined ? f.default : only?.value;
+    if (preset !== null && preset !== undefined) out[f.path] = displayValue(f, preset);
+  }
+  return out;
+}
+
+/**
  * The schema units the console formats itself (U24): seconds as durations, micros as currency
  * units, ratio as a percent. Units are otherwise open display text from the server's schema, so
  * this maps the text to the few the console knows once; anything else is shown as sent.

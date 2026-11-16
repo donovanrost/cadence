@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import {
+  createDefaults,
   diffEdits,
   formatSeconds,
   fromDocument,
@@ -230,5 +231,65 @@ describe("json fields (comms parity 4: a ground station's metadata)", () => {
         ok: false,
         message: 'Metadata must be a JSON object, like {"site": "north"}.',
       });
+  });
+});
+
+describe("create forms preselect required defaults (ux 11-16)", () => {
+  const f = (over: Partial<SchemaField>): SchemaField => ({
+    path: "x",
+    label: "X",
+    type: "string",
+    unit: null,
+    enum: null,
+    range: null,
+    default: null,
+    required: false,
+    help: null,
+    create_only: undefined,
+    visible_when: null,
+    pattern: undefined,
+    ...over,
+  });
+  const schema = (fields: SchemaField[]) => ({ kind: "transport", fields });
+
+  it("preselects a required field's default, and a required one-option enum", () => {
+    const kind = f({
+      path: "transport_kind",
+      type: "enum",
+      required: true,
+      default: "tcp_socket",
+      enum: [{ value: "tcp_socket", label: "TCP socket" }],
+    });
+    const lone = f({
+      path: "mode",
+      type: "enum",
+      required: true,
+      enum: [{ value: "client", label: "Client" }],
+    });
+    expect(createDefaults(schema([kind, lone]), {})).toEqual({
+      transport_kind: "tcp_socket",
+      mode: "client",
+    });
+  });
+
+  it("leaves optional defaults empty (inherit) and never overwrites a value", () => {
+    const optional = f({ path: "port", type: "integer", default: 7000 });
+    const typed = f({ path: "display_name", required: true, default: "Main" });
+    expect(createDefaults(schema([optional, typed]), { display_name: "Backup" })).toEqual({
+      display_name: "Backup",
+    });
+  });
+
+  it("leaves a required field without a default or a single option empty", () => {
+    const choice = f({
+      path: "origin",
+      type: "enum",
+      required: true,
+      enum: [
+        { value: "direct", label: "Direct" },
+        { value: "provider_managed", label: "Provider managed" },
+      ],
+    });
+    expect(createDefaults(schema([choice]), {})).toEqual({});
   });
 });
