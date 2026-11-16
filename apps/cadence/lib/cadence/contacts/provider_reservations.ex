@@ -444,28 +444,10 @@ defmodule Cadence.Contacts.ProviderReservations do
      }}
   end
 
-  @doc """
-  Reservations whose window overlaps `[from, to)`, oldest start first, at most
-  `:limit` (default 500). Returns `{entries, truncated?}`. Option
-  `:spacecraft_id` narrows to one spacecraft.
-  """
-  @spec list_in_window(binary(), binary(), DateTime.t(), DateTime.t(), keyword()) ::
-          {[ProviderReservation.t()], boolean()}
-  def list_in_window(org, mission, %DateTime{} = from, %DateTime{} = to, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 500)
-
-    rows =
-      ProviderReservationRow
-      |> where([r], r.organization_id == ^org and r.mission_id == ^mission)
-      |> where([r], r.starts_at < ^to and r.ends_at > ^from)
-      |> window_spacecraft(Keyword.get(opts, :spacecraft_id))
-      |> order_by([r], asc: r.starts_at, asc: r.provider_reservation_id)
-      |> limit(^(limit + 1))
-      |> Repo.all()
-
-    {rows |> Enum.take(limit) |> Enum.map(&ProviderReservationRow.to_domain/1),
-     length(rows) > limit}
-  end
+  @doc "Reservations whose window overlaps `[from, to)`; see `PassWindows.reservations/5`."
+  defdelegate list_in_window(org, mission, from, to, opts \\ []),
+    to: Cadence.Contacts.PassWindows,
+    as: :reservations
 
   @doc """
   The passes live at `now` on these missions (AOS <= now < LOS, active or in the pass phase, not
@@ -561,9 +543,6 @@ defmodule Cadence.Contacts.ProviderReservations do
       %{tracked?: false, passes_next_2h: nil, by_spacecraft: %{}}
     end
   end
-
-  defp window_spacecraft(query, nil), do: query
-  defp window_spacecraft(query, id), do: where(query, [r], r.spacecraft_id == ^id)
 
   @spec list_due_for_reconciliation(binary(), keyword()) :: [ProviderReservation.t()]
   def list_due_for_reconciliation(organization_id, opts)

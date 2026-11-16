@@ -44,7 +44,10 @@ defmodule Cadence.Reads.PassContactFields do
 
   @spec detail(binary(), binary(), map(), DateTime.t()) :: map()
   def detail(org, mission, pass, now) do
-    realized = realized_contact_id(org, mission, pass.scheduled_contact_id)
+    # A hand-started row (U78) is its realized contact; a booking finds the one it realized.
+    realized =
+      Map.get(pass, :realized_contact_id) ||
+        realized_contact_id(org, mission, pass.scheduled_contact_id)
 
     %{
       queued_commands: queued(org, mission, pass, now),

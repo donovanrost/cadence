@@ -13,12 +13,35 @@ S8) are api's: [scheduling.md](scheduling.md). Conventions: [README.md](README.m
 
 ## `GET /api/console/v1/missions/:mission_id/passes`
 
-One row per **provider reservation** whose window overlaps `[from, to)`, oldest start first.
+One row per **provider reservation** whose window overlaps `[from, to)`, oldest start first
+(`order=desc`: newest first). Every reservation row carries `booked: true`.
 
 Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at most 7 days),
 `spacecraft_id`, `station` (matches the row's `station.ref`, `station.id` or `station.code`),
-`states` (comma list of reservation states, below). Bad values: `422 invalid_params` with
-`details` keyed by parameter.
+`states` (comma list of reservation states, below, plus a hand-started contact's `defined` and
+`stopped`), `order` (`asc` | `desc`), `include=hand_started` (U78, below). `spacecraft_id` and
+`states` apply in SQL before the 500-row cut; `station` applies after it. Bad values:
+`422 invalid_params` with `details` keyed by parameter.
+
+**Hand-started contacts (U78, opt-in `include=hand_started`; History sends it).** A realized
+contact with no scheduled contact (started by hand, #84) whose time overlaps the window joins as a
+`booked: false` row. Without `include` no such row ever appears. It's a contact, not a pass:
+- `id` = `realized_contact_id` (also on the row), `kind: "contact"`, `booked: false`;
+- `state` is the contact's own word: `defined | active | stopped | completed` (`defined` and
+  `stopped` appear only on these rows);
+- `starts_at`: when it went live (when it was realized if it never did); `ends_at`: when it was
+  stopped, completed or closed as never started, `null` while open;
+- `spacecraft` `{id, name, scid}` from its source endpoints, `null` when they name none or several;
+  `station` from its `ground_station_ref`, the same shape as a booking's;
+- `started_by: {kind: user | service | system, id, name} | null` (name only for a user);
+- `reservation_id`, `scheduled_contact_id`, `plan`, `requirement`, `provider_revision`,
+  `pass_phase`, `delivery_state`, `antenna`, `source`, `cost`, `max_elevation_deg`,
+  `uplink_capable`, `booking_evidence`, `attested_by`, `uplink_confirmed`, `off_plan`, `ended_by`,
+  `attention`, `uplink_readiness`, `contact_action`, `contact_ended`: `null`; `releasable: false`.
+
+Both halves are read in the requested order, merged by `starts_at` (then `id`) and cut to 500, so
+the rows kept are always the first 500 of the whole list; `truncated: true` when either half or the
+merge passed 500.
 
 ```json
 {"data": {
@@ -72,7 +95,8 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
   null, reservation_id}` when a live single booking (contact workspace `actions/reserve`) covers
   it. A lost row with `replaced_by: null` is still lost: that's what re-plan's Impact shows.
   Replacement is persisted when the repair plan is created and never re-derived.
-- `truncated: true`: more than 500 reservations overlap the window. Narrow it.
+- `truncated: true`: more than 500 rows overlap the window (with the filters that apply in SQL).
+  The rows kept are the first 500 in the requested order. Narrow it.
 - Refetch on `invalidate` with `contacts` (below). AOS/LOS happen without an event; refresh a
   "now" line on a timer if you draw one.
 
@@ -108,6 +132,18 @@ Every row gains four fields:
 One pass by its reservation id (the row `id`, or the attention object's `reservation_id`), in the
 same row shape including `attention`, whatever its window. Review opens passes days out with it.
 Returns `{data: <row>}`. Errors: `404 pass_not_found`, `404 mission_not_found`.
+
+U78: `:id` may also be a **scheduled contact id** (the reservation that booked it) or a **realized
+contact id** (the pass of the scheduled contact it realized, or, for a hand-started contact, its
+`booked: false` row with the detail fields below). Reservation ids are tried first, then scheduled,
+then realized. A scheduled id never gives a `booked: false` row; a scheduled contact nothing booked
+is `404`. The row keeps its own `id` (a reservation id for a booking): key on `data.id`. Scoped to
+the mission like a reservation id. Writes (`release`, `recover-uplink`, `cancel-contact`,
+`end-contact`) take reservation ids only: a contact id is `404 pass_not_found`. For a
+`booked: false` row the detail has `queued_command_groups: {count: 0, next_pass: null}`,
+`provider_changes: []`, `window_moves: []`, plan and requirement names `null`, and
+`telemetry_stored`, `incomplete_at_end`, `second_connections_refused` and `queued_commands`
+from the contact.
 
 This read alone adds `queued_command_groups: {count, next_pass}` for the D2 Release sheet (ux):
 - `count` is how many queued, unfinished command groups release on this pass, whatever its

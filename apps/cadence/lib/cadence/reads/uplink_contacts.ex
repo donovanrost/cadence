@@ -13,11 +13,11 @@ defmodule Cadence.Reads.UplinkContacts do
   oldest GO first: what a named release sends, in that order.
   """
 
-  alias Cadence.Accounts
   alias Cadence.Commanding.Groups.Waiting
   alias Cadence.Comms.StationRefs
   alias Cadence.Contacts.{OpenContacts, RealizedContact}
   alias Cadence.Control.UplinkReadiness.Groups
+  alias Cadence.Reads.ContactStart
   alias Cadence.SpacecraftStore
 
   @spec load(binary(), binary(), [binary()]) :: map()
@@ -110,39 +110,11 @@ defmodule Cadence.Reads.UplinkContacts do
 
   defp realized_order(%RealizedContact{} = c), do: {0, c.realized_contact_id}
 
-  # Who started it (domain's metadata "started_by" {kind, id}); null before it starts. A user is
-  # named; a service or the scheduler carries its id only.
-  defp started_by(%RealizedContact{metadata: %{"started_by" => %{"id" => id} = by}})
-       when is_binary(id) do
-    case by["kind"] do
-      "user" -> %{kind: "user", id: id, name: user_name(id)}
-      "service" -> %{kind: "service", id: id, name: nil}
-      _system -> %{kind: "system", id: id, name: nil}
-    end
-  end
+  defp started_by(contact), do: ContactStart.started_by(contact)
 
-  defp started_by(_contact), do: nil
-
-  defp user_name(id) do
-    case Accounts.fetch_user(id) do
-      {:ok, user} -> user.display_name || user.email
-      _missing -> nil
-    end
-  end
-
-  # When it went live: the start after a failed one (U45), else when it was realized.
-  defp started_at(%RealizedContact{lifecycle_state: :active} = contact) do
-    case contact.metadata["start_failure"] do
-      %{"started_at" => at} when is_binary(at) ->
-        case DateTime.from_iso8601(at) do
-          {:ok, parsed, _offset} -> parsed
-          _invalid -> contact.realized_at
-        end
-
-      _never_failed ->
-        contact.realized_at
-    end
-  end
+  # Only while it's live (Uplink's block); History's rows use ContactStart directly.
+  defp started_at(%RealizedContact{lifecycle_state: :active} = contact),
+    do: ContactStart.went_live_at(contact)
 
   defp started_at(_contact), do: nil
 

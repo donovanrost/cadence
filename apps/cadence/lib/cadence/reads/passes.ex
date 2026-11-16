@@ -1,7 +1,9 @@
 defmodule Cadence.Reads.Passes do
   @moduledoc """
   Passes in a time window for the console (ops M7 = scheduling S1): one row per
-  provider reservation whose window overlaps `[from, to)`.
+  provider reservation whose window overlaps `[from, to)`, `booked: true`. With
+  `hand_started: true` (U78 History), hand-started contacts join as `booked: false` rows
+  (`Cadence.Reads.HandStartedPasses`).
 
   Station and antenna come from the reservation's newest snapshot (Cadence
   accepted, then provider confirmed, then requested). The station is matched to
@@ -14,11 +16,12 @@ defmodule Cadence.Reads.Passes do
   """
 
   alias Cadence.Comms.{GroundStationStore, StationRefs}
-  alias Cadence.Contacts.ProviderReservation
+  alias Cadence.Contacts.{PassWindows, ProviderReservation, RealizedContact}
   alias Cadence.Control.Contacts
-  alias Cadence.Reads.PassEnders
+  alias Cadence.Reads.{HandStartedPasses, PassEnders}
 
   @default_limit 500
+  @hand_only_states ~w(defined stopped)
   @provider_booked [:confirmed, :active, :completed]
   @attestable [:pending, :unknown]
   @snapshots [
@@ -31,43 +34,146 @@ defmodule Cadence.Reads.Passes do
           optional(:spacecraft_id) => binary() | nil,
           optional(:station) => binary() | nil,
           optional(:states) => [binary()] | nil,
-          optional(:limit) => pos_integer()
+          optional(:limit) => pos_integer(),
+          optional(:order) => :asc | :desc,
+          optional(:hand_started) => boolean()
         }
 
   @spec load(binary(), binary(), DateTime.t(), DateTime.t(), filters()) :: map()
   def load(organization_id, mission_id, from, to, filters \\ %{}) do
-    {reservations, truncated?} =
-      Contacts.list_provider_reservations_in_window(organization_id, mission_id, from, to,
-        spacecraft_id: Map.get(filters, :spacecraft_id),
-        limit: Map.get(filters, :limit, @default_limit)
-      )
+    limit = Map.get(filters, :limit, @default_limit)
+    order = Map.get(filters, :order, :asc)
 
-    load_rows(organization_id, mission_id, reservations, %{
+    {reservations, truncated?} =
+      case booked_states(Map.get(filters, :states)) do
+        :none ->
+          {[], false}
+
+        states ->
+          Contacts.list_provider_reservations_in_window(organization_id, mission_id, from, to,
+            spacecraft_id: Map.get(filters, :spacecraft_id),
+            states: states,
+            order: order,
+            limit: limit
+          )
+      end
+
+    organization_id
+    |> load_rows(mission_id, reservations, %{
       from: from,
       to: to,
       truncated: truncated?,
       filters: filters
     })
+    |> with_hand_started(organization_id, mission_id, filters, limit, order)
   end
 
-  @doc "One pass by its reservation id, in the same row shape (U32: Review opens any pass)."
+  # U78: hand-started contacts join only on request (`include=hand_started`), merged in the same
+  # order and cut to the same limit, so the kept rows are the first `limit` of the whole list.
+  defp with_hand_started(result, org, mission, %{hand_started: true} = filters, limit, order) do
+    {rows, truncated?} = HandStartedPasses.load(org, mission, result.from, result.to, filters)
+    station = Map.get(filters, :station)
+    rows = Enum.filter(rows, &station_match?(&1, station))
+    merged = merge(result.passes, rows, order)
+
+    %{
+      result
+      | passes: Enum.take(merged, limit),
+        truncated: result.truncated or truncated? or length(merged) > limit
+    }
+  end
+
+  defp with_hand_started(result, _org, _mission, _filters, _limit, _order), do: result
+
+  defp merge(booked, [], _order), do: booked
+
+  defp merge(booked, hand, order) do
+    key = &{DateTime.to_unix(&1.starts_at, :microsecond), &1.id}
+    Enum.sort_by(booked ++ hand, key, order)
+  end
+
+  # A states filter applies to bookings in SQL (before the cut); words only a hand-started
+  # contact carries (defined, stopped) match no booking.
+  defp booked_states(nil), do: nil
+
+  defp booked_states(states) do
+    case Enum.reject(states, &(&1 in @hand_only_states)) do
+      [] -> :none
+      booked -> booked
+    end
+  end
+
+  @doc """
+  One pass by its reservation id, in the same row shape (U32: Review opens any pass). Writes and
+  their re-reads use this: a contact id is no pass to act on.
+  """
   @spec fetch(binary(), binary(), binary()) :: {:ok, map()} | {:error, :pass_not_found}
   def fetch(organization_id, mission_id, reservation_id) do
     case Contacts.fetch_provider_reservation(organization_id, mission_id, reservation_id) do
       {:ok, %ProviderReservation{} = reservation} ->
-        %{passes: [pass]} =
-          load_rows(organization_id, mission_id, [reservation], %{
-            from: nil,
-            to: nil,
-            truncated: false,
-            filters: %{}
-          })
-
-        {:ok, pass}
+        {:ok, one(organization_id, mission_id, reservation)}
 
       {:error, _reason} ->
         {:error, :pass_not_found}
     end
+  end
+
+  @doc """
+  `GET /passes/:id` (U78): `fetch/3`, or a scheduled contact id (the reservation that booked it)
+  or a realized contact id (the pass of the contact it realized, else, started by hand, its
+  `booked: false` row). Reservation ids are tried first, so today's lookups never change, and a
+  scheduled id never gives a hand-started row. Scoped to the mission like `fetch/3`.
+  """
+  @spec resolve(binary(), binary(), binary()) :: {:ok, map()} | {:error, :pass_not_found}
+  def resolve(organization_id, mission_id, id) do
+    with {:error, :pass_not_found} <- fetch(organization_id, mission_id, id),
+         {:error, _not_scheduled} <- by_scheduled(organization_id, mission_id, id) do
+      by_realized(organization_id, mission_id, id)
+    else
+      {:ok, %ProviderReservation{} = reservation} ->
+        {:ok, one(organization_id, mission_id, reservation)}
+
+      {:ok, pass} ->
+        {:ok, pass}
+    end
+  end
+
+  defp by_scheduled(org, mission, id) do
+    case Contacts.fetch_scheduled_contact(org, mission, id) do
+      {:ok, _scheduled} -> booking(org, mission, id)
+      {:error, _reason} -> {:error, :not_scheduled}
+    end
+  end
+
+  defp by_realized(org, mission, id) do
+    case Contacts.fetch_realized_contact(org, mission, id) do
+      {:ok, %RealizedContact{scheduled_contact_id: nil} = contact} ->
+        {:ok, HandStartedPasses.row(org, mission, contact)}
+
+      {:ok, %RealizedContact{scheduled_contact_id: scheduled_id}} ->
+        case booking(org, mission, scheduled_id) do
+          {:ok, %ProviderReservation{} = reservation} -> {:ok, one(org, mission, reservation)}
+          {:error, :pass_not_found} -> {:error, :pass_not_found}
+        end
+
+      {:error, _reason} ->
+        {:error, :pass_not_found}
+    end
+  end
+
+  # A scheduled contact with no booking (made through the control-plane API) has no pass row.
+  defp booking(org, mission, scheduled_id) do
+    case PassWindows.reservation_for_scheduled(org, mission, scheduled_id) do
+      {:ok, reservation} -> {:ok, reservation}
+      {:error, _reason} -> {:error, :pass_not_found}
+    end
+  end
+
+  defp one(org, mission, %ProviderReservation{} = reservation) do
+    %{passes: [pass]} =
+      load_rows(org, mission, [reservation], %{from: nil, to: nil, truncated: false, filters: %{}})
+
+    pass
   end
 
   defp load_rows(organization_id, mission_id, reservations, window) do
@@ -125,6 +231,8 @@ defmodule Cadence.Reads.Passes do
     %{
       id: reservation.provider_reservation_id,
       kind: "contact",
+      # U78: a booking; hand-started contacts' rows are `booked: false` (HandStartedPasses).
+      booked: true,
       state: atom_text(reservation.lifecycle_state),
       pass_phase: atom_text(reservation.pass_phase),
       delivery_state: atom_text(reservation.delivery_state),

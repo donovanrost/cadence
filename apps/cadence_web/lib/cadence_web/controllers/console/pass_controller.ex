@@ -13,21 +13,22 @@ defmodule CadenceWeb.Console.PassController do
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias Cadence.Reads.{Attention, PassContactFields, Passes, PassUplink}
-  alias CadenceWeb.Console.{PassJSON, Problem, WindowParams}
+  alias CadenceWeb.Console.{PassJSON, PassListParams, Problem, WindowParams}
 
   @max_span_s 7 * 86_400
-  @default_span_s 86_400
-  @states ~w(requesting pending confirmed active completed unknown rejected canceling canceled failed)
 
   def index(conn, params) do
-    with {:ok, window} <- WindowParams.parse(with_defaults(params), max_span_s: @max_span_s),
-         {:ok, states} <- states(params["states"]) do
+    with {:ok, window} <-
+           WindowParams.parse(PassListParams.with_defaults(params), max_span_s: @max_span_s),
+         {:ok, filters} <- PassListParams.parse(params) do
       result =
-        Passes.load(org_id(conn), mission_id(conn), window.from, window.to, %{
-          spacecraft_id: window.spacecraft_id,
-          station: blank_to_nil(params["station"]),
-          states: states
-        })
+        Passes.load(
+          org_id(conn),
+          mission_id(conn),
+          window.from,
+          window.to,
+          Map.put(filters, :spacecraft_id, window.spacecraft_id)
+        )
 
       json(conn, %{data: PassJSON.passes(decorate(conn, result))})
     else
@@ -36,7 +37,8 @@ defmodule CadenceWeb.Console.PassController do
   end
 
   def show(conn, %{"id" => id}) do
-    case Passes.fetch(org_id(conn), mission_id(conn), id) do
+    # U78: a scheduled or realized contact id finds its pass too (writes take reservation ids).
+    case Passes.resolve(org_id(conn), mission_id(conn), id) do
       {:ok, pass} ->
         %{passes: [pass]} = decorate(conn, %{passes: [pass]})
 
@@ -131,7 +133,13 @@ defmodule CadenceWeb.Console.PassController do
             booker? =
               match?(%{off_plan: %{booked_by: %{id: ^viewer}}}, pass) and is_binary(viewer)
 
-            %{pass | releasable: (admin? or booker?) and pass.state in @releasable_states}
+            # A hand-started contact (U78, booked: false) has no booking to release.
+            %{
+              pass
+              | releasable:
+                  Map.get(pass, :booked) == true and (admin? or booker?) and
+                    pass.state in @releasable_states
+            }
           end)
     }
   end
@@ -349,39 +357,6 @@ defmodule CadenceWeb.Console.PassController do
 
     %{result | passes: Enum.map(passes, &Map.put(&1, :replaced_by, Map.get(replaced, &1.id)))}
   end
-
-  # Passes look forward: by default `from` is now and `to` is a day later.
-  defp with_defaults(params) do
-    now = DateTime.utc_now() |> DateTime.truncate(:millisecond)
-
-    from =
-      case DateTime.from_iso8601(params["from"] || "") do
-        {:ok, from, _offset} -> from
-        _missing -> now
-      end
-
-    params
-    |> Map.put_new_lazy("from", fn -> DateTime.to_iso8601(now) end)
-    |> Map.put_new_lazy("to", fn -> DateTime.to_iso8601(DateTime.add(from, @default_span_s)) end)
-  end
-
-  defp states(nil), do: {:ok, nil}
-  defp states(""), do: {:ok, nil}
-
-  defp states(value) when is_binary(value) do
-    states = value |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
-
-    if Enum.all?(states, &(&1 in @states)),
-      do: {:ok, states},
-      else:
-        {:error,
-         {:invalid_params, %{"states" => "must be a comma list of #{Enum.join(@states, ", ")}"}}}
-  end
-
-  defp states(_value), do: {:error, {:invalid_params, %{"states" => "must be a comma list"}}}
-
-  defp blank_to_nil(value) when is_binary(value) and value != "", do: value
-  defp blank_to_nil(_value), do: nil
 
   defp org_id(conn), do: conn.assigns.current_scope.organization_id
   defp mission_id(conn), do: conn.assigns.current_mission.mission_id
