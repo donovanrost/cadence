@@ -12,6 +12,7 @@ import EventLogPanel from "./EventLogPanel.vue";
 import EpisodeBar from "./EpisodeBar.vue";
 import SistersPanel from "./SistersPanel.vue";
 import { logLines } from "./eventLog.ts";
+import { sampleQuery } from "./sample/link.ts";
 import { useEpisodeDetail, useSpacecraftEpisodes, useSpacecraftEvents } from "./useInvestigate.ts";
 import { DEFAULT_RANGE, lastCleared, pickAlarm, type RangeKey } from "./model.ts";
 
@@ -83,13 +84,19 @@ const lines = computed(() =>
           events: episode.value.events,
         }
       : null,
-    // ux U71 A7: 'Show sample' opens Telemetry on the alarm's point, centred and ringed.
-    (at) =>
+    // ux U71 A7 / U80: 'Show sample' opens Telemetry on the alarm's point, centred and ringed,
+    // with the Sample aside open on it.
+    (s) =>
       episode.value
         ? {
             name: "ops.spacecraft",
             params: { scId: props.sc.scid, tab: "telemetry" },
-            query: { points: episode.value.point.id, focus: episode.value.point.id, at },
+            query: {
+              points: episode.value.point.id,
+              focus: episode.value.point.id,
+              at: s.at,
+              ...sampleQuery(s.id, s.receipt_time),
+            },
           }
         : null,
   ),

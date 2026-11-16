@@ -39,6 +39,13 @@ function changeText(e: EpisodeEvent): string | null {
   return null;
 }
 
+/** The sample an episode event carries (U68 R5; receipt_time from api D1 part A). */
+export type LogSample = Readonly<{
+  id: string | null;
+  at: string;
+  receipt_time?: string | null | undefined;
+}>;
+
 /**
  * ux U71 A7: the episode's own escalations replace the timeline's limit lines for that point,
  * only within the episode's span (opened to cleared, or now); outside it they're other episodes.
@@ -46,13 +53,13 @@ function changeText(e: EpisodeEvent): string | null {
 export function logLines(
   events: readonly MissionEvent[] | null,
   episode: LogEpisode | null,
-  sampleTo: (iso: string) => RouteLocationRaw | null = () => null,
+  sampleTo: (sample: LogSample) => RouteLocationRaw | null = () => null,
 ): LogLine[] {
   const changes = (episode?.events ?? []).flatMap((e) => {
     const text = changeText(e);
     const sample = e.sample;
     if (!text || !sample) return [];
-    const to = sampleTo(sample.at);
+    const to = sampleTo(sample);
     return [
       {
         key: `episode:${e.id}`,

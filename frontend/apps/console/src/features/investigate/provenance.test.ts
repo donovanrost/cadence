@@ -47,6 +47,10 @@ describe("B1 provenance (ux U71 A7)", () => {
       params: { tab: "telemetry" },
       query: { points: "EPS.VBAT", focus: "EPS.VBAT", at: "2026-11-08T02:08:11Z" },
     });
+    // ux U80: and opens the Sample aside on it, exactly (its receipt time).
+    expect(links[1]?.props("to")).toMatchObject({
+      query: { sample: "s-1", received: "2026-11-08T02:08:11.250Z" },
+    });
   });
   it("says the catalog's limits, with no links, for catalog monitoring", () => {
     const w = view(

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
+  formatClock,
   formatRelative,
   useNow,
   ApEmptyState,
@@ -24,6 +25,8 @@ import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { fetchHistory } from "../api.ts";
 import { RANGES, rangeWindow, toSeries, type RangeKey } from "../model.ts";
 import { useSpacecraftTail } from "../tail.ts";
+import SampleAside from "../sample/SampleAside.vue";
+import { useConsoleWide, useSample } from "../sample/useSample.ts";
 import PointPlot from "./PointPlot.vue";
 import {
   filterCounts,
@@ -96,6 +99,28 @@ const at = computed(() => {
   const v = typeof route.query.at === "string" ? Date.parse(route.query.at) : Number.NaN;
   return Number.isNaN(v) ? null : v;
 });
+/** ux U80: ?sample= opens the Sample aside in T1's place (a sheet below 1100px). */
+const wide = useConsoleWide();
+const sample = useSample(
+  missionId,
+  computed(() => props.sc.id),
+  focusId,
+);
+const sampleRead = computed(() => sample.read.state.value);
+const sampleTitle = computed(() => {
+  const s = sampleRead.value;
+  const name = (s.status === "ready" ? s.value.sample?.point_name : null) ?? focused.value?.name;
+  return name ? `Sample · ${name}` : "Sample";
+});
+const atLabel = computed(() => (at.value === null ? null : `${formatClock(new Date(at.value))}Z`));
+const today = computed(() => now.value.toISOString().slice(0, 10));
+const search = ref<HTMLElement | null>(null);
+const searchInput = () => search.value?.querySelector("input") ?? null;
+async function closeSample() {
+  await sample.close();
+  await nextTick();
+  searchInput()?.focus();
+}
 /** "6 h" in sentences (ux review 5); the segmented control keeps its compact labels. */
 const rangeLabel = computed(() =>
   (RANGES.find((r) => r.value === range.value)?.label ?? range.value)
@@ -194,8 +219,19 @@ const latest = (p: (typeof all.value)[number]) =>
       v-else
       class="grid grid-cols-1 gap-3 console:min-h-0 console:flex-1 console:grid-cols-[360px_minmax(0,1fr)]"
     >
-      <ApPanel index="T1" title="Points" :meta="`${all.length}`" pane flush>
-        <div class="flex flex-col gap-2 border-b border-hairline px-4 py-3">
+      <SampleAside
+        v-if="sample.open.value && wide"
+        wide
+        :state="sampleRead"
+        :title="sampleTitle"
+        :at-label="atLabel"
+        :today="today"
+        :return-focus="searchInput"
+        @close="closeSample"
+        @retry="sample.read.refetch"
+      />
+      <ApPanel v-else index="T1" title="Points" :meta="`${all.length}`" pane flush>
+        <div ref="search" class="flex flex-col gap-2 border-b border-hairline px-4 py-3">
           <ApField v-model="q" label="Search points" hidden-label placeholder="Label or key" />
           <ApSegmented v-model="filter" :options="chips" label="Show" variant="micro" />
         </div>
@@ -341,5 +377,16 @@ const latest = (p: (typeof all.value)[number]) =>
         </ApPanel>
       </div>
     </div>
+    <SampleAside
+      v-if="sample.open.value && !wide"
+      :wide="false"
+      :state="sampleRead"
+      :title="sampleTitle"
+      :at-label="atLabel"
+      :today="today"
+      :return-focus="searchInput"
+      @close="closeSample"
+      @retry="sample.read.refetch"
+    />
   </ApRemote>
 </template>
