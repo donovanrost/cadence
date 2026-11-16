@@ -31,6 +31,9 @@ defmodule Cadence.Contacts.JournalReclaim do
   alias Cadence.Control.Contacts, as: Runtime
 
   @default_retention_ms 72 * 60 * 60 * 1000
+  @default_early_at 80.0
+  @default_early_to 70.0
+  @pressure_key {__MODULE__, :volume_pressure}
 
   @doc "How long a settled contact's journal stays on disk."
   @spec retention_ms() :: pos_integer()
@@ -44,26 +47,85 @@ defmodule Cadence.Contacts.JournalReclaim do
   @doc """
   Reclaims at most one stream of `mission_id`. Returns `{:reclaimed, contact_id}`,
   `{:retained, contact_id}` (marked undrained), or `:none`.
+
+  Under disk pressure (the journal's disk at or above `:early_reclaim_at`, 80 %, until it's
+  back below `:early_reclaim_to`, 70 %; director 11-15) the 72 h review window is skipped: the
+  oldest-settled stream that passes every other check goes first (settled, inspected, not open,
+  drained on disk, i.e. already all in the ingress archive), marked `reclaimed_early`. Never a
+  stream still being stored or open. An unreadable disk means no early reclaim (fail-safe).
   """
   @spec run(binary(), DateTime.t(), keyword()) ::
           {:reclaimed, binary()} | {:retained, binary()} | :none
   def run(mission_id, %DateTime{} = now, opts \\ []) when is_binary(mission_id) do
-    retention = Keyword.get_lazy(opts, :retention_ms, &retention_ms/0)
+    pressure = pressure(opts)
+    retention = if pressure, do: 0, else: Keyword.get_lazy(opts, :retention_ms, &retention_ms/0)
     streams = Runtime.stored_ingress_journals(mission_id)
     streams_by_contact = Enum.group_by(streams, & &1.context.realized_contact_id)
 
     streams_by_contact
     |> Map.keys()
-    |> Enum.sort()
-    |> Enum.find_value(:none, fn contact_id ->
-      with {:ok, contact} <- ContactStore.fetch_realized(mission_id, contact_id),
-           true <- reclaimable?(contact, now, retention),
+    |> Enum.flat_map(fn contact_id ->
+      case ContactStore.fetch_realized(mission_id, contact_id) do
+        {:ok, contact} -> [contact]
+        _missing -> []
+      end
+    end)
+    |> order(pressure)
+    |> Enum.find_value(:none, fn contact ->
+      contact_id = contact.realized_contact_id
+
+      with true <- reclaimable?(contact, now, retention),
            false <- Runtime.ingress_journal_open?(mission_id, contact_id) do
-        reclaim_one(contact, streams_by_contact[contact_id], now)
+        reclaim_one(contact, streams_by_contact[contact_id], now, pressure)
       else
         _not_this_contact -> nil
       end
     end)
+  end
+
+  @doc """
+  Whether the journal's disk is under pressure: `nil`, or `%{percent}` while early reclaim runs
+  (from at or above `:early_reclaim_at` until below `:early_reclaim_to`). `opts[:volume]` gives
+  the reading (tests); otherwise the disk is read now. `:unknown` is never pressure.
+  """
+  @spec pressure(keyword()) :: nil | %{percent: float()}
+  def pressure(opts \\ []) do
+    {early_at, early_to} = thresholds()
+    volume = Keyword.get_lazy(opts, :volume, fn -> Runtime.ingress_journal_volume() end)
+    active? = :persistent_term.get(@pressure_key, false)
+
+    case volume do
+      {:ok, %{percent: percent}} when percent >= early_at or (active? and percent >= early_to) ->
+        :persistent_term.put(@pressure_key, true)
+        %{percent: percent}
+
+      _below_or_unknown ->
+        if active?, do: :persistent_term.put(@pressure_key, false)
+        nil
+    end
+  end
+
+  @doc false
+  def reset_pressure, do: :persistent_term.erase(@pressure_key)
+
+  defp thresholds do
+    config = :cadence |> Application.get_env(:ingress_journal, []) |> Enum.into(%{})
+
+    {Map.get(config, :early_reclaim_at, @default_early_at),
+     Map.get(config, :early_reclaim_to, @default_early_to)}
+  end
+
+  # Normal: any order (one per tick). Under pressure: the oldest settled first.
+  defp order(contacts, nil), do: Enum.sort_by(contacts, & &1.realized_contact_id)
+  defp order(contacts, _pressure), do: Enum.sort_by(contacts, &settled_at_key/1)
+
+  defp settled_at_key(%RealizedContact{metadata: metadata}) do
+    with %{"settled_at" => at} when is_binary(at) <- Map.get(metadata || %{}, "settlement"),
+         {:ok, settled_at, _offset} <- DateTime.from_iso8601(at) do
+      DateTime.to_unix(settled_at, :microsecond)
+    else
+      _unsettled -> :infinity
+    end
   end
 
   @doc "Pure: whether a contact's journals may be reclaimed at `now` (all but the disk checks)."
@@ -88,10 +150,14 @@ defmodule Cadence.Contacts.JournalReclaim do
 
   defp settled_before?(_at, _cutoff), do: false
 
-  defp reclaim_one(contact, [stream | rest], now) do
+  defp reclaim_one(contact, [stream | rest], now, pressure) do
     case Runtime.stored_ingress_journal_drain(stream) do
       {:drained, bytes} ->
-        remove(contact, stream, bytes, rest == [], now)
+        remove(contact, stream, bytes, rest == [], now, pressure)
+
+      # Early, a stream still being stored is skipped, not marked: it may just be catching up.
+      {:not_drained, _reason, _bytes} when not is_nil(pressure) ->
+        nil
 
       {:not_drained, reason, bytes} ->
         Logger.warning(
@@ -113,7 +179,7 @@ defmodule Cadence.Contacts.JournalReclaim do
     end
   end
 
-  defp remove(contact, stream, bytes, last?, now) do
+  defp remove(contact, stream, bytes, last?, now, nil) do
     case Runtime.reclaim_stored_ingress_journal(stream) do
       :ok ->
         Logger.info(
@@ -122,6 +188,39 @@ defmodule Cadence.Contacts.JournalReclaim do
         )
 
         if last?, do: mark(contact, %{"journal_disk" => "reclaimed"}, now)
+        {:reclaimed, contact.realized_contact_id}
+
+      {:error, reason} ->
+        Logger.warning(
+          "could not reclaim ingress journal #{stream.stream_id}: #{inspect(reason)}"
+        )
+
+        nil
+    end
+  end
+
+  # Early, under disk pressure: the stream is already all in the ingress archive; only its
+  # 72 h review copy goes. Logged as a warning and marked, so history says why it went early.
+  defp remove(contact, stream, bytes, last?, now, %{percent: percent}) do
+    case Runtime.reclaim_stored_ingress_journal(stream) do
+      :ok ->
+        Logger.warning(
+          "reclaimed ingress journal #{stream.stream_id} of #{contact.realized_contact_id} " <>
+            "EARLY (#{bytes} bytes; journal disk #{percent} % full)"
+        )
+
+        if last?,
+          do:
+            mark(
+              contact,
+              %{
+                "journal_disk" => "reclaimed_early",
+                "journal_disk_reason" => "volume_pressure",
+                "journal_disk_volume_percent" => percent
+              },
+              now
+            )
+
         {:reclaimed, contact.realized_contact_id}
 
       {:error, reason} ->

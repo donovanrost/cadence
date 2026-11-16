@@ -311,7 +311,9 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       note: Map.get(entry, :note),
       # U50 (fe-ops, ux): a booked pass ends at LOS, a hand-started contact just ends.
       reservation_id: Map.get(entry, :provider_reservation_id),
-      booked: is_binary(Map.get(entry, :provider_reservation_id))
+      booked: is_binary(Map.get(entry, :provider_reservation_id)),
+      # U66: when the journal's disk refused telemetry before it cleared; null otherwise.
+      refused: refused(entry)
     }
     |> Map.merge(resolution_fields(entry))
   end
@@ -321,6 +323,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     do: Map.take(entry, [:day, :from_state, :plan_revision, :booking])
 
   defp resolution_fields(_entry), do: %{}
+  defp refused(%{refused_from: %DateTime{} = from, refused_to: to}), do: %{from: from, to: to}
+  defp refused(_entry), do: nil
 
   # A source may name its resolver as a bare kind ("system", listener_refusal).
   defp actor_map(%{} = by), do: by

@@ -2,6 +2,10 @@ import Config
 
 config :cadence, :opportunity_capability_secret, "cadence-test-opportunity-capability-secret-2026"
 
+# No disksup under test: the host's own disk would raise the journal-disk item and start early
+# reclaims in every suite. Tests give the reading themselves (Cadence.IngressJournal.Volume).
+config :os_mon, start_disksup: false
+
 config :cadence, Cadence.Repo,
   username: "postgres",
   password: "postgres",

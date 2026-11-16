@@ -325,6 +325,10 @@ defmodule Cadence.Control.Contacts do
   @spec stored_ingress_journals(binary()) :: [map()]
   def stored_ingress_journals(mission_id), do: RuntimeContacts.stored_journals(mission_id)
 
+  @doc "The ingress journal's disk (Runtime.Contacts.journal_volume/1, ux U66)."
+  @spec ingress_journal_volume(keyword()) :: {:ok, map()} | :unknown
+  def ingress_journal_volume(opts \\ []), do: RuntimeContacts.journal_volume(opts)
+
   @doc "The mission's shared-listener adapters and their refusals (Runtime.Contacts, ux U50)."
   @spec listener_refusals(binary()) :: [map()]
   def listener_refusals(mission_id), do: RuntimeContacts.listener_refusals(mission_id)

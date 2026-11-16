@@ -379,6 +379,22 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
       `reservation_id`, `provider_message` (null) and `resolution` (null). `journal_usage` is null
       on `frames_dropped` and `drops` null on `journal_near_full`. Visible text says "buffer";
       `diagnostics` is for Technical details only (U47).
+    - `conflict` `journal_disk` (ux U66): the DISK every journal shares is filling (each stream's
+      own cap is `journal_near_full`; nothing caps their sum, and a full disk stops telemetry from
+      every pass). One item, row id `attention:ingress_backpressure:journal_disk`, shown in every
+      mission's queue. **P2** (caution) from 70%; **P1** (critical) from 90% or while `refusing`;
+      it clears itself below 60% (`system` / `drained`; the resolved entry's `refused {from, to}`
+      says when telemetry was refused, else null). Not acknowledgeable. `attention` adds
+      `journal_disk {percent, used_bytes, size_bytes, rate_bytes_per_hour (signed; null until two
+      readings), eta_full_s (only while growing, else null), holders [{realized_contact_id,
+      contact_id, spacecraft_id, ground_station_ref, provider_id, starts_at, ends_at, bytes,
+      state: storing | kept, kept_until (kept only, else null)}] (this mission's contacts,
+      largest first, at most 3), more_count, other_missions_bytes (never named), refusing,
+      refused_since | null}`; the per-contact keys above are absent. `kept` = already all in the
+      ingress archive and on disk only for the review window; above 80% those are removed early,
+      oldest first (`JournalReclaim`, marked `reclaimed_early`). The only action is Open pass on a
+      holder; the disk's size is deployment config. Read every minute from the OS (disksup);
+      `refusing` is checked every 5 s from the journals' own append errors (`enospc`).
     - The state is in the node's memory (`Cadence.Runtime.IngressBackpressureMonitor`, sampled every
       5 s): a node restart clears it, along with the backlog itself. Opening and clearing
       publish `invalidate` with `attention`.

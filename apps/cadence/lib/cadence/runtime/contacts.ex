@@ -2,6 +2,7 @@ defmodule Cadence.Runtime.Contacts do
   @moduledoc "Public data-plane command and observation boundary for realized Contacts."
 
   alias Cadence.IngressJournal.FileSystem, as: JournalFileSystem
+  alias Cadence.IngressJournal.Volume, as: JournalVolume
   alias Cadence.ProviderAdapters.TCPSocket
   alias Cadence.Runtime
 
@@ -67,6 +68,27 @@ defmodule Cadence.Runtime.Contacts do
 
       _off ->
         MapSet.new()
+    end
+  end
+
+  @doc """
+  The disk the ingress journal lives on (ux U66): `{:ok, %{size_bytes, used_bytes, percent}}`,
+  or `:unknown` when the journal is off or the disk can't be read (callers then don't act).
+  """
+  @spec journal_volume(keyword()) :: {:ok, map()} | :unknown
+  def journal_volume(opts \\ []) do
+    case journal_base_path() do
+      nil -> :unknown
+      base_path -> JournalVolume.usage(base_path, opts)
+    end
+  end
+
+  @doc "Every stored journal stream on that disk, largest first, with its bytes (all missions)."
+  @spec journal_volume_streams() :: [map()]
+  def journal_volume_streams do
+    case journal_base_path() do
+      nil -> []
+      base_path -> JournalVolume.streams(base_path)
     end
   end
 

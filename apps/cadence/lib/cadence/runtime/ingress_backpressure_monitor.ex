@@ -6,6 +6,10 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
     ingress journal (`retained / capacity`). An item opens at 80% and clears below 70% (or when
     the journal goes away: the contact ended and drained). `rising` is true while the ratio grew
     since the previous sample.
+  - **The journal's disk** (`journal_disk`, ux U66): every stream shares one disk that nothing
+    caps, so a full disk stops every pass. Read on demand every minute (`JournalDiskWatch`):
+    open at 70 %, critical at 90 %, clear below 60 %; `refusing` while any journal's appends fail
+    for lack of space (checked every tick).
   - **Frames dropped** (`frames_dropped`): it listens for `ReceiveBackpressure`'s
     `[:cadence, :ingress, :frames_dropped]` event, so a transport that can't push back counts its
     drops here. A drop is data loss: the item stays until an operator acknowledges it and the
@@ -22,13 +26,16 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
 
   alias Cadence.Ingress.ReceiveBackpressure
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
+  alias Cadence.IngressJournal.Volume, as: JournalVolume
   alias Cadence.Platform.ScopedReadUpdates
-  alias Cadence.Runtime.{Cluster, ProcessNamespace}
+  alias Cadence.Runtime.{Cluster, JournalDiskWatch, ProcessNamespace}
 
   @raise_ratio 0.8
   @clear_ratio 0.7
   @default_interval_ms 5_000
   @resolved_keep_s 120
+  # The journal's disk (ux U66) is read every 12th tick (a minute at the default 5 s).
+  @disk_every_ticks 12
 
   @type key :: {binary(), binary(), binary()}
 
@@ -52,12 +59,14 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
   @spec snapshot(binary(), ProcessNamespace.t()) :: %{
           near_full: [map()],
           drops: [map()],
-          resolved: [map()]
+          resolved: [map()],
+          disk: nil | map(),
+          disk_resolved: [map()]
         }
   def snapshot(mission_id, namespace \\ ProcessNamespace.default()) do
     GenServer.call(name(namespace), {:snapshot, mission_id}, 1_000)
   catch
-    :exit, _reason -> %{near_full: [], drops: [], resolved: []}
+    :exit, _reason -> %{near_full: [], drops: [], resolved: [], disk: nil, disk_resolved: []}
   end
 
   @doc "Records an operator's acknowledgement of a mission's dropped frames."
@@ -97,6 +106,11 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
       drops: %{},
       resolved: [],
       organizations: %{},
+      ticks: 0,
+      disk_every_ticks: Keyword.get(opts, :disk_every_ticks, @disk_every_ticks),
+      disk: JournalDiskWatch.new(),
+      # The journal disk's reading and its streams: {reading, streams} (tests replace it).
+      journal_volume: Keyword.get(opts, :journal_volume, &journal_volume/0),
       # The mission's organization, for the attention_changed publish. Injected by the runtime
       # supervisor (Cadence.Missions is management plane; this is data plane).
       organization_for: Keyword.get(opts, :organization_for, fn _mission_id -> nil end)
@@ -130,7 +144,9 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
            do: near_full(state, key, raised_at)
          ),
        drops: for({{^mission_id, _, _} = key, drop} <- state.drops, do: Map.put(drop, :key, key)),
-       resolved: for(%{key: {^mission_id, _, _}} = entry <- state.resolved, do: entry)
+       resolved: for(%{key: {^mission_id, _, _}} = entry <- state.resolved, do: entry),
+       disk: JournalDiskWatch.view(state.disk, mission_id),
+       disk_resolved: JournalDiskWatch.resolved(state.disk, DateTime.utc_now())
      }, state}
   end
 
@@ -173,10 +189,46 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
     |> clear_near_full(usage, now)
     |> settle_drops()
     |> forget_old(now)
+    |> sample_disk(usage, now)
   rescue
     error ->
       Logger.warning("ingress backpressure sample failed: #{Exception.message(error)}")
       state
+  end
+
+  # The disk every @disk_every_ticks (and the first tick); 'refusing' every tick, since a full disk
+  # shows first as journals failing to append. Publishes to every mission with a stream on it.
+  defp sample_disk(state, usage, now) do
+    refusing? = Enum.any?(usage, fn {_key, entry} -> no_space?(entry[:last_error]) end)
+    read? = rem(state.ticks, state.disk_every_ticks) == 0
+    before = JournalDiskWatch.missions(state.disk)
+
+    {disk, changed?} =
+      if read? do
+        {reading, streams} = state.journal_volume.()
+        JournalDiskWatch.sample(state.disk, reading, streams, refusing?, now)
+      else
+        JournalDiskWatch.sample(state.disk, :unknown, state.disk.streams, refusing?, now)
+      end
+
+    state = %{state | disk: disk, ticks: state.ticks + 1}
+
+    if changed?,
+      do:
+        Enum.reduce(Enum.uniq(before ++ JournalDiskWatch.missions(disk)), state, &publish(&2, &1)),
+      else: state
+  end
+
+  defp no_space?(error) when is_binary(error), do: String.contains?(error, "enospc")
+  defp no_space?(_error), do: false
+
+  defp journal_volume do
+    with %{enabled?: true, file_system_opts: opts} <- IngressJournal.configured_policy(),
+         base_path when is_binary(base_path) <- Keyword.get(opts, :base_path) do
+      {JournalVolume.usage(base_path), JournalVolume.streams(base_path)}
+    else
+      _off -> {:unknown, []}
+    end
   end
 
   defp open_near_full(state, usage, now) do

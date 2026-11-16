@@ -19,7 +19,9 @@ defmodule Cadence.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
+      # :os_mon for disksup only (the ingress journal's disk, ux U66); config.exs starts nothing
+      # else of it and keeps its own disk alarms quiet.
+      extra_applications: [:logger, :os_mon],
       mod: {Cadence.Application, []}
     ]
   end

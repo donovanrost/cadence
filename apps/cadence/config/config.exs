@@ -28,6 +28,17 @@ config :logger, :default_formatter,
     :error_class
   ]
 
+# os_mon runs for disksup only: the ingress journal reads its own disk on demand
+# (Cadence.IngressJournal.Volume, ux U66). No cpu/mem/os supervisors; its periodic check is
+# hourly and its almost-full alarm threshold is 100 %, so it never raises alarms of its own.
+config :os_mon,
+  start_cpu_sup: false,
+  start_memsup: false,
+  start_os_sup: false,
+  start_disksup: true,
+  disk_space_check_interval: 60,
+  disk_almost_full_threshold: 1.0
+
 config :cadence,
   activation_governance: [approval_required: true],
   # Mission change-set kinds (Cadence.Platform.ConfigKind), see docs/apogee/domain/change-sets.md.

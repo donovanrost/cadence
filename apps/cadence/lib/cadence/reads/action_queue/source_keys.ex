@@ -61,7 +61,8 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :approved_by,
       :approved_at
     ],
-    # DECISIONS #83 / ux U47: a contact's ingest buffer filling, or frames lost.
+    # DECISIONS #83 / ux U47: a contact's ingest buffer filling, or frames lost; ux U66: the
+    # journal's disk filling (`journal_disk`, the only key that item carries here).
     "ingress_backpressure" => [
       :realized_contact_id,
       :contact_label,
@@ -69,7 +70,8 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :transport,
       :journal_usage,
       :drops,
-      :diagnostics
+      :diagnostics,
+      :journal_disk
     ],
     # #87 / ux U50: connections a shared listener refused, one row per open pass on it.
     "listener_refusal" => [

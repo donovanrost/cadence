@@ -6,6 +6,8 @@ defmodule Cadence.Contacts.JournalReclaimTest do
   """
   use Cadence.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Cadence.Contacts.{ContactStore, JournalReclaim, RealizedContact}
   alias Cadence.IngressJournal.FileSystem
   alias Cadence.Runtime.ProcessNamespace
@@ -29,8 +31,11 @@ defmodule Cadence.Contacts.JournalReclaimTest do
       Keyword.merge(previous || [], enabled?: true, base_path: base_path)
     )
 
+    JournalReclaim.reset_pressure()
+
     on_exit(fn ->
       Application.put_env(:cadence, :ingress_journal, previous)
+      JournalReclaim.reset_pressure()
       File.rm_rf!(base_path)
     end)
 
@@ -123,6 +128,82 @@ defmodule Cadence.Contacts.JournalReclaimTest do
     assert %{"journal_disk" => "reclaimed"} = settlement(contact)
   end
 
+  describe "under disk pressure (director 11-15)" do
+    @recent "2026-11-17T10:00:00Z"
+    @earlier "2026-11-17T08:00:00Z"
+
+    test "a kept stream goes before its 72 h, oldest settled first, logged and marked", c do
+      newer = settled_contact!("newer", %{"settled_at" => @recent})
+      older = settled_contact!("older", %{"settled_at" => @earlier})
+      stream!(c, newer, "path-a", [:processing, :archive])
+      stream!(c, older, "path-a", [:processing, :archive])
+
+      # Not under pressure: both are within the 72 h and stay.
+      assert :none = JournalReclaim.run(@mission, @now, volume: volume(79.0))
+
+      log =
+        capture_log(fn ->
+          assert {:reclaimed, id} = JournalReclaim.run(@mission, @now, volume: volume(85.0))
+          assert id == older.realized_contact_id
+        end)
+
+      assert log =~ "EARLY" and log =~ older.realized_contact_id and log =~ "85.0 % full"
+
+      assert %{
+               "journal_disk" => "reclaimed_early",
+               "journal_disk_reason" => "volume_pressure",
+               "journal_disk_volume_percent" => 85.0
+             } = settlement(older)
+
+      assert [%{context: %{realized_contact_id: left}}] = streams(c)
+      assert left == newer.realized_contact_id
+    end
+
+    test "never a stream still being stored, an open one, or an unsettled one; nothing marked",
+         c do
+      storing = settled_contact!("storing", %{"settled_at" => @recent})
+      stream!(c, storing, "path-a", [:processing])
+
+      open = settled_contact!("open-early", %{"settled_at" => @recent})
+      stream!(c, open, "path-a", [:processing, :archive], keep_open: true)
+
+      unsettled = settled_contact!("unsettled-early", %{"state" => "unsettled"})
+      stream!(c, unsettled, "path-a", [:processing, :archive])
+
+      # Read to the end, but a partial frame keeps its resume point short of it.
+      partial = settled_contact!("partial-frame", %{"settled_at" => @recent})
+      stream!(c, partial, "path-a", [:processing, :archive], resume_offset: 3)
+
+      assert :none = JournalReclaim.run(@mission, @now, volume: volume(95.0))
+      assert length(streams(c)) == 4
+      refute Map.has_key?(settlement(storing), "journal_disk")
+    end
+
+    test "runs from 80 % until back under 70 % (hysteresis)" do
+      assert nil == JournalReclaim.pressure(volume: volume(75.0))
+      assert %{percent: 80.0} = JournalReclaim.pressure(volume: volume(80.0))
+      assert %{percent: 72.0} = JournalReclaim.pressure(volume: volume(72.0))
+      assert nil == JournalReclaim.pressure(volume: volume(69.9))
+      assert nil == JournalReclaim.pressure(volume: volume(75.0))
+    end
+
+    test "an unreadable disk is never pressure: the 72 h holds (fail-safe)", c do
+      contact = settled_contact!("unknown-disk", %{"settled_at" => @recent})
+      stream!(c, contact, "path-a", [:processing, :archive])
+
+      assert %{} = JournalReclaim.pressure(volume: volume(90.0))
+      assert nil == JournalReclaim.pressure(volume: :unknown)
+      assert :none = JournalReclaim.run(@mission, @now, volume: :unknown)
+      assert [_kept] = streams(c)
+
+      # And the real reader is :unknown here (no disksup under test).
+      assert :none = JournalReclaim.run(@mission, @now)
+    end
+  end
+
+  defp volume(percent),
+    do: {:ok, %{size_bytes: 1_000, used_bytes: round(percent * 10), percent: percent}}
+
   defp settled_contact!(name, settlement \\ %{}) do
     contact =
       RealizedContact.new(%{
@@ -168,7 +249,11 @@ defmodule Cadence.Contacts.JournalReclaimTest do
 
     journal = start_supervised!({FileSystem, journal_opts})
     {:ok, entry} = FileSystem.append(journal, "captured", DateTime.utc_now())
-    for consumer <- acked, do: :ok = FileSystem.acknowledge(journal, consumer, entry.end_offset)
+
+    for consumer <- acked do
+      resume = if consumer == :processing, do: Keyword.take(opts, [:resume_offset]), else: []
+      :ok = FileSystem.acknowledge(journal, consumer, entry.end_offset, resume)
+    end
 
     if not Keyword.get(opts, :keep_open, false),
       do: :ok = stop_supervised({:ingress_journal, binding})
