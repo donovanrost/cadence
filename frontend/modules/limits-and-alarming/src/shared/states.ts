@@ -26,7 +26,7 @@ export function counts(v: unknown): v is Record<State["severity"], number> {
     ["red", "yellow", "blue", "green"].every((k) => integer(v[k]))
   );
 }
-export function state(x: unknown, definitionBase: string, mission: string): x is State {
+export function state(x: unknown, definitionBase: string): x is State {
   const normalized = {
     red_low: "red",
     red_high: "red",
@@ -55,6 +55,6 @@ export function state(x: unknown, definitionBase: string, mission: string): x is
     nullable(x.generation_time, stamp) &&
     stamp(x.receipt_time) &&
     definitionLink(x.definition_href, definitionBase, x.definition_id, x.definition_version) &&
-    evidence(x, mission)
+    evidence(x)
   );
 }

@@ -21,14 +21,14 @@ test("api D2: the console Investigate link and its fallbacks are admitted", () =
     "/console/acme/earendil/telemetry?" + q({ p: "HK.voltage" }),
     "/console",
   ])
-    expect(evidence(row(href), "m-1"), href).toBe(true);
+    expect(evidence(row(href)), href).toBe(true);
 });
 
 test("at is the generation time when the sample has one, else the receipt time", () => {
   const link = (t: string) => fleet + q({ points: "HK.voltage", focus: "HK.voltage", at: t });
-  expect(evidence(row(link(generated), generated), "m-1")).toBe(true);
-  expect(evidence(row(link(at), generated), "m-1")).toBe(false);
-  expect(evidence(row(link(at)), "m-1")).toBe(true);
+  expect(evidence(row(link(generated), generated))).toBe(true);
+  expect(evidence(row(link(at), generated))).toBe(false);
+  expect(evidence(row(link(at)))).toBe(true);
 });
 
 test("a console link naming another point, time or key is refused", () => {
@@ -53,16 +53,8 @@ test("a console link naming another point, time or key is refused", () => {
     "https://evil.test/console/acme/earendil/telemetry?" + q({ p: "HK.voltage" }),
     "/console/acme/earendil/telemetry?" + q({ p: "HK.voltage" }) + "#x",
     "/console/acme/earendil/telemetry?p=HK.voltage?x=1",
+    "/missions/m-1/ops/explore?" +
+      q({ point_id: "HK.voltage", sample_id: "sample-1", selected_time: at }),
   ])
-    expect(evidence(row(href), "m-1"), href).toBe(false);
-});
-
-test("the pre-D2 explore link stays admitted until api's change is live", () => {
-  const old = (o: Record<string, string>) => "/missions/m-1/ops/explore?" + q(o);
-  const base = { point_id: "HK.voltage", spacecraft_id: "craft-1", sample_id: "sample-1" };
-  expect(evidence(row(old({ ...base, selected_time: at })), "m-1")).toBe(true);
-  expect(evidence(row(old({ ...base, sample_id: "sample-2", selected_time: at })), "m-1")).toBe(
-    false,
-  );
-  expect(evidence(row(old({ ...base, selected_time: at })), "m-2")).toBe(false);
+    expect(evidence(row(href)), href).toBe(false);
 });

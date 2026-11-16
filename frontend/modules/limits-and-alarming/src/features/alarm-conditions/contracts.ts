@@ -125,12 +125,11 @@ export function admitAlarmDocument(v: unknown, expected: OpsPageContext): AlarmD
   )
     return null;
   const base = v.links.self,
-    posture = v.links.posture,
-    mission = v.mission_id;
+    posture = v.links.posture;
   if (
     !page(
       v.states,
-      (x): x is State => state(x, posture, mission),
+      (x): x is State => state(x, posture),
       base,
       (x) => link(x, base),
     ) ||

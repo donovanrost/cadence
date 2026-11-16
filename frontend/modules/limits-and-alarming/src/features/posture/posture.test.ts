@@ -30,13 +30,7 @@ function populated() {
       generation_time: null,
       receipt_time: stamp,
       definition_href: d.links.self + "?definition=definition-1&version=1",
-      evidence_href:
-        "/missions/mission-limits/ops/explore?" +
-        new URLSearchParams({
-          point_id: "HK.voltage",
-          sample_id: "sample-1",
-          selected_time: stamp,
-        }),
+      evidence_href: "/console/acme/limits/telemetry?" + new URLSearchParams({ p: "HK.voltage" }),
     },
   ];
   return d;
@@ -71,8 +65,8 @@ test("retains actual timestamps and producing-version identity while changing sc
 test("rejects substituted sample links, inconsistent counts and foreign spacecraft rows", () => {
   const a = populated();
   required(a.states.items[0]).evidence_href = required(a.states.items[0]).evidence_href.replace(
-    "sample-1",
-    "sample-2",
+    "p=HK.voltage",
+    "p=HK.current",
   );
   expect(admitDocument(a)).toBeNull();
   const b = populated();

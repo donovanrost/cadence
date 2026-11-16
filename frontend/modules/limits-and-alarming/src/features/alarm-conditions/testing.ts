@@ -51,14 +51,8 @@ export function alarmFixture(total = 1, page = 1): AlarmDocument {
         receipt_time: stamp,
         definition_href: d.links.posture + "?definition=definition&version=1",
         evidence_href:
-          root +
-          "/ops/explore?" +
-          new URLSearchParams({
-            point_id: "HK.voltage",
-            spacecraft_id: "craft-" + n,
-            sample_id: "sample-" + n,
-            selected_time: stamp,
-          }),
+          `/console/acme/alarm/fleet/${100 + n}/telemetry?` +
+          new URLSearchParams({ points: "HK.voltage", focus: "HK.voltage", at: stamp }),
       };
     },
   );

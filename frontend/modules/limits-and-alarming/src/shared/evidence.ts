@@ -36,27 +36,10 @@ function consoleLink(href: string, v: Row): boolean {
   return false;
 }
 
-/** The pre-D2 /ops/explore link. todo(D2): remove once api's console links are live. */
-function exploreLink(href: string, v: Row, mission: string): boolean {
-  const prefix = `/missions/${mission}/ops/explore?`;
-  if (!href.startsWith(prefix)) return false;
-  const q = new URLSearchParams(href.slice(prefix.length));
-  return (
-    new Set(q.keys()).size === [...q.keys()].length &&
-    [...q.keys()].every((k) =>
-      ["point_id", "spacecraft_id", "sample_id", "selected_time"].includes(k),
-    ) &&
-    q.get("point_id") === v.point_id &&
-    q.get("sample_id") === v.sample_id &&
-    q.get("selected_time") === v.receipt_time &&
-    q.get("spacecraft_id") === (v.spacecraft_id ?? null)
-  );
-}
-
 /** A row's `evidence_href` names the row's own point and receipt time, and nothing else. */
-export function evidence(v: Row, mission: string): boolean {
+export function evidence(v: Row): boolean {
   const href = v.evidence_href;
   if (!text(href, 4096) || /[\\#]/.test(href) || href.split("").some((c) => c.charCodeAt(0) <= 32))
     return false;
-  return consoleLink(href, v) || exploreLink(href, v, mission);
+  return consoleLink(href, v);
 }
