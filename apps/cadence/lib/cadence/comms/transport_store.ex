@@ -261,9 +261,48 @@ defmodule Cadence.Comms.TransportStore do
               |> Map.put("archived_at", DateTime.utc_now())
         }
 
-      persist_transport(organization_id, archived)
+      # Archiving releases what the transport holds (lead 11-16): its materialized provider
+      # profile goes with it, in the same transaction, so its listen host:port is free again and no
+      # pass can start through it.
+      Repo.transaction(fn ->
+        archive_with_profile(organization_id, current_transport, archived)
+      end)
     end
   end
+
+  defp archive_with_profile(organization_id, current, archived) do
+    with {:ok, transport} <- persist_transport(organization_id, archived),
+         :ok <- retire_materialized_profile(current) do
+      transport
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp retire_materialized_profile(%Transport{materialized_provider_profile_id: id} = transport)
+       when is_binary(id) and id != "" do
+    case ProfileStore.fetch_provider_profile(transport.organization_id, transport.mission_id, id) do
+      {:ok, profile} ->
+        if profile.metadata["materialized_from_transport_id"] == transport.transport_id,
+          do:
+            deleted(
+              ProfileStore.delete_provider_profile(
+                transport.organization_id,
+                transport.mission_id,
+                id
+              )
+            ),
+          else: :ok
+
+      {:error, _gone} ->
+        :ok
+    end
+  end
+
+  defp retire_materialized_profile(_transport), do: :ok
+
+  defp deleted({:ok, _profile}), do: :ok
+  defp deleted({:error, reason}), do: {:error, reason}
 
   defp normalize_transport(%Transport{lifecycle_state: :archived} = transport, _opts),
     do: {:ok, transport}

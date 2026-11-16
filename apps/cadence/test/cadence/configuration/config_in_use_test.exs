@@ -7,8 +7,16 @@ defmodule Cadence.Configuration.ConfigInUseTest do
 
   import Cadence.ConfigurationFixtures
 
-  alias Cadence.Comms.{RoutingRule, RoutingRuleStore, TransportStore}
-  alias Cadence.Contacts.{ContactStore, RealizedContact}
+  alias Cadence.Comms.{ListenClaims, RoutingRule, RoutingRuleStore, TransportStore}
+
+  alias Cadence.Contacts.{
+    ContactStore,
+    PathTemplate,
+    PathTemplateStore,
+    ProfileStore,
+    RealizedContact
+  }
+
   alias Cadence.Control.{Configuration, ConfigUsers}
   alias Cadence.ProviderChangeFixtures
 
@@ -21,7 +29,7 @@ defmodule Cadence.Configuration.ConfigInUseTest do
     apply_ops(%{alice: alice, mission: mission}, "Fairbanks", [
       create("ground_station", %{"display_name" => "Fairbanks", "code" => "FBK"}, ids.fbk),
       create("transport", station_transport("FBK down", ids.fbk, "inbound"), ids.down),
-      create("transport", Map.delete(transport_doc("Spare"), "ground_station_id"), ids.spare)
+      create("transport", spare_doc(), ids.spare)
     ])
 
     [sc] =
@@ -148,6 +156,70 @@ defmodule Cadence.Configuration.ConfigInUseTest do
 
     assert {:ok, _still} = TransportStore.fetch_transport(ctx.org, ctx.mission, ctx.ids.down)
   end
+
+  # lead (3): archiving a transport releases what it holds: its materialized provider profile goes
+  # with it, so its listen host:port is free for another mission and no new path is built on it.
+  describe "archiving releases the transport's provider profile" do
+    test "the profile is archived and its host:port is free for another mission", ctx do
+      {:ok, transport} = TransportStore.fetch_transport(ctx.org, ctx.mission, ctx.ids.spare)
+      profile_id = transport.materialized_provider_profile_id
+      endpoint = %{host: "0.0.0.0", port: 5310}
+      %{mission_id: other} = configuration_mission("in-use-other")
+
+      assert {:error, {:listen_endpoint_claimed, _}} = ListenClaims.check(other, endpoint)
+
+      apply_ops(ctx, "Archive spare", [archive("transport", ctx.ids.spare)])
+
+      assert {:error, :contact_provider_profile_not_found} =
+               ProfileStore.fetch_provider_profile(ctx.org, ctx.mission, profile_id)
+
+      assert :ok = ListenClaims.check(other, endpoint)
+    end
+
+    test "a path pinned to the archived transport's profile version no longer resolves", ctx do
+      {:ok, transport} = TransportStore.fetch_transport(ctx.org, ctx.mission, ctx.ids.spare)
+
+      {:ok, profile} =
+        ProfileStore.fetch_provider_profile(
+          ctx.org,
+          ctx.mission,
+          transport.materialized_provider_profile_id
+        )
+
+      {:ok, template} =
+        PathTemplateStore.persist(
+          ctx.org,
+          PathTemplate.new(%{
+            path_template_id: unique("path"),
+            mission_id: ctx.mission,
+            path_id: unique("downlink"),
+            direction: :downlink,
+            selection_role: :selected,
+            source_endpoint_ref: "source-" <> ctx.sc,
+            provider_profile_refs: [
+              %{
+                "provider_profile_id" => profile.provider_profile_id,
+                "version" => profile.version
+              }
+            ]
+          })
+        )
+
+      assert {:ok, _path} = PathTemplateStore.resolve(template)
+
+      apply_ops(ctx, "Archive spare", [archive("transport", ctx.ids.spare)])
+
+      assert {:error, :contact_provider_profile_not_found} = PathTemplateStore.resolve(template)
+    end
+  end
+
+  # Its own listen port (5310), so its claim is the only one on it.
+  defp spare_doc,
+    do:
+      "Spare"
+      |> transport_doc()
+      |> Map.delete("ground_station_id")
+      |> put_in(["configuration", "port"], "5310")
 
   defp stage(ctx, op),
     do: Configuration.stage(ctx.alice, ctx.mission, %{summary: "Archive"}, [op])

@@ -458,9 +458,33 @@ defmodule Cadence.Contacts.PathTemplateStore do
       "provider_profile_id",
       :contact_provider_profile_not_found,
       &fetch_provider_profile_for_scope/3,
-      &ProfileStore.fetch_provider_profile_version/4,
-      &ProfileStore.fetch_provider_profile_version/3
+      &live_provider_profile_version/4,
+      &live_provider_profile_version/3
     )
+  end
+
+  # A pinned profile version resolves only while the profile itself is live: once its latest
+  # version is deleted (e.g. its transport was archived, lead 11-16), no new path is built on it.
+  defp live_provider_profile_version(organization_id, mission_id, provider_profile_id, version) do
+    with {:ok, profile} <-
+           ProfileStore.fetch_provider_profile_version(
+             organization_id,
+             mission_id,
+             provider_profile_id,
+             version
+           ),
+         {:ok, _latest} <-
+           ProfileStore.fetch_provider_profile(organization_id, mission_id, provider_profile_id) do
+      {:ok, profile}
+    end
+  end
+
+  defp live_provider_profile_version(mission_id, provider_profile_id, version) do
+    with {:ok, profile} <-
+           ProfileStore.fetch_provider_profile_version(mission_id, provider_profile_id, version),
+         {:ok, _latest} <- ProfileStore.fetch_provider_profile(mission_id, provider_profile_id) do
+      {:ok, profile}
+    end
   end
 
   defp fetch_provider_profile_for_scope(organization_id, mission_id, provider_profile_id)
