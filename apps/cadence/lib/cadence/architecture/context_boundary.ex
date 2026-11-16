@@ -73,6 +73,8 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/spacecraft_traffic.ex" => :composition,
     "lib/cadence/control/scid_sharing.ex" => :composition,
     "lib/cadence/control/config_users.ex" => :composition,
+    # TEMPORARY (deleted with 9ac6dc8ee): the legacy route conversion's batches.
+    "lib/cadence/control/legacy_route_conversion.ex" => :composition,
     "lib/cadence/control/uplink_readiness.ex" => :composition,
     "lib/cadence/control/uplink_readiness/attention.ex" => :composition,
     "lib/cadence/control/uplink_readiness/groups.ex" => :composition,

@@ -24,7 +24,8 @@ defmodule Cadence.Configuration.Submission do
     Ledger,
     Pipeline,
     Preview,
-    ReviewRow
+    ReviewRow,
+    Staging
   }
 
   alias Cadence.Governance.{ActivationLocks, ActivationPolicy}
@@ -45,7 +46,7 @@ defmodule Cadence.Configuration.Submission do
          :ok <- state(set, "open"),
          :ok <- expected(set, params),
          {:ok, preview} <- checks(organization_id, set, params) do
-      policy = ActivationPolicy.evidence(organization_id, mission_id)
+      policy = policy(organization_id, mission_id, set)
 
       apply_transaction(set, fn ->
         submit_transaction(set, actor, reason, policy, preview, params)
@@ -397,6 +398,40 @@ defmodule Cadence.Configuration.Submission do
     do: Document.normalize(%{"reason" => "in_use", "entity" => entity, "uses" => uses})
 
   defp failure_document(reason), do: %{"reason" => to_string(reason)}
+
+  # A legacy route conversion batch always goes to review, so its stager can't apply it
+  # (reviewer_is_author does the refusing; director 11-16).
+  defp policy(organization_id, mission_id, set) do
+    evidence = ActivationPolicy.evidence(organization_id, mission_id)
+
+    if Enum.any?(ChangeSetStore.changes(set.change_set_id), &Staging.conversion?(&1.source)),
+      do: ActivationPolicy.forced_approval(evidence, "legacy_route_conversion"),
+      else: evidence
+  end
+
+  @doc """
+  Why `viewer` can't review (approve or send back) the set, before they try: `:reviewer_is_author`
+  when the set needs approval and they submitted it or authored any of its changes (the same test
+  as `review/6`), else nil. For the console's disabled Review.
+  """
+  @spec review_blocked_reason(String.t(), String.t(), String.t(), map()) ::
+          :reviewer_is_author | nil
+  def review_blocked_reason(organization_id, mission_id, change_set_id, %{} = viewer) do
+    with {:ok, set} <- ChangeSetStore.fetch(mission_id, change_set_id),
+         true <- needs_approval?(organization_id, set),
+         {:error, :reviewer_is_author} <- independent(set, viewer) do
+      :reviewer_is_author
+    else
+      _reviewable -> nil
+    end
+  end
+
+  defp needs_approval?(organization_id, set) do
+    case set.policy_document do
+      %{"approval_required" => required} -> required
+      _not_submitted -> policy(organization_id, set.mission_id, set)["approval_required"]
+    end
+  end
 
   defp independent(set, %{"kind" => "user"} = reviewer) do
     reviewer_key = key(reviewer)
