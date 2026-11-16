@@ -50,7 +50,7 @@ async function render(props: Record<string, unknown> = {}) {
     history: createMemoryHistory(),
     routes: [
       { path: "/", component: { render: () => null } },
-      { path: "/done", name: "done", component: { render: () => null } },
+      { path: "/done", name: "home", component: { render: () => null } },
     ],
   });
   const w = mount(KindEditor, {
@@ -62,7 +62,7 @@ async function render(props: Record<string, unknown> = {}) {
       name: "extra route",
       index: "R1",
       surface: "spacecraft",
-      done: { name: "done" },
+      done: { name: "home" as const },
       ...props,
     },
     global: { plugins: [router] },
@@ -116,7 +116,16 @@ describe("KindEditor: U79 errors on their fields, and the kind's own summary", (
   it("stages with the kind's summary when it gives one, and today's otherwise", async () => {
     const reply = {
       status: 200,
-      body: { data: { change_set: { id: "cs-1" }, items: [] } },
+      body: {
+        data: {
+          change_set_id: "cs-1",
+          change_id: "c-1",
+          version: 1,
+          staged_count: 1,
+          base_revision: 3,
+          entity_ids: ["e-1"],
+        },
+      },
     };
     let calls = stub(reply);
     let w = await render({

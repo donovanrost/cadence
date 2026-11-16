@@ -72,9 +72,11 @@ watch(
   () => [schema.state.value, props.document] as const,
   ([s, doc]) => {
     if (s.status !== "ready") return;
-    before.value = fromDocument(s.value, doc);
+    const given = fromDocument(s.value, doc);
     // ux: a create preselects required defaults, staged explicitly (they differ from `before`).
-    values.value = props.entityId ? { ...before.value } : createDefaults(s.value, before.value);
+    // So does a create's preset document (U79: the page's spacecraft): `before` is blank then.
+    before.value = props.entityId ? given : fromDocument(s.value, {});
+    values.value = props.entityId ? { ...given } : createDefaults(s.value, given);
   },
   { immediate: true },
 );
