@@ -83,6 +83,31 @@ footer: Passes │ Minutes / budget │ Cost / budget │ Rule met │ Conflicts
   `Submit 1,512 requests` (step 04). After submit the plan shows per-contact Requested → Confirmed /
   Rejected live; rejections become new A rows.
 
+### K1 day strip (DECISIONS #100, A14; the user's ruling 11-16)
+The day picker is a strip of the next **7 UTC days**, today first. Each day is a link (`?day=`), and the selected
+day has the white inset bottom bar. A cell holds the day (`Tue 17`) over its plan's state in one word or phrase. The
+words match U61's titles, so the strip and Now say the same thing:
+
+| The day's newest plan | Word | Mark |
+| --- | --- | --- |
+| `reserved` | `Booked` | ■ nominal |
+| `partially_reserved` | `1,490 of 1,512 booked` | ▲ caution |
+| `failed` | `Booking failed` | ▲ caution |
+| `unconfirmed` | `4 unconfirmed` | ▲ caution |
+| `executing` | `Booking…` | none |
+| `pending_approval` | `Awaiting approval` | none, then U61's |
+| sent back | `Sent back` | none, then U61's |
+| `draft`, `drafting`, `interrupted`, `superseded` | `Draft` | none, then U61's |
+| no plan, with requirements | `No plan` | none, then U61's |
+| no requirements | `Nothing to plan` | none |
+
+- **"Then U61's":** the strip uses U61's thresholds, so it never disagrees with Now.
+  - ▲ caution from T−24h before the day's first window.
+  - ◆ crit once the first window opens with no approved plan, when the word becomes `Started unplanned`.
+- **Accessible name per cell:** "Tue 17 Nov: awaiting approval, first window 00:00Z". Marks are `aria-hidden`.
+- `not_set_up` replaces the strip with K1's not-set-up callout. A day further than 7 days out is reached with the
+  existing date picker beside the strip.
+
 ### K1 plan states (DECISIONS #27, #28; lead's model in plans/scheduling.md)
 The takeover header's mono line names the state. There's **one primary per state**, always in the
 footer's commit slot, and a blocked primary always says why in visible text under it (U6/§6).
