@@ -377,7 +377,9 @@ Refetch on `invalidate` `commanding`, plus `telemetry` throttled to 10 s.
 - `window: {from, to} | null`: the first release to the last verifier timeout; `null` before
   release, when there's nothing to plot yet.
 - `targets: [{spacecraft_id, name, verifier_state: pending | satisfied | failed | timed_out | null,
-  verifier: {instance_id, verifier_id, severity, failure_code} | null, samples: [{t, value_json}]}]`:
+  verifier: {instance_id, verifier_id, severity, failure_code} | null, timeout_at | null,
+  matched_at | null, samples: [{t, value_json}]}]`: `timeout_at` / `matched_at` (U69 A4a) are the
+  instance's verify-by and matched times;
   `verifier` (U68 R4) is that target's verifier instance, null exactly when `verifier_state` is
   (`failure_code`: `timed_out | failure_criteria_matched | null`); per target, that spacecraft's own samples only (#38), at most 300
   per target, decimated.

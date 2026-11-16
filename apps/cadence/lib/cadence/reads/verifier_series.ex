@@ -219,6 +219,9 @@ defmodule Cadence.Reads.VerifierSeries do
             verifier_state: instance && instance.lifecycle_state,
             # U68 R4: which verifier instance this target's state is, and why it failed.
             verifier: instance && verifier_detail(instance),
+            # U69 A4a: "Verify by …" / "Verified at …" without a history read per target.
+            timeout_at: instance && instance.timeout_at,
+            matched_at: instance && instance.matched_at,
             samples: Map.get(samples, target["spacecraft_id"], [])
           }
         end),

@@ -96,6 +96,11 @@ defmodule Cadence.Reads.VerifierSeriesTest do
 
     # U68 R4: a target's verifier detail is there exactly when its instance is (none here yet).
     assert Enum.all?(series.targets, &(is_nil(&1.verifier) == is_nil(&1.verifier_state)))
+
+    assert Enum.all?(
+             series.targets,
+             &(Map.has_key?(&1, :timeout_at) and Map.has_key?(&1, :matched_at))
+           )
   end
 
   # U2 (fe-ops 11-14): targets pinned to different revisions watch different points.
