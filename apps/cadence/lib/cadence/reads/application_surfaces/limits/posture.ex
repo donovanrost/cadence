@@ -1,6 +1,7 @@
 defmodule Cadence.Reads.ApplicationSurfaces.Limits.Posture do
   @moduledoc false
   alias Cadence.Reads.ApplicationSurfaces.Limits.{Definitions, Pages}
+  alias Cadence.Reads.ConsoleSampleLinks
   alias Cadence.Reads.Limits
   alias Cadence.Reads.LimitStateEvidence
   alias Cadence.SpacecraftStore
@@ -20,12 +21,13 @@ defmodule Cadence.Reads.ApplicationSurfaces.Limits.Posture do
         )
 
       craft = spacecraft_page(org, mission, query)
+      links = ConsoleSampleLinks.context(org, mission)
 
       {:ok,
        %{
          "states" =>
            Pages.envelope(
-             %{page | items: Enum.map(page.items, &state(&1, mission, base, query))},
+             %{page | items: Enum.map(page.items, &state(&1, links, base, query))},
              base,
              query,
              "page"
@@ -67,7 +69,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.Limits.Posture do
       else: page
   end
 
-  defp state(e, mission, base, query) do
+  defp state(e, links, base, query) do
     definition_href =
       Pages.href(
         base,
@@ -80,6 +82,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.Limits.Posture do
         |> Map.put("activation_page", 1)
       )
 
-    LimitStateEvidence.row(e, mission, definition_href)
+    LimitStateEvidence.row(e, links, definition_href)
   end
 end

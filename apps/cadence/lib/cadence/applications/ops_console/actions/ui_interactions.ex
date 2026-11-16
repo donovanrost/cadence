@@ -3,7 +3,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Reads.{Alarms, MissionTimeline}
+  alias Cadence.Reads.{Alarms, ConsoleSampleLinks, MissionTimeline}
 
   @application_key "ops_console"
   @application_version 1
@@ -183,6 +183,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
 
   defp dispatch(organization_id, mission_id, "alarms", action_id, %{"filters" => filters}) do
     snapshot = Alarms.snapshot(organization_id, mission_id, filters: filters)
+    links = ConsoleSampleLinks.context(organization_id, mission_id)
 
     {:ok,
      %{
@@ -196,7 +197,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
        "props" => %{
          "filters" => %{"values" => filters},
          "summary" => presentation_alarm_summary(snapshot.summary, snapshot.observed_at),
-         "alarms" => Enum.map(snapshot.rows, &presentation_alarm_row(&1, mission_id))
+         "alarms" => Enum.map(snapshot.rows, &presentation_alarm_row(&1, mission_id, links))
        }
      }}
   end
@@ -300,7 +301,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
     }
   end
 
-  defp presentation_alarm_row(row, mission_id) do
+  defp presentation_alarm_row(row, mission_id, links) do
     %{
       "id" => row.id,
       "__dom_id" => "alarm-condition-#{row.limit_event_id}",
@@ -314,7 +315,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
       "observed" => %{"label" => "Observed", "display" => iso(row.receipt_time)},
       "evidence" => %{
         "id" => "alarm-open-sample-#{row.limit_event_id}",
-        "href" => "/missions/#{mission_id}/ops/explore",
+        # §11c(D) D2: the console's Investigate at that sample (no /ops/explore).
+        "href" =>
+          ConsoleSampleLinks.href(
+            links,
+            row.spacecraft_id,
+            row.point_id,
+            Map.get(row, :generation_time),
+            row.receipt_time
+          ),
         "title" => "Open exact sample and evidence",
         "icon" => "hero-magnifying-glass",
         "label" => "Evidence"

@@ -3,6 +3,7 @@ defmodule Cadence.Reads.LimitAlarmConditions do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions
   alias Cadence.Reads.ApplicationSurfaces.Limits.Pages
+  alias Cadence.Reads.ConsoleSampleLinks
   alias Cadence.Reads.Limits
   alias Cadence.Reads.LimitStateEvidence
   alias Cadence.SpacecraftStore
@@ -40,6 +41,7 @@ defmodule Cadence.Reads.LimitAlarmConditions do
         )
 
       craft = craft_page(org, mission, query)
+      links = ConsoleSampleLinks.context(org, mission)
 
       data = %{
         "version" => 1,
@@ -57,7 +59,7 @@ defmodule Cadence.Reads.LimitAlarmConditions do
           Map.new(@severity, fn {tone, state} -> {tone, Map.fetch!(states.counts, state)} end),
         "states" =>
           Pages.envelope(
-            %{states | items: Enum.map(states.items, &row(&1, mission))},
+            %{states | items: Enum.map(states.items, &row(&1, mission, links))},
             base,
             query,
             "page"
@@ -149,9 +151,9 @@ defmodule Cadence.Reads.LimitAlarmConditions do
       else: page
   end
 
-  defp row(e, mission) do
+  defp row(e, mission, links) do
     query = %{"definition" => e.limit_definition_id, "version" => e.limit_definition_version}
     href = "/missions/#{mission}/applications/limits/activity?" <> URI.encode_query(query)
-    LimitStateEvidence.row(e, mission, href)
+    LimitStateEvidence.row(e, links, href)
   end
 end

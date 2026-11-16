@@ -1,17 +1,13 @@
 defmodule Cadence.Reads.LimitStateEvidence do
   @moduledoc "Canonical evaluated-state evidence shared by Limits posture and Ops alarm conditions."
   alias Cadence.Reads.ApplicationSurfaces.Limits.Pages
+  alias Cadence.Reads.ConsoleSampleLinks
 
-  def row(e, mission, definition_href) do
-    evidence =
-      %{
-        "point_id" => e.point_id,
-        "spacecraft_id" => e.spacecraft_id,
-        "sample_id" => e.sample_id,
-        "selected_time" => Pages.stamp(e.receipt_time)
-      }
-      |> Map.reject(fn {_, v} -> is_nil(v) end)
-
+  @doc """
+  One evaluated state's row. `links` is `ConsoleSampleLinks.context/2` for the mission (read once
+  per page): `evidence_href` opens the sample in the console's Investigate (§11c(D) D2).
+  """
+  def row(e, links, definition_href) do
     %{
       "id" => e.limit_event_id,
       "point_id" => e.point_id,
@@ -29,7 +25,14 @@ defmodule Cadence.Reads.LimitStateEvidence do
       "generation_time" => Pages.stamp(e.generation_time),
       "receipt_time" => Pages.stamp(e.receipt_time),
       "definition_href" => definition_href,
-      "evidence_href" => "/missions/#{mission}/ops/explore?" <> URI.encode_query(evidence)
+      "evidence_href" =>
+        ConsoleSampleLinks.href(
+          links,
+          e.spacecraft_id,
+          e.point_id,
+          Pages.stamp(e.generation_time),
+          Pages.stamp(e.receipt_time)
+        )
     }
   end
 end
