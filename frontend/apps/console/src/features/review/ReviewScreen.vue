@@ -3,7 +3,8 @@ import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApCallout, ApPageHeader, ApRemote, ApTabLinks, plural, type ApTabLink } from "@/ui";
+import { ApCallout, ApPageHeader, ApRemote, ApTabLinks, plural } from "@/ui";
+import { contactsSections } from "@/features/contacts/index.ts";
 import DailyPanel from "./DailyPanel.vue";
 import LostPanel from "./LostPanel.vue";
 import ReviewControls from "./ReviewControls.vue";
@@ -51,11 +52,6 @@ const exporter = useReviewExport(
   computed(() => scope.value.mission.slug),
   s,
 );
-const tabs: readonly ApTabLink[] = [
-  { key: "live", label: "Live", to: { name: "ops.contacts" } },
-  { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
-  { key: "review", label: "Review", to: { name: "ops.contacts.review" } },
-];
 const dayAt = computed(() => Date.parse(`${win.day.value}T00:00:00Z`));
 const pickDay = (t: number | null) =>
   t !== null && win.set({ day: new Date(t).toISOString().slice(0, 10) });
@@ -82,7 +78,7 @@ const pickDay = (t: number | null) =>
         @export="exporter.run"
       />
     </ApPageHeader>
-    <ApTabLinks :links="tabs" active="review" label="Contacts sections" />
+    <ApTabLinks :links="contactsSections" active="review" label="Contacts sections" />
     <ApCallout v-if="exporter.failure.value" tone="caution">{{ exporter.failure.value }}</ApCallout>
     <SummarySection :state="summary.state.value" @retry="summary.refetch" />
     <ApRemote :state="daily.state.value" loading-label="Loading 30 days…" @retry="daily.refetch">

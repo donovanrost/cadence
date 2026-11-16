@@ -16,7 +16,6 @@ import {
   ApRemote,
   ApSegmented,
   ApTabLinks,
-  type ApTabLink,
 } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import { fetchGroups } from "@/features/commands/index.ts";
@@ -29,7 +28,9 @@ import { useCommandAccess } from "@/features/commands/index.ts";
 import FindingsPanel from "./FindingsPanel.vue";
 import { findingsMeta, useFindings } from "./findings.ts";
 import { usePasses } from "./usePasses.ts";
-import { fetchPass, fetchStations, type Pass } from "./api.ts";
+import { fetchStations, type Pass } from "./api.ts";
+import { contactsSections } from "./sections.ts";
+import { useSelectedPass } from "./useSelectedPass.ts";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 
@@ -156,58 +157,8 @@ const stationName = computed(() => {
   const pass = all.value.find((p) => p.station.id === id);
   return known?.display_name ?? known?.code ?? pass?.station.name ?? id ?? "";
 });
-/** A pass named in the URL but outside the window (Review from Now, U31) is read on its own. */
-const outsideKey = computed(() => {
-  const id = selectedId.value;
-  if (id === null || passes.state.value.status !== "ready") return null;
-  return all.value.some((p) => p.id === id) ? null : { m: missionId.value, id };
-});
-const outside = useRemoteQuery(outsideKey, (k, signal) => fetchPass(k.m, k.id, signal));
-useMissionInvalidation(missionId, ["contacts", "attention"], outside.refetch);
-const outsidePass = computed(() =>
-  outside.state.value.status === "ready" ? outside.state.value.value : null,
-);
-function refetchPass() {
-  passes.refetch();
-  if (outsideKey.value !== null) outside.refetch();
-}
-/** Default selection: the pass named in the URL, else the next AOS fleet-wide. */
-const selected = computed(() => {
-  const t = now.value.getTime();
-  const named = all.value.find((p) => p.id === selectedId.value) ?? outsidePass.value;
-  if (named) return named;
-  // A pass named in the URL that hasn't resolved yet: show it loading, not another pass (qa).
-  if (selectedId.value !== null) return null;
-  return (
-    list.value.find((p) => Date.parse(p.starts_at) > t && passStatus(p, t) === "scheduled") ?? null
-  );
-});
-/** The URL's pass is still being read: the window first, then the pass on its own. */
-const selectedLoading = computed(
-  () =>
-    selectedId.value !== null &&
-    selected.value === null &&
-    (passes.state.value.status !== "ready" ||
-      (outsideKey.value !== null && outside.state.value.status === "loading")),
-);
-const selectedMissing = computed(
-  () =>
-    selectedId.value !== null &&
-    selected.value === null &&
-    !selectedLoading.value &&
-    outside.state.value.status === "failed",
-);
-/** D2 identity: the fleet row (has state) else the pass's own {name, scid}. */
-const selectedSpacecraft = computed(() => {
-  const p = selected.value;
-  if (!p) return null;
-  const known = p.spacecraft_id ? byId.value.get(p.spacecraft_id) : undefined;
-  if (known) return known;
-  // A deleted spacecraft keeps its pass rows with a null name (contacts.md).
-  return p.spacecraft?.scid != null
-    ? { name: p.spacecraft.name ?? "Deleted spacecraft", scid: p.spacecraft.scid }
-    : null;
-});
+const pick = useSelectedPass(missionId, passes, list, selectedId, byId, now);
+const { selected, loading: selectedLoading, missing: selectedMissing } = pick;
 const view = computed(() => {
   const s = passes.state.value;
   // Wait for the fleet too: rows and D2 are labelled by name (R01), never by raw id.
@@ -258,11 +209,6 @@ watch(
   },
   { immediate: true },
 );
-const tabs: readonly ApTabLink[] = [
-  { key: "live", label: "Live", to: { name: "ops.contacts" } },
-  { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
-  { key: "review", label: "Review", to: { name: "ops.contacts.review" } },
-];
 </script>
 
 <template>
@@ -289,7 +235,7 @@ const tabs: readonly ApTabLink[] = [
       </div>
     </ApPageHeader>
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <ApTabLinks :links="tabs" active="live" label="Contacts sections" />
+      <ApTabLinks :links="contactsSections" active="live" label="Contacts sections" />
       <div class="flex flex-wrap items-center gap-3">
         <div class="w-40">
           <ApField
@@ -398,8 +344,8 @@ const tabs: readonly ApTabLink[] = [
             :pass="selected"
             :loading="selectedLoading"
             :missing="selectedMissing"
-            :spacecraft="selectedSpacecraft"
-            @changed="refetchPass"
+            :spacecraft="pick.spacecraft.value"
+            @changed="pick.refetch"
           />
           <FindingsPanel
             v-if="findingsReady"
