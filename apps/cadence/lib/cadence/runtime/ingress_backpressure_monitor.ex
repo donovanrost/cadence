@@ -108,7 +108,10 @@ defmodule Cadence.Runtime.IngressBackpressureMonitor do
       organizations: %{},
       ticks: 0,
       disk_every_ticks: Keyword.get(opts, :disk_every_ticks, @disk_every_ticks),
-      disk: JournalDiskWatch.new(),
+      disk:
+        JournalDiskWatch.new(
+          Keyword.get_lazy(opts, :disk_thresholds, &JournalVolume.thresholds/0)
+        ),
       # The journal disk's reading and its streams: {reading, streams} (tests replace it).
       journal_volume: Keyword.get(opts, :journal_volume, &journal_volume/0),
       # The mission's organization, for the attention_changed publish. Injected by the runtime

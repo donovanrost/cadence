@@ -29,10 +29,9 @@ defmodule Cadence.Contacts.JournalReclaim do
 
   alias Cadence.Contacts.{ContactStore, RealizedContact}
   alias Cadence.Control.Contacts, as: Runtime
+  alias Cadence.IngressJournal.Volume
 
   @default_retention_ms 72 * 60 * 60 * 1000
-  @default_early_at 80.0
-  @default_early_to 70.0
   @pressure_key {__MODULE__, :volume_pressure}
 
   @doc "How long a settled contact's journal stays on disk."
@@ -90,30 +89,32 @@ defmodule Cadence.Contacts.JournalReclaim do
   """
   @spec pressure(keyword()) :: nil | %{percent: float()}
   def pressure(opts \\ []) do
-    {early_at, early_to} = thresholds()
+    t = Keyword.get_lazy(opts, :thresholds, &Volume.thresholds/0)
     volume = Keyword.get_lazy(opts, :volume, fn -> Runtime.ingress_journal_volume() end)
     active? = :persistent_term.get(@pressure_key, false)
 
     case volume do
-      {:ok, %{percent: percent}} when percent >= early_at or (active? and percent >= early_to) ->
-        :persistent_term.put(@pressure_key, true)
-        %{percent: percent}
+      {:ok, %{percent: percent} = reading} ->
+        under? = percent >= t.reclaim_at or (active? and percent >= t.reclaim_to)
+        set_pressure(active?, under? and Volume.low_on_free?(reading, t), percent)
 
-      _below_or_unknown ->
-        if active?, do: :persistent_term.put(@pressure_key, false)
-        nil
+      _unknown ->
+        set_pressure(active?, false, nil)
     end
+  end
+
+  defp set_pressure(active?, true, percent) do
+    if not active?, do: :persistent_term.put(@pressure_key, true)
+    %{percent: percent}
+  end
+
+  defp set_pressure(active?, false, _percent) do
+    if active?, do: :persistent_term.put(@pressure_key, false)
+    nil
   end
 
   @doc false
   def reset_pressure, do: :persistent_term.erase(@pressure_key)
-
-  defp thresholds do
-    config = :cadence |> Application.get_env(:ingress_journal, []) |> Enum.into(%{})
-
-    {Map.get(config, :early_reclaim_at, @default_early_at),
-     Map.get(config, :early_reclaim_to, @default_early_to)}
-  end
 
   # Normal: any order (one per tick). Under pressure: the oldest settled first.
   defp order(contacts, nil), do: Enum.sort_by(contacts, & &1.realized_contact_id)

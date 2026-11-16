@@ -187,6 +187,18 @@ defmodule Cadence.Contacts.JournalReclaimTest do
       assert nil == JournalReclaim.pressure(volume: volume(75.0))
     end
 
+    test "deployment thresholds, and a free-space floor (a big shared disk isn't an emergency)" do
+      t = %{reclaim_at: 97.0, reclaim_to: 95.0, emergency_free_bytes: 100}
+      # volume/1 is a 1,000-byte disk: 98 % leaves 20 bytes free, under the floor.
+      assert %{percent: 98.0} = JournalReclaim.pressure(volume: volume(98.0), thresholds: t)
+      assert %{} = JournalReclaim.pressure(volume: volume(96.0), thresholds: t)
+      assert nil == JournalReclaim.pressure(volume: volume(94.0), thresholds: t)
+      assert nil == JournalReclaim.pressure(volume: volume(96.0), thresholds: t)
+
+      plenty = %{t | emergency_free_bytes: 10}
+      assert nil == JournalReclaim.pressure(volume: volume(98.0), thresholds: plenty)
+    end
+
     test "an unreadable disk is never pressure: the 72 h holds (fail-safe)", c do
       contact = settled_contact!("unknown-disk", %{"settled_at" => @recent})
       stream!(c, contact, "path-a", [:processing, :archive])

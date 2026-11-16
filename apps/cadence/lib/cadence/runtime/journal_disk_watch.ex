@@ -7,20 +7,22 @@ defmodule Cadence.Runtime.JournalDiskWatch do
   Each stream has its own cap (one contact, ux U47's `journal_near_full`); nothing caps their sum,
   and a full disk stops telemetry from every pass at once. The item opens at 70 % (caution), turns
   critical at 90 %, and clears below 60 % (no flapping). An unreadable disk (`:unknown`) changes
-  nothing: an open item stays as last read.
+  nothing: an open item stays as last read. The thresholds are deployment config
+  (`Cadence.IngressJournal.Volume.thresholds/0`): those are the defaults, and with a free-bytes
+  floor set, critical also needs the free space below it.
   """
 
-  @caution 70.0
-  @critical 90.0
-  @clear 60.0
+  alias Cadence.IngressJournal.Volume
+
   @rate_window_s 3_600
   @resolved_keep_s 120
 
   @type t :: map()
 
-  @spec new() :: t()
-  def new,
+  @spec new(map()) :: t()
+  def new(thresholds \\ Volume.thresholds()),
     do: %{
+      thresholds: thresholds,
       level: nil,
       raised_at: nil,
       reading: nil,
@@ -45,7 +47,14 @@ defmodule Cadence.Runtime.JournalDiskWatch do
       [{now, reading.used_bytes} | state.samples]
       |> Enum.filter(fn {at, _used} -> DateTime.diff(now, at) <= @rate_window_s end)
 
-    level = level(state.level, percent)
+    level =
+      level(
+        state.level,
+        percent,
+        Volume.low_on_free?(reading, state.thresholds),
+        state.thresholds
+      )
+
     {state, refusing_changed?} = refusing(state, refusing?, now)
 
     opened_or_moved? = level != state.level
@@ -113,12 +122,16 @@ defmodule Cadence.Runtime.JournalDiskWatch do
     |> Enum.sort_by(& &1.bytes, :desc)
   end
 
-  # Raise at 70, critical at 90, and stay raised until below 60.
-  defp level(_current, percent) when percent >= @critical, do: :critical
-  defp level(_current, percent) when percent >= @caution, do: :caution
-  defp level(nil, _percent), do: nil
-  defp level(_current, percent) when percent < @clear, do: nil
-  defp level(_current, _percent), do: :caution
+  # Raise at caution (70), critical at 90 (and short of free space, with a floor), and stay
+  # raised until below clear (60).
+  defp level(current, percent, low_on_free?, t) do
+    cond do
+      percent >= t.critical and low_on_free? -> :critical
+      percent >= t.caution -> :caution
+      is_nil(current) or percent < t.clear -> nil
+      true -> :caution
+    end
+  end
 
   defp refusing(state, refusing?, now) do
     cond do

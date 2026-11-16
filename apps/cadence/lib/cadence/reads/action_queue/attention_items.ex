@@ -65,6 +65,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp named_spacecraft(%{source: "contact_start"} = attention),
     do: ContactStartItem.spacecraft_ids(attention)
 
+  # U66: the journal disk's holders are named (fe-ops), though the row has no spacecraft itself.
+  defp named_spacecraft(%{conflict: "journal_disk", journal_disk: %{holders: holders}}),
+    do: Enum.map(holders, & &1.spacecraft_id)
+
   defp named_spacecraft(attention),
     do: Map.get(attention, :spacecraft_ids) || [Map.get(attention, :spacecraft_id)]
 
@@ -190,7 +194,28 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     |> Map.update(:provider_change, nil, &provider_change/1)
   end
 
+  # U66: each holder of the journal disk with its spacecraft and station named (fe-ops: Now has no
+  # fleet or station lookup of its own).
+  defp source_fields(%{conflict: "journal_disk", journal_disk: disk} = attention, names) do
+    holders =
+      Enum.map(disk.holders, fn holder ->
+        Map.merge(holder, %{
+          spacecraft: holder_spacecraft(holder.spacecraft_id, names),
+          station: station(holder.ground_station_ref, names)
+        })
+      end)
+
+    attention |> SourceKeys.take() |> Map.put(:journal_disk, %{disk | holders: holders})
+  end
+
   defp source_fields(attention, _names), do: SourceKeys.take(attention)
+
+  defp holder_spacecraft(id, names) do
+    case spacecraft(id, names) do
+      [member] -> Map.take(member, [:id, :name, :scid])
+      [] -> nil
+    end
+  end
 
   @doc """
   A provider change as the console reads it (ux U44): one `state`, which is `expired` for a

@@ -387,14 +387,21 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
       says when telemetry was refused, else null). Not acknowledgeable. `attention` adds
       `journal_disk {percent, used_bytes, size_bytes, rate_bytes_per_hour (signed; null until two
       readings), eta_full_s (only while growing, else null), holders [{realized_contact_id,
-      contact_id, spacecraft_id, ground_station_ref, provider_id, starts_at, ends_at, bytes,
-      state: storing | kept, kept_until (kept only, else null)}] (this mission's contacts,
+      contact_id, spacecraft_id, spacecraft {id, name, scid} | null, ground_station_ref,
+      station {ref, id, code, name} (the shared station shape), provider_id, starts_at, ends_at,
+      bytes, state: storing | kept, kept_until (kept only, else null)}] (this mission's contacts,
       largest first, at most 3), more_count, other_missions_bytes (never named), refusing,
       refused_since | null}`; the per-contact keys above are absent. `kept` = already all in the
       ingress archive and on disk only for the review window; above 80% those are removed early,
       oldest first (`JournalReclaim`, marked `reclaimed_early`). The only action is Open pass on a
       holder; the disk's size is deployment config. Read every minute from the OS (disksup);
-      `refusing` is checked every 5 s from the journals' own append errors (`enospc`).
+      `refusing` is checked every 5 s from the journals' own append errors (`enospc`). The
+      thresholds are deployment config under `:cadence, :ingress_journal` (ratios: `disk_caution`
+      0.70, `disk_critical` 0.90, `disk_clear` 0.60, `early_reclaim_at` 0.80, `early_reclaim_to`
+      0.70) plus `disk_emergency_free_bytes` (nil): with a floor set, critical and early reclaim
+      also need free space below it. Dev (the host's shared disk): 0.95 / 0.97 / 0.93, reclaim
+      0.97 -> 0.95, floor 10 GiB. The row always carries the shared keys (`contact_id`, `station`,
+      `provider`, `starts_at`, `provider_message`, `acknowledged_by`), null here.
     - The state is in the node's memory (`Cadence.Runtime.IngressBackpressureMonitor`, sampled every
       5 s): a node restart clears it, along with the backlog itself. Opening and clearing
       publish `invalidate` with `attention`.

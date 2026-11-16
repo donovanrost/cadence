@@ -13,6 +13,50 @@ defmodule Cadence.IngressJournal.Volume do
 
   @type usage :: %{size_bytes: non_neg_integer(), used_bytes: non_neg_integer(), percent: float()}
 
+  # Deployment config under :cadence, :ingress_journal (ratios of the disk; bytes for the floor).
+  # Defaults are for a disk of its own (ux U66, director 11-15). On a shared disk (dev: the
+  # host's) the floor keeps a big disk with plenty free from counting as an emergency (lead).
+  @defaults %{
+    disk_caution: 0.70,
+    disk_critical: 0.90,
+    disk_clear: 0.60,
+    early_reclaim_at: 0.80,
+    early_reclaim_to: 0.70,
+    disk_emergency_free_bytes: nil
+  }
+
+  @doc """
+  The disk thresholds in percent (`caution`, `critical`, `clear`, `reclaim_at`, `reclaim_to`) and
+  `emergency_free_bytes` (nil: no floor): critical and early reclaim need the free space below it.
+  """
+  @spec thresholds() :: map()
+  def thresholds do
+    config =
+      Map.merge(
+        @defaults,
+        :cadence
+        |> Application.get_env(:ingress_journal, [])
+        |> Map.new()
+        |> Map.take(Map.keys(@defaults))
+      )
+
+    %{
+      caution: config.disk_caution * 100,
+      critical: config.disk_critical * 100,
+      clear: config.disk_clear * 100,
+      reclaim_at: config.early_reclaim_at * 100,
+      reclaim_to: config.early_reclaim_to * 100,
+      emergency_free_bytes: config.disk_emergency_free_bytes
+    }
+  end
+
+  @doc "Whether a reading is short enough of free space to count as an emergency (the floor)."
+  @spec low_on_free?(map(), map()) :: boolean()
+  def low_on_free?(_reading, %{emergency_free_bytes: nil}), do: true
+
+  def low_on_free?(%{size_bytes: size, used_bytes: used}, %{emergency_free_bytes: floor}),
+    do: size - used < floor
+
   @doc """
   The disk holding `base_path`: `{:ok, %{size_bytes, used_bytes, percent}}` or `:unknown`.
   `opts[:reader]` replaces disksup (tests): `path -> [{id, total_kib, available_kib, capacity}]`.

@@ -5,7 +5,9 @@ defmodule Cadence.Contacts.JournalDiskAttentionTest do
   """
   use Cadence.DataCase, async: false
 
+  alias Cadence.Comms.StationRefs
   alias Cadence.Contacts.{ContactStore, IngressBackpressureAttention, RealizedContact}
+  alias Cadence.Reads.ActionQueue.{AttentionItems, Item}
   alias Cadence.Runtime.IngressBackpressureMonitor, as: Monitor
   alias Cadence.Runtime.ProcessNamespace
 
@@ -139,6 +141,51 @@ defmodule Cadence.Contacts.JournalDiskAttentionTest do
                IngressBackpressureAttention.disk_items(@org, @mission, caution)
 
       assert [] == IngressBackpressureAttention.disk_items(@org, @mission, nil)
+
+      # On the wire (fe-ops): the shared keys present, null; each holder named.
+      names = %{
+        spacecraft: %{
+          "sc-8" =>
+            Item.member(%{
+              id: "sc-8",
+              name: "EARENDIL-008",
+              scid: 8,
+              plane: nil,
+              stale: nil,
+              last_received_at: nil,
+              violating_points: nil
+            })
+        },
+        station:
+          &StationRefs.resolve(&1, %{"svb" => %{id: "st-1", code: "SVB", name: "Svalbard"}}),
+        providers: %{}
+      }
+
+      holders = [
+        %{hd(item.journal_disk.holders) | spacecraft_id: "sc-8", ground_station_ref: "svb"},
+        %{List.last(item.journal_disk.holders) | spacecraft_id: nil, ground_station_ref: nil}
+      ]
+
+      wire =
+        AttentionItems.object(put_in(item, [:journal_disk, :holders], holders), names)
+
+      for key <- [
+            :contact_id,
+            :station,
+            :provider,
+            :starts_at,
+            :provider_message,
+            :acknowledged_by
+          ],
+          do: assert(Map.has_key?(wire, key), "missing #{key}")
+
+      assert wire.contact_id == nil and wire.starts_at == nil and wire.acknowledged_by == nil
+
+      assert [named, unnamed] = wire.journal_disk.holders
+      assert named.spacecraft == %{id: "sc-8", name: "EARENDIL-008", scid: 8}
+      assert %{ref: "svb", code: "SVB", name: "Svalbard"} = named.station
+      assert unnamed.spacecraft == nil
+      assert unnamed.station == %{ref: nil, id: nil, code: nil, name: nil}
     end
   end
 

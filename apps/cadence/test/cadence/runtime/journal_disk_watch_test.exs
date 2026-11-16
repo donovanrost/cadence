@@ -50,6 +50,28 @@ defmodule Cadence.Runtime.JournalDiskWatchTest do
       assert JournalDiskWatch.resolved(state, at(8)) == []
     end
 
+    test "thresholds are config; with a free-space floor, critical also needs little free" do
+      # Dev's: 95 / 97 / 93, and critical only with under 10 GB free (lead 11-15).
+      t = %{caution: 95.0, critical: 97.0, clear: 93.0, emergency_free_bytes: 10_000_000_000}
+      state = JournalDiskWatch.new(t)
+
+      {state, false} = sample(state, 92.0, 0)
+      {state, true} = sample(state, 96.0, 1)
+      assert %{level: :caution} = JournalDiskWatch.view(state, "m")
+
+      # 98 % of 100 GB leaves 2 GB: under the floor.
+      {state, true} = sample(state, 98.0, 2)
+      assert %{level: :critical} = JournalDiskWatch.view(state, "m")
+
+      # A huge disk at 98 % with plenty free stays caution.
+      big = JournalDiskWatch.new(%{t | emergency_free_bytes: 1_000_000})
+      {big, true} = sample(big, 98.0, 0)
+      assert %{level: :caution} = JournalDiskWatch.view(big, "m")
+
+      {state, true} = sample(state, 92.9, 3)
+      assert JournalDiskWatch.view(state, "m") == nil
+    end
+
     test "an unreadable disk changes nothing" do
       {state, true} = sample(JournalDiskWatch.new(), 75.0, 0)
       {same, false} = JournalDiskWatch.sample(state, :unknown, [], false, at(1))

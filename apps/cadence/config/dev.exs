@@ -4,6 +4,17 @@ config :cadence, :opportunity_capability_secret, "cadence-dev-opportunity-capabi
 
 config :cadence, provider_local_credentials: [enabled: true]
 
+# The journal shares the host's disk here (mostly not ours): its alert (ux U66) and early reclaim
+# act only near a genuinely full disk, with under 10 GiB free (lead 11-15). Defaults (70/90/60,
+# reclaim 80 -> 70, no floor) are for a disk of its own.
+config :cadence, :ingress_journal,
+  disk_caution: 0.95,
+  disk_critical: 0.97,
+  disk_clear: 0.93,
+  early_reclaim_at: 0.97,
+  early_reclaim_to: 0.95,
+  disk_emergency_free_bytes: 10 * 1_024 * 1_024 * 1_024
+
 config :cadence, Cadence.Repo,
   username: "postgres",
   password: "postgres",
