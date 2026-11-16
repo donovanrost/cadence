@@ -67,5 +67,5 @@ export function filteredEmpty(f: EpisodeFilters, nameOf: (id: string) => string)
 /** 'N of M shown' where the table starts; a capped read says the count covers only that read. */
 export function shownLine(shown: number, total: number, read: number): string {
   const line = `${shown} of ${total} shown`;
-  return read >= EPISODES_LIMIT ? `${line} · from the first ${EPISODES_LIMIT} alarms` : line;
+  return read >= EPISODES_LIMIT ? `${line} · from the ${EPISODES_LIMIT} loaded` : line;
 }

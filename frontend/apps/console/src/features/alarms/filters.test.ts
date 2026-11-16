@@ -60,7 +60,7 @@ describe("Alarms filters (ux U69 A6)", () => {
       "No alarms on EARENDIL-312.",
     );
     expect(shownLine(4, 17, 17)).toBe("4 of 17 shown");
-    expect(shownLine(4, 200, 200)).toBe("4 of 200 shown · from the first 200 alarms");
+    expect(shownLine(4, 200, 200)).toBe("4 of 200 shown · from the 200 loaded");
   });
   it("changes one filter and drops empty ones from the URL", () => {
     expect(withFilter({ tab: "acknowledged", sc: "a" }, "sc", null)).toEqual({
