@@ -242,14 +242,14 @@ await runBrowserGate(
       );
       await waitForExpression(
         client,
-        "Boolean(document.querySelector('#save-packet-bindings'))",
+        "Boolean(document.querySelector('[data-testid=\"save-packet-bindings\"]'))",
         "telemetry_decom packet_bindings mounted on the console",
         { signal },
       );
       await record(client, "(() => { history.back(); return { ok: true }; })()", "back", signal);
       await waitForExpression(
         client,
-        `location.pathname === ${JSON.stringify(fixtureMission)} && !document.querySelector('#save-packet-bindings')`,
+        `location.pathname === ${JSON.stringify(fixtureMission)} && !document.querySelector('[data-testid="save-packet-bindings"]')`,
         "router back to the fixture",
         { signal },
       );
