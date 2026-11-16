@@ -58,7 +58,12 @@ export type UseLine = Readonly<{
 }>;
 /** A failure outcome that can also list what still uses the thing (U82). */
 export type RefusalOutcome = FailureOutcome &
-  Readonly<{ uses?: readonly UseLine[]; closing?: string }>;
+  Readonly<{ uses?: readonly UseLine[]; closing?: string; entityId?: string }>;
+
+/** The change-set row to mark after an apply-time in-use refusal (ux U82): its entity, and why. */
+export type InUseMark = Readonly<{ entityId: string; sentence: string }>;
+export const inUseMark = (o: RefusalOutcome | null): InUseMark | null =>
+  o?.entityId ? { entityId: o.entityId, sentence: o.sentence.replace(/:$/, ".") } : null;
 
 const routeText = (r: InUse["uses"]["routes"]["items"][number]) => {
   const station = r.station?.code || r.station?.name;
@@ -136,16 +141,19 @@ export function inUseOutcome(
   const sentence = atStage
     ? `${subject(d.entity)} is still in use, so it can't be archived:`
     : `${subject(d.entity)} is in use now, so this change set can't be applied:`;
+  const entityId = d.entity?.id;
   if (lines.length === 0)
     return {
       changed: false,
       sentence: sentence.replace(/:$/, "."),
       closing: "Something still uses it.",
+      ...(entityId ? { entityId } : {}),
     };
   return {
     changed: false,
     sentence,
     uses: lines,
+    ...(entityId ? { entityId } : {}),
     closing: atStage
       ? "Move or remove these first."
       : "Move these first, or take the archive out of the change set.",

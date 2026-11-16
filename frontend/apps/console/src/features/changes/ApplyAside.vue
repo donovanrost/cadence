@@ -6,7 +6,7 @@ import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
 import { NOTHING_RUNNING } from "./nothingRunning.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import { blockingReason, submitChangeSet, type Preview, type SubmitResult } from "./actions.ts";
-import { refusalOutcome, type RefusalOutcome } from "./refusals.ts";
+import { inUseMark, refusalOutcome, type InUseMark, type RefusalOutcome } from "./refusals.ts";
 import { holdsKey, NOT_RUN_REASON, RECHECKING_REASON, type HeldChecks } from "./checks-view.ts";
 import { whyPlaceholder } from "./holds.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
@@ -20,7 +20,12 @@ const props = defineProps<{
   /** ux B4: the previous checks while the current set's re-run (or failed). */
   held: HeldChecks | null;
 }>();
-const emit = defineEmits<{ result: [result: SubmitResult]; changed: [] }>();
+const emit = defineEmits<{
+  result: [result: SubmitResult];
+  changed: [];
+  /** U82: the archive row an apply-time in-use refusal is about, or null to clear it. */
+  inUse: [mark: InUseMark | null];
+}>();
 
 const why = ref("");
 const acknowledged = ref(false);
@@ -77,6 +82,7 @@ async function apply() {
   if (blocked.value !== null || busy.value) return;
   busy.value = true;
   failure.value = null;
+  emit("inUse", null);
   try {
     const result = await submitChangeSet(props.missionId, props.changeSet.id, {
       reason: why.value.trim(),
@@ -86,6 +92,7 @@ async function apply() {
     if (result.ok) emit("result", result.value);
     else {
       failure.value = refusalOutcome(result.error, "applied");
+      emit("inUse", inUseMark(failure.value));
       emit("changed");
     }
   } finally {

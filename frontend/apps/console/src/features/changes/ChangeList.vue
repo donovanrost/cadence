@@ -2,13 +2,14 @@
 import type { MissionId } from "@/api/index.ts";
 import { ref, watch } from "vue";
 import { useSession } from "@/shell";
-import { ApCallout, ApPanel, plural, refocusFirst } from "@/ui";
+import { ApCallout, ApPanel, ApStatusMark, plural, refocusFirst } from "@/ui";
 import { discardChangeSet, failureOutcome, withdrawChange, type PreviewItem } from "./actions.ts";
 import ChangeConflict from "./ChangeConflict.vue";
 import { conflictRow } from "./rebase.ts";
 import ChangeOps from "./ChangeOps.vue";
 import ChangeRowHead from "./ChangeRowHead.vue";
 import DiscardConfirm from "./DiscardConfirm.vue";
+import type { InUseMark } from "./refusals.ts";
 import type { Change, ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K1: one row per staged change, collapsed; expanded shows what each op touches. */
@@ -18,7 +19,11 @@ const props = defineProps<{
   changeSet: ChangeSet;
   /** The Conflicts check's items by op id (rebase.ts conflictOps). */
   conflicts: ReadonlyMap<string, readonly PreviewItem[]>;
+  /** U82: the archive refused at apply because it's in use now; its row carries a crit mark. */
+  inUse?: InUseMark | null;
 }>();
+const inUseRow = (change: Change) =>
+  props.inUse ? change.ops.some((o) => o.entity_id === props.inUse?.entityId) : false;
 const conflicting = (change: Change) =>
   change.ops.filter((o) => props.conflicts.has(o.id)).map((o) => o.id);
 const rowOf = (change: Change) =>
@@ -117,6 +122,12 @@ function toggle(id: string) {
           @withdraw="withdraw(change)"
           @toggle="toggle(change.id)"
         />
+        <p
+          v-if="inUseRow(change)"
+          class="m-0 flex items-center gap-2 px-4 pb-3 text-sm text-crit-text"
+        >
+          <ApStatusMark state="crit" />{{ inUse?.sentence }}
+        </p>
         <ChangeConflict
           v-if="changeSet.state === 'open' && conflicting(change).length > 0"
           :mission-id="missionId"
