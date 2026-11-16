@@ -32,6 +32,7 @@ export const providerErrorPaths = [
   "service_profile_ref",
   "delivery_profile_ref",
 ] as const;
+export type ProviderErrorPath = (typeof providerErrorPaths)[number];
 
 export const providerOptionsReader = d.object({
   providers: d.array(choice, 200),
