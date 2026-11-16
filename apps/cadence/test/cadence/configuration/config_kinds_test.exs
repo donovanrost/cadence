@@ -299,6 +299,96 @@ defmodule Cadence.Configuration.ConfigKindsTest do
     end
   end
 
+  # The kind's own pin rules (pin_exists, governed_rule). The legacy Spacecraft.Identity form had
+  # different ones and left with host cleanup (a); these are tested here, at the kind.
+  describe "spacecraft pins" do
+    test "a pin names an existing, active, shared profile version", ctx do
+      {profile_id, _} = block(ctx, 1)
+
+      assert validation_errors(ctx, [
+               create(
+                 "spacecraft",
+                 spacecraft_doc("Synthetic", 50, {"spacecraft_configuration_profile_x", 1})
+               )
+             ]) == [%{path: "spacecraft_type_id", message: "Choose a shared profile"}]
+
+      assert validation_errors(ctx, [
+               create("spacecraft", spacecraft_doc("Unknown", 51, {profile_id, 9}))
+             ]) == [%{path: "spacecraft_type_id", message: "That profile version doesn't exist"}]
+
+      assert validation_errors(ctx, [
+               create("spacecraft", spacecraft_doc("Pinned", 52, {profile_id, 1}))
+             ]) == []
+    end
+
+    test "an edit that keeps the pin isn't checked against it", ctx do
+      {_profile_id, [sc]} = block(ctx, 1)
+      assert validation_errors(ctx, [update("spacecraft", sc, "display_name", "SC-1b")]) == []
+    end
+
+    test "with generations off, a spacecraft governed by configuration review keeps its pin",
+         ctx do
+      {:ok, _} =
+        ConfigurationSettings.put_profile_framing_generations(ctx.org, ctx.mission, false, %{
+          id: "test",
+          name: "Test"
+        })
+
+      {sc, repin} = governed_with_v2(ctx)
+
+      assert validation_errors(ctx, [repin]) == [
+               %{
+                 path: "spacecraft_type_id",
+                 message: "Change framing in Communications and submit it for review"
+               }
+             ]
+
+      assert validation_errors(ctx, [update("spacecraft", sc, "display_name", "Renamed")]) == []
+    end
+
+    test "with generations on (DECISIONS #33/#45), a governed spacecraft may be re-pinned", ctx do
+      assert ConfigurationSettings.profile_framing_generations?(ctx.org, ctx.mission)
+      {_sc, repin} = governed_with_v2(ctx)
+      assert validation_errors(ctx, [repin]) == []
+    end
+
+    test "the configuration review's revision id can't be changed by an edit", ctx do
+      {sc, _repin} = governed_with_v2(ctx)
+      edit = update("spacecraft", sc, "metadata.spacecraft_configuration_revision_id", "rev-2")
+
+      assert validation_errors(ctx, [edit]) == [
+               %{
+                 path: "metadata",
+                 message:
+                   "spacecraft_configuration_revision_id is managed by configuration review"
+               }
+             ]
+    end
+  end
+
+  # A spacecraft governed by configuration review on profile v1, a v2 of its profile, and the op
+  # that re-pins it to v2.
+  defp governed_with_v2(ctx) do
+    {profile_id, [sc]} = block(ctx, 1)
+    {:ok, spacecraft} = SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, sc)
+    governed = %{spacecraft | metadata: %{"spacecraft_configuration_revision_id" => "rev-1"}}
+    {:ok, _} = SpacecraftStore.update_spacecraft(ctx.org, governed)
+
+    rename = update("spacecraft_profile", profile_id, "display_name", "Block v2")
+    apply_ops(ctx, "v2, no rollout", [Map.put(rename, :options, %{rollout: "none"})])
+
+    {sc, update("spacecraft", sc, "spacecraft_type_version", 2)}
+  end
+
+  defp validation_errors(%{alice: alice, mission: mission}, ops) do
+    {:ok, %{checks: checks}} = Configuration.preview(alice, mission, {:ops, ops})
+
+    for %{key: "validation", items: items} <- checks,
+        %{errors: errors} <- items,
+        error <- errors,
+        do: Map.take(error, [:path, :message])
+  end
+
   defp block(ctx, count) do
     profile_id = "profile-" <> unique("block")
 
