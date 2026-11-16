@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { ApButton, ApCallout, ApSheet, ApTextarea } from "@/ui";
 
 /** A confirm with a required reason (L13 revokes). The caller runs the write and reports back. */
 defineProps<{ title: string; sentence: string; confirm: string }>();
 const emit = defineEmits<{ confirm: [reason: string] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
+// ux a11y A1 exception: the sheet opens on Reason, so the consequence sentence describes the dialog.
+const consequence = useId();
 const reason = ref("");
 const failure = ref<string | null>(null);
 const busy = ref(false);
@@ -33,9 +35,15 @@ defineExpose({ open, settle });
 </script>
 
 <template>
-  <ApSheet ref="sheet" :title="title" width="narrow" initial-focus="textarea">
+  <ApSheet
+    ref="sheet"
+    :title="title"
+    width="narrow"
+    initial-focus="textarea"
+    :described-by="consequence"
+  >
     <div class="flex flex-col gap-3">
-      <p class="m-0 text-md text-text-2">{{ sentence }}</p>
+      <p :id="consequence" class="m-0 text-md text-text-2">{{ sentence }}</p>
       <ApTextarea v-model="reason" label="Reason" required :maxlength="2000" />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
     </div>

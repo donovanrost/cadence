@@ -34,6 +34,11 @@ const props = withDefaults(
      * an element, or a function evaluated at close. Without it, the page's main heading.
      */
     returnFocus?: HTMLElement | (() => HTMLElement | null) | null | undefined;
+    /**
+     * ux a11y A1 exception: a danger sheet that opens on its Reason skips the consequence sentence,
+     * so the dialog is described by it. The id of that sentence; absent, no aria-describedby.
+     */
+    describedBy?: string | undefined;
   }>(),
   { width: "narrow", initialFocus: "footer button", placement: "center", dismissible: true },
 );
@@ -97,6 +102,7 @@ defineExpose({ open, close });
   <dialog
     ref="dialog"
     :aria-labelledby="titleId"
+    :aria-describedby="describedBy"
     :aria-modal="modal ? 'true' : undefined"
     class="flex-col border border-line bg-panel p-0 text-readout open:flex max-md:inset-0 max-md:m-0 max-md:h-dvh max-md:max-h-none max-md:w-full max-md:max-w-none max-md:border-0"
     :class="

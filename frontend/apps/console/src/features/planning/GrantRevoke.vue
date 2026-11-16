@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { fieldErrors } from "@/api";
 import { ApButton, ApCallout, ApSheet, ApTextarea } from "@/ui";
 import { grantFailure, identityName, revokeGrant, type Grant } from "./grants.ts";
@@ -9,6 +9,8 @@ import { grantFailure, identityName, revokeGrant, type Grant } from "./grants.ts
 const props = defineProps<{ missionId: MissionId }>();
 const emit = defineEmits<{ revoked: [] }>();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
+// ux a11y A1 exception: the sheet opens on Reason, so the consequence sentence describes the dialog.
+const consequence = useId();
 const grant = ref<Grant | null>(null);
 const reason = ref("");
 const error = ref<string | null>(null);
@@ -42,9 +44,15 @@ defineExpose({ open });
 </script>
 
 <template>
-  <ApSheet ref="sheet" title="Revoke grant" width="narrow" initial-focus="textarea">
+  <ApSheet
+    ref="sheet"
+    title="Revoke grant"
+    width="narrow"
+    initial-focus="textarea"
+    :described-by="consequence"
+  >
     <div class="flex flex-col gap-3">
-      <p class="m-0 text-md text-text-2">
+      <p :id="consequence" class="m-0 text-md text-text-2">
         {{ grant ? identityName(grant) : "" }} stops acting on its own now. Plans it already
         submitted stay as they are.
       </p>

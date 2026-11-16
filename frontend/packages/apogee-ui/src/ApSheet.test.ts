@@ -234,4 +234,18 @@ describe("ApSheet", () => {
       elsewhere.remove();
     });
   });
+
+  describe("describedBy (ux a11y A1: a reason-first danger sheet is described by its consequence)", () => {
+    it("sets the dialog's aria-describedby to the given id", () => {
+      const { wrapper } = mountSheet("textarea", { describedBy: "revoke-consequence" });
+      expect(wrapper.get("dialog").attributes("aria-describedby")).toBe("revoke-consequence");
+      wrapper.unmount();
+    });
+
+    it("leaves aria-describedby off when it isn't given", () => {
+      const { wrapper } = mountSheet();
+      expect(wrapper.get("dialog").attributes("aria-describedby")).toBeUndefined();
+      wrapper.unmount();
+    });
+  });
 });

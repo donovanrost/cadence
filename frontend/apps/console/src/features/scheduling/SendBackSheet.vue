@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApSheet, ApTextarea } from "@/ui";
 import { REASON_MAX } from "./api.ts";
@@ -13,6 +13,8 @@ const props = defineProps<{ author: string | null; busy: boolean }>();
 const emit = defineEmits<{ submit: [reason: string] }>();
 const error = defineModel<ApiError | null>("error", { default: null });
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
+// ux a11y A1 exception: the sheet opens on Reason, so the consequence sentence describes the dialog.
+const consequence = useId();
 const reason = ref("");
 const ready = computed(() => reason.value.trim().length > 0);
 
@@ -31,8 +33,9 @@ defineExpose({ open, close });
     ref="sheet"
     :title="`Send back${props.author ? ` to ${props.author}` : ''}`"
     initial-focus="textarea"
+    :described-by="consequence"
   >
-    <p class="m-0 text-base text-text-3">
+    <p :id="consequence" class="m-0 text-base text-text-3">
       The plan returns to draft. Nothing is booked. Your comment is recorded with the decision.
     </p>
     <ApTextarea
