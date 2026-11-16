@@ -289,6 +289,25 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 | 27–29 | unclaimed | main ports: claim before use |
 | 31 | qa | restart dry assemblies (`scratchpad/dry-b-wt`; (B) 11-14 01:23–01:35Z, the L8 + L4 bundle next) |
 
+## Daily dev retention slot
+
+Once a day, in a qa slot outside passes (no active contact; not within 1 h of an armed pass), on `cadence_apogee_dev`
+and this stack's QuestDB only. devops samples disk before and after (qa pastes their lines into the checklist).
+
+1. **QuestDB: keep today + 2 full days** (director). Drop older day partitions with a WALL-CLOCK `WHERE` on the
+   partition day, never QuestDB's TTL: TTL counts from `MAX(observed_at)`, the spacecraft clock, so one far-future
+   frame would drop every current day. Export anything an open check still needs first (`var/questdb-export-*`).
+2. **identity_states: 96 h prune** (director, from 11-17; the first rows qualify ~11-18 00:05Z, because the oldest
+   `first_seen_at` on dev is 11-14 00:04Z). `var/qa-scripts/identity-states-prune.sh` with its default cutoff
+   (now − 96 h): `dry` (a full scan of a ~9 GB table, so slot work), then `delete`, then `vacuum` (plain VACUUM:
+   it makes the space reusable and pauses growth but returns nothing to disk; no VACUUM FULL without the
+   director). Run with `BATCH=1000` and `PGAPPNAME=qa-cleanup-<date>` so a deadline can `pg_cancel_backend` it;
+   stop the deletes below 20.5 GiB free. The 11-16 wrapper `var/qa-scripts/cleanup-window.sh` shows the pattern
+   (start-by and cancel-at per step, disk guard), but its times are hard-coded for 11-16.
+
+Growth this slot can't stop: identity_states adds ~3.6 GB/day until domain's change (a) stops writing a state for a
+first-seen canonical observation (#99).
+
 ## Known limits
 
 - **Live telemetry saturates the shared laptop.** On 2026-11-08, ten 1 Hz feeds plus team builds
