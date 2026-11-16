@@ -9,7 +9,12 @@ import { byHour, needsSpacecraftPrefix, severityState, subjectLink } from "./mod
  * E2 · Events newest first under UTC hour headers. The server sentence names its subject and links
  * to it (refs.subject), else to the spacecraft it names.
  */
-const props = defineProps<{ events: readonly MissionEvent[] }>();
+/** `selectedId` makes each row's time a toggle for the event detail (ux U71 A8). */
+const props = defineProps<{
+  events: readonly MissionEvent[];
+  selectedId?: string | null | undefined;
+}>();
+const emit = defineEmits<{ select: [id: string] }>();
 const groups = computed(() => byHour(props.events));
 /** Distinct spacecraft of a folded row, in scid order. */
 const spacecraftOf = (members: readonly MissionEvent[]) =>
@@ -30,6 +35,8 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
         :time="`${formatClock(new Date(event.at))}Z`"
         :datetime="event.at"
         :state="severityState(event.severity)"
+        :selected="selectedId === undefined ? undefined : selectedId === event.id"
+        @select="emit('select', event.id)"
       >
         <details v-if="members.length" class="inline">
           <summary class="cursor-pointer">

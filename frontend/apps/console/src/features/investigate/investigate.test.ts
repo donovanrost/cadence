@@ -228,6 +228,7 @@ describe("event log lines (B2)", () => {
       contact_id: null,
       subject: null,
     },
+    record: null,
   };
   const raised = {
     id: "e1",

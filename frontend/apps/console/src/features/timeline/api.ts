@@ -36,6 +36,30 @@ export const subjectKinds = [
   "pass",
 ] as const;
 
+/**
+ * The producing record's own fields, for the event detail panel (U69 A8a, api a87bee73d). Each is
+ * null when that record has none. Optional so an older server's rows still decode.
+ */
+const record = d.object({
+  // free-text: the producing store's own status word, shown as said.
+  status: d.nullable(d.string),
+  source_record: d.nullable(
+    d.object({
+      // free-text: the producing store's record kind, shown as said (Technical details).
+      kind: d.string,
+      id: d.string,
+    }),
+  ),
+  source_endpoint_ref: d.nullable(d.string),
+  scheduled_contact_id: d.nullable(d.string),
+  realized_contact_id: d.nullable(d.string),
+  path_id: d.nullable(d.string),
+  capability_instance_id: d.nullable(d.string),
+  activation_id: d.nullable(d.string),
+  // free-text: an opaque correlation key.
+  correlation_key: d.nullable(d.string),
+});
+
 const event = d.object({
   id: d.token,
   at: d.timestamp,
@@ -59,6 +83,7 @@ const event = d.object({
       ),
     ),
   }),
+  record: d.optional(d.nullable(record)),
 });
 
 export const eventsReader = d.object({
@@ -128,4 +153,19 @@ export function fetchDensity(
     densityReader,
     signal ? { signal } : {},
   );
+}
+
+const oneEventReader = d.object({ event });
+
+/** A Timeline permalink: one event by id (U69 A8b). Ids contain ':', so the id is URL-encoded. */
+export function fetchEvent(
+  missionId: MissionId,
+  eventId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<MissionEvent>> {
+  return request(
+    `${base(missionId)}/${encodeURIComponent(eventId)}`,
+    oneEventReader,
+    signal ? { signal } : {},
+  ).then((r) => (r.ok ? { ok: true, value: r.value.event } : r));
 }

@@ -35,6 +35,7 @@ const ev = (id: string, at: string, severity: MissionEvent["severity"] = "info")
     contact_id: null,
     subject: null,
   },
+  record: null,
 });
 
 describe("timeline", () => {

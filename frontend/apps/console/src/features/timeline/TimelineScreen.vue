@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -8,11 +8,14 @@ import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
   useNow,
+  ApButton,
+  ApCallout,
   ApEmptyState,
   ApPageHeader,
   ApPanel,
   ApRemote,
   ApSelect,
+  ApSheet,
   ApTimeRange,
   type TimeRange,
 } from "@/ui";
@@ -29,7 +32,9 @@ import {
 import { DEFAULT_KINDS, eventKinds, fetchDensity, fetchEvents, type EventKind } from "./api.ts";
 import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
+import EventDetail from "./EventDetail.vue";
 import EventLog from "./EventLog.vue";
+import { useEventSelection } from "./useEventSelection.ts";
 import {
   densityBucketS,
   scopeOptions,
@@ -176,6 +181,48 @@ const shownEvents = computed(() => {
   return defaultView.value && d.status === "ready" ? withAlertingData(main, d.value.events) : main;
 });
 const held = useHeldNewest(shownEvents, scroller);
+/**
+ * Event detail (ux decisions U71 A8): a row's time selects it (?event=<id>). From 1100 the detail is
+ * an aside beside the log; below, a sheet. A permalink centres the window on the event and focuses
+ * the panel's title.
+ */
+const listWindow = computed(() =>
+  events.state.value.status === "ready"
+    ? {
+        from: Date.parse(events.state.value.value.from),
+        to: Date.parse(events.state.value.value.to),
+      }
+    : null,
+);
+function centreOn(at: number) {
+  const w = listWindow.value;
+  const span = w ? w.to - w.from : 86_400_000;
+  const to = Math.min(at + span / 2, Date.now());
+  setWindow({ kind: "custom", from: to - span, to });
+}
+const selection = useEventSelection({
+  missionId,
+  shown: shownEvents,
+  window: listWindow,
+  centreOn,
+});
+const wideQuery =
+  typeof window.matchMedia === "function" ? window.matchMedia("(min-width: 68.75rem)") : null;
+const wide = ref(wideQuery?.matches ?? true);
+const onWide = (e: MediaQueryListEvent) => (wide.value = e.matches);
+wideQuery?.addEventListener("change", onWide);
+onBeforeUnmount(() => wideQuery?.removeEventListener("change", onWide));
+const detail = ref<InstanceType<typeof EventDetail> | null>(null);
+const detailSheet = ref<InstanceType<typeof ApSheet> | null>(null);
+let fromLink = selection.selectedId.value !== null;
+watch(selection.event, async (e) => {
+  if (!e) return void detailSheet.value?.close();
+  if (!wide.value) detailSheet.value?.open();
+  if (!fromLink) return;
+  fromLink = false;
+  await nextTick();
+  detail.value?.focusTitle();
+});
 
 const missing = computed(
   () => events.state.value.status === "failed" && events.state.value.error.kind === "not_found",
@@ -218,38 +265,68 @@ const short = (iso: string) => {
           @brush="brushTo"
         />
       </div>
-      <ApPanel index="E2" title="Event log" pane flush class="console:min-h-0 console:flex-1">
-        <ApRemote
-          :state="events.state.value"
-          loading-label="LOADING EVENTS…"
-          @retry="events.refetch"
-        >
-          <template #default="{ value }">
-            <ApEmptyState
-              v-if="(shownEvents ?? value.events).length === 0"
-              :headline="`No events between ${short(value.from)} and ${short(value.to)}.`"
-            />
-            <template v-else>
-              <div ref="logAnchor" aria-hidden="true" />
-              <button
-                v-if="held.pending.value > 0"
-                type="button"
-                class="sticky top-0 z-10 w-full cursor-pointer border-b border-hairline bg-raised px-4 py-2 text-left font-mono text-xs text-readout uppercase hover:text-bright"
-                @click="held.showNew"
-              >
-                {{ held.pending.value }} new {{ held.pending.value === 1 ? "event" : "events" }} ↑
-              </button>
-              <EventLog :events="held.shown.value ?? shownEvents ?? value.events" />
-              <p
-                v-if="eventsCapNote(value.events.length)"
-                class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
-              >
-                {{ eventsCapNote(value.events.length) }}
-              </p>
+      <ApCallout v-if="selection.notFound.value" tone="info">
+        This event isn't in the timeline any more.
+        <template #action>
+          <ApButton size="compact" variant="secondary" @click="selection.clear">Clear</ApButton>
+        </template>
+      </ApCallout>
+      <div
+        class="grid grid-cols-1 gap-2.5 console:min-h-0 console:flex-1"
+        :class="selection.event.value && wide ? 'console:grid-cols-[minmax(0,1fr)_380px]' : ''"
+      >
+        <ApPanel index="E2" title="Event log" pane flush class="console:min-h-0">
+          <ApRemote
+            :state="events.state.value"
+            loading-label="LOADING EVENTS…"
+            @retry="events.refetch"
+          >
+            <template #default="{ value }">
+              <ApEmptyState
+                v-if="(shownEvents ?? value.events).length === 0"
+                :headline="`No events between ${short(value.from)} and ${short(value.to)}.`"
+              />
+              <template v-else>
+                <div ref="logAnchor" aria-hidden="true" />
+                <button
+                  v-if="held.pending.value > 0"
+                  type="button"
+                  class="sticky top-0 z-10 w-full cursor-pointer border-b border-hairline bg-raised px-4 py-2 text-left font-mono text-xs text-readout uppercase hover:text-bright"
+                  @click="held.showNew"
+                >
+                  {{ held.pending.value }} new {{ held.pending.value === 1 ? "event" : "events" }} ↑
+                </button>
+                <EventLog
+                  :events="held.shown.value ?? shownEvents ?? value.events"
+                  :selected-id="selection.selectedId.value"
+                  @select="selection.toggle"
+                />
+                <p
+                  v-if="eventsCapNote(value.events.length)"
+                  class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
+                >
+                  {{ eventsCapNote(value.events.length) }}
+                </p>
+              </template>
             </template>
-          </template>
-        </ApRemote>
-      </ApPanel>
+          </ApRemote>
+        </ApPanel>
+        <aside
+          v-if="selection.event.value && wide"
+          aria-label="Event detail"
+          class="border border-line bg-panel console:min-h-0 console:overflow-auto"
+        >
+          <EventDetail ref="detail" :event="selection.event.value" @close="selection.clear" />
+        </aside>
+      </div>
+      <ApSheet v-if="!wide" ref="detailSheet" title="Event" @closed="selection.clear">
+        <EventDetail
+          v-if="selection.event.value"
+          ref="detail"
+          :event="selection.event.value"
+          @close="detailSheet?.close()"
+        />
+      </ApSheet>
     </template>
   </div>
 </template>
