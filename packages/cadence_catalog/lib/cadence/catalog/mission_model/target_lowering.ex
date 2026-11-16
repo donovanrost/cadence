@@ -135,7 +135,10 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
           size_bits: size_bits,
           data_type: data_type,
           byte_order: telemetry_byte_order(type),
-          engineering_unit: engineering_unit(parameter, index) || engineering_unit(type, index)
+          engineering_unit: engineering_unit(parameter, index) || engineering_unit(type, index),
+          # Contract 3: decom computes engineering values from these (raw stays raw).
+          calibrator: calibrator(type, index),
+          enumerations: enumerations(type)
         }
 
         {:cont, {:ok, [field | fields]}}
@@ -490,6 +493,32 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     do: "less_equal"
 
   defp comparison_operator(operator), do: operator
+
+  # The type's polynomial calibrator, lowest-order coefficient first; nil when it has none or one
+  # that doesn't execute yet (target legalization reports those).
+  defp calibrator(type, index) do
+    with {:ok, %Declaration{kind: :calibrator} = calibrator} <-
+           referenced_declaration(type, nil, 0, :calibrator, index),
+         kind when kind in [:polynomial, "polynomial"] <-
+           value(calibrator.definition, :algorithm_type),
+         [_ | _] = coefficients <- value(calibrator.definition, :coefficients),
+         true <- Enum.all?(coefficients, &is_number/1) do
+      %{type: "polynomial", coefficients: coefficients}
+    else
+      _none -> nil
+    end
+  end
+
+  # The type's states as {value, label}, by value; [] for a type without any.
+  defp enumerations(type) do
+    for state <- List.wrap(value(type.definition, :enumerations)),
+        state_value = value(state, :value),
+        label = value(state, :label),
+        is_integer(state_value) and is_binary(label) do
+      %{value: state_value, label: label}
+    end
+    |> Enum.sort_by(& &1.value)
+  end
 
   defp referenced_declaration(owner, entry, position, role, index) do
     source_ref = entry && (value(entry, :parameter_ref) || value(entry, :argument_ref))

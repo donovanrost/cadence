@@ -9,7 +9,8 @@ defmodule Cadence.Catalog.MissionModel.Target do
     TargetLowering
   }
 
-  @contracts %{telemetry: "2", algorithm: "1", monitoring: "1", command: "2"}
+  # telemetry 3 (#92 c, 11-15): fields carry their calibrator and enumerations.
+  @contracts %{telemetry: "3", algorithm: "1", monitoring: "1", command: "2"}
 
   @target_kinds %{
     telemetry: [
@@ -99,9 +100,14 @@ defmodule Cadence.Catalog.MissionModel.Target do
     end
   end
 
+  # Polynomial calibrators execute at decom (contract 3); state maps arrive as the parameter
+  # type's enumerations; tables and splines aren't executable yet and say so.
   defp legalize(%Declaration{kind: :calibrator} = declaration, :telemetry) do
     case value(declaration.definition, :algorithm_type) do
-      kind when kind in [:polynomial, :table, :state_map, "polynomial", "table", "state_map"] ->
+      kind when kind in [:polynomial, "polynomial"] ->
+        []
+
+      kind when kind in [:table, :state_map, :spline, "table", "state_map", "spline"] ->
         [unsupported(declaration, :telemetry, "MM_CALIBRATOR_RUNTIME_UNSUPPORTED")]
 
       _other ->
