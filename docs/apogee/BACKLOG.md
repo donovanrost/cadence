@@ -130,7 +130,7 @@ missing endpoint or decision; an item with no blocker can start now.
 
 
 ### Known-bad dev telemetry: 2026-11-10 wrong-craft passes (director 11-16)
-On 2026-11-10 (dev, Earendil demo mission), stray provider downlink streams reached station listen ports first, and each pass's listener kept the first peer. So some passes recorded ANOTHER spacecraft's frames under their own spacecraft, and lost their own. Mechanism: a provider-side restart left live streams reconnecting (simulator, fixed in 3ea527b2b), plus first-peer-wins listen-mode profiles (open in Cadence; see the shared-listener move and the frame-SCID cross-check). No repair: the data stays as known-bad history.
+On 2026-11-10 (dev, Earendil demo mission), stray provider downlink streams reached station listen ports first, and each pass's listener kept the first peer. So some passes recorded ANOTHER spacecraft's frames under their own spacecraft, and lost their own. Mechanism: a provider-side restart left live streams reconnecting (simulator, fixed in 3ea527b2b), plus first-peer-wins listen-mode profiles (open in Cadence; see the shared-listener move and the frame-SCID cross-check). No repair: the data stays as known-bad history. Cause status: SUPPORTED, NOT DIRECTLY OBSERVED (the simulator log doesn't reach 11-10; it shows the same Orchestrator failure mode on 11-12 before 3ea527b2b ran) (director).
 DO NOT USE these passes for limit tuning, model or plan comparisons, replay cases, baselines or any "typical pass" sample. Exclude them from any gate or comparison that draws on 2026-11-10:
 
 | Realized contact (…_run) | Spacecraft (frames actually from) | Window (UTC) |
@@ -148,7 +148,9 @@ DO NOT USE these passes for limit tuning, model or plan comparisons, replay case
 | scheduled_contact_Jgx1bbIKOxxt4TQmWtifmiLr | EARENDIL-004 (partly from 009) | 20:18–20:26 |
 
 Found from 1–5% table samples, so a short pass could be missing. To be safe, exclude ALL 2026-11-10 passes on the three affected station profiles (provider_profile_i4467s4fie_3F, _2V and _35). No other day since 11-08 shows a mismatch in sampling.
-Follow-ups: (A) the frame-SCID cross-check: a single-craft pass refuses a wrong-SCID frame as a counted anomaly (domain, after the same-org SCID warning; lands at a restart). (B) a planned move of listen profiles to the shared listener, STAGED (director): one downlink profile canary through a change set by a QA admin, watched over its next passes, then the other 9 (from 11-17 unless a clean slot today).
+Follow-ups: (A) the frame-SCID cross-check: a single-craft pass refuses a wrong-SCID frame as a counted anomaly (domain, after the same-org SCID warning; lands at a restart). (B) a planned move of listen profiles to the shared listener, STAGED (director): one downlink profile canary through a change set by a QA admin, watched over its next passes, then the other 9. CANARY = profile _3F (director): early 11-17, after the blackout and ≥30 min before the 06:02Z overlap; watched over the 06:02 and 12:30 overlaps (001 not refused, SCIDs correct); revert through a change set if it misbehaves. Tonight's 18:43–18:58Z _3F overlap (006/001) is accepted; qa checks both passes' SCIDs read-only afterwards.
+**Routing pattern (follow-up, domain proposes the fix):** a route's rule pins ONE fixed transport (listen port) while the provider confirms whichever station it gets, so passes at different stations can overlap on one port (~70 bookings in a day ran on another station's port; 4 overlaps on _3F in 30 h). Goes with per-booking ports.
+**Armed run (A1/A2, C1 dry):** moved to 11-17 19:23:57Z on provider_reservation_kmzskno54a_5L2YR (003 at Fairbanks, uplink leg), director-approved with the SCID-3 verification check, the gate condition and no profile change on 003's path within 1 h; tonight had no uplink pass.
 
 
 ## 1. Next up, per person (the short version)
