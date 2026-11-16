@@ -316,11 +316,3 @@ export function brushRange(
   const t = (f: number) => Math.round(window.from + Math.min(1, Math.max(0, f)) * span);
   return { from: t(Math.min(a, b)), to: t(Math.max(a, b)) };
 }
-
-/** The events read returns at most this many (timeline/api.ts). */
-export const EVENTS_LIMIT = 500;
-/** When the read came back full, some events in the window aren't shown: say so (no silent cut). */
-export const eventsCapNote = (count: number): string | null =>
-  count >= EVENTS_LIMIT
-    ? `Showing ${EVENTS_LIMIT} events, the most one read returns. Narrow the window to see them all.`
-    : null;

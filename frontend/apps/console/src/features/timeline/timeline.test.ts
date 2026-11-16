@@ -2,7 +2,7 @@ import { effectScope, nextTick, ref } from "vue";
 import { useHeldNewest } from "./useHeldNewest.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { scid as scidReader, decode } from "@/api/index.ts";
-import { eventsReader, type MissionEvent } from "./api.ts";
+import { eventsReader, type EventsPage, type MissionEvent } from "./api.ts";
 import {
   byHour,
   densityBars,
@@ -265,12 +265,37 @@ describe("E1 brush (OpsLists §Timeline)", () => {
   });
 });
 
-describe("a full events read is never cut silently (parity D2)", () => {
-  it("says so at the read's limit", async () => {
-    const { eventsCapNote } = await import("./model.ts");
-    expect(eventsCapNote(499)).toBeNull();
-    expect(eventsCapNote(500)).toBe(
-      "Showing 500 events, the most one read returns. Narrow the window to see them all.",
+describe("a full events read is never cut silently (parity D2, now A9d older pages)", () => {
+  const page = (ids: string[], nextCursor: string | null): EventsPage => ({
+    from: "2026-11-15T00:00:00Z",
+    to: "2026-11-16T00:00:00Z",
+    events: ids.map((id) => ev(id, "2026-11-15T10:00:00Z")),
+    nextCursor,
+  });
+  it("offers older events while the server has a cursor, and appends them", async () => {
+    const { useOlderEvents } = await import("./useOlderEvents.ts");
+    const first = ref<EventsPage | null>(page(["a"], "c1"));
+    const pages: Record<string, EventsPage> = { c1: page(["b"], "c2"), c2: page(["c"], null) };
+    const o = useOlderEvents(first, (c) =>
+      Promise.resolve({ ok: true, value: pages[c] ?? page([], null) }),
     );
+    expect(o.hasMore.value).toBe(true);
+    await o.more();
+    await o.more();
+    expect(o.older.value.map((e) => e.id)).toEqual(["b", "c"]);
+    expect(o.hasMore.value).toBe(false);
+  });
+  it("starts over on a new first page, and says when a page fails", async () => {
+    const { useOlderEvents } = await import("./useOlderEvents.ts");
+    const first = ref<EventsPage | null>(page(["a"], "c1"));
+    const o = useOlderEvents(first, () =>
+      Promise.resolve({ ok: false, error: { kind: "unavailable", status: 503, message: "Down." } }),
+    );
+    await o.more();
+    expect(o.error.value).toBe("Down.");
+    first.value = page(["z"], "x9");
+    await nextTick();
+    expect(o.error.value).toBeNull();
+    expect(o.older.value).toEqual([]);
   });
 });

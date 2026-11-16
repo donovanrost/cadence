@@ -3,6 +3,7 @@ import {
   scid as scidReader,
   decoders as d,
   request,
+  requestPage,
   type ApiResult,
   type Decoded,
 } from "@/api/index.ts";
@@ -139,6 +140,39 @@ export function fetchEvents(
     `${base(missionId)}?${params(query, { limit: "500" })}`,
     eventsReader,
     signal ? { signal } : {},
+  );
+}
+
+/** The first page of the window, with the cursor to older events (U69 A9d; null = nothing older). */
+export type EventsPage = Events & Readonly<{ nextCursor: string | null }>;
+
+export function fetchEventsPage(
+  missionId: MissionId,
+  query: EventQuery,
+  signal?: AbortSignal,
+): Promise<ApiResult<EventsPage>> {
+  return requestPage(
+    `${base(missionId)}?${params(query, { limit: "500" })}`,
+    eventsReader,
+    signal ? { signal } : {},
+  ).then((r) =>
+    r.ok ? { ok: true, value: { ...r.value.value, nextCursor: r.value.nextCursor } } : r,
+  );
+}
+
+/** The next older page (`?cursor=<meta.next_cursor>`); same filters as the first. */
+export function fetchOlderEvents(
+  missionId: MissionId,
+  query: EventQuery,
+  cursor: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<EventsPage>> {
+  return requestPage(
+    `${base(missionId)}?${params(query, { limit: "500", cursor })}`,
+    eventsReader,
+    signal ? { signal } : {},
+  ).then((r) =>
+    r.ok ? { ok: true, value: { ...r.value.value, nextCursor: r.value.nextCursor } } : r,
   );
 }
 

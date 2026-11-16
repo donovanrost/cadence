@@ -29,7 +29,15 @@ import {
   windowQuery,
   type WindowSel,
 } from "@/features/telemetry/index.ts";
-import { DEFAULT_KINDS, eventKinds, fetchDensity, fetchEvents, type EventKind } from "./api.ts";
+import {
+  DEFAULT_KINDS,
+  eventKinds,
+  fetchDensity,
+  fetchEvents,
+  fetchEventsPage,
+  fetchOlderEvents,
+  type EventKind,
+} from "./api.ts";
 import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
 import EventDetail from "./EventDetail.vue";
@@ -42,8 +50,8 @@ import {
   scopeValue,
   timelineScope,
   withAlertingData,
-  eventsCapNote,
 } from "./model.ts";
+import { useOlderEvents } from "./useOlderEvents.ts";
 
 /** Timeline (OpsLists §Timeline): fleet-wide events, newest first, with a density strip. */
 const mission = useMissionScope();
@@ -140,7 +148,20 @@ const windowOf = (w: WindowSel) => {
   return { from: new Date(r.from), to: new Date(r.to) };
 };
 const events = useRemoteQuery(key, (k, signal) =>
-  fetchEvents(k.m, { ...windowOf(k.w), ...filters(k) }, signal),
+  fetchEventsPage(k.m, { ...windowOf(k.w), ...filters(k) }, signal),
+);
+/** A9d: older pages through the first page's cursor; Older events replaces the cap note. */
+const older = useOlderEvents(
+  computed(() => (events.state.value.status === "ready" ? events.state.value.value : null)),
+  (cursor) => {
+    const k = key.value;
+    return k
+      ? fetchOlderEvents(k.m, { ...windowOf(k.w), ...filters(k) }, cursor)
+      : Promise.resolve({
+          ok: false,
+          error: { kind: "unavailable", status: 0, message: "No window yet." },
+        });
+  },
 );
 const density = useRemoteQuery(key, (k, signal) => {
   const w = windowOf(k.w);
@@ -176,7 +197,11 @@ const dataAlerts = useRemoteQuery(
 );
 const shownEvents = computed(() => {
   if (events.state.value.status !== "ready") return null;
-  const main = events.state.value.value.events;
+  const seen = new Set(events.state.value.value.events.map((e) => e.id));
+  const main = [
+    ...events.state.value.value.events,
+    ...older.older.value.filter((e) => !seen.has(e.id)),
+  ];
   const d = dataAlerts.state.value;
   return defaultView.value && d.status === "ready" ? withAlertingData(main, d.value.events) : main;
 });
@@ -310,12 +335,22 @@ const short = (iso: string) => {
                   :selected-id="selection.selectedId.value"
                   @select="selection.toggle"
                 />
-                <p
-                  v-if="eventsCapNote(value.events.length)"
-                  class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
+                <div
+                  v-if="older.hasMore.value || older.error.value"
+                  class="flex flex-wrap items-center gap-3 border-t border-hairline px-4 py-2"
                 >
-                  {{ eventsCapNote(value.events.length) }}
-                </p>
+                  <ApButton
+                    size="compact"
+                    variant="secondary"
+                    :disabled="older.busy.value"
+                    disabled-reason="Loading older events…"
+                    @click="older.more"
+                    >Older events</ApButton
+                  >
+                  <span v-if="older.error.value" class="text-sm text-caution-text" role="status">
+                    Couldn't load older events: {{ older.error.value }}
+                  </span>
+                </div>
               </template>
             </template>
           </ApRemote>
