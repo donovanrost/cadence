@@ -45,7 +45,7 @@ const menu = computed(() => [
 </script>
 
 <template>
-  <span class="flex items-center gap-2">
+  <span class="flex flex-wrap items-center gap-2">
     <ViewerControls
       :scope-options="scopeOptions"
       :spacecraft="spacecraft"

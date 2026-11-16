@@ -82,9 +82,10 @@ const stepsScroll = useScrollable(steps);
       >
       <slot name="clocks" />
     </div>
+    <!-- Under 768 the actions may take a row of their own and wrap there, never past the screen. -->
     <div
       v-if="$slots.actions"
-      class="flex flex-none items-center gap-2 border-l border-hairline px-4"
+      class="flex flex-none items-center gap-2 border-l border-hairline px-4 max-md:min-w-0 max-md:shrink max-md:flex-wrap max-md:py-1.5"
     >
       <slot name="actions" />
     </div>
