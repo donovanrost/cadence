@@ -55,15 +55,25 @@ defmodule Cadence.Catalog.Importers.Xtce13.Calibration do
 
   defp states(enumeration) do
     label = Element.attr(enumeration, "label")
+    raw_last = Element.attr(enumeration, "maxValue")
     first = integer(Element.attr(enumeration, "value"))
-    last = integer(Element.attr(enumeration, "maxValue"))
+    last = integer(raw_last)
+    single = {[%{value: first, label: label}], []}
 
     cond do
       # Not an integer: kept with a nil value, so legalization says it never matches.
-      is_nil(first) or is_nil(last) or last == first ->
-        {[%{value: first, label: label}], []}
+      is_nil(first) or (is_nil(raw_last) or last == first) ->
+        single
 
-      last > first and last - first < @max_range ->
+      is_nil(last) or last < first ->
+        invalid(
+          single,
+          enumeration,
+          "state #{inspect(label)} has maxValue " <>
+            "#{inspect(raw_last)}, which isn't an integer at or above #{first}; only #{first} is mapped"
+        )
+
+      last - first < @max_range ->
         {Enum.map(first..last, &%{value: &1, label: label}), []}
 
       true ->
@@ -75,6 +85,9 @@ defmodule Cadence.Catalog.Importers.Xtce13.Calibration do
          ]}
     end
   end
+
+  defp invalid({states, []}, enumeration, message),
+    do: {states, [{"XTCE_ENUMERATION_INVALID", message, enumeration}]}
 
   defp encoding_calibrators(encoding) do
     default =
