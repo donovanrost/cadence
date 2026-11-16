@@ -342,10 +342,65 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     read_package!(output_directory)
   end
 
+  # A release build is a function of the committed frontend tree and node, so a clean tree reuses
+  # an earlier run's checked build (six remotes take about a minute; ApplicationReleaseRegistryTest
+  # timed out under load). A dirty frontend tree always rebuilds.
   defp build_release!(node, package_name, publication_directory, output_directory) do
     assert File.dir?(publication_directory),
            "real federation publication output is missing: #{publication_directory}"
 
+    case release_cache_directory(node, package_name) do
+      nil ->
+        run_release_build!(node, package_name, output_directory)
+
+      cached ->
+        unless File.dir?(cached), do: populate_release_cache!(node, package_name, cached)
+        cached
+    end
+  end
+
+  defp release_cache_directory(node, package_name) do
+    git = fn args -> System.cmd("git", args, cd: @repo_root, stderr_to_stdout: true) end
+
+    with {tree, 0} <- git.(["rev-parse", "HEAD:frontend"]),
+         {"", 0} <- git.(["status", "--porcelain", "--", "frontend"]),
+         {version, 0} <- System.cmd(node, ["--version"], stderr_to_stdout: true) do
+      key =
+        :sha256
+        |> :crypto.hash([
+          @repo_root,
+          0,
+          String.trim(tree),
+          0,
+          String.trim(version),
+          0,
+          package_name
+        ])
+        |> Base.encode16(case: :lower)
+        |> binary_part(0, 32)
+
+      # Release builds must write outside the repository (the release config refuses otherwise);
+      # the key includes the checkout, so worktrees never share a build.
+      Path.join([System.tmp_dir!(), "cadence-federation-release-cache", key])
+    else
+      _dirty_or_unknown -> nil
+    end
+  end
+
+  # Build and check into a staging directory, then rename it into place, so a concurrent run
+  # never reads a half-written build.
+  defp populate_release_cache!(node, package_name, cached) do
+    staging = "#{cached}.#{System.unique_integer([:positive])}.tmp"
+    File.mkdir_p!(Path.dirname(cached))
+    run_release_build!(node, package_name, staging)
+
+    case File.rename(staging, cached) do
+      :ok -> :ok
+      {:error, _already_populated} -> File.rm_rf!(staging)
+    end
+  end
+
+  defp run_release_build!(node, package_name, output_directory) do
     corepack = System.find_executable("corepack") || raise "corepack executable is required"
 
     env = [{"CADENCE_RELEASE_OUTPUT_DIR", output_directory}]
