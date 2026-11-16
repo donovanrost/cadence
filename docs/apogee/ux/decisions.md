@@ -1752,3 +1752,66 @@ A stream that stops mid-frame is normal. It never goes to Now or the Timeline.
   of the pass didn't form a complete frame, so it wasn't stored." (fe-ops)
 - Packets: "…didn't form a complete packet…". Both: "6 bytes at the end of the pass didn't form a complete frame,
   and 12 didn't form a complete packet, so they weren't stored."
+
+### U68 · Command priority, expiry and resolved arguments (§11c(C) tier 1, director GO; fe-ops) (fe-ops / api)
+**Expiry** (Compose C5, the Release block, under the two release options):
+- A checkbox `Expire if not released by` opens ApTimePicker (UTC, mission presets). Its hint: "Uplinks not released
+  by then end as Expired." Unchecked = `expires_at: null`, the default.
+- The time is refused when it's in the past ("Pick a time in the future.") or not after a `Hold until` time ("Pick a
+  time after the hold time, 11-16 02:00Z.").
+- C4 Delivery plan: a target whose next contact starts after the expiry gets a caution row "Expires before its next
+  contact (AOS 04:12Z)." Arming isn't blocked; the operator may mean it.
+- The arm button's confirm and the summary tiles add "Expires 11-16 04:00Z if not released."
+- Approve's A1 header meta and the request page's Release line: `Expires 11-16 04:00Z` (§4: date when not
+  today).
+- When it happens, the end reason reads "Expired at 04:00Z before it was released." (the "Expired" stage word stays,
+  never "Canceled").
+
+**Priority** (words final once api says what priority changes; provisional until then):
+- Words, never a number. The Release block gets a `Priority` choice: `Normal` (default) · `High`. A third level
+  appears only if the server treats it differently.
+- The hint says what it does, as api confirms it, for example "High-priority uplinks go before normal ones queued
+  for the same contact."
+- Normal is silent everywhere. High shows as a neutral outline tag `HIGH PRIORITY` (not a status colour) in Approve's
+  A1 header, the request page's Release line and the Commands list row.
+- api: send the range, which way is sooner, and what it actually orders (per target? per contact? across missions?).
+
+**Resolved arguments** (the queue-step condition, ux review 2026-11-15). The server's value is shown only where it
+differs from what was entered.
+- **Shared values:** under A1's readout and stack line, one `text-3` line per differing argument, for example
+  `Sent as 2.50 V (entered 2.5)` or `TIMEOUT: default used, 30 s`.
+- **Own-values table:** the cell shows the value sent, with `entered 2.5` under it in `text-4`. A `default` cell
+  becomes `default · 30 s`.
+- **Arm** (Compose, no second GO): the arm confirm repeats the same lines under each command. Nobody arms without
+  seeing them.
+- **Uplink & verify and the request page:** the command line shows the value sent, in Technical details only.
+
+### U69 · Frontend-only parity items (§11c(C) audit A4a, A5a, A6, A9a, A16a; fe-ops) (fe-ops)
+- **A4a Verify times (Uplink & verify), per target.** Seconds, since the shift matters here.
+  - Pending: "Verify by 03:12:30Z". Met: "Verified at 03:11:58Z". Timed out: "Timed out at 03:12:30Z: no matching
+    telemetry".
+  - Placement: the target's N card, its U1 cell name and title, and the U3 event row.
+  - The pipeline's `Verifier window open` caption gains its end: "open until 03:12:30Z", or "windows close
+    03:12–03:20Z" when the targets differ.
+- **A5a Commands state filter.**
+  - A `State` multi-select in the filter row (in the URL as `?state=`). Its options use the stage words:
+    `Release failed`, `Verify failed` (or one `Failed` if the server only has failed), `Outcome unclear`,
+    `Sending or verifying`, `Queued for AOS`.
+  - While it's set, the results span every tab: the tabs give way to the line "12 commands · Failed, Outcome
+    unclear" + `Clear filters`.
+- **A6 Alarms.**
+  - A filter row above L1 (`?sc=`, `?severity=`): `Spacecraft` (a searchable select) · `Severity` (`Critical`,
+    `Caution`, multi-select).
+  - By point stays in the L2 aside, and all filters combine.
+  - Now's `?state=critical|caution` links map onto `?severity=`, which fixes D1.
+  - Header meta "Last change 02:51Z on EARENDIL-047" (§4 date when not today), omitted when there's none.
+- **A9a Timeline severity.** It sits with the kind toggles as a choice: `All` · `Caution and up` · `Critical`
+  (`?severity=`), a threshold rather than a multi-select. E1's density strip stacks only what's shown.
+- **A16a Book a pass offer row.**
+  - Antenna: after the station, as given: `Svalbard · Antenna SG2` (the label; with no label, nothing, and its id
+    goes to Technical details).
+  - Availability: `available` says nothing. `limited` adds a caution word "Limited availability". `unavailable`
+    disables `Book`, with the reason "Northlight reports this window as unavailable."
+  - Synthetic: the plan's `SYNTHETIC` tag.
+  - Cost: **not shown yet**. The wire has a bare number, with no currency and no word on whether it's a quote or an
+    estimate (U20). api adds `{amount, currency, kind}`; it then reads `$240` for a quote or `≈ $240 (estimate)`.

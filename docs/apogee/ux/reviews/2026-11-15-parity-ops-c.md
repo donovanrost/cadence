@@ -96,4 +96,4 @@ The rest of C5 (workspace panes, rail collapse, starred dashboards in the rail) 
 
 ## One wording ruling from section D
 **D4:** a command's end reason `expired` reads **"Expired"**, never "Canceled". In a sentence: "Expired at 02:30Z
-before it was released."
+before it was released." (U68)
