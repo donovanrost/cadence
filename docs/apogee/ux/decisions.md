@@ -1601,9 +1601,11 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
     - Action: `Start booking`.
   - **Interrupted:**
     - Title: `Booking for 11-16 stopped`.
-    - Body: "Booking for R41 stopped at 22:14Z with 12 of 41 passes booked. The other 29 aren't booked until it
-      continues."
-    - Action: `Continue booking`. With nothing booked yet: "…stopped at 22:14Z before any pass was booked."
+    - Body: "Booking for R41 stopped with 12 of 41 passes booked; its last progress was at 22:14Z. The other 29
+      aren't booked until it continues." The time is `booking.last_progress_at`: the last progress seen, not the
+      moment it stopped, so it's never worded as "stopped at" (U20).
+    - Action: `Continue booking`. With nothing booked yet: "Booking for R41 stopped before any pass was booked; its
+      last progress was at 22:14Z."
   - Both actions call POST `/execute`, which is idempotent per pass. Someone who can't book gets `Open plan`
     instead.
   - Priority and marks follow the thresholds above.
