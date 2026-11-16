@@ -458,7 +458,10 @@ Nothing outstanding from the design. Work past its `expires_at` is never release
 claim refuses it under the request and lane locks. It ends `end_reason: expired` as soon as
 release reaches it: the lane's dispatch closes its expired entries first, and a named-contact
 release ends its expired members and STOPS at the first one in stack order (`stopped.reason.code`
-`command_queue_entry_expired`, the rest not attempted). A sweep on every dispatcher reconcile
+`command_queue_entry_expired`). A group's members share ONE `expires_at` (DECISIONS #97; admission
+refuses a group whose members don't), so when a group expires every unreleased member of a target
+expires at the same instant and ends `end_reason: expired` itself, on both paths: none is left
+queued to go out at a later contact. Members released before the deadline stay released. A sweep on every dispatcher reconcile
 (about a minute) cleans up the rest. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
 (realtime.md).
 

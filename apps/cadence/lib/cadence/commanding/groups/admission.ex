@@ -13,6 +13,8 @@ defmodule Cadence.Commanding.Groups.Admission do
   @doc "Member requests for a group from `Validation` members, in `state`."
   @spec members(binary(), [map()], atom()) :: [CommandRequest.t()]
   def members(group_id, validated, state) do
+    :ok = uniform_expiry!(validated)
+
     Enum.map(validated, fn member ->
       group = %{
         "id" => group_id,
@@ -27,6 +29,27 @@ defmodule Cadence.Commanding.Groups.Admission do
           metadata: Map.put(member.request.metadata, "group", group)
       }
     end)
+  end
+
+  @doc """
+  Tripwire for DECISIONS #97 (an expired member halts its group): every member of a group shares
+  the group's one `expires_at`. So when one expires, every later member of its target expires at
+  the same instant and ends `expired` itself, and no later member is ever left to release
+  without it. Per-member expiry would break that: it needs #97's HELD = BLOCKED hold (later
+  members excluded from release on every path until an operator acts) built FIRST. Raises
+  rather than admit a group with mixed expiry.
+  """
+  @spec uniform_expiry!([map()]) :: :ok
+  def uniform_expiry!(validated) do
+    case validated |> Enum.map(& &1.request.expires_at) |> Enum.uniq() do
+      distinct when length(distinct) <= 1 ->
+        :ok
+
+      distinct ->
+        raise ArgumentError,
+              "DECISIONS #97: a group's members must share one expires_at (got " <>
+                "#{length(distinct)} distinct); per-member expiry needs HELD = BLOCKED first"
+    end
   end
 
   @doc """

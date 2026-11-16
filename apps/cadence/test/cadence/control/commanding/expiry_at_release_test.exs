@@ -3,6 +3,11 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
   A member past its `expires_at` is never released, and ends `expired` when release reaches it,
   not on the dispatcher's next sweep (the sweep is only cleanup). Covers the lane dispatch, the
   claim itself (the race where nothing closed it first) and a named-contact release (U46).
+
+  DECISIONS #97 (an expired member halts its group) holds because a group's members share ONE
+  expires_at (`Groups.Admission.uniform_expiry!/1` is the tripwire): when one expires, every later
+  member of its target expires at the same instant and ends `expired` itself, on both paths. The
+  tests here expire a group the only way it can: all its unreleased members at once.
   """
   use Cadence.ConfigCase, async: false
 
@@ -16,6 +21,7 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
     CommandRequestRow
   }
 
+  alias Cadence.Commanding.Groups.Admission
   alias Cadence.Control.Commanding
   alias Cadence.Control.Commanding.GroupRelease
   alias Cadence.Persistence.JsonDocument
@@ -33,26 +39,58 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
     %{alpha: alpha, model: model, scope: scope}
   end
 
-  test "lane dispatch ends an expired head as expired, never releases it, and releases the next",
+  test "lane dispatch: when a group expires, every unreleased member ends expired, none goes out",
        c do
-    %{entries: [expired, fresh]} = armed_group!(c, [c.alpha, c.alpha])
+    %{entries: entries} = armed_group!(c, [c.alpha, c.alpha, c.alpha])
     # A booked pass open at @at: an armed group releases by itself only into a scheduled pass.
     uplink_contact!(c.alpha, {DateTime.add(@at, -600), DateTime.add(@at, 600)})
-    expire!(expired)
+    Enum.each(entries, &expire!/1)
 
-    assert {:ok, _released} =
+    assert {:error, :command_queue_lane_empty} =
              Cadence.Commanding.dispatch_queue_lane(
                @org,
                @mission,
-               lane(expired),
+               lane(hd(entries)),
                %{"actor_kind" => "system"},
                attempted_at: @at
              )
 
-    assert ended_expired?(expired)
-    assert attempts(expired) == 0
-    assert attempts(fresh) == 1
-    assert entry_state(fresh) != "pending"
+    for entry <- entries do
+      assert ended_expired?(entry)
+      assert attempts(entry) == 0
+    end
+  end
+
+  test "lane dispatch: members sent before the deadline stay sent; the rest end expired together",
+       c do
+    %{entries: [first | rest]} = armed_group!(c, [c.alpha, c.alpha, c.alpha])
+    uplink_contact!(c.alpha, {DateTime.add(@at, -600), DateTime.add(@at, 600)})
+
+    # The first goes out while the group is live.
+    assert {:ok, _} =
+             Cadence.Commanding.release_command_queue_entry(
+               @org,
+               @mission,
+               first,
+               hd(Cadence.Contacts.list_realized_contacts(@org, @mission)).realized_contact_id,
+               %{"actor_kind" => "system"},
+               attempted_at: @at
+             )
+
+    # Then the group's one deadline passes: the rest expire at the same instant.
+    Enum.each(rest, &expire!/1)
+
+    assert {:error, :command_queue_lane_empty} =
+             Cadence.Commanding.dispatch_queue_lane(
+               @org,
+               @mission,
+               lane(first),
+               %{"actor_kind" => "system"},
+               attempted_at: @at
+             )
+
+    assert attempts(first) == 1
+    assert Enum.all?(rest, &(ended_expired?(&1) and attempts(&1) == 0))
   end
 
   test "the claim refuses an expired entry that nothing has closed yet", c do
@@ -77,43 +115,46 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
     assert entry_state(expired) == "pending"
   end
 
-  test "a named-contact release ends an expired member as expired and stops there", c do
-    group = armed_group!(c, [c.alpha, c.alpha])
-    [expired, fresh] = group.entries
+  test "a named release on an expired group stops at its first member; the rest end expired too",
+       c do
+    group = armed_group!(c, [c.alpha, c.alpha, c.alpha])
+    [first | rest] = group.entries
     contact = uplink_contact!(c.alpha)
-    expire!(expired)
+    Enum.each(group.entries, &expire!/1)
 
-    # An ordered stack: the member after an expired one never goes out on its own.
     assert {:ok,
             %{
               released_entry_ids: [],
-              stopped: %{command_queue_entry_id: ^expired, reason: reason},
-              not_attempted_entry_ids: [^fresh]
+              stopped: %{command_queue_entry_id: ^first, reason: reason},
+              not_attempted_entry_ids: ^rest
             }} = release(c, group, contact)
 
-    assert reason == {:command_queue_entry_expired, expired}
+    assert reason == {:command_queue_entry_expired, first}
     assert GroupRelease.encode_reason(reason)["code"] == "command_queue_entry_expired"
-    assert ended_expired?(expired)
-    assert attempts(expired) == 0
-    assert entry_state(fresh) == "pending"
-    assert attempts(fresh) == 0
+
+    # Not left queued to go out at a later contact: each ended expired by its own deadline.
+    for entry <- group.entries do
+      assert ended_expired?(entry)
+      assert attempts(entry) == 0
+    end
+
+    assert {:error, {:command_group_nothing_to_release, _}} = release(c, group, contact)
   end
 
-  test "a named-contact release sends the members before an expired one, then stops", c do
-    group = armed_group!(c, [c.alpha, c.alpha])
-    [first, expired] = group.entries
-    contact = uplink_contact!(c.alpha)
-    expire!(expired)
+  test "the #97 tripwire: a group whose members don't share one expiry is never admitted" do
+    member = fn expires_at -> %{request: %{expires_at: expires_at}} end
+    at = DateTime.add(@at, 3_600)
 
-    assert {:ok,
-            %{
-              released_entry_ids: [^first],
-              stopped: %{command_queue_entry_id: ^expired},
-              not_attempted_entry_ids: []
-            }} = release(c, group, contact)
+    assert :ok = Admission.uniform_expiry!([member.(at), member.(at)])
+    assert :ok = Admission.uniform_expiry!([member.(nil), member.(nil)])
 
-    assert ended_expired?(expired)
-    assert attempts(first) == 1
+    assert_raise ArgumentError, ~r/DECISIONS #97/, fn ->
+      Admission.uniform_expiry!([member.(at), member.(DateTime.add(at, 60))])
+    end
+
+    assert_raise ArgumentError, ~r/DECISIONS #97/, fn ->
+      Admission.uniform_expiry!([member.(at), member.(nil)])
+    end
   end
 
   defp release(c, group, contact),
