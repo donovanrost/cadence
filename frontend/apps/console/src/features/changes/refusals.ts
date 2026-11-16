@@ -23,7 +23,14 @@ const details = object({
         routing_rule_id: token,
         name: nullable(string),
         spacecraft: named,
-        station: nullable(object({ id: token, code: nullable(string), name: nullable(string) })),
+        station: nullable(
+          object({
+            id: token,
+            // free-text: the station's short code, an identifier (U25), shown as written.
+            code: nullable(string),
+            name: nullable(string),
+          }),
+        ),
         direction: oneOf(["downlink", "uplink"]),
       }),
     ),
@@ -33,6 +40,7 @@ const details = object({
       object({
         realized_contact_id: token,
         spacecraft: named,
+        // free-text: the station's short code, an identifier (U25), shown as written.
         station_code: nullable(string),
         starts_at: timestamp,
       }),

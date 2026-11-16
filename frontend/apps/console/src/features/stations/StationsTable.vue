@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { ApStatusMark, ApTable, formatCount, type ApColumn } from "@/ui";
+import type { MissionId } from "@/api/index.ts";
+import { StagedArchive, type RefusalOutcome } from "@/features/changes/index.ts";
+import { ApStatusMark, ApTable, ApTag, formatCount, type ApColumn } from "@/ui";
 import type { Station } from "./api.ts";
+import { stationName } from "./names.ts";
 import StationCodeCell from "./StationCodeCell.vue";
 
 /** Ground stations; health is "not reported" until the server tracks it (never assumed ok). */
 const props = defineProps<{
+  missionId: MissionId;
   rows: readonly Station[];
   canEdit?: boolean;
   /** Stations whose suggested code is staged in the change set, and the one being staged. */
   staged?: ReadonlySet<string>;
   busy?: string | null;
 }>();
-defineEmits<{ confirm: [station: Station] }>();
+defineEmits<{ confirm: [station: Station]; refused: [outcome: RefusalOutcome] }>();
 // U10: a column the server can't fill is left out, not shown as a column of dashes.
 const linked = props.rows.some((s) => s.transport_count !== null);
 const coded = props.canEdit === true || props.rows.some((s) => s.code !== null);
@@ -24,9 +28,13 @@ const allColumns: readonly ApColumn[] = [
   { key: "rules", label: "Routing rules", mono: true, align: "end" },
   { key: "health", label: "Health" },
 ];
-const columns = allColumns.filter(
-  (c) => (linked || (c.key !== "transports" && c.key !== "rules")) && (coded || c.key !== "code"),
-);
+const columns = [
+  ...allColumns.filter(
+    (c) => (linked || (c.key !== "transports" && c.key !== "rules")) && (coded || c.key !== "code"),
+  ),
+  // ux U82: Archive… in the row's ⋯ menu, for whoever can stage.
+  ...(props.canEdit === true ? [{ key: "actions", label: "", align: "end" as const }] : []),
+];
 </script>
 
 <template>
@@ -37,7 +45,7 @@ const columns = allColumns.filter(
         class="font-semibold text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
         >{{ row.display_name }}</RouterLink
       >
-      <span v-if="row.lifecycle_state === 'archived'" class="text-xs text-text-4"> · archived</span>
+      <ApTag v-if="row.lifecycle_state === 'archived'" label="ARCHIVED" class="ms-2" />
     </template>
     <!-- U25: never invent identifiers; a suggestion is dimmed and only real once confirmed. -->
     <template #cell-code="{ row }">
@@ -59,6 +67,18 @@ const columns = allColumns.filter(
     <template #cell-rules="{ row }">{{
       row.routing_rule_count === null ? "—" : formatCount(row.routing_rule_count)
     }}</template>
+    <template #cell-actions="{ row }">
+      <StagedArchive
+        v-if="row.lifecycle_state === 'active'"
+        :mission-id="missionId"
+        kind="ground_station"
+        :entity-id="row.id"
+        :name="stationName(row)"
+        surface="stations"
+        variant="menu"
+        @refused="$emit('refused', $event)"
+      />
+    </template>
     <template #cell-health="{ row }">
       <span v-if="row.health === null" class="inline-flex items-center gap-2 text-text-3"
         ><ApStatusMark state="off" />Not reported</span

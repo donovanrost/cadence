@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { stationIdParam, useRemoteQuery, type StationId } from "@/api";
 import { useMissionInvalidation } from "@/live";
@@ -15,7 +15,13 @@ import {
   type ApTabLink,
 } from "@/ui";
 import ProvidersPanel from "./ProvidersPanel.vue";
-import { FailureOutcomeCallout, KindEditor } from "@/features/changes/index.ts";
+import {
+  FailureOutcomeCallout,
+  KindEditor,
+  StagedArchive,
+  type RefusalOutcome,
+} from "@/features/changes/index.ts";
+import { stationName } from "./names.ts";
 import StationsTable from "./StationsTable.vue";
 import { fetchStations } from "./api.ts";
 import { useConfirmCode } from "./useConfirmCode.ts";
@@ -23,7 +29,20 @@ import { useConfirmCode } from "./useConfirmCode.ts";
 /** Setup › Ground stations (rail 06). Edits stage into the change set (ground_station kind). */
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
-const { state, refetch } = useRemoteQuery(missionId, fetchStations);
+/** ux U82: archived stations are hidden unless asked for, listed after the active ones. */
+const showArchived = ref(false);
+const { state, refetch } = useRemoteQuery(
+  () => ({ missionId: missionId.value, archived: showArchived.value }),
+  (key, signal) => fetchStations(key.missionId, signal, key.archived),
+);
+/** U82: an in-use refusal, shown in place of the confirm with what still uses it. */
+const refused = ref<RefusalOutcome | null>(null);
+/** The station being edited (null on Add); U82's header Archive… is for an active one. */
+const edited = computed(() =>
+  state.value.status === "ready" && editing.value && editing.value !== "new"
+    ? (state.value.value.find((s) => s.id === editing.value) ?? null)
+    : null,
+);
 useMissionInvalidation(missionId, ["configuration"], refetch);
 const route = useRoute();
 const session = useSession();
@@ -62,6 +81,7 @@ const notProvided = computed(
     </ApPageHeader>
     <ApTabLinks :links="tabs" :active="tab" label="Ground station sections" />
     <ProvidersPanel v-if="tab === 'providers'" :mission-id="missionId" />
+    <FailureOutcomeCallout v-if="tab === 'stations' && refused" :outcome="refused" />
     <template v-if="tab === 'stations' && editing && canStage && state.status === 'ready'">
       <KindEditor
         :key="editing"
@@ -77,9 +97,31 @@ const notProvided = computed(
         index="G2"
         surface="stations"
         :done="{ name: 'setup.stations' }"
-      />
+      >
+        <template v-if="edited?.lifecycle_state === 'active'" #actions>
+          <StagedArchive
+            :mission-id="missionId"
+            kind="ground_station"
+            :entity-id="edited.id"
+            :name="stationName(edited)"
+            surface="stations"
+            variant="button"
+            @refused="refused = $event"
+          />
+        </template>
+      </KindEditor>
     </template>
     <ApPanel v-if="tab === 'stations'" index="G1" title="Stations" flush>
+      <template #header>
+        <label class="flex items-center gap-2 text-sm text-text-2">
+          <input
+            v-model="showArchived"
+            type="checkbox"
+            class="size-4 accent-[var(--color-readout)]"
+          />
+          Show archived
+        </label>
+      </template>
       <ApEmptyState
         v-if="notProvided"
         state="off"
@@ -97,11 +139,13 @@ const notProvided = computed(
           <template v-else>
             <FailureOutcomeCallout v-if="codes.failure.value" :outcome="codes.failure.value" />
             <StationsTable
+              :mission-id="missionId"
               :rows="value"
               :can-edit="canStage"
               :staged="codes.staged.value"
               :busy="codes.busy.value"
               @confirm="codes.confirm"
+              @refused="refused = $event"
             />
           </template>
         </template>

@@ -1,23 +1,24 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
+import { FailureOutcomeCallout, type RefusalOutcome } from "@/features/changes/index.ts";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import {
-  ApButton,
-  ApEmptyState,
-  ApPanel,
-  ApRemote,
-  ApTable,
-  formatCount,
-  type ApColumn,
-} from "@/ui";
-import { directionLabel, fetchTransports } from "./api.ts";
+import { ApButton, ApEmptyState, ApPanel, ApRemote, type ApColumn } from "@/ui";
+import { fetchTransports } from "./api.ts";
+import TransportsTable from "./TransportsTable.vue";
 
 /** Transports (rail 05 tab). Adds and edits stage into the change set (transport kind). */
 const scope = useMissionScope();
 const session = useSession();
 const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
-const { state, refetch } = useRemoteQuery(() => scope.value.mission.id, fetchTransports);
+/** ux U82: archived transports are hidden unless asked for, listed after the active ones. */
+const showArchived = ref(false);
+const { state, refetch } = useRemoteQuery(
+  () => ({ missionId: scope.value.mission.id, archived: showArchived.value }),
+  (key, signal) => fetchTransports(key.missionId, signal, key.archived),
+);
+/** U82: an in-use refusal, shown in place of the confirm with what still uses it. */
+const refused = ref<RefusalOutcome | null>(null);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
@@ -38,8 +39,17 @@ const columns = computed(() =>
 
 <template>
   <ApPanel index="T1" title="Transports" flush>
-    <template v-if="canStage" #header>
+    <template #header>
+      <label class="flex items-center gap-2 text-sm text-text-2">
+        <input
+          v-model="showArchived"
+          type="checkbox"
+          class="size-4 accent-[var(--color-readout)]"
+        />
+        Show archived
+      </label>
       <ApButton
+        v-if="canStage"
         size="compact"
         :to="{ name: 'setup.comms.transports', params: { transportId: 'new' } }"
         >Add transport</ApButton
@@ -54,30 +64,16 @@ const columns = computed(() =>
     <ApRemote v-else :state="state" loading-label="Loading transports…" @retry="refetch">
       <template #default="{ value }">
         <ApEmptyState v-if="value.length === 0" state="off" headline="No transports yet" />
-        <ApTable
-          v-else
-          :columns="columns"
-          :rows="value"
-          :row-key="(t) => t.id"
-          caption="Transports"
-        >
-          <template #cell-name="{ row }">
-            <RouterLink
-              :to="{ name: 'setup.comms.transports', params: { transportId: row.id } }"
-              class="font-semibold text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
-              >{{ row.display_name }}</RouterLink
-            >
-            <span class="font-mono text-xs text-text-4"> v{{ row.version }}</span>
-          </template>
-          <template #cell-station="{ row }">{{ row.station?.display_name ?? "—" }}</template>
-          <template #cell-direction="{ row }">{{
-            directionLabel(row.direction_capability)
-          }}</template>
-          <template #cell-origin="{ row }">{{
-            row.origin === "direct" ? "Direct" : "Provider managed"
-          }}</template>
-          <template #cell-rules="{ row }">{{ formatCount(row.routing_rule_count) }}</template>
-        </ApTable>
+        <template v-else>
+          <FailureOutcomeCallout v-if="refused" :outcome="refused" class="m-4" />
+          <TransportsTable
+            :mission-id="scope.mission.id"
+            :rows="value"
+            :columns="columns"
+            :can-stage="canStage"
+            @refused="refused = $event"
+          />
+        </template>
       </template>
     </ApRemote>
   </ApPanel>

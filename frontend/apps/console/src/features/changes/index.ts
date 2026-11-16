@@ -3,6 +3,8 @@ export { default as ConfigStatus } from "./ConfigStatus.vue";
 export { default as StagedBar } from "./StagedBar.vue";
 export { default as FailureOutcomeCallout } from "./FailureOutcomeCallout.vue";
 export { useStageFailure } from "./useStageFailure.ts";
+export { default as StagedArchive } from "./StagedArchive.vue";
+export { refusalOutcome, type RefusalOutcome } from "./refusals.ts";
 export {
   errorCode,
   failureOutcome,

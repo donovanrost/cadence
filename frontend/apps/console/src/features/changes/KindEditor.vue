@@ -131,6 +131,10 @@ async function stage() {
 
 <template>
   <ApPanel :index="index" :title="title">
+    <!-- The page's own header actions, e.g. U82 Archive…; never a primary button. -->
+    <template v-if="$slots.actions" #header>
+      <span class="ml-auto flex items-center gap-2"><slot name="actions" /></span>
+    </template>
     <ApRemote :state="schema.state.value" loading-label="Loading fields…" @retry="schema.refetch">
       <template #default="{ value: kindSchema }">
         <form class="flex flex-col gap-4" @submit.prevent="stage">

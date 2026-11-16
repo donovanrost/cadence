@@ -36,12 +36,14 @@ export type RoutingRule = Decoded<typeof rule>;
 
 const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}`;
 
+/** Active transports; with `includeArchived`, archived ones too, after them (ux U82, api). */
 export async function fetchTransports(
   missionId: MissionId,
   signal: AbortSignal,
+  includeArchived = false,
 ): Promise<ApiResult<readonly Transport[]>> {
   const result = await request(
-    `${base(missionId)}/transports`,
+    `${base(missionId)}/transports${includeArchived ? "?include_archived=true" : ""}`,
     object({ transports: array(transport, 5000) }),
     { signal },
   );

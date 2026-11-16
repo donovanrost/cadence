@@ -24,12 +24,14 @@ const station = object({
 export const stationsReader = object({ stations: array(station, 5000) });
 export type Station = Decoded<typeof station>;
 
+/** Active stations; with `includeArchived`, archived ones too, after them (ux U82, api). */
 export async function fetchStations(
   missionId: MissionId,
   signal: AbortSignal,
+  includeArchived = false,
 ): Promise<ApiResult<readonly Station[]>> {
   const result = await request(
-    `/missions/${encodeURIComponent(missionId)}/ground-stations`,
+    `/missions/${encodeURIComponent(missionId)}/ground-stations${includeArchived ? "?include_archived=true" : ""}`,
     stationsReader,
     { signal },
   );
