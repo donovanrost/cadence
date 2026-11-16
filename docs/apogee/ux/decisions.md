@@ -1828,3 +1828,40 @@ differs from what was entered.
   - Synthetic: the plan's `SYNTHETIC` tag.
   - Cost: **not shown yet**. The wire has a bare number, with no currency and no word on whether it's a quote or an
     estimate (U20). api adds `{amount, currency, kind}`; it then reads `$240` for a quote or `≈ $240 (estimate)`.
+
+### U70 · A target's command history: release attempts and verifier evidence (§11c(C) A3, A4b/c; api 45563ffe8) (fe-ops)
+**Where:** a `History` button opens a sheet titled `EARENDIL-007 · history`.
+- The button sits on the target's N card, in its selected-target detail (U1 cells are a matrix, not rows) and on
+  the request page's target line.
+- It's a dialog trigger (`aria-haspopup="dialog"`), not a disclosure, so it has no `aria-expanded`.
+- In the sheet, one block per command, in stack order, headed by the command's stack line. Each block has two
+  lists, `Attempts` and `Verifiers`.
+- Both lists read **oldest first**, as a story. When there are more than 25, `Show N earlier` goes at the top of the
+  list.
+- Every time has seconds, since the shift matters here; the date only when not today.
+
+**Attempts** (state words as in groups/words.ts):
+- "Released at 03:11:58Z during EARENDIL-007 · PUQ 07:20Z pass · 12 bytes" (the contact label as api gives it).
+- "Release failed at 03:02:10Z: <reason in words>". Reuse the existing release-failure words. A code without a word
+  shows its sentence-case code, and fe-ops sends ux the list.
+- "Outcome unclear at 03:05:12Z: Cadence couldn't confirm whether it was sent."
+
+**Verifiers:**
+- Each row is the verifier's name, then its outcome.
+  - Met: "Mode applied · verified at 03:12:04Z".
+  - Failure criteria matched: "Mode applied · failed at 03:12:04Z: the reading matched its failure condition".
+  - Timed out: "Mode applied · timed out at 03:12:30Z: no matching telemetry".
+  - Still pending: "Mode applied · verify by 03:12:30Z" (U69 A4a).
+- Under each outcome, the evidence on one `text-3` line:
+  - Telemetry: "HK.sc_mode = 2, received 03:12:03Z".
+    - The raw value appears only when it differs from the engineering one: "= 8.0 °C (raw 412)".
+    - Quality appears only when it isn't good: "· quality: suspect", in caution text.
+  - Transport: "<action in words> · <signal phase in words> at 03:11:58Z". fe-ops sends ux the two code lists for
+    words.
+  - The evidence record is gone: "The matching record is no longer available." (U20: the outcome stands; only the
+    proof is missing).
+- The phase word (`completion`) and severity go to Technical details, unless api says severity changes what an
+  operator does.
+
+**Technical details** (one disclosure per block): attempt, path, binding, packet, evidence and record ids; generated
+time; recorded at; and the exact float encoding (U68).
