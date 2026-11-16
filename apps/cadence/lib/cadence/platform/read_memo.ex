@@ -12,6 +12,9 @@ defmodule Cadence.Platform.ReadMemo do
   wrapped call. Nested `with_memo/1` calls share the outer memo. Outside one, `fetch/2` just reads.
   Like `SpacecraftTypeStore.with_version_memo/1`.
 
+  `Reads.Attention` also wraps each load in one (U61, 11-16): `plan_coverage` keeps its day read
+  there, so a load's items, resolutions and counts share one snapshot. Nothing in a load writes.
+
   One field isn't immutable: a mission-model revision's `status` (approved or rejected through
   `MissionModels.RevisionDecisions`). A status decision must not run inside `with_memo/1`, or a
   later `MissionModels.fetch_revision/3` in the same memo returns the old status (api-ops). Nothing

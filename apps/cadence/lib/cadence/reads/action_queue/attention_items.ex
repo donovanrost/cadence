@@ -239,6 +239,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
 
   # An approval is due at its deadline (the provider applies or drops it then).
   defp due_at(%{source: "provider_change", deadline_at: %DateTime{} = deadline}), do: deadline
+  # U61: the countdown runs to the day's first window.
+  defp due_at(%{source: "plan_coverage"} = attention), do: Map.get(attention, :first_window_at)
   defp due_at(attention), do: Map.get(attention, :starts_at)
 
   # fe-ops (L14): a provider change to acknowledge, or one that failed, is P3; an approval P2
@@ -272,6 +274,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp p1?(%{source: "archive_quarantine"}, _now), do: false
   # U50: domain decides (not connected, or its own connection quiet, in the open window).
   defp p1?(%{source: "listener_refusal"} = attention, _now), do: Map.get(attention, :p1) == true
+  # U61: the source decides (from the first window − 6 h).
+  defp p1?(%{source: "plan_coverage"} = attention, _now), do: Map.get(attention, :p1) == true
   # No spacecraft's telemetry is processed while it's open.
   defp p1?(%{source: "mission_runtime"}, _now), do: true
   # The same while an apply that would bring the runtime up is stuck (ux U41).

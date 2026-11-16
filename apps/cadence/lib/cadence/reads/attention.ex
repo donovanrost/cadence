@@ -8,9 +8,10 @@ defmodule Cadence.Reads.Attention do
   approved activation whose apply failed or stalled, to retry; 2026-11-13) and `provider_change`
   (a provider changed a booked pass: approve, reject or acknowledge; §11 L14) and
   `ingress_backpressure` (a contact's ingest buffer filling, or frames dropped; #83),
-  `archive_quarantine` (archive entries that can never be indexed; #88) and `listener_refusal`
-  (connections refused on a pass's shared listener; #87, U50) and `expired_group` (a command group
-  whose deadline passed before all its members went out; U75, #97). While an
+  `archive_quarantine` (archive entries that can never be indexed; #88), `listener_refusal`
+  (connections refused on a pass's shared listener; #87, U50), `expired_group` (a command group
+  whose deadline passed before all its members went out; U75, #97) and `plan_coverage` (a day
+  nearing its first window with nothing being booked; U61). While an
   `activation_apply` item is open it carries the cause, so `mission_runtime` stays out of the list
   and those items say `runtime_not_applied: true` instead (fe-ops: one row for one cause). Other
   mission-level sources (provider changes, for example) join by implementing the same four
@@ -34,7 +35,9 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.ProviderChangeAttention, as: ProviderChange
   alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
   alias Cadence.Control.UplinkReadiness.Attention, as: UplinkBlocked
+  alias Cadence.Platform.ReadMemo
   alias Cadence.Reads.MissionRuntimeAttention, as: MissionRuntime
+  alias Cadence.Reads.PlanCoverageAttention, as: PlanCoverage
 
   @sources [
     PassResolutions,
@@ -49,7 +52,8 @@ defmodule Cadence.Reads.Attention do
     ArchiveQuarantine,
     JobOutcomeUnknown,
     ListenerRefusal,
-    ExpiredGroup
+    ExpiredGroup,
+    PlanCoverage
   ]
   @resolved_window_s 60
 
@@ -64,19 +68,23 @@ defmodule Cadence.Reads.Attention do
       now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
       since = DateTime.add(now, -@resolved_window_s, :second)
 
-      {:ok,
-       %{
-         items: @sources |> Enum.flat_map(& &1.items(org, mission_id)) |> one_row_per_cause(),
-         resolved: Enum.flat_map(@sources, & &1.resolved_since(org, mission_id, since)),
-         counts: counts(org, mission_id)
-       }}
+      # One memo per load, so a source (plan_coverage) reads once for its items, resolutions and
+      # counts. Nothing here writes.
+      ReadMemo.with_memo(fn ->
+        {:ok,
+         %{
+           items: @sources |> Enum.flat_map(& &1.items(org, mission_id)) |> one_row_per_cause(),
+           resolved: Enum.flat_map(@sources, & &1.resolved_since(org, mission_id, since)),
+           counts: counts(org, mission_id)
+         }}
+      end)
     end
   end
 
   @doc "Open and acknowledged counts across sources; cheap enough for `/counts`."
   @spec counts(binary(), binary()) :: %{open: non_neg_integer(), acknowledged: non_neg_integer()}
   def counts(org, mission_id) do
-    by_source = Map.new(@sources, &{&1, &1.counts(org, mission_id)})
+    by_source = ReadMemo.with_memo(fn -> Map.new(@sources, &{&1, &1.counts(org, mission_id)}) end)
 
     by_source
     |> Map.drop(if by_source[ActivationApply].open > 0, do: [MissionRuntime], else: [])

@@ -10,6 +10,8 @@ defmodule Cadence.Reads.ContactPlanDays do
     * `sent_back`: the plan is a draft whose latest decision is a rejection.
     * `requirements_count`: the day's contacts needed (`PlanningSetup.demand_days/3`, as Setup's
       demand), 0 when there's nothing to plan.
+    * `first_window_at`: the earliest window start in the day among those needs (U61), nil when
+      there are none.
 
   Plans come from one list read (newest first, capped at 100), grouped by their window's day.
   """
@@ -36,12 +38,14 @@ defmodule Cadence.Reads.ContactPlanDays do
       {:ok,
        Enum.map(days, fn day ->
          plan = plan_of_day(Map.get(by_day, day, []))
+         day_demand = Map.fetch!(demand, day)
 
          %{
            day: day,
            plan: plan,
            sent_back: plan != nil and sent_back?(org, mission, plan),
-           requirements_count: demand |> Map.fetch!(day) |> Map.fetch!(:contacts_needed)
+           requirements_count: day_demand.contacts_needed,
+           first_window_at: day_demand.first_window_at
          }
        end)}
     else

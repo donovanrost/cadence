@@ -6,6 +6,16 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
   """
 
   @keys %{
+    # ux U61: a day nearing its first window with nothing being booked. Per-viewer fields
+    # (viewer_can_approve, viewer_can_book) are the console's.
+    "plan_coverage" => [
+      :day,
+      :first_window_at,
+      :severity,
+      :requirements_count,
+      :plan,
+      :approvers
+    ],
     # DECISIONS #71 / ux U37: telemetry still on disk, not stored. The pass has ended, so the row
     # is always P2; nothing expires it (the journal keeps it) and Cadence retries by itself.
     "contact_settlement" => [

@@ -103,10 +103,19 @@ defmodule Cadence.Reads.PlanningSetup do
               {template.contact_requirement_template_id, DateTime.to_unix(occurrence),
                spacecraft_id}
             ),
-            do: {spacecraft_id, count}
+            do: {spacecraft_id, count, occurrence}
       end)
 
-    needs = requirement_needs ++ template_needs
+    # U61: the first window that STARTS in the day. A requirement carried over from the day before
+    # (its window opened then) doesn't start this day's countdown.
+    window_starts =
+      for(
+        {_requirement, version} <- requirements,
+        not DateTime.before?(version.earliest_start, from),
+        do: version.earliest_start
+      ) ++ Enum.map(template_needs, &elem(&1, 2))
+
+    needs = requirement_needs ++ Enum.map(template_needs, fn {id, count, _at} -> {id, count} end)
     with_rules = needs |> Enum.map(&elem(&1, 0)) |> Enum.reject(&is_nil/1) |> MapSet.new()
 
     %{
@@ -114,7 +123,8 @@ defmodule Cadence.Reads.PlanningSetup do
       spacecraft_with_rules: MapSet.size(with_rules),
       contacts_needed: needs |> Enum.map(&elem(&1, 1)) |> Enum.sum(),
       without_rule: max(total - MapSet.size(with_rules), 0),
-      spacecraft_total: total
+      spacecraft_total: total,
+      first_window_at: Enum.min(window_starts, DateTime, fn -> nil end)
     }
   end
 

@@ -22,7 +22,6 @@ defmodule Cadence.Control.Scheduling do
   alias Cadence.Management.Contacts, as: ManagementContacts
 
   alias Cadence.ContactPlanning.{
-    ConfirmationWindow,
     ContactPlan,
     ContactPlanExecutions,
     ContactPlans,
@@ -237,56 +236,10 @@ defmodule Cadence.Control.Scheduling do
     end)
   end
 
-  @doc """
-  A plan's lifecycle as operators see it (DECISIONS #52). An `executing` plan that no session
-  is executing reads by its unfinished items:
-
-  - `:interrupted` when any were never placed (`pending`/`requesting`). Execute resumes those
-    and only re-reads `uncertain` ones; it never re-sends them.
-  - `:unconfirmed` when an `uncertain` item (placed, provider hasn't answered) has waited past
-    the provider confirmation window, counted from placement (`started_at`, set when the item is
-    claimed just before the provider call), so later provider errors don't restart it. It needs
-    operator resolution, not Execute.
-  - `:executing` when every unfinished item is `uncertain` within the window. Nothing to
-    resume; the plan settles when the provider confirms.
-
-  Options: `:now`, `:confirmation_window_ms` (default from `:provider_confirmation_window_ms`).
-  """
+  @doc "A plan's lifecycle as operators see it: `Control.Contacts.plan_state/5`."
   @spec plan_state(binary(), binary(), binary(), atom(), keyword()) :: atom()
-  def plan_state(organization_id, mission_id, plan_id, lifecycle_state, opts \\ [])
-
-  def plan_state(organization_id, mission_id, plan_id, :executing, opts) do
-    if FleetRunLock.key_held?(execution_key(organization_id, mission_id, plan_id)),
-      do: :executing,
-      else: unattended_state(organization_id, mission_id, plan_id, opts)
-  end
-
-  def plan_state(_organization_id, _mission_id, _plan_id, lifecycle_state, _opts),
-    do: lifecycle_state
-
-  defp unattended_state(organization_id, mission_id, plan_id, opts) do
-    unfinished =
-      organization_id
-      |> plan_items(mission_id, plan_id)
-      |> Enum.filter(&(&1.lifecycle_state in [:pending, :requesting, :uncertain]))
-
-    cond do
-      unfinished == [] -> :interrupted
-      Enum.any?(unfinished, &(&1.lifecycle_state != :uncertain)) -> :interrupted
-      Enum.any?(unfinished, &ConfirmationWindow.overdue?(&1, opts)) -> :unconfirmed
-      true -> :executing
-    end
-  end
-
-  defp plan_items(organization_id, mission_id, plan_id) do
-    case approved_version(organization_id, mission_id, plan_id) do
-      {:ok, version, _sha} ->
-        ControlContacts.list_plan_execution(organization_id, mission_id, plan_id, version)
-
-      {:error, _reason} ->
-        []
-    end
-  end
+  defdelegate plan_state(organization_id, mission_id, plan_id, lifecycle_state, opts \\ []),
+    to: ControlContacts
 
   @doc "The approved version and hash of a plan, for (re-)execution."
   @spec approved_version(binary(), binary(), binary()) ::

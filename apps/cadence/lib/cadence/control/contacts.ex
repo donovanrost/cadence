@@ -2,7 +2,13 @@ defmodule Cadence.Control.Contacts do
   @moduledoc "Control-plane executor for exact realized Contact runtime handoffs."
 
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.ContactPlanning.{ContactPlanExecutionItem, ContactPlanExecutions}
+
+  alias Cadence.ContactPlanning.{
+    ConfirmationWindow,
+    ContactPlanExecutionItem,
+    ContactPlanExecutions,
+    FleetRunLock
+  }
 
   alias Cadence.Contacts.{
     ContactStore,
@@ -126,6 +132,67 @@ defmodule Cadence.Control.Contacts do
           [ContactPlanExecutionItem.t()]
   def list_plan_execution(organization_id, mission_id, plan_id, version),
     do: ContactPlanExecutions.list(organization_id, mission_id, plan_id, version)
+
+  @doc """
+  A plan's lifecycle as operators see it (DECISIONS #52). An `executing` plan that no session
+  is executing reads by its unfinished items:
+
+  - `:interrupted` when any were never placed (`pending`/`requesting`). Execute resumes those
+    and only re-reads `uncertain` ones; it never re-sends them.
+  - `:unconfirmed` when an `uncertain` item (placed, provider hasn't answered) has waited past
+    the provider confirmation window, counted from placement (`started_at`, set when the item is
+    claimed just before the provider call), so later provider errors don't restart it. It needs
+    operator resolution, not Execute.
+  - `:executing` when every unfinished item is `uncertain` within the window. Nothing to
+    resume; the plan settles when the provider confirms.
+
+  A `partially_reserved` plan reads the same way when no session is executing it (U61, 11-16):
+  the execution projection writes `partially_reserved` as soon as one item is reserved, while the
+  rest may still be pending. A run that stopped after booking some passes then reads
+  `:interrupted`, not booked. With nothing unfinished it stays `:partially_reserved` (the
+  failed items have their own resolution).
+
+  Options: `:now`, `:confirmation_window_ms` (default from `:provider_confirmation_window_ms`).
+  """
+  @spec plan_state(binary(), binary(), binary(), atom(), keyword()) :: atom()
+  def plan_state(organization_id, mission_id, plan_id, lifecycle_state, opts \\ [])
+
+  def plan_state(organization_id, mission_id, plan_id, state, opts)
+      when state in [:executing, :partially_reserved] do
+    if FleetRunLock.key_held?(
+         ContactPlanExecutions.execution_key(organization_id, mission_id, plan_id)
+       ),
+       do: state,
+       else: unattended_state(organization_id, mission_id, plan_id, state, opts)
+  end
+
+  def plan_state(_organization_id, _mission_id, _plan_id, lifecycle_state, _opts),
+    do: lifecycle_state
+
+  defp unattended_state(organization_id, mission_id, plan_id, state, opts) do
+    unfinished =
+      organization_id
+      |> plan_items(mission_id, plan_id)
+      |> Enum.filter(&(&1.lifecycle_state in [:pending, :requesting, :uncertain]))
+
+    cond do
+      unfinished == [] and state == :partially_reserved -> :partially_reserved
+      unfinished == [] -> :interrupted
+      Enum.any?(unfinished, &(&1.lifecycle_state != :uncertain)) -> :interrupted
+      Enum.any?(unfinished, &ConfirmationWindow.overdue?(&1, opts)) -> :unconfirmed
+      true -> state
+    end
+  end
+
+  defp plan_items(organization_id, mission_id, plan_id) do
+    case ManagementContacts.fetch_approved_plan(organization_id, mission_id, plan_id) do
+      {:ok, approved} ->
+        list_plan_execution(organization_id, mission_id, plan_id, approved.contact_plan_version)
+
+      {:error, _reason} ->
+        []
+    end
+  end
 
   defdelegate list_plan_execution_page(organization_id, mission_id, plan_id, version, page),
     to: ContactPlanExecutions,

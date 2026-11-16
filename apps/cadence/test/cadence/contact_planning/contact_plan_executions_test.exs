@@ -20,6 +20,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
   alias Cadence.Control.PlanConfirmation
   alias Cadence.Control.Scheduling
   alias Cadence.Management.Contacts, as: ManagementContacts
+  alias Cadence.Management.Contacts.Store.ContactPlanRow
+  alias Cadence.Reads.PlanCoverageAttention
 
   alias Cadence.Contacts.{PathTemplate, ProviderBooking, ProviderReservations}
   alias Cadence.GroundNetworks
@@ -693,12 +695,161 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     end
   end
 
-  defp execute(context, reserve) do
+  # The setup's plan: approved at @now + 1 s and accepted (items pending), never executed. Its
+  # passes are on 07-16; the requirement's window opens 21:00Z that day.
+  describe "U61 plan_coverage: a day whose booking hasn't started, or stopped (lead 11-16)" do
+    test "approve-plan without execute-plan: covered within the 2-minute grace, open after it",
+         context do
+      assert coverage(context, DateTime.add(@now, 60, :second)) == nil
+
+      assert %{
+               plan: %{state: "approved", revision: 1, approved_at: approved_at, booking: nil},
+               first_window_at: first,
+               severity: "caution",
+               p1: true
+             } = coverage(context, DateTime.add(@now, 4, :minute))
+
+      assert approved_at == context.plan.approved_at
+      assert first == DateTime.add(@now, 3_600, :second)
+    end
+
+    test "booking under way (its lock held) is covered; lock free with a pass never placed reopens",
+         context do
+      assert {:ok, %{items: [_uncertain, unplaced]}} =
+               execute(context, ambiguous_reserver(self()))
+
+      put_pending(unplaced)
+      now = DateTime.add(@now, 4, :minute)
+
+      with_execution_lock(context, fn -> assert coverage(context, now) == nil end)
+
+      assert %{
+               plan: %{
+                 state: "interrupted",
+                 approved_at: %DateTime{},
+                 booking: %{reserved: 0, total: 2, last_progress_at: %DateTime{}}
+               }
+             } = coverage(context, now)
+    end
+
+    test "a run that stopped after booking some passes reads interrupted, not partially reserved",
+         context do
+      assert {:ok, %{items: [_booked, other]}} = execute(context, successful_reserver(self()))
+      put_pending(other)
+      put_plan_state(context, "partially_reserved")
+      now = DateTime.add(@now, 4, :minute)
+
+      assert plan_state(context, :partially_reserved) == :interrupted
+
+      assert %{plan: %{state: "interrupted", booking: %{reserved: 1, total: 2}}} =
+               coverage(context, now)
+
+      # Every item finished (one rejected): it stays partially reserved, and the day is covered.
+      put_item_state(other, "rejected")
+      assert plan_state(context, :partially_reserved) == :partially_reserved
+      assert coverage(context, now) == nil
+    end
+
+    test "resolutions: booking started after the grace; a day that ends unbooked", context do
+      start = DateTime.add(@now, 5, :minute)
+      assert {:ok, _result} = execute(context, successful_reserver(self()), start)
+
+      assert [%{action: "booking_started", from_state: "approved", resolved_at: ^start}] =
+               resolved(
+                 context,
+                 DateTime.add(start, -30, :second),
+                 DateTime.add(start, 10, :second)
+               )
+
+      put_plan_state(context, "approved")
+      day_end = ~U[2026-07-17 00:00:00.000000Z]
+
+      assert [%{action: "day_ended", resolved_at: ^day_end, plan_revision: 1}] =
+               resolved(
+                 context,
+                 DateTime.add(day_end, -30, :second),
+                 DateTime.add(day_end, 10, :second)
+               )
+    end
+  end
+
+  defp coverage(context, now) do
+    context.organization_id
+    |> PlanCoverageAttention.items(context.mission_id, now: now)
+    |> Enum.find(&(&1.id == "2026-07-16"))
+  end
+
+  defp resolved(context, since, now) do
+    context.organization_id
+    |> PlanCoverageAttention.resolved_since(context.mission_id, since, now: now)
+    |> Enum.filter(&(&1.day == "2026-07-16"))
+  end
+
+  defp plan_state(context, state),
+    do:
+      Scheduling.plan_state(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        state
+      )
+
+  defp put_pending(item) do
+    put_item_state(item, "pending", provider_reservation_id: nil)
+
+    Repo.query!("DELETE FROM provider_reservations WHERE provider_reservation_id = $1", [
+      item.provider_reservation_id
+    ])
+  end
+
+  defp put_item_state(item, state, extra \\ []) do
+    ContactPlanExecutionItemRow
+    |> where([i], i.contact_plan_execution_item_id == ^item.contact_plan_execution_item_id)
+    |> Repo.update_all(set: [lifecycle_state: state] ++ extra)
+  end
+
+  defp put_plan_state(context, state) do
+    ContactPlanRow
+    |> where([p], p.contact_plan_id == ^context.plan.contact_plan_id)
+    |> Repo.update_all(set: [lifecycle_state: state])
+  end
+
+  defp with_execution_lock(context, fun) do
+    test_pid = self()
+
+    key =
+      ContactPlanExecutions.execution_key(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id
+      )
+
+    holder =
+      spawn(fn ->
+        FleetRunLock.with_key(key, fn ->
+          send(test_pid, :held)
+
+          receive do
+            :release -> :ok
+          end
+        end)
+      end)
+
+    assert_receive :held, 5_000
+
+    try do
+      fun.()
+    after
+      send(holder, :release)
+    end
+  end
+
+  defp execute(context, reserve, now \\ DateTime.add(@now, 2, :second)) do
     ContactPlanExecutions.execute(
       context.member_scope,
       context.mission_id,
       context.plan.contact_plan_id,
-      now: DateTime.add(@now, 2, :second),
+      now: now,
       resolve_route: context.resolve_route,
       reserve: reserve
     )
