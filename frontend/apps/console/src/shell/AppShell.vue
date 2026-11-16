@@ -17,6 +17,7 @@ import { provideRuntimeStatus } from "./runtime-status.ts";
 import RuntimeBanner from "./RuntimeBanner.vue";
 import { useRuntimeBanner } from "./runtime-banner.ts";
 import { useAdminOrgSelect } from "./admin-org.ts";
+import { useRouteFocus } from "./route-focus.ts";
 
 const route = useRoute();
 const scope = useConsoleScope();
@@ -75,6 +76,8 @@ watch(
 /** A scrolling main must be keyboard reachable (axe scrollable-region-focusable, qa U30 #3). */
 const main = ref<HTMLElement | null>(null);
 const mainScrolls = useScrollable(main);
+/** After a page change: focus its heading and announce its title (a11y, lead). */
+const { announcement } = useRouteFocus(main);
 </script>
 
 <template>
@@ -132,6 +135,7 @@ const mainScrolls = useScrollable(main);
           <NotFoundScreen v-else-if="unknownScope" :sentence="unknownScope" />
           <RouterView v-else />
         </main>
+        <p class="sr-only" role="status" aria-live="polite">{{ announcement }}</p>
         <!-- Setup bottom bar (staged changes), composed in App.vue; stays put while main scrolls. -->
         <slot v-if="mode === 'setup' && missionScope" name="setup-footer" />
       </div>
