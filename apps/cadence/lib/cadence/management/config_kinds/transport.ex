@@ -1,4 +1,4 @@
-defmodule Cadence.Comms.ConfigKinds.Transport do
+defmodule Cadence.Management.ConfigKinds.Transport do
   @moduledoc """
   Change-set kind for mission Transports.
 
@@ -9,23 +9,28 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
   Contact scheduling reads transports when it books, so applying a change notifies the
   mission's contact scheduler. Booked and running contacts keep the transport they were booked
   with.
+
+  A **provider-managed** transport stages its provider (`mission_provider_id`,
+  `mission_provider_version`) and exact profile refs (`service_profile_ref`,
+  `delivery_profile_ref`: `{"id", "version"}`); its configuration and direction are derived
+  from the delivery profile and replace anything staged there. Validation runs the same
+  derivation an apply does (`Cadence.Management.Transports.derive/3`), so a preview that passes
+  applies. This kind is composition, not Comms, because that crosses Ground Networks and Comms
+  (comms parity 2).
   """
 
   @behaviour Cadence.Platform.ConfigKind
-
-  import Ecto.Query
 
   alias Cadence.Comms.{
     GroundStationStore,
     ListenClaims,
     Transport,
     TransportKind,
-    TransportRow,
     TransportStore
   }
 
+  alias Cadence.Management.Transports
   alias Cadence.Platform.ConfigFields, as: F
-  alias Cadence.Repo
 
   @fields ~w(display_name origin transport_kind direction_capability configuration ground_station_id
              mission_provider_id mission_provider_version service_profile_ref
@@ -40,22 +45,9 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
 
   @impl true
   def load(organization_id, mission_id, ids) do
-    latest =
-      from(row in TransportRow,
-        where:
-          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-            row.transport_id in ^ids,
-        distinct: row.transport_id,
-        order_by: [asc: row.transport_id, desc: row.version]
-      )
-
-    latest
-    |> Repo.all()
-    |> Enum.reject(&(&1.lifecycle_state == "archived"))
-    |> Map.new(fn row ->
-      transport = TransportRow.to_domain(row)
-      {transport.transport_id, document(transport)}
-    end)
+    organization_id
+    |> TransportStore.latest_transports(mission_id, ids)
+    |> Map.new(&{&1.transport_id, document(&1)})
   end
 
   @impl true
@@ -137,7 +129,36 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
     end
   end
 
+  # Provider-managed: the provider, its version and the two profile refs are checked, and the
+  # configuration derived, exactly as an apply will (Management.Transports.derive/3).
+  def validate(
+        organization_id,
+        mission_id,
+        _action,
+        _entity_id,
+        _previous,
+        %{"origin" => "provider_managed"} = doc
+      ) do
+    case Transports.derive(organization_id, mission_id, doc) do
+      {:ok, derived} -> listen_claim(mission_id, derived.configuration)
+      {:error, errors} -> {:error, Enum.map(errors, &F.error(&1.path, &1.message))}
+    end
+  end
+
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
+
+  # SAFETY: a listen host:port is one mission's (listener guard). A provider-managed transport's
+  # derived configuration listens too (provider_connects), so its preview refuses a claimed port
+  # like a direct one, instead of passing and failing at apply.
+  defp listen_claim(mission_id, configuration) do
+    case ListenClaims.check(mission_id, ListenClaims.endpoint(configuration)) do
+      :ok ->
+        :ok
+
+      {:error, {:listen_endpoint_claimed, _endpoint}} ->
+        {:error, [F.error("configuration.port", ListenClaims.message())]}
+    end
+  end
 
   @impl true
   def write(organization_id, mission_id, :create, id, nil, proposed, _options) do
@@ -152,7 +173,7 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
       })
       |> Transport.new()
 
-    stored(TransportStore.persist_transport(organization_id, transport))
+    stored(Transports.persist_transport(organization_id, transport))
   end
 
   def write(organization_id, mission_id, :update, id, _previous, proposed, _options) do
@@ -164,7 +185,7 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
       |> Map.from_struct()
       |> Map.take(Map.values(@field_atoms))
 
-    stored(TransportStore.version_transport(organization_id, mission_id, id, attrs))
+    stored(Transports.version_transport(organization_id, mission_id, id, attrs))
   end
 
   def write(organization_id, mission_id, :delete, id, _previous, nil, _options) do

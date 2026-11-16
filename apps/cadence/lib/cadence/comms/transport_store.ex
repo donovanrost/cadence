@@ -162,6 +162,22 @@ defmodule Cadence.Comms.TransportStore do
     |> Enum.map(&TransportRow.to_domain/1)
   end
 
+  @doc "The latest version of each of `transport_ids` that isn't archived (the change-set kind's load)."
+  @spec latest_transports(binary(), binary(), [binary()]) :: [Transport.t()]
+  def latest_transports(organization_id, mission_id, transport_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(transport_ids) do
+    from(row in TransportRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.transport_id in ^transport_ids,
+      distinct: row.transport_id,
+      order_by: [asc: row.transport_id, desc: row.version]
+    )
+    |> Repo.all()
+    |> Enum.reject(&(&1.lifecycle_state == "archived"))
+    |> Enum.map(&TransportRow.to_domain/1)
+  end
+
   @doc "Returns one bounded page of the active latest transport versions."
   @spec list_transports_page(binary(), binary(), keyword()) :: Listing.Page.t()
   def list_transports_page(organization_id, mission_id, opts \\ [])
@@ -274,8 +290,24 @@ defmodule Cadence.Comms.TransportStore do
   end
 
   defp normalize_transport(%Transport{origin: :provider_managed} = transport, opts) do
+    with {:ok, %ProviderTransportBasis{} = provider} <- provider_transport_basis(opts) do
+      derive_provider_transport(transport, provider)
+    end
+  end
+
+  @doc """
+  A provider-managed transport as it would be stored, without storing it: the provider's
+  version, readiness and profiles checked, the configuration and direction derived from the
+  delivery profile, exact profile refs and the provider snapshot filled in. The change-set kind's
+  preview and an options read use it, so what they show is what an apply stores.
+  """
+  @spec derive_provider_transport(Transport.t(), ProviderTransportBasis.t()) ::
+          {:ok, Transport.t()} | {:error, term()}
+  def derive_provider_transport(
+        %Transport{origin: :provider_managed} = transport,
+        %ProviderTransportBasis{} = provider
+      ) do
     with {:ok, provider_id, provider_version} <- provider_reference(transport),
-         {:ok, %ProviderTransportBasis{} = provider} <- provider_transport_basis(opts),
          :ok <- require_provider_scope(transport, provider, provider_id),
          true <- provider.provider_version == provider_version,
          :ok <- require_validated_provider(provider),
@@ -284,7 +316,7 @@ defmodule Cadence.Comms.TransportStore do
          {:ok, delivery_profile} <-
            find_profile(provider, "delivery_profiles", transport.delivery_profile_ref),
          :ok <- require_profile_compatibility(service_profile, delivery_profile),
-         {:ok, configuration} <- TCPSocket.from_delivery_profile(delivery_profile) do
+         {:ok, configuration} <- delivery_configuration(delivery_profile) do
       {:ok,
        %Transport{
          transport
@@ -383,6 +415,13 @@ defmodule Cadence.Comms.TransportStore do
        do: {:ok, provider_id, provider_version}
 
   defp provider_reference(_transport), do: {:error, :mission_provider_reference_required}
+
+  defp delivery_configuration(delivery_profile) do
+    case TCPSocket.from_delivery_profile(delivery_profile) do
+      {:ok, configuration} -> {:ok, configuration}
+      {:error, message} -> {:error, {:provider_delivery_profile_unusable, message}}
+    end
+  end
 
   defp provider_transport_basis(opts) do
     case Keyword.fetch(opts, :provider_transport_basis) do

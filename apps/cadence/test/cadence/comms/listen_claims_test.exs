@@ -6,7 +6,6 @@ defmodule Cadence.Comms.ListenClaimsTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Comms.ConfigKinds.Transport, as: TransportKind
   alias Cadence.Comms.{ListenClaims, Transport, TransportStore}
 
   alias Cadence.Contacts.{
@@ -19,6 +18,7 @@ defmodule Cadence.Comms.ListenClaimsTest do
   }
 
   alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Management.ConfigKinds.Transport, as: TransportKind
   alias Cadence.Reads.ActionQueue.ContactStartItem
 
   setup do

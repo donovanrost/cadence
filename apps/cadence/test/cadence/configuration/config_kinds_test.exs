@@ -2,9 +2,11 @@ defmodule Cadence.Configuration.ConfigKindsTest do
   use Cadence.DataCase, async: false
 
   import Cadence.ConfigurationFixtures
+  import Cadence.ReadyProviderFixtures
 
-  alias Cadence.Comms.TransportStore
+  alias Cadence.Comms.{ListenClaims, TransportStore}
   alias Cadence.Control.Configuration
+  alias Cadence.Management.Transports
   alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
@@ -38,6 +40,75 @@ defmodule Cadence.Configuration.ConfigKindsTest do
 
       assert %{verdict: :no_go, items: [%{errors: [%{path: "configuration"}]}]} =
                Enum.find(checks, &(&1.key == "validation"))
+    end
+
+    # Comms parity (2): provider-managed transports through change sets. Validation runs the same
+    # derivation an apply does, so a preview that passes applies, and stores what derive/3 shows.
+    test "a provider-managed transport applies with the configuration derive/3 shows", ctx do
+      provider = persist_ready_provider!(ctx.org, ctx.mission)
+      doc = provider_doc(provider, "Provider downlink")
+
+      assert {:ok, derived} = Transports.derive(ctx.org, ctx.mission, doc)
+      assert derived.direction_capability == :inbound
+      assert derived.summary.endpoint == "127.0.0.1:5100"
+
+      [id] = apply_ops(ctx, "Add provider transport", [create("transport", doc)])
+
+      assert {:ok, stored} = fetch_transport(ctx, id)
+      assert stored.origin == :provider_managed
+      assert stored.configuration == derived.configuration
+      assert stored.mission_provider_version == provider.version
+      assert stored.delivery_profile_ref == %{"id" => "delivery-cadence", "version" => 7}
+
+      # An edit keeps the provider basis and its derived configuration.
+      apply_ops(ctx, "Rename", [update("transport", id, "display_name", "Provider downlink 2")])
+
+      assert {:ok, %{version: 2, origin: :provider_managed} = edited} = fetch_transport(ctx, id)
+      assert edited.configuration == derived.configuration
+    end
+
+    test "provider-managed refusals land on their fields in preview", ctx do
+      provider = persist_ready_provider!(ctx.org, ctx.mission)
+      doc = provider_doc(provider, "Refused")
+
+      for {bad, path} <- [
+            {Map.delete(doc, "mission_provider_id"), "mission_provider_id"},
+            {%{doc | "mission_provider_version" => provider.version + 1},
+             "mission_provider_version"},
+            {%{doc | "service_profile_ref" => %{"id" => "service-gone", "version" => 1}},
+             "service_profile_ref"},
+            {%{doc | "delivery_profile_ref" => %{"id" => "delivery-cadence", "version" => 6}},
+             "delivery_profile_ref"}
+          ] do
+        assert {:ok, %{verdict: :no_go, checks: checks}} =
+                 Configuration.preview(ctx.alice, ctx.mission, {:ops, [create("transport", bad)]})
+
+        assert %{items: [%{errors: [%{path: ^path}]}]} =
+                 Enum.find(checks, &(&1.key == "validation")),
+               path
+      end
+    end
+
+    # Listener guard (isolation): a provider-managed transport's derived configuration listens too
+    # (provider_connects), so a host:port another mission listens on is refused in PREVIEW, like a
+    # direct one, rather than passing and failing at apply.
+    test "a provider-managed transport whose derived listen port another mission holds is refused",
+         ctx do
+      %{organization_id: other_org, mission_id: other} = configuration_mission("kinds-other")
+      other_ctx = %{alice: member_scope(other_org, :member, "Bob"), mission: other}
+      claimed = put_in(transport_doc("Other mission's listener")["configuration"]["port"], "5100")
+      apply_ops(other_ctx, "Other mission listens", [create("transport", claimed)])
+
+      provider = persist_ready_provider!(ctx.org, ctx.mission)
+      doc = provider_doc(provider, "Provider downlink")
+
+      assert {:ok, %{verdict: :no_go, checks: checks}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [create("transport", doc)]})
+
+      assert %{items: [%{errors: [%{path: "configuration.port", message: message}]}]} =
+               Enum.find(checks, &(&1.key == "validation"))
+
+      assert message == ListenClaims.message()
     end
   end
 
@@ -429,4 +500,16 @@ defmodule Cadence.Configuration.ConfigKindsTest do
 
   defp versions(%{org: org, mission: mission}, id),
     do: TransportStore.list_transport_versions(org, mission, id)
+
+  # What the console stages for a provider-managed transport (comms parity 2): no configuration
+  # or direction, they're derived.
+  defp provider_doc(provider, name),
+    do: %{
+      "display_name" => name,
+      "origin" => "provider_managed",
+      "mission_provider_id" => provider.provider_id,
+      "mission_provider_version" => provider.version,
+      "service_profile_ref" => %{"id" => "service-downlink", "version" => 3},
+      "delivery_profile_ref" => %{"id" => "delivery-cadence", "version" => 7}
+    }
 end

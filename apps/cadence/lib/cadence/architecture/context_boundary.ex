@@ -171,6 +171,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/runtime_fact_consumer.ex" => :commanding,
     "lib/cadence/control/mission_runtime.ex" => :runtime,
     "lib/cadence/management/transports.ex" => :composition,
+    "lib/cadence/management/config_kinds/transport.ex" => :composition,
     "lib/cadence/management/communications_setup.ex" => :composition,
     "lib/cadence/derived_telemetry/definition.ex" => :catalog,
     "lib/cadence/derived_telemetry/expression_evaluator.ex" => :catalog,

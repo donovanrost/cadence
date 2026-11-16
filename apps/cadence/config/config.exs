@@ -44,7 +44,8 @@ config :cadence,
   # Mission change-set kinds (Cadence.Platform.ConfigKind), see docs/apogee/domain/change-sets.md.
   configuration_kinds: [
     Cadence.Comms.ConfigKinds.GroundStation,
-    Cadence.Comms.ConfigKinds.Transport,
+    # Composition: provider-managed transports cross Ground Networks and Comms (comms parity 2).
+    Cadence.Management.ConfigKinds.Transport,
     Cadence.Spacecraft.ConfigKinds.Spacecraft,
     Cadence.Spacecraft.ConfigKinds.SpacecraftProfile,
     Cadence.Spacecraft.ConfigKinds.SpacecraftOverride,
