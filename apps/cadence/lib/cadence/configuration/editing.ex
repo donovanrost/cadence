@@ -4,6 +4,12 @@ defmodule Cadence.Configuration.Editing do
 
   Withdrawn changes keep their ops, so the surface where they were made can give them back to
   their author as unstaged edits.
+
+  A set left with nothing staged (its last change withdrawn, discarded, or emptied by a take-live
+  rebase) closes in the same transaction, under its row lock: state `discarded` with `closed_at`,
+  as a discard of everything always did (lead, ux 11-16). Staging takes the same row lock, so a
+  concurrent stage opens a fresh set instead of joining a closed one. The set's history still
+  shows the withdrawals.
   """
 
   import Ecto.Query
@@ -20,7 +26,7 @@ defmodule Cadence.Configuration.Editing do
            :ok <- staged(change),
            :ok <- may_edit(change, actor, discard_any?) do
         ChangeSetStore.set_change_states(set.change_set_id, [change_id], "withdrawn")
-        result(ChangeSetStore.update_set(set, []))
+        result(close_if_empty(set))
       else
         {:error, reason} -> Repo.rollback(reason)
       end
@@ -49,12 +55,17 @@ defmodule Cadence.Configuration.Editing do
     ChangeSetStore.set_change_states(set.change_set_id, ids, "discarded")
     remaining = length(changes) - length(mine)
 
-    updated =
-      if remaining == 0,
-        do: ChangeSetStore.update_set(set, state: "discarded", closed_at: DateTime.utc_now()),
-        else: ChangeSetStore.update_set(set, [])
+    set
+    |> close_if_empty()
+    |> result()
+    |> Map.merge(%{discarded: length(mine), remaining: remaining})
+  end
 
-    updated |> result() |> Map.merge(%{discarded: length(mine), remaining: remaining})
+  # Under the caller's lock on the set row.
+  defp close_if_empty(set) do
+    if ChangeSetStore.changes(set.change_set_id) == [],
+      do: ChangeSetStore.update_set(set, state: "discarded", closed_at: DateTime.utc_now()),
+      else: ChangeSetStore.update_set(set, [])
   end
 
   @doc """
@@ -74,7 +85,7 @@ defmodule Cadence.Configuration.Editing do
            {:ok, current} <- current(organization_id, mission_id, op) do
         apply_resolution(op, current, resolution)
         maybe_withdraw_empty(set, change.change_id)
-        result(ChangeSetStore.update_set(set, []))
+        result(close_if_empty(set))
       else
         {:error, reason} -> Repo.rollback(reason)
       end

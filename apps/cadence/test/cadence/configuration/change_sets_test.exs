@@ -190,6 +190,26 @@ defmodule Cadence.Configuration.ChangeSetsTest do
       assert {:ok, %{change_set: nil}} = Configuration.current(alice, mission)
     end
 
+    # lead/ux 11-16: a set left with nothing staged closes, as a discard of everything does.
+    test "withdrawing the last change closes the set; the next stage opens a fresh one",
+         %{alice: alice, bob: bob, mission: mission} do
+      {:ok, a} = Configuration.stage(alice, mission, %{summary: "A"}, [station_op("A")])
+      {:ok, b} = Configuration.stage(bob, mission, %{summary: "B"}, [station_op("B")])
+
+      # One of two withdrawn: the set stays open.
+      assert {:ok, %{state: "open"}} = Configuration.withdraw(bob, mission, b.change_id)
+
+      # The last one withdrawn: closed, with closed_at, the same terminal state as a discard.
+      assert {:ok, %{state: "discarded"}} = Configuration.withdraw(alice, mission, a.change_id)
+      assert {:ok, %{change_set: nil}} = Configuration.current(alice, mission)
+
+      assert %{closed_at: %DateTime{}} =
+               Repo.get(Cadence.Configuration.ChangeSetRow, a.change_set_id)
+
+      {:ok, c} = Configuration.stage(alice, mission, %{summary: "C"}, [station_op("C")])
+      refute c.change_set_id == a.change_set_id
+    end
+
     test "compare folds revisions per entity", ctx do
       %{alice: alice, mission: mission} = ctx
       station_id = applied_station(ctx, "Punta Arenas")
