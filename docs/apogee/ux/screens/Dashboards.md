@@ -92,7 +92,16 @@ View only. Widgets stack in grid order, one column. There's no Edit, and the hea
     shows. A dashboard without a scope shows the range button alone, right-aligned.
   - The refresh interval moves into `⋯` as `Refresh: every 30 s…`, or `Refresh: off…` when it's off. That item opens
     a sheet with the choices.
+    The default range's short form is `Live`; its accessible name keeps the desktop label, `Live · widget windows`.
   - From 768px up, the one-row header may wrap where it doesn't fit.
+  - **Fleet health stays on screen** (lead, 11-15). The viewer is a takeover, so the bottom tab bar with its alarm
+    count isn't there. In its place goes a 48px bottom bar (`chrome`, hairline top, above the home indicator):
+    health on the left, `UTC 23:55Z` on the right.
+    - Health uses the cockpit chips with mark and word: `◆ 2 crit · ▲ 1 caution · 3 stale`. Each chip links to
+      Alarms or Fleet, as on desktop, and is a 48px target.
+    - With nothing to report, it reads `■ Fleet nominal`.
+    - Health is never hidden in `⋯`: a status you have to open isn't a status.
+    - Kiosk and Present on a phone keep their own 24px status line, which already holds health and UTC.
 - **Directory** (dashboards 9b9a99649): Mobile rows, at least 56px. The name link (with ★ and `ARCHIVED`) sits over
   one subtitle line, `EARENDIL-312 · 11-12 02:51Z · Mira K.`. Tags are left off the row; the tag filter stays in
   the toolbar. The `⋯` offers Star only. An unknown part is dropped from the subtitle, never shown as `—`.
