@@ -16,6 +16,7 @@ defmodule Cadence.Protocol.ProtocolAnomaly do
           | :continuation_decode_failed
           | :invalid_space_packet
           | :oid_validation_failed
+          | :scid_mismatch
 
   @type t :: %__MODULE__{
           anomaly_id: binary(),

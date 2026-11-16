@@ -1036,6 +1036,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       path_id: state.path_id,
       source_endpoint_ref: state.source_endpoint_ref,
       source_endpoint_spacecraft_id: state.source_endpoint_spacecraft_id,
+      # The frame-SCID cross-check's expected SCID, journaled with each entry (DECISIONS #102).
+      source_endpoint_spacecraft_scid: state.source_endpoint_spacecraft_scid,
       direction: state.direction,
       ingress_protocol_family: state.ingress_protocol_family,
       fixed_message_bytes: state.fixed_message_bytes,
@@ -1169,6 +1171,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       provider_binding_id: state.provider_binding_id,
       source_endpoint_ref: state.source_endpoint_ref,
       spacecraft_id: state.source_endpoint_spacecraft_id,
+      # The pass's one spacecraft's SCID (nil when the path has none): the frame-SCID
+      # cross-check refuses frames with another (DECISIONS #102).
+      spacecraft_scid: state.source_endpoint_spacecraft_scid,
       protocol_family: state.ingress_protocol_family,
       direction: state.direction,
       source_ref: state.source_ref || state.provider_binding_id,
@@ -1389,7 +1394,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
             Map.merge(state.ingress_metadata || %{}, %{
               "realized_contact_id" => state.realized_contact_id,
               "path_id" => state.path_id,
-              "provider_binding_id" => state.provider_binding_id
+              "provider_binding_id" => state.provider_binding_id,
+              "spacecraft_scid" => state.source_endpoint_spacecraft_scid
             })
         })
       end)

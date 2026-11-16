@@ -121,7 +121,10 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       # would retry forever); raised by each ack.
       resume_floor: 0,
       last_incomplete: nil,
-      incomplete_at_end: %{frame_bytes: 0, packet_octets: 0, journal_bytes: 0}
+      incomplete_at_end: %{frame_bytes: 0, packet_octets: 0, journal_bytes: 0},
+      # The frame-SCID cross-check's running tally for this stream (DECISIONS #102): nil until a
+      # batch reports one (no expected SCID: never).
+      scid_check: nil
     }
 
     send(self(), :consume)
@@ -183,7 +186,8 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         phase: if(state.in_flight, do: state.in_flight.phase, else: :idle),
         last_completed_at: state.last_completed_at,
         last_error: state.last_error,
-        incomplete_at_end: state.incomplete_at_end
+        incomplete_at_end: state.incomplete_at_end,
+        scid_check: state.scid_check
       }}, state}
   end
 
@@ -235,7 +239,8 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       Map.merge(batch, %{
         phase: :acknowledge,
         resume: Map.get(progress, :resume_offset),
-        incomplete: Map.get(progress, :incomplete)
+        incomplete: Map.get(progress, :incomplete),
+        scid_check: Map.get(progress, :scid_check)
       })
 
     acknowledge_batch(%{state | in_flight: batch})
@@ -352,6 +357,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
              resume_slice: nil,
              resume_floor: batch_resume(batch, state.resume_floor) || batch.last.end_offset,
              last_incomplete: Map.get(batch, :incomplete),
+             scid_check: add_scid_check(state.scid_check, Map.get(batch, :scid_check)),
              acknowledged_batches: state.acknowledged_batches + 1,
              acknowledged_entries: state.acknowledged_entries + batch.entry_count,
              acknowledged_bytes: state.acknowledged_bytes + batch.byte_count,
@@ -428,9 +434,22 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       acknowledged_batches: state.acknowledged_batches,
       acknowledged_entries: state.acknowledged_entries,
       acknowledged_bytes: state.acknowledged_bytes,
-      incomplete_at_end: state.incomplete_at_end
+      incomplete_at_end: state.incomplete_at_end,
+      scid_check: state.scid_check
     }
   end
+
+  # Adds one batch's frame-SCID tally to the stream's (DECISIONS #102).
+  defp add_scid_check(total, nil), do: total
+  defp add_scid_check(nil, batch), do: batch
+
+  defp add_scid_check(total, batch),
+    do: %{
+      expected_scid: batch.expected_scid,
+      spacecraft_id: Map.get(batch, :spacecraft_id),
+      frames: total.frames + batch.frames,
+      refused: Map.merge(total.refused, batch.refused, fn _scid, a, b -> a + b end)
+    }
 
   # The batch's resume point, never below the floor; nil (resume = end) when it reported none.
   defp batch_resume(%{last: %{end_offset: end_offset}} = batch, floor) do

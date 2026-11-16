@@ -97,6 +97,31 @@ defmodule Cadence.Runtime.ContactBacklog do
     :exit, _reason -> []
   end
 
+  @doc """
+  The frame-SCID cross-check's tally of each of the contact's journal consumers (DECISIONS #102):
+  `[%{path_id, provider_binding_id, expected_scid, frames, refused: %{scid => count}}]`, every
+  path that checked any frame (refusing or not: "most" is over all of the contact's frames).
+  """
+  @spec scid_checks(term(), binary(), binary()) :: [map()]
+  def scid_checks(namespace, mission_id, realized_contact_id) do
+    namespace
+    |> registered(:provider_ingress_journal_consumer, mission_id, realized_contact_id)
+    |> Enum.flat_map(fn {path_id, provider_binding_id, pid} ->
+      consumer_scid_check(pid, %{path_id: path_id, provider_binding_id: provider_binding_id})
+    end)
+  catch
+    :exit, _reason -> []
+  end
+
+  defp consumer_scid_check(pid, ids) do
+    case IngressJournalConsumer.snapshot(pid) do
+      {:ok, %{scid_check: %{frames: frames} = check}} when frames > 0 -> [Map.merge(check, ids)]
+      _nothing -> []
+    end
+  catch
+    :exit, _reason -> []
+  end
+
   defp registered(namespace, kind, mission_id, realized_contact_id) do
     Cluster.select(namespace, [
       {{{kind, mission_id, realized_contact_id, :"$1", :"$2"}, :"$3", :_}, [],

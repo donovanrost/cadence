@@ -316,6 +316,10 @@ defmodule Cadence.Control.Contacts do
   def realized_contact_incomplete_at_end(mission_id, realized_contact_id),
     do: RuntimeContacts.incomplete_at_end(mission_id, realized_contact_id)
 
+  @spec realized_contact_scid_checks(binary(), binary()) :: [map()]
+  def realized_contact_scid_checks(mission_id, realized_contact_id),
+    do: RuntimeContacts.scid_checks(mission_id, realized_contact_id)
+
   @spec ingress_journal_enabled?() :: boolean()
   def ingress_journal_enabled?, do: RuntimeContacts.journal_enabled?()
 

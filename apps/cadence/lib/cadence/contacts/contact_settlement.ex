@@ -13,7 +13,7 @@ defmodule Cadence.Contacts.ContactSettlement do
 
   import Ecto.Query
 
-  alias Cadence.Contacts.{ContactStore, RealizedContact}
+  alias Cadence.Contacts.{ContactStore, RealizedContact, ScidMismatch}
   alias Cadence.Contacts.ContactStore.RealizedContactRow
   alias Cadence.Control.Contacts, as: Runtime
   alias Cadence.Repo
@@ -277,7 +277,9 @@ defmodule Cadence.Contacts.ContactSettlement do
           :settled | :absent | {:unsettled, binary(), term()},
           map(),
           term(),
-          map() | nil
+          map() | nil,
+          [map()],
+          [map()]
         ) ::
           {:ok, RealizedContact.t()} | {:error, term()}
   def record(
@@ -286,25 +288,45 @@ defmodule Cadence.Contacts.ContactSettlement do
         backlog,
         stop,
         listener_refusal \\ nil,
-        incomplete \\ []
+        incomplete \\ [],
+        scid_checks \\ []
       ) do
     with {:ok, current} <-
            ContactStore.fetch_realized(contact.mission_id, contact.realized_contact_id) do
+      now = DateTime.utc_now()
+      scid_mismatch = ScidMismatch.settlement_entries(scid_checks, ground_station_ref(current))
+
       settlement =
         current.metadata
         |> Map.get("settlement", %{})
-        |> Map.merge(outcome_fields(outcome, backlog, DateTime.utc_now()))
+        |> Map.merge(outcome_fields(outcome, backlog, now))
         |> put_stop(stop)
         |> put_incomplete(incomplete)
+        |> put_scid_mismatch(scid_mismatch)
 
       metadata =
         if listener_refusal,
           do: %{"settlement" => settlement, "listener_refusal" => listener_refusal},
           else: %{"settlement" => settlement}
 
-      ContactStore.update_realized_lifecycle(current, current.lifecycle_state, metadata)
+      with {:ok, updated} <-
+             ContactStore.update_realized_lifecycle(current, current.lifecycle_state, metadata) do
+        # Only a fresh read raises the event; a later settle reads nothing (#102).
+        _ = ScidMismatch.record_event(updated, scid_mismatch, now)
+        {:ok, updated}
+      end
     end
   end
+
+  # The frame-SCID cross-check (DECISIONS #102): an empty read keeps what an earlier settle stored,
+  # as incomplete_at_end does.
+  defp put_scid_mismatch(settlement, []), do: settlement
+
+  defp put_scid_mismatch(settlement, entries),
+    do: Map.put(settlement, "scid_mismatch", entries)
+
+  defp ground_station_ref(%RealizedContact{metadata: metadata}),
+    do: (metadata || %{})["ground_station_ref"]
 
   # No runtime to drain: whatever its journal holds on disk wasn't inspected (replay does).
   defp outcome_fields(:absent, _backlog, now),

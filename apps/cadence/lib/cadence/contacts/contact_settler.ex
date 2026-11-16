@@ -194,13 +194,24 @@ defmodule Cadence.Contacts.ContactSettler do
 
     # What a stream gave up at its end (a frame or packet that never completed): read before stop.
     incomplete = Runtime.realized_contact_incomplete_at_end(mission_id, id)
+    # And what its frame-SCID cross-check refused (DECISIONS #102), likewise before stop.
+    scid_checks = Runtime.realized_contact_scid_checks(mission_id, id)
 
     stop = Runtime.terminate_realized_contact(mission_id, id)
 
     _ =
       if state.mode == :replay,
         do: ContactSettlement.record_replay(contact, outcome, backlog, stop),
-        else: ContactSettlement.record(contact, outcome, backlog, stop, refusals, incomplete)
+        else:
+          ContactSettlement.record(
+            contact,
+            outcome,
+            backlog,
+            stop,
+            refusals,
+            incomplete,
+            scid_checks
+          )
 
     # Its runtime is gone, listener included: a pass that couldn't start (ux U45) starts now.
     :ok = Scheduler.retry_starts(mission_id)

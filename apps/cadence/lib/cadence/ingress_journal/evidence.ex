@@ -168,11 +168,18 @@ defmodule Cadence.IngressJournal.Evidence do
   # same string keys the journal-less path sets (tcp_socket.ex), so archive rows name their
   # contact (qa issue 61: every archive row read NULL, and #88 quarantine items group by it).
   defp contact_context(metadata) do
-    for key <- [:realized_contact_id, :path_id, :provider_binding_id],
-        value = metadata_value(metadata, key),
-        is_binary(value),
-        into: %{},
-        do: {Atom.to_string(key), value}
+    ids =
+      for key <- [:realized_contact_id, :path_id, :provider_binding_id],
+          value = metadata_value(metadata, key),
+          is_binary(value),
+          into: %{},
+          do: {Atom.to_string(key), value}
+
+    # The pass's one spacecraft's SCID, for the frame-SCID cross-check (DECISIONS #102).
+    case metadata_value(metadata, :spacecraft_scid) do
+      scid when is_integer(scid) -> Map.put(ids, "spacecraft_scid", scid)
+      _none -> ids
+    end
   end
 
   defp validate_contiguous_entries([%Entry{}]), do: :ok

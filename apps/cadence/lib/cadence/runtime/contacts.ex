@@ -50,6 +50,11 @@ defmodule Cadence.Runtime.Contacts do
         realized_contact_id
       )
 
+  @doc "The contact's frame-SCID cross-check tallies (`ContactBacklog.scid_checks/3`, #102)."
+  @spec scid_checks(binary(), binary()) :: [map()]
+  def scid_checks(mission_id, realized_contact_id),
+    do: ContactBacklog.scid_checks(ProcessNamespace.default(), mission_id, realized_contact_id)
+
   @doc "Whether downlink ingress is journaled to disk (DECISIONS #71 holds only when it is)."
   @spec journal_enabled?() :: boolean()
   def journal_enabled?, do: JournalFileSystem.configured_policy().enabled?

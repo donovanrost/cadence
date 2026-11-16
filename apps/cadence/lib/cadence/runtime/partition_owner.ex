@@ -581,6 +581,7 @@ defmodule Cadence.Runtime.PartitionOwner do
          # Where this stream may durably resume (TMFrameIngress.resume_offset/3); nil without one.
          resume_offset: Map.get(decode_result, :resume_offset),
          incomplete: Map.get(decode_result, :incomplete),
+         scid_check: Map.get(decode_result, :scid_check),
          dispatch_decisions: dispatch_decisions,
          outputs: outputs,
          semantic_result: semantic_result,

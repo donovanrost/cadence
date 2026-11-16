@@ -6,6 +6,8 @@ defmodule Cadence.OperationalEvents.Event.Kind do
     :activation_superseded,
     :binding_set_activated,
     :catalog_revision_registered,
+    # Most of a pass's TM frames carried another SCID and were refused (DECISIONS #102).
+    :contact_scid_mismatch,
     :contact_window_moved,
     :dashboard_archived,
     :dashboard_config_changed,

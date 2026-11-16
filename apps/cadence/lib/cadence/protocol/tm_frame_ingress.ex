@@ -44,8 +44,8 @@ defmodule Cadence.Protocol.TMFrameIngress do
          {:ok, pipeline_state, frame_remainder, next_continuity_state} <-
            prepare_receive_stream(raw_evidence, pipeline_state, continuity_state, frame_remainder),
          absolute_base_offset = absolute_base_offset(raw_evidence, frame_remainder),
-         {:ok, sdu_octets, frame_infos, decode_anomalies, rest, next_pipeline_state} <-
-           TMFramePipeline.decode_sdu_octets_detailed(
+         {:ok, sdu_octets, frame_infos, decode_anomalies, rest, next_pipeline_state, scid_check} <-
+           TMFramePipeline.decode_sdu_octets_checked(
              frame_remainder <> raw_evidence.raw,
              codec_opts,
              pipeline_state,
@@ -78,7 +78,9 @@ defmodule Cadence.Protocol.TMFrameIngress do
          incomplete: %{
            frame_bytes: byte_size(rest),
            packet_octets: TMFramePipeline.stats(next_pipeline_state).buffered_octets
-         }
+         },
+         # The frame-SCID cross-check's tally (DECISIONS #102); nil without an expected SCID.
+         scid_check: scid_check && Map.put(scid_check, :spacecraft_id, raw_evidence.spacecraft_id)
        }, rest, next_pipeline_state,
        Map.put(next_continuity_state, :pending_frame_offsets, frame_offsets)}
     else
@@ -193,15 +195,27 @@ defmodule Cadence.Protocol.TMFrameIngress do
   # Without a source time a frame's time IS its receipt time: each frame takes the receipt time
   # of the journal record its bytes arrived in, not the first record of a merged batch.
   defp decode_context(%RawEvidence{source_time: nil} = raw_evidence, absolute_base_offset) do
-    %{
-      direction: raw_evidence.direction,
-      sdu_kind_hint: :space_packet,
-      frame_timestamp: &RawEvidence.receipt_time_at(raw_evidence, absolute_base_offset + &1)
-    }
+    raw_evidence
+    |> base_context()
+    |> Map.put(
+      :frame_timestamp,
+      &RawEvidence.receipt_time_at(raw_evidence, absolute_base_offset + &1)
+    )
   end
 
   defp decode_context(%RawEvidence{} = raw_evidence, _absolute_base_offset),
-    do: %{direction: raw_evidence.direction, sdu_kind_hint: :space_packet}
+    do: base_context(raw_evidence)
+
+  # The pass's one spacecraft's SCID, when the path resolved one (DECISIONS #102): frames with
+  # another SCID are refused before reassembly.
+  defp base_context(%RawEvidence{} = raw_evidence) do
+    context = %{direction: raw_evidence.direction, sdu_kind_hint: :space_packet}
+
+    case metadata_value(raw_evidence.metadata || %{}, :spacecraft_scid) do
+      scid when is_integer(scid) -> Map.put(context, :expected_scid, scid)
+      _none -> context
+    end
+  end
 
   # A packet is received when the frame completing it is: that frame's stamp (receipt fallback).
   defp packet_receipt_time(%RawEvidence{source_time: nil} = raw_evidence, sdu),
@@ -272,7 +286,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
   defp build_pipeline_anomalies(%RawEvidence{} = raw_evidence, anomalies, absolute_base_offset)
        when is_list(anomalies) do
     Enum.map(anomalies, fn anomaly ->
-      metadata = Map.get(anomaly, :metadata, %{})
+      metadata = anomaly_metadata(raw_evidence, anomaly)
 
       ProtocolAnomaly.new(%{
         evidence_id: raw_evidence.evidence_id,
@@ -294,6 +308,18 @@ defmodule Cadence.Protocol.TMFrameIngress do
       })
     end)
   end
+
+  # A refused frame's anomaly names its contact and path, for a later live read (DECISIONS #102).
+  defp anomaly_metadata(raw_evidence, %{anomaly_kind: :scid_mismatch} = anomaly) do
+    metadata = raw_evidence.metadata || %{}
+
+    Map.merge(anomaly.metadata, %{
+      realized_contact_id: metadata_value(metadata, :realized_contact_id),
+      path_id: metadata_value(metadata, :path_id)
+    })
+  end
+
+  defp anomaly_metadata(_raw_evidence, anomaly), do: Map.get(anomaly, :metadata, %{})
 
   defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, position, acc) do
     with :ok <- validate_tm_sdu_kind(sdu),
