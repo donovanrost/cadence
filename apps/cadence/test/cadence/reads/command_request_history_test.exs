@@ -68,6 +68,8 @@ defmodule Cadence.Reads.CommandRequestHistoryTest do
     verifier!(c, 4, "satisfied", "transport_action_request", other)
     verifier!(c, 5, "timed_out", nil, nil, "timed_out")
     verifier!(c, 6, "satisfied", "telemetry_sample", "missing-sample")
+    capability = capability!(c)
+    verifier!(c, 7, "satisfied", "transport_capability_record", capability)
 
     {:ok, history} = CommandRequestHistory.load(@org, @mission, c.request_id)
 
@@ -77,8 +79,13 @@ defmodule Cadence.Reads.CommandRequestHistoryTest do
              {"ready", transport},
              {"unavailable", nil},
              {"unmatched", nil},
-             {"unavailable", nil}
+             {"unavailable", nil},
+             {"ready", capability_record}
            ] = Enum.map(history.verifiers, &{&1.evidence_status, &1.evidence})
+
+    # The phase it matched at, from the record's own metadata (fe-ops correction b).
+    assert %{source: "capability_record", record_id: ^capability, signal_phase: "completion"} =
+             capability_record
 
     assert %{
              kind: "telemetry",
@@ -98,6 +105,49 @@ defmodule Cadence.Reads.CommandRequestHistoryTest do
 
     assert %{failure_code: "timed_out", severity: "warning", verifier_id: "verifier-5"} =
              Enum.at(history.verifiers, 4)
+  end
+
+  test "an attempt's failure says its kind and a code; the raw reason stays as said" do
+    assert CommandRequestHistory.failure("released", nil) == nil
+
+    assert CommandRequestHistory.failure("release_failed", "resolved: not_sent") ==
+             %{kind: "resolved", code: "not_sent"}
+
+    assert CommandRequestHistory.failure(
+             "release_failed",
+             ~s(refused: {:command_window_closed, "contact-1", :ended})
+           ) == %{kind: "refused", code: "command_window_closed"}
+
+    assert CommandRequestHistory.failure("release_failed", "refused: :fop_alerted") ==
+             %{kind: "refused", code: "fop_alerted"}
+
+    assert CommandRequestHistory.failure("release_uncertain", ":send_outcome_unknown") ==
+             %{kind: "uncertain", code: "send_outcome_unknown"}
+
+    assert CommandRequestHistory.failure("release_uncertain", "%RuntimeError{}") ==
+             %{kind: "uncertain", code: nil}
+  end
+
+  test "a resolved failure names who resolved it and when", c do
+    log = %{
+      "entries" => [
+        %{"outcome" => "unknown", "actor" => %{"kind" => "service", "id" => "cadence"}},
+        %{
+          "outcome" => "not_sent",
+          "actor" => %{"kind" => "user", "id" => c.scope.user.user_id},
+          "recorded_at" => "2026-11-14T07:25:05Z"
+        }
+      ]
+    }
+
+    assert %{kind: "resolved", code: "not_sent", by: %{id: id, name: name}, at: at} =
+             CommandRequestHistory.resolved_by(%{kind: "resolved", code: "not_sent"}, log)
+
+    assert id == c.scope.user.user_id and is_binary(name)
+    assert at == ~U[2026-11-14 07:25:05Z]
+
+    assert %{kind: "refused", by: nil, at: nil} =
+             CommandRequestHistory.resolved_by(%{kind: "refused", code: "x"}, log)
   end
 
   test "pages of 25 by cursor; a stale cursor or an unknown request is refused", c do
@@ -149,6 +199,20 @@ defmodule Cadence.Reads.CommandRequestHistoryTest do
   # Through ingest, so its packet and evidence references are real.
   defp sample! do
     CommandHistoryFixtures.sample!(%{org: @org, mission: @mission}, 17).sample_id
+  end
+
+  defp capability!(c) do
+    id = "capability-" <> Integer.to_string(System.unique_integer([:positive]))
+
+    CommandHistoryFixtures.capability!(
+      %{org: @org, mission: @mission},
+      id,
+      c.request_id,
+      c.attempt.attempt_id,
+      metadata: %{"signal_phase" => "completion"}
+    )
+
+    id
   end
 
   # Through the transport store; `action_kind` and `signal_phase` are the fixture's.

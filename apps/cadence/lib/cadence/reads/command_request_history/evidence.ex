@@ -8,7 +8,8 @@ defmodule Cadence.Reads.CommandRequestHistory.Evidence do
       action (its action_kind), signal_phase, at (requested_at), recorded_at: nil}`, only when it
       belongs to this request and the verifier's attempt;
     * `transport_capability_record` → `{kind: "transport", source: "capability_record",
-      record_id, action (its event_kind), signal_phase: nil, at and recorded_at (recorded_at)}`.
+      record_id, action (its event_kind), signal_phase (as the verifier matched it), at and
+      recorded_at (recorded_at)}`.
 
   `evidence_status`: `ready` (the record), `pending` (nothing matched yet and the verifier is
   still pending), `unmatched` (it ended with nothing matched, e.g. timed out), `unavailable` (a
@@ -136,6 +137,8 @@ defmodule Cadence.Reads.CommandRequestHistory.Evidence do
       select: %{
         transport_record_id: c.transport_record_id,
         event_kind: c.event_kind,
+        family_key: c.family_key,
+        metadata: c.metadata,
         recorded_at: type(c.recorded_at, :utc_datetime_usec)
       }
     )
@@ -147,12 +150,27 @@ defmodule Cadence.Reads.CommandRequestHistory.Evidence do
          source: "capability_record",
          record_id: c.transport_record_id,
          action: c.event_kind,
-         signal_phase: nil,
+         signal_phase: capability_phase(c),
          at: c.recorded_at,
          recorded_at: c.recorded_at
        }}
     end)
   end
+
+  # The phase the verifier matched it at (VerifierTransportSignals.signal_phase/2): the record's
+  # own signal_phase / verifier_phase, else acceptance for the uplink gateway's handled input.
+  defp capability_phase(record) do
+    metadata = JsonDocument.unwrap_value(record.metadata || %{})
+    metadata = if is_map(metadata), do: metadata, else: %{}
+
+    case metadata["signal_phase"] || metadata["verifier_phase"] do
+      phase when is_binary(phase) and phase != "" -> phase
+      _none -> default_phase(record.family_key, record.event_kind)
+    end
+  end
+
+  defp default_phase("uplink_gateway", "control_input_handled"), do: "acceptance"
+  defp default_phase(_family, _kind), do: nil
 
   defp value_json(nil), do: nil
   defp value_json(document), do: document |> JsonDocument.unwrap_value() |> Jason.encode!()

@@ -9,6 +9,8 @@ defmodule Cadence.Reads.CommandRequestHistory do
 
   import Ecto.Query
 
+  alias Cadence.Accounts
+
   alias Cadence.Commanding.{
     CommandReleaseAttemptRow,
     CommandRequestRow,
@@ -159,6 +161,10 @@ defmodule Cadence.Reads.CommandRequestHistory do
       state: row.lifecycle_state,
       uncertain: row.lifecycle_state == "release_uncertain",
       failure_reason: row.failure_reason,
+      failure:
+        row.lifecycle_state
+        |> failure(row.failure_reason)
+        |> resolved_by(row.resolution_evidence),
       contact: Contacts.contact(contacts, row.realized_contact_id, row.attempted_at),
       path_id: row.path_id,
       transport_binding_id: row.transport_binding_id,
@@ -166,6 +172,65 @@ defmodule Cadence.Reads.CommandRequestHistory do
       attempted_at: row.attempted_at,
       released_at: row.released_at
     }
+  end
+
+  # U68 R3 (fe-ops U70): `failure_reason` is an inspected term, so the wire also says what kind
+  # of failure it is and a code. Refusal codes are the leading atom, the same vocabulary as a
+  # named release's `stopped.reason.code` (GroupRelease.encode_reason).
+  @doc false
+  def failure(_state, nil), do: nil
+  def failure(_state, "resolved: " <> outcome), do: %{kind: "resolved", code: outcome}
+  def failure(_state, "refused: " <> term), do: %{kind: "refused", code: leading_atom(term)}
+  def failure("release_uncertain", term), do: %{kind: "uncertain", code: leading_atom(term)}
+  def failure(_state, term), do: %{kind: "refused", code: leading_atom(term)}
+
+  # ux U29: a resolution names who and when, from the attempt's resolution log (the last entry
+  # with that outcome). Other kinds carry `by: nil, at: nil`.
+  @doc false
+  def resolved_by(nil, _evidence), do: nil
+
+  def resolved_by(%{kind: "resolved", code: outcome} = failure, evidence) do
+    entry =
+      (evidence || %{})
+      |> Map.get("entries", [])
+      |> Enum.filter(&(is_map(&1) and &1["outcome"] == outcome))
+      |> List.last()
+
+    Map.merge(failure, %{
+      by: actor(entry && entry["actor"]),
+      at: time(entry && entry["recorded_at"])
+    })
+  end
+
+  def resolved_by(failure, _evidence), do: Map.merge(failure, %{by: nil, at: nil})
+
+  defp actor(%{"kind" => "user", "id" => id}) when is_binary(id) do
+    name =
+      case Accounts.fetch_user(id) do
+        {:ok, user} -> user.display_name || user.email
+        _missing -> nil
+      end
+
+    %{id: id, name: name}
+  end
+
+  defp actor(%{"id" => id}) when is_binary(id), do: %{id: id, name: nil}
+  defp actor(_none), do: nil
+
+  defp time(iso) when is_binary(iso) do
+    case DateTime.from_iso8601(iso) do
+      {:ok, at, _offset} -> at
+      _invalid -> nil
+    end
+  end
+
+  defp time(_none), do: nil
+
+  defp leading_atom(term) do
+    case Regex.run(~r/^\{?:"?([A-Za-z_][A-Za-z0-9_]*)/, term) do
+      [_match, atom] -> atom
+      nil -> nil
+    end
   end
 
   defp verifier(row, evidence) do

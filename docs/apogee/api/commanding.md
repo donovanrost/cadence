@@ -522,7 +522,12 @@ A member is a command request (`targets[].members[].request_id` on the group rea
 
 - `attempts`: newest first. `state`: `release_pending | released | release_failed |
   release_uncertain | canceled`; `uncertain` is `state == release_uncertain`. `failure_reason` is
-  free text. `contact.label` names the spacecraft, station code and AOS for a booked pass ("… pass",
+  an internal inspected term: Technical details only, never worded. `failure` (U70) is what to
+  word: `{kind: refused | resolved | uncertain, code: string | null, by: {id, name} | null, at |
+  null} | null`. `refused` = the uplink refused before sending; `code` is the same vocabulary as
+  a named release's `stopped.reason.code`. `resolved` = an operator resolved an uncertain
+  release; `code: not_sent | rejected`, with `by` and `at` from the resolution log. `uncertain` =
+  the cause's code (e.g. `send_outcome_unknown`). `by`/`at` are null except for `resolved`. `contact.label` names the spacecraft, station code and AOS for a booked pass ("… pass",
   the date when not the attempt's day), or "… contact" for a hand-started one.
 - `verifiers`: oldest first. `phase`: `acceptance | start | completion | custom`; `severity`:
   `info | warning | error | critical | null`; `state`: `pending | satisfied | failed | timed_out |
@@ -533,10 +538,14 @@ A member is a command request (`targets[].members[].request_id` on the group rea
   - `{kind: "telemetry", sample_id, point_id, point_name, packet_id, evidence_id, quality: good |
     suspect | bad, raw_value_json, engineering_value_json, received_at, generated_at}`;
   - `{kind: "transport", source: "action_request", record_id, action, signal_phase, at, recorded_at:
-    null}` (`action` = its action kind, `at` = requested);
-  - `{kind: "transport", source: "capability_record", record_id, action, signal_phase: null, at,
-    recorded_at}` (`action` = its event kind, `at` = `recorded_at`). Neither transport record
-    has a separate event time.
+    null}` (`action` = its action kind: `uplink_request | provider_request`, the only kinds that
+    carry a command attempt; `at` = requested);
+  - `{kind: "transport", source: "capability_record", record_id, action, signal_phase, at,
+    recorded_at}` (`action` = its event kind: `transport_event_handled | control_input_handled |
+    timer_handled`; `signal_phase` as the verifier matched it: the record's own phase, else
+    `acceptance` for the uplink gateway's handled input; `at` = `recorded_at`). Neither
+    transport record has a separate event time.
+  - `signal_phase`: `acceptance | start | completion | failure | custom | null`.
 - Paging: 25 each. `?attempts_after=<attempts_next>`, `?verifiers_after=<verifiers_next>`; `null`
   = no more. An id that isn't on this request: `422 invalid_params` (`details.field: "cursor"`).
 - `404 command_request_not_found`.
