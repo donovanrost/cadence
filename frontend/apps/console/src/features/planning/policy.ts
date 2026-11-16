@@ -167,6 +167,7 @@ export function buildDocument(
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, document };
 }
 
+// keyed-by-text: schema group keys, an open set from the server's form layout; an unknown group shows its key
 export const groupTitles: Readonly<Record<string, string>> = {
   horizon: "Horizon",
   scoring: "Trade-offs",
@@ -177,6 +178,7 @@ export const groupTitles: Readonly<Record<string, string>> = {
 };
 
 /** One line for panels whose fields are all advanced (ux review: no empty panels). */
+// keyed-by-text: schema group keys from the policy schema's layout; only some groups have a summary
 export const groupSummaries: Readonly<Record<string, string>> = {
   scoring:
     "How the scheduler weighs priority, deadlines and coverage against each other. The defaults suit most missions.",

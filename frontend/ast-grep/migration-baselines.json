@@ -7,9 +7,6 @@
     "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
     "apps/console/src/features/dashboards/fixtures.test-support.ts",
     "apps/console/src/features/dashboards/model/time-range.ts",
-    "apps/console/src/features/planning/RequirementGroups.vue",
-    "apps/console/src/features/planning/TemplateEditor.vue",
-    "apps/console/src/features/planning/policy.ts",
     "apps/console/src/features/profiles/newProfile.ts",
     "apps/console/src/features/review/api.ts",
     "apps/console/src/features/review/format.ts",
@@ -20,8 +17,6 @@
   ],
   "_comment_decoded_text": "Rule B (tools/decoded-text-compared.mjs): hits per file may only fall; a file not listed must have none. Lower or delete a file's count when you migrate it.",
   "decoded-text-compared": {
-    "src/features/planning/requirements.ts": 2,
-    "src/features/planning/templates.ts": 1,
     "src/features/profiles/detail.ts": 1,
     "src/features/profiles/newProfile.ts": 1,
     "src/features/profiles/overrides.ts": 2,

@@ -7,6 +7,7 @@ import type { TemplateSchema } from "./templates.ts";
 /** The requirement form's groups (Window, then Requirement), advanced fields collapsed (ux P4). */
 defineProps<{ schema: TemplateSchema; errors: Readonly<Record<string, string>> }>();
 const values = defineModel<FormValues>({ required: true });
+// keyed-by-text: schema group keys, an open set from the server's form layout; an unknown group shows its key
 const titles: Readonly<Record<string, string>> = { window: "Window", requirement: "Requirement" };
 </script>
 

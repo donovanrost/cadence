@@ -135,6 +135,7 @@ export function maxGapFact(
   fields: readonly SchemaField[] | null,
   document: unknown,
 ): Readonly<{ key: string; label: string; value: string; mono: boolean }> | null {
+  // compared-as-text: a schema field path, an open set the server's schema defines
   const f = fields?.find((x) => x.path === "requirement.max_gap_seconds");
   if (!f) return null;
   const v = readPath(document, f.path);

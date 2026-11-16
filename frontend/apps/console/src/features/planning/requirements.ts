@@ -274,6 +274,7 @@ export function withSpacecraftChoices(
   return {
     ...s,
     fields: s.fields.map((f) =>
+      // compared-as-text: a schema field path, an open set the server's schema defines
       f.path === "spacecraft_id" && choices.length > 0 ? { ...f, enum: choices } : f,
     ),
   };
@@ -307,7 +308,8 @@ export function requirementFacts(
     const label = f.enum?.find((o) => JSON.stringify(o.value) === JSON.stringify(v))?.label;
     const value =
       v === null || v === undefined
-        ? f.path === "max_gap_seconds"
+        ? // compared-as-text: a schema field path, an open set the server's schema defines
+          f.path === "max_gap_seconds"
           ? "No limit"
           : "—"
         : (label ?? displayValue(f, v));

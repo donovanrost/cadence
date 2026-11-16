@@ -75,6 +75,7 @@ watch(
   { immediate: true },
 );
 
+// keyed-by-text: schema group keys, an open set from the server's form layout; an unknown group shows its key
 const groupTitles: Readonly<Record<string, string>> = {
   schedule: "Schedule",
   requirement: "Each contact",
