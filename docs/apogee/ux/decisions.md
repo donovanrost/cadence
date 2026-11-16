@@ -1767,14 +1767,16 @@ A stream that stops mid-frame is normal. It never goes to Now or the Timeline.
 - When it happens, the end reason reads "Expired at 04:00Z before it was released." (the "Expired" stage word stays,
   never "Canceled").
 
-**Priority** (words final once api says what priority changes; provisional until then):
-- Words, never a number. The Release block gets a `Priority` choice: `Normal` (default) · `High`. A third level
-  appears only if the server treats it differently.
-- The hint says what it does, as api confirms it, for example "High-priority uplinks go before normal ones queued
-  for the same contact."
-- Normal is silent everywhere. High shows as a neutral outline tag `HIGH PRIORITY` (not a status colour) in Approve's
-  A1 header, the request page's Release line and the Commands list row.
-- api: send the range, which way is sooner, and what it actually orders (per target? per contact? across missions?).
+**Priority** (api: integers 0–9, default 3, lower = sooner; it orders only within one target's queue lane, never
+across spacecraft, and never overtakes a release in progress):
+- Words, never a number. The Release block gets a `Priority` choice: `Normal` (sends 3, the default) · `High`
+  (sends 1). Compose offers no other values.
+- The hint: "High-priority uplinks go before normal ones queued for the same spacecraft."
+- Normal (3) is silent everywhere. Below 3 shows as a neutral outline tag `HIGH PRIORITY`, and 4–9 (from the legacy
+  pages or the API) as `LOW PRIORITY`. Both are tags, not status colours, in Approve's A1 header, the request
+  page's Release line and the Commands list row. The number goes in Technical details.
+- Edit and resend keeps a request's priority. A low one shows as a third, pre-selected choice `Low (as before)`, so
+  a resend never quietly changes it.
 
 **Resolved arguments** (the queue-step condition, ux review 2026-11-15). The server's value is shown only where it
 differs from what was entered.
