@@ -329,7 +329,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                mission_id: setup.mission_id,
                backoff_ms: 0,
                credential_resolver: &resolve_provider_credential/1,
-               now: DateTime.add(DateTime.utc_now(), 1, :second)
+               now: due_read_at(confirmed_reservation)
              )
 
     assert {:ok, completed_reservation} =
@@ -473,7 +473,7 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
                mission_id: setup.mission_id,
                backoff_ms: 0,
                credential_resolver: &resolve_provider_credential/1,
-               now: DateTime.add(DateTime.utc_now(), 2, :second)
+               now: due_read_at(recovered_reservation)
              )
 
     assert [scheduled_contact] =
@@ -716,7 +716,9 @@ defmodule CadenceSimulator.ContactSchedulingIntegrationTest do
 
     assert {:error, failed, reason} = reconcile_reservation(reservation)
     assert failed.lifecycle_state == :failed
-    assert reason == :delivery_descriptor_conflicts_with_transport
+    # Tagged by the reconciler (881e19e8c), so a caller decides from this read.
+    assert reason ==
+             {:provider_configuration_failure, :delivery_descriptor_conflicts_with_transport}
 
     change =
       setup
