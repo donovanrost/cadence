@@ -650,12 +650,40 @@ defmodule Cadence.Management.DataSources.Store do
   end
 
   defp persist_data_binding_projection(%DataBinding{} = data_binding, opts) do
-    previous_row = Repo.get(DataBindingRow, data_binding.binding_id)
+    previous_row = previous_binding_row(data_binding.binding_id, opts)
     previous = previous_row && DataBindingRow.to_domain(previous_row)
     data_binding = prepare_data_binding_projection(data_binding, previous)
 
-    with :ok <- platform_binding_invariant(previous, data_binding) do
+    with :ok <- expected_source(previous, opts),
+         :ok <- platform_binding_invariant(previous, data_binding) do
       persist_changed_data_binding(previous_row, previous, data_binding, opts)
+    end
+  end
+
+  # A switch made against what the operator saw (`expected_data_source_id:`) locks the row and
+  # refuses when someone else moved the binding since, so a stale confirmation can't overwrite it.
+  defp previous_binding_row(binding_id, opts) do
+    if Keyword.has_key?(opts, :expected_data_source_id) do
+      DataBindingRow
+      |> where([row], row.binding_id == ^binding_id)
+      |> lock("FOR UPDATE")
+      |> Repo.one()
+    else
+      Repo.get(DataBindingRow, binding_id)
+    end
+  end
+
+  defp expected_source(previous, opts) do
+    case Keyword.fetch(opts, :expected_data_source_id) do
+      :error ->
+        :ok
+
+      {:ok, expected}
+      when is_struct(previous, DataBinding) and previous.data_source_id == expected ->
+        :ok
+
+      {:ok, _stale} ->
+        {:error, {:binding_changed, previous && previous.data_source_id}}
     end
   end
 

@@ -117,14 +117,20 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
       nil ->
         Problem.respond(conn, :binding_not_found)
 
-      %{data_source_id: current} when is_binary(expected) and current != expected ->
-        Problem.respond(conn, :binding_changed, %{current_data_source_id: current})
+      # The switch is confirmed against the source the sheet showed; the action checks it (and the
+      # write re-checks it under a lock), so the host action path can't skip it either.
+      _binding when not is_binary(expected) ->
+        Problem.respond(conn, :invalid_params, %{field: "expected_data_source_id"})
 
       _binding ->
         binding_params =
           params
           |> Map.take(["reason", "expected_affected_missions", "expected_live_passes_total"])
-          |> Map.merge(%{"binding_id" => binding_id, "data_source_id" => to_string(target)})
+          |> Map.merge(%{
+            "binding_id" => binding_id,
+            "data_source_id" => to_string(target),
+            "expected_data_source_id" => expected
+          })
 
         case act(conn, "change-binding", %{"binding" => binding_params}) do
           # #90: a platform-wide binding answers the counts it recorded.
@@ -320,6 +326,9 @@ defmodule CadenceWeb.Console.DataSourceWritesController do
 
   defp error(conn, {:error, :incompatible_data_source}),
     do: Problem.respond(conn, :invalid_params, %{field: "data_source_id"})
+
+  defp error(conn, {:error, {:binding_changed, current}}),
+    do: Problem.respond(conn, :binding_changed, %{current_data_source_id: current})
 
   defp error(conn, {:error, :malformed_action_input}), do: Problem.respond(conn, :invalid_params)
 

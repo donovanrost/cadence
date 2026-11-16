@@ -281,7 +281,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
                  request("change-binding", %{
                    "binding" => %{
                      "binding_id" => "platform-shared-binding",
-                     "data_source_id" => own.data_source_id
+                     "data_source_id" => own.data_source_id,
+                     "expected_data_source_id" => c.shared.data_source_id
                    }
                  })
                )
@@ -310,6 +311,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
                    "binding" => %{
                      "binding_id" => "platform-shared-binding-target",
                      "data_source_id" => own.data_source_id,
+                     "expected_data_source_id" => c.shared.data_source_id,
                      "reason" => "Use ours.",
                      "expected_affected_missions" => 1,
                      "expected_live_passes_total" => 0
@@ -334,6 +336,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
                    "binding" => %{
                      "binding_id" => "platform-shared-binding-target",
                      "data_source_id" => org_shared.data_source_id,
+                     "expected_data_source_id" => c.shared.data_source_id,
                      "reason" => "Use the org's shared one.",
                      "expected_affected_missions" => 1,
                      "expected_live_passes_total" => 0
@@ -363,6 +366,82 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
                  "data_sources",
                  request("disable-source", %{"data-source-id" => c.shared.data_source_id})
                )
+    end
+  end
+
+  describe "change-binding is confirmed against the source the operator saw" do
+    setup do
+      first =
+        persist_source!("binding-first-source", @organization_id, @mission_id, :mission_isolated)
+
+      second =
+        persist_source!("binding-second-source", @organization_id, @mission_id, :mission_isolated)
+
+      third =
+        persist_source!("binding-third-source", @organization_id, @mission_id, :mission_isolated)
+
+      {:ok, binding} =
+        DataSources.persist_data_binding(%DataBinding{
+          binding_id: "mission-expected-binding",
+          organization_id: @organization_id,
+          mission_id: @mission_id,
+          realm: "flight",
+          logical_source: :telemetry,
+          data_source_id: first.data_source_id
+        })
+
+      %{binding: binding, first: first, second: second, third: third}
+    end
+
+    test "the host action refuses a switch without the expected source, or with a stale one", c do
+      switch = fn binding_params ->
+        execute(
+          request("change-binding", %{
+            "binding" =>
+              Map.merge(
+                %{
+                  "binding_id" => c.binding.binding_id,
+                  "data_source_id" => c.second.data_source_id
+                },
+                binding_params
+              )
+          })
+        )
+      end
+
+      assert {:error, :malformed_action_input} = switch.(%{})
+
+      assert {:error, {:binding_changed, current}} =
+               switch.(%{"expected_data_source_id" => c.third.data_source_id})
+
+      assert current == c.first.data_source_id
+      assert {:ok, unchanged} = DataSources.fetch_data_binding(c.binding.binding_id)
+      assert unchanged.data_source_id == c.first.data_source_id
+
+      assert {:ok, %DataBinding{data_source_id: switched}} =
+               switch.(%{"expected_data_source_id" => c.first.data_source_id})
+
+      assert switched == c.second.data_source_id
+    end
+
+    test "the write re-checks the expected source, so a switch made in between isn't overwritten",
+         %{binding: %DataBinding{} = binding} = c do
+      # Someone else moved the binding after this switch read it.
+      {:ok, _moved} =
+        DataSources.persist_data_binding(%DataBinding{
+          binding
+          | data_source_id: c.third.data_source_id
+        })
+
+      assert {:error, {:binding_changed, current}} =
+               DataSources.persist_data_binding(
+                 %DataBinding{binding | data_source_id: c.second.data_source_id},
+                 expected_data_source_id: c.first.data_source_id
+               )
+
+      assert current == c.third.data_source_id
+      assert {:ok, kept} = DataSources.fetch_data_binding(binding.binding_id)
+      assert kept.data_source_id == c.third.data_source_id
     end
   end
 

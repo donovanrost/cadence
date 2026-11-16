@@ -778,8 +778,11 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
   null}]}`, newest first, 50. A platform-wide switch's entry carries its reason and counts. For a
   platform-wide binding outside admin mode, `actor`, `reason`, `affected_missions` and
   `live_passes_total` are `null` (the platform admins' record; tenants see what happened and when).
-- `PUT /data-source-bindings/:binding_id {data_source_id, expected_data_source_id?}` → `{binding}`.
-  - `409 binding_changed {current_data_source_id}` when `expected_data_source_id` is stale.
+- `PUT /data-source-bindings/:binding_id {data_source_id, expected_data_source_id}` → `{binding}`.
+  - `expected_data_source_id` (the source the sheet showed) is required: `422 invalid_params
+    {field: "expected_data_source_id"}` without it.
+  - `409 binding_changed {current_data_source_id}` when it's stale, checked by the switch action
+    itself (every caller, not only this endpoint) and again under a row lock at the write.
   - `422` when the source doesn't serve the binding's logical source or isn't enabled.
   - The binding must be the mission's own, or (a platform admin in admin mode) a platform-wide one.
     A mission's own binding may point at its own or a shared source; a platform-wide binding only at

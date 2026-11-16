@@ -292,13 +292,19 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     with :ok <- exact_keys(params, ["binding"], ["mission_id"]),
          {:ok, binding_params} <- fetch_map(params, "binding"),
          :ok <-
-           exact_keys(binding_params, ["binding_id", "data_source_id"], @shared_switch_keys),
+           exact_keys(
+             binding_params,
+             ["binding_id", "data_source_id", "expected_data_source_id"],
+             @shared_switch_keys
+           ),
          {:ok, binding_id} <- required_text(binding_params, "binding_id"),
-         {:ok, data_source_id} <- required_text(binding_params, "data_source_id") do
+         {:ok, data_source_id} <- required_text(binding_params, "data_source_id"),
+         {:ok, expected} <- required_text(binding_params, "expected_data_source_id") do
       {:ok,
        %{
          binding_id: binding_id,
          data_source_id: data_source_id,
+         expected_data_source_id: expected,
          shared_switch: Map.take(binding_params, @shared_switch_keys)
        }}
     end
@@ -472,7 +478,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
       host_context,
       request,
       binding_id,
-      data_source_id,
+      {params.expected_data_source_id, data_source_id},
       Map.get(params, :shared_switch, %{})
     )
   end
@@ -598,13 +604,14 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          %HostContext{mission_id: mission_id},
          request,
          binding_id,
-         data_source_id,
+         {expected, data_source_id},
          shared_switch
        ) do
     organization_id = scope.organization_id
 
     with {:ok, binding} <- scoped_binding(organization_id, mission_id, binding_id),
          :ok <- writable(scope, binding),
+         :ok <- expected_source?(binding, expected),
          :ok <- different_source?(binding, data_source_id),
          {:ok, source} <- scoped_source(organization_id, mission_id, data_source_id),
          :ok <- compatible_source?(source, binding),
@@ -640,9 +647,12 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     end
   end
 
+  # The write re-checks the binding still points where this switch was read (expected_data_source_id,
+  # under a row lock), so a switch made between the read and the write is refused, not overwritten.
   defp persist_switch(scope, request, %DataBinding{} = binding, data_source_id, extra) do
     DataSources.persist_data_binding(
       %DataBinding{binding | data_source_id: data_source_id},
+      expected_data_source_id: binding.data_source_id,
       actor_id: actor_id(scope),
       payload:
         request
@@ -902,6 +912,13 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
       nil -> {:error, :scope_mismatch}
     end
   end
+
+  # The switch was confirmed against the binding's source at the time; another switch since then
+  # refuses it (the console sends what its sheet showed).
+  defp expected_source?(%DataBinding{data_source_id: expected}, expected), do: :ok
+
+  defp expected_source?(%DataBinding{data_source_id: current}, _stale),
+    do: {:error, {:binding_changed, current}}
 
   defp different_source?(%DataBinding{data_source_id: data_source_id}, data_source_id),
     do: {:error, :same_data_source}
