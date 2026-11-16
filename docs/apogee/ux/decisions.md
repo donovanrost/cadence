@@ -1888,7 +1888,13 @@ and the spacecraft link are enough.
   - Catalog monitoring (no definition): "From the catalog's limits", with no link.
 - **The triggering sample:** `Show the sample that raised it (02:08:11Z)` on the same line.
   - It opens the Telemetry tab on that point, centred on `trigger.at`, with that sample ringed.
-- **Escalations:** in H3 and the event log, "Became critical at 02:31:40Z" carries its own `Show sample`.
+- **Escalations** (fe-ops' option b): B2 shows the episode's own line, "Became critical at 02:31:40Z · `Show
+  sample`".
+  - Within the episode's span (opened to cleared, or now), the timeline's limit events for that point are hidden,
+    so nothing shows twice. Outside the span, they stay.
+  - Lines are never matched by time.
+  - History's H3 lists past episodes and gets nothing. When a past episode is selected, H2's chart rings its
+    triggering sample.
 - **Technical details:** definition id, sample id.
 
 **A8 Timeline event detail.**
