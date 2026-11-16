@@ -31,10 +31,12 @@ defmodule CadenceWeb.MissionShowLiveTest do
              snapshot["mission_page"]
   end
 
-  test "unknown mission ids redirect to the mission list" do
-    {conn, _organization} = signed_in_org()
+  # L4 (f2e4f172d): the legacy mission list is gone, so an unknown mission goes to the console's.
+  test "unknown mission ids redirect to the console's mission list" do
+    {conn, organization} = signed_in_org()
+    missions = CadenceWeb.ConsolePaths.organization(organization.organization_id, "/org/missions")
 
-    assert {:error, {:redirect, %{to: "/missions"}}} =
+    assert {:error, {:redirect, %{to: ^missions, flash: %{"error" => "Mission not found."}}}} =
              live(conn, ~p"/missions/mission_unknown")
   end
 
