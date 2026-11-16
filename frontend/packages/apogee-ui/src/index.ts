@@ -13,6 +13,8 @@ export { default as ApGantt } from "./ApGantt.vue";
 export { default as ApKbd } from "./ApKbd.vue";
 export { default as ApKeyValue, type ApKeyValueItem } from "./ApKeyValue.vue";
 export { default as ApListRow } from "./ApListRow.vue";
+export { default as ApMenuButton } from "./ApMenuButton.vue";
+export { default as ApMenuItem } from "./ApMenuItem.vue";
 export { default as ApNumberField } from "./ApNumberField.vue";
 export { default as ApOption } from "./ApOption.vue";
 export { default as ApPageHeader } from "./ApPageHeader.vue";
