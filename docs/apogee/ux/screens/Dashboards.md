@@ -85,6 +85,14 @@ fleet health counts (crit · caution · stale chips, each linking to Alarms or F
 
 ## Phone (< 768px)
 View only. Widgets stack in grid order, one column. There's no Edit, and the header is the mobile header.
+- **Viewer header** (dashboards' 390 question, 11-15): at most two rows (~96px), never wrapping into more.
+  - Row 1: `×` · the title on one line (truncated; the full name stays in its accessible name) · `⋯`.
+  - Row 2: the scope selector `EARENDIL-312 ▾` (fills the row, truncates; no `[`/`]` on phones) · the range button
+    in its short form (`Last 1h`, `11-14 02:00–04:00Z`). Both stay visible, because they decide what every plot
+    shows. A dashboard without a scope shows the range button alone, right-aligned.
+  - The refresh interval moves into `⋯` as `Refresh: every 30 s…`, or `Refresh: off…` when it's off. That item opens
+    a sheet with the choices.
+  - From 768px up, the one-row header may wrap where it doesn't fit.
 - **Directory** (dashboards 9b9a99649): Mobile rows, at least 56px. The name link (with ★ and `ARCHIVED`) sits over
   one subtitle line, `EARENDIL-312 · 11-12 02:51Z · Mira K.`. Tags are left off the row; the tag filter stays in
   the toolbar. The `⋯` offers Star only. An unknown part is dropped from the subtitle, never shown as `—`.
