@@ -27,6 +27,9 @@ import {
   waitForResponse,
 } from "./federation_browser_smoke.mjs";
 
+/** @param {unknown} error */
+const errorText = (error) => (error instanceof Error ? error.message : String(error));
+
 /** @param {string[]} args @param {string} name */
 const arg = (args, name) => requiredArg(args, name);
 
@@ -41,15 +44,34 @@ async function record(client, expression, label, signal) {
 /**
  * Waits for the fixture surface and returns what it shows.
  * @param {import("./cdp-contract.ts").CdpPort} client
+ * @param {ReturnType<typeof import("./federation_browser_smoke.mjs").installDiagnostics>} diagnostics
  * @param {string} surface @param {AbortSignal|undefined} signal
  */
-async function fixtureSurface(client, surface, signal) {
-  await waitForExpression(
-    client,
-    `Boolean(document.querySelector('#surface-fixture[data-surface=${JSON.stringify(surface)}] #surface-fixture-context'))`,
-    `surface_fixture ${surface} mounted with its host context`,
-    { signal },
-  );
+async function fixtureSurface(client, diagnostics, surface, signal) {
+  try {
+    await waitForExpression(
+      client,
+      `Boolean(document.querySelector('#surface-fixture[data-surface=${JSON.stringify(surface)}] #surface-fixture-context'))`,
+      `surface_fixture ${surface} mounted with its host context`,
+      { signal },
+    );
+  } catch (error) {
+    // Name the failing host query (status and problem body) instead of only "timed out".
+    const queries = diagnostics.completed((r) => new URL(r.url).pathname.endsWith("/query"));
+    const evidence = [];
+    for (const record of queries.slice(-3)) {
+      const body = await client
+        .send("Network.getResponseBody", { requestId: record.requestId }, 5_000, signal)
+        .then((result) => String(diagnosticObject(result, "query body").body ?? "").slice(0, 600))
+        .catch(() => "<body unavailable>");
+      evidence.push(
+        `${record.method} ${new URL(record.url).pathname} -> ${String(record.response?.status)} ${body}`,
+      );
+    }
+    throw new Error(`${errorText(error)}\nhost queries: ${evidence.join(" | ") || "none"}`, {
+      cause: error,
+    });
+  }
   const shown = await record(
     client,
     `(() => ({
@@ -153,7 +175,7 @@ await runBrowserGate(
         diagnostics,
         signal,
       });
-      const missionView = await fixtureSurface(client, "mission_surface", signal);
+      const missionView = await fixtureSurface(client, diagnostics, "mission_surface", signal);
       assert.equal(missionView.release, "n-minus-1", "the mission surface isn't release N-1");
       assert.equal(missionView.context.placement, "mission");
       assert.equal(missionView.context.mission_id, missionId);

@@ -55,7 +55,7 @@ defmodule Cadence.TestSupport.SurfaceFixtureApplication do
       application_key: @application_key,
       version: @version,
       display_name: "Surface Fixture",
-      description: "A test fixture for the console's federated surface contract.",
+      description: "A fixture for the console's federated surface contract.",
       trust: :first_party,
       installation_policy: :platform,
       availability: :available,
@@ -150,13 +150,17 @@ defmodule Cadence.TestSupport.SurfaceFixtureApplication.Query do
 
   @impl true
   def load(%Scope{} = scope, %HostContext{} = host, %SurfaceQueryRequest{} = request) do
+    # A trusted surface's result: navigation plus the data the remote reads (as trusted_surface).
     {:ok,
      %{
-       "surface_id" => request.surface_id,
-       "placement" => to_string(host.placement),
-       "organization_id" => scope.organization_id,
-       "mission_id" => host.mission_id,
-       "spacecraft_id" => Map.get(host, :spacecraft_id)
+       "navigation" => %{},
+       "data" => %{
+         "surface_id" => request.surface_id,
+         "placement" => to_string(host.placement),
+         "organization_id" => scope.organization_id,
+         "mission_id" => host.mission_id,
+         "spacecraft_id" => Map.get(host, :spacecraft_id)
+       }
      }}
   end
 end

@@ -13,11 +13,15 @@ const actionError = ref<string>();
 
 onMounted(async () => {
   try {
-    snapshot.value = await props.bridge.query<Record<string, unknown>>({
+    const response = await props.bridge.query<Record<string, unknown>>({
       queryId: props.surface.dataContract.id,
       version: props.surface.dataContract.version,
       context: props.context,
     });
+    // The host returns a trusted surface's data under trusted_surface.
+    const data = response["trusted_surface"];
+    snapshot.value =
+      typeof data === "object" && data !== null ? (data as Record<string, unknown>) : response;
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
   }
