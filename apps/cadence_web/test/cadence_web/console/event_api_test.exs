@@ -132,6 +132,42 @@ defmodule CadenceWeb.Console.EventAPITest do
     end
   end
 
+  test "severity_at_least keeps caution and above on the page and the bar (A9a)", c do
+    all =
+      c |> get_json("/events?" <> window()) |> json_response(200) |> get_in(["data", "events"])
+
+    serious = Enum.filter(all, &(&1["severity"] in ~w(caution critical)))
+    assert serious != [], "the seeded limit evaluation raises a caution"
+
+    page =
+      c
+      |> get_json("/events?#{window()}&severity_at_least=caution")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+
+    assert Enum.map(page, & &1["id"]) == Enum.map(serious, & &1["id"])
+
+    critical =
+      c
+      |> get_json("/events?#{window()}&severity_at_least=critical")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+
+    assert Enum.all?(critical, &(&1["severity"] == "critical"))
+
+    bar =
+      c
+      |> get_json("/events/density?#{window()}&severity_at_least=caution")
+      |> json_response(200)
+      |> get_in(["data", "buckets"])
+
+    assert Enum.sum(Enum.map(bar, &(&1["nominal"] + &1["info"]))) == 0
+    assert Enum.sum(Enum.map(bar, &(&1["caution"] + &1["critical"]))) == length(serious)
+
+    body = c |> get_json("/events?#{window()}&severity_at_least=warning") |> json_response(422)
+    assert %{"severity_at_least" => _} = body["error"]["details"]
+  end
+
   test "ground health is data and limit-definition lifecycle is config, never flight_event", c do
     now = DateTime.utc_now()
 

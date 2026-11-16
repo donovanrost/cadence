@@ -719,6 +719,11 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
   fetched page (like `kind`), so keep following `next_cursor`. A bad item → `422 invalid_params`
   (`details.raw_kind`).
 
+- U69 A9a `severity_at_least=caution|critical`: keeps rows whose shown `severity` is at or above
+  it (`caution` = caution and critical). Same on `/events/density`. It runs per fetched page,
+  like `kind`, so keep following `next_cursor`. Anything else → `422 invalid_params`
+  (`details.severity_at_least`).
+
 ## `GET /api/console/v1/missions/:mission_id/events/raw-kinds?from&to` (U69 A9b picker, owner: api)
 
 `{"data": {"from", "to", "raw_kinds": [{"raw_kind": "command_released", "kind": "command", "count": 12}]}}`:

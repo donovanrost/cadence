@@ -43,7 +43,8 @@ defmodule Cadence.Reads.EventLog do
   @doc """
   Options: `:from`, `:to`, `:spacecraft_id`, `:plane` (the spacecraft in that orbital plane,
   from spacecraft metadata; with `:spacecraft_id`, only that one if it's in the plane), `:kinds`
-  (console kinds), `:raw_kinds` (`EventLog.RawKinds` patterns), `:limit`, `:cursor`.
+  (console kinds), `:raw_kinds` (`EventLog.RawKinds` patterns), `:severity_at_least` (`:caution | :critical`),
+  `:limit`, `:cursor`.
   """
   @spec page(binary(), binary(), map()) :: {:ok, map()} | {:error, :invalid_cursor}
   def page(organization_id, mission_id, opts) do
@@ -103,7 +104,8 @@ defmodule Cadence.Reads.EventLog do
       Enum.filter(
         page.entries,
         &(kind_selected?(%{kind: kind(&1)}, opts[:kinds]) and
-            RawKinds.selected?(&1.kind, opts[:raw_kinds]))
+            RawKinds.selected?(&1.kind, opts[:raw_kinds]) and
+            severe_enough?(&1, opts[:severity_at_least]))
       )
 
     acc = acc ++ selected
@@ -157,7 +159,8 @@ defmodule Cadence.Reads.EventLog do
       |> Enum.map(&event(&1, @no_names))
       |> dedupe()
       |> Enum.filter(
-        &(kind_selected?(&1, opts[:kinds]) and RawKinds.selected?(&1.raw_kind, opts[:raw_kinds]))
+        &(kind_selected?(&1, opts[:kinds]) and RawKinds.selected?(&1.raw_kind, opts[:raw_kinds]) and
+            at_least?(&1.severity, opts[:severity_at_least]))
       )
       |> Enum.group_by(fn event -> div(DateTime.to_unix(event.at) - origin, opts.bucket_s) end)
 
@@ -338,6 +341,16 @@ defmodule Cadence.Reads.EventLog do
   @doc false
   # The page's console kind and severity for an entry built from a density group.
   def classify_entry(%Entry{} = entry), do: {kind(entry), severity(entry)}
+
+  # U69 A9a: the severity the row shows (its sentence's, else the entry's), at or above the floor.
+  defp severe_enough?(_entry, nil), do: true
+  defp severe_enough?(entry, floor), do: at_least?(event(entry, @no_names).severity, floor)
+
+  @doc false
+  def at_least?(_severity, nil), do: true
+
+  def at_least?(severity, floor),
+    do: Map.get(@severity_rank, severity, 0) >= Map.fetch!(@severity_rank, floor)
 
   defp kind_selected?(_event, nil), do: true
   defp kind_selected?(_event, []), do: true

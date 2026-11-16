@@ -35,8 +35,9 @@ defmodule Cadence.Reads.EventLog.DensityCounts do
 
     buckets =
       (counted ++ extras)
-      |> Enum.filter(fn {_bucket, {kind, _severity}, _count, raw} ->
-        selected?(kind, opts[:kinds]) and RawKinds.selected?(raw, opts[:raw_kinds])
+      |> Enum.filter(fn {_bucket, {kind, severity}, _count, raw} ->
+        selected?(kind, opts[:kinds]) and RawKinds.selected?(raw, opts[:raw_kinds]) and
+          EventLog.at_least?(severity, opts[:severity_at_least])
       end)
       |> Enum.group_by(&elem(&1, 0))
       |> Enum.sort_by(&elem(&1, 0))

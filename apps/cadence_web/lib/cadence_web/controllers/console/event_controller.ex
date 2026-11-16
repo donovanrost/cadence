@@ -16,6 +16,7 @@ defmodule CadenceWeb.Console.EventController do
     with {:ok, window} <- WindowParams.parse(params, default_span_s: @day_s, max_span_s: nil),
          {:ok, kinds} <- kinds(params["kind"]),
          {:ok, raw_kinds} <- raw_kinds(params["raw_kind"]),
+         {:ok, floor} <- severity_floor(params["severity_at_least"]),
          {:ok, limit} <- int(params["limit"], :limit, 200, 1..500),
          {:ok, plane} <- int(params["plane"], :plane, nil, 0..10_000),
          {:ok, page} <-
@@ -26,6 +27,7 @@ defmodule CadenceWeb.Console.EventController do
              plane: plane,
              kinds: kinds,
              raw_kinds: raw_kinds,
+             severity_at_least: floor,
              limit: limit,
              cursor: params["cursor"]
            }) do
@@ -43,6 +45,7 @@ defmodule CadenceWeb.Console.EventController do
            WindowParams.parse(params, default_span_s: @day_s, max_span_s: 31 * @day_s),
          {:ok, kinds} <- kinds(params["kind"]),
          {:ok, raw_kinds} <- raw_kinds(params["raw_kind"]),
+         {:ok, floor} <- severity_floor(params["severity_at_least"]),
          {:ok, bucket_s} <- int(params["bucket_s"], :bucket_s, default_bucket(window), 60..@day_s),
          {:ok, plane} <- int(params["plane"], :plane, nil, 0..10_000) do
       density =
@@ -53,6 +56,7 @@ defmodule CadenceWeb.Console.EventController do
           plane: plane,
           kinds: kinds,
           raw_kinds: raw_kinds,
+          severity_at_least: floor,
           bucket_s: bucket_s
         })
 
@@ -76,6 +80,15 @@ defmodule CadenceWeb.Console.EventController do
         error(conn, error)
     end
   end
+
+  # U69 A9a: caution = caution and critical.
+  defp severity_floor(nil), do: {:ok, nil}
+  defp severity_floor(""), do: {:ok, nil}
+  defp severity_floor("caution"), do: {:ok, :caution}
+  defp severity_floor("critical"), do: {:ok, :critical}
+
+  defp severity_floor(_value),
+    do: {:error, {:invalid_params, %{severity_at_least: "must be caution or critical"}}}
 
   defp raw_kinds(value) do
     case RawKinds.parse(value) do
