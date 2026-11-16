@@ -328,6 +328,26 @@ defmodule Cadence.SpacecraftStore do
   end
 
   @doc """
+  The OTHER missions of the organization with an active spacecraft flying `scid` (the same-SCID
+  HOLD, ux U81 §1). Never across organizations.
+  """
+  @spec missions_flying_scid(binary(), non_neg_integer(), binary()) :: [binary()]
+  def missions_flying_scid(organization_id, scid, except_mission_id)
+      when is_binary(organization_id) and is_integer(scid) and is_binary(except_mission_id) do
+    SpacecraftRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.scid == ^scid and
+        row.mission_id != ^except_mission_id
+    )
+    |> active()
+    |> distinct(true)
+    |> select([row], row.mission_id)
+    |> order_by([row], asc: row.mission_id)
+    |> Repo.all()
+  end
+
+  @doc """
   Spacecraft pinned to a profile, ordered by name. Options: `version:` (only that version),
   `spacecraft_ids:` (only those spacecraft).
   """

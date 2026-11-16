@@ -32,6 +32,7 @@ defmodule Cadence.Control.Configuration do
   alias Cadence.Contacts.Scheduler
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
+  alias Cadence.Control.ScidSharing
   alias Cadence.Platform.ScopedReadUpdates
 
   @pubsub Cadence.PubSub
@@ -118,7 +119,10 @@ defmodule Cadence.Control.Configuration do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :read),
          {:ok, prepared} <- Staging.prepare_ops(mission.organization_id, mission.mission_id, ops) do
       head = Ledger.ensure_head(mission.organization_id, mission.mission_id)
-      Preview.run(mission.organization_id, mission.mission_id, head.revision_number, prepared)
+
+      mission.organization_id
+      |> Preview.run(mission.mission_id, head.revision_number, prepared)
+      |> ScidSharing.for_viewer(scope, mission)
     end
   end
 
@@ -126,7 +130,10 @@ defmodule Cadence.Control.Configuration do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :read),
          {:ok, set} <- ChangeSetStore.fetch(mission.mission_id, change_set_id) do
       ops = ChangeSetStore.staged_ops(set.change_set_id)
-      Preview.run(mission.organization_id, mission.mission_id, set.base_revision_number, ops)
+
+      mission.organization_id
+      |> Preview.run(mission.mission_id, set.base_revision_number, ops)
+      |> ScidSharing.for_viewer(scope, mission)
     end
   end
 
@@ -139,6 +146,7 @@ defmodule Cadence.Control.Configuration do
       mission.organization_id
       |> Submission.submit(mission.mission_id, change_set_id, Access.actor(scope), params)
       |> after_apply(mission, change_set_id)
+      |> ScidSharing.for_viewer(scope, mission)
     end
   end
 
@@ -158,6 +166,7 @@ defmodule Cadence.Control.Configuration do
         params
       )
       |> after_apply(mission, change_set_id)
+      |> ScidSharing.for_viewer(scope, mission)
     end
   end
 

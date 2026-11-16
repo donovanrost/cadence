@@ -22,7 +22,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft, as: SpacecraftAsset
-  alias Cadence.Spacecraft.ConfigKinds.ArchiveHolds
+  alias Cadence.Spacecraft.ConfigKinds.{ArchiveHolds, ScidHolds}
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
@@ -112,9 +112,13 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
     end
   end
 
-  # Archiving (#49/#50, L22): what's still ahead of it, and whether it has had traffic.
+  # Archiving (#49/#50, L22): what's still ahead of it, and whether it has had traffic. A new
+  # SCID another mission of the organization flies through a shared provider account (ux U81).
   @impl true
-  defdelegate holds(organization_id, mission_id, entries), to: ArchiveHolds
+  def holds(organization_id, mission_id, entries),
+    do:
+      ArchiveHolds.holds(organization_id, mission_id, entries) ++
+        ScidHolds.holds(organization_id, mission_id, entries)
 
   @impl true
   def summary(:delete, previous, nil), do: "Archive spacecraft #{previous["display_name"]}"

@@ -65,6 +65,9 @@ config :cadence,
   ],
   # Which spacecraft have had traffic, for the archive HOLD (#49/#50).
   spacecraft_traffic: Cadence.Control.SpacecraftTraffic,
+  # Which other missions of the organization fly a SCID through a shared provider account, for
+  # the same-SCID HOLD (ux U81 §1).
+  scid_sharing: Cadence.Control.ScidSharing,
   # The mission's catalog points for the derived_telemetry kind's checks (#77), configured so
   # governance has no compile-time edge to projections.
   derived_point_catalog: Cadence.Ops.PointCatalog,
