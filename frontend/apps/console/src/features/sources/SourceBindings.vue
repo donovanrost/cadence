@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
-import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, type ApColumn } from "@/ui";
+import { computed, ref, watch } from "vue";
+import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, refocusFirst, type ApColumn } from "@/ui";
 import type { DataSource } from "./api.ts";
 import BindingHistorySheet from "./BindingHistorySheet.vue";
 import BindingSwitchSheet from "./BindingSwitchSheet.vue";
@@ -48,11 +48,30 @@ function openSwitch(b: SourceBinding) {
   if (b.shared === true) platform.value?.open(b);
   else own.value?.open(b);
 }
-const relay = (n: { tone: "nominal" | "crit"; text: string }) => emit("done", n);
+// a11y A5: switching a binding away removes its row and the Switch… the sheet returned focus to;
+// once the bindings re-read, land on a remaining Switch…, else the panel's heading.
+let settle = false;
+watch(
+  () => props.bindings,
+  () => {
+    if (!settle) return;
+    settle = false;
+    const panel = document.querySelector<HTMLElement>("[data-source-bindings]");
+    refocusFirst(
+      panel?.querySelector<HTMLElement>("[data-binding-switch]"),
+      panel?.querySelector<HTMLElement>("h2"),
+    );
+  },
+  { flush: "post" },
+);
+const relay = (n: { tone: "nominal" | "crit"; text: string }) => {
+  if (n.tone === "nominal") settle = true;
+  emit("done", n);
+};
 </script>
 
 <template>
-  <ApPanel index="S2" title="Bindings" flush>
+  <ApPanel index="S2" title="Bindings" flush data-source-bindings>
     <ApEmptyState
       v-if="bindings.length === 0"
       state="off"
@@ -70,7 +89,12 @@ const relay = (n: { tone: "nominal" | "crit"; text: string }) => emit("done", n)
         ><span class="text-text-2">{{ BINDING_WORDS[row.status] }}</span></template
       >
       <template #cell-switch="{ row }"
-        ><ApButton v-if="canSwitch(row)" size="compact" variant="ghost" @click="openSwitch(row)"
+        ><ApButton
+          v-if="canSwitch(row)"
+          data-binding-switch
+          size="compact"
+          variant="ghost"
+          @click="openSwitch(row)"
           >Switch…</ApButton
         ></template
       >

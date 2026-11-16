@@ -45,13 +45,16 @@ const tokenError = () => {
     <div class="flex flex-wrap gap-2">
       <ApButton
         size="compact"
+        data-add-leg
         @click="patch({ legs: [...rule.legs, { direction: 'uplink', role: 'primary' }] })"
         >Add leg</ApButton
       >
       <ApButton size="compact" variant="ghost" @click="patch({ enabled: !rule.enabled })">{{
         rule.enabled ? "Disable rule" : "Enable rule"
       }}</ApButton>
-      <ApButton size="compact" variant="danger" @click="$emit('remove')">Remove rule</ApButton>
+      <ApButton size="compact" variant="danger" data-remove-rule @click="$emit('remove')"
+        >Remove rule</ApButton
+      >
     </div>
   </fieldset>
 </template>

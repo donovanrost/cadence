@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRemoteQuery, type SessionOrganization } from "@/api";
-import { ApButton, ApCallout } from "@/ui";
+import { ApButton, ApCallout, refocusFirst } from "@/ui";
 import AccountCredential from "./AccountCredential.vue";
 import AccountGrantsTable from "./AccountGrantsTable.vue";
 import AccountMissions from "./AccountMissions.vue";
@@ -35,8 +35,21 @@ const note = ref<string | null>(null);
 const grantSheet = ref<InstanceType<typeof GrantMissionSheet> | null>(null);
 const revokeSheet = ref<InstanceType<typeof ReasonSheet> | null>(null);
 const picked = ref<AccountGrant | null>(null);
+// a11y A5: a revoke's refetch removes its opener (the row's Revoke…, Revoke credential…) after the
+// sheet has returned focus to it; once the account re-reads, land on the note instead.
+let settleOnNote = false;
+watch(
+  () => detail.state.value,
+  () => {
+    if (!settleOnNote) return;
+    settleOnNote = false;
+    refocusFirst(document.querySelector<HTMLElement>("[data-account-note]"));
+  },
+  { flush: "post" },
+);
 function done(text: string) {
   note.value = text;
+  settleOnNote = true;
   detail.refetch();
   emit("changed");
 }
@@ -63,7 +76,7 @@ async function revoke(reason: string) {
       :can-manage="canManage"
       @revoke="(g) => ((picked = g), revokeSheet?.open())"
     />
-    <ApCallout v-if="note" tone="nominal">{{ note }}</ApCallout>
+    <ApCallout v-if="note" data-account-note tone="nominal">{{ note }}</ApCallout>
     <AccountCredential :account-key="key" :detail="ready" :can-manage="canManage" @done="done" />
     <GrantMissionSheet
       ref="grantSheet"

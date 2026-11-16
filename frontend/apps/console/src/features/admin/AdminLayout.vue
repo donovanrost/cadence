@@ -16,7 +16,7 @@ const admin = useAdminMode(() => now.value);
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <template v-if="!admin.active.value">
       <ApPageHeader label="Platform admin" title="Admin mode" size="reading" />
-      <ApPanel index="A0" title="Step up">
+      <ApPanel index="A0" title="Confirm your password">
         <AdminModeForm />
       </ApPanel>
     </template>

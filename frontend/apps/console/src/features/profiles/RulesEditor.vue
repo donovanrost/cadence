@@ -12,7 +12,15 @@ import {
   type StageOp,
 } from "@/features/changes/index.ts";
 import { fetchStations } from "@/features/stations/index.ts";
-import { ApButton, ApCallout, ApPanel, ApRemote, ApSegmented, plural } from "@/ui";
+import {
+  ApButton,
+  ApCallout,
+  ApPanel,
+  ApRemote,
+  ApSegmented,
+  focusAfterRemove,
+  plural,
+} from "@/ui";
 import RuleForm from "./RuleForm.vue";
 import type { ProfileDetail } from "./detail.ts";
 import { draftProblems, newRule, toDocument, toDrafts, type RuleDraft } from "./rulesDraft.ts";
@@ -24,6 +32,14 @@ const emit = defineEmits<{ close: [] }>();
 const router = useRouter();
 const stations = useRemoteQuery(() => props.missionId, fetchStations);
 const drafts = ref<RuleDraft[]>(toDrafts(props.detail.rules));
+// a11y A5: Remove rule takes itself; land on the next rule's Remove, else Add rule.
+const rulesBox = ref<HTMLElement | null>(null);
+function removeRule(i: number) {
+  drafts.value.splice(i, 1);
+  void focusAfterRemove(rulesBox.value, "[data-remove-rule]", i, () =>
+    rulesBox.value?.querySelector<HTMLElement>("[data-add-rule]"),
+  );
+}
 const rollout = ref<"all" | "none">("all");
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
@@ -95,17 +111,19 @@ const rolloutOptions = [
       @retry="stations.refetch"
     >
       <template #default="{ value: stationList }">
-        <div class="flex flex-col gap-4">
+        <div ref="rulesBox" class="flex flex-col gap-4">
           <RuleForm
             v-for="(_, i) in drafts"
             :key="drafts[i]?.id ?? i"
             v-model="drafts[i]!"
             :index="i"
             :stations="stationList"
-            @remove="drafts.splice(i, 1)"
+            @remove="removeRule(i)"
           />
           <div>
-            <ApButton size="compact" @click="drafts.push(newRule(drafts))">Add rule</ApButton>
+            <ApButton size="compact" data-add-rule @click="drafts.push(newRule(drafts))"
+              >Add rule</ApButton
+            >
           </div>
           <ApSegmented v-model="rollout" label="Roll out to" :options="rolloutOptions" />
           <ApCallout v-if="problems.length > 0" tone="caution">{{ problems.join(" ") }}</ApCallout>

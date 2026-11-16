@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fetchSpacecraftDirectory } from "@/features/spacecraft/index.ts";
-import { ApChip, ApRemote, ApSelect } from "@/ui";
+import { ApChip, ApRemote, ApSelect, focusAfterRemove } from "@/ui";
 
 /** C3 a few spacecraft first: the Compose C1 pattern (chips plus an "Add spacecraft…" select). */
 const props = defineProps<{ missionId: MissionId }>();
@@ -17,17 +17,26 @@ const options = computed(() =>
     .filter((s) => !ids.value.includes(s.id))
     .map((s) => ({ value: s.id, label: s.scid === null ? s.name : `${s.name} · SCID ${s.scid}` })),
 );
+// a11y A5: removing a chip takes its focused ×; land on the next chip's ×, else Add spacecraft.
+const box = ref<HTMLElement | null>(null);
+function remove(id: string) {
+  const at = ids.value.indexOf(id);
+  ids.value = ids.value.filter((x) => x !== id);
+  void focusAfterRemove(box.value, 'button[aria-label^="Remove "]', at, () =>
+    box.value?.querySelector("select"),
+  );
+}
 </script>
 
 <template>
   <ApRemote :state="state" loading-label="Loading spacecraft…" @retry="refetch">
-    <div class="flex flex-wrap items-center gap-2">
+    <div ref="box" class="flex flex-wrap items-center gap-2">
       <ApChip
         v-for="id in ids"
         :key="id"
         removable
         :remove-label="`Remove ${nameOf(id)}`"
-        @remove="ids = ids.filter((x) => x !== id)"
+        @remove="remove(id)"
         >{{ nameOf(id) }}</ApChip
       >
       <div class="w-64">
