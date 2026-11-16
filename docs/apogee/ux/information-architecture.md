@@ -95,7 +95,14 @@ query (⌘K) → fleet posture → clocks → account.
   - Chips with mark, count and word, only for non-zero states, worst first: `◆ 2 crit · ▲ 1 caution · ▨ 3 stale`
     (▨ = the kit's stale mark, the hatched square; ◆ is only ever crit). Crit and caution link to Alarms (Active);
     stale links to Fleet `?state=stale`.
-  - Nothing to report: `■ Fleet nominal` (→ Now). Never nominal while any spacecraft is stale (precedence).
+  - Nothing to report: `■ Fleet nominal` (→ Now). Never nominal while any spacecraft is stale or not heard yet.
+  - **Not heard yet** (`never_heard`; U9: `off`, "awaiting first AOS"): a last chip with the off mark, `○ 6 not heard
+    yet` → Fleet `?state=never_heard`. It's not a problem state, so it ranks after stale, but it stops the nominal
+    claim (U20). When every spacecraft is never heard: `○ No telemetry yet`, the Missions list's words.
+  - **Telemetry `degraded`** (the history store didn't answer, so Cadence can't tell stale from never heard): the
+    stale and not-heard chips merge into one stale-marked chip, `▨ 9 not heard recently` → Fleet
+    `?state=stale,never_heard`. Its title and accessible name say why: "Cadence couldn't read telemetry history,
+    so it can't tell which of these were heard before the restart." Crit and caution are unaffected.
   - Ground limits not installed: the crit and caution chips are replaced by `○ Ground limits off` (→ Setup › Apps).
     Stale still counts. Never a clean nominal in that state, as with Alarms.
   - Not loaded yet: nothing, never a placeholder nominal (U20).
