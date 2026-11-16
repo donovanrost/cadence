@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef } from "vue";
+import { nextTick, ref, shallowRef } from "vue";
 import { describeApiError } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApTextarea } from "@/ui";
@@ -13,6 +13,19 @@ const props = defineProps<{ group: Group }>();
 const emit = defineEmits<{ done: [] }>();
 const scope = useMissionScope();
 const open = ref(false);
+const root = ref<HTMLElement | null>(null);
+/**
+ * a11y (ux A1/A5 for an inline confirm): the button that opens or closes it disappears, so focus
+ * would fall to <body>. Opening lands on the safe 'Keep running'; Keep running returns to
+ * 'Abort remaining'.
+ */
+async function setOpen(value: boolean) {
+  open.value = value;
+  await nextTick();
+  root.value
+    ?.querySelector<HTMLElement>(value ? "[data-focus=keep]" : "[data-focus=abort]")
+    ?.focus();
+}
 const reason = ref("");
 const busy = ref(false);
 const outcome = shallowRef<{ tone: "crit" | "caution" | "nominal"; text: string } | null>(null);
@@ -48,9 +61,9 @@ const onAbort = () => run().catch((e: unknown) => console.error("Abort failed", 
 </script>
 
 <template>
-  <div class="flex flex-col gap-2">
+  <div ref="root" class="flex flex-col gap-2">
     <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
-    <ApButton v-if="!open" variant="danger" size="compact" @click="open = true"
+    <ApButton v-if="!open" variant="danger" size="compact" data-focus="abort" @click="setOpen(true)"
       >Abort remaining</ApButton
     >
     <div v-else class="flex flex-col gap-2">
@@ -70,7 +83,9 @@ const onAbort = () => run().catch((e: unknown) => console.error("Abort failed", 
           @click="onAbort"
           >Abort remaining uplinks</ApButton
         >
-        <ApButton size="compact" variant="ghost" @click="open = false">Keep running</ApButton>
+        <ApButton size="compact" variant="ghost" data-focus="keep" @click="setOpen(false)"
+          >Keep running</ApButton
+        >
       </div>
     </div>
   </div>

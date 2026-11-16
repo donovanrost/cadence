@@ -47,9 +47,12 @@ function start() {
   open.value = true;
   void nextTick(() => root.value?.querySelector("input")?.focus());
 }
+/** Closing removes the field that had focus: it returns to '+ Add point' (a11y A5), not <body>. */
+const opener = ref<HTMLElement | null>(null);
 function close() {
   open.value = false;
   q.value = "";
+  void nextTick(() => opener.value?.querySelector("button")?.focus());
 }
 function pick(p: TelemetryPoint) {
   emit("add", p);
@@ -58,9 +61,11 @@ function pick(p: TelemetryPoint) {
 </script>
 
 <template>
-  <ApButton v-if="!open" size="compact" variant="ghost" :disabled="full" @click="start">{{
-    full ? "Plot up to 3 points" : "+ Add point"
-  }}</ApButton>
+  <span v-if="!open" ref="opener" class="contents"
+    ><ApButton size="compact" variant="ghost" :disabled="full" @click="start">{{
+      full ? "Plot up to 3 points" : "+ Add point"
+    }}</ApButton></span
+  >
   <div v-else ref="root" class="flex w-full flex-col gap-2">
     <form class="flex items-end gap-2" @submit.prevent="shown[0] && pick(shown[0])">
       <ApField

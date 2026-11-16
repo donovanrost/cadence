@@ -120,6 +120,7 @@ function altMove(e: KeyboardEvent, i: number) {
             type="button"
             class="order-last min-w-0 basis-full cursor-pointer truncate text-left font-mono text-sm text-text-3 hover:text-readout hover:underline"
             :aria-label="`Edit ${item.command.name} values: ${argSummary(item).join(', ') || 'none set'}`"
+            :aria-expanded="open === item.key"
             @click="open = item.key"
           >
             {{ argSummary(item).join(" · ") || "Set values" }}
