@@ -43,6 +43,8 @@ const now = Date.parse("2026-11-09T02:00:00Z");
 const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   id,
   kind: "contact",
+  booked: undefined,
+  scheduled_contact_id: undefined,
   state: "confirmed",
   pass_phase: "scheduled",
   delivery_state: "pending",

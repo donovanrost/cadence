@@ -156,6 +156,8 @@ export const errorCodes = [
   "history_unavailable",
   // Contacts, planning, bookings
   "pass_not_found",
+  // A13 contact record read (api 42e3b9550): no contact with this id.
+  "contact_not_found",
   // U55 (api): Cadence's side of a scheduled contact can't be canceled or ended now.
   "contact_not_cancelable",
   "contact_not_live",

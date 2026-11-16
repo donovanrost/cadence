@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref, shallowRef, watch } from "vue";
-import { describeApiError, isKnown, useRemoteQuery } from "@/api/index.ts";
+import { describeApiError, isError, isKnown, useRemoteQuery } from "@/api/index.ts";
 import { ApButton } from "@/ui";
 import { fetchContactRecord, type ContactRecord } from "./records.ts";
 import { clock, sentenceCase, span } from "./recordWords.ts";
@@ -11,9 +11,22 @@ import { clock, sentenceCase, span } from "./recordWords.ts";
  * sources and intents, and the schedule's revisions (newest first, Show earlier). `contactId`:
  * undefined while the reservation that names it loads, null when it has none.
  */
-const props = defineProps<{ missionId: MissionId; contactId: string | null | undefined }>();
+const props = defineProps<{
+  missionId: MissionId;
+  contactId: string | null | undefined;
+  /** ux U78: the record on its own (a hand-started contact's drawer), open from the start. */
+  alone?: boolean;
+}>();
 const emit = defineEmits<{ open: [] }>();
-const opened = ref(false);
+const opened = ref(props.alone === true);
+/** U78/U25: a missing record isn't named by its id as if that were a name. */
+const failure = computed(() => {
+  const s = query.state.value;
+  if (s.status !== "failed") return null;
+  return isError(s.error, "contact_not_found")
+    ? "No contact record with this id."
+    : `Couldn't load the contact record: ${describeApiError(s.error)}`;
+});
 const query = useRemoteQuery(
   computed(() =>
     opened.value && props.contactId ? { m: props.missionId, c: props.contactId } : null,
@@ -70,15 +83,13 @@ const onToggle = (e: Event) => {
 </script>
 
 <template>
-  <details class="text-xs text-text-3" @toggle="onToggle">
-    <summary class="cursor-pointer font-mono uppercase">Contact record</summary>
+  <component :is="alone ? 'div' : 'details'" class="text-xs text-text-3" @toggle="onToggle">
+    <summary v-if="!alone" class="cursor-pointer font-mono uppercase">Contact record</summary>
     <p v-if="contactId === null" class="m-0 pt-1">No scheduled contact for this reservation.</p>
     <p v-else-if="!c && query.state.value.status !== 'failed'" class="m-0 pt-1 font-mono">
       Loading…
     </p>
-    <p v-else-if="query.state.value.status === 'failed'" class="m-0 pt-1 text-caution-text">
-      Couldn't load the contact record: {{ describeApiError(query.state.value.error) }}
-    </p>
+    <p v-else-if="failure" class="m-0 pt-1 text-caution-text">{{ failure }}</p>
     <div v-else-if="c" class="flex flex-col gap-2 pt-1 font-mono">
       <dl class="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-0.5">
         <template v-for="[k, v] in facts" :key="k + v">
@@ -123,5 +134,5 @@ const onToggle = (e: Event) => {
       <p v-if="moreError" class="m-0 text-caution-text">{{ moreError }}</p>
       <p v-if="c.truncated" class="m-0">More paths, sources or intents than shown.</p>
     </div>
-  </details>
+  </component>
 </template>

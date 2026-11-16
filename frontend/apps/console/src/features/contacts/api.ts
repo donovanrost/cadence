@@ -79,9 +79,28 @@ const contactEnded = d.object({
 });
 export type ContactEnded = Decoded<typeof contactEnded>;
 
+/** A pass row's spacecraft identity; name is null for a deleted spacecraft. */
+export const passSpacecraft = d.object({
+  id: d.token,
+  name: d.nullable(d.string),
+  scid: d.nullable(scidReader),
+});
+/** A pass row's station, as booked or as a hand-started contact's ground_station_ref names it. */
+export const passStation = d.object({
+  ref: d.nullable(d.string),
+  id: d.nullable(d.token),
+  // free-text: a station call sign (SVA), not a vocabulary
+  code: d.nullable(d.string),
+  name: d.nullable(d.string),
+});
+
 const pass = d.object({
   id: d.token,
   kind: d.literal("contact"),
+  /** U78 (api): true on every reservation row; hand-started rows read with handStarted.ts. */
+  booked: d.optional(d.literal(true)),
+  /** M7: the scheduled contact this reservation booked (U78's Scheduled contact column). */
+  scheduled_contact_id: d.optional(d.nullable(d.token)),
   /** U55: which of Cancel contact… / End contact now… applies now (never both), or none. */
   contact_action: d.optional(d.nullable(d.known(["cancel", "end"] as const))),
   contact_ended: d.optional(d.nullable(contactEnded)),
@@ -99,16 +118,8 @@ const pass = d.object({
   spacecraft_id: d.nullable(spacecraftIdReader),
   /** Identity on the row (5f02fd3d), so names never depend on a client join. */
   // name is null for a deleted spacecraft (contacts.md; api drift sweep 11-13).
-  spacecraft: d.nullable(
-    d.object({ id: d.token, name: d.nullable(d.string), scid: d.nullable(scidReader) }),
-  ),
-  station: d.object({
-    ref: d.nullable(d.string),
-    id: d.nullable(d.token),
-    // free-text: a station call sign (SVA), not a vocabulary
-    code: d.nullable(d.string),
-    name: d.nullable(d.string),
-  }),
+  spacecraft: d.nullable(passSpacecraft),
+  station: passStation,
   antenna: d.nullable(d.object({ id: d.nullable(d.string), label: d.nullable(d.string) })),
   starts_at: d.timestamp,
   ends_at: d.timestamp,

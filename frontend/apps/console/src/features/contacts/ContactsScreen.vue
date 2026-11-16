@@ -22,6 +22,7 @@ import { fetchGroups } from "@/features/commands/index.ts";
 import { availabilityBands, passGantt, passStatus, type GanttAxis } from "./gantt.ts";
 import { fetchAvailability } from "@/features/scheduling/index.ts";
 import SelectedPassPanel from "./SelectedPassPanel.vue";
+import ContactRecordPanel from "./ContactRecordPanel.vue";
 import BookPassSheet from "./BookPassSheet.vue";
 import { SINGLE_BOOKINGS_LIVE } from "./singleBookings.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
@@ -338,7 +339,13 @@ watch(
           </ApRemote>
         </ApPanel>
         <div class="flex min-h-0 flex-col gap-3">
+          <ContactRecordPanel
+            v-if="pick.handStarted.value"
+            :mission-id="missionId"
+            :contact-id="pick.handStarted.value.realized_contact_id"
+          />
           <SelectedPassPanel
+            v-else
             :class="selectedId === null ? 'max-md:hidden' : undefined"
             :mission-id="missionId"
             :pass="selected"
