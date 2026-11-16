@@ -32,6 +32,19 @@ export const seriesReader = d.object({
       spacecraft_id: d.token,
       name: d.nullable(d.string),
       verifier_state: d.nullable(d.known(["pending", "satisfied", "failed", "timed_out"] as const)),
+      /** U68 R4 (api 45563ffe8): that target's verifier instance; null exactly when the state is. */
+      verifier: d.optional(
+        d.nullable(
+          d.object({
+            instance_id: d.token,
+            verifier_id: d.token,
+            severity: d.nullable(d.knownText(["info", "warning", "error", "critical"] as const)),
+            failure_code: d.nullable(
+              d.knownText(["timed_out", "failure_criteria_matched"] as const),
+            ),
+          }),
+        ),
+      ),
       samples: d.array(d.object({ t: d.timestamp, value_json: d.nullable(d.string) }), 1_000),
     }),
     100,
