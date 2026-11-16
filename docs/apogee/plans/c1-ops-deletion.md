@@ -51,8 +51,10 @@ The ops frame (`host/src/ops-workspace/features/frame/*`) stays: it wraps every 
    surfaces. **Console embedding check:** the console mounts only `setup`-area surfaces (`features/apps/
    surfaces.ts:6`); of C1's surfaces only `workspace` is `application_workspace` (= setup), so Setup › Apps lists
    "Ops Console" with that surface today and loses it in C1. Nothing else in the console embeds them (no static
-   reference to `ops_console` in `apps/console/src`; the federation canary is devops' fixture app since 987034f1e).
-2. **devops updates the legacy federation smoke in the batch** (`federation_browser_smoke.mjs:5245`, contract
+   reference to `ops_console` in `apps/console/src`; devops' console smoke uses the surface_fixture app for the mission surface and
+   telemetry_decom/packet_bindings as its canary, and is unaffected by C1).
+2. **devops updates the legacy federation smoke in the batch** (devops builds it on the post-(B) head and hands a SHA
+   to pick into C1) (`federation_browser_smoke.mjs:5245`, contract
    `:3209`: the `commands` surface and its `/ops/commands` assertion): a new canonical surface, or drop it if no
    legacy ops surface survives.
 3. **Split:** api writes the redirects (as L1–L11, with the command group lookup above); **fe-setup does the server
