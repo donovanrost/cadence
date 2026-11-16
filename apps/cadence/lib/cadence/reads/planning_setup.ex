@@ -51,14 +51,36 @@ defmodule Cadence.Reads.PlanningSetup do
   end
 
   @spec demand(binary(), binary(), Date.t()) :: map()
-  def demand(organization_id, mission_id, %Date{} = day) do
+  def demand(organization_id, mission_id, %Date{} = day),
+    do: organization_id |> demand_days(mission_id, [day]) |> Map.fetch!(day)
+
+  @doc """
+  `demand/3` for several UTC days in one pass (DECISIONS #100's day strip): requirements, templates
+  and template targets are read once. `%{day => demand}`.
+  """
+  @spec demand_days(binary(), binary(), [Date.t()]) :: %{Date.t() => map()}
+  def demand_days(organization_id, mission_id, days) do
+    requirements = ContactRequirements.list(organization_id, mission_id, lifecycle_state: :active)
+
+    templates =
+      organization_id
+      |> ContactRequirementTemplates.list(mission_id, lifecycle_state: :active)
+      |> Enum.map(fn {template, version} ->
+        {template, version,
+         TemplateTargets.resolve(organization_id, mission_id, version.target_document)}
+      end)
+
+    total = length(Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id))
+
+    Map.new(days, &{&1, day_demand(&1, requirements, templates, total)})
+  end
+
+  defp day_demand(day, requirements, templates, total) do
     from = DateTime.new!(day, ~T[00:00:00], "Etc/UTC")
     until = DateTime.new!(Date.add(day, 1), ~T[00:00:00], "Etc/UTC")
 
     requirements =
-      organization_id
-      |> ContactRequirements.list(mission_id, lifecycle_state: :active)
-      |> Enum.filter(fn {_requirement, version} -> overlaps?(version, from, until) end)
+      Enum.filter(requirements, fn {_requirement, version} -> overlaps?(version, from, until) end)
 
     requirement_needs =
       Enum.map(requirements, fn {_requirement, version} ->
@@ -69,11 +91,8 @@ defmodule Cadence.Reads.PlanningSetup do
     materialized = requirements |> Enum.map(&generated_from/1) |> MapSet.new()
 
     template_needs =
-      organization_id
-      |> ContactRequirementTemplates.list(mission_id, lifecycle_state: :active)
-      |> Enum.flat_map(fn {template, version} ->
+      Enum.flat_map(templates, fn {template, version, targets} ->
         count = (version.requirement_document || %{})["contact_count"] || 1
-        targets = TemplateTargets.resolve(organization_id, mission_id, version.target_document)
 
         # The schedule range includes `until`; that occurrence belongs to the next day.
         for occurrence <- ContactRequirementTemplates.preview_occurrences(version, from, until),
@@ -89,7 +108,6 @@ defmodule Cadence.Reads.PlanningSetup do
 
     needs = requirement_needs ++ template_needs
     with_rules = needs |> Enum.map(&elem(&1, 0)) |> Enum.reject(&is_nil/1) |> MapSet.new()
-    total = length(Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id))
 
     %{
       day: day,

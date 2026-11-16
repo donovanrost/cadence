@@ -1092,6 +1092,7 @@ defmodule CadenceWeb.Router do
       get("/contact-plans", ContactPlanController, :index)
       get("/contact-plans/setup", ContactPlanController, :setup)
       get("/contact-plans/demand", ContactPlanController, :demand)
+      get("/contact-plans/days", ContactPlanDaysController, :index)
       get("/contact-plans/:plan_id", ContactPlanController, :show)
       get("/contact-plans/:plan_id/history", ContactPlanHistoryController, :show)
       post("/contact-plans/:plan_id/versions", ContactPlanController, :edit)

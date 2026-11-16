@@ -255,6 +255,25 @@ Plan detail also carries `latest_version` (U69 A10): the plan's newest version, 
 `?version=N` read of an older one can show the historical-version banner and "Review current
 version" (open it without `version`).
 
+### `GET /contact-plans/days?from=YYYY-MM-DD&to=YYYY-MM-DD` (DECISIONS #100 day strip, owner: api)
+
+K1's day strip in one read: at most 14 UTC days, `from` ≤ `to`, both inclusive (otherwise `422
+invalid_params`). `{"data": {"days": [{day, plan: {id, version, state} | null, sent_back,
+requirements_count, booked_count, unconfirmed_count, requested_count, first_window_at}]}}`, one
+entry per day in order, days without a plan included.
+
+- `plan`: the day's plan by K1's own rule (repair proposals aside, the newest plan that isn't
+  superseded or canceled, else the newest if it's a superseded draft); `state` is the list's and
+  detail's word, derived states included (`interrupted`, `unconfirmed`). Plans are grouped by their
+  window's UTC day from the newest 100.
+- `sent_back`: a draft whose latest decision is a rejection.
+- `requirements_count`: the day's contacts needed, as `GET /contact-plans/demand` (`contacts_needed`);
+  0 when there's nothing to plan, never null.
+- `booked_count` / `unconfirmed_count` / `requested_count`: the plan's `execution` `confirmed` /
+  `uncertain` / `requested` (passes); null without a plan, or before it has bookings.
+- `first_window_at`: `null` for now; it takes U61's `plan_coverage` rule when that source lands, so
+  the strip and Now agree.
+
 ### `GET /contact-plans/:plan_id/history` (U69 A10, owner: api)
 
 `{"data": {"plan_id", "latest_version", "versions": [...], "decisions": [...], "truncated"}}`:
