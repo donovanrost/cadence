@@ -30,11 +30,7 @@ function open(item: {
 }
 async function save() {
   const t = target.value;
-  if (!t || busy.value) return;
-  if (!name.value.trim()) {
-    error.value = "Give it a name.";
-    return;
-  }
+  if (!t || busy.value || !name.value.trim()) return;
   busy.value = true;
   const r = await renameItem(props.missionId, t.id, {
     name: name.value.trim(),
@@ -69,7 +65,12 @@ defineExpose({ open });
     <ApCallout v-if="error" tone="caution">{{ error }}</ApCallout>
     <template #footer>
       <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
-      <ApButton variant="primary" :disabled="busy" disabled-reason="Saving…" @click="save"
+      <!-- An empty name disables Rename and says why (ux a11y A6: one pattern per form). -->
+      <ApButton
+        variant="primary"
+        :disabled="busy || !name.trim()"
+        :disabled-reason="busy ? 'Saving…' : 'Give it a name.'"
+        @click="save"
         >Rename</ApButton
       >
     </template>
