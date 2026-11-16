@@ -53,6 +53,8 @@ config :cadence,
     Cadence.Governance.DerivedTelemetryKind,
     # ... and limit definitions (DECISIONS #77, stage 2).
     Cadence.Control.LimitDefinitionKind,
+    # A spacecraft's own extra routes (DECISIONS #3 per-spacecraft overrides; profile-routing.md §2.2).
+    Cadence.Comms.ConfigKinds.SpacecraftRoute,
     # Derived: re-materializes profile routes after the ops above (finalize/3).
     Cadence.Comms.ConfigKinds.SpacecraftRoutes,
     # Derived: framing compatibility HOLDs when the profile becomes framing authority.
