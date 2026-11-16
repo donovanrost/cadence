@@ -1930,3 +1930,23 @@ Investigate (`?alarm=`):
 - deescalated: "Last change 02:51Z: an alarm on EARENDIL-047 eased to caution."
 - cleared: "Last change 02:51Z: an alarm on EARENDIL-047 cleared."
 - No spacecraft: "on the mission". No change at all: omitted. §4 date when not today.
+
+### U72 · Commands search and target filter; paging without totals (§11c(C) A5b/c, A6d) (fe-ops)
+- **Commands filter row:** a search field + `Target` + `State` (U69 A5a), all in the URL (`?q=`, `?target=`,
+  `?state=`).
+  - **Search:** placeholder `Search requests`, accessible name "Search requests by title, log entry, command or
+    id". It holds 100 characters at most; past that, "Keep the search under 100 characters."
+  - **Target:** a select of every fleet spacecraft by name, with type-ahead. It can't be narrowed, because the list
+    has no per-target counts.
+- **While any filter is set,** the tabs give way to one line + `Clear filters`, and the line claims only what's
+  known.
+  - More pages to come: "12 shown · Failed, Outcome unclear · matching “heater” · on EARENDIL-312".
+  - Everything loaded: "12 commands · …" (now a true total).
+  - Nothing: "No commands match: Failed · “heater”." + `Clear filters`.
+- **Paging** (Commands and Alarms; cursor-based, no totals): `Load more` at the list's foot, only while there's a
+  next page.
+  - After loading, focus moves to the first new row's link.
+  - The button disappears at the end.
+  - Alarms' cap note gives way to it, and "· from the N loaded" stays true as N grows.
+- **Rows that move between pages** (api's caveat): dedupe by id, silently. A live change reloads from the first
+  page up to the number already shown, so a row skipped while it moved comes back by itself. No words for it.
