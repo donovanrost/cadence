@@ -54,43 +54,95 @@ is written insert-or-get: **one statement, `ON CONFLICT` on a unique index, no e
 So an alarm transition costs about **6 statements** today, and a replayed action request inserts a
 **second request**.
 
-**The design:**
-- **Id:** `Canonical.content_id(kind, {partition identity, stream_id, offset, output index})`, a
-  SHA-256 over a small term, as transitions and evaluations already use.
-- **Managed action request:** `INSERT ... ON CONFLICT (action_request_id) DO NOTHING` (the primary
-  key is the unique index). Same statement count (1); a replay inserts nothing.
-- **Episode event:** a deterministic `event_id`, inserted `ON CONFLICT DO NOTHING`. That replaces
-  the `seen?` read, so an alarm transition drops from about 6 statements to about 5.
-- **Episode:** an episode is stateful (one active per subject), so it keeps `lock_active`. Its id
-  becomes deterministic from the opening transition, so a replayed open re-derives the same row:
-  `ON CONFLICT (episode_id) DO NOTHING` instead of a second episode.
-- **Transitions and evaluations:** already content ids. Replay-stable **only if** `update_id`
-  (the sample id) is. That belongs to the identity-v2 audit (recovery-from-archive.md (b)): nothing
-  may derive from `evidence_id`.
+**The design (revised per the director, 11-15: ordered ids, no hashing).** A SHA-256 content id is
+~87 bytes and uniformly random, so each insert lands on a random B-tree page (page splits, cache
+misses, full-page images in WAL after each checkpoint), and the long key repeats in the primary key
+and every index and foreign key that references it. Today's `Ids.new` (~45 bytes) is a monotonic
+sequence that appends at the right edge. So the new deterministic ids are **ordered and built from
+their inputs:**
 
-**The expected cost:** per sample, the same or one statement fewer per transition; one hash per
-effect (already paid for transitions). No extra reads.
+```
+<kind>_<stream key>_<offset>_<index>        e.g.  mar_k3v9q2m8x1zt_00000a3f1c80_0002
+```
+
+- `kind`: 3 letters (`mar` managed action request, `aep` alarm episode, `aev` episode event).
+- `stream key`: 12 base32 characters naming (partition identity, journal stream). It is derived
+  **once per stream** (when the partition first sees it) and cached; no per-record hash.
+- `offset`: the input frame's journal byte offset, 12 hex digits zero-padded (up to 256 TB per
+  stream).
+- `index`: the output's index within that input, 4 hex digits.
+
+That is **34 bytes**, shorter than today's ~45. Within a stream the ids increase with the offset, so
+each active stream appends at its own right edge: a handful of hot leaf pages, not random ones. A new
+stream (one per contact) starts at one new place in the index, once.
+
+- **Timer-driven effects** (no input frame): the stream key names (partition identity, `timer`), and
+  the offset is the timer's fire time in microseconds, zero-padded. Still ordered, still replay-safe.
+- **Text, not a composite key.** A composite (stream key bigint, offset bigint, index smallint) would
+  be 18 bytes, but these ids are referenced as strings (episode events → episodes, transitions,
+  the API); keeping the text column keeps every reference and reader unchanged.
+- **Managed action request:** `INSERT ... ON CONFLICT (action_request_id) DO NOTHING`. Still 1
+  statement; a replay inserts nothing.
+- **Episode and episode event:** both ids come from the input. The episode is inserted (or the open
+  one updated) as today, then the event with `ON CONFLICT (event_id) DO NOTHING RETURNING`: no row
+  back means a replay, so the episode change is skipped. That replaces the `seen?` read, so a
+  transition goes from about 6 statements to about 5.
+- **Sources that never replay** (acknowledgements, ground-limit reconcile) keep `Ids.new`.
+- **Transitions and evaluations** keep their content ids for now (see the volumes below). They are
+  replay-stable only if `update_id` (the sample id) is: that is on the identity-v2 audit
+  (recovery-from-archive.md (b)).
+
+**Volumes of the existing content-id tables** (dev, `pg_stat_user_tables`, since the stats reset
+2026-11-14 21:22Z; a catalog read):
+
+| Table | Inserts | Size (heap / indexes) |
+|---|---|---|
+| `semantic_monitoring_evaluations` | 0 | 0 / 32 kB |
+| `semantic_alarm_transitions` | 0 | 0 / 32 kB |
+| parameter updates | no table: they live in `semantic_runtime_commits`' state term, which #94 retires | (23,142 rows; 403 MB / 362 MB) |
+| `alarm_episodes`, `alarm_episode_events`, `managed_action_requests` (the #99 tables) | 0 each | 0 / 32 kB each |
+
+Evaluations are persisted **only on a transition** (`SemanticObservations.add_result/2`), so both
+content-id tables scale with alarm transitions, not with samples. **Neither is high-volume; no
+follow-up is needed now.** Watch item: if #92 step 2 moves the Limits policies onto this path and a
+flapping parameter drives transitions per sample, give them the same ordered id then.
+
+**The expected cost:** per record, the same or one statement fewer; no per-record hash; ids 34 bytes
+instead of ~45; inserts append per stream.
 
 ## Before/after measurement (the gate for both)
 
-Both changes are measured the same way, on :4011, on the **busiest partition during a pass**
-(qa's slot; the handlers are attached and detached through `var/qa-scripts/rpc.sh`).
+**A finding first:** on dev, the #99 paths write nothing (0 rows in all three tables since 11-14
+21:22Z). A live before/after of the busy path can't show their storage cost, so #99's storage gate
+is a **synthetic bench**; the live runs guard the busy path as a whole.
 
-| Metric | How | Window |
-|---|---|---|
-| **Per-sample decode-to-commit time** | `[:cadence, :runtime, :ingress_persistence_projector, :persist_result]` `duration_us` plus the batch's queue wait, divided by the batch's sample count; p50/p95/p99 | 10 min in a pass |
-| **Statements per commit** | count `[:cadence, :repo, :query]` events from the projector's process between batch start and `persist_result`; mean and max | the same 10 min |
-| Context-match cost (#98) | `:timer.tc` of `MonitoringEvaluator.evaluate` over the partition's plan and a recorded batch, before vs after, with 007's delta present | a bench, 10k samples |
+**Live** (`var/qa-scripts/measure-98-99.exs`, qa's slot, 11-17 01:01-01:19Z cluster, the busiest
+projector in a pass; handlers attached and always detached):
 
-- **Before:** taken on the current team branch, ahead of either change.
-- **After:** taken with the change, at the same pass slot and partition.
-- **Pass:** p95 per sample and mean statements per commit are within run-to-run noise (two
-  "before" runs set the noise band). Anything above the band is a regression and goes to the
-  director before landing.
+| Metric | How |
+|---|---|
+| Per-sample time | the projector's `persist_result` (`duration_us` + `queue_wait_ms`) ÷ batch size; p50/p95/p99. **This is enqueue-to-commit:** no event spans decode→commit today (decode and evaluation run in the partition owner before the enqueue). Every #99 statement runs in this span; #98's change runs before it, so #98 also gets the bench below. |
+| Statements per commit | `[:cadence, :repo, :query]` events from the projector process per persisted batch; mean/max |
+| WAL bytes per commit | `pg_current_wal_lsn()` delta over the window ÷ persisted batches. `pg_stat_statements` isn't installed, so this is cluster-wide WAL (the simulator and other partitions too); the same in both runs |
+| Index growth | `pg_indexes_size` of the three #99 tables, start vs end of the window, per hour; ÷ the pass's craft count gives per craft-hour |
 
-| | p50 / p95 / p99 per sample (µs) | statements per commit (mean / max) |
-|---|---|---|
-| Before, run 1 | pending (qa slot) | pending |
-| Before, run 2 | pending | pending |
-| After #98 | pending | pending |
-| After #99 | pending | pending |
+**Synthetic** (test partition 12, its own database; no slot needed):
+- insert 100k rows into each #99 table with today's ids, hashed ids and ordered ids, at the pass's
+  stream fan-out (a few streams interleaved);
+- measure the WAL bytes per insert (`pg_current_wal_lsn()` delta) and each index's size after;
+- each run spans at least one natural checkpoint (5 min). No manual `CHECKPOINT`: the server is
+  shared with :4011.
+
+**#98 bench:** `:timer.tc` of `MonitoringEvaluator.evaluate` over the partition's plan and a
+recorded batch, 10k samples, before vs after, with 007's delta present.
+
+**Pass rule:** two live "before" runs set the noise band. p95, statements per commit and WAL per
+commit must stay inside it; the synthetic WAL per insert and index bytes per row must be at or below
+today's ids. Anything worse goes to the director before landing.
+
+| | p50 / p95 / p99 per sample (µs) | statements per commit (mean / max) | WAL bytes per commit | #99 index growth per craft-hour |
+|---|---|---|---|---|
+| Before, run 1 | pending (11-17 slot) | pending | pending | pending |
+| Before, run 2 | pending | pending | pending | pending |
+| After #98 | pending | pending | pending | pending |
+| After #99 | pending | pending | pending | pending |
