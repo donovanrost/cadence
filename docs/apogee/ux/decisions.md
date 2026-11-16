@@ -2377,6 +2377,9 @@ fold into one item ("2 other missions in this organization also fly SCID 42 thro
   Now row (api's shape, 11-16): no countdown (nothing is due); meta `FBK 03:10Z · settled 04:12Z`. The pass time
   is the realized start. Fallbacks: no spacecraft name → the title drops "EARENDIL-312 · " and the secondary reads
   "not this pass's SCID 1"; no station → "on the 03:10Z pass". Never an id.
+  Built (fe-ops 6f31a4933): Now titles carry no trailing period, like the other Now titles; with no access, Mark
+  as seen reads "Operators mark these passes as seen." (the U45/U37 pattern). The record line with no spacecraft
+  name: "…arrived during this pass, which expected SCID 1."
   Wire (api): action `seen` (resolved_by the person, with name; resolved_at = when seen; a null name reads "Seen at
   04:12Z", never the id) or `retired` (system, settle + 7 days). The words:
   - Title: "EARENDIL-312 · Most frames on the FBK 03:10Z pass carried another SCID."
