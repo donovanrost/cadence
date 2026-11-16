@@ -15,7 +15,8 @@ defmodule CadenceWeb.Console.AttentionController do
     ContactSettlementAttention,
     ContactStartAttention,
     IngressBackpressureAttention,
-    JobOutcomeUnknownAttention
+    JobOutcomeUnknownAttention,
+    ScidMismatchAttention
   }
 
   alias Cadence.Reads.ActionQueue.AttentionItems
@@ -144,6 +145,8 @@ defmodule CadenceWeb.Console.AttentionController do
   defp source("job_outcome_unknown"), do: {:ok, JobOutcomeUnknownAttention}
   # U75: an expired command group is marked as seen (acknowledge); nothing to resolve.
   defp source("expired_group"), do: {:ok, ExpiredGroupAttention}
+  # U81 §2: Mark as seen resolves it at once; nothing to resolve or retry.
+  defp source("contact_scid_mismatch"), do: {:ok, ScidMismatchAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}
 
   defp no_actor(params) do

@@ -19,7 +19,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   alias Cadence.Auth.Scope
   alias Cadence.Comms.StationRefs
   alias Cadence.GroundNetworks.MissionProviders
-  alias Cadence.Reads.ActionQueue.{ContactStartItem, Item, SourceKeys}
+  alias Cadence.Reads.ActionQueue.{ContactStartItem, Item, ScidMismatchItem, SourceKeys}
   alias Cadence.Reads.{Attention, PassUplink}
   alias Cadence.SpacecraftStore
 
@@ -187,6 +187,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp source_fields(%{source: "contact_start"} = attention, names),
     do: ContactStartItem.fields(attention, names.spacecraft, names.station)
 
+  # ux U81 §2 (#102): the pass's craft and its refused frames, summed over its paths.
+  defp source_fields(%{source: "contact_scid_mismatch"} = attention, names),
+    do: ScidMismatchItem.fields(attention, names.spacecraft)
+
   # §11 L14: what the provider changed, for the decision block.
   defp source_fields(%{source: "provider_change"} = attention, _names) do
     attention
@@ -292,6 +296,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   # U45: P1 while Cadence is still trying to start the pass; P2 once it's missed.
   defp p1?(%{source: "contact_start", conflict: conflict}, _now), do: conflict == "not_started"
   defp p1?(%{source: "provider_change"}, _now), do: false
+  # U81 §2: the pass is over; never P1, however recent its start.
+  defp p1?(%{source: "contact_scid_mismatch"}, _now), do: false
   # #83: the source decides (buffer >= 95% or rising during the pass; a recent drop mid-pass).
   defp p1?(%{source: "ingress_backpressure"} = attention, _now),
     do: Map.get(attention, :p1) == true

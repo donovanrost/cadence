@@ -14,12 +14,14 @@ defmodule Cadence.Reads.EventSentences do
   never Title Case. Pure: `context` carries the name lookups.
   """
 
+  alias Cadence.Comms.StationRefs
   alias Cadence.MissionEvents.Entry
 
   alias Cadence.Reads.{
     ConfigRevisionEvents,
     ContactEndingEvents,
     OffPlanBookingEvents,
+    ScidMismatchEvents,
     WatermarkEvents,
     WindowMoveEvents
   }
@@ -27,7 +29,8 @@ defmodule Cadence.Reads.EventSentences do
   @type context :: %{
           spacecraft: %{optional(binary()) => {binary() | nil, integer() | nil}},
           users: %{optional(binary()) => binary()},
-          dashboards: %{optional(binary()) => binary()}
+          dashboards: %{optional(binary()) => binary()},
+          stations: %{optional(binary()) => map()}
         }
 
   @spec describe(Entry.t(), context()) :: %{
@@ -148,6 +151,15 @@ defmodule Cadence.Reads.EventSentences do
      %{kind: "pass", id: doc["provider_reservation_id"] || entry.subject_id, name: nil}, nil}
   end
 
+  # ux U81 §2 (#102): most of a settled pass's frames carried another SCID. Caution; the
+  # secondary line is the row's detail (`detail/2`).
+  defp sentence("contact_scid_mismatch", entry, ctx) do
+    doc = string_keys(payload(entry))
+
+    {ScidMismatchEvents.title(doc, craft_name(entry, ctx), station(doc, ctx)), contact_ref(entry),
+     :caution}
+  end
+
   defp sentence("contact_booked_off_plan", entry, ctx),
     do:
       {OffPlanBookingEvents.sentence(entry, by(entry, ctx)),
@@ -190,6 +202,37 @@ defmodule Cadence.Reads.EventSentences do
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" ")
     |> String.capitalize()
+  end
+
+  @doc "A row's secondary line, for the kinds that have one (nil otherwise)."
+  @spec detail(Entry.t(), context()) :: binary() | nil
+  def detail(%Entry{kind: kind} = entry, ctx)
+      when kind in [:contact_scid_mismatch, "contact_scid_mismatch"],
+      do: ScidMismatchEvents.detail(string_keys(payload(entry)), craft_name(entry, ctx))
+
+  def detail(_entry, _ctx), do: nil
+
+  # The spacecraft's name only (never its id), for words that drop the name when it's unknown.
+  defp craft_name(%Entry{spacecraft_id: id}, ctx) do
+    case Map.get(ctx.spacecraft, id) do
+      {name, _scid} when is_binary(name) and name != "" -> name
+      _unknown -> nil
+    end
+  end
+
+  # A payload read back from the store has string keys; one projected in memory, atom keys.
+  defp string_keys(%{} = map), do: Map.new(map, fn {key, value} -> {to_string(key), value} end)
+  defp string_keys(_none), do: %{}
+
+  defp station(doc, ctx) do
+    case doc["ground_station_ref"] do
+      ref when is_binary(ref) and ref != "" ->
+        index = Map.get(ctx, :stations, %{})
+        if Map.has_key?(index, ref), do: StationRefs.resolve(ref, index)
+
+      _none ->
+        nil
+    end
   end
 
   defp source_ref(entry), do: %{kind: "data_source", id: entry.subject_id, name: source(entry)}

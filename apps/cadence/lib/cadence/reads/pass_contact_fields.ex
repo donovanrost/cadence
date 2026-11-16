@@ -19,7 +19,7 @@ defmodule Cadence.Reads.PassContactFields do
   alias Cadence.Contacts.{ContactAction, ListenerRefusalAttention, OpenContacts, PassContacts}
   alias Cadence.Contacts.UplinkPasses
   alias Cadence.Control.UplinkReadiness.Groups
-  alias Cadence.Reads.{PassBooking, PassIncompleteAtEnd, PassTelemetryStored}
+  alias Cadence.Reads.{PassBooking, PassIncompleteAtEnd, PassScidMismatch, PassTelemetryStored}
 
   @terminal [:canceled, :completed, :expired]
 
@@ -56,7 +56,9 @@ defmodule Cadence.Reads.PassContactFields do
       # ux U60: did this pass's data reach the store (domain's settle event).
       telemetry_stored: PassTelemetryStored.read(org, mission, realized, craft_name(pass)),
       # ux U67: bytes at the end that didn't form a complete frame or packet (domain's settlement).
-      incomplete_at_end: PassIncompleteAtEnd.read(org, mission, realized)
+      incomplete_at_end: PassIncompleteAtEnd.read(org, mission, realized),
+      # ux U81 §2 (#102): frames refused for another SCID, per path (domain's settlement).
+      scid_mismatch: PassScidMismatch.read(org, mission, realized)
     }
     |> Map.merge(PassBooking.names(org, mission, pass))
   end

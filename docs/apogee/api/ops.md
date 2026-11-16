@@ -709,8 +709,19 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
   pass's AOS, dated when it isn't on the booking's UTC day, else time only; "by an operator"
   without an actor; ux, Contacts.md), severity `info`, `at` = when it
   was booked, `detail` = "“<note>” Doesn't count toward contact rules." (without a note, just the
-  second sentence; the only kind with a `detail` so far), `spacecraft` its spacecraft,
+  second sentence), `spacecraft` its spacecraft,
   `refs.subject` `{kind: "pass", id: <reservation id>, name: null}` (`GET /passes/:id`).
+- **Frames with another SCID** (ux U81 §2, DECISIONS #102) are `contact` events: `raw_kind`
+  `contact_scid_mismatch`, one per contact when MORE than half of its integrity-checked TM frames
+  carried another SCID (domain's `ScidMismatch.most?/1`, the same rule as the Now item). Text
+  "EARENDIL-312 · Most frames on the FBK 03:10Z pass carried another SCID." (the station's code,
+  else its name; without a station "the 03:10Z pass"; without a spacecraft name the
+  "EARENDIL-312 · " part is dropped, never an id). Severity `caution`; `at` = the pass's start.
+  `detail` = "412 of 430 frames carried SCID 3, not EARENDIL-312's SCID 1. Cadence kept them as
+  raw evidence and made no telemetry from them." ("not this pass's SCID 1" without a name; SCIDs
+  read "SCID 3", "SCIDs 3 and 7", "SCIDs 3, 7 and 9", more than three "12 different SCIDs", and
+  "at least 12 different SCIDs" when the list may be short). `refs.subject` and
+  `refs.contact_id` are the realized contact ('Open contact record' → History `?contact=`).
 - **Applied configuration revisions** (BACKLOG 8d) are `config` events: `raw_kind`
   `config_revision_applied` ("Applied r6 · 2 changes") or `config_revision_rolled_back`
   ("Rolled back to r4"), severity `info`, `at` = applied time, `spacecraft` `null`,

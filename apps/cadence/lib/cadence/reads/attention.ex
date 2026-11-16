@@ -33,6 +33,7 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.ListenerRefusalAttention, as: ListenerRefusal
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
   alias Cadence.Contacts.ProviderChangeAttention, as: ProviderChange
+  alias Cadence.Contacts.ScidMismatchAttention, as: ScidMismatch
   alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
   alias Cadence.Control.UplinkReadiness.Attention, as: UplinkBlocked
   alias Cadence.Platform.ReadMemo
@@ -53,7 +54,8 @@ defmodule Cadence.Reads.Attention do
     JobOutcomeUnknown,
     ListenerRefusal,
     ExpiredGroup,
-    PlanCoverage
+    PlanCoverage,
+    ScidMismatch
   ]
   @resolved_window_s 60
 

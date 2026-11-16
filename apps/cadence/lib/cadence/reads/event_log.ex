@@ -32,7 +32,7 @@ defmodule Cadence.Reads.EventLog do
   alias Cadence.SpacecraftStore
 
   @kinds ~w(limit flight_event contact command config operator data)
-  @no_names %{spacecraft: %{}, users: %{}, dashboards: %{}, contacts: %{}}
+  @no_names %{spacecraft: %{}, users: %{}, dashboards: %{}, contacts: %{}, stations: %{}}
   @max_rounds 10
   @density_cap 5_000
 
@@ -191,7 +191,7 @@ defmodule Cadence.Reads.EventLog do
       raw_kind: entry.kind && to_string(entry.kind),
       severity: described.severity || Classify.severity(entry),
       text: described.text,
-      detail: detail(entry),
+      detail: detail(entry, context),
       spacecraft: spacecraft(entry.spacecraft_id, context.spacecraft),
       refs: %{
         subject: described.subject,
@@ -224,10 +224,10 @@ defmodule Cadence.Reads.EventLog do
   defp text(value), do: to_string(value)
 
   # L15: an off-plan booking's note.
-  defp detail(%Entry{source_record_kind: :off_plan_booking} = entry),
+  defp detail(%Entry{source_record_kind: :off_plan_booking} = entry, _context),
     do: OffPlanBookingEvents.detail(entry)
 
-  defp detail(_entry), do: nil
+  defp detail(entry, context), do: EventSentences.detail(entry, context)
 
   # The same fact can reach the timeline from two sources (a projected mission event and its
   # operational event): same kind, subject and second. Keep one, the more severe.

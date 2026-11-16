@@ -386,6 +386,36 @@ no actions, so acknowledge, resolve and retry answer `404 attention_item_not_fou
 Every recently resolved entry (all sources) also carries `reservation_id` (null without a booking)
 and `booked` (true when it has one), so an ended item can say "the pass" or "the contact".
 
+### Most frames carried another SCID: the `contact_scid_mismatch` source (ux U81 §2, DECISIONS #102)
+
+One item per settled contact where MORE than half of its integrity-checked TM frames carried
+another SCID (domain's `ScidMismatch.most?/1`, the same rule as the Timeline event). Now's row:
+`id` `attention:contact_scid_mismatch:<realized_contact_id>`, `priority` 2 and `state` `caution`
+always (the pass is over; no countdown: `due_at` is the pass start, in the past), `spacecraft`
+`[member]`. The `attention` object: `id` = the realized contact id, `conflict` `null`, `state`
+`open | resolved`, `acknowledged_by` `null`, `contact_id` (the scheduled contact, `null` when
+started by hand), `realized_contact_id`, `reservation_id`, `station`, `starts_at` (the contact's
+realized start), `raised_at` (settled at), plus:
+
+- `spacecraft: {id, name, scid} | null`: the pass's craft (`name` null, never the id, when unknown).
+- `scid_mismatch: {expected_scid, frames, frames_total, scids, scid_count}`: refused frames and
+  every integrity-checked frame, summed over the paths; `scids` the observed SCIDs over all paths,
+  sorted, at most 8; `scid_count` the larger of the largest per-path count and the list's size
+  before the cap, so the list is complete exactly when `scid_count == scids.length < 8`.
+
+'Open contact record' → History `?contact=<contact_id ?? realized_contact_id>` (`GET /passes/:id`
+takes either). Lifecycle (no acknowledged-but-open state; `counts.acknowledged` is 0):
+
+- `POST …/attention/contact_scid_mismatch/:id/acknowledge` (no body; `operate_mission`) marks it
+  seen and RESOLVES it at once: it answers the attention object with `state: "resolved"` and
+  `resolution: {action: "seen", actor: {kind: "user", id, name}, at, note: null,
+  provider_reference: null}`; the resolved entry is `action: "seen"`, `resolved_by` the person.
+  Not open (seen, retired or never raised): `404 attention_item_not_found`. `resolve` and `retry`
+  are 404 for this source.
+- Never seen, it retires 7 days after the settle: `action: "retired"`, `resolved_by: {kind:
+  "system", id: null, name: null}`, `resolved_at` = settle + 7 d (the console words it 'Retired
+  after 7 days without being seen', no actor).
+
 ### Cancel or end a pass's contact (ux U55/U56)
 
 Pass rows (`GET /passes`, `GET /passes/:id`) carry:
@@ -417,6 +447,16 @@ Pass rows (`GET /passes`, `GET /passes/:id`) carry:
   `null` when nothing was cut off or the contact hasn't settled; one side may be 0. A quiet note in
   the settlement view only ("6 bytes at the end of the pass didn't form a complete frame, so they
   weren't stored."); never on Now or the Timeline. Detail only.
+- `scid_mismatch: {expected_scid, paths: [{station, frames, scids, scid_count, path_id,
+  provider_binding_id}]} | null` (ux U81 §2, DECISIONS #102): TM frames whose header SCID wasn't
+  the pass's, refused before reassembly, so they made no telemetry (the bytes stay in the journal
+  as raw evidence). From domain's settlement (`realized_contacts.metadata.settlement.scid_mismatch`):
+  one entry per path that refused a frame (`frames > 0`), most frames first. `station` is the
+  contact's `ground_station_ref` resolved like the rows' (`{ref, id, code, name}`, or `null`);
+  `scids` the observed SCIDs, sorted, at most 8; `scid_count` how many there were (≥ the list).
+  `path_id` and `provider_binding_id` are for Technical details only. `null` when nothing was
+  refused, the contact hasn't settled, or the record predates #102; never an empty list. The
+  record line words it per station (ux U81 §2). Detail only.
 - `telemetry_stored: {through, los, settled_at, text} | null` (ux U60): did this pass's data reach
   the store, and how close to LOS. From the latest `source_watermark_settled` event on the pass's
   realized contact: `through` = what's stored through, `los` = the pass's LOS, `settled_at` = when

@@ -1,9 +1,10 @@
 defmodule Cadence.Reads.EventLog.Context do
   @moduledoc """
   The names a Timeline page's sentences use (`Cadence.Reads.EventLog`): spacecraft always, and
-  people and dashboards only when the page's entries mention them.
+  people, dashboards and stations only when the page's entries mention them.
   """
 
+  alias Cadence.Comms.StationRefs
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.Reads.EventSentences
 
@@ -30,10 +31,17 @@ defmodule Cadence.Reads.EventLog.Context do
           |> Map.new(&{&1.dashboard_id, &1.name}),
         else: %{}
 
+    # ux U81 §2: a contact_scid_mismatch title names the pass's station by its code.
+    stations =
+      if Enum.any?(entries, &(to_string(&1.kind) == "contact_scid_mismatch")),
+        do: StationRefs.index(organization_id, mission_id),
+        else: %{}
+
     %{
       spacecraft: spacecraft_names(organization_id, mission_id),
       users: users,
-      dashboards: dashboards
+      dashboards: dashboards,
+      stations: stations
     }
   end
 
