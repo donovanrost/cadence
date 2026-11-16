@@ -91,7 +91,7 @@ words match U61's titles, so the strip and Now say the same thing:
 | The day's newest plan | Word | Mark |
 | --- | --- | --- |
 | `reserved` | `Booked` | ■ nominal |
-| `partially_reserved` | `1,490 of 1,512 booked` | ▲ caution |
+| `partially_reserved` | `1,490 of 1,500 booked` (of `requested_count`, what the approved plan books; api) | ▲ caution |
 | `failed` | `Booking failed` | ▲ caution |
 | `unconfirmed` | `4 unconfirmed` | ▲ caution |
 | `executing` | `Booking…` | none |
@@ -104,6 +104,9 @@ words match U61's titles, so the strip and Now say the same thing:
 - **"Then U61's":** the strip uses U61's thresholds, so it never disagrees with Now.
   - ▲ caution from T−24h before the day's first window.
   - ◆ crit once the first window opens with no approved plan, when the word becomes `Started unplanned`.
+- The booked count is always measured against what the plan books, never against demand: demand the plan doesn't
+  cover is the accepted-gaps story, not a booking failure. The same holds in K1's header (`R41 · 1,490 OF 1,500
+  BOOKED`).
 - **Accessible name per cell:** "Tue 17 Nov: awaiting approval, first window 00:00Z". Marks are `aria-hidden`.
 - `not_set_up` replaces the strip with K1's not-set-up callout. A day further than 7 days out is reached with the
   existing date picker beside the strip.
@@ -126,7 +129,7 @@ footer's commit slot, and a blocked primary always says why in visible text unde
 | `unconfirmed` **[U30]** | `R41 · 36 BOOKED · 4 UNCONFIRMED` | caution callout: "Northlight hasn't confirmed 4 bookings after 10 min. They may or may not be booked, so Cadence won't send them again. Check them with Northlight." (window from the server; per-provider split when several: "(Northlight 3, KSAT 1)"). Under it, the passes: spacecraft · station · AOS (mono) · `T−` to the first. On the Gantt they're stale-hatched with the tag `UNCONFIRMED`. | none; secondary `Open Contacts` only if Contacts shows them as unconfirmed |
 | `interrupted` (execute) | `BOOKING STOPPED · 812 OF 1,512` | stale callout: "Booking stopped. 812 requests went out; 700 didn't." (U20: state what's known; name a cause only when the server reports one.) Only requests that never went out count here (#52). | `Continue booking` (resumes those; never re-sends a sent one) |
 | `reserved` | `R41 · BOOKED` | nominal callout "1,512 passes confirmed." | secondary `Open Contacts` |
-| `partially_reserved` / `failed` | `R41 · 1,490 OF 1,512 BOOKED` / `R41 · BOOKING FAILED` | Rejections become A Demand rows (`Rejected by Northlight: antenna fault`). | `Re-plan after provider changes` (K2) |
+| `partially_reserved` / `failed` | `R41 · 1,490 OF 1,500 BOOKED` / `R41 · BOOKING FAILED` | Rejections become A Demand rows (`Rejected by Northlight: antenna fault`). | `Re-plan after provider changes` (K2) |
 
 **A Demand when a spacecraft can't be covered at all:** the row says so plainly, with no alternatives.
 Caution mark, name, and "No window can cover it: no station sees EARENDIL-389 with uplink today"
