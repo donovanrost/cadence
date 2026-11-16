@@ -33,21 +33,18 @@ defmodule Cadence.Applications.SurfaceFixtureApplicationTest do
     assert FixtureContributors.all() == [SurfaceFixtureApplication]
 
     assert {:ok, definition} = Registry.fetch("surface_fixture", 1)
-    assert definition.installable_scopes == [:mission, :spacecraft]
+    assert definition.installable_scopes == [:mission]
     assert CatalogRegistry.validate() == :ok
     assert "surface_fixture" in Enum.map(CatalogRegistry.all(), & &1.definition.application_key)
     assert ReleaseRegistry.validate() == :ok
 
-    for surface <- ["mission_surface", "spacecraft_surface"] do
-      assert {:ok, %{release_id: "surface-fixture-v1"}} =
-               ReleaseRegistry.fetch("surface_fixture", 1, surface, 1)
-    end
+    assert {:ok, %{release_id: "surface-fixture-v1"}} =
+             ReleaseRegistry.fetch("surface_fixture", 1, "mission_surface", 1)
 
     assert {:ok, SurfaceFixtureApplication.Action} =
              ActionProviderRegistry.fetch("surface_fixture")
 
     query_ids = Enum.map(SurfaceProviderRegistry.contributions(), & &1.query_id)
     assert "cadence.surface_fixture.mission" in query_ids
-    assert "cadence.surface_fixture.spacecraft" in query_ids
   end
 end

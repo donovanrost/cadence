@@ -26,7 +26,7 @@ export const manifest = defineApplicationManifest({
     version: 1,
     displayName: "Surface Fixture",
     description: "A fixture for the console's federated surface contract.",
-    installableScopes: ["mission", "spacecraft"],
+    installableScopes: ["mission"],
   },
   surfaces: [
     {
@@ -38,17 +38,6 @@ export const manifest = defineApplicationManifest({
       navigation: { label: "Surface fixture", order: 90 },
       dataContract: { id: "cadence.surface_fixture.mission", version: 1 },
       actions: ["record_nonce"],
-      renderer: { kind: "federated-vue", exposedModule: "./Application" },
-    },
-    {
-      surfaceId: "spacecraft_surface",
-      version: 1,
-      purpose: "overview",
-      scope: "spacecraft",
-      placement: "application_workspace",
-      navigation: { label: "Surface fixture", order: 91 },
-      dataContract: { id: "cadence.surface_fixture.spacecraft", version: 1 },
-      actions: [],
       renderer: { kind: "federated-vue", exposedModule: "./Application" },
     },
   ],

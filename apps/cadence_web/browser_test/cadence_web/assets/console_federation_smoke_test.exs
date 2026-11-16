@@ -74,7 +74,9 @@ defmodule CadenceWeb.Assets.ConsoleFederationSmokeTest do
       "--fixture-n-release-id",
       Map.fetch!(release.release_ids.n, "surface_fixture"),
       "--federation-lifecycle-url",
-      release.lifecycle.url
+      release.lifecycle.url,
+      "--release-ids-json",
+      Jason.encode!(release.release_ids)
     ]
 
     {output, status} =

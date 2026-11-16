@@ -10,8 +10,9 @@ defmodule Cadence.TestSupport.SurfaceFixtureApplication do
   `Cadence.Applications.FixtureContributors`). Production publication and the release output check
   both forbid the remote, so it can't ship.
 
-  - `mission_surface` (mission scope) and `spacecraft_surface` (spacecraft scope) show what the
-    host handed the remote (scope and ids) and the release serving it.
+  - `mission_surface` (mission scope) shows what the host handed the remote (scope and ids) and
+    the release serving it. One surface: activation gives each released surface its own remote,
+    and the console smoke's spacecraft-scope side is the telemetry_decom canary.
   - `record_nonce` (mission scope) echoes a nonce. It changes nothing, so a smoke can count
     requests without side effects.
   """
@@ -37,12 +38,6 @@ defmodule Cadence.TestSupport.SurfaceFixtureApplication do
       scope: :mission,
       query: "cadence.surface_fixture.mission",
       order: 90
-    },
-    %{
-      id: "spacecraft_surface",
-      scope: :spacecraft,
-      query: "cadence.surface_fixture.spacecraft",
-      order: 91
     }
   ]
 
@@ -59,7 +54,7 @@ defmodule Cadence.TestSupport.SurfaceFixtureApplication do
       trust: :first_party,
       installation_policy: :platform,
       availability: :available,
-      installable_scopes: [:mission, :spacecraft],
+      installable_scopes: [:mission],
       actions: [
         %ActionDefinition{
           action_id: "record_nonce",

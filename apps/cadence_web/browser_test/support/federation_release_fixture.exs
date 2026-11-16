@@ -926,7 +926,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     assert {:ok, %{source: :database, entries: entries}} =
              ApplicationReleaseRegistry.snapshot(now: @activation_now)
 
-    assert length(entries) == 6
+    assert length(entries) == length(current)
     :ok
   end
 
