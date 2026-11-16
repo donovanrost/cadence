@@ -6,6 +6,7 @@ import { row } from "./testRows.ts";
 import {
   announceText,
   countText,
+  drawerTitle,
   emptyText,
   filterLine,
   shortDayCallout,
@@ -94,16 +95,25 @@ describe("History's week read (U78 truncation)", () => {
 });
 
 describe("History words (U78)", () => {
-  it("windows carry the date, name a crossed midnight, and an unrecorded end", () => {
-    expect(windowText({ starts_at: "2026-11-14T02:59:40Z", ends_at: "2026-11-14T03:08:52Z" })).toBe(
+  it("windows carry the date, name a crossed midnight, an unrecorded end, a never-live contact", () => {
+    const w = (o: Record<string, unknown>) => windowText(row({ id: "r", ...o }));
+    expect(w({ starts_at: "2026-11-14T02:59:40Z", ends_at: "2026-11-14T03:08:52Z" })).toBe(
       "11-14 02:59:40 – 03:08:52Z",
     );
-    expect(windowText({ starts_at: "2026-11-14T23:59:40Z", ends_at: "2026-11-15T00:08:52Z" })).toBe(
+    expect(w({ starts_at: "2026-11-14T23:59:40Z", ends_at: "2026-11-15T00:08:52Z" })).toBe(
       "11-14 23:59:40 – 11-15 00:08:52Z",
     );
-    expect(windowText({ starts_at: "2026-11-16T02:59:40Z", ends_at: null })).toBe(
-      "11-16 02:59:40Z – no end yet",
+    const hand = { booked: false, starts_at: "2026-11-16T02:59:40Z", ends_at: null };
+    expect(w({ ...hand, state: "active" })).toBe("11-16 02:59:40Z – no end yet");
+    expect(w({ ...hand, state: "defined" })).toBe("11-16 02:59:40Z");
+  });
+
+  it("sheet titles name their subject", () => {
+    expect(drawerTitle("pass", "EARENDIL-312", "Fairbanks")).toBe(
+      "Pass · EARENDIL-312 · Fairbanks",
     );
+    expect(drawerTitle("record", "EARENDIL-312", null)).toBe("Contact record · EARENDIL-312");
+    expect(drawerTitle("pass", null, null)).toBe("Pass");
   });
 
   it("week labels, with the year off this year", () => {
@@ -154,5 +164,12 @@ describe("History words (U78)", () => {
     expect(stateView(live).word).toBe("In contact");
     const done = row({ id: "rc-2", booked: false, starts_at: "2026-11-16T02:00:00Z" });
     expect(stateView(done).word).toBe("Ended · not verified");
+    const never = row({
+      id: "rc-3",
+      booked: false,
+      starts_at: "2026-11-16T02:00:00Z",
+      state: "defined",
+    });
+    expect(stateView(never)).toEqual({ word: "Not started", state: "off" });
   });
 });

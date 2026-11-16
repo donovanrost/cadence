@@ -23,6 +23,12 @@ export function mondayOf(t: number): number {
 }
 
 /**
+ * U78: History lists hand-started contacts (`include=hand_started`, api's opt-in `booked: false`
+ * rows) once api ships them; until then it asks for booked passes only and says so in a foot line.
+ */
+export const HAND_STARTED_LISTED = false;
+
+/**
  * The State filter (U78): the console's contact-state words, never raw lifecycles, each with the
  * reservation states it sends as `states=`. Unknown sends unknown + failed; Confirmed and In contact
  * both send confirmed + active, and rows are split by phase on the client (contactState).
@@ -88,10 +94,16 @@ export function parseStateFilters(v: string | null): StateFilter[] {
   return stateFilters.filter((f) => keys.has(f.key));
 }
 
-/** What `states=` sends for the chosen words: the union of their reservation states, or null. */
-export function apiStates(chosen: readonly StateFilter[]): Pass["state"][] | null {
+/**
+ * What `states=` sends for the chosen words: the union of their reservation states, or null. With
+ * hand-started rows listed, Ended also sends `stopped` (a contact's own word, fe-ops' review);
+ * 'Not started' (defined) has no filter option.
+ */
+export function apiStates(chosen: readonly StateFilter[], handStarted = HAND_STARTED_LISTED) {
   if (chosen.length === 0) return null;
-  return [...new Set(chosen.flatMap((f) => f.states))];
+  const states: string[] = chosen.flatMap((f) => f.states);
+  if (handStarted && chosen.some((f) => f.key === "ended")) states.push("stopped");
+  return [...new Set(states)];
 }
 
 export function parseHistoryQuery(q: LocationQuery, now: number): HistoryQuery {

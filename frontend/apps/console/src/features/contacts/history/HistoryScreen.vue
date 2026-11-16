@@ -15,15 +15,22 @@ import {
 import { contactsSections } from "../sections.ts";
 import { useSelectedPass } from "../useSelectedPass.ts";
 import type { Pass } from "../api.ts";
-import { HAND_STARTED_LISTED } from "./api.ts";
-import { stepWeek } from "./history.ts";
+import { HAND_STARTED_LISTED, stepWeek } from "./history.ts";
 import { useHistory } from "./useHistory.ts";
 import { useHistoryLookups } from "./useHistoryLookups.ts";
 import HistoryWeekNav from "./HistoryWeekNav.vue";
 import HistoryFilters from "./HistoryFilters.vue";
 import HistoryTable from "./HistoryTable.vue";
 import HistoryDrawer from "./HistoryDrawer.vue";
-import { announceText, countMeta, emptyText, rowCounts, shortDayCallout } from "./words.ts";
+import {
+  announceText,
+  countMeta,
+  drawerTitle,
+  emptyText,
+  rowCounts,
+  shortDayCallout,
+  stationName,
+} from "./words.ts";
 
 /**
  * Contacts › History (§11c(C) A12, ux U78): passes whose window has started, a week at a time,
@@ -84,6 +91,12 @@ const filtered = computed(
     h.query.value.states.length > 0,
 );
 const older = computed(() => stepWeek(h.query.value.week, -1, now.value.getTime()) ?? undefined);
+const sheetTitle = computed(() => {
+  const hs = pick.handStarted.value;
+  if (hs) return drawerTitle("record", look.spacecraftName(hs), null);
+  const p = pick.selected.value;
+  return drawerTitle("pass", p ? look.spacecraftName(p) : null, p ? stationName(p.station) : null);
+});
 const clear = () => h.go({ spacecraft: undefined, station: undefined, state: undefined });
 </script>
 
@@ -169,7 +182,7 @@ const clear = () => h.go({ spacecraft: undefined, station: undefined, state: und
     <ApSheet
       v-if="!wide"
       ref="sheet"
-      :title="pick.handStarted.value ? 'Contact record' : 'Pass'"
+      :title="sheetTitle"
       placement="side"
       @closed="h.go({ contact: undefined })"
     >

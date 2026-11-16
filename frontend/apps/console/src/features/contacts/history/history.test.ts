@@ -43,6 +43,9 @@ describe("History weeks (U78)", () => {
     expect(q.states.map((f) => f.key)).toEqual(["in_contact", "unknown"]);
     expect(apiStates(q.states)).toEqual(["confirmed", "active", "unknown", "failed"]);
     expect(apiStates([])).toBeNull();
+    const ended = parseHistoryQuery({ state: "ended" }, NOW).states;
+    expect(apiStates(ended, false)).toEqual(["completed"]);
+    expect(apiStates(ended, true)).toEqual(["completed", "stopped"]);
   });
 });
 

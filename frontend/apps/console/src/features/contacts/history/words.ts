@@ -19,8 +19,11 @@ export const dayTime = (t: number) => `${md(t)} ${hms(t)}Z`;
  * Window: the date always. '11-14 02:59:40 – 03:08:52Z'; across midnight the end names its day;
  * an end never recorded reads 'no end yet' (U20: claims neither still going nor ended).
  */
-export function windowText(p: Readonly<{ starts_at: string; ends_at: string | null }>): string {
-  const start = Date.parse(p.starts_at);
+export function windowText(row: HistoryRow): string {
+  const start = Date.parse(row.starts_at);
+  // Defined, never live: one time (api: its realized_at), shown as 'Created …' by the table (U78).
+  if (isHandStarted(row) && row.state === "defined") return dayTime(start);
+  const p = row;
   if (p.ends_at === null) return `${dayTime(start)} – no end yet`;
   const end = Date.parse(p.ends_at);
   const sameDay = isoDay(start) === isoDay(end);
@@ -104,11 +107,26 @@ export function stationName(s: Pass["station"]): string {
 
 /**
  * The State cell: mark + the contact-state word. A hand-started contact reads its real word (U78:
- * never "Hand-started"); one defined but not yet live has no contact word, so it says so.
+ * never "Hand-started"); one defined but never live reads '○ Not started' (U78 5d52c9eb2).
  */
 export function stateView(row: HistoryRow): Readonly<{ word: string; state: OpState }> {
   const key = rowStateKey(row);
   return key
     ? { word: contactStateWord[key], state: contactOpState(key) }
-    : { word: "Not started", state: "neutral" };
+    : { word: "Not started", state: "off" };
+}
+
+/**
+ * The drawer sheet's title, which names it for assistive tech (U78 5d52c9eb2):
+ * 'Pass · EARENDIL-312 · Fairbanks', or 'Contact record · EARENDIL-312' for a hand-started one.
+ */
+export function drawerTitle(
+  kind: "pass" | "record",
+  spacecraft: string | null,
+  station: string | null,
+): string {
+  const head = kind === "pass" ? "Pass" : "Contact record";
+  return [head, spacecraft, kind === "pass" ? station : null]
+    .filter((w): w is string => w !== null && w !== "")
+    .join(" · ");
 }

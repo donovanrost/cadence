@@ -2,13 +2,14 @@ import type { ApiResult, MissionId } from "@/api/index.ts";
 import { request } from "@/api/index.ts";
 import type { Decoded } from "@/api/index.ts";
 import { passesWithContactsReader } from "../handStarted.ts";
-import { DAY_MS, isoDay, weekDays, type HistoryRow, type WeekSpan } from "./history.ts";
-
-/**
- * U78: History lists hand-started contacts (`include=hand_started`, api's opt-in `booked: false`
- * rows) once api ships them; until then it asks for booked passes only and says so in a foot line.
- */
-export const HAND_STARTED_LISTED = false;
+import {
+  DAY_MS,
+  HAND_STARTED_LISTED,
+  isoDay,
+  weekDays,
+  type HistoryRow,
+  type WeekSpan,
+} from "./history.ts";
 
 /**
  * History's own read of `GET /passes` (contacts.md) over a fixed range: no sliding window, and the

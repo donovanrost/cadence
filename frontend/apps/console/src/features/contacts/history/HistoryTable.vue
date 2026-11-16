@@ -51,6 +51,10 @@ const to = (r: HistoryRow) => ({ query: { ...route.query, contact: r.id } });
 const linkClass =
   "font-semibold whitespace-nowrap text-readout no-underline hover:text-bright hover:underline max-md:hit-44";
 const booked = (r: HistoryRow) => (isHandStarted(r) ? null : r);
+/** U78: a contact defined but never live shows when Cadence made its record, not a start. */
+const neverLive = (r: HistoryRow) => isHandStarted(r) && r.state === "defined";
+const createdLabel = (r: HistoryRow) =>
+  `Created ${dayTime(Date.parse(r.starts_at))}, never started`;
 </script>
 
 <template>
@@ -62,7 +66,11 @@ const booked = (r: HistoryRow) => (isHandStarted(r) ? null : r);
           :to="to(row.pass)"
           :class="linkClass"
           :aria-current="row.pass.id === selectedId ? 'true' : undefined"
-          >{{ windowText(row.pass) }}</RouterLink
+          :aria-label="neverLive(row.pass) ? createdLabel(row.pass) : undefined"
+          ><template v-if="neverLive(row.pass)"
+            ><span class="font-sans font-normal text-text-3">Created</span>
+            {{ dayTime(Date.parse(row.pass.starts_at)) }}</template
+          ><template v-else>{{ windowText(row.pass) }}</template></RouterLink
         >
         <ApTag v-if="isHandStarted(row.pass)" label="HAND-STARTED" />
       </span>
@@ -74,7 +82,11 @@ const booked = (r: HistoryRow) => (isHandStarted(r) ? null : r);
           :to="to(row.pass)"
           :class="linkClass"
           :aria-current="row.pass.id === selectedId ? 'true' : undefined"
-          >{{ dayTime(Date.parse(row.pass.starts_at)) }}</RouterLink
+          :aria-label="neverLive(row.pass) ? createdLabel(row.pass) : undefined"
+          ><template v-if="neverLive(row.pass)"
+            ><span class="font-sans font-normal text-text-3">Created</span>
+            {{ dayTime(Date.parse(row.pass.starts_at)) }}</template
+          ><template v-else>{{ dayTime(Date.parse(row.pass.starts_at)) }}</template></RouterLink
         >
         <ApTag v-if="isHandStarted(row.pass)" label="HAND-STARTED" />
       </span>
