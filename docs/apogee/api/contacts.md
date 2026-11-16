@@ -424,7 +424,10 @@ Pass rows (`GET /passes`, `GET /passes/:id`) carry:
   03:19:57Z)". `null` without a realized contact or before it settles (and until domain's
   coalescing writer ships). Detail only.
 - `window_moves: [{at, before {starts_at, ends_at}, after {…}, classification: observed |
-  acknowledgment_required, provider_change_id}]`, newest first: the provider's moves of this pass.
+  acknowledgment_required | approval_required, provider_change_id}]`, newest first: the
+  provider's moves of this pass. `before` and `after` are always objects: only a change that moved
+  the window is listed (an approved change, `approval_required`, takes both windows from the
+  contact's revisions).
 
 Writes (operators, `operate_mission`; neither changes the provider booking, which is Release):
 
