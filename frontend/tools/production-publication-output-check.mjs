@@ -134,6 +134,22 @@ async function validateHostPublication(root) {
   return { outputRoot: root, fileCount: paths.length };
 }
 
+// The console federation smoke's test-only remote (frontend/apps/surface-fixture) is signed with the
+// smoke's TEST key; a production publication must never contain or reference it (lead, 11-16).
+const surfaceFixtureReference = /surface[-_. ]?fixture/i;
+
+/** @param {string} root */
+async function assertNoSurfaceFixture(root) {
+  for (const path of await outputFiles(root, root)) {
+    const name = relative(root, path).split(sep).join("/");
+    if (surfaceFixtureReference.test(name)) fail(`${name} is the test-only surface fixture`);
+    const source = await readFile(path, "utf8").catch(() => fail(`${name} is unreadable`));
+    if (surfaceFixtureReference.test(source)) {
+      fail(`${name} references the test-only surface fixture`);
+    }
+  }
+}
+
 export async function validateProductionPublication(root = publicationRoot) {
   const { remotes: publicationBundles } = await discoverFirstPartyRemotes(
     join(repositoryRoot, "frontend"),
@@ -158,6 +174,7 @@ export async function validateProductionPublication(root = publicationRoot) {
     );
   }
 
+  await assertNoSurfaceFixture(root);
   const host = await validateHostPublication(join(root, "host"));
   const remotes = [];
   for (const { bundle, remoteName } of publicationBundles) {

@@ -265,6 +265,39 @@ void describe("frontend release packager", () => {
     }
   });
 
+  void it("signs a TEST-key release of the console smoke's surface fixture (publication refuses it)", async () => {
+    // The console federation smoke signs its test-only remote with a test key; only the production
+    // publication check forbids it (production-publication-output-check.test.mjs).
+    const input = await temporaryDirectory();
+    await mkdir(join(input, "assets"), { recursive: true });
+    for (const [path, bytes] of Object.entries(packageFixtureFiles())) {
+      const text = bytes
+        .toString("utf8")
+        .replaceAll("cadence_telemetry_decom", "cadence_surface_fixture")
+        .replace("phase-c", "surface_fixture n");
+      await writeFile(join(input, path), text);
+    }
+    const outputParent = await temporaryDirectory("cadence-release-output-");
+    const result = await packageRelease({
+      inputDirectory: input,
+      outputDirectory: join(outputParent, "surface-fixture"),
+      metadata: {
+        ...metadata,
+        application: { id: "surface_fixture", version: 1 },
+        package: { id: "cadence.surface-fixture", version: 1 },
+        surface: { id: "mission_surface", version: 1 },
+        query: { id: "cadence.surface_fixture.mission", version: 1 },
+        actions: ["record_nonce"],
+        remote: { name: "cadence_surface_fixture" },
+      },
+      artifactOrigin: TEST_ORIGIN,
+      keyId: "fixture-release-key",
+      privateKey: keyPair().privateKey,
+    });
+    assert.ok(result.documentBytes.length > 0);
+    assert.ok(result.artifacts.some(({ path }) => path === "assets/app.js"));
+  });
+
   void it("matches the repository's canonical JSON and release-ID fixture rules exactly", async () => {
     const corpus = jsonFixture(
       await readFile(
