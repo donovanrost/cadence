@@ -11,6 +11,27 @@ import { useRouter, type RouteLocationNormalized } from "vue-router";
 
 /** How long to wait for the new page's heading (async screens render it after their read). */
 const HEADING_WAIT_MS = 1500;
+/** After falling back to <main>, how long a late heading may still take focus (qa: slow reads). */
+const LATE_HEADING_MS = 8000;
+
+/**
+ * qa (live): a page whose read outlasts the wait leaves focus on <main> and a screen reader hears
+ * "Loading…". When its h1 arrives, focus moves to it, but only if focus is still on <main>
+ * (the user hasn't gone anywhere) and no newer navigation started.
+ */
+function upgradeWhenHeadingArrives(target: HTMLElement, stillMine: () => boolean, waitMs: number) {
+  if (typeof MutationObserver === "undefined") return;
+  const observer = new MutationObserver(() => {
+    if (!stillMine() || document.activeElement !== target) return void observer.disconnect();
+    const h1 = target.querySelector<HTMLElement>("h1");
+    if (!h1) return;
+    observer.disconnect();
+    if (!h1.hasAttribute("tabindex")) h1.setAttribute("tabindex", "-1");
+    h1.focus({ preventScroll: false });
+  });
+  observer.observe(target, { childList: true, subtree: true });
+  setTimeout(() => observer.disconnect(), waitMs);
+}
 
 /** True when only the query or hash changed: the same page, so focus stays where it is. */
 export const samePage = (to: RouteLocationNormalized, from: RouteLocationNormalized) =>
@@ -47,7 +68,7 @@ async function headingIn(main: HTMLElement, waitMs: number): Promise<HTMLElement
 
 export function useRouteFocus(
   main: Readonly<Ref<HTMLElement | null>>,
-  options: Readonly<{ headingWaitMs?: number }> = {},
+  options: Readonly<{ headingWaitMs?: number; lateHeadingMs?: number }> = {},
 ) {
   const router = useRouter();
   /** The live region's text: the page title after each page change. */
@@ -72,6 +93,12 @@ export function useRouteFocus(
     const focusable = heading?.isConnected ? heading : target;
     if (!focusable.hasAttribute("tabindex")) focusable.setAttribute("tabindex", "-1");
     focusable.focus({ preventScroll: false });
+    if (focusable === target)
+      upgradeWhenHeadingArrives(
+        target,
+        () => mine === token,
+        options.lateHeadingMs ?? LATE_HEADING_MS,
+      );
     // Cleared first, so a page with the same title as the last one is still announced.
     announcement.value = "";
     await nextFrame();

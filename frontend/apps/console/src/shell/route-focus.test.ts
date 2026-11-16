@@ -21,6 +21,14 @@ const late = defineComponent({
   },
 });
 const plain = defineComponent({ render: () => h("p", "No heading here") });
+/** A read that outlasts the heading wait (60 ms in these tests): h1 at ~150 ms. */
+const slow = defineComponent({
+  setup() {
+    const ready = ref(false);
+    onMounted(() => setTimeout(() => (ready.value = true), 150));
+    return () => (ready.value ? h("h1", "Slow") : h("p", "Loading spacecraft…"));
+  },
+});
 
 const mounted: { unmount: () => void }[] = [];
 afterEach(() => {
@@ -37,6 +45,7 @@ async function setup() {
       { path: "/own", component: own },
       { path: "/late", component: late },
       { path: "/plain", component: plain },
+      { path: "/slow", component: slow },
     ],
   });
   router.afterEach((to) => {
@@ -58,7 +67,7 @@ async function setup() {
   mounted.push(w);
   return { router, w };
 }
-const settle = () => new Promise((r) => setTimeout(r, 120));
+const settle = (ms = 120) => new Promise((r) => setTimeout(r, ms));
 const live = (w: Awaited<ReturnType<typeof setup>>["w"]) => w.find("#live").text();
 
 describe("route-change focus", () => {
@@ -85,6 +94,26 @@ describe("route-change focus", () => {
     await router.push("/plain");
     await settle();
     expect(document.activeElement?.id).toBe("main");
+  });
+
+  it("moves from <main> to a heading that arrives after the wait, if focus is still on <main>", async () => {
+    const { router } = await setup();
+    await router.push("/slow");
+    await settle(100);
+    expect(document.activeElement?.id).toBe("main");
+    await settle(150);
+    expect(document.activeElement?.textContent).toBe("Slow");
+  });
+
+  it("but not if the user moved on while it loaded", async () => {
+    const { router } = await setup();
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    await router.push("/slow");
+    await settle(100);
+    field.focus();
+    await settle(150);
+    expect(document.activeElement).toBe(field);
   });
 
   it("leaves focus alone when the page takes it itself", async () => {
