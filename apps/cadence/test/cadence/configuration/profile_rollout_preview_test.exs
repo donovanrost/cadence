@@ -108,8 +108,10 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
     # (A runtime plan is 4 queries, one per target.)
     for {reader, bound} <- [
           {"Catalog.fetch_revision", 16},
-          {"MissionModels.fetch_revision", 4},
-          {"MissionModels.fetch_plan", 16}
+          # +2: the model approval gate compares the introduced revision with its baseline once.
+          {"MissionModels.fetch_revision", 6},
+          # +8: the gate's comparison loads both revisions' four plans once.
+          {"MissionModels.fetch_plan", 24}
         ] do
       assert reads(by_query, reader) <= bound, "#{reader}: #{top(by_query)}"
     end
