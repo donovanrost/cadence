@@ -185,6 +185,65 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
     assert length(own_routes(ctx)) == 2
   end
 
+  # The route as WRITTEN is the source; the rows are its resolved output (lead, fe-setup's catch).
+  # load/3 returns exactly what was staged, so the console's Edit gets it back.
+  describe "round trip: load(stage(doc)) == doc" do
+    test "an empty transport stays empty (the station's transport per leg)", ctx do
+      doc = extra(ctx)
+      [id] = apply_ops(ctx, "Recovery via Inuvik", [create("spacecraft_route", doc)])
+
+      assert Enum.all?(own_routes(ctx), &(&1.transport_id == ctx.ids.inu_tcp))
+      assert SpacecraftRoute.load(ctx.org, ctx.mission, [id]) == %{id => doc}
+    end
+
+    test "two legs on two different station transports stay unpinned, and an edit keeps it so",
+         ctx do
+      kir = unique("kir")
+
+      apply_ops(ctx, "Kiruna", [
+        create("ground_station", %{"display_name" => "Kiruna", "code" => "KIR"}, kir),
+        create("transport", station_transport("Kiruna down", kir, "inbound"), unique("kir-down")),
+        create("transport", station_transport("Kiruna up", kir, "outbound"), unique("kir-up"))
+      ])
+
+      doc = %{extra(ctx) | "ground_station_id" => kir}
+      [id] = apply_ops(ctx, "Via Kiruna", [create("spacecraft_route", doc)])
+
+      assert own_routes(ctx) |> Enum.map(& &1.transport_id) |> Enum.uniq() |> length() == 2
+      assert SpacecraftRoute.load(ctx.org, ctx.mission, [id]) == %{id => doc}
+
+      apply_ops(ctx, "Relabel", [update("spacecraft_route", id, "purpose_label", "Test")])
+
+      assert SpacecraftRoute.load(ctx.org, ctx.mission, [id]) == %{
+               id => %{doc | "purpose_label" => "Test"}
+             }
+    end
+
+    test "a name template stays a template; the rows carry it rendered", ctx do
+      doc = Map.put(extra(ctx), "display_name", "Spare {station} for {spacecraft}")
+      [id] = apply_ops(ctx, "Named", [create("spacecraft_route", doc)])
+
+      assert Enum.all?(own_routes(ctx), &(&1.display_name == "Spare INU for EARENDIL-001"))
+      assert SpacecraftRoute.load(ctx.org, ctx.mission, [id]) == %{id => doc}
+    end
+
+    test "an edit that resolves to the same rows still stores what was written", ctx do
+      [id] = apply_ops(ctx, "Recovery via Inuvik", [create("spacecraft_route", extra(ctx))])
+      before = own_routes(ctx) |> Enum.map(&{&1.routing_rule_id, &1.transport_id}) |> Enum.sort()
+
+      # Pinning the transport the station resolves to anyway: same rows, a different document.
+      apply_ops(ctx, "Pin", [update("spacecraft_route", id, "transport_id", ctx.ids.inu_tcp)])
+
+      assert own_routes(ctx) |> Enum.map(&{&1.routing_rule_id, &1.transport_id}) |> Enum.sort() ==
+               before
+
+      assert %{^id => %{"transport_id" => pinned}} =
+               SpacecraftRoute.load(ctx.org, ctx.mission, [id])
+
+      assert pinned == ctx.ids.inu_tcp
+    end
+  end
+
   defp extra(ctx),
     do: %{
       "spacecraft_id" => ctx.sc,
@@ -248,4 +307,7 @@ defmodule Cadence.Configuration.SpacecraftRouteKindTest do
     op = %{kind: kind, action: :create, document: document}
     if id, do: Map.put(op, :entity_id, id), else: op
   end
+
+  defp update(kind, id, path, value),
+    do: %{kind: kind, action: :update, entity_id: id, changes: [%{path: path, value: value}]}
 end

@@ -77,7 +77,9 @@ defmodule Cadence.Comms.RoutingRuleStore do
 
   @doc """
   Creates or updates a materialized route to match `desired` (by its deterministic id),
-  reviving it when it was archived. Returns what happened.
+  reviving it when it was archived. Returns what happened. `also:` names fields beyond the
+  route's own to keep in step (a spacecraft's extra route keeps its written document in
+  `:metadata`); by default only the route fields count.
   """
   @spec put_route(binary(), RoutingRule.t(), keyword()) ::
           {:ok, RoutingRule.t(), :created | :updated | :unchanged} | {:error, term()}
@@ -92,15 +94,6 @@ defmodule Cadence.Comms.RoutingRuleStore do
     end
   end
 
-  defp refresh_route(current, desired, opts) do
-    if same_route?(current, desired) do
-      {:ok, current, :unchanged}
-    else
-      with {:ok, rule} <- update_from(current, route_attrs(desired), opts),
-           do: {:ok, rule, :updated}
-    end
-  end
-
   @route_fields [
     :display_name,
     :purpose_label,
@@ -112,14 +105,26 @@ defmodule Cadence.Comms.RoutingRuleStore do
     :spacecraft_type_version
   ]
 
-  defp same_route?(current, desired) do
-    current.lifecycle_state == :active and current.enabled? and
-      Map.take(current, @route_fields) == Map.take(desired, @route_fields)
+  defp refresh_route(current, desired, opts) do
+    {also, opts} = Keyword.pop(opts, :also, [])
+    fields = @route_fields ++ also
+
+    if same_route?(current, desired, fields) do
+      {:ok, current, :unchanged}
+    else
+      with {:ok, rule} <- update_from(current, route_attrs(desired, fields), opts),
+           do: {:ok, rule, :updated}
+    end
   end
 
-  defp route_attrs(desired) do
+  defp same_route?(current, desired, fields) do
+    current.lifecycle_state == :active and current.enabled? and
+      Map.take(current, fields) == Map.take(desired, fields)
+  end
+
+  defp route_attrs(desired, fields) do
     desired
-    |> Map.take(@route_fields)
+    |> Map.take(fields)
     |> Map.merge(%{lifecycle_state: :active, enabled?: true})
   end
 

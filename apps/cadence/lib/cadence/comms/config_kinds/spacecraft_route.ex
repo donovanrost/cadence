@@ -116,7 +116,7 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
     with {:ok, spacecraft} <- spacecraft(organization_id, mission_id, proposed),
          {:ok, routes} <-
            plan(context(organization_id, mission_id), spacecraft, id, proposed),
-         :ok <- put_routes(organization_id, routes),
+         :ok <- put_routes(organization_id, Enum.map(routes, &authored(&1, proposed))),
          wanted = MapSet.new(routes, & &1.routing_rule_id),
          :ok <-
            organization_id
@@ -244,7 +244,9 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
 
   defp put_routes(organization_id, routes) do
     Enum.reduce_while(routes, :ok, fn route, :ok ->
-      case RoutingRuleStore.put_route(organization_id, route) do
+      # Its written document rides on every row, so an edit that resolves to the same rows still
+      # stores what the operator wrote.
+      case RoutingRuleStore.put_route(organization_id, route, also: [:metadata]) do
         {:ok, _rule, _change} -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -270,7 +272,20 @@ defmodule Cadence.Comms.ConfigKinds.SpacecraftRoute do
     end)
   end
 
-  # What's live, as a document: the rows share the station, transport, name and label.
+  # The route as the operator WROTE it is the source (lead, fe-setup's catch): the rows are its
+  # resolved output (the station's transport per leg, the rendered name). Each row keeps the
+  # written document, so load/3 returns exactly what was staged: an empty transport stays empty,
+  # two legs on two different station transports stay unpinned, a name template stays a template.
+  @authored_key "authored_document"
+
+  defp authored(route, proposed),
+    do: %{route | metadata: Map.put(route.metadata || %{}, @authored_key, written(proposed))}
+
+  defp written(proposed), do: Map.take(proposed, @fields)
+
+  defp document([%{metadata: %{@authored_key => %{} = written}} | _rows]), do: written
+
+  # Rows written before the document was kept: rebuilt from the rows (resolved values).
   defp document([first | _] = rows),
     do: %{
       "spacecraft_id" => first.spacecraft_id,
