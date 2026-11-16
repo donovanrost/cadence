@@ -34,6 +34,8 @@ contact with no scheduled contact (started by hand, #84) whose time overlaps the
 - `spacecraft` `{id, name, scid}` from its source endpoints, `null` when they name none or several;
   `station` from its `ground_station_ref`, the same shape as a booking's;
 - `started_by: {kind: user | service | system, id, name} | null` (name only for a user);
+- `not_started: boolean` (ux U78): `true` when it never went live: still `defined`, or closed by
+  Cadence's never-started sweep (`stopped`; `ends_at` is the close). Only on `booked: false` rows;
 - `reservation_id`, `scheduled_contact_id`, `plan`, `requirement`, `provider_revision`,
   `pass_phase`, `delivery_state`, `antenna`, `source`, `cost`, `max_elevation_deg`,
   `uplink_capable`, `booking_evidence`, `attested_by`, `uplink_confirmed`, `off_plan`, `ended_by`,

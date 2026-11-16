@@ -119,6 +119,7 @@ defmodule CadenceWeb.Console.PassHandStartedAPITest do
                "releasable" => false,
                "contact_action" => nil,
                "contact_ended" => nil,
+               "not_started" => false,
                "started_by" => %{"kind" => "user", "id" => ^user_id, "name" => "Mira K."},
                "provider_changes" => [],
                "window_moves" => [],
@@ -131,10 +132,39 @@ defmodule CadenceWeb.Console.PassHandStartedAPITest do
       assert {:ok, ^ends_at, 0} = DateTime.from_iso8601(row["ends_at"])
     end
 
+    test "not_started: a defined contact, or one the sweep closed; booked rows lack the key", c do
+      defined = hand!(c.booked, "defined", DateTime.utc_now(), :defined, %{})
+
+      swept =
+        hand!(c.booked, "swept", DateTime.utc_now(), :stopped, %{
+          "not_started" => %{
+            "at" => DateTime.to_iso8601(DateTime.utc_now()),
+            "reason" => "never_started"
+          }
+        })
+
+      for contact <- [defined, swept] do
+        assert %{"data" => %{"booked" => false, "not_started" => true}} =
+                 c |> show(contact.realized_contact_id) |> json_response(200)
+      end
+
+      assert %{"data" => booked} =
+               c |> show(c.booked.reservation.provider_reservation_id) |> json_response(200)
+
+      refute Map.has_key?(booked, "not_started")
+    end
+
     test "an active hand-started contact is never releasable, even for an org admin", c do
       active = hand!(c.booked, "active", DateTime.utc_now(), :active, %{})
 
-      assert %{"data" => %{"state" => "active", "releasable" => false, "booked" => false}} =
+      assert %{
+               "data" => %{
+                 "state" => "active",
+                 "releasable" => false,
+                 "booked" => false,
+                 "not_started" => false
+               }
+             } =
                c |> show(active.realized_contact_id) |> json_response(200)
     end
 

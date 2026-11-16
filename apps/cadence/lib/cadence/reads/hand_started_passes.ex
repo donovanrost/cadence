@@ -10,7 +10,9 @@ defmodule Cadence.Reads.HandStartedPasses do
       closed, null while open;
     * `spacecraft`: from its source endpoints, null when they name none or several;
     * `station`: from its `ground_station_ref`;
-    * `started_by`: `{kind: user | service | system, id, name}` or null.
+    * `started_by`: `{kind: user | service | system, id, name}` or null;
+    * `not_started` (ux U78): true when it never went live, still `defined` or closed by the
+      never-started sweep (`stopped` with `not_started` metadata; `ends_at` is the close).
   """
 
   alias Cadence.Comms.StationRefs
@@ -84,6 +86,7 @@ defmodule Cadence.Reads.HandStartedPasses do
       starts_at: ContactStart.went_live_at(contact),
       ends_at: ContactStart.ended_at(contact),
       started_by: ContactStart.started_by(contact),
+      not_started: not_started?(contact),
       uplink_capable: nil,
       source: nil,
       max_elevation_deg: nil,
@@ -103,6 +106,16 @@ defmodule Cadence.Reads.HandStartedPasses do
       ended_by: nil
     }
   end
+
+  defp not_started?(%RealizedContact{lifecycle_state: :defined}), do: true
+
+  defp not_started?(%RealizedContact{
+         lifecycle_state: :stopped,
+         metadata: %{"not_started" => %{}}
+       }),
+       do: true
+
+  defp not_started?(_contact), do: false
 
   defp spacecraft(contact, owners, crafts) do
     case contact.source_endpoint_refs |> Enum.map(&owners[&1]) |> Enum.uniq() do
