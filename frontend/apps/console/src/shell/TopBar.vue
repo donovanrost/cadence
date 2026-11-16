@@ -62,9 +62,9 @@ const placeholder = computed(() =>
       />
       <div v-else class="flex-1" />
       <LinkStatus />
-      <!-- Mode-specific status from features, composed in App.vue: Ops fleet tag / next AOS,
-           Setup config revision. -->
-      <slot v-if="mode === 'ops' && mission" name="status" />
+      <!-- Status from features, composed in App.vue: the fleet posture (both modes, ux IA §Top bar),
+           then Setup's config revision. -->
+      <slot v-if="(mode === 'ops' || mode === 'setup') && mission" name="status" />
       <!-- Below 768 the staged bar carries the revision, so the top row stays one line (ux #2). -->
       <div v-if="mode === 'setup' && mission" class="flex max-md:hidden">
         <slot name="setup-status" />

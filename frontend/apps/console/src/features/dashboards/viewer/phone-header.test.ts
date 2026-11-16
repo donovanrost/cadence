@@ -75,7 +75,7 @@ vi.mock("@/shell", async (original) => ({
 }));
 vi.mock("@/features/fleet/index.ts", () => ({
   useFleet: () => ({
-    state: computed(() => ({ status: "ready", value: { counts: fleet.counts } })),
+    state: computed(() => ({ status: "ready", value: { counts: fleet.counts, limits: { configured: true } } })),
   }),
 }));
 
@@ -93,7 +93,7 @@ describe("phone status bar (ux 45d26151f): health stays on screen", () => {
     expect(links.map((l) => l.props("to"))).toEqual([
       { name: "ops.alarms" },
       { name: "ops.alarms" },
-      { name: "ops.fleet" },
+      { name: "ops.fleet", query: { state: "stale" } },
     ]);
     expect(links[0]?.attributes("aria-label")).toBe("2 spacecraft critical");
   });

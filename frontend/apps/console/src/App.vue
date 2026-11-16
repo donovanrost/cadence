@@ -8,6 +8,7 @@ import { useBootstrap } from "@/shell/bootstrap.ts";
 import SessionProvider from "@/shell/SessionProvider.vue";
 import PaletteRoot from "@/features/palette/PaletteRoot.vue";
 import { ConfigStatus, StagedBar } from "@/features/changes/index.ts";
+import { FleetPosture } from "@/features/dashboards/index.ts";
 import AuthLayout from "@/features/auth/AuthLayout.vue";
 
 /**
@@ -47,8 +48,8 @@ watch(state, (current) => {
   <BootScreen v-else-if="state.status === 'failed'" :error="state.error" @retry="load" />
   <SessionProvider v-else :session="state.session">
     <AppShell>
-      <!-- fe-ops: <FleetStatusTag /> from @/features/fleet goes here (Ops top bar). -->
-      <template #topbar-status />
+      <!-- Fleet posture, both modes at mission scope (ux IA §Top bar; replaces the context rail). -->
+      <template #topbar-status><FleetPosture /></template>
       <!-- fe-setup: CONFIG rN · n STAGED (renders nothing until the mission has change sets). -->
       <template #topbar-setup-status><ConfigStatus /></template>
       <!-- fe-setup: staged bar under Setup screens (hidden while nothing is staged). -->
