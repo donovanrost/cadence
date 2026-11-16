@@ -3,7 +3,13 @@ import type { RemoteState } from "@/api/index.ts";
 import { computed } from "vue";
 import { formatClock, ApCallout, ApEmptyState, ApRemote, ApTimeSeries } from "@/ui";
 import { formatValue } from "@/features/alarms/index.ts";
-import { notPlottable, pointName, seriesChart, type VerifierSeries } from "../groups/series.ts";
+import {
+  notPlottable,
+  plotSentence,
+  pointName,
+  seriesChart,
+  type VerifierSeries,
+} from "../groups/series.ts";
 
 /**
  * One verifier plot (U2): a point over the request window, one faint line per target (failed ones
@@ -35,7 +41,7 @@ const value = (v: number) => formatValue(v) ?? "";
           :comparison="chart.lines"
           :window="chart.window"
           :now="Date.now()"
-          :label="`${pointName(ready)} for ${ready.targets.length} targets`"
+          :label="plotSentence(ready)"
           :format-tick="tick"
           :format-value="value"
           :height="180"

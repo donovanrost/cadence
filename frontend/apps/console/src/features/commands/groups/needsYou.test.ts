@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { groupOf } from "./fixtures.ts";
 import { needsYouCards } from "./needsYou.ts";
-import { notPlottable, pointName, type VerifierSeries } from "./series.ts";
+import { notPlottable, plotSentence, pointName, type VerifierSeries } from "./series.ts";
 
 const member = (stage: string, position = 0, end_reason: string | null = null) => ({
   target_index: 0,
@@ -102,6 +102,31 @@ describe("N Needs you cards", () => {
     ]);
     expect(needsYouCards(g, null)[0]?.explanation).toBe(
       "No ACK for SET_MODE: Cadence can't tell whether it arrived. Check the spacecraft before re-sending.",
+    );
+  });
+});
+
+describe("a verifier plot's sentence (a11y checklist C)", () => {
+  const t = (id: string) => ({
+    spacecraft_id: id,
+    name: `EARENDIL-${id}`,
+    verifier_state: "satisfied" as const,
+    samples: [],
+  });
+  it("names the point, up to three targets, and how they came out", () => {
+    const one = series([]);
+    expect(plotSentence(one)).toBe("batt_setpoint for A: 1 not met.");
+    const many = {
+      ...one,
+      targets: ["001", "002", "003", "004", "005"].map(t),
+      target_count: 5,
+      summary: { met: 4, not_met: 1, pending: 0 },
+    };
+    expect(plotSentence(many)).toBe(
+      "batt_setpoint for EARENDIL-001, EARENDIL-002, EARENDIL-003 and 2 more: 4 met, 1 not met.",
+    );
+    expect(plotSentence({ ...many, targets: many.targets.slice(0, 2), target_count: 2 })).toBe(
+      "batt_setpoint for EARENDIL-001 and EARENDIL-002: 4 met, 1 not met.",
     );
   });
 });

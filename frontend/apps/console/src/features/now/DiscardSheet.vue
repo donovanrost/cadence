@@ -57,7 +57,8 @@ defineExpose({ open });
 </script>
 
 <template>
-  <ApSheet ref="sheet" :title="title" width="narrow" initial-focus="textarea">
+  <!-- a11y A1: a danger sheet opens on its safe button (Cancel, first in the footer). -->
+  <ApSheet ref="sheet" :title="title" width="narrow">
     <p class="m-0 text-md text-text-2">{{ DISCARD_BODY }}</p>
     <ApTextarea v-model="reason" label="Reason" required :maxlength="200" />
     <p v-if="error" class="m-0 text-sm text-crit-text">{{ error }}</p>

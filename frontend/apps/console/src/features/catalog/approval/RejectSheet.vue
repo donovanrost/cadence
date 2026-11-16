@@ -27,11 +27,11 @@ defineExpose({ open, close: () => sheet.value?.close() });
 </script>
 
 <template>
+  <!-- a11y A1: a danger sheet opens on its safe button (Cancel, first in the footer). -->
   <ApSheet
     ref="sheet"
     :title="rev === null ? 'Reject this catalog revision?' : `Reject catalog rev ${rev}?`"
     width="narrow"
-    initial-focus="textarea"
   >
     <p class="m-0 text-md text-text-2">
       Spacecraft can't move to {{ label() }} after this. To try again, import a new revision.

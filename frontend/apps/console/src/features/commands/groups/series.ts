@@ -164,3 +164,28 @@ export function pointCaption(p: VerifierPoint, nameOf: (spacecraftId: string) =>
   const who = n <= 3 ? p.spacecraft_ids.map(nameOf).join(", ") : `${n} targets`;
   return [p.verifier_name, who].filter(Boolean).join(" · ");
 }
+
+/**
+ * The plot's sentence (a11y checklist C, Uplink & verify): the point, the targets it names (up to 3,
+ * then "and N more"), and how they came out, zero counts left out. "EPS.VBAT for EARENDIL-001,
+ * EARENDIL-002 and 3 more: 4 met, 1 not met."
+ */
+export function plotSentence(s: VerifierSeries): string {
+  const names = s.targets.map((t) => t.name ?? t.spacecraft_id);
+  const shown = names.slice(0, 3);
+  const more = s.target_count - shown.length;
+  const who =
+    shown.length === 0
+      ? "no targets"
+      : more > 0
+        ? `${shown.join(", ")} and ${more} more`
+        : shown.length > 1
+          ? `${shown.slice(0, -1).join(", ")} and ${shown.at(-1) ?? ""}`
+          : (shown[0] ?? "");
+  const outcome = [
+    s.summary.met ? `${s.summary.met} met` : null,
+    s.summary.not_met ? `${s.summary.not_met} not met` : null,
+    s.summary.pending ? `${s.summary.pending} pending` : null,
+  ].filter((p): p is string => p !== null);
+  return `${pointName(s)} for ${who}${outcome.length ? `: ${outcome.join(", ")}` : ""}.`;
+}

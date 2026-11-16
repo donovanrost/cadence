@@ -46,11 +46,18 @@ async function reject(reason: string) {
     <div v-if="decided" class="flex flex-col gap-2">
       <p class="m-0 text-md text-readout">
         {{ decided }}
-        <ApButton v-if="report" size="compact" variant="ghost" @click="showReport = !showReport">
+        <ApButton
+          v-if="report"
+          size="compact"
+          variant="ghost"
+          :aria-expanded="showReport"
+          aria-controls="approval-report"
+          @click="showReport = !showReport"
+        >
           {{ showReport ? "Hide report" : "Show report" }}
         </ApButton>
       </p>
-      <ComparisonReport v-if="report && showReport" :report="report" />
+      <ComparisonReport v-if="report && showReport" id="approval-report" :report="report" />
     </div>
     <div v-else class="flex flex-col gap-3">
       <ApCallout v-if="report?.replay.status === 'not_run'" tone="caution">{{

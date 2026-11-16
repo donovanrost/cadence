@@ -102,7 +102,8 @@ defineExpose({ openRetry, openClose });
       >
     </template>
   </ApSheet>
-  <ApSheet ref="closeSheet" title="Close without retrying?" width="narrow" initial-focus="textarea">
+  <!-- a11y A1: a danger sheet opens on its safe button (Cancel, first in the footer). -->
+  <ApSheet ref="closeSheet" title="Close without retrying?" width="narrow">
     <p class="m-0 font-semibold text-readout">{{ noun }}</p>
     <p class="m-0 text-md text-text-2">{{ CLOSE_BODY }}</p>
     <ApTextarea v-model="note" label="What did you find?" required :maxlength="200" />

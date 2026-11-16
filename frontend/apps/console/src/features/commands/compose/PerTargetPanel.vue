@@ -141,14 +141,19 @@ function paste() {
           @click="emit('change', fillFromCurrent(item, ids, current))"
           >Current + {{ addWords }}</ApButton
         >
-        <ApButton size="compact" variant="secondary" @click="pasting = !pasting"
+        <ApButton
+          size="compact"
+          variant="secondary"
+          :aria-expanded="pasting"
+          :aria-controls="`paste-${item.key}`"
+          @click="pasting = !pasting"
           >Paste CSV</ApButton
         >
         <ApButton size="compact" variant="ghost" @click="emit('change', clearPerTarget(item))"
           >Clear</ApButton
         >
       </div>
-      <div v-if="pasting" class="flex flex-col gap-2">
+      <div v-if="pasting" :id="`paste-${item.key}`" class="flex flex-col gap-2">
         <ApTextarea
           v-model="csv"
           label="CSV"
