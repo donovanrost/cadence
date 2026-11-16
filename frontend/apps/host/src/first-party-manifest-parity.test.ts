@@ -399,16 +399,6 @@ const expected = [
         [],
       ],
       [
-        "new",
-        "configuration",
-        "mission",
-        "application_workspace",
-        "New spacecraft",
-        20,
-        "cadence.spacecraft.new",
-        ["validate", "save"],
-      ],
-      [
         "profile_list",
         "overview",
         "mission",
@@ -417,16 +407,6 @@ const expected = [
         30,
         "cadence.spacecraft.profiles",
         [],
-      ],
-      [
-        "profile_new",
-        "configuration",
-        "mission",
-        "application_workspace",
-        "New spacecraft profile",
-        40,
-        "cadence.spacecraft.profile.new",
-        ["validate", "save"],
       ],
       [
         "profile_show",
@@ -447,16 +427,6 @@ const expected = [
         10,
         "cadence.spacecraft.show",
         [],
-      ],
-      [
-        "edit",
-        "configuration",
-        "spacecraft",
-        "application_workspace",
-        "Edit spacecraft",
-        20,
-        "cadence.spacecraft.edit",
-        ["validate", "save"],
       ],
       [
         "readiness",
@@ -572,6 +542,7 @@ describe("first-party federated manifest parity", () => {
       }
     }
 
-    expect(surfaceCount).toBe(40);
+    // Sweep row 2: spacecraft's new / profile_new / edit forms left (40 → 37).
+    expect(surfaceCount).toBe(37);
   });
 });

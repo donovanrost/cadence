@@ -28,10 +28,6 @@ export const manifest = defineApplicationManifest({
   },
   surfaces: [
     surface("list", "overview", "mission", "Spacecraft", "cadence.spacecraft.list", []),
-    surface("new", "configuration", "mission", "New spacecraft", "cadence.spacecraft.new", [
-      "validate",
-      "save",
-    ]),
     surface(
       "profile_list",
       "overview",
@@ -39,14 +35,6 @@ export const manifest = defineApplicationManifest({
       "Spacecraft profiles",
       "cadence.spacecraft.profiles",
       [],
-    ),
-    surface(
-      "profile_new",
-      "configuration",
-      "mission",
-      "New spacecraft profile",
-      "cadence.spacecraft.profile.new",
-      ["validate", "save"],
     ),
     surface(
       "profile_show",
@@ -57,10 +45,6 @@ export const manifest = defineApplicationManifest({
       [],
     ),
     surface("show", "overview", "spacecraft", "Spacecraft overview", "cadence.spacecraft.show", []),
-    surface("edit", "configuration", "spacecraft", "Edit spacecraft", "cadence.spacecraft.edit", [
-      "validate",
-      "save",
-    ]),
     surface(
       "readiness",
       "overview",
