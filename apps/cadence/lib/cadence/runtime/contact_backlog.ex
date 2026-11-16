@@ -79,6 +79,9 @@ defmodule Cadence.Runtime.ContactBacklog do
     |> Enum.flat_map(fn {path_id, provider_binding_id, pid} ->
       consumer_incomplete(pid, %{path_id: path_id, provider_binding_id: provider_binding_id})
     end)
+  catch
+    # The registry select itself (registry or :global trouble) mustn't crash the settler mid-settle.
+    :exit, _reason -> []
   end
 
   # One consumer gone (or a remote call timing out) leaves out only its own entry (api-ops).
