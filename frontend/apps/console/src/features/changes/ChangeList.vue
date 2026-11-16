@@ -2,12 +2,13 @@
 import type { MissionId } from "@/api/index.ts";
 import { ref, watch } from "vue";
 import { useSession } from "@/shell";
-import { ApButton, ApCallout, ApPanel, plural, refocusFirst } from "@/ui";
+import { ApCallout, ApPanel, plural, refocusFirst } from "@/ui";
 import { discardChangeSet, failureOutcome, withdrawChange, type PreviewItem } from "./actions.ts";
 import ChangeConflict from "./ChangeConflict.vue";
 import { conflictRow } from "./rebase.ts";
 import ChangeOps from "./ChangeOps.vue";
 import ChangeRowHead from "./ChangeRowHead.vue";
+import DiscardConfirm from "./DiscardConfirm.vue";
 import type { Change, ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K1: one row per staged change, collapsed; expanded shows what each op touches. */
@@ -93,16 +94,13 @@ function toggle(id: string) {
 <template>
   <ApPanel index="K1" title="Changes" :meta="plural(changeSet.changes.length, 'change')" flush>
     <template v-if="changeSet.state === 'open' && canDiscard()" #header>
-      <ApButton
-        size="compact"
-        variant="ghost"
-        :disabled="busy"
-        disabled-reason="Working…"
-        @click="discard"
-        >{{
-          config.permissions.has("config.discard_any") ? "Discard all" : "Discard mine"
-        }}</ApButton
-      >
+      <DiscardConfirm
+        :changes="changeSet.changes"
+        :user-id="session.user.id"
+        :discard-any="config.permissions.has('config.discard_any')"
+        :busy="busy"
+        @discard="discard"
+      />
     </template>
     <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
     <ul class="m-0 list-none p-0">
