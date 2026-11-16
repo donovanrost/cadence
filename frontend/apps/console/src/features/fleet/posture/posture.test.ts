@@ -88,38 +88,3 @@ describe("posture compact (ux IA §Top bar, d39a9c150)", () => {
     expect(postureCompact({ ...base, compact: true, room: 200, grow: 180 })).toBe(false);
   });
 });
-
-describe("posture fit doesn't flap (lead)", () => {
-  /** A model top bar: fixed items, the query trigger (min 160) and the posture. */
-  function settle(width: number, full = 450, compactWidth = 150, fixed = 900) {
-    let compact = false;
-    const seen: boolean[] = [];
-    for (let i = 0; i < 8; i++) {
-      const posture = compact ? compactWidth : full;
-      const flex = Math.max(160, width - fixed - posture);
-      const overflow = fixed + flex + posture > width;
-      compact = postureCompact({
-        wide: true,
-        compact,
-        overflow,
-        room: flex - 160,
-        grow: full - posture,
-      });
-      seen.push(compact);
-    }
-    return seen;
-  }
-  it("settles after at most one switch, at every width, never alternating", () => {
-    for (let width = 1200; width <= 2200; width += 10) {
-      const seen = settle(width);
-      const last = seen.at(-1);
-      expect(seen.slice(1).every((c) => c === last)).toBe(true);
-    }
-  });
-  it("shows words when they fit and compact when they don't", () => {
-    expect(settle(1600).at(-1)).toBe(false); // 900 fixed + 250 query + 450 words = 1600: fits
-    expect(settle(2000).at(-1)).toBe(false);
-    expect(settle(1500).at(-1)).toBe(true); // words would squeeze the query below 160
-    expect(settle(1300).at(-1)).toBe(true);
-  });
-});

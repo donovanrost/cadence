@@ -126,13 +126,10 @@ onBeforeUnmount(() => {
       </RouterLink>
     </template>
     <span v-if="offline" class="text-stale-text">as of {{ asOf }}</span>
-    <!-- The words' width, measured in place: spans only, invisible and inert, so never focusable
-         or read (lead); right-anchored, so it never widens the page. -->
+    <!-- The words' width, measured off-screen (right-anchored, invisible, never focusable). -->
     <span
       ref="measure"
       aria-hidden="true"
-      inert
-      data-posture-measure
       class="pointer-events-none invisible absolute top-0 right-0 flex items-center gap-2 px-4"
     >
       <template v-for="(chip, i) in chips" :key="chip.key">

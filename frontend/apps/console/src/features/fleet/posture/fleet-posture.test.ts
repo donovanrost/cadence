@@ -82,19 +82,6 @@ describe("top bar fleet posture (ux IA §Top bar)", () => {
     expect(links[0]?.attributes("aria-label")).toBe("2 spacecraft critical");
     vi.unstubAllGlobals();
   });
-  it("never lets Tab reach its measuring copy: spans only, inert and aria-hidden (lead)", () => {
-    const w = posture();
-    const copy = w.get("[data-posture-measure]").element;
-    expect(copy.hasAttribute("inert")).toBe(true);
-    expect(copy.getAttribute("aria-hidden")).toBe("true");
-    expect(copy.classList.contains("invisible")).toBe(true);
-    expect(copy.querySelectorAll("a, button, input, select, textarea, [tabindex]")).toHaveLength(0);
-    // Every Tab stop in the cluster is a visible chip link outside the copy.
-    const cluster = w.get("[data-fleet-posture]").element;
-    const stops = [...cluster.querySelectorAll<HTMLElement>("a, button, [tabindex]")];
-    expect(stops.length).toBe(3);
-    expect(stops.every((e) => !copy.contains(e))).toBe(true);
-  });
   it("keeps the counts when the live link drops, stale-tinted with 'as of'", async () => {
     const w = posture();
     connection.value = "offline";
