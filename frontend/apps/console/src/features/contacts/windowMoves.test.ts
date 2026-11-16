@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { passReader } from "./api.ts";
-import { listensUntil, moveDuration, windowMoveLine } from "./windowMoves.ts";
+import { listensUntil, moveDuration, windowMoveLine, windowMoves } from "./windowMoves.ts";
 
 /** A move as GET /passes/:id carries it (decoded through the pass reader). */
-const moveOf = (before: [string, string], after: [string, string], at = "2026-11-14T12:05:00Z") => {
-  const r = decode(passReader, {
+const passWithMoves = (moves: unknown[], after: [string, string]) =>
+  decode(passReader, {
     id: "pass-3",
     kind: "contact",
     state: "confirmed",
@@ -29,7 +29,11 @@ const moveOf = (before: [string, string], after: [string, string], at = "2026-11
     attention: null,
     uplink_readiness: null,
     provider_revision: null,
-    window_moves: [
+    window_moves: moves,
+  });
+const moveOf = (before: [string, string], after: [string, string], at = "2026-11-14T12:05:00Z") => {
+  const r = passWithMoves(
+    [
       {
         at,
         before: { starts_at: before[0], ends_at: before[1] },
@@ -38,15 +42,34 @@ const moveOf = (before: [string, string], after: [string, string], at = "2026-11
         provider_change_id: "chg-1",
       },
     ],
-  });
+    after,
+  );
   if (!r.ok) throw new Error(r.error.message);
-  const m = r.value.window_moves?.[0];
+  const m = windowMoves(r.value.window_moves)[0];
   if (!m) throw new Error("no move");
   return m;
 };
 const T = (hms: string) => `2026-11-14T${hms}Z`;
 
 describe("U56 window moves in the pass history", () => {
+  it("reads a revision with no window (qa 11-16, approval_required) and leaves it out", () => {
+    const r = passWithMoves(
+      [
+        {
+          at: "2026-11-13T14:30:42.059536Z",
+          before: null,
+          after: null,
+          classification: "approval_required",
+          provider_change_id: "provider_change_5lec73hfga_L1LE",
+        },
+      ],
+      [T("12:11:27"), T("12:19:27")],
+    );
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.window_moves).toHaveLength(1);
+    expect(windowMoves(r.value.window_moves)).toEqual([]);
+  });
+
   it("words each case to the second, later or earlier", () => {
     expect(
       windowMoveLine(

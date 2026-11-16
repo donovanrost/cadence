@@ -4,7 +4,20 @@ import type { Pass } from "./api.ts";
  * U56 window_moved, the pass history line (ux's table, in step with api's Timeline sentence):
  * "later"/"earlier", never "+30 s"; times to the second, because a 30 s move vanishes at minutes.
  */
-export type WindowMove = NonNullable<Pass["window_moves"]>[number];
+type Revision = NonNullable<Pass["window_moves"]>[number];
+type Window = NonNullable<Revision["before"]>;
+/** A revision that moved the window: both its windows known. */
+export type WindowMove = Revision & Readonly<{ before: Window; after: Window }>;
+
+/**
+ * The moves among a pass's provider revisions: one without a before or after window (qa 11-16:
+ * an approval_required revision from 11-13 carries none) didn't move anything we can say.
+ */
+export function windowMoves(revisions: readonly Revision[] | undefined): WindowMove[] {
+  return (revisions ?? []).flatMap((r) =>
+    r.before && r.after ? [{ ...r, before: r.before, after: r.after }] : [],
+  );
+}
 
 /** "30 s", "2 min", "1 min 30 s". */
 export function moveDuration(ms: number): string {

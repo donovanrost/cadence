@@ -71,6 +71,8 @@ const props = defineProps<{
   missing?: boolean;
   /** The pass named in the URL couldn't be read for another reason (Try again emits changed). */
   failed?: boolean;
+  /** Why it couldn't load (the error's own words), under the headline. */
+  failedWhy?: string | null;
 }>();
 defineEmits<{ changed: [] }>();
 const now = useNow();
@@ -192,7 +194,11 @@ const countdown = computed(() => {
       headline="Pass not found"
       sentence="It isn't on this mission's schedule any more. Choose a bar in the schedule."
     />
-    <ApEmptyState v-else-if="!pass && failed" headline="This pass couldn't load.">
+    <ApEmptyState
+      v-else-if="!pass && failed"
+      headline="This pass couldn't load."
+      :sentence="failedWhy ?? undefined"
+    >
       <ApButton size="compact" @click="$emit('changed')">Try again</ApButton>
     </ApEmptyState>
     <ApEmptyState

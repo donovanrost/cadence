@@ -216,8 +216,9 @@ const pass = d.object({
     d.array(
       d.object({
         at: d.timestamp,
-        before: d.object({ starts_at: d.timestamp, ends_at: d.timestamp }),
-        after: d.object({ starts_at: d.timestamp, ends_at: d.timestamp }),
+        // qa 11-16: an approval_required revision can carry no window (null); see windowMoves.ts.
+        before: d.nullable(d.object({ starts_at: d.timestamp, ends_at: d.timestamp })),
+        after: d.nullable(d.object({ starts_at: d.timestamp, ends_at: d.timestamp })),
         classification: d.knownText(["observed", "acknowledgment_required"] as const),
         provider_change_id: d.nullable(d.token),
       }),

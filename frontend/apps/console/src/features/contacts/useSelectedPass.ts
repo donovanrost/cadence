@@ -1,5 +1,11 @@
 import { computed, type Ref } from "vue";
-import { isError, useRemoteQuery, type MissionId, type RemoteState } from "@/api/index.ts";
+import {
+  describeApiError,
+  isError,
+  useRemoteQuery,
+  type MissionId,
+  type RemoteState,
+} from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { passStatus } from "./gantt.ts";
@@ -80,6 +86,10 @@ export function useSelectedPass(
   });
   const missing = computed(() => unread.value !== null && isError(unread.value, "pass_not_found"));
   const failed = computed(() => unread.value !== null && !missing.value);
+  /** Why it failed, for the drawer's sentence (qa 11-16: a decode error names its path). */
+  const failedWhy = computed(() =>
+    unread.value !== null && !missing.value ? describeApiError(unread.value) : null,
+  );
   /** D2 identity: the fleet row (has state) else the pass's own {name, scid}. */
   const spacecraft = computed(() => {
     const p = selected.value;
@@ -91,5 +101,5 @@ export function useSelectedPass(
       ? { name: p.spacecraft.name ?? "Deleted spacecraft", scid: p.spacecraft.scid }
       : null;
   });
-  return { selected, handStarted, loading, missing, failed, spacecraft, refetch };
+  return { selected, handStarted, loading, missing, failed, failedWhy, spacecraft, refetch };
 }

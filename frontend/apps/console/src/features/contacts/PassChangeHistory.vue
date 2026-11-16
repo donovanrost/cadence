@@ -7,7 +7,7 @@ import { historyEntry } from "@/features/now/index.ts";
 import { fetchPass } from "./api.ts";
 import ProviderChangeBlock from "./ProviderChangeBlock.vue";
 import { contactState } from "@/features/scheduling/index.ts";
-import { listensUntil, windowMoveLine } from "./windowMoves.ts";
+import { listensUntil, windowMoveLine, windowMoves } from "./windowMoves.ts";
 
 /**
  * The pass's provider changes, newest first (ux U44 pass history; api, L14 flown passes): what
@@ -54,7 +54,7 @@ const moves = computed(() => {
   const s = read.state.value;
   if (s.status !== "ready") return [];
   const live = contactState(s.value) === "in_contact";
-  return (s.value.window_moves ?? []).map((m, i) => ({
+  return windowMoves(s.value.window_moves).map((m, i) => ({
     m,
     line: windowMoveLine(m, props.provider),
     listens: i === 0 ? listensUntil(m, live) : null,

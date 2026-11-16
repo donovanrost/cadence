@@ -353,6 +353,7 @@ watch(
             :loading="selectedLoading"
             :missing="selectedMissing"
             :failed="pick.failed.value"
+            :failed-why="pick.failedWhy.value"
             :spacecraft="pick.spacecraft.value"
             @changed="pick.refetch"
           />
