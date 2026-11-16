@@ -47,6 +47,10 @@ const unavailable = computed(() =>
     ? props.history.error.message
     : null,
 );
+/** §11c(D) D11 (ux): the read hit its cap, so the plot is missing samples; never cut silently. */
+const incomplete = computed(
+  () => props.history.status === "ready" && props.history.value.truncated,
+);
 const tick = (t: number) => formatClock(new Date(t)).slice(0, 5);
 const value = (v: number) => formatValue(v) ?? "";
 </script>
@@ -81,6 +85,10 @@ const value = (v: number) => formatValue(v) ?? "";
       </TrendChart>
       <p v-if="!compact && view.series.length === 0" class="m-0 pt-2 text-md text-text-3">
         No samples for this point in the last {{ rangeLabel }}.
+      </p>
+      <p v-if="incomplete" class="m-0 pt-2 text-sm text-caution-text">
+        This range has more samples than one read returns (20,000), so the plot is incomplete. Pick
+        a shorter range to see all of it.
       </p>
     </template>
   </ApRemote>
