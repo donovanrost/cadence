@@ -2,7 +2,12 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { decode, missionId } from "@/api/index.ts";
 import ContactRecordView from "./ContactRecordView.vue";
-import { isHandStarted, passOrContactReader, passesWithContactsReader } from "./handStarted.ts";
+import {
+  isHandStarted,
+  neverLiveLine,
+  passOrContactReader,
+  passesWithContactsReader,
+} from "./handStarted.ts";
 
 /** U78 (api): a hand-started contact's row; every booking field is null. */
 const handStarted = {
@@ -64,6 +69,31 @@ describe("hand-started rows (U78)", () => {
   it("keeps an open contact's end null and rejects a hand-started row claiming booked:true", () => {
     expect(decode(passOrContactReader, { ...handStarted, ends_at: null }).ok).toBe(true);
     expect(decode(passOrContactReader, { ...handStarted, booked: true }).ok).toBe(false);
+  });
+});
+
+describe("never went live (api not_started, ux U78)", () => {
+  it("says Cadence closed it only when it never went live and has a close time", () => {
+    const read = (raw: unknown) => {
+      const r = decode(passOrContactReader, raw);
+      if (!r.ok || !isHandStarted(r.value)) throw new Error("expected a hand-started row");
+      return r.value;
+    };
+    const swept = read({ ...handStarted, not_started: true });
+    expect(neverLiveLine(swept, "2026-11-16")).toBe(
+      "Closed by Cadence at 11-14 03:08Z: it never went live.",
+    );
+    expect(neverLiveLine(swept, "2026-11-14")).toBe(
+      "Closed by Cadence at 03:08Z: it never went live.",
+    );
+    expect(
+      neverLiveLine(
+        read({ ...handStarted, state: "defined", ends_at: null, not_started: true }),
+        "2026-11-16",
+      ),
+    ).toBe(null);
+    expect(neverLiveLine(read({ ...handStarted, not_started: false }), "2026-11-16")).toBe(null);
+    expect(neverLiveLine(read(handStarted), "2026-11-16")).toBe(null);
   });
 });
 

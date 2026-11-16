@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { decoders as d, request, type ApiResult, type Decoded, type Reader } from "@/api/index.ts";
+import { shortWhen } from "@/features/scheduling/index.ts";
 import { passReader, passSpacecraft, passStation, type Pass } from "./api.ts";
 
 /**
@@ -18,6 +19,11 @@ export const handStartedReader = d.object({
   starts_at: d.timestamp,
   /** Null while the contact is open. */
   ends_at: d.nullable(d.timestamp),
+  /**
+   * api (ux U78): the contact never went live, either still defined or closed by Cadence's
+   * never-started sweep (stopped, ends_at = the close). Absent on older reads.
+   */
+  not_started: d.optional(d.boolean),
   /** Null when its endpoints map to no spacecraft or to several. */
   spacecraft: d.nullable(passSpacecraft),
   station: passStation,
@@ -60,4 +66,11 @@ export function fetchPassOrContact(
     passOrContactReader,
     signal ? { signal } : {},
   );
+}
+
+/** ux U78: the drawer's line for a contact Cadence closed because it never went live, else null. */
+export function neverLiveLine(c: HandStartedContact, today: string): string | null {
+  return c.not_started === true && c.ends_at !== null
+    ? `Closed by Cadence at ${shortWhen(c.ends_at, today)}: it never went live.`
+    : null;
 }

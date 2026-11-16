@@ -343,6 +343,7 @@ watch(
             v-if="pick.handStarted.value"
             :mission-id="missionId"
             :contact-id="pick.handStarted.value.realized_contact_id"
+            :contact="pick.handStarted.value"
           />
           <SelectedPassPanel
             v-else
