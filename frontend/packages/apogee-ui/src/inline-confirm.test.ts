@@ -4,48 +4,55 @@ import { defineComponent, h, ref } from "vue";
 import ApButton from "./ApButton.vue";
 import ApInlineConfirm from "./ApInlineConfirm.vue";
 
-/** A caller as screens use it: a trigger, the sentence, optional fields; it closes on success. */
-const Host = defineComponent({
-  props: {
-    withReason: { type: Boolean, default: false },
-    refusal: { type: String, default: null },
-    keepTrigger: { type: Boolean, default: true },
-  },
-  emits: ["confirm", "cancel"],
-  setup(props, { emit, expose }) {
-    const open = ref(false);
-    expose({ open });
-    return () =>
-      h("main", [
-        h("h1", "Provider account"),
-        h(
-          ApInlineConfirm,
-          {
-            open: open.value,
-            "onUpdate:open": (v: boolean) => (open.value = v),
-            action: "Remove account",
-            busyReason: "Removing…",
-            refusal: props.refusal,
-            onConfirm: () => emit("confirm"),
-            onCancel: () => emit("cancel"),
-          },
-          {
-            trigger: ({ attrs }: { attrs: Record<string, unknown> }) =>
-              props.keepTrigger
-                ? h(ApButton, { variant: "danger", ...attrs }, () => "Remove account…")
-                : null,
-            default: () => "Remove Svalbard? Missions can't book with it afterwards.",
-            ...(props.withReason
-              ? { fields: () => h("textarea", { "aria-label": "Reason" }) }
-              : {}),
-          },
-        ),
-      ]);
-  },
-});
+/**
+ * A caller as screens use it: a trigger, the sentence, optional fields; it closes on success. Each
+ * host owns its `open` ref, so a test can close it as a screen would (no casts into the vm).
+ */
+function makeHost() {
+  const open = ref(false);
+  const Host = defineComponent({
+    props: {
+      withReason: { type: Boolean, default: false },
+      refusal: { type: String, default: null },
+      keepTrigger: { type: Boolean, default: true },
+    },
+    emits: ["confirm", "cancel"],
+    setup(props, { emit }) {
+      return () =>
+        h("main", [
+          h("h1", "Provider account"),
+          h(
+            ApInlineConfirm,
+            {
+              open: open.value,
+              "onUpdate:open": (v: boolean) => (open.value = v),
+              action: "Remove account",
+              busyReason: "Removing…",
+              refusal: props.refusal,
+              onConfirm: () => emit("confirm"),
+              onCancel: () => emit("cancel"),
+            },
+            {
+              trigger: ({ attrs }: { attrs: Record<string, unknown> }) =>
+                props.keepTrigger
+                  ? h(ApButton, { variant: "danger", ...attrs }, () => "Remove account…")
+                  : null,
+              default: () => "Remove Svalbard? Missions can't book with it afterwards.",
+              ...(props.withReason
+                ? { fields: () => h("textarea", { "aria-label": "Reason" }) }
+                : {}),
+            },
+          ),
+        ]);
+    },
+  });
+  return { Host, open };
+}
+let current = makeHost();
 let wrapper: ReturnType<typeof mount> | null = null;
 const host = (props: Record<string, unknown> = {}) => {
-  wrapper = mount(Host, { props, attachTo: document.body });
+  current = makeHost();
+  wrapper = mount(current.Host, { props, attachTo: document.body });
   return wrapper;
 };
 afterEach(() => {
@@ -97,7 +104,7 @@ describe("ApInlineConfirm (design-language §7)", () => {
     await w.findAll('[role="group"] button')[1]?.trigger("click");
     expect(w.emitted("confirm")).toHaveLength(1);
     await w.setProps({ keepTrigger: false });
-    (w.vm as unknown as { open: boolean }).open = false;
+    current.open.value = false;
     await flushPromises();
     expect(active()?.tagName).toBe("H1");
   });
@@ -118,7 +125,7 @@ describe("ApInlineConfirm (design-language §7)", () => {
     menu.textContent = "⋯";
     document.querySelector("main")?.append(menu);
     menu.focus();
-    (w.vm as unknown as { open: boolean }).open = true;
+    current.open.value = true;
     await flushPromises();
     expect(active()?.textContent?.trim()).toBe("Cancel");
     await w.get('[role="group"]').trigger("keydown", { key: "Escape" });
@@ -126,8 +133,8 @@ describe("ApInlineConfirm (design-language §7)", () => {
     expect(active()).toBe(menu);
   });
   it("keeps one open at a time: opening another cancels the first without stealing focus back", async () => {
-    const a = mount(Host, { attachTo: document.body });
-    const b = mount(Host, { attachTo: document.body });
+    const a = mount(makeHost().Host, { attachTo: document.body });
+    const b = mount(makeHost().Host, { attachTo: document.body });
     await a.get("button[aria-controls]").trigger("click");
     await flushPromises();
     await b.get("button[aria-controls]").trigger("click");
