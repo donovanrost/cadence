@@ -36,6 +36,7 @@ defmodule Cadence.Reads.ProfileDetail do
              Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
            rules: ProfileRouting.rules(organization_id, mission_id, profile),
            overrides: ProfileRouting.overrides(organization_id, mission_id, profile),
+           extra_routes: ProfileRouting.extra_routes(organization_id, mission_id, profile),
            catalog_choices: catalog_choices(organization_id, mission_id)
          })}
 
@@ -83,6 +84,8 @@ defmodule Cadence.Reads.ProfileDetail do
       applications: profile.applications || %{},
       rules: rules,
       overrides: overrides,
+      # ux U79: each spacecraft's own extra routes, beside the field overrides.
+      extra_routes: Map.get(input, :extra_routes, []),
       routing_model: if(rules == [], do: :per_spacecraft, else: :profile),
       # ux: "12 spacecraft on v5".
       versions:

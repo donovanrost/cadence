@@ -17,6 +17,7 @@ defmodule CadenceWeb.Console.Problem do
     mission_not_found: {404, "Mission not found."},
     organization_not_found: {404, "Organization not found."},
     spacecraft_not_found: {404, "Spacecraft not found."},
+    spacecraft_route_not_found: {404, "Extra route not found."},
     profile_not_found: {404, "Profile not found."},
     catalog_revision_not_found: {404, "Catalog revision not found."},
     artifact_not_found: {404, "Source file not found."},

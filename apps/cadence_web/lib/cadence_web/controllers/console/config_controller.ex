@@ -8,20 +8,35 @@ defmodule CadenceWeb.Console.ConfigController do
   use CadenceWeb, :controller
 
   alias Cadence.Configuration.Kinds
-  alias Cadence.Control.{Activations, Configuration, ConfigurationRollback, SpacecraftOps}
-  alias Cadence.Reads.{ConfigKindSchema, ConfigLabels}
+
+  alias Cadence.Control.{
+    Activations,
+    Configuration,
+    ConfigurationRollback,
+    LegacyRouteConversion,
+    SpacecraftOps
+  }
+
+  alias Cadence.Reads.{ChangeSetViewer, ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
   def show(conn, _params) do
     with {:ok, current} <- Configuration.current(scope(conn), mission_id(conn)),
          {:ok, permissions} <- Configuration.permissions(scope(conn), mission_id(conn)) do
+      current = Map.update!(current, :change_set, &annotate(conn, &1))
+
       ok(conn, Map.put(current, :permissions, permissions))
     end
     |> reply(conn)
   end
 
-  def change_set(conn, %{"change_set_id" => id}),
-    do: Configuration.change_set(scope(conn), mission_id(conn), id) |> wrap() |> reply(conn)
+  def change_set(conn, %{"change_set_id" => id}) do
+    case Configuration.change_set(scope(conn), mission_id(conn), id) do
+      {:ok, set} -> {:data, annotate(conn, set)}
+      other -> other
+    end
+    |> reply(conn)
+  end
 
   def stage(conn, body) do
     with {:ok, attrs, ops} <- params(ConfigParams.stage(body)),
@@ -212,6 +227,16 @@ defmodule CadenceWeb.Console.ConfigController do
       {:ok, _activation},
       Activations.fetch_active_basis(scope(conn).organization_id, mission_id(conn))
     )
+  end
+
+  # ux U79: who may review it, and (TEMPORARY, removed with 9ac6dc8ee) whether it holds a legacy
+  # route conversion batch.
+  defp annotate(_conn, nil), do: nil
+
+  defp annotate(conn, %{id: id} = set) do
+    scope(conn)
+    |> ChangeSetViewer.annotate(mission_id(conn), set)
+    |> Map.put(:legacy_conversion, LegacyRouteConversion.change_set_batch(mission_id(conn), id))
   end
 
   defp ok(conn, data), do: {:sent, json(conn, %{data: ConfigJSON.encode(data)})}
