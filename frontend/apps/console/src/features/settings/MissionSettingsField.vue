@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { diffEdits, SchemaForm, type FormValues } from "@/features/changes/index.ts";
-import { ApButton, ApTag } from "@/ui";
+import { ApButton, ApInlineConfirm, ApTag } from "@/ui";
 import { fieldTag, initialValues, resetConfirm, valueText, type SettingsField } from "./api.ts";
 
 /**
@@ -24,10 +24,11 @@ const emit = defineEmits<{
 const setHere = computed(() => props.field.source === "mission");
 const schema = computed(() => ({ kind: "settings", fields: [props.field] }));
 const editing = ref(false);
+/** Governance's Reset confirms in place, naming the organization's value (ApInlineConfirm, §7). */
 const confirming = ref(false);
-function askReset() {
-  if (props.confirmReset) confirming.value = true;
-  else emit("reset");
+function reset() {
+  confirming.value = false;
+  emit("reset");
 }
 const before = ref<FormValues>({});
 const values = ref<FormValues>({});
@@ -58,20 +59,8 @@ function save() {
       valueText(field)
     }}</span>
     <span v-if="field.help && !editing" class="text-sm text-text-3">{{ field.help }}</span>
-    <p v-if="confirming" class="m-0 text-md text-text-2">{{ resetConfirm(field, orgName) }}</p>
     <div v-if="canChange" class="flex flex-wrap gap-2">
-      <template v-if="confirming">
-        <ApButton
-          size="compact"
-          variant="danger"
-          :disabled="busy"
-          disabled-reason="Saving…"
-          @click="((confirming = false), emit('reset'))"
-          >Reset to inherited</ApButton
-        >
-        <ApButton size="compact" variant="ghost" @click="confirming = false">Cancel</ApButton>
-      </template>
-      <template v-else-if="editing">
+      <template v-if="editing">
         <ApButton
           size="compact"
           variant="primary"
@@ -84,13 +73,33 @@ function save() {
       </template>
       <template v-else>
         <ApButton size="compact" @click="start">{{ setHere ? "Change" : "Override" }}</ApButton>
+        <ApInlineConfirm
+          v-if="setHere && confirmReset"
+          v-model:open="confirming"
+          action="Reset to inherited"
+          :busy="busy"
+          busy-reason="Saving…"
+          @confirm="reset"
+        >
+          <template #trigger="{ attrs }">
+            <ApButton
+              size="compact"
+              variant="ghost"
+              :disabled="busy"
+              disabled-reason="Saving…"
+              v-bind="attrs"
+              >Reset to inherited…</ApButton
+            >
+          </template>
+          {{ resetConfirm(field, orgName) }}
+        </ApInlineConfirm>
         <ApButton
-          v-if="setHere"
+          v-else-if="setHere"
           size="compact"
           variant="ghost"
           :disabled="busy"
           disabled-reason="Saving…"
-          @click="askReset"
+          @click="emit('reset')"
           >Reset to inherited</ApButton
         >
       </template>
