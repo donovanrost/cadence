@@ -1,51 +1,51 @@
 {
   "packages/plugin-sdk/src/release-catalog.ts": {
     "lines": 1806,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/host/src/shell/ApplicationHost.vue": {
     "lines": 1105,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/commanding/src/features/workspace/useCommandWorkspace.ts": {
     "lines": 761,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/communications/src/features/transports/CommsTransportNew.vue": {
     "lines": 749,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/telemetry-decom/src/features/configuration/ConfigurationPanel.vue": {
     "lines": 694,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/data-operations/src/features/historical-workflows/NativeHistoricalWorkflows.vue": {
     "lines": 672,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/commanding/src/features/command-authoring/CommandAuthoring.vue": {
     "lines": 553,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/planning-and-contacts/src/features/contact-scheduling/OpsContactSchedule.vue": {
     "lines": 539,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "packages/plugin-sdk/src/host/http-host-bridge.ts": {
     "lines": 534,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/host/src/http-host-bridge.ts": {
     "lines": 529,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/host/src/shell/BrowserHost.vue": {
     "lines": 515,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/storybook/src/CommandWorkspaceExample.vue": {
     "lines": 509,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/console/src/router/route-map.ts": {
     "lines": 508,
@@ -53,27 +53,27 @@
   },
   "modules/telemetry-decom/src/features/configuration/contracts.ts": {
     "lines": 506,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/data-operations/src/features/historical-workflows/native-contract.ts": {
     "lines": 500,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/commanding/src/features/stage-workbench/StageWorkbench.vue": {
     "lines": 478,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningRun.vue": {
     "lines": 474,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/derived-telemetry/src/features/definitions/DefinitionsPanel.vue": {
     "lines": 471,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/telemetry-decom/src/features/packet-bindings/PacketBindingsPanel.vue": {
     "lines": 467,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/console/src/features/changes/actions.ts": {
     "lines": 439,
@@ -81,15 +81,15 @@
   },
   "packages/plugin-sdk/src/bridge.ts": {
     "lines": 418,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/dashboards-and-exploration/src/features/exploration/ExplorationPanel.vue": {
     "lines": 411,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/telemetry-decom/src/features/packet-bindings/state.ts": {
     "lines": 407,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   },
   "apps/host/src/mission-and-spacecraft/features/profile-creation/SpacecraftTypeNew.vue": {
     "lines": 405,
@@ -97,6 +97,6 @@
   },
   "apps/host/src/phoenix-catalog-client.ts": {
     "lines": 403,
-    "owner": "unassigned (lead)"
+    "owner": "legacy (#80): frozen, leaves with its row"
   }
 }
