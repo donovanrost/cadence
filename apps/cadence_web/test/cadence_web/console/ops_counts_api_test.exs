@@ -36,6 +36,20 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
     assert data["attention"] == %{"open" => 0, "acknowledged" => 0}
     assert data["runtime"] == nil
     assert is_binary(data["observed_at"])
+
+    assert %{
+             "total" => 0,
+             "critical" => 0,
+             "caution" => 0,
+             "stale" => 0,
+             "nominal" => 0,
+             "never_heard" => 0,
+             "limits_configured" => false,
+             "telemetry" => "ok",
+             "observed_at" => observed_at
+           } = data["posture"]
+
+    assert observed_at == data["observed_at"]
   end
 
   test "runtime reports a generation the runtime has failed to apply (U38)", c do
@@ -76,6 +90,22 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
              data["alarms"]
 
     assert data["fleet"]["total"] == 1
+
+    # The top bar's posture is GET /fleet's counts, by the same rule (no rows on the wire).
+    fleet =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/missions/#{c.mission.mission_id}/fleet")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    posture = data["posture"]
+    keys = ~w(total critical caution stale nominal never_heard)
+
+    assert Map.take(posture, keys) == Map.take(fleet["counts"], keys)
+    assert posture["limits_configured"] == fleet["limits"]["configured"]
+    assert posture["telemetry"] == fleet["telemetry"]
+    assert posture["total"] == 1
   end
 
   test "another organization's mission is not found", c do

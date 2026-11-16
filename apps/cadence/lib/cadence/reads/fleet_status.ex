@@ -69,6 +69,44 @@ defmodule Cadence.Reads.FleetStatus do
   end
 
   @doc """
+  The fleet counts alone, `%{observed_at, telemetry, counts}` with `counts` of `total`,
+  `critical`, `caution`, `stale`, `nominal` and `never_heard`: the same numbers as `load/3`'s, from
+  the same inputs and rule, without building rows (the console top bar's posture, on `/counts`).
+  """
+  @spec posture(binary(), binary(), keyword()) :: map()
+  def posture(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) do
+    build_posture(%{
+      spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
+      limit_states: LimitReads.latest_states_for_mission(organization_id, mission_id, []),
+      samples: TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
+      durable: durable(organization_id, mission_id),
+      now: Keyword.get_lazy(opts, :now, &DateTime.utc_now/0),
+      stale_after_s: Keyword.get_lazy(opts, :stale_after_s, &stale_after_s/0)
+    })
+  end
+
+  @posture_counts [:total, :critical, :caution, :stale, :nominal, :never_heard]
+
+  @doc "Pure builder for `posture/3`: `build/1`'s inputs (profiles and contacts aren't used)."
+  @spec build_posture(map()) :: map()
+  def build_posture(%{spacecraft: spacecraft, now: now, stale_after_s: stale_after_s} = input) do
+    limit_states = Enum.group_by(Map.get(input, :limit_states, []), & &1.spacecraft_id)
+    received = received(input)
+
+    conditions =
+      Enum.map(spacecraft, fn %Spacecraft{spacecraft_id: id} ->
+        condition(Map.get(limit_states, id, []), Map.get(received, id), now, stale_after_s)
+      end)
+
+    %{
+      observed_at: now,
+      telemetry: telemetry(input),
+      counts: conditions |> counts() |> Map.take(@posture_counts)
+    }
+  end
+
+  @doc """
   Newest receipt time per spacecraft id: live telemetry values, limit
   evaluations, and the durable history store, so a spacecraft once heard is
   never reported as never heard after a restart.
@@ -123,14 +161,7 @@ defmodule Cadence.Reads.FleetStatus do
     contacts =
       Map.get(input, :contacts, %{tracked?: false, passes_next_2h: nil, by_spacecraft: %{}})
 
-    received =
-      latest_receipts(
-        Map.get(input, :samples, []),
-        Map.get(input, :limit_states, []),
-        input
-        |> Map.get(:durable, %{})
-        |> Map.get(:receipts, Map.get(input, :durable_receipts, %{}))
-      )
+    received = received(input)
 
     rows =
       spacecraft
@@ -151,18 +182,42 @@ defmodule Cadence.Reads.FleetStatus do
       observed_at: now,
       stale_after_s: stale_after_s,
       # :degraded when the durable history store didn't answer in time (see durable/2).
-      telemetry: input |> Map.get(:durable, %{}) |> Map.get(:telemetry, :ok),
+      telemetry: telemetry(input),
       last_received_at: rows |> Enum.map(& &1.last_received_at) |> max_datetime(),
       counts: Map.merge(counts(rows), contact_counts(contacts, rows)),
       spacecraft: rows
     }
   end
 
+  defp received(input) do
+    latest_receipts(
+      Map.get(input, :samples, []),
+      Map.get(input, :limit_states, []),
+      input
+      |> Map.get(:durable, %{})
+      |> Map.get(:receipts, Map.get(input, :durable_receipts, %{}))
+    )
+  end
+
+  defp telemetry(input), do: input |> Map.get(:durable, %{}) |> Map.get(:telemetry, :ok)
+
+  # One spacecraft's condition: what both the rows and the posture count (counts/1).
+  defp condition(limit_states, last_received_at, now, stale_after_s) do
+    limit_state = worst_limit_state(limit_states)
+    stale = stale?(last_received_at, now, stale_after_s)
+
+    %{
+      state: state(limit_state, last_received_at, stale),
+      limit_state: limit_state,
+      last_received_at: last_received_at,
+      stale: stale
+    }
+  end
+
   defp row(craft, profiles, limit_states, last_received_at, now, stale_after_s) do
     metadata = craft.metadata || %{}
-    limit_state = worst_limit_state(limit_states)
+    condition = condition(limit_states, last_received_at, now, stale_after_s)
     violating = Enum.filter(limit_states, & &1.violation)
-    stale = stale?(last_received_at, now, stale_after_s)
 
     %{
       id: craft.spacecraft_id,
@@ -173,12 +228,12 @@ defmodule Cadence.Reads.FleetStatus do
       slot: SpacecraftMetadata.integer(metadata, "slot"),
       phase_deg: SpacecraftMetadata.phase_deg(metadata),
       operational_phase: SpacecraftMetadata.string(metadata, "operational_phase"),
-      state: state(limit_state, last_received_at, stale),
-      limit_state: limit_state,
+      state: condition.state,
+      limit_state: condition.limit_state,
       violating_points: length(violating),
       worst_point: worst_point(violating),
-      last_received_at: last_received_at,
-      stale: stale
+      last_received_at: condition.last_received_at,
+      stale: condition.stale
     }
   end
 

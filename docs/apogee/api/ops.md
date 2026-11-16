@@ -181,9 +181,10 @@ values get `422 invalid_params` with `details`.
 
 ## `GET /api/console/v1/missions/:mission_id/counts`
 
-Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't load `GET /fleet`
-(~300 KB) for numbers. Refetch on `invalidate` with `alarms`, `commanding`, `spacecraft` or
-`attention`, throttled.
+Small counts for the shell (Ops rail, mobile on-call tabs, the top bar's posture), so the shell
+doesn't load `GET /fleet` (~300 KB) for numbers. Refetch on `invalidate` with `alarms`,
+`commanding`, `spacecraft`, `attention` or `limits`, throttled, and on `telemetry` throttled to
+about 10 s (`posture.stale` changes with time).
 
 ```json
 {"data": {
@@ -197,6 +198,10 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
     "state": "not_applied", "since": "2026-11-11T22:14:31Z", "reason": "spec_mismatch",
     "failure_message": "…", "desired_generation": 8, "applied_generation": null,
     "applied_at": null, "activated_at": "2026-11-11T21:58:02Z", "change_set_id": "…"
+  },
+  "posture": {
+    "critical": 2, "caution": 1, "stale": 3, "nominal": 488, "never_heard": 6, "total": 500,
+    "limits_configured": true, "telemetry": "ok", "observed_at": "2026-11-08T02:41:17Z"
   }
 }}
 ```
@@ -230,6 +235,18 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
     made it, when known; `null` otherwise.
   - Times are ISO-8601 UTC; generations are integers. A flip between `applied` and `not_applied`
     publishes `attention`, so refetch on `invalidate` with `attention` (no new topic).
+
+- `posture` (the top bar's fleet posture; dashboards, fe-ops 11-16): spacecraft counted by their
+  worst condition, **the same numbers as `GET /fleet` `counts`** (`critical`, `caution`, `stale`,
+  `nominal`, `never_heard`, `total`), from the same code (`FleetStatus.posture/3`): the same rule,
+  `stale_after_s` and durable receipts, without building rows.
+  - `limits_configured` = `GET /fleet` `limits.configured` (= `alarms.limits_configured`).
+  - `telemetry`: `"ok" | "degraded"`, as on `GET /fleet` (degraded: the history store didn't
+    answer, so a spacecraft not heard since a restart reads `never_heard`, not `stale`).
+  - `observed_at`: the read's time (the top-level `observed_at`, repeated so the object stands
+    alone). The counts are never `null`.
+  - Cost: `/counts` now also reads the latest values, the limit states and the durable receipts
+    (bounded at 3 s), the inputs of `GET /fleet` minus profiles and contacts.
 
 Errors: `404 mission_not_found`.
 

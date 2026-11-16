@@ -89,6 +89,55 @@ defmodule Cadence.Reads.FleetStatusTest do
     assert result.last_received_at == DateTime.add(@now, -1)
   end
 
+  describe "build_posture/1 (the top bar's counts, on /counts)" do
+    test "counts exactly what build/1 counts, without rows" do
+      input = %{
+        spacecraft: Enum.map(~w(crit caution stale ok never stale_crit old), &craft/1),
+        limit_states: [
+          limit("crit", :red, 2),
+          limit("caution", :yellow, 5),
+          limit("ok", :green, 1),
+          limit("stale_crit", :red, 3_600)
+        ],
+        samples: [sample("stale", 1_000), sample("ok", 1)],
+        durable: %{receipts: %{"old" => DateTime.add(@now, -86_400)}, telemetry: :ok}
+      }
+
+      posture = build_posture(input)
+      fleet = build(input)
+
+      assert posture.counts ==
+               Map.take(fleet.counts, [
+                 :total,
+                 :critical,
+                 :caution,
+                 :stale,
+                 :nominal,
+                 :never_heard
+               ])
+
+      assert posture.counts == %{
+               total: 7,
+               critical: 2,
+               caution: 1,
+               stale: 2,
+               nominal: 1,
+               never_heard: 1
+             }
+
+      assert %{observed_at: @now, telemetry: :ok} = posture
+    end
+
+    test "says when the durable store didn't answer; an empty fleet is all zeros" do
+      assert %{telemetry: :degraded, counts: %{total: 0, critical: 0, never_heard: 0}} =
+               build_posture(%{spacecraft: [], durable: %{receipts: %{}, telemetry: :degraded}})
+    end
+  end
+
+  defp build_posture(input) do
+    FleetStatus.build_posture(Map.merge(%{now: @now, stale_after_s: 900}, input))
+  end
+
   test "a spacecraft heard only in the durable history store is stale, never never_heard" do
     [row] =
       build(%{
