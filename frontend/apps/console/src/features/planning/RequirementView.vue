@@ -55,7 +55,7 @@ const columns: readonly ApColumn[] = [
         name: 'setup.contact-planning.template',
         params: { templateId: requirement.template_id },
       }"
-      class="text-readout hover:underline"
+      class="text-readout underline underline-offset-2"
       >{{ templateName }}</RouterLink
     >.</ApCallout
   >

@@ -31,15 +31,14 @@ const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(
     <AuditTable v-else :events="[...page.events, ...older]">
       <template #footer>
         <div
-          v-if="hasMore || failed"
+          v-if="hasMore || failed || older.length > 0"
           class="flex items-center gap-3 border-t border-hairline px-4 py-2.5 text-sm text-text-3"
         >
           <span>{{ formatCount(page.events.length + older.length) }} shown</span>
           <ApButton
-            v-if="hasMore"
             size="compact"
-            :disabled="loading"
-            disabled-reason="Loading…"
+            :disabled="loading || !hasMore"
+            :disabled-reason="loading ? 'Loading…' : 'No older events'"
             @click="$emit('older')"
             >Load older</ApButton
           >

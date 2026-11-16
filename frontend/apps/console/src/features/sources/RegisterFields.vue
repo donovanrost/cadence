@@ -23,6 +23,7 @@ const set = <K extends keyof RegisterDraft>(key: K, value: RegisterDraft[K]) =>
   <ApSelect
     :model-value="draft.logical"
     label="Stores"
+    required
     :options="c.logical"
     placeholder="Choose…"
     @update:model-value="set('logical', $event)"
@@ -30,6 +31,7 @@ const set = <K extends keyof RegisterDraft>(key: K, value: RegisterDraft[K]) =>
   <ApSelect
     :model-value="draft.kind"
     label="Kind"
+    required
     :options="c.kinds"
     placeholder="Choose…"
     @update:model-value="draft = { ...draft, kind: $event, isolation: '' }"
@@ -37,6 +39,7 @@ const set = <K extends keyof RegisterDraft>(key: K, value: RegisterDraft[K]) =>
   <ApSelect
     :model-value="draft.isolation"
     label="Isolation"
+    required
     :options="c.isolation"
     :disabled="draft.kind === ''"
     placeholder="Choose…"
@@ -45,6 +48,7 @@ const set = <K extends keyof RegisterDraft>(key: K, value: RegisterDraft[K]) =>
   <ApSelect
     :model-value="draft.storage"
     label="Storage"
+    required
     :options="c.storages"
     placeholder="Choose…"
     @update:model-value="set('storage', $event)"
@@ -53,6 +57,7 @@ const set = <K extends keyof RegisterDraft>(key: K, value: RegisterDraft[K]) =>
     v-if="needsCredentials(options, draft.kind)"
     :model-value="draft.credentials"
     label="Credentials reference"
+    required
     mono
     hint="A secret reference, never the secret itself."
     @update:model-value="set('credentials', $event)"

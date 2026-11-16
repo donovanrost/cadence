@@ -89,7 +89,7 @@ async function apply() {
         <ApStatTile label="Changes" :value="changeSet.staged_count" />
         <ApStatTile label="Authors" :value="changeSet.authors.length" />
       </div>
-      <ApField v-model="why" label="Why" :placeholder="placeholder" />
+      <ApField v-model="why" label="Why" :placeholder="placeholder" required />
       <label
         v-if="verdict === 'hold' && !blocking"
         class="flex items-center gap-2 text-md text-readout"

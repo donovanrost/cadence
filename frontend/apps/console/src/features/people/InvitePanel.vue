@@ -60,14 +60,21 @@ async function invite() {
 <template>
   <ApPanel index="U2" title="Invite">
     <form ref="form" class="flex flex-col gap-3" @submit.prevent="invite">
-      <ApField v-model="email" label="Email" type="email" autocomplete="off" :error="failure" />
+      <ApField
+        v-model="email"
+        label="Email"
+        type="email"
+        autocomplete="off"
+        :error="failure"
+        required
+      />
       <ApSelect v-model="role" label="Role" :options="options" />
       <ApCallout v-if="sent" tone="nominal">{{ sent }}</ApCallout>
       <ApButton
         type="submit"
         variant="primary"
         :disabled="busy || !email.includes('@')"
-        disabled-reason="Enter an email address."
+        :disabled-reason="busy ? 'Sending…' : 'Enter an email address.'"
       >
         {{ busy ? "Sending…" : "Send invite" }}
       </ApButton>

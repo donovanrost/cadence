@@ -87,7 +87,7 @@ async function upload() {
       </div>
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ApSelect v-model="databaseId" label="Catalog database" :options="databases" />
-        <ApField v-if="databaseId === 'new'" v-model="newName" label="New database name" />
+        <ApField v-if="databaseId === 'new'" v-model="newName" label="New database name" required />
         <ApField v-model="label" label="Revision label" placeholder="e.g. FSW 3.2.0" />
         <ApField v-model="notes" label="Notes" />
       </div>

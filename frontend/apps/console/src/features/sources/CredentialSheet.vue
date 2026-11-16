@@ -52,6 +52,7 @@ defineExpose({ open });
         v-model="ref_"
         label="New credentials reference"
         mono
+        required
         hint="A secret reference such as secret://…, never the secret itself."
       />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>

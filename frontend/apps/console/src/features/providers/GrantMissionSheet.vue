@@ -76,6 +76,7 @@ defineExpose({ open });
       <ApSelect
         v-model="mission"
         label="Mission"
+        required
         :options="missions"
         placeholder="Choose…"
         :error="errors['mission_id'] ?? null"

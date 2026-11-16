@@ -37,7 +37,7 @@ const canBook = computed(() => SINGLE_BOOKINGS_LIVE && access.value.abort);
               book_to: day.to,
             },
           }"
-          class="text-readout hover:underline"
+          class="text-readout underline underline-offset-2"
           >book a pass</RouterLink
         >
         instead.

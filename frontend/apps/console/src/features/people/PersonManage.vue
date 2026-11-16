@@ -64,7 +64,9 @@ async function remove() {
         </div>
         <ApButton
           :disabled="self || busy || role === '' || role === current(member.role)"
-          :disabled-reason="self ? 'You can\'t change your own role.' : 'Pick a different role'"
+          :disabled-reason="
+            self ? 'You can\'t change your own role.' : busy ? 'Saving…' : 'Pick a different role'
+          "
           @click="saveRole"
           >Save</ApButton
         >
@@ -79,9 +81,10 @@ async function remove() {
           <div class="w-[320px]">
             <ApField
               v-model="confirm"
-              label="Type their email to confirm"
+              :label="`Type ${member.email} to confirm`"
               :placeholder="member.email"
               mono
+              required
             />
           </div>
           <ApButton

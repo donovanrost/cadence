@@ -6,7 +6,10 @@ import { ApCallout, ApPanel, ApStatusMark, formatCount, formatRelative, useNow }
 import { runPhases, runPhaseText } from "./api.ts";
 import type { PlanView } from "./plan-state.ts";
 
-/** K1 body for every state that isn't a plan (ScheduleFlow "K1 plan states"). */
+/**
+ * K1 body for every state that isn't a plan (ScheduleFlow "K1 plan states"). Drafting is role=status,
+ * so its ticking elapsed is aria-hidden (a11y B4); the current phase is aria-current and underlined (B2).
+ */
 const props = defineProps<{ view: Exclude<PlanView, { kind: "plan" }> }>();
 const now = useNow();
 const PHASES = runPhases;
@@ -96,14 +99,18 @@ const elapsed = computed(() =>
           v-for="(phase, i) in PHASES"
           :key="phase"
           class="flex items-center gap-2"
-          :class="phase === view.phase ? 'text-readout' : 'text-text-4'"
+          :class="
+            phase === view.phase ? 'text-readout underline underline-offset-4' : 'text-text-4'
+          "
+          :aria-current="phase === view.phase ? 'step' : undefined"
         >
           <span v-if="i > 0" aria-hidden="true">→</span
           >{{ phase === "materializing_plan" ? "plan" : phase }}
         </li>
       </ol>
       <p class="m-0 text-md text-text-3">
-        Drafting with every provider's windows<span v-if="elapsed"> · {{ elapsed }}</span
+        Drafting with every provider's windows<span v-if="elapsed" aria-hidden="true">
+          · {{ elapsed }}</span
         >. You can leave this page; the draft keeps running.
       </p>
     </div>

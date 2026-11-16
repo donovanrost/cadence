@@ -2,9 +2,12 @@
 import { computed } from "vue";
 import { formatCount, plural, ApButton, ApCallout, ApListRow, ApPanel } from "@/ui";
 import type { Readiness } from "./api.ts";
-import { fixLink, orderedFindings, severityState } from "./present.ts";
+import { fixLink, orderedFindings, severityState, severityWord } from "./present.ts";
 
-/** R1: one line per cause (grouped server-side), blockers first, each with at most one fix. */
+/**
+ * R1: one line per cause (grouped server-side), blockers first, each with at most one fix. Each
+ * title leads with its severity word, so the mark isn't the only signal (a11y B2).
+ */
 const props = defineProps<{ readiness: Readiness }>();
 
 const findings = computed(() => orderedFindings(props.readiness));
@@ -40,8 +43,7 @@ const others = computed(() => findings.value.filter((f) => f.severity !== "block
       >
         <template #title>
           <span :class="finding.severity === 'optional' ? 'text-text-2' : ''"
-            ><template v-if="finding.severity === 'optional'">Optional · </template
-            >{{ finding.title }}</span
+            >{{ severityWord(finding.severity) }} · {{ finding.title }}</span
           >
         </template>
         <template v-if="finding.fix" #action>

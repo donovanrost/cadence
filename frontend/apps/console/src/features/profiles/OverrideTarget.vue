@@ -40,6 +40,7 @@ const spacecraftId = computed({
         v-model="spacecraftId"
         label="Spacecraft"
         mono
+        required
         placeholder="Choose…"
         :options="options"
         :hint="`${options.length} on ${profile.name}`"

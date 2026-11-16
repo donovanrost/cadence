@@ -56,9 +56,14 @@ async function submit() {
 </script>
 
 <template>
-  <ApSheet ref="sheet" :title="`Switch ${picked?.logical_source ?? ''}`" width="narrow">
+  <ApSheet
+    ref="sheet"
+    :title="`Switch ${picked?.logical_source ?? ''}`"
+    width="narrow"
+    initial-focus="select"
+  >
     <div class="flex flex-col gap-3">
-      <ApSelect v-model="target" label="Read from" :options="choices" />
+      <ApSelect v-model="target" label="Read from" :options="choices" required />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
     </div>
     <template #footer>

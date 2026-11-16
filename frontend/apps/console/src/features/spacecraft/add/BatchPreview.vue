@@ -60,7 +60,7 @@ const columns: readonly ApColumn[] = [
       <span class="text-sm text-text-3"
         >{{ formatCount(rest.length) }} more rows · {{ rangeLabel(rest) }}</span
       >
-      <ApButton size="compact" @click="showAll = !showAll">{{
+      <ApButton size="compact" :aria-expanded="showAll" @click="showAll = !showAll">{{
         showAll ? "Show first 8" : `Show all ${formatCount(rows.length)}`
       }}</ApButton>
     </div>

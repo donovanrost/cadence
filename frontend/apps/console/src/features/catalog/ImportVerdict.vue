@@ -36,7 +36,7 @@ const issues = computed(() =>
   <template v-else-if="counts.error + counts.warning > 0">
     <ApCallout tone="caution">
       Imported with {{ issues }}. Unsupported items were skipped.
-      <ApButton size="compact" variant="ghost" @click="open = !open">{{
+      <ApButton size="compact" variant="ghost" :aria-expanded="open" @click="open = !open">{{
         open ? "Hide them" : `Show ${issues}`
       }}</ApButton>
     </ApCallout>

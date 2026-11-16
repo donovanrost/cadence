@@ -10,6 +10,7 @@ import UnconfirmedSheet from "./UnconfirmedSheet.vue";
  * U30 caution block, shared by K1 and K2 (exported): who hasn't confirmed what, and the passes
  * soonest first with T− to the first. U32's per-pass actions (fe-setup's features/resolutions,
  * DECISIONS #53) come in through the `row-actions` slot; screens fill it only for org admins.
+ * The 1 Hz T− is aria-hidden: the callout is role=status and would re-read it every second (a11y B4).
  */
 const props = defineProps<{
   plan: PlanDetail;
@@ -40,7 +41,9 @@ const hidden = computed(() => (view.value ? view.value.passes.length - CAP : 0))
       >
         <span class="font-mono text-sm text-text-2 tabular"
           >{{ pass.text
-          }}<template v-if="i === 0"> · {{ formatCountdown(pass.startsAt, now) }}</template></span
+          }}<span v-if="i === 0" aria-hidden="true">
+            · {{ formatCountdown(pass.startsAt, now) }}</span
+          ></span
         >
         <slot name="row-actions" :pass="pass" />
       </span>

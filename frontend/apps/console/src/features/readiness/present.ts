@@ -19,6 +19,22 @@ export function severityState(severity: Severity): OpState {
   }
 }
 
+/** The word that leads a finding's title, so severity isn't only its mark (a11y B2). */
+export function severityWord(severity: Severity): string {
+  switch (severity) {
+    case "blocker":
+      return "Blocker";
+    case "caution":
+      return "Caution";
+    case "stale":
+      return "Stale";
+    case "not_set_up":
+      return "Not set up";
+    case "optional":
+      return "Optional";
+  }
+}
+
 export function areaState(status: AreaStatus): OpState {
   switch (status) {
     case "ready":

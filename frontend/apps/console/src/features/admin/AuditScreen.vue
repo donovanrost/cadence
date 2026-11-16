@@ -79,8 +79,12 @@ const columns: readonly ApColumn[] = [
           /></template>
           <template #cell-org="{ row }"><AuditOrg :event="readable(row)" /></template>
         </ApTable>
-        <div v-if="cursor" class="border-t border-hairline px-4 py-2.5">
-          <ApButton size="compact" :disabled="loading" disabled-reason="Loading…" @click="loadOlder"
+        <div v-if="cursor || older.length > 0" class="border-t border-hairline px-4 py-2.5">
+          <ApButton
+            size="compact"
+            :disabled="loading || !cursor"
+            :disabled-reason="loading ? 'Loading…' : 'No older events'"
+            @click="loadOlder"
             >Older</ApButton
           >
         </div>

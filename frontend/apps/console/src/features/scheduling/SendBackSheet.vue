@@ -35,7 +35,13 @@ defineExpose({ open, close });
     <p class="m-0 text-base text-text-3">
       The plan returns to draft. Nothing is booked. Your comment is recorded with the decision.
     </p>
-    <ApTextarea v-model="reason" label="What should change" :rows="3" :maxlength="REASON_MAX" />
+    <ApTextarea
+      v-model="reason"
+      label="What should change"
+      :rows="3"
+      :maxlength="REASON_MAX"
+      required
+    />
     <ApCallout v-if="error" tone="caution">{{ planErrorText(error) }}</ApCallout>
     <template #footer>
       <ApButton variant="ghost" @click="close">Cancel</ApButton>

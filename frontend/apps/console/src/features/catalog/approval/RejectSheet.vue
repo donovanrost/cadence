@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ApButton, ApSheet, ApTextarea } from "@/ui";
+import { ApButton, ApCallout, ApSheet, ApTextarea } from "@/ui";
 import { REASON_MAX } from "./words.ts";
 
 /**
@@ -37,7 +37,7 @@ defineExpose({ open, close: () => sheet.value?.close() });
       Spacecraft can't move to {{ label() }} after this. To try again, import a new revision.
     </p>
     <ApTextarea v-model="reason" label="Reason" required :maxlength="REASON_MAX" :hint="counter" />
-    <p v-if="error" class="m-0 text-sm text-crit-text">{{ error }}</p>
+    <ApCallout v-if="error" tone="crit">{{ error }}</ApCallout>
     <template #footer>
       <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
       <ApButton

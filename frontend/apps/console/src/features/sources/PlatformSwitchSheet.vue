@@ -134,11 +134,12 @@ function close() {
       <p v-else-if="!lines" role="status" class="m-0 text-md text-text-3">Counting missions…</p>
       <template v-else>
         <ApCallout v-if="changed" tone="caution">{{ words.changedLine(changed) }}</ApCallout>
-        <p class="m-0 text-md text-text-2">{{ lines.blast }}</p>
+        <p class="m-0 text-md text-text-2" aria-live="polite">{{ lines.blast }}</p>
         <ApCallout v-if="lines.live" tone="crit">{{ lines.live }}</ApCallout>
         <ApSelect
           v-model="target"
           label="Read from"
+          required
           :options="choices"
           placeholder="Choose another source"
         />
@@ -149,7 +150,7 @@ function close() {
           :hint="words.REASON_HELP"
           :error="reasonError"
         />
-        <ApField v-model="typed" :label="`Type ${name} to confirm`" mono />
+        <ApField v-model="typed" :label="`Type ${name} to confirm`" mono required />
       </template>
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
     </div>

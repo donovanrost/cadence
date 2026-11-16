@@ -37,7 +37,7 @@ defineEmits<{ check: []; stage: []; discard: [] }>();
       <div class="flex flex-wrap gap-3">
         <ApButton
           :disabled="busy || invalid !== null"
-          :disabled-reason="invalid ?? ''"
+          :disabled-reason="invalid ?? 'Checking…'"
           @click="$emit('check')"
           >Check</ApButton
         >
