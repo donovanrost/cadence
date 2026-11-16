@@ -85,6 +85,11 @@ shows the problem and `Open in Plan`. **Empty:** nominal callout "No conflicts o
          station: `SVA · Northlight`.
        - The path is added only when a station has several: `SVA · Northlight · S-band`.
        - Routes with an uplink path carry the `UP` tag. The others read `downlink only` in `text-3`.
+       - **Unpinned routes** (api: a route names a station only when its rule pins one; otherwise the provider picks
+         per offer) are listed under their provider after the pinned ones, as `Northlight · any of its stations`.
+         Where uplink depends on the station, they read `uplink varies by station` in `text-3`, with no tag. With
+         `With uplink`, they stay in the list; their offers are filtered after the search, and they don't count in
+         the "routes hidden" line.
      - **No uplink path:** with `With uplink`, such routes are hidden, with one line: "2 routes hidden: no uplink path
        to EARENDIL-312." If every chosen route is downlink-only, `Search` is disabled with "SVA · Northlight has no
        uplink path to EARENDIL-312. Choose Downlink or another route."
