@@ -2508,6 +2508,13 @@ page's header actions. It's not a primary button anywhere.
 - Then: "Move or remove these first." No id ever. A use with no name is counted ("1 route on a spacecraft with no
   name").
 - domain sends counts and up to 3 named items per kind; the console words them.
+- As built (api 409 `in_use`; domain 16ee2ed00): every kind is always sent; a kind with count 0 shows no line.
+  Unnamed uses are only counted, so they fall into "and N more". A route with no name reads by spacecraft,
+  station and direction ("EARENDIL-312 · INU downlink"), never the rule id. If every count is 0 and the refusal
+  still comes, the lead sentence ends "Something still uses it."
+- **Later, at submit or review** (something started using it after staging; the set reopens): on the change set,
+  "INU S-band is in use now, so this change set can't be applied:" + the same lines, then "Move these first, or
+  take the archive out of the change set." The archive's own row in the set carries the same crit mark.
 
 **Summary and history:**
 - Summary: "Archive transport INU S-band" / "Archive station Inuvik · INU" (a station with no code: its name only).
