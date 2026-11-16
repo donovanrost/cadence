@@ -584,6 +584,6 @@ describe("first-party federated manifest parity", () => {
       }
     }
 
-    expect(surfaceCount).toBe(41);
+    expect(surfaceCount).toBe(40);
   });
 });
