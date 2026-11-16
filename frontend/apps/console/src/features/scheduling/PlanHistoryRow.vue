@@ -36,7 +36,7 @@ const shown = ref(false);
     <!-- ux U73 / design-language §8: no raw id leads a row; reasons, ids under Technical details. -->
     <template v-if="shown">
       <ul class="m-0 flex list-none flex-col gap-0.5 p-0 text-sm text-text-2">
-        <li v-for="(d, i) in row.details" :key="i">{{ d.reason }}</li>
+        <li v-for="(d, i) in row.details" :key="i">{{ d.text }}</li>
       </ul>
       <details class="text-sm text-text-3">
         <summary class="cursor-pointer">Technical details</summary>

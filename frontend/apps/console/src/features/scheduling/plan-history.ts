@@ -27,6 +27,13 @@ const versionRow = d.object({
   submitted: d.boolean,
 });
 
+/** api f3aa9b272 (U73): which requirement a gap was, for its row; absent on older reads. */
+const gapNames = {
+  // free-text: the requirement's template name, else its rule in words
+  requirement_label: d.optional(d.nullable(d.string)),
+  spacecraft: d.optional(d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }))),
+};
+
 const decisionRow = d.object({
   kind: d.knownText(["submitted", "approved", "rejected"] as const),
   version: d.integer,
@@ -41,6 +48,7 @@ const decisionRow = d.object({
       requirement_id: d.token,
       // free-text: why the author accepted this gap, as they wrote it
       reason: d.string,
+      ...gapNames,
     }),
     2_000,
   ),
@@ -50,6 +58,7 @@ const decisionRow = d.object({
       requirement_version: d.nullable(d.integer),
       // free-text: why the approver accepted this gap, as they wrote it
       reason: d.string,
+      ...gapNames,
     }),
     2_000,
   ),
@@ -107,7 +116,8 @@ export type HistoryLine = Readonly<{
   /** `View R3` (not on the current version). */
   view: number | null;
   /** Gaps accepted at submit, or exceptions at approval, under `Show`. */
-  details: readonly Readonly<{ id: string; reason: string }>[];
+  /** `text` is the row (ux: no raw id leads it); `id` goes under Technical details. */
+  details: readonly Readonly<{ id: string; text: string }>[];
   detailsLabel: string | null;
 }>;
 
@@ -135,6 +145,15 @@ export function versionLine(v: VersionRow, current: number, now: Date = new Date
   };
 }
 
+type Gap = DecisionRow["acknowledgements"][number] | DecisionRow["exceptions"][number];
+/** 'EARENDIL-389 · Block 1 daily: no window can cover it' (U73); the reason alone without names. */
+export function gapText(g: Gap): string {
+  const name = [g.spacecraft?.name ?? null, g.requirement_label ?? null]
+    .filter((p): p is string => Boolean(p))
+    .join(" · ");
+  return name ? `${name}: ${g.reason}` : g.reason;
+}
+
 export function decisionLine(e: DecisionRow, now: Date = new Date()): HistoryLine {
   const t = when(e.at, now);
   const r = `R${e.version}`;
@@ -148,7 +167,7 @@ export function decisionLine(e: DecisionRow, now: Date = new Date()): HistoryLin
       ...base,
       line: n > 0 ? `${lead} · ${formatCount(n)} ${n === 1 ? "gap" : "gaps"} accepted` : lead,
       quote: quote(e.text),
-      details: e.acknowledgements.map((a) => ({ id: a.requirement_id, reason: a.reason })),
+      details: e.acknowledgements.map((a) => ({ id: a.requirement_id, text: gapText(a) })),
       detailsLabel: n > 0 ? `Show ${formatCount(n)}` : null,
     };
   }
@@ -162,7 +181,7 @@ export function decisionLine(e: DecisionRow, now: Date = new Date()): HistoryLin
       ...base,
       line: n > 0 ? `${lead} · ${formatCount(n)} ${n === 1 ? "exception" : "exceptions"}` : lead,
       quote: quote(e.text),
-      details: e.exceptions.map((x) => ({ id: x.requirement_id, reason: x.reason })),
+      details: e.exceptions.map((x) => ({ id: x.requirement_id, text: gapText(x) })),
       detailsLabel: n > 0 ? `Show ${formatCount(n)}` : null,
     };
   }

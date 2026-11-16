@@ -124,7 +124,7 @@ describe("plan history (U73)", () => {
     expect(old?.view).toBe(2);
     expect(old?.quote).toBe("“Svalbard is down”");
     expect(submitted?.detailsLabel).toBe("Show 1");
-    expect(submitted?.details).toEqual([{ id: "req_1", reason: "No pass over SVB tonight" }]);
+    expect(submitted?.details).toEqual([{ id: "req_1", text: "No pass over SVB tonight" }]);
   });
 
   it("words an older version's callout by its own decision", () => {
@@ -153,5 +153,27 @@ describe("plan history (U73)", () => {
     expect(oldVersionLine(plan({ version: 2 }), 4, now)).toBe(
       "You're looking at R2, never submitted. The current version is R4.",
     );
+  });
+});
+
+describe("gap rows with names (api f3aa9b272)", () => {
+  it("leads with the spacecraft and requirement, and falls back to the reason", async () => {
+    const { gapText } = await import("./plan-history.ts");
+    expect(
+      gapText({
+        requirement_id: "r1",
+        reason: "no window can cover it",
+        requirement_label: "Block 1 daily",
+        spacecraft: { id: "sc", name: "EARENDIL-389" },
+      }),
+    ).toBe("EARENDIL-389 · Block 1 daily: no window can cover it");
+    expect(
+      gapText({
+        requirement_id: "r1",
+        reason: "no window can cover it",
+        requirement_label: undefined,
+        spacecraft: undefined,
+      }),
+    ).toBe("no window can cover it");
   });
 });
