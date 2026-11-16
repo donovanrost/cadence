@@ -63,6 +63,47 @@ api.
 3. Alarms fetches at most 200 episodes (`alarms/episodes.ts:86`) with no notice when there are more.
 4. The "expired" end reason of a command reads "Canceled" (`commands/groups/words.ts:49-65`).
 
+## Gap list for the director (lead 11-16)
+Rule (director): a gap that removes an operator capability defaults to **build**; **accept-drop** only for what ux
+confirms is a by-design omission; dropping a capability is the **user's call**. Sizes: S ≤ half a day, M about a
+day, L 2-3 days (console side; api's own size is theirs). "Frontend" = the data is already on the wire.
+
+| Gap | Tier | Size | Data | Mark |
+| --- | --- | --- | --- | --- |
+| A1 command **priority**: set in Compose, shown on the request | 1 safety | S | frontend (submit takes `priority`; the request read returns it, `show.ts:229`); api to confirm the allowed range | build |
+| A2 command **expiry**: set in Compose, shown on the request | 1 safety | S | frontend (submit takes `expires_at`; read returns it, `show.ts:228`) | build |
+| A3 **release-attempt history** per request | 1 | M | api: per member/target attempts {attempt id, state, uncertain, contact id+label, path, transport binding, encoded size, attempted_at, released_at} | build |
+| A4a verifier **deadline, matched time** | 1 | S | frontend (`verify_by`, `occurred_at` decoded, `show.ts:73-74`) | build |
+| A4b verifier **failure code, severity, id** | 1 | S | api: on the series/verifier entry | build |
+| A4c **matched evidence**: telemetry (packet id, evidence id, quality, raw vs engineering, received/generated) and transport (action, signal phase, event/recorded times) | 1 | M | api: matched record per verifier | build |
+| A7a alarm's **producing limit definition id·vN** | 1 | S | frontend in Investigate (decoded `investigate/api.ts:56-57`); api: add to the alarms list episode | build |
+| A7b **"Inspect producing vN"** link | 1 | S | the limits app (owner) must accept a definition-version deep link | build |
+| A7c **"Open exact sample"** | 1 | M | api: the triggering sample id/time on the episode; console: Telemetry deep link at that time | build |
+| A5a commands **state filter** (failed, indeterminate, in flight, release pending…) | 2 | S | frontend (`?state=` exists, `groups/api.ts:302`) | build |
+| A5b commands **text search + target filter** | 2 | M | api: `q=`, `target=` | build |
+| A5c commands **paging** past 1,000 | 2 | M | api: cursor | build |
+| A6a alarms **spacecraft filter** | 2 | S | frontend (`spacecraft_id=` exists, `alarms/episodes.ts:87`) | build |
+| A6b alarms **severity filter** | 2 | S | frontend over the read (≤200), or api `severity=` | build |
+| A6c mission-wide **nominal / info conditions** | 2 | M | api: a current limit-state read (per point, mission-wide) | build (or user call) |
+| A6d alarms **paging** past 200 (+ the notice, bug D3) | 2 | M | api: cursor | build |
+| A8a Timeline **event detail** panel | 2 | M | frontend for id, occurred, subject, 4 refs; api: status, source record, source endpoint, realized contact, path, capability instance, activation, correlation | build |
+| A8b Timeline **permalink** `?event=` | 2 | S | api: read one event by id | build |
+| A9a Timeline **severity filter** | 2 | S | frontend over the window, or api `severity=` | build |
+| A9b Timeline **raw-kind filter** | 2 | S | api `raw_kind=` | build |
+| A9c Timeline **truncation notice** (bug D2) | 2 | S | frontend (`truncated` decoded) | build (in D now) |
+| A9d Timeline **older-events paging** | 2 | M | api: cursor | build |
+| A10 plan **version + decision history**, open an older version | 3 | M | api: versions list, read by version, decisions list | build |
+| A12 contact **ledgers beyond the Live window** (a Contacts History view) | 3 | M | mostly frontend (passes read by window; review read); api if paging | build |
+| A16a Book a pass offer **cost, antenna, availability, synthetic** | 3 | S | frontend (decoded `singleBookings.ts:40-47`) | build |
+| A16b Book a pass **route choice + search past 48 h** | 3 | M | api: search by route; the range limit | build (or user call) |
+| A11, A13 reservation links/audit; contact record paths, bindings, endpoints, intents | with L14 | M | api: a contact-record read | with L14 (not in (C)) |
+| A14 horizon, recurring toggle, input review, repair window; A15 approve without booking; A17 run directory | design | — | — | ux + director (user call if dropped) |
+| C1-C5 stages, queue step, review checkboxes, context rail, workspace layout | — | — | — | accept-drop only if ux confirms (asked 11-16) |
+| B evidence/identity fields | fold-in | S each | mostly frontend where decoded; api for resolved arguments, approval id + content sha, queue entry details, provider reference + revision, plan/opportunity hashes | build, per screen as touched |
+
+**Order (fe-ops):** D now → A1, A2 (frontend, safety) → A4a, A7a, A5a, A6a, A6b, A9a, A16a (frontend, small) →
+the api-backed ones as api lands them (A3, A4b/c, A7b/c, A5b/c, A6c/d, A8, A9b/d, A10) → A12.
+
 ## Per-page evidence
 
 Path prefixes: **C** = `frontend/apps/console/src/features`; legacy files named per page. "Partial" says what's
