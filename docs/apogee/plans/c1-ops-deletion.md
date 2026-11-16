@@ -122,3 +122,15 @@ The ops frame (`host/src/ops-workspace/features/frame/*`) stays: it wraps every 
   `ContactPlanOverview.day/3` and the run's horizon start; request → command group (review/uplink), no group → list.
   `legacy_ops_redirect_controller_test` 8/8. With the routes gone, 73 tests in 23 modules fail: all tests of the
   deleted pages, deleted or trimmed in fe-setup's server half (api's list in its message, 11-16).
+
+## Updates (11-16, after (B))
+- **Domain moved the six Planning surface reads into C1** (ContactPlanShow, ContactRecord, ContactSchedule, FleetRun,
+  FleetStart, FleetDirectory + their tests, fe-setup's server half). The L14 reservation path calls only ContactDetail
+  (domain 09:25Z), so the contact-scheduling page drops its "schedule" and "record" branches and four private
+  projections go too; `reservation_projection` stays.
+- **Catalog rule:** with ops_console's only workspace surface (the landing) deleted, the workspace-surface coverage
+  rule would invalidate the app and empty the catalog. Fix (A): platform apps are exempt; optional apps still need a
+  workspace surface (fe-setup writes it in C1, domain reviews; with tests).
+- **Frontend re-cut** on the post-(B) head d19c3c75f: `dashboards/c1-frontend`, 10 commits, all frontend checks green.
+- **Dry timing:** after the model gate (~17:00Z): R1 needs the QA catalog activated (L10) and A1/A2 a booked QA pass
+  (the director OKs it). Likely 11-17.

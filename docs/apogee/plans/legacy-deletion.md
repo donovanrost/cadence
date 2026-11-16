@@ -17,12 +17,17 @@ the tree moves.
 | L6 admin mode | `/admin-mode` | account menu admin mode | **done** (batch 1, 5320cb7a3; host account menu follow-up 9ece4eed3) |
 | L7 platform admin | `/admin/**` | `/console/admin/**` | **done** (batch 3, restart (a) 11-14 14:28Z: redirects 0c6ed155c, pages b2cffbd10, federated surfaces 7227cc524, frontend 22d048048) |
 | L8 dashboards | `/ops/dashboards[/new\|/:id[/edit]]`; library, playlists, settings, shares, snapshots | `ops.dashboards[.new]`, `ops.dashboard[?edit=1]` | L8a done (live 11-14 01:46Z, c21fad95a); federated batch done (restart 1, 11-14 08:01Z, 4cb04734d); L8b done (live 11-14 09:20Z, 3dbb243b0; Settings live a8649a04f, member path afd1201ca); L8c done (step 1 D18 `refresh`; step 2 live 11-14 15:54Z, fe-setup/l8c-r5, D18 latency flat); **L8 done** except L8c step 3, domain's later migration dropping the decision events table |
-| L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | console live (be59d4f32, 6e289aa35); deletion waits on a re-inventory and qa's live check, then the director's go |
+| L10 activations | `/ops/activations` | `setup.changes` + `setup.activation` | console live (be59d4f32, 6e289aa35); deletion pulled from the 11-16 combined batch (director: no in-node approval as a precondition); it runs after the model gate (~11-16 17:00Z) with a real console approval, then goes in the next batch |
 | L11 data sources | `/ops/data-sources/**` | `setup.data-sources[/:sourceId]` | **done** (batch 3, restart (a) 11-14 14:28Z: redirects 70d25b5db, page 4d70c076d) |
-| L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | console live (2e899643c on api-ops 4f81a1d0d); deletion waits on qa's live check, then the director's go |
-| L13 provider accounts | `/provider-accounts…` | `org.provider-accounts[/:accountId]` | console live (b90f5401a on api-ops 74ad20816); deletion waits on qa's live check, then the director's go |
+| L12 mission providers | `/comms/providers…` | `setup.stations.providers[/:providerId]` | **done** (combined batch, live 11-16 07:52Z on c8f869d52; qa PASS 07:58Z) |
+| L13 provider accounts | `/provider-accounts…` | `org.provider-accounts[/:accountId]` | **done** with L12 (combined batch, live 11-16 07:52Z) |
 | L19 spacecraft apps | `/spacecraft/:sid/applications…` | `setup.spacecraft.app` | blocked: list read not built; surfaces emit legacy hrefs |
 | L21 accept as signed-in | `/notifications` (accept event) | `account` invitations | **done** (batch 1, 163cd0dfa; host page frontend 09974fc56; the bell stays) |
+| §11c(A) organization | `/`, `/settings[/:section]` | `org.home`, `org.settings` | **done** (combined batch, live 11-16 07:52Z on c8f869d52; qa PASS 07:58Z) |
+| §11c(B) mission setup | mission home, settings, spacecraft, catalog, comms, applications (+ 18 comms aliases) | `setup.*` | **done** (live 11-16 09:21Z on 5f89cb782; qa PASS 09:24Z: 89 legacy routes 302 once → 200) |
+| §11c(C1) ops (all but alarms) | `/ops` landing, planning, plans, contacts list/records, timeline, commands, contact-workspace | `ops.now`, `ops.contacts.*`, `ops.timeline`, `ops.commands.*` | built (`plans/c1-ops-deletion.md`: api b0958fd09, dashboards `dashboards/c1-frontend`, fe-setup's server half); dry waits on R1 + the A1/A2 armed run after the model gate |
+| §11c(C2) ops alarms | `/ops/alarms` | `ops.alarms` | waits on A6c (mission-wide conditions, after #92 phase 3) |
+| §11c(D) ops explore, data operations | `/ops/explore`, `/ops/telemetry/explore`, `/ops/data-operations[/manage]` | see `plans/parity-ops-d.md` | parity audit (dashboards, 11-16) |
 
 ## Cross-cutting (every batch)
 - **Shared files: trim, never delete.**
