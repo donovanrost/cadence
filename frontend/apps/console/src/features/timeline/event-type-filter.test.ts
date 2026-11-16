@@ -50,8 +50,8 @@ describe("Event type filter (ux U71 A9b, api 4a2f470d8)", () => {
     expect(labels).toEqual(["Contacts canceled (214)", "Limit violations (40)"]);
     w.unmount();
   });
-  it("writes ?raw_kind= and Clear filters resets the groups and the types", async () => {
-    const { w, router } = await mountAt({ kind: "contact,limit" });
+  it("writes ?raw_kind= and Clear filters resets the groups, the types and the threshold", async () => {
+    const { w, router } = await mountAt({ kind: "contact,limit", severity: "caution" });
     await w.get("button[aria-expanded]").trigger("click");
     await flushPromises();
     await w.findAll("input[type=checkbox]")[0]?.trigger("change");

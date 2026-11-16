@@ -12,7 +12,7 @@ import { rawKindLabel } from "./model.ts";
  * The Event type filter (§11c(C) A9b; ux decisions U71, api 4a2f470d8): a multi-select next to the
  * group toggles, in the URL as `?raw_kind=`. Options use the fold words with counts, most frequent
  * first, and list only types in the groups shown (a chosen type always stays listed). Type-ahead
- * only. `Clear filters` resets the groups and the types. At most 20 types (api).
+ * only. `Clear filters` resets the groups, the types and the severity threshold. At most 20 types (api).
  */
 const props = defineProps<{
   missionId: MissionId;
@@ -71,10 +71,14 @@ const flip = (raw: string) =>
       : [...selected.value, raw],
   );
 const filtered = computed(
-  () => selected.value.length > 0 || typeof route.query["kind"] === "string",
+  () =>
+    selected.value.length > 0 ||
+    typeof route.query["kind"] === "string" ||
+    typeof route.query["severity"] === "string",
 );
 function clearFilters() {
-  const { kind: _kind, raw_kind: _types, ...rest } = route.query;
+  // 'Cleared' is the full log: groups, types and the severity threshold (ux, via fe-ops).
+  const { kind: _kind, raw_kind: _types, severity: _floor, ...rest } = route.query;
   router.replace({ query: rest }).catch((e: unknown) => console.error("Navigation failed", e));
 }
 watch(open, async (isOpen) => {

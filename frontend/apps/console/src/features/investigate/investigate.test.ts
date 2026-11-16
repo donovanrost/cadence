@@ -611,6 +611,7 @@ describe("B2 escalation lines (ux U71 A7)", () => {
       contact_id: null,
       subject: undefined,
     },
+    record: null,
   });
   const escalated = {
     id: "x1",
