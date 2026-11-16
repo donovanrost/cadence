@@ -3,7 +3,8 @@ defmodule Cadence.Reads.CommandRequestHistory.Evidence do
   The record that matched each verifier, loaded in one query per record kind for a page:
 
     * `telemetry_sample` → `{kind: "telemetry", sample_id, point_id, point_name, packet_id,
-      evidence_id, quality, raw_value_json, engineering_value_json, received_at, generated_at}`;
+      evidence_id, quality, raw_value_json, engineering_value_json, unit, received_at,
+      generated_at}` (`unit` from the catalog, `nil` when none);
     * `transport_action_request` → `{kind: "transport", source: "action_request", record_id,
       action (its action_kind), signal_phase, at (requested_at), recorded_at: nil}`, only when it
       belongs to this request and the verifier's attempt;
@@ -22,6 +23,7 @@ defmodule Cadence.Reads.CommandRequestHistory.Evidence do
   import Ecto.Query
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Reads.PointInfo
   alias Cadence.Repo
 
   @spec load(binary(), binary(), binary(), [map()]) :: map()
@@ -29,7 +31,8 @@ defmodule Cadence.Reads.CommandRequestHistory.Evidence do
     ids = Enum.group_by(verifiers, & &1.matched_record_kind, & &1.matched_record_id)
 
     %{
-      "telemetry_sample" => samples(org, mission, ids["telemetry_sample"]),
+      "telemetry_sample" =>
+        org |> samples(mission, ids["telemetry_sample"]) |> with_units(org, mission),
       "transport_action_request" =>
         actions(org, mission, request_id, ids["transport_action_request"]),
       "transport_capability_record" =>
@@ -93,6 +96,18 @@ defmodule Cadence.Reads.CommandRequestHistory.Evidence do
          received_at: s.receipt_time,
          generated_at: s.generation_time
        }}
+    end)
+  end
+
+  # U70: the point's catalog unit ("= 8.0 °C (raw 412)"), `nil` when the catalog has none.
+  defp with_units(samples, _org, _mission) when map_size(samples) == 0, do: samples
+
+  defp with_units(samples, org, mission) do
+    points = PointInfo.by_id(org, mission)
+
+    Map.new(samples, fn {id, sample} ->
+      unit = points |> Map.get(sample.point_id, PointInfo.unknown()) |> Map.get(:unit)
+      {id, Map.put(sample, :unit, unit)}
     end)
   end
 

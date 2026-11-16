@@ -97,6 +97,7 @@ defmodule Cadence.Reads.CommandRequestHistoryTest do
            } = telemetry
 
     assert quality in ~w(good suspect bad)
+    assert Map.has_key?(telemetry, :unit)
 
     assert %{kind: "transport", source: "action_request", record_id: ^own, at: %DateTime{}} =
              transport
@@ -140,11 +141,24 @@ defmodule Cadence.Reads.CommandRequestHistoryTest do
       ]
     }
 
-    assert %{kind: "resolved", code: "not_sent", by: %{id: id, name: name}, at: at} =
+    assert %{kind: "resolved", code: "not_sent", by: %{kind: "user", id: id, name: name}, at: at} =
              CommandRequestHistory.resolved_by(%{kind: "resolved", code: "not_sent"}, log)
 
     assert id == c.scope.user.user_id and is_binary(name)
     assert at == ~U[2026-11-14 07:25:05Z]
+
+    service = %{
+      "entries" => [
+        %{"outcome" => "rejected", "actor" => %{"kind" => "service", "id" => "svc-unknown"}}
+      ]
+    }
+
+    assert %{by: %{kind: "service_identity", id: "svc-unknown", name: nil}} =
+             CommandRequestHistory.resolved_by(
+               %{kind: "resolved", code: "rejected"},
+               service,
+               @org
+             )
 
     assert %{kind: "refused", by: nil, at: nil} =
              CommandRequestHistory.resolved_by(%{kind: "refused", code: "x"}, log)

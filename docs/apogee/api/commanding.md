@@ -523,11 +523,14 @@ A member is a command request (`targets[].members[].request_id` on the group rea
 - `attempts`: newest first. `state`: `release_pending | released | release_failed |
   release_uncertain | canceled`; `uncertain` is `state == release_uncertain`. `failure_reason` is
   an internal inspected term: Technical details only, never worded. `failure` (U70) is what to
-  word: `{kind: refused | resolved | uncertain, code: string | null, by: {id, name} | null, at |
-  null} | null`. `refused` = the uplink refused before sending; `code` is the same vocabulary as
+  word: `{kind: refused | resolved | uncertain, code: string | null, by: {kind, id, name} | null,
+  at | null} | null`. `refused` = the uplink refused before sending; `code` is the same vocabulary as
   a named release's `stopped.reason.code`. `resolved` = an operator resolved an uncertain
   release; `code: not_sent | rejected`, with `by` and `at` from the resolution log. `uncertain` =
-  the cause's code (e.g. `send_outcome_unknown`). `by`/`at` are null except for `resolved`. `contact.label` names the spacecraft, station code and AOS for a booked pass ("… pass",
+  the cause's code (e.g. `send_outcome_unknown`). `by`/`at` are null except for `resolved`.
+  `by.kind`: `user` (name = display name, else email) | `service_identity` (an API credential;
+  name = its display name). Never Cadence itself: an automatic timeout records outcome
+  `unknown`, which isn't a resolved failure. `contact.label` names the spacecraft, station code and AOS for a booked pass ("… pass",
   the date when not the attempt's day), or "… contact" for a hand-started one.
 - `verifiers`: oldest first. `phase`: `acceptance | start | completion | custom`; `severity`:
   `info | warning | error | critical | null`; `state`: `pending | satisfied | failed | timed_out |
@@ -536,7 +539,8 @@ A member is a command request (`targets[].members[].request_id` on the group rea
   `unmatched` (ended with nothing matched), `unavailable` (a match is recorded but its record
   can't be read, or belongs to another attempt). `evidence` is null unless `ready`:
   - `{kind: "telemetry", sample_id, point_id, point_name, packet_id, evidence_id, quality: good |
-    suspect | bad, raw_value_json, engineering_value_json, received_at, generated_at}`;
+    suspect | bad, raw_value_json, engineering_value_json, unit, received_at, generated_at}`
+    (`unit`: the point's catalog unit, `null` when none);
   - `{kind: "transport", source: "action_request", record_id, action, signal_phase, at, recorded_at:
     null}` (`action` = its action kind: `uplink_request | provider_request`, the only kinds that
     carry a command attempt; `at` = requested);

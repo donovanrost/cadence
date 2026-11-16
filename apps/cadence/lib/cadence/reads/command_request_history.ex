@@ -9,7 +9,7 @@ defmodule Cadence.Reads.CommandRequestHistory do
 
   import Ecto.Query
 
-  alias Cadence.Accounts
+  alias Cadence.{Accounts, Auth}
 
   alias Cadence.Commanding.{
     CommandReleaseAttemptRow,
@@ -164,7 +164,7 @@ defmodule Cadence.Reads.CommandRequestHistory do
       failure:
         row.lifecycle_state
         |> failure(row.failure_reason)
-        |> resolved_by(row.resolution_evidence),
+        |> resolved_by(row.resolution_evidence, row.organization_id),
       contact: Contacts.contact(contacts, row.realized_contact_id, row.attempted_at),
       path_id: row.path_id,
       transport_binding_id: row.transport_binding_id,
@@ -187,9 +187,10 @@ defmodule Cadence.Reads.CommandRequestHistory do
   # ux U29: a resolution names who and when, from the attempt's resolution log (the last entry
   # with that outcome). Other kinds carry `by: nil, at: nil`.
   @doc false
-  def resolved_by(nil, _evidence), do: nil
+  def resolved_by(failure, evidence, org \\ nil)
+  def resolved_by(nil, _evidence, _org), do: nil
 
-  def resolved_by(%{kind: "resolved", code: outcome} = failure, evidence) do
+  def resolved_by(%{kind: "resolved", code: outcome} = failure, evidence, org) do
     entry =
       (evidence || %{})
       |> Map.get("entries", [])
@@ -197,25 +198,39 @@ defmodule Cadence.Reads.CommandRequestHistory do
       |> List.last()
 
     Map.merge(failure, %{
-      by: actor(entry && entry["actor"]),
+      by: actor(entry && entry["actor"], org),
       at: time(entry && entry["recorded_at"])
     })
   end
 
-  def resolved_by(failure, _evidence), do: Map.merge(failure, %{by: nil, at: nil})
+  def resolved_by(failure, _evidence, _org), do: Map.merge(failure, %{by: nil, at: nil})
 
-  defp actor(%{"kind" => "user", "id" => id}) when is_binary(id) do
+  # A resolution's actor is a person or a service identity (an API credential), never Cadence
+  # itself: an automatic timeout records outcome `unknown`, which isn't a resolved failure.
+  defp actor(%{"kind" => "user", "id" => id}, _org) when is_binary(id) do
     name =
       case Accounts.fetch_user(id) do
         {:ok, user} -> user.display_name || user.email
         _missing -> nil
       end
 
-    %{id: id, name: name}
+    %{kind: "user", id: id, name: name}
   end
 
-  defp actor(%{"id" => id}) when is_binary(id), do: %{id: id, name: nil}
-  defp actor(_none), do: nil
+  defp actor(%{"kind" => "service", "id" => id}, org) when is_binary(id) do
+    name =
+      with true <- is_binary(org),
+           {:ok, service} <- Auth.fetch_service_identity(org, id) do
+        service.display_name
+      else
+        _missing -> nil
+      end
+
+    %{kind: "service_identity", id: id, name: name}
+  end
+
+  defp actor(%{"id" => id}, _org) when is_binary(id), do: %{kind: nil, id: id, name: nil}
+  defp actor(_none, _org), do: nil
 
   defp time(iso) when is_binary(iso) do
     case DateTime.from_iso8601(iso) do
