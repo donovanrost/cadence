@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import type { MissionId } from "@/api/index.ts";
-import { reviewBlocked } from "./review-block.ts";
+import { conversionStager, reviewBlocked } from "./review-block.ts";
 import ReviewPanel from "./ReviewPanel.vue";
 import { changeSet, type ConfigState } from "./shapes.ts";
 
@@ -96,5 +96,26 @@ describe("#320: the review panel", () => {
     expect(w.find("[data-review-blocked]").exists()).toBe(false);
     await w.find("textarea, input").setValue("Looks right");
     for (const b of buttons(w)) expect(b.attributes("aria-disabled")).toBeUndefined();
+  });
+});
+
+describe("ux U79 (TEMPORARY, deleted with 9ac6dc8ee): a legacy route conversion batch", () => {
+  const conversion = { legacy_conversion: { batch: 2, batches_total: 10 } };
+
+  it("blocks the batch's stager with U79's own line", () => {
+    expect(reviewBlocked(set({ ...blockedAs("reviewer_is_author"), ...conversion }))).toEqual({
+      line: "You staged this batch, so someone else reviews and applies it.",
+      code: null,
+    });
+  });
+
+  it("names a conversion batch's stager, or leaves out a nameless one", () => {
+    expect(conversionStager(set(conversion))).toBe(
+      "Staged by Mira K. Someone else reviews and applies it.",
+    );
+    expect(
+      conversionStager(set({ ...conversion, authors: [{ kind: "user", id: "u1", name: null }] })),
+    ).toBe("Staged earlier. Someone else reviews and applies it.");
+    expect(conversionStager(set())).toBeNull();
   });
 });

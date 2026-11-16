@@ -7,6 +7,7 @@ import ChangeList from "./ChangeList.vue";
 import ChecksPanel from "./ChecksPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import type { Preview, PreviewItem, SubmitResult } from "./actions.ts";
+import { conversionStager } from "./review-block.ts";
 import type { HeldChecks } from "./checks-view.ts";
 import type { InUseMark } from "./refusals.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
@@ -33,6 +34,10 @@ const reviewing = () =>
 <template>
   <div class="flex flex-wrap items-start gap-4">
     <div class="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
+      <!-- TEMPORARY (ux U79; deleted with 9ac6dc8ee): who staged a conversion batch. -->
+      <p v-if="conversionStager(changeSet)" class="m-0 text-md text-text-3">
+        {{ conversionStager(changeSet) }}
+      </p>
       <ChangeList
         :mission-id="missionId"
         :config="config"
