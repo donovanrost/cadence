@@ -117,7 +117,13 @@ export type EventQuery = Readonly<{
   kinds?: readonly EventKind[];
   /** U69 A9b: exact raw kinds (`?raw_kind=`), ANDed with `kinds`; at most 20. */
   rawKinds?: readonly string[];
+  /** U69 A9a: a severity floor (`?severity_at_least=`); absent = every severity. */
+  severityAtLeast?: SeverityFloor;
 }>;
+
+/** U69 A9a: `caution` keeps caution and critical; `critical` keeps critical. */
+export const severityFloors = ["caution", "critical"] as const;
+export type SeverityFloor = (typeof severityFloors)[number];
 
 function params(query: EventQuery, extra: Record<string, string>) {
   const p = new URLSearchParams({
@@ -129,6 +135,7 @@ function params(query: EventQuery, extra: Record<string, string>) {
   if (query.plane !== undefined) p.set("plane", String(query.plane));
   if (query.kinds?.length) p.set("kind", query.kinds.join(","));
   if (query.rawKinds?.length) p.set("raw_kind", query.rawKinds.join(","));
+  if (query.severityAtLeast) p.set("severity_at_least", query.severityAtLeast);
   return p.toString();
 }
 

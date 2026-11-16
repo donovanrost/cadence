@@ -36,12 +36,15 @@ import {
   fetchEvents,
   fetchEventsPage,
   fetchOlderEvents,
+  severityFloors,
   type EventKind,
+  type SeverityFloor as Floor,
 } from "./api.ts";
 import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
 import EventDetail from "./EventDetail.vue";
 import EventTypeFilter from "./EventTypeFilter.vue";
+import SeverityFloor from "./SeverityFloor.vue";
 import EventLog from "./EventLog.vue";
 import { useTimelineDetail } from "./useTimelineDetail.ts";
 import {
@@ -127,6 +130,8 @@ const rawKinds = computed(() =>
     ? route.query["raw_kind"].split(",").filter((s) => s !== "")
     : [],
 );
+/** U69 A9a: the severity floor (?severity=); SeverityFloor writes it. */
+const severity = computed(() => severityFloors.find((f) => f === route.query["severity"]) ?? null);
 const filterWindow = computed(() => {
   const r = resolveWindow(sel.value, new Date());
   return { from: new Date(r.from), to: new Date(r.to) };
@@ -139,6 +144,7 @@ type Key = Readonly<{
   p: number | null;
   /** A9b: chosen event types (?raw_kind=). */
   rk: readonly string[];
+  sev: Floor | null;
 }>;
 const key = computed((): Key | null =>
   typeof route.query.sc === "string" && fleet.state.value.status !== "ready"
@@ -150,6 +156,7 @@ const key = computed((): Key | null =>
         sc: scope.value.kind === "spacecraft" ? scope.value.id : null,
         p: scope.value.kind === "plane" ? scope.value.plane : null,
         rk: rawKinds.value,
+        sev: severity.value,
       },
 );
 const filters = (k: Key) => ({
@@ -157,6 +164,7 @@ const filters = (k: Key) => ({
   ...(k.sc ? { spacecraftId: k.sc } : {}),
   ...(k.p !== null ? { plane: k.p } : {}),
   ...(k.rk.length ? { rawKinds: k.rk } : {}),
+  ...(k.sev ? { severityAtLeast: k.sev } : {}),
 });
 const windowOf = (w: WindowSel) => {
   const r = resolveWindow(w, new Date());
@@ -268,6 +276,7 @@ const short = (iso: string) => {
     </ApPageHeader>
     <div class="flex flex-none flex-wrap items-center gap-3">
       <KindToggles :selected="kinds" @change="setKinds" />
+      <SeverityFloor />
       <EventTypeFilter :mission-id="missionId" :window="filterWindow" :kinds="kinds" />
     </div>
     <ApPanel v-if="missing" index="E2" title="Event log" flush>
