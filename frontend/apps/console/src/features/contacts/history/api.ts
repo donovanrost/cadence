@@ -13,8 +13,9 @@ import {
 
 /**
  * History's own read of `GET /passes` (contacts.md) over a fixed range: no sliding window, and the
- * filters History offers. `spacecraft_id` filters in SQL before the 500 cut; `station` filters after it (api, 11-16); History also filters
- * states on its side, to split Confirmed from In contact.
+ * filters History offers. `spacecraft_id` and `states` filter in SQL before the 500 cut; `station`
+ * filters after it (api, 11-16). History also filters states on its side, to split Confirmed from
+ * In contact.
  */
 export type HistoryFilter = Readonly<{
   spacecraftId: string | null;

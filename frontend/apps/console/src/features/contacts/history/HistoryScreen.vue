@@ -175,6 +175,7 @@ const clear = () => h.go({ spacecraft: undefined, station: undefined, state: und
           :loading="pick.loading.value"
           :missing="pick.missing.value"
           :failed="pick.failed.value"
+          :failed-why="pick.failedWhy.value"
           :spacecraft="pick.spacecraft.value"
           @changed="pick.refetch"
         />
@@ -194,6 +195,7 @@ const clear = () => h.go({ spacecraft: undefined, station: undefined, state: und
         :loading="pick.loading.value"
         :missing="pick.missing.value"
         :failed="pick.failed.value"
+        :failed-why="pick.failedWhy.value"
         :spacecraft="pick.spacecraft.value"
         @changed="pick.refetch"
       />

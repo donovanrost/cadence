@@ -18,6 +18,8 @@ defineProps<{
   missing: boolean;
   /** The read failed for another reason than not found (fe-ops 22b1e653a): D2 offers Try again. */
   failed: boolean;
+  /** Why it couldn't load, in words (fe-ops 355cd169d: a decode error's path, say). */
+  failedWhy: string | null;
   spacecraft: { name: string; scid: Scid | null } | null;
 }>();
 defineEmits<{ changed: [] }>();
@@ -39,6 +41,7 @@ defineEmits<{ changed: [] }>();
     :pass="pass"
     :loading="loading"
     :failed="failed"
+    :failed-why="failedWhy"
     :spacecraft="spacecraft"
     @changed="$emit('changed')"
   />

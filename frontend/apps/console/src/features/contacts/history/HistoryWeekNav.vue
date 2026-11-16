@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { ApButton, ApTimePicker } from "@/ui";
 import { DAY_MS, isoDay, mondayOf, stepWeek, type WeekSpan } from "./history.ts";
 import { weekLabel } from "./words.ts";
@@ -14,9 +14,16 @@ const older = computed(() => stepWeek(props.week, -1, props.now));
 const newer = computed(() => stepWeek(props.week, 1, props.now));
 const today = computed(() => Math.floor(props.now / DAY_MS) * DAY_MS);
 const future = (at: number) => (at > today.value ? "Pick a date up to today." : null);
+/** A refused future date says why under the field, not only inside the picker (qa, U78). */
+const refused = ref<string | null>(null);
+watch(
+  () => props.week,
+  () => (refused.value = null),
+);
 const goTo = (at: number | null) => {
-  if (at === null || future(at) !== null) return;
-  emit("week", isoDay(mondayOf(at)));
+  if (at === null) return;
+  refused.value = future(at);
+  if (refused.value === null) emit("week", isoDay(mondayOf(at)));
 };
 </script>
 
@@ -44,6 +51,7 @@ const goTo = (at: number | null) => {
         :warn="future"
         @update:model-value="goTo"
       />
+      <p role="status" class="m-0 mt-1 text-sm text-caution-text">{{ refused }}</p>
     </div>
   </div>
 </template>
