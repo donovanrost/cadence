@@ -2133,9 +2133,11 @@ passes are on Live and Plan. The current week runs to now.
 **Filters** (in the URL, U72's pattern): `Spacecraft` (a select of every fleet spacecraft, with type-ahead),
 `Station` (a select), and `State` (multi-select).
 - State options are the console's contact-state words, never the raw lifecycle: Requesting, Requested, Confirmed,
-  In contact, Ended · not verified, Rejected, Unknown, Canceling, Canceled. Each maps to its `?states=` values
-  (Unknown sends `unknown` and `failed`; Confirmed and In contact both send `confirmed` and `active`, and the
-  rows are then split by phase on the client).
+  In contact, Ended · not verified, Rejected, Unknown, Canceling, Canceled.
+  - The URL keeps the word keys (`?state=confirmed,in_contact`), because Confirmed and In contact share raw states and
+    wouldn't round-trip.
+  - The read gets the union of their raw states as `states=` (Unknown sends `unknown` and `failed`; Confirmed and In
+    contact both send `confirmed` and `active`), and rows are split by phase on the client.
 - While any filter is set, one line + `Clear filters`: "212 passes · Canceled · EARENDIL-312 · Fairbanks".
 
 **Columns**, in this order. Mono where noted.
@@ -2178,6 +2180,9 @@ filter.
 - State is its real state word (`In contact`, `Ended · not verified`), never "Hand-started".
 - With no end yet (`ends_at` null): `11-16 02:59:40Z – no end yet`. That's true whether the contact is still open or
   its end was never recorded, so it claims neither (U20). Duration reads `—`.
+- Defined but never live (`defined`): State `○ Not started` (the off mark; neutral, not a fault). It's not a
+  pass that was missed. The Window cell shows the one time the row has, with no end part.
+- `stopped` reads `Ended · not verified`, like a completed pass: never green without flown evidence.
 - Count lines add them: "1,284 passes and 3 hand-started contacts". The foot line goes.
 - The drawer shows the A13 record alone, titled "Contact record", with no reservation section and no pass actions.
 
@@ -2185,5 +2190,7 @@ filter.
 contact" link to History `?contact=<id>` once api's `/passes/:id` accepts a scheduled or realized contact id (api's
 next item). Until then they stay plain text, as today.
 - The drawer opens whatever that read returns: a booked pass with its record, or, for a hand-started contact, the
-  record alone ("Contact record", no reservation section, no pass actions).
+  record alone (no reservation section, no pass actions).
+- **Drawer titles** name the subject, since a sheet below 1100px takes its accessible name from the title:
+  `Pass · EARENDIL-312 · Fairbanks`, and `Contact record · EARENDIL-312` for a hand-started contact.
 - An id the read can't find: "No contact record with this id." (U25: the id isn't repeated as if it were a name.)
