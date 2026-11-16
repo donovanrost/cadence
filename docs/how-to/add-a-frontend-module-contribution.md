@@ -130,56 +130,14 @@ next sequence and displayed source version. Known pre-persistence validation
 failures allow correction. Successful and uncertain submissions remain consumed
 through refresh; there is no automatic retry or cross-session deduplication claim.
 
-### Mission page contributions
+### Mission page contributions (retired)
 
-`mission.page`, version 1, places a compiled module-owned read page at a mission
-URL. Its contract is `@cadence/plugin-sdk/mission-pages`; the first eight
-registrations are exported by `@cadence/communications/mission-pages`.
-Registration declarations stay in each feature's `mission.contribution.ts`.
-The public entry assembles them without moving validators or renderers out of
-their vertical slices.
-
-`CadenceWeb.MissionModulePage` selects a bounded read by the matched host route.
-`Cadence.Reads.Comms.Pages` authorizes the supplied scope independently of that
-host and of the historical federation query adapter. The host checks the
-slot/identity/version and organization/mission/resource envelope; the feature
-then validates its DTO and checks that detail data matches the path-owned
-`resourceId`. A payload may not select a different component or resource.
-Unavailable reads and renderer failures retain the shell and a host refresh
-control. Search remains a native GET form; pagination and detail links use
-ordinary host navigation. These read registrations carry no action port.
-
-The existing Communications routes remain in the authenticated application
-live session with the `:comms` host policy. No new route or public endpoint is
-introduced.
-
-The four Communications setup forms use feature-local `setup.contribution.ts`
-registrations in the same slot, with a finite `validate`/`save` action list.
-`CadenceWeb.CommunicationsSetupPage` binds a page token to the authenticated user,
-organization, mission, full path and (for station edit) resource. Validation stores
-the exact admitted draft; save revalidates that draft and consumes the instance
-before calling `Cadence.Management.CommunicationsSetup`. The latter authorizes
-independently and is also used by the legacy action adapter.
-
-Keep initial form props and the port stable for a mounted token so refresh does
-not replace drafts. A completed phase hides the consumed form; an uncertain
-submission disables it and offers a records-review link. Never automatically
-retry effects. Navigating away creates a new instance on return, so this is not
-cross-session idempotency.
-
-Provider directory, creation and detail are also mission-page contributions,
-declared inside `features/providers/mission.contribution.ts`. Their finite port
-exposes creation, validation, synchronization, archival, and read-only refresh.
-The feature adapts that port to its existing workflows; the host never interprets
-provider DTO fields. `CadenceWeb.MissionProviderPage` binds path/token/context,
-checks the observed provider version and page-local sequence, and consumes each
-effect before invocation. Refresh does not unlock an uncertain effect.
-
-Registration requires the account and grant versions that were admitted in the
-form. Its domain command authorizes independently and preserves every supported
-bounded-policy timing field. Provider control actions retain the existing
-control-plane implementations. Version checks are admission checks, not atomic
-concurrency control or cross-session exactly-once guarantees.
+The `mission.page` slot has no consumer left: the host doesn't mount it, and its
+server bindings (`CadenceWeb.MissionModulePage`, `CadenceWeb.CommunicationsSetupPage`,
+`CadenceWeb.MissionProviderPage`) were deleted earlier.
+The last frontend pieces (`@cadence/plugin-sdk/mission-pages`,
+`@cadence/communications/mission-pages` and the features' `mission.contribution.ts`
+/ `setup.contribution.ts` registrations) were removed once nothing imported them.
 
 ### Organization page contributions
 
