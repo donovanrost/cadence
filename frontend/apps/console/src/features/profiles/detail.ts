@@ -66,7 +66,14 @@ const extraRoute = object({
   spacecraft: object({ id: spacecraftId, name: string }),
   route_id: token,
   name: string,
-  station: nullable(object({ id: token, code: nullable(string), name: nullable(string) })),
+  station: nullable(
+    object({
+      id: token,
+      // free-text: the station's short code, an identifier (null when the station is gone).
+      code: nullable(string),
+      name: nullable(string),
+    }),
+  ),
   legs: array(
     object({
       direction: oneOf(["downlink", "uplink"]),

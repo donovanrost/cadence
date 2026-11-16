@@ -4,8 +4,9 @@ import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApPanel, ApRemote } from "@/ui";
-import { failureOutcome, fieldErrors, stageChange, type FailureOutcome } from "./actions.ts";
+import { failureOutcome, stageChange, type FailureOutcome } from "./actions.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
+import { fieldErrors } from "./fieldErrors.ts";
 import {
   createDefaults,
   diffEdits,
