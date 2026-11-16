@@ -2380,6 +2380,8 @@ fold into one item ("2 other missions in this organization also fly SCID 42 thro
   Built (fe-ops 6f31a4933): Now titles carry no trailing period, like the other Now titles; with no access, Mark
   as seen reads "Operators mark these passes as seen." (the U45/U37 pattern). The record line with no spacecraft
   name: "…arrived during this pass, which expected SCID 1."
+  Timeline kind word (fe-ops' fold words): `contact_scid_mismatch` → "Frames with another SCID" (detail: "Contacts ·
+  Frames with another SCID"), plural like "Contacts ended early".
   Wire (api): action `seen` (resolved_by the person, with name; resolved_at = when seen; a null name reads "Seen at
   04:12Z", never the id) or `retired` (system, settle + 7 days). The words:
   - Title: "EARENDIL-312 · Most frames on the FBK 03:10Z pass carried another SCID."
