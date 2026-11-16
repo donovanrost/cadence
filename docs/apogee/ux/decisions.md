@@ -2107,3 +2107,73 @@ hybrid, disabled). Order: as below.
   - "Every 5 min" is added only if the account's configuration states an interval; never a guessed one.
   - Off adds "Cadence won't see Northlight's booking changes."
 - **History and audit:** "Changed booking updates from Cadence checks to Off (v5) · Mira K. · 08:02Z".
+
+### U78 · Contacts › History: a week of past passes (§11c(C) A12; dashboards builds, fe-ops reviews)
+A 4th Contacts tab: `Live · Plan · Review · History`. The tab label is `History`. Route `contacts/history`
+(`ops.contacts.history`). The page header stays Contacts'.
+
+**What it lists.** Booked passes whose window has **started**, newest first: History is the past, and upcoming
+passes are on Live and Plan. The current week runs to now.
+- A foot line in `text-3`: "Booked passes only. Contacts started by hand show in Timeline." (`Timeline` links to
+  Timeline with the Contacts kind.) It goes when hand-started rows arrive (below).
+
+**The week.**
+- A week is Monday 00:00Z to the next Monday 00:00Z (UTC, ISO weeks). `?week=` holds the Monday. Any other date
+  normalizes to its week's Monday, and a bad or future value falls back to this week.
+- The stepper reads `‹ Older week` · `11-09 – 11-15` · `Newer week ›`. Dates follow §4: the year is added when the
+  week isn't in this year (`2025-12-29 – 2026-01-04`). This week reads `11-16 – now`.
+- On this week, `Newer week` is disabled with its reason (A6): "This is the current week."
+- Off this week, a `This week` link sits after the stepper.
+- Jump: a date field, `Go to date`, opens the week holding that date. A future date is refused: "Pick a date up to
+  today."
+- A step or jump keeps the filters and focus stays on the control used. A polite live region announces "Week of
+  11-09 to 11-15, 1,284 passes."
+- Header meta (mono `text-3`): `1,284 PASSES` for the shown week (`500+ PASSES` when truncated).
+
+**Filters** (in the URL, U72's pattern): `Spacecraft` (a select of every fleet spacecraft, with type-ahead),
+`Station` (a select), and `State` (multi-select).
+- State options are the console's contact-state words, never the raw lifecycle: Requesting, Requested, Confirmed,
+  In contact, Ended · not verified, Rejected, Unknown, Canceling, Canceled. Each maps to its `?states=` values
+  (Unknown sends `unknown` and `failed`; Confirmed and In contact both send `confirmed` and `active`, and the
+  rows are then split by phase on the client).
+- While any filter is set, one line + `Clear filters`: "212 passes · Canceled · EARENDIL-312 · Fairbanks".
+
+**Columns**, in this order. Mono where noted.
+| Column | Value |
+|---|---|
+| Window | mono, the date always (a week spans days): `11-14 02:59:40 – 03:08:52Z`. It's the row's link: it opens the selected-pass drawer on `?contact=`. |
+| Spacecraft | the name (text, not a second link; the drawer links it) |
+| Station | the name with the code in mono `text-3`: `Fairbanks FBK` |
+| State | mark + word from the contact-state words (`■ Ended · not verified`, `▲ Rejected`) |
+| Provider revision | mono `3`; `—` when the read has none |
+| Reservation | mono id, middle-truncated, with a copy button ("Copy reservation id") |
+| Scheduled contact | the same, "Copy scheduled contact id" |
+
+- The drawer is the record: realized id, scheduled revision and clock mode stay there (A13), not in new columns.
+  On a pass that's over, it shows no live actions.
+- **768–1099px:** Reservation and Scheduled contact drop (they're in the drawer's record).
+- **Below 768px:** a table, not cards. Three columns: `Start` (mono `11-14 02:59:40Z`), `Pass` (the spacecraft over
+  `Fairbanks FBK` in `text-3`), `State`. `Start` is the link. The drawer is a full-height sheet (§9).
+
+**States.**
+- Loading: `LOADING…` in the table panel.
+- Empty week: "No passes between 11-09 and 11-15." This week: "No passes have started this week." Both offer
+  `‹ Older week`.
+- Empty with filters: "No passes match: Canceled · EARENDIL-312 · 11-09 – 11-15." + `Clear filters`.
+- Truncated (`truncated: true`): an info callout above the table, "This week has more than 500 passes, and 500 are
+  shown. Pick a spacecraft, station or state to see them all." If the read's 500 are a known end of the week, the
+  sentence says so: "…and the newest 500 are shown (back to 11-13 04:10Z)." Never a guessed range (U20).
+- Error: "Contact history couldn't load." + `Try again`.
+
+**Hand-started contacts (when api lists them, BACKLOG's `booked: false` rows).** They join the list with no new
+filter.
+- The Window cell reads `11-14 02:59:40 – 03:08:52Z` with a `HAND-STARTED` tag. It's a contact, not a pass (U46):
+  no AOS or LOS words, and no Reservation or Provider revision (`—`).
+- State is its real state word (`In contact`, `Ended · not verified`), never "Hand-started".
+- Count lines add them: "1,284 passes and 3 hand-started contacts". The foot line goes.
+- The drawer shows the A13 record alone, titled "Contact record", with no reservation section and no pass actions.
+
+**Opening a contact record from anywhere (Timeline today).** Route `contacts/history?record=<id>`: the A13 record
+alone in the drawer ("Contact record"), for a scheduled or a realized contact id, over that contact's week.
+Timeline's "Realized contact" and "Scheduled contact" ids become links to it. A record that can't be found reads
+"No contact record with this id." (U25: the id isn't repeated as if it were a name.)
