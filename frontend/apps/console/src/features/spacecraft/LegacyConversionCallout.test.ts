@@ -89,6 +89,8 @@ describe("legacy route conversion callout (ux U79)", () => {
     await flushPromises();
     expect(api.push).not.toHaveBeenCalled();
     expect(w.text()).toContain("Batch 2 is staged. 1 route wasn't converted: EARENDIL-389's");
+    // ux: even one skipped route links its spacecraft's routing page.
+    expect(w.findAll("li a").map((a) => a.text())).toEqual(["EARENDIL-389"]);
     expect(w.text()).toContain("Open change set");
   });
 

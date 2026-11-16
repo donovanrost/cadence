@@ -63,7 +63,7 @@ async function stage() {
     <p class="m-0">{{ CALLOUT }} {{ progressLine(conversion) }}</p>
     <template v-if="staged">
       <p class="m-0 mt-2">Batch {{ staged.batch }} is staged. {{ skippedLine(staged.skipped) }}</p>
-      <ul v-if="staged.skipped.length > 1" class="m-0 mt-1 ps-5">
+      <ul class="m-0 mt-1 ps-5">
         <li v-for="sc in skippedSpacecraft(staged.skipped)" :key="sc.id">
           <RouterLink
             :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: sc.id } }"
