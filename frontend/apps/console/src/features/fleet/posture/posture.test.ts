@@ -51,6 +51,12 @@ describe("fleet posture chips (ux IA §Top bar, ca31e877a)", () => {
       word: "No telemetry yet",
     });
   });
+  it("shows nothing for an empty mission, and reads caution as 'in caution' (ux)", () => {
+    expect(
+      postureChips({ ...fleet(0, 0, 0), counts: { ...fleet(0, 0, 0).counts, total: 0 } }),
+    ).toEqual([]);
+    expect(postureChips(fleet(0, 2, 0))[0]?.label).toBe("2 spacecraft in caution");
+  });
   it("says Ground limits off instead of crit and caution when limits aren't installed; stale still counts", () => {
     expect(keys(fleet(2, 1, 3, false))).toEqual(["limits-off", "stale"]);
     expect(keys(fleet(0, 0, 0, false))).toEqual(["limits-off"]);

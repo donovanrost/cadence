@@ -50,7 +50,7 @@ describe("top bar fleet posture (ux IA §Top bar)", () => {
     const links = w.findAllComponents(RouterLinkStub);
     expect(links.map((l) => l.attributes("aria-label"))).toEqual([
       "2 spacecraft critical",
-      "1 spacecraft caution",
+      "1 spacecraft in caution",
       "3 spacecraft stale",
     ]);
     expect(links[0]?.attributes("title")).toBe("2 spacecraft critical");

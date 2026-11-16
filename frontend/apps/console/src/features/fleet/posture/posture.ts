@@ -9,6 +9,7 @@ import type { OpState } from "@/ui";
  * - Never heard (ux fb5e5ded0, U9 words): a last chip `○ 6 not heard yet`, or `○ No telemetry yet`
  *   when no spacecraft has been heard. It isn't a problem state, but it blocks the nominal claim.
  * - `■ Fleet nominal` only when there's nothing else, so never while anything is stale or unheard.
+ * - An empty mission (no spacecraft) shows nothing; Now covers the empty fleet (ux).
  */
 export type PostureChip = Readonly<{
   key: "crit" | "caution" | "stale" | "never-heard" | "limits-off" | "nominal";
@@ -39,6 +40,7 @@ export const POSTURE_FRESHNESS_GAP_MS = 60_000;
 const alarms: RouteLocationRaw = { name: "ops.alarms" };
 
 export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
+  if (counts.total === 0) return [];
   const chips: PostureChip[] = [];
   if (!limits.configured)
     chips.push({
@@ -65,7 +67,7 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
         state: "caution",
         count: counts.caution,
         word: "caution",
-        label: `${counts.caution} spacecraft caution`,
+        label: `${counts.caution} spacecraft in caution`,
         to: alarms,
       });
   }
