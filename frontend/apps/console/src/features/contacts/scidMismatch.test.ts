@@ -61,7 +61,7 @@ describe("frames with another SCID (U81 §2)", () => {
     expect(lines([path({ frames: 1 })])).toEqual([
       "1 frame with SCID 3 arrived during this pass, which is EARENDIL-312's (SCID 1). Cadence kept it as raw evidence and made no telemetry from it.",
     ]);
-    expect(lines([path()], null)[0]).toContain("during this pass, which is for SCID 1.");
+    expect(lines([path()], null)[0]).toContain("during this pass, which expected SCID 1.");
   });
 
   it("lists up to three SCIDs, then counts them", () => {

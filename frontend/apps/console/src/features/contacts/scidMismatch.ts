@@ -57,7 +57,7 @@ export function scidMismatchLines(m: Mismatch, spacecraft: string | null): strin
   if (!m) return [];
   const whose = spacecraft
     ? `which is ${spacecraft}'s (SCID ${m.expected_scid})`
-    : `which is for SCID ${m.expected_scid}`;
+    : `which expected SCID ${m.expected_scid}`;
   const gs = groups(m);
   return gs.map((g) => {
     const one = g.frames === 1;
