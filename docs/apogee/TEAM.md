@@ -85,6 +85,18 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
 - The CLAUDE.md "UI rules" about `assets/css/components` and `<.button>` etc. govern the
   LiveView/HEEx layer, not the new SPA.
 
+## Controls (director, 2026-11-14 and 2026-11-16)
+
+- **Never route around a permission or approval control.** Don't mint tokens or credentials outside the
+  product path to get past a permission check (11-14: qa's service-token mint for a REST cancel was refused
+  and not worked around). Don't write an approval or any human decision record by calling a domain
+  function from a node or script under a person's name, even as a QA precondition (11-16: a scripted
+  pre-gate model approval wrote a false record and had to be reverted). If a check needs an approval or
+  permission that only a not-yet-landed path can grant, take the check out and run it after the real path lands.
+- **Approval BEFORE, not an FYI after.** A step that routes around an approval or permission control needs
+  the director's OK BEFORE it runs. "Say if you'd rather…" is only for calls that are safe to have already
+  happened.
+
 ## Git
 
 - Commit small and often on `ui/apogee-spa`. Never push, rebase, reset, or stash. The director handles PRs.
