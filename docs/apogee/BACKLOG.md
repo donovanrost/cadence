@@ -12,6 +12,7 @@ missing endpoint or decision; an item with no blocker can start now.
 
 ## 0. Live operations and freezes (read first)
 
+- **11-10 DATA IS BAD:** see 'Known-bad dev telemetry: 2026-11-10' below §0's list.
 - **§11c(B) LIVE (qa 09:24Z):** :4011 UP 09:21:09Z on 5f89cb782 (== devops' smoked 75d115ef4). PASS: 89 legacy routes 302 once → console 200; live settings write on the new node; boot clean; publication 7/7; CatalogRegistry valid; journal on.
 - **COMBINED DELETION LIVE (qa 07:58Z):** :4011 UP 07:52:00Z on c8f869d52 (L11, L12/L13, §11c(A), the ingestion field, #21; L10 OUT). PASS: 59 legacy GET routes 302 once → console 200; boot clean bar 2 known warnings; publication 7/7 + 6 manifests; CatalogRegistry valid; journal on; VACUUM FULL provider_audit_entries 438 → 137 MB. Next: §11c(B) dry ~10:00Z, slot ~10:45Z.
 - **INCIDENT 11-16 04:30:02Z (lead's call, overruled by the director too late):** a script approved the QA mission's only model revision (mission_model_revision:dbfda3aab0…) via MissionModels.approve_revision/5 under qa-org-admin-2's name. NOT a real admin decision. Nothing else touched (Earendil's 4 still candidate). **Director: RESET** via a reviewed, dry-run-first one-off (domain; qa slot) that returns only that revision to candidate and clears approved_by/approved_at, after checking nothing used the approval; any audit/event rows the script created are KEPT as the true record, and the correction adds its own entry saying so; the revision then gets a REAL console approval after the gate (not a retroactive one). **REVERTED 04:33:56Z** (qa; pre-check: nothing referenced it, 0 activations, 0 change sets; after: candidate, approver/time null; Earendil's 4 untouched). No model-decision audit kind exists, so nothing was written or deleted there; the correction note is in qa-pass-checklist. The preflight blocks again; L10 waits for the gate + a real console approval. L10 is out of the combined batch and runs after the gate with a real console approval. Rule now in TEAM.md › Controls (c001fc5ad).
@@ -126,6 +127,29 @@ missing endpoint or decision; an item with no blocker can start now.
 - **Legacy pages (director 11-13):** the old LiveView pages are being deleted. No new features in them; bug fixes only if something live depends on them. §11 lists what still exists only there.
 
 - **:4011 outage 11-13 03:45:59Z → 04:12:48Z** (dev-env mix builds in the shared tree purged `Cadence.Repo`). Back with gen 8, `modified_modules` [], P9CS still queued. Rules since: Elixir checks only with `MIX_ENV=test` (check-slot enforces it); dev-DB migrations through qa (in-node `Ecto.Migrator` or a planned restart). Runbook e53a9c00. The queued commits went live early with that restart; qa #51 verified (Audit 1.5 s).
+
+
+### Known-bad dev telemetry: 2026-11-10 wrong-craft passes (director 11-16)
+On 2026-11-10 (dev, Earendil demo mission), stray provider downlink streams reached station listen ports first, and each pass's listener kept the first peer. So some passes recorded ANOTHER spacecraft's frames under their own spacecraft, and lost their own. Mechanism: a provider-side restart left live streams reconnecting (simulator, fixed in 3ea527b2b), plus first-peer-wins listen-mode profiles (open in Cadence; see the shared-listener move and the frame-SCID cross-check). No repair: the data stays as known-bad history.
+DO NOT USE these passes for limit tuning, model or plan comparisons, replay cases, baselines or any "typical pass" sample. Exclude them from any gate or comparison that draws on 2026-11-10:
+
+| Realized contact (…_run) | Spacecraft (frames actually from) | Window (UTC) |
+|---|---|---|
+| scheduled_contact_naf4iny7uy_8CB0 | EARENDIL-010 (from 005) | 07:09–07:17 |
+| scheduled_contact_naf4iny7uy_8CEO | EARENDIL-004 (from 009) | 07:22–07:30 |
+| scheduled_contact_naf4iny7uy_8CFW | EARENDIL-006 (from 001) | 07:31–07:39 |
+| scheduled_contact_M4uvfry1hTfJDW_ONvO5Zlos | EARENDIL-025 (from 005) | 08:27–08:35 |
+| scheduled_contact_WC5STC9wgXXpIfV-_1WfMiw1 | EARENDIL-024 (from 009) | 09:35–09:43 |
+| scheduled_contact_naf4iny7uy_8CM0 | EARENDIL-004 (from 009) | 12:13–12:21 |
+| scheduled_contact_naf4iny7uy_8CN8 | EARENDIL-006 (from 001) | 12:22–12:30 |
+| scheduled_contact_0AVDnfONegwk8-4I6ZTzs5aV | EARENDIL-006 (from 001) | 13:59–14:07 |
+| scheduled_contact_naf4iny7uy_8D2N | EARENDIL-010 (partly from 005) | 18:28–18:36 |
+| scheduled_contact_naf4iny7uy_8D7J | EARENDIL-006 (from 001) | 18:50–18:58 |
+| scheduled_contact_Jgx1bbIKOxxt4TQmWtifmiLr | EARENDIL-004 (partly from 009) | 20:18–20:26 |
+
+Found from 1–5% table samples, so a short pass could be missing. To be safe, exclude ALL 2026-11-10 passes on the three affected station profiles (provider_profile_i4467s4fie_3F, _2V and _35). No other day since 11-08 shows a mismatch in sampling.
+Follow-ups: (A) the frame-SCID cross-check: a single-craft pass refuses a wrong-SCID frame as a counted anomaly (domain, after the same-org SCID warning; lands at a restart). (B) a planned move of listen profiles to the shared listener, STAGED (director): one downlink profile canary through a change set by a QA admin, watched over its next passes, then the other 9 (from 11-17 unless a clean slot today).
+
 
 ## 1. Next up, per person (the short version)
 
