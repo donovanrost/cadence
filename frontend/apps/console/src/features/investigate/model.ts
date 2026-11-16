@@ -194,3 +194,22 @@ export function heroStatus(
 /** `−0.43` per hour: two decimals, U+2212 for negatives. */
 export const formatRate = (perHour: number) =>
   `${perHour < 0 ? "−" : perHour > 0 ? "+" : ""}${Math.abs(perHour).toFixed(2)}`;
+
+/**
+ * §11c(D) D11 (ux): a capped history read keeps the EARLIEST samples (api, M10 fallback), so the
+ * plot is whole from the read's start to its last bucket's end. Null when the read wasn't cut.
+ * Times per §4: HH:MMZ, with MM-DD on both ends when the shown span crosses days.
+ */
+export function truncatedLine(
+  h: Readonly<{ truncated: boolean; from: string; buckets: readonly { t_end: string }[] }>,
+): string | null {
+  if (!h.truncated) return null;
+  const from = h.from;
+  const to = h.buckets.at(-1)?.t_end ?? h.from;
+  const days = from.slice(0, 10) !== to.slice(0, 10);
+  const at = (iso: string) => `${days ? `${iso.slice(5, 10)} ` : ""}${iso.slice(11, 16)}Z`;
+  return (
+    `This range has more samples than one read returns (20,000). The plot shows ${at(from)} to ` +
+    `${at(to)}; samples after ${at(to)} weren't read. Pick a shorter or later range to see the rest.`
+  );
+}

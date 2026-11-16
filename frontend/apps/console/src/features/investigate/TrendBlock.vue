@@ -4,6 +4,7 @@ import { computed } from "vue";
 import type { RemoteState } from "@/api/index.ts";
 import { formatClock, ApEmptyState, ApRemote } from "@/ui";
 import type { History } from "./api.ts";
+import { truncatedLine } from "./model.ts";
 import {
   ApTimeSeries as TrendChart,
   type LimitSegment,
@@ -48,8 +49,8 @@ const unavailable = computed(() =>
     : null,
 );
 /** §11c(D) D11 (ux): the read hit its cap, so the plot is missing samples; never cut silently. */
-const incomplete = computed(
-  () => props.history.status === "ready" && props.history.value.truncated,
+const incomplete = computed(() =>
+  props.history.status === "ready" ? truncatedLine(props.history.value) : null,
 );
 const tick = (t: number) => formatClock(new Date(t)).slice(0, 5);
 const value = (v: number) => formatValue(v) ?? "";
@@ -86,10 +87,7 @@ const value = (v: number) => formatValue(v) ?? "";
       <p v-if="!compact && view.series.length === 0" class="m-0 pt-2 text-md text-text-3">
         No samples for this point in the last {{ rangeLabel }}.
       </p>
-      <p v-if="incomplete" class="m-0 pt-2 text-sm text-caution-text">
-        This range has more samples than one read returns (20,000), so the plot is incomplete. Pick
-        a shorter range to see all of it.
-      </p>
+      <p v-if="incomplete" class="m-0 pt-2 text-sm text-caution-text">{{ incomplete }}</p>
     </template>
   </ApRemote>
 </template>
