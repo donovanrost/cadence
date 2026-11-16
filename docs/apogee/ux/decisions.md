@@ -2339,5 +2339,8 @@ Under the SCID field, and on the change's row in the change set:
 organization; keep it so.
 - The store-level refusal (`listen_endpoint_claimed` from a transport or provider-profile write) maps to the same
   words on the port field (knownErrorCode), never a generic failure or the code.
-- A pass refused at start for the same reason: "Didn't start: another mission listens on the port INU S-band uses
-  (5012). Change that transport's port." The transport by name; no mission.
+- A pass refused at start for the same reason: U45's contact_start row (its title already says "hasn't started"),
+  reason `listen_endpoint_claimed`. Reason line: "Another mission already listens on the port INU S-band uses
+  (5012). Change that transport's port." With no transport name: "Another mission already listens on port 5012,
+  which this pass's transport uses. Change that transport's port." Second action `Open transport` (the transport's
+  Setup page; none without a transport). The transport by name; never the mission, even if one is sent.
