@@ -94,12 +94,16 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127
   CADENCE_INGRESS_JOURNAL_ENABLED=true CADENCE_INGRESS_JOURNAL_PATH="$PWD/../../var/ingress_journal" \
   CADENCE_INGRESS_JOURNAL_MAX_BYTES=2147483648 \
   CADENCE_LIVE_VUE_VITE_PORT=5183 POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
-  mise exec -- env OTEL_EXPORTER_OTLP_ENDPOINT= iex --sname cadence_apogee --cookie cadence -S mix phx.server 2>&1 | tee -a ../../var/qa-server.log
+  mise exec -- env OTEL_EXPORTER_OTLP_ENDPOINT= ELIXIR_ERL_OPTIONS="-logger level info" iex --sname cadence_apogee --cookie cadence -S mix phx.server 2>&1 | tee -a ../../var/qa-server.log
 #    OTEL_EXPORTER_OTLP_ENDPOINT is cleared AFTER mise (api-ops 11-14): set before `mise exec`, mise.toml's
 #    [env] value (http://localhost:4318) wins, runtime.exs turns the OTLP exporter on, and with nothing on
 #    4318 the log gets 'client error exporting … econnrefused' ~12×/min.
-#    After any restart also drop the log level to :info (director, 2026-11-11: at :debug the log hit
-#    28 GB and filled the disk). Over RPC on cadence_apogee: Logger.configure(level: :info).
+#    The node STARTS at :info (director, 11-16): ELIXIR_ERL_OPTIONS="-logger level info" sets the :logger
+#    app's level at boot (dev config sets none, so it isn't overridden; checked: plain elixir reports
+#    :debug without it, :info with it). At :debug the log hit 28 GB on 11-11 and 2.3 GB on 11-16 (07:52Z
+#    to 17:00Z, a skipped manual step). The post-boot check (var/qa-scripts/postboot-comb.exs) reports
+#    log_level_info?: it must be true; if it isn't, Over RPC on cadence_apogee: Logger.configure(level: :info)
+#    (var/qa-scripts/loglevel-info.exs) and find out why before going on.
 #    If var/qa-server.log grows past a few GB, truncate it in place: : > var/qa-server.log
 #    Check after any restart (expect 9200/8822; nil means restart again with the line above):
 #    rpc System.get_env("CADENCE_QUESTDB_HTTP_ENDPOINT") on cadence_apogee
