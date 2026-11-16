@@ -7,10 +7,17 @@ import { useMissionInvalidation } from "@/live/index.ts";
 import { throttle } from "@/features/fleet/index.ts";
 import type { TelemetryPoint } from "@/features/telemetry/index.ts";
 import { fetchHistory, fetchLimitIntervals } from "../api.ts";
-import { limitSegments, rangeWindow, toSeries, trendSentence, type RangeKey } from "../model.ts";
+import {
+  centredWindow,
+  limitSegments,
+  rangeWindow,
+  toSeries,
+  trendSentence,
+  type RangeKey,
+} from "../model.ts";
 import { tailPoints, type TailSample } from "../tail.ts";
 import TrendBlock from "../TrendBlock.vue";
-import type { TimeBand } from "@/ui";
+import { formatClock, type TimeBand } from "@/ui";
 
 /**
  * One T2 small multiple: a point's history over the range (M10) with its limit bands (M11) and the
@@ -25,13 +32,18 @@ const props = defineProps<{
   tail: readonly TailSample[];
   height: number;
   bands: readonly TimeBand[];
+  /** ux U71 A7 (?at=): centre the window on this sample and ring it. */
+  at?: number | null | undefined;
 }>();
 const hover = defineModel<number | null>("hover", { default: null });
 const key = computed(
-  () => `${props.missionId}|${props.spacecraftId}|${props.point.id}|${props.range}`,
+  () =>
+    `${props.missionId}|${props.spacecraftId}|${props.point.id}|${props.range}|${props.at ?? ""}`,
 );
 const win = () => {
-  const w = rangeWindow(props.range, new Date());
+  const w = props.at
+    ? centredWindow(props.range, props.at, new Date())
+    : rangeWindow(props.range, new Date());
   return { from: new Date(w.from), to: new Date(w.to) };
 };
 const history = useRemoteQuery(key, (_k, signal) =>
@@ -50,6 +62,9 @@ useMissionInvalidation(
   computed(() => props.missionId),
   ["limits"],
   intervals.refetch,
+);
+const marks = computed(() =>
+  props.at ? [{ t: props.at, label: `the sample at ${formatClock(new Date(props.at))}Z` }] : [],
 );
 /** §4 short (ux #11): `15:31Z` today, `11-10 15:31Z` otherwise. */
 const edge = (t: number) => {
@@ -93,6 +108,7 @@ const view = computed(() => {
     :view="view"
     :height="height"
     :bands="bands"
+    :marks="marks"
     v-model:hover="hover"
     @retry="history.refetch"
   />

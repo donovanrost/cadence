@@ -20,6 +20,13 @@ export function rangeWindow(range: RangeKey, now: Date): TimeWindow {
   return { from: now.getTime() - ms, to: now.getTime() };
 }
 
+/** ux U71 A7: the range's length centred on `at` (a sample to show), never past now. */
+export function centredWindow(range: RangeKey, at: number, now: Date): TimeWindow {
+  const ms = RANGES.find((r) => r.value === range)?.ms ?? 6 * 3_600_000;
+  const to = Math.min(now.getTime(), at + ms / 2);
+  return { from: to - ms, to };
+}
+
 /**
  * The alarm B1 shows: the one named in the URL (`?alarm=` id, or `?point=` from the episode-based
  * Alarms list) if present, else the worst (server order).

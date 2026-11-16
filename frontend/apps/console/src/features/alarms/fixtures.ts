@@ -24,5 +24,9 @@ export const episodeFixture = (overrides: Partial<Episode> = {}): Episode => ({
   acknowledged_by: null,
   assignee: null,
   assigned_at: null,
+  limit_definition_id: undefined,
+  limit_definition_version: undefined,
+  limit_set_name: undefined,
+  trigger: undefined,
   ...overrides,
 });

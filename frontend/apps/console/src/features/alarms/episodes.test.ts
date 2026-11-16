@@ -62,10 +62,18 @@ describe("alarm episodes", () => {
     const detail: EpisodeDetail = {
       ...episode(),
       events: [
-        { id: "e1", kind: "raised", actor: null, at: "2026-11-08T02:35:02Z", payload: {} },
+        {
+          id: "e1",
+          kind: "raised",
+          actor: null,
+          at: "2026-11-08T02:35:02Z",
+          sample: undefined,
+          payload: {},
+        },
         {
           id: "e2",
           kind: "escalated",
+          sample: undefined,
           actor: null,
           at: "2026-11-08T02:40:00Z",
           payload: { from: "caution", to: "critical", acknowledgement_cleared: true },
@@ -82,10 +90,18 @@ describe("alarm episodes", () => {
     const inferred: EpisodeDetail = {
       ...episode(),
       events: [
-        { id: "a", kind: "acknowledged", actor: null, at: "2026-11-08T02:36:00Z", payload: {} },
+        {
+          id: "a",
+          kind: "acknowledged",
+          actor: null,
+          at: "2026-11-08T02:36:00Z",
+          sample: undefined,
+          payload: {},
+        },
         {
           id: "b",
           kind: "escalated",
+          sample: undefined,
           actor: null,
           at: "2026-11-08T02:40:00Z",
           payload: { from: "caution", to: "critical" },

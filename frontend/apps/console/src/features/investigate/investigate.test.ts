@@ -234,6 +234,7 @@ describe("event log lines (B2)", () => {
     kind: "raised" as const,
     actor: null,
     at: "2026-11-08T02:08:11Z",
+    sample: undefined,
     payload: {},
   };
   const acked = {
@@ -241,6 +242,7 @@ describe("event log lines (B2)", () => {
     kind: "acknowledged" as const,
     actor: { kind: "user" as const, id: "u", name: "Mira K." },
     at: "2026-11-08T02:10:00Z",
+    sample: undefined,
     payload: {},
   };
 

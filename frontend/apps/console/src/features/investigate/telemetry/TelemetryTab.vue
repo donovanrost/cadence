@@ -91,6 +91,11 @@ const focusId = computed(() => {
   return f && pinned.value.includes(f) ? f : (pinned.value[0] ?? null);
 });
 const focused = computed(() => plotted.value.find((p) => p.id === focusId.value) ?? null);
+/** ux U71 A7: ?at= centres the focused point's window on a sample and rings it. */
+const at = computed(() => {
+  const v = typeof route.query.at === "string" ? Date.parse(route.query.at) : Number.NaN;
+  return Number.isNaN(v) ? null : v;
+});
 /** "6 h" in sentences (ux review 5); the segmented control keeps its compact labels. */
 const rangeLabel = computed(() =>
   (RANGES.find((r) => r.value === range.value)?.label ?? range.value)
@@ -282,6 +287,7 @@ const latest = (p: (typeof all.value)[number]) =>
                 :tail="tail.tails.value.get(p.id) ?? []"
                 :height="plotted.length === 1 ? 220 : 120"
                 :bands="passBands"
+                :at="p.id === focusId ? at : null"
                 v-model:hover="hoverT"
               />
             </div>

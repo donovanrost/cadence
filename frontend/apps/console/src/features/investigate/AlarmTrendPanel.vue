@@ -29,6 +29,7 @@ import {
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { TelemetryPoint } from "@/features/telemetry/index.ts";
 import AddPointSearch from "./AddPointSearch.vue";
+import AlarmProvenance from "./AlarmProvenance.vue";
 import PointPlot from "./telemetry/PointPlot.vue";
 import TrendBlock from "./TrendBlock.vue";
 import {
@@ -174,6 +175,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
       <ApCallout v-else-if="!subject" tone="nominal">No active alarm on {{ sc.name }}.</ApCallout>
       <div v-else class="flex flex-col gap-3">
         <slot name="lifecycle" />
+        <AlarmProvenance v-if="episode" :episode="episode" :sc="sc" />
         <div class="flex flex-wrap items-end justify-between gap-3">
           <ApCallout v-if="!alarm" tone="nominal" class="flex-1">
             Resolved at {{ resolvedAt ?? "an unknown time" }} · back in limits.

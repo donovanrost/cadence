@@ -39,6 +39,23 @@ const episodeFields = {
   acknowledged_by: d.nullable(actor),
   assignee: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
   assigned_at: d.nullable(d.timestamp),
+  /** U68 R5 (api 0619ac94a): the ground-limit definition that opened it; null for catalog. */
+  limit_definition_id: d.optional(d.nullable(d.token)),
+  limit_definition_version: d.optional(d.nullable(d.integer)),
+  limit_set_name: d.optional(d.nullable(d.string)),
+  /** The sample that opened it (catalog monitoring: no sample, at = opened_at). */
+  trigger: d.optional(
+    d.nullable(
+      d.object({
+        sample_id: d.nullable(d.token),
+        sample_type: d.nullable(
+          d.knownText(["telemetry_sample", "derived_telemetry_sample"] as const),
+        ),
+        point_id: d.string,
+        at: d.timestamp,
+      }),
+    ),
+  ),
 } as const;
 
 const episode = d.object(episodeFields);
@@ -59,6 +76,8 @@ const event = d.object({
   ] as const),
   actor: d.nullable(actor),
   at: d.timestamp,
+  /** U68 R5: the sample a source record's event was caused by; null for people's actions. */
+  sample: d.optional(d.nullable(d.object({ id: d.nullable(d.token), at: d.timestamp }))),
   // Kind-specific; read per kind in episodeEventText, never trusted as a whole.
   payload: (value: unknown) => (value !== null && typeof value === "object" ? value : {}),
 });

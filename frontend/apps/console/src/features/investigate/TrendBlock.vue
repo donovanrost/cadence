@@ -9,6 +9,7 @@ import {
   type LimitSegment,
   type SeriesPoint,
   type TimeBand,
+  type TimeMark,
   type TimeWindow,
 } from "@/ui";
 
@@ -32,8 +33,10 @@ const props = withDefaults(
     compact?: boolean;
     /** Pass / outage spans behind the series (kit e80c3fc8). */
     bands?: readonly TimeBand[];
+    /** ux U71 A7: a sample to ring (kit b7d6be8ec). */
+    marks?: readonly TimeMark[];
   }>(),
-  { height: 220, compact: false, bands: () => [] },
+  { height: 220, compact: false, bands: () => [], marks: () => [] },
 );
 /** Shared crosshair time: stacked plots bind one ref so their readouts move together. */
 const hover = defineModel<number | null>("hover", { default: null });
@@ -68,6 +71,7 @@ const value = (v: number) => formatValue(v) ?? "";
         :height="height"
         :step-ms="view.stepMs"
         :bands="bands"
+        :marks="marks"
         :series-name="unit ? `${pointName} (${unit})` : pointName"
         v-model:hover="hover"
       >
