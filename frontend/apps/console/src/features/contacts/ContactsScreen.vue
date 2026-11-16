@@ -351,6 +351,7 @@ watch(
             :pass="selected"
             :loading="selectedLoading"
             :missing="selectedMissing"
+            :failed="pick.failed.value"
             :spacecraft="pick.spacecraft.value"
             @changed="pick.refetch"
           />

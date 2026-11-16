@@ -1,5 +1,5 @@
 import { computed, type Ref } from "vue";
-import { useRemoteQuery, type MissionId, type RemoteState } from "@/api/index.ts";
+import { isError, useRemoteQuery, type MissionId, type RemoteState } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { passStatus } from "./gantt.ts";
@@ -67,14 +67,19 @@ export function useSelectedPass(
       (passes.state.value.status !== "ready" ||
         (outsideKey.value !== null && outside.state.value.status === "loading")),
   );
-  const missing = computed(
-    () =>
-      selectedId.value !== null &&
+  /** The URL's id failed to read: `missing` when the server has no such pass, else `failed`. */
+  const unread = computed(() => {
+    const s = outside.state.value;
+    return selectedId.value !== null &&
       selected.value === null &&
       handStarted.value === null &&
       !loading.value &&
-      outside.state.value.status === "failed",
-  );
+      s.status === "failed"
+      ? s.error
+      : null;
+  });
+  const missing = computed(() => unread.value !== null && isError(unread.value, "pass_not_found"));
+  const failed = computed(() => unread.value !== null && !missing.value);
   /** D2 identity: the fleet row (has state) else the pass's own {name, scid}. */
   const spacecraft = computed(() => {
     const p = selected.value;
@@ -86,5 +91,5 @@ export function useSelectedPass(
       ? { name: p.spacecraft.name ?? "Deleted spacecraft", scid: p.spacecraft.scid }
       : null;
   });
-  return { selected, handStarted, loading, missing, spacecraft, refetch };
+  return { selected, handStarted, loading, missing, failed, spacecraft, refetch };
 }

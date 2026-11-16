@@ -2,7 +2,7 @@
 import type { MissionId } from "@/api/index.ts";
 import type { Scid } from "@/api/index.ts";
 import { computed } from "vue";
-import { RouterLink, type RouteLocationRaw } from "vue-router";
+import { RouterLink } from "vue-router";
 import {
   formatClock,
   formatCountdown,
@@ -23,6 +23,7 @@ import {
   sourceLabel,
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
+import { replanLink } from "./replanLink.ts";
 import AttentionBlock from "./AttentionBlock.vue";
 import ProviderChangeBlock from "./ProviderChangeBlock.vue";
 import PassChangeHistory from "./PassChangeHistory.vue";
@@ -68,6 +69,8 @@ const props = defineProps<{
   loading?: boolean;
   /** The pass named in the URL couldn't be read (gone, or not this mission's). */
   missing?: boolean;
+  /** The pass named in the URL couldn't be read for another reason (Try again emits changed). */
+  failed?: boolean;
 }>();
 defineEmits<{ changed: [] }>();
 const now = useNow();
@@ -133,13 +136,7 @@ const releaseIssue = computed(() => {
 const access = useCommandAccess();
 /** false only: null means no uplink leg was asked for (downlink only). */
 const uplinkUnconfirmed = computed(() => props.pass?.uplink_confirmed === false);
-/** K2: a rejected / failed reservation booked by a plan can be re-planned (lead, 4259c615). */
-const replan = computed((): RouteLocationRaw | null => {
-  const p = props.pass;
-  return p?.plan && (p.state === "rejected" || p.state === "failed")
-    ? { name: "ops.contacts.replan", query: { plan: p.plan.id } }
-    : null;
-});
+const replan = computed(() => replanLink(props.pass, now.value.getTime()));
 const facts = computed(() => {
   const p = props.pass;
   if (!p) return [];
@@ -195,6 +192,9 @@ const countdown = computed(() => {
       headline="Pass not found"
       sentence="It isn't on this mission's schedule any more. Choose a bar in the schedule."
     />
+    <ApEmptyState v-else-if="!pass && failed" headline="This pass couldn't load.">
+      <ApButton size="compact" @click="$emit('changed')">Try again</ApButton>
+    </ApEmptyState>
     <ApEmptyState
       v-else-if="!pass"
       headline="No pass selected"
