@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { postureChips } from "./posture.ts";
 
-const fleet = (critical: number, caution: number, stale: number, configured = true) => ({
-  counts: { critical, caution, stale },
+const fleet = (
+  critical: number,
+  caution: number,
+  stale: number,
+  configured = true,
+  unheard = 0,
+) => ({
+  counts: { critical, caution, stale, never_heard: unheard, total: 500 },
   limits: { configured },
 });
 const keys = (f: ReturnType<typeof fleet>) => postureChips(f).map((c) => c.key);
@@ -29,6 +35,21 @@ describe("fleet posture chips (ux IA §Top bar, ca31e877a)", () => {
   });
   it("is never nominal while anything is stale", () => {
     expect(keys(fleet(0, 0, 4))).toEqual(["stale"]);
+  });
+  it("never claims nominal while spacecraft are unheard; all unheard is 'No telemetry yet' (U20, U9)", () => {
+    expect(keys(fleet(0, 0, 0, true, 6))).toEqual(["never-heard"]);
+    expect(postureChips(fleet(0, 0, 0, true, 6))[0]).toMatchObject({
+      state: "off",
+      count: 6,
+      word: "not heard yet",
+      label: "6 spacecraft not heard yet",
+      to: { name: "ops.fleet", query: { state: "never_heard" } },
+    });
+    expect(keys(fleet(1, 0, 2, true, 6))).toEqual(["crit", "stale", "never-heard"]);
+    expect(postureChips(fleet(0, 0, 0, true, 500))[0]).toMatchObject({
+      count: null,
+      word: "No telemetry yet",
+    });
   });
   it("says Ground limits off instead of crit and caution when limits aren't installed; stale still counts", () => {
     expect(keys(fleet(2, 1, 3, false))).toEqual(["limits-off", "stale"]);

@@ -78,7 +78,10 @@ vi.mock("@/features/fleet/index.ts", async (original) => ({
   useFleet: () => ({
     state: computed(() => ({
       status: "ready",
-      value: { counts: fleet.counts, limits: { configured: true } },
+      value: {
+        counts: { never_heard: 0, total: 99, ...fleet.counts },
+        limits: { configured: true },
+      },
     })),
   }),
 }));

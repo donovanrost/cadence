@@ -25,7 +25,7 @@ vi.mock("../useFleet.ts", () => ({
         ? {
             status: "ready",
             value: {
-              counts: { ...live.counts },
+              counts: { never_heard: 0, total: 99, ...live.counts },
               limits: { configured: true },
               observed_at: "2026-11-15T23:52:10Z",
             },

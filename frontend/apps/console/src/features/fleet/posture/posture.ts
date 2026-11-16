@@ -6,10 +6,12 @@ import type { OpState } from "@/ui";
  * bar's posture cluster and the dashboard cockpit:
  * - Only non-zero states appear, worst first: `◆ 2 crit · ▲ 1 caution · ▨ 3 stale`.
  * - Ground limits not installed: `○ Ground limits off` replaces crit and caution; stale still counts.
- * - `■ Fleet nominal` only when there's nothing else, so never while anything is stale.
+ * - Never heard (ux fb5e5ded0, U9 words): a last chip `○ 6 not heard yet`, or `○ No telemetry yet`
+ *   when no spacecraft has been heard. It isn't a problem state, but it blocks the nominal claim.
+ * - `■ Fleet nominal` only when there's nothing else, so never while anything is stale or unheard.
  */
 export type PostureChip = Readonly<{
-  key: "crit" | "caution" | "stale" | "limits-off" | "nominal";
+  key: "crit" | "caution" | "stale" | "never-heard" | "limits-off" | "nominal";
   state: OpState;
   /** null: a word-only chip (limits off, nominal). */
   count: number | null;
@@ -21,7 +23,13 @@ export type PostureChip = Readonly<{
 }>;
 
 export type PostureInput = Readonly<{
-  counts: Readonly<{ critical: number; caution: number; stale: number }>;
+  counts: Readonly<{
+    critical: number;
+    caution: number;
+    stale: number;
+    never_heard: number;
+    total: number;
+  }>;
   limits: Readonly<{ configured: boolean }>;
 }>;
 
@@ -70,6 +78,17 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
       label: `${counts.stale} spacecraft stale`,
       to: { name: "ops.fleet", query: { state: "stale" } },
     });
+  if (counts.never_heard > 0) {
+    const none = counts.never_heard === counts.total;
+    chips.push({
+      key: "never-heard",
+      state: "off",
+      count: none ? null : counts.never_heard,
+      word: none ? "No telemetry yet" : "not heard yet",
+      label: none ? "No telemetry yet" : `${counts.never_heard} spacecraft not heard yet`,
+      to: { name: "ops.fleet", query: { state: "never_heard" } },
+    });
+  }
   if (chips.length === 0)
     chips.push({
       key: "nominal",
