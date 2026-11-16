@@ -2011,7 +2011,9 @@ version's decision:
 - Automatic approvals read "under an automation policy" until api sends the policy's name and version (the wire has
   only `automation_grant_id`).
 - **Gaps and exceptions under `Show`** name the requirement by spacecraft and label once api sends them
-  ("EARENDIL-389 · Block 1 daily: no window can cover it"). Until then each row is the reason alone, and the
+  ("EARENDIL-389 · Block 1 daily: no window can cover it"). The gap's window follows the label (qa: one
+  requirement can have several gaps, and the rows read the same otherwise): "EARENDIL-389 · Block 1 daily ·
+  06:00–12:00Z: no window can cover it" (§4). If the history read has no window, api adds it. Until then each row is the reason alone, and the
   requirement ids go in a Technical details under the list. Raw ids never lead a row (design-language §8).
 
 ### U74 · A pass's reservation and contact record in the drawer (§11c(C) A11, A13; L14) (fe-ops)
