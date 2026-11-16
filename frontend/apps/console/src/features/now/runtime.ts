@@ -34,6 +34,8 @@ export function reasonWords(
       return { text: `Applying it failed${why}. ${KEEPS_TRYING}`, needsFix: false };
     // contact_start's reasons (U45) share the field; its own row words them.
     case "listener_in_use":
+    // U81 §3: another mission listens on the port; contactStart.ts words it (claimedWords).
+    case "listen_endpoint_claimed":
     case "listener_unavailable":
     case "connect_failed":
     case "ingress_pipeline_failed":
