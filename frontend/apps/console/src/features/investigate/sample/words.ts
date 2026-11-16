@@ -27,18 +27,17 @@ export function laterBy(from: string | null, to: string): string | null {
 }
 
 const valueWords = {
-  ready: "",
   not_recorded: "Not recorded",
   unsupported: "Can't be shown for this point type",
   limited: "Too large to show here",
 } as const;
 /** The value line: the text when ready (with the unit for Value, U24), else the state's words. */
 export function valueLine(v: SampleValue, unit: string | null = null): string {
-  if (v.state === "ready" || !isKnown(v.state)) {
-    if (v.text === null) return isKnown(v.state) ? "—" : v.state.unrecognized;
-    return unit ? `${v.text} ${unit}` : v.text;
-  }
-  return valueWords[v.state];
+  // ux: a state we haven't learned shows its text if any, else "Can't be shown here", never its word.
+  if (!isKnown(v.state)) return v.text ?? "Can't be shown here";
+  if (v.state !== "ready") return valueWords[v.state];
+  if (v.text === null) return "—";
+  return unit ? `${v.text} ${unit}` : v.text;
 }
 
 const qualityWords = { good: "Good", suspect: "▲ Suspect", bad: "▲ Bad" } as const;

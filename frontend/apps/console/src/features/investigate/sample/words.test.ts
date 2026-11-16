@@ -39,6 +39,9 @@ describe("ux U80: the Sample aside's rows", () => {
     expect(value("not_recorded", null)).toBe("Not recorded");
     expect(value("unsupported", null)).toBe("Can't be shown for this point type");
     expect(value("limited", null)).toBe("Too large to show here");
+    expect(value("ready", null)).toBe("—");
+    expect(value("redacted", null)).toBe("Can't be shown here");
+    expect(value("redacted", "28.1")).toBe("28.1");
   });
 
   it("marks Suspect and Bad quality and a conflicting record", () => {

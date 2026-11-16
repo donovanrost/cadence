@@ -5,7 +5,7 @@ import { RouterLink } from "vue-router";
 import { formatClock } from "@/ui";
 import type { EpisodeDetail } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import { sampleQuery } from "./sample/link.ts";
+import { sampleLink } from "./sample/link.ts";
 
 /**
  * B1's provenance line (ux U71 A7): which limit raised the alarm, a link to that limit version in
@@ -31,20 +31,10 @@ const limitTo = computed<RouteLocationRaw | null>(() =>
     : null,
 );
 const trigger = computed(() => e.value.trigger ?? null);
-const sampleTo = computed<RouteLocationRaw | null>(() =>
-  trigger.value?.sample_id
-    ? {
-        name: "ops.spacecraft",
-        params: { scId: props.sc.scid, tab: "telemetry" },
-        query: {
-          points: trigger.value.point_id,
-          focus: trigger.value.point_id,
-          at: trigger.value.at,
-          ...sampleQuery(trigger.value.sample_id, trigger.value.receipt_time),
-        },
-      }
-    : null,
-);
+const sampleTo = computed<RouteLocationRaw | null>(() => {
+  const t = trigger.value;
+  return t?.sample_id ? sampleLink(props.sc.scid, t.point_id, { ...t, id: t.sample_id }) : null;
+});
 const ids = computed(() =>
   [
     e.value.limit_definition_id ? `Limit definition ${e.value.limit_definition_id}` : null,

@@ -79,7 +79,10 @@ describe("samplePath", () => {
 
   it("passes receipt_time when known, for an exact match", () => {
     const at = "2026-11-08T02:08:11.250Z";
-    const url = new URL(samplePath(ids.value.m, { ...key, receiptTime: at }), "https://x.test");
+    const url = new URL(
+      samplePath(ids.value.m, { ...key, receiptTime: at, at: "2026-11-08T02:08:11Z" }),
+      "https://x.test",
+    );
     expect(url.pathname).toBe("/missions/m-1/telemetry/samples/s%2F1");
     expect(Object.fromEntries(url.searchParams)).toEqual({
       point_id: "EPS.VBAT",
@@ -88,8 +91,15 @@ describe("samplePath", () => {
     });
   });
 
-  it("leaves receipt_time out when it isn't known", () => {
-    const url = new URL(samplePath(ids.value.m, { ...key, receiptTime: null }), "https://x.test");
-    expect(url.searchParams.has("receipt_time")).toBe(false);
+  it("without receipt_time passes at, so api searches ±60 s rather than a day", () => {
+    const at = "2026-11-08T02:08:11Z";
+    const path = (k: { receiptTime: null; at: string | null }) =>
+      new URL(samplePath(ids.value.m, { ...key, ...k }), "https://x.test").searchParams;
+    expect(path({ receiptTime: null, at }).has("receipt_time")).toBe(false);
+    expect(path({ receiptTime: null, at }).get("at")).toBe(at);
+    expect([...path({ receiptTime: null, at: null }).keys()]).toEqual([
+      "point_id",
+      "spacecraft_id",
+    ]);
   });
 });

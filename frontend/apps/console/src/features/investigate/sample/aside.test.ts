@@ -107,16 +107,20 @@ describe("lead: ?sample= is a permalink", () => {
         pointId: "EPS.VBAT",
         spacecraftId: "sc-312",
         receiptTime: "2026-11-08T02:08:12.880Z",
+        at: null,
       },
       expect.anything(),
     );
     expect(api()?.open.value).toBe(true);
   });
 
-  it("without received asks api to search (which may answer ambiguous)", async () => {
+  it("without received passes at, so api searches ±60 s (it may answer ambiguous)", async () => {
     fetchSample.mockResolvedValue({ ok: true, value: statusOnly("ambiguous") });
     await harness("/t?sample=s-1&at=2026-11-08T02%3A08%3A11Z");
-    expect(fetchSample.mock.lastCall?.[1]).toMatchObject({ receiptTime: null });
+    expect(fetchSample.mock.lastCall?.[1]).toMatchObject({
+      receiptTime: null,
+      at: "2026-11-08T02:08:11Z",
+    });
   });
 
   it("closing drops both keys and keeps the rest", async () => {

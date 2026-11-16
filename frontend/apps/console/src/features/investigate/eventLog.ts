@@ -1,6 +1,7 @@
 import type { RouteLocationRaw } from "vue-router";
 import { formatClock, type OpState } from "@/ui";
 import { eventState, eventText, type EpisodeEvent } from "@/features/alarms/index.ts";
+import type { SampleRef } from "./sample/link.ts";
 import { severityState, type MissionEvent } from "@/features/timeline/index.ts";
 
 /** B2 lines: mission events plus the shown alarm's lifecycle actions, newest first. */
@@ -39,13 +40,6 @@ function changeText(e: EpisodeEvent): string | null {
   return null;
 }
 
-/** The sample an episode event carries (U68 R5; receipt_time from api D1 part A). */
-export type LogSample = Readonly<{
-  id: string | null;
-  at: string;
-  receipt_time?: string | null | undefined;
-}>;
-
 /**
  * ux U71 A7: the episode's own escalations replace the timeline's limit lines for that point,
  * only within the episode's span (opened to cleared, or now); outside it they're other episodes.
@@ -53,7 +47,7 @@ export type LogSample = Readonly<{
 export function logLines(
   events: readonly MissionEvent[] | null,
   episode: LogEpisode | null,
-  sampleTo: (sample: LogSample) => RouteLocationRaw | null = () => null,
+  sampleTo: (sample: SampleRef) => RouteLocationRaw | null = () => null,
 ): LogLine[] {
   const changes = (episode?.events ?? []).flatMap((e) => {
     const text = changeText(e);

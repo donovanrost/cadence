@@ -19,6 +19,7 @@ import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { fetchHistory, fetchLimitIntervals } from "../api.ts";
 import { limitSegments, toSeries, trendSentence } from "../model.ts";
 import TrendBlock from "../TrendBlock.vue";
+import { sampleLink } from "../sample/link.ts";
 import {
   conditionLine,
   durationWords,
@@ -152,6 +153,14 @@ const triggerMarks = computed(() => {
     ? [{ t: Date.parse(t.at), label: `the sample that raised it, ${formatClock(new Date(t.at))}Z` }]
     : [];
 });
+/** ux U80: H2's line opens the Sample aside on the trigger, as B1's does (no per-row links). */
+const sampleTo = computed(() => {
+  const o = selected.value;
+  const t = o?.trigger;
+  return o && t?.sample_id
+    ? sampleLink(props.sc.scid, o.point.id, { ...t, id: t.sample_id })
+    : null;
+});
 const telemetryTo = computed((): RouteLocationRaw | null => {
   const o = selected.value;
   if (!o) return null;
@@ -263,6 +272,13 @@ const live = (o: Occurrence) => `OPEN · ${formatRelative(new Date(o.opened_at),
                 :marks="triggerMarks"
                 @retry="history.refetch"
               />
+              <p v-if="sampleTo && selected.trigger" class="m-0 pt-2 text-sm">
+                <RouterLink :to="sampleTo" class="text-readout hover:underline"
+                  >Show the sample that raised it ({{
+                    formatClock(new Date(selected.trigger.at))
+                  }}Z)</RouterLink
+                >
+              </p>
             </div>
           </ApPanel>
           <ApPanel index="H3" title="Prior occurrences" :meta="summary ?? undefined" pane flush>

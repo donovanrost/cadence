@@ -6,7 +6,8 @@ import { fetchSample } from "./api.ts";
 /**
  * ux U80 / lead: the Telemetry tab's `?sample=<id>` (and `?received=<ISO>`, which makes the read
  * exact). The point is the focused one, so a cold load of the permalink reopens the same aside;
- * without `received` api searches a window and may answer ambiguous. Closing drops both keys.
+ * without `received`, `at` narrows api's search to ±60 s (it may answer ambiguous). Closing drops
+ * `sample` and `received`; `at` stays, so the plot keeps ringing the time.
  */
 export function useSample(
   missionId: Ref<MissionId>,
@@ -21,6 +22,10 @@ export function useSample(
     const v = text(route.query.received);
     return v !== null && !Number.isNaN(Date.parse(v)) ? v : null;
   });
+  const at = computed(() => {
+    const v = text(route.query.at);
+    return v !== null && !Number.isNaN(Date.parse(v)) ? v : null;
+  });
   const read = useRemoteQuery(
     computed(() =>
       sampleId.value && pointId.value
@@ -31,6 +36,7 @@ export function useSample(
               pointId: pointId.value,
               spacecraftId: spacecraftId.value,
               receiptTime: received.value,
+              at: at.value,
             },
           }
         : null,

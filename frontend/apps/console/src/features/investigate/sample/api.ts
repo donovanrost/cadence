@@ -87,14 +87,17 @@ export type SampleKey = Readonly<{
   sampleId: string;
   pointId: string;
   spacecraftId: SpacecraftId;
-  /** The exact match; without it api searches a bounded window and may answer ambiguous. */
+  /** The exact match (±1 s on the receipt clock). */
   receiptTime: string | null;
+  /** Without a receipt time: the sample's generation time, so api searches ±60 s, not 24 h. */
+  at: string | null;
 }>;
 
-/** The read's path and query; receipt_time only when known. */
+/** The read's path and query: receipt_time when known, else at when known, else neither. */
 export function samplePath(missionId: MissionId, key: SampleKey): string {
   const query = new URLSearchParams({ point_id: key.pointId, spacecraft_id: key.spacecraftId });
   if (key.receiptTime) query.set("receipt_time", key.receiptTime);
+  else if (key.at) query.set("at", key.at);
   const sample = encodeURIComponent(key.sampleId);
   return `/missions/${encodeURIComponent(missionId)}/telemetry/samples/${sample}?${query}`;
 }
