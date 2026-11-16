@@ -23,6 +23,7 @@ Before handing off any frontend change, run these from this directory and read e
 They call the binaries directly, so they are the same in a side worktree and in the shared tree:
 
 - lint, 0 errors: `./node_modules/.bin/vp lint`
+- formatting, exit 0: `./node_modules/.bin/vp fmt --check`
 - the workspace type-check (every project in the root `tsconfig.json` references):
   `node tools/typecheck-workspace.mjs`
 - test:structure: `./node_modules/.bin/ast-grep test --config sgconfig.yml --skip-snapshot-tests && node --test tools/structural-rules.test.mjs`
