@@ -2018,27 +2018,27 @@ everything in them is mono key/values.
   - A table `Path · Provider binding · Transport binding`, with sources and intents as key/values.
   - Schedule revisions: "r3 · 02:59:40–03:08:52Z · scheduled", newest first, `Show earlier` at the foot.
 
-### U75 · An expired member halts its request (DECISIONS #97) (api / fe-ops)
-The noun is **request**, as in U46. The expired command is named by its stack name, with the target where the
-screen shows several ("Heater setpoint to EARENDIL-004"). Times are §4.
-- **Later members are held** (lead, 11-16: as U46's "rest stay queued"). They never release by themselves; they wait
-  until an operator resends or aborts. Stage `Held` (caution, since a human decides).
-  - Detail: "Held: Heater setpoint expired at 04:00Z before it was released, so the rest of the request waits."
-  - Actions: `Abort remaining` · `Edit and resend`.
-- **The expired member itself** keeps U68's line: "Expired at 04:00Z before it was released."
-- **Uplink & verify:**
-  - U1 cells: `Held` gets a caution outline, and it's in the legend.
-  - One N card per request, not per target: "Heater setpoint expired at 04:00Z before it was released, so 3 later
-    uplinks are held." Its actions are the ones above.
-- **Request log:** "Stopped at 04:00Z: Heater setpoint expired before it was released · 3 uplinks held". An abort
-  or resend logs as today.
-- **Commands list:** the row's state reads `Stopped · 1 expired`.
-- **Now:** one caution item per request, P2.
-  - Title: "EARENDIL-004 · Low power safe stopped: a command expired before it was sent" (several targets: "on 3
-    spacecraft").
-  - `Open` goes to the request.
-  - It resolves when the request is resent or aborted. While anything is held, it can't be marked as seen.
-- **Approve** isn't involved; a halt happens after approval.
+### U75 · A request that expires part-way (DECISIONS #97; api: one `expires_at` per request) (api / fe-ops)
+Every member of a request shares one `expires_at`. When it passes, every unreleased member expires together and
+ends `expired` on its own; nothing is held. The noun is **request**, and its members are **uplinks** (U46). Times
+are §4.
+- **Each expired uplink:** stage `Expired` (off), with U68's line "Expired at 04:00Z before it was released."
+  There's no special action; `Edit and resend` stays the request's normal action.
+- **The request, where it summarises** (request page, Uplink & verify's header area):
+  - Some went out: "The request expired at 04:00Z after 2 of 5 uplinks went out. The other 3 weren't sent."
+  - None went out: "The request expired at 04:00Z before any uplink went out."
+- **Uplink & verify:** expired cells are dashed (off), with `Expired` in the legend. A **partial** expiry gets one N
+  card per request: the sentence above + `Edit and resend`. Nothing went out: no card; the summary line is enough.
+- **Commands list row:** `Expired · 2 of 5 sent`, or `Expired` when none went out.
+- **Request log:** "Expired at 04:00Z · 2 uplinks sent, 3 not sent" (none: "Expired at 04:00Z · nothing sent").
+- **Now** (`expired_group: {expired_count, released_count, target_count, expired_at}`), P2, `Open` → the request,
+  resolved by `Mark as seen`:
+  - Partial: caution, since a spacecraft may be part-way through the sequence. Title "EARENDIL-004 · Low power safe
+    expired before all its uplinks went out", or "Low power safe expired on 3 spacecraft before all its uplinks
+    went out". Meta `2 OF 5 SENT · EXPIRED 04:00Z`.
+  - None released: neutral. Title "EARENDIL-004 · Low power safe expired before any uplink went out". Meta
+    `NONE SENT · EXPIRED 04:00Z`.
+- **Approve** isn't involved; expiry happens after approval.
 
 ### U76 · Planning replacements, final words (user accepted the four drops, 11-16) (fe-setup)
 **Re-plan header meta (K2),** under the title:
