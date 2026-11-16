@@ -377,7 +377,9 @@ Refetch on `invalidate` `commanding`, plus `telemetry` throttled to 10 s.
 - `window: {from, to} | null`: the first release to the last verifier timeout; `null` before
   release, when there's nothing to plot yet.
 - `targets: [{spacecraft_id, name, verifier_state: pending | satisfied | failed | timed_out | null,
-  samples: [{t, value_json}]}]`: per target, that spacecraft's own samples only (#38), at most 300
+  verifier: {instance_id, verifier_id, severity, failure_code} | null, samples: [{t, value_json}]}]`:
+  `verifier` (U68 R4) is that target's verifier instance, null exactly when `verifier_state` is
+  (`failure_code`: `timed_out | failure_criteria_matched | null`); per target, that spacecraft's own samples only (#38), at most 300
   per target, decimated.
   - At most 100 targets. `?targets=` picks which (100 max); `target_count` is the group's total,
     and `truncated` is true when not all are included.
@@ -498,6 +500,47 @@ on the request's spacecraft, plus the command's prior requests to the same targe
   don't present its values as the spacecraft's state), `null` when it was never released.
 - Bounds (`valid_range`, unit) stay on the command catalog read (`GET /commands/:id`).
 - Access as for M24 (`403 forbidden`, `404 command_request_not_found`).
+## `GET /api/console/v1/missions/:mission_id/command-requests/:command_request_id/history` (U68 R3/R4, owner: api)
+
+One member's release attempts and verifiers with the record that matched each (parity A3, A4b/c).
+A member is a command request (`targets[].members[].request_id` on the group read).
+
+```json
+{"data": {"request_id": "…", "spacecraft_id": "…",
+  "attempts": [{"attempt_id": "…", "state": "released", "uncertain": false, "failure_reason": null,
+    "contact": {"id": "…", "label": "EARENDIL-007 · PUQ 07:20Z pass"}, "path_id": "…",
+    "transport_binding_id": "…", "encoded_size_bytes": 12, "attempted_at": "…", "released_at": "…"}],
+  "attempts_next": null,
+  "verifiers": [{"instance_id": "…", "attempt_id": "…", "verifier_id": "…", "name": "Mode applied",
+    "phase": "completion", "severity": "warning", "state": "satisfied", "failure_code": null,
+    "matched_at": "…", "timeout_at": "…", "evidence_status": "ready",
+    "evidence": {"kind": "telemetry", "sample_id": "…", "point_id": "HK.sc_mode", "point_name": "…",
+      "packet_id": "…", "evidence_id": "…", "quality": "good", "raw_value_json": "2",
+      "engineering_value_json": "2", "received_at": "…", "generated_at": "…"}}],
+  "verifiers_next": null}}
+```
+
+- `attempts`: newest first. `state`: `release_pending | released | release_failed |
+  release_uncertain | canceled`; `uncertain` is `state == release_uncertain`. `failure_reason` is
+  free text. `contact.label` names the spacecraft, station code and AOS for a booked pass ("… pass",
+  the date when not the attempt's day), or "… contact" for a hand-started one.
+- `verifiers`: oldest first. `phase`: `acceptance | start | completion | custom`; `severity`:
+  `info | warning | error | critical | null`; `state`: `pending | satisfied | failed | timed_out |
+  canceled`; `failure_code`: `timed_out | failure_criteria_matched | null`.
+- `evidence_status`: `ready` (`evidence` set), `pending` (nothing matched yet, still pending),
+  `unmatched` (ended with nothing matched), `unavailable` (a match is recorded but its record
+  can't be read, or belongs to another attempt). `evidence` is null unless `ready`:
+  - `{kind: "telemetry", sample_id, point_id, point_name, packet_id, evidence_id, quality: good |
+    suspect | bad, raw_value_json, engineering_value_json, received_at, generated_at}`;
+  - `{kind: "transport", source: "action_request", record_id, action, signal_phase, at, recorded_at:
+    null}` (`action` = its action kind, `at` = requested);
+  - `{kind: "transport", source: "capability_record", record_id, action, signal_phase: null, at,
+    recorded_at}` (`action` = its event kind, `at` = `recorded_at`). Neither transport record
+    has a separate event time.
+- Paging: 25 each. `?attempts_after=<attempts_next>`, `?verifiers_after=<verifiers_next>`; `null`
+  = no more. An id that isn't on this request: `422 invalid_params` (`details.field: "cursor"`).
+- `404 command_request_not_found`.
+
 ## Compose draft (owner: api; director, BACKLOG ac293f6c)
 
 Each user has one current draft per mission. Autosave overwrites it; there is no list and no

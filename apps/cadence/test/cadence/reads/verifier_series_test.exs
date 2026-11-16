@@ -93,6 +93,9 @@ defmodule Cadence.Reads.VerifierSeriesTest do
     assert [%{samples: first}, %{samples: second}] = series.targets
     assert Enum.map(first, & &1.value_json) == ["5.0", "8.0"]
     assert length(second) == 2
+
+    # U68 R4: a target's verifier detail is there exactly when its instance is (none here yet).
+    assert Enum.all?(series.targets, &(is_nil(&1.verifier) == is_nil(&1.verifier_state)))
   end
 
   # U2 (fe-ops 11-14): targets pinned to different revisions watch different points.

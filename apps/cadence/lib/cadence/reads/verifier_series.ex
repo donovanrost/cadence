@@ -217,6 +217,8 @@ defmodule Cadence.Reads.VerifierSeries do
             spacecraft_id: target["spacecraft_id"],
             name: target["name"],
             verifier_state: instance && instance.lifecycle_state,
+            # U68 R4: which verifier instance this target's state is, and why it failed.
+            verifier: instance && verifier_detail(instance),
             samples: Map.get(samples, target["spacecraft_id"], [])
           }
         end),
@@ -226,6 +228,14 @@ defmodule Cadence.Reads.VerifierSeries do
       telemetry: telemetry
     }
   end
+
+  defp verifier_detail(instance),
+    do: %{
+      instance_id: instance.command_verifier_instance_id,
+      verifier_id: instance.verifier_id,
+      severity: instance.severity,
+      failure_code: instance.failure_reason
+    }
 
   # A verifier's subject is a point id (`telemetry:THERM.setpoint`) or, from the mission model, the
   # parameter's semantic id (`semantic:parameter:…`) or qualified name (#73,
