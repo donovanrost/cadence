@@ -1057,7 +1057,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       completions:
         for(
           {result, _span, {pid, ref}} <- entries,
-          do: {pid, ref, resume_offset(result)}
+          do: {pid, ref, %{resume_offset: resume_offset(result), incomplete: incomplete(result)}}
         ),
       producer_receipts: [{self(), length(entries)}]
     })
@@ -1065,6 +1065,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   defp resume_offset(%{resume_offset: offset}) when is_integer(offset), do: offset
   defp resume_offset(_result), do: nil
+
+  defp incomplete(%{incomplete: %{} = incomplete}), do: incomplete
+  defp incomplete(_result), do: nil
 
   defp enqueue_persistence_batch(state, %ProcessedIngressBatch{} = batch) do
     with {:ok, next_state} <- ensure_persistence_projector(state),

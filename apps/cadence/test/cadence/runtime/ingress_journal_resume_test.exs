@@ -44,7 +44,8 @@ defmodule Cadence.Runtime.IngressJournalResumeTest do
     {consumer, _consumer_id} = start_consumer(name)
     {[_packet], _state} = process_next(consumer, initial_state())
 
-    assert {:ok, %{incomplete_at_end_bytes: 6}} = IngressJournalConsumer.quiesce(consumer)
+    assert {:ok, %{incomplete_at_end: %{frame_bytes: 6, packet_octets: 0, journal_bytes: 6}}} =
+             IngressJournalConsumer.quiesce(consumer)
 
     assert {:ok, %{next_offset: tail, resume_points: %{processing: %{resume: tail}}}} =
              IngressJournal.snapshot(name)
@@ -70,7 +71,9 @@ defmodule Cadence.Runtime.IngressJournalResumeTest do
     {consumer, _consumer_id} = start_consumer(name)
     {after_restart, _state} = process_all(consumer, initial_state(), length(rest) + 1)
 
-    assert {:ok, %{incomplete_at_end_bytes: 0}} = IngressJournalConsumer.quiesce(consumer)
+    assert {:ok, %{incomplete_at_end: %{journal_bytes: 0}}} =
+             IngressJournalConsumer.quiesce(consumer)
+
     Enum.map(before ++ after_restart, & &1.sequence_count)
   end
 
@@ -97,7 +100,8 @@ defmodule Cadence.Runtime.IngressJournalResumeTest do
 
         send(
           consumer,
-          {:provider_ingress_persisted, self(), ref, %{resume_offset: result.resume_offset}}
+          {:provider_ingress_persisted, self(), ref,
+           %{resume_offset: result.resume_offset, incomplete: result.incomplete}}
         )
 
         {result.packet_records, {pipeline, continuity, rest}}

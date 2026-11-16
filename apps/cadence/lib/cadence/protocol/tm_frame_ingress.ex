@@ -72,7 +72,13 @@ defmodule Cadence.Protocol.TMFrameIngress do
          packet_records: packet_records,
          transfer_frame_records: transfer_frame_records,
          protocol_anomalies: protocol_anomalies,
-         resume_offset: resume_offset(raw_evidence, rest, frame_offsets)
+         resume_offset: resume_offset(raw_evidence, rest, frame_offsets),
+         # What's still incomplete after this evidence: the partial frame's bytes and the
+         # buffered partial packets' octets (given up and counted if the stream ends here).
+         incomplete: %{
+           frame_bytes: byte_size(rest),
+           packet_octets: TMFramePipeline.stats(next_pipeline_state).buffered_octets
+         }
        }, rest, next_pipeline_state,
        Map.put(next_continuity_state, :pending_frame_offsets, frame_offsets)}
     else
