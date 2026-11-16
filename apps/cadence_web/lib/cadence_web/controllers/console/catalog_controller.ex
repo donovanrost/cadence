@@ -54,13 +54,12 @@ defmodule CadenceWeb.Console.CatalogController do
 
   @doc "K2 (L18): import the stored file again; refused while a run on it is still going."
   def reimport(conn, %{"artifact_id" => artifact_id}) do
-    with {:ok, detail} <- CatalogOverview.artifact(org_id(conn), mission_id(conn), artifact_id),
-         nil <- Enum.find(detail.import_runs, &(&1.status == :running)),
-         {:ok, %{"import_run_id" => run_id}} <-
-           Reimport.execute(conn.assigns.current_scope, mission_id(conn), artifact_id) do
-      conn |> put_status(:accepted) |> json(%{data: %{import_run: %{id: run_id}}})
-    else
-      %{id: running} ->
+    # The running-import refusal lives in Reimport, so every path gets it (host-action sweep).
+    case Reimport.execute(conn.assigns.current_scope, mission_id(conn), artifact_id) do
+      {:ok, %{"import_run_id" => run_id}} ->
+        conn |> put_status(:accepted) |> json(%{data: %{import_run: %{id: run_id}}})
+
+      {:error, {:import_running, running}} ->
         Problem.respond(conn, :import_running, %{import_run_id: running})
 
       {:error, :artifact_not_found} ->

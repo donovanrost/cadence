@@ -1,5 +1,9 @@
 defmodule Cadence.Catalog.Reimport do
-  @moduledoc "Scoped request to import an existing immutable Catalog artifact."
+  @moduledoc """
+  Scoped request to import an existing immutable Catalog artifact again. Refused while an import of
+  that artifact is still running (`{:import_running, import_run_id}`): every path asks here (the
+  console, the mission catalog host action and the native page), so none can start a second.
+  """
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
@@ -13,6 +17,7 @@ defmodule Cadence.Catalog.Reimport do
            }),
          {:ok, artifact} <-
            Catalog.fetch_artifact(scope.organization_id, mission_id, artifact_id),
+         :ok <- not_running(scope.organization_id, mission_id, artifact.artifact_id),
          {:ok, run} <-
            Catalog.start_import_run(
              scope.organization_id,
@@ -30,6 +35,15 @@ defmodule Cadence.Catalog.Reimport do
   end
 
   def execute(_scope, _mission_id, _artifact_id), do: {:error, :invalid_catalog_request}
+
+  defp not_running(organization_id, mission_id, artifact_id) do
+    case organization_id
+         |> Catalog.list_import_runs(mission_id, artifact_id: artifact_id)
+         |> Enum.find(&(&1.status == :running)) do
+      nil -> :ok
+      run -> {:error, {:import_running, run.import_run_id}}
+    end
+  end
 
   defp actor(%Scope{user: %{id: id, email: email}}), do: %{user_id: id, email: email}
   defp actor(%Scope{}), do: %{}

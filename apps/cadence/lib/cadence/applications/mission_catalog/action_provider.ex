@@ -4,7 +4,7 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
   @behaviour Cadence.Applications.ActionProvider
 
   alias Cadence.Applications.ActionContractLedger
-  alias Cadence.Applications.{ActionRequest, ApplicationInstallations, HostContext}
+  alias Cadence.Applications.{ActionFailure, ActionRequest, ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.Reimport
   alias Cadence.Ids
@@ -122,7 +122,17 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
          "artifact_id" => artifact_id
        }) do
     with {:ok, artifact_id} <- application_key(artifact_id) do
-      Reimport.execute(scope, mission_id, artifact_id)
+      case Reimport.execute(scope, mission_id, artifact_id) do
+        {:error, {:import_running, _run_id}} ->
+          {:error,
+           %ActionFailure{
+             code: "import_running",
+             message: "An import of this file is still running. Wait for it to finish."
+           }}
+
+        other ->
+          other
+      end
     end
   end
 
