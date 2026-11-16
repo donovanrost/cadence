@@ -2,9 +2,9 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useConnection } from "@/live";
-import { useFleetPosture } from "@/shell";
+import { TopBarLevel, useFleetPosture, useTopBarLevel } from "@/shell";
 import { ApStatusMark, formatHourMinute, stateTextClass } from "@/ui";
-import { postureChips } from "./posture.ts";
+import { POSTURE_WIDE_QUERY, postureChips } from "./posture.ts";
 
 /**
  * The top bar's fleet posture (ux information-architecture.md §Top bar, ca31e877a). It replaces
@@ -32,6 +32,18 @@ const chips = computed(() => {
   });
 });
 const offline = computed(() => connection.value === "offline");
+/**
+ * Words from 1600px and only while the top bar holds them; otherwise compact: marks and counts,
+ * short words for count-less chips, the full words in every name and title. Compacting is the bar's
+ * first give-way step (shell topbar-fit.ts; ux IA §Top bar). The posture never hides.
+ */
+const level = useTopBarLevel();
+const media =
+  typeof window.matchMedia === "function" ? window.matchMedia(POSTURE_WIDE_QUERY) : null;
+const wide = ref(media?.matches ?? true);
+const onMedia = (e: MediaQueryListEvent) => (wide.value = e.matches);
+media?.addEventListener("change", onMedia);
+const compact = computed(() => !wide.value || level.value >= TopBarLevel.postureCompact);
 const asOf = computed(() =>
   ready.value ? formatHourMinute(new Date(ready.value.observed_at)) : "",
 );
@@ -48,6 +60,7 @@ watch(
   },
 );
 onBeforeUnmount(() => {
+  media?.removeEventListener("change", onMedia);
   if (timer !== null) clearTimeout(timer);
 });
 </script>
@@ -56,7 +69,8 @@ onBeforeUnmount(() => {
   <div
     v-if="chips.length"
     data-fleet-posture
-    class="flex items-center gap-2 border-l border-hairline px-4 font-mono text-md max-md:hidden"
+    :data-compact="compact ? 'true' : undefined"
+    class="flex items-center whitespace-nowrap gap-2 border-l border-hairline px-4 font-mono text-md max-md:hidden"
   >
     <template v-for="(chip, i) in chips" :key="chip.key">
       <span v-if="i > 0" aria-hidden="true" class="text-text-4">·</span>
@@ -72,9 +86,9 @@ onBeforeUnmount(() => {
       >
         <ApStatusMark :state="chip.state" />
         <template v-if="chip.count !== null"
-          >{{ chip.count }}<span class="max-xl:hidden">{{ chip.word }}</span></template
+          >{{ chip.count }}<span v-if="!compact">{{ chip.word }}</span></template
         >
-        <template v-else>{{ chip.word }}</template>
+        <template v-else>{{ compact ? chip.short : chip.word }}</template>
       </RouterLink>
     </template>
     <span v-if="offline" class="text-stale-text">as of {{ asOf }}</span>

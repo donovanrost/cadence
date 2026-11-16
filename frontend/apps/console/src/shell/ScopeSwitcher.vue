@@ -3,6 +3,9 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useDisclosure } from "./disclosure.ts";
 import type { ConsoleScope } from "./scope.ts";
+import { TopBarLevel, useTopBarLevel } from "./topbar-fit.ts";
+
+const level = useTopBarLevel();
 
 const props = defineProps<{ scope: ConsoleScope }>();
 const route = useRoute();
@@ -38,7 +41,12 @@ const targetName = computed(() =>
       aria-controls="mission-switcher"
       @click="toggle"
     >
-      <span class="text-text-4 max-md:sr-only">{{ organization.name }} /</span>
+      <!-- At its give-way step the org name leaves the eye, not the accessible name (ux IA §Top bar). -->
+      <span
+        class="text-text-4 max-md:sr-only"
+        :class="level >= TopBarLevel.crumbMission ? 'sr-only' : ''"
+        >{{ organization.name }} /</span
+      >
       <span>{{ missionName ?? "Choose mission" }}</span>
       <svg
         width="10"

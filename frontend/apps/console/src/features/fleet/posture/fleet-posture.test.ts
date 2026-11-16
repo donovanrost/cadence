@@ -55,8 +55,8 @@ describe("top bar fleet posture (ux IA §Top bar)", () => {
       "3 spacecraft stale",
     ]);
     expect(links[0]?.attributes("title")).toBe("2 spacecraft critical");
-    // 768–1279: marks and counts; the word is visual from 1280.
-    expect(links[0]?.get("span.max-xl\\:hidden").text()).toBe("crit");
+    // Below 1600 (the test viewport) it's compact; the words stay in the name and title.
+    expect(links[0]?.text()).toBe("2");
     expect(w.text()).not.toContain("UTC");
   });
   it("merges stale and never heard when telemetry history didn't answer (ux fb5e5ded0)", () => {

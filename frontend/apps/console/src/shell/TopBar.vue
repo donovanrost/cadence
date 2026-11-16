@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import AccountMenu from "./AccountMenu.vue";
 import BrandMark from "./BrandMark.vue";
@@ -14,6 +14,7 @@ import QueryTrigger from "./QueryTrigger.vue";
 import ScopeSwitcher from "./ScopeSwitcher.vue";
 import { usePalette } from "./palette.ts";
 import type { ConsoleScope } from "./scope.ts";
+import { TopBarLevel, useTopBarFit } from "./topbar-fit.ts";
 
 const props = defineProps<{ scope: ConsoleScope }>();
 const route = useRoute();
@@ -26,6 +27,15 @@ const mode = computed(() => {
   return raw === "takeover" ? "setup" : raw;
 });
 const mission = computed(() => (props.scope.kind === "mission" ? props.scope : null));
+/**
+ * From 768 the bar fits by giving way in ux's order (topbar-fit.ts), never by clipping: every item
+ * keeps its width except the query trigger (data-topbar-flex), and only the last step wraps.
+ */
+const header = ref<HTMLElement | null>(null);
+const { level } = useTopBarFit(
+  header,
+  computed(() => !small.value),
+);
 const placeholder = computed(() =>
   mode.value === "setup"
     ? "Spacecraft, profiles, commands, settings…"
@@ -35,7 +45,10 @@ const placeholder = computed(() =>
 
 <template>
   <header
-    class="flex h-[56px] flex-none flex-nowrap items-stretch border-b border-hairline bg-chrome md:h-auto md:min-h-[52px] md:flex-wrap"
+    ref="header"
+    :data-topbar-level="level"
+    class="flex h-[56px] flex-none flex-nowrap items-stretch border-b border-hairline bg-chrome md:h-auto md:min-h-[52px] md:[&>*:not([data-topbar-flex])]:flex-none"
+    :class="level >= TopBarLevel.wrap ? 'md:flex-wrap' : ''"
   >
     <MobileHeaderBar v-if="small && mobileHeader" :header="mobileHeader" />
     <template v-else>
@@ -60,7 +73,7 @@ const placeholder = computed(() =>
         class="max-md:hidden"
         :placeholder="placeholder"
       />
-      <div v-else class="flex-1" />
+      <div v-else class="flex-1" data-topbar-flex />
       <LinkStatus />
       <!-- Status from features, composed in App.vue: the fleet posture (both modes, ux IA §Top bar),
            then Setup's config revision. -->

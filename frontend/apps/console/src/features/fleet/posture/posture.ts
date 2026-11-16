@@ -18,6 +18,8 @@ export type PostureChip = Readonly<{
   count: number | null;
   /** The visible word, after the count. */
   word: string;
+  /** Compact (below 1600px, or the top bar's first give-way step): "" for a counted chip. */
+  short: string;
   /** Accessible name and title: "2 spacecraft critical". */
   label: string;
   to: RouteLocationRaw;
@@ -51,6 +53,7 @@ export function postureChips({ counts, limits, telemetry }: PostureInput): Postu
       state: "off",
       count: null,
       word: "Ground limits off",
+      short: "Limits off",
       label: "Ground limits off",
       to: { name: "setup.apps" },
     });
@@ -61,6 +64,7 @@ export function postureChips({ counts, limits, telemetry }: PostureInput): Postu
         state: "crit",
         count: counts.critical,
         word: "crit",
+        short: "",
         label: `${counts.critical} spacecraft critical`,
         to: alarms,
       });
@@ -70,6 +74,7 @@ export function postureChips({ counts, limits, telemetry }: PostureInput): Postu
         state: "caution",
         count: counts.caution,
         word: "caution",
+        short: "",
         label: `${counts.caution} spacecraft in caution`,
         to: alarms,
       });
@@ -82,6 +87,7 @@ export function postureChips({ counts, limits, telemetry }: PostureInput): Postu
         state: "stale",
         count: unheard,
         word: "not heard recently",
+        short: "",
         label: `${unheard} spacecraft not heard recently. ${DEGRADED_SENTENCE}`,
         to: { name: "ops.fleet", query: { state: "stale,never_heard" } },
       });
@@ -91,6 +97,7 @@ export function postureChips({ counts, limits, telemetry }: PostureInput): Postu
       state: "stale",
       count: counts.stale,
       word: "stale",
+      short: "",
       label: `${counts.stale} spacecraft stale`,
       to: { name: "ops.fleet", query: { state: "stale" } },
     });
@@ -101,6 +108,7 @@ export function postureChips({ counts, limits, telemetry }: PostureInput): Postu
       state: "off",
       count: none ? null : counts.never_heard,
       word: none ? "No telemetry yet" : "not heard yet",
+      short: none ? "No telemetry yet" : "",
       label: none ? "No telemetry yet" : `${counts.never_heard} spacecraft not heard yet`,
       to: { name: "ops.fleet", query: { state: "never_heard" } },
     });
@@ -111,8 +119,12 @@ export function postureChips({ counts, limits, telemetry }: PostureInput): Postu
       state: "nominal",
       count: null,
       word: "Fleet nominal",
+      short: "Nominal",
       label: "Fleet nominal",
       to: { name: "ops.now" },
     });
   return chips;
 }
+
+/** The posture keeps its words from 1600px (ux IA §Top bar, 9c49c76ab). */
+export const POSTURE_WIDE_QUERY = "(min-width: 100rem)";

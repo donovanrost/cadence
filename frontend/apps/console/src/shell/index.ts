@@ -17,6 +17,7 @@ export { useOpsCounts, type OpsCounts } from "./counts.ts";
 /** The mission runtime status from the shell's /counts read (U38; Setup CONVERGING / DEGRADED). */
 export { useRuntimeStatus } from "./runtime-status.ts";
 export { useFleetPosture } from "./fleet-posture.ts";
+export { TopBarLevel, useTopBarLevel } from "./topbar-fit.ts";
 export { outageText } from "./runtime-banner.ts";
 export type { FleetPostureCounts, RuntimeStatus } from "./counts.ts";
 /** L6 admin mode for features (L7 admin pages): state, enter/leave, and the step-up form. */
