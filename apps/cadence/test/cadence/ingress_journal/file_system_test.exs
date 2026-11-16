@@ -196,19 +196,27 @@ defmodule Cadence.IngressJournal.FileSystemTest do
     journal = start_supervised!({FileSystem, ctx.opts}, restart: :temporary)
     ref = Process.monitor(journal)
 
+    # No timing windows (flaky under load in the hook runs): each linked process is monitored,
+    # and the journal is synced with a call after the linked process is gone.
     linked = fn reason ->
-      spawn(fn ->
-        Process.link(journal)
-        exit(reason)
-      end)
+      {pid, linked_ref} =
+        spawn_monitor(fn ->
+          Process.link(journal)
+          exit(reason)
+        end)
+
+      assert_receive {:DOWN, ^linked_ref, :process, ^pid, ^reason}, 5_000
     end
 
     linked.(:normal)
-    refute_receive {:DOWN, ^ref, :process, ^journal, _reason}, 100
+    # The exit signal reached the journal before this call (it was sent before the DOWN above),
+    # so a reply means the journal handled it and kept running.
+    assert {:ok, _snapshot} = FileSystem.snapshot(ctx.name)
     assert Process.alive?(journal)
+    refute_received {:DOWN, ^ref, :process, ^journal, _reason}
 
     linked.(:writer_crashed)
-    assert_receive {:DOWN, ^ref, :process, ^journal, :writer_crashed}
+    assert_receive {:DOWN, ^ref, :process, ^journal, :writer_crashed}, 5_000
   end
 
   @tag :tmp_dir
