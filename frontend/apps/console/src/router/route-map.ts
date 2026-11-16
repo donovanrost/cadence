@@ -147,6 +147,7 @@ export interface ConsoleRoutes {
   >;
   "ops.contacts.replan": InMission<"ops.contacts.replan", "/contacts/replan">;
   "ops.contacts.review": InMission<"ops.contacts.review", "/contacts/review">;
+  "ops.contacts.history": InMission<"ops.contacts.history", "/contacts/history">;
   "ops.contact": InMission<
     "ops.contact",
     "/contacts/:contactId",
@@ -378,6 +379,7 @@ export const consoleRouteNames: Readonly<Record<ConsoleRouteName, true>> = {
   "ops.contacts.replan.station": true,
   "ops.contacts.replan": true,
   "ops.contacts.review": true,
+  "ops.contacts.history": true,
   "ops.contact": true,
   "ops.telemetry": true,
   "ops.dashboards": true,
@@ -465,6 +467,7 @@ const paramlessRouteNames: Readonly<Record<ParamlessRouteName, true>> = {
   "ops.contacts.plan": true,
   "ops.contacts.replan": true,
   "ops.contacts.review": true,
+  "ops.contacts.history": true,
   "ops.telemetry": true,
   "ops.dashboards": true,
   "ops.dashboards.new": true,

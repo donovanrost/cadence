@@ -93,6 +93,14 @@ export const opsRoutes: RouteRecordRaw[] = [
     meta: { mode: "ops", nav: "contacts", title: "Pass review", board: "PassReview (K3)" },
   },
   {
+    // §11c(C) A12 (ux U78): the contact ledgers beyond the Live window, a week at a time. Before
+    // contacts/:contactId so 'history' isn't read as a contact id.
+    path: "contacts/history",
+    name: "ops.contacts.history",
+    component: () => import("@/features/contacts/history/HistoryScreen.vue"),
+    meta: { mode: "ops", nav: "contacts", title: "Contact history", board: "ContactHistory (A12)" },
+  },
+  {
     // The Contacts drawer on ?contact= is the contact's page for now (backlog §2): keep the
     // documented path working by redirecting to it.
     path: "contacts/:contactId",
