@@ -103,6 +103,9 @@ defmodule Cadence.Configuration.Submission do
 
       {:error, {:checks_failed, _preview}} = error ->
         reopen_on_failure(set, error)
+
+      {:error, {:in_use, _uses}} = error ->
+        reopen_on_failure(set, error)
     end
   end
 
@@ -223,14 +226,31 @@ defmodule Cadence.Configuration.Submission do
   end
 
   defp clean(%{conflicts: [], errors: [], halted?: false}), do: :ok
-  defp clean(result), do: {:error, {:checks_failed, Preview.summarize(result)}}
+  defp clean(result), do: {:error, failure(Preview.summarize(result))}
+
+  # An op refused because what it archives is still in use (ux U82) answers with the uses, the
+  # same {:in_use, uses} as at stage, so the console words both moments alike.
+  defp failure(preview) do
+    case in_use(preview) do
+      nil -> {:checks_failed, preview}
+      uses -> {:in_use, uses}
+    end
+  end
+
+  defp in_use(%{checks: checks}) do
+    Enum.find_value(checks, fn check ->
+      Enum.find_value(check.items, fn item ->
+        Enum.find_value(Map.get(item, :errors, []), &Map.get(&1, :in_use))
+      end)
+    end)
+  end
 
   defp checks(organization_id, set, params) do
     ops = ChangeSetStore.staged_ops(set.change_set_id)
 
     case Preview.run(organization_id, set.mission_id, set.base_revision_number, ops) do
       {:ok, %{verdict: :no_go} = preview} ->
-        {:error, {:checks_failed, preview}}
+        {:error, failure(preview)}
 
       {:ok, %{verdict: :hold} = preview} ->
         cond do
@@ -354,11 +374,15 @@ defmodule Cadence.Configuration.Submission do
   end
 
   defp reopen?({:checks_failed, _}), do: true
+  defp reopen?({:in_use, _}), do: true
   defp reopen?(:activation_policy_changed), do: true
   defp reopen?(_reason), do: false
 
   defp failure_document({:checks_failed, preview}),
     do: Document.normalize(%{"reason" => "checks_failed", "checks" => preview.checks})
+
+  defp failure_document({:in_use, uses}),
+    do: Document.normalize(%{"reason" => "in_use", "uses" => uses})
 
   defp failure_document(reason), do: %{"reason" => to_string(reason)}
 

@@ -58,6 +58,24 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   def normalize(_action, _id, _document), do: {:error, [F.error("", "Enter the station details")]}
 
   @impl true
+  # Archiving: refused while anything still uses it (director 11-16, ux U82), at stage
+  # (stage_check/4) and again here, which re-runs at preview and apply. The uses come through the
+  # :config_users adapter (Cadence.Control.ConfigUsers), so comms needs no edge to contacts.
+  def validate(organization_id, mission_id, :delete, entity_id, _previous, nil) do
+    case uses(organization_id, mission_id, entity_id) do
+      nil ->
+        :ok
+
+      uses ->
+        {:error,
+         [
+           ""
+           |> F.error("This station is still in use, so it can't be archived.")
+           |> Map.put(:in_use, uses)
+         ]}
+    end
+  end
+
   def validate(organization_id, mission_id, _action, entity_id, _previous, %{"code" => code})
       when is_binary(code) do
     taken? =
@@ -84,6 +102,27 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
     do: [F.error("code", "Use 2–8 capital letters or digits, like SVB")]
 
   defp code_errors(_document), do: []
+
+  @impl true
+  def stage_check(organization_id, mission_id, :delete, entity_id, deleting) do
+    case uses(organization_id, mission_id, entity_id, deleting) do
+      nil -> :ok
+      uses -> {:error, {:in_use, uses}}
+    end
+  end
+
+  def stage_check(_organization_id, _mission_id, _action, _entity_id, _deleting), do: :ok
+
+  # nil when nothing uses it (or no adapter is configured).
+  defp uses(organization_id, mission_id, station_id, deleting \\ MapSet.new()) do
+    with users when users != nil <- Application.get_env(:cadence, :config_users),
+         uses = users.station_uses(organization_id, mission_id, station_id, except: deleting),
+         true <- users.in_use?(uses) do
+      uses
+    else
+      _free -> nil
+    end
+  end
 
   @impl true
   def write(organization_id, mission_id, :create, id, nil, proposed, _options) do

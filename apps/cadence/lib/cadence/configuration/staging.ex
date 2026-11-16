@@ -108,12 +108,16 @@ defmodule Cadence.Configuration.Staging do
     do: {:error, {:invalid_op, 0, [%{path: "summary", message: "Enter a short summary"}]}}
 
   defp prepare_all(organization_id, mission_id, ops) do
+    deleting = deleting(mission_id, ops)
+
     ops
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {op, index}, {:ok, acc} ->
-      case prepare(organization_id, mission_id, op) do
+      case prepare(organization_id, mission_id, op, deleting) do
         {:ok, prepared} -> {:cont, {:ok, [prepared | acc]}}
-        {:error, errors} -> {:halt, {:error, {:invalid_op, index, errors}}}
+        {:error, errors} when is_list(errors) -> {:halt, {:error, {:invalid_op, index, errors}}}
+        # A kind's own refusal with details (e.g. {:in_use, uses}, ux U82) passes through as is.
+        {:error, refusal} -> {:halt, {:error, refusal}}
       end
     end)
     |> case do
@@ -122,11 +126,11 @@ defmodule Cadence.Configuration.Staging do
     end
   end
 
-  defp prepare(organization_id, mission_id, op) do
+  defp prepare(organization_id, mission_id, op, deleting) do
     with {:ok, kind} <- kind(op),
          {:ok, action} <- action(op),
          {:ok, options} <- options(kind, action, Map.get(op, :options)),
-         {:ok, prepared} <- prepare(kind, action, organization_id, mission_id, op) do
+         {:ok, prepared} <- prepare(kind, action, organization_id, mission_id, op, deleting) do
       {:ok, put_options(prepared, options)}
     end
   end
@@ -148,7 +152,7 @@ defmodule Cadence.Configuration.Staging do
   defp put_options(prepared, options),
     do: %{prepared | payload: Map.put(prepared.payload, "options", options)}
 
-  defp prepare(kind, "create", organization_id, mission_id, op) do
+  defp prepare(kind, "create", organization_id, mission_id, op, _deleting) do
     entity_id = Map.get(op, :entity_id) || Ids.new(kind.id_prefix())
 
     with {:ok, document} <- kind.normalize(:create, entity_id, Document.normalize(op[:document])),
@@ -158,10 +162,11 @@ defmodule Cadence.Configuration.Staging do
     end
   end
 
-  defp prepare(kind, action, organization_id, mission_id, op) do
+  defp prepare(kind, action, organization_id, mission_id, op, deleting) do
     entity_id = Map.get(op, :entity_id)
 
-    with {:ok, current} <- current(kind, organization_id, mission_id, entity_id) do
+    with {:ok, current} <- current(kind, organization_id, mission_id, entity_id),
+         :ok <- stage_check(kind, organization_id, mission_id, action, entity_id, deleting) do
       prepare_existing(kind, action, entity_id, current, op)
     end
   end
@@ -227,6 +232,31 @@ defmodule Cadence.Configuration.Staging do
       nil -> {:error, [%{path: "entity_id", message: "This no longer exists"}]}
       document -> {:ok, Document.normalize(document)}
     end
+  end
+
+  # A kind can refuse an update or delete at stage, before anything is staged
+  # (ConfigKind.stage_check/4): e.g. archiving a transport something still uses.
+  defp stage_check(kind, organization_id, mission_id, action, entity_id, deleting) do
+    if function_exported?(kind, :stage_check, 5),
+      do: kind.stage_check(organization_id, mission_id, action_atom(action), entity_id, deleting),
+      else: :ok
+  end
+
+  # What's being deleted beside an op: this stage's deletes and those already staged in the open
+  # set, as {kind, entity_id}. A delete whose only users are going too isn't refused at stage
+  # (e.g. a station with its transports); apply checks again against live state, op by op.
+  defp deleting(mission_id, ops) do
+    staged =
+      case ChangeSetStore.active(mission_id) do
+        nil -> []
+        set -> ChangeSetStore.staged_ops(set.change_set_id)
+      end
+
+    for op <- ops ++ staged,
+        to_string(Map.get(op, :action)) == "delete",
+        is_binary(Map.get(op, :entity_id)),
+        into: MapSet.new(),
+        do: {to_string(op.kind), op.entity_id}
   end
 
   defp kind(%{kind: kind}) do

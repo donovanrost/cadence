@@ -29,6 +29,7 @@ defmodule Cadence.Management.ConfigKinds.Transport do
     TransportStore
   }
 
+  alias Cadence.Control.ConfigUsers
   alias Cadence.Management.Transports
   alias Cadence.Platform.ConfigFields, as: F
 
@@ -78,7 +79,10 @@ defmodule Cadence.Management.ConfigKinds.Transport do
     do: {:error, [F.error("", "Enter the transport details")]}
 
   @impl true
-  def validate(_organization_id, _mission_id, :delete, _entity_id, _previous, nil), do: :ok
+  # Archiving: refused while anything still uses it (director 11-16, ux U82), at stage
+  # (stage_check/4) and again here, which re-runs at preview and apply.
+  def validate(organization_id, mission_id, :delete, entity_id, _previous, nil),
+    do: in_use(ConfigUsers.transport_uses(organization_id, mission_id, entity_id))
 
   def validate(
         org,
@@ -187,6 +191,26 @@ defmodule Cadence.Management.ConfigKinds.Transport do
       {:ok, _transport} -> {:ok, nil, []}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  @impl true
+  def stage_check(organization_id, mission_id, :delete, entity_id, deleting) do
+    uses = ConfigUsers.transport_uses(organization_id, mission_id, entity_id, except: deleting)
+    if ConfigUsers.in_use?(uses), do: {:error, {:in_use, uses}}, else: :ok
+  end
+
+  def stage_check(_organization_id, _mission_id, _action, _entity_id, _deleting), do: :ok
+
+  defp in_use(uses) do
+    if ConfigUsers.in_use?(uses),
+      do:
+        {:error,
+         [
+           ""
+           |> F.error("This transport is still in use, so it can't be archived.")
+           |> Map.put(:in_use, uses)
+         ]},
+      else: :ok
   end
 
   @impl true

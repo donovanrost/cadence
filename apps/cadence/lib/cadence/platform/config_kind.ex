@@ -123,7 +123,21 @@ defmodule Cadence.Platform.ConfigKind do
   """
   @callback create_entity_id(document()) :: String.t()
 
-  @optional_callbacks effect: 7,
+  @doc """
+  Refuses an update or delete at STAGE (nothing staged) with a reason the API carries as is, e.g.
+  `{:in_use, uses}`. `deleting` is what this stage and the open set delete beside it, as
+  `{kind, entity_id}`. The same rule belongs in validate/6 too, which re-runs at preview and apply.
+  """
+  @callback stage_check(
+              String.t(),
+              String.t(),
+              :update | :delete,
+              String.t(),
+              deleting :: MapSet.t({String.t(), String.t()})
+            ) :: :ok | {:error, term()}
+
+  @optional_callbacks stage_check: 5,
+                      effect: 7,
                       normalize_options: 2,
                       finalize: 3,
                       holds: 3,

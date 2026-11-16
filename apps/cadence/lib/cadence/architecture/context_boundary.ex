@@ -71,6 +71,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/semantic_commit_retirement.ex" => :composition,
     "lib/cadence/control/spacecraft_traffic.ex" => :composition,
     "lib/cadence/control/scid_sharing.ex" => :composition,
+    "lib/cadence/control/config_users.ex" => :composition,
     "lib/cadence/control/uplink_readiness.ex" => :composition,
     "lib/cadence/control/uplink_readiness/attention.ex" => :composition,
     "lib/cadence/control/uplink_readiness/groups.ex" => :composition,

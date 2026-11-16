@@ -69,6 +69,8 @@ config :cadence,
   # Which other missions of the organization fly a SCID through a shared provider account, for
   # the same-SCID HOLD (ux U81 §1).
   scid_sharing: Cadence.Control.ScidSharing,
+  # What still uses a transport or ground station, for the archive refusal (ux U82).
+  config_users: Cadence.Control.ConfigUsers,
   # The mission's catalog points for the derived_telemetry kind's checks (#77), configured so
   # governance has no compile-time edge to projections.
   derived_point_catalog: Cadence.Ops.PointCatalog,

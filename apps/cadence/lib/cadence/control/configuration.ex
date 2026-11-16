@@ -278,6 +278,7 @@ defmodule Cadence.Control.Configuration do
   end
 
   defp reopened?({:checks_failed, _}), do: true
+  defp reopened?({:in_use, _}), do: true
   defp reopened?(:activation_policy_changed), do: true
   defp reopened?(_reason), do: false
 
