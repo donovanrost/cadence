@@ -403,6 +403,7 @@ defmodule Cadence.Commanding do
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
              is_map(released_by) and is_list(opts) do
     attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
+    :ok = expire_lane(organization_id, mission_id, queue_lane_key, attempted_at)
 
     with :ok <-
            RequestQueueStore.ensure_lane_not_in_flight(
@@ -825,6 +826,16 @@ defmodule Cadence.Commanding do
 
     # Also on the reconcile: the group timeline's safety net for outcomes no hook saw (#51).
     _written = Groups.Timeline.settle_open()
+    :ok
+  end
+
+  # Expired members end `expired` at dispatch instead of waiting for the sweep.
+  defp expire_lane(organization_id, mission_id, queue_lane_key, now) do
+    case Cancellation.expire_lane(organization_id, mission_id, queue_lane_key, now) do
+      [] -> :ok
+      _canceled -> ReadUpdates.publish(:commanding_changed, organization_id, mission_id)
+    end
+
     :ok
   end
 

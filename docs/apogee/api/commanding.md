@@ -423,8 +423,10 @@ The UI writes the sentences (title + sentence per key).
 
 ### Not yet
 
-Nothing outstanding from the design. Expired unstarted work is canceled by a sweep on every
-dispatcher reconcile (about a minute), with `end_reason: expired`. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
+Nothing outstanding from the design. Work past its `expires_at` is never released: the release
+claim refuses it under the request and lane locks. It ends `end_reason: expired` as soon as
+release reaches it (the lane's dispatch, or a named-contact release, closes its expired members
+first), and a sweep on every dispatcher reconcile (about a minute) cleans up the rest. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
 (realtime.md).
 
 ## `GET /api/console/v1/missions/:mission_id/command-requests/:command_request_id/encoding` (M24, owner: api)

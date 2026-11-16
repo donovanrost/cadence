@@ -118,6 +118,50 @@ defmodule Cadence.Commanding.Cancellation do
     end)
   end
 
+  @doc """
+  Ends one lane's expired, unstarted entries as `expired`, so the dispatcher closes them
+  before it picks the lane's head: a member past `expires_at` ends visibly at dispatch,
+  not on the next sweep. The release claim refuses expired work on its own (under the
+  request and lane locks); this only makes the outcome immediate. Returns the canceled
+  request ids. Owns its transaction.
+  """
+  @spec expire_lane(binary(), binary(), binary(), DateTime.t()) :: [binary()]
+  def expire_lane(org, mission, queue_lane_key, now \\ DateTime.utc_now()),
+    do: expire_queued(org, mission, now, dynamic([q], q.queue_lane_key == ^queue_lane_key))
+
+  @doc "As `expire_lane/4`, for the queued entries of `request_ids` (a named-contact release)."
+  @spec expire_requests(binary(), binary(), [binary()], DateTime.t()) :: [binary()]
+  def expire_requests(org, mission, request_ids, now \\ DateTime.utc_now()),
+    do: expire_queued(org, mission, now, dynamic([q], q.command_request_id in ^request_ids))
+
+  defp expire_queued(org, mission, now, scope) do
+    ids =
+      from(q in CommandQueueEntryRow,
+        join: r in CommandRequestRow,
+        on:
+          r.organization_id == q.organization_id and r.mission_id == q.mission_id and
+            r.command_request_id == q.command_request_id,
+        where:
+          q.organization_id == ^org and q.mission_id == ^mission and
+            q.lifecycle_state == "pending" and (q.expires_at < ^now or r.expires_at < ^now),
+        where: ^scope,
+        select: q.command_request_id,
+        limit: @sweep_limit
+      )
+      |> Repo.all()
+
+    expire_ids(org, mission, ids)
+  end
+
+  defp expire_ids(_org, _mission, []), do: []
+
+  defp expire_ids(org, mission, ids) do
+    {:ok, %{canceled: canceled}} =
+      Repo.transaction(fn -> cancel(org, mission, ids, "expired", @system_actor) end)
+
+    canceled
+  end
+
   @doc "Cancels the request behind a pending queue entry whose basis no longer resolves."
   @spec fail_closed(binary(), binary(), binary(), binary()) :: :ok | {:error, :not_pending}
   def fail_closed(org, mission, command_request_id, reason) do

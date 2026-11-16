@@ -20,7 +20,14 @@ defmodule Cadence.Control.Commanding.GroupRelease do
 
   alias Cadence.Accounts.User
   alias Cadence.Auth.Scope
-  alias Cadence.Commanding.{CommandRequest, ReleaseTargetGuard, ReleaseTargetSelection}
+
+  alias Cadence.Commanding.{
+    Cancellation,
+    CommandRequest,
+    ReleaseTargetGuard,
+    ReleaseTargetSelection
+  }
+
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.Contacts
   alias Cadence.Contacts.RealizedContact
@@ -67,7 +74,7 @@ defmodule Cadence.Control.Commanding.GroupRelease do
                realized_contact_id,
                at
              ),
-           {:ok, members} <- releasable_members(org, mission_id, group_id, contact) do
+           {:ok, members} <- releasable_members(org, mission_id, group_id, contact, at) do
         result = release_members(org, mission_id, members, contact, actor, opts)
         :ok = record(org, mission_id, group_id, contact, actor, result)
         ScopedReadUpdates.publish(:commanding_changed, org, mission_id)
@@ -162,11 +169,25 @@ defmodule Cadence.Control.Commanding.GroupRelease do
   end
 
   # This contact's spacecraft's members still queued, in stack order, with their queue entries.
-  defp releasable_members(org, mission, group_id, %RealizedContact{} = contact) do
+  defp releasable_members(org, mission, group_id, %RealizedContact{} = contact, at) do
     own =
       Enum.filter(GroupStore.members(org, mission, group_id), &served?(org, mission, &1, contact))
 
-    queued = Enum.filter(own, &(&1.lifecycle_state == :queued))
+    # Members past their expiry end `expired` now; the claim would refuse them anyway.
+    expired =
+      own
+      |> Enum.filter(&(&1.lifecycle_state == :queued))
+      |> Enum.map(& &1.command_request_id)
+      |> then(&Cancellation.expire_requests(org, mission, &1, at))
+      |> MapSet.new()
+
+    if MapSet.size(expired) > 0, do: ScopedReadUpdates.publish(:commanding_changed, org, mission)
+
+    queued =
+      Enum.filter(
+        own,
+        &(&1.lifecycle_state == :queued and not MapSet.member?(expired, &1.command_request_id))
+      )
 
     entries =
       GroupStore.pending_entry_ids(org, mission, Enum.map(queued, & &1.command_request_id))
