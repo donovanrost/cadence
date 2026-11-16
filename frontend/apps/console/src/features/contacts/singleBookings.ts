@@ -117,14 +117,20 @@ export function reserveOffer(missionId: MissionId, token: string, note: string) 
 
 const clock = (iso: string) => formatHourMinute(new Date(iso)).replace(/Z$/, "");
 /** "SVA Svalbard · Northlight · 03:10Z–03:19Z" pieces (§4). */
-export const stationWords = (o: Offer) =>
-  [o.station.code, o.station.name].filter(Boolean).join(" ") || "A station";
+/** ux U69 A16a: the station, then the antenna's label as given ('Svalbard · Antenna SG2'). */
+export const stationWords = (o: Offer) => {
+  const station = [o.station.code, o.station.name].filter(Boolean).join(" ") || "A station";
+  return o.antenna?.label ? `${station} · ${o.antenna.label}` : station;
+};
 export const providerWords = (o: Offer) => o.provider.name ?? "the provider";
 export const windowWords = (o: Offer) => `${clock(o.starts_at)}Z–${clock(o.ends_at)}Z`;
 
 /** Why an offer can't be chosen, or null: it overlaps a booked pass, or its token expired. */
 export function offerBlocked(o: Offer, now: Date): string | null {
   if (Date.parse(o.expires_at) <= now.getTime()) return "Offer expired. Search again.";
+  // ux U69 A16a: the provider's own word; booking it would only be refused.
+  if (o.availability === "unavailable")
+    return `${o.provider.name ?? "The provider"} reports this window as unavailable.`;
   const ov = o.overlaps;
   if (ov)
     return `Overlaps ${ov.spacecraft.name}'s ${ov.station_code ? `${ov.station_code} ` : ""}${formatHourMinute(new Date(ov.starts_at))} pass.`;

@@ -9,6 +9,7 @@ import {
   offerBlocked,
   offPlanLine,
   outcomeWords,
+  stationWords,
   reserveReader,
   searchReader,
   type Offer,
@@ -186,5 +187,22 @@ describe("L15 replies as api 1ef9e85ef sends them", () => {
       pass: null,
     });
     expect(r.ok && r.value.reservation_id).toBe("res-9");
+  });
+});
+
+describe("offer row (ux U69 A16a)", () => {
+  const now = new Date("2026-11-13T03:05:00Z");
+  it("names the antenna after the station, as given", () => {
+    expect(stationWords(offer("a"))).toBe("SVA Svalbard");
+    expect(stationWords(offer("a", { antenna: { id: "sg2", label: "Antenna SG2" } }))).toBe(
+      "SVA Svalbard · Antenna SG2",
+    );
+    expect(stationWords(offer("a", { antenna: { id: "sg2", label: null } }))).toBe("SVA Svalbard");
+  });
+  it("blocks an unavailable window with the provider's word", () => {
+    expect(offerBlocked(offer("a", { availability: "unavailable" }), now)).toBe(
+      "Northlight reports this window as unavailable.",
+    );
+    expect(offerBlocked(offer("a", { availability: "limited" }), now)).toBeNull();
   });
 });

@@ -205,6 +205,11 @@ const outcome = computed(() =>
               formatDuration((Date.parse(o.ends_at) - Date.parse(o.starts_at)) / 1000)
             }}</span>
             <ApTag v-if="o.uplink_capable" state="neutral" label="Up" />
+            <!-- ux U69 A16a: the plan's tag; 'limited' says so, 'available' says nothing. -->
+            <ApTag v-if="o.synthetic" state="stale" label="Synthetic" />
+            <span v-if="o.availability === 'limited'" class="text-sm text-caution-text"
+              >Limited availability</span
+            >
             <span
               class="ml-auto font-mono text-xs uppercase"
               :class="expiryWords(o, now).soon ? 'text-caution-text' : 'text-text-4'"
