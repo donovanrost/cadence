@@ -313,7 +313,14 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       reservation_id: Map.get(entry, :provider_reservation_id),
       booked: is_binary(Map.get(entry, :provider_reservation_id))
     }
+    |> Map.merge(resolution_fields(entry))
   end
+
+  # U61 (domain's plan_coverage): the words its resolution lines need.
+  defp resolution_fields(%{source: "plan_coverage"} = entry),
+    do: Map.take(entry, [:day, :from_state, :plan_revision, :booking])
+
+  defp resolution_fields(_entry), do: %{}
 
   # A source may name its resolver as a bare kind ("system", listener_refusal).
   defp actor_map(%{} = by), do: by

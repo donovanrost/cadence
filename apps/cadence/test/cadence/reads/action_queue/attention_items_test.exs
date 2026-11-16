@@ -228,6 +228,40 @@ defmodule Cadence.Reads.ActionQueue.AttentionItemsTest do
     assert hd(items).due_at == at(600)
   end
 
+  test "U61: a plan_coverage resolution carries the words its line needs; others don't" do
+    coverage = %{
+      id: "plan_coverage:2026-11-16",
+      source: "plan_coverage",
+      resolved_by: %{"kind" => "system"},
+      action: "day_ended",
+      resolved_at: @now,
+      day: ~D[2026-11-16],
+      from_state: "interrupted",
+      plan_revision: 41,
+      booking: %{reserved: 12, total: 41}
+    }
+
+    other = %{
+      id: "x",
+      source: "contact_start",
+      resolved_by: %{"kind" => "system"},
+      action: "started",
+      resolved_at: @now
+    }
+
+    %{resolved: [line, plain]} = build([], [coverage, other])
+
+    assert %{
+             action: "day_ended",
+             day: ~D[2026-11-16],
+             from_state: "interrupted",
+             plan_revision: 41,
+             booking: %{reserved: 12, total: 41}
+           } = line
+
+    refute Map.has_key?(plain, :from_state)
+  end
+
   test "the console reads one provider-change state: expired when the pass ended undecided" do
     pending = %{id: "c", state: "pending_approval", expired: false}
 

@@ -31,7 +31,7 @@ defmodule CadenceWeb.Console.ContactPlanDaysController do
         booked_count: nil,
         unconfirmed_count: nil,
         requested_count: nil,
-        first_window_at: nil
+        first_window_at: Map.get(day, :first_window_at)
       })
 
   defp day(%{plan: plan} = day, org, mission) do
@@ -47,8 +47,8 @@ defmodule CadenceWeb.Console.ContactPlanDaysController do
       booked_count: execution[:confirmed],
       unconfirmed_count: execution[:uncertain],
       requested_count: execution[:requested],
-      # U61's plan_coverage rule, filled when that source lands (fe-setup: null until then).
-      first_window_at: nil
+      # U61: the day demand's first window (domain's plan_coverage rule), null until it lands.
+      first_window_at: Map.get(day, :first_window_at)
     })
   end
 
