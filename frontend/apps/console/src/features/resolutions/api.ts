@@ -2,9 +2,10 @@ import type { MissionId } from "@/api/index.ts";
 import {
   actor,
   decoders as d,
+  detailsOf,
+  orNull,
   fieldErrors,
   isError,
-  recordOf,
   request,
   type ApiError,
   type ApiResult,
@@ -79,7 +80,7 @@ export function failureText(e: ApiError, provider: string): ResolveFailure {
     };
   if (isError(e, "booking_already_resolved"))
     return {
-      text: `${resolverName("details" in e ? e.details : null) ?? "Someone"} already resolved this.`,
+      text: `${resolverName(e) ?? "Someone"} already resolved this.`,
       fields: {},
       refresh: true,
     };
@@ -110,7 +111,8 @@ export function failureText(e: ApiError, provider: string): ResolveFailure {
   };
 }
 
-function resolverName(details: unknown): string | null {
-  const name = recordOf(recordOf(details)?.["actor"])?.["name"];
-  return typeof name === "string" && name ? name : null;
+/** booking_already_resolved names who resolved it: details.actor, the shared actor (§12 A5). */
+const alreadyResolved = d.object({ actor: orNull(actor) });
+function resolverName(e: ApiError): string | null {
+  return detailsOf(e, alreadyResolved)?.actor?.name || null;
 }

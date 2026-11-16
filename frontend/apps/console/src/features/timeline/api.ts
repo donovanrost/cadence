@@ -1,7 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import {
-  scid as scidReader,
   decoders as d,
+  spacecraftRef,
   request,
   requestPage,
   type ApiResult,
@@ -75,9 +75,7 @@ const event = d.object({
    * api (11-16): name and scid are null for a craft outside the name context (an unknown or
    * foreign id); the row shows no craft name then, never the id. The id drives the filter.
    */
-  spacecraft: d.nullable(
-    d.object({ id: d.token, name: d.nullable(d.string), scid: d.nullable(scidReader) }),
-  ),
+  spacecraft: d.nullable(spacecraftRef),
   refs: d.object({
     alarm_id: d.nullable(d.token),
     point_id: d.nullable(d.token),
