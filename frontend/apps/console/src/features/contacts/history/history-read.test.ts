@@ -46,7 +46,10 @@ describe("History's week read (U78 truncation)", () => {
       const from = new URL(input, "http://x").searchParams.get("from") ?? "";
       const day = from.slice(0, 10);
       const truncated = urls.length === 1 || day === "2026-11-12";
-      const passes = urls.length === 1 ? [] : [pass(`p-${day}`, `${day}T18:40:00.000Z`)];
+      const passes =
+        urls.length === 1
+          ? []
+          : [pass(`p2-${day}`, `${day}T18:40:00.000Z`), pass(`p1-${day}`, `${day}T05:12:00.000Z`)];
       return Promise.resolve(
         new Response(JSON.stringify({ data: { from, to: from, truncated, passes } })),
       );
@@ -60,11 +63,12 @@ describe("History's week read (U78 truncation)", () => {
     expect(urls).toHaveLength(8);
     expect(urls[0]).toContain("spacecraft_id=sc-312");
     expect(urls[0]).toContain("states=completed");
-    expect(urls[0]).not.toContain("include=");
-    expect(r.value.passes).toHaveLength(7);
+    expect(urls[0]).toContain("order=desc");
+    expect(urls[0]).toContain("include=hand_started");
+    expect(r.value.passes).toHaveLength(14);
     expect(r.value.truncated).toBe(true);
     expect(r.value.shortDays).toEqual([
-      { day: "2026-11-12", through: Date.parse("2026-11-12T18:40:00Z") },
+      { day: "2026-11-12", back: Date.parse("2026-11-12T05:12:00Z") },
     ]);
   });
 
@@ -147,11 +151,11 @@ describe("History words (U78)", () => {
   });
 
   it("a cut day's callout and row", () => {
-    const d = { day: "2026-11-12", through: Date.parse("2026-11-12T18:40:00Z") };
+    const d = { day: "2026-11-12", back: Date.parse("2026-11-12T05:12:00Z") };
     expect(shortDayCallout(d)).toBe(
-      "11-12 has more than 500 passes, and only the earliest 500 are shown, through 18:40Z. Pick a spacecraft to see the rest.",
+      "11-12 has more than 500 passes, and only the newest 500 are shown, back to 05:12Z. Pick a spacecraft or state to see the rest.",
     );
-    expect(shortDayRow(d)).toBe("Passes on 11-12 after 18:40Z aren't shown.");
+    expect(shortDayRow(d)).toBe("Passes on 11-12 before 05:12Z aren't shown.");
   });
 
   it("a hand-started contact reads its real state word", () => {

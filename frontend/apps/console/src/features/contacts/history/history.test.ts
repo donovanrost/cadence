@@ -45,6 +45,7 @@ describe("History weeks (U78)", () => {
     expect(apiStates([])).toBeNull();
     const ended = parseHistoryQuery({ state: "ended" }, NOW).states;
     expect(apiStates(ended, false)).toEqual(["completed"]);
+    expect(apiStates(ended)).toEqual(["completed", "stopped"]);
     expect(apiStates(ended, true)).toEqual(["completed", "stopped"]);
   });
 });
@@ -85,13 +86,12 @@ describe("History rows (U78)", () => {
     expect(ledgerRows([swept], span, []).map((r) => r.id)).toEqual(["rc-9"]);
   });
 
-  it("puts a cut day's row above that day's newest shown row", () => {
+  it("puts a cut day's row below that day's oldest shown row (the read keeps the newest 500)", () => {
     const shown = ledgerRows(rows, span, []);
-    const through = Date.parse("2026-11-13T05:00:00Z");
     const keys = ledgerItems(shown, [
-      { day: "2026-11-13", through },
-      { day: "2026-11-10", through: Date.parse("2026-11-10T00:00:00Z") },
+      { day: "2026-11-13", back: Date.parse("2026-11-13T01:00:00Z") },
+      { day: "2026-11-10", back: Date.parse("2026-11-11T00:00:00Z") },
     ]).map((i) => i.key);
-    expect(keys).toEqual(["b", "gap-2026-11-13", "rc-1", "c", "a", "gap-2026-11-10"]);
+    expect(keys).toEqual(["b", "rc-1", "c", "gap-2026-11-13", "a", "gap-2026-11-10"]);
   });
 });

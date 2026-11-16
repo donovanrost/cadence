@@ -24,9 +24,9 @@ export function mondayOf(t: number): number {
 
 /**
  * U78: History lists hand-started contacts (`include=hand_started`, api's opt-in `booked: false`
- * rows) once api ships them; until then it asks for booked passes only and says so in a foot line.
+ * rows; live 11-16 08:16Z). Off, it asks for booked passes only and says so in a foot line.
  */
-export const HAND_STARTED_LISTED = false;
+export const HAND_STARTED_LISTED = true;
 
 /**
  * The State filter (U78): the console's contact-state words, never raw lifecycles, each with the

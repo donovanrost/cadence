@@ -90,14 +90,14 @@ export function emptyText(span: WeekSpan, now: number, n: HistoryNames): string 
     : `No passes between ${md(span.from)} and ${md(span.to - DAY_MS)}.`;
 }
 
-/** The per-day callout (U78 a44be588a); spacecraft narrows in SQL (api), station and state don't. */
+/** The per-day callout (U78); spacecraft and state narrow in SQL before the cut, station doesn't (api). */
 export function shortDayCallout(d: ShortDay): string {
-  return `${md(Date.parse(`${d.day}T00:00:00Z`))} has more than 500 passes, and only the earliest 500 are shown, through ${hm(d.through)}Z. Pick a spacecraft to see the rest.`;
+  return `${md(Date.parse(`${d.day}T00:00:00Z`))} has more than 500 passes, and only the newest 500 are shown, back to ${hm(d.back)}Z. Pick a spacecraft or state to see the rest.`;
 }
 
 /** The text-3 row where the missing passes belong. */
 export function shortDayRow(d: ShortDay): string {
-  return `Passes on ${md(Date.parse(`${d.day}T00:00:00Z`))} after ${hm(d.through)}Z aren't shown.`;
+  return `Passes on ${md(Date.parse(`${d.day}T00:00:00Z`))} before ${hm(d.back)}Z aren't shown.`;
 }
 
 /** 'Fairbanks' (the station's name, else its ref); the code shows beside it in mono. */

@@ -7,7 +7,6 @@ import { isHandStarted } from "../handStarted.ts";
 import { fetchWeekLedger, type ShortDay } from "./api.ts";
 import {
   apiStates,
-  DAY_MS,
   isoDay,
   ledgerRows,
   mondayOf,
@@ -22,8 +21,8 @@ export type LedgerItem =
   | Readonly<{ kind: "gap"; key: string; day: ShortDay }>;
 
 /**
- * Newest first, each cut day's gap row sits above that day's newest shown row (its missing passes
- * started after `through`, so they'd be newer); a cut day with no row shown sits where it would be.
+ * Newest first, each cut day's gap row sits below that day's oldest shown row (the read keeps the
+ * newest 500, so its missing passes are older); a cut day with no row shown sits where it would be.
  */
 export function ledgerItems(
   rows: readonly HistoryRow[],
@@ -32,8 +31,8 @@ export function ledgerItems(
   const items: LedgerItem[] = rows.map((p) => ({ kind: "pass", key: p.id, pass: p }));
   const days = [...shortDays].sort((a, b) => (a.day < b.day ? 1 : -1));
   for (const d of days) {
-    const end = Date.parse(`${d.day}T00:00:00Z`) + DAY_MS;
-    const at = items.findIndex((i) => i.kind === "pass" && Date.parse(i.pass.starts_at) < end);
+    const start = Date.parse(`${d.day}T00:00:00Z`);
+    const at = items.findIndex((i) => i.kind === "pass" && Date.parse(i.pass.starts_at) < start);
     const gap: LedgerItem = { kind: "gap", key: `gap-${d.day}`, day: d };
     items.splice(at === -1 ? items.length : at, 0, gap);
   }
