@@ -95,3 +95,17 @@ The ops frame (`host/src/ops-workspace/features/frame/*`) stays: it wraps every 
   dashboards' first frontend commit, with a test).
 - Gate for qa's dry: R1 and the A1/A2 armed run PASS first.
 - Host vue-tsc + host vitest in the batch.
+
+## Domain follow-up batch (after C1 is live; domain's caller map 08:39Z on 0f0439862)
+- **Goes:** `reads/command_review`; `reads/command_history` + `command_history/{query,projection,evidence_query}`
+  (the console uses `reads/command_request_history*`); `reads/ops_workspace/timeline`;
+  `control/commanding/{queue,workspace}_submission`; `management/commanding/{stage_catalog,stage_drafts,stage_input,
+  stage_item_authoring,stage_submission,stage_access,workspace_catalog,workspace_drafts}`;
+  `applications/ops_console/actions/plan_review_workflow`; `plane_boundary.ex:141, 495-498`; their tests.
+- **Also goes, because ruling 1 deletes the surfaces:** `reads/ops_workspace/landing`, `reads/command_monitor`,
+  `reads/application_surfaces/planning/{contact_plan_show,fleet_directory,fleet_run,fleet_start}`.
+- **Already orphaned** (may ride along): `applications/ops_console/actions/schedule_cancellations` + its boundary entry.
+- **Stays:** the stage REST API's stores (`command_stage_controller`, `staged_command_item_controller`: removing that
+  API is a separate product call); `management/commanding/{request_*,review_*,authoring_*,argument_document,
+  spacecraft_catalogs,approved_command,workspace_settings}`; `actions/{contact_workflow,native_planning_input}` and
+  `Planning.{ContactRecord,ContactSchedule,ContactDetail}` (L14); `actions/fleet_planning` (grants).
