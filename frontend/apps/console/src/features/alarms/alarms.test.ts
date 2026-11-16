@@ -172,3 +172,14 @@ describe("alarm grouping and the empty state (OpsLists §Alarms)", () => {
     expect(lastClearedLine([], now)).toBeNull();
   });
 });
+
+describe("a full episodes read is never cut silently (parity D3)", () => {
+  it("says how many on the active list, else that the read is full", async () => {
+    const { episodesCapNote } = await import("./list.ts");
+    expect(episodesCapNote(150, 150)).toBeNull();
+    expect(episodesCapNote(200, 342)).toBe(
+      "Showing 200 of 342 active alarms. Filter by point to see the rest.",
+    );
+    expect(episodesCapNote(200, null)).toBe("Showing 200 alarms, the most one read returns.");
+  });
+});

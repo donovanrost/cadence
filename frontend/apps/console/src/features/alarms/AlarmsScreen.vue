@@ -25,6 +25,7 @@ import {
   lastClearedLine,
   tabCounts,
   type AlarmTab,
+  episodesCapNote,
 } from "./list.ts";
 import { useActiveEpisodes, useClearedEpisodes } from "./useAlarms.ts";
 
@@ -161,6 +162,22 @@ const empty = computed(() =>
             <template v-else>
               <AlarmTable class="max-md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
               <AlarmRowList class="md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
+              <p
+                v-if="
+                  episodesCapNote(
+                    value.episodes.length,
+                    tab === 'new' ? value.summary.active : null,
+                  )
+                "
+                class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
+              >
+                {{
+                  episodesCapNote(
+                    value.episodes.length,
+                    tab === "new" ? value.summary.active : null,
+                  )
+                }}
+              </p>
             </template>
           </template>
         </ApRemote>

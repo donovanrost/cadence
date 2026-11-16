@@ -37,6 +37,7 @@ import {
   scopeValue,
   timelineScope,
   withAlertingData,
+  eventsCapNote,
 } from "./model.ts";
 
 /** Timeline (OpsLists §Timeline): fleet-wide events, newest first, with a density strip. */
@@ -239,6 +240,12 @@ const short = (iso: string) => {
                 {{ held.pending.value }} new {{ held.pending.value === 1 ? "event" : "events" }} ↑
               </button>
               <EventLog :events="held.shown.value ?? shownEvents ?? value.events" />
+              <p
+                v-if="eventsCapNote(value.events.length)"
+                class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
+              >
+                {{ eventsCapNote(value.events.length) }}
+              </p>
             </template>
           </template>
         </ApRemote>

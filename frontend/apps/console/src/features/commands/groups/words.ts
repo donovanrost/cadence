@@ -59,6 +59,8 @@ export function memberStageWord(
   // L22 / U40: nothing is sent to an archived spacecraft.
   if (stage === "canceled" && endReason === "spacecraft_archived")
     return `Not released: ${name ?? "the spacecraft"} is archived`;
+  // Its release window passed before it went (ux: never 'Canceled', which says someone did it).
+  if (stage === "canceled" && endReason === "expired") return "Expired";
   if (stage === "rejected" && group === "sent_back") return "Sent back";
   if (stage === "rejected" && group === "rejected") return "NO-GO";
   return STAGE_WORDS[stage];

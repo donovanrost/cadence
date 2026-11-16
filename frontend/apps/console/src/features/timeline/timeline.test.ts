@@ -263,3 +263,13 @@ describe("E1 brush (OpsLists §Timeline)", () => {
     expect(brushRange(w, 0.5, 0.505)).toBeNull();
   });
 });
+
+describe("a full events read is never cut silently (parity D2)", () => {
+  it("says so at the read's limit", async () => {
+    const { eventsCapNote } = await import("./model.ts");
+    expect(eventsCapNote(499)).toBeNull();
+    expect(eventsCapNote(500)).toBe(
+      "Showing 500 events, the most one read returns. Narrow the window to see them all.",
+    );
+  });
+});

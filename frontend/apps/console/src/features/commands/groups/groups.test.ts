@@ -538,3 +538,11 @@ describe("B2 Now column and Current + (api, per-target values)", () => {
     });
   });
 });
+
+describe("a member whose release window passed (parity D4)", () => {
+  it("reads 'Expired', never 'Canceled'", async () => {
+    const { memberStageWord } = await import("./words.ts");
+    expect(memberStageWord("canceled", "queued", "expired")).toBe("Expired");
+    expect(memberStageWord("canceled", "queued", null)).toBe("Canceled");
+  });
+});
