@@ -13,21 +13,16 @@ defmodule Cadence.Control.ConfigUsers do
     station is at its transport's station.
   - profile_routes: the latest version of each profile whose rules name it (a station entry
     without a transport means that station's transport).
-  - booked_passes: reservations still ahead (requesting, pending, confirmed, unknown).
+  - booked_passes: reservations still booked ahead (ReservationActivity.booked_ahead/3).
   - listening_now: open contacts (defined, active) on it.
   """
 
-  import Ecto.Query
-
   alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, StationRefs, TransportStore}
-  alias Cadence.Contacts.OpenContacts
-  alias Cadence.Control.Contacts.Store.ProviderReservationRow
-  alias Cadence.Repo
+  alias Cadence.Contacts.{OpenContacts, ReservationActivity}
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
   @listed 3
-  @booked ~w(requesting pending confirmed unknown)
 
   @doc "`except:` uses being deleted beside it, as `{kind, entity_id}` (Staging's `deleting`)."
   @spec transport_uses(binary(), binary(), binary(), keyword()) :: map()
@@ -159,16 +154,9 @@ defmodule Cadence.Control.ConfigUsers do
            entry["ground_station_id"] == station)
 
   defp booked(org, mission, uses?) do
-    now = DateTime.utc_now()
-
     reservations =
-      from(row in ProviderReservationRow,
-        where:
-          row.organization_id == ^org and row.mission_id == ^mission and
-            row.lifecycle_state in ^@booked and row.starts_at > ^now
-      )
-      |> Repo.all()
-      |> Enum.map(&ProviderReservationRow.to_domain/1)
+      org
+      |> ReservationActivity.booked_ahead(mission, DateTime.utc_now())
       |> Enum.filter(uses?)
 
     %{

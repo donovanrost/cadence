@@ -29,7 +29,6 @@ defmodule Cadence.Management.ConfigKinds.Transport do
     TransportStore
   }
 
-  alias Cadence.Control.ConfigUsers
   alias Cadence.Management.Transports
   alias Cadence.Platform.ConfigFields, as: F
 
@@ -85,7 +84,7 @@ defmodule Cadence.Management.ConfigKinds.Transport do
     do:
       in_use(
         entity(entity_id, previous),
-        ConfigUsers.transport_uses(organization_id, mission_id, entity_id)
+        uses(organization_id, mission_id, entity_id, [])
       )
 
   def validate(
@@ -199,9 +198,9 @@ defmodule Cadence.Management.ConfigKinds.Transport do
 
   @impl true
   def stage_check(organization_id, mission_id, :delete, entity_id, deleting) do
-    uses = ConfigUsers.transport_uses(organization_id, mission_id, entity_id, except: deleting)
+    uses = uses(organization_id, mission_id, entity_id, except: deleting)
 
-    if ConfigUsers.in_use?(uses),
+    if in_use?(uses),
       do:
         {:error, {:in_use, %{entity: entity(organization_id, mission_id, entity_id), uses: uses}}},
       else: :ok
@@ -211,7 +210,7 @@ defmodule Cadence.Management.ConfigKinds.Transport do
 
   # The refusal carries what was archived and what uses it, as {:in_use, %{entity, uses}} (api).
   defp in_use(entity, uses) do
-    if ConfigUsers.in_use?(uses),
+    if in_use?(uses),
       do:
         {:error,
          [
@@ -221,6 +220,17 @@ defmodule Cadence.Management.ConfigKinds.Transport do
          ]},
       else: :ok
   end
+
+  # Through the :config_users adapter (Cadence.Control.ConfigUsers), so this kind has no
+  # compile-time edge to Control. Without one configured there's nothing to check.
+  defp uses(organization_id, mission_id, transport_id, opts) do
+    case Application.get_env(:cadence, :config_users) do
+      nil -> %{}
+      users -> users.transport_uses(organization_id, mission_id, transport_id, opts)
+    end
+  end
+
+  defp in_use?(uses), do: Enum.any?(uses, fn {_kind, %{count: count}} -> count > 0 end)
 
   defp entity(id, %{} = previous),
     do: %{kind: "transport", id: id, name: previous["display_name"]}

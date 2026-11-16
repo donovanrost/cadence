@@ -12,6 +12,18 @@ defmodule Cadence.Contacts.ReservationActivity do
   # Still booked, or still being booked: what an operator would release in Contacts.
   @booked ~w(requesting pending confirmed unknown)
 
+  @doc "The mission's reservations still booked ahead of `now` (the archive in-use check, U82)."
+  @spec booked_ahead(binary(), binary(), DateTime.t()) :: [map()]
+  def booked_ahead(organization_id, mission_id, %DateTime{} = now) do
+    from(row in ProviderReservationRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.lifecycle_state in ^@booked and row.starts_at > ^now
+    )
+    |> Repo.all()
+    |> Enum.map(&ProviderReservationRow.to_domain/1)
+  end
+
   @spec spacecraft_with_reservations(binary(), binary(), [binary()]) :: MapSet.t()
   def spacecraft_with_reservations(_organization_id, _mission_id, []), do: MapSet.new()
 
