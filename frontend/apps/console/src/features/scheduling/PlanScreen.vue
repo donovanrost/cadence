@@ -212,7 +212,7 @@ const clock = computed(() =>
       ></template
     >
   </TakeoverHeader>
-  <DayNav :day="day" />
+  <DayNav :day="day" :show-strip="view.kind !== 'not_set_up'" />
   <p v-if="draftedBy" class="m-0 font-mono text-sm text-text-3">{{ draftedBy }}</p>
   <PassResolutionsCallout :passes="resolutions" />
   <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
