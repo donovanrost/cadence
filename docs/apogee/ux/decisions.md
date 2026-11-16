@@ -2317,8 +2317,9 @@ endpoint ids, the replay run id, and the full JSON or hex.
 
 **1. Same-SCID warning at spacecraft save (same organization only).** A caution, not a refusal: the save goes ahead.
 As built (domain's shape, 11-16): an acknowledgeable HOLD in the change set's Compatibility check, reason
-`scid_shared_in_organization`, on a create or a SCID change. Apply's Why placeholder: "Why it's safe for both
-spacecraft to use SCID 42". One item per other mission, its shared providers joined; missions the viewer can't open
+`scid_shared_in_organization`, on a create or a SCID change. Apply's Why placeholder (the set's only acknowledgeable
+hold): mission_count 1, "Why it's safe for both spacecraft to use SCID 42"; mission_count ≥ 2, "Why it's safe for
+these spacecraft to share SCID 42"; two or more holds keep the general placeholder. One item per other mission, its shared providers joined; missions the viewer can't open
 fold into one item ("2 other missions in this organization also fly SCID 42 through KSAT."). The words:
 - "▲ Another mission in this organization, Earendil Ops, also flies SCID 42 through KSAT. KSAT's stations can't tell
   the two spacecraft's uplinks apart."
@@ -2326,8 +2327,14 @@ fold into one item ("2 other missions in this organization also fly SCID 42 thro
   flies SCID 42 through KSAT." Never its id (U25).
 - The provider is named. If more than one provider is shared, "through KSAT and AWS Ground Station. Their stations
   can't tell the two spacecraft's uplinks apart." The second sentence stays in the unnamed form.
-- Not yet covered (follow-up, lead's call): a mission adding a provider account that a same-SCID mission already
-  uses.
+- One account: "KSAT's stations"; two or more: "Their stations". An account with no name is counted, never shown by
+  id: "through KSAT and 1 other provider account"; only unnamed ones: "through a provider account you share" / "2
+  provider accounts you share", then "Its stations" / "Their stations".
+- Folded, n ≥ 2: "2 other missions in this organization also fly SCID 42 through KSAT. KSAT's stations can't tell
+  the spacecraft's uplinks apart."
+- Not yet covered (queued by lead, 11-16: domain BACKLOG row after this lands): a mission adding a provider on an
+  account a same-SCID mission already uses. Transports need no check: a transport can only pick its own mission's
+  providers, and every provider already counts.
 - Never across organizations: another tenant's SCID is not ours to show. That case waits for domain's follow-up (an
   authenticated delivery identity).
 
