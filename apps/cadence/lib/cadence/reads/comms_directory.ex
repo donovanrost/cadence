@@ -26,9 +26,13 @@ defmodule Cadence.Reads.CommsDirectory do
   @default_limit 100
   @max_limit 500
 
-  @spec stations(binary(), binary()) :: [map()]
-  def stations(organization_id, mission_id) do
-    stations = GroundStationStore.list_ground_stations(organization_id, mission_id)
+  @spec stations(binary(), binary(), keyword()) :: [map()]
+  def stations(organization_id, mission_id, opts \\ []) do
+    stations =
+      organization_id
+      |> GroundStationStore.list_ground_stations(mission_id, opts)
+      |> archived_last()
+
     taken = stations |> Enum.map(& &1.code) |> Enum.reject(&is_nil/1)
 
     stations
@@ -134,8 +138,8 @@ defmodule Cadence.Reads.CommsDirectory do
     end
   end
 
-  @spec transports(binary(), binary()) :: [map()]
-  def transports(organization_id, mission_id) do
+  @spec transports(binary(), binary(), keyword()) :: [map()]
+  def transports(organization_id, mission_id, opts \\ []) do
     rule_counts =
       organization_id
       |> OperationalState.list_routing_rules(mission_id)
@@ -143,7 +147,8 @@ defmodule Cadence.Reads.CommsDirectory do
       |> Enum.frequencies_by(& &1.transport_id)
 
     organization_id
-    |> TransportStore.list_transports(mission_id)
+    |> TransportStore.list_transports(mission_id, opts)
+    |> archived_last()
     |> Enum.map(fn %Transport{} = transport ->
       %{
         id: transport.transport_id,
@@ -306,4 +311,7 @@ defmodule Cadence.Reads.CommsDirectory do
       _other -> {:error, %{cursor: "is not a valid cursor"}}
     end
   end
+
+  # U82: with ?include_archived, archived rows follow the active ones (each group keeps its order).
+  defp archived_last(rows), do: Enum.sort_by(rows, &(&1.lifecycle_state == :archived))
 end

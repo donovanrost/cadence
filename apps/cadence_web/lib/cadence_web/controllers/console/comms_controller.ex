@@ -10,17 +10,28 @@ defmodule CadenceWeb.Console.CommsController do
   alias Cadence.Reads.CommsDirectory
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
-  def stations(conn, _params),
+  # U82: archived rows only on request (?include_archived=true); the default, which every picker
+  # reads, stays active-only.
+  def stations(conn, params),
     do:
       json(conn, %{
-        data: %{stations: encode(CommsDirectory.stations(org_id(conn), mission_id(conn)))}
+        data: %{
+          stations:
+            encode(CommsDirectory.stations(org_id(conn), mission_id(conn), archived(params)))
+        }
       })
 
-  def transports(conn, _params),
+  def transports(conn, params),
     do:
       json(conn, %{
-        data: %{transports: encode(CommsDirectory.transports(org_id(conn), mission_id(conn)))}
+        data: %{
+          transports:
+            encode(CommsDirectory.transports(org_id(conn), mission_id(conn), archived(params)))
+        }
       })
+
+  defp archived(%{"include_archived" => "true"}), do: [include_archived: true]
+  defp archived(_params), do: []
 
   def transport(conn, %{"transport_id" => transport_id}) do
     case CommsDirectory.transport(org_id(conn), mission_id(conn), transport_id) do

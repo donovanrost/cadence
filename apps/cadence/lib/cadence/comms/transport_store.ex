@@ -145,9 +145,12 @@ defmodule Cadence.Comms.TransportStore do
     end
   end
 
-  @spec list_transports(binary(), binary()) :: [Transport.t()]
-  def list_transports(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
+  @doc "A mission's transports (latest versions); archived ones only with `include_archived: true` (U82)."
+  @spec list_transports(binary(), binary(), keyword()) :: [Transport.t()]
+  def list_transports(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    archived? = Keyword.get(opts, :include_archived, false)
+
     TransportRow
     |> where(
       [row],
@@ -157,7 +160,7 @@ defmodule Cadence.Comms.TransportStore do
     |> Repo.all()
     |> Enum.reduce(%{}, fn row, acc -> Map.put_new(acc, row.transport_id, row) end)
     |> Map.values()
-    |> Enum.reject(&(&1.lifecycle_state == "archived"))
+    |> Enum.reject(&(&1.lifecycle_state == "archived" and not archived?))
     |> Enum.sort_by(& &1.display_name)
     |> Enum.map(&TransportRow.to_domain/1)
   end

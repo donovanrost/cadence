@@ -60,14 +60,18 @@ defmodule Cadence.Comms.GroundStationStore do
     end
   end
 
-  @spec list_ground_stations(binary(), binary()) :: [GroundStation.t()]
-  def list_ground_stations(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
+  @doc "A mission's ground stations; archived ones only with `include_archived: true` (U82)."
+  @spec list_ground_stations(binary(), binary(), keyword()) :: [GroundStation.t()]
+  def list_ground_stations(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    states =
+      if Keyword.get(opts, :include_archived, false), do: ~w(active archived), else: ~w(active)
+
     GroundStationRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.lifecycle_state == "active"
+        row.lifecycle_state in ^states
     )
     |> order_by([row], asc: row.display_name, asc: row.ground_station_id)
     |> Repo.all()

@@ -45,7 +45,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
     rollback_unknown_kind: 422,
     rollback_crosses_legacy: 409,
     change_set_open: 409,
-    rollback_in_progress: 409
+    rollback_in_progress: 409,
+    # U82: an archive refused because the transport or station is still used (stage, submit, review).
+    in_use: 409
   }
 
   @messages %{
@@ -87,7 +89,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
       "The range includes a legacy activation; roll back to it, not past it.",
     change_set_open: "Finish or discard the open change set first.",
     rollback_in_progress:
-      "A rollback is staged; apply or discard it before staging other changes."
+      "A rollback is staged; apply or discard it before staging other changes.",
+    in_use: "It's still in use, so it can't be archived."
   }
 
   @doc "Deep-encodes a facade value for JSON."

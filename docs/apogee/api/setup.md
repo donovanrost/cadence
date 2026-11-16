@@ -998,13 +998,15 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
 
 - `GET .../ground-stations` → `{stations: [{id, display_name, code, provider, region,
   lifecycle_state, transport_count, routing_rule_count, health}]}`. Only active stations are
-  listed. `code` is the station's short code (2–8 capitals/digits, unique per mission).
+  listed, unless `?include_archived=true` (U82: archived ones follow the active ones, with
+  `lifecycle_state: "archived"`). Pickers use the default. `code` is the station's short code (2–8 capitals/digits, unique per mission).
   `transport_count` and `routing_rule_count` are **`null`** because the model has no
   station↔transport link yet. `health` is `null` (not tracked; show "not reported").
 - `GET .../transports` → `{transports: [{id, display_name, version, origin, transport_kind,
   direction_capability, lifecycle_state, station: null, routing_rule_count}]}`.
   `routing_rule_count` counts active rules using the transport; `station` is `null` for the same
-  reason as above.
+  reason as above. Active only by default; `?include_archived=true` adds archived ones after the
+  active ones (U82).
 - `GET .../transports/:transport_id` → `{id, version, lifecycle_state, document: {display_name,
   origin, transport_kind, direction_capability, configuration}}`. `document` is exactly what the
   `transport` change-set kind loads, so prefill the edit form from it and stage
@@ -1145,3 +1147,32 @@ Organization admins only (`403 forbidden` for members).
 Only active identities are listed. `last_used_at` is always `null` (token use isn't tracked yet),
 and `rotation_policy_days` is `null` (there is no rotation policy model). `mission` is `null` for
 organization-wide identities ("· all missions" in `scope_summary`).
+
+## Archiving transports and ground stations (ux U82)
+
+Archive is `action: "delete"` on the `transport` or `ground_station` kind through `POST
+/config/stage`, for either transport origin. Once applied the item can't be chosen for new routes
+or passes; its history stays. Archiving a transport also releases the provider profile created
+from it (its listen port is free again). The change list, preview and history name a station
+`Inuvik · INU` (its name alone without a code).
+
+Something still using the item refuses the archive with `409 in_use`, the same details at every
+moment: at stage (nothing staged), and at submit or review when it became used after staging (the
+set reopens; nothing applied):
+
+```json
+{"entity": {"kind": "transport" | "ground_station", "id": "…", "name": "INU S-band" | null},
+ "uses": {
+   "routes":         {"count": 1, "items": [{"routing_rule_id", "name": null, "spacecraft": {"id", "name"},
+                                             "station": {"id", "code", "name"} | null, "direction": "downlink"}]},
+   "profile_routes": {"count": 0, "items": [{"profile": {"id", "name"}, "rule_id", "label": null}]},
+   "booked_passes":  {"count": 0, "next_at": null},
+   "listening_now":  {"count": 0, "items": [{"realized_contact_id", "spacecraft": {"id", "name"},
+                                             "station_code": null, "starts_at"}]},
+   "transports":     {"count": 0, "items": [{"id", "name"}]}}}
+```
+
+Every kind is always present; `count` is the full number and `items` at most 3. An item is listed
+only when the name its line needs exists (a route's or pass's spacecraft name, a profile's name, a
+station's transport name); otherwise it is only counted. A station archived together with its
+transports (one stage, or already staged in the open set) isn't refused for them.

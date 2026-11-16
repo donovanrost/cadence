@@ -165,6 +165,12 @@ defmodule Cadence.Reads.ConfigLabels do
 
   defp profile_fields, do: Enum.flat_map(Schema.sections(), & &1.fields)
 
+  # U82: a station reads 'Inuvik · INU' (its name alone without a code); only station documents
+  # carry a code.
+  defp name_of(%{"display_name" => name, "code" => code})
+       when is_binary(name) and is_binary(code) and code != "",
+       do: "#{name} · #{code}"
+
   defp name_of(%{"display_name" => name}) when is_binary(name), do: name
   defp name_of(_document), do: nil
 end

@@ -44,7 +44,7 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
 
 | Status | Codes |
 | --- | --- |
-| 409 | `holds_blocking` (details = the preview), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone` |
+| 409 | `holds_blocking` (details = the preview), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone`, `in_use` (details = `{entity, uses}`: an archive of a transport or station still in use, at stage, submit or review; [setup.md](setup.md)) |
 | 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required`, `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field) |
 | 403 | `forbidden` |
 | 404 | `change_set_not_found`, `revision_not_found`, `change_not_found`, `op_not_found`, `mission_not_found` |
