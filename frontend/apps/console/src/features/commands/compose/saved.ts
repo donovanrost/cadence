@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { PRIORITY_NORMAL } from "../priority.ts";
 import {
   DecodeError,
   decoders as d,
@@ -116,6 +117,9 @@ const documentReader = d.object({
   release: d.object({
     mode: d.oneOf(["next_contact", "not_before"] as const),
     not_before: d.nullable(d.timestamp),
+    /** U68: absent on drafts saved before expiry and priority existed. */
+    expires_at: d.optional(d.nullable(d.timestamp)),
+    priority: d.optional(d.integer),
   }),
   requested_approver_user_id: d.nullable(d.token),
   sent_back_from: d.nullable(d.token),
@@ -162,6 +166,8 @@ export function toDocument(f: ComposeFields) {
         f.release.mode === "not_before" && f.release.notBefore !== null
           ? new Date(f.release.notBefore).toISOString()
           : null,
+      expires_at: f.release.expiresAt === null ? null : new Date(f.release.expiresAt).toISOString(),
+      priority: f.release.priority,
     },
     requested_approver_user_id: f.approver || null,
     sent_back_from: f.sentBackFrom,
@@ -236,10 +242,13 @@ export async function restoreDraft(
         query: { ...v.target_query, states: v.target_query.states.filter(isFleetState) },
         endpoints: v.endpoints,
         stack,
-        release:
-          v.release.mode === "not_before"
-            ? { mode: "not_before", notBefore: nb ? Date.parse(nb) : null }
-            : { mode: "next_contact", notBefore: null },
+        release: {
+          ...(v.release.mode === "not_before"
+            ? { mode: "not_before" as const, notBefore: nb ? Date.parse(nb) : null }
+            : { mode: "next_contact" as const, notBefore: null }),
+          expiresAt: v.release.expires_at ? Date.parse(v.release.expires_at) : null,
+          priority: v.release.priority ?? PRIORITY_NORMAL,
+        },
         approver: v.requested_approver_user_id ?? "",
         sentBackFrom: v.sent_back_from,
       },

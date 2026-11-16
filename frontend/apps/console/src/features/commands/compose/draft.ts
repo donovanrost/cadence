@@ -57,8 +57,16 @@ export function queryChips(q: TargetQuery): TargetChip[] {
   return chips;
 }
 
-/** C5 release choice: each target's next AOS, or hold until a set time (epoch ms). */
-export type Release = { mode: "next_contact" | "not_before"; notBefore: number | null };
+/**
+ * C5 release choice: each target's next AOS, or hold until a set time (epoch ms); an optional
+ * expiry (epoch ms) and the priority (ux U68: 3 Normal, 1 High, a resend's own low value).
+ */
+export type Release = {
+  mode: "next_contact" | "not_before";
+  notBefore: number | null;
+  expiresAt: number | null;
+  priority: number;
+};
 
 export type ComposeInput = Readonly<{
   title: string;
@@ -67,6 +75,8 @@ export type ComposeInput = Readonly<{
   query: TargetQuery;
   stack: readonly StackItem[];
   notBefore: number | null;
+  expiresAt: number | null;
+  priority: number;
   approver: string;
   sentBackFrom: string | null;
   /** Explicit uplink endpoints by spacecraft id (an audited override; else routing decides). */
@@ -100,8 +110,8 @@ export function buildDraft(input: ComposeInput): Draft | null {
     target_query: { chips: queryChips(input.query), explicit: input.query.explicit },
     commands,
     not_before: input.notBefore === null ? null : new Date(input.notBefore).toISOString(),
-    expires_at: null,
-    priority: 3,
+    expires_at: input.expiresAt === null ? null : new Date(input.expiresAt).toISOString(),
+    priority: input.priority,
     requested_approver_user_id: input.approver || null,
     sent_back_from: input.sentBackFrom,
   };

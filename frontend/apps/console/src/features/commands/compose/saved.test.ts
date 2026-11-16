@@ -59,7 +59,7 @@ const blank: ComposeFields = {
   query: EMPTY_QUERY,
   endpoints: {},
   stack: [],
-  release: { mode: "next_contact", notBefore: null },
+  release: { mode: "next_contact", notBefore: null, expiresAt: null, priority: 3 },
   approver: "",
   sentBackFrom: null,
 };
@@ -78,7 +78,12 @@ describe("compose draft document", () => {
     query: { ...EMPTY_QUERY, plane: 7, explicit: ["sc-1"] },
     endpoints: { "sc-1": "ep-9" },
     stack: [{ ...newItem(heater), values: { s: "abc" } }],
-    release: { mode: "not_before", notBefore: Date.parse("2026-11-12T00:00:00Z") },
+    release: {
+      mode: "not_before",
+      notBefore: Date.parse("2026-11-12T00:00:00Z"),
+      expiresAt: null,
+      priority: 3,
+    },
     approver: "user-2",
   };
 
@@ -86,7 +91,12 @@ describe("compose draft document", () => {
     const doc = toDocument(fields);
     expect(doc.schema_version).toBe(1);
     expect(doc.stack[0]).toMatchObject({ command_id: "cmd-1", values: { s: "abc" } });
-    expect(doc.release).toEqual({ mode: "not_before", not_before: "2026-11-12T00:00:00.000Z" });
+    expect(doc.release).toEqual({
+      mode: "not_before",
+      not_before: "2026-11-12T00:00:00.000Z",
+      expires_at: null,
+      priority: 3,
+    });
     expect(doc.requested_approver_user_id).toBe("user-2");
     expect(doc.origin).toBeNull();
     expect(toDocument({ ...fields, sentBackFrom: "g-1" }).origin).toEqual({
@@ -116,6 +126,18 @@ describe("compose draft document", () => {
     expect(r.ok && r.value.fields.stack[0]?.values).toEqual({ s: "abc" });
     expect(r.ok && r.value.fields.release.notBefore).toBe(Date.parse("2026-11-12T00:00:00Z"));
     expect(r.ok && r.value.fields.query.plane).toBe(7);
+    // U68: a draft saved before expiry and priority existed restores the defaults.
+    const old = {
+      ...toDocument(fields),
+      release: { mode: "next_contact", not_before: null },
+    };
+    const back = await restoreDraft(missionIdReader("m"), stored(JSON.parse(JSON.stringify(old))));
+    expect(back.ok && back.value.fields.release).toEqual({
+      mode: "next_contact",
+      notBefore: null,
+      expiresAt: null,
+      priority: 3,
+    });
     const lost = await restoreDraft(missionIdReader("m"), stored(doc, ["cmd-1"]));
     expect(lost.ok && [lost.value.gone, lost.value.fields.stack.length]).toEqual([1, 0]);
   });

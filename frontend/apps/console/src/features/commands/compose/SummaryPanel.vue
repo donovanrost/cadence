@@ -7,16 +7,16 @@ import {
   ApButton,
   ApCallout,
   ApField,
-  ApOption,
   ApPanel,
   ApSelect,
   ApStatStrip,
   ApStatTile,
   ApTextarea,
-  ApTimePicker,
 } from "@/ui";
 import { fetchPeople } from "@/features/alarms/index.ts";
 import type { Release } from "./draft.ts";
+import { expiresWords } from "../priority.ts";
+import ReleaseFields from "./ReleaseFields.vue";
 import SubmitOutcome from "./SubmitOutcome.vue";
 import type { SubmitState } from "./useSubmit.ts";
 
@@ -52,16 +52,6 @@ const approvers = computed(() => [
     : []),
 ]);
 const uplinks = computed(() => props.targets * props.commands);
-const mode = computed({
-  get: () => release.value.mode,
-  set: (m: Release["mode"] | null) => {
-    if (m) release.value = { ...release.value, mode: m };
-  },
-});
-const notBefore = computed({
-  get: () => release.value.notBefore,
-  set: (t: number | null) => (release.value = { ...release.value, notBefore: t }),
-});
 </script>
 
 <template>
@@ -72,30 +62,7 @@ const notBefore = computed({
         <ApStatTile label="Cmds" :value="commands" />
         <ApStatTile label="Uplinks" :value="uplinks" />
       </ApStatStrip>
-      <fieldset class="m-0 flex flex-col gap-2 border-0 p-0">
-        <legend class="ap-label pb-2">Release</legend>
-        <ApOption
-          v-model="mode"
-          name="release"
-          value="next_contact"
-          title="At each target's next AOS"
-          description="Recommended. Each uplink waits for its own target's contact."
-        />
-        <ApOption
-          v-model="mode"
-          name="release"
-          value="not_before"
-          title="Hold until a set time"
-          description="Then the first AOS after it."
-        />
-        <ApTimePicker
-          v-if="mode === 'not_before'"
-          v-model="notBefore"
-          label="Not before"
-          future
-          past-message="That time has passed; the release would go at the next AOS."
-        />
-      </fieldset>
+      <ReleaseFields v-model="release" />
       <div v-if="secondGo.length" class="flex flex-col gap-2">
         <ApCallout tone="caution">Needs a second GO: {{ secondGo.join("; ") }}.</ApCallout>
         <ApSelect v-model="approver" label="Second GO from" size="compact" :options="approvers" />
@@ -114,6 +81,9 @@ const notBefore = computed({
         :required="secondGo.length > 0"
         placeholder="Why this sequence, for the request log"
       />
+      <p v-if="release.expiresAt !== null" class="m-0 text-md text-text-2">
+        {{ expiresWords(new Date(release.expiresAt).toISOString()) }} if not released.
+      </p>
       <ApButton
         variant="primary"
         size="commit"

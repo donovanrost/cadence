@@ -1,5 +1,5 @@
 import { isKnown } from "@/api/index.ts";
-import { plural, type OpState } from "@/ui";
+import { formatHourMinute, plural, type OpState } from "@/ui";
 import type { GroupState, MemberStage } from "./api.ts";
 import { checkLabel } from "./checks.ts";
 import { releaseClause, type ReleaseLogContext } from "./release.ts";
@@ -52,6 +52,8 @@ export function memberStageWord(
   endReason: GroupMember["end_reason"] = null,
   /** The target's name, for reasons that name it (U40). */
   name: string | null = null,
+  /** U68: the request's expiry, for 'Expired at 04:00Z before it was released'. */
+  expiresAt: string | null = null,
 ): string {
   // #65: a catalog change set canceled it before release.
   if (stage === "canceled" && endReason === "catalog_changed")
@@ -60,7 +62,10 @@ export function memberStageWord(
   if (stage === "canceled" && endReason === "spacecraft_archived")
     return `Not released: ${name ?? "the spacecraft"} is archived`;
   // Its release window passed before it went (ux: never 'Canceled', which says someone did it).
-  if (stage === "canceled" && endReason === "expired") return "Expired";
+  if (stage === "canceled" && endReason === "expired")
+    return expiresAt
+      ? `Expired at ${formatHourMinute(new Date(expiresAt))} before it was released`
+      : "Expired";
   if (stage === "rejected" && group === "sent_back") return "Sent back";
   if (stage === "rejected" && group === "rejected") return "NO-GO";
   return STAGE_WORDS[stage];

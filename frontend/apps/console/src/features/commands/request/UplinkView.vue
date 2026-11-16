@@ -181,7 +181,15 @@ const release = computed(() =>
           <span class="min-w-0 truncate font-mono text-sm text-text-3">
             <template v-for="m in t.members" :key="m.request_id"
               >{{ pos(m.position) }} {{ m.command_name ?? m.command_id }} ·
-              {{ memberStageWord(m.stage, group.state, m.end_reason, t.name) }}&ensp;</template
+              {{
+                memberStageWord(
+                  m.stage,
+                  group.state,
+                  m.end_reason,
+                  t.name,
+                  group.release?.expires_at ?? null,
+                )
+              }}&ensp;</template
             >
           </span>
           <ApTag :state="STAGE_STATE[t.stage]" :label="memberStageWord(t.stage, group.state)" />

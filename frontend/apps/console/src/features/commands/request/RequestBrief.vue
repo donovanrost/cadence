@@ -9,6 +9,7 @@ import { formatClock, formatDayTime, plural, ApPanel, ApTag } from "@/ui";
 import { catalogRevisionWords } from "../api.ts";
 import type { Group } from "../groups/show.ts";
 import type { PersonName } from "../groups/words.ts";
+import { expiresWords, priorityTag } from "../priority.ts";
 
 /**
  * Request header + A1 What changes + (A2 slot) + A3 What will radiate (CommandFlow C2). v1 shows the decoded
@@ -21,10 +22,14 @@ const targets = computed(() => props.group.targets.slice(0, LIMIT));
 const commands = computed(() => [...props.group.commands].sort((a, b) => a.position - b.position));
 const release = computed(() => {
   const nb = props.group.release?.not_before;
-  return nb
+  const when = nb
     ? `Held until ${formatClock(new Date(nb))}, then each target at its next AOS`
     : "Each target at its next AOS";
+  const exp = props.group.release?.expires_at;
+  return exp ? `${when}. ${expiresWords(exp)}` : when;
 });
+/** U68: Normal is silent; High / Low show as a neutral tag. */
+const priority = computed(() => priorityTag(props.group.release?.priority));
 const args = (json: string) => (json.trim() === "{}" ? "no arguments" : json);
 const scope = useMissionScope();
 /** One request per stack position: the first target's member at that position. */
@@ -75,12 +80,17 @@ const bytesLine = (position: number) => {
       index="A1"
       title="What changes"
       :meta="
-        [plural(group.target_count, 'target'), catalogRevisionWords(group.catalog_revision)]
+        [
+          plural(group.target_count, 'target'),
+          catalogRevisionWords(group.catalog_revision),
+          group.release?.expires_at ? expiresWords(group.release.expires_at) : null,
+        ]
           .filter(Boolean)
           .join(' · ')
       "
       flush
     >
+      <template v-if="priority" #header><ApTag :label="priority" /></template>
       <ul class="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 px-4 py-3">
         <li v-for="t in targets" :key="t.spacecraft_id" class="font-mono text-sm text-readout">
           {{ t.name ?? "Unknown spacecraft" }}
@@ -93,6 +103,7 @@ const bytesLine = (position: number) => {
       <ValueChanges :group="group" />
       <p class="m-0 border-t border-hairline px-4 py-2 text-md text-text-3">
         Release: {{ release }}.
+        <ApTag v-if="priority" :label="priority" class="ml-2" />
       </p>
     </ApPanel>
     <slot name="checks" />

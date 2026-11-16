@@ -8,6 +8,7 @@ import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } fr
 import { TelemetryDegraded, useFleet } from "@/features/fleet/index.ts";
 import { useCommandAccess } from "../access.ts";
 import { catalogRevisionWords, fetchCommand } from "../api.ts";
+import { PRIORITY_NORMAL } from "../priority.ts";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import DeliveryPanel from "./DeliveryPanel.vue";
 import DraftNotices from "./DraftNotices.vue";
@@ -72,7 +73,12 @@ const setValues = (key: string, values: Record<string, string>) =>
 const setPerTarget = (key: string, perTarget: StackItem["perTarget"]) =>
   (stack.value = stack.value.map((i) => (i.key === key ? { ...i, perTarget } : i)));
 
-const release = ref<Release>({ mode: "next_contact", notBefore: null });
+const release = ref<Release>({
+  mode: "next_contact",
+  notBefore: null,
+  expiresAt: null,
+  priority: PRIORITY_NORMAL,
+});
 const approver = ref("");
 const log = ref("");
 const title = ref(typeof route.query.title === "string" ? route.query.title : "");
@@ -348,6 +354,7 @@ const close = computed((): RouteLocationRaw =>
           :contacts="contacts"
           :endpoints="endpoints"
           :overrides="overrides"
+          :expires-at="release.expiresAt"
           @override="setOverride"
         />
       </div>

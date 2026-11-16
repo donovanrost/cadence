@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { PRIORITY_NORMAL } from "../priority.ts";
 import { ref, shallowRef, type Ref } from "vue";
 import type { Release } from "./draft.ts";
 import { loadResend } from "./resend.ts";
@@ -57,7 +58,15 @@ export function useResend(
       into.log.value = group.log_entry ?? "";
       into.approver.value = group.requested_approver_user_id ?? "";
       const nb = group.release?.not_before;
-      if (nb) into.release.value = { mode: "not_before", notBefore: Date.parse(nb) };
+      // U68: a resend keeps its priority (a low one becomes 'Low (as before)'); a past expiry isn't
+      // carried, since it would refuse at once.
+      into.release.value = {
+        ...(nb
+          ? { mode: "not_before" as const, notBefore: Date.parse(nb) }
+          : { mode: "next_contact" as const, notBefore: null }),
+        expiresAt: null,
+        priority: group.release?.priority ?? PRIORITY_NORMAL,
+      };
       const note = group.decision?.note;
       const gone = missing.length
         ? ` ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} no longer in the active catalog and ${missing.length === 1 ? "was" : "were"} left out.`

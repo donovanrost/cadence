@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { formatCountdown, useNow, ApEmptyState, ApPanel, ApStatusMark } from "@/ui";
+import {
+  formatCountdown,
+  formatHourMinute,
+  useNow,
+  ApEmptyState,
+  ApPanel,
+  ApStatusMark,
+} from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { NextContact, TargetEndpoints } from "../groups/api.ts";
 import { useMissionScope } from "@/shell/index.ts";
@@ -18,6 +25,8 @@ const props = defineProps<{
   /** Per target: what routing resolves (DECISIONS #41), with the endpoints to override with. */
   endpoints: ReadonlyMap<string, TargetEndpoints>;
   overrides: Readonly<Record<string, string>>;
+  /** U68: the request's expiry (epoch ms); a target whose next AOS is after it gets a caution. */
+  expiresAt?: number | null | undefined;
 }>();
 defineEmits<{ override: [spacecraftId: string, endpointId: string | null] }>();
 const now = useNow();
@@ -45,6 +54,11 @@ const all = computed<Row[]>(() =>
         };
   }),
 );
+/** 'Expires before its next contact (AOS 04:12Z).' when the expiry comes first; arming isn't blocked. */
+const expiresFirst = (r: Row) =>
+  r.aos && props.expiresAt != null && props.expiresAt < Date.parse(r.aos)
+    ? `Expires before its next contact (AOS ${formatHourMinute(new Date(r.aos))}).`
+    : null;
 const rows = computed(() =>
   [...all.value]
     .sort((a, b) => (a.aos ? Date.parse(a.aos) : Infinity) - (b.aos ? Date.parse(b.aos) : Infinity))
@@ -62,11 +76,14 @@ const noContact = computed(() => all.value.filter((r) => r.aos === null).length)
         :key="row.sc.id"
         class="flex items-center gap-3 border-t border-hairline-faint px-4 py-1.5 first:border-t-0"
       >
-        <ApStatusMark :state="row.aos ? 'live' : 'caution'" />
+        <ApStatusMark :state="row.aos && !expiresFirst(row) ? 'live' : 'caution'" />
         <span class="w-32 font-mono text-md text-readout">{{ row.sc.name }}</span>
         <span class="font-mono text-sm" :class="row.aos ? 'text-text-2' : 'text-caution-text'">
           {{ row.aos ? `AOS ${formatCountdown(new Date(row.aos), now)}` : "No booked contact" }}
         </span>
+        <span v-if="expiresFirst(row)" class="text-sm text-caution-text">{{
+          expiresFirst(row)
+        }}</span>
         <EndpointCell
           class="ml-auto"
           :name="row.sc.name"

@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { expiryProblem } from "../priority.ts";
 import { computed, ref, watch, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
@@ -50,6 +51,8 @@ export function useComposeRequest(
           query: query.value,
           stack: stack.value,
           notBefore: form.release.value.mode === "not_before" ? form.release.value.notBefore : null,
+          expiresAt: form.release.value.expiresAt,
+          priority: form.release.value.priority,
           approver: form.approver.value,
           sentBackFrom: form.sentBackFrom.value,
           endpoints: form.endpoints.value,
@@ -96,6 +99,12 @@ export function useComposeRequest(
       return "Write a log entry: a second GO needs one.";
     if (form.release.value.mode === "not_before" && form.release.value.notBefore === null)
       return "Pick the hold-until time.";
+    const expiry = expiryProblem(
+      form.release.value.expiresAt,
+      form.release.value.mode === "not_before" ? form.release.value.notBefore : null,
+      Date.now(),
+    );
+    if (expiry) return expiry;
     if (preflight.checking.value) return "Waiting for the server's checks.";
     const pf = preflight.current.value;
     if (!pf) return "The server's checks didn't run. Check again in C3.";
