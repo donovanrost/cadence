@@ -2,6 +2,7 @@ import { isKnown } from "@/api/index.ts";
 import { formatHourMinute, plural, type OpState } from "@/ui";
 import { formatValue } from "@/features/alarms/index.ts";
 import { pointName, type VerifierSeries } from "./series.ts";
+import { verifyTimeOf } from "./verifyTimes.ts";
 import type { Group, GroupMember, GroupTarget } from "./show.ts";
 import { memberStageWord, NEEDS_YOU, STAGE_STATE } from "./words.ts";
 
@@ -85,12 +86,16 @@ function card(group: Group, series: VerifierSeries | null, t: GroupTarget): Need
     state: STAGE_STATE[t.stage],
     tag: memberStageWord(t.stage, group.state),
   };
-  if (t.stage === "verify_failed")
+  if (t.stage === "verify_failed") {
+    // ux U69 A4a: when it timed out or failed, with seconds.
+    const time = verifyTimeOf(series, t.spacecraft_id);
     return {
       ...base,
-      explanation: verifyLine(group, series, t, m, cmd) + stoppedLine(t),
+      explanation:
+        verifyLine(group, series, t, m, cmd) + (time ? ` ${time}.` : "") + stoppedLine(t),
       resend: true,
     };
+  }
   if (t.stage === "release_failed")
     return {
       ...base,

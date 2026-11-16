@@ -405,6 +405,8 @@ describe("M26 verifier series (U2)", () => {
         name: "A",
         verifier_state: "satisfied",
         verifier: undefined,
+        timeout_at: undefined,
+        matched_at: undefined,
         samples: [{ t: "2026-11-10T01:01:00Z", value_json: "8.0" }],
       },
       {
@@ -412,6 +414,8 @@ describe("M26 verifier series (U2)", () => {
         name: "B",
         verifier_state: "failed",
         verifier: undefined,
+        timeout_at: undefined,
+        matched_at: undefined,
         samples: [{ t: "2026-11-10T01:01:00Z", value_json: "5.0" }],
       },
     ],

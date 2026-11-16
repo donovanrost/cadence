@@ -1,3 +1,4 @@
+import { windowEnd } from "./verifyTimes.ts";
 import type { MissionId } from "@/api/index.ts";
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import type { ComparisonSeries, TimeWindow } from "@/ui";
@@ -45,6 +46,9 @@ export const seriesReader = d.object({
           }),
         ),
       ),
+      /** U69 A4a (api, on u68-r3): the instance's deadline and match time; optional until shipped. */
+      timeout_at: d.optional(d.nullable(d.timestamp)),
+      matched_at: d.optional(d.nullable(d.timestamp)),
       samples: d.array(d.object({ t: d.timestamp, value_json: d.nullable(d.string) }), 1_000),
     }),
     100,
@@ -127,7 +131,7 @@ export function seriesMeta(s: VerifierSeries): string {
     head,
     `${s.summary.met} met${target}`,
     s.summary.not_met ? `${s.summary.not_met} did not` : null,
-    s.summary.pending ? `${s.summary.pending} pending` : null,
+    s.summary.pending ? `${s.summary.pending} pending${windowEnd(s)}` : null,
   ].filter((p): p is string => p !== null);
   return parts.join(" · ");
 }
@@ -198,7 +202,7 @@ export function plotSentence(s: VerifierSeries): string {
   const outcome = [
     s.summary.met ? `${s.summary.met} met` : null,
     s.summary.not_met ? `${s.summary.not_met} not met` : null,
-    s.summary.pending ? `${s.summary.pending} pending` : null,
+    s.summary.pending ? `${s.summary.pending} pending${windowEnd(s)}` : null,
   ].filter((p): p is string => p !== null);
   return `${pointName(s)} for ${who}${outcome.length ? `: ${outcome.join(", ")}` : ""}.`;
 }

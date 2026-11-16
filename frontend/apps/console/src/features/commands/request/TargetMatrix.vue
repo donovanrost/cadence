@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { verifyTimeOf } from "../groups/verifyTimes.ts";
+import type { VerifierSeries } from "../groups/series.ts";
 import { layoutMatrix, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { Group } from "../groups/show.ts";
 import { LOOK_OF, LOOK_WORDS, legendLooks, type CellLook } from "../groups/matrix.ts";
@@ -10,7 +12,12 @@ import { memberStageWord } from "../groups/words.ts";
  * look, with a legend. Pointer-only and hidden from assistive tech; the target list under it is
  * the accessible path, and a summary sentence says the counts.
  */
-const props = defineProps<{ group: Group; fleet: readonly FleetSpacecraft[] }>();
+const props = defineProps<{
+  group: Group;
+  fleet: readonly FleetSpacecraft[];
+  /** ux U69 A4a: each cell's title adds its verify time when the series covers it. */
+  series?: VerifierSeries | null | undefined;
+}>();
 const stageOf = computed(
   () => new Map(props.group.targets.map((t) => [t.spacecraft_id, t.stage] as const)),
 );
@@ -54,7 +61,13 @@ const summary = computed(() =>
             :class="lookOf(sc) ? CLASS[lookOf(sc) ?? 'queued'] : 'bg-cell-empty'"
             :title="
               sc
-                ? `${sc.name} · ${memberStageWord(stageOf.get(sc.id) ?? 'queued_for_contact', group.state)}`
+                ? [
+                    sc.name,
+                    memberStageWord(stageOf.get(sc.id) ?? 'queued_for_contact', group.state),
+                    verifyTimeOf(series ?? null, sc.id),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
                 : undefined
             "
           />

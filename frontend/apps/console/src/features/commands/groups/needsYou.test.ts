@@ -41,7 +41,15 @@ const series = (samples: { t: string; value_json: string | null }[]): VerifierSe
   band: null,
   window: { from: "2026-11-12T00:05:00Z", to: "2026-11-12T00:06:00Z" },
   targets: [
-    { spacecraft_id: "a", name: "A", verifier_state: "failed", verifier: undefined, samples },
+    {
+      spacecraft_id: "a",
+      name: "A",
+      verifier_state: "failed",
+      verifier: undefined,
+      timeout_at: undefined,
+      matched_at: undefined,
+      samples,
+    },
   ],
   target_count: 1,
   truncated: false,
@@ -114,6 +122,8 @@ describe("a verifier plot's sentence (a11y checklist C)", () => {
     name: `EARENDIL-${id}`,
     verifier_state: "satisfied" as const,
     verifier: undefined,
+    timeout_at: undefined,
+    matched_at: undefined,
     samples: [],
   });
   it("names the point, up to three targets, and how they came out", () => {
