@@ -1,4 +1,5 @@
 import { definitionLink, id, integer, name, nullable, record, stamp, text } from "./contracts";
+import { evidence } from "./evidence";
 export type State = {
   id: string;
   point_id: string;
@@ -18,27 +19,6 @@ export type State = {
   definition_href: string;
   evidence_href: string;
 };
-function evidence(v: Record<string, unknown>, mission: string) {
-  const prefix = `/missions/${mission}/ops/explore?`;
-  if (
-    !text(v.evidence_href, 4096) ||
-    !v.evidence_href.startsWith(prefix) ||
-    /[\\#]/.test(v.evidence_href) ||
-    v.evidence_href.split("").some((c) => c.charCodeAt(0) <= 32)
-  )
-    return false;
-  const q = new URLSearchParams(v.evidence_href.slice(prefix.length));
-  return (
-    new Set(q.keys()).size === [...q.keys()].length &&
-    [...q.keys()].every((k) =>
-      ["point_id", "spacecraft_id", "sample_id", "selected_time"].includes(k),
-    ) &&
-    q.get("point_id") === v.point_id &&
-    q.get("sample_id") === v.sample_id &&
-    q.get("selected_time") === v.receipt_time &&
-    q.get("spacecraft_id") === (v.spacecraft_id ?? null)
-  );
-}
 export function counts(v: unknown): v is Record<State["severity"], number> {
   return (
     record(v) &&
