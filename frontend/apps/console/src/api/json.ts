@@ -12,6 +12,16 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/**
+ * Typing rule A (plan §12B): a word map for open server text (provider reason codes, setup gaps)
+ * is keyed by its own literal keys, the vocabulary the console words, and looked up through this
+ * guard, so a misspelled key is a compile error and text the console doesn't word finds nothing.
+ */
+export const isKeyOf = <M extends object>(
+  map: M,
+  key: string | null | undefined,
+): key is Extract<keyof M, string> => key !== null && key !== undefined && Object.hasOwn(map, key);
+
 /** The value as a JSON object, or null when it isn't one. */
 export const recordOf = (value: unknown): Record<string, unknown> | null =>
   isRecord(value) ? value : null;

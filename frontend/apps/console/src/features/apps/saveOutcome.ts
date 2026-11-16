@@ -1,4 +1,5 @@
 import type { HostActionReceipt } from "@cadence/plugin-sdk";
+import { isKeyOf } from "@/api";
 
 /**
  * L9 save-outcome seam (DECISIONS #77, lead): the host never hard-wires "saved now". Each app's
@@ -18,8 +19,8 @@ export type SaveAdapter = (actionId: string, receipt: HostActionReceipt) => Save
 const savesNow: SaveAdapter = (actionId) =>
   actionId.startsWith("save") ? { kind: "saved", text: "Saved. It applies now." } : null;
 
-// Keyed by application key: an open vocabulary (apps are installed per mission); unknown apps get null.
-const adapters: Readonly<Record<string, SaveAdapter>> = {
+// Keyed by the application keys the console knows (rule A); unknown apps get null.
+const adapters = {
   limits: savesNow,
   derived_telemetry: savesNow,
   telemetry_decom: (actionId, receipt) =>
@@ -29,7 +30,7 @@ const adapters: Readonly<Record<string, SaveAdapter>> = {
           text: "Activation requested. It applies once it's approved.",
         }
       : savesNow(actionId, receipt),
-};
+} satisfies Readonly<Record<string, SaveAdapter>>;
 
 /** Unknown apps say nothing rather than guess (U20); the app's own UI shows its result. */
 export function saveOutcome(
@@ -37,7 +38,7 @@ export function saveOutcome(
   actionId: string,
   receipt: HostActionReceipt,
 ): SaveOutcome | null {
-  return adapters[appKey]?.(actionId, receipt) ?? null;
+  return isKeyOf(adapters, appKey) ? adapters[appKey](actionId, receipt) : null;
 }
 
 /**
@@ -45,10 +46,11 @@ export function saveOutcome(
  * `SAVES IMMEDIATELY`; `activation` waits for an approval (L10). Unknown apps show nothing.
  */
 export type SaveMode = "immediate" | "activation";
-// Keyed by application key (open vocabulary, as above).
-const modes: Readonly<Record<string, SaveMode>> = {
+// Keyed by the application keys the console knows (rule A), as above.
+const modes = {
   limits: "immediate",
   derived_telemetry: "immediate",
   telemetry_decom: "activation",
-};
-export const saveMode = (appKey: string): SaveMode | null => modes[appKey] ?? null;
+} as const satisfies Readonly<Record<string, SaveMode>>;
+export const saveMode = (appKey: string): SaveMode | null =>
+  isKeyOf(modes, appKey) ? modes[appKey] : null;

@@ -251,6 +251,13 @@ export function isError(error: ApiError | null | undefined, code: ErrorCode): bo
   return codeOf(error) === code;
 }
 
+/**
+ * A code from something that isn't an ApiError (the plugin host bridge's HostBridgeError), checked
+ * against the known vocabulary like isError.
+ */
+export const hasErrorCode = (code: string | null | undefined, expected: ErrorCode): boolean =>
+  code === expected;
+
 /** The refusal's `details`, decoded with `read`; null when absent or not that shape. */
 export function detailsOf<T>(error: ApiError | null | undefined, read: Reader<T>): T | null {
   if (!error || !("details" in error) || error.details === undefined) return null;

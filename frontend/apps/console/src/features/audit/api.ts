@@ -2,6 +2,7 @@ import type { RouteLocationRaw } from "vue-router";
 import {
   actor,
   decoders,
+  isKeyOf,
   orNull,
   request,
   type ApiResult,
@@ -99,11 +100,13 @@ export function kindText(kind: string): string {
 }
 
 /** A source as a phrase for the sources callout: "config events", "provider account changes". */
-const sourcePhrases: Readonly<Record<string, string>> = {
+const sourcePhrases = {
   provider_accounts: "provider account changes",
-};
+} as const;
 export function sourcePhrase(kind: string): string {
-  return sourcePhrases[kind] ?? `${kindText(kind).toLowerCase()} events`;
+  return isKeyOf(sourcePhrases, kind)
+    ? sourcePhrases[kind]
+    : `${kindText(kind).toLowerCase()} events`;
 }
 
 export type AuditRow = AuditEvent & Readonly<{ repeat: number }>;
@@ -141,6 +144,7 @@ export function targetRoute(
   organization: Pick<SessionOrganization, "slug" | "missions"> | null,
 ): RouteLocationRaw | null {
   const target = e.target;
+  // compared-as-text: target kinds are an open set across audit sources; only a command group links
   if (!target || target.kind !== "command_group" || !target.id || !e.mission || !organization)
     return null;
   const missionId = e.mission.id;

@@ -1,4 +1,4 @@
-import { isError, type ApiError } from "@/api";
+import { isError, isKeyOf, type ApiError } from "@/api";
 import type { SurfaceRow } from "./host.ts";
 
 /** The app's Setup surfaces in the app's own order (ux: the tabs; no `:surface` opens the first). */
@@ -17,7 +17,7 @@ export function hostRefusal(e: ApiError): HostRefusal {
  * The query keys each app's surface query accepts (ux U42; until the app descriptor lists them). The
  * server refuses an unknown key and the surface fails, so only these go to the bridge as params.
  */
-const SURFACE_QUERY_KEYS: Readonly<Record<string, readonly string[]>> = {
+const SURFACE_QUERY_KEYS = {
   derived_telemetry: [
     "definition",
     "version",
@@ -31,7 +31,7 @@ const SURFACE_QUERY_KEYS: Readonly<Record<string, readonly string[]>> = {
     "sources_page",
     "spacecraft_page",
   ],
-};
+} as const satisfies Readonly<Record<string, readonly string[]>>;
 
 /** The host-captured params for an app's surface query: its declared keys, single values only. */
 export function surfaceParams(
@@ -39,7 +39,7 @@ export function surfaceParams(
   query: Readonly<Record<string, unknown>>,
 ): Record<string, string> {
   return Object.fromEntries(
-    (SURFACE_QUERY_KEYS[appKey] ?? []).flatMap((k) => {
+    (isKeyOf(SURFACE_QUERY_KEYS, appKey) ? SURFACE_QUERY_KEYS[appKey] : []).flatMap((k) => {
       const v = query[k];
       return typeof v === "string" ? [[k, v]] : [];
     }),

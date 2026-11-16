@@ -6,6 +6,7 @@ import type {
   HostSurfaceReport,
 } from "@cadence/plugin-sdk";
 import { HostBridgeError, type HttpHostBridge } from "@cadence/plugin-sdk/host";
+import { hasErrorCode } from "@/api";
 
 /**
  * L9 bridge for one mounted surface (api: the app-host session pins ONE scope per browser session, so
@@ -21,7 +22,7 @@ export const lostText = (dirty: boolean) =>
     : LOST_TEXT;
 
 export const isMismatch = (e: unknown) =>
-  e instanceof HostBridgeError && e.code === "host_session_mismatch";
+  e instanceof HostBridgeError && hasErrorCode(e.code, "host_session_mismatch");
 
 export type RepinningBridge = Readonly<{
   bridge: HostBridge;

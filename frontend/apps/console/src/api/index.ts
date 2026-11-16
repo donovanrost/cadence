@@ -18,6 +18,7 @@ export { isKnown, knownText, vocabularyText, type Unrecognized } from "./decode.
 /** Schema-driven JSON documents: guards and path helpers instead of `as` (typing §12 A1). */
 export {
   childRecord,
+  isKeyOf,
   isRecord,
   jsonObject,
   pathGet,
@@ -70,6 +71,7 @@ export {
   detailsOf,
   errorCodes,
   fieldErrors,
+  hasErrorCode,
   isError,
   knownErrorCode,
   type ErrorCode,
