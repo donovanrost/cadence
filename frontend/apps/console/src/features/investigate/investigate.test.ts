@@ -618,7 +618,7 @@ describe("B2 escalation lines (ux U71 A7)", () => {
     kind: "escalated" as const,
     actor: null,
     at: "2026-11-08T02:31:41Z",
-    sample: { id: "s-9", at: "2026-11-08T02:31:40Z" },
+    sample: { id: "s-9", at: "2026-11-08T02:31:40Z", receipt_time: "2026-11-08T02:31:40.5Z" },
     payload: {},
   };
   it("shows the episode's own escalation with Show sample, hiding that point's limit lines only in its span", () => {

@@ -28,6 +28,7 @@ describe("B1 provenance (ux U71 A7)", () => {
           sample_type: "telemetry_sample",
           point_id: "EPS.VBAT",
           at: "2026-11-08T02:08:11Z",
+          receipt_time: "2026-11-08T02:08:11.250Z",
         },
       }),
     );
@@ -56,6 +57,7 @@ describe("B1 provenance (ux U71 A7)", () => {
           sample_type: null,
           point_id: "EPS.VBAT",
           at: "2026-11-08T02:08:11Z",
+          receipt_time: null,
         },
       }),
     );

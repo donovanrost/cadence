@@ -54,6 +54,8 @@ const episodeFields = {
         ),
         point_id: d.string,
         at: d.timestamp,
+        /** api D1 part A: the receipt time the one-sample read matches on; null without a sample. */
+        receipt_time: d.optional(d.nullable(d.timestamp)),
       }),
     ),
   ),
@@ -78,7 +80,15 @@ const event = d.object({
   actor: d.nullable(actor),
   at: d.timestamp,
   /** U68 R5: the sample a source record's event was caused by; null for people's actions. */
-  sample: d.optional(d.nullable(d.object({ id: d.nullable(d.token), at: d.timestamp }))),
+  sample: d.optional(
+    d.nullable(
+      d.object({
+        id: d.nullable(d.token),
+        at: d.timestamp,
+        receipt_time: d.optional(d.nullable(d.timestamp)),
+      }),
+    ),
+  ),
   // Kind-specific; read per kind in episodeEventText, never trusted as a whole.
   payload: (value: unknown) => (value !== null && typeof value === "object" ? value : {}),
 });
