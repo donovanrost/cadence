@@ -192,3 +192,43 @@ describe("percent typed as a fraction (ux)", () => {
     expect(ratioSlip({ ...base, unit: null }, "0.9")).toBeNull();
   });
 });
+
+describe("json fields (comms parity 4: a ground station's metadata)", () => {
+  const meta: SchemaField = {
+    path: "metadata",
+    label: "Metadata",
+    type: "json",
+    unit: null,
+    enum: null,
+    range: null,
+    default: {},
+    required: false,
+    help: null,
+    create_only: undefined,
+    visible_when: null,
+    pattern: undefined,
+  };
+
+  it("decodes the json type instead of reading it as text", () => {
+    const r = decode(kindSchemaReader, { kind: "ground_station", fields: [meta] });
+    expect(r.ok && r.value.fields[0]?.type).toBe("json");
+  });
+
+  it("shows the stored object pretty-printed and stages an object back", () => {
+    const text = fromDocument(
+      { kind: "ground_station", fields: [meta] },
+      { metadata: { site: "north", rack: 2 } },
+    )["metadata"];
+    expect(text).toBe('{\n  "site": "north",\n  "rack": 2\n}');
+    expect(toValue(meta, text ?? "")).toEqual({ ok: true, value: { site: "north", rack: 2 } });
+  });
+
+  it("treats empty as {} and rejects anything that isn't one JSON object", () => {
+    expect(toValue(meta, "  ")).toEqual({ ok: true, value: {} });
+    for (const bad of ["[1, 2]", "null", '"text"', "{site: north}", "3"])
+      expect(toValue(meta, bad)).toEqual({
+        ok: false,
+        message: 'Metadata must be a JSON object, like {"site": "north"}.',
+      });
+  });
+});

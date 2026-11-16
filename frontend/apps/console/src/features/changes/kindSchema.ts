@@ -22,6 +22,8 @@ export const schemaFieldReader = object({
     "datetime",
     "time",
     "list",
+    // domain (comms parity 4): a JSON object (a ground station's metadata); default {}.
+    "json",
   ] as const),
   unit: nullable(string),
   enum: nullable(array(object({ value: raw, label: string }), 200)),
@@ -81,6 +83,7 @@ export const formattedUnit = (f: Readonly<{ unit: string | null }>): FormattedUn
 
 /** U24: format by schema unit (seconds as durations, micros as currency units). */
 export function displayValue(f: SchemaField, v: unknown): string {
+  if (f.type === "json") return JSON.stringify(v, null, 2);
   if (typeof v === "number" && formattedUnit(f) === "s") return formatSeconds(v);
   if (typeof v === "boolean") return v ? "true" : "false";
   if (Array.isArray(v))
@@ -130,6 +133,7 @@ export type FieldCheck = Readonly<{ ok: true; value: unknown } | { ok: false; me
 /** Text → typed value, with the schema's own required/range rules (the server re-validates). */
 export function toValue(f: SchemaField, text: string): FieldCheck {
   const t = text.trim();
+  if (f.type === "json") return toObject(f, t);
   if (t === "")
     return f.required
       ? { ok: false, message: `${f.label} is required.` }
@@ -201,6 +205,23 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
       if (f.range?.max != null && t.length > f.range.max)
         return { ok: false, message: `${f.label} is at most ${f.range.max} characters.` };
       return { ok: true, value: t };
+  }
+}
+
+/** A `json` field holds one JSON object; empty means `{}` (the kind's default). */
+function toObject(f: SchemaField, t: string): FieldCheck {
+  if (t === "") return { ok: true, value: {} };
+  const bad = {
+    ok: false,
+    message: `${f.label} must be a JSON object, like {"site": "north"}.`,
+  } as const;
+  try {
+    const parsed: unknown = JSON.parse(t);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? { ok: true, value: parsed }
+      : bad;
+  } catch {
+    return bad;
   }
 }
 

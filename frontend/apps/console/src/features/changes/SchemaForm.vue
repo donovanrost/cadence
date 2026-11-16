@@ -70,7 +70,7 @@ const hint = (f: SchemaField) =>
           @update:model-value="set(f.path, $event)"
         />
         <ApTextarea
-          v-else-if="f.type === 'text'"
+          v-else-if="f.type === 'text' || f.type === 'json'"
           class="md:col-span-2"
           :label="f.label"
           :model-value="values[f.path] ?? ''"
