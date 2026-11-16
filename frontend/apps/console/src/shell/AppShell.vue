@@ -13,6 +13,7 @@ import { bindPaletteShortcut } from "./palette.ts";
 import { useConsoleScope } from "./scope.ts";
 import { canAdministerOrganization, useSession } from "./session.ts";
 import { useOpsCounts } from "./counts.ts";
+import { provideFleetPosture } from "./fleet-posture.ts";
 import { provideRuntimeStatus } from "./runtime-status.ts";
 import RuntimeBanner from "./RuntimeBanner.vue";
 import { useRuntimeBanner } from "./runtime-banner.ts";
@@ -51,6 +52,10 @@ const { counts } = useOpsCounts(computed(() => missionScope.value?.mission.id ??
 /** One runtime status for the banner and for features (useRuntimeStatus). */
 const runtimeStatus = computed(() => (counts.value ? (counts.value.runtime ?? null) : undefined));
 provideRuntimeStatus(runtimeStatus);
+/** The top bar's fleet posture reads the same /counts (no second poll; ux IA §Top bar). */
+provideFleetPosture(
+  computed(() => (counts.value ? (counts.value.posture ?? undefined) : undefined)),
+);
 const runtimeBanner = useRuntimeBanner(
   runtimeStatus,
   computed(() => missionScope.value?.mission.name ?? null),

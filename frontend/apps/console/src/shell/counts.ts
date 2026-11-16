@@ -47,8 +47,30 @@ export const countsReader = d.object({
       }),
     ),
   ),
+  /**
+   * The top bar's fleet posture (api-ops 64b16a90e; ux IA §Top bar): the same numbers and rule as
+   * GET /fleet's counts, without the rows. Optional so an older server's /counts still decodes
+   * (the posture then shows nothing, U20); null only if the read failed.
+   */
+  posture: d.optional(
+    d.nullable(
+      d.object({
+        critical: d.integer,
+        caution: d.integer,
+        stale: d.integer,
+        nominal: d.integer,
+        never_heard: d.integer,
+        total: d.integer,
+        limits_configured: d.boolean,
+        /** degraded: the history store didn't answer, so stale and never-heard can't be told apart. */
+        telemetry: d.known(["ok", "degraded"]),
+        observed_at: d.timestamp,
+      }),
+    ),
+  ),
 });
 export type RuntimeStatus = NonNullable<OpsCounts["runtime"]>;
+export type FleetPostureCounts = NonNullable<OpsCounts["posture"]>;
 export type OpsCounts = Decoded<typeof countsReader>;
 
 function fetchCounts(missionId: MissionId, signal: AbortSignal): Promise<ApiResult<OpsCounts>> {
@@ -56,6 +78,8 @@ function fetchCounts(missionId: MissionId, signal: AbortSignal): Promise<ApiResu
 }
 
 const GAP_MS = 5_000;
+/** Telemetry hints only move the posture's freshness (stale), so they refetch at most this often (api ops.md). */
+const TELEMETRY_GAP_MS = 10_000;
 
 /**
  * Shell counts (Ops rail, on-call tabs, runtime status). Refetches on alarms/attention/commanding/
@@ -76,11 +100,19 @@ export function useOpsCounts(missionId: Readonly<Ref<MissionId | null>>) {
     }, wait);
   };
   // `configuration`: an applied change set moves the runtime generation (CONVERGING, fe-setup).
+  // `limits`: installing or removing ground limits changes the posture (api-ops 64b16a90e).
   useMissionInvalidation(
     missionId,
-    ["alarms", "attention", "commanding", "spacecraft", "configuration"],
+    ["alarms", "attention", "commanding", "spacecraft", "configuration", "limits"],
     refetch,
   );
+  // Telemetry hints arrive every 500 ms under live feeds; staleness only needs ~10 s.
+  let lastTelemetry = 0;
+  useMissionInvalidation(missionId, ["telemetry"], () => {
+    if (Date.now() - lastTelemetry < TELEMETRY_GAP_MS) return;
+    lastTelemetry = Date.now();
+    refetch();
+  });
   onScopeDispose(() => {
     if (timer !== null) clearTimeout(timer);
   });

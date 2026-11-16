@@ -12,7 +12,7 @@ import type { OpState } from "@/ui";
  * - An empty mission (no spacecraft) shows nothing; Now covers the empty fleet (ux).
  */
 export type PostureChip = Readonly<{
-  key: "crit" | "caution" | "stale" | "never-heard" | "limits-off" | "nominal";
+  key: "crit" | "caution" | "stale" | "never-heard" | "unheard-recently" | "limits-off" | "nominal";
   state: OpState;
   /** null: a word-only chip (limits off, nominal). */
   count: number | null;
@@ -32,14 +32,17 @@ export type PostureInput = Readonly<{
     total: number;
   }>;
   limits: Readonly<{ configured: boolean }>;
+  /** /counts' posture says whether telemetry history answered; GET /fleet's counts don't. */
+  telemetry?: "ok" | "degraded" | "unrecognized" | undefined;
 }>;
-
-/** How often telemetry hints may refresh the posture's fleet read (lead 11-16). */
-export const POSTURE_FRESHNESS_GAP_MS = 60_000;
 
 const alarms: RouteLocationRaw = { name: "ops.alarms" };
 
-export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
+/** ux fb5e5ded0 (2): degraded, Cadence can't tell stale from never heard, so they're one chip. */
+export const DEGRADED_SENTENCE =
+  "Cadence couldn't read telemetry history, so it can't tell which of these were heard before the restart.";
+
+export function postureChips({ counts, limits, telemetry }: PostureInput): PostureChip[] {
   if (counts.total === 0) return [];
   const chips: PostureChip[] = [];
   if (!limits.configured)
@@ -71,7 +74,18 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
         to: alarms,
       });
   }
-  if (counts.stale > 0)
+  const unheard = counts.stale + counts.never_heard;
+  if (telemetry === "degraded") {
+    if (unheard > 0)
+      chips.push({
+        key: "unheard-recently",
+        state: "stale",
+        count: unheard,
+        word: "not heard recently",
+        label: `${unheard} spacecraft not heard recently. ${DEGRADED_SENTENCE}`,
+        to: { name: "ops.fleet", query: { state: "stale,never_heard" } },
+      });
+  } else if (counts.stale > 0)
     chips.push({
       key: "stale",
       state: "stale",
@@ -80,7 +94,7 @@ export function postureChips({ counts, limits }: PostureInput): PostureChip[] {
       label: `${counts.stale} spacecraft stale`,
       to: { name: "ops.fleet", query: { state: "stale" } },
     });
-  if (counts.never_heard > 0) {
+  if (telemetry !== "degraded" && counts.never_heard > 0) {
     const none = counts.never_heard === counts.total;
     chips.push({
       key: "never-heard",

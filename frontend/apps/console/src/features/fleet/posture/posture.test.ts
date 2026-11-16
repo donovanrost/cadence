@@ -67,3 +67,20 @@ describe("fleet posture chips (ux IA §Top bar, ca31e877a)", () => {
     });
   });
 });
+
+describe("telemetry degraded (ux fb5e5ded0)", () => {
+  it("merges stale and never heard into one stale-marked chip; crit and caution unaffected", () => {
+    const chips = postureChips({
+      counts: { critical: 1, caution: 0, stale: 3, never_heard: 6, total: 500 },
+      limits: { configured: true },
+      telemetry: "degraded",
+    });
+    expect(chips.map((c) => c.key)).toEqual(["crit", "unheard-recently"]);
+    expect(chips[1]).toMatchObject({
+      state: "stale",
+      count: 9,
+      word: "not heard recently",
+      to: { name: "ops.fleet", query: { state: "stale,never_heard" } },
+    });
+  });
+});

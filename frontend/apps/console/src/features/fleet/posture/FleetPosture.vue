@@ -1,36 +1,36 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { useFleet } from "../useFleet.ts";
 import { useConnection } from "@/live";
-import { useMissionScope } from "@/shell";
+import { useFleetPosture } from "@/shell";
 import { ApStatusMark, formatHourMinute, stateTextClass } from "@/ui";
-import { POSTURE_FRESHNESS_GAP_MS, postureChips } from "./posture.ts";
+import { postureChips } from "./posture.ts";
 
 /**
  * The top bar's fleet posture (ux information-architecture.md §Top bar, ca31e877a). It replaces
  * the legacy context rail and is the dashboard cockpit's chips without their clock (the top bar's
  * clocks carry UTC).
- * - Shown in both modes at mission scope; nothing until the fleet has loaded.
+ * - Shown in both modes at mission scope; nothing until /counts has its posture (U20).
+ * - Telemetry degraded: stale and never heard merge into '▨ n not heard recently' (ux fb5e5ded0).
  * - Below 768 it isn't shown (the tab bar's Alarms count and Now cover it).
  * - From 768 to 1279 it shows marks and counts; the words stay in each link's name and title.
  * - When the live link drops, the counts stay, stale-tinted, with 'as of HH:MMZ'.
  * - Changes aren't announced; a new crit flashes its chip once (no flash with reduced motion).
  */
-const scope = useMissionScope();
-// live: false: the fleet push is per screen, so this cluster refetches on the mission's hints.
-// It's on every screen and the read is ~300 KB, so telemetry hints refresh it at most once a
-// minute; the stale count may lag up to 60 s (lead). State hints still refetch within 2 s.
-// When api's counts-only posture read lands, read that instead.
-const fleet = useFleet(
-  computed(() => scope.value.mission.id),
-  { live: false, freshnessGapMs: POSTURE_FRESHNESS_GAP_MS },
-);
+// The shell's one /counts read carries the posture (api-ops 64b16a90e): a few hundred bytes,
+// refetched on the mission's hints (telemetry at most every 10 s), not the ~300 KB fleet read.
+const posture = useFleetPosture();
 const connection = useConnection();
-const ready = computed(() =>
-  fleet.state.value.status === "ready" ? fleet.state.value.value : null,
-);
-const chips = computed(() => (ready.value ? postureChips(ready.value) : []));
+const ready = computed(() => posture.value ?? null);
+const chips = computed(() => {
+  const p = ready.value;
+  if (!p) return [];
+  return postureChips({
+    counts: p,
+    limits: { configured: p.limits_configured },
+    telemetry: p.telemetry,
+  });
+});
 const offline = computed(() => connection.value === "offline");
 const asOf = computed(() =>
   ready.value ? formatHourMinute(new Date(ready.value.observed_at)) : "",
@@ -39,7 +39,7 @@ const asOf = computed(() =>
 const flashing = ref(false);
 let timer: ReturnType<typeof setTimeout> | null = null;
 watch(
-  () => ready.value?.counts.critical ?? null,
+  () => ready.value?.critical ?? null,
   (now, before) => {
     if (now === null || before === null || before === undefined || now <= before) return;
     flashing.value = true;
