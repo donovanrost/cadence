@@ -87,7 +87,8 @@ export function useSeries(
   });
   const state = computed((): RemoteState<SeriesData[]> => {
     const s = query.state.value;
-    return s.status === "failed" && last.value ? last.value : s;
+    // Kept through a failure and through Try again's reload; a new selection resets `last`.
+    return s.status !== "ready" && last.value ? last.value : s;
   });
   const refreshFailed = computed((): RefreshFailed | null =>
     failedAt.value && last.value ? { at: failedAt.value, readAt: last.value.receivedAt } : null,

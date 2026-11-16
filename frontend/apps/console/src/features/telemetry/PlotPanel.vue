@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import {
   formatClock,
@@ -24,7 +25,7 @@ const QUESTIONS = [
   { label: "Missing telemetry", to: { name: "setup.data-sources" } },
   { label: "Link health", to: { name: "ops.contacts" } },
 ] as const;
-defineProps<{
+const props = defineProps<{
   state: RemoteState<SeriesData[]>;
   view: PlotView | null;
   empty: boolean;
@@ -39,6 +40,10 @@ defineProps<{
 }>();
 defineEmits<{ retry: []; suggest: [plot: RecentPlot]; pickSc: [] }>();
 const clock = (d: Date) => `${formatClock(d).slice(0, 5)}Z`;
+/** D11: the capped-read line, once per state. */
+const capped = computed(() =>
+  props.state.status === "ready" ? cappedLine(props.state.value) : null,
+);
 const pointWords = (points: readonly string[]) =>
   points.length > 1 ? `${points[0]} and ${points.length - 1} more` : (points[0] ?? "");
 const window = defineModel<TimeRange>("window", { required: true });
@@ -143,11 +148,8 @@ const toneClass = {
             />{{ item.label }}
           </span>
         </TrendChart>
-        <p
-          v-if="state.status === 'ready' && cappedLine(state.value)"
-          class="m-0 text-sm text-caution-text"
-        >
-          {{ cappedLine(state.value) }}
+        <p v-if="capped" class="m-0 text-sm text-caution-text">
+          {{ capped }}
         </p>
       </ApRemote>
     </div>
