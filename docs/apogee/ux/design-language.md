@@ -343,6 +343,32 @@ warning). Spec: `tone: nominal | caution | crit | stale | off | info`, 10–12px
 (info = `raised`), mark, sentence 14px readout, optional trailing action button. No border, no
 icon other than the mark, no title.
 
+**ApInlineConfirm** (dashboards' kit proposal, lead-approved, 11-15). An in-place confirm under its trigger, for
+removing, revoking, resetting or closing **one** object whose result shows right there.
+- **When to use a sheet instead:** more than one field, a list of consequences, or type-to-confirm (U53).
+- **Look:** an ApCallout in `info` tone (`raised`, **no status mark, no wash**). A confirm isn't an operational
+  state, and ◆/▲ mean the spacecraft or the ground, not "be careful". Destructiveness shows in the danger button and
+  in the sentence.
+  - The sentence is a question plus its consequence: "Remove the EARENDIL-312 provider account? Missions can't book
+    with it afterwards."
+  - An optional field (a required Reason) goes below the sentence.
+- **Actions:** `Cancel` (secondary), then the action (danger or primary), right-aligned like a sheet footer.
+  - The action's label is a verb plus its object (`Remove account`, `Revoke key`), never OK, Yes or Confirm.
+  - On a phone, both share one row at 48px. If a label doesn't fit, they stack in the same order.
+- **Focus:**
+  - On open, focus goes to the first field, a reason included, as in the reason sheets; with no field, to Cancel.
+    Never to the action (checklist A1).
+  - Esc inside it means Cancel. Cancel returns focus to the trigger.
+  - After the action, focus goes to the trigger if it still exists, else the caller's return target (the row's new
+    state line), else the page h1.
+  - It isn't a focus trap: Tab may leave it, and it stays open.
+- **Semantics:** `role="group"`, named and described by its sentence. The trigger has `aria-expanded` and
+  `aria-controls`. One is open at a time; opening another cancels the first.
+- **Busy and refusals:**
+  - While busy, the action is disabled, with "Removing…" as its reason (A7).
+  - A refusal appears as a line under the sentence in a polite live region, in the refusal's own words. Focus
+    doesn't move, and the confirm stays open so the operator can cancel or retry.
+
 **ApStepBar.** Horizontal `<ol>` of steps, 40–52px high, hairline separators, display 13px .16em
 `text-4`; done = mono `✓` + label; current = mono `●`, readout, `raised` bg, inset bottom white,
 `aria-current="step"`; upcoming = number only. Commanding uses the same component for its seven
