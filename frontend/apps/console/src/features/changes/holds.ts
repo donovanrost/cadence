@@ -18,6 +18,15 @@ const retiring = (item: PreviewItem, preview: Preview) =>
     (d) => d.kind === "limit_definition" && d.entity_id === item.entity_id && d.action === "delete",
   );
 
+/** ux U81 §1: one other spacecraft, 'both'; a folded item standing for two or more missions, 'these'. */
+function scidPlaceholder(item: PreviewItem): string {
+  const scid = item.details?.scid;
+  const id = scid == null ? "this SCID" : `SCID ${scid}`;
+  return (item.details?.mission_count ?? 1) >= 2
+    ? `Why it's safe for these spacecraft to share ${id}`
+    : `Why it's safe for both spacecraft to use ${id}`;
+}
+
 function placeholderFor(item: PreviewItem, preview: Preview): string | null {
   const name = item.entity_name ?? "this spacecraft";
   switch (item.reason) {
@@ -35,6 +44,8 @@ function placeholderFor(item: PreviewItem, preview: Preview): string | null {
       return retiring(item, preview)
         ? "Why it's safe to clear it"
         : "Why it's safe to change them while it's raised";
+    case "scid_shared_in_organization":
+      return scidPlaceholder(item);
     // Reasons with no placeholder of their own (blocking, or worded elsewhere), and any other.
     case "telemetry_app_not_installed":
     case "derived_point_in_use":

@@ -33,6 +33,8 @@ export const holdReasons = [
   "catalog_configuration_pending",
   "catalog_change",
   "catalog_cancels_commands",
+  // U81 §1 (domain fbc2ae00c, api setup.md): another mission of the org flies this SCID.
+  "scid_shared_in_organization",
 ] as const;
 export type HoldReason = (typeof holdReasons)[number];
 /** A reason as text: its key, or the server's own (an item is a diagnostic either way). */
@@ -52,6 +54,15 @@ const holdDetails = object({
   used_by: decoders.optional(
     array(object({ point_id: string, name: nullable(string), definition_id: token }), 200),
   ),
+  /**
+   * U81 §1 scid_shared_in_organization (api setup.md): the shared SCID, the shared provider accounts
+   * (sorted by name), the other mission (null when folded: the ones the viewer can't open), and how
+   * many missions the item stands for.
+   */
+  scid: decoders.optional(nullable(integer)),
+  provider_accounts: decoders.optional(array(object({ id: token, name: nullable(string) }), 200)),
+  mission: decoders.optional(nullable(object({ id: token, name: nullable(string) }))),
+  mission_count: decoders.optional(nullable(integer)),
 });
 
 // Items are diagnostics: ids and reasons may be absent or null without failing the preview (qa #18).

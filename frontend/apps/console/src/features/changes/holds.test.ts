@@ -121,3 +121,55 @@ describe("mission_model_not_approved (U65, domain's gate)", () => {
     expect(modelHolds(p)).toEqual([]);
   });
 });
+
+describe("scid_shared_in_organization (U81 §1, domain fbc2ae00c)", () => {
+  const scid = (mission: object | null, missionCount: number) => ({
+    kind: "spacecraft",
+    entity_id: "sc-new",
+    op_id: null,
+    change_id: null,
+    reason: "scid_shared_in_organization",
+    blocking: false,
+    sentence: "Another mission in this organization also flies SCID 42 through KSAT. …",
+    details: {
+      scid: 42,
+      provider_accounts: [
+        { id: "acct-ksat", name: "KSAT" },
+        { id: "acct-2", name: null },
+      ],
+      mission,
+      mission_count: missionCount,
+    },
+  });
+
+  it("decodes all four details keys, a null mission and an unnamed account", () => {
+    const [item] = preview([scid(null, 2)]).checks[0]?.items ?? [];
+    expect(item?.reason).toBe("scid_shared_in_organization");
+    expect(item?.details).toMatchObject({
+      scid: 42,
+      provider_accounts: [
+        { id: "acct-ksat", name: "KSAT" },
+        { id: "acct-2", name: null },
+      ],
+      mission: null,
+      mission_count: 2,
+    });
+    const named = preview([scid({ id: "m-b", name: "Bravo" }, 1)]).checks[0]?.items[0];
+    expect(named?.details?.mission).toEqual({ id: "m-b", name: "Bravo" });
+  });
+
+  it("says 'both' for one other mission, named or folded, and 'these' for two or more", () => {
+    const both = "Why it's safe for both spacecraft to use SCID 42";
+    expect(whyPlaceholder(preview([scid({ id: "m-b", name: "Bravo" }, 1)]))).toBe(both);
+    expect(whyPlaceholder(preview([scid(null, 1)]))).toBe(both);
+    expect(whyPlaceholder(preview([scid(null, 3)]))).toBe(
+      "Why it's safe for these spacecraft to share SCID 42",
+    );
+  });
+
+  it("keeps the general placeholder for two or more holds", () => {
+    expect(whyPlaceholder(preview([scid({ id: "m-b", name: "Bravo" }, 1), scid(null, 2)]))).toBe(
+      "Why it's safe to apply despite these holds",
+    );
+  });
+});
