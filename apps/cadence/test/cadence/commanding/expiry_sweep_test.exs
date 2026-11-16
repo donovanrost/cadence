@@ -60,4 +60,31 @@ defmodule Cadence.Commanding.ExpirySweepTest do
 
     assert Cancellation.expire_due() == %{}
   end
+
+  test "U75: an expired group's read and timeline say how the expiry went, once", c do
+    ids = member_ids(c)
+    set_expired(ids)
+
+    assert Cancellation.expire_due() == %{{c.org, c.mission} => 3}
+
+    {:ok, view} = CommandGroups.get(c.org, c.mission, c.group.command_group_id, nil)
+    assert %{expired: 3, sent: 0, total: 3} = view.expiry
+
+    [row] =
+      c.org
+      |> CommandGroups.list(c.mission, nil, states: [:queued])
+      |> Enum.filter(&(&1.id == c.group.command_group_id))
+
+    assert row.expiry == view.expiry
+
+    assert [%{kind: :expired, payload: %{"sent" => 0, "not_sent" => 3}}] =
+             c.mission
+             |> GroupStore.events(c.group.command_group_id)
+             |> Enum.filter(&(&1.kind == :expired))
+  end
+
+  test "U75: a group none of whose members expired has no expiry", c do
+    {:ok, view} = CommandGroups.get(c.org, c.mission, c.group.command_group_id, nil)
+    assert view.expiry == nil
+  end
 end

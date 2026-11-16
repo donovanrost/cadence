@@ -273,6 +273,10 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   instance is satisfied, the latest match; `timed_out_at` = the earliest deadline among instances
   that timed out; `failed_at` = the earliest match among instances whose failure criteria
   matched; each `null` when it doesn't apply (`verify_by` = the latest deadline, as before).
+  U75: list rows and the group read carry `expiry: {expires_at, expired, sent, total} | null` (null
+  unless a member ended `expired`): `expired` = members with `end_reason: expired`, `sent` =
+  members that went out (radiating, executed, indeterminate, verified, no_verifier, verify_failed),
+  `total` = `member_count`. Expired members keep stage `canceled` + `end_reason: expired`.
   `caused_by` is the earlier member whose failure stopped this one (`end_reason:
   earlier_command_failed`). `release_refusal` (U46): `null`, or `{code, details, at,
   realized_contact_id, booked}` while the member still waits and the latest named release that
@@ -313,6 +317,10 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
     verify_timed_out, release_failed, canceled, catalog_changed, rejected: count}}` (only non-zero keys).
     Written right after the release, verification, halt or abort that finished the last member.
     A one-minute reconcile sweep backs it up. Each write invalidates `commanding`.
+  - `expired` (ux U75, DECISIONS #97): once per group, when its deadline ended members that hadn't
+    gone out. `at` = the group's `expires_at`, actor `{actor_kind: "system"}`, payload `{sent,
+    not_sent}` (members out before the deadline / members it ended). Written by whichever path ended
+    them first (lane dispatch, a named release, the sweep); never twice.
   - `released_on_contact` (U46): a named release that got past the group-level checks, even when
     its first member stopped. `actor` the user. Payload: `{released_by, realized_contact_id, booked,
     released_entry_ids, not_attempted_entry_ids, stopped: null | {command_queue_entry_id,

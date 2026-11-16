@@ -20,7 +20,7 @@ defmodule Cadence.Reads.CommandGroups do
 
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.Reads.{CommandCatalog, Commands}
-  alias Cadence.Reads.CommandGroups.{ReleaseRefusals, VerifyTimes}
+  alias Cadence.Reads.CommandGroups.{Expiry, ReleaseRefusals, VerifyTimes}
   alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
 
   # Final member stages. `indeterminate` (an uncertain release) isn't: an operator must resolve
@@ -57,7 +57,9 @@ defmodule Cadence.Reads.CommandGroups do
       group
       |> summary()
       |> Map.put(:awaiting_me, awaiting?(group, viewer_id))
-      |> Map.merge(Map.get(delivery, group.command_group_id, %{progress: nil, finished: nil}))
+      |> Map.merge(
+        Map.get(delivery, group.command_group_id, %{progress: nil, finished: nil, expiry: nil})
+      )
     end)
   end
 
@@ -79,7 +81,9 @@ defmodule Cadence.Reads.CommandGroups do
       {group.command_group_id,
        %{
          progress: Enum.frequencies_by(targets, & &1.stage),
-         finished: Enum.all?(targets, &(&1.stage in @finished))
+         finished: Enum.all?(targets, &(&1.stage in @finished)),
+         # U75: how its expiry went, when it did.
+         expiry: Expiry.summary(group, targets)
        }}
     end)
   end
@@ -103,7 +107,9 @@ defmodule Cadence.Reads.CommandGroups do
       {:ok,
        group
        |> summary()
-       |> Map.merge(Map.get(delivery, group.command_group_id, %{progress: nil, finished: nil}))}
+       |> Map.merge(
+         Map.get(delivery, group.command_group_id, %{progress: nil, finished: nil, expiry: nil})
+       )}
     end
   end
 
@@ -134,6 +140,7 @@ defmodule Cadence.Reads.CommandGroups do
          targets: targets,
          progress: Enum.frequencies_by(targets, & &1.stage),
          finished: Enum.all?(targets, &(&1.stage in @finished)),
+         expiry: Expiry.summary(group, targets),
          events: events,
          # U2: per stacked command, which targets share which verifiers (as Compose's preflight).
          verifier_groups: VerifierGroups.for_group(org, mission, group, members),

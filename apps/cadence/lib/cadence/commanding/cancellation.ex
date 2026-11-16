@@ -14,6 +14,7 @@ defmodule Cadence.Commanding.Cancellation do
   import Ecto.Query
 
   alias Cadence.Commanding.{CommandQueueEntryRow, CommandRequestRow}
+  alias Cadence.Commanding.Groups.ExpiryEvent
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
@@ -70,6 +71,9 @@ defmodule Cadence.Commanding.Cancellation do
       )
       |> Repo.update_all(set: [lifecycle_state: "canceled", updated_at: now])
     end
+
+    # U75: a group whose members expired says so once on its timeline.
+    if reason == "expired", do: ExpiryEvent.record(org, mission, cancelable)
 
     %{
       canceled: Enum.map(cancelable, & &1.command_request_id),

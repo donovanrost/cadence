@@ -16,12 +16,13 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
   alias Cadence.CommandGroupFixtures
 
   alias Cadence.Commanding.{
+    Cancellation,
     CommandQueueEntryRow,
     CommandReleaseAttemptRow,
     CommandRequestRow
   }
 
-  alias Cadence.Commanding.Groups.Admission
+  alias Cadence.Commanding.Groups.{Admission, GroupStore}
   alias Cadence.Control.Commanding
   alias Cadence.Control.Commanding.GroupRelease
   alias Cadence.Persistence.JsonDocument
@@ -91,6 +92,14 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
 
     assert attempts(first) == 1
     assert Enum.all?(rest, &(ended_expired?(&1) and attempts(&1) == 0))
+
+    # U75: the timeline says it once (the read's expiry counts: expiry_sweep_test).
+    assert [%{payload: %{"sent" => 1, "not_sent" => 2}, actor: %{"actor_kind" => "system"}}] =
+             expired_events(first)
+
+    # A later sweep or path ends nothing new and writes no second event.
+    Cancellation.expire_due()
+    assert length(expired_events(first)) == 1
   end
 
   test "the claim refuses an expired entry that nothing has closed yet", c do
@@ -181,6 +190,12 @@ defmodule Cadence.Control.Commanding.ExpiryAtReleaseTest do
       from(r in CommandRequestRow, where: r.command_request_id == ^entry.command_request_id)
       |> Repo.update_all(set: [expires_at: past])
   end
+
+  defp group_id(entry_id),
+    do: Repo.get!(CommandRequestRow, request_id(entry_id)).command_group_id
+
+  defp expired_events(entry_id),
+    do: @mission |> GroupStore.events(group_id(entry_id)) |> Enum.filter(&(&1.kind == :expired))
 
   defp lane(entry_id), do: Repo.get!(CommandQueueEntryRow, entry_id).queue_lane_key
 

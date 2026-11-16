@@ -12,7 +12,7 @@ defmodule Cadence.Commanding.Groups.CommandGroupEventRow do
 
   @kinds ~w(submitted approved approved_with_exclusions sent_back rejected note member_canceled
             aborted member_failed completed hold_acknowledged
-            released_on_contact)
+            released_on_contact expired)
 
   schema "command_group_events" do
     field(:command_group_id, :string)
