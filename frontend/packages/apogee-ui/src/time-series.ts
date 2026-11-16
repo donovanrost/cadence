@@ -37,6 +37,13 @@ export type TimeBand = Readonly<{
   severity?: "caution" | "crit" | undefined;
   label?: string | undefined;
 }>;
+/**
+ * A marked moment (a sample to point at): a ring on the series at `t` plus a dashed vertical, or
+ * the vertical alone when the series has no value there. `series` names a comparison series (its
+ * `name`); omitted = the main series. `label` is read out (the shape and the text carry it, not
+ * colour alone).
+ */
+export type TimeMark = Readonly<{ t: number; label: string; series?: string | undefined }>;
 export type Domain = readonly [number, number];
 
 const f = (n: number) => (Math.round(n * 10) / 10).toString();

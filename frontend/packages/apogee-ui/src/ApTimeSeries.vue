@@ -12,6 +12,7 @@ import {
   type LimitSegment,
   type SeriesPoint,
   type TimeBand,
+  type TimeMark,
   type TimeWindow,
 } from "./time-series.ts";
 
@@ -36,6 +37,8 @@ const props = withDefaults(
     stepMs?: number | null;
     /** Labelled spans behind the plot: passes (AOS–LOS + station), outages. */
     bands?: readonly TimeBand[];
+    /** Marked moments: a ring on the series (plus a dashed vertical), read out by label. */
+    marks?: readonly TimeMark[];
     /** The main series' name in the hover readout. */
     seriesName?: string | undefined;
     /** Readout time; defaults to `formatTick`. */
@@ -48,6 +51,7 @@ const props = withDefaults(
     height: 250,
     stepMs: null,
     bands: () => [],
+    marks: () => [],
     seriesName: undefined,
     formatTime: undefined,
   },
@@ -157,6 +161,25 @@ const crosshair = computed(() => {
   };
 });
 
+/** Ringed when the marked series has a value at `t`; the dashed vertical always. */
+const markBoxes = computed(() =>
+  props.marks
+    .filter((m) => m.t >= props.window.from && m.t <= props.window.to)
+    .map((m, i) => {
+      const points =
+        m.series === undefined
+          ? props.series
+          : (props.comparison.find((c) => c.name === m.series)?.points ?? []);
+      const p = pointAt(points, m.t, tolerance.value);
+      return {
+        key: i,
+        label: m.label,
+        left: pct(x.value(m.t), W),
+        top: p ? pct(y.value(p.mean), props.height) : null,
+      };
+    }),
+);
+
 const nowX = computed(() =>
   props.now !== null && props.now >= props.window.from && props.now <= props.window.to
     ? x.value(props.now)
@@ -256,6 +279,20 @@ const nowX = computed(() =>
             class="stroke-action"
           />
         </svg>
+        <!-- Marks: a dashed vertical and a ring (shape, not colour alone); the label is read out. -->
+        <template v-for="m in markBoxes" :key="m.key">
+          <span
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-y-0 w-0 border-l border-dashed border-readout"
+            :style="{ left: m.left }"
+          />
+          <span
+            v-if="m.top !== null"
+            aria-hidden="true"
+            class="pointer-events-none absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-readout"
+            :style="{ left: m.left, top: m.top }"
+          />
+        </template>
         <template v-if="crosshair">
           <span
             aria-hidden="true"
@@ -287,6 +324,9 @@ const nowX = computed(() =>
         >
       </div>
     </div>
+    <p v-if="markBoxes.length" class="sr-only">
+      Marked: {{ markBoxes.map((m) => m.label).join("; ") }}.
+    </p>
     <figcaption v-if="$slots.default" class="pl-[52px] font-mono text-xs text-text-3">
       <slot />
     </figcaption>

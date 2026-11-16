@@ -54,6 +54,7 @@ export {
   type LimitSegment,
   type SeriesPoint,
   type TimeBand,
+  type TimeMark,
   type TimeWindow,
 } from "./time-series.ts";
 export { parseTime } from "./time/parse.ts";
