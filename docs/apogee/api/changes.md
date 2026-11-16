@@ -161,3 +161,33 @@ sentences:
   paths the overridden field's (`…/frame_size.value`; `.reason` → "… override reason"), and
   spacecraft paths Name, SCID, NORAD ID, Profile, Profile version. An entry may also carry
   `format: "version"` (show `4` as "v4").
+
+## Transport provider options (comms parity 2)
+
+`GET …/config/kinds/transport/provider-options?provider_id=&service_profile_id=&delivery_profile_id=`
+(each optional; needs `config.stage`). The provider-managed transport form's dependent choices
+and its derived preview; nothing is written.
+
+```json
+{"data": {
+  "providers": [{"id": "…", "version": 2, "name": "Simulator"}],
+  "services": [{"id": "service-downlink", "version": 3, "name": "Realtime telemetry"}],
+  "deliveries": [{"id": "delivery-cadence", "version": 7, "name": "Cadence primary ingress"}],
+  "preview": {"configuration": [{"label": "Endpoint", "value": "127.0.0.1:5100"}, …],
+              "direction_capability": "inbound", "provider_version": 2,
+              "summary": [{"label": "Endpoint", "value": "127.0.0.1:5100"}, …]},
+  "errors": []}}
+```
+
+- `services` is `[]` until a provider is chosen; `deliveries` is `[]` until a service is chosen
+  (only ready downlink deliveries that support the service and that the transport kind can use).
+- `preview` is `Management.Transports.derive/3` (the derivation a change set's apply stores),
+  rendered as rows of strings in display order; `null` until all three are chosen, or when derive
+  refuses.
+- `errors`: `[{path, message}]`, `path` one of `mission_provider_id`, `mission_provider_version`,
+  `service_profile_ref`, `delivery_profile_ref`, or `null` (a general error). A chosen id that
+  isn't on offer is reported on its field.
+- Stage `origin: "provider_managed"`, `display_name`, `mission_provider_id`,
+  `mission_provider_version` and the exact refs `service_profile_ref` / `delivery_profile_ref`
+  (`{id, version}`); `configuration` and `direction_capability` are derived, never staged.
+- Errors: `403 forbidden` without `config.stage`; `422 invalid_params` for a non-text query value.

@@ -1248,6 +1248,12 @@ defmodule CadenceWeb.Router do
         get("/revisions/:revision", ConfigController, :revision)
         get("/compare", ConfigController, :compare)
         get("/kinds/:kind/schema", ConfigController, :kind_schema)
+        # Comms parity 2: the provider-managed transport form's choices and derived preview.
+        get(
+          "/kinds/transport/provider-options",
+          TransportProviderOptionsController,
+          :show
+        )
       end
     end
 
