@@ -2,7 +2,7 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useRemoteQuery } from "@/api/index.ts";
+import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { useDisclosure } from "@/shell/index.ts";
 import { ApButton, ApField } from "@/ui";
 import { fetchRawKinds, type EventKind } from "./api.ts";
@@ -42,6 +42,10 @@ const read = useRemoteQuery(
       : null,
   ),
   (k, signal) => fetchRawKinds(k.m, { from: new Date(k.from), to: new Date(k.to) }, signal),
+);
+/** A failed read says so, with Retry, never 'none in this window' (fe-ops' review). */
+const loadError = computed(() =>
+  read.state.value.status === "failed" ? describeApiError(read.state.value.error) : null,
 );
 const options = computed(() => {
   const rows = read.state.value.status === "ready" ? read.state.value.value : [];
@@ -115,12 +119,16 @@ watch(open, async (isOpen) => {
           />
           {{ o.label }}
         </label>
-        <p v-if="!options.length" class="m-0 text-sm text-text-3">
+        <p v-if="loadError" class="m-0 flex flex-wrap items-center gap-2 text-sm text-caution-text">
+          Couldn't load event types: {{ loadError }}
+          <ApButton size="compact" variant="secondary" @click="read.refetch">Retry</ApButton>
+        </p>
+        <p v-else-if="!options.length" class="m-0 text-sm text-text-3">
           {{ q.trim() ? "No event types match." : "No event types in this window." }}
         </p>
       </fieldset>
       <p v-if="selected.length >= MAX" class="m-0 text-sm text-text-3" role="status">
-        Up to {{ MAX }} types at a time.
+        Up to {{ MAX }} types at once.
       </p>
     </div>
   </div>
