@@ -2166,8 +2166,8 @@ passes are on Live and Plan. The current week runs to now.
     earliest 500 are shown, through 18:40Z." The time is the last shown pass's start.
   - In the list, at the point where the missing passes belong (above that day's newest shown row), a `text-3` row:
     "Passes on 11-12 after 18:40Z aren't shown."
-  - No advice to narrow by station or state: those filters run after the cut and can't bring the rows back. Add
-    "Pick a spacecraft to see the rest." only if api confirms the spacecraft filter runs in the read.
+  - The callout ends "Pick a spacecraft to see the rest." (api: the spacecraft filter runs in the read, before the
+    cut). No advice to narrow by station or state: those run after the cut and can't bring the rows back.
   - Meta reads `500+ PASSES` on a day that's short, and counts stay "500+" wherever they include it.
 - Error: "Contact history couldn't load." + `Try again`.
 
@@ -2176,6 +2176,8 @@ filter.
 - The Window cell reads `11-14 02:59:40 – 03:08:52Z` with a `HAND-STARTED` tag. It's a contact, not a pass (U46):
   no AOS or LOS words, and no Reservation or Provider revision (`—`).
 - State is its real state word (`In contact`, `Ended · not verified`), never "Hand-started".
+- With no end yet (`ends_at` null): `11-16 02:59:40Z – no end yet`. That's true whether the contact is still open or
+  its end was never recorded, so it claims neither (U20). Duration reads `—`.
 - Count lines add them: "1,284 passes and 3 hand-started contacts". The foot line goes.
 - The drawer shows the A13 record alone, titled "Contact record", with no reservation section and no pass actions.
 
