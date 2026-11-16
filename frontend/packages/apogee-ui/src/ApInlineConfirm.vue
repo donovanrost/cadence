@@ -45,7 +45,8 @@ const props = withDefaults(
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
 defineSlots<{
   default(): unknown;
-  trigger(props: {
+  /** Optional: a confirm opened from a ⋯ menu item opens through v-model:open instead. */
+  trigger?(props: {
     attrs: {
       "aria-expanded": "true" | "false";
       "aria-controls": string;
