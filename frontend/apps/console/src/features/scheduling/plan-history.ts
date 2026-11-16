@@ -36,12 +36,19 @@ const decisionRow = d.object({
   // free-text: a submit's note or a decision's reason
   text: d.nullable(d.string),
   unchanged: d.nullable(d.boolean),
-  // free-text: each accepted gap's reason, as its author or approver wrote it
-  acknowledgements: d.array(d.object({ requirement_id: d.token, reason: d.string }), 2_000),
+  acknowledgements: d.array(
+    d.object({
+      requirement_id: d.token,
+      // free-text: why the author accepted this gap, as they wrote it
+      reason: d.string,
+    }),
+    2_000,
+  ),
   exceptions: d.array(
     d.object({
       requirement_id: d.token,
       requirement_version: d.nullable(d.integer),
+      // free-text: why the approver accepted this gap, as they wrote it
       reason: d.string,
     }),
     2_000,
