@@ -268,7 +268,11 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   boolean on show), `events[] {id, kind, actor, at, payload}` (see Timeline events below),
   and `targets[]`:
   `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
-  end_reason, caused_by, verify_by, occurred_at, release_refusal}], last_event_at, blocked: null}`.
+  end_reason, caused_by, verify_by, verified_at, timed_out_at, failed_at, occurred_at,
+  release_refusal}], last_event_at, blocked: null}`. U69 A4a: `verified_at` = once every verifier
+  instance is satisfied, the latest match; `timed_out_at` = the earliest deadline among instances
+  that timed out; `failed_at` = the earliest match among instances whose failure criteria
+  matched; each `null` when it doesn't apply (`verify_by` = the latest deadline, as before).
   `caused_by` is the earlier member whose failure stopped this one (`end_reason:
   earlier_command_failed`). `release_refusal` (U46): `null`, or `{code, details, at,
   realized_contact_id, booked}` while the member still waits and the latest named release that

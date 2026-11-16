@@ -20,7 +20,7 @@ defmodule Cadence.Reads.CommandGroups do
 
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.Reads.{CommandCatalog, Commands}
-  alias Cadence.Reads.CommandGroups.ReleaseRefusals
+  alias Cadence.Reads.CommandGroups.{ReleaseRefusals, VerifyTimes}
   alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
 
   # Final member stages. `indeterminate` (an uncertain release) isn't: an operator must resolve
@@ -250,9 +250,10 @@ defmodule Cadence.Reads.CommandGroups do
       stage: stage,
       end_reason: end_reason(request, stage),
       caused_by: caused_by(request),
-      verify_by: verify_by(row),
       occurred_at: row && row.occurred_at
     }
+    # verify_by, and (U69 A4a) verified_at, timed_out_at, failed_at.
+    |> Map.merge(VerifyTimes.fields(row))
   end
 
   defp stage(%{lifecycle_state: :approval_pending}, _row, _excluded), do: :awaiting_go
@@ -309,15 +310,6 @@ defmodule Cadence.Reads.CommandGroups do
       _other -> nil
     end
   end
-
-  defp verify_by(%{verifier_instances: [_ | _] = instances}) do
-    instances
-    |> Enum.map(& &1.timeout_at)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.max(DateTime, fn -> nil end)
-  end
-
-  defp verify_by(_row), do: nil
 
   # Lanes held by a release whose outcome is unknown (`release_uncertain`): nothing behind it
   # releases until an operator resolves it. `%{lane => command_request_id}`.
