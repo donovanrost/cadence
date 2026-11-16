@@ -9,12 +9,12 @@ afterEach(() => {
 });
 
 describe("ApSheet", () => {
-  function mountSheet(initialFocus?: string) {
+  function mountSheet(initialFocus?: string, extra: Record<string, unknown> = {}) {
     const opener = document.createElement("button");
     document.body.append(opener);
     const wrapper = mount(ApSheet, {
       attachTo: document.body,
-      props: { title: "Send back", ...(initialFocus ? { initialFocus } : {}) },
+      props: { title: "Send back", ...(initialFocus ? { initialFocus } : {}), ...extra },
       slots: {
         default: '<textarea aria-label="Why"></textarea>',
         footer: "<button>Cancel</button><button>Send back</button>",
@@ -159,5 +159,55 @@ describe("ApSheet", () => {
     await nextTick();
     expect(dialog.element.open).toBe(false);
     wrapper.unmount();
+  });
+
+  describe("A5: focus on close when the opener is gone", () => {
+    it("goes to returnFocus (an element or a function), evaluated at close", async () => {
+      const line = document.createElement("p");
+      line.tabIndex = -1;
+      document.body.append(line);
+      const { wrapper, sheet, opener } = mountSheet(undefined, { returnFocus: () => line });
+      opener.focus();
+      sheet.open();
+      await nextTick();
+      opener.remove();
+      sheet.close();
+      await nextTick();
+      expect(document.activeElement).toBe(line);
+      wrapper.unmount();
+      line.remove();
+    });
+
+    it("without returnFocus, goes to the page's main heading (tabindex -1), never <body>", async () => {
+      const main = document.createElement("main");
+      main.innerHTML = "<h1>Now</h1>";
+      document.body.append(main);
+      const { wrapper, sheet, opener } = mountSheet();
+      opener.focus();
+      sheet.open();
+      await nextTick();
+      opener.remove();
+      sheet.close();
+      await nextTick();
+      expect(document.activeElement?.textContent).toBe("Now");
+      expect(document.activeElement?.getAttribute("tabindex")).toBe("-1");
+      wrapper.unmount();
+      main.remove();
+    });
+
+    it("an opener still there gets focus back, whatever returnFocus says", async () => {
+      const elsewhere = document.createElement("p");
+      elsewhere.tabIndex = -1;
+      document.body.append(elsewhere);
+      const { wrapper, sheet, opener } = mountSheet(undefined, { returnFocus: elsewhere });
+      opener.focus();
+      sheet.open();
+      await nextTick();
+      sheet.close();
+      await nextTick();
+      expect(document.activeElement).toBe(opener);
+      wrapper.unmount();
+      elsewhere.remove();
+    });
   });
 });

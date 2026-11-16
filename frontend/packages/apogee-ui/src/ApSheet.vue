@@ -28,6 +28,11 @@ const props = withDefaults(
     placement?: "center" | "side" | undefined;
     /** False: Escape doesn't close it; only the caller's own close() does (e.g. a show-once secret). */
     dismissible?: boolean | undefined;
+    /**
+     * ux a11y A5: where focus goes on close when the opener is gone (the action removed its row):
+     * an element, or a function evaluated at close. Without it, the page's main heading.
+     */
+    returnFocus?: HTMLElement | (() => HTMLElement | null) | null | undefined;
   }>(),
   { width: "narrow", initialFocus: "footer button", placement: "center", dismissible: true },
 );
@@ -71,8 +76,20 @@ function onKeydown(event: KeyboardEvent) {
     close();
   }
 }
+/** The page's main heading (tabindex -1, the route-focus target), else <main>; never <body>. */
+function landmark(): HTMLElement | null {
+  const target =
+    document.querySelector<HTMLElement>("main h1") ?? document.querySelector<HTMLElement>("main");
+  if (target && !target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+  return target;
+}
 function onClose() {
-  opener?.focus();
+  const fallback =
+    typeof props.returnFocus === "function" ? props.returnFocus() : props.returnFocus;
+  const target = opener?.isConnected
+    ? opener
+    : ((fallback?.isConnected ? fallback : null) ?? landmark());
+  target?.focus();
   opener = null;
   emit("closed");
 }
