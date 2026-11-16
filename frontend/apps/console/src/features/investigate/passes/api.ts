@@ -2,6 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import {
   decoders as d,
   DecodeError,
+  stationRef,
   request,
   type ApiResult,
   type Decoded,
@@ -15,14 +16,8 @@ import { causeText, outcomeTag, ownerWord } from "@/features/review/format.ts";
  * Investigate › Passes (Investigate.md §Passes; ops.md §spacecraft/:id/passes, api 324428aa):
  * P1 coverage and P3's queued counts. P2/P3 rows come from /passes and P4 from pass-review rows.
  */
-const station = d.nullable(
-  d.object({
-    id: d.nullable(d.token),
-    // free-text: the station's short code, an identifier shown as is.
-    code: d.nullable(d.string),
-    name: d.nullable(d.string),
-  }),
-);
+/** §12 A5: the shared station reference (api/entities.ts). */
+const station = d.nullable(stationRef);
 /** `{<pass id>: count}`, only passes with groups queued. */
 const queuedCounts: Reader<Readonly<Record<string, number>>> = (value, path = "") => {
   if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -75,13 +70,7 @@ export function fetchCoverage(
 
 const recentRow = d.object({
   id: d.token,
-  station: d.nullable(
-    d.object({
-      // free-text: the station's short code, an identifier shown as is.
-      code: d.nullable(d.string),
-      name: d.nullable(d.string),
-    }),
-  ),
+  station,
   planned_aos: d.timestamp,
   planned_los: d.timestamp,
   actual_aos: d.nullable(d.timestamp),

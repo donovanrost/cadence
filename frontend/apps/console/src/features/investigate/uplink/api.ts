@@ -1,9 +1,9 @@
 import type { MissionId } from "@/api/index.ts";
 import {
-  stationId as stationIdReader,
-  scid as scidReader,
   actor,
   decoders as d,
+  spacecraftRef,
+  stationRef,
   request,
   type ApiResult,
   type Decoded,
@@ -15,13 +15,8 @@ import { passReadinessReader } from "@/features/contacts/readiness.ts";
  * Investigate › Uplink (Investigate.md §Tab · Uplink; ops.md §spacecraft/:id/uplink, aa1f493e):
  * can I command this spacecraft now, and what's going up?
  */
-const station = d.object({
-  ref: d.nullable(d.string),
-  id: d.nullable(stationIdReader),
-  // free-text: the station's short code, an identifier shown as is.
-  code: d.nullable(d.string),
-  name: d.nullable(d.string),
-});
+/** §12 A5: the shared station and spacecraft references (api/entities.ts). */
+const station = stationRef;
 const provider = d.nullable(d.object({ id: d.nullable(d.token), name: d.nullable(d.string) }));
 const pass = d.object({
   reservation_id: d.token,
@@ -34,7 +29,7 @@ const pass = d.object({
 const group = d.nullable(d.object({ id: d.token, title: d.string }));
 
 const uplinkReader = d.object({
-  spacecraft: d.object({ id: d.token, name: d.string, scid: scidReader }),
+  spacecraft: spacecraftRef,
   route: d.nullable(
     d.object({
       routing_rule_id: d.nullable(d.token),
