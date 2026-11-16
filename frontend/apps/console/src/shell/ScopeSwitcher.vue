@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { useRoute } from "vue-router";
 import { useDisclosure } from "./disclosure.ts";
 import type { ConsoleScope } from "./scope.ts";
@@ -11,6 +11,15 @@ const props = defineProps<{ scope: ConsoleScope }>();
 const route = useRoute();
 const root = ref<HTMLElement | null>(null);
 const { open, toggle, close } = useDisclosure(root);
+const listLabel = useId();
+/**
+ * A disclosure, not a menu (ux, a11y-checklist B3): navigation links Tab in order. When focus moves
+ * to something outside (a Tab past the last mission), the list closes instead of staying over the page.
+ */
+function onFocusOut(event: FocusEvent) {
+  const next = event.relatedTarget;
+  if (open.value && next instanceof Node && root.value && !root.value.contains(next)) close();
+}
 
 const organization = computed(() =>
   props.scope.kind === "organization" ||
@@ -32,12 +41,16 @@ const targetName = computed(() =>
 </script>
 
 <template>
-  <div v-if="organization" ref="root" class="relative flex border-r border-hairline">
+  <div
+    v-if="organization"
+    ref="root"
+    class="relative flex border-r border-hairline"
+    @focusout="onFocusOut"
+  >
     <button
       type="button"
       class="flex cursor-pointer items-center gap-2.5 border-0 bg-transparent min-w-0 px-4 md:px-[18px] font-display text-base font-semibold tracking-tag text-readout uppercase hover:bg-raised"
       :aria-expanded="open"
-      aria-haspopup="true"
       aria-controls="mission-switcher"
       @click="toggle"
     >
@@ -66,8 +79,8 @@ const targetName = computed(() =>
       id="mission-switcher"
       class="absolute top-full left-0 z-30 min-w-[280px] border border-line bg-raised py-1.5"
     >
-      <p class="ap-label px-3.5 pt-1.5 pb-1">Missions in {{ organization.name }}</p>
-      <ul class="m-0 list-none p-0">
+      <p :id="listLabel" class="ap-label px-3.5 pt-1.5 pb-1">Missions in {{ organization.name }}</p>
+      <ul class="m-0 list-none p-0" :aria-labelledby="listLabel">
         <li v-for="mission in organization.missions" :key="mission.id">
           <RouterLink
             :to="{ name: targetName, params: { org: organization.slug, mission: mission.slug } }"
