@@ -236,7 +236,8 @@ export type StageOp = Readonly<{
     | "transport"
     | "spacecraft"
     | "spacecraft_profile"
-    | "spacecraft_override";
+    | "spacecraft_override"
+    | "spacecraft_route";
   action: "create" | "update" | "delete";
   entity_id?: string;
   document?: Readonly<Record<string, unknown>>;

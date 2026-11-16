@@ -1,18 +1,39 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { ApEmptyState, ApPanel, ApTable, type ApColumn } from "@/ui";
+import type { MissionId } from "@/api/index.ts";
+import { computed, ref } from "vue";
+import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, type ApColumn } from "@/ui";
+import RemoveRouteSheet from "./RemoveRouteSheet.vue";
 import { directionLabel, type RoutingRule } from "./detail.ts";
+import { actionRows, routeTag, stationWord } from "./routes.ts";
 
-/** D4 Routing rules for this spacecraft (per spacecraft until DECISIONS #3 moves them to the profile). */
-const props = defineProps<{ rules: readonly RoutingRule[] }>();
+/**
+ * D4 Routing for this spacecraft. U79: each route says where it comes from, `Add extra route` sits
+ * above the list, and the spacecraft's own routes have Edit and Remove…, both staged.
+ */
+const props = defineProps<{
+  missionId: MissionId;
+  spacecraftName: string;
+  rules: readonly RoutingRule[];
+  /** Stage into the change set (the spacecraft page's gate). */
+  canStage: boolean;
+}>();
 const active = computed(() => props.rules.filter((r) => r.active));
-const columns: readonly ApColumn[] = [
+const routeOf = computed(() => actionRows(active.value));
+const remover = ref<InstanceType<typeof RemoveRouteSheet> | null>(null);
+const columns = computed((): readonly ApColumn[] => [
   { key: "name", label: "Rule" },
+  { key: "source", label: "Source" },
   { key: "direction", label: "Direction" },
   { key: "role", label: "Role" },
   { key: "transport", label: "Transport" },
   { key: "state", label: "State" },
-];
+  ...(props.canStage ? [{ key: "actions", label: "", align: "end" as const }] : []),
+]);
+function remove(rule: RoutingRule) {
+  const routeId = routeOf.value.get(rule.id);
+  if (routeId)
+    remover.value?.open({ routeId, name: rule.name, station: stationWord(rule.station) });
+}
 </script>
 
 <template>
@@ -25,6 +46,9 @@ const columns: readonly ApColumn[] = [
         >Comms &amp; routing →</RouterLink
       >
     </template>
+    <div v-if="canStage" class="flex justify-end border-b border-hairline px-4 py-2.5">
+      <ApButton size="compact" :to="{ query: { route: 'new' } }">Add extra route</ApButton>
+    </div>
     <ApEmptyState
       v-if="active.length === 0"
       state="off"
@@ -40,6 +64,19 @@ const columns: readonly ApColumn[] = [
     >
       <template #cell-name="{ row }">
         {{ row.name }}<span v-if="row.purpose" class="text-text-4"> · {{ row.purpose }}</span>
+        <span v-if="routeTag(row)?.note" class="block text-sm text-text-3">{{
+          routeTag(row)?.note
+        }}</span>
+        <!-- ux A6: why there's no Edit, as reachable text (not a disabled button). -->
+        <span
+          v-if="canStage && routeTag(row)?.reason"
+          tabindex="0"
+          class="block text-sm text-text-3"
+          >{{ routeTag(row)?.reason }}</span
+        >
+      </template>
+      <template #cell-source="{ row }">
+        <ApTag v-if="routeTag(row)" :label="routeTag(row)?.label" />
       </template>
       <template #cell-direction="{ row }">{{ directionLabel(row.direction) }}</template>
       <template #cell-role="{ row }"
@@ -51,6 +88,13 @@ const columns: readonly ApColumn[] = [
           row.enabled ? "Enabled" : "Disabled"
         }}</span>
       </template>
+      <template #cell-actions="{ row }">
+        <span v-if="routeOf.has(row.id)" class="flex items-center justify-end gap-2">
+          <ApButton size="compact" :to="{ query: { route: routeOf.get(row.id) } }">Edit</ApButton>
+          <ApButton size="compact" variant="ghost" @click="remove(row)">Remove…</ApButton>
+        </span>
+      </template>
     </ApTable>
+    <RemoveRouteSheet ref="remover" :mission-id="missionId" :spacecraft-name="spacecraftName" />
   </ApPanel>
 </template>

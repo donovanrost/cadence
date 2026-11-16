@@ -34,6 +34,7 @@ export const configKinds = [
   "spacecraft_profile",
   "spacecraft_override",
   "spacecraft_routes",
+  "spacecraft_route",
   "framing_compatibility",
   "catalog_compatibility",
   "switch_compatibility",
@@ -48,6 +49,8 @@ const configKindWords: Readonly<Record<ConfigKind, string>> = {
   spacecraft_profile: "Profile",
   spacecraft_override: "Override",
   spacecraft_routes: "Spacecraft routes",
+  // U79: one spacecraft's own route (domain 774471695).
+  spacecraft_route: "Extra route",
   framing_compatibility: "Framing compatibility",
   catalog_compatibility: "Catalog compatibility",
   switch_compatibility: "Commanding and telemetry switches",

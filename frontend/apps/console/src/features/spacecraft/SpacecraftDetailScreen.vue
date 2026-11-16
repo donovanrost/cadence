@@ -7,6 +7,7 @@ import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTag, type ApCrumb } from "@/ui";
 import SpacecraftAdmin from "./SpacecraftAdmin.vue";
+import ExtraRouteEditor from "./ExtraRouteEditor.vue";
 import SpacecraftEditor from "./SpacecraftEditor.vue";
 import SpacecraftPanels from "./SpacecraftPanels.vue";
 import { fetchSpacecraftDetail } from "./detail.ts";
@@ -18,6 +19,12 @@ const session = useSession();
 /** L17: Edit and Archive stage into the change set (the same gate as stations' edits). */
 const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
 const editing = computed(() => canStage.value && route.query.edit === "1");
+/** U79: `?route=new` adds an extra route, `?route=<id>` edits one (Routing's Add / Edit). */
+const routeId = computed(() =>
+  canStage.value && typeof route.query.route === "string" && route.query.route !== ""
+    ? route.query.route
+    : null,
+);
 /** The spacecraft's id (not its SCID): a branded SpacecraftId (typing §12C). */
 const spacecraftId = computed(() => spacecraftIdParam(route.params.spacecraftId));
 const key = computed(() =>
@@ -68,7 +75,19 @@ const crumbs = computed((): readonly ApCrumb[] => [
     <ApRemote :state="state" loading-label="Loading spacecraft…" @retry="refetch">
       <template #default="{ value }">
         <SpacecraftEditor v-if="editing" :mission-id="scope.mission.id" :detail="value" />
-        <SpacecraftPanels v-else :mission-id="scope.mission.id" :detail="value" />
+        <ExtraRouteEditor
+          v-else-if="routeId !== null"
+          :key="routeId"
+          :mission-id="scope.mission.id"
+          :detail="value"
+          :route-id="routeId"
+        />
+        <SpacecraftPanels
+          v-else
+          :mission-id="scope.mission.id"
+          :detail="value"
+          :can-stage="canStage"
+        />
       </template>
     </ApRemote>
     <SpacecraftApps
