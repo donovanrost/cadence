@@ -6,11 +6,9 @@
   "word-map-keyed-by-text": [
     "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
     "apps/console/src/features/dashboards/fixtures.test-support.ts",
-    "apps/console/src/features/dashboards/model/time-range.ts",
-    "apps/console/src/features/spacecraft/detail.ts"
+    "apps/console/src/features/dashboards/model/time-range.ts"
   ],
   "_comment_decoded_text": "Rule B (tools/decoded-text-compared.mjs): hits per file may only fall; a file not listed must have none. Lower or delete a file's count when you migrate it.",
   "decoded-text-compared": {
-    "src/features/spacecraft/edit.ts": 1
   }
 }

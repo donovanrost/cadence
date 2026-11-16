@@ -32,6 +32,5 @@
       "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
       "apps/console/src/features/dashboards/fixtures.test-support.ts",
       "apps/console/src/features/dashboards/model/time-range.ts",
-      "apps/console/src/features/spacecraft/detail.ts",
     ],
 }

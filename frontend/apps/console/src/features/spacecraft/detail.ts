@@ -1,6 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import {
   decoders,
+  isKnown,
   request,
   scid as scidReader,
   spacecraftId as spacecraftIdReader,
@@ -38,7 +39,14 @@ const rule = object({
   active: boolean,
   transport: object({ id: token, name: string, version: integer }),
 });
-const check = object({ key: token, status: oneOf(checkStatuses), title: string, body: string });
+/** Readiness checks (Reads.SpacecraftDetail); a new one reads as its key. */
+const readinessKeys = ["identity", "profile", "routing", "telemetry"] as const;
+const check = object({
+  key: decoders.knownText(readinessKeys),
+  status: oneOf(checkStatuses),
+  title: string,
+  body: string,
+});
 
 /** `ready` is the server's (no blocker in identity, profile, routing); a disagreement isn't a failed read (qa 11-13). */
 export const detailReader = object({
@@ -129,7 +137,7 @@ export function identityFacts(detail: SpacecraftDetail, now: Date): readonly ApK
   ];
 }
 
-const checkLabels: Readonly<Record<string, string>> = {
+const checkLabels: Readonly<Record<(typeof readinessKeys)[number], string>> = {
   identity: "Identity",
   profile: "Profile",
   routing: "Routing",
@@ -152,8 +160,8 @@ export function checkRows(checks: readonly ReadinessCheck[]): readonly CheckRow[
       }
     })();
     return {
-      key: check.key,
-      label: checkLabels[check.key] ?? check.key,
+      key: isKnown(check.key) ? check.key : check.key.unrecognized,
+      label: isKnown(check.key) ? checkLabels[check.key] : check.key.unrecognized,
       sentence: check.title,
       detail: check.body,
       ...verdict,

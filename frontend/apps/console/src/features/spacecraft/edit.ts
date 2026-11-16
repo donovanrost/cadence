@@ -24,6 +24,7 @@ export function withPinnedProfile(d: SpacecraftDetail) {
     return {
       ...schema,
       fields: schema.fields.map((f) => {
+        // compared-as-text: a schema field path, an open set the server's schema defines
         if (f.path !== "spacecraft_type_id" || !f.enum || f.enum.some((o) => o.value === pin.id))
           return f;
         return {
