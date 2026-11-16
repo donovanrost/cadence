@@ -6,8 +6,8 @@ defmodule Cadence.Reads.RequirementLabels do
     * otherwise by its rule in words ("2 downlink contacts of at least 8 min"), the same text
       plan detail's `demand.rules[].text` shows.
 
-  Each label also carries the requirement version's spacecraft (`{id, name}`, or `nil`). A
-  requirement that can't be read has no entry.
+  Each label also carries the requirement version's spacecraft (`{id, name}`, or `nil`) and its
+  window (`{from, to}`, or `nil`). A requirement that can't be read has no entry.
   """
 
   import Ecto.Query
@@ -44,11 +44,19 @@ defmodule Cadence.Reads.RequirementLabels do
       {ref,
        %{
          name: Map.get(templates, v.contact_requirement_id) || Demand.rule_text(v),
+         # ux U73: the version's window (a template occurrence's own window), to tell apart
+         # several gaps of one recurring requirement.
+         window: window(v),
          spacecraft:
            v.spacecraft_id && %{id: v.spacecraft_id, name: Map.get(crafts, v.spacecraft_id)}
        }}
     end)
   end
+
+  defp window(%{earliest_start: %DateTime{} = from, latest_end: %DateTime{} = to}),
+    do: %{from: from, to: to}
+
+  defp window(_version), do: nil
 
   defp version(org, mission, {id, nil}) do
     case ContactRequirements.fetch(org, mission, id) do

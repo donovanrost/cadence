@@ -15,6 +15,12 @@ defmodule Cadence.Reads.RequirementLabelsTest do
     assert %{^ref => %{name: name, spacecraft: spacecraft}} =
              RequirementLabels.load(c.organization_id, c.mission_id, [ref])
 
+    # U73: the version's window, to tell several gaps of one requirement apart.
+    assert %{^ref => %{window: %{from: from, to: to}}} =
+             RequirementLabels.load(c.organization_id, c.mission_id, [ref])
+
+    assert from == version.earliest_start and to == version.latest_end
+
     assert name =~ ~r/^\d+ \w+ contacts?/
     assert %{id: id, name: craft} = spacecraft
     assert id == version.spacecraft_id and is_binary(craft)

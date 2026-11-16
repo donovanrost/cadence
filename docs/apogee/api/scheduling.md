@@ -285,8 +285,9 @@ entry per day in order, days without a plan included.
 - `decisions`, newest first, one per act across all rounds: `{kind: submitted | approved |
   rejected, version, round | null, actor: {kind, id, name}, at, text | null (a submit's note or a
   decision's reason), unchanged: bool | null (submits only), acknowledgements: [{requirement_id,
-  requirement_label, spacecraft: {id, name} | null, reason}] (submits), exceptions:
-  [{requirement_id, requirement_version, requirement_label, spacecraft, reason}] (decisions),
+  requirement_label, spacecraft: {id, name} | null, requirement_window: {from, to} | null, reason}]
+  (submits), exceptions: [{requirement_id, requirement_version, requirement_label, spacecraft,
+  requirement_window, reason}] (decisions),
   automation_grant_id | null (a decision made under an automation approval policy)}`. The words
   match detail's `submission` / `approval`.
 - `requirement_label` (ux U73): a requirement has no name of its own, so it's its template's name

@@ -97,7 +97,8 @@ defmodule Cadence.Reads.PlanHistory do
 
     Map.merge(item, %{
       requirement_label: found && found.name,
-      spacecraft: found && found.spacecraft
+      spacecraft: found && found.spacecraft,
+      requirement_window: found && found.window
     })
   end
 
