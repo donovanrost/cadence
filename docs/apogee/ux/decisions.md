@@ -2128,7 +2128,7 @@ passes are on Live and Plan. The current week runs to now.
   today."
 - A step or jump keeps the filters and focus stays on the control used. A polite live region announces "Week of
   11-09 to 11-15, 1,284 passes."
-- Header meta (mono `text-3`): `1,284 PASSES` for the shown week (`500+ PASSES` when truncated).
+- Header meta (mono `text-3`): `1,284 PASSES` for the shown week (`500+ PASSES` when a day is short; see Truncated).
 
 **Filters** (in the URL, U72's pattern): `Spacecraft` (a select of every fleet spacecraft, with type-ahead),
 `Station` (a select), and `State` (multi-select).
@@ -2160,9 +2160,15 @@ passes are on Live and Plan. The current week runs to now.
 - Empty week: "No passes between 11-09 and 11-15." This week: "No passes have started this week." Both offer
   `‹ Older week`.
 - Empty with filters: "No passes match: Canceled · EARENDIL-312 · 11-09 – 11-15." + `Clear filters`.
-- Truncated (`truncated: true`): an info callout above the table, "This week has more than 500 passes, and 500 are
-  shown. Pick a spacecraft, station or state to see them all." If the read's 500 are a known end of the week, the
-  sentence says so: "…and the newest 500 are shown (back to 11-13 04:10Z)." Never a guessed range (U20).
+- **Truncated** (api: the read keeps the **earliest** 500 by start, and `truncated` is set before the station and
+  state filters run). A truncated week is re-read one UTC day at a time and merged, so only a day over 500 is short.
+  - An info callout above the table, one sentence per short day: "11-12 has more than 500 passes, and only the
+    earliest 500 are shown, through 18:40Z." The time is the last shown pass's start.
+  - In the list, at the point where the missing passes belong (above that day's newest shown row), a `text-3` row:
+    "Passes on 11-12 after 18:40Z aren't shown."
+  - No advice to narrow by station or state: those filters run after the cut and can't bring the rows back. Add
+    "Pick a spacecraft to see the rest." only if api confirms the spacecraft filter runs in the read.
+  - Meta reads `500+ PASSES` on a day that's short, and counts stay "500+" wherever they include it.
 - Error: "Contact history couldn't load." + `Try again`.
 
 **Hand-started contacts (when api lists them, BACKLOG's `booked: false` rows).** They join the list with no new
@@ -2173,7 +2179,6 @@ filter.
 - Count lines add them: "1,284 passes and 3 hand-started contacts". The foot line goes.
 - The drawer shows the A13 record alone, titled "Contact record", with no reservation section and no pass actions.
 
-**Opening a contact record from anywhere (Timeline today).** Route `contacts/history?record=<id>`: the A13 record
-alone in the drawer ("Contact record"), for a scheduled or a realized contact id, over that contact's week.
-Timeline's "Realized contact" and "Scheduled contact" ids become links to it. A record that can't be found reads
-"No contact record with this id." (U25: the id isn't repeated as if it were a name.)
+**Timeline's contact ids** (lead's ruling, 11-16; no record-only route, at fe-ops' request): "Realized contact" and
+"Scheduled contact" link to History `?contact=<id>` **only when the id resolves** to a pass row. One that doesn't stays
+plain text, as today.
