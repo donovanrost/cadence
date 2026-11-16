@@ -1,4 +1,5 @@
 import { plural } from "@/ui";
+import { shownValue } from "../groups/resolved.ts";
 import type { CommandArgument } from "../api.ts";
 import { checkArg } from "../args.ts";
 import type { Group } from "../groups/show.ts";
@@ -174,15 +175,7 @@ export function radiateMeta(group: Pick<Group, "commands" | "target_count">): st
 }
 
 /** A value as an operator reads it: strings unquoted, numbers and the rest as sent. */
-const shown = (raw: string) => {
-  if (!raw.startsWith('"')) return raw;
-  try {
-    const v: unknown = JSON.parse(raw);
-    return typeof v === "string" ? v : raw;
-  } catch {
-    return raw;
-  }
-};
+const shown = shownValue;
 
 /**
  * Uplink & verify (ux C2): a target's own values as Approve shows them, `setpoint 9.5 °C · mode 1`,

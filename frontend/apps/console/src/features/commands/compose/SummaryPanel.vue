@@ -15,6 +15,7 @@ import {
 } from "@/ui";
 import { fetchPeople } from "@/features/alarms/index.ts";
 import type { Release } from "./draft.ts";
+import type { ResolvedCommand } from "../groups/resolved.ts";
 import { expiresWords } from "../priority.ts";
 import ReleaseFields from "./ReleaseFields.vue";
 import SubmitOutcome from "./SubmitOutcome.vue";
@@ -29,6 +30,8 @@ const props = defineProps<{
   targets: number;
   commands: number;
   secondGo: readonly string[];
+  /** U68: where the server's value will differ from what was entered, per command. */
+  resolved: readonly ResolvedCommand[];
   blocked: string | null;
   submit: SubmitState;
 }>();
@@ -81,6 +84,13 @@ const uplinks = computed(() => props.targets * props.commands);
         :required="secondGo.length > 0"
         placeholder="Why this sequence, for the request log"
       />
+      <!-- ux U68: nobody arms without seeing what the server will send instead. -->
+      <div v-for="c in resolved" :key="c.position" class="flex flex-col gap-0.5">
+        <p class="m-0 font-mono text-sm font-semibold text-readout">{{ c.label }}</p>
+        <p v-for="line in c.lines" :key="line" class="m-0 font-mono text-sm text-text-3">
+          {{ line }}
+        </p>
+      </div>
       <p v-if="release.expiresAt !== null" class="m-0 text-md text-text-2">
         {{ expiresWords(new Date(release.expiresAt).toISOString()) }} if not released.
       </p>

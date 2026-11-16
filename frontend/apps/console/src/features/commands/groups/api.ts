@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { resolvedArgumentsReader } from "./resolved.ts";
 import {
   scid as scidReader,
   decoders as d,
@@ -197,6 +198,7 @@ export const preflightReader = d.object({
         position: d.integer,
         command_id: d.token,
         verifier_groups: d.array(verifierGroupReader, 100),
+        resolved_arguments: resolvedArgumentsReader,
       }),
       16,
     ),

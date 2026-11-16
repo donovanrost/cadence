@@ -4,6 +4,7 @@ import { ApButton, ApStatusMark } from "@/ui";
 import type { CommandArgument } from "../api.ts";
 import type { Group } from "../groups/show.ts";
 import { cellOf, rawEntries, tableArgs, type Override } from "./ownValues.ts";
+import { resolvedCell } from "../groups/resolved.ts";
 
 /**
  * Own-values table under a command (ux, CommandFlow C2): Target · one column per argument, with
@@ -54,6 +55,17 @@ const rows = computed(() => (all.value ? props.overrides : props.overrides.slice
               :aria-label="`${cellOf(o, n, shared, argOf(n)).text}: ${cellOf(o, n, shared, argOf(n)).caution}`"
               :title="cellOf(o, n, shared, argOf(n)).caution ?? undefined"
               ><ApStatusMark state="caution" />{{ cellOf(o, n, shared, argOf(n)).text }}</span
+            >
+            <!-- ux U68: the value sent, with what was entered under it. -->
+            <span
+              v-else-if="resolvedCell(command.resolved_arguments, n, o.spacecraftId)"
+              class="flex flex-col font-semibold text-readout"
+              >{{ resolvedCell(command.resolved_arguments, n, o.spacecraftId)?.text
+              }}<span
+                v-if="resolvedCell(command.resolved_arguments, n, o.spacecraftId)?.entered"
+                class="text-xs font-normal text-text-4"
+                >{{ resolvedCell(command.resolved_arguments, n, o.spacecraftId)?.entered }}</span
+              ></span
             >
             <span
               v-else

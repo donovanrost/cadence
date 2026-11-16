@@ -1,4 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
+import { resolvedArgumentsReader } from "./resolved.ts";
 import {
   scid as scidReader,
   decoders as d,
@@ -106,6 +107,8 @@ const command = d.object({
   argument_values_json: d.string,
   /** U51 (api): how each group of targets verifies it, from each member's pinned revision. */
   verifier_groups: d.optional(d.array(verifierGroupReader, 100)),
+  /** U68 R1: where the server's value differs from what was entered. */
+  resolved_arguments: resolvedArgumentsReader,
   // api f1bed1880: each target's own values ([] when none); optional for older reads.
   per_target: d.optional(
     d.array(d.object({ spacecraft_id: d.token, argument_values_json: d.string }), 2_000),

@@ -8,6 +8,7 @@ import { argChanges, fetchBrief, overwriteCallouts, type Brief } from "./brief.t
 import OwnValuesTable from "./OwnValuesTable.vue";
 import { useCatalogArgs } from "./useCatalogArgs.ts";
 import { overridesOf, readoutLines } from "./ownValues.ts";
+import { resolvedLines } from "../groups/resolved.ts";
 
 /**
  * A1 value changes (CommandFlow A1): for each command with arguments, `mode 1 → 3` per argument
@@ -19,7 +20,8 @@ const LIMIT = 40;
 const scope = useMissionScope();
 const withArgs = computed(() =>
   [...props.group.commands]
-    .filter((c) => c.argument_values_json.trim() !== "{}")
+    // U68: a command whose blank arguments took defaults has rows too.
+    .filter((c) => c.argument_values_json.trim() !== "{}" || c.resolved_arguments?.length)
     .sort((a, b) => a.position - b.position),
 );
 const targets = computed(() => props.group.targets.slice(0, LIMIT));
@@ -72,6 +74,7 @@ const rows = computed(() => {
         ),
       ),
       callouts: overwriteCallouts(bs, c.argument_values_json, nameOf),
+      resolved: resolvedLines(c.resolved_arguments, nameOf),
       read: bs.length,
     };
   });
@@ -93,6 +96,10 @@ const rows = computed(() => {
           {{ l.text }}<span v-if="l.note" class="text-sm text-text-3"> · {{ l.note }}</span>
         </li>
       </ul>
+      <!-- ux U68: where the server's value differs from what was entered. -->
+      <p v-for="line in r.resolved" :key="line" class="m-0 font-mono text-sm text-text-3">
+        {{ line }}
+      </p>
       <!-- ux C2: what each target with its own values gets (not for a single target). -->
       <OwnValuesTable
         v-if="r.overrides.length && group.target_count > 1"

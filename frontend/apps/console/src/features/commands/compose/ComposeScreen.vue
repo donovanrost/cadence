@@ -9,6 +9,7 @@ import { TelemetryDegraded, useFleet } from "@/features/fleet/index.ts";
 import { useCommandAccess } from "../access.ts";
 import { catalogRevisionWords, fetchCommand } from "../api.ts";
 import { PRIORITY_NORMAL } from "../priority.ts";
+import { resolvedByCommand } from "../groups/resolved.ts";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import DeliveryPanel from "./DeliveryPanel.vue";
 import DraftNotices from "./DraftNotices.vue";
@@ -366,6 +367,9 @@ const close = computed((): RouteLocationRaw =>
         :targets="targets.length"
         :commands="stack.length"
         :second-go="secondGo"
+        :resolved="
+          resolvedByCommand(lastPreflight?.commands, nameOf, (p) => stack[p]?.command.name ?? '')
+        "
         :blocked="blocked"
         :submit="submission.state.value"
         @send="send"
