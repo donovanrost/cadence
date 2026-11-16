@@ -53,6 +53,7 @@ function setup() {
     history: createMemoryHistory(),
     routes: [
       { path: "/apps", name: "setup.apps", component: stub },
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC; the lint type service can't resolve .vue imports.
       { path: "/apps/:appKey/:surface?", name: "setup.app", component: AppSurfaceScreen },
       { path: "/comms", name: "setup.comms", component: stub },
       { path: "/comms/transports/:transportId?", name: "setup.comms.transports", component: stub },

@@ -16,12 +16,12 @@ const Harness = defineComponent({
           default: () => [
             h(
               ApMenuItem,
-              { disabled: "It's already first.", onSelect: () => chosen("up") },
+              { disabled: "It's already first.", onSelect: () => void chosen("up") },
               () => "Move up",
             ),
-            h(ApMenuItem, { onSelect: () => chosen("down") }, () => "Move down"),
+            h(ApMenuItem, { onSelect: () => void chosen("down") }, () => "Move down"),
             h("p", { role: "none" }, "Danger"),
-            h(ApMenuItem, { to: "/elsewhere", onSelect: () => chosen("link") }, () => "Open"),
+            h(ApMenuItem, { to: "/elsewhere", onSelect: () => void chosen("link") }, () => "Open"),
           ],
         },
       );

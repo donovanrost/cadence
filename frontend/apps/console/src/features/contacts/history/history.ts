@@ -165,6 +165,9 @@ export function rowStateKey(row: HistoryRow): ContactState | null {
     case "completed":
     case "stopped":
       return "ended";
+    // Not live yet (neverLive covers the hand-started ones that never were).
+    case "defined":
+      return null;
     default:
       return null;
   }

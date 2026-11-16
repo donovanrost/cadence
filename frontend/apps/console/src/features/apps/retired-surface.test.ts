@@ -24,6 +24,7 @@ describe("retired app surfaces (sweep row 2, qa 11:22Z)", () => {
       history: createMemoryHistory(),
       routes: [
         { path: "/apps", name: "setup.apps", component: stub },
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC; the lint type service can't resolve .vue imports.
         { path: "/apps/:appKey/:surface?", name: "setup.app", component: AppSurfaceScreen },
         { path: "/spacecraft", name: "setup.spacecraft", component: stub },
         { path: "/spacecraft/new", name: "setup.spacecraft.new", component: stub },
