@@ -2357,6 +2357,10 @@ fold into one item ("2 other missions in this organization also fly SCID 42 thro
   - Several paths: one line per path, with its station: "…arrived through Fairbanks during this pass…". The path is
     named by its station, never by path or binding id (U25). One path: no station.
   - Not "weren't decoded": an operator reads "made no telemetry from them".
+  - The read (api, final 11-16): `scid_mismatch: null | {expected_scid, paths: [{station, frames, scids, scid_count,
+    path_id, provider_binding_id}]}`, paths by frames, most first. The station clause uses station.name, else
+    station.code, else no clause; one path gets no clause. path_id and provider_binding_id go in Technical details
+    only.
 
 **3. Listen port taken by another mission** (domain 0a3426e7d, ListenClaims). Accepted as built, on the port field:
 "Another mission already listens on this host and port. Choose a different port." It names no mission and no
