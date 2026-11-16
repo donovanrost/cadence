@@ -1,20 +1,29 @@
+import type { RouteLocationRaw } from "vue-router";
 import type { MissionId } from "@/api/index.ts";
 import {
   codeOf,
   isError,
+  isKnown,
   decoders,
   outcomeUnknown,
   request,
   type ApiError,
   type ApiResult,
   type Decoded,
+  detailsOf,
 } from "@/api";
 
 /** Change-set writes and the dry run. Contract: docs/apogee/api/changes.md. */
 const { array, integer, object, oneOf, string, token } = decoders;
 
 const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/config`;
-import { previewReader, type Preview, type PreviewItem } from "./preview.ts";
+import {
+  previewReader,
+  reasonText,
+  type HoldReason,
+  type Preview,
+  type PreviewItem,
+} from "./preview.ts";
 import { changeSetStates, configKindText } from "./shapes.ts";
 export {
   diffEntry,
@@ -67,15 +76,15 @@ export function humanize(key: string): string {
 }
 
 /** #65 catalog generations: holds that acknowledging can't clear, and what clears them. */
-const blockingNext: Readonly<Record<string, string>> = {
+const blockingNext: Readonly<Partial<Record<HoldReason, string>>> = {
   catalog_command_in_flight: "Apply when those commands finish.",
   catalog_configuration_pending: "Activate or discard the pending configuration first.",
 };
 
 /** A blocking item's "can't apply yet" line: #65 catalog holds by reason, L17/L22 by `blocking`. */
 function blockingLine(item: PreviewItem): string | null {
-  const said = item.sentence ?? humanize(item.reason ?? "");
-  const next = item.reason ? blockingNext[item.reason] : undefined;
+  const said = item.sentence ?? humanize(item.reason ? reasonText(item.reason) : "");
+  const next = item.reason && isKnown(item.reason) ? blockingNext[item.reason] : undefined;
   if (next) return `Can't apply yet: ${said} ${next}`;
   return item.blocking === true ? `Can't apply yet: ${said}` : null;
 }
@@ -111,7 +120,7 @@ export function itemLine(item: PreviewItem, leftBy?: string): string {
   if (item.sentence) return item.sentence;
   if (item.errors && item.errors.length > 0)
     return item.errors.map((e) => `${e.path}: ${e.message}`).join("; ");
-  return item.reason ? humanize(item.reason) : configKindText(item.kind);
+  return item.reason ? humanize(reasonText(item.reason)) : configKindText(item.kind);
 }
 
 const versionResult = object({
@@ -290,7 +299,11 @@ export type FailureOutcome = Readonly<{
   /** false: the server rejected it, nothing changed. null: we can't tell (reply lost or unreadable). */
   changed: false | null;
   sentence: string;
+  /** U65: where to go about it ('Open the report' on a failed model comparison). */
+  link?: Readonly<{ label: string; to: RouteLocationRaw }>;
 }>;
+
+const comparisonFailed = decoders.object({ mission_model_revision_id: decoders.token });
 
 /**
  * Every stage/apply failure says whether anything changed (ux review 2026-11-09). A rejection
@@ -338,14 +351,34 @@ export function failureOutcome(
         return { changed: false, sentence: `Nothing was ${verb}. ${parts.join(" · ")}` };
     }
   }
-  // U63: the server's sentence already says "Not applied: …" and names the spacecraft (ux).
+  // U63/U65: the server's sentence already says "Not applied: …" and names what (ux).
   if (
     (isError(error, "telemetry_app_not_installed") ||
-      isError(error, "telemetry_packet_inputs_required")) &&
+      isError(error, "telemetry_packet_inputs_required") ||
+      isError(error, "mission_model_revision_not_approved") ||
+      isError(error, "mission_model_comparison_failed")) &&
     "message" in error &&
     error.message
-  )
-    return { changed: false, sentence: error.message };
+  ) {
+    const report = isError(error, "mission_model_comparison_failed")
+      ? detailsOf(error, comparisonFailed)
+      : null;
+    return {
+      changed: false,
+      sentence: error.message,
+      ...(report
+        ? {
+            link: {
+              label: "Open the report",
+              to: {
+                name: "setup.catalog.model",
+                params: { revisionId: report.mission_model_revision_id },
+              },
+            },
+          }
+        : {}),
+    };
+  }
   return { changed: false, sentence: `Nothing was ${verb}. ${rejectionSentence(error)}` };
 }
 

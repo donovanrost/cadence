@@ -1,4 +1,6 @@
+import { isKnown } from "@/api/index.ts";
 import type { Preview, PreviewItem } from "./actions.ts";
+import type { HoldReason } from "./preview.ts";
 
 /**
  * Acknowledgeable HOLDs (ux U40, U41, U43): the Apply 'Why' placeholder says what to justify, and a
@@ -33,6 +35,18 @@ function placeholderFor(item: PreviewItem, preview: Preview): string | null {
       return retiring(item, preview)
         ? "Why it's safe to clear it"
         : "Why it's safe to change them while it's raised";
+    // Reasons with no placeholder of their own (blocking, or worded elsewhere), and any other.
+    case "telemetry_app_not_installed":
+    case "derived_point_in_use":
+    case "framing_unverified":
+    case "framing_mismatch":
+    case "mission_model_not_approved":
+    case "catalog_command_in_flight":
+    case "catalog_configuration_pending":
+    case "catalog_change":
+    case "catalog_cancels_commands":
+    case null:
+    case undefined:
     default:
       return null;
   }
@@ -84,11 +98,31 @@ export function appHolds(preview: Preview): readonly AppHold[] {
 }
 
 /** U63: a check whose every item is one titled reason reads as that title (ux). */
-const REASON_TITLES: Readonly<Record<string, string>> = {
+const REASON_TITLES: Readonly<Partial<Record<HoldReason, string>>> = {
   telemetry_app_not_installed: "Telemetry app not installed",
+  // U65.
+  mission_model_not_approved: "Catalog revision not approved",
 };
 export function checkTitle(items: readonly PreviewItem[]): string | null {
   const [first] = items;
-  const title = first?.reason ? REASON_TITLES[first.reason] : undefined;
+  const title = first?.reason && isKnown(first.reason) ? REASON_TITLES[first.reason] : undefined;
   return title && items.every((i) => i.reason === first?.reason) ? title : null;
+}
+
+/** U65: a catalog revision a HOLD says must be approved first (one per model revision). */
+export type ModelHold = Readonly<{ revisionId: string; catalogRevisionNumber: number | null }>;
+
+/** U65: mission_model_not_approved holds, once per model revision, for 'Open rev 4'. */
+export function modelHolds(preview: Preview): readonly ModelHold[] {
+  const byId = new Map<string, number | null>();
+  for (const c of preview.checks)
+    for (const i of c.items) {
+      const id =
+        i.reason === "mission_model_not_approved" ? i.details?.mission_model_revision_id : null;
+      if (id) byId.set(id, i.details?.catalog_revision_number ?? null);
+    }
+  return [...byId.entries()].map(([revisionId, catalogRevisionNumber]) => ({
+    revisionId,
+    catalogRevisionNumber,
+  }));
 }

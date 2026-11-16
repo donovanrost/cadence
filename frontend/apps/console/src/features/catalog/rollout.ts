@@ -1,5 +1,5 @@
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
-import type { Preview, StageOp } from "@/features/changes/index.ts";
+import type { HoldReason, Preview, StageOp } from "@/features/changes/index.ts";
 import { overrideOp } from "@/features/profiles/index.ts";
 import { plural } from "@/ui";
 
@@ -73,7 +73,7 @@ export function rolloutOps(revisionId: string, choice: RolloutChoice): StageOp[]
 }
 
 /** The compatibility check's items with this reason. */
-const catalogItems = (p: Preview, reason: string) =>
+const catalogItems = (p: Preview, reason: HoldReason) =>
   p.checks.flatMap((c) => c.items).filter((i) => i.reason === reason);
 
 /** Spacecraft the dry run moves onto this revision (catalog_change items, `to` = the revision). */

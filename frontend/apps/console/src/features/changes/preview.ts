@@ -1,5 +1,5 @@
 import { configKind, opActions } from "./shapes.ts";
-import { decoders, isRecord, type Decoded } from "@/api";
+import { decoders, isKnown, isRecord, type Decoded, type Unrecognized } from "@/api";
 
 /** The change-set dry run's shape. Contract: docs/apogee/api/changes.md (preview). */
 const { array, boolean, integer, nullable, object, oneOf, string, token } = decoders;
@@ -10,11 +10,45 @@ const verdict = oneOf(["go", "hold", "no_go"]);
  * HOLD details the console reads: U42 derived_point_in_use's dependents (domain 5504322a8) and U43
  * limit_alarm_active's point (its alarms link).
  */
+/**
+ * HOLD and NO-GO reasons the console words or links (holds.ts placeholders, alarm and app links,
+ * actions.ts framing, dependents.ts, U65's model approval). Items are diagnostics: any other reason
+ * still renders through `blocking` and the server's sentence (typing rule B).
+ */
+export const holdReasons = [
+  "spacecraft_passes_booked",
+  "spacecraft_has_traffic",
+  "commanding_disabled_cancels_commands",
+  "telemetry_disabled",
+  "handled_apids_change",
+  "limit_alarm_active",
+  "telemetry_app_not_installed",
+  "derived_point_in_use",
+  "framing_unverified",
+  "framing_mismatch",
+  "mission_model_not_approved",
+  // #65 catalog generations: blocking holds (actions.ts blockingNext) and C3's dry-run counts
+  // (catalog/rollout.ts).
+  "catalog_command_in_flight",
+  "catalog_configuration_pending",
+  "catalog_change",
+  "catalog_cancels_commands",
+] as const;
+export type HoldReason = (typeof holdReasons)[number];
+/** A reason as text: its key, or the server's own (an item is a diagnostic either way). */
+export const reasonText = (reason: HoldReason | Unrecognized): string =>
+  isKnown(reason) ? reason : reason.unrecognized;
+
 const holdDetails = object({
   point_id: decoders.optional(nullable(string)),
   /** U63 telemetry_app_not_installed (domain e587668da): the app to install, and its display name. */
   app_key: decoders.optional(nullable(token)),
   app_name: decoders.optional(nullable(string)),
+  /** U65 mission_model_not_approved (domain + api): the catalog revision to approve, and its model. */
+  catalog_database_id: decoders.optional(nullable(token)),
+  catalog_revision_id: decoders.optional(nullable(token)),
+  catalog_revision_number: decoders.optional(nullable(integer)),
+  mission_model_revision_id: decoders.optional(nullable(token)),
   used_by: decoders.optional(
     array(object({ point_id: string, name: nullable(string), definition_id: token }), 200),
   ),
@@ -26,7 +60,7 @@ const previewItem = object({
   change_id: decoders.optional(nullable(token)),
   kind: configKind,
   entity_id: decoders.optional(nullable(token)),
-  reason: decoders.optional(nullable(token)),
+  reason: decoders.optional(nullable(decoders.knownText(holdReasons))),
   errors: decoders.optional(array(object({ path: string, message: string }), 200)),
   // Compatibility HOLD (DECISIONS #33, domain): both values named.
   // Absent or null: framing_unverified sends null values (domain 5fc08e7c).

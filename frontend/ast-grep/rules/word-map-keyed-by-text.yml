@@ -34,7 +34,6 @@
       "apps/console/src/features/audit/api.ts",
       "apps/console/src/features/changes/ChecksPanel.vue",
       "apps/console/src/features/changes/EntryList.vue",
-      "apps/console/src/features/changes/actions.ts",
       "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
       "apps/console/src/features/dashboards/fixtures.test-support.ts",
       "apps/console/src/features/dashboards/model/time-range.ts",

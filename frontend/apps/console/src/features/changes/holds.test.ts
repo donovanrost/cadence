@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { previewReader } from "./actions.ts";
-import { alarmPoints, appHolds, checkTitle, whyPlaceholder } from "./holds.ts";
+import { alarmPoints, appHolds, checkTitle, modelHolds, whyPlaceholder } from "./holds.ts";
 import { blockingReason } from "./actions.ts";
 
 /** Fixtures: ux U43 (limits HOLD) and U40 (archive HOLDs); domain's details {point_id, …}. */
@@ -83,5 +83,41 @@ describe("telemetry_app_not_installed (U63, domain e587668da)", () => {
 
   it("links nothing without an app key", () => {
     expect(appHolds(preview([{ ...hold, details: {} }]))).toEqual([]);
+  });
+});
+
+describe("mission_model_not_approved (U65, domain's gate)", () => {
+  const hold = (rev: string, number: number | null) => ({
+    kind: "catalog_compatibility",
+    entity_id: "sc_1",
+    reason: "mission_model_not_approved",
+    blocking: true,
+    sentence:
+      "Catalog rev 4 isn't approved yet, so 499 spacecraft can't move to it. An org admin approves it in Setup › Catalog first.",
+    spacecraft_ids: ["sc_1", "sc_2"],
+    details: {
+      catalog_database_id: "db-1",
+      catalog_revision_id: "cr-4",
+      catalog_revision_number: number,
+      mission_model_revision_id: rev,
+    },
+  });
+
+  it("titles the check and links each revision once ('Open rev 4')", () => {
+    const p = preview([hold("mm-4", 4), hold("mm-4", 4), hold("mm-5", null)]);
+    expect(checkTitle(p.checks[0]?.items ?? [])).toBe("Catalog revision not approved");
+    expect(modelHolds(p)).toEqual([
+      { revisionId: "mm-4", catalogRevisionNumber: 4 },
+      { revisionId: "mm-5", catalogRevisionNumber: null },
+    ]);
+    expect(blockingReason(p)).toBe(
+      "Can't apply yet: Catalog rev 4 isn't approved yet, so 499 spacecraft can't move to it. An org admin approves it in Setup › Catalog first.",
+    );
+  });
+
+  it("reads an unknown reason as a diagnostic, not a failure", () => {
+    const p = preview([{ kind: "limit_definition", entity_id: "x", reason: "brand_new_reason" }]);
+    expect(p.checks[0]?.items[0]?.reason).toEqual({ unrecognized: "brand_new_reason" });
+    expect(modelHolds(p)).toEqual([]);
   });
 });

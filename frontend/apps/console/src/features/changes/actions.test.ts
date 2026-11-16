@@ -116,7 +116,7 @@ describe("preview compatibility HOLD (DECISIONS #33)", () => {
 
   it("falls back to field errors, then the reason", () => {
     expect(itemLine({ ...base, errors: [{ path: "a", message: "bad" }] })).toBe("a: bad");
-    expect(itemLine({ ...base, reason: "entity_gone" })).toBe("Entity gone");
+    expect(itemLine({ ...base, reason: { unrecognized: "entity_gone" } })).toBe("Entity gone");
   });
 });
 
@@ -324,5 +324,45 @@ describe("U63 apply refusals (api 396c59fd5)", () => {
         "applied",
       ).sentence,
     ).toBe(inputs);
+  });
+});
+
+describe("U65 apply refusals (api 0d453d55f)", () => {
+  it("shows the server's sentence; a failed comparison links to its report", () => {
+    const notApproved = "Not applied: catalog rev 4 isn't approved yet.";
+    expect(
+      failureOutcome(
+        {
+          kind: "conflict",
+          code: "mission_model_revision_not_approved",
+          message: notApproved,
+          details: { mission_model_revision_ids: ["mm-4"], catalog_revision_numbers: [4] },
+        },
+        "applied",
+      ),
+    ).toEqual({ changed: false, sentence: notApproved });
+    const failed = "Not applied: catalog rev 4's comparison didn't pass.";
+    expect(
+      failureOutcome(
+        {
+          kind: "conflict",
+          code: "mission_model_comparison_failed",
+          message: failed,
+          details: {
+            mission_model_revision_id: "mm-4",
+            comparison_report_id: "rep-1",
+            catalog_revision_number: 4,
+          },
+        },
+        "applied",
+      ),
+    ).toEqual({
+      changed: false,
+      sentence: failed,
+      link: {
+        label: "Open the report",
+        to: { name: "setup.catalog.model", params: { revisionId: "mm-4" } },
+      },
+    });
   });
 });
