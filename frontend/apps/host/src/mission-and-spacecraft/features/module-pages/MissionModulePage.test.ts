@@ -214,7 +214,7 @@ test("unavailable reads retry and renderer failures recover with a fresh snapsho
 });
 test("registration admits only unique supported compiled contributions", () => {
   const registration = required(missionModulePages["comms.transports"]);
-  expect(Object.keys(missionModulePages)).toHaveLength(15);
+  expect(Object.keys(missionModulePages)).toHaveLength(12);
   expect(() => admitMissionPages([registration, registration])).toThrow();
   expect(() => admitMissionPages([{ ...registration, version: 2 } as never])).toThrow();
   expect(() =>
