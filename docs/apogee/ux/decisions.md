@@ -2078,4 +2078,8 @@ hybrid, disabled). Order: as below.
     made while it was off (U20).
   - To `Northlight sends` from `Cadence checks` or `Both`: "Cadence will stop checking. Make sure Northlight's webhook
     is set up, or changes will be missed."
+- **Read-back on the account page** (a kv row `Booking updates`): `Cadence checks`, `Northlight sends`, `Both`,
+  or `Off` (in caution text).
+  - "Every 5 min" is added only if the account's configuration states an interval; never a guessed one.
+  - Off adds "Cadence won't see Northlight's booking changes."
 - **History and audit:** "Changed booking updates from Cadence checks to Off (v5) · Mira K. · 08:02Z".
