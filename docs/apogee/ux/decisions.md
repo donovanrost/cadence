@@ -1984,4 +1984,10 @@ Versions read `R3`, as the plan header already does (`Contact plan · R41 draft`
 version's decision:
 - Sent back: "You're looking at R2, sent back 11-13 02:58Z. The current version is R4." + `Review current version`.
 - Approved, then replaced: "…R2, approved 11-13 03:10Z and since replaced by R4."
+- Submitted with no decision, then replaced: "…R2, submitted 11-13 02:46Z and since replaced by R4." (fe-setup)
 - No decision: "…R2, never submitted."
+- Automatic approvals read "under an automation policy" until api sends the policy's name and version (the wire has
+  only `automation_grant_id`).
+- **Gaps and exceptions under `Show`** name the requirement by spacecraft and label once api sends them
+  ("EARENDIL-389 · Block 1 daily: no window can cover it"). Until then each row is the reason alone, and the
+  requirement ids go in a Technical details under the list. Raw ids never lead a row (design-language §8).
