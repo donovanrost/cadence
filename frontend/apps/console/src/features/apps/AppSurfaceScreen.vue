@@ -41,9 +41,13 @@ const app = computed(() =>
     : null,
 );
 const surfaces = computed(() => setupSurfaces(app.value?.surfaces ?? []));
-// A retired surface (a bookmark or an old link) goes to its console home, never an empty tab (ux).
+// A retired surface (a bookmark or an old link) goes to its console home, never an empty tab (ux),
+// without first asking the server for a host it no longer has (qa 11:22Z).
+const retiredHome = computed(() =>
+  retiredSurfaceHome(appKey.value, paramText(route.params, "surface"), spacecraftId.value),
+);
 watch(
-  () => retiredSurfaceHome(appKey.value, paramText(route.params, "surface"), spacecraftId.value),
+  retiredHome,
   (home) => {
     if (home) void router.replace(home).catch(() => undefined);
   },
@@ -53,7 +57,7 @@ const surfaceId = computed(
   () => paramText(route.params, "surface") || (surfaces.value[0]?.surface_id ?? null),
 );
 const key = computed(() =>
-  surfaceId.value
+  surfaceId.value && !retiredHome.value
     ? {
         missionId: missionId.value,
         appKey: appKey.value,
