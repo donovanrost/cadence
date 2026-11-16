@@ -11,6 +11,7 @@ defmodule Cadence.Reads.AlarmEpisodes do
   alias Cadence.Auth.Scope
   alias Cadence.Control.Alarms
   alias Cadence.Limits
+  alias Cadence.Reads.AlarmEpisodes.Triggers
   alias Cadence.Reads.PointInfo
   alias Cadence.SpacecraftStore
 
@@ -36,12 +37,15 @@ defmodule Cadence.Reads.AlarmEpisodes do
     thresholds = thresholds(organization_id, mission_id, episodes)
     points = if episodes == [], do: %{}, else: PointInfo.by_id(organization_id, mission_id)
 
-    Enum.map(episodes, fn episode ->
+    episodes
+    |> Enum.map(fn episode ->
       episode
       |> Map.put(:spacecraft, Map.get(spacecraft, episode.spacecraft_id))
       |> Map.put(:point, Map.put(episode.point, :unit, unit(points, episode.point.id)))
       |> Map.put(:thresholds, Map.get(thresholds, definition_key(episode)))
     end)
+    # U68 R5: the producing definition and the triggering sample.
+    |> then(&Triggers.put(organization_id, mission_id, &1))
   end
 
   defp spacecraft(organization_id, mission_id, episodes) do

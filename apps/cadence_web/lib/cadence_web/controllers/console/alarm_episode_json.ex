@@ -35,7 +35,12 @@ defmodule CadenceWeb.Console.AlarmEpisodeJSON do
       acknowledged_at: episode.acknowledged_at,
       acknowledged_by: episode.acknowledged_by,
       assignee: episode.assignee,
-      assigned_at: episode.assigned_at
+      assigned_at: episode.assigned_at,
+      # U68 R5 (parity A7a/c): the definition that opened it and its triggering sample.
+      limit_definition_id: Map.get(episode, :limit_definition_id),
+      limit_definition_version: Map.get(episode, :limit_definition_version),
+      limit_set_name: Map.get(episode, :limit_set_name),
+      trigger: Map.get(episode, :trigger)
     }
 
     case Map.fetch(episode, :events) do
@@ -59,7 +64,8 @@ defmodule CadenceWeb.Console.AlarmEpisodeJSON do
       kind: to_string(event.kind),
       actor: event.actor,
       at: event.at,
-      payload: WireValue.encode(event.payload || %{})
+      payload: WireValue.encode(event.payload || %{}),
+      sample: Map.get(event, :sample)
     }
   end
 end

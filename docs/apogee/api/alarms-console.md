@@ -49,14 +49,25 @@ Query: `state` = `active` (default) | `cleared` | `all`; `severity` = `critical`
 - `point.unit`: from the catalog (same source as the alarms read). `null` when the catalog has none.
 - `acknowledged_by` / event `actor`: `{kind, id, name}`. `assignee`: `{id, name}`.
 - Values (`first_value`, `last_value`, thresholds) keep their type (number, string or boolean).
+- U68 R5 (parity A7a/c): `limit_definition_id`, `limit_definition_version`, `limit_set_name`: the
+  ground-limit definition that OPENED the episode (`null` for catalog monitoring). Deep link
+  "Inspect producing vN": the limits app takes `?definition=<id>&version=<n>`.
+  `trigger: {sample_id, sample_type: telemetry_sample | derived_telemetry_sample | null, point_id,
+  at}`: the sample that opened it, `at` its generation time, else receipt. Catalog-monitoring
+  transitions record no sample: `sample_id` and `sample_type` `null`, `at` = `opened_at`.
 
 ## `GET /alarm-episodes/:episode_id`
 
 One episode in the same shape plus `events`, oldest first:
 
 ```json
-{"events": [{"id": "…", "kind": "raised", "actor": null, "at": "…", "payload": {}}]}
+{"events": [{"id": "…", "kind": "raised", "actor": null, "at": "…", "payload": {},
+  "sample": {"id": "…", "at": "…"}}]}
 ```
+
+`sample` (U68 R5): for an event a source record caused (`raised`, `escalated`, `deescalated`,
+`cleared` by an evaluation), the sample behind it (`id` `null` for catalog monitoring, `at` as
+`trigger.at`); `null` for people's actions.
 
 `kind`: `raised | escalated | deescalated | acknowledged | assigned | unassigned | note |
 handed_off | cleared`. `escalated` payload has `from`, `to`, `acknowledgement_cleared`; `cleared`

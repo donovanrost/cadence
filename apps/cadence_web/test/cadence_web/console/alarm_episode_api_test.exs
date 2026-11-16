@@ -49,6 +49,22 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
 
       assert Map.has_key?(episode["point"], "unit")
       refute Map.has_key?(episode, "events")
+
+      # U68 R5: the definition that opened it and the sample that triggered it.
+      assert %{
+               "limit_definition_id" => definition_id,
+               "limit_definition_version" => version,
+               "limit_set_name" => set_name,
+               "trigger" => %{
+                 "sample_id" => sample_id,
+                 "sample_type" => "telemetry_sample",
+                 "point_id" => "HK.counter",
+                 "at" => at
+               }
+             } = episode
+
+      assert is_binary(definition_id) and is_integer(version) and is_binary(set_name)
+      assert is_binary(sample_id) and is_binary(at)
     end
 
     test "filters and rejects bad filter values", c do
@@ -65,7 +81,11 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
   describe "lifecycle commands" do
     test "show includes the event log; acknowledge records it", c do
       id = episode_id(c)
-      assert [%{"kind" => "raised"} | _] = get_data(c, "/#{id}")["events"]
+
+      assert [%{"kind" => "raised", "sample" => %{"id" => sample_id}} | _] =
+               get_data(c, "/#{id}")["events"]
+
+      assert sample_id == get_data(c, "")["episodes"] |> hd() |> get_in(["trigger", "sample_id"])
 
       data =
         c |> conn() |> post(path(c, "/#{id}/acknowledge"), %{note: "on it"}) |> json_response(200)

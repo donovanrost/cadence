@@ -143,6 +143,8 @@ defmodule Cadence.Alarms.Queries do
       spacecraft_id: episode.spacecraft_id,
       point: %{id: episode.parameter_ref, name: episode.point_name},
       context: episode.context,
+      # The source record that opened it (a ground limit event id, a catalog transition id).
+      opened_by_ref: episode.opened_by_ref,
       opened_at: episode.opened_at,
       cleared_at: episode.cleared_at,
       first_value: unwrap(episode.first_value),
@@ -162,7 +164,8 @@ defmodule Cadence.Alarms.Queries do
       kind: Map.fetch!(@event_kinds, event.kind),
       actor: actor(event.actor),
       at: event.at,
-      payload: event.payload
+      payload: event.payload,
+      source_ref: event.source_ref
     }
   end
 
