@@ -8,5 +8,7 @@ import type { Settings } from "./api.ts";
  */
 export const profileFramingOff = (s: Settings): boolean =>
   s.sections
+    // compared-as-text: a settings section key, an open set from the server's settings registry
     .find((x) => x.key === "cadence.configuration")
+    // compared-as-text: a settings field path, an open set from the section's schema
     ?.fields.find((f) => f.path === "profile_framing_generations")?.value === false;

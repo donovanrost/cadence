@@ -1,3 +1,4 @@
+import { isKeyOf } from "@/api";
 import type { OpState } from "@/ui";
 import type {
   Owner,
@@ -77,17 +78,17 @@ export function ownerCaption(counts: Readonly<Record<Owner, number>>): string | 
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
-const causeWords: Readonly<Record<string, string>> = {
+/** Causes the console words (rule A); a provider's own cause reads as its key in words. */
+const causeWords = {
   not_ingested: "Delivered, not ingested",
   provider_canceled: "Provider canceled",
   station_outage: "Station outage",
   no_aos: "No AOS",
   short_pass: "Short pass",
-};
+} as const;
 export function causeText(cause: string | null): string {
   if (cause === null) return "Not reported";
-  const known = causeWords[cause];
-  if (known) return known;
+  if (isKeyOf(causeWords, cause)) return causeWords[cause];
   const words = cause.replace(/_/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

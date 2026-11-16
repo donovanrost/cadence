@@ -43,10 +43,12 @@ export function fetchProviderAccounts(
   );
 }
 
+/** What a credential test verified or failed on (setup.md): the reference, later the provider. */
+const testParts = ["reference", "provider"] as const;
 const testReader = object({
   ok: decoders.boolean,
-  checked: array(token, 10),
-  failed: decoders.optional(nullable(token)),
+  checked: array(decoders.knownText(testParts), 10),
+  failed: decoders.optional(nullable(decoders.knownText(testParts))),
   reason: decoders.optional(nullable(string)),
   message: string,
 });

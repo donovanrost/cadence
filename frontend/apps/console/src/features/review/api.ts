@@ -182,6 +182,7 @@ export function fetchLost(
   k: ReviewKey & Readonly<{ cursor?: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<ReviewRows>> {
+  // keyed-by-text: a query-parameter bag, not a word map
   const extra: Record<string, string> = { outcome: "missed,failed,partial", limit: "50" };
   if (k.cursor) extra.cursor = k.cursor;
   return request(path(k, "/rows", extra), rowsReader, { signal });
