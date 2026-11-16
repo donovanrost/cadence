@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-rout
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
+  formatClock,
   formatRelative,
   useNow,
   ApEmptyState,
@@ -144,6 +145,13 @@ const peakMeta = computed(() => {
     ? `Peak ${valueWords(p.value, o.point.unit)} · ${shortTime(new Date(p.t).toISOString())}`
     : undefined;
 });
+/** ux U71: H2 rings the selected episode's triggering sample, when the read carries it. */
+const triggerMarks = computed(() => {
+  const t = selected.value?.trigger;
+  return t?.sample_id
+    ? [{ t: Date.parse(t.at), label: `the sample that raised it, ${formatClock(new Date(t.at))}Z` }]
+    : [];
+});
 const telemetryTo = computed((): RouteLocationRaw | null => {
   const o = selected.value;
   if (!o) return null;
@@ -252,6 +260,7 @@ const live = (o: Occurrence) => `OPEN · ${formatRelative(new Date(o.opened_at),
                 :view="view"
                 :height="180"
                 :bands="episodeBand"
+                :marks="triggerMarks"
                 @retry="history.refetch"
               />
             </div>

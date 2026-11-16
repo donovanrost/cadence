@@ -26,7 +26,13 @@ defineEmits<{ retry: [] }>();
           :time="`${formatClock(new Date(line.at))}Z`"
           :datetime="line.at"
           :state="line.state"
-          >{{ line.text }}</ApEventLine
+          >{{ line.text
+          }}<template v-if="line.sampleTo">
+            ·
+            <RouterLink :to="line.sampleTo" class="text-readout hover:underline"
+              >Show sample</RouterLink
+            ></template
+          ></ApEventLine
         >
       </ol>
     </ApRemote>

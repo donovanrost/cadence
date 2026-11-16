@@ -45,6 +45,8 @@ export const occurrenceReader = d.object({
   acknowledged_by: d.nullable(actor),
   first_value: d.nullable(engineeringValue),
   last_value: d.nullable(engineeringValue),
+  /** U68 R5: the sample that opened it, when the read carries it (ux U71: H2 rings it). */
+  trigger: d.optional(d.nullable(d.object({ sample_id: d.nullable(d.token), at: d.timestamp }))),
 });
 export type Occurrence = Decoded<typeof occurrenceReader>;
 

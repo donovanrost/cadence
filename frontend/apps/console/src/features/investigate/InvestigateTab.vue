@@ -75,7 +75,23 @@ const events = useSpacecraftEvents(
 const lines = computed(() =>
   logLines(
     events.state.value.status === "ready" ? events.state.value.value.events : null,
-    episode.value?.events ?? null,
+    episode.value
+      ? {
+          pointId: episode.value.point.id,
+          openedAt: episode.value.opened_at,
+          clearedAt: episode.value.cleared_at,
+          events: episode.value.events,
+        }
+      : null,
+    // ux U71 A7: 'Show sample' opens Telemetry on the alarm's point, centred and ringed.
+    (at) =>
+      episode.value
+        ? {
+            name: "ops.spacecraft",
+            params: { scId: props.sc.scid, tab: "telemetry" },
+            query: { points: episode.value.point.id, focus: episode.value.point.id, at },
+          }
+        : null,
   ),
 );
 function refreshEpisode() {

@@ -1,4 +1,4 @@
-import { logLines } from "./eventLog.ts";
+import { logLines, type LogEpisode } from "./eventLog.ts";
 import { mergeSamples, tailPoints } from "./tail.ts";
 import {
   conditionLine,
@@ -246,15 +246,22 @@ describe("event log lines (B2)", () => {
     payload: {},
   };
 
+  const epi = (events: LogEpisode["events"]): LogEpisode => ({
+    pointId: "EPS.VBAT",
+    openedAt: "2026-11-08T02:00:00Z",
+    clearedAt: null,
+    events,
+  });
+
   it("merges lifecycle actions into mission events, newest first, without duplicates", () => {
-    expect(logLines([mission], [raised, acked]).map((l) => l.text)).toEqual([
+    expect(logLines([mission], epi([raised, acked])).map((l) => l.text)).toEqual([
       "Acknowledged by Mira K.",
       "VBAT crossed red low",
     ]);
   });
 
   it("falls back to the whole episode history without the mission read", () => {
-    expect(logLines(null, [raised, acked])).toHaveLength(2);
+    expect(logLines(null, epi([raised, acked]))).toHaveLength(2);
   });
 });
 
@@ -306,6 +313,7 @@ describe("History tab (Investigate.md §History, api's episode reads)", () => {
     acknowledged_by: null,
     first_value: 23.5,
     last_value: 24.2,
+    trigger: undefined,
     ...over,
   });
   it("words the condition and how it ended", () => {
@@ -582,5 +590,47 @@ describe("G1 protocol line (§11c parity; api c61444ede)", () => {
       "USLP uplink",
     );
     expect(protocolLine(profile({ uplink_protocol: null, packet_protocol: null }))).toBeNull();
+  });
+});
+
+describe("B2 escalation lines (ux U71 A7)", () => {
+  const limitAt = (id: string, at: string) => ({
+    id,
+    at,
+    kind: "limit" as const,
+    raw_kind: "limit_violation",
+    severity: "critical" as const,
+    text: `VBAT limit ${id}`,
+    detail: null,
+    spacecraft: null,
+    refs: {
+      alarm_id: null,
+      point_id: "EPS.VBAT",
+      command_request_id: null,
+      contact_id: null,
+      subject: undefined,
+    },
+  });
+  const escalated = {
+    id: "x1",
+    kind: "escalated" as const,
+    actor: null,
+    at: "2026-11-08T02:31:41Z",
+    sample: { id: "s-9", at: "2026-11-08T02:31:40Z" },
+    payload: {},
+  };
+  it("shows the episode's own escalation with Show sample, hiding that point's limit lines only in its span", () => {
+    const lines = logLines(
+      [limitAt("in", "2026-11-08T02:31:41Z"), limitAt("before", "2026-11-08T01:00:00Z")],
+      {
+        pointId: "EPS.VBAT",
+        openedAt: "2026-11-08T02:00:00Z",
+        clearedAt: null,
+        events: [escalated],
+      },
+      () => ({ name: "ops.timeline" }),
+    );
+    expect(lines.map((l) => l.text)).toEqual(["Became critical at 02:31:40Z", "VBAT limit before"]);
+    expect(lines[0]?.sampleTo).toEqual({ name: "ops.timeline" });
   });
 });
