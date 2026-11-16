@@ -1748,7 +1748,7 @@ The buffer has a cap **per pass** (per stream), and all of them share **one disk
 ### U67 · Incomplete data at the end of a pass (director; api's incomplete_at_end_bytes) (api / fe-ops)
 Shown only when > 0, in the contact's settlement view as a data-quality note: `text-3`, no mark, no status colour.
 A stream that stops mid-frame is normal. It never goes to Now or the Timeline.
-- Frames: "6 bytes at the end of the pass didn't form a complete frame, so they weren't stored." ("1 byte … didn't
-  form …" singular.)
+- Frames: "6 bytes at the end of the pass didn't form a complete frame, so they weren't stored." One byte: "1 byte at the end
+  of the pass didn't form a complete frame, so it wasn't stored." (fe-ops)
 - Packets: "…didn't form a complete packet…". Both: "6 bytes at the end of the pass didn't form a complete frame,
   and 12 didn't form a complete packet, so they weren't stored."
