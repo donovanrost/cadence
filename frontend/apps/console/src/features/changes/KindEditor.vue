@@ -3,8 +3,9 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { ApButton, ApCallout, ApPanel, ApRemote } from "@/ui";
-import { failureOutcome, stageChange } from "./actions.ts";
+import { ApButton, ApPanel, ApRemote } from "@/ui";
+import { failureOutcome, stageChange, type FailureOutcome } from "./actions.ts";
+import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import {
   createDefaults,
   diffEdits,
@@ -57,7 +58,7 @@ const schema = {
 const before = ref<FormValues>({});
 const values = ref<FormValues>({});
 const errors = ref<Readonly<Record<string, string>>>({});
-const failure = ref<string | null>(null);
+const failure = ref<FailureOutcome | null>(null);
 const busy = ref(false);
 watch(
   () => [schema.state.value, props.document] as const,
@@ -96,7 +97,8 @@ async function stage() {
   const edits = diffEdits(schema.state.value.value, before.value, values.value);
   if (!edits.ok) return void (errors.value = edits.errors);
   errors.value = {};
-  if (edits.changes.length === 0) return void (failure.value = "Nothing changed yet.");
+  if (edits.changes.length === 0)
+    return void (failure.value = { changed: false, sentence: "Nothing changed yet." });
   const changes = props.finish ? props.finish(edits.changes) : edits.changes;
   busy.value = true;
   failure.value = null;
@@ -118,7 +120,7 @@ async function stage() {
       source: { surface: props.surface },
       ops: [op],
     });
-    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged").sentence);
+    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged"));
     refreshConfigState(props.missionId);
     await router.push(props.done);
   } finally {
@@ -133,7 +135,7 @@ async function stage() {
       <template #default="{ value: kindSchema }">
         <form class="flex flex-col gap-4" @submit.prevent="stage">
           <SchemaForm v-model="values" :schema="kindSchema" :errors="errors" />
-          <ApCallout v-if="failure" tone="caution">{{ failure }}</ApCallout>
+          <FailureOutcomeCallout v-if="failure" :outcome="failure" tone="caution" />
           <div class="flex flex-wrap gap-2">
             <ApButton type="submit" variant="primary" :disabled="busy" disabled-reason="Staging…"
               >Stage change</ApButton

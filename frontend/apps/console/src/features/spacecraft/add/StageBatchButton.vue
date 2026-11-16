@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
+  FailureOutcomeCallout,
   failureOutcome,
   invalidOpDetails,
   refreshConfigState,
@@ -9,7 +10,7 @@ import {
   type FailureOutcome,
 } from "@/features/changes/index.ts";
 import { useMissionScope } from "@/shell";
-import { ApButton, ApCallout, focusFirstConnected, plural } from "@/ui";
+import { ApButton, focusFirstConnected, plural } from "@/ui";
 import { useDraft } from "./context.ts";
 import { clearDraft } from "./draft.ts";
 import { batchOps } from "./stage.ts";
@@ -83,15 +84,15 @@ async function stage() {
 </script>
 
 <template>
-  <ApCallout v-if="failure" :tone="failure.changed === null ? 'caution' : 'crit'">
-    {{ failure.sentence }} Your draft is kept.
+  <FailureOutcomeCallout v-if="failure" :outcome="failure">
+    Your draft is kept.
     <template #action>
       <ApButton v-if="failure.changed === null" size="compact" :to="{ name: 'setup.changes' }"
         >Staged changes</ApButton
       >
       <ApButton v-else size="compact" @click="retry">Retry</ApButton>
     </template>
-  </ApCallout>
+  </FailureOutcomeCallout>
   <ApButton
     variant="primary"
     size="commit"

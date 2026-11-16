@@ -4,11 +4,13 @@ import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   displayValue,
+  FailureOutcomeCallout,
   failureOutcome,
   previewOps,
   refreshConfigState,
   stageChange,
   toValue,
+  type FailureOutcome,
   type FormValues,
 } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApPanel, ApTextarea } from "@/ui";
@@ -82,7 +84,16 @@ const blocked = computed((): string | null => {
 
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
-watch([target, path, values, reason], () => (outcome.value = null), { deep: true });
+/** A refused or unclear Stage, with its link (e.g. U79 'Open change set'). */
+const failure = ref<FailureOutcome | null>(null);
+watch(
+  [target, path, values, reason],
+  () => {
+    outcome.value = null;
+    failure.value = null;
+  },
+  { deep: true },
+);
 /** ux: Stage is disabled while the last Check said NO-GO, with that line as the reason. */
 const noGo = computed(() => (outcome.value?.tone === "crit" ? outcome.value.text : null));
 const op = () =>
@@ -115,6 +126,7 @@ async function check() {
 async function stage() {
   if (blocked.value !== null || busy.value) return;
   busy.value = true;
+  failure.value = null;
   try {
     const verb = existing.value ? "change override" : "override";
     const r = await stageChange(props.missionId, {
@@ -122,11 +134,7 @@ async function stage() {
       source: { surface: "profile_overrides" },
       ops: [op()],
     });
-    if (!r.ok)
-      return void (outcome.value = {
-        tone: "crit",
-        text: failureOutcome(r.error, "staged").sentence,
-      });
+    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged"));
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {
@@ -162,6 +170,7 @@ async function stage() {
         required
       />
       <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+      <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <div class="flex flex-wrap gap-3">
         <ApButton
           :disabled="busy || blocked !== null"

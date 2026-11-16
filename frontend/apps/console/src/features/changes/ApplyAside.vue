@@ -2,7 +2,8 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import type { RemoteState } from "@/api";
-import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
+import { ApButton, ApField, ApPanel, ApStatTile } from "@/ui";
+import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import {
   blockingReason,
   failureOutcome,
@@ -40,9 +41,8 @@ watch(
   { immediate: true },
 );
 const busy = ref(false);
-const failure = ref<string | null>(null);
-/** U65: a refusal's link ('Open the report'). */
-const failureLink = ref<FailureOutcome["link"] | null>(null);
+/** With its link, e.g. U65 'Open the report'. */
+const failure = ref<FailureOutcome | null>(null);
 const next = computed(() => props.config.head.revision + 1);
 const needsReview = computed(() => props.changeSet.approval_required === true);
 const verdict = computed(() =>
@@ -79,7 +79,6 @@ async function apply() {
   if (blocked.value !== null || busy.value) return;
   busy.value = true;
   failure.value = null;
-  failureLink.value = null;
   try {
     const result = await submitChangeSet(props.missionId, props.changeSet.id, {
       reason: why.value.trim(),
@@ -88,9 +87,7 @@ async function apply() {
     });
     if (result.ok) emit("result", result.value);
     else {
-      const outcome = failureOutcome(result.error, "applied");
-      failure.value = outcome.sentence;
-      failureLink.value = outcome.link ?? null;
+      failure.value = failureOutcome(result.error, "applied");
       emit("changed");
     }
   } finally {
@@ -118,14 +115,7 @@ async function apply() {
         />
         I've read the holds
       </label>
-      <ApCallout v-if="failure" tone="crit"
-        >{{ failure }}
-        <template v-if="failureLink" #action
-          ><ApButton size="compact" :to="failureLink.to">{{
-            failureLink.label
-          }}</ApButton></template
-        >
-      </ApCallout>
+      <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <ApButton
         variant="primary"
         size="commit"

@@ -1,6 +1,7 @@
 /** Public API of the changes feature. */
 export { default as ConfigStatus } from "./ConfigStatus.vue";
 export { default as StagedBar } from "./StagedBar.vue";
+export { default as FailureOutcomeCallout } from "./FailureOutcomeCallout.vue";
 export {
   errorCode,
   failureOutcome,

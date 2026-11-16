@@ -1,6 +1,11 @@
 import type { MissionId } from "@/api/index.ts";
 import { ref, shallowRef } from "vue";
-import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
+import {
+  failureOutcome,
+  refreshConfigState,
+  stageChange,
+  type FailureOutcome,
+} from "@/features/changes/index.ts";
 import type { Station } from "./api.ts";
 
 /**
@@ -10,7 +15,8 @@ import type { Station } from "./api.ts";
 export function useConfirmCode(missionId: () => MissionId) {
   const staged = shallowRef<ReadonlySet<string>>(new Set());
   const busy = ref<string | null>(null);
-  const failure = ref<string | null>(null);
+  /** Named for its station, with its link (e.g. U79 'Open change set'). */
+  const failure = ref<FailureOutcome | null>(null);
 
   async function confirm(station: Station) {
     const code = station.suggested_code;
@@ -31,7 +37,8 @@ export function useConfirmCode(missionId: () => MissionId) {
         ],
       });
       if (!result.ok) {
-        failure.value = `${station.display_name}: ${failureOutcome(result.error, "staged").sentence}`;
+        const outcome = failureOutcome(result.error, "staged");
+        failure.value = { ...outcome, sentence: `${station.display_name}: ${outcome.sentence}` };
         return;
       }
       staged.value = new Set([...staged.value, station.id]);

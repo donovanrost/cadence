@@ -4,12 +4,14 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery, type ApiError } from "@/api";
 import {
+  FailureOutcomeCallout,
   failureOutcome,
   invalidOpDetails,
   previewOps,
   refreshConfigState,
   stageChange,
   type StageOp,
+  type FailureOutcome,
 } from "@/features/changes/index.ts";
 import { fetchStations } from "@/features/stations/index.ts";
 import {
@@ -43,6 +45,8 @@ function removeRule(i: number) {
 const rollout = ref<"all" | "none">("all");
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
+/** A refused or unclear Stage, with its link (e.g. U79 'Open change set'). */
+const failure = ref<FailureOutcome | null>(null);
 const problems = computed(() => draftProblems(drafts.value));
 if (drafts.value.length === 0) drafts.value.push(newRule([]));
 
@@ -65,6 +69,7 @@ const op = (): StageOp => ({
 async function check() {
   if (problems.value.length > 0 || busy.value) return;
   busy.value = true;
+  failure.value = null;
   try {
     const result = await previewOps(
       { missionId: props.missionId, ops: [op()] },
@@ -80,17 +85,14 @@ async function check() {
 async function stage() {
   if (problems.value.length > 0 || busy.value) return;
   busy.value = true;
+  failure.value = null;
   try {
     const result = await stageChange(props.missionId, {
       summary: `${props.detail.profile.name} · routing rules (${plural(drafts.value.length, "rule")})`,
       source: { surface: "profile_routing" },
       ops: [op()],
     });
-    if (!result.ok)
-      return void (outcome.value = {
-        tone: "crit",
-        text: failureOutcome(result.error, "staged").sentence,
-      });
+    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged"));
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {
@@ -128,6 +130,7 @@ const rolloutOptions = [
           <ApSegmented v-model="rollout" label="Roll out to" :options="rolloutOptions" />
           <ApCallout v-if="problems.length > 0" tone="caution">{{ problems.join(" ") }}</ApCallout>
           <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+          <FailureOutcomeCallout v-if="failure" :outcome="failure" />
           <div class="flex flex-wrap gap-2">
             <ApButton
               :disabled="busy || problems.length > 0"

@@ -9,6 +9,7 @@ import {
   refreshConfigState,
   SchemaForm,
   stageChange,
+  type FailureOutcome,
 } from "@/features/changes/index.ts";
 import { ApPanel, plural } from "@/ui";
 import type { ProfileSection } from "./detail.ts";
@@ -39,6 +40,8 @@ const before = sectionValues(props.section, fields);
 const values = ref({ ...before });
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
+/** A refused or unclear Stage edit, with its link (e.g. U79 'Open change set'). */
+const failure = ref<FailureOutcome | null>(null);
 const counts = ref<PreviewCounts | null>(null);
 const edits = computed(() => diffEdits(schema, before, values.value));
 const dirty = computed(() =>
@@ -61,6 +64,7 @@ watch(
   values,
   () => {
     outcome.value = null;
+    failure.value = null;
     counts.value = null;
   },
   { deep: true },
@@ -86,17 +90,14 @@ async function check() {
 async function stage() {
   if (!edits.value.ok || edits.value.changes.length === 0 || busy.value) return;
   busy.value = true;
+  failure.value = null;
   try {
     const r = await stageChange(props.missionId, {
       summary: `${props.profile.name} · ${props.section.label} (${plural(edits.value.changes.length, "field")})`,
       source: { surface: "profile_section", section: props.section.key },
       ops: [sectionOp(props.profile.id, edits.value.changes)],
     });
-    if (!r.ok)
-      return void (outcome.value = {
-        tone: "crit",
-        text: failureOutcome(r.error, "staged").sentence,
-      });
+    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged"));
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {
@@ -117,6 +118,7 @@ async function stage() {
       :before="before"
       :values="values"
       :outcome="outcome"
+      :failure="failure"
       :counts="counts"
       :busy="busy"
       :invalid="invalid"

@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
-import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
+import {
+  FailureOutcomeCallout,
+  failureOutcome,
+  refreshConfigState,
+  stageChange,
+  type FailureOutcome,
+} from "@/features/changes/index.ts";
 import { ApButton, ApCallout, formatShort } from "@/ui";
 import type { ProfileField, ProfileOverride } from "./detail.ts";
 import { overrideOp, valueText } from "./overrides.ts";
@@ -16,12 +22,14 @@ const props = defineProps<{
 }>();
 const busy = ref<string | null>(null);
 const note = ref<string | null>(null);
+const failure = ref<FailureOutcome | null>(null);
 const fieldOf = (o: ProfileOverride) => props.fields.find((f) => f.path === o.path);
 const key = (o: ProfileOverride) => `${o.spacecraft.id}:${o.path}`;
 
 async function reset(o: ProfileOverride) {
   busy.value = key(o);
   note.value = null;
+  failure.value = null;
   try {
     const result = await stageChange(props.missionId, {
       summary: `${o.spacecraft.name} · reset ${fieldOf(o)?.label ?? o.path} to profile`,
@@ -31,7 +39,7 @@ async function reset(o: ProfileOverride) {
     if (result.ok) {
       note.value = `Reset staged for ${o.spacecraft.name}. It applies with the change set.`;
       refreshConfigState(props.missionId);
-    } else note.value = failureOutcome(result.error, "staged").sentence;
+    } else failure.value = failureOutcome(result.error, "staged");
   } finally {
     busy.value = null;
   }
@@ -40,6 +48,7 @@ async function reset(o: ProfileOverride) {
 
 <template>
   <ApCallout v-if="note" tone="info">{{ note }}</ApCallout>
+  <FailureOutcomeCallout v-if="failure" :outcome="failure" />
   <ul class="m-0 list-none p-0">
     <li
       v-for="o in overrides"

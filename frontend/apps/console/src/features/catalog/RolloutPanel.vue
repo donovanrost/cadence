@@ -2,10 +2,16 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
+import {
+  FailureOutcomeCallout,
+  failureOutcome,
+  refreshConfigState,
+  stageChange,
+  type FailureOutcome,
+} from "@/features/changes/index.ts";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApButton, ApCallout, ApPanel, plural } from "@/ui";
+import { ApButton, ApPanel, plural } from "@/ui";
 import RolloutBreaking from "./RolloutBreaking.vue";
 import RolloutChoose from "./RolloutChoose.vue";
 import RolloutDryRun from "./RolloutDryRun.vue";
@@ -83,7 +89,7 @@ const blocked = computed((): string | null => {
 });
 
 const busy = ref(false);
-const failure = ref<string | null>(null);
+const failure = ref<FailureOutcome | null>(null);
 async function stage() {
   if (blocked.value !== null || busy.value) return;
   busy.value = true;
@@ -95,7 +101,7 @@ async function stage() {
       source: { surface: "catalog_rollout" },
       ops: ops.value,
     });
-    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged").sentence);
+    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged"));
     refreshConfigState(missionId.value);
     await router.push({ name: "setup.changes" });
   } finally {
@@ -123,7 +129,7 @@ async function stage() {
         :revision-number="revision.number"
         :breaking="breaking"
       />
-      <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+      <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <ApButton
         variant="primary"
         :disabled="busy || blocked !== null"

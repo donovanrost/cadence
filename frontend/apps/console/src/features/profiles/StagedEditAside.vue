@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { FormValues, SchemaField } from "@/features/changes/index.ts";
+import {
+  FailureOutcomeCallout,
+  type FailureOutcome,
+  type FormValues,
+  type SchemaField,
+} from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApPanel, ApStatTile, plural } from "@/ui";
 import type { PreviewCounts } from "./sectionEdit.ts";
 
@@ -9,6 +14,8 @@ defineProps<{
   before: FormValues;
   values: FormValues;
   outcome: Readonly<{ tone: "nominal" | "caution" | "crit"; text: string }> | null;
+  /** A refused or unclear Stage edit (failureOutcome), with its link. */
+  failure: FailureOutcome | null;
   /** From the last Check; null until one has run for these values. */
   counts: PreviewCounts | null;
   busy: boolean;
@@ -34,6 +41,7 @@ defineEmits<{ check: []; stage: []; discard: [] }>();
         <ApStatTile label="Keeps" :value="counts.keeps" unit="SC" />
       </div>
       <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+      <FailureOutcomeCallout v-if="failure" :outcome="failure" />
       <div class="flex flex-wrap gap-3">
         <ApButton
           :disabled="busy || invalid !== null"

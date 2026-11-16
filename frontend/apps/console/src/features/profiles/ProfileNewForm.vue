@@ -4,12 +4,14 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
   diffEdits,
+  FailureOutcomeCallout,
   failureOutcome,
   refreshConfigState,
   SchemaForm,
   stageChange,
+  type FailureOutcome,
 } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
+import { ApButton, ApField, ApPanel } from "@/ui";
 import { createOp, type NewProfileForm } from "./newProfile.ts";
 
 /** Profile.md New profile: name + the generated fields, staged as one create in a change set. */
@@ -24,7 +26,7 @@ const router = useRouter();
 const name = ref(props.initialName);
 const values = ref({ ...props.form.values });
 const errors = ref<Readonly<Record<string, string>>>({});
-const failure = ref<string | null>(null);
+const failure = ref<FailureOutcome | null>(null);
 const busy = ref(false);
 const blocked = computed(() => (name.value.trim() === "" ? "Name the profile first." : null));
 
@@ -42,7 +44,7 @@ async function stage() {
       source: { surface: "profile_new" },
       ops: [createOp(name.value, props.form.carried, edits.changes)],
     });
-    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged").sentence);
+    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged"));
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {
@@ -61,7 +63,7 @@ async function stage() {
       </p>
       <ApField v-model="name" label="Name" required />
       <SchemaForm v-model="values" :schema="form.schema" :errors="errors" />
-      <ApCallout v-if="failure" tone="caution">{{ failure }}</ApCallout>
+      <FailureOutcomeCallout v-if="failure" :outcome="failure" tone="caution" />
       <div class="flex flex-wrap gap-2">
         <ApButton
           type="submit"

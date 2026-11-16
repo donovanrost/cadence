@@ -3,11 +3,13 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
+  FailureOutcomeCallout,
   failureOutcome,
   previewOps,
   refreshConfigState,
   stageChange,
   useConfigState,
+  type FailureOutcome,
   type Preview,
 } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
@@ -19,7 +21,7 @@ const props = defineProps<{ missionId: MissionId; detail: SpacecraftDetail }>();
 const router = useRouter();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const preview = ref<Preview | null>(null);
-const failure = ref<string | null>(null);
+const failure = ref<FailureOutcome | null>(null);
 const busy = ref(false);
 const holds = computed(() =>
   preview.value
@@ -70,7 +72,7 @@ async function stage() {
       source: { surface: "spacecraft" },
       ops: [archiveOp(props.detail)],
     });
-    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged").sentence);
+    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged"));
     staged.value = true;
     refreshConfigState(props.missionId);
     // If the navigation doesn't happen, the sheet stays open and says it's staged (qa 11-13).
@@ -111,7 +113,7 @@ defineExpose({ open });
         <ApButton size="compact" :to="{ name: 'setup.changes' }">Open Changes</ApButton>
       </template>
     </ApCallout>
-    <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+    <FailureOutcomeCallout v-if="failure" :outcome="failure" />
     <template #footer>
       <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
       <ApButton

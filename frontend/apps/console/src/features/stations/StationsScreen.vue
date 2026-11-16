@@ -6,7 +6,6 @@ import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, paramText, useMissionScope, useSession } from "@/shell";
 import {
   ApButton,
-  ApCallout,
   ApEmptyState,
   ApPageHeader,
   ApPanel,
@@ -16,7 +15,7 @@ import {
   type ApTabLink,
 } from "@/ui";
 import ProvidersPanel from "./ProvidersPanel.vue";
-import { KindEditor } from "@/features/changes/index.ts";
+import { FailureOutcomeCallout, KindEditor } from "@/features/changes/index.ts";
 import StationsTable from "./StationsTable.vue";
 import { fetchStations } from "./api.ts";
 import { useConfirmCode } from "./useConfirmCode.ts";
@@ -96,7 +95,7 @@ const notProvided = computed(
             sentence="Stations come from your ground-network providers or are added here."
           />
           <template v-else>
-            <ApCallout v-if="codes.failure.value" tone="crit">{{ codes.failure.value }}</ApCallout>
+            <FailureOutcomeCallout v-if="codes.failure.value" :outcome="codes.failure.value" />
             <StationsTable
               :rows="value"
               :can-edit="canStage"
