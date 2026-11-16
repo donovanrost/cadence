@@ -71,6 +71,14 @@ describe("ApField", () => {
     await wrapper.get("input").setValue("50");
     expect(wrapper.emitted("update:modelValue")).toEqual([["50"]]);
   });
+  it("marks a required field aria-required, and not aria-invalid until it has an error (ux a11y A6)", async () => {
+    const wrapper = mount(ApField, { props: { label: "Name", required: true, modelValue: "" } });
+    const input = wrapper.get("input");
+    expect(input.attributes("aria-required")).toBe("true");
+    expect(input.attributes("aria-invalid")).toBeUndefined();
+    await wrapper.setProps({ error: "Name is taken." });
+    expect(input.attributes("aria-invalid")).toBe("true");
+  });
 });
 
 describe("ApPageHeader", () => {

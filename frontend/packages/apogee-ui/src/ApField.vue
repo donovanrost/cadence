@@ -55,6 +55,7 @@ const describedBy = computed(
         :name="name"
         :placeholder="placeholder"
         :required="required"
+        :aria-required="required ? 'true' : undefined"
         :disabled="disabled"
         :autocomplete="autocomplete"
         :inputmode="inputmode"

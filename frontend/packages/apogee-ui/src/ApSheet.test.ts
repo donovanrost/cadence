@@ -67,6 +67,35 @@ describe("ApSheet", () => {
     wrapper.unmount();
   });
 
+  it("moves focus back into an open side sheet when its opener is used again (ux a11y A3)", async () => {
+    const opener = document.createElement("button");
+    const elsewhere = document.createElement("button");
+    document.body.append(opener, elsewhere);
+    const wrapper = mount(ApSheet, {
+      attachTo: document.body,
+      props: { title: "Widget", placement: "side", initialFocus: "input" },
+      slots: { default: "<input aria-label='Name' />" },
+    });
+    const sheet = wrapper.vm as { open: () => void; close: () => void };
+    const input = wrapper.get("input").element;
+    opener.focus();
+    sheet.open();
+    await nextTick();
+    expect(document.activeElement).toBe(input);
+    // Tab may leave a side sheet for the page; using the opener again brings focus back in.
+    elsewhere.focus();
+    sheet.open();
+    await nextTick();
+    expect(document.activeElement).toBe(input);
+    // Closing still returns focus to the first opener.
+    sheet.close();
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+    wrapper.unmount();
+    opener.remove();
+    elsewhere.remove();
+  });
+
   it("refuses Escape when not dismissible, but still closes from the caller", async () => {
     const wrapper = mount(ApSheet, {
       attachTo: document.body,

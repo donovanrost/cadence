@@ -35,12 +35,15 @@ const body = ref<HTMLElement | null>(null);
 const scrolls = useScrollable(body);
 let opener: HTMLElement | null = null;
 
+const focusInitial = () => dialog.value?.querySelector<HTMLElement>(props.initialFocus)?.focus();
+/** Already open (only a side sheet can be: its page stays usable), the opener moves focus back in (ux a11y A3). */
 function open() {
-  if (dialog.value?.open) return;
-  opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  if (props.placement === "side") dialog.value?.show();
-  else dialog.value?.showModal();
-  void nextTick(() => dialog.value?.querySelector<HTMLElement>(props.initialFocus)?.focus());
+  if (!dialog.value?.open) {
+    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (props.placement === "side") dialog.value?.show();
+    else dialog.value?.showModal();
+  }
+  void nextTick(focusInitial);
 }
 function close() {
   dialog.value?.close();
