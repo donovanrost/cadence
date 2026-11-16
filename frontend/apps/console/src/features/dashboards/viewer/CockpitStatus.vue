@@ -2,9 +2,8 @@
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useMissionScope } from "@/shell";
-import { useFleet } from "@/features/fleet/index.ts";
+import { postureChips, useFleet } from "@/features/fleet/index.ts";
 import { ApStatusMark, stateTextClass } from "@/ui";
-import { postureChips } from "../posture/posture.ts";
 
 /**
  * The cockpit cluster (ux): fleet health chips, the same as the top bar's posture

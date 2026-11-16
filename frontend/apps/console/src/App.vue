@@ -8,7 +8,7 @@ import { useBootstrap } from "@/shell/bootstrap.ts";
 import SessionProvider from "@/shell/SessionProvider.vue";
 import PaletteRoot from "@/features/palette/PaletteRoot.vue";
 import { ConfigStatus, StagedBar } from "@/features/changes/index.ts";
-import { FleetPosture } from "@/features/dashboards/index.ts";
+import { FleetPosture } from "@/features/fleet/index.ts";
 import AuthLayout from "@/features/auth/AuthLayout.vue";
 
 /**

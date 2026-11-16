@@ -17,7 +17,7 @@ vi.mock("@/live", async (original) => ({
   ...(await original<typeof import("@/live")>()),
   useConnection: () => connection,
 }));
-vi.mock("@/features/fleet/index.ts", () => ({
+vi.mock("../useFleet.ts", () => ({
   useFleet: () => ({
     state: computed(() => {
       void tick.value;

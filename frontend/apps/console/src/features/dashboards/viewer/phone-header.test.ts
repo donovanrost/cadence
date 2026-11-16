@@ -73,9 +73,13 @@ vi.mock("@/shell", async (original) => ({
   ...(await original<typeof import("@/shell")>()),
   useMissionScope: () => computed(() => ({ mission: { id: "m1" } })),
 }));
-vi.mock("@/features/fleet/index.ts", () => ({
+vi.mock("@/features/fleet/index.ts", async (original) => ({
+  ...(await original<typeof import("@/features/fleet/index.ts")>()),
   useFleet: () => ({
-    state: computed(() => ({ status: "ready", value: { counts: fleet.counts, limits: { configured: true } } })),
+    state: computed(() => ({
+      status: "ready",
+      value: { counts: fleet.counts, limits: { configured: true } },
+    })),
   }),
 }));
 

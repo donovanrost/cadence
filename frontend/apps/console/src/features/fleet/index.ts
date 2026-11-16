@@ -33,3 +33,6 @@ export { fleetSubset, statTiles, type StatTile } from "./stats.ts";
 export { fleetOf, spacecraftRow } from "./fixtures.ts";
 export { default as TelemetryDegraded } from "./TelemetryDegraded.vue";
 export { nextContact } from "./filters.ts";
+/** The top bar's fleet posture (ux IA §Top bar), shared with the dashboard cockpit. */
+export { default as FleetPosture } from "./posture/FleetPosture.vue";
+export { postureChips, type PostureChip } from "./posture/posture.ts";

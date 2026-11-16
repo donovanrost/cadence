@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { useFleet } from "@/features/fleet/index.ts";
+import { useFleet } from "../useFleet.ts";
 import { useConnection } from "@/live";
 import { useMissionScope } from "@/shell";
 import { ApStatusMark, formatHourMinute, stateTextClass } from "@/ui";
