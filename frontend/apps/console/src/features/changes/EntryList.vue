@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ApPanel, plural } from "@/ui";
-import { humanize } from "./actions.ts";
+import { humanize } from "./itemLines.ts";
 import { configKindText, type EntryOp } from "./shapes.ts";
 import { isKnown, type Unrecognized } from "@/api";
 import FieldRows from "./FieldRows.vue";

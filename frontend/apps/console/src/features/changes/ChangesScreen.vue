@@ -9,7 +9,8 @@ import { ApPageHeader, ApRemote, formatShort, plural, refocusFirst } from "@/ui"
 import ChangeSetBoard from "./ChangeSetBoard.vue";
 import ChangesEmpty from "./ChangesEmpty.vue";
 import ChangesOutcome from "./ChangesOutcome.vue";
-import { blockingReason, previewChangeSet, type SubmitResult } from "./actions.ts";
+import { previewChangeSet, type SubmitResult } from "./actions.ts";
+import { blockingReason } from "./itemLines.ts";
 import { useHeldChecks } from "./checks-view.ts";
 import { conflictOps } from "./rebase.ts";
 import { refreshConfigState } from "./useConfigState.ts";

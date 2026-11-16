@@ -10,7 +10,6 @@ export {
   failureOutcome,
   type FailureOutcome,
   invalidOpDetails,
-  itemLine,
   type PreviewItem,
   previewOps,
   previewReader,
@@ -20,6 +19,7 @@ export {
   type StageOp,
   type StageResult,
 } from "./actions.ts";
+export { itemLine } from "./itemLines.ts";
 export { checkKeyText, checkLabel, type CheckKey, type HoldReason } from "./preview.ts";
 export { refreshConfigState, useConfigState } from "./useConfigState.ts";
 export { default as SchemaForm } from "./SchemaForm.vue";

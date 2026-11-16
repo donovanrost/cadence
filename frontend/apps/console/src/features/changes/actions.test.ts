@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode, type Actor } from "@/api";
-import {
-  failureOutcome,
-  groupedLines,
-  itemLine,
-  previewReader,
-  type PreviewItem,
-} from "./actions.ts";
+import { failureOutcome, previewReader, type PreviewItem } from "./actions.ts";
+import { groupedLines, itemLine } from "./itemLines.ts";
 
 const base: PreviewItem = {
   op_id: null,
@@ -267,7 +262,8 @@ describe("failureOutcome on 5xx (qa #19)", () => {
 
 describe("#65 blocking holds", () => {
   it("reads blocking items as 'can't apply yet' with what clears them", async () => {
-    const { blockingReason, rejectionSentence } = await import("./actions.ts");
+    const { rejectionSentence } = await import("./actions.ts");
+    const { blockingReason } = await import("./itemLines.ts");
     const preview = decode(previewReader, {
       verdict: "hold",
       checks: [
