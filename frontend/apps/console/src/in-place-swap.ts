@@ -19,7 +19,15 @@ export function useInPlaceSwap(
 ) {
   const find = (selector: string) => root.value?.querySelector<HTMLElement>(selector) ?? null;
   const editor = `[data-swap-editor="${name}"]`;
-  const field = () => find(`${editor} input, ${editor} textarea, ${editor} select`);
+  // The first field that can take focus: not a hidden input, not disabled (dashboards' review).
+  const field = () =>
+    find(
+      [
+        `${editor} input:not([type="hidden"]):not(:disabled)`,
+        `${editor} textarea:not(:disabled)`,
+        `${editor} select:not(:disabled)`,
+      ].join(", "),
+    );
   let waiting: MutationObserver | null = null;
   const stopWaiting = () => {
     waiting?.disconnect();

@@ -3,7 +3,8 @@ import { defineComponent, h, nextTick, ref } from "vue";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { useInPlaceSwap } from "./in-place-swap.ts";
 
-/** Edit swaps for an editor whose field is there at once, or only once `ready` (a schema read). */
+/** Edit swaps for an editor whose fields are there at once, or only once `ready` (a schema read).
+ * A hidden and a disabled input come first: focus must skip them. */
 const Host = defineComponent({
   props: { late: { type: Boolean, default: false } },
   setup(props) {
@@ -16,7 +17,17 @@ const Host = defineComponent({
     return h("main", { ref: "root" }, [
       h("h1", "Page"),
       this.swap.open.value
-        ? h("div", { "data-swap-editor": "" }, this.ready ? [h("input", { id: "field" })] : [])
+        ? h(
+            "div",
+            { "data-swap-editor": "" },
+            this.ready
+              ? [
+                  h("input", { type: "hidden", id: "hidden" }),
+                  h("input", { id: "off", disabled: true }),
+                  h("input", { id: "field" }),
+                ]
+              : [],
+          )
         : h("button", { "data-swap-opener": "", id: "edit" }, "Edit"),
     ]);
   },
