@@ -2316,12 +2316,18 @@ endpoint ids, the replay run id, and the full JSON or hex.
 ### U81 · Listen isolation words (lead + domain, class-level, 11-16) (domain / api / fe-setup)
 
 **1. Same-SCID warning at spacecraft save (same organization only).** A caution, not a refusal: the save goes ahead.
-Under the SCID field, and on the change's row in the change set:
+As built (domain's shape, 11-16): an acknowledgeable HOLD in the change set's Compatibility check, reason
+`scid_shared_in_organization`, on a create or a SCID change. Apply's Why placeholder: "Why it's safe for both
+spacecraft to use SCID 42". One item per other mission, its shared providers joined; missions the viewer can't open
+fold into one item ("2 other missions in this organization also fly SCID 42 through KSAT."). The words:
 - "▲ Another mission in this organization, Earendil Ops, also flies SCID 42 through KSAT. KSAT's stations can't tell
   the two spacecraft's uplinks apart."
 - The other mission is named only when the viewer can open it; otherwise "Another mission in this organization also
   flies SCID 42 through KSAT." Never its id (U25).
-- The provider is named. If more than one provider is shared, "through KSAT and AWS Ground Station".
+- The provider is named. If more than one provider is shared, "through KSAT and AWS Ground Station. Their stations
+  can't tell the two spacecraft's uplinks apart." The second sentence stays in the unnamed form.
+- Not yet covered (follow-up, lead's call): a mission adding a provider account that a same-SCID mission already
+  uses.
 - Never across organizations: another tenant's SCID is not ours to show. That case waits for domain's follow-up (an
   authenticated delivery identity).
 
