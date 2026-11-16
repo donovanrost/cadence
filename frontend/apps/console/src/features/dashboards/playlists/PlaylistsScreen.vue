@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
@@ -19,7 +19,7 @@ import MoreMenu from "../viewer/MoreMenu.vue";
 import { fetchPlaylists, type PlaylistSummary } from "./api.ts";
 import DeleteSheet from "./DeleteSheet.vue";
 import PlaylistSheet from "./PlaylistSheet.vue";
-import { refetchKeepingFocus } from "../focus-fallback.ts";
+import { focusLost, refetchKeepingFocus } from "../focus-fallback.ts";
 
 /** Playlists (ux): Name · Dashboards · Dwell · Updated · Present; editor and delete in sheets. */
 const scope = useMissionScope();
@@ -34,6 +34,29 @@ useMissionInvalidation(missionId, ["dashboards"], list.refetch);
 const editor = ref<InstanceType<typeof PlaylistSheet> | null>(null);
 const remover = ref<InstanceType<typeof DeleteSheet> | null>(null);
 const refetchRows = refetchKeepingFocus(() => list.state.value, list.refetch);
+/** Back from Present (Esc or Exit, which pass `presentFocus`): its Present link takes focus (ux). */
+const state: unknown = window.history.state;
+let returnTo =
+  state &&
+  typeof state === "object" &&
+  "presentFocus" in state &&
+  typeof state.presentFocus === "string"
+    ? state.presentFocus
+    : null;
+watch(
+  () => list.state.value.status,
+  async (status) => {
+    if (status !== "ready" || returnTo === null) return;
+    const id = returnTo;
+    returnTo = null;
+    await nextTick();
+    const link = document.querySelector<HTMLElement>(`[data-present="${CSS.escape(id)}"]`);
+    // The shell may have put focus on the h1 meanwhile; anything else the user chose stays.
+    const active = document.activeElement;
+    if (focusLost() || active?.tagName === "H1") link?.focus();
+  },
+  { immediate: true, flush: "post" },
+);
 const canEdit = computed(
   () => list.state.value.status === "ready" && list.state.value.value.can_edit,
 );
@@ -94,6 +117,7 @@ function onAction(id: "edit" | "delete", p: PlaylistSummary) {
               size="compact"
               variant="secondary"
               :to="{ name: 'ops.dashboards.present', params: { playlistId: row.id } }"
+              :data-present="row.id"
               >Present</ApButton
             >
             <MoreMenu

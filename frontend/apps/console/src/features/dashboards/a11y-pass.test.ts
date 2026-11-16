@@ -1,6 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { nextTick } from "vue";
 import EditSectionHead from "./editor/EditSectionHead.vue";
 import { focusLost, inDialog, refocus } from "./focus-fallback.ts";
 import PresentLine from "./playlists/PresentLine.vue";
@@ -66,22 +65,51 @@ describe("in-place Remove section confirm (A1, A5)", () => {
   });
 });
 
-describe("present line (B4)", () => {
-  it("announces a step or a pause, not the countdown", async () => {
+describe("present line (B4; ux Dashboards.md, Present)", () => {
+  function present() {
     document.body.innerHTML = `<div id="ap-takeover-header"></div>`;
-    const props = { name: "Ops wall", position: 2, total: 5, remainingMs: 18_000, paused: false };
-    const w = mount(PresentLine, {
-      props: { ...props, skipped: 0 },
+    const props = {
+      name: "Ops wall",
+      current: "Power overview",
+      position: 2,
+      total: 5,
+      remainingMs: 18_000,
+      paused: false,
+      failed: false,
+      skipped: 0,
+    };
+    return mount(PresentLine, {
+      props,
       attachTo: document.body,
       global: { stubs: { CockpitStatus: true } },
     });
-    await nextTick();
-    const live = () => document.querySelector('[aria-live="polite"]')?.textContent?.trim();
-    expect(live()).toBe("2 of 5");
+  }
+  const live = () => document.querySelector('[aria-live="polite"]')?.textContent?.trim();
+
+  it("names the dashboard, then its position, on each step and pause; never the countdown", async () => {
+    const w = present();
+    await flushPromises();
+    expect(live()).toBe("Power overview, 2 of 5");
     await w.setProps({ remainingMs: 17_000 });
-    expect(live()).toBe("2 of 5");
+    expect(live()).toBe("Power overview, 2 of 5");
     await w.setProps({ paused: true });
-    expect(live()).toBe("2 of 5, paused");
+    expect(live()).toBe("Paused: Power overview, 2 of 5");
+    await w.setProps({ paused: false });
+    expect(live()).toBe("Playing: Power overview, 2 of 5");
+    await w.setProps({ current: "Thermal", position: 3 });
+    expect(live()).toBe("Thermal, 3 of 5");
+    await w.setProps({ failed: true });
+    expect(live()).toBe("Thermal couldn't load, 3 of 5");
+    expect(document.querySelector("header span.font-mono")?.textContent).toContain(
+      "Thermal · 3 of 5",
+    );
+    w.unmount();
+  });
+  it("takes focus on its own h1 when it opens (it sits outside <main>)", async () => {
+    const w = present();
+    await flushPromises();
+    expect(document.activeElement?.tagName).toBe("H1");
+    expect(document.activeElement?.textContent?.trim()).toBe("Playlist · Ops wall");
     w.unmount();
   });
 });

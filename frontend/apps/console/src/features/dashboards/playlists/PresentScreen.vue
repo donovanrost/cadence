@@ -62,7 +62,9 @@ const shown = computed(() => {
   return s.status === "ready" && pushed ? { ...s, value: { ...s.value, snapshot: pushed } } : s;
 });
 const connection = useConnection();
-const leave = () => void router.push({ name: "ops.dashboards.playlists" });
+/** Esc or Exit: back to Playlists, whose Present for this playlist takes focus again (ux). */
+const leave = () =>
+  void router.push({ name: "ops.dashboards.playlists", state: { presentFocus: id.value } });
 /** From anywhere in the takeover, but not from a sheet it opened (Inspect's Esc closes only it). */
 function onKey(event: KeyboardEvent) {
   if (inDialog(event)) return;
@@ -84,6 +86,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
     :total="show.total.value"
     :remaining-ms="show.remainingMs.value"
     :paused="show.paused.value"
+    :current="show.current.value?.name ?? ''"
+    :failed="shown.status === 'failed'"
     :skipped="show.skipped.value"
     @exit="leave"
   />
