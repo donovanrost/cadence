@@ -144,6 +144,70 @@ defmodule CadenceWeb.Console.SingleBookingAPITest do
     assert code in ["token_invalid", "invalid_params"]
   end
 
+  test "A16b: the route picker reads the ready routes and limits; search takes route_keys and the reach",
+       c do
+    routes =
+      c
+      |> get_json("/single-bookings/routes?spacecraft_id=#{c.spacecraft.spacecraft_id}")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert %{
+             "spacecraft" => %{"id" => _},
+             "routes" => [route | _],
+             "limits" => %{
+               "max_window_s" => 604_800,
+               "max_reach_s" => reach_s,
+               "reach_until" => until
+             }
+           } = routes
+
+    assert %{"key" => key, "name" => _, "provider" => %{"id" => _}, "transport" => %{"id" => _}} =
+             route
+
+    assert Map.has_key?(route, "station") and Map.has_key?(route, "uplink")
+    assert reach_s == 14 * 86_400 and is_binary(until)
+
+    from = DateTime.utc_now() |> DateTime.add(3_600) |> DateTime.truncate(:second)
+
+    search = fn extra ->
+      post_json(
+        c,
+        "/single-bookings/search",
+        Map.merge(
+          %{
+            "spacecraft_id" => c.spacecraft.spacecraft_id,
+            "from" => DateTime.to_iso8601(from),
+            "to" => DateTime.to_iso8601(DateTime.add(from, 86_400)),
+            "direction" => "downlink"
+          },
+          extra
+        )
+      )
+    end
+
+    assert %{"offers" => [_ | _]} = json_response(search.(%{"route_keys" => [key]}), 200)["data"]
+
+    assert %{"details" => %{"route_keys" => _}} =
+             json_response(search.(%{"route_keys" => ["nope"]}), 422)["error"]
+
+    far = DateTime.add(DateTime.utc_now(), 20 * 86_400) |> DateTime.truncate(:second)
+
+    assert %{"details" => %{"to" => message}} =
+             json_response(
+               search.(%{
+                 "from" => DateTime.to_iso8601(DateTime.add(far, -3_600)),
+                 "to" => DateTime.to_iso8601(far)
+               }),
+               422
+             )["error"]
+
+    assert message =~ "Search up to"
+
+    assert %{"error" => %{"code" => "spacecraft_not_found"}} =
+             json_response(get_json(c, "/single-bookings/routes?spacecraft_id=nope"), 404)
+  end
+
   defp run_jobs, do: for(job <- Jobs.claim_jobs(100), do: JobRunner.run_job(job.job_id))
 
   def run(request), do: :persistent_term.get({__MODULE__, :handler}).(request)

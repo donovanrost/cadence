@@ -22,6 +22,33 @@ defmodule Cadence.Contacts.UplinkLegs do
   @unconfirmed "uplink unconfirmed"
   @provider_confirmed [:confirmed, :active, :completed]
 
+  @doc """
+  A16b: the providers through which the spacecraft has a primary uplink path at some station
+  (its provider-managed transports), and the stations each pins. `%{provider_id => [station_ref]}`.
+  """
+  @spec uplink_stations(binary(), binary(), binary()) :: %{binary() => [binary()]}
+  def uplink_stations(organization_id, mission_id, spacecraft_id) do
+    organization_id
+    |> RoutingRuleStore.list_routing_rules_for_spacecraft(mission_id, spacecraft_id)
+    |> Enum.filter(&primary_uplink?/1)
+    |> Enum.flat_map(fn rule ->
+      case TransportStore.fetch_transport_version(
+             rule.organization_id,
+             rule.mission_id,
+             rule.transport_id,
+             rule.transport_version
+           ) do
+        {:ok, %Transport{origin: :provider_managed, mission_provider_id: provider} = transport}
+        when is_binary(provider) ->
+          [{provider, rule.ground_station_id || transport.ground_station_id}]
+
+        _other ->
+          []
+      end
+    end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+  end
+
   @doc "The uplink leg to request with a booking at `ground_station_ref`, or nil."
   @spec for_booking(binary(), binary(), binary(), binary() | nil, binary()) :: map() | nil
   def for_booking(organization_id, mission_id, spacecraft_id, ground_station_ref, provider_id) do

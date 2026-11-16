@@ -12,6 +12,22 @@ defmodule Cadence.Contacts.SingleBookings.Search do
   alias Cadence.SpacecraftStore
 
   @max_window_s 7 * 86_400
+  # A16b (user ruling): how far ahead a search may reach, server-set.
+  @default_reach_days 14
+  @max_route_keys 50
+
+  @doc "The search limits the Book a pass picker bounds itself by (A16b)."
+  @spec limits(DateTime.t()) :: %{
+          max_window_s: pos_integer(),
+          max_reach_s: pos_integer(),
+          reach_until: DateTime.t()
+        }
+  def limits(now \\ DateTime.utc_now()) do
+    reach_s =
+      Application.get_env(:cadence, :single_booking_max_reach_days, @default_reach_days) * 86_400
+
+    %{max_window_s: @max_window_s, max_reach_s: reach_s, reach_until: DateTime.add(now, reach_s)}
+  end
 
   @doc """
   `params`: `%{"spacecraft_id", "from", "to", "direction" => "downlink" | "uplink",
@@ -24,8 +40,9 @@ defmodule Cadence.Contacts.SingleBookings.Search do
 
     with {:ok, query} <- query(params),
          {:ok, sc} <- spacecraft(org, mission, query.spacecraft_id),
-         {:ok, %{routes: routes, findings: findings}} <-
+         {:ok, %{routes: ready, findings: findings}} <-
            ProviderScheduling.list_ready_downlink_routes(org, mission, sc.spacecraft_id),
+         {:ok, routes} <- chosen(ready, query.route_keys),
          {:ok, found, failed, truncated} <- search_routes(scope, mission, query, routes) do
       offers = enrich(org, mission, sc, found)
       {kept, hidden} = filter(offers, query)
@@ -49,6 +66,7 @@ defmodule Cadence.Contacts.SingleBookings.Search do
     with {:ok, from} <- time(params["from"], "from"),
          {:ok, to} <- time(params["to"], "to"),
          :ok <- window(from, to),
+         {:ok, route_keys} <- route_keys(params["route_keys"]),
          direction when direction in ["downlink", "uplink"] <-
            params["direction"] || "downlink" do
       {:ok,
@@ -57,6 +75,7 @@ defmodule Cadence.Contacts.SingleBookings.Search do
          from: from,
          to: to,
          direction: direction,
+         route_keys: route_keys,
          station_ids: params["station_ids"]
        }}
     else
@@ -85,9 +104,36 @@ defmodule Cadence.Contacts.SingleBookings.Search do
       DateTime.diff(to, from) > @max_window_s ->
         {:error, {:invalid, %{"to" => "Search at most 7 days"}}}
 
+      DateTime.after?(to, limits().reach_until) ->
+        {:error,
+         {:invalid, %{"to" => "Search up to #{DateTime.to_iso8601(limits().reach_until)}"}}}
+
       true ->
         :ok
     end
+  end
+
+  # A16b: the routes to search, a subset of the ready ones; nil searches them all.
+  defp route_keys(nil), do: {:ok, nil}
+
+  defp route_keys(keys)
+       when is_list(keys) and keys != [] and length(keys) <= @max_route_keys do
+    if Enum.all?(keys, &(is_binary(&1) and &1 != "")),
+      do: {:ok, Enum.uniq(keys)},
+      else: {:error, {:invalid, %{"route_keys" => "Pick routes from the list"}}}
+  end
+
+  defp route_keys(_keys),
+    do: {:error, {:invalid, %{"route_keys" => "Pick 1 to #{@max_route_keys} routes"}}}
+
+  defp chosen(ready, nil), do: {:ok, ready}
+
+  defp chosen(ready, keys) do
+    picked = Enum.filter(ready, &(&1.route_key in keys))
+
+    if length(picked) == length(keys),
+      do: {:ok, picked},
+      else: {:error, {:invalid, %{"route_keys" => "That route isn't ready any more; pick again"}}}
   end
 
   defp spacecraft(org, mission, id) when is_binary(id) do

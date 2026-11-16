@@ -20,6 +20,14 @@ defmodule CadenceWeb.Console.SingleBookingController do
     end
   end
 
+  # A16b: the route picker's options and the search limits.
+  def routes(conn, params) do
+    case SingleBookings.routes(scope(conn), mission_id(conn), params["spacecraft_id"]) do
+      {:ok, result} -> json(conn, %{data: ConfigJSON.encode(result)})
+      {:error, reason} -> error(conn, reason)
+    end
+  end
+
   # Idempotent per booker and token: a retry returns the booking already asked for.
   def create(conn, params) do
     case SingleBookings.reserve(scope(conn), mission_id(conn), Map.take(params, ~w(token note))) do

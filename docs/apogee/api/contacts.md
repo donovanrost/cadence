@@ -577,8 +577,22 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
 Passes booked outside any plan. They're fixed occupancy: drafts and repairs plan around them and
 never count them toward a requirement.
 
+- A16b `GET /single-bookings/routes?spacecraft_id=` → `{spacecraft {id, name}, routes: [{key, name,
+  provider {id, name}, transport {id, version, name}, service_name, station {ref, id, code, name} |
+  null, uplink: true | false | null}], not_ready: [{code, message}], limits: {max_window_s,
+  max_reach_s, reach_until}}` (`operate_mission`). `routes` are the spacecraft's ready routes, the
+  set the search fans out over. `name` is the routing rule's name (the path label). `station` is set
+  only when the route PINS one (its rule's station, else its transport's); `null` = the provider
+  picks among its stations and each offer names its own. `uplink`: pinned → whether the spacecraft
+  has a primary uplink path at that station via the provider; unpinned → `false` when it has none
+  via the provider, `null` when it depends on the station (offers' `uplink_capable` decide).
+  `limits`: the 7-day window, and how far ahead a search may reach (`max_reach_s`, server-set,
+  default 14 days; `reach_until` = now + that). `404 spacecraft_not_found`.
 - `POST /single-bookings/search` `{spacecraft_id, from, to, direction: "downlink" | "uplink",
-  station_ids?}` → `{spacecraft {id, name, scid}, window {from, to}, offers: [{id, token,
+  station_ids?, route_keys?}` (A16b `route_keys`: 1 to 50 route keys from `/routes`, searching only
+  those; omitted = every ready route. A key that isn't ready now → `422 invalid_params`
+  `details.route_keys`. A `to` past `reach_until` → `422 invalid_params` `details.to` "Search up
+  to …") → `{spacecraft {id, name, scid}, window {from, to}, offers: [{id, token,
   expires_at, starts_at, ends_at, station {ref, id, code, name}, antenna {id, label} | null,
   provider {id, name}, availability, uplink_capable, synthetic, cost, overlaps {reservation_id,
   spacecraft {id, name}, station_code, starts_at, reason: same_spacecraft | same_antenna} |

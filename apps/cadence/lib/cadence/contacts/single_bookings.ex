@@ -18,7 +18,7 @@ defmodule Cadence.Contacts.SingleBookings do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Contacts.{ProviderReservations, ScheduleCommands, ScheduleOperations}
-  alias Cadence.Contacts.SingleBookings.{Occupancy, Search}
+  alias Cadence.Contacts.SingleBookings.{Occupancy, Routes, Search}
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.Repo
 
@@ -59,6 +59,11 @@ defmodule Cadence.Contacts.SingleBookings do
 
   @doc "Search one spacecraft's offers (`SingleBookings.Search.run/3`)."
   def search(%Scope{} = scope, mission, params), do: Search.run(scope, mission, params)
+
+  @doc "A16b: the routes Book a pass can search for a spacecraft, with the search limits."
+  @spec routes(Scope.t(), binary(), binary() | nil) :: {:ok, map()} | {:error, term()}
+  def routes(%Scope{} = scope, mission, spacecraft_id),
+    do: Routes.list(scope, mission, spacecraft_id)
 
   @doc """
   Books the offer behind `token` (`%{"token", "note"}`; note at most 500 characters). Idempotent

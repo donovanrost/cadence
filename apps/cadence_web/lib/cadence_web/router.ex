@@ -916,6 +916,7 @@ defmodule CadenceWeb.Router do
       )
 
       # L15 single bookings (owner: api).
+      get("/single-bookings/routes", SingleBookingController, :routes)
       post("/single-bookings/search", SingleBookingController, :search)
       post("/single-bookings", SingleBookingController, :create)
       get("/commands", CommandCatalogController, :index)
