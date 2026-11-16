@@ -66,8 +66,9 @@ defmodule Cadence.Reads.ConfigKindSchema do
     {:ok,
      [
        field("display_name", "Name", :string, required: true, range: %{min: 1, max: 200}),
+       # ux U25: optional while none is stored (the console marks it required once set).
        field("code", "Code", :string,
-         required: true,
+         required: false,
          range: %{min: 2, max: 8},
          help: "2–8 capital letters or digits, unique in the mission (e.g. SVB)."
        )

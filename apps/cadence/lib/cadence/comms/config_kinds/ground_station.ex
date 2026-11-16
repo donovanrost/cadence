@@ -42,7 +42,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   def normalize(:delete, _id, nil), do: {:ok, nil}
 
   def normalize(_action, _id, %{} = document) do
-    document = Map.put_new(document, "metadata", %{})
+    document = document |> Map.put_new("metadata", %{}) |> blank_code()
 
     errors =
       F.only(document, @fields) ++
@@ -78,8 +78,30 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
     end
   end
 
-  def validate(organization_id, mission_id, _action, entity_id, _previous, %{"code" => code})
-      when is_binary(code) do
+  def validate(organization_id, mission_id, action, entity_id, previous, proposed) do
+    with :ok <- code_kept(action, previous, proposed),
+         do: code_free(organization_id, mission_id, entity_id, proposed)
+  end
+
+  # ux U25: Code is optional while none is stored; once set it can change but not be emptied
+  # (pass titles and filters show it).
+  defp code_kept(:update, %{"code" => old}, proposed) when is_binary(old) and old != "" do
+    if is_nil(Map.get(proposed, "code")),
+      do:
+        {:error,
+         [
+           F.error(
+             "code",
+             "#{old} is already used in pass titles and filters, so it can be changed but not removed."
+           )
+         ]},
+      else: :ok
+  end
+
+  defp code_kept(_action, _previous, _proposed), do: :ok
+
+  defp code_free(organization_id, mission_id, entity_id, %{"code" => code})
+       when is_binary(code) do
     taken? =
       organization_id
       |> GroundStationStore.list_ground_stations(mission_id)
@@ -90,7 +112,14 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
       else: :ok
   end
 
-  def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
+  defp code_free(_organization_id, _mission_id, _entity_id, _proposed), do: :ok
+
+  # A cleared field (empty or blank) means no code.
+  defp blank_code(%{"code" => code} = document) when is_binary(code) do
+    if String.trim(code) == "", do: Map.put(document, "code", nil), else: document
+  end
+
+  defp blank_code(document), do: document
 
   defp code_errors(%{"code" => code}) when is_binary(code) do
     if Regex.match?(~r/\A[A-Z0-9]{2,8}\z/, code),
