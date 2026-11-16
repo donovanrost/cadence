@@ -10,11 +10,17 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
    (`Cancel`, `Keep contact`), never to the danger action.
 2. **Named:** the dialog's accessible name is its title (`aria-labelledby`).
 3. **Trapped:** Tab and Shift+Tab cycle inside it, never reaching the page behind.
+   *Exception, the non-modal side sheet* (Dashboards edit's Widget sheet, which keeps the board usable): Tab may
+   leave it for the page. It's then `role="dialog"` **without** `aria-modal`, still named (A2), focus still goes
+   into it on open (A1), Esc still closes it and returns focus to the opener (A4, A5), and the opener moves focus
+   back into the open sheet. Any other sheet that lets Tab out fails A3.
 4. **Esc closes** it without acting.
 5. **Focus returns** to the control that opened it, after Cancel, Esc **and** after the action. If that control
    is gone (the row resolved), focus goes to the row's new state line or the list heading, never to `<body>`.
 6. **Required-field errors** ("Give a reason first.") are announced: `aria-invalid` plus `aria-describedby` on the
-   field, not colour alone.
+   field, not colour alone. A required field that starts empty may instead keep its action disabled with the
+   reason ("Give it a name.", A7). Then the field carries `aria-required="true"`, and it gets **no** `aria-invalid`:
+   an untouched empty field isn't an error yet. Either pattern passes; a form uses one, not both.
 7. A **disabled action's reason** is reachable by keyboard (focusable text, or `aria-describedby` on the button),
    not only on hover.
 
