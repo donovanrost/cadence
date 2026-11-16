@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { useSession } from "@/shell";
-import { ApButton, ApCallout, ApPanel, ApTextarea } from "@/ui";
+import { ApButton, ApCallout, ApInlineConfirm, ApTextarea } from "@/ui";
 import {
   endRequirement,
   fieldErrors,
@@ -15,7 +15,11 @@ import {
 } from "./requirements.ts";
 import { fetchRequirementSupersedes, supersedeSentence } from "./supersedes.ts";
 
-/** ux P4 Close… / Cancel…: each confirms with a required reason; both are final. */
+/**
+ * ux P4 Close… / Cancel…: each confirms in place with a required reason; both are final. The kit's
+ * ApInlineConfirm (design-language §7): the Reason takes focus, Esc backs out to the trigger, one
+ * open at a time, a refusal is read under the sentence and it stays open.
+ */
 const props = defineProps<{
   missionId: MissionId;
   requirement: RequirementDetail;
@@ -24,7 +28,11 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ ended: [] }>();
 const session = useSession();
-const action = ref<EndAction | null>(null);
+const opened = reactive<Record<EndAction, boolean>>({ close: false, cancel: false });
+const action = computed<EndAction | null>(() =>
+  opened.close ? "close" : opened.cancel ? "cancel" : null,
+);
+const actions = ["close", "cancel"] as const;
 const reason = ref("");
 const error = ref<string | null>(null);
 const failure = ref<string | null>(null);
@@ -33,18 +41,27 @@ const busy = ref(false);
  * What each does, in the server's terms (U20, domain): today both stop planning and keep booked
  * passes; only the recorded state differs. Drafts and pending plans using it read superseded.
  */
-const what: Readonly<Record<EndAction, { title: string; sentence: string; confirm: string }>> = {
+const what: Readonly<
+  Record<
+    EndAction,
+    { opener: string; question: string; sentence: string; confirm: string; busy: string }
+  >
+> = {
   close: {
-    title: "Close requirement",
+    opener: "Close…",
+    question: "Close this requirement?",
+    busy: "Closing…",
     sentence:
       "Use this when it's done or no longer needed. Cadence stops planning for it. Passes already booked stay booked.",
-    confirm: "Close it",
+    confirm: "Close requirement",
   },
   cancel: {
-    title: "Cancel requirement",
+    opener: "Cancel…",
+    question: "Cancel this requirement?",
+    busy: "Canceling…",
     sentence:
       "Use this when it was a mistake. Withdraws it: nothing more is planned for it. Passes already booked stay booked.",
-    confirm: "Cancel it",
+    confirm: "Cancel requirement",
   },
 };
 const supersedes = useRemoteQuery(
@@ -56,13 +73,10 @@ const drafts = computed(() =>
     ? supersedes.state.value.value.filter((d) => d.state !== "superseded")
     : [],
 );
-const blocked = computed(() =>
-  busy.value ? "Working…" : reason.value.trim() === "" ? "Give a reason first." : null,
-);
-function open(a: EndAction) {
-  action.value = a;
+const blocked = computed(() => (reason.value.trim() === "" ? "Give a reason first." : null));
+watch(action, () => {
   error.value = failure.value = null;
-}
+});
 
 async function confirm() {
   if (!action.value || blocked.value !== null) return;
@@ -84,42 +98,40 @@ async function confirm() {
 </script>
 
 <template>
-  <div v-if="!action" class="flex flex-wrap gap-2">
-    <ApButton @click="open('close')">Close…</ApButton>
-    <ApButton @click="open('cancel')">Cancel…</ApButton>
+  <div class="flex flex-wrap gap-2">
+    <ApInlineConfirm
+      v-for="a in actions"
+      :key="a"
+      v-model:open="opened[a]"
+      :action="what[a].confirm"
+      :busy="busy"
+      :busy-reason="what[a].busy"
+      :blocked="blocked"
+      :refusal="failure"
+      @confirm="confirm"
+    >
+      <template #trigger="{ attrs }">
+        <ApButton v-bind="attrs">{{ what[a].opener }}</ApButton>
+      </template>
+      {{ what[a].question }}
+      <template v-if="occurrence"
+        >{{ occurrenceScope(a, occurrence).lead }} {{ what[a].sentence }}
+        {{ occurrenceScope(a, occurrence).final }}</template
+      >
+      <template v-else
+        >{{ what[a].sentence }} This is final: declare a new requirement to plan it again.</template
+      >
+      <template #fields>
+        <ApCallout v-if="drafts.length > 0" tone="caution">{{
+          supersedeSentence(
+            drafts,
+            requirement.version,
+            session.user.id,
+            a === "close" ? "Closing it" : "Canceling it",
+          )
+        }}</ApCallout>
+        <ApTextarea v-model="reason" label="Reason" required :maxlength="2000" :error="error" />
+      </template>
+    </ApInlineConfirm>
   </div>
-  <ApPanel v-else index="Q9" :title="what[action].title">
-    <div class="flex max-w-[640px] flex-col gap-3">
-      <p class="m-0 text-md text-text-2">
-        <template v-if="occurrence"
-          >{{ occurrenceScope(action, occurrence).lead }} {{ what[action].sentence }}
-          {{ occurrenceScope(action, occurrence).final }}</template
-        >
-        <template v-else
-          >{{ what[action].sentence }} This is final: declare a new requirement to plan it
-          again.</template
-        >
-      </p>
-      <ApCallout v-if="drafts.length > 0" tone="caution">{{
-        supersedeSentence(
-          drafts,
-          requirement.version,
-          session.user.id,
-          action === "close" ? "Closing it" : "Canceling it",
-        )
-      }}</ApCallout>
-      <ApTextarea v-model="reason" label="Reason" required :maxlength="2000" :error="error" />
-      <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
-      <div class="flex flex-wrap gap-2">
-        <ApButton
-          variant="danger"
-          :disabled="blocked !== null"
-          :disabled-reason="blocked ?? ''"
-          @click="confirm"
-          >{{ what[action].confirm }}</ApButton
-        >
-        <ApButton variant="ghost" @click="action = null">Back</ApButton>
-      </div>
-    </div>
-  </ApPanel>
 </template>
