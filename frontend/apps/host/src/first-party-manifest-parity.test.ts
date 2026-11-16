@@ -261,13 +261,7 @@ const expected = [
         "Data Operations",
         10,
         "cadence.ops.data_operations",
-        [
-          "validate-request",
-          "record-historical-workflow-request",
-          "transition-group",
-          "retry-group",
-          "request-correction",
-        ],
+        [],
       ],
       [
         "data_operations_manage",
@@ -277,13 +271,7 @@ const expected = [
         "Manage Data Operations",
         10,
         "cadence.ops.data_operations_manage",
-        [
-          "validate-request",
-          "record-historical-workflow-request",
-          "transition-group",
-          "retry-group",
-          "request-correction",
-        ],
+        [],
       ],
       [
         "data_sources",

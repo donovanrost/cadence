@@ -2,7 +2,7 @@ import type { OpsConsolePresentation } from "./ops-console";
 
 type JsonRecord = Record<string, unknown>;
 
-const validationActions = new Set(["validate", "validate-template", "validate-request"]);
+const validationActions = new Set(["validate", "validate-template"]);
 
 export function reconcileOpsActionResult(
   presentation: OpsConsolePresentation,

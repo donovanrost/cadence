@@ -239,33 +239,14 @@ const expectedSurfaceTable = [
     "cadence.ops.telemetry_explore",
     ["apply_filters", "apply_question"],
   ],
-  [
-    "data_operations",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.data_operations",
-    [
-      "validate-request",
-      "record-historical-workflow-request",
-      "transition-group",
-      "retry-group",
-      "request-correction",
-    ],
-  ],
+  ["data_operations", "operations", "mission", "ops_workspace", "cadence.ops.data_operations", []],
   [
     "data_operations_manage",
     "operations",
     "mission",
     "ops_workspace",
     "cadence.ops.data_operations_manage",
-    [
-      "validate-request",
-      "record-historical-workflow-request",
-      "transition-group",
-      "retry-group",
-      "request-correction",
-    ],
+    [],
   ],
   [
     "data_sources",
@@ -650,15 +631,16 @@ describe("Ops Console federated application", () => {
     expect(manifest.surfaces).toEqual(surfaceContracts);
     expect(surfaceContracts).toHaveLength(18);
     expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(18);
-    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(55);
+    // The data-operations surfaces declare no host actions (their native page does the work).
+    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(45);
     expect(
       new Set(
         surfaceContracts.flatMap((surface) =>
           surface.actions.map((action) => `${surface.surfaceId}:${action}`),
         ),
       ).size,
-    ).toBe(55);
-    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(39);
+    ).toBe(45);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(34);
     expect(
       surfaceContracts.slice(2).every((surface) => {
         const componentName = `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_: string, _prefix: string, letter: string) => letter.toUpperCase())}`;
