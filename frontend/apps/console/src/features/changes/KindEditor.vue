@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { MissionId } from "@/api/index.ts";
+import type { ApiError, MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApPanel, ApRemote } from "@/ui";
-import { failureOutcome, stageChange, type FailureOutcome } from "./actions.ts";
+import { failureOutcome, fieldErrors, stageChange, type FailureOutcome } from "./actions.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import {
   createDefaults,
@@ -39,6 +39,12 @@ const props = defineProps<{
   ) => readonly { path: string; value: unknown }[];
   /** A value the read suggests for one field, offered as 'Suggested: X' + 'Use X' (ux U25). */
   suggestion?: Readonly<{ path: string; value: string }> | null;
+  /** The change-set summary in the kind's own words (U79 "Add extra route INU · EARENDIL-389"). */
+  summarize?: (
+    action: "create" | "update",
+    values: FormValues,
+    changes: readonly { path: string; value: unknown }[],
+  ) => string;
 }>();
 const router = useRouter();
 const fetched = useRemoteQuery(
@@ -103,6 +109,34 @@ function toDocument(changes: readonly { path: string; value: unknown }[]) {
   return doc;
 }
 
+function defaultSummary(changes: readonly { path: string; value: unknown }[]) {
+  const label = props.entityId ? props.name : (values.value.display_name ?? props.name);
+  return props.entityId
+    ? `${label} · ${changes.map((c) => `${c.path} → ${show(c.value)}`).join(", ")}`
+    : `Add ${label}`;
+}
+
+/** U79: a field's error sits on the field; anything else, and the outcome, in the callout. */
+function rejected(error: ApiError) {
+  const state = schema.state.value;
+  const split =
+    state.status === "ready"
+      ? fieldErrors(error, new Set(state.value.fields.map((f) => f.path)))
+      : null;
+  if (!split || Object.keys(split.onFields).length === 0) {
+    failure.value = failureOutcome(error, "staged");
+    return;
+  }
+  errors.value = split.onFields;
+  failure.value = {
+    changed: false,
+    sentence: [
+      "Nothing was staged.",
+      ...split.rest.map((e) => (e.path ? `${e.path}: ${e.message}` : e.message)),
+    ].join(" "),
+  };
+}
+
 async function stage() {
   if (schema.state.value.status !== "ready" || busy.value) return;
   const edits = diffEdits(schema.state.value.value, before.value, values.value);
@@ -122,16 +156,15 @@ async function stage() {
           changes,
         }
       : { kind: props.kind, action: "create" as const, document: toDocument(changes) };
-    const label = props.entityId ? props.name : (values.value.display_name ?? props.name);
-    const summary = props.entityId
-      ? `${label} · ${changes.map((c) => `${c.path} → ${show(c.value)}`).join(", ")}`
-      : `Add ${label}`;
+    const summary = props.summarize
+      ? props.summarize(props.entityId ? "update" : "create", values.value, changes)
+      : defaultSummary(changes);
     const result = await stageChange(props.missionId, {
       summary,
       source: { surface: props.surface },
       ops: [op],
     });
-    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged"));
+    if (!result.ok) return void rejected(result.error);
     refreshConfigState(props.missionId);
     await router.push(props.done);
   } finally {
