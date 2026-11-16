@@ -93,6 +93,18 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   - *Compatibility*: flight software / catalog requirements ("needs FSW 3.2 on 0 of 499") → HOLD.
   Any NO-GO disables Apply with the reason. HOLD allows Apply after an explicit checkbox
   "I've read the 2 holds" **[decision]**.
+  - **Re-check after the change set moves** (another user stages or removes; setup audit B4, ux 11-16). The old
+    verdict is never shown as current.
+    - The previous rows stay, under a `text-3` sub-label "From the previous check (12 changes)". Their marks and tags
+      are dimmed, and the text stays at full contrast (U27). The panel's verdict line gives way to a status line
+      (`role="status"`): "Checking again: the change set now has 14 changes."
+    - Apply is disabled with the reason "Checks are re-running for the new changes."
+    - When the new result arrives, it replaces the rows and the status line announces it: "Checks done: 1 NO-GO,
+      2 holds." or "Checks done: all GO." The holds checkbox clears only if the holds changed.
+    - Focus: a focused control that still exists keeps focus; otherwise focus goes to K2's heading, never `<body>`.
+    - If the re-check fails, the old rows stay dimmed, with crit "The checks couldn't run for the new changes." +
+      `Try again`. Apply says "Checks haven't run for the current changes."
+    - The first load, with no previous check, still reads `Running checks…`.
 - **K3 Apply aside:** tiles (changes, resulting fleet size, routes delta); readiness delta line;
   **Why** textarea (required, 10+ chars; goes in the audit and the revision list); primary `Apply as
   r6`. If mission policy requires review (DECISIONS #7 pattern, policy-driven): primary becomes
