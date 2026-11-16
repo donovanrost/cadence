@@ -208,9 +208,9 @@ describe("ApMenuItem type=submit (Sign out)", () => {
     wrapper = mount(Form, { attachTo: document.body });
     await wrapper.get("button[aria-haspopup]").trigger("click");
     await nextTick();
-    const signOut = wrapper.findAll('[role="menuitem"]')[1];
-    expect(signOut?.attributes("type")).toBe("submit");
-    (signOut?.element as HTMLButtonElement).click();
+    const signOut = wrapper.get('[role="menuitem"][type="submit"]');
+    expect(signOut.text()).toBe("Sign out");
+    (signOut.element as HTMLButtonElement).click();
     await nextTick();
     expect(submitted).toHaveBeenCalledOnce();
     expect(wrapper.find('[role="menu"]').exists()).toBe(false);
