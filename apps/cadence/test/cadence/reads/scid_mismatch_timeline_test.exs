@@ -78,4 +78,23 @@ defmodule Cadence.Reads.ScidMismatchTimelineTest do
              refs: %{subject: %{kind: "contact", id: "rc-scid"}, contact_id: "rc-scid"}
            } = event
   end
+
+  test "an archived craft is still named on its past events", c do
+    {:ok, _} =
+      SpacecraftStore.archive_spacecraft(@org, @mission, c.craft.spacecraft_id, %{kind: :system})
+
+    {:ok, %{events: [event]}} =
+      EventLog.page(@org, @mission, %{
+        from: DateTime.add(@started, -60),
+        to: DateTime.add(@started, 3_600),
+        limit: 50,
+        cursor: nil,
+        kinds: nil,
+        plane: nil,
+        spacecraft_id: nil
+      })
+
+    assert %{spacecraft: %{name: "EARENDIL-312", scid: 1}} = event
+    assert event.text =~ "EARENDIL-312 · "
+  end
 end

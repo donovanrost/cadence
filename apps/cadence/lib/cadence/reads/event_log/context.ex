@@ -47,7 +47,9 @@ defmodule Cadence.Reads.EventLog.Context do
 
   defp spacecraft_names(organization_id, mission_id) do
     organization_id
-    |> Cadence.SpacecraftStore.list_spacecraft(mission_id)
+    # Archived craft keep their name (L22): their past events still name them, and a Timeline row
+    # never goes out with a known craft unnamed.
+    |> Cadence.SpacecraftStore.list_spacecraft(mission_id, include_archived: true)
     |> Map.new(&{&1.spacecraft_id, {&1.display_name, &1.scid}})
   end
 end
