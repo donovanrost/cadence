@@ -28,6 +28,7 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
   superseded: null,
   repair_of: null,
   superseded_by: null,
+  latest_version: undefined,
   passes: [
     pass("a", "sc-1", "2026-11-10T09:00:00Z"),
     pass("b", "sc-2", "2026-11-10T03:00:00Z"),

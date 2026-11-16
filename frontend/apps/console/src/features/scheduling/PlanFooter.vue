@@ -23,6 +23,8 @@ const props = defineProps<{
   requestsLeft?: number | null | undefined;
   /** Admin reviewing a pending_approval plan: a secondary Send back beside Approve. */
   canSendBack?: boolean | undefined;
+  /** U73: an older version (`?version=N`) shows its totals but no actions. */
+  readOnly?: boolean | undefined;
 }>();
 defineEmits<{ sheet: []; execute: []; redraft: []; sendBack: [] }>();
 const primary = computed(() =>
@@ -60,7 +62,7 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
         :caption-state="atRisk > 0 ? 'caution' : undefined"
       />
     </ApStatStrip>
-    <div class="flex min-w-[240px] flex-col justify-center gap-1.5">
+    <div v-if="!readOnly" class="flex min-w-[240px] flex-col justify-center gap-1.5">
       <template v-if="primary.kind === 'sheet'">
         <ApButton variant="primary" size="commit" :disabled="busy" @click="$emit('sheet')">{{
           sheetLabel ?? primary.label

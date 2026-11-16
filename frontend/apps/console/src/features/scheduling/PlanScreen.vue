@@ -5,7 +5,7 @@ import { useRoute, type RouteLocationRaw } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApStationBar, useNow } from "@/ui";
-import { draftedByOther, editableStates, runPhaseText, type Acknowledgement } from "./api.ts";
+import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import FocusPanel from "./FocusPanel.vue";
@@ -15,7 +15,10 @@ import { offerClock } from "./offer-clock.ts";
 import DraftGantt from "./DraftGantt.vue";
 import { dayLabel, useSpacecraftNames } from "./names.ts";
 import PlanFooter from "./PlanFooter.vue";
-import { planHeaderTail } from "./plan-primary.ts";
+import { headerFor } from "./plan-header.ts";
+import { historical } from "./plan-history.ts";
+import PlanHistorySheet from "./PlanHistorySheet.vue";
+import OldVersionCallout from "./OldVersionCallout.vue";
 import { useBookingStopped } from "./useBookingStopped.ts";
 import PlanStatePanel from "./PlanStatePanel.vue";
 import { limitRefusal, overLimit } from "./start-limit.ts";
@@ -33,7 +36,6 @@ import type { Expired } from "./lifecycle.ts";
 import UnconfirmedCallout from "./UnconfirmedCallout.vue";
 import { stationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
-import type { PlanView } from "./plan-state.ts";
 import { usePlanDay } from "./usePlanDay.ts";
 
 /** K1 · Plan a day (ScheduleFlow.md). States: plan-state.ts; data: usePlanDay. */
@@ -89,8 +91,13 @@ const stopped = useBookingStopped(
   missionId,
   computed(() => (view.value.kind === "plan" ? view.value.plan : null)),
 );
+/** U73: `?version=N` of an older version is read-only (the latest version's number, else null). */
+const latest = computed(() => (view.value.kind === "plan" ? historical(view.value.plan) : null));
+const historySheet = ref<InstanceType<typeof PlanHistorySheet> | null>(null);
 const primary = computed(() =>
-  view.value.kind === "plan" ? planPrimary(view.value.plan, isAdmin.value) : null,
+  view.value.kind === "plan" && latest.value === null
+    ? planPrimary(view.value.plan, isAdmin.value)
+    : null,
 );
 
 const sendBackSheet = ref<InstanceType<typeof SendBackSheet> | null>(null);
@@ -146,7 +153,10 @@ async function onSubmit(acks: Acknowledgement[], note?: string) {
   else sheetError.value = result.error;
 }
 const editable = computed(
-  () => view.value.kind === "plan" && editableStates.includes(view.value.plan.state),
+  () =>
+    view.value.kind === "plan" &&
+    latest.value === null &&
+    editableStates.includes(view.value.plan.state),
 );
 function onEdit(change: { add?: string[]; remove?: string[] }) {
   if (view.value.kind !== "plan") return;
@@ -175,30 +185,6 @@ const step = computed(() =>
         : 2
       : 0,
 );
-/** Header mono line per state (ScheduleFlow "K1 plan states"). */
-function headerFor(v: PlanView, d: string): string {
-  switch (v.kind) {
-    case "not_set_up":
-      return "Contact plan · not set up";
-    case "no_draft":
-      return `Contact plan · ${d} · no draft`;
-    case "drafting":
-      return `Drafting · ${v.phase ? runPhaseText(v.phase) : "queued"}`;
-    case "interrupted":
-      return "Drafting stopped";
-    case "draft_failed":
-    case "failed":
-      return `Contact plan · ${d}`;
-    case "loading":
-      return `Contact plan · ${d}`;
-    case "plan":
-      return v.plan.superseded
-        ? `Contact plan · R${v.plan.version} draft · superseded`
-        : // ScheduleFlow K1 table: 'R41 DRAFT · READY', otherwise 'R41 · <tail>' (the tail names
-          // the state), so the line stays short enough not to truncate (qa: the U30 count was cut).
-          `Contact plan · R${v.plan.version}${v.plan.state === "draft" ? " draft" : ""} · ${planHeaderTail(v.plan)}`;
-  }
-}
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));
 const setupLink = computed((): RouteLocationRaw => ({ name: "setup.contact-planning" }));
 /** ux: "NEXT OFFER EXPIRES T−… · KSAT" from the plan's provider_freeze (domain c38bb5de). */
@@ -220,6 +206,11 @@ const clock = computed(() =>
     <template v-if="clock" #clocks
       ><OfferClock :clock="clock" @select="selected = $event"
     /></template>
+    <template v-if="view.kind === 'plan'" #actions
+      ><ApButton variant="ghost" size="compact" @click="historySheet?.open()"
+        >History</ApButton
+      ></template
+    >
   </TakeoverHeader>
   <DayNav :day="day" />
   <p v-if="draftedBy" class="m-0 font-mono text-sm text-text-3">{{ draftedBy }}</p>
@@ -227,8 +218,16 @@ const clock = computed(() =>
   <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
   <template v-if="view.kind === 'plan'">
     <PlanLifecycleCallouts :day="day" :superseded-by="view.plan.superseded_by" :expired="expired" />
-    <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
-    <ApCallout v-else-if="sentBack" tone="caution">{{ sentBack }}</ApCallout>
+    <OldVersionCallout v-if="latest !== null" :plan="view.plan" :latest="latest" />
+    <SupersededCallout v-else-if="view.plan.superseded" :superseded="view.plan.superseded" />
+    <ApCallout v-else-if="sentBack" tone="caution"
+      >{{ sentBack
+      }}<template #action
+        ><ApButton size="compact" variant="ghost" @click="historySheet?.open()"
+          >All decisions</ApButton
+        ></template
+      ></ApCallout
+    >
     <ApCallout v-else-if="resubmitted" tone="info">
       <span class="flex flex-col gap-1">
         <span>{{ resubmitted.line }}</span>
@@ -236,6 +235,11 @@ const clock = computed(() =>
           resubmitted.earlier
         }}</span>
       </span>
+      <template #action
+        ><ApButton size="compact" variant="ghost" @click="historySheet?.open()"
+          >All decisions</ApButton
+        ></template
+      >
     </ApCallout>
     <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
     <!-- U30: on any state that has unconfirmed bookings, on top of the state's own callout. -->
@@ -246,7 +250,7 @@ const clock = computed(() =>
       :member-note="!isAdmin"
     >
       <!-- U32 (fe-setup's resolutions): org admins resolve each pass; the plan refetches after. -->
-      <template v-if="isAdmin" #row-actions="{ pass }">
+      <template v-if="isAdmin && latest === null" #row-actions="{ pass }">
         <ResolveBookingActions
           :mission-id="missionId"
           :plan-id="view.plan.id"
@@ -318,14 +322,15 @@ const clock = computed(() =>
         proposal?.repair_of?.plan.id === view.plan.id ? proposal.repair_of.run_id : null
       "
       :requests-left="stopped?.left ?? null"
-      :can-send-back="isAdmin && view.plan.state === 'pending_approval'"
+      :can-send-back="isAdmin && latest === null && view.plan.state === 'pending_approval'"
+      :read-only="latest !== null"
       @send-back="sendBackSheet?.open()"
       @sheet="sheet?.open()"
       @redraft="draftDay"
       @execute="onExecute"
     />
     <SendBackSheet
-      v-if="isAdmin && view.plan.state === 'pending_approval'"
+      v-if="isAdmin && latest === null && view.plan.state === 'pending_approval'"
       ref="sendBackSheet"
       v-model:error="sendBackError"
       :author="view.plan.author?.name ?? null"
@@ -343,6 +348,12 @@ const clock = computed(() =>
       :busy="busy"
       :day="day"
       @submit="onSubmit"
+    />
+    <PlanHistorySheet
+      ref="historySheet"
+      :mission-id="missionId"
+      :plan-id="view.plan.id"
+      :day="day"
     />
   </template>
   <template v-else>

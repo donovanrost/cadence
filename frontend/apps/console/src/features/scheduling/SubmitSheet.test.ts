@@ -38,6 +38,7 @@ const plan: PlanDetail = {
   superseded: null,
   repair_of: null,
   superseded_by: null,
+  latest_version: undefined,
 };
 
 describe("SubmitSheet", () => {

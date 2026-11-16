@@ -373,6 +373,8 @@ export const planDetailReader = d.object({
   /** U30 (api b122f667): placed bookings unanswered past the window, on any state; else null. */
   unconfirmed: (value: unknown, path?: string) =>
     value === undefined ? null : unconfirmedReader(value, path),
+  /** U73 A10 (api 7a83a958b): the plan's newest version, for an older version's banner. */
+  latest_version: d.optional(d.nullable(d.integer)),
   /** U61: the plan that replaced this one (a newer plan for the day); absent on older servers. */
   superseded_by: (value: unknown, path?: string) =>
     value === undefined ? null : supersededByReader(value, path),
@@ -456,9 +458,12 @@ export function fetchPlan(
   missionId: MissionId,
   planId: string,
   signal?: AbortSignal,
+  /** U73 A10: an older version, read-only (`?version=N`); the current one when absent. */
+  version?: number | null,
 ): Promise<ApiResult<PlanDetail>> {
+  const q = version != null ? `?version=${version}` : "";
   return request(
-    `${base(missionId)}/${encodeURIComponent(planId)}`,
+    `${base(missionId)}/${encodeURIComponent(planId)}${q}`,
     planDetailReader,
     signal ? { signal } : {},
   );

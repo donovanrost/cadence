@@ -91,7 +91,15 @@ export function usePlanDay(
     const p = plans.state.value;
     return p.status === "ready" ? (planOfDay(p.value.plans)?.id ?? null) : null;
   });
-  const plan = useRemoteQuery(planId, (id, signal) => fetchPlan(missionId.value, id, signal));
+  /** U73 A10: `?version=N` opens an older version of the plan, read-only. */
+  const version = computed(() => {
+    const v = Number(route.query.version);
+    return Number.isInteger(v) && v > 0 ? v : null;
+  });
+  const plan = useRemoteQuery(
+    computed(() => (planId.value ? { id: planId.value, version: version.value } : null)),
+    (k, signal) => fetchPlan(missionId.value, k.id, signal, k.version),
+  );
   /** S7 station availability for the Gantt's outage / maintenance / degraded bands. */
   const availability = useRemoteQuery(missionId, (id, signal) => fetchAvailability(id, signal));
   useMissionInvalidation(missionId, ["stations"], availability.refetch);
