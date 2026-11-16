@@ -178,23 +178,22 @@ describe("U79 Add / Edit extra route", () => {
     await fieldOf(w, "Station")?.setValue("gs-1");
     await w.get("form").trigger("submit");
     await flushPromises();
-    expect(bodies).toEqual([
-      expect.objectContaining({
-        summary: "Add extra route INU · EARENDIL-389",
-        ops: [
-          expect.objectContaining({
-            kind: "spacecraft_route",
-            action: "create",
-            document: expect.objectContaining({
-              spacecraft_id: "sc-1",
-              ground_station_id: "gs-1",
-              downlink: "primary",
-              uplink: "none",
-            }),
-          }),
-        ],
-      }),
-    ]);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      summary: "Add extra route INU · EARENDIL-389",
+      ops: [
+        {
+          kind: "spacecraft_route",
+          action: "create",
+          document: {
+            spacecraft_id: "sc-1",
+            ground_station_id: "gs-1",
+            downlink: "primary",
+            uplink: "none",
+          },
+        },
+      ],
+    });
     w.unmount();
   });
 

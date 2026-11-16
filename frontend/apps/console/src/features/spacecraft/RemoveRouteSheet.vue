@@ -4,7 +4,7 @@ import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
-import { removeRouteOp, routeSummary } from "./routes.ts";
+import { removeRouteOp, routeChangeSummary } from "./routes.ts";
 
 /** U79 Remove… on a "This spacecraft only" route: staged like any change (`delete`). */
 const props = defineProps<{ missionId: MissionId; spacecraftName: string }>();
@@ -25,7 +25,7 @@ async function stage() {
   busy.value = true;
   try {
     const r = await stageChange(props.missionId, {
-      summary: routeSummary("Remove", route.station, props.spacecraftName),
+      summary: routeChangeSummary("Remove", route.name, route.station, props.spacecraftName),
       source: { surface: "spacecraft" },
       ops: [removeRouteOp(route.routeId)],
     });

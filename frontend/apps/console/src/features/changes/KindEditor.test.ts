@@ -36,7 +36,7 @@ type Call = { url: string; body: unknown };
 function stub(stageReply: { status: number; body: unknown }) {
   const calls: Call[] = [];
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
-    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
     calls.push({ url, body });
     const reply = url.endsWith("/schema") ? { status: 200, body: { data: schema } } : stageReply;
     return Promise.resolve(new Response(JSON.stringify(reply.body), { status: reply.status }));

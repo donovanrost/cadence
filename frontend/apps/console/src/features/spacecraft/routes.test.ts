@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { detailReader, type RoutingRule } from "./detail.ts";
-import { actionRows, removeRouteOp, routeSummary, routeTag, stationWord } from "./routes.ts";
+import {
+  actionRows,
+  removeRouteOp,
+  routeChangeSummary,
+  routeSummary,
+  routeTag,
+  stationWord,
+} from "./routes.ts";
 
 const base = {
   id: "r-1",
@@ -100,5 +107,26 @@ describe("U79 summary words (names, never ids)", () => {
     ).toBe("Remove extra route Inuvik · EARENDIL-389");
     expect(stationWord(null)).toBe("a removed station");
     expect(stationWord({ code: "", name: null })).toBe("a removed station");
+  });
+});
+
+describe("U79 Edit / Remove lines (ux: named routes quoted)", () => {
+  it("quotes a named route and adds the spacecraft", () => {
+    expect(routeChangeSummary("Edit", "Fairbanks (Demo) — uplink", "FBK", "EARENDIL-389")).toBe(
+      "Edit extra route “Fairbanks (Demo) — uplink” · EARENDIL-389",
+    );
+  });
+  it("reads the default name, or none, in the station form", () => {
+    expect(routeChangeSummary("Remove", "FBK · EARENDIL-389", "FBK", "EARENDIL-389")).toBe(
+      "Remove extra route FBK · EARENDIL-389",
+    );
+    expect(routeChangeSummary("Edit", null, "INU", "EARENDIL-389")).toBe(
+      "Edit extra route INU · EARENDIL-389",
+    );
+  });
+  it("doesn't repeat a spacecraft the name already holds", () => {
+    expect(routeChangeSummary("Remove", "EARENDIL-389 recovery", "INU", "EARENDIL-389")).toBe(
+      "Remove extra route “EARENDIL-389 recovery”",
+    );
   });
 });

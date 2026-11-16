@@ -6,7 +6,7 @@ import { KindEditor, type FormValues, type KindSchema } from "@/features/changes
 import { fetchStations } from "@/features/stations/index.ts";
 import { ApButton, ApCallout, ApRemote } from "@/ui";
 import type { SpacecraftDetail } from "./detail.ts";
-import { fetchExtraRoute, routeSummary, stationWord } from "./routes.ts";
+import { fetchExtraRoute, routeChangeSummary, routeSummary, stationWord } from "./routes.ts";
 
 /**
  * U79: add (`new`) or edit one extra route of this spacecraft through the change set. The form is
@@ -61,11 +61,11 @@ function prepare(schema: KindSchema): KindSchema {
 function summarize(action: "create" | "update", values: FormValues): string {
   const station = stationById.value.get(values.ground_station_id ?? "");
   const word = station ? stationWord({ code: station.code, name: station.display_name }) : "";
-  return routeSummary(
-    action === "create" ? "Add" : "Edit",
-    word || "a station",
-    spacecraft.value.name,
-  );
+  const where = word || "a station";
+  if (action === "create") return routeSummary("Add", where, spacecraft.value.name);
+  // The route's rendered name, as the routing list shows it (ux: quoted when it has one).
+  const shown = props.detail.routing_rules.find((r) => r.route_id === props.routeId)?.name ?? null;
+  return routeChangeSummary("Edit", shown, where, spacecraft.value.name);
 }
 </script>
 

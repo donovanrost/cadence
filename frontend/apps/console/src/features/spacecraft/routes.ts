@@ -71,6 +71,26 @@ export const routeSummary = (
   spacecraft: string,
 ): string => `${verb} extra route ${station} · ${spacecraft}`;
 
+/**
+ * U79 Edit / Remove lines (ux): a named route quotes its rendered name, so two routes at one station
+ * read apart ('Edit extra route “Fairbanks (Demo) — uplink” · EARENDIL-389'). A name that is the
+ * default '<station> · <spacecraft>' reads as unnamed (the station form), and a name that already
+ * holds the spacecraft's doesn't repeat it.
+ */
+export function routeChangeSummary(
+  verb: "Edit" | "Remove",
+  renderedName: string | null,
+  station: string,
+  spacecraft: string,
+): string {
+  const name = renderedName?.trim() ?? "";
+  if (name === "" || name === `${station} · ${spacecraft}`)
+    return routeSummary(verb, station, spacecraft);
+  return name.includes(spacecraft)
+    ? `${verb} extra route “${name}”`
+    : `${verb} extra route “${name}” · ${spacecraft}`;
+}
+
 export const removeRouteOp = (routeId: string): StageOp => ({
   kind: "spacecraft_route",
   action: "delete",
