@@ -1991,3 +1991,29 @@ version's decision:
 - **Gaps and exceptions under `Show`** name the requirement by spacecraft and label once api sends them
   ("EARENDIL-389 · Block 1 daily: no window can cover it"). Until then each row is the reason alone, and the
   requirement ids go in a Technical details under the list. Raw ids never lead a row (design-language §8).
+
+### U74 · A pass's reservation and contact record in the drawer (§11c(C) A11, A13; L14) (fe-ops)
+**One first-class line in D2** (it's navigation, not evidence): a `Booked` kv row.
+- From a plan: "From the 11-14 plan (R3) · for Block 1 daily". Both parts are links, to the plan at that version and
+  to the requirement.
+- Off-plan bookings keep their existing "Booked outside a plan by …" line.
+- No plan or requirement: the row is omitted.
+
+**Inside D2's Technical details,** two disclosures, `Reservation` and `Contact record`. They're collapsed, and
+everything in them is mono key/values.
+- **Reservation:** reservation id · Provider revision `7` · State (the pass state words; an unknown code shows
+  sentence-case) · Provider and transport (`Northlight · v4`) · Plan and requirement ids with versions · "Last
+  reconciled 02:11:04Z".
+- **Provider values:** a table, `Field · Requested · Confirmed · Accepted`.
+  - Field names are the provider's, as given (`// free-text:`).
+  - A value that differs from Requested is `text` weight 600; one equal to it is `text-4` (the own-values rule,
+    C2).
+  - A missing value reads `not set` in `text-4`, never a dash.
+  - A withheld value reads `Not shown`, with the title "Structured or over 512 bytes; Cadence doesn't display
+    it."
+- **Provider audit:** rows "02:11:04Z · <action> · <outcome>", using the provider's codes in sentence case. Newest
+  first, with `Show earlier` at the foot while there's more.
+- **Contact record:**
+  - Scheduled and realized, each with its state, window (§4) and clock mode, plus "Realized at 03:09:02Z".
+  - A table `Path · Provider binding · Transport binding`, with sources and intents as key/values.
+  - Schedule revisions: "r3 · 02:59:40–03:08:52Z · scheduled", newest first, `Show earlier` at the foot.
