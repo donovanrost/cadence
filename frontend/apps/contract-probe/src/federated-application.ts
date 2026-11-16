@@ -3,7 +3,7 @@ import {
   defineApplicationManifest,
   FEDERATED_APPLICATION_MANIFEST_SCHEMA,
 } from "@cadence/plugin-sdk";
-import ProbeApplication from "./ProbeApplication.vue";
+import ContractProbeApplication from "./ContractProbeApplication.vue";
 
 export const manifest = defineApplicationManifest({
   schema: FEDERATED_APPLICATION_MANIFEST_SCHEMA,
@@ -24,7 +24,7 @@ export const manifest = defineApplicationManifest({
     version: 1,
     displayName: "Contract Probe",
     description: "A development fixture proving generic runtime application discovery.",
-    installableScopes: ["mission", "spacecraft"],
+    installableScopes: ["spacecraft"],
   },
   surfaces: [
     {
@@ -38,30 +38,7 @@ export const manifest = defineApplicationManifest({
       actions: [],
       renderer: { kind: "federated-vue", exposedModule: "./Application" },
     },
-    // The console federation smoke's surfaces (Cadence.TestSupport.ContractProbeApplication).
-    {
-      surfaceId: "mission_contracts",
-      version: 1,
-      purpose: "overview",
-      scope: "mission",
-      placement: "application_workspace",
-      navigation: { label: "Contract probe", order: 92 },
-      dataContract: { id: "cadence.contract_probe.mission", version: 1 },
-      actions: ["record_probe"],
-      renderer: { kind: "federated-vue", exposedModule: "./Application" },
-    },
-    {
-      surfaceId: "spacecraft_contracts",
-      version: 1,
-      purpose: "overview",
-      scope: "spacecraft",
-      placement: "application_workspace",
-      navigation: { label: "Contract probe", order: 93 },
-      dataContract: { id: "cadence.contract_probe.spacecraft", version: 1 },
-      actions: [],
-      renderer: { kind: "federated-vue", exposedModule: "./Application" },
-    },
   ],
 });
 
-export default ProbeApplication;
+export default ContractProbeApplication;
