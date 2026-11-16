@@ -2179,6 +2179,9 @@ filter.
 - Count lines add them: "1,284 passes and 3 hand-started contacts". The foot line goes.
 - The drawer shows the A13 record alone, titled "Contact record", with no reservation section and no pass actions.
 
-**Timeline's contact ids** (lead's ruling, 11-16; no record-only route, at fe-ops' request): "Realized contact" and
-"Scheduled contact" link to History `?contact=<id>` **only when the id resolves** to a pass row. One that doesn't stays
-plain text, as today.
+**Timeline's contact ids** (lead's ruling, 11-16: no record-only `?record=` route). "Realized contact" and "Scheduled
+contact" link to History `?contact=<id>` once api's `/passes/:id` accepts a scheduled or realized contact id (api's
+next item). Until then they stay plain text, as today.
+- The drawer opens whatever that read returns: a booked pass with its record, or, for a hand-started contact, the
+  record alone ("Contact record", no reservation section, no pass actions).
+- An id the read can't find: "No contact record with this id." (U25: the id isn't repeated as if it were a name.)
