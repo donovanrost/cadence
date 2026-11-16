@@ -11,7 +11,10 @@ defmodule Cadence.Contacts.ContactStartAttention do
   (`acknowledge/3`, action `acknowledged`).
 
   `reason` is one of `ContactStartFailure.reasons/0`; for `listener_in_use`, `holder` is the pass
-  holding the listener. Pass fields as `contact_settlement`'s.
+  holding the listener; for `listen_endpoint_claimed`, `listen_port`, `transport_id` and
+  `transport_name` say
+  which transport's port another mission listens on (never which mission). Pass fields as
+  `contact_settlement`'s.
   """
 
   import Ecto.Query
@@ -265,6 +268,10 @@ defmodule Cadence.Contacts.ContactStartAttention do
       realized_contact_id: contact.realized_contact_id,
       provider_profile_id: contact.metadata["provider_profile_id"],
       provider_profile_name: profile_name(contact),
+      # listen_endpoint_claimed (ux U81): the port another mission listens on, and whose it is.
+      listen_port: failure["listen_port"],
+      transport_id: failure["transport_id"],
+      transport_name: failure["transport_name"],
       holder: holder_fields(holder, reservations),
       raised_at: timestamp(failure["first_failed_at"]),
       last_attempt_at: timestamp(failure["last_attempt_at"]),

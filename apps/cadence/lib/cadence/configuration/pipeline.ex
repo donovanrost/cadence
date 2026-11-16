@@ -173,6 +173,11 @@ defmodule Cadence.Configuration.Pipeline do
         |> Map.update!(:entries, &(Enum.reverse(extra, [entry]) ++ &1))
         |> Map.update!(:impacts, &MapSet.put(&1, kind.runtime_impact(action, current, proposed)))
 
+      # A store refusal the kind can word as field errors (e.g. a listen port another mission
+      # holds) reads like validation, on the field.
+      {:error, [%{path: _, message: _} | _] = field_errors} ->
+        {:halt, Map.update!(acc, :errors, &[error(op, field_errors) | &1])}
+
       {:error, reason} ->
         {:halt,
          Map.update!(

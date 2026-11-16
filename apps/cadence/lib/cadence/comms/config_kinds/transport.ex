@@ -191,6 +191,12 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
   end
 
   defp stored({:ok, transport}), do: {:ok, document(transport), []}
+
+  # The store's own refusal (it holds the port's lock, so it can catch what validate raced past,
+  # and a provider-managed transport's derived port) in the same words, on the port field.
+  defp stored({:error, {:listen_endpoint_claimed, _endpoint}}),
+    do: {:error, [F.error("configuration.port", ListenClaims.message())]}
+
   defp stored({:error, reason}), do: {:error, reason}
 
   defp document(%Transport{} = transport) do

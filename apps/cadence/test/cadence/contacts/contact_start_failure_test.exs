@@ -19,6 +19,8 @@ defmodule Cadence.Contacts.ContactStartFailureTest do
        {"uplink_session_failed", nil}},
       {{:shutdown, {:failed_to_start_child, Cadence.Runtime.IngressPersistenceProjector, :boom}},
        {"ingress_pipeline_failed", nil}},
+      {{:listen_endpoint_claimed, %{port: 5012, provider_binding_id: "b"}},
+       {"listen_endpoint_claimed", "b"}},
       {:something_else, {"unknown", nil}}
     ]
 
@@ -26,7 +28,8 @@ defmodule Cadence.Contacts.ContactStartFailureTest do
 
     assert Enum.sort(ContactStartFailure.reasons()) ==
              Enum.sort(~w(listener_in_use listener_unavailable connect_failed
-                          ingress_pipeline_failed uplink_session_failed no_runtime_spec unknown))
+                          ingress_pipeline_failed uplink_session_failed no_runtime_spec
+                          listen_endpoint_claimed unknown))
   end
 
   test "attempts count up from the first failure, and a start closes the failure" do

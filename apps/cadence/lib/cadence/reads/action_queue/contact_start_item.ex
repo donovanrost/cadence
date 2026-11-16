@@ -19,7 +19,13 @@ defmodule Cadence.Reads.ActionQueue.ContactStartItem do
     :retry,
     :attempts,
     :last_attempt_at,
-    :expires_at
+    :expires_at,
+    # listen_endpoint_claimed (ux U81): the port another mission listens on, and the transport
+    # whose port it is (id and name, each nil if the binding doesn't say); nil for every other
+    # reason.
+    :listen_port,
+    :transport_id,
+    :transport_name
   ]
 
   @doc "The source's wire keys, `holder` serialized with `station` (a `StationRefs` resolver)."

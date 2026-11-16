@@ -9,15 +9,17 @@ defmodule Cadence.Contacts.ContactStartFailure do
   so the second couldn't open the station listener (`eaddrinuse`) until the first one ended.
 
   `start_failure`: `reason` (one of `reasons/0`), `failure_message` (the raw error, cut to 300
-  characters), `provider_binding_id` (the listener's, for `listener_in_use`), `attempts`,
-  `first_failed_at`, `last_attempt_at`, and, once it has started, `started_at`.
+  characters), `provider_binding_id` (the listener's, for `listener_in_use` and
+  `listen_endpoint_claimed`), `attempts`, `first_failed_at`, `last_attempt_at`, and, once it has
+  started, `started_at`. For `listen_endpoint_claimed` (another mission listens on the pass's
+  port, ux U81) also `listen_port`, `transport_id` and `transport_name`.
   """
 
   alias Cadence.Contacts.{ContactStore, RealizedContact}
   alias Cadence.Platform.ScopedReadUpdates
 
   @reasons ~w(listener_in_use listener_unavailable connect_failed ingress_pipeline_failed
-              uplink_session_failed no_runtime_spec unknown)
+              uplink_session_failed no_runtime_spec listen_endpoint_claimed unknown)
 
   # Matched by name: the runtime's children are the data plane's, not this context's to depend on.
   @ingress_children ~w(IngressJournal.FileSystem Runtime.IngressJournalConsumer
@@ -39,16 +41,29 @@ defmodule Cadence.Contacts.ContactStartFailure do
     at = DateTime.to_iso8601(at)
 
     %{
-      "start_failure" => %{
-        "reason" => reason,
-        "provider_binding_id" => provider_binding_id,
-        "failure_message" => message(error),
-        "attempts" => Map.get(previous, "attempts", 0) + 1,
-        "first_failed_at" => Map.get(previous, "first_failed_at", at),
-        "last_attempt_at" => at
-      }
+      "start_failure" =>
+        %{
+          "reason" => reason,
+          "provider_binding_id" => provider_binding_id,
+          "failure_message" => message(error),
+          "attempts" => Map.get(previous, "attempts", 0) + 1,
+          "first_failed_at" => Map.get(previous, "first_failed_at", at),
+          "last_attempt_at" => at
+        }
+        |> Map.merge(claim_details(error))
     }
   end
+
+  # `listen_endpoint_claimed` (ListenClaims, ux U81): the port another mission listens on and the
+  # transport whose port it is, so the item can say which port to change.
+  defp claim_details({:listen_endpoint_claimed, %{port: port} = claim}),
+    do: %{
+      "listen_port" => port,
+      "transport_id" => Map.get(claim, :transport_id),
+      "transport_name" => Map.get(claim, :transport_name)
+    }
+
+  defp claim_details(_error), do: %{}
 
   @doc "Records a failed start attempt on the contact and tells the Now queue."
   @spec record(RealizedContact.t(), term(), DateTime.t()) ::
@@ -110,6 +125,9 @@ defmodule Cadence.Contacts.ContactStartFailure do
 
   defp find({:tcp_provider_connect_failed, binding_id, _reason}),
     do: {"connect_failed", binding_id}
+
+  defp find({:listen_endpoint_claimed, %{} = claim}),
+    do: {"listen_endpoint_claimed", Map.get(claim, :provider_binding_id)}
 
   defp find(:no_active_binding_set), do: {"no_runtime_spec", nil}
   defp find({:mission_runtime_spec_mismatch, _field}), do: {"no_runtime_spec", nil}

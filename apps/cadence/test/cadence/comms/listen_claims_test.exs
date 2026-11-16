@@ -8,8 +8,18 @@ defmodule Cadence.Comms.ListenClaimsTest do
 
   alias Cadence.Comms.ConfigKinds.Transport, as: TransportKind
   alias Cadence.Comms.{ListenClaims, Transport, TransportStore}
-  alias Cadence.Contacts.{Path, ProfileStore, ProviderBinding, ProviderProfile, RealizedContact}
+
+  alias Cadence.Contacts.{
+    ContactStartFailure,
+    Path,
+    ProfileStore,
+    ProviderBinding,
+    ProviderProfile,
+    RealizedContact
+  }
+
   alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Reads.ActionQueue.ContactStartItem
 
   setup do
     suffix = System.unique_integer([:positive])
@@ -150,6 +160,36 @@ defmodule Cadence.Comms.ListenClaimsTest do
                  document
                )
     end
+
+    test "the store's refusal at write reads the same, on the port field (ux U81)", %{
+      a: a,
+      b: b,
+      port: port
+    } do
+      assert {:ok, _transport} = persist_transport(a, port)
+
+      document = %{
+        "origin" => "direct",
+        "display_name" => "Lab TCP",
+        "transport_kind" => "tcp_socket",
+        "direction_capability" => "inbound",
+        "configuration" => tcp_config(port)
+      }
+
+      # As when validate passed before another mission's save took the port.
+      assert {:error, [%{path: "configuration.port", message: message}]} =
+               TransportKind.write(
+                 b.organization_id,
+                 b.mission_id,
+                 :create,
+                 "transport-listen-b",
+                 nil,
+                 document,
+                 []
+               )
+
+      assert message == ListenClaims.message()
+    end
   end
 
   describe "starting a contact" do
@@ -168,18 +208,63 @@ defmodule Cadence.Comms.ListenClaimsTest do
           %Path{
             provider_bindings: [
               ProviderBinding.new(%{
+                provider_binding_id: "binding-listen-b",
                 adapter_key: :tcp_socket,
-                configuration: listen("127.0.0.1", port)
+                configuration: listen("127.0.0.1", port),
+                metadata: %{
+                  "display_name" => "INU S-band",
+                  "materialized_from_transport_id" => "transport-inu"
+                }
               })
             ]
           }
         ]
       }
 
-      assert {:error, {:listen_endpoint_claimed, %{port: ^port}}} =
+      assert {:error, {:listen_endpoint_claimed, claim} = error} =
                ControlContacts.start_realized_contact(contact)
 
+      assert claim == %{
+               host: "127.0.0.1",
+               port: port,
+               provider_binding_id: "binding-listen-b",
+               transport_id: "transport-inu",
+               transport_name: "INU S-band"
+             }
+
       assert :ok = ListenClaims.check_paths(a.mission_id, contact.paths)
+
+      # The start failure the Now item reads (ux U81: "Didn't start: another mission listens on
+      # the port INU S-band uses (port). Change that transport's port.").
+      assert %{"start_failure" => failure} =
+               ContactStartFailure.failed(contact, error, DateTime.utc_now())
+
+      assert failure["reason"] == "listen_endpoint_claimed"
+      assert failure["reason"] in ContactStartFailure.reasons()
+      assert failure["provider_binding_id"] == "binding-listen-b"
+      assert failure["listen_port"] == port
+      assert failure["transport_id"] == "transport-inu"
+      assert failure["transport_name"] == "INU S-band"
+
+      # On the wire (fe-ops' reader): the Now item's contact_start fields.
+      wire =
+        ContactStartItem.fields(
+          %{
+            reason: failure["reason"],
+            listen_port: failure["listen_port"],
+            transport_id: failure["transport_id"],
+            transport_name: failure["transport_name"]
+          },
+          %{},
+          fn _ref -> nil end
+        )
+
+      assert %{
+               reason: "listen_endpoint_claimed",
+               listen_port: ^port,
+               transport_id: "transport-inu",
+               transport_name: "INU S-band"
+             } = wire
     end
   end
 

@@ -212,8 +212,9 @@ defmodule Cadence.ProviderChangeFixtures do
                   "protocol" => "tcp",
                   "mode" => "provider_connects",
                   "host" => "127.0.0.1",
-                  # One mission's listen port (ListenClaims): each fixture mission gets its own.
-                  "port" => 10_000 + rem(suffix, 50_000),
+                  # One mission's listen port (ListenClaims): each fixture mission gets its own,
+                  # near the old fixed 5100 and clear of live dev listeners (42100-42209).
+                  "port" => 5100 + rem(suffix, 800),
                   "framing_family" => "ccsds_tm",
                   "frame_bytes" => 1115
                 }

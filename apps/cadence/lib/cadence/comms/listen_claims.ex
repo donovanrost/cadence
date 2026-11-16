@@ -30,7 +30,7 @@ defmodule Cadence.Comms.ListenClaims do
   @loopback_hosts ["localhost", "127.0.0.1"]
 
   @type endpoint :: %{host: binary(), port: pos_integer()}
-  @type reason :: {:listen_endpoint_claimed, endpoint()}
+  @type reason :: {:listen_endpoint_claimed, map()}
 
   @doc "The words a form shows for a refused endpoint (class-level; names no mission)."
   @spec message() :: binary()
@@ -98,20 +98,35 @@ defmodule Cadence.Comms.ListenClaims do
     end
   end
 
-  @doc "`check/2` for every listen binding on a contact's paths (fail closed at start)."
+  @doc """
+  `check/2` for every listen binding on a contact's paths (fail closed at start). A refusal also
+  names the binding (`provider_binding_id`) and its transport (`transport_id` and
+  `transport_name`, from the binding's metadata; nil when unknown), so the start failure can say
+  which transport's port to change.
+  """
   @spec check_paths(binary(), [map()]) :: :ok | {:error, reason()}
   def check_paths(mission_id, paths) when is_binary(mission_id) and is_list(paths) do
     paths
     |> Enum.flat_map(&(Map.get(&1, :provider_bindings) || []))
-    |> Enum.map(&endpoint(Map.get(&1, :configuration)))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.reduce_while(:ok, fn endpoint, :ok ->
-      case check(mission_id, endpoint) do
-        :ok -> {:cont, :ok}
-        error -> {:halt, error}
+    |> Enum.reduce_while(:ok, fn binding, :ok ->
+      case check(mission_id, endpoint(Map.get(binding, :configuration))) do
+        :ok ->
+          {:cont, :ok}
+
+        {:error, {:listen_endpoint_claimed, endpoint}} ->
+          {:halt, {:error, {:listen_endpoint_claimed, Map.merge(endpoint, binding_ref(binding))}}}
       end
     end)
+  end
+
+  defp binding_ref(binding) do
+    metadata = Map.get(binding, :metadata) || %{}
+
+    %{
+      provider_binding_id: Map.get(binding, :provider_binding_id),
+      transport_id: metadata["materialized_from_transport_id"],
+      transport_name: metadata["display_name"]
+    }
   end
 
   # Other missions' latest provider profiles mentioning `port` (ProfileStore owns the rows).
