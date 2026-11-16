@@ -72,8 +72,10 @@ refuses in words. No ux work now.
 (api/ops.md M10).
 - An info line under the plot: "This range has more samples than one read returns (20,000), so the plot is
   incomplete. Pick a shorter range to see all of it."
-- If api says which end the cap keeps, the line names the part shown ("…showing 02:00–05:40Z"); never a guessed
-  range (U20).
+- api (11-16): only the fallback store truncates, and it keeps the **earliest** 20,000, so the plot runs from the
+  range's start to the last bucket's `t_end` (exact). The line reads: "This range has more samples than one read
+  returns (20,000). The plot shows 09:00Z to 10:12Z; samples after 10:12Z weren't read. Pick a shorter or later
+  range to see the rest." Dates follow §4 when the range spans days ("11-15 22:00Z to 11-16 03:12Z").
 - The same line goes on Investigate's Telemetry tab.
 
 **D12 Old telemetry links keep the spacecraft: agreed** (api maps `spacecraft_id` → `sc`). An unknown id drops
