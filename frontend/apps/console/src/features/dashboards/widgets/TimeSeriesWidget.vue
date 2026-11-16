@@ -6,6 +6,7 @@ import type { ReadyPlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
 import { overlayMarkers } from "../model/overlay-markers.ts";
 import { hasData } from "../model/widget-data.ts";
 import { snapshotSeries } from "../model/snapshot-series.ts";
+import { chartSentence } from "../model/chart-sentence.ts";
 
 /** Time series on the ported uPlot engine, from the snapshot's decimated envelope frames. */
 const props = defineProps<{
@@ -42,6 +43,15 @@ const empty = computed(() => !hasData(props.placement));
 const liveEmpty = computed(() => empty.value && props.context.time_mode === "live");
 const frameable = computed(
   () => liveEmpty.value || Boolean(props.context.from && props.context.to),
+);
+/** The chart reads as an image with a sentence (a11y B5). */
+const sentence = computed(() =>
+  chartSentence(props.placement.widget.title, series.value?.primary ?? [], {
+    live: props.context.time_mode === "live",
+    from: props.context.from,
+    to: props.context.to,
+    windowSeconds: props.context.window_seconds ?? options.value.window_seconds,
+  }),
 );
 /** Limits and contacts from the placement's overlay frames (ux Dashboards.md 'Overlays'). */
 const overlay = computed(() => overlayMarkers(props.placement));
@@ -93,6 +103,8 @@ const optional = computed(() => {
 
 <template>
   <div class="relative flex h-full min-h-0 flex-col overflow-hidden px-1 pb-1">
+    <!-- Beside the canvas, not on it: the chart holds focusable annotation controls. -->
+    <span role="img" :aria-label="sentence" class="sr-only" />
     <TelemetryChart
       v-if="series && (!empty || frameable)"
       :chart_id="chartId"

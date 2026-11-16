@@ -51,6 +51,8 @@ const title = (state: string, limit: LimitState | null, from: number) =>
           :title="title(segment.state, segment.limit, segment.from)"
         >
           <span class="truncate">{{ segment.state }}</span>
+          <!-- The limit is colour and hover title otherwise (a11y B2). -->
+          <span v-if="segment.limit" class="sr-only">, {{ limitLabel[segment.limit] }}</span>
         </div>
       </div>
     </div>

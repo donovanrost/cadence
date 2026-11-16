@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { ApStatusMark, stateTextClass } from "@/ui";
 import type { WorkspacePlacement } from "../model/snapshot.ts";
-import { limitMark, table } from "../model/widget-data.ts";
+import { limitLabel, limitMark, table } from "../model/widget-data.ts";
 
 /** Data table / status matrix. Limit-state cells carry their mark, not just a tint. */
 const props = defineProps<{ placement: WorkspacePlacement }>();
@@ -33,7 +33,8 @@ const data = computed(() => table(props.placement));
             :class="cell.state ? stateTextClass(limitMark[cell.state]) : 'text-readout'"
           >
             <span class="inline-flex items-center gap-1.5">
-              <ApStatusMark v-if="cell.state" :state="limitMark[cell.state]" />{{ cell.text }}
+              <ApStatusMark v-if="cell.state" :state="limitMark[cell.state]" />{{ cell.text
+              }}<span v-if="cell.state" class="sr-only">, {{ limitLabel[cell.state] }}</span>
             </span>
           </td>
         </tr>
