@@ -5,6 +5,27 @@
 page → in the console (where), partial, or missing; tiered; what each gap needs. **Read-only**, on head `72966c894`;
 each console "Yes" traced to code. **C** = `frontend/apps/console/src/features`.
 
+## Gate (ux review 11-16, `ux/reviews/2026-11-16-parity-ops-d.md`)
+DECISIONS #75 parks **L16** (data operations) and **L20** (canned questions): their legacy pages stay until the user
+revisits. So `/ops/explore` and `/ops/data-operations` can't be deleted by building gaps alone; each needs the user's
+call (unpark and build, or accept the gap).
+
+## Status (11-16)
+- **D11 built:** the capped-read line on both screens, with ux's words naming the part shown (api: the fallback
+  store keeps the EARLIEST 20,000 raw samples, so the plot runs from the range start to the last bucket's end;
+  native decimation never truncates). Telemetry d93886412 + e1e8f8a49 (dashboards; qa PASS 09:58Z), Investigate
+  8e01920a7 + 03e5e5bff (fe-ops).
+- **D12 frontend built:** points with no spacecraft read "Pick a spacecraft to plot <point>." (focus moves only from
+  "Choose a spacecraft"). The 301 itself still needs api to map `spacecraft_id` → that spacecraft's **SCID** (`?sc=`
+  takes SCIDs; fe-ops).
+- **"Couldn't be confirmed" replaced:** a failed re-read keeps the last plot under "Couldn't refresh at …; showing
+  data read at …" + Try again (ux's condition), in the same Telemetry commits.
+- **D1, D2, D12 (301) → api** (lead). D1's home is Investigate (a Sample aside from T3 rows; ux), fe-ops once the read
+  exists. D2's target is exactly the link AlarmProvenance builds (`ops.spacecraft` with `tab: telemetry`, `?points=`,
+  `focus=`, `at=<sample time>`), so both builders need the SCID, point and sample time; the limits app's prefix
+  check must accept `/console/…/spacecraft/`.
+- **Data operations (L16) → the director / user** (unpark or accept).
+
 ## Triage
 
 ### Tier 1 (safety / audit)
@@ -33,10 +54,12 @@ each console "Yes" traced to code. **C** = `frontend/apps/console/src/features`.
 - Render decoded-but-unused fields: bucket `count` (`investigate/api.ts:22`), the limit interval's `limit_set_name`, definition id/version and scope (`:55-61`); Sources' binding `realm` in Technical details (`sources/bindings.ts:27`) (frontend only).
 - Data operations' extra summary counts, `blocked_count`, audit `actor_id`/`event_type`, job times, Validate's per-field feedback (legacy wire only, so api).
 
-### Gone by design / obsolete (ux to confirm)
-- **Canned questions** (`apply_question`): L20 parked (DECISIONS #75); ux's four empty-state links shipped (`telemetry/PlotPanel.vue:21-26,82-91`).
+### Gone by design / obsolete (ux confirmed 11-16, except canned questions)
+- **Canned questions** (`apply_question`): NOT gone by design; L20 is parked (DECISIONS #75), so it's the user's
+  call. ux's four empty-state links shipped meanwhile (`telemetry/PlotPanel.vue`).
 - **Row limit and order:** meaningless for a bucketed plot.
-- **"Refreshed result could not be confirmed":** replaced by live invalidation (`telemetry/useSeries.ts:61-62`).
+- **"Refreshed result could not be confirmed":** replaced by live invalidation, on ux's condition that a failed
+  re-read keeps the last plot with its read time (built 11-16).
 - **`add_to_dashboard`:** already removed (legacy-deletion.md L8 notes).
 - **Federated `OpsTelemetryExplore`, `OpsDataOperations[Manage]` surfaces:** "Open in workspace" links only; they go with their pages.
 - Not equivalents (no overlap): Now's ingress / settlement / archive items; catalog `import_runs`; the dashboards' removed backfill-lifecycle overlays (`dashboards/chart/chart-events.ts:8-12`).

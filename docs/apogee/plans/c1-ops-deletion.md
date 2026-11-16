@@ -134,3 +134,8 @@ The ops frame (`host/src/ops-workspace/features/frame/*`) stays: it wraps every 
 - **Frontend re-cut** on the post-(B) head d19c3c75f: `dashboards/c1-frontend`, 10 commits, all frontend checks green.
 - **Dry timing:** after the model gate (~17:00Z): R1 needs the QA catalog activated (L10) and A1/A2 a booked QA pass
   (the director OKs it). Likely 11-17.
+- **Added gate (lead):** devops' smoke opens a SURVIVING ops_console federated surface live on the assembled tree, to
+  prove it still mounts now that ops_console has no default catalog entry (fe-setup's 3a918a60d; domain approved).
+- **Assembled:** `dashboards/c1-assembled` d1e03b706 = d19c3c75f → api b0958fd09 → fe-setup d1777f310 f919b9039
+  3a918a60d → dashboards' 10 (clean; frontend tree identical to the tested branch). devops smokes it (legacy federation
+  smoke moved off `commands`).
