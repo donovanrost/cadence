@@ -25,6 +25,7 @@ defmodule Cadence.Control.LimitDefinitionKind do
   alias Cadence.Limits
   alias Cadence.Limits.Definition
   alias Cadence.Platform.ConfigFields, as: F
+  alias Cadence.Platform.SaveTrail
 
   @fields ~w(point_id limit_set_name thresholds metadata)
   @thresholds ~w(red_low yellow_low yellow_high red_high)
@@ -117,7 +118,7 @@ defmodule Cadence.Control.LimitDefinitionKind do
         point_id: point,
         limit_set_name: set,
         thresholds: proposed["thresholds"] || %{},
-        metadata: proposed["metadata"] || %{}
+        metadata: SaveTrail.change_set(proposed["metadata"])
       },
       review,
       publish_facts?: false
@@ -277,12 +278,13 @@ defmodule Cadence.Control.LimitDefinitionKind do
         metadata: document["metadata"] || %{}
       })
 
+  # Without the save trail: who saved the live version, and how, isn't a change to review.
   defp document(%Definition{} = definition),
     do: %{
       "point_id" => definition.point_id,
       "limit_set_name" => definition.limit_set_name,
       "thresholds" => definition.thresholds || %{},
-      "metadata" => definition.metadata || %{}
+      "metadata" => SaveTrail.without(definition.metadata)
     }
 
   # ux U43: the set is named only when it isn't DEFAULT.

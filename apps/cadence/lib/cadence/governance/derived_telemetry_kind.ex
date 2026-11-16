@@ -23,6 +23,7 @@ defmodule Cadence.Governance.DerivedTelemetryKind do
   alias Cadence.DerivedTelemetry.{Definition, ExpressionParser}
   alias Cadence.Governance
   alias Cadence.Platform.ConfigFields, as: F
+  alias Cadence.Platform.SaveTrail
 
   @fields ~w(point_id point_name expression metadata)
 
@@ -85,7 +86,7 @@ defmodule Cadence.Governance.DerivedTelemetryKind do
       point_name: proposed["point_name"] || proposed["point_id"],
       expression: proposed["expression"],
       version: 1,
-      metadata: proposed["metadata"] || %{}
+      metadata: SaveTrail.change_set(proposed["metadata"])
     }
     |> Definition.new()
     |> Governance.persist_derived_definition()
@@ -103,7 +104,7 @@ defmodule Cadence.Governance.DerivedTelemetryKind do
           point_name: proposed["point_name"] || current.point_id,
           expression: proposed["expression"],
           expected_definition_id: id,
-          metadata: proposed["metadata"] || %{}
+          metadata: SaveTrail.change_set(proposed["metadata"])
         },
         current.version
       )
@@ -280,12 +281,13 @@ defmodule Cadence.Governance.DerivedTelemetryKind do
   defp stored({:ok, %Definition{} = definition}), do: {:ok, document(definition), []}
   defp stored({:error, reason}), do: {:error, reason}
 
+  # Without the save trail: who saved the live version, and how, isn't a change to review.
   defp document(%Definition{} = definition),
     do: %{
       "point_id" => definition.point_id,
       "point_name" => definition.point_name,
       "expression" => definition.expression,
-      "metadata" => definition.metadata || %{}
+      "metadata" => SaveTrail.without(definition.metadata)
     }
 
   defp label(document), do: document["point_name"] || document["point_id"]

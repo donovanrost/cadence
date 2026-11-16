@@ -136,6 +136,7 @@ defmodule Cadence.Applications.LimitsApplicationTest do
       surface_id: "manage",
       surface_version: 1,
       action_id: "save_limit_definition",
+      origin: :console,
       params:
         Map.merge(
           %{

@@ -62,6 +62,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.DerivedTelemetryWorkflowTest do
                surface_id: "manage",
                surface_version: 1,
                action_id: "save_definition",
+               origin: :console,
                params: input
              })
 

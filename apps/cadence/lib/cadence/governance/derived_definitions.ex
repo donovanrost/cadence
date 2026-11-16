@@ -4,6 +4,7 @@ defmodule Cadence.Governance.DerivedDefinitions do
   alias Cadence.DerivedTelemetry.Definition
   alias Cadence.Governance.GovernedDerivedTelemetryDefinitionRow, as: Row
   alias Cadence.Missions
+  alias Cadence.Platform.SaveTrail
   alias Cadence.Repo
   alias Ecto.Adapters.SQL
 
@@ -186,11 +187,19 @@ defmodule Cadence.Governance.DerivedDefinitions do
   defp existing_result(org, definition) do
     with {:ok, stored} <-
            fetch(org, definition.mission_id, definition.derived_definition_id, definition.version) do
-      if Jason.encode!(Map.from_struct(stored)) == Jason.encode!(Map.from_struct(definition)),
+      if content(stored) == content(definition),
         do: {:ok, stored},
         else: {:error, :derived_definition_version_conflict}
     end
   end
+
+  # The save trail (who, via which path) isn't content: the same version saved again by someone
+  # else, or through another path, is the same version (SaveTrail).
+  defp content(%Definition{} = definition),
+    do:
+      Jason.encode!(
+        Map.from_struct(%{definition | metadata: SaveTrail.without(definition.metadata)})
+      )
 
   defp transaction(org, mission, point, operation) do
     <<key::signed-64, _::binary>> =
