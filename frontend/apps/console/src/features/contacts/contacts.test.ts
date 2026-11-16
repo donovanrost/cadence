@@ -56,6 +56,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   source: { provider: "p", provider_name: "Simulator", synthetic: true },
   max_elevation_deg: null,
   plan: null,
+  requirement: undefined,
   ended_by: null,
   replaced_by: null,
   booking_evidence: null,
@@ -82,7 +83,10 @@ describe("passes", () => {
       from: "2026-11-09T02:00:00Z",
       to: "2026-11-09T04:00:00Z",
       truncated: false,
-      passes: [pass("a"), pass("b", { plan: { id: "contact_plan_1", version: 42 } })],
+      passes: [
+        pass("a"),
+        pass("b", { plan: { id: "contact_plan_1", version: 42, day: undefined } }),
+      ],
     };
     expect(decode(passesReader, body).ok).toBe(true);
     expect(decode(passesReader, { ...body, passes: [{ ...pass("a"), state: "maybe" }] }).ok).toBe(

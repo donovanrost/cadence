@@ -119,8 +119,18 @@ const pass = d.object({
     synthetic: d.nullable(d.boolean),
   }),
   max_elevation_deg: d.nullable(d.number),
-  /** The contact plan revision that booked it; null for direct bookings. */
-  plan: d.nullable(d.object({ id: d.token, version: d.nullable(d.integer) })),
+  /** The contact plan revision that booked it; null for direct bookings. `day` (U74): its UTC day. */
+  plan: d.nullable(
+    d.object({
+      id: d.token,
+      version: d.nullable(d.integer),
+      day: d.optional(d.nullable(d.timestamp)),
+    }),
+  ),
+  /** U74 (api): the requirement it was booked for, with its name; optional until shipped. */
+  requirement: d.optional(
+    d.nullable(d.object({ id: d.token, version: d.nullable(d.integer), name: d.string })),
+  ),
   /** qa #30: who ended a canceled/rejected/failed booking; absent on older servers. */
   ended_by: d.optional(d.nullable(passEnder)),
   /**

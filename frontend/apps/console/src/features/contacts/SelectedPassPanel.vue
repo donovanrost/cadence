@@ -41,6 +41,8 @@ import IngressBlock from "./IngressBlock.vue";
 import JobBlock from "./JobBlock.vue";
 import ListenerBlock from "./ListenerBlock.vue";
 import PassTechnical from "./PassTechnical.vue";
+import BookedRow from "./BookedRow.vue";
+import ReservationRecord from "./ReservationRecord.vue";
 import { passAttentions, passAttentionTag } from "./passAttention.ts";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
@@ -300,6 +302,7 @@ const countdown = computed(() => {
       <p v-if="pass.off_plan" class="m-0 text-sm text-text-2">
         {{ offPlanLine(pass.off_plan, now) }}
       </p>
+      <BookedRow v-else :pass="pass" />
       <p v-if="pass.contact_ended" class="m-0 text-sm text-text-2">
         {{ endedLine(pass.contact_ended, pass.source.provider_name, now) }}
       </p>
@@ -352,6 +355,11 @@ const countdown = computed(() => {
       <ApStateTrail v-if="state" :steps="contactTrail(state)" label="Contact state" />
       <ApKeyValue :items="facts" />
       <PassTechnical :mission-id="missionId" :pass-id="pass.id" />
+      <ReservationRecord
+        :mission-id="missionId"
+        :pass-id="pass.id"
+        :provider-name="pass.source.provider_name"
+      />
       <PassUplinks :mission-id="missionId" :pass-id="pass.id" />
       <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>
       <ContactEndAction
