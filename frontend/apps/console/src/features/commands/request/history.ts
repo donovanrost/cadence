@@ -26,7 +26,16 @@ const attempt = d.object({
         // free-text: refused = the release-stop vocabulary; resolved / uncertain codes vary.
         code: d.nullable(d.string),
         /** For a resolution: who and when (asked of api; optional until it ships). */
-        by: d.optional(d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }))),
+        by: d.optional(
+          d.nullable(
+            d.object({
+              id: d.token,
+              name: d.nullable(d.string),
+              /** api 1b61e57ac: a person or a service identity (an API credential), never Cadence. */
+              kind: d.optional(d.nullable(d.knownText(["user", "service_identity"] as const))),
+            }),
+          ),
+        ),
         at: d.optional(d.nullable(d.timestamp)),
       }),
     ),
@@ -49,6 +58,8 @@ const telemetryEvidence = d.object({
   quality: d.knownText(["good", "suspect", "bad"] as const),
   raw_value_json: d.nullable(d.string),
   engineering_value_json: d.nullable(d.string),
+  /** api 1b61e57ac: the point's catalog unit, null when none; never guessed (ux U70). */
+  unit: d.optional(d.nullable(d.string)),
   received_at: d.timestamp,
   generated_at: d.nullable(d.timestamp),
 });

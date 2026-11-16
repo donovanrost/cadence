@@ -34,9 +34,13 @@ function resolvedLine(a: Attempt): string {
   // compared-as-text: resolved codes are api's two words, not_sent and rejected.
   const as = f?.code === "rejected" ? "rejected" : "not sent";
   const when = f?.at ? ` at ${at(f.at)}` : "";
-  const who = f?.by?.name;
-  return who
-    ? `Resolved as ${as} by ${who}${when}`
+  const by = f?.by;
+  // ux U70: a person or a service identity (an API credential) by its name. A resolution is never
+  // Cadence's own act (api: an automatic timeout records 'unknown', not a resolution).
+  const who = by?.name ?? null;
+  if (who) return `Resolved as ${as} by ${who}${when}`;
+  return by
+    ? `Resolved as ${as}${when}; who resolved it isn't known`
     : `Resolved as ${as}${when}; who resolved it wasn't recorded`;
 }
 
@@ -102,7 +106,8 @@ export function evidenceLine(
   }
   const eng = e.engineering_value_json === null ? null : shownValue(e.engineering_value_json);
   const raw = e.raw_value_json === null ? null : shownValue(e.raw_value_json);
-  const value = eng ?? raw ?? "no value";
+  const unit = e.unit && eng !== null ? ` ${e.unit}` : "";
+  const value = eng === null ? (raw ?? "no value") : `${eng}${unit}`;
   const rawPart = raw !== null && eng !== null && raw !== eng ? ` (raw ${raw})` : "";
   const quality = e.quality;
   const caution =

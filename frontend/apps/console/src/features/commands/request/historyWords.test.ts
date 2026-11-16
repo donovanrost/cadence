@@ -113,6 +113,20 @@ describe("history words (ux U70)", () => {
         null,
       ),
     ).toBe("Resolved as rejected; who resolved it wasn't recorded");
+    expect(
+      attemptLine(
+        attempt({
+          state: "release_failed",
+          failure: {
+            kind: "resolved",
+            code: "not_sent",
+            by: { id: "key-1", name: "Ground ops key", kind: "service_identity" },
+            at: "2026-11-16T03:20:05Z",
+          },
+        }),
+        null,
+      ),
+    ).toBe("Resolved as not sent by Ground ops key at 03:20:05Z");
   });
   it("words verifiers and their evidence", () => {
     expect(verifierLine(verifier())).toBe("Mode applied · verified at 03:12:04Z");
@@ -143,12 +157,13 @@ describe("history words (ux U70)", () => {
         quality: "suspect",
         raw_value_json: "412",
         engineering_value_json: "8.0",
+        unit: "°C",
         received_at: "2026-11-16T03:12:03Z",
         generated_at: null,
       },
     });
     expect(evidenceLine(differs)).toEqual({
-      text: "TH.temp = 8.0 (raw 412), received 03:12:03Z",
+      text: "TH.temp = 8.0 °C (raw 412), received 03:12:03Z",
       caution: "quality: suspect",
     });
     const transport = verifier({
