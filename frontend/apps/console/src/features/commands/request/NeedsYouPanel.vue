@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { ApButton, ApCallout, ApListRow, ApPanel } from "@/ui";
 import { needsYouCards } from "../groups/needsYou.ts";
 import type { VerifierSeries } from "../groups/series.ts";
-import type { Group } from "../groups/show.ts";
+import type { Group, GroupTarget } from "../groups/show.ts";
 
 /**
  * N · Needs you (CommandFlow C3): one card per target a human has to look at, with what happened
@@ -12,6 +12,7 @@ import type { Group } from "../groups/show.ts";
  * narrowed to those targets, through the normal GO. A released request with nothing to do says so.
  */
 const props = defineProps<{ group: Group; series: VerifierSeries | null }>();
+defineEmits<{ history: [target: GroupTarget] }>();
 const cards = computed(() => needsYouCards(props.group, props.series));
 const resendable = computed(() => cards.value.filter((c) => c.resend));
 const resend = (ids: readonly string[]): RouteLocationRaw => ({
@@ -53,6 +54,14 @@ const resend = (ids: readonly string[]): RouteLocationRaw => ({
               variant="secondary"
               :to="resend([c.target.spacecraft_id])"
               >Re-send</ApButton
+            >
+            <ApButton
+              size="compact"
+              variant="ghost"
+              aria-haspopup="dialog"
+              :aria-label="`History of ${c.target.name ?? 'this target'}`"
+              @click="$emit('history', c.target)"
+              >History</ApButton
             >
             <ApButton
               v-if="c.target.scid !== null"

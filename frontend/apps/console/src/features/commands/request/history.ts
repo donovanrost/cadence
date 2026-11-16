@@ -16,8 +16,21 @@ const attempt = d.object({
     "canceled",
   ] as const),
   uncertain: d.boolean,
-  // free-text: the release path's own failure words, shown as said.
+  // free-text: an internal term (api); Technical details only, never worded.
   failure_reason: d.nullable(d.string),
+  /** api's follow-up: why it failed, as a kind and the leading code; optional until it ships. */
+  failure: d.optional(
+    d.nullable(
+      d.object({
+        kind: d.knownText(["refused", "resolved", "uncertain"] as const),
+        // free-text: refused = the release-stop vocabulary; resolved / uncertain codes vary.
+        code: d.nullable(d.string),
+        /** For a resolution: who and when (asked of api; optional until it ships). */
+        by: d.optional(d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }))),
+        at: d.optional(d.nullable(d.timestamp)),
+      }),
+    ),
+  ),
   contact: d.nullable(d.object({ id: d.token, label: d.string })),
   path_id: d.nullable(d.token),
   transport_binding_id: d.nullable(d.token),
@@ -45,7 +58,9 @@ const transportEvidence = d.object({
   record_id: d.token,
   // free-text: the action or event kind as the transport records it.
   action: d.string,
-  signal_phase: d.nullable(d.knownText(["acceptance", "start", "completion", "custom"] as const)),
+  signal_phase: d.nullable(
+    d.knownText(["acceptance", "start", "completion", "failure", "custom"] as const),
+  ),
   at: d.timestamp,
   recorded_at: d.nullable(d.timestamp),
 });

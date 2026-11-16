@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import {
   formatClock,
   ApButton,
@@ -33,6 +33,7 @@ import NeedsYouPanel from "./NeedsYouPanel.vue";
 import TargetMatrix from "./TargetMatrix.vue";
 import { useFleet } from "@/features/fleet/index.ts";
 import VerifierPanel from "./VerifierPanel.vue";
+import HistorySheet from "./HistorySheet.vue";
 import { abortable, pipeline } from "./uplink.ts";
 import { useVerifierSeries } from "./useVerifierSeries.ts";
 
@@ -64,6 +65,8 @@ const events = computed(() =>
 );
 const decisionNote = computed(() => props.group.decision?.note ?? null);
 const pos = (n: number) => String(n + 1).padStart(2, "0");
+/** ux U70: a target's History sheet, opened from its line and its N card. */
+const history = ref<InstanceType<typeof HistorySheet> | null>(null);
 /** U33: the group's pass is blocked; the same line as the list, with expiry, above the trail. */
 const stations = useStationCodes(computed(() => props.missionId));
 const blocked = computed(() =>
@@ -158,7 +161,7 @@ const release = computed(() =>
         :state="t.value ? t.state : undefined"
       />
     </ApStatStrip>
-    <NeedsYouPanel :group="group" :series="series.ready.value" />
+    <NeedsYouPanel :group="group" :series="series.ready.value" @history="(t) => history?.open(t)" />
     <VerifierPanel
       :series="series"
       :mission-id="missionId"
@@ -171,7 +174,7 @@ const release = computed(() =>
         <li
           v-for="t in group.targets"
           :key="t.spacecraft_id"
-          class="grid grid-cols-[14px_200px_minmax(0,1fr)_auto] items-baseline gap-3 border-t border-hairline-faint px-4 py-2 first:border-t-0"
+          class="grid grid-cols-[14px_200px_minmax(0,1fr)_auto_auto] items-baseline gap-3 border-t border-hairline-faint px-4 py-2 first:border-t-0"
         >
           <ApStatusMark :state="STAGE_STATE[t.stage]" class="self-center" />
           <span class="font-mono text-md text-readout"
@@ -193,21 +196,30 @@ const release = computed(() =>
             >
           </span>
           <ApTag :state="STAGE_STATE[t.stage]" :label="memberStageWord(t.stage, group.state)" />
+          <ApButton
+            size="compact"
+            variant="ghost"
+            aria-haspopup="dialog"
+            :aria-label="`History of ${t.name ?? 'this target'}`"
+            @click="history?.open(t)"
+            >History</ApButton
+          >
           <!-- ux C2: a target with its own values shows them on its command line. -->
           <p
             v-for="o in ownOf(t)"
             :key="o.position"
-            class="col-span-3 col-start-2 m-0 flex flex-wrap items-center gap-2 font-mono text-sm text-text-2"
+            class="col-span-4 col-start-2 m-0 flex flex-wrap items-center gap-2 font-mono text-sm text-text-2"
           >
             {{ pos(o.position) }} {{ o.name }} {{ o.values }}
             <ApTag state="neutral" label="Own values" />
           </p>
-          <p v-if="refusalOf(t)" class="col-span-3 col-start-2 m-0 text-sm text-caution-text">
+          <p v-if="refusalOf(t)" class="col-span-4 col-start-2 m-0 text-sm text-caution-text">
             {{ refusalOf(t) }}
           </p>
         </li>
       </ul>
     </ApPanel>
+    <HistorySheet ref="history" :group="group" :mission-id="missionId" />
     <ApPanel index="U3" title="Request log" flush>
       <ol class="m-0 list-none p-0">
         <ApEventLine
