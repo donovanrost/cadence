@@ -115,6 +115,37 @@ defmodule Cadence.Catalog.MissionModel.Target do
     end
   end
 
+  # A state whose value isn't an integer, or two states for one value, would make decom read the
+  # raw value as an undefined state with nothing at compile time saying why (api-ops, 11-15).
+  defp legalize(%Declaration{kind: :parameter_type} = declaration, :telemetry) do
+    states = List.wrap(value(declaration.definition, :enumerations))
+    values = for state <- states, do: value(state, :value)
+
+    invalid =
+      for state <- states, not is_integer(value(state, :value)), do: value(state, :label)
+
+    duplicated =
+      values
+      |> Enum.filter(&is_integer/1)
+      |> Enum.frequencies()
+      |> Enum.filter(&(elem(&1, 1) > 1))
+
+    Enum.map(invalid, fn label ->
+      enumeration_warning(
+        declaration,
+        "MM_ENUMERATION_VALUE_INVALID",
+        "state #{inspect(label)} of #{declaration.name} has no integer value, so it never matches"
+      )
+    end) ++
+      Enum.map(duplicated, fn {state_value, _count} ->
+        enumeration_warning(
+          declaration,
+          "MM_ENUMERATION_VALUE_DUPLICATE",
+          "#{declaration.name} names value #{state_value} more than once; the first label wins"
+        )
+      end)
+  end
+
   defp legalize(%Declaration{kind: :container} = declaration, :telemetry) do
     if is_integer(value(declaration.definition, :apid)) and
          is_list(value(declaration.definition, :entries)) do
@@ -252,6 +283,19 @@ defmodule Cadence.Catalog.MissionModel.Target do
 
   defp stringify_keys(map) when is_map(map) do
     Map.new(map, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  defp enumeration_warning(declaration, code, message) do
+    Diagnostic.new(%{
+      code: code,
+      severity: :warning,
+      stage: :legalization,
+      target: :telemetry,
+      semantic_id: declaration.semantic_id,
+      support: :lossy,
+      message: message,
+      provenance: declaration.provenance
+    })
   end
 
   defp unsupported(declaration, target, code) do
