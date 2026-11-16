@@ -114,7 +114,7 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
         ingested_at: context.recorded_at || DateTime.utc_now(),
         revision: revision,
         supersedes_observation_id: Keyword.get(opts, :supersedes_observation_id),
-        provenance: sample.provenance,
+        provenance: stored_provenance(sample.provenance),
         metadata: Map.merge(context.metadata, Keyword.get(opts, :metadata, %{}))
       }
 
@@ -288,6 +288,13 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelope do
     |> :crypto.hash(:erlang.term_to_binary(parts))
     |> Base.url_encode64(padding: false)
   end
+
+  # A sample read back from storage carries the reader's "storage" bookkeeping (its row's
+  # identity, realm, source, validity), built from that row's columns. It describes the OLD row, so
+  # a write-back (backfill, late data) must not store it as the new row's provenance; the new row's
+  # own columns hold its storage facts.
+  defp stored_provenance(%{} = provenance), do: Map.drop(provenance, ["storage", :storage])
+  defp stored_provenance(provenance), do: provenance
 
   defp enriched_provenance(%__MODULE__{} = envelope) do
     Map.put(envelope.provenance || %{}, "storage", %{
