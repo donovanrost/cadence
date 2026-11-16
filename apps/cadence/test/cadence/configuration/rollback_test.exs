@@ -6,8 +6,8 @@ defmodule Cadence.Configuration.RollbackTest do
 
   alias Cadence.Comms.GroundStationStore
   alias Cadence.Configuration.Ledger
-  alias Cadence.SpacecraftStore
   alias Cadence.Control.{Configuration, ConfigurationRollback}
+  alias Cadence.SpacecraftStore
 
   setup do
     %{organization_id: org, mission_id: mission} = configuration_mission()
