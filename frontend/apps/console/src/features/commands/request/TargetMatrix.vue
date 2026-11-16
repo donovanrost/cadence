@@ -3,8 +3,8 @@ import { computed } from "vue";
 import { targetVerifyTime } from "../groups/verifyTimes.ts";
 import { layoutMatrix, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { Group } from "../groups/show.ts";
-import { LOOK_OF, LOOK_WORDS, legendLooks, type CellLook } from "../groups/matrix.ts";
-import { memberStageWord } from "../groups/words.ts";
+import { LOOK_WORDS, legendLooks, targetLook, type CellLook } from "../groups/matrix.ts";
+import { targetStageWord } from "../groups/expiry.ts";
 
 /**
  * U1 Targets matrix (CommandFlow C3): one cell per target in plane rows (by slot), its stage as a
@@ -27,17 +27,26 @@ const CLASS: Readonly<Record<CellLook, string>> = {
   no_ack: "bg-caution",
   failed: "bg-crit ring-1 ring-crit ring-offset-1 ring-offset-panel",
   excluded: "border border-dashed border-text-4",
+  expired: "border border-dashed border-text-3",
   unverifiable: "border border-stale bg-stale-deep",
 };
+const targetOf = computed(() => new Map(props.group.targets.map((t) => [t.spacecraft_id, t])));
 const lookOf = (sc: FleetSpacecraft | null) => {
-  const stage = sc ? stageOf.value.get(sc.id) : undefined;
-  return stage ? LOOK_OF[stage] : null;
+  const t = sc ? targetOf.value.get(sc.id) : undefined;
+  return t ? targetLook(t) : null;
 };
-const legend = computed(() => legendLooks(props.group.targets.map((t) => t.stage)));
+const legend = computed(() => legendLooks(props.group.targets));
+/** The cell's title: name · stage (an expired one reads 'Expired') · verify time. */
+const titleOf = (sc: FleetSpacecraft) => {
+  const t = targetOf.value.get(sc.id);
+  return [sc.name, t ? targetStageWord(t, props.group) : null, targetVerifyTime(t)]
+    .filter(Boolean)
+    .join(" · ");
+};
 const summary = computed(() =>
   legend.value
     .map((l) => {
-      const n = props.group.targets.filter((t) => LOOK_OF[t.stage] === l).length;
+      const n = props.group.targets.filter((t) => targetLook(t) === l).length;
       return `${n} ${LOOK_WORDS[l].toLowerCase()}`;
     })
     .join(", "),
@@ -56,17 +65,7 @@ const summary = computed(() =>
             :key="sc?.id ?? `empty-${i}`"
             class="size-3 flex-none"
             :class="lookOf(sc) ? CLASS[lookOf(sc) ?? 'queued'] : 'bg-cell-empty'"
-            :title="
-              sc
-                ? [
-                    sc.name,
-                    memberStageWord(stageOf.get(sc.id) ?? 'queued_for_contact', group.state),
-                    targetVerifyTime(group.targets.find((t) => t.spacecraft_id === sc.id)),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')
-                : undefined
-            "
+            :title="sc ? titleOf(sc) : undefined"
           />
         </span>
       </div>

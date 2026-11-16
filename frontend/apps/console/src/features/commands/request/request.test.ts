@@ -625,11 +625,12 @@ describe("A1 value changes (brief)", () => {
 describe("U1 targets matrix looks (CommandFlow C3)", () => {
   it("maps stages to looks and lists only the looks present, in pipeline order", () => {
     expect(LOOK_OF.indeterminate).toBe("no_ack");
-    expect(legendLooks(["verified", "verify_failed", "queued_for_contact", "verified"])).toEqual([
-      "queued",
-      "verified",
-      "failed",
-    ]);
+    const base = groupOf().targets[0];
+    if (!base) throw new Error("fixture");
+    const t = (stage: typeof base.stage) => ({ ...base, stage, members: [] });
+    expect(
+      legendLooks([t("verified"), t("verify_failed"), t("queued_for_contact"), t("verified")]),
+    ).toEqual(["queued", "verified", "failed"]);
   });
 });
 

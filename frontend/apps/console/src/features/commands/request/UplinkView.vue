@@ -37,6 +37,7 @@ import HistorySheet from "./HistorySheet.vue";
 import { abortable, pipeline } from "./uplink.ts";
 import { useVerifierSeries } from "./useVerifierSeries.ts";
 import { targetVerifyTime } from "../groups/verifyTimes.ts";
+import { expirySummary, targetStageWord } from "../groups/expiry.ts";
 
 /**
  * C3 · Uplink & verify v1: pipeline tiles, each target's trail, the request log, and Abort
@@ -152,6 +153,8 @@ const release = computed(() =>
     />
     <!-- CommandFlow C3: Abort sits up top (header area), never below a long target list. -->
     <AbortPanel v-if="canAbort && abortable(group)" :group="group" @done="$emit('changed')" />
+    <!-- ux U75: the request expired; its unsent uplinks all expired together. -->
+    <p v-if="expirySummary(group)" class="m-0 text-md text-text-2">{{ expirySummary(group) }}</p>
     <ApStatStrip :columns="tiles.length" label="Uplink pipeline">
       <ApStatTile
         v-for="t in tiles"
@@ -196,7 +199,7 @@ const release = computed(() =>
               }}&ensp;</template
             >
           </span>
-          <ApTag :state="STAGE_STATE[t.stage]" :label="memberStageWord(t.stage, group.state)" />
+          <ApTag :state="STAGE_STATE[t.stage]" :label="targetStageWord(t, group)" />
           <ApButton
             size="compact"
             variant="ghost"

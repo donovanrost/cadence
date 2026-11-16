@@ -3,6 +3,7 @@ import type { RouteLocationRaw } from "vue-router";
 import { computed } from "vue";
 import { ApButton, ApCallout, ApListRow, ApPanel } from "@/ui";
 import { needsYouCards } from "../groups/needsYou.ts";
+import { expiryCounts, expirySummary } from "../groups/expiry.ts";
 import type { VerifierSeries } from "../groups/series.ts";
 import type { Group, GroupTarget } from "../groups/show.ts";
 
@@ -15,6 +16,14 @@ const props = defineProps<{ group: Group; series: VerifierSeries | null }>();
 defineEmits<{ history: [target: GroupTarget] }>();
 const cards = computed(() => needsYouCards(props.group, props.series));
 const resendable = computed(() => cards.value.filter((c) => c.resend));
+/** ux U75: one card per request when it expired part-way (none sent: no card). */
+const expired = computed(() =>
+  expiryCounts(props.group).sent > 0 ? expirySummary(props.group) : null,
+);
+const editAndResend: RouteLocationRaw = {
+  name: "ops.commands.new",
+  query: { from: `group:${props.group.id}` },
+};
 const resend = (ids: readonly string[]): RouteLocationRaw => ({
   name: "ops.commands.new",
   query: { from: `group:${props.group.id}`, only: ids.join(",") },
@@ -23,10 +32,12 @@ const resend = (ids: readonly string[]): RouteLocationRaw => ({
 
 <template>
   <ApPanel
-    v-if="cards.length"
+    v-if="cards.length || expired"
     index="N"
     title="Needs you"
-    :meta="`${cards.length} ${cards.length === 1 ? 'target' : 'targets'}`"
+    :meta="
+      cards.length ? `${cards.length} ${cards.length === 1 ? 'target' : 'targets'}` : 'request'
+    "
     flush
   >
     <template v-if="resendable.length > 1" #meta>
@@ -38,6 +49,13 @@ const resend = (ids: readonly string[]): RouteLocationRaw => ({
       >
     </template>
     <ul class="m-0 list-none p-0">
+      <ApListRow v-if="expired" state="off" title="Request expired" :sentence="expired">
+        <template #action>
+          <ApButton size="compact" variant="secondary" :to="editAndResend"
+            >Edit and resend</ApButton
+          >
+        </template>
+      </ApListRow>
       <ApListRow
         v-for="c in cards"
         :key="c.target.spacecraft_id"

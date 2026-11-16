@@ -1,5 +1,7 @@
 import type { MemberStage } from "./api.ts";
 import { STAGE_WORDS } from "./words.ts";
+import { targetExpired } from "./expiry.ts";
+import type { GroupTarget } from "./show.ts";
 
 /**
  * U1 Targets matrix cell looks (CommandFlow C3): verified nominal-dim, executed text-3 fill,
@@ -14,6 +16,7 @@ export type CellLook =
   | "no_ack"
   | "failed"
   | "excluded"
+  | "expired"
   | "unverifiable";
 
 export const LOOK_OF: Readonly<Record<MemberStage, CellLook>> = {
@@ -39,6 +42,7 @@ export const LOOK_WORDS: Readonly<Record<CellLook, string>> = {
   no_ack: "No ACK",
   failed: "Failed",
   excluded: "Excluded or canceled",
+  expired: "Expired",
   unverifiable: "Not verifiable",
 };
 
@@ -51,9 +55,14 @@ const ORDER: readonly CellLook[] = [
   "unverifiable",
   "no_ack",
   "failed",
+  "expired",
   "excluded",
 ];
-export const legendLooks = (stages: readonly MemberStage[]): CellLook[] => {
-  const present = new Set(stages.map((s) => LOOK_OF[s]));
+/** ux U75: an expired target has its own look (dashed, off); else its stage's look. */
+export const targetLook = (t: GroupTarget): CellLook =>
+  targetExpired(t) ? "expired" : LOOK_OF[t.stage];
+
+export const legendLooks = (targets: readonly GroupTarget[]): CellLook[] => {
+  const present = new Set(targets.map(targetLook));
   return ORDER.filter((l) => present.has(l));
 };
