@@ -146,6 +146,33 @@ showed):
 - `audit`: newest first, 25 per page; `?audit_cursor=<next_cursor>`. A cursor not on this
   reservation → `422 invalid_params` (`details.audit_cursor`). `404 pass_not_found`.
 
+### `GET /api/console/v1/missions/:mission_id/contacts/:contact_id/record` (L14 / A13, owner: api)
+
+A contact's record for the drawer's Technical details (what the legacy contact record showed).
+`contact_id` is a scheduled OR a realized contact id; both sides of the pair come back.
+
+```json
+{"data": {"subject": {"id", "kind": "scheduled" | "realized"},
+ "scheduled": {"id", "current_revision", "lifecycle_state", "starts_at", "ends_at", "realized_id",
+   "provider_contact_ref"} | null,
+ "realized": {"id", "scheduled_id", "lifecycle_state", "clock_mode", "realized_at", "initial_time"} | null,
+ "paths": [{"side": "scheduled" | "realized", "id", "direction", "selection", "source_endpoint_ref",
+   "provider_bindings": [{"id", "adapter_key"}], "transport_bindings": [{"id", "family_key", "target_scope"}]}],
+ "sources": [{"id", "side": "reviewed_schedule" | "realized"}],
+ "intents": [{"id", "side": "current_schedule" | "realized"}],
+ "revisions": {"entries": [{"revision", "created_at", "created_by": {"kind", "id", "name"} | null,
+   "provider_change_id", "starts_at", "ends_at", "lifecycle_state"}], "next_cursor": null},
+ "truncated": false}}
+```
+
+- `revisions`: the schedule history, newest first, 25 per page; `?revisions_cursor=<next_cursor>`.
+  Each carries its window and state, so "Review current revision" is picking one (the first is
+  current). `created_by` is a person, `{kind: "system", name: "Cadence"}`, or `{kind: null, id}`.
+- Provider bindings name their `adapter_key` (they have no family key); transport bindings their
+  `family_key` and `target_scope`. State and key words are the store's (shown as said).
+- Caps: 100 paths, 200 sources, 200 intents, then `truncated: true`. `404 contact_not_found`;
+  a bad cursor → `422 invalid_params` (`details.revisions_cursor`).
+
 ### Provider changes (§11 L14): the `provider_change` attention source
 
 A provider changed a booked pass (`ProviderReservationChange`) and someone must decide. One item

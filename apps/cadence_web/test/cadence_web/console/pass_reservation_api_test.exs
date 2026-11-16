@@ -1,5 +1,5 @@
 defmodule CadenceWeb.Console.PassReservationAPITest do
-  @moduledoc "L14 / A11: the route answers in the console envelope (the read's own test covers rows)."
+  @moduledoc "L14 / A11 + A13: the routes answer in the console envelope (the reads' tests cover rows)."
   use CadenceWeb.ConnCase, async: false
 
   alias CadenceWeb.TestFixtures
@@ -17,5 +17,13 @@ defmodule CadenceWeb.Console.PassReservationAPITest do
       |> json_response(404)
 
     assert body["error"]["code"] == "pass_not_found"
+
+    body =
+      user
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/missions/#{mission.mission_id}/contacts/nope/record")
+      |> json_response(404)
+
+    assert body["error"]["code"] == "contact_not_found"
   end
 end
