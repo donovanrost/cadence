@@ -203,19 +203,6 @@ export function byPoint(episodes: readonly Episode[]): PointCount[] {
     .sort((a, b) => b.count - a.count || b.critical - a.critical || a.name.localeCompare(b.name));
 }
 
-/** The episodes read returns at most this many (alarms/episodes.ts). */
-export const EPISODES_LIMIT = 200;
-/**
- * When the read came back full, say so instead of cutting silently. On the active list the summary
- * knows the true count.
- */
-export function episodesCapNote(shown: number, active: number | null): string | null {
-  if (shown < EPISODES_LIMIT) return null;
-  return active !== null && active > shown
-    ? `Showing ${shown} of ${active} active alarms. Filter by point to see the rest.`
-    : `Showing ${EPISODES_LIMIT} alarms, the most one read returns.`;
-}
-
 /** ux U71 A12: what happened, as a clause: 'a new alarm on X', '… became critical', 'eased to caution'. */
 function changeClause(kind: Readonly<{ unrecognized: string }> | string, on: string): string {
   if (kind === "raised") return `a new alarm ${on}`;

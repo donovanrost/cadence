@@ -6,6 +6,7 @@ import {
   actor as sharedActor,
   decoders as d,
   request,
+  requestPage,
   type ApiError,
   type ApiResult,
   type Decoded,
@@ -122,6 +123,18 @@ export function fetchEpisodes(
     episodesReader,
     signal ? { signal } : {},
   );
+}
+
+/** A6d (api 23c06033f): one page of episodes in the server's order, with its next cursor. */
+export function fetchEpisodePage(
+  missionId: MissionId,
+  state: "active" | "cleared",
+  cursor: string | null,
+  limit = 200,
+) {
+  const params = new URLSearchParams({ state, limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return requestPage(`${base(missionId)}?${params.toString()}`, episodesReader);
 }
 
 export function fetchEpisode(missionId: MissionId, episodeId: string, signal?: AbortSignal) {

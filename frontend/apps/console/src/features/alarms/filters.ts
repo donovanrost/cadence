@@ -1,5 +1,4 @@
 import type { LocationQuery } from "vue-router";
-import { EPISODES_LIMIT } from "./list.ts";
 import type { Episode } from "./episodes.ts";
 
 /**
@@ -64,8 +63,11 @@ export function filteredEmpty(f: EpisodeFilters, nameOf: (id: string) => string)
   return `No ${sev}alarms${on}.`;
 }
 
-/** 'N of M shown' where the table starts; a capped read says the count covers only that read. */
-export function shownLine(shown: number, total: number, read: number): string {
+/**
+ * 'N of M shown' where the table starts; while more pages remain, the count covers only what's
+ * loaded ('· from the 400 loaded', ux U72), and it grows with Load more.
+ */
+export function shownLine(shown: number, total: number, loaded: number, more: boolean): string {
   const line = `${shown} of ${total} shown`;
-  return read >= EPISODES_LIMIT ? `${line} · from the ${EPISODES_LIMIT} loaded` : line;
+  return more ? `${line} · from the ${loaded} loaded` : line;
 }

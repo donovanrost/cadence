@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import {
@@ -26,7 +26,6 @@ import {
   lastClearedLine,
   tabCounts,
   type AlarmTab,
-  episodesCapNote,
 } from "./list.ts";
 import { useActiveEpisodes, useClearedEpisodes } from "./useAlarms.ts";
 import AlarmFilters from "./AlarmFilters.vue";
@@ -134,12 +133,21 @@ const scOptions = (episodes: Episodes) =>
 const options = computed(() =>
   shown.value.status === "ready" ? scOptions(shown.value.value.episodes) : [],
 );
-const shownOf = (episodes: Episodes) =>
+const shownOf = (episodes: Episodes, more: boolean) =>
   shownLine(
     tabRows(episodes.filter((e) => matches(e, filters.value))).length,
     tabRows(episodes).length,
     episodes.length,
+    more,
   );
+/** ux U72: Load more appends the next page; focus goes to the first new row's link. */
+const list = ref<HTMLElement | null>(null);
+async function loadMore() {
+  const before = list.value?.querySelectorAll("tbody tr").length ?? 0;
+  await (tab.value === "cleared" ? cleared : active).more();
+  await nextTick();
+  list.value?.querySelectorAll("tbody tr")[before]?.querySelector<HTMLElement>("a")?.focus();
+}
 /** ux U69 A6: the header's newest change, mission-wide (filters don't change it). */
 const lastChange = computed(() =>
   active.state.value.status === "ready"
@@ -242,26 +250,23 @@ const empty = computed(() =>
                 v-if="filtered(filters)"
                 class="m-0 border-b border-hairline px-4 py-2 font-mono text-xs text-text-3 uppercase"
               >
-                {{ shownOf(value.episodes) }}
+                {{ shownOf(value.episodes, value.next !== null) }}
               </p>
-              <AlarmTable class="max-md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
+              <div ref="list">
+                <AlarmTable class="max-md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
+              </div>
               <AlarmRowList class="md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
-              <p
-                v-if="
-                  episodesCapNote(
-                    value.episodes.length,
-                    tab === 'new' ? value.summary.active : null,
-                  )
-                "
-                class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3"
-              >
-                {{
-                  episodesCapNote(
-                    value.episodes.length,
-                    tab === "new" ? value.summary.active : null,
-                  )
-                }}
-              </p>
+              <!-- ux U72: Load more only while there's a next page (A6d cursor). -->
+              <div v-if="value.next" class="border-t border-hairline px-4 py-2">
+                <ApButton
+                  size="compact"
+                  variant="secondary"
+                  :disabled="(tab === 'cleared' ? cleared : active).busy.value"
+                  disabled-reason="Loading…"
+                  @click="loadMore"
+                  >Load more</ApButton
+                >
+              </div>
             </template>
           </template>
         </ApRemote>
