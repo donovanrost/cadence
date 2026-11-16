@@ -1950,3 +1950,38 @@ Investigate (`?alarm=`):
   - Alarms' cap note gives way to it, and "· from the N loaded" stays true as N grows.
 - **Rows that move between pages** (api's caveat): dedupe by id, silently. A live change reloads from the first
   page up to the number already shown, so a row skipped while it moved comes back by itself. No words for it.
+
+### U73 · A plan's history: versions and every decision round (§11c(C) A10; api 7a83a958b) (fe-ops / fe-setup)
+Versions read `R3`, as the plan header already does (`Contact plan · R41 draft`).
+
+**Where it lives:**
+- `History` in the plan takeover's header opens a wide sheet, "Contact plan for 11-14 · history". This keeps K1's
+  Gantt layout untouched.
+- The state panel's latest-decision line links to the same sheet ("All decisions").
+- The sheet is one list, **newest first**, with version rows and decision rows in time order. A17's run history
+  joins this list later.
+
+**Version row:** "R3 · drafted by Maya T. at 11-13 02:44Z".
+- When Cadence drafted it (a re-plan or the planner): "R3 · drafted by Cadence at 02:44Z". A service identity shows
+  its display name.
+- A `text-3` line: "1,512 selected · 36 locked · 4 rejected". The rationale follows as a quote, when there is one.
+- Tags: `CURRENT` on the current version; its decision as a word tag (`APPROVED` or `SENT BACK`); nothing for none.
+- `View R3` opens `?version=3`. There's no link on the current version.
+
+**Decision rows** (actor and time together, U29):
+- submitted: "Submitted R3 for approval by Maya T. at 02:46Z", with the note quoted.
+  - A resubmit without changes: "Resubmitted R3 unchanged by Maya T. at 03:01Z".
+  - With acknowledgements: "· 6 gaps accepted" and a `Show` that lists each gap with its reason (ScheduleFlow's
+    accepted-gap words).
+- approved: "Approved R3 by Ana R. at 03:10Z", with the note quoted.
+  - With exceptions: "· 2 exceptions" and a `Show` that lists them.
+  - Automatic: "Approved R3 automatically under the policy “Nightly approval” v2 at 03:10Z". The policy is the
+    actor; with no policy name, "under an automation policy".
+- rejected: "Sent back R2 by Ana R. at 02:58Z: “Svalbard is down tonight, re-draft without SVB.”" (the console's
+  word for reject).
+
+**An old version** (`?version=N`, read-only, all actions hidden): an info callout at the top, worded by that
+version's decision:
+- Sent back: "You're looking at R2, sent back 11-13 02:58Z. The current version is R4." + `Review current version`.
+- Approved, then replaced: "…R2, approved 11-13 03:10Z and since replaced by R4."
+- No decision: "…R2, never submitted."
