@@ -27,6 +27,12 @@ const rows = computed(() => (all.value ? props.overrides : props.overrides.slice
 <template>
   <div class="flex flex-col gap-1">
     <table class="w-full border-collapse font-mono text-sm">
+      <!-- a11y checklist C (Approve): the table names its command. -->
+      <caption class="sr-only">
+        {{
+          `Values per target for ${command.name ?? "this command"}`
+        }}
+      </caption>
       <thead>
         <tr class="text-left text-xs text-text-3 uppercase">
           <th class="py-1 pr-3 font-normal">Target</th>
