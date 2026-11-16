@@ -1831,20 +1831,25 @@ differs from what was entered.
 
 ### U70 · A target's command history: release attempts and verifier evidence (§11c(C) A3, A4b/c; api 45563ffe8) (fe-ops)
 **Where:** a `History` button opens a sheet titled `EARENDIL-007 · history`.
-- The button sits on the target's N card, in its selected-target detail (U1 cells are a matrix, not rows) and on
-  the request page's target line.
+- The button sits on the target's N card and on each target line. U1's cells have no selection (fe-ops).
 - It's a dialog trigger (`aria-haspopup="dialog"`), not a disclosure, so it has no `aria-expanded`.
 - In the sheet, one block per command, in stack order, headed by the command's stack line. Each block has two
   lists, `Attempts` and `Verifiers`.
-- Both lists read **oldest first**, as a story. When there are more than 25, `Show N earlier` goes at the top of the
-  list.
+- Both lists read **oldest first**, as a story. Paging follows the server, which gives no totals, so no number:
+  `Show earlier attempts` at the top of Attempts, `Show later verifiers` at the bottom of Verifiers.
 - Every time has seconds, since the shift matters here; the date only when not today.
 
 **Attempts** (state words as in groups/words.ts):
 - "Released at 03:11:58Z during EARENDIL-007 · PUQ 07:20Z pass · 12 bytes" (the contact label as api gives it).
-- "Release failed at 03:02:10Z: <reason in words>". Reuse the existing release-failure words. A code without a word
-  shows its sentence-case code, and fe-ops sends ux the list.
-- "Outcome unclear at 03:05:12Z: Cadence couldn't confirm whether it was sent."
+- Refused: "Release failed at 03:02:10Z: <reason in words>", using the release-stop words ("the command window is
+  closed"). `failure_reason` is internal and goes to Technical details.
+- Uncertain: "Outcome unclear at 03:05:12Z: Cadence couldn't confirm whether it was sent." `timeout` instead ends
+  "…: the send didn't answer in time, so Cadence can't tell whether it went." Any other uncertain code uses the
+  first sentence.
+- Resolved by an operator (U29, actor and time together):
+  - not_sent: "Resolved as not sent by Mira K. at 03:20:05Z."
+  - rejected: "Resolved as rejected by Mira K. at 03:20:05Z."
+  - Without a recorded actor: "Resolved as not sent at 03:20:05Z; who resolved it wasn't recorded."
 
 **Verifiers:**
 - Each row is the verifier's name, then its outcome.
@@ -1856,8 +1861,11 @@ differs from what was entered.
   - Telemetry: "HK.sc_mode = 2, received 03:12:03Z".
     - The raw value appears only when it differs from the engineering one: "= 8.0 °C (raw 412)".
     - Quality appears only when it isn't good: "· quality: suspect", in caution text.
-  - Transport: "<action in words> · <signal phase in words> at 03:11:58Z". fe-ops sends ux the two code lists for
-    words.
+  - Transport: "<action> <phase> at 03:11:58Z", for example "Uplink request accepted at 03:11:58Z".
+    - Actions: uplink_request "Uplink request", provider_request "Provider request", transport_event_handled
+      "Transport event", control_input_handled "Control input", timer_handled "Timer".
+    - Phases: acceptance "accepted", start "started", completion "completed", failure "failed" (crit text), custom
+      "reported". With no phase: "<action> at 03:11:58Z".
   - The evidence record is gone: "The matching record is no longer available." (U20: the outcome stands; only the
     proof is missing).
 - The phase word (`completion`) and severity go to Technical details, unless api says severity changes what an
