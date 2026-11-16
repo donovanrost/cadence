@@ -113,6 +113,55 @@ defmodule Cadence.IngressJournal.Evidence do
     end
   end
 
+  @doc """
+  `raw_evidence` without its leading bytes before the absolute stream offset `offset`: after a
+  restart, the bytes of the resume entry the processing consumer had already decoded (the journal's
+  durable resume point, domain's partial-frame fix 11-15). Unchanged when `offset` isn't inside it.
+  """
+  @spec drop_before(RawEvidence.t(), non_neg_integer()) :: RawEvidence.t()
+  def drop_before(%RawEvidence{metadata: metadata} = raw_evidence, offset)
+      when is_integer(offset) do
+    start = metadata["journal_start_offset"]
+    finish = metadata["journal_end_offset"]
+
+    if is_integer(start) and is_integer(finish) and offset > start and offset < finish do
+      skip = offset - start
+      <<_done::binary-size(^skip), rest::binary>> = raw_evidence.raw
+
+      %{
+        raw_evidence
+        | evidence_id: Identity.evidence_id(metadata["journal_stream_id"], offset, finish),
+          raw: rest,
+          receipt_times: receipt_times_from(raw_evidence.receipt_times, offset),
+          metadata:
+            metadata
+            |> Map.put("journal_start_offset", offset)
+            |> Map.put("journal_resumed_from", start)
+            |> Map.put(
+              RawEvidence.receipt_times_key(),
+              RawEvidence.encode_receipt_times(
+                receipt_times_from(raw_evidence.receipt_times, offset)
+              )
+            )
+      }
+    else
+      raw_evidence
+    end
+  end
+
+  # The record covering `offset` keeps its time, starting at `offset`; later records unchanged.
+  defp receipt_times_from(times, offset) when is_list(times) do
+    {before, rest} = Enum.split_while(times, fn {start, _time} -> start < offset end)
+
+    case {List.last(before), rest} do
+      {nil, rest} -> rest
+      {{_start, time}, [{^offset, _} | _] = rest} when is_struct(time) -> rest
+      {{_start, time}, rest} -> [{offset, time} | rest]
+    end
+  end
+
+  defp receipt_times_from(times, _offset), do: times
+
   defp receipt_times(entries), do: Enum.map(entries, &{&1.start_offset, &1.receipt_time})
 
   # The contact, path and binding the TCP receiver journals at the entry's top level, as the

@@ -629,8 +629,15 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       send(producer_pid, {:ingress_persistence_completed, self(), count})
     end)
 
-    Enum.each(batch.completions, fn {subscriber_pid, ref} ->
-      send(subscriber_pid, {:provider_ingress_persisted, self(), ref})
+    Enum.each(batch.completions, fn
+      {subscriber_pid, ref, resume_offset} ->
+        send(
+          subscriber_pid,
+          {:provider_ingress_persisted, self(), ref, %{resume_offset: resume_offset}}
+        )
+
+      {subscriber_pid, ref} ->
+        send(subscriber_pid, {:provider_ingress_persisted, self(), ref})
     end)
   end
 

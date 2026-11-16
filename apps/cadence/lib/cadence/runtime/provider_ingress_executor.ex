@@ -1052,10 +1052,19 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       enqueued_at: System.monotonic_time(),
       processing_results: Enum.map(entries, &elem(&1, 0)),
       trace_contexts: Enum.map(entries, &elem(&1, 1)),
-      completions: entries |> Enum.map(&elem(&1, 2)) |> Enum.reject(&is_nil/1),
+      # Each journal completion carries where its stream may durably resume (the partition's
+      # resume_offset; nil when it has none), for the processing consumer's ack.
+      completions:
+        for(
+          {result, _span, {pid, ref}} <- entries,
+          do: {pid, ref, resume_offset(result)}
+        ),
       producer_receipts: [{self(), length(entries)}]
     })
   end
+
+  defp resume_offset(%{resume_offset: offset}) when is_integer(offset), do: offset
+  defp resume_offset(_result), do: nil
 
   defp enqueue_persistence_batch(state, %ProcessedIngressBatch{} = batch) do
     with {:ok, next_state} <- ensure_persistence_projector(state),

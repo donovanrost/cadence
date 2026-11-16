@@ -113,7 +113,11 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       max_delivered_batch_bytes: 0,
       failed_count: 0,
       last_completed_at: nil,
-      last_error: nil
+      last_error: nil,
+      # The journal's durable resume point when it lies inside the first entry read after a start
+      # (bytes already decoded before a restart; dropped once), then nil.
+      resume_slice: :unread,
+      incomplete_at_end_bytes: 0
     }
 
     send(self(), :consume)
@@ -219,6 +223,19 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   def handle_info({:retry, _stale_ref}, state), do: {:noreply, state}
 
   def handle_info(
+        {:provider_ingress_persisted, _projector_pid, ref, %{resume_offset: resume}},
+        %{in_flight: %{ref: ref, phase: :processing} = batch} = state
+      ) do
+    acknowledge_batch(%{
+      state
+      | in_flight: Map.merge(batch, %{phase: :acknowledge, resume: resume})
+    })
+  end
+
+  def handle_info({:provider_ingress_persisted, _projector_pid, _stale_ref, _resume}, state),
+    do: {:noreply, state}
+
+  def handle_info(
         {:provider_ingress_persisted, _projector_pid, ref},
         %{in_flight: %{ref: ref, phase: :processing} = batch} = state
       ) do
@@ -253,9 +270,10 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       ref: nil
     }
 
-    state = %{state | in_flight: batch}
+    state = %{state | in_flight: batch} |> load_resume_slice()
 
     with {:ok, raw_evidence} <- Evidence.from_contiguous_entries(entries),
+         raw_evidence = slice(raw_evidence, state.resume_slice),
          ref <- make_ref(),
          :ok <-
            ProviderIngressExecutor.enqueue_telemetry(state.executor_name, raw_evidence,
@@ -307,7 +325,14 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   defp acknowledge_batch(%{in_flight: batch} = state) do
-    case FileSystem.acknowledge(state.journal_name, :processing, batch.last.end_offset) do
+    # Acked through the batch's end, durable only to where the stream may resume: the start of a
+    # frame or packet still incomplete (domain's partial-frame fix, 11-15).
+    case FileSystem.acknowledge(
+           state.journal_name,
+           :processing,
+           batch.last.end_offset,
+           resume_offset: resume_within(Map.get(batch, :resume), batch.last.end_offset)
+         ) do
       :ok ->
         send(self(), :consume)
 
@@ -315,6 +340,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
          %{
            state
            | in_flight: nil,
+             resume_slice: nil,
              acknowledged_batches: state.acknowledged_batches + 1,
              acknowledged_entries: state.acknowledged_entries + batch.entry_count,
              acknowledged_bytes: state.acknowledged_bytes + batch.byte_count,
@@ -367,6 +393,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   defp settle_or_schedule(%{lifecycle_status: :quiescing} = state) do
+    state = give_up_incomplete(state)
     settlement = quiescence_settlement(state)
     Enum.each(state.quiesce_waiters, &GenServer.reply(&1, {:ok, settlement}))
 
@@ -389,8 +416,55 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       provider_binding_id: state.provider_binding_id,
       acknowledged_batches: state.acknowledged_batches,
       acknowledged_entries: state.acknowledged_entries,
-      acknowledged_bytes: state.acknowledged_bytes
+      acknowledged_bytes: state.acknowledged_bytes,
+      incomplete_at_end_bytes: state.incomplete_at_end_bytes
     }
+  end
+
+  defp resume_within(resume, end_offset) when is_integer(resume) and resume <= end_offset,
+    do: resume
+
+  defp resume_within(_resume, _end_offset), do: nil
+
+  defp load_resume_slice(%{resume_slice: :unread} = state) do
+    case FileSystem.resume_offset(state.journal_name, :processing) do
+      {:ok, offset} -> %{state | resume_slice: offset}
+      {:error, _reason} -> %{state | resume_slice: nil}
+    end
+  end
+
+  defp load_resume_slice(state), do: state
+
+  defp slice(raw_evidence, offset) when is_integer(offset),
+    do: Evidence.drop_before(raw_evidence, offset)
+
+  defp slice(raw_evidence, nil), do: raw_evidence
+
+  # At the stream's end a frame or packet still incomplete never will be: give it up so the stream
+  # drains (seal and reclaim wait for resume == tail), and count it.
+  defp give_up_incomplete(state) do
+    with {:ok, %{next_offset: tail, resume_points: %{processing: %{resume: resume}}}}
+         when resume < tail <- journal_snapshot(state.journal_name),
+         :ok <- FileSystem.acknowledge(state.journal_name, :processing, tail, resume_offset: tail) do
+      Logger.warning(
+        "Ingress journal processing gave up #{tail - resume} bytes incomplete at end",
+        mission_id: state.mission_id,
+        realized_contact_id: state.realized_contact_id,
+        path_id: state.path_id
+      )
+
+      %{state | incomplete_at_end_bytes: state.incomplete_at_end_bytes + tail - resume}
+    else
+      _complete -> state
+    end
+  end
+
+  defp journal_snapshot(journal) do
+    case FileSystem.snapshot(journal) do
+      {:ok, snapshot} -> {:ok, snapshot}
+      %{} = snapshot -> {:ok, snapshot}
+      other -> other
+    end
   end
 
   defp schedule_consume(interval_ms), do: Process.send_after(self(), :consume, interval_ms)
