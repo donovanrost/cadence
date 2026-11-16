@@ -19,6 +19,7 @@ import MoreMenu from "../viewer/MoreMenu.vue";
 import { fetchPlaylists, type PlaylistSummary } from "./api.ts";
 import DeleteSheet from "./DeleteSheet.vue";
 import PlaylistSheet from "./PlaylistSheet.vue";
+import { refetchKeepingFocus } from "../focus-fallback.ts";
 
 /** Playlists (ux): Name · Dashboards · Dwell · Updated · Present; editor and delete in sheets. */
 const scope = useMissionScope();
@@ -32,6 +33,7 @@ const list = useRemoteQuery(missionId, (id, signal) => fetchPlaylists(id, "", si
 useMissionInvalidation(missionId, ["dashboards"], list.refetch);
 const editor = ref<InstanceType<typeof PlaylistSheet> | null>(null);
 const remover = ref<InstanceType<typeof DeleteSheet> | null>(null);
+const refetchRows = refetchKeepingFocus(() => list.state.value, list.refetch);
 const canEdit = computed(
   () => list.state.value.status === "ready" && list.state.value.value.can_edit,
 );
@@ -106,5 +108,5 @@ function onAction(id: "edit" | "delete", p: PlaylistSummary) {
     </template>
   </ApRemote>
   <PlaylistSheet ref="editor" :mission-id="missionId" @saved="list.refetch" />
-  <DeleteSheet ref="remover" :mission-id="missionId" @deleted="list.refetch" />
+  <DeleteSheet ref="remover" :mission-id="missionId" @deleted="refetchRows" />
 </template>

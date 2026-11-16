@@ -19,6 +19,10 @@ const next = computed(() => {
   const s = Math.ceil(props.remainingMs / 1000);
   return `next in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 });
+/** Read on a step or a pause, not every second of the countdown (a11y B4). */
+const spoken = computed(
+  () => `${props.position} of ${props.total}${props.paused ? ", paused" : ""}`,
+);
 </script>
 
 <template>
@@ -27,11 +31,12 @@ const next = computed(() => {
       <h1 class="m-0 truncate font-display text-xs uppercase tracking-title text-readout">
         Playlist · {{ name }}
       </h1>
-      <span class="font-mono text-text-3" aria-live="polite">
+      <span class="font-mono text-text-3">
         {{ position }} of {{ total }} ·
         <span :class="paused ? 'text-caution-text' : ''">{{ paused ? "PAUSED" : next }}</span>
         <template v-if="skipped"> · {{ skipped }} archived skipped</template>
       </span>
+      <span class="sr-only" aria-live="polite">{{ spoken }}</span>
       <span class="ml-auto flex items-center [&_div]:px-0 [&_div]:text-xs"><CockpitStatus /></span>
       <button
         type="button"

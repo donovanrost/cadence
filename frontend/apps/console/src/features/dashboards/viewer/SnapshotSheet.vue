@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { fieldErrors } from "@/api";
 import { ApButton, ApCallout, ApSegmented, ApSheet, formatShort, useNow } from "@/ui";
@@ -25,6 +25,7 @@ const data = ref<DataVisibility>("with_data");
 const busy = ref(false);
 const failure = ref<string | null>(null);
 const taken = ref<Snapshot | null>(null);
+const done = ref<HTMLElement | null>(null);
 const options = [
   { value: "with_data", label: "With data" },
   { value: "definition_only", label: "Definition only" },
@@ -56,7 +57,13 @@ async function take() {
     },
   });
   busy.value = false;
-  if (r.ok) return void (taken.value = r.value);
+  if (r.ok) {
+    taken.value = r.value;
+    // Take snapshot is gone with the form; its result's link takes focus (a11y A5).
+    await nextTick();
+    done.value?.querySelector("a")?.focus();
+    return;
+  }
   // 422 names `runtime.from` / `runtime.to` / `runtime.spacecraft_id` / `data_visibility`.
   const fields = Object.values(fieldErrors(r.error));
   failure.value =
@@ -66,8 +73,9 @@ defineExpose({ open });
 </script>
 
 <template>
-  <ApSheet ref="sheet" title="Take snapshot">
-    <div v-if="taken" class="flex flex-col gap-3">
+  <!-- Opens on the Data choice, its first field (a11y A1). -->
+  <ApSheet ref="sheet" title="Take snapshot" initial-focus="[role='radio'][tabindex='0']">
+    <div v-if="taken" ref="done" class="flex flex-col gap-3">
       <ApCallout tone="nominal">Snapshot taken. It keeps this window and version.</ApCallout>
       <RouterLink
         :to="{ name: 'ops.dashboards.snapshot', params: { snapshotId: taken.id } }"

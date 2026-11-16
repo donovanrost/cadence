@@ -13,6 +13,7 @@ import { LIVE_PUSH, useDashboardLive } from "../viewer/useDashboardLive.ts";
 import { fetchPlaylist, playlistDeleted } from "./api.ts";
 import PresentLine from "./PresentLine.vue";
 import { usePresent } from "./usePresent.ts";
+import { inDialog } from "../focus-fallback.ts";
 
 /**
  * Present a playlist (ux): a kiosk takeover rotating its dashboards through the viewer's own read
@@ -62,7 +63,9 @@ const shown = computed(() => {
 });
 const connection = useConnection();
 const leave = () => void router.push({ name: "ops.dashboards.playlists" });
+/** From anywhere in the takeover, but not from a sheet it opened (Inspect's Esc closes only it). */
 function onKey(event: KeyboardEvent) {
+  if (inDialog(event)) return;
   if (event.key === "ArrowRight") show.next();
   else if (event.key === "ArrowLeft") show.previous();
   else if (event.key === " ") {

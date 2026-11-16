@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from "vue";
 import CockpitStatus from "./CockpitStatus.vue";
+import { inDialog } from "../focus-fallback.ts";
 
 /**
  * Kiosk (ux): the takeover header collapses to a 24px status line (title · range · health ·
@@ -10,7 +11,8 @@ import CockpitStatus from "./CockpitStatus.vue";
 defineProps<{ title: string; range: string }>();
 const emit = defineEmits<{ exit: [] }>();
 function onKey(event: KeyboardEvent) {
-  if (event.key === "Escape") emit("exit");
+  // Esc in a sheet opened here (Inspect) closes only the sheet.
+  if (event.key === "Escape" && !inDialog(event)) emit("exit");
 }
 onMounted(() => window.addEventListener("keydown", onKey));
 onBeforeUnmount(() => window.removeEventListener("keydown", onKey));

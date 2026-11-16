@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
 import { TakeoverHeader, useMissionScope, useSmallScreen } from "@/shell";
 import { useConnection } from "@/live";
@@ -28,6 +28,7 @@ import CockpitStatus from "./CockpitStatus.vue";
 import { refreshChoices, useDashboardView, type RefreshChoice } from "./useDashboardView.ts";
 import { liveSnapshot } from "../model/live-merge.ts";
 import { LIVE_PUSH, useDashboardLive } from "./useDashboardLive.ts";
+import { refocus } from "../focus-fallback.ts";
 
 /**
  * Dashboard viewer and editor (ux Dashboards.md): a takeover cockpit. The URL owns the runtime
@@ -106,6 +107,24 @@ watch(
 const connection = useConnection();
 /** Kiosk (ux): `?kiosk=1` or ⋯ › Kiosk; the header collapses to a status line. */
 const kiosk = computed(() => one(route.query.kiosk) === "1");
+/**
+ * The header swaps its actions on Edit, Save, Discard and leaving kiosk, taking the focused control
+ * with it (a11y A5): focus lands on the counterpart (Add widget; Edit, else ⋯), as ux asks for
+ * kiosk ('after Esc, focus returns to ⋯ › Kiosk').
+ */
+const headerControl = (selector: string) => document.querySelector<HTMLElement>(selector);
+const viewerMenu = "[data-viewer-menu] [aria-haspopup]";
+watch(
+  [editing, kiosk],
+  async ([on, inKiosk], [wasOn, wasKiosk]) => {
+    await nextTick();
+    if (on && !wasOn) refocus(headerControl("[data-add-widget]"));
+    else if (wasKiosk && !inKiosk) refocus(headerControl(viewerMenu));
+    else if (wasOn && !on)
+      refocus(headerControl("[data-edit-dashboard]") ?? headerControl(viewerMenu));
+  },
+  { flush: "post" },
+);
 const pane = ref<InstanceType<typeof EditorPane> | null>(null);
 const versions = ref<InstanceType<typeof VersionsSheet> | null>(null);
 const copySheet = ref<InstanceType<typeof CopySheet> | null>(null);

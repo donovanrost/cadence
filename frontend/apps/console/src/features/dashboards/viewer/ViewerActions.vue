@@ -55,9 +55,14 @@ const menu = computed(() => [
       @range="emit('range', $event)"
       @refresh="emit('refresh', $event)"
     />
-    <ApButton v-if="canEdit" variant="secondary" size="compact" @click="emit('edit')"
+    <ApButton
+      v-if="canEdit"
+      variant="secondary"
+      size="compact"
+      data-edit-dashboard
+      @click="emit('edit')"
       >Edit</ApButton
     >
-    <MoreMenu :items="menu" @select="emit('menu', $event)" />
+    <MoreMenu :items="menu" data-viewer-menu @select="emit('menu', $event)" />
   </span>
 </template>

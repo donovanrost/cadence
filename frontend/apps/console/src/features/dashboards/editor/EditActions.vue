@@ -18,7 +18,9 @@ function onDiscard() {
       <span class="font-display text-sm uppercase tracking-tag text-caution-text">Editing</span>
       <span class="text-xs text-text-3">Live values paused while editing.</span>
     </span>
-    <ApButton variant="secondary" size="compact" @click="emit('add')">Add widget</ApButton>
+    <ApButton variant="secondary" size="compact" data-add-widget @click="emit('add')"
+      >Add widget</ApButton
+    >
     <ApButton variant="secondary" size="compact" data-add-section @click="emit('addSection')"
       >Add section</ApButton
     >

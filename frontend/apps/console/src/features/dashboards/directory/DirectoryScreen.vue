@@ -10,6 +10,7 @@ import DirectoryToolbar from "./DirectoryToolbar.vue";
 import DuplicateSheet from "./DuplicateSheet.vue";
 import TelemetryTabs from "./TelemetryTabs.vue";
 import { useDirectory } from "./useDirectory.ts";
+import { refetchKeepingFocus } from "../focus-fallback.ts";
 
 /** Ops › Telemetry › Dashboards (ux Dashboards.md): a normal reading page in the shell. */
 const scope = useMissionScope();
@@ -23,6 +24,7 @@ const canEdit = computed(() =>
 const archiveSheet = ref<InstanceType<typeof ArchiveSheet> | null>(null);
 const duplicateSheet = ref<InstanceType<typeof DuplicateSheet> | null>(null);
 const failure = ref<string | null>(null);
+const refetchRows = refetchKeepingFocus(() => listing.state.value, listing.refetch);
 const filtered = computed(
   () =>
     query.value.q !== "" ||
@@ -42,7 +44,7 @@ async function onAction(
     action === "restore"
       ? await unarchive(missionId.value, row.id)
       : await setStarred(missionId.value, row.id, action === "star");
-  if (result.ok) listing.refetch();
+  if (result.ok) refetchRows();
   else
     failure.value = result.error.kind === "unauthenticated" ? "Signed out." : result.error.message;
 }
@@ -114,6 +116,6 @@ async function onAction(
       </p>
     </template>
   </ApRemote>
-  <ArchiveSheet ref="archiveSheet" :mission-id="missionId" @done="listing.refetch" />
+  <ArchiveSheet ref="archiveSheet" :mission-id="missionId" @done="refetchRows" />
   <DuplicateSheet ref="duplicateSheet" :mission-id="missionId" />
 </template>

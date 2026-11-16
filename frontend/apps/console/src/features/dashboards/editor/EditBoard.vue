@@ -5,6 +5,7 @@ import type { WorkspacePlacement } from "../model/snapshot.ts";
 import type { Command, LayoutEdit, Outline, OutlinePlacement, Preview } from "./contracts.ts";
 import EditSection from "./EditSection.vue";
 import EditSectionHead from "./EditSectionHead.vue";
+import { refocus } from "../focus-fallback.ts";
 
 /**
  * The board in edit mode: sections of editable grids over the staged outline and preview. Once a
@@ -62,8 +63,25 @@ watch(
   },
 );
 const onLayout = (layouts: LayoutEdit[]) => emit("stage", { event: "layout", input: { layouts } });
-const onRemove = (p: OutlinePlacement) =>
+/** A removed widget took its focused Remove button: its section's heading, else Add widget (A5). */
+const removedWidget = ref<OutlinePlacement | null>(null);
+function onRemove(p: OutlinePlacement) {
+  removedWidget.value = p;
   emit("stage", { event: "remove_widget", input: { placement_id: p.id } });
+}
+watch(
+  () => outline.value.placements.map((p) => p.id),
+  async (ids) => {
+    const p = removedWidget.value;
+    if (!p || ids.includes(p.id)) return;
+    removedWidget.value = null;
+    await nextTick();
+    const heading = p.section_id
+      ? root.value?.querySelector<HTMLElement>(`[data-section-heading="${p.section_id}"]`)
+      : null;
+    refocus(heading ?? document.querySelector<HTMLElement>("[data-add-widget]"));
+  },
+);
 </script>
 
 <template>

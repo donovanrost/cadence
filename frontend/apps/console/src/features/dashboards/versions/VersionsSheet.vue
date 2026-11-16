@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import ChangeList from "../editor/ChangeList.vue";
 import type { SourceWarning } from "../editor/contracts.ts";
 import JsonDiffView from "./JsonDiffView.vue";
 import VersionRows from "./VersionRows.vue";
 import { useVersions } from "./useVersions.ts";
+import { focusLost, refocus } from "../focus-fallback.ts";
 
 /**
  * ⋯ › Versions (Grafana-style): history, compare any two, restore one as a new current version.
@@ -24,13 +25,35 @@ const json = ref(false);
 const pending = ref<number | null>(null);
 const pair = computed(() => (selected.value.length === 2 ? selected.value : null));
 
-function open() {
+/**
+ * Focus (a11y A1, A5): the first version's checkbox once the list arrives, unless the user has
+ * moved; the confirm's Restore when it opens; back to the row's Restore on Cancel; the new current
+ * version's row after restoring (the confirm is gone).
+ */
+const body = ref<HTMLElement | null>(null);
+const inBody = (selector: string) => body.value?.querySelector<HTMLElement>(selector) ?? null;
+async function open() {
   selected.value = [];
   json.value = false;
   pending.value = null;
   v.comparison.value = null;
-  void v.load();
   sheet.value?.open();
+  await nextTick();
+  const atOpen = document.activeElement;
+  await v.load();
+  await nextTick();
+  if (focusLost() || document.activeElement === atOpen) inBody("input")?.focus();
+}
+async function ask(version: number) {
+  pending.value = version;
+  await nextTick();
+  inBody("[data-confirm-restore]")?.focus();
+}
+async function cancelRestore() {
+  const version = pending.value;
+  pending.value = null;
+  await nextTick();
+  inBody(`[aria-label="Restore v${version}"]`)?.focus();
 }
 function toggle(version: number) {
   selected.value = selected.value.includes(version)
@@ -41,6 +64,8 @@ async function confirmRestore() {
   if (pending.value === null) return;
   const made = await v.restoreVersion(pending.value);
   pending.value = null;
+  await nextTick();
+  refocus(inBody("input"));
   if (made !== null) emit("restored", made.warnings);
 }
 defineExpose({ open });
@@ -48,7 +73,7 @@ defineExpose({ open });
 
 <template>
   <ApSheet ref="sheet" title="Versions" width="wide">
-    <div class="flex flex-col gap-3">
+    <div ref="body" class="flex flex-col gap-3">
       <ApCallout v-if="v.error.value" tone="crit">{{
         v.error.value.kind === "unauthenticated" ? "Signed out." : v.error.value.message
       }}</ApCallout>
@@ -61,10 +86,11 @@ defineExpose({ open });
               variant="primary"
               :disabled="v.busy.value"
               disabled-reason="Restoring…"
+              data-confirm-restore
               @click="confirmRestore"
               >Restore</ApButton
             >
-            <ApButton size="compact" variant="secondary" @click="pending = null">Cancel</ApButton>
+            <ApButton size="compact" variant="secondary" @click="cancelRestore">Cancel</ApButton>
           </span>
         </template>
       </ApCallout>
@@ -74,7 +100,7 @@ defineExpose({ open });
         :selected="selected"
         :can-restore="canRestore"
         @toggle="toggle"
-        @restore="pending = $event"
+        @restore="ask"
       />
       <section v-if="v.comparison.value" class="flex flex-col gap-2">
         <h3 class="m-0 font-display text-xs uppercase tracking-label text-text-4">

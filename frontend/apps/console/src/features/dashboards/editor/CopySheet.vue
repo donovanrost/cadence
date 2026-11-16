@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { ref } from "vue";
+import { nextTick, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ApButton, ApCallout, ApField, ApSheet } from "@/ui";
 import { copy } from "./api.ts";
@@ -39,8 +39,14 @@ async function submit() {
   }
   emit("copied");
   const note = warningsText("Copied.", result.value.warnings);
-  if (note) copied.value = { id: result.value.id, note };
-  else openCopy(result.value.id);
+  if (!note) {
+    openCopy(result.value.id);
+    return;
+  }
+  copied.value = { id: result.value.id, note };
+  // Save copy and edit is gone; Open the copy takes its place and focus (a11y A5).
+  await nextTick();
+  document.querySelector<HTMLElement>("[data-open-copy]")?.focus();
 }
 function openCopy(id: string) {
   sheet.value?.close();
@@ -65,7 +71,7 @@ defineExpose({ open });
       <ApButton variant="secondary" class="mr-auto" @click="sheet?.close()">{{
         copied ? "Close" : "Cancel"
       }}</ApButton>
-      <ApButton v-if="copied" variant="primary" @click="openCopy(copied.id)"
+      <ApButton v-if="copied" variant="primary" data-open-copy @click="openCopy(copied.id)"
         >Open the copy</ApButton
       >
       <ApButton
