@@ -2307,3 +2307,37 @@ endpoint ids, the replay run id, and the full JSON or hex.
 - timeout: "Reading the sample took too long." + `Try again`
 - unsupported: "This data source can't look up a single sample."
 - unavailable: "The history store can't be reached right now." + `Try again`
+- (11-16, fe-ops' build 2a498b5b5) History: with an episode selected, H2's line carries B1's link, "Show the sample
+  that raised it (02:08:11Z)", opening the aside; no per-row links.
+- An unknown status: "Cadence couldn't read this sample." + `Try again`.
+- An unknown value state shows its text if it has one, else "Can't be shown here"; never the raw state word (a
+  closed list we haven't learned yet, not free text). A ready value with no text shows "—".
+
+### U81 · Listen isolation words (lead + domain, class-level, 11-16) (domain / api / fe-setup)
+
+**1. Same-SCID warning at spacecraft save (same organization only).** A caution, not a refusal: the save goes ahead.
+Under the SCID field, and on the change's row in the change set:
+- "▲ Another mission in this organization, Earendil Ops, also flies SCID 42 through KSAT. KSAT's stations can't tell
+  the two spacecraft's uplinks apart."
+- The other mission is named only when the viewer can open it; otherwise "Another mission in this organization also
+  flies SCID 42 through KSAT." Never its id (U25).
+- The provider is named. If more than one provider is shared, "through KSAT and AWS Ground Station".
+- Never across organizations: another tenant's SCID is not ours to show. That case waits for domain's follow-up (an
+  authenticated delivery identity).
+
+**2. A frame whose SCID doesn't match its single-craft pass** (no longer made into samples). Kind word:
+`SCID doesn't match the pass`. Counted per pass, not one line per frame, wherever protocol anomalies are listed
+(the contact record first; no console list exists yet):
+- "▲ 14 frames with SCID 57 arrived during EARENDIL-312's pass (SCID 42), 02:08:11 – 02:09:40Z. Cadence kept them as
+  raw evidence and made no telemetry from them."
+- One frame: "▲ A frame with SCID 57 arrived during EARENDIL-312's pass (SCID 42) at 02:08:11Z. Cadence kept it as raw
+  evidence and made no telemetry from it."
+- Never a guess at whose SCID 57 is: it may be another tenant's. Technical details: VCID, frame sequence, evidence id.
+
+**3. Listen port taken by another mission** (domain 0a3426e7d, ListenClaims). Accepted as built, on the port field:
+"Another mission already listens on this host and port. Choose a different port." It names no mission and no
+organization; keep it so.
+- The store-level refusal (`listen_endpoint_claimed` from a transport or provider-profile write) maps to the same
+  words on the port field (knownErrorCode), never a generic failure or the code.
+- A pass refused at start for the same reason: "Didn't start: another mission listens on the port INU S-band uses
+  (5012). Change that transport's port." The transport by name; no mission.
