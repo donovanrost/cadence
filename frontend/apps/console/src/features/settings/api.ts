@@ -113,7 +113,10 @@ export function fieldTag(f: SettingsField): string | null {
       return "Inherited from org";
     case "default":
       return "Default";
-    default:
+    // No tag when the server doesn't say, or says something this console doesn't know yet.
+    case "unrecognized":
+    case null:
+    case undefined:
       return null;
   }
 }

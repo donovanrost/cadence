@@ -11,7 +11,7 @@ import {
 } from "./api.ts";
 
 /** api 14455857d: one mission section can mix per-field sources (ux SettingsAuditProviders.md). */
-function section(sources: readonly ("mission" | "organization" | "default")[]) {
+function section(sources: readonly (string | null)[]) {
   const r = decode(settingsReader, {
     sections: [
       {
@@ -53,6 +53,15 @@ describe("per-field settings sources", () => {
       "Set for this mission",
       "Default",
     ]);
+  });
+
+  it("gives no tag when the source is absent, null or a value this console doesn't know", () => {
+    const [unknown, none] = section(["inherited_from_constellation", null]).fields;
+    if (!unknown || !none) throw new Error("no fields");
+    expect(unknown.source).toBe("unrecognized");
+    expect(fieldTag(unknown)).toBeNull();
+    expect(fieldTag(none)).toBeNull();
+    expect(fieldTag({ ...none, source: undefined })).toBeNull();
   });
 
   it("reads a section as the mission's when any field is set for it", () => {
