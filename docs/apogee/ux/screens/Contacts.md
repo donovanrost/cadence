@@ -13,13 +13,13 @@ conflict or coverage gap in one click.
 ## Layout
 ```
 lbl "GROUND NETWORK · 6 STATIONS"  h1 "Contacts"   meta: 186 PASSES NEXT 6H · 7 AOS NOW · 2 CONFLICTS · 1 COVERAGE GAP
-tabs: Live · Plan · Review                          [By station | By spacecraft]  [Book passes]
+tabs: Live · Plan · Review · History                [By station | By spacecraft]  [Book passes]
 ┌ D1 Ground track (flex) ────────────────────────┐ ┌ D2 Selected pass (aside 360, pane) ┐
 └────────────────────────────────────────────────┘ └────────────────────────────────────┘
 ┌ D3 Pass schedule · 6 h (flex) ─────────────────┐ ┌ D4 Needs a decision (aside, pane)  ┐
 └────────────────────────────────────────────────┘ └────────────────────────────────────┘
 ```
-**[decision]** Contacts gets a section tab row (`Live · Plan · Review`, ApSegmented `tabs`) under
+**[decision]** Contacts gets a section tab row (`Live · Plan · Review · History`; History is U78) under
 the header so the scheduling boards share one rail item. `Book passes` = shortcut to Plan.
 `By station │ By spacecraft` is a `choice` segmented that swaps D3's row axis.
 
