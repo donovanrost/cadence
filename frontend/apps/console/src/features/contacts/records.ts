@@ -103,7 +103,8 @@ export const contactRecordReader = d.object({
       // free-text: as above.
       selection: d.string,
       source_endpoint_ref: d.nullable(d.string),
-      provider_bindings: d.array(d.object({ id: d.token, family_key: d.string }), 50),
+      // api 42e3b9550: a provider binding has an adapter key, not a family key.
+      provider_bindings: d.array(d.object({ id: d.token, adapter_key: d.string }), 50),
       transport_bindings: d.array(
         d.object({ id: d.token, family_key: d.string, target_scope: d.string }),
         50,
@@ -126,7 +127,7 @@ export const contactRecordReader = d.object({
         created_at: d.timestamp,
         created_by: d.nullable(
           d.object({
-            kind: d.knownText(["user", "service_identity", "system"] as const),
+            kind: d.nullable(d.knownText(["user", "system"] as const)),
             id: d.nullable(d.string),
             name: d.nullable(d.string),
           }),

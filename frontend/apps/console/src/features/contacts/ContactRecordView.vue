@@ -103,7 +103,7 @@ const onToggle = (e: Event) => {
               {{ p.id }} · {{ sentenceCase(p.direction) }} · {{ side(p.side) }}
             </td>
             <td class="pr-2 break-all">
-              {{ p.provider_bindings.map((b) => `${b.family_key} ${b.id}`).join(", ") || "none" }}
+              {{ p.provider_bindings.map((b) => `${b.adapter_key} ${b.id}`).join(", ") || "none" }}
             </td>
             <td class="break-all">
               {{ p.transport_bindings.map((b) => `${b.family_key} ${b.id}`).join(", ") || "none" }}
