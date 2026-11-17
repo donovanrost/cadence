@@ -111,10 +111,15 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
   - Elixir (api only): `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict` on touched
     files, and the tests for the touched area. **Only api, api-ops and domain run Elixir tests**, since parallel runs fight
     over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=2`, api-ops uses `3`). qa runs the dev server against the dev database.
-- **Machine load etiquette (8 cores, 9 agents):** before a heavy job (full Elixir suite, full frontend
-  `verify`, a whole Playwright run, a production build), check `uptime`. If the 1-minute load is above 16,
-  run only targeted tests for what you changed and save the full run for milestones. Never leave watchers,
-  dev servers or feeds running that you aren't using (qa owns the one shared dev stack).
+- **Heavy jobs go through the team gate (director, 2026-11-17):** `var/heavy-gate.sh --agent <you> -- <command>`
+  (status: `var/heavy-gate.sh --status`). Heavy = full suites, test directories, hooked commits, builds, vue-tsc /
+  typecheck, pnpm install, credo, the architecture check. The gate waits until BOTH the 1-min and 5-min load are
+  under 16 AND fewer than 2 heavy jobs run team-wide; one heavy job per agent at a time. A heavy job run outside the
+  gate is a rule break. Never set the HEAVY_GATE_* variables (devops' tests only), HEAVY_GATE_HELD included. Exit 75
+  means it waited 30 min and ran NOTHING: report it to lead, don't retry in a loop. qa takes the slot lock
+  (`--slot-begin '<what>'` / `--slot-end`) for its slots and hold windows; everyone else waits. Single targeted test
+  files can run without it. Never leave watchers, dev servers or feeds running that you aren't using (qa owns the one
+  shared dev stack).
 - Conventional commit messages (`feat(console): …`, `feat(api): …`) with the Co-Authored-By trailer.
 
 ## Phases
