@@ -151,6 +151,35 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "packet_definition_not_found")
   end
 
+  # Four-eyes audit 11-17, P0: a command-group member is decided, queued and released only through
+  # its group; and only group submission makes a request a member. ux U87's words.
+  def call(conn, {:error, :command_request_in_group}) do
+    error_response(
+      conn,
+      :conflict,
+      "command_request_in_group",
+      "This command is part of a command group. Approve it with the group's GO/NO-GO."
+    )
+  end
+
+  def call(conn, {:error, :command_request_group_reserved}) do
+    error_response(
+      conn,
+      :unprocessable_entity,
+      "command_request_group_reserved",
+      "A command joins a command group only when the group is submitted."
+    )
+  end
+
+  def call(conn, {:error, :command_group_not_armed}) do
+    error_response(
+      conn,
+      :conflict,
+      "command_group_not_armed",
+      "This command's group hasn't been given its GO, so it can't be sent."
+    )
+  end
+
   # U46 / DECISIONS #84: domain's release gate refused the named contact (outside its pass, or
   # its uplink leg was dropped). Nothing was released.
   def call(conn, {:error, {:command_window_closed, realized_contact_id, why}}) do
@@ -189,6 +218,12 @@ defmodule CadenceWeb.FallbackController do
     conn
     |> put_status(status)
     |> json(%{errors: [%{reason: code}]})
+  end
+
+  defp error_response(conn, status, code, message) do
+    conn
+    |> put_status(status)
+    |> json(%{errors: [%{reason: code, message: message}]})
   end
 
   defp translate_errors(%Changeset{} = changeset) do

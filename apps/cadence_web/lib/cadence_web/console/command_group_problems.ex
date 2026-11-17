@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.CommandGroupProblems do
             not_the_requested_approver command_group_review_stale command_group_basis_changed
             note_required exclusions_required unknown_excluded_target invalid_decision
             command_group_not_abortable reason_required command_request_already_started
-            command_request_not_found)a
+            command_request_not_found command_group_members_changed)a
 
   @spec respond(Plug.Conn.t(), term()) :: Plug.Conn.t()
   def respond(conn, {:error, {:invalid_params, details}}),

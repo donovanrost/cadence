@@ -157,6 +157,9 @@ defmodule CadenceWeb.OpsCommandQueuePage do
   defp feedback(:approved_command_basis_changed),
     do: "The approved command changed. Refresh and review it again."
 
+  defp feedback(:command_request_in_group),
+    do: "This command is part of a command group. Approve it with the group's GO/NO-GO."
+
   defp feedback(:command_queue_changed),
     do: "The reviewed request changed. Refresh and review it again."
 

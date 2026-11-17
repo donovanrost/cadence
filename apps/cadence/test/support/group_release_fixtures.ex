@@ -5,10 +5,14 @@ defmodule Cadence.GroupReleaseFixtures do
   """
 
   alias Cadence.Catalog.Artifact
-  alias Cadence.Commanding.CommandRequest
+  import Ecto.Query
+
+  alias Cadence.Commanding.{CommandRequest, CommandRequestRow}
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Jobs.Runner, as: JobRunner
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
 
@@ -55,10 +59,7 @@ defmodule Cadence.GroupReleaseFixtures do
               mission_model_revision_id: c.model.revision_id,
               command_id: Cadence.MissionModelFixtures.command_id!(c.model, "NOOP"),
               priority: 3,
-              requested_by: %{"user_id" => "requester"},
-              metadata: %{
-                "group" => %{"id" => id, "target_index" => target_index, "position" => position}
-              }
+              requested_by: %{"user_id" => "requester"}
             })
           )
 
@@ -70,10 +71,31 @@ defmodule Cadence.GroupReleaseFixtures do
             %{"user_id" => "approver"}
           )
 
+        # Only group submission makes a member (four-eyes audit 11-17, P0): the standalone create
+        # and enqueue refuse group metadata, so the fixture joins the queued request to the group
+        # the way submission's rows read, straight in the table.
+        join_group!(request, %{"id" => id, "target_index" => target_index, "position" => position})
+
         entry.command_queue_entry_id
       end)
 
     %{id: id, entries: entries}
+  end
+
+  defp join_group!(request, group) do
+    {1, _} =
+      Repo.update_all(
+        from(r in CommandRequestRow, where: r.command_request_id == ^request.command_request_id),
+        set: [
+          command_group_id: group["id"],
+          group_target_index: group["target_index"],
+          group_position: group["position"],
+          metadata_document:
+            JsonDocument.wrap_value(Map.put(request.metadata || %{}, "group", group))
+        ]
+      )
+
+    :ok
   end
 
   def persist_target!(name, scid) do

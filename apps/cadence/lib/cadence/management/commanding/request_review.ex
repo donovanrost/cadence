@@ -77,6 +77,12 @@ defmodule Cadence.Management.Commanding.RequestReview do
   defp receipt({:error, {:command_request_self_approval_not_allowed, _}}),
     do: {:rejected, "A different person must review this request."}
 
+  # ux U87.
+  defp receipt({:error, :command_request_in_group}),
+    do:
+      {:rejected,
+       "This command is part of a command group. Approve it with the group's GO/NO-GO."}
+
   defp receipt({:error, _}),
     do: {:rejected, "The decision was not saved. Reload before reviewing."}
 end

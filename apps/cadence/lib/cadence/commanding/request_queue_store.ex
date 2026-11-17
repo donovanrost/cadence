@@ -32,6 +32,7 @@ defmodule Cadence.Commanding.RequestQueueStore do
              is_binary(command_request_id) and is_map(enqueued_by) and is_list(opts) do
     Repo.transaction(fn ->
       with {:ok, request_row} <- lock_request(organization_id, mission_id, command_request_id),
+           :ok <- LifecyclePolicy.ensure_request_not_in_group(request_row),
            :ok <- LifecyclePolicy.ensure_request_queueable(request_row),
            :ok <- LifecyclePolicy.ensure_request_not_expired(request_row),
            :ok <-

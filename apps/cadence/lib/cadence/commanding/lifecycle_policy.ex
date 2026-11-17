@@ -23,6 +23,17 @@ defmodule Cadence.Commanding.LifecyclePolicy do
     {:error, {:staged_command_item_not_editable, staged_command_item_id, lifecycle_state}}
   end
 
+  @doc """
+  A command-group member is decided and queued only through its group (the group's GO/NO-GO and
+  release), never alone: a standalone decision or enqueue would skip the group's named approver,
+  its basis check and its hold acknowledgements (four-eyes audit 11-17, P0).
+  """
+  @spec ensure_request_not_in_group(map()) :: :ok | {:error, :command_request_in_group}
+  def ensure_request_not_in_group(%{command_group_id: nil}), do: :ok
+
+  def ensure_request_not_in_group(%{command_group_id: _group_id}),
+    do: {:error, :command_request_in_group}
+
   @spec ensure_request_pending_approval(map()) :: :ok | {:error, term()}
   def ensure_request_pending_approval(%{lifecycle_state: "approval_pending"}), do: :ok
 

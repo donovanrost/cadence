@@ -72,7 +72,8 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   defp locked(snapshot, org, mission, group_id, actor, decision) do
     with {:ok, group} <- GroupStore.fetch(org, mission, group_id, lock: true),
          :ok <- decidable(group, actor, decision),
-         :ok <- same_basis(group, snapshot) do
+         :ok <- same_basis(group, snapshot),
+         :ok <- members_as_submitted(group) do
       apply_decision(group, actor, decision)
     end
   end
@@ -102,6 +103,17 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   defp known_targets?(group, excluded) do
     ids = MapSet.new(group.targets, & &1["spacecraft_id"])
     Enum.all?(excluded, &MapSet.member?(ids, &1))
+  end
+
+  # The decision acts on the group's member rows, but the review token covers only the group row's
+  # member_count, not the member ids. A group whose member rows no longer match what submission
+  # recorded is refused rather than decided (four-eyes audit 11-17, P0, defence in depth).
+  defp members_as_submitted(group) do
+    members = GroupStore.members(group.organization_id, group.mission_id, group.command_group_id)
+
+    if length(members) == group.member_count,
+      do: :ok,
+      else: {:error, :command_group_members_changed}
   end
 
   defp same_basis(group, snapshot) do

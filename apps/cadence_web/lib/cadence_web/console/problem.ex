@@ -196,6 +196,8 @@ defmodule CadenceWeb.Console.Problem do
     command_group_review_stale: {409, "The group changed since you opened it. Reload it."},
     command_group_basis_changed:
       {409, "The command catalog changed since this was submitted. It must be resubmitted."},
+    command_group_members_changed:
+      {409, "This group's commands changed after it was submitted. It must be resubmitted."},
     exclusions_required: {422, "Name the targets to exclude."},
     unknown_excluded_target: {422, "An excluded target isn't in this group."},
     invalid_decision: {422, "That decision isn't valid."},

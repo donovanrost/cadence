@@ -5,6 +5,8 @@ defmodule Cadence.Commanding do
   release attempts.
   """
 
+  require Logger
+
   alias Ecto.Multi
 
   alias Cadence.Commanding.{
@@ -751,6 +753,7 @@ defmodule Cadence.Commanding do
              queue_entry_row.command_request_id
            ),
          :ok <- LifecyclePolicy.ensure_request_releasable(request_row),
+         :ok <- group_armed(organization_id, mission_id, request_row),
          :ok <- group_still_going(organization_id, mission_id, request_row),
          :ok <- target_live(organization_id, mission_id, request_row),
          {:ok, %RealizedContact{} = realized_contact} <-
@@ -862,6 +865,32 @@ defmodule Cadence.Commanding do
 
       result ->
         result
+    end
+  end
+
+  # A group member releases only while its group is armed (`:queued`: its GO was given, or it
+  # needed none), judged from the server's group row, never from request or queue metadata. A
+  # member that reached the queue any other way is refused and left as it is, so nothing goes out
+  # that its group's decision didn't send (four-eyes audit 11-17, P0, defence in depth).
+  defp group_armed(_organization_id, _mission_id, %CommandRequestRow{command_group_id: nil}),
+    do: :ok
+
+  defp group_armed(organization_id, mission_id, %CommandRequestRow{command_group_id: group_id}) do
+    case Groups.GroupStore.fetch(organization_id, mission_id, group_id) do
+      {:ok, %{state: :queued}} ->
+        :ok
+
+      {:ok, %{state: state}} ->
+        Logger.error(
+          "command release refused: a member of command group #{group_id} is queued but the " <>
+            "group is #{state}",
+          mission_id: mission_id
+        )
+
+        {:error, :command_group_not_armed}
+
+      {:error, _reason} ->
+        {:error, :command_group_not_armed}
     end
   end
 

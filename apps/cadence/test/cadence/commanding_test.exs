@@ -27,6 +27,8 @@ defmodule Cadence.CommandingTest do
     StagedCommandItem
   }
 
+  alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
+
   alias Cadence.Contacts.{
     Path,
     ProviderBinding,
@@ -1754,6 +1756,22 @@ defmodule Cadence.CommandingTest do
 
   # One group, one target, in queue order (stop-on-failure applies per target).
   defp group_33(members) do
+    # The group row too, armed (`:queued`): a member releases only while its group is (P0).
+    {:ok, _group} =
+      GroupStore.insert_group(
+        CommandGroup.new(%{
+          command_group_id: "command-group-33",
+          organization_id: @organization_id,
+          mission_id: @mission_id,
+          state: :queued,
+          title: "COP-1 lockout",
+          requested_by: %{"actor_kind" => "user", "user_id" => "requester"},
+          requested_at: DateTime.utc_now(),
+          resolved_at: DateTime.utc_now(),
+          member_count: length(members)
+        })
+      )
+
     members
     |> Enum.with_index()
     |> Enum.each(fn {member, position} ->
