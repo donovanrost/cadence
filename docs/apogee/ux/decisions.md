@@ -2923,14 +2923,17 @@ Communications, Changes) for ux's look.
 - **Versions:** the craft's configuration reads `v4` ("EARENDIL-004's configuration v4"), never `r4`, which is a
   change-set revision on Setup › Changes (api: versions count 1, 2, 3… per craft). An active `version` of 0 (set
   before this workspace) reads `Active` with no number.
-- **Status tag** (the section header): `ACTIVE · v3` / `DRAFT SAVED · v4` (caution while it differs from active) /
-  `UNSAVED EDITS` (caution) / `NOT SET UP` (`active` null).
+- **Status tag** (the section header; state only, fe-ops 11-17, since tags uppercase): `ACTIVE` / `DRAFT SAVED`
+  (caution while it differs from active) / `UNSAVED EDITS` (caution) / `NOT SET UP` (`active` null). The versions go
+  in the header line, mono: "EARENDIL-004's configuration · v3 active · v4 saved" (only the parts that exist).
 - **Not set up** (`active` null): heading `Set up EARENDIL-004`, and an info line "Nothing runs for EARENDIL-004
-  until its configuration is activated."
+  until its configuration is activated." While telemetry is off it adds ", and nothing is decoded until a change
+  set turns telemetry on." (ux review of fe-ops' shots, 11-17).
 - **Steps before it can be sent** (the host's setup issues):
   - "Choose a catalog revision": "Pick the catalog revision that matches EARENDIL-004's flight software."
   - "Choose what to decode": "Pick the packet source and the APIDs Cadence decodes for EARENDIL-004."
-- **Fields:** the catalog revision reads `catalog rev 14` (U65), with `Choose…` / `Change…`; Telemetry and
+- **Fields:** the catalog revision reads `catalog rev 14` (U65), from the server's `number` (catalogs rows) or
+  `catalog_number` (packets read), never parsed from a label, with `Choose…` / `Change…`; Telemetry and
   Commanding use U40's labels, help and on/off sentences; handled APIDs use U40's chip list; framing keeps the
   protocol terms (TM, AOS, USLP, TC, frame and header sizes), since the people setting it know them.
 - **Save:** `Save draft` (busy `Saving…`) and `Discard edits`. Saved: "Saved as v4. v3 stays active until v4 is
@@ -2939,8 +2942,8 @@ Communications, Changes) for ux's look.
   "Someone saved EARENDIL-004's configuration after you started editing. Your edits are kept." with rows "Saved: TM
   → Yours: AOS", and `Use the saved version` / `Keep my edits`.
 - **Comparison** (the Changes section): columns `Setting`, `Active`, `Draft`; no changes: "The draft matches the
-  active configuration."; nothing active: the Active column reads `—` and a line "Nothing is active yet, so every
-  setting is new." (U90).
+  active configuration."; nothing active: the line "Nothing is active yet, so every setting is new." (U90) and the
+  Active column is left out, not a column of dashes. The Changes tab carries the count, `Changes 2`.
 - **Send it** (by the mission's approval setting, U89's words; the source line "Mission setting" / "Organization
   default" / "Set by the organization", with `Approval settings`):
   - Applies without approval: `Activate v4`.
@@ -3008,6 +3011,9 @@ Communications, Changes) for ux's look.
     "On · set through Setup › Changes.").
   - Never set: "Off · no change set has turned it on yet. Turn it on in EARENDIL-004's Operation panel; it applies
     with the next change set."
+  - Keys (api): `switches.telemetry_enabled` / `switches.commanding_enabled`, each `{value, set, revision}`. `set`
+    false gives the never-set line; `set` true with `revision` gives "set by r7", without it "set through Setup ›
+    Changes".
   - The draft takes these values; they never show as a change in the comparison.
   - `spacecraft_switch_set_by_change_set` stays a backstop only: "Not saved: Telemetry and Commanding are set
     through Setup › Changes, and they changed after this page loaded. Reload to see them."
