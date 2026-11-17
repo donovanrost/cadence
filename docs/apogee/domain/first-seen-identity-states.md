@@ -61,10 +61,20 @@ Decision items should **always** send `point_id`, `sample_id` and `observed_at`:
 - `physical_sample_reader_test.exs`: the row's revision is carried; a NULL revision gets no key.
 - `observation_envelope_observable_tripwire_test.exs`: no envelope write path passes `observable_id`.
 
-## Measured (pending)
+## Measured, A/B
 
-Base = team head vs built. Interleaved, gated, partition 12, the #99 bench setup (1,000 frames).
+Method: base 75cfd29b8 vs built b77a79f6f, in the order built, base, built. Each phase is one gated job: forced compile, then
+3 runs of 1,000 timed frames after 10 warm-up frames, through the real ingest and persistence path (the #99 e2e setup, two
+telemetry samples per frame). Partition 12, test DB. WAL by relfilenode from pg_waldump over each run's LSN window.
 
-- **Per batch:** statements and latency p50/p95/p99 on the identity-states table.
-- **Per 1,000 frames:** rows and WAL bytes for its heap and indexes.
-- **Dev saving:** estimated from a TABLESAMPLE read (outside slots, or given to qa).
+| Per 1,000 frames | Base (3 runs) | Built (6 runs) |
+|---|---|---|
+| Identity-state rows written | 2,000 (2,020 incl. warm-up) | 0 |
+| WAL on the table (heap + 4 indexes) | 3.08–3.10 MB | 0 B |
+| Statements on the table | 1,000 (one insert_all per frame) | 1,000 (one locking read per frame) |
+| Time in those statements | 206–220 ms | 85–93 ms |
+| All statements | 45,000 | 45,000 |
+| Decode-to-commit p50 / p95 | 12.3–16.3 / 19.6–23.7 ms | 12.1–17.1 / 19.1–27.0 ms (within run-to-run noise) |
+
+Not covered: the dev saving in bytes per day. That needs a TABLESAMPLE read of the share of undecided canonical rows (outside
+slots, or by qa); the bench shows the mechanism: every canonical first sighting's row and its WAL are gone.
