@@ -93,6 +93,57 @@ describe("kind schema forms", () => {
   });
 });
 
+describe("visible_when with every condition (U83, a transport's listener)", () => {
+  const listener = (visibleWhen: unknown) =>
+    decode(kindSchemaReader, {
+      kind: "transport",
+      fields: [
+        {
+          path: "configuration.listener",
+          label: "Listener",
+          type: "enum",
+          unit: null,
+          enum: [
+            { value: "own", label: "Own listener for each pass" },
+            { value: "shared", label: "Shared, routed by SCID" },
+          ],
+          range: null,
+          default: "own",
+          required: false,
+          help: null,
+          visible_when: visibleWhen,
+        },
+      ],
+    });
+  const both = {
+    all: [
+      { path: "configuration.mode", equals: "listen" },
+      { path: "configuration.direction_capability", equals: "inbound" },
+    ],
+  };
+
+  it("shows the field only when every condition holds", () => {
+    const read = listener(both);
+    if (!read.ok) throw read.error;
+    const field = read.value.fields[0];
+    if (!field) throw new Error("fixture");
+    const at = (mode: string, direction: string) =>
+      visible(field, {
+        "configuration.mode": mode,
+        "configuration.direction_capability": direction,
+      });
+    expect(at("listen", "inbound")).toBe(true);
+    expect(at("listen", "outbound")).toBe(false);
+    expect(at("connect", "inbound")).toBe(false);
+  });
+
+  it("still reads one condition, and refuses a malformed list", () => {
+    expect(listener({ path: "configuration.mode", equals: "listen" }).ok).toBe(true);
+    expect(listener({ all: [{ equals: "listen" }] }).ok).toBe(false);
+    expect(listener({ all: "listen" }).ok).toBe(false);
+  });
+});
+
 describe("U24 units", () => {
   it("formats and parses durations", () => {
     expect(formatSeconds(172_800)).toBe("48h 00m");

@@ -6,6 +6,17 @@ const { array, boolean, nullable, number, object, optional, string, token } = de
 
 const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
 
+const condition = object({ path: string, equals: raw });
+const allConditions = object({ all: array(condition, 20) });
+/** One condition, or (U83, a transport's listener) `{all: [...]}`: shown when every one holds. */
+const visibleWhen: Reader<Decoded<typeof condition> | Decoded<typeof allConditions>> = (
+  value,
+  path = "",
+) =>
+  typeof value === "object" && value !== null && Object.hasOwn(value, "all")
+    ? allConditions(value, path)
+    : condition(value, path);
+
 export const schemaFieldReader = object({
   path: string,
   label: string,
@@ -31,7 +42,7 @@ export const schemaFieldReader = object({
   default: raw,
   required: boolean,
   help: nullable(string),
-  visible_when: nullable(object({ path: string, equals: raw })),
+  visible_when: nullable(visibleWhen),
   pattern: optional(nullable(string)),
   /** api fa7e9e463: set on create only (a derived point's id); the edit form leaves it out. */
   create_only: optional(boolean),
@@ -139,9 +150,11 @@ export function parseDuration(text: string): number | null {
 }
 
 export function visible(f: SchemaField, values: FormValues): boolean {
-  if (!f.visible_when) return true;
-  const want = f.visible_when.equals;
-  return values[f.visible_when.path] === (typeof want === "string" ? want : JSON.stringify(want));
+  const when = f.visible_when;
+  if (!when) return true;
+  return ("all" in when ? when.all : [when]).every(
+    (c) => values[c.path] === (typeof c.equals === "string" ? c.equals : JSON.stringify(c.equals)),
+  );
 }
 
 export type FieldCheck = Readonly<{ ok: true; value: unknown } | { ok: false; message: string }>;
