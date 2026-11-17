@@ -14,16 +14,18 @@ defmodule Cadence.SemanticRuntime.CommitRetirement do
     * everything at or after the checkpoint;
     * `timer`, `seed` and NULL-kind (legacy) commits, which timer cursors and pending timers read.
 
-  Only QUIET partitions are touched: no commit for `quiet_ms` (a pass has ended, or the partition
-  is idle). Each batch is ONE statement in its own transaction that re-reads the checkpoints and
+  Only QUIET partitions are touched: no commit for `quiet_ms` under any runtime basis (a pass has
+  ended, or the partition is idle). Each batch is ONE statement in its own transaction that re-reads the checkpoints and
   re-checks the quiet period, so a pass that starts mid-run stops the run at the next batch.
   Batches are keyset-paged and bounded. Nothing here vacuums: Postgres reuses the space.
+
+  A run stops if the checkpoint count drops below its count at the start. It counts ALL
+  checkpoints, so a legitimate checkpoint removal elsewhere (a mission deleted, say) also stops the
+  run; that fails safe, and the next tick starts again.
   """
 
-  import Ecto.Query
-
   alias Cadence.Repo
-  alias Cadence.SemanticRuntime.{Checkpoint, CommitRow}
+  alias Cadence.SemanticRuntime.Checkpoint
 
   @table "semantic_runtime_commits"
   @checkpoints "semantic_runtime_checkpoints"
@@ -43,37 +45,31 @@ defmodule Cadence.SemanticRuntime.CommitRetirement do
         }
 
   @doc """
-  Partitions with a checkpoint whose latest commit is older than `cutoff`. A partition still in a
-  pass (a commit since `cutoff`) is never listed.
+  The (partition, basis) pairs with a checkpoint in partitions whose latest commit, under ANY
+  basis, is older than `cutoff`. A partition still in a pass (a commit since `cutoff`, under any
+  basis) is never listed.
   """
   @spec quiet_partitions(DateTime.t()) :: [partition()]
   def quiet_partitions(%DateTime{} = cutoff) do
-    latest_at =
-      from(c in CommitRow,
-        where:
-          c.organization_scope_id == parent_as(:checkpoint).organization_scope_id and
-            c.mission_id == parent_as(:checkpoint).mission_id and
-            c.partition_id == parent_as(:checkpoint).partition_id and
-            c.runtime_basis_sha256 == parent_as(:checkpoint).runtime_basis_sha256,
-        order_by: [desc: c.commit_sequence],
-        limit: 1,
-        select: c.inserted_at
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT k.organization_scope_id, k.mission_id, k.partition_id, k.runtime_basis_sha256
+        FROM #{@checkpoints} k
+        WHERE #{partition_latest_commit_at("k.organization_scope_id", "k.mission_id", "k.partition_id")} < $1
+        ORDER BY k.mission_id, k.partition_id, k.runtime_basis_sha256
+        """,
+        [DateTime.to_naive(cutoff)]
       )
 
-    from(k in Checkpoint,
-      as: :checkpoint,
-      inner_lateral_join: latest in subquery(latest_at),
-      on: true,
-      where: latest.inserted_at < ^cutoff,
-      order_by: [k.mission_id, k.partition_id, k.runtime_basis_sha256],
-      select: %{
-        organization_scope_id: k.organization_scope_id,
-        mission_id: k.mission_id,
-        partition_id: k.partition_id,
-        runtime_basis_sha256: k.runtime_basis_sha256
+    Enum.map(rows, fn [organization_scope_id, mission_id, partition_id, basis] ->
+      %{
+        organization_scope_id: organization_scope_id,
+        mission_id: mission_id,
+        partition_id: partition_id,
+        runtime_basis_sha256: basis
       }
-    )
-    |> Repo.all()
+    end)
   end
 
   @doc """
@@ -210,11 +206,26 @@ defmodule Cadence.SemanticRuntime.CommitRetirement do
           AND k.runtime_basis_sha256 = $4)
       AND NOT EXISTS (
         SELECT 1 FROM #{@checkpoints} kc WHERE kc.commit_sequence = c.commit_sequence)
-      AND (
-        SELECT r.inserted_at FROM #{@table} r
-        WHERE r.organization_scope_id = $1 AND r.mission_id = $2 AND r.partition_id = $3
-          AND r.runtime_basis_sha256 = $4
-        ORDER BY r.commit_sequence DESC LIMIT 1) < $5
+      AND #{partition_latest_commit_at("$1", "$2", "$3")} < $5
+    """
+  end
+
+  # The partition's latest commit time across ALL its runtime bases: a partition is quiet only when
+  # no basis of it has committed since the cutoff (a pass under a new basis keeps the old bases'
+  # history untouched too). Every basis with commits has a checkpoint (one is published with every
+  # commit), and each lookup is one backward step on the recovery index.
+  defp partition_latest_commit_at(organization_scope_id, mission_id, partition_id) do
+    """
+    (SELECT max(l.inserted_at)
+     FROM #{@checkpoints} k2
+     CROSS JOIN LATERAL (
+       SELECT r.inserted_at FROM #{@table} r
+       WHERE r.organization_scope_id = k2.organization_scope_id AND r.mission_id = k2.mission_id
+         AND r.partition_id = k2.partition_id
+         AND r.runtime_basis_sha256 = k2.runtime_basis_sha256
+       ORDER BY r.commit_sequence DESC LIMIT 1) l
+     WHERE k2.organization_scope_id = #{organization_scope_id} AND k2.mission_id = #{mission_id}
+       AND k2.partition_id = #{partition_id})
     """
   end
 

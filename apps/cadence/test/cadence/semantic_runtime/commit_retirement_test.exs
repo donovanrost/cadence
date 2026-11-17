@@ -78,6 +78,30 @@ defmodule Cadence.SemanticRuntime.CommitRetirementTest do
       assert gone?(old)
     end
 
+    test "an old runtime basis is untouched while the same partition is in a pass under a new one",
+         %{a: a} do
+      # The partition ran under basis A, then a new activation moved it to basis B.
+      old_a = commit(a, "updates", -900)
+      commit(a, "updates", -800, checkpoint: true)
+      b = %{a | runtime_basis_sha256: "basis-new"}
+
+      # B is mid-pass: a commit a minute up to now.
+      for minute <- -5..-1//1, do: commit(b, "updates", minute * 60, checkpoint: minute == -1)
+
+      assert live_run() == []
+      refute gone?(old_a)
+
+      # Two minutes after B's last commit, the whole partition is quiet: both bases retire.
+      outcomes = live_run(now: DateTime.add(@now, 121, :second))
+
+      assert Enum.sort(Enum.map(outcomes, & &1.partition.runtime_basis_sha256)) == [
+               "basis-a",
+               "basis-new"
+             ]
+
+      assert gone?(old_a)
+    end
+
     test "a pass that starts mid-run stops the run at its next batch", %{a: a} do
       for s <- -900..-800//10, do: commit(a, "updates", s)
       commit(a, "updates", -700, checkpoint: true)
@@ -262,7 +286,8 @@ defmodule Cadence.SemanticRuntime.CommitRetirementTest do
         (organization_scope_id, mission_id, partition_id, runtime_basis_sha256, generation,
          ownership_epoch, commit_sequence)
       VALUES ($1, $2, $3, $4, 1, 1, 0)
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (organization_scope_id, mission_id, partition_id)
+      DO UPDATE SET runtime_basis_sha256 = EXCLUDED.runtime_basis_sha256
       """,
       [
         keys.organization_scope_id,
