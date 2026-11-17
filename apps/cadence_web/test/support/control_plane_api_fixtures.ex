@@ -11,6 +11,7 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -92,6 +93,7 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
       })
 
     assert {:ok, compilation} = Cadence.MissionModels.compile_layers([layer])
+    MissionModelCatalogNaming.name!(organization_id, mission_id, compilation.revision.revision_id)
 
     assert {:ok, revision} =
              MissionModelApproval.approve!(

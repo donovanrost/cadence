@@ -6,6 +6,7 @@ defmodule Cadence.MissionModels.ComparisonTest do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.MissionModel.{Declaration, Expression, Layer, Reference}
   alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.MissionModels
   alias Cadence.MissionModels.Comparison
   alias Cadence.Platform.ContentHash
@@ -30,6 +31,7 @@ defmodule Cadence.MissionModels.ComparisonTest do
 
     {layer, input_id} = algorithm_layer(organization_id, mission_id)
     assert {:ok, compilation} = MissionModels.compile_layers([layer])
+    MissionModelCatalogNaming.name!(organization_id, mission_id, compilation.revision.revision_id)
 
     assert {:ok, revision} =
              MissionModelApproval.approve!(

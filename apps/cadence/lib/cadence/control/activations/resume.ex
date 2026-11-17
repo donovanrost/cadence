@@ -70,14 +70,16 @@ defmodule Cadence.Control.Activations.Resume do
   defp approved(request), do: {:error, {:nothing_to_resume, to_string(request.state)}}
 
   @doc """
-  Whether a failed execution's code can apply on a retry. A stale review or content that no
-  longer matches its approval fails the same way every time: those need a new request (ux U41).
+  Whether a failed execution's code can apply on a retry. A stale review, content that no longer
+  matches its approval, or a model revision no catalog revision names fails the same way every
+  time: those need a new request (ux U41).
   """
   def retryable_code?(code),
     do:
       code not in [
         "spacecraft_configuration_review_stale",
-        "approved_activation_content_mismatch"
+        "approved_activation_content_mismatch",
+        "mission_model_revision_not_in_catalog"
       ]
 
   defp resumable(request, now) do

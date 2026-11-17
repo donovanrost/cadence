@@ -189,6 +189,9 @@ defmodule Cadence.Control.Activations.ApplyAttention do
   defp error_sentence(:failed, "approved_activation_content_mismatch", _row, _ids),
     do: "What would be applied now differs from what was approved, so it wasn't applied."
 
+  defp error_sentence(:failed, "mission_model_revision_not_in_catalog", _row, _ids),
+    do: "The catalog doesn't list the revision this request names, so it can't be applied."
+
   defp error_sentence(:failed, _code, _row, _ids), do: "Applying failed."
 
   defp whose_configuration(row, [id]) do

@@ -39,7 +39,7 @@ defmodule Cadence.MissionModels.ReimportSeparationTest do
     }
   end
 
-  test "a reimporting admin is refused on the revision their reimport made; another approves",
+  test "a reimporter is the importer of the revision their reimport made; nobody approves it",
        c do
     reimporter = scope(c.organization, "reimporter-b")
     {_run_id, orphan} = reimport!(reimporter, c)
@@ -47,11 +47,12 @@ defmodule Cadence.MissionModels.ReimportSeparationTest do
     assert importers(c, orphan) == ["reimporter-b"]
     assert importers(c, c.model) == ["importer-a"]
 
-    assert {:error, :mission_model_self_approval_forbidden} =
-             approve(reimporter, c, orphan, compare!(c, orphan))
-
-    assert {:ok, %{status: :approved}} =
-             approve(scope(c.organization, "admin-c"), c, orphan, compare!(c, orphan))
+    # No catalog revision names it, so it isn't approvable by anyone (domain's guard, director
+    # 11-17); the catalog check comes before the importer check.
+    for approver <- [reimporter, scope(c.organization, "admin-c")] do
+      assert {:error, :mission_model_revision_not_in_catalog} =
+               approve(approver, c, orphan, compare!(c, orphan))
+    end
 
     # The original stays its importer's: a reimport doesn't change who imported it.
     report = compare!(c, c.model)

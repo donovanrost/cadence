@@ -7,6 +7,7 @@ defmodule CadenceWeb.ActivationApprovalsTest do
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations
   alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.MissionModels
   alias Cadence.Reads.ActivationApprovals
   alias Cadence.Runtime.Missions, as: RuntimeMissions
@@ -237,6 +238,12 @@ defmodule CadenceWeb.ActivationApprovalsTest do
           })
 
         {:ok, compilation} = MissionModels.compile_layers([layer])
+
+        MissionModelCatalogNaming.name!(
+          context.org.organization_id,
+          context.mission.mission_id,
+          compilation.revision.revision_id
+        )
 
         {:ok, revision} =
           MissionModelApproval.approve!(

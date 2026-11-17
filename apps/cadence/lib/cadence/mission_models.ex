@@ -9,6 +9,7 @@ defmodule Cadence.MissionModels do
   alias Ecto.Multi
 
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog
   alias Cadence.Catalog.MissionModel.{Compiler, CompilerResult, Layer, Revision, RuntimePlan}
   alias Cadence.Management.Activations, as: ManagementActivations
 
@@ -199,6 +200,7 @@ defmodule Cadence.MissionModels do
 
     with {:ok, %Revision{status: :approved} = revision} <-
            fetch_revision(organization_id, mission_id, revision_id),
+         :ok <- Catalog.require_named_model_revision(organization_id, mission_id, revision_id),
          {:ok, plans} <- fetch_runtime_plans(organization_id, mission_id, revision_id),
          {:ok, comparison} <-
            Comparison.run(

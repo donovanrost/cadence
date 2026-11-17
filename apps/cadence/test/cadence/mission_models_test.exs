@@ -12,6 +12,7 @@ defmodule Cadence.MissionModelsTest do
   alias Cadence.Control.Missions
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModelApproval
+  alias Cadence.MissionModelCatalogNaming
   alias Cadence.MissionModels
   alias Cadence.MissionModels.RevisionRow
   alias Cadence.Persistence.JsonDocument
@@ -122,6 +123,12 @@ defmodule Cadence.MissionModelsTest do
       })
 
     assert {:ok, compilation} = MissionModels.compile_layers([layer])
+
+    MissionModelCatalogNaming.name!(
+      @organization_id,
+      mission_id,
+      compilation.revision.revision_id
+    )
 
     # The decision itself is RevisionDecisionsTest's.
     assert {:ok, revision} =

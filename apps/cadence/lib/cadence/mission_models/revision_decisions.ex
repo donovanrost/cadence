@@ -11,6 +11,8 @@ defmodule Cadence.MissionModels.RevisionDecisions do
     can't approve it (`:mission_model_self_approval_forbidden`). A revision whose importer wasn't
     recorded can be approved by any administrator; the approval records that.
   - Approval needs a candidate (or already approved) revision whose four runtime plans are ready.
+  - Approval needs a catalog revision that names the revision
+    (`:mission_model_revision_not_in_catalog`, director 11-17, interim); rejecting doesn't.
   """
 
   import Ecto.Query
@@ -47,6 +49,7 @@ defmodule Cadence.MissionModels.RevisionDecisions do
     %{organization_id: organization_id, mission_id: mission_id, revision_id: revision_id} = row
 
     with :ok <- require_approvable(RevisionRow.to_domain(row)),
+         :ok <- Catalog.require_named_model_revision(organization_id, mission_id, revision_id),
          :ok <- require_ready_plans(organization_id, mission_id, revision_id),
          {:ok, comparison} <- Comparison.fetch(organization_id, mission_id, comparison_report_id),
          :ok <- passed_for(comparison, revision_id),

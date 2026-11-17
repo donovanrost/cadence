@@ -328,6 +328,15 @@ defmodule Cadence.Catalog do
     to: ModelImporters,
     as: :list
 
+  @doc "`:ok` when a catalog revision names the mission-model revision; see `ModelRevisionNaming`."
+  defdelegate require_named_model_revision(
+                organization_id,
+                mission_id,
+                mission_model_revision_id
+              ),
+              to: Cadence.Catalog.ModelRevisionNaming,
+              as: :require_named
+
   @doc """
   The mission-model revision produced by the catalog revision just before the one that produced
   `mission_model_revision_id` in the same catalog database, or nil (a first import). The default
