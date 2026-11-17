@@ -2910,3 +2910,109 @@ telemetry. Facts: api, domain, api-ops (the telemetry cases from reading the cod
       `code`, else its `name`, as U47's pass label. `reason_detail` goes in Technical details only.
   - While the earlier configuration still runs, passes start on it, and no telemetry line shows.
 - **Resolved:** the row "Resolved: runtime started"; the banner as U38, "Telemetry processing resumed at 14:26Z."
+
+### U94 · A spacecraft's configuration in the console: save, request, activate (director's (B), 11-17; api's shape diff; ported from the host) (api / domain / fe-ops)
+The per-craft configuration workspace moves from the host's spacecraft page into the console's (Setup › Spacecraft ›
+EARENDIL-004 › `Configuration`). Approve and reject stay on L10 (Setup › Changes › activations), where these
+requests already list as "Spacecraft configuration for EARENDIL-004". Field words reuse U40's; the host's other words
+are re-said here. fe-ops proposes the layout (the host's four sections: Overview, Catalog & applications,
+Communications, Changes) for ux's look.
+
+- **Never in visible text:** generation, binding or "bind", token, "legacy configuration", "active fleet
+  configuration", "runtime application", ids. They go in Technical details.
+- **Versions:** the craft's configuration reads `v4` ("EARENDIL-004's configuration v4"), never `r4`, which is a
+  change-set revision on Setup › Changes (api: versions count 1, 2, 3… per craft). An active `version` of 0 (set
+  before this workspace) reads `Active` with no number.
+- **Status tag** (the section header): `ACTIVE · v3` / `DRAFT SAVED · v4` (caution while it differs from active) /
+  `UNSAVED EDITS` (caution) / `NOT SET UP` (`active` null).
+- **Not set up** (`active` null): heading `Set up EARENDIL-004`, and an info line "Nothing runs for EARENDIL-004
+  until its configuration is activated."
+- **Steps before it can be sent** (the host's setup issues):
+  - "Choose a catalog revision": "Pick the catalog revision that matches EARENDIL-004's flight software."
+  - "Choose what to decode": "Pick the packet source and the APIDs Cadence decodes for EARENDIL-004."
+- **Fields:** the catalog revision reads `catalog rev 14` (U65), with `Choose…` / `Change…`; Telemetry and
+  Commanding use U40's labels, help and on/off sentences; handled APIDs use U40's chip list; framing keeps the
+  protocol terms (TM, AOS, USLP, TC, frame and header sizes), since the people setting it know them.
+- **Save:** `Save draft` (busy `Saving…`) and `Discard edits`. Saved: "Saved as v4. v3 stays active until v4 is
+  activated." (first: "Saved as v1. Nothing runs until it's activated.").
+- **Someone else saved meanwhile** (`spacecraft_configuration_changed`, and `external_changes`): a caution panel
+  "Someone saved EARENDIL-004's configuration after you started editing. Your edits are kept." with rows "Saved: TM
+  → Yours: AOS", and `Use the saved version` / `Keep my edits`.
+- **Comparison** (the Changes section): columns `Setting`, `Active`, `Draft`; no changes: "The draft matches the
+  active configuration."; nothing active: the Active column reads `—` and a line "Nothing is active yet, so every
+  setting is new." (U90).
+- **Send it** (by the mission's approval setting, U89's words; the source line "Mission setting" / "Organization
+  default" / "Set by the organization", with `Approval settings`):
+  - Applies without approval: `Activate v4`.
+  - Needs a second person's approval: `Request approval for v4`.
+  - Disabled reasons (A6), first that applies: unsaved "Save the draft first."; someone else saved "Choose which
+    version to keep first."; steps left "Finish the steps above first."; nothing changed "The draft matches the active
+    configuration."; already waiting "v4 is waiting for approval."; `can_request` false "You can't activate
+    configurations on this mission."
+- **Results** (submit's `state`):
+  - `approval_pending`: "Sent for approval. Another person approves v4 in Setup › Changes." with `Open request`
+    (the L10 page).
+  - `active`: "v4 is active on EARENDIL-004." then the runtime as U38's verbs say (applying / applied / not applied).
+  - `needs_review`: "v4 is approved, but Cadence couldn't confirm it was applied yet." with `Open request`; U41 and
+    U38/U91 say the rest, never "check runtime status".
+- **The request's state, in the workspace** (`review.state`, with `Open request` for who and when, U29):
+  approval_pending "v4 is waiting for approval."; approved and active as above; rejected "v4 was rejected. Change
+  the draft and send it again."; withdrawn "The request for v4 was withdrawn."; superseded "Replaced by a newer
+  request."; stale "EARENDIL-004's configuration changed after v4 was sent, so it can't be approved. Send it again."
+- **Refusals** (submit and save):
+  - `spacecraft_configuration_review_stale`: "Not sent: EARENDIL-004's active configuration changed since you loaded
+    this. Check the comparison and send it again."
+  - `activation_policy_changed`: "Not sent: the mission's approval setting changed. Check it and send it again."
+  - `spacecraft_configuration_review_unavailable`: "Save the draft and choose which version to keep first."
+  - `spacecraft_catalog_required`: "Choose a catalog revision first."
+  - `spacecraft_packet_inputs_required`: "Choose a packet source and the APIDs to decode first."
+  - `mission_model_revision_not_approved`: "Not sent: catalog rev 14 isn't approved yet. An org admin approves it in
+    Setup › Catalog first." with `Open rev 14` (U65).
+  - `forbidden`: "You can't change EARENDIL-004's configuration." `not_found`: "EARENDIL-004 isn't on this mission."
+    `invalid_params`: the field's own error.
+  - `spacecraft_catalog_set_by_profile`: "Not saved: EARENDIL-004's profile sets its catalog revision. Change it on
+    the profile, through Setup › Changes." with `Open profile`.
+  - `spacecraft_packet_input_unavailable`: "Not saved: the packet source you chose isn't available to EARENDIL-004
+    any more. Choose another."
+  - `spacecraft_configuration_catalog_not_loaded`: "Not saved: Cadence couldn't load catalog rev 14's telemetry
+    packets. Try again, or choose another revision."
+  - `spacecraft_source_limit_exceeded` (the snapshot and submit): "EARENDIL-004 has more packet sources than one
+    configuration can carry, so it can't be shown or sent. Remove some in Setup › Comms." On the snapshot it's the
+    section's error state, with `Open Comms`.
+  - `spacecraft_catalog_unavailable` (the packet choices): in the picker, "Catalog rev 14 can't be used for
+    EARENDIL-004." and the revision can't be chosen.
+  - `spacecraft_not_found` (404): "EARENDIL-004 isn't on this mission."
+  - Any other code: "Not saved." / "Not sent." plus the code in Technical details (U20); `spacecraft_configuration_
+    pending` doesn't reach these routes (api).
+- **On L10, for these requests:**
+  - `What changes` panel from `configuration_changes`: "Telemetry: Off → On"; a first start (`before` null) reads
+    as U90: "Nothing is active for EARENDIL-004 yet, so every setting is new." and the rows show only the new value.
+  - Approve refused stale (409, nothing recorded): "Not approved: EARENDIL-004's configuration changed after this was
+    requested, so it isn't what was reviewed. The requester sends it again."
+  - Separation (`activation_self_approval_forbidden`): requester "Not approved: you requested this, so another
+    person approves it."; author "Not approved: you saved part of this configuration, so another person approves
+    it." The 403's `details.rule` (`requester` / `author`) picks the line; without it: "Not approved: you requested
+    or edited this configuration, so another person approves it." `author` applies only under "Needs a second
+    person's approval" (domain captures the authors at submit).
+- **The mission-wide decom app after this** (lead, 11-17): once any craft's configuration is saved here, the
+  telemetry_decom app's Save is closed for the mission. It shows disabled with: "Telemetry decoding is now set per
+  spacecraft, in each spacecraft's Configuration, so it can't be saved here." and `Open spacecraft` (Setup ›
+  Spacecraft).
+- **The interim lines point here once it ships:** U45's `no_configuration` reads "…Review and activate
+  EARENDIL-004's configuration to start it." with `Open configuration`; U93's before-line keeps its words, adding
+  `Open configuration` when the preview names one spacecraft.
+- **Telemetry and Commanding switches: change sets own both, always** (DECISIONS #109; lead, director agreed
+  11-17; one owner per setting, since what runs is the configuration document). The workspace shows both read-only, from the snapshot's per-switch owner and value (api),
+  each with `Open Operation` (U40's panel, where they're staged):
+  - Set by a change set: "On · set by r7." / "Off · set by r7." (the change-set revision that set it; without it,
+    "On · set through Setup › Changes.").
+  - Never set: "Off · no change set has turned it on yet. Turn it on in EARENDIL-004's Operation panel; it applies
+    with the next change set."
+  - The draft takes these values; they never show as a change in the comparison.
+  - `spacecraft_switch_set_by_change_set` stays a backstop only: "Not saved: Telemetry and Commanding are set
+    through Setup › Changes, and they changed after this page loaded. Reload to see them."
+- **Activating with telemetry off** (crit, right above `Activate v4` / `Request approval for v4`, and on L10's What
+  changes panel; it warns, it doesn't block): "Telemetry is off for EARENDIL-004, so once this is active it starts
+  but decodes nothing: no live values, alarms or history. Turn telemetry on with a change set first." with `Open
+  Operation`. A new craft's first start is a change set turning telemetry on, then this Activate (director's end-to-
+  end test on a fresh mission, then qa's live check).
