@@ -36,6 +36,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     PartitionKey,
     Persistence,
     ProcessNamespace,
+    ReplayConflicts.Recorder,
     TimerService
   }
 
@@ -246,6 +247,8 @@ defmodule Cadence.Runtime.PartitionOwner do
       Map.to_list(metadata) ++
         [duration_ms: System.monotonic_time(:millisecond) - started, status: elem(result, 0)]
     )
+
+    _ = track_start(result, metadata, Keyword.get(opts, :partition_stable_ms, 30_000))
 
     case result do
       {:ok, state} ->
@@ -510,15 +513,15 @@ defmodule Cadence.Runtime.PartitionOwner do
             else
               {:error, reason} ->
                 _ = TimerService.cancel_all(timer_service)
-                {:stop, tripped(reason), {:error, reason}, state}
+                stop_tripped_reply(reason, state)
             end
 
           {:error, reason} ->
-            {:stop, tripped(reason), {:error, reason}, state}
+            stop_tripped_reply(reason, state)
         end
 
       {:error, reason} ->
-        {:stop, tripped(reason), {:error, reason}, state}
+        stop_tripped_reply(reason, state)
     end
   end
 
@@ -842,6 +845,13 @@ defmodule Cadence.Runtime.PartitionOwner do
     {:stop, {:shutdown, :name_conflict}, state}
   end
 
+  # #99 follow-up (domain R-a): the owner stayed up its stable time, so its timers write again.
+  def handle_info(:replay_conflict_stable, state) do
+    partition = PartitionKey.identifier(state.partition_key)
+    _ = Recorder.track(:ok, Recorder.partition_unit(state.mission_id, partition), :unknown)
+    {:noreply, state}
+  end
+
   def handle_info({:semantic_algorithm_timer, timer_key, timer_id}, state) do
     state = refresh_live_clock(state)
 
@@ -854,7 +864,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
         case execute_semantic_timer(entry, timer_state) do
           {:ok, next_state} -> {:noreply, next_state}
-          {:error, reason} -> {:stop, tripped(retirement_reason(reason, state)), state}
+          {:error, reason} -> stop_tripped(retirement_reason(reason, state), state)
         end
 
       _other ->
@@ -1087,7 +1097,7 @@ defmodule Cadence.Runtime.PartitionOwner do
         {:noreply, %{next_state | pending_runtime_records: pending_runtime_records}}
 
       {:error, reason} ->
-        {:stop, tripped(reason), state}
+        stop_tripped(reason, state)
     end
   end
 
@@ -1569,6 +1579,41 @@ defmodule Cadence.Runtime.PartitionOwner do
     do: reason |> Tuple.to_list() |> Enum.any?(&replay_id_conflict?/1)
 
   defp replay_id_conflict?(_reason), do: false
+
+  # #99 follow-up: a timer-path or reconcile trip opens the partition's stuck-processing record
+  # before the owner stops (ReplayConflicts, after the failed write returned); never changes the stop.
+  defp stop_tripped(reason, state) do
+    _ = record_trip(reason, state, nil)
+    {:stop, tripped(reason), state}
+  end
+
+  # R1 (api-ops): an activation reconcile that trips stops the partition until its next start.
+  defp stop_tripped_reply(reason, state) do
+    _ = record_trip(reason, state, "applying")
+    {:stop, tripped(reason), {:error, reason}, state}
+  end
+
+  defp record_trip(reason, state, stopped_while) do
+    partition = PartitionKey.identifier(state.partition_key)
+    unit = Recorder.partition_unit(state.mission_id, partition, stopped_while)
+    Recorder.track({:error, reason}, unit, :clear)
+  end
+
+  # A start that hits the conflict stays down until a fix (`stopped_while: "starting"`). A start
+  # that succeeds resolves only the records about stopping (starting / applying): it got past
+  # them. A timer trip's record waits until this owner has stayed up `partition_stable_ms` (R2's
+  # rule), else a trip that recurs right after each restart would resolve and re-open every
+  # backoff cycle (domain R-a).
+  defp track_start({:ok, _state}, metadata, stable_ms) do
+    _ = Recorder.resolve_stopped(start_unit(metadata, nil))
+    Process.send_after(self(), :replay_conflict_stable, stable_ms)
+  end
+
+  defp track_start({:stop, reason}, metadata, _stable_ms),
+    do: Recorder.track({:error, reason}, start_unit(metadata, "starting"), :clear)
+
+  defp start_unit(metadata, stopped_while),
+    do: Recorder.partition_unit(metadata.mission_id, metadata.partition_id, stopped_while)
 
   defp drain_timer_records(state) do
     case next_timer_entry(state.timer_service) do

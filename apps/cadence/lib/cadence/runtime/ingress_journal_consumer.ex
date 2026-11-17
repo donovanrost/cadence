@@ -15,6 +15,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   alias Cadence.IngressJournal.{Entry, Evidence, FileSystem}
   alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.ProviderIngressExecutor
+  alias Cadence.Runtime.ReplayConflicts.Recorder
 
   @default_poll_interval_ms 10
   @default_max_batch_entries 8
@@ -84,6 +85,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       realized_contact_id: Keyword.fetch!(opts, :realized_contact_id),
       path_id: Keyword.fetch!(opts, :path_id),
       provider_binding_id: Keyword.fetch!(opts, :provider_binding_id),
+      replay_conflict: :unknown,
       journal_name: Keyword.fetch!(opts, :journal_name),
       executor_name: Keyword.fetch!(opts, :executor_name),
       poll_interval_ms:
@@ -360,6 +362,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
          ) do
       :ok ->
         send(self(), :consume)
+        state = track_replay_conflict(:ok, state)
 
         {:noreply,
          %{
@@ -385,6 +388,8 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   defp retry_after_failure(state, reason) do
+    state = track_replay_conflict({:error, reason}, state)
+
     delay =
       if state.consecutive_failures == 0,
         do: min(state.retry_initial_ms, state.retry_max_ms),
@@ -525,4 +530,21 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   defp schedule_consume(interval_ms), do: Process.send_after(self(), :consume, interval_ms)
+
+  # #99 follow-up: after the batch returned, record a replay-id conflict on this stream or resolve
+  # it (ReplayConflicts.Recorder); never changes the retry. Direct, non-journal ingest (direct
+  # space packets, TM with no stream) isn't recorded: its ids are evidence-scoped and never
+  # re-batched, so it can't replay-conflict (domain).
+  defp track_replay_conflict(result, state) do
+    unit =
+      Recorder.stream_unit(
+        :processing,
+        state.mission_id,
+        state.realized_contact_id,
+        state.path_id,
+        state.provider_binding_id
+      )
+
+    %{state | replay_conflict: Recorder.track(result, unit, state.replay_conflict)}
+  end
 end

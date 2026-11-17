@@ -27,7 +27,8 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
     Missions,
     PartitionKey,
     PartitionOwner,
-    ProcessNamespace
+    ProcessNamespace,
+    ReplayConflicts
   }
 
   alias Cadence.Test.TrippingRuntimeWriter
@@ -99,6 +100,18 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
     # The trip still says so, at error level, once per trip.
     assert [_one] = Regex.scan(~r/\[error\].*MM_REPLAY_ID_CONFLICT managed_action_request/, log)
 
+    # #99 follow-up: its durable record survived the failed write, open on the partition.
+    alpha_id = PartitionKey.identifier(alpha)
+
+    assert [
+             %{
+               path: "timer",
+               partition_id: ^alpha_id,
+               effect_kind: "managed_action_request",
+               partition_stopped: false
+             }
+           ] = ReplayConflicts.open(@mission)
+
     # Not restarted by the pool (a shutdown), backed off by the coordinator instead.
     await(fn ->
       PartitionOwner.lookup(@namespace, @mission, alpha) == {:error, :partition_not_running}
@@ -115,9 +128,13 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
     assert {:ok, _} = Runtime.partition_snapshot(@namespace, @mission, alpha)
     assert {:ok, back} = PartitionOwner.lookup(@namespace, @mission, alpha)
     assert back != owner
+    # A start doesn't prove its timers write (domain R-a): the record stays open until the owner
+    # has stayed up its stable time, then resolves.
+    assert [%{stopped_while: nil}] = ReplayConflicts.open(@mission)
 
     # After a stable run, its next trip starts the backoff over at 250 ms, not doubled (lead (2)).
     Process.sleep(@stable_ms + 50)
+    assert ReplayConflicts.open(@mission) == []
     ref = Process.monitor(back)
     TrippingRuntimeWriter.configure(@mission, trip: [:timer_handled], notify: self())
 
@@ -161,6 +178,11 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
     assert first <= 250
     assert second > 250 and second <= 500
     assert third > 500 and third <= 1_000
+
+    # #99 follow-up (domain R-a): one record stays open across the cycles; no start resolved it.
+    assert [%{conflict_count: count}] = ReplayConflicts.open(@mission)
+    assert count >= 3
+    assert ReplayConflicts.resolved_since(@mission, ~U[2000-01-01 00:00:00Z]) == []
     assert_untouched(ctx)
   end
 
@@ -194,6 +216,11 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
 
     assert GenServer.whereis(pool_name()) == ctx.pool
     assert Process.alive?(ctx.pool)
+
+    # #99 follow-up: each stopped partition's record survived its failed write and says why.
+    stopped = ReplayConflicts.open(@mission)
+    assert length(stopped) == 5
+    assert Enum.all?(stopped, &(&1.partition_stopped and &1.stopped_while == "applying"))
   end
 
   @tag periodic_ms: 150
@@ -255,6 +282,18 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
     Process.sleep(100)
     assert :counters.get(starts, 1) == 1
     assert PartitionOwner.lookup(@namespace, @mission, delta) == {:error, :partition_not_running}
+    # #99 follow-up: the record says it stopped while starting and stays down.
+    delta_id = PartitionKey.identifier(delta)
+
+    assert [
+             %{
+               path: "timer",
+               partition_id: ^delta_id,
+               partition_stopped: true,
+               stopped_while: "starting"
+             }
+           ] = ReplayConflicts.open(@mission)
+
     assert_untouched(ctx)
   end
 
