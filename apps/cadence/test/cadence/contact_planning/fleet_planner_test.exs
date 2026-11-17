@@ -25,6 +25,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
   alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
   alias Cadence.Management.Contacts.Store.ContactPlanRow
 
+  alias Cadence.PolicyReviewer
   alias Cadence.Reads.RepairDiff
   alias Cadence.Repo
   alias Cadence.Spacecraft
@@ -57,7 +58,7 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     assert {:ok, _active, ^policy_version, _approval} =
              FleetPlanningPolicies.approve(
-               admin_scope,
+               PolicyReviewer.reviewer(admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                policy_version.version,

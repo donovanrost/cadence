@@ -3,6 +3,7 @@ defmodule Cadence.FleetStartFixtures do
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactRequirements, FleetPlanningPolicies}
+  alias Cadence.PolicyReviewer
   alias Cadence.Spacecraft
   @organization_id "org-fleet-start"
   @mission_id "mission-fleet-start"
@@ -27,7 +28,7 @@ defmodule Cadence.FleetStartFixtures do
 
     {:ok, _, _, _} =
       FleetPlanningPolicies.approve(
-        admin,
+        PolicyReviewer.reviewer(admin),
         @mission_id,
         policy.fleet_planning_policy_id,
         version.version,

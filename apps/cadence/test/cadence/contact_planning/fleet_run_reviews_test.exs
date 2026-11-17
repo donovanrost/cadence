@@ -12,6 +12,7 @@ defmodule Cadence.ContactPlanning.FleetRunReviewsTest do
   }
 
   alias Cadence.FleetRunFixtures, as: Fixtures
+  alias Cadence.PolicyReviewer
   alias Cadence.Repo
   setup do: Fixtures.setup_run()
 
@@ -201,7 +202,7 @@ defmodule Cadence.ContactPlanning.FleetRunReviewsTest do
 
     assert {:ok, _, _, _} =
              FleetPlanningPolicies.approve(
-               c.admin,
+               PolicyReviewer.reviewer(c.admin),
                c.mission_id,
                c.policy.fleet_planning_policy_id,
                version.version,

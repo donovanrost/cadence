@@ -114,8 +114,8 @@ defmodule Cadence.Control.PlanningPolicy do
              mission_id,
              policy.fleet_planning_policy_id,
              number
-           ),
-         :ok <- not_author(scope, version) do
+           ) do
+      # FleetPlanningPolicies refuses the version's author (:reviewer_is_author).
       apply_decision(scope, mission_id, policy, version, decision, comment)
     end
   end
@@ -153,11 +153,6 @@ defmodule Cadence.Control.PlanningPolicy do
       {:error, _reason} = error -> error
     end
   end
-
-  defp not_author(%Scope{user: %{user_id: user_id}}, %{created_by: user_id}),
-    do: {:error, :reviewer_is_author}
-
-  defp not_author(_scope, _version), do: :ok
 
   # The latest version awaits review while it isn't active and has no
   # decision (a rejected version stays latest but isn't pending).

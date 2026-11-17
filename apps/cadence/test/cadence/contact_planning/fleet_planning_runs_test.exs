@@ -10,6 +10,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
     FleetPlanningRuns
   }
 
+  alias Cadence.PolicyReviewer
   alias Cadence.Spacecraft
 
   @organization_id "org-fleet-planning-runs"
@@ -39,7 +40,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
 
     assert {:ok, _active, ^policy_version, _approval} =
              FleetPlanningPolicies.approve(
-               admin_scope,
+               PolicyReviewer.reviewer(admin_scope),
                @mission_id,
                policy.fleet_planning_policy_id,
                policy_version.version,

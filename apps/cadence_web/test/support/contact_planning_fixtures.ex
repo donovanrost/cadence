@@ -13,6 +13,8 @@ defmodule CadenceWeb.ContactPlanningFixtures do
     Planner
   }
 
+  alias Cadence.PolicyReviewer
+
   @now ~U[2027-01-01 00:00:00Z]
 
   def now, do: @now
@@ -115,7 +117,7 @@ defmodule CadenceWeb.ContactPlanningFixtures do
 
     assert {:ok, _, _, _} =
              FleetPlanningPolicies.approve(
-               admin_scope,
+               PolicyReviewer.reviewer(admin_scope),
                mission_id,
                policy.fleet_planning_policy_id,
                version.version,

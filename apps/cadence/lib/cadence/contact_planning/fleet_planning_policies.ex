@@ -348,12 +348,20 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
   defp decide(_scope, _mission_id, _policy_id, _version, _hash, _decision, _reason, _opts),
     do: {:error, :invalid_fleet_planning_policy_decision}
 
+  # Whoever wrote a version doesn't decide it (approve or reject). It was only in the control
+  # wrapper (Control.PlanningPolicy); here every caller gets it (approval sweep, director 11-15).
+  defp not_author(%{created_by: author}, %{"user_id" => author}),
+    do: {:error, :reviewer_is_author}
+
+  defp not_author(_version_row, _actor), do: :ok
+
   defp decide_transaction(organization_id, context) do
     with {:ok, row} <-
            lock_policy(organization_id, context.mission_id, context.policy_id),
          :ok <- not_retired(row),
          :ok <- expected_version(row, context.expected_version),
          {:ok, version_row} <- fetch_version_row(row, context.expected_version),
+         :ok <- not_author(version_row, context.actor),
          :ok <- exact_hash(version_row, context.expected_hash),
          :ok <- undecided(row, context.expected_version),
          version <- FleetPlanningPolicyVersionRow.to_domain(version_row),

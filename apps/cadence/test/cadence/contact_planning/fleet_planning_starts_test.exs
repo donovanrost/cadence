@@ -3,6 +3,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
   alias Cadence.Control.Scheduling
   alias Cadence.FleetStartFixtures, as: Fixtures
   alias Cadence.Management.Contacts.Store.{ContactRequirementRow, ContactRequirementTemplateRow}
+  alias Cadence.PolicyReviewer
   alias Cadence.Repo
   alias Ecto.Changeset
 
@@ -113,7 +114,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
 
     assert {:ok, _, _, _} =
              FleetPlanningPolicies.approve(
-               c.admin,
+               PolicyReviewer.reviewer(c.admin),
                c.mission_id,
                c.policy.fleet_planning_policy_id,
                2,

@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
   alias Cadence.Auth.ServiceIdentity
   alias Cadence.ContactPlanning.FleetPlanningPolicies
   alias Cadence.FleetStartFixtures
+  alias Cadence.PolicyReviewer
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -30,7 +31,7 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
 
     {:ok, _, _, _} =
       FleetPlanningPolicies.approve(
-        scope,
+        PolicyReviewer.reviewer(scope),
         mission.mission_id,
         policy.fleet_planning_policy_id,
         v1.version,

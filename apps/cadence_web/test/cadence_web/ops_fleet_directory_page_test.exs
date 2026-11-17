@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsFleetDirectoryPageTest do
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactRequirements, FleetPlanningPolicies, FleetPlanningRuns}
   alias Cadence.FleetStartFixtures
+  alias Cadence.PolicyReviewer
   alias Cadence.Spacecraft
   alias CadenceWeb.TestFixtures
 
@@ -40,7 +41,7 @@ defmodule CadenceWeb.OpsFleetDirectoryPageTest do
 
     {:ok, _, _, _} =
       FleetPlanningPolicies.approve(
-        scope,
+        PolicyReviewer.reviewer(scope),
         mission.mission_id,
         policy.fleet_planning_policy_id,
         version.version,
