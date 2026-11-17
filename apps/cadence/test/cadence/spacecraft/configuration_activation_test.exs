@@ -32,6 +32,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
 
   alias Cadence.{Activations, Governance}
+  alias Cadence.TestSupport.CatalogTestActor
 
   setup do
     org = "org-spacecraft-activation"
@@ -612,6 +613,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
         c.revision.catalog_database_id,
         artifact,
         "cadence_yaml",
+        requested_by: CatalogTestActor.system(),
         metadata: %{"revision_label" => "Next imported revision"}
       )
 

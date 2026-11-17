@@ -3,10 +3,14 @@ defmodule Cadence.Catalog.Reimport do
   Scoped request to import an existing immutable Catalog artifact again. Refused while an import of
   that artifact is still running (`{:import_running, import_run_id}`): every path asks here (the
   console, the mission catalog host action and the native page), so none can start a second.
+  The run records who asked (`Catalog.Actor`); before 11-17 it matched the user on `:id` (the key
+  is `user_id`), so every reimport stored `%{}`. The run's own model revision counts its runner as
+  its importer (`Catalog.ModelImporters`).
   """
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
+  alias Cadence.Catalog.Actor
 
   def execute(%Scope{} = scope, mission_id, artifact_id)
       when is_binary(mission_id) and is_binary(artifact_id) do
@@ -15,6 +19,7 @@ defmodule Cadence.Catalog.Reimport do
              organization_id: scope.organization_id,
              mission_id: mission_id
            }),
+         {:ok, actor} <- Actor.from_scope(scope),
          {:ok, artifact} <-
            Catalog.fetch_artifact(scope.organization_id, mission_id, artifact_id),
          :ok <- not_running(scope.organization_id, mission_id, artifact.artifact_id),
@@ -24,7 +29,7 @@ defmodule Cadence.Catalog.Reimport do
              mission_id,
              artifact.artifact_id,
              artifact.format_key,
-             requested_by: actor(scope)
+             requested_by: actor
            ) do
       {:ok,
        %{
@@ -44,7 +49,4 @@ defmodule Cadence.Catalog.Reimport do
       run -> {:error, {:import_running, run.import_run_id}}
     end
   end
-
-  defp actor(%Scope{user: %{id: id, email: email}}), do: %{user_id: id, email: email}
-  defp actor(%Scope{}), do: %{}
 end

@@ -3,7 +3,7 @@ defmodule Cadence.Catalog.Upload do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
-  alias Cadence.Catalog.{Artifact, Registry}
+  alias Cadence.Catalog.{Actor, Artifact, Registry}
   alias Cadence.Missions
   alias Cadence.Repo
 
@@ -48,6 +48,7 @@ defmodule Cadence.Catalog.Upload do
              organization_id: scope.organization_id,
              mission_id: mission_id
            }),
+         {:ok, actor} <- Actor.from_scope(scope),
          {:ok, _mission} <- Missions.fetch_mission(scope.organization_id, mission_id),
          {:ok, values} <- validate(database_id, params),
          :ok <- validate_upload(upload),
@@ -56,17 +57,17 @@ defmodule Cadence.Catalog.Upload do
       # The browser's media type is a detection hint, not the canonical format.
       artifact =
         Artifact.build_from_upload(mission_id, descriptor, Map.put(upload, :client_type, nil),
-          uploaded_by: actor(scope)
+          uploaded_by: actor
         )
 
       Repo.transaction(fn ->
-        create_import(scope, mission_id, database_id, values, descriptor, artifact)
+        create_import({scope, actor}, mission_id, database_id, values, descriptor, artifact)
       end)
     end
   end
 
-  defp create_import(scope, mission_id, database_id, values, descriptor, artifact) do
-    with {:ok, database} <- database(scope, mission_id, database_id, values, descriptor),
+  defp create_import({scope, actor}, mission_id, database_id, values, descriptor, artifact) do
+    with {:ok, database} <- database({scope, actor}, mission_id, database_id, values, descriptor),
          {:ok, run} <-
            Catalog.start_revision_import(
              scope.organization_id,
@@ -74,7 +75,7 @@ defmodule Cadence.Catalog.Upload do
              database.catalog_database_id,
              artifact,
              descriptor.importer_key,
-             requested_by: actor(scope),
+             requested_by: actor,
              metadata: Map.take(values, ~w(revision_label revision_notes))
            ) do
       run
@@ -83,16 +84,16 @@ defmodule Cadence.Catalog.Upload do
     end
   end
 
-  defp database(scope, mission_id, nil, values, descriptor) do
+  defp database({scope, actor}, mission_id, nil, values, descriptor) do
     Catalog.create_database(scope.organization_id, mission_id, %{
       name: String.trim(values["name"]),
       catalog_family: descriptor.catalog_family,
       default_importer_key: descriptor.importer_key,
-      created_by: actor(scope)
+      created_by: actor
     })
   end
 
-  defp database(scope, mission_id, database_id, _values, _descriptor),
+  defp database({scope, _actor}, mission_id, database_id, _values, _descriptor),
     do: Catalog.fetch_database(scope.organization_id, mission_id, database_id)
 
   defp validate_upload(%{filename: filename, bytes: bytes})
@@ -105,16 +106,4 @@ defmodule Cadence.Catalog.Upload do
   end
 
   defp validate_upload(_upload), do: {:error, :invalid_catalog_upload}
-  # Who uploaded and imported it (lead 11-14: imports recorded no actor). The user struct's key is
-  # user_id; matching on :id never did, so every upload stored %{}. The catalog read names the
-  # actor by "name", else "email".
-  defp actor(%Scope{user: %{user_id: id} = user}) when is_binary(id),
-    do: %{
-      "actor_kind" => "user",
-      "user_id" => id,
-      "name" => Map.get(user, :display_name),
-      "email" => Map.get(user, :email)
-    }
-
-  defp actor(%Scope{}), do: %{}
 end

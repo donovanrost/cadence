@@ -12,6 +12,7 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
   alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.TestSupport.CatalogTestActor
 
   def setup_spacecraft!(organization_id, mission_id) do
     Cadence.DataCase.persist_mission_scope(organization_id, mission_id)
@@ -169,7 +170,7 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
         artifact,
         "cadence_yaml",
         metadata: %{"revision_label" => revision_label},
-        requested_by: Keyword.get(opts, :requested_by, %{})
+        requested_by: Keyword.get_lazy(opts, :requested_by, &CatalogTestActor.system/0)
       )
 
     {:ok, completed} = Catalog.execute_enqueued_run(run.import_run_id)

@@ -4,6 +4,7 @@ defmodule Cadence.Catalog.BroadcastsTest do
   alias Cadence.Jobs.Runner, as: JobRunner
 
   alias Cadence.Catalog.{Artifact, Events, Registry}
+  alias Cadence.TestSupport.CatalogTestActor
 
   @organization_id "org-broadcasts"
   @mission_id "mission-broadcasts"
@@ -13,6 +14,7 @@ defmodule Cadence.Catalog.BroadcastsTest do
 
     {:ok,
      importer_opts: [
+       requested_by: CatalogTestActor.system(),
        importer_registrations:
          Registry.registrations([
            Cadence.TestSupport.FakeTelemetryCatalogImporter,

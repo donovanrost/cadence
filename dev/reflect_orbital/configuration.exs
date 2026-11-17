@@ -2,7 +2,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
   @moduledoc "Imports and assigns the demo command and telemetry database to the Earendil fleet."
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Catalog
-  alias Cadence.Catalog.Artifact
+  alias Cadence.Catalog.{Actor, Artifact}
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.MissionModels.TelemetryProjection
@@ -98,13 +98,9 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
             use_calibrated: false
   """
 
-  # Who imported the demo catalog (lead 11-14: imports recorded no actor). The seed runs as no
-  # user or service identity, so it names itself.
-  @seed_actor %{
-    "actor_kind" => "system",
-    "name" => "Reflect Orbital demo seed",
-    "seed" => "reflect-orbital-v1"
-  }
+  # Who imported the demo catalog (lead 11-14/11-17): the seed runs as no user or service
+  # identity, so it names itself as a system actor (a stable ref, never a person).
+  defp seed_actor, do: Actor.system("seed:reflect-orbital-v1", "Reflect Orbital demo seed")
 
   defp with_demo_verifiers(source) do
     Enum.reduce(@verified_commands, source, fn name, acc ->
@@ -131,6 +127,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
             name: "Demo Spacecraft — Command & Telemetry",
             catalog_family: :combined,
             default_importer_key: "cadence_yaml",
+            created_by: seed_actor(),
             description:
               "The repository's complete demo_spacecraft.yaml, assigned to the Earendil demonstration fleet.",
             metadata: F.metadata()
@@ -155,7 +152,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
           format_key: "cadence_yaml",
           media_type: "application/yaml",
           source_artifact: source,
-          uploaded_by: @seed_actor,
+          uploaded_by: seed_actor(),
           metadata:
             Map.put(
               F.metadata(),
@@ -171,7 +168,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
           id,
           artifact,
           "cadence_yaml",
-          requested_by: @seed_actor
+          requested_by: seed_actor()
         )
 
       await_import(run.import_run_id, 120)

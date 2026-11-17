@@ -14,6 +14,7 @@ defmodule Cadence.Applications.PacketBindingsTest do
   alias Cadence.MissionModels.TelemetryProjection
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.TestSupport.CatalogTestActor
 
   @organization_id "org-packet-bindings"
   @mission_id "mission-packet-bindings"
@@ -287,6 +288,7 @@ defmodule Cadence.Applications.PacketBindingsTest do
         database.catalog_database_id,
         artifact,
         "cadence_yaml",
+        requested_by: CatalogTestActor.system(),
         metadata: %{"revision_label" => "Packet Bindings Rev 1"}
       )
 

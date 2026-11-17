@@ -327,8 +327,18 @@ defmodule Cadence.Reads.CatalogOverview do
   defp size(bytes) when is_binary(bytes), do: byte_size(bytes)
   defp size(_other), do: nil
 
-  defp actor(%{"name" => name}) when is_binary(name), do: %{name: name}
-  defp actor(%{"email" => email}) when is_binary(email), do: %{name: email}
-  defp actor(%{email: email}) when is_binary(email), do: %{name: email}
+  # Catalog.Actor's name/email, else the REST API's actor document (ControlPlaneAccess), so an
+  # import made over the API names its person or service too (lead 11-17).
+  @actor_names ~w(name email user_display_name user_email service_identity_display_name)
+
+  defp actor(%{} = by) do
+    Enum.find_value(@actor_names, fn key ->
+      case Map.get(by, key) do
+        name when is_binary(name) and name != "" -> %{name: name}
+        _missing -> nil
+      end
+    end)
+  end
+
   defp actor(_other), do: nil
 end

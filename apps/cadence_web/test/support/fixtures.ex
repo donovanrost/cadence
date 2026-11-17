@@ -19,6 +19,7 @@ defmodule CadenceWeb.TestFixtures do
   alias Cadence.{Spacecraft, SpacecraftType}
 
   alias Cadence.Repo
+  alias Cadence.TestSupport.CatalogTestActor
 
   @default_password "durable-password-123"
 
@@ -233,7 +234,12 @@ defmodule CadenceWeb.TestFixtures do
                artifact.mission_id,
                artifact.artifact_id,
                Keyword.get(opts, :importer_key, "cadence_yaml"),
-               requested_by: Keyword.get(opts, :requested_by, %{}),
+               requested_by:
+                 Keyword.get_lazy(
+                   opts,
+                   :requested_by,
+                   &CatalogTestActor.system/0
+                 ),
                catalog_database_id:
                  Keyword.get(opts, :catalog_database_id, artifact.catalog_database_id),
                metadata: Keyword.get(opts, :metadata, %{})
@@ -265,7 +271,12 @@ defmodule CadenceWeb.TestFixtures do
                database.catalog_database_id,
                artifact,
                Keyword.get(opts, :importer_key, database.default_importer_key || "cadence_yaml"),
-               requested_by: Keyword.get(opts, :requested_by, %{}),
+               requested_by:
+                 Keyword.get_lazy(
+                   opts,
+                   :requested_by,
+                   &CatalogTestActor.system/0
+                 ),
                metadata: %{
                  "revision_label" => Keyword.get(opts, :revision_label, "Revision 1"),
                  "revision_notes" => Keyword.get(opts, :revision_notes, "")

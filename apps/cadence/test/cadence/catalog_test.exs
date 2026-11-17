@@ -25,6 +25,7 @@ defmodule Cadence.CatalogTest do
 
   alias Cadence.Missions.Mission
   alias Cadence.Platform.EventBus
+  alias Cadence.TestSupport.CatalogTestActor
 
   setup do
     suffix = System.unique_integer([:positive])
@@ -117,7 +118,10 @@ defmodule Cadence.CatalogTest do
                mission_id(),
                persisted_artifact.artifact_id,
                "fake_tm_json",
-               catalog_opts(importer_opts, importer_version: 2)
+               catalog_opts(importer_opts,
+                 importer_version: 2,
+                 requested_by: CatalogTestActor.system()
+               )
              )
 
     assert {:ok, queued_job} =
@@ -420,7 +424,7 @@ defmodule Cadence.CatalogTest do
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json",
-                 importer_opts
+                 CatalogTestActor.opts(importer_opts)
                )
 
       assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
@@ -470,7 +474,10 @@ defmodule Cadence.CatalogTest do
                  database.catalog_database_id,
                  artifact,
                  "fake_tm_json",
-                 catalog_opts(importer_opts, metadata: %{"revision_label" => "Bad"})
+                 catalog_opts(importer_opts,
+                   metadata: %{"revision_label" => "Bad"},
+                   requested_by: CatalogTestActor.system()
+                 )
                )
 
       assert [] =

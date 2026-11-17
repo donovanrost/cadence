@@ -193,7 +193,10 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   approved|rejected, by {id, name}, at, report_id | null, reason | null, retroactive} | null,
   viewer_can_decide, viewer_is_importer, cannot_decide_because: not_admin | not_approvable |
   self_approval | plans_not_ready | null, plans_ready, comparison: <cmp> | null}`. `imported_by`
-  null reads "Importer not recorded".
+  null reads "Importer not recorded". Importers (11-17) are the people recorded on the catalog
+  revisions naming the model revision plus the people who ran a completed import run that made
+  it (every run makes its own model revision, so a reimport's has only its runner);
+  `imported_by` is the first. A service or Cadence's own seed never counts as one.
 - `POST /:id/comparison {}` → `201 <cmp>`, synchronous, against the mission's active binding set
   and the revision this one replaces (the previous catalog revision's model in the same
   database, else none). Reports dedupe on content.

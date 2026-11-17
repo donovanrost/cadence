@@ -6,10 +6,10 @@ defmodule Cadence.Catalog do
 
   import Ecto.Query
 
-  alias Cadence.Persistence.JsonDocument
   alias Ecto.Changeset
 
   alias Cadence.Catalog.{
+    Actor,
     Artifact,
     ArtifactRow,
     Database,
@@ -20,6 +20,7 @@ defmodule Cadence.Catalog do
     ImportResult,
     ImportRun,
     ImportRunRow,
+    ModelImporters,
     Registry,
     Revision,
     RevisionRow,
@@ -180,7 +181,9 @@ defmodule Cadence.Catalog do
   def start_import_run(organization_id, mission_id, artifact_id, importer_key, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(artifact_id) and
              is_binary(importer_key) and is_list(opts) do
-    with {:ok, %Artifact{} = artifact} <- fetch_artifact(organization_id, mission_id, artifact_id),
+    # An import names who ran it (lead 11-17): a revision's importer is what the model gate reads.
+    with :ok <- Actor.recorded(Keyword.get(opts, :requested_by)),
+         {:ok, %Artifact{} = artifact} <- fetch_artifact(organization_id, mission_id, artifact_id),
          {:ok, %{module: importer_module, descriptor: descriptor}} <-
            Registry.fetch_importer(
              importer_key,
@@ -319,24 +322,11 @@ defmodule Cadence.Catalog do
     end)
   end
 
-  @doc """
-  Who imported a mission-model revision: the user ids recorded on the catalog revisions that name
-  it (empty when no importer was recorded). The model approval's importer/approver separation
-  (`MissionModels.RevisionDecisions`, DECISIONS #92 a) reads it.
-  """
+  @doc "Who imported a mission-model revision; see `Cadence.Catalog.ModelImporters`."
   @spec model_importers(binary(), binary(), binary()) :: [binary()]
-  def model_importers(organization_id, mission_id, mission_model_revision_id) do
-    from(row in RevisionRow,
-      where:
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.mission_model_revision_id == ^mission_model_revision_id,
-      select: row.created_by
-    )
-    |> Repo.all()
-    |> Enum.map(&recorded_user_id/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-  end
+  defdelegate model_importers(organization_id, mission_id, mission_model_revision_id),
+    to: ModelImporters,
+    as: :list
 
   @doc """
   The mission-model revision produced by the catalog revision just before the one that produced
@@ -371,14 +361,6 @@ defmodule Cadence.Catalog do
       |> limit(1)
       |> select([row], row.mission_model_revision_id)
       |> Repo.one()
-    end
-  end
-
-  defp recorded_user_id(created_by) do
-    case JsonDocument.unwrap_value(created_by) do
-      %{"user_id" => id} when is_binary(id) and id != "" -> id
-      %{"id" => id} when is_binary(id) and id != "" -> id
-      _not_recorded -> nil
     end
   end
 
@@ -475,7 +457,8 @@ defmodule Cadence.Catalog do
       )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(catalog_database_id) and is_binary(importer_key) and is_list(opts) do
-    with {:ok, %Database{} = database} <-
+    with :ok <- Actor.recorded(Keyword.get(opts, :requested_by)),
+         {:ok, %Database{} = database} <-
            fetch_database(organization_id, mission_id, catalog_database_id),
          artifact <- %Artifact{artifact | catalog_database_id: catalog_database_id},
          :ok <-
