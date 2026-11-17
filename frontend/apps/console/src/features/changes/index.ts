@@ -24,11 +24,13 @@ export { checkKeyText, checkLabel, type CheckKey, type HoldReason } from "./prev
 export { refreshConfigState, useConfigState } from "./useConfigState.ts";
 export { default as SchemaForm } from "./SchemaForm.vue";
 export { default as KindEditor } from "./KindEditor.vue";
+export type { Change, FormRules, FormState } from "./formRules.ts";
 export {
   diffEdits,
   displayValue,
   fetchKindSchema,
   fromDocument,
+  kindSchemaReader,
   schemaFieldReader,
   toValue,
   visible,
