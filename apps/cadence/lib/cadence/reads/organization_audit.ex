@@ -26,8 +26,8 @@ defmodule Cadence.Reads.OrganizationAudit do
     AccountEvents,
     CommandEvents,
     ContactEvents,
-    ModelEvents,
     DashboardEvents,
+    ModelEvents,
     PolicyEvents,
     ProviderAccountEvents,
     SettingsEvents
