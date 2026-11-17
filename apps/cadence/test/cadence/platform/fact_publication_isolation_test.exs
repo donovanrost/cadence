@@ -124,6 +124,16 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
     assert_fact(:bus_a, {:cadence, :telemetry, :facts}, ObservationsCommitted)
     refute_any_fact()
 
+    # The write landed: storage received this sample with its own identity.
+    assert_received {:telemetry_storage_envelopes,
+                     [
+                       %{
+                         sample_id: "sample-a",
+                         mission_id: ^mission_id,
+                         observation_identity_id: identity_a
+                       }
+                     ]}
+
     assert :ok =
              Storage.persist_samples(policy_b, [sample("sample-b", mission_id, 2)],
                organization_id: organization_id,
@@ -136,8 +146,20 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
     assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationsCommitted)
     refute_any_fact()
 
-    # First-seen rule (11-17): canonical first sightings write no identity-state row; the
-    # ObservationIdentityStateChanged facts above show both writes went through their own bus.
+    assert_received {:telemetry_storage_envelopes,
+                     [
+                       %{
+                         sample_id: "sample-b",
+                         mission_id: ^mission_id,
+                         observation_identity_id: identity_b
+                       }
+                     ]}
+
+    assert is_binary(identity_a) and is_binary(identity_b) and identity_a != identity_b
+    refute_received {:telemetry_storage_envelopes, _more}
+
+    # First-seen rule (11-17): canonical first sightings write no identity-state row. Both writes
+    # landed (storage received each sample and its identity above) and published on their own bus.
     assert Storage.list_observation_identity_states(mission_id) == []
 
     assert :ok = Persistence.persist_managed_runtime_records(bus_a, [], [], [])
