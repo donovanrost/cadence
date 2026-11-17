@@ -311,6 +311,20 @@ previous one's post-checks. A later step never moves ahead to keep its time. Whe
 after it slides; what no longer fits the day moves to the next day in the same order, never compressed. Protected
 windows (for example, around an armed run) stay closed whatever slips.
 
+**Chain rules** (director 11-17):
+
+1. The chain owner checks each step's expected END as well as its start, and pings within 15 min of either being
+   missed.
+2. Every approval step in a chain names a backup approver, a different agent from the stager. If the named approver
+   hasn't acted within 15 min of the hand-off, the owner switches to the backup; an approval never sits waiting on one
+   session.
+3. Every heavy-job hold has an end time when it is set. If the step it protects hasn't started by then, the hold
+   lapses and the owner re-sets it explicitly. qa's slot lock note carries the same end time.
+
+Why: on 11-17 step 4 part 2 (the r10 apply) stalled from 09:17Z to 12:4xZ. The approver's session dropped on a
+connection error right after qa's hand-off. qa held the slot lock and waited for the approver's ping, and nobody
+checked the step's expected end. The hold and lock had no end time, so the whole chain waited about three hours.
+
 ## Daily dev retention slot
 
 Once a day, in a qa slot outside passes (no active contact; not within 1 h of an armed pass), on `cadence_apogee_dev`
