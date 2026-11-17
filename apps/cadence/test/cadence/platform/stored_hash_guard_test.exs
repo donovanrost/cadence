@@ -14,6 +14,15 @@ defmodule Cadence.Platform.StoredHashGuardTest do
     Declaration.fingerprint (checked against an authored override's stored expected_fingerprint).
     The application-inputs basis and the review token built on it hash the
     Applications.* structs pinned below.
+  - DEFAULTS are pinned with the keys: a stored row decoded without a key takes its default, so a
+    changed default moves stored hashes exactly like a new field (api-ops).
+
+  The hashes are `:erlang.term_to_binary(term, [:deterministic])` over whole struct terms, so the
+  goldens also move on a struct MODULE rename or move (the `__struct__` atom is hashed), on a
+  field's value changing type (an atom becoming a string), and on an Erlang/OTP or Elixir upgrade
+  that changes the external term format. Every one of those stops every stored generation from
+  verifying. NEVER just re-pin a golden: find what moved it, keep stored values verifying (or get
+  a director-approved plan for them) BEFORE that change lands, and only then update the pin.
   """
   use Cadence.UnitCase, async: true
 
@@ -171,26 +180,50 @@ defmodule Cadence.Platform.StoredHashGuardTest do
     ]
   }
 
+  # Every default that isn't nil (the rest default to nil).
+  @defaults %{
+    BindingSet => %{capability_instances: [], rules: []},
+    BindingRule => %{fanout_mode: :exclusive, priority: 100},
+    CapabilityInstance => %{lifecycle_state: :active},
+    CapabilityConfig => %{document: %{}},
+    Selector => %{},
+    SelectorScope => %{},
+    SelectorMatch => %{},
+    PacketDefinition => %{fields: []},
+    FieldDefinition => %{byte_order: :big_endian},
+    ApplicationBinding => %{enabled: true, handled_apids: [], metadata: %{}},
+    PacketBindingConfiguration => %{bindings: [], enabled: true, metadata: %{}},
+    PacketBinding => %{metadata: %{}, resources: [], selector: %{}},
+    PacketBindingResource => %{metadata: %{}},
+    Reference => %{required: true},
+    Provenance => %{metadata: %{}, source_path: [], transformations: []}
+  }
+
+  @rule "it feeds a stored hash (DECISIONS #108). Keep stored values verifying in the same commit " <>
+          "(leave the field out, or out at its default, with a legacy-value test) or get a " <>
+          "director-approved plan; only then update the pin."
+
   # Pinned 11-17 on the tree that verifies Earendil's stored generation 9.
   @golden_binding_set "35734e0ee261b3e9bf041ca5744f66b36bdb6685115262b056547bd24aede372"
   @golden_declaration "af8853f96fcb709a7e1adadabe3f6eed881327be77142c5c4ce1429241af0976"
 
   describe "structs reachable from stored hashes (#108)" do
     for {module, keys} <- @shapes do
-      test "#{inspect(module)} keeps its pinned shape" do
-        actual = unquote(module).__struct__() |> Map.from_struct() |> Map.keys() |> Enum.sort()
+      defaults = Map.fetch!(@defaults, module)
 
-        assert actual == unquote(keys),
-               "#{inspect(unquote(module))} changed shape; it feeds a stored hash (DECISIONS #108). " <>
-                 "Keep the hash stable for stored values in the same commit (leave the field out, " <>
-                 "or out at its default) with a legacy-value test, then update this list."
+      test "#{inspect(module)} keeps its pinned shape and defaults" do
+        expected =
+          unquote(keys) |> Map.new(&{&1, nil}) |> Map.merge(unquote(Macro.escape(defaults)))
+
+        assert Map.from_struct(unquote(module).__struct__()) == expected,
+               "#{inspect(unquote(module))} changed its fields or defaults; " <> @rule
       end
     end
   end
 
   describe "golden hashes (#108)" do
     test "BindingSet.content_sha256 of a fixed binding set" do
-      assert BindingSet.content_sha256(binding_set()) == @golden_binding_set
+      assert BindingSet.content_sha256(binding_set()) == @golden_binding_set, golden_message()
     end
 
     test "a field's parameter_id and qualified_name don't move it (#73)" do
@@ -203,12 +236,18 @@ defmodule Cadence.Platform.StoredHashGuardTest do
           ]
         end)
 
-      assert BindingSet.content_sha256(named) == @golden_binding_set
+      assert BindingSet.content_sha256(named) == @golden_binding_set, golden_message()
     end
 
     test "Declaration.fingerprint of a fixed declaration" do
-      assert Declaration.fingerprint(declaration()) == @golden_declaration
+      assert Declaration.fingerprint(declaration()) == @golden_declaration, golden_message()
     end
+  end
+
+  defp golden_message do
+    "A golden stored-hash value moved: a struct reached by it changed (fields, defaults, module " <>
+      "name or a value's type), or the Erlang/OTP or Elixir term encoding changed. Don't just " <>
+      "re-pin: " <> @rule
   end
 
   defp binding_set do
