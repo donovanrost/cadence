@@ -2576,7 +2576,10 @@ Cadence for the mission's organization (today, domain).
 
 - **Name for operators:** `Stuck processing` (filters, the cause tag, Technical details' source line). Never
   "replay", "conflict", "partition", "journal", "effect" or "runtime" in visible text; they go in Technical details.
-- **Spacecraft names:** up to 3, then "and N more"; one craft leads the title, as in U37/U47.
+- **Spacecraft names:** up to 3, then "and N more"; one craft leads the title, as in U37/U47. A craft whose
+  `name` is null is counted, never shown by id (U25): "EARENDIL-004 and 1 other spacecraft"; all unnamed, "2
+  spacecraft". A `storage` item whose only craft is unnamed titles with the pass: `SVA 18:49Z pass · telemetry
+  storage is stuck`.
 - **Title** (by `path`):
   - (1) pass: `EARENDIL-001 · SVA 18:49Z pass · telemetry storage is stuck` (several craft: `EARENDIL-001 and 2
     others · SVA 18:49Z pass · …`; the pass label as U47).
@@ -2590,27 +2593,40 @@ Cadence for the mission's organization (today, domain).
   - (3) "Timed actions for 4 spacecraft aren't running: EARENDIL-004, …"
 - **Who's affected, `processing` and `timer`** (api's shape, 11-17): `spacecraft_ids` is the craft known to be
   affected and can undercount, so these paths never claim an exact set (U20). Their titles name nobody:
-  `Incoming data is stuck` / `Timed actions are stuck`. The what-stopped line then says "It affects EARENDIL-004
-  and EARENDIL-005, and may affect others." (names up to 3, then "and N more"); with none known, "It isn't known
-  yet which spacecraft it affects." `storage` (one pass) keeps the named title above.
+  `Incoming data is stuck` / `Timed actions are stuck`. The what-stopped line then says, by what's known (review of
+  fe-ops' build, 11-17):
+  - one craft: "It affects EARENDIL-009, and may affect others."
+  - two or more, all named: "It affects at least 2 spacecraft: EARENDIL-004 and EARENDIL-005."
+  - some unnamed, or more than 3: "It affects at least 3 spacecraft, including EARENDIL-004 and EARENDIL-005." (up
+    to 3 names; never "1 other spacecraft, and may affect others")
+  - one unnamed craft only: "It affects at least 1 spacecraft." None known: "It isn't known yet which spacecraft it
+    affects."
+  - `storage` (one pass) keeps the named title above; with several craft its line reads "…so alarms and current
+    values for this pass's spacecraft aren't updating."
 - **Why** (second line, all paths): "It's a fault in Cadence, not in this mission's setup or data. Cadence retries
   by itself and hits the same fault each time: 14 tries since 03:10Z, the last at 03:52Z." (`occurrences`, `since`,
   `last_seen`; drop a clause whose field is null, U20.) For (3) the retries come only when new data or a timed
   action comes due (api: at most about every 30 s), and the same sentence holds. There's no restart loop and no
   given-up state (api, 11-17).
+  - (3) stopped at start (domain's #99 check, lead 11-17; api's `stopped` signal): nothing counts tries, so the
+    why line has no counts: "It's a fault in Cadence, not in this mission's setup or data. It stopped while
+    starting up and won't start again until Cadence is fixed." Meta `STOPPED · SINCE 03:10Z` (no TRIES). The
+    what-stopped and what-to-do lines are unchanged.
 - **What to do** (third line): "Tell the team that runs Cadence for you, and send them the details. Nothing in
   the console fixes this." No restart line (see above).
   - `Copy details` is a quiet button (it copies, it doesn't navigate): the item's Technical details as plain text
     (source, path, unit, spacecraft, pass, since, last seen, occurrences, buffer, error). Afterwards "Copied"
-    for 2 s in a live region. It changes nothing on the server.
+    for 2 s in a live region; if the clipboard is blocked, "Couldn't copy. Select the Technical details instead."
+    It changes nothing on the server.
 - **Buffer, (1) and (2)** (the U47 word "buffer", never "journal"; bytes with the console's formatter):
   - Filling: "Incoming telemetry is kept in Cadence's buffer meanwhile: 3.3 of 8.6 GB used. Once it's full, new
-    telemetry is lost." Meta `BUFFER 39% · SINCE 03:10Z · 14 TRIES`.
+    telemetry is lost." Meta `BUFFER 38% · SINCE 03:10Z · 14 TRIES` (the % rounds down, so it never reads 100% before it's full).
   - Dropping (the urgent state, crit ◆, sorts first): "Cadence's buffer is full, so new telemetry from these
-    spacecraft is being lost. Telemetry received before 04:40Z is kept." (`dropping_since`, when sent;
+    spacecraft is being lost." (`storage`: "…new telemetry from this pass is being lost.") Then "Telemetry received before 04:40Z is kept." (`dropping_since`, when sent;
     else "Telemetry already received is kept.") Meta `BUFFER FULL · LOSING NEW TELEMETRY`.
   - Otherwise the mark is caution ▲.
-- **Acknowledge** (operate_mission; without it: "Operators acknowledge this."): an optional note, placeholder
+- **Acknowledge** (operate_mission; without it, in the sheet only, never on the row: "Operators acknowledge
+  this."): an optional note, placeholder
   "Who you told, e.g. domain at 03:18Z". After it: "Acknowledged by Mira K. at 03:20Z: told domain at 03:18Z." (no
   note: "Acknowledged by Mira K. at 03:20Z."). The row stays listed, sorted last in its priority (U31), with
   `ACK MIRA K.` in the meta. The dropping state un-sorts it again: frames being lost is new.
@@ -2622,9 +2638,23 @@ Cadence for the mission's organization (today, domain).
     earlier one belongs to the audit, not the row, so api sends only the latest.
   - Fields: `occurrences`, `first_seen_at`, `last_seen_at` back the why line; `journal_used_bytes` /
     `journal_max_bytes` back the buffer line.
+- **Row and sheet** (fe-ops' split, 11-17; ApListRow has one sentence):
+  - Row sentence: the what-stopped line; while dropping, the dropping line instead (the urgent fact; the title
+    already says what's stuck). The ack stays out of the sentence: it's `ACK MIRA K.` in the meta.
+  - Row action: `Acknowledge…` for operators while it isn't acknowledged (primary when dropping); otherwise
+    `Details`. Both open the same side sheet.
+  - Sheet: titled with the row's title, then `Stuck processing` as a small label under it (the kit's sheet has no
+    kicker slot; fine as built). In order: what stopped, why, buffer, what to do,
+    the ack line if any (so whoever takes over sees who was told), `Copy details`, Technical details (a
+    disclosure), then for operators the note field and `Acknowledge`; without operate_mission "Operators
+    acknowledge this."
 - **Resolved** (system, U31: the action only): the row fades for 5 s with `Resolved: telemetry storage resumed` /
   `Resolved: processing resumed` / `Resolved: timed actions running`. Frames lost while dropping stay as U47's
   `frames_dropped` item.
 - **Cause tag on the folded rows** (U37 telemetry not stored, U47 buffer filling, U38 runtime not applied, for the
-  same unit): tag `STUCK PROCESSING`, rows shown under this item. Their own actions that would retry (U37's `Retry
-  storing`) are disabled with the A6 reason "Retrying won't help until the stuck processing is fixed."
+  same unit): tag `STUCK PROCESSING`, rows shown under this item. A tagged U37 row has no `Retry storing`, not
+  even disabled: its action is `Review` (the contact drawer), and its evidence already says why (below).
+  - api (11-17): `stuck_processing_id` is set only when the item's own cause is this conflict. U37 gains
+    `failure_kind: "replay_id_conflict"`, evidence "1,204 entries (3.4 MB) are on disk. Cadence can't store them
+    until the stuck processing is fixed." (no retry sentence, no "Next try"); it folds by its own key, as U37's
+    other kinds. U38 carries it only if its reason can be the conflict (api checks at build).
