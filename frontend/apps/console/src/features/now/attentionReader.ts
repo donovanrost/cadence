@@ -21,6 +21,7 @@ import { coveragePlanStates, planCoverageFields } from "./coverageFields.ts";
 import { expiredGroupFields } from "./expiredGroup.ts";
 import { journalDiskFields } from "./journalDisk.ts";
 import { providerChangeReader } from "./providerChangeReader.ts";
+import { replayConflictFields, replayConflictPaths } from "./replayConflictFields.ts";
 import { scidMismatchFields } from "./scidMismatch.ts";
 
 /**
@@ -285,6 +286,8 @@ export const attentionReader = d.object({
   ...journalDiskFields,
   /** contact_scid_mismatch (U81 §2): the pass's craft and its refused frames. */
   ...scidMismatchFields,
+  /** replay_conflict (U84): the stuck unit, who it affects, its buffer and its ack note. */
+  ...replayConflictFields,
   resolution: d.nullable(
     d.object({
       /** How it closed: a known key (archive 'discarded', a job 'closed'…), else the raw word. */
@@ -315,4 +318,6 @@ export const resolvedReader = d.object({
   from_state: d.optional(d.nullable(d.knownText(coveragePlanStates))),
   plan_revision: d.optional(d.nullable(d.integer)),
   booking: d.optional(d.nullable(d.object({ reserved: d.integer, total: d.integer }))),
+  /** U84 replay_conflict only: which part resumed, for the per-path resolved line. */
+  path: d.optional(d.nullable(d.knownText(replayConflictPaths))),
 });

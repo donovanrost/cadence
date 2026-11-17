@@ -19,6 +19,9 @@ export function settlementEvidence(f: SettlementFacts, now: Date = new Date()): 
   const one = f.backlog.entries === 1;
   const disk = `${f.backlog.entries.toLocaleString("en-US")} ${one ? "entry" : "entries"} (${formatBytes(f.backlog.bytes)}) ${one ? "is" : "are"} on disk`;
   const them = one ? "it" : "them";
+  // U84: retrying can't help until the fix lands, so no tries and no next try.
+  if (f.failureKind === "replay_id_conflict")
+    return `${disk}. Cadence can't store ${them} until the stuck processing is fixed.`;
   if (f.retry === "manual") {
     // ux 294e67c6: replay stopped after MAX_TRIES; the reason is the last try's.
     const why =
@@ -163,6 +166,7 @@ export function attentionWords(
     case "quarantined":
     case "listener_refusal":
     case "outcome_unknown":
+    case "replay_id_conflict":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.

@@ -29,6 +29,8 @@ export const attentionSources = [
   "expired_group",
   // U81 §2 (api, #102): most of a settled contact's frames carried another SCID.
   "contact_scid_mismatch",
+  // U84 (api, after #99): processing stuck on a fault in Cadence ("Stuck processing").
+  "replay_conflict",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
@@ -59,6 +61,8 @@ export const attentionConflicts = [
   "listener_refusal",
   // job_outcome_unknown (U54): one item per cut-off run.
   "outcome_unknown",
+  // replay_conflict (U84): one item per stuck unit.
+  "replay_id_conflict",
 ] as const;
 /** U50 listener_refusal: why the shared listener refused the last connection. */
 export const listenerRefusals = [
@@ -91,7 +95,12 @@ export const startReasons = [
   "unknown",
 ] as const;
 /** U37 contact_settlement: why the telemetry isn't stored (null: a slow drain past the deadline). */
-export const settlementFailures = ["telemetry_storage_unavailable", "settle_failed"] as const;
+export const settlementFailures = [
+  "telemetry_storage_unavailable",
+  "settle_failed",
+  // U84: the stored failure is the stuck processing (the item carries stuck_processing_id).
+  "replay_id_conflict",
+] as const;
 
 /** The server's own key, known or not: attention routes, fold keys. */
 export const serverKey = <T extends string>(value: T | Unrecognized): string =>
@@ -117,6 +126,8 @@ export const resolutionActions = [
   "rejected",
   "replayed",
   "retried",
+  // U84 replay_conflict: the system closed it when the fix landed (per-path words).
+  "resumed",
   // U81 §2 contact_scid_mismatch: unseen 7 days after settle; marked seen (the person, with name).
   "retired",
   "seen",

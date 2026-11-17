@@ -11,9 +11,10 @@ export type Resolved = Decoded<typeof resolvedReader>;
 /** What the words read of a resolved entry; `booked` and `refused` are only on newer reads. */
 export type ResolvedEntry = Omit<
   Resolved,
-  "booked" | "refused" | "from_state" | "plan_revision" | "booking"
+  "booked" | "refused" | "from_state" | "plan_revision" | "booking" | "path"
 > &
   Readonly<{
+    path?: Resolved["path"];
     booked?: boolean | null | undefined;
     refused?: Resolved["refused"];
     from_state?: Resolved["from_state"];
@@ -119,6 +120,12 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
     if (r.action === "retired") return "Retired after 7 days without being seen.";
     if (r.action === "seen")
       return r.resolved_by.name ? `Seen by ${r.resolved_by.name} at ${at}.` : `Seen at ${at}.`;
+  }
+  if (r.id.startsWith("attention:replay_conflict:") && r.action === "resumed") {
+    // U84: the system closed it when the fix landed; the action only, by path (U31).
+    if (r.path === "storage") return "Resolved: telemetry storage resumed.";
+    if (r.path === "timer") return "Resolved: timed actions running.";
+    return "Resolved: processing resumed.";
   }
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";
