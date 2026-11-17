@@ -7,13 +7,14 @@ import {
 } from "@/features/changes/index.ts";
 
 /**
- * U83: a listen-mode inbound transport's listener, own or shared. The stored document holds
- * `listener: "shared"` or no key (missing reads as own; api). When an edit hides the field over a
- * stored shared listener (connect, outbound or bidirectional), the transport goes back to its own
+ * U83: a listen-mode downlink transport's listener, own or shared (U85: the direction reads
+ * Downlink/Uplink/Both; its stored values stay inbound/outbound/bidirectional). The stored document
+ * holds `listener: "shared"` or no key (missing reads as own; api). When an edit hides the field over
+ * a stored shared listener (connect, uplink or both), the transport goes back to its own
  * listener: own is sent in the same stage, since the stored shared would be refused (api).
  */
 export const LISTENER = "configuration.listener";
-const WHY = "only an inbound transport that listens can share one";
+const WHY = "only a downlink transport that listens can share one";
 export const STOPS_SHARING = `This transport will stop sharing its listener: ${WHY}.`;
 
 const field = (s: FormState): SchemaField | undefined =>

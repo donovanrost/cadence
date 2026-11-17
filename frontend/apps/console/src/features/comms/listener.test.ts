@@ -28,9 +28,10 @@ const read = decode(kindSchemaReader, {
       ["listen", "TCP server (listen)"],
       ["connect", "TCP client (connect)"],
     ]),
-    select("configuration.direction_capability", "Direction Capability", [
-      ["inbound", "Inbound"],
-      ["outbound", "Outbound"],
+    select("configuration.direction_capability", "Direction", [
+      ["inbound", "Downlink"],
+      ["outbound", "Uplink"],
+      ["bidirectional", "Both"],
     ]),
     {
       ...select(LISTENER, "Listener", [
@@ -69,7 +70,7 @@ describe("a transport's listener (U83)", () => {
       { path: LISTENER, value: "own" },
     ]);
     expect(listenerRules.describe?.({ path: LISTENER, value: "own" }, s)).toBe(
-      "Listener: Shared, routed by SCID → Own listener for each pass (only an inbound transport that listens can share one)",
+      "Listener: Shared, routed by SCID → Own listener for each pass (only a downlink transport that listens can share one)",
     );
     expect(listenerRules.notes?.(s)).toEqual({ "configuration.mode": STOPS_SHARING });
   });
