@@ -87,6 +87,8 @@ export const startReasons = [
   "listener_in_use",
   // U81 §3: another mission listens on the port our transport uses.
   "listen_endpoint_claimed",
+  // U45 (api, Archive control): the pass's path is pinned to an archived transport's profile.
+  "transport_archived",
   "listener_unavailable",
   "connect_failed",
   "ingress_pipeline_failed",

@@ -318,6 +318,8 @@ export const resolvedReader = d.object({
   from_state: d.optional(d.nullable(d.knownText(coveragePlanStates))),
   plan_revision: d.optional(d.nullable(d.integer)),
   booking: d.optional(d.nullable(d.object({ reserved: d.integer, total: d.integer }))),
+  /** U45 contact_start: null when it failed before its run existed ('Set up at', ux). */
+  realized_contact_id: d.optional(d.nullable(d.token)),
   /** U84 replay_conflict only: which part resumed, for the per-path resolved line. */
   path: d.optional(d.nullable(d.knownText(replayConflictPaths))),
 });

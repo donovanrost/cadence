@@ -220,6 +220,7 @@ const countdown = computed(() => {
         :mission-id="missionId"
         :attention="startItem"
         :now="now"
+        :spacecraft-id="pass.spacecraft?.id ?? null"
         @changed="$emit('changed')"
       />
       <!-- U47: this pass's telemetry backing up, or frames lost. -->

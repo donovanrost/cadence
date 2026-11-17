@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MissionId } from "@/api/index.ts";
+import type { MissionId, SpacecraftId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
 import { plural, ApButton, ApCallout } from "@/ui";
@@ -20,7 +20,13 @@ import {
  * itself; once missed, Mark as seen closes it (operate_mission, as U37). The holder pass links;
  * the reason key and the raw error live in Technical details only.
  */
-const props = defineProps<{ missionId: MissionId; attention: Attention; now: Date }>();
+const props = defineProps<{
+  missionId: MissionId;
+  attention: Attention;
+  now: Date;
+  /** The pass's craft: transport_archived's Book a pass books for it (ux U45). */
+  spacecraftId?: SpacecraftId | null | undefined;
+}>();
 const emit = defineEmits<{ changed: [] }>();
 
 const access = useCommandAccess();
@@ -35,7 +41,7 @@ const holder = computed((): { label: string; to: RouteLocationRaw } | null => {
       }
     : null;
 });
-const fix = computed(() => startReasonAction(props.attention));
+const fix = computed(() => startReasonAction(props.attention, props.spacecraftId ?? null));
 /** "Cadence is retrying · 3 tries · last at 03:12Z"; nothing once missed. */
 const tries = computed(() => {
   const a = props.attention;

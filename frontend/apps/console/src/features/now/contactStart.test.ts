@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { ResolutionAction } from "./attention.ts";
-import { decode } from "@/api/index.ts";
+import { decode, spacecraftId as spacecraftIdReader } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { attentionReader, resolvedWords } from "./attention.ts";
 import { startReasonAction } from "./contactStart.ts";
@@ -165,6 +165,34 @@ describe("contact_start on Now (ux U45)", () => {
     expect(fix({ listen_port: 5012, transport_id: null })).toBeNull();
   });
 
+  it("U45 transport_archived: this pass only, names the transport, Book a pass for the craft", () => {
+    const said = (o: Record<string, unknown>) =>
+      rowOf({ reason: "transport_archived", holder: null, ...o })?.sentence;
+    const archived = {
+      listen_port: null,
+      provider_binding_id: null,
+      transport_id: "tr-9",
+      transport_name: "INU S-band",
+    };
+    const TAIL =
+      "was archived after the pass was booked, so it can't start, and every try fails the same way. Book another pass for this spacecraft.";
+    expect(said(archived)).toContain(`This pass's transport, INU S-band, ${TAIL}`);
+    expect(said({ ...archived, transport_name: null })).toContain(`This pass's transport ${TAIL}`);
+    const r = decode(
+      attentionReader,
+      item({ reason: "transport_archived", ...archived }).attention,
+    );
+    if (!r.ok) throw new Error(r.error.message);
+    const id = decode(spacecraftIdReader, "spacecraft-earendil-312");
+    if (!id.ok) throw new Error(id.error.message);
+    expect(startReasonAction(r.value, id.value)).toEqual({
+      label: "Book a pass",
+      to: { name: "ops.contacts", query: { book: "spacecraft-earendil-312" } },
+    });
+    // Without the pass's craft there's nowhere to send it: no second action.
+    expect(startReasonAction(r.value)).toBeNull();
+  });
+
   it("missed: P2, the window, Mark as seen, no countdown", () => {
     const row = rowOf({ conflict: "missed", reason: null }, 2);
     expect(row?.title).toBe("EARENDIL-312 · SVA 03:10Z pass was missed");
@@ -200,5 +228,33 @@ describe("contact_start on Now (ux U45)", () => {
       );
     expect(closed("started", "system", null)).toBe("Started at 03:40Z.");
     expect(closed("acknowledged", "user", "Mira K.")).toBe("Marked as seen by Mira K. at 03:40Z.");
+    // ux U45: a pass that failed to set up reads "Set up", since its start can still fail.
+    expect(
+      resolvedWords(
+        {
+          id: "attention:contact_start:sc-312",
+          resolved_by: { kind: "system", id: null, name: null },
+          action: "started",
+          resolved_at: "2026-11-14T03:40:00Z",
+          note: null,
+          realized_contact_id: null,
+        },
+        NOW,
+      ),
+    ).toBe("Set up at 03:40Z.");
+  });
+
+  it("a pass that failed to set up (no realized contact): 'couldn't set up', own reasons kept", () => {
+    const realization = { realized_contact_id: null, holder: null, provider_profile_id: null };
+    const said = (o: Record<string, unknown>) => rowOf({ ...realization, ...o })?.sentence ?? "";
+    expect(said({ reason: "unknown" })).toContain("Cadence couldn't set up this pass.");
+    expect(said({ reason: "something_new" })).toContain("Cadence couldn't set up this pass.");
+    expect(said({ reason: "transport_archived", transport_name: "INU S-band" })).toContain(
+      "This pass's transport, INU S-band, was archived after the pass was booked",
+    );
+    // A realized pass keeps "Starting failed."
+    expect(rowOf({ reason: "unknown", holder: null })?.sentence).toContain("Starting failed.");
+    const row = rowOf({ ...realization, reason: "unknown" });
+    expect(row?.action.to).toEqual({ name: "ops.contacts", query: { contact: "pass-312" } });
   });
 });

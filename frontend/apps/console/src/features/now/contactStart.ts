@@ -1,4 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
+import type { SpacecraftId } from "@/api/index.ts";
 import { plural } from "@/ui";
 import { short, startReasons, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
@@ -26,7 +27,10 @@ export function holderPass(h: Holder, now: Date = new Date()): string {
 }
 
 const REASON_WORDS: Readonly<
-  Record<Exclude<StartReason, "listener_in_use" | "listen_endpoint_claimed">, string>
+  Record<
+    Exclude<StartReason, "listener_in_use" | "listen_endpoint_claimed" | "transport_archived">,
+    string
+  >
 > = {
   listener_unavailable: "Cadence couldn't open the station connection on its side.",
   connect_failed: "Cadence couldn't reach the provider's endpoint for this pass.",
@@ -35,6 +39,9 @@ const REASON_WORDS: Readonly<
   no_runtime_spec: "The mission's runtime has no active configuration, so passes can't start.",
   unknown: "Starting failed.",
 };
+
+/** U45 (api, lead's (A)): it failed before Cadence built its run (realization), not at the start. */
+const SETUP_FAILED = "Cadence couldn't set up this pass.";
 
 /** U81 §3: another mission holds our transport's port. The other mission is never named. */
 function claimedWords(a: Attention): string {
@@ -46,21 +53,38 @@ function claimedWords(a: Attention): string {
   return `Another mission already listens on ${on}, which this pass's transport uses. ${fix}`;
 }
 
+/**
+ * U45 (ux 11-17, after domain): the transport was archived after this pass was booked. Its template
+ * was fixed at booking, so only this pass fails; nothing about later passes.
+ */
+function archivedWords(a: Attention): string {
+  const its = a.transport_name
+    ? `This pass's transport, ${a.transport_name},`
+    : "This pass's transport";
+  return `${its} was archived after the pass was booked, so it can't start, and every try fails the same way. Book another pass for this spacecraft.`;
+}
+
 /** U45's reason line; a key this console doesn't know reads as unknown, a missing one says so. */
 export function startReasonWords(a: Attention, now: Date = new Date()): string {
   const reason = startReasonOf(a);
   if (reason === "listener_in_use")
     return `Cadence couldn't open the station connection because ${a.holder ? `the ${holderPass(a.holder, now)}` : "another pass"} was still holding it.`;
   if (reason === "listen_endpoint_claimed") return claimedWords(a);
+  if (reason === "transport_archived") return archivedWords(a);
   if (reason === "connect_failed" && a.provider?.name)
     return `Cadence couldn't reach ${a.provider.name}'s endpoint for this pass.`;
+  // ux U45: a pass that failed to set up (no realized contact yet) never read "Starting failed."
+  const unknown = a.realized_contact_id === null ? SETUP_FAILED : REASON_WORDS.unknown;
+  if (reason === "unknown") return unknown;
   if (reason) return REASON_WORDS[reason];
-  return a.reason ? REASON_WORDS.unknown : "No reason was recorded.";
+  return a.reason ? unknown : "No reason was recorded.";
 }
 
 /** ux U45: reasons whose fix is elsewhere get a second action. */
 export function startReasonAction(
   a: Attention,
+  /** The pass's spacecraft, for transport_archived's Book a pass (Contacts, that craft). */
+  spacecraftId: SpacecraftId | null = null,
 ): Readonly<{ label: string; to: RouteLocationRaw }> | null {
   switch (startReasonOf(a)) {
     case "connect_failed":
@@ -73,6 +97,11 @@ export function startReasonAction(
             label: "Open transport",
             to: { name: "setup.comms.transports", params: { transportId: a.transport_id } },
           }
+        : null;
+    // ux U45: only this pass fails, so book another for the same craft (L15's Book a pass).
+    case "transport_archived":
+      return spacecraftId
+        ? { label: "Book a pass", to: { name: "ops.contacts", query: { book: spacecraftId } } }
         : null;
     case "listener_in_use":
     case "listener_unavailable":

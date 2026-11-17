@@ -11,9 +11,10 @@ export type Resolved = Decoded<typeof resolvedReader>;
 /** What the words read of a resolved entry; `booked` and `refused` are only on newer reads. */
 export type ResolvedEntry = Omit<
   Resolved,
-  "booked" | "refused" | "from_state" | "plan_revision" | "booking" | "path"
+  "booked" | "refused" | "from_state" | "plan_revision" | "booking" | "path" | "realized_contact_id"
 > &
   Readonly<{
+    realized_contact_id?: Resolved["realized_contact_id"];
     path?: Resolved["path"];
     booked?: boolean | null | undefined;
     refused?: Resolved["refused"];
@@ -55,8 +56,10 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
     }
   }
   if (r.id.startsWith("attention:contact_start:")) {
-    // U45: it started, or an operator marked the missed pass as seen.
-    if (r.action === "started") return `Started at ${at}.`;
+    // U45: it started, or an operator marked the missed pass as seen. A pass that failed to set
+    // up (realized_contact_id null) reads "Set up", since its start can still fail (ux).
+    if (r.action === "started")
+      return r.realized_contact_id === null ? `Set up at ${at}.` : `Started at ${at}.`;
     if (r.action === "acknowledged")
       return `Marked as seen by ${r.resolved_by.name ?? "an operator"} at ${at}.`;
   }

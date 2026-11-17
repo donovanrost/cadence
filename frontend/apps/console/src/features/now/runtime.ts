@@ -36,6 +36,7 @@ export function reasonWords(
     case "listener_in_use":
     // U81 §3: another mission listens on the port; contactStart.ts words it (claimedWords).
     case "listen_endpoint_claimed":
+    case "transport_archived":
     case "listener_unavailable":
     case "connect_failed":
     case "ingress_pipeline_failed":
