@@ -123,7 +123,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :telemetry, :facts}, _fact}}
   end
 
-  test "keeps canonical selection while counting alternate-path duplicates" do
+  test "a duplicate sighting creates the row its canonical first sighting didn't, and counts it" do
     canonical = envelope(sample_id: "sample-primary", data_source_id: "ds-primary")
 
     duplicate =
@@ -187,7 +187,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     assert state.payload == %{"supersedes_observation_id" => initial.observation_id}
   end
 
-  test "records conflicts without promoting them to canonical" do
+  test "a conflict sighting creates the row without promoting itself to canonical" do
     canonical = envelope(sample_id: "sample-canonical")
     conflict = envelope(sample_id: "sample-conflict", validity_state: :conflict)
 

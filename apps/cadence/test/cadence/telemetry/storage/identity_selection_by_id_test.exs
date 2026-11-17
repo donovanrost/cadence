@@ -44,7 +44,14 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
       envelope("other-point", minute: 1, point_id: "HK.other")
     ]
 
-    envelopes = plain ++ [initial, correction, decided, decided_conflict, excluded] ++ others
+    # An advisory sighting of plain-2's identity: an undecided state row (first-seen rule, 11-17),
+    # so the id lookup still has to load a state no decision made. Not a QuestDB row below.
+    plain_2_advisory = envelope("plain-2-advisory", minute: 2, validity_state: :advisory)
+
+    envelopes =
+      plain ++
+        [initial, correction, decided, decided_conflict, excluded, plain_2_advisory] ++ others
+
     assert :ok = ObservationIdentityStates.record_envelopes(envelopes)
 
     decide!(decided, :mark_canonical,
@@ -66,10 +73,10 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
     full = ObservationIdentityStates.list_for_selection(@mission, @filters)
     by_id = by_id(samples)
 
-    # First-seen rule (11-17): only decided identities have rows (decided, excluded); the plain
-    # and corrected sightings, and the other spacecraft and point, wrote none.
-    assert length(by_id) == 2
-    assert length(full) == 2
+    # First-seen rule (11-17): rows exist for the decided identities (decided, excluded) and the
+    # advisory sighting (plain-2); the other canonical sightings wrote none.
+    assert length(by_id) == 3
+    assert length(full) == 3
 
     selected = selected(samples, full)
     assert selected(samples, by_id) == selected
@@ -89,8 +96,8 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
     window = Enum.filter(samples, &(&1.sample_id =~ ~r/^(decided|excluded|plain-2)/))
     full = ObservationIdentityStates.list_for_selection(@mission, @filters)
 
-    # decided and excluded have rows; plain-2 (a canonical sighting) has none.
-    assert length(by_id(window)) == 2
+    # decided and excluded (decisions) and plain-2 (its advisory sighting) have rows.
+    assert length(by_id(window)) == 3
     assert selected(window, by_id(window)) == selected(window, full)
   end
 
