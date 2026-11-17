@@ -2550,5 +2550,13 @@ schema labels), so fe-setup's KindEditor shows them as they are.
   - Not a downlink (`outbound` or `bidirectional`): "Only an inbound (downlink) transport can choose its listener."
   - Both at once: the first line only.
 - **Change summary and diff:** the option words, e.g. "Listener: Own listener for each pass → Shared, routed by SCID".
+- **A shared transport switched to connect, outbound or bidirectional** (lead/api, 11-16): the field hides and the
+  console sends `listener: own` in the same stage, so the server doesn't refuse a hidden field.
+  - In the form, at the switch, an info line under the field that changed (TCP Mode or Direction Capability):
+    "This transport will stop sharing its listener: only an inbound transport that listens can share one."
+  - The diff line shows, because it changes how passes connect, with the reason after it: "Listener: Shared, routed
+    by SCID → Own listener for each pass (only an inbound transport that listens can share one)". The same words in
+    the change set's review.
+  - Switching back before staging restores the field with `Own listener for each pass` chosen; the info line goes.
 - **Not here:** the refusals a shared listener makes during a pass are U50's `listener_refusal` (and U58 for an own
   listener held by another pass). This field adds no new Now or record words.
