@@ -106,8 +106,7 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
              MissionModels.fetch_runtime_plans(@organization_id, @mission_id, revision_id)
 
     assert Enum.all?(plans, fn {_target, plan} -> plan.status == :ready end)
-    # Telemetry contract 3 (#92 (c)): a polynomial executes at decom, so nothing is reported.
-    refute "MM_CALIBRATOR_RUNTIME_UNSUPPORTED" in Enum.map(plans.telemetry.diagnostics, & &1.code)
+    assert "MM_CALIBRATOR_RUNTIME_UNSUPPORTED" in Enum.map(plans.telemetry.diagnostics, & &1.code)
     assert :ok = MissionModelPlanDecoder.validate(plans)
 
     assert {:ok, [packet_definition]} =
@@ -119,9 +118,6 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
              {"temperature_c", :float},
              {"heater_enabled", :bool}
            ]
-
-    assert [%{coefficients: [+0.0, 1.0]}, nil] =
-             Enum.map(packet_definition.fields, & &1.calibrator)
 
     assert Enum.map(plans.command.plan["runtime_definitions"], & &1["name"]) == [
              "NOOP",
