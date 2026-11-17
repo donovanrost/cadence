@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { stationId as stationIdReader } from "@/api/index.ts";
 import type { PlanDetail } from "./api.ts";
-import { planHeaderTail, planPrimary } from "./plan-primary.ts";
+import { planHeaderTail, planPrimary, type PlanPrimary } from "./plan-primary.ts";
 
 const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   id: "plan_1",
@@ -108,6 +108,23 @@ describe("planPrimary", () => {
       kind: "execute",
       label: "Continue booking",
     });
+  });
+});
+
+describe("planPrimary sheet titles name the act without the count (U36, ux)", () => {
+  const sentBack = {
+    decision: "rejected" as const,
+    actor: { kind: "user" as const, id: "u", name: "Mira K." },
+    at: "2026-11-09T10:52:00Z",
+    reason: "Move 004 off HBK",
+    exceptions: [],
+  };
+  const titleOf = (p: PlanPrimary) => (p.kind === "sheet" ? p.title : null);
+  it("asks members for approval, or again, and has admins approve and book in every round", () => {
+    expect(titleOf(planPrimary(plan({}), false))).toBe("Request approval");
+    expect(titleOf(planPrimary(plan({ approval: sentBack }), false))).toBe("Submit the plan again");
+    for (const p of [plan({}), plan({ approval: sentBack }), plan({ state: "pending_approval" })])
+      expect(titleOf(planPrimary(p, true))).toBe("Approve and book the plan");
   });
 });
 

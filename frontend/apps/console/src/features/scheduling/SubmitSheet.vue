@@ -25,6 +25,8 @@ const props = defineProps<{
   plan: PlanDetail;
   nameOf: (id: string | null) => SpacecraftName | null;
   commitLabel: string;
+  /** The act, without the count (U36); a sheet with gaps titles itself by them instead. */
+  title: string;
   confirm: string;
   busy: boolean;
   /** The day on screen, for a U61 refusal's Open (K1's `?plan=`). */
@@ -133,10 +135,10 @@ function submit() {
   if (text) emit("submit", acks, text);
   else emit("submit", acks);
 }
-const title = computed(() =>
+const heading = computed(() =>
   groups.value.length > 0
     ? `Accept ${plural(groups.value.length, "gap")} · ${contactsShortText(coverage(props.plan).contactsShort)}`
-    : "Submit the plan",
+    : props.title,
 );
 /** U61: a refusal that names another plan offers to open it. */
 const refusalOpen = computed(() => {
@@ -168,7 +170,7 @@ defineExpose({ open, close });
   <!-- Focus the first reason (or the commit when nothing is unmet) rather than the first control. -->
   <ApSheet
     ref="sheet"
-    :title="title"
+    :title="heading"
     width="wide"
     initial-focus="textarea, footer button:last-child"
     @closed="emit('close')"

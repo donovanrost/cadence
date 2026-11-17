@@ -10,7 +10,7 @@ import { byAuthor, type PlanDetail } from "./api.ts";
  * link, a disabled action with its reason, or nothing.
  */
 export type PlanPrimary =
-  | { kind: "sheet"; label: string; confirm: string }
+  | { kind: "sheet"; label: string; title: string; confirm: string }
   | { kind: "execute"; label: string }
   | { kind: "link"; label: string; to: RouteLocationRaw }
   | { kind: "redraft"; label: string }
@@ -63,7 +63,7 @@ export function planPrimary(
       const confirm = isAdmin
         ? `This approves the plan and books ${n} passes with the providers.`
         : "An organization admin reviews it before anything is booked.";
-      return { kind: "sheet", label, confirm };
+      return { kind: "sheet", label, title: sheetTitle(isAdmin, again), confirm };
     }
     case "pending_approval":
       return isAdmin
@@ -73,6 +73,7 @@ export function planPrimary(
               gaps > 0
                 ? `Accept ${plural(gaps, "gap")}, approve and book`
                 : `Approve and book ${plural(n, "pass", "passes")}`,
+            title: sheetTitle(true, false),
             confirm: `This approves the plan and books ${n} passes with the providers.`,
           }
         : { kind: "none", note: "Waiting for an organization admin to approve." };
@@ -107,6 +108,14 @@ export function planPrimary(
       return { kind: "none", note: "This plan is no longer current." };
   }
 }
+
+/**
+ * The sheet's title names the act, as the button does, without the count (U36, ux): an admin
+ * approves and books whatever the draft's round; anyone else asks for approval, or again.
+ * With gaps the sheet titles itself 'Accept 2 gaps · …' instead.
+ */
+const sheetTitle = (isAdmin: boolean, again: boolean) =>
+  isAdmin ? "Approve and book the plan" : again ? "Submit the plan again" : "Request approval";
 
 /**
  * ux (b30600e7 follow-up): sending and confirming overlap. While requests still go out:

@@ -309,6 +309,7 @@ async function onApply(acks: Acknowledgement[]) {
           :plan="proposal.plan"
           :name-of="nameOf"
           :commit-label="applyLabel(proposal.plan)"
+          :title="isAdmin ? 'Approve and apply the proposal' : 'Request approval for the proposal'"
           :confirm="isAdmin ? applyConfirm : primary.confirm"
           :busy="busy"
           @submit="onApply"

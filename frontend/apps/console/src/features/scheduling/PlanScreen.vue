@@ -344,6 +344,7 @@ const clock = computed(() =>
       :plan="view.plan"
       :name-of="nameOf"
       :commit-label="primary.label"
+      :title="primary.title"
       :confirm="primary.confirm"
       :busy="busy"
       :day="day"

@@ -48,12 +48,15 @@ describe("SubmitSheet", () => {
         plan,
         nameOf: () => null,
         commitLabel: "Accept 2 gaps and submit",
+        title: "Approve and book the plan",
         confirm: "",
         busy: false,
       },
       attachTo: document.body,
     });
     expect(wrapper.text()).toContain("2 gaps still need a reason");
+    expect(wrapper.text()).toContain("Accept 2 gaps ·"); // gaps title the sheet, not the act
+    expect(wrapper.text()).not.toContain("Approve and book the plan");
     const [first] = wrapper.findAll("textarea");
     await first?.setValue("Station maintenance accepted by ops.");
     expect(wrapper.text()).toContain("1 gap still needs a reason");
@@ -78,6 +81,7 @@ describe("SubmitSheet", () => {
         plan: { ...plan, unmet: [gap("r1"), twice] },
         nameOf: () => null,
         commitLabel: "Accept 2 gaps and submit",
+        title: "Approve and book the plan",
         confirm: "",
         busy: false,
       },
@@ -102,6 +106,7 @@ describe("SubmitSheet", () => {
         plan: { ...plan, unmet: [gap("r1")] },
         nameOf: () => null,
         commitLabel: "Accept 1 gap and submit",
+        title: "Approve and book the plan",
         confirm: "",
         busy: false,
       },
@@ -128,6 +133,7 @@ describe("SubmitSheet per-spacecraft gaps (U23 amended)", () => {
         plan: two,
         nameOf: () => null,
         commitLabel: "Accept 1 gap and submit",
+        title: "Approve and book the plan",
         confirm: "",
         busy: false,
       },
@@ -155,6 +161,7 @@ describe("SubmitSheet dialog (ux K1 #8)", () => {
         plan,
         nameOf: () => null,
         commitLabel: "Accept 2 gaps and submit",
+        title: "Approve and book the plan",
         confirm: "",
         busy: false,
       },
@@ -207,11 +214,13 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
         plan: risky,
         nameOf: () => ({ name: "EARENDIL-003", scid: 3 }),
         commitLabel: "Submit and book 1 pass",
+        title: "Approve and book the plan",
         confirm: "c",
         busy: false,
       },
       attachTo: document.body,
     });
+    expect(wrapper.text()).toContain("Approve and book the plan"); // the act, not 'Submit the plan' (U36)
     expect(wrapper.text()).toContain("1 pass on a degraded station may lose data");
     expect(wrapper.text()).toContain("EARENDIL-003 · KIR · 00:12–00:20Z");
     wrapper.unmount();
@@ -244,6 +253,7 @@ describe("SubmitSheet resubmission (U36)", () => {
         plan: sentBack,
         nameOf: () => null,
         commitLabel: "Accept 2 gaps and submit again",
+        title: "Approve and book the plan",
         confirm: "",
         busy: false,
       },
