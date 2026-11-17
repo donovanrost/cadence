@@ -4,9 +4,12 @@ import {
   scid as scidReader,
   actor,
   decoders as d,
+  isRecord,
+  perItem,
   request,
   type ApiResult,
   type Decoded,
+  type Unshown,
 } from "@/api/index.ts";
 import { engineeringValue, sourceStates } from "@/features/alarms/index.ts";
 import { attentionReader, resolvedReader } from "./attention.ts";
@@ -29,19 +32,6 @@ const tolerantOneOf =
   (value, path = "") => {
     const v = d.token(value, path);
     return values.find((candidate) => candidate === v) ?? null;
-  };
-
-/** Reads with `read`, or null (logged) when the value doesn't fit: for per-row objects. */
-const lenient =
-  <T>(read: d.Reader<T>): d.Reader<T | null> =>
-  (value, path = "") => {
-    try {
-      return read(value, path);
-    } catch (e) {
-      if (!(e instanceof d.DecodeError)) throw e;
-      console.warn("Dropped an unreadable queue row", e.message);
-      return null;
-    }
   };
 
 const member = d.object({
@@ -153,29 +143,54 @@ const itemReader = d.object({
   /** Approval items: command groups awaiting the viewer's GO (one each). */
   command_groups: d.optional(d.array(commandGroup, 1_000)),
   finding: d.nullable(d.object({ id: d.token, title: d.string, body: d.nullable(d.string) })),
-  // U31 (fafe581a): null on other kinds; optional until api ships it.
-  // An attention object this console can't read drops its own row, never the whole queue.
-  attention: d.optional(d.nullable(lenient(attentionReader))),
+  // U31 (fafe581a): null on other kinds; optional until api ships it. Unreadable: U86 (below).
+  attention: d.optional(d.nullable(attentionReader)),
   // Queue sources (ops.md b7008dd6): null on other kinds; optional until api-ops ships them.
   missed_passes: d.optional(d.nullable(d.array(missedPassReader, 100))),
   next_contact: d.optional(d.nullable(nextContactReader)),
   station_issue: d.optional(d.nullable(stationIssueReader)),
   /** flight_event (02cdde37): the state the spacecraft entered, and when (spacecraft time). */
   event: d.optional(d.nullable(d.object({ value_json: d.string, entered_at: d.timestamp }))),
-  /** U39 change_set_stale (api 8d): null on other kinds; unreadable drops its own row. */
-  change_set: d.optional(d.nullable(lenient(changeSetReader))),
+  /** U39 change_set_stale (api 8d): null on other kinds. */
+  change_set: d.optional(d.nullable(changeSetReader)),
 });
 export type ServerItem = Decoded<typeof itemReader>;
 
-export const actionQueueReader = d.object({
+/**
+ * U86 (lead): one item this console can't read, or of a kind it doesn't know (#71), is left out
+ * and described; the rest of the queue still shows, with a line for what isn't.
+ */
+const items = perItem(itemReader, 1_000, {
+  label: "Now's queue",
+  kindOf: (raw) => [raw["kind"], isRecord(raw["attention"]) ? raw["attention"]["source"] : null],
+  shown: (item) => item.kind !== null,
+});
+/** Resolved entries only word a row's 5 s fade: an unreadable one is logged, the row just goes. */
+const resolved = perItem(resolvedReader, 1_000, {
+  label: "Now's resolved entries",
+  kindOf: (raw) => [raw["source"]],
+});
+
+const queueShape = d.object({
   observed_at: d.timestamp,
   counts: d.object({ p1: d.integer, p2: d.integer, p3: d.integer, spacecraft_p1: d.integer }),
-  items: d.array(itemReader, 1_000),
-  resolved: d.optional(d.array(resolvedReader, 1_000)),
+  items,
+  resolved: d.optional(resolved),
   /** U35: a missed pass is P1 with no booked contact within this horizon (6 h). */
   missed_pass_horizon_s: d.optional(d.integer),
 });
-export type ActionQueue = Decoded<typeof actionQueueReader>;
+export type ActionQueue = Readonly<
+  Omit<Decoded<typeof queueShape>, "items" | "resolved"> & {
+    items: readonly ServerItem[];
+    resolved: readonly Decoded<typeof resolvedReader>[] | undefined;
+    /** U86: the items left out, for the line at the top of the queue. */
+    unshown: readonly Unshown[];
+  }
+>;
+export const actionQueueReader: d.Reader<ActionQueue> = (value, path = "") => {
+  const q = queueShape(value, path);
+  return { ...q, items: q.items.items, resolved: q.resolved?.items, unshown: q.items.unshown };
+};
 
 export function fetchActionQueue(
   missionId: MissionId,

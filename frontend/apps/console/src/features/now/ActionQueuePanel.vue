@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { RouterLink } from "vue-router";
-import type { RemoteState } from "@/api/index.ts";
+import type { RemoteState, Unshown } from "@/api/index.ts";
 import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
 import type { QueueItem } from "./queue.ts";
 import type { Attention } from "./attention.ts";
 import DiscardSheet from "./DiscardSheet.vue";
 import JobSheets from "./JobSheets.vue";
 import StuckSheet from "./StuckSheet.vue";
+import UnshownCallout from "./UnshownCallout.vue";
 import { stuckAction } from "./stuckRow.ts";
 import QueueListSheet from "./QueueListSheet.vue";
 import QueueReveal from "./QueueReveal.vue";
@@ -20,7 +21,12 @@ import { useMissionScope } from "@/shell/index.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 
 /** A2 · Action queue: the server-ranked queue (M6), in server order. */
-const props = defineProps<{ state: RemoteState<QueueItem[]>; nominal: number }>();
+const props = defineProps<{
+  state: RemoteState<QueueItem[]>;
+  nominal: number;
+  /** U86: items this console couldn't read; the total counts them, the rows can't. */
+  unshown: readonly Unshown[];
+}>();
 const emit = defineEmits<{ retry: []; retried: [row: QueueItem, outcome: RetryOutcome] }>();
 const now = useNow();
 const sheet = ref<InstanceType<typeof QueueListSheet> | null>(null);
@@ -103,16 +109,21 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
   <ApPanel
     index="A2"
     title="Action queue"
-    :meta="state.status === 'ready' ? `${state.value.length} open · sorted by urgency` : undefined"
+    :meta="
+      state.status === 'ready'
+        ? `${state.value.length + unshown.length} open · sorted by urgency`
+        : undefined
+    "
     pane
     flush
   >
     <ApRemote :state="state" loading-label="LOADING QUEUE…" @retry="$emit('retry')">
       <template #default="{ value: items }">
-        <ApCallout v-if="items.length === 0" tone="nominal">
+        <UnshownCallout :unshown="unshown" />
+        <ApCallout v-if="items.length === 0 && unshown.length === 0" tone="nominal">
           Nothing needs you. {{ nominal }} spacecraft fresh and in limits.
         </ApCallout>
-        <ul v-else ref="list" class="m-0 list-none p-0">
+        <ul v-else-if="items.length > 0" ref="list" class="m-0 list-none p-0">
           <ApListRow
             v-for="(item, i) in shownOf(items)"
             :key="item.key"

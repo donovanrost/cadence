@@ -23,7 +23,8 @@ export function usePassResolutions(
   return computed<Pass[]>(() =>
     passes.state.value.status === "ready"
       ? passes.state.value.value.passes
-          .filter((p) => p.attention)
+          // U86: a top item this console can't read is still open; the callout counts it.
+          .filter((p) => p.attention || p.attention_unshown)
           // U21: acknowledged isn't resolved; it stays, sorted last, soonest AOS first within each.
           .sort(
             (a, b) =>

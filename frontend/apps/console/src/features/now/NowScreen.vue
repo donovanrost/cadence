@@ -104,6 +104,7 @@ function openById(id: string) {
           <ActionQueuePanel
             class="order-first min-h-[320px] md:order-none console:min-h-0"
             :state="actionQueue.items.value"
+            :unshown="actionQueue.unshown.value"
             @retry="actionQueue.refetch"
             @retried="actionQueue.applyRetry"
             :nominal="value.counts.nominal"

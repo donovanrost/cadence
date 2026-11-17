@@ -31,6 +31,7 @@ import {
   attentionWords,
   changeEvidence,
   changeTitle,
+  UnshownCallout,
   type attentionSources,
 } from "@/features/now/index.ts";
 import { targetOfAttention } from "./attention.ts";
@@ -45,7 +46,7 @@ import ListenerBlock from "./ListenerBlock.vue";
 import PassTechnical from "./PassTechnical.vue";
 import BookedRow from "./BookedRow.vue";
 import ReservationRecord from "./ReservationRecord.vue";
-import { passAttentions, passAttentionTag } from "./passAttention.ts";
+import { passAttentions, passAttentionTag, passUnshown } from "./passAttention.ts";
 import { noRecoverText, readinessTag, reasonKey, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
@@ -208,6 +209,8 @@ const countdown = computed(() => {
       sentence="Choose a bar in the schedule."
     />
     <div v-else class="flex flex-col gap-3 p-4">
+      <!-- U86: this pass's items the console couldn't read, above the rest (priority unknown). -->
+      <UnshownCallout :unshown="passUnshown(pass)" />
       <!-- pass_release (1a87609e): no acknowledge; it stays open until the booking settles. -->
       <ApCallout v-if="releaseIssue" tone="caution">
         <p class="m-0 font-semibold">{{ releaseIssue.what }}</p>

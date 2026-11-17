@@ -164,8 +164,10 @@ describe("action queue (M6)", () => {
     expect(rows[1]?.sentence).toBe("HEATER_SET · EARENDIL-140 · by Ana P.");
   });
 
-  it("rejects an unknown priority (an unknown kind only drops its row: lead, #71)", () => {
-    expect(decode(actionQueueReader, body([item({ priority: 4 })])).ok).toBe(false);
+  it("an unknown priority leaves that item out, counted (U86), not the whole queue", () => {
+    const r = decode(actionQueueReader, body([item({ id: "p4", priority: 4 })]));
+    expect(r.ok && r.value.items).toEqual([]);
+    expect(r.ok && r.value.unshown).toEqual([{ kind: [item({}).kind], id: "p4" }]);
   });
 });
 
@@ -609,7 +611,7 @@ describe("contact_settlement (U37, #71)", () => {
     ).toHaveLength(1);
   });
 
-  it("an unreadable attention object drops its row, and pass-less items read (mission_runtime)", () => {
+  it("an unreadable attention object leaves its item out, counted (U86); pass-less items read", () => {
     const r = decode(actionQueueReader, {
       observed_at: "2026-11-11T22:00:00Z",
       counts: { p1: 1, p2: 1, p3: 1, spacecraft_p1: 0 },
@@ -637,7 +639,8 @@ describe("contact_settlement (U37, #71)", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.items[0]?.attention).toBeNull();
+    expect(r.value.items.map((i) => i.id)).not.toContain("attention:broken");
+    expect(r.value.unshown).toEqual([{ kind: ["attention"], id: "attention:broken" }]);
     const rows = presentQueue(r.value);
     expect(rows.map((q) => q.key)).toContain("setup:a");
     expect(rows.find((q) => q.key === "attention:mission_runtime:m")?.due).toBeUndefined();

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Pass } from "@/features/contacts/index.ts";
 import { computed } from "vue";
-import { attentionMeta, attentionWords } from "@/features/now/index.ts";
+import { attentionMeta, attentionWords, UnshownCallout } from "@/features/now/index.ts";
 import { ApCallout, plural } from "@/ui";
 
 /**
@@ -9,6 +9,9 @@ import { ApCallout, plural } from "@/ui";
  * (drawer). Acknowledged items stay (U21) and sort last with Now's "ACK SAM T." meta.
  */
 const props = defineProps<{ passes: readonly Pass[] }>();
+/** U86: passes whose item this console couldn't read: counted in the total, listed in the line. */
+const unshown = computed(() => props.passes.flatMap((p) => p.attention_unshown ?? []));
+const readable = computed(() => props.passes.filter((p) => p.attention));
 const acknowledged = computed(
   () => props.passes.filter((p) => p.attention?.state === "acknowledged").length,
 );
@@ -24,6 +27,7 @@ function meta(p: Pass): string {
 </script>
 
 <template>
+  <UnshownCallout :unshown="unshown" />
   <ApCallout v-if="passes.length > 0" tone="caution">
     <span class="flex flex-col gap-1">
       <span
@@ -33,7 +37,7 @@ function meta(p: Pass): string {
         ></span
       >
       <RouterLink
-        v-for="p in passes"
+        v-for="p in readable"
         :key="p.id"
         :to="{ name: 'ops.contacts', query: { contact: p.id } }"
         class="max-md:hit-44 text-sm text-readout underline-offset-2 hover:underline"

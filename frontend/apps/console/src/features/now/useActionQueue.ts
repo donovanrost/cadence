@@ -1,6 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
-import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
+import { useRemoteQuery, type RemoteState, type Unshown } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { FLEET_REFETCH_GAP_MS, FLEET_TELEMETRY_GAP_MS, throttle } from "@/features/fleet/index.ts";
 import { fetchActionQueue, presentQueue } from "./actionQueue.ts";
@@ -111,5 +111,10 @@ export function useActionQueue(
     const value = withFading(rows.value ?? [], fading.value);
     return { status: "ready", value, receivedAt: s.receivedAt };
   });
-  return { state: query.state, items, refetch: query.refetch, applyRetry };
+  /** U86: the items this console couldn't read, for the line at the top of the queue. */
+  const unshown = computed<readonly Unshown[]>(() => {
+    const s = query.state.value;
+    return s.status === "ready" ? s.value.unshown : [];
+  });
+  return { state: query.state, items, unshown, refetch: query.refetch, applyRetry };
 }

@@ -55,6 +55,8 @@ export {
   offers as archiveOffers,
 } from "./archive.ts";
 export { default as DiscardSheet } from "./DiscardSheet.vue";
+/** U86: a list's line for the items this console couldn't read. */
+export { default as UnshownCallout } from "./UnshownCallout.vue";
 export { listenerEvidence, listenerMeta, listenerTechnical, listenerTitle } from "./listener.ts";
 export { jobEvidence, jobMeta, jobOffers, jobTechnical, jobTitle, NO_ACCESS_JOB } from "./jobs.ts";
 export { default as JobSheets } from "./JobSheets.vue";
