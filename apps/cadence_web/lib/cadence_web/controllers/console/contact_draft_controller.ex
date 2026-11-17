@@ -11,7 +11,7 @@ defmodule CadenceWeb.Console.ContactDraftController do
   alias Cadence.Comms.StationRefs
   alias Cadence.ContactPlanning.{FleetPlanningRuns, RepairChain}
   alias Cadence.Control.Scheduling
-  alias Cadence.Reads.{ContactPlanOverview, RepairDiff}
+  alias Cadence.Reads.{ContactPlanOverview, PlanRepairHeader, RepairDiff}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
 
   def create(conn, params) do
@@ -50,6 +50,12 @@ defmodule CadenceWeb.Console.ContactDraftController do
     end
   end
 
+  @repair_refusals [
+    :fleet_repair_attempt_limit_exceeded,
+    :fleet_repair_horizon_exceeded,
+    :fleet_repair_horizon_invalid
+  ]
+
   @doc "S8: start a repair (re-plan after provider changes) for a plan."
   def repair(conn, %{"plan_id" => plan_id} = params) do
     with {:ok, operation_id} <- operation_id(params["operation_id"]),
@@ -66,8 +72,29 @@ defmodule CadenceWeb.Console.ContactDraftController do
     else
       {:error, :repair_source_not_found} -> Problem.respond(conn, :plan_not_repairable)
       {:error, :fleet_repair_source_unavailable} -> Problem.respond(conn, :plan_not_repairable)
+      {:error, reason} when reason in @repair_refusals -> repair_refused(conn, plan_id, reason)
       error -> error(conn, error)
     end
+  end
+
+  # ux U76: the refusal carries what its line names (the attempts, or the policy's horizon).
+  defp repair_refused(conn, plan_id, reason) do
+    header =
+      PlanRepairHeader.for_plan(
+        conn.assigns.current_scope.organization_id,
+        mission_id(conn),
+        plan_id,
+        DateTime.utc_now()
+      )
+
+    details =
+      case {reason, header} do
+        {:fleet_repair_attempt_limit_exceeded, %{attempts: attempts}} -> attempts
+        {:fleet_repair_horizon_exceeded, %{horizon_seconds: s}} -> %{horizon_seconds: s}
+        _other -> nil
+      end
+
+    Problem.respond(conn, reason, details)
   end
 
   @doc "S8: the repair run, its new candidate plan and the diff against the source plan."

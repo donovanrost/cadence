@@ -53,8 +53,10 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     %__MODULE__{}
     |> cast(domain_attrs(approval), @fields)
     |> validate_required(
-      @fields -- [:automation_grant_id, :automation_grant_content_sha256, :exceptions_document]
+      @fields --
+        [:automation_grant_id, :automation_grant_content_sha256, :exceptions_document, :reason]
     )
+    |> validate_rejection_reason()
     |> validate_number(:contact_plan_version, greater_than: 0)
     |> validate_inclusion(:decision, ~w(approved rejected))
     |> validate_inclusion(:actor_kind, ~w(user service))
@@ -68,6 +70,13 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     |> foreign_key_constraint(:contact_plan_version,
       name: :contact_plan_approvals_plan_version_fk
     )
+  end
+
+  # U76: a rejection keeps its required reason; an approval's note may be NULL.
+  defp validate_rejection_reason(changeset) do
+    if get_field(changeset, :decision) == "rejected",
+      do: validate_required(changeset, [:reason]),
+      else: changeset
   end
 
   @spec to_domain(struct()) :: ContactPlanApproval.t()

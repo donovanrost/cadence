@@ -191,11 +191,13 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
        )
        when is_binary(mission_id) and is_binary(plan_id) and is_integer(expected_version) and
               expected_version > 0 and is_binary(expected_hash) and is_list(opts) do
+    # U76 (lead 11-17; P3: blank is none): a rejection needs its reason; an approval's note is
+    # optional and recorded as NULL when absent or blank, never a canned text.
     reason = reason |> to_string() |> String.trim()
     now = now(opts)
 
     with {:ok, actor} <- authorize_actor(current_scope, mission_id, decision, opts),
-         :ok <- require_reason(reason) do
+         :ok <- require_reason(decision, reason) do
       Repo.transaction(fn ->
         decide_transaction(%{
           organization_id: current_scope.organization_id,
@@ -204,7 +206,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
           expected_version: expected_version,
           expected_hash: expected_hash,
           decision: decision,
-          reason: reason,
+          reason: if(reason == "", do: nil, else: reason),
           actor: actor,
           now: now,
           opts: opts
@@ -493,7 +495,9 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
       lifecycle_state: "approved",
       lifecycle_changed_by: actor["id"],
       lifecycle_changed_at: now,
-      lifecycle_reason: reason,
+      # The plan's lifecycle projection (not the decision record, which keeps NULL): its column
+      # is required, so a note-less approval reads 'Approved' here.
+      lifecycle_reason: reason || "Approved",
       approved_version: version.version,
       approved_at: now,
       approved_by: actor["id"]
@@ -568,8 +572,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   defp exact_version(_plan, _version), do: {:error, :stale_contact_plan_version}
   defp exact_hash(%ContactPlanVersionRow{content_sha256: hash}, hash), do: :ok
   defp exact_hash(_version, _hash), do: {:error, :stale_contact_plan_content}
-  defp require_reason(""), do: {:error, :contact_plan_decision_reason_required}
-  defp require_reason(_reason), do: :ok
+  defp require_reason(:rejected, ""), do: {:error, :contact_plan_decision_reason_required}
+  defp require_reason(_decision, _reason), do: :ok
 
   defp authorize_actor(
          %Scope{actor_kind: :user, user: user} = scope,
