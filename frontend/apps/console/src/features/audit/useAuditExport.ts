@@ -1,7 +1,7 @@
 import { ref, type Ref } from "vue";
 import { describeApiError } from "@/api";
 import { fetchAudit, type AuditQuery } from "./api.ts";
-import { allEvents, auditCsv, auditFileName, exportCap } from "./export.ts";
+import { allEvents, auditCsv, auditFileName, exportCap, unreadNote } from "./export.ts";
 
 /** Audit Export CSV: walk the filter's pages, build the CSV client-side, hand the file over. */
 export function useAuditExport(
@@ -31,11 +31,15 @@ export function useAuditExport(
       a.download = auditFileName(orgSlug.value, q);
       a.click();
       URL.revokeObjectURL(url);
-      if (r.value.capped)
-        note.value = {
-          tone: "info",
-          text: `Exported the first ${exportCap.toLocaleString("en-US")} events. Narrow the range or filters for the rest.`,
-        };
+      const parts = [
+        r.value.capped
+          ? `Exported the first ${exportCap.toLocaleString("en-US")} events. Narrow the range or filters for the rest.`
+          : null,
+        // ux U86: never a silent short file.
+        r.value.unshown > 0 ? unreadNote(r.value.unshown) : null,
+      ].filter((p): p is string => p !== null);
+      if (parts.length)
+        note.value = { tone: r.value.unshown > 0 ? "caution" : "info", text: parts.join(" ") };
     } finally {
       busy.value = false;
     }

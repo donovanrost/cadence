@@ -34,6 +34,7 @@ import { contactsSections } from "./sections.ts";
 import { useSelectedPass } from "./useSelectedPass.ts";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
+import { UnshownCallout } from "@/features/now/index.ts";
 
 /**
  * J4 · Contacts, Live (Contacts.md): 6 h pass schedule by station or spacecraft, the selected pass,
@@ -210,6 +211,10 @@ watch(
   },
   { immediate: true },
 );
+/** U86: passes this console couldn't read, for the line at the top of the list. */
+const unshownPasses = computed(() =>
+  passes.state.value.status === "ready" ? passes.state.value.value.unshown : [],
+);
 </script>
 
 <template>
@@ -320,8 +325,9 @@ watch(
             loading-label="LOADING PASSES…"
             @retry="passes.refetch"
           >
+            <UnshownCallout :unshown="unshownPasses" noun="pass" />
             <ApEmptyState
-              v-if="view && view.bars.length === 0"
+              v-if="view && view.bars.length === 0 && unshownPasses.length === 0"
               :headline="`No passes${stationId === null ? '' : ` at ${stationName}`} in the next ${rangeWords}`"
             />
             <div v-else-if="view" class="p-3">

@@ -1,12 +1,17 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import type { Unshown } from "@/api";
+import { UnshownCallout } from "@/features/now/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, formatCount } from "@/ui";
 import AuditTable from "./AuditTable.vue";
 import { listWords, sourcePhrase, type AuditEvent, type AuditPage } from "./api.ts";
 
 /** Audit log results: missing-sources note, the table, and Load older (cursor paging). */
-defineProps<{
+const props = defineProps<{
   page: AuditPage;
   older: readonly AuditEvent[];
+  /** U86: events left out of the older pages; with the page's own, the line above the table. */
+  olderUnshown: readonly Unshown[];
   hasMore: boolean;
   loading: boolean;
   failed: boolean;
@@ -16,6 +21,7 @@ defineEmits<{ older: [] }>();
 const words = (p: AuditPage, which: "included" | "missing") =>
   listWords(p.sources[which].map(sourcePhrase));
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+const unshown = computed(() => [...props.page.unshown, ...props.olderUnshown]);
 </script>
 
 <template>
@@ -24,11 +30,15 @@ const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(
     audit log yet.
   </ApCallout>
   <ApPanel index="L1" title="Audit" flush>
+    <UnshownCallout :unshown="unshown" noun="event" />
     <ApEmptyState
-      v-if="page.events.length === 0"
+      v-if="page.events.length === 0 && unshown.length === 0"
       :headline="`No audited actions in the last ${span}`"
     />
-    <AuditTable v-else :events="[...page.events, ...older]">
+    <AuditTable
+      v-else-if="page.events.length + older.length > 0"
+      :events="[...page.events, ...older]"
+    >
       <template #footer>
         <div
           v-if="hasMore || failed || older.length > 0"

@@ -81,7 +81,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
 });
 
 describe("passes", () => {
-  it("decodes the read and rejects unknown states", () => {
+  it("decodes the read; an unknown state leaves its pass out (U86)", () => {
     const body = {
       from: "2026-11-09T02:00:00Z",
       to: "2026-11-09T04:00:00Z",
@@ -92,9 +92,10 @@ describe("passes", () => {
       ],
     };
     expect(decode(passesReader, body).ok).toBe(true);
-    expect(decode(passesReader, { ...body, passes: [{ ...pass("a"), state: "maybe" }] }).ok).toBe(
-      false,
-    );
+    // U86 follow-up: an unknown state leaves that pass out, counted; the read still decodes.
+    const odd = decode(passesReader, { ...body, passes: [{ ...pass("a"), state: "maybe" }] });
+    expect(odd.ok && odd.value.passes).toEqual([]);
+    expect(odd.ok && odd.value.unshown).toEqual([{ kind: ["contact"], id: "a" }]);
   });
 
   it("reads status from state, phase and time", () => {

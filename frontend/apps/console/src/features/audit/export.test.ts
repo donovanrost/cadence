@@ -30,8 +30,18 @@ describe("audit Export CSV", () => {
   });
   it("walks every page of the filter", async () => {
     const pages: AuditPage[] = [
-      { events: [event("e1")], sources: { included: [], missing: [] }, next_cursor: "c2" },
-      { events: [event("e2")], sources: { included: [], missing: [] }, next_cursor: null },
+      {
+        events: [event("e1")],
+        sources: { included: [], missing: [] },
+        next_cursor: "c2",
+        unshown: [{ kind: ["config"], id: "e9" }],
+      },
+      {
+        events: [event("e2")],
+        sources: { included: [], missing: [] },
+        next_cursor: null,
+        unshown: [],
+      },
     ];
     const seen: (string | undefined)[] = [];
     const r = await allEvents(query, async (q) => {
@@ -42,6 +52,8 @@ describe("audit Export CSV", () => {
     });
     expect(r.ok && r.value.events.map((e) => e.id)).toEqual(["e1", "e2"]);
     expect(r.ok && r.value.capped).toBe(false);
+    // U86: the dropped event is counted, so the note can say it isn't in the file.
+    expect(r.ok && r.value.unshown).toBe(1);
     expect(seen).toEqual([undefined, "c2"]);
   });
   it("names the file by the window's UTC days", () => {

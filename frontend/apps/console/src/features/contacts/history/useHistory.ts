@@ -86,7 +86,8 @@ export function useHistory(missionId: Ref<MissionId>, now: Ref<Date>) {
       const s = ledger.state.value;
       if (s.status !== "ready") return s;
       const booked: Pass[] = s.value.passes.filter((r): r is Pass => !isHandStarted(r));
-      return { ...s, value: { ...s.value, passes: booked } };
+      // The week ledger is its own strict read: it never leaves a pass out (U86 is GET /passes).
+      return { ...s, value: { ...s.value, passes: booked, unshown: [] } };
     }),
     refetch: ledger.refetch,
   };

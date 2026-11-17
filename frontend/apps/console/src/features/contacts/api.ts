@@ -13,6 +13,7 @@ import {
 } from "@/api/index.ts";
 import { passChangeReader } from "@/features/now/index.ts";
 import { passAttention, passAttentionList, withPassAttentions } from "./passAttentionReader.ts";
+import { passListReader } from "./passList.ts";
 import { passReadinessReader } from "./readiness.ts";
 
 /** Contract: docs/apogee/api/contacts.md, `GET /missions/:mission_id/passes` (M7 / S1). */
@@ -324,14 +325,9 @@ export function fetchPassTechnical(missionId: MissionId, passId: string, signal?
   );
 }
 
-export const passesReader = d.object({
-  from: d.timestamp,
-  to: d.timestamp,
-  truncated: d.boolean,
-  passes: d.array(pass, 500),
-});
+export const passesReader = passListReader(pass);
 export type Passes = Decoded<typeof passesReader>;
-export type Pass = Passes["passes"][number];
+export type Pass = Decoded<typeof pass>;
 
 /** One pass in any window (8329ec68): Review from Now can name a pass days out. 404 pass_not_found. */
 export function fetchPass(

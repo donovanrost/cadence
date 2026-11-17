@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { useNow, ApButton, ApEmptyState, ApGantt, ApPanel, ApRemote } from "@/ui";
 import { passGantt, usePasses } from "@/features/contacts/index.ts";
+import UnshownCallout from "./UnshownCallout.vue";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 
 /**
@@ -34,6 +35,10 @@ const view = computed(() => {
     synthetic: s.value.passes.some((p) => p.source.synthetic),
   };
 });
+/** U86: passes this console couldn't read, for the line at the top of the list. */
+const unshown = computed(() =>
+  query.state.value.status === "ready" ? query.state.value.value.unshown : [],
+);
 </script>
 
 <template>
@@ -52,7 +57,11 @@ const view = computed(() => {
       >
     </template>
     <ApRemote :state="query.state.value" loading-label="LOADING PASSES…" @retry="query.refetch">
-      <ApEmptyState v-if="view && view.bars.length === 0" headline="No passes in the next 2 h">
+      <UnshownCallout :unshown="unshown" noun="pass" />
+      <ApEmptyState
+        v-if="view && view.bars.length === 0 && unshown.length === 0"
+        headline="No passes in the next 2 h"
+      >
         <ApButton size="compact" :to="{ name: 'ops.contacts' }">Open contacts</ApButton>
       </ApEmptyState>
       <div v-else-if="view" class="p-3">

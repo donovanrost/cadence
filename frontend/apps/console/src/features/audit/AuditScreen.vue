@@ -117,6 +117,7 @@ const missionOptions = computed(() => [
         <AuditResults
           :page="value"
           :older="log.older.value"
+          :older-unshown="log.olderUnshown.value"
           :has-more="log.cursor.value !== null"
           :loading="log.loading.value"
           :failed="log.failed.value"

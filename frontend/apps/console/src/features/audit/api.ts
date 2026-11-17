@@ -4,10 +4,13 @@ import {
   decoders,
   isKeyOf,
   orNull,
+  perItem,
   request,
   type ApiResult,
   type Decoded,
+  type Reader,
   type SessionOrganization,
+  type Unshown,
 } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /organizations/:id/audit` (AU1). */
@@ -43,15 +46,26 @@ const event = object({
   // free-text: the reason or note a person gave.
   reason: nullable(string),
 });
-export const auditReader = object({
-  events: array(event, 1000),
+const pageShape = object({
+  /** U86 follow-up: read event by event; one this console can't read is left out and counted. */
+  events: perItem(event, 1000, { label: "Org Audit", kindOf: (raw) => [raw["kind"]] }),
   sources: object({
     included: array(token, 20),
     missing: array(token, 20),
   }),
   next_cursor: nullable(string),
 });
-export type AuditPage = Decoded<typeof auditReader>;
+export type AuditPage = Readonly<
+  Omit<Decoded<typeof pageShape>, "events"> & {
+    events: readonly AuditEvent[];
+    /** U86: the events left out of this page, for the line above the table and the export. */
+    unshown: readonly Unshown[];
+  }
+>;
+export const auditReader: Reader<AuditPage> = (value, path = "") => {
+  const p = pageShape(value, path);
+  return { ...p, events: p.events.items, unshown: p.events.unshown };
+};
 export type AuditEvent = Decoded<typeof event>;
 
 export type AuditQuery = Readonly<{

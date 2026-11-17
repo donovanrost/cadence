@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { UnshownCallout } from "@/features/now/index.ts";
 import { computed } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -124,6 +125,10 @@ const recentLine = (r: RecentPass) =>
 const days = computed(() =>
   recent.state.value.status === "ready" ? byDay(recent.state.value.value.rows) : [],
 );
+/** U86: passes this console couldn't read, for the line at the top of the list. */
+const unshownPasses = computed(() =>
+  passes.state.value.status === "ready" ? passes.state.value.value.unshown : [],
+);
 </script>
 
 <template>
@@ -207,6 +212,8 @@ const days = computed(() =>
         </dl>
       </ApRemote>
     </ApPanel>
+    <!-- U86: above P2 and P3, so every width sees it (P2 is hidden on phones; lead). -->
+    <UnshownCallout :unshown="unshownPasses" noun="pass" />
     <ApPanel index="P2" title="Passes · −24 h … +24 h" flush class="flex-none max-md:hidden">
       <div v-if="gantt" class="p-3">
         <ApGantt
