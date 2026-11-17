@@ -163,6 +163,57 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
     assert Enum.any?(actions, &String.starts_with?(&1, "Approved catalog rev "))
   end
 
+  test "U90: a mission's first revision compares with nothing earlier and can be approved", c do
+    # No activation in this mission: nothing runs yet, so there's no binding set (domain/lead 11-17).
+    mission = TestFixtures.persist_mission!(c.org)
+    importer = TestFixtures.persist_user!(display_name: "Ivo P.")
+    TestFixtures.grant_membership!(importer, c.org, role: :organization_admin)
+
+    revision =
+      Fixtures.persist_imported_revision!(c.org.organization_id, mission.mission_id,
+        approve: false,
+        requested_by: %{"actor_kind" => "user", "user_id" => importer.user_id, "name" => "Ivo P."}
+      ).mission_model_revision_id
+
+    path = "/api/console/v1/missions/#{mission.mission_id}/mission-model-revisions/#{revision}"
+
+    post_to = fn user, suffix, body ->
+      user |> TestFixtures.member_conn() |> post(path <> suffix, body)
+    end
+
+    cmp = c.admin |> post_to.("/comparison", %{}) |> json_response(201) |> Map.fetch!("data")
+
+    assert %{"report_id" => report_id, "against" => nil, "replay" => %{"status" => "not_run"}} =
+             cmp
+
+    assert cmp["totals"]["added"] > 0
+
+    assert %{"error" => %{"code" => "mission_model_self_approval_forbidden"}} =
+             importer
+             |> post_to.("/approve", %{"comparison_report_id" => report_id})
+             |> json_response(403)
+
+    assert %{"status" => "approved"} =
+             c.admin
+             |> post_to.("/approve", %{"comparison_report_id" => report_id})
+             |> json_response(200)
+             |> Map.fetch!("data")
+
+    actions =
+      c.admin
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/organizations/#{c.org.organization_id}/audit")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+      |> Enum.map(& &1["action"])
+
+    assert Enum.any?(
+             actions,
+             &(&1 =~
+                 ~r/^Approved catalog rev \d+ \(not compared: no earlier configuration; replay not run\)$/)
+           )
+  end
+
   test "a member reads but can't decide; approve needs a report that exists", c do
     path = "/mission-model-revisions/#{c.revision}"
     read = c |> get_as(c.member, path) |> json_response(200) |> Map.fetch!("data")

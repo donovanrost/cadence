@@ -4,8 +4,9 @@ defmodule Cadence.Reads.MissionModelApprovals do
   revision named by its catalog revision ("catalog rev 4"), its decision, the latest comparison
   report (summarised: totals and per-kind sections, never the raw declaration lists), and what
   the viewer may do. Decisions go through `MissionModels.approve_revision/5` and
-  `reject_revision/5`; a comparison runs against the mission's active binding set and the
-  revision this one replaces.
+  `reject_revision/5`; a comparison runs against the mission's active binding set (none for a
+  mission's first revision) and the revision this one replaces (none when there's nothing
+  earlier: `against` null, ux U90).
   """
 
   alias Cadence.Auth.{Policy, Scope}
@@ -267,8 +268,10 @@ defmodule Cadence.Reads.MissionModelApprovals do
       {:ok, %{binding_set_id: id, binding_set_version: version}} when is_binary(id) ->
         {:ok, %{binding_set_id: id, binding_set_version: version}}
 
+      # A mission's first revision (domain/lead 11-17, ux U90): nothing runs yet, so there's no
+      # binding set to record; the comparison runs against no baseline (every item added).
       _none ->
-        {:error, :mission_model_no_active_binding_set}
+        {:ok, %{binding_set_id: nil, binding_set_version: nil}}
     end
   end
 

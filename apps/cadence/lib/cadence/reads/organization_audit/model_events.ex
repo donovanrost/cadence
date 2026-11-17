@@ -4,6 +4,7 @@ defmodule Cadence.Reads.OrganizationAudit.ModelEvents do
   named by catalog revision as the screen does:
 
     * "Approved catalog rev 4 (comparison passed against rev 3; replay not run)"
+    * "Approved catalog rev 1 (not compared: no earlier configuration; replay not run)" (ux U90)
     * "Rejected catalog rev 4", with the reason in the reason column.
 
   From `MissionModels.list_model_decisions/2` (people only, with the evidence they decided on);
@@ -60,7 +61,8 @@ defmodule Cadence.Reads.OrganizationAudit.ModelEvents do
   defp detail(report, numbers, replay, retroactive) do
     against =
       case report["baseline_revision_id"] do
-        nil -> "comparison passed"
+        # ux U90: nothing earlier to compare with is never 'passed'.
+        nil -> "not compared: no earlier configuration"
         id -> "comparison passed against #{short(id, numbers)}"
       end
 
