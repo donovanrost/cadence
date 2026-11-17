@@ -7,6 +7,8 @@ import type { QueueItem } from "./queue.ts";
 import type { Attention } from "./attention.ts";
 import DiscardSheet from "./DiscardSheet.vue";
 import JobSheets from "./JobSheets.vue";
+import StuckSheet from "./StuckSheet.vue";
+import { stuckAction } from "./stuckRow.ts";
 import QueueListSheet from "./QueueListSheet.vue";
 import QueueReveal from "./QueueReveal.vue";
 import { QUEUE_CAP } from "./queueCap.ts";
@@ -41,6 +43,14 @@ function openJob(row: QueueItem, kind: "retry" | "close") {
   deciding = row;
   if (kind === "retry") jobSheets.value?.openRetry(row.job);
   else jobSheets.value?.openClose(row.job);
+}
+/** U84: Acknowledge… / Details open the Stuck processing sheet; its ack patches the row. */
+const stuckSheet = ref<InstanceType<typeof StuckSheet> | null>(null);
+let acking: QueueItem | null = null;
+function openStuck(row: QueueItem) {
+  if (!row.stuck) return;
+  acking = row;
+  stuckSheet.value?.open(row.stuck);
 }
 function openDiscard(row: QueueItem) {
   if (!row.discard) return;
@@ -135,9 +145,17 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
               <template v-else>{{ item.title }}</template>
             </template>
             <template #action>
+              <!-- U84: one sheet behind Acknowledge… (operators, while open) or Details. -->
+              <ApButton
+                v-if="item.stuck"
+                size="compact"
+                :variant="stuckAction(item.stuck, access.abort).primary ? 'primary' : 'secondary'"
+                @click="openStuck(item)"
+                >{{ stuckAction(item.stuck, access.abort).label }}</ApButton
+              >
               <!-- U37: a write (Retry storing / Retry all N) where the operator may run it. -->
               <ApButton
-                v-if="item.command && access.abort"
+                v-else-if="item.command && access.abort"
                 size="compact"
                 variant="secondary"
                 :disabled="command.running.value.has(item.key)"
@@ -200,6 +218,12 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
       ref="jobSheets"
       :mission-id="scope.mission.id"
       @done="(item) => deciding && discarded(deciding, item)"
+    />
+    <StuckSheet
+      ref="stuckSheet"
+      :mission-id="scope.mission.id"
+      :can-ack="access.abort"
+      @done="(item) => acking && discarded(acking, item)"
     />
     <DiscardSheet
       ref="discardSheet"

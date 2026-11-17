@@ -159,6 +159,8 @@ describe("attention block words (U32)", () => {
     effect_kind: undefined,
     effect_id: undefined,
     partition_id: undefined,
+    partition_stopped: undefined,
+    effect_count: undefined,
     path_id: undefined,
     stream_key: undefined,
     contact: undefined,
@@ -286,6 +288,16 @@ describe("attention block words (U32)", () => {
     expect(whatToDo(item({ conflict: "cancel_failed" })).text).toBe(
       "Check with Northlight that the pass is canceled. If it can't be, keep it and record what you did.",
     );
+    // The other sources' conflicts still fall to the booking line (never U84's, lead 11-17).
+    for (const conflict of ["listener_refusal", "unsettled", "outcome_unknown"] as const)
+      expect(whatToDo(item({ conflict })).text).toBe(
+        "Check the booking with Northlight, then record what you did.",
+      );
+    // U84: a fault in Cadence, never "check the booking with the provider".
+    expect(whatToDo(item({ source: "replay_conflict", conflict: "replay_id_conflict" }))).toEqual({
+      text: "Tell the team that runs Cadence for you, and send them the details. Nothing in the console fixes this.",
+      plan: false,
+    });
   });
 
   it("an already-resolved item says so and refreshes", () => {

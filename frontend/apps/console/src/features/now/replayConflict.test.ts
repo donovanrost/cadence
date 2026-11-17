@@ -22,7 +22,9 @@ const stuck = (o: Record<string, unknown> = {}) => ({
   path: "storage",
   effect_kind: "alarm_effect",
   effect_id: "eff:3f2a",
-  partition_id: "endpoint:sva-1",
+  effect_count: 1,
+  partition_id: null,
+  partition_stopped: false,
   realized_contact_id: "rc-7",
   path_id: "path-2",
   stream_key: "sva-1 / downlink 0",
@@ -87,6 +89,8 @@ describe("replay_conflict reader (ux U84, readers first)", () => {
       stuck({
         path: "timer",
         effect_kind: "managed_action_request",
+        partition_id: "endpoint:sva-1",
+        partition_stopped: true,
         realized_contact_id: null,
         path_id: null,
         stream_key: null,
@@ -103,7 +107,9 @@ describe("replay_conflict reader (ux U84, readers first)", () => {
         reraised: false,
       }),
     );
-    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.partition_stopped).toBe(true);
+    expect(r.value.partition_id).toBe("endpoint:sva-1");
   });
 
   it("keeps the whole queue readable beside a SCID-mismatch item's single spacecraft", () => {

@@ -23,6 +23,7 @@ import { changeEvidence, changeTitle, pastDeadline } from "./providerChange.ts";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 import { runtimeRow } from "./runtime.ts";
 import { scidMismatchRow } from "./scidMismatch.ts";
+import { stuckRow, tagStuck } from "./stuckRow.ts";
 import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settlement.ts";
 import { missedPassRows, stationRow, type MissedItem } from "./sources.ts";
 
@@ -222,6 +223,7 @@ function rowFor(
         return [expiredRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "contact_scid_mismatch")
         return [scidMismatchRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
+      if (a.source === "replay_conflict") return [stuckRow(base(item), item.id, a, now)];
       if (a.source === "job_outcome_unknown")
         return [jobRow(base(item), item.id, a, item.spacecraft[0]?.name ?? null, now)];
       if (a.source === "provider_change") {
@@ -348,9 +350,19 @@ export function presentQueue(
     if (s && fold && fold.length >= FOLD_AT) {
       if (placedFolds.has(foldKey(s))) return [];
       placedFolds.add(foldKey(s));
-      return [foldedSettlementRow(fold, now)];
+      return [
+        tagStuck(
+          foldedSettlementRow(fold, now),
+          fold.map((m) => m.attention),
+        ),
+      ];
     }
-    if (item.kind !== "missed_pass") return rowFor(item, missionName, now, viewerId);
+    if (item.kind !== "missed_pass") {
+      const rows = rowFor(item, missionName, now, viewerId);
+      // U84: settlement, buffer and runtime items caused by stuck processing say so.
+      const a = item.attention;
+      return a ? rows.map((r) => tagStuck(r, [a])) : rows;
+    }
     if (placed) return [];
     placed = true;
     return missedRows;

@@ -108,6 +108,12 @@ export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }
         text: "Don't count on this contact. Re-plan the spacecraft if it needs this contact.",
         plan: true,
       };
+    // U84: a fault in Cadence, not the booking; only the Cadence team can fix it.
+    case "replay_id_conflict":
+      return {
+        text: "Tell the team that runs Cadence for you, and send them the details. Nothing in the console fixes this.",
+        plan: false,
+      };
     // pass_resolution only: other sources have their own blocks (settlement, provider change, …).
     case "unsettled":
     case "generation_not_applied":
@@ -124,7 +130,6 @@ export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }
     case "quarantined":
     case "listener_refusal":
     case "outcome_unknown":
-    case "replay_id_conflict":
     case null:
     default:
       return { text: `Check the booking with ${provider}, then record what you did.`, plan: false };

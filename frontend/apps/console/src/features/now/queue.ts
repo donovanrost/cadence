@@ -51,6 +51,8 @@ export type QueueItem = Readonly<{
   discard?: Attention;
   /** U54: `Retry…` and `Close without retry…`, each a sheet (operators only). */
   job?: Attention;
+  /** U84: the stuck-processing item; its action opens the Stuck processing sheet. */
+  stuck?: Attention;
   /** The row has nothing to open (a job with no pass): no route button. */
   noAction?: boolean;
   /** A folded row's members: its action opens them in a sheet (U30 pattern) instead of routing. */

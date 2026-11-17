@@ -130,6 +130,8 @@ export const errorCodes = [
   "log_entry_required",
   "note_required",
   "reason_required",
+  // U84 replay_conflict acknowledge: the note is over 500 characters, or not text.
+  "invalid_note",
   "title_required",
   "uplink_not_blocked",
   "uplink_recovering",
