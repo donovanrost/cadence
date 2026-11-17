@@ -114,12 +114,22 @@ describe("Stuck processing words (ux U84)", () => {
     ).toMatch(/hits the same fault each time\.$/);
   });
 
-  it("stopped at start has no counts: STOPPED · SINCE (U84 (3))", () => {
-    const stopped = stuck({ path: "timer", partition_stopped: true, buffer: null });
-    expect(stuckWhy(stopped, NOW)).toBe(
-      "It's a fault in Cadence, not in this mission's setup or data. It stopped while starting up and won't start again until Cadence is fixed.",
+  it("stopped has no counts and says why it's down: STOPPED · SINCE (U84 (3))", () => {
+    const stopped = (stopped_while: string | null) =>
+      stuck({ path: "timer", partition_stopped: true, stopped_while, buffer: null });
+    const why = (w: string | null) => stuckWhy(stopped(w), NOW);
+    const FAULT = "It's a fault in Cadence, not in this mission's setup or data.";
+    expect(why("starting")).toBe(
+      `${FAULT} It stopped while starting up and won't start again until Cadence is fixed.`,
     );
-    expect(stuckMeta(stopped, NOW)).toBe("STOPPED · SINCE 03:10Z");
+    expect(why("applying")).toBe(
+      `${FAULT} It stopped while applying a configuration change and won't start again until Cadence is fixed.`,
+    );
+    expect(why(null)).toBe(`${FAULT} It stopped and won't start again until Cadence is fixed.`);
+    // A reason this console doesn't know yet reads as stopped, reason unknown.
+    expect(why("restarting")).toBe(why(null));
+    for (const w of ["starting", "applying", null])
+      expect(stuckMeta(stopped(w), NOW)).toBe("STOPPED · SINCE 03:10Z");
   });
 
   it("words the buffer filling and full, with its meta", () => {

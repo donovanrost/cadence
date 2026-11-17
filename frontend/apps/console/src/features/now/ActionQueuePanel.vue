@@ -126,13 +126,14 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
             <!-- U66: a sentence with links (the buffer disk's holders). -->
             <template v-if="item.sentenceParts" #sentence>
               <template v-for="(part, n) in item.sentenceParts" :key="n">
+                <template v-if="typeof part === 'string'">{{ part }}</template>
                 <RouterLink
-                  v-if="typeof part !== 'string'"
+                  v-else-if="'to' in part"
                   :to="part.to"
                   class="text-readout underline hover:text-bright"
                   >{{ part.text }}</RouterLink
                 >
-                <template v-else>{{ part }}</template>
+                <span v-else class="whitespace-nowrap">{{ part.text }}</span>
               </template>
             </template>
             <template #title>

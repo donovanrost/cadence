@@ -12,10 +12,12 @@ import {
   stuckWhy,
   whatStopped,
 } from "./stuckProcessing.ts";
+import { keepWhole } from "./queue.ts";
 import {
   NOTE_MAX,
   NO_ACCESS_STUCK,
   acknowledgeStuck,
+  craftNames,
   stuckOpen,
   stuckTechnical,
 } from "./stuckRow.ts";
@@ -44,6 +46,8 @@ const lines = computed(() => {
     (l): l is string => l !== null,
   );
 });
+/** ux U84: craft names stay whole when a line wraps. */
+const names = computed(() => (target.value ? craftNames(target.value) : []));
 const ack = computed(() => (target.value ? stuckAckLine(target.value, now()) : null));
 const technical = computed(() => (target.value ? stuckTechnical(target.value) : []));
 const acking = computed(() => props.canAck && target.value !== null && stuckOpen(target.value));
@@ -96,7 +100,12 @@ defineExpose({ open });
 <template>
   <ApSheet ref="sheet" :title="target ? stuckTitle(target, now()) : 'Stuck processing'">
     <p class="ap-label m-0">Stuck processing</p>
-    <p v-for="(line, i) in lines" :key="i" class="m-0 text-md text-text-2">{{ line }}</p>
+    <p v-for="(line, i) in lines" :key="i" class="m-0 text-md text-text-2">
+      <template v-for="(part, n) in keepWhole(line, names)" :key="n">
+        <span v-if="typeof part !== 'string'" class="whitespace-nowrap">{{ part.text }}</span>
+        <template v-else>{{ part }}</template>
+      </template>
+    </p>
     <p v-if="ack" class="m-0 text-md text-text-2">{{ ack }}</p>
     <div class="flex items-center gap-3">
       <ApButton size="compact" variant="ghost" @click="copy">Copy details</ApButton>

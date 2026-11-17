@@ -12,8 +12,37 @@ import type { Attention } from "./attention.ts";
  */
 
 export type QueueAction = Readonly<{ label: string; to: RouteLocationRaw }>;
-/** A sentence piece: text, or a link (U66's holders). */
-export type SentencePart = string | Readonly<{ text: string; to: RouteLocationRaw }>;
+/** A sentence piece: text, a link (U66's holders), or text kept on one line (U84's craft names). */
+export type SentencePart =
+  | string
+  | Readonly<{ text: string; to: RouteLocationRaw }>
+  | Readonly<{ text: string; nowrap: true }>;
+
+/**
+ * ux U84: `text` with each of `names` kept whole when the line wraps ("EARENDIL-004" never breaks
+ * at its hyphen). Longer names first, so one name inside another stays whole.
+ */
+export function keepWhole(text: string, names: readonly string[]): SentencePart[] {
+  const wanted = [...new Set(names.filter(Boolean))].sort((a, b) => b.length - a.length);
+  const parts: SentencePart[] = [];
+  let rest = text;
+  while (rest) {
+    let at = -1;
+    let hit = "";
+    for (const n of wanted) {
+      const i = rest.indexOf(n);
+      if (i >= 0 && (at < 0 || i < at)) [at, hit] = [i, n];
+    }
+    if (at < 0) {
+      parts.push(rest);
+      break;
+    }
+    if (at > 0) parts.push(rest.slice(0, at));
+    parts.push({ text: hit, nowrap: true });
+    rest = rest.slice(at + hit.length);
+  }
+  return parts;
+}
 
 export type QueueItem = Readonly<{
   key: string;

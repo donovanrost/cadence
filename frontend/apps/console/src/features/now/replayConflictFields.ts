@@ -23,6 +23,8 @@ export const replayConflictFields = {
   partition_id: d.optional(d.nullable(d.token)),
   /** timer only: the partition failed to start and stays down (U84 'STOPPED', no retry counts). */
   partition_stopped: d.optional(d.nullable(d.boolean)),
+  /** With partition_stopped: its start hit the fault, or applying a configuration change did (#99 R1). */
+  stopped_while: d.optional(d.nullable(d.knownText(["starting", "applying"] as const))),
   path_id: d.optional(d.nullable(d.token)),
   // free-text: the stream's key, Technical details only (null on timer)
   stream_key: d.optional(d.nullable(d.string)),

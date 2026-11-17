@@ -82,8 +82,16 @@ const FAULT = "It's a fault in Cadence, not in this mission's setup or data.";
 
 /** Why (the second line): tries since, the last at; stopped at start has no counts (U84 (3)). */
 export function stuckWhy(a: Attention, now: Date = new Date()): string {
-  if (a.partition_stopped)
-    return `${FAULT} It stopped while starting up and won't start again until Cadence is fixed.`;
+  if (a.partition_stopped) {
+    // U84 (3), ux 11-17: why it's down; an unknown or missing reason just says it stopped.
+    const when =
+      a.stopped_while === "starting"
+        ? " while starting up"
+        : a.stopped_while === "applying"
+          ? " while applying a configuration change"
+          : "";
+    return `${FAULT} It stopped${when} and won't start again until Cadence is fixed.`;
+  }
   const tries =
     a.occurrences != null ? `${a.occurrences} ${a.occurrences === 1 ? "try" : "tries"}` : null;
   const since = a.first_seen_at ? `since ${short(a.first_seen_at, now)}` : null;

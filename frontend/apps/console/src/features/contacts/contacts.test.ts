@@ -160,6 +160,7 @@ describe("attention block words (U32)", () => {
     effect_id: undefined,
     partition_id: undefined,
     partition_stopped: undefined,
+    stopped_while: undefined,
     effect_count: undefined,
     path_id: undefined,
     stream_key: undefined,

@@ -1,7 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import { request } from "@/api/index.ts";
 import { attentionReader, serverKey, type Attention } from "./attention.ts";
-import type { QueueItem } from "./queue.ts";
+import { keepWhole, type QueueItem } from "./queue.ts";
 import { bufferLine, stuckMeta, stuckTitle, whatStopped } from "./stuckProcessing.ts";
 
 /**
@@ -16,7 +16,12 @@ export const NOTE_MAX = 500;
 
 type Base = Pick<QueueItem, "priority" | "spacecraftIds">;
 
+/** The craft names a line may hold, kept whole when it wraps (ux U84). */
+export const craftNames = (a: Attention): string[] =>
+  (a.affected_spacecraft ?? []).flatMap((c) => (c.name ? [c.name] : []));
+
 export function stuckRow(b: Base, key: string, a: Attention, now: Date = new Date()): QueueItem {
+  const sentence = (a.dropping ? bufferLine(a, now) : null) ?? whatStopped(a);
   return {
     ...b,
     key,
@@ -24,7 +29,8 @@ export function stuckRow(b: Base, key: string, a: Attention, now: Date = new Dat
     state: a.dropping ? "crit" : "caution",
     title: stuckTitle(a, now),
     titleTo: null,
-    sentence: (a.dropping ? bufferLine(a, now) : null) ?? whatStopped(a),
+    sentence,
+    sentenceParts: keepWhole(sentence, craftNames(a)),
     meta: stuckMeta(a, now),
     acknowledged: a.state === "acknowledged" && !a.reraised,
     // The sheet takes the action slot; this route is never shown.

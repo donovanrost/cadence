@@ -279,3 +279,48 @@ describe("StuckSheet", () => {
     w.unmount();
   });
 });
+
+describe("U84 follow-ups", () => {
+  it("keeps craft names whole in the row sentence (ux: no break at the hyphen)", () => {
+    const [row] = rows(
+      stuck({
+        path: "processing",
+        affected_spacecraft: [
+          { id: "spacecraft-004", name: "EARENDIL-004", scid: null },
+          { id: "spacecraft-005", name: "EARENDIL-005", scid: null },
+        ],
+        spacecraft_count: 2,
+      }),
+    );
+    const kept = (row?.sentenceParts ?? []).flatMap((p) =>
+      typeof p !== "string" && "nowrap" in p ? [p.text] : [],
+    );
+    expect(kept).toEqual(["EARENDIL-004", "EARENDIL-005"]);
+    const joined = (row?.sentenceParts ?? [])
+      .map((p) => (typeof p === "string" ? p : p.text))
+      .join("");
+    expect(joined).toBe(row?.sentence);
+  });
+
+  it("tags U38's runtime item when the stuck processing caused it (ux 11-17)", () => {
+    const [row] = rows({
+      id: "rt-1",
+      source: "mission_runtime",
+      conflict: "generation_not_applied",
+      state: "open",
+      acknowledged_by: null,
+      contact_id: null,
+      station: null,
+      provider: null,
+      starts_at: null,
+      raised_at: "2026-11-17T03:30:00Z",
+      provider_message: null,
+      resolution: null,
+      reason: "apply_failed",
+      desired_generation: 8,
+      applied_generation: 7,
+      stuck_processing_id: "rcf-1",
+    });
+    expect(row?.meta).toMatch(/^STUCK PROCESSING/);
+  });
+});
