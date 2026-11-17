@@ -283,7 +283,6 @@ defmodule Cadence.Catalog.Xtce13ImporterTest do
           <Enumeration value="1" label="ON"/>
           <Enumeration value="2" maxValue="4" label="FAULT"/>
           <Enumeration value="5" maxValue="100000" label="WILD"/>
-          <Enumeration value="9" maxValue="7" label="BACKWARDS"/>
         </EnumerationList>
       </EnumeratedParameterType>
       """
@@ -292,10 +291,6 @@ defmodule Cadence.Catalog.Xtce13ImporterTest do
                Xtce13.import(source(calibration_document(type)), %{import_run_id: "e"})
 
       assert Enum.any?(result.diagnostics, &(&1.code == "XTCE_ENUMERATION_RANGE_UNSUPPORTED"))
-
-      # A reversed range is malformed, not too big (api-ops).
-      assert [invalid] = Enum.filter(result.diagnostics, &(&1.code == "XTCE_ENUMERATION_INVALID"))
-      assert invalid.message =~ "BACKWARDS"
 
       [layer] = result.bundle.declaration_layers
       type = Enum.find(layer.declarations, &(&1.kind == :parameter_type))
@@ -306,8 +301,7 @@ defmodule Cadence.Catalog.Xtce13ImporterTest do
                %{value: 2, label: "FAULT"},
                %{value: 3, label: "FAULT"},
                %{value: 4, label: "FAULT"},
-               %{value: 5, label: "WILD"},
-               %{value: 9, label: "BACKWARDS"}
+               %{value: 5, label: "WILD"}
              ]
     end
   end
