@@ -2588,6 +2588,11 @@ Cadence for the mission's organization (today, domain).
     more. Their telemetry isn't stored, and their alarms and current values aren't updating." (One craft: "…for
     EARENDIL-004. Its telemetry isn't stored, and its alarms…")
   - (3) "Timed actions for 4 spacecraft aren't running: EARENDIL-004, …"
+- **Who's affected, `processing` and `timer`** (api's shape, 11-17): `spacecraft_ids` is the craft known to be
+  affected and can undercount, so these paths never claim an exact set (U20). Their titles name nobody:
+  `Incoming data is stuck` / `Timed actions are stuck`. The what-stopped line then says "It affects EARENDIL-004
+  and EARENDIL-005, and may affect others." (names up to 3, then "and N more"); with none known, "It isn't known
+  yet which spacecraft it affects." `storage` (one pass) keeps the named title above.
 - **Why** (second line, all paths): "It's a fault in Cadence, not in this mission's setup or data. Cadence retries
   by itself and hits the same fault each time: 14 tries since 03:10Z, the last at 03:52Z." (`occurrences`, `since`,
   `last_seen`; drop a clause whose field is null, U20.) For (3) the retries come only when new data or a timed
