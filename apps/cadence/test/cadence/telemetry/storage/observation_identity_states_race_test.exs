@@ -93,19 +93,18 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesRaceTest do
   defp hold_batch(envelope) do
     test_pid = self()
 
-    holder =
-      Task.async(fn ->
-        Sandbox.unboxed_run(Repo, fn ->
-          Repo.transaction(fn ->
-            :ok = ObservationIdentityStates.record_envelopes([envelope], publish_facts?: false)
-            send(test_pid, :held)
-            receive do: (:commit -> :ok)
-          end)
-        end)
-      end)
+    holder = Task.async(fn -> Sandbox.unboxed_run(Repo, fn -> hold(envelope, test_pid) end) end)
 
     assert_receive :held, 2_000
     holder
+  end
+
+  defp hold(envelope, test_pid) do
+    Repo.transaction(fn ->
+      :ok = ObservationIdentityStates.record_envelopes([envelope], publish_facts?: false)
+      send(test_pid, :held)
+      receive do: (:commit -> :ok)
+    end)
   end
 
   defp unboxed_async(fun) do

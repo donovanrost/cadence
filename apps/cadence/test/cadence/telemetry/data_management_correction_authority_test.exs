@@ -6,6 +6,7 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.HistoryStore
   alias Cadence.Telemetry.Storage
+  alias Cadence.Telemetry.Storage.ObservationEnvelope
 
   setup do
     persistence_policy = data_management_persistence_policy()
@@ -373,7 +374,7 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
     fn query, _opts ->
       case Enum.find(envelopes, &(&1.sample_id == query.sample_id)) do
         nil -> {:error, :not_found}
-        envelope -> {:ok, Cadence.Telemetry.Storage.ObservationEnvelope.to_sample(envelope)}
+        envelope -> {:ok, ObservationEnvelope.to_sample(envelope)}
       end
     end
   end
