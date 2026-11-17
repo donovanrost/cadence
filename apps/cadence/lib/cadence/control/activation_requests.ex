@@ -10,7 +10,7 @@ defmodule Cadence.Control.ActivationRequests do
   """
 
   alias Cadence.Auth.Scope
-  alias Cadence.Control.ActivationRequests.Rows
+  alias Cadence.Control.ActivationRequests.{Refusals, Rows}
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.Directory
@@ -46,9 +46,12 @@ defmodule Cadence.Control.ActivationRequests do
           {:ok, map()} | {:error, term()}
   def approve(%Scope{} = scope, mission_id, request_id, params, opts \\ []) do
     with {:ok, reason} <- reason(params["reason"]),
-         {:ok, _request} <- pending(scope, mission_id, request_id),
+         {:ok, request} <- pending(scope, mission_id, request_id),
          {:ok, _request, _decision, approved} <-
-           decision_result(ControlActivations.approve(scope, request_id, reason, opts)) do
+           scope
+           |> ControlActivations.approve(request_id, reason, opts)
+           |> Refusals.explain(scope.organization_id, mission_id, request)
+           |> decision_result() do
       outcome = scope |> execute(approved) |> outcome()
       announce(scope, mission_id)
       reply(scope, mission_id, request_id, outcome)

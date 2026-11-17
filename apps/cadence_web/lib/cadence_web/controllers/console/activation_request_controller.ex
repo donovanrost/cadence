@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   use CadenceWeb, :controller
 
   alias Cadence.Control.ActivationRequests
-  alias CadenceWeb.Console.{ConfigJSON, Problem}
+  alias CadenceWeb.Console.{ApproveRefusals, ConfigJSON, Problem}
 
   def index(conn, params),
     do: respond(conn, ActivationRequests.list(scope(conn), mission_id(conn), params))
@@ -38,6 +38,10 @@ defmodule CadenceWeb.Console.ActivationRequestController do
 
   defp error(conn, {:nothing_to_resume, state}),
     do: Problem.respond(conn, :nothing_to_resume, %{state: state})
+
+  # ux U95: the approve preflight refused before anything was recorded (a 409 per code).
+  defp error(conn, {:approve_refused, code, details}),
+    do: ApproveRefusals.respond(conn, code, details)
 
   defp error(conn, {:not_resumable, code}),
     do: Problem.respond(conn, :not_resumable, %{error_code: code})

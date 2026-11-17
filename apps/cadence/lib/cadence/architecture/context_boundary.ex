@@ -59,6 +59,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/planning_templates.ex" => :composition,
     "lib/cadence/control/planning_grants.ex" => :composition,
     "lib/cadence/control/activation_requests.ex" => :composition,
+    "lib/cadence/control/activation_requests/refusals.ex" => :composition,
     "lib/cadence/control/activation_requests/rows.ex" => :composition,
     "lib/cadence/control/planning_operations.ex" => :composition,
     "lib/cadence/control/spacecraft_ops.ex" => :composition,
