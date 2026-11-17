@@ -56,10 +56,12 @@ describe("U94 status, steps and fields", () => {
   });
 
   it("lists the steps left, in U94's words", () => {
-    const steps = setupSteps(
-      documentWire({ catalog_revision_id: null, handled_apids: [] }) as never,
-      "EARENDIL-004",
-    );
+    const doc = read({
+      document: documentWire({ catalog_revision_id: null, handled_apids: [] }),
+    }).document;
+    const steps = setupSteps(doc, "EARENDIL-004", true);
+    // Telemetry off: nothing to decode, so no decode step (#109: the switch, not the document).
+    expect(setupSteps(doc, "EARENDIL-004", false).map((s) => s.key)).toEqual(["catalog"]);
     expect(steps.map((s) => s.label)).toEqual([
       "Choose a catalog revision",
       "Choose what to decode",
@@ -92,17 +94,37 @@ describe("U94 status, steps and fields", () => {
 });
 
 describe("U94 switches (DECISIONS #109)", () => {
-  it("reads set by rN, set through Changes, never set, or just the value on an older server", () => {
-    expect(switchLine({ value: true, set: true, revision: 7 }, true, "EARENDIL-004")).toBe(
+  it("reads set by rN, set through Changes, or never set", () => {
+    expect(switchLine({ value: true, set: true, revision: 7, active: true }, "EARENDIL-004")).toBe(
       "On · set by r7.",
     );
-    expect(switchLine({ value: false, set: true, revision: null }, false, "EARENDIL-004")).toBe(
-      "Off · set through Setup › Changes.",
-    );
-    expect(switchLine({ value: false, set: false, revision: null }, false, "EARENDIL-004")).toBe(
+    expect(
+      switchLine({ value: false, set: true, revision: null, active: false }, "EARENDIL-004"),
+    ).toBe("Off · set through Setup › Changes.");
+    expect(
+      switchLine({ value: false, set: false, revision: null, active: null }, "EARENDIL-004"),
+    ).toBe(
       "Off · no change set has turned it on yet. Turn it on in EARENDIL-004's Operation panel; it applies with the next change set.",
     );
-    expect(switchLine(undefined, true, "EARENDIL-004")).toBe("On");
+  });
+
+  it("never set while the active configuration runs it: says a new version turns it off", () => {
+    expect(
+      switchLine({ value: false, set: false, revision: null, active: true }, "EARENDIL-004", 3),
+    ).toBe(
+      "On in the active configuration (v3); no change set has set it yet. Saving a new version turns it off unless a change set turns it on first.",
+    );
+  });
+
+  it("a switch whose draft value differs from the active one shows as a change (U94 amended)", () => {
+    const off = read({
+      document: documentWire({ handled_apids: [42] }),
+      switches: {
+        telemetry_enabled: { value: false, set: false, revision: null, active: true },
+        commanding_enabled: { value: false, set: false, revision: null, active: false },
+      },
+    });
+    expect(comparisonRows(off)).toEqual([{ setting: "Telemetry", active: "On", draft: "Off" }]);
   });
 
   it("shows both read-only, each with Open Operation to the craft's page", () => {
@@ -136,7 +158,11 @@ describe("U94 comparison", () => {
       { setting: "Handled APIDs", active: "0x2A", draft: "0x2A, 0x2B", mono: true },
     ]);
     const switched = read({
-      document: documentWire({ handled_apids: [42], commanding_enabled: true }),
+      document: documentWire({ handled_apids: [42] }),
+      switches: {
+        telemetry_enabled: { value: true, set: true, revision: 7, active: true },
+        commanding_enabled: { value: true, set: true, revision: 8, active: true },
+      },
     });
     expect(comparisonRows(switched)).toEqual([]);
   });
@@ -168,8 +194,8 @@ describe("U94 comparison", () => {
           active: null,
           document: documentWire({ catalog_revision_id: null }),
           switches: {
-            telemetry_enabled: { value: false, set: false, revision: null },
-            commanding_enabled: { value: false, set: false, revision: null },
+            telemetry_enabled: { value: false, set: false, revision: null, active: null },
+            commanding_enabled: { value: false, set: false, revision: null, active: null },
           },
         }),
       },

@@ -12,18 +12,27 @@ describe("the configuration workspace snapshot", () => {
     expect(r.value.active?.version).toBe(3);
     expect(r.value.document.handled_apids).toEqual([42, 43]);
     expect(r.value.approval.requirement).toBe("independent");
-    expect(r.value.switches?.telemetry_enabled).toEqual({ value: true, set: true, revision: 7 });
+    expect(r.value.switches.telemetry_enabled).toEqual({
+      value: true,
+      set: true,
+      revision: 7,
+      active: true,
+    });
   });
 
-  it("reads a craft that was never set up, never saved, and an older server without switches", () => {
-    const r = decode(snapshotReader, {
-      ...snapshotWire({ active: null, saved_version: null }),
-      switches: undefined,
-    });
+  it("reads a craft that was never set up and never saved", () => {
+    const r = decode(snapshotReader, snapshotWire({ active: null, saved_version: null }));
     if (!r.ok) throw r.error;
     expect(r.value.active).toBeNull();
     expect(r.value.saved_version).toBeNull();
-    expect(r.value.switches).toBeUndefined();
+  });
+
+  it("switches come only from switches: the document carries none (#109, api)", () => {
+    const r = decode(snapshotReader, snapshotWire());
+    if (!r.ok) throw r.error;
+    expect("telemetry_enabled" in r.value.document).toBe(false);
+    // Without the switches block the read fails: it's their only source.
+    expect(decode(snapshotReader, { ...snapshotWire(), switches: undefined }).ok).toBe(false);
   });
 
   it("an unknown review state or framing keeps its raw word instead of failing the read", () => {

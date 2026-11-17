@@ -1,8 +1,6 @@
 /** (B) wire fixtures (api's shape diff), for tests and the preview; never shipped as data. */
 export const documentWire = (o: Record<string, unknown> = {}) => ({
   catalog_revision_id: "cr-14",
-  telemetry_enabled: true,
-  commanding_enabled: false,
   telemetry_source_endpoint_id: "src-1",
   handled_apids: [42, 43],
   protocol: {
@@ -65,8 +63,8 @@ export const snapshotWire = (o: Record<string, unknown> = {}) => ({
   sources: [{ id: "src-1", name: "SVA S-band" }],
   presets: [],
   switches: {
-    telemetry_enabled: { value: true, set: true, revision: 7 },
-    commanding_enabled: { value: false, set: false, revision: null },
+    telemetry_enabled: { value: true, set: true, revision: 7, active: true },
+    commanding_enabled: { value: false, set: false, revision: null, active: false },
   },
   ...o,
 });

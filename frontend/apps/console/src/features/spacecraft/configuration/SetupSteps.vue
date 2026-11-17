@@ -7,10 +7,9 @@ import { notSetUpLine, setupSteps } from "./words.ts";
 
 /** U94: "Not set up" and the steps before the draft can be sent, numbered, each to its section. */
 const props = defineProps<{ snapshot: ConfigurationSnapshot }>();
-const steps = computed(() => setupSteps(props.snapshot.document, props.snapshot.name));
-const telemetryOn = computed(
-  () =>
-    props.snapshot.switches?.telemetry_enabled.value ?? props.snapshot.document.telemetry_enabled,
+const telemetryOn = computed(() => props.snapshot.switches.telemetry_enabled.value);
+const steps = computed(() =>
+  setupSteps(props.snapshot.document, props.snapshot.name, telemetryOn.value),
 );
 </script>
 

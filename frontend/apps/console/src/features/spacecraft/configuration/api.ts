@@ -31,11 +31,13 @@ export const protocolReader = d.object({
 });
 export type Protocol = Decoded<typeof protocolReader>;
 
-/** The configuration document, keys exactly as the host's ConfigurationInput (api). */
+/**
+ * The editable configuration document (the host's ConfigurationInput keys), WITHOUT the
+ * Telemetry and Commanding switches: change sets own them (#109), so they come read-only in
+ * `switches`, and a draft carrying them is refused (422). Never sent back.
+ */
 export const documentReader = d.object({
   catalog_revision_id: d.nullable(d.token),
-  telemetry_enabled: d.boolean,
-  commanding_enabled: d.boolean,
   telemetry_source_endpoint_id: d.nullable(d.token),
   handled_apids: d.array(d.integer, 2048),
   protocol: d.nullable(protocolReader),
@@ -50,6 +52,8 @@ const switchReader = d.object({
   value: d.boolean,
   set: d.boolean,
   revision: d.nullable(d.integer),
+  /** The switch in the craft's ACTIVE configuration; null when nothing is active (api, U94). */
+  active: d.nullable(d.boolean),
 });
 export type SwitchState = Decoded<typeof switchReader>;
 
@@ -137,10 +141,8 @@ export const snapshotReader = d.object({
     }),
     200,
   ),
-  /** #109 (api, after the first diff): optional until the route ships it. */
-  switches: d.optional(
-    d.object({ telemetry_enabled: switchReader, commanding_enabled: switchReader }),
-  ),
+  /** #109: the switches' only source (read-only; lead kept the per-switch form). */
+  switches: d.object({ telemetry_enabled: switchReader, commanding_enabled: switchReader }),
 });
 export type ConfigurationSnapshot = Decoded<typeof snapshotReader>;
 export type ConfigurationSection = ConfigurationSnapshot["section"];

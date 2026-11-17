@@ -14,18 +14,18 @@ const rows = () => [
     key: "telemetry",
     label: "Telemetry",
     line: switchLine(
-      props.snapshot.switches?.telemetry_enabled,
-      props.snapshot.document.telemetry_enabled,
+      props.snapshot.switches.telemetry_enabled,
       props.snapshot.name,
+      props.snapshot.active?.version ?? null,
     ),
   },
   {
     key: "commanding",
     label: "Commanding",
     line: switchLine(
-      props.snapshot.switches?.commanding_enabled,
-      props.snapshot.document.commanding_enabled,
+      props.snapshot.switches.commanding_enabled,
       props.snapshot.name,
+      props.snapshot.active?.version ?? null,
     ),
   },
 ];
