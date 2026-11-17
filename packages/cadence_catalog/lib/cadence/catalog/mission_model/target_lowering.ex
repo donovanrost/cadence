@@ -3,7 +3,6 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
 
   alias Cadence.Catalog.MissionModel.{
     ArgumentCriteria,
-    CalibratedComparisons,
     Canonical,
     Declaration,
     Diagnostic,
@@ -53,11 +52,6 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
 
     artifacts = Enum.reject(artifacts, &is_nil/1)
 
-    lints =
-      artifacts
-      |> Enum.flat_map(&(&1.constraint_plans ++ &1.verifier_plans))
-      |> CalibratedComparisons.warnings(revision.declarations, index)
-
     {%{
        "target" => "command",
        "runtime_contract" => @command_runtime_contract,
@@ -65,7 +59,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
        "constraint_plans" => Enum.flat_map(artifacts, & &1.constraint_plans),
        "verifier_plans" => Enum.flat_map(artifacts, & &1.verifier_plans),
        "operational_bindings" => Enum.map(artifacts, & &1.operational_binding)
-     }, diagnostics ++ lints}
+     }, diagnostics}
   end
 
   defp lower_container(container, revision, index) do

@@ -61,46 +61,6 @@ defmodule Cadence.Catalog.VerifierArgumentCriteriaTest do
            )
   end
 
-  describe "a calibrated comparison on a state parameter (#92 (c))" do
-    test "against a number warns: the calibrated value is the label" do
-      {:ok, compilation} = compile_with_warnings(source(value_criteria("1", nil)))
-
-      assert [warning] =
-               Enum.filter(
-                 compilation.plans.command.diagnostics,
-                 &(&1.code == "MM_CALIBRATED_COMPARISON_NUMERIC_ON_STATES")
-               )
-
-      assert warning.severity == :warning
-      assert warning.message =~ "SAFE, NOMINAL"
-      assert warning.message =~ "use_calibrated: false"
-      assert compilation.plans.command.status == :ready
-    end
-
-    test "against the label, or raw against a number, doesn't" do
-      for criteria <- [value_criteria("NOMINAL", nil), value_criteria("1", false)] do
-        assert {:ok, _compilation} = compile(source(criteria))
-      end
-    end
-  end
-
-  defp compile_with_warnings(source) do
-    {:ok, import_result} = CadenceYamlDatabase.import(source, %{import_run_id: "verifier-args"})
-    [layer] = import_result.bundle.declaration_layers
-    Compiler.compile([layer])
-  end
-
-  defp value_criteria(value, calibrated) do
-    [
-      "criteria_type: comparison",
-      "subject_ref: telemetry:HK.mode",
-      "comparison: equal",
-      "value: #{value}"
-    ]
-    |> Kernel.++(if is_nil(calibrated), do: [], else: ["use_calibrated: #{calibrated}"])
-    |> Enum.map_join("\n", &("          " <> &1))
-  end
-
   defp compile(source) do
     {:ok, import_result} = CadenceYamlDatabase.import(source, %{import_run_id: "verifier-args"})
     [layer] = import_result.bundle.declaration_layers
