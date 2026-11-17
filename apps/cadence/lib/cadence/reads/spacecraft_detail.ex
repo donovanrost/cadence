@@ -94,11 +94,9 @@ defmodule Cadence.Reads.SpacecraftDetail do
       role: rule.role,
       enabled: rule.enabled?,
       active: rule.lifecycle_state == :active,
-      transport: %{
-        id: rule.transport_id,
-        name: transport && transport.display_name,
-        version: rule.transport_version
-      }
+      # No version: a route names its transport and the current version resolves at apply
+      # (DECISIONS, routing drop (a), 11-16).
+      transport: %{id: rule.transport_id, name: transport && transport.display_name}
     }
   end
 

@@ -100,7 +100,7 @@ Refetch on `invalidate` with `spacecraft`.
   "routing_rules": [
     {"id": "…", "name": "Primary downlink", "purpose": "TM", "direction": "inbound",
      "role": "primary", "enabled": true, "active": true,
-     "transport": {"id": "…", "name": "Svalbard X-band", "version": 2}}
+     "transport": {"id": "…", "name": "Svalbard X-band"}}
   ],
   "readiness": {"ready": false, "checks": [
     {"key": "identity", "status": "ready", "title": "SCID 312", "body": "The spacecraft has a SCID."},
@@ -113,6 +113,8 @@ Refetch on `invalidate` with `spacecraft`.
 
 - `profile`: null when unbound. `name` and `latest_version` are null if the pinned profile was
   deleted (the `profile` check is then a `blocker`).
+- `routing_rules[].transport` has no `version`: a route names its transport and the current
+  version resolves at apply (DECISIONS, routing drop (a), 11-16; the field was removed).
 - `routing_rules[].direction`: `inbound | outbound | bidirectional`. These are the model's values
   (inbound = downlink, outbound = uplink), not the `downlink | uplink | both` that was requested.
   `role`: `primary | candidate | contributing`. Archived rules appear with `active: false`, active
