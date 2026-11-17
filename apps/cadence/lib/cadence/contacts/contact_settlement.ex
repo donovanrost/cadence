@@ -360,8 +360,16 @@ defmodule Cadence.Contacts.ContactSettlement do
 
   # A storing failure names the cause, whatever ended the wait; a deadline with no error is a
   # slow drain (failure_kind nil).
-  defp failure(_reason, _error, storage_error) when is_binary(storage_error),
-    do: {@storage_failure, truncate(storage_error)}
+  # #99 follow-up (ux U84): storage stuck on a replay-id conflict is its own kind, so the item
+  # folds under the Stuck processing item and offers no retry.
+  defp failure(_reason, _error, storage_error) when is_binary(storage_error) do
+    kind =
+      if String.contains?(storage_error, ":replay_id_conflict"),
+        do: "replay_id_conflict",
+        else: @storage_failure
+
+    {kind, truncate(storage_error)}
+  end
 
   defp failure("settle_failed", error, nil), do: {"settle_failed", truncate(inspect(error))}
   defp failure(_reason, _error, nil), do: {nil, nil}

@@ -6,6 +6,31 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
   """
 
   @keys %{
+    # #99 follow-up / ux U84 'Stuck processing': a unit #99's tripwire stopped. AttentionItems adds
+    # affected_spacecraft and contact (names, the pass label).
+    "replay_conflict" => [
+      :acknowledged_at,
+      :acknowledged_note,
+      :reraised,
+      :path,
+      :effect_kind,
+      :effect_id,
+      :effect_count,
+      :partition_id,
+      :partition_stopped,
+      :stopped_while,
+      :realized_contact_id,
+      :path_id,
+      :stream_key,
+      :spacecraft_ids,
+      :spacecraft_count,
+      :first_seen_at,
+      :last_seen_at,
+      :occurrences,
+      :buffer,
+      :dropping,
+      :dropping_since
+    ],
     # ux U61: a day nearing its first window with nothing being booked. Per-viewer fields
     # (viewer_can_approve, viewer_can_book) are the console's.
     "plan_coverage" => [
@@ -33,7 +58,8 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :attempts,
       :next_attempt_at,
       :last_attempt_at,
-      :first_failure_kind
+      :first_failure_kind,
+      :stuck_processing_id
     ],
     # 2026-11-12 / ux U38: the mission's runtime hasn't applied its active generation.
     "mission_runtime" => [
@@ -46,7 +72,8 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :change_set_id,
       # U91: what a spec mismatch failed to verify, and the pass the failure costs.
       :reason_detail,
-      :next_pass
+      :next_pass,
+      :stuck_processing_id
     ],
     # Director C / ux U41: an approved activation whose apply failed or stalled (Retry apply).
     "activation_apply" => [
@@ -74,7 +101,8 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :journal_usage,
       :drops,
       :diagnostics,
-      :journal_disk
+      :journal_disk,
+      :stuck_processing_id
     ],
     # #87 / ux U50: connections a shared listener refused, one row per open pass on it.
     "listener_refusal" => [

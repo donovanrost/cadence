@@ -169,6 +169,7 @@ defmodule CadenceWeb.Console.Problem do
     retry_not_manual:
       {409, "Cadence is already retrying this; there is nothing to retry by hand."},
     actor_not_assignable: {422, "The actor is always the signed-in user."},
+    invalid_note: {422, "The note must be plain text of at most 500 characters."},
     holds_unacknowledged:
       {422,
        "Some preflight HOLDs aren't acknowledged or cleared. Re-run preflight and resolve them."},

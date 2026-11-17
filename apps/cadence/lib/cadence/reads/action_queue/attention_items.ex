@@ -20,6 +20,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   alias Cadence.Comms.StationRefs
   alias Cadence.GroundNetworks.MissionProviders
   alias Cadence.Reads.ActionQueue.{ContactStartItem, Item, ScidMismatchItem, SourceKeys}
+  alias Cadence.Reads.ActionQueue.ReplayConflictItem
   alias Cadence.Reads.{Attention, PassUplink}
   alias Cadence.SpacecraftStore
 
@@ -212,6 +213,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     attention |> SourceKeys.take() |> Map.put(:journal_disk, %{disk | holders: holders})
   end
 
+  # #99 follow-up / ux U84: the craft named (U25) and the pass label (station code + AOS).
+  defp source_fields(%{source: "replay_conflict"} = a, names),
+    do: ReplayConflictItem.fields(a, names.spacecraft, station(a.ground_station_ref, names))
+
   defp source_fields(attention, _names), do: SourceKeys.take(attention)
 
   defp holder_spacecraft(id, names) do
@@ -291,6 +296,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp state(false, %{source: "expired_group", severity: "info"}), do: :info
   defp state(false, _attention), do: :caution
 
+  # ux U84: critical only while new telemetry is being lost.
+  defp p1?(%{source: "replay_conflict"} = attention, _now), do: attention.dropping == true
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{source: "contact_settlement"}, _now), do: false
   # U45: P1 while Cadence is still trying to start the pass; P2 once it's missed.

@@ -23,12 +23,8 @@ defmodule Cadence.Contacts.IngressBackpressureAttention do
   docs/apogee/api/ops.md.
   """
 
-  import Ecto.Query
-
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Contacts.{ContactStore, JournalReclaim, RealizedContact}
-  alias Cadence.Control.Contacts.Store.ProviderReservationRow
-  alias Cadence.Repo
+  alias Cadence.Contacts.{AttentionPasses, JournalReclaim, RealizedContact}
   alias Cadence.Runtime.Ingress, as: RuntimeIngress
 
   @source "ingress_backpressure"
@@ -261,29 +257,16 @@ defmodule Cadence.Contacts.IngressBackpressureAttention do
 
   defp live?(_pass, _now), do: false
 
-  # Each contact's record and its booking, looked up once per read.
+  # Each contact's record and its booking, looked up once per read (shared with replay_conflict).
   defp context(org, mission, keys) do
-    contacts =
-      keys
-      |> Enum.map(fn {_mission, contact, _binding} -> contact end)
-      |> Enum.uniq()
-      |> Enum.flat_map(fn id ->
-        case ContactStore.fetch_realized(org, mission, id) do
-          {:ok, %RealizedContact{} = contact} -> [{id, contact}]
-          _missing -> []
-        end
-      end)
-      |> Map.new()
-
-    %{contacts: contacts, reservations: reservations(org, mission, Map.values(contacts))}
+    contacts = keys |> Enum.map(fn {_mission, contact, _binding} -> contact end) |> Enum.uniq()
+    AttentionPasses.context(org, mission, contacts)
   end
 
-  defp scheduled_contact_id(context, contact) do
-    case Map.get(context.contacts, contact) do
-      %RealizedContact{scheduled_contact_id: id} -> id
-      nil -> nil
-    end
-  end
+  defp scheduled_contact_id(context, contact),
+    do: AttentionPasses.scheduled_contact_id(context, contact)
+
+  defp pass(context, contact), do: AttentionPasses.pass(context, contact)
 
   defp transport_kind(context, contact, binding) do
     with %RealizedContact{paths: paths} <- Map.get(context.contacts, contact),
@@ -294,50 +277,6 @@ defmodule Cadence.Contacts.IngressBackpressureAttention do
       if key == :tcp_socket, do: "tcp", else: to_string(key)
     else
       _unknown -> nil
-    end
-  end
-
-  defp reservations(_org, _mission, []), do: %{}
-
-  defp reservations(org, mission, contacts) do
-    ids = contacts |> Enum.map(& &1.scheduled_contact_id) |> Enum.reject(&is_nil/1)
-
-    from(row in ProviderReservationRow,
-      where:
-        row.organization_id == ^org and row.mission_id == ^mission and
-          row.scheduled_contact_id in ^ids
-    )
-    |> Repo.all()
-    |> Enum.map(&ProviderReservationRow.to_domain/1)
-    |> Map.new(&{&1.scheduled_contact_id, &1})
-  end
-
-  # The pass the contact realizes, from its booking; nil fields for a contact without one.
-  defp pass(context, contact) do
-    case Map.get(context.reservations, scheduled_contact_id(context, contact)) do
-      nil ->
-        %{
-          spacecraft_id: nil,
-          provider_reservation_id: nil,
-          ground_station_ref: nil,
-          provider_id: nil,
-          starts_at: nil,
-          ends_at: nil
-        }
-
-      reservation ->
-        %{
-          spacecraft_id: reservation.spacecraft_id,
-          provider_reservation_id: reservation.provider_reservation_id,
-          ground_station_ref:
-            Enum.find_value(
-              [reservation.provider_confirmed_snapshot_document, reservation.request_document],
-              &(is_map(&1) && &1["ground_station_ref"])
-            ),
-          provider_id: reservation.provider_id,
-          starts_at: reservation.starts_at,
-          ends_at: reservation.ends_at
-        }
     end
   end
 end

@@ -16,6 +16,7 @@ defmodule CadenceWeb.Console.AttentionController do
     ContactStartAttention,
     IngressBackpressureAttention,
     JobOutcomeUnknownAttention,
+    ReplayConflictAttention,
     ScidMismatchAttention
   }
 
@@ -27,6 +28,22 @@ defmodule CadenceWeb.Console.AttentionController do
 
   # todo(authz): Cedar should decide who may acknowledge or resolve each attention source (any
   # mission operator today), e.g. only provider-account owners for pass resolutions.
+  # ux U84: Stuck processing's acknowledge takes an optional note ('who you told', 500 at most).
+  def acknowledge(conn, %{"source" => "replay_conflict", "id" => id} = params) do
+    case no_actor(params) do
+      :ok ->
+        note = Map.get(params, "note")
+
+        respond(
+          conn,
+          ReplayConflictAttention.acknowledge(scope(conn), mission_id(conn), id, note)
+        )
+
+      {:error, reason} ->
+        problem(conn, reason)
+    end
+  end
+
   def acknowledge(conn, %{"source" => source, "id" => id} = params) do
     with :ok <- no_actor(params),
          {:ok, actions} <- source(source) do
@@ -147,6 +164,8 @@ defmodule CadenceWeb.Console.AttentionController do
   defp source("expired_group"), do: {:ok, ExpiredGroupAttention}
   # U81 §2: Mark as seen resolves it at once; nothing to resolve or retry.
   defp source("contact_scid_mismatch"), do: {:ok, ScidMismatchAttention}
+  # #99 follow-up / U84: acknowledge only (above, with its note); nothing to resolve.
+  defp source("replay_conflict"), do: {:ok, ReplayConflictAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}
 
   defp no_actor(params) do
@@ -205,6 +224,7 @@ defmodule CadenceWeb.Console.AttentionController do
               :attention_item_not_found,
               :attention_item_not_open,
               :forbidden,
+              :invalid_note,
               :reason_required
             ],
        do: Problem.respond(conn, reason)

@@ -11,7 +11,8 @@ defmodule Cadence.Reads.Attention do
   `archive_quarantine` (archive entries that can never be indexed; #88), `listener_refusal`
   (connections refused on a pass's shared listener; #87, U50), `expired_group` (a command group
   whose deadline passed before all its members went out; U75, #97) and `plan_coverage` (a day
-  nearing its first window with nothing being booked; U61). While an
+  nearing its first window with nothing being booked; U61) and `replay_conflict` (#99's tripwire
+  stopped a unit; ux U84 'Stuck processing'). While an
   `activation_apply` item is open it carries the cause, so `mission_runtime` stays out of the list
   and those items say `runtime_not_applied: true` instead (fe-ops: one row for one cause). Other
   mission-level sources (provider changes, for example) join by implementing the same four
@@ -33,6 +34,7 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.ListenerRefusalAttention, as: ListenerRefusal
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
   alias Cadence.Contacts.ProviderChangeAttention, as: ProviderChange
+  alias Cadence.Contacts.ReplayConflictAttention, as: ReplayConflict
   alias Cadence.Contacts.ScidMismatchAttention, as: ScidMismatch
   alias Cadence.Control.Activations.ApplyAttention, as: ActivationApply
   alias Cadence.Control.UplinkReadiness.Attention, as: UplinkBlocked
@@ -55,7 +57,8 @@ defmodule Cadence.Reads.Attention do
     ListenerRefusal,
     ExpiredGroup,
     PlanCoverage,
-    ScidMismatch
+    ScidMismatch,
+    ReplayConflict
   ]
   @resolved_window_s 60
 
@@ -97,7 +100,9 @@ defmodule Cadence.Reads.Attention do
   end
 
   @doc false
-  def one_row_per_cause(items) do
+  def one_row_per_cause(items), do: items |> runtime_cause() |> stuck_cause()
+
+  defp runtime_cause(items) do
     runtime = MissionRuntime.source()
     apply = ActivationApply.source()
 
@@ -116,6 +121,52 @@ defmodule Cadence.Reads.Attention do
     do: Map.put(item, :runtime_not_applied, runtime_not_applied?)
 
   defp flag_runtime(item, _apply, _runtime_not_applied?), do: item
+
+  # ux U84: only an item whose own cause is the conflict folds under its Stuck processing item: a
+  # settlement whose storage failed on it, a buffer filling behind that stuck stream, or the
+  # runtime left unapplied by an activation that tripped while applying (api-ops R1).
+  defp stuck_cause(items) do
+    stuck = for %{source: "replay_conflict"} = item <- items, do: item
+    if stuck == [], do: items, else: Enum.map(items, &tag_stuck(&1, stuck))
+  end
+
+  defp tag_stuck(
+         %{source: "contact_settlement", failure_kind: "replay_id_conflict"} = item,
+         stuck
+       ) do
+    put_stuck(
+      item,
+      Enum.find(stuck, &(&1.stream_key && &1.realized_contact_id == item.realized_contact_id))
+    )
+  end
+
+  defp tag_stuck(%{source: "ingress_backpressure", transport: %{} = transport} = item, stuck) do
+    binding = Map.get(transport, :provider_binding_id)
+
+    put_stuck(
+      item,
+      Enum.find(stuck, fn conflict ->
+        (conflict.stream_key && conflict.realized_contact_id == item.realized_contact_id) and
+          conflict.provider_binding_id == binding
+      end)
+    )
+  end
+
+  # Only a reconcile trip writes `applying`, and it fails the apply: one first seen while this
+  # not-applied period runs is its cause.
+  defp tag_stuck(%{source: "mission_runtime"} = item, stuck),
+    do: put_stuck(item, Enum.find(stuck, &applying_since?(&1, Map.get(item, :since))))
+
+  defp tag_stuck(item, _stuck), do: item
+
+  defp applying_since?(%{stopped_while: "applying", first_seen_at: at}, %DateTime{} = since),
+    do: DateTime.compare(at, since) != :lt
+
+  defp applying_since?(%{stopped_while: "applying"}, nil), do: true
+  defp applying_since?(_conflict, _since), do: false
+
+  defp put_stuck(item, nil), do: item
+  defp put_stuck(item, conflict), do: Map.put(item, :stuck_processing_id, conflict.id)
 
   defp authorize(scope, mission_id),
     do:
