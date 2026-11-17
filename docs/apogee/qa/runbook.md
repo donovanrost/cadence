@@ -308,6 +308,12 @@ and this stack's QuestDB only. devops samples disk before and after (qa pastes t
 Growth this slot can't stop: identity_states adds ~3.6 GB/day until domain's change (a) stops writing a state for a
 first-seen canonical observation (#99).
 
+## Tripped partition (#99 replay-safe ids)
+
+domain's text (11-17, with #99's hand-off), as given:
+
+#99 replay-safe ids: a TRIPPED partition. Signs: an error log line MM_REPLAY_ID_CONFLICT <kind> <id>: a different effect already holds this id (stored ..., new ...), repeating. For alarm effects, the ingress persistence projector's batch fails and is retried (cadence.telemetry.ingress.persistence_failed warnings repeat, the journal isn't acknowledged, the partition's backlog grows). For a managed action request, the partition's runtime-record write fails on every batch. It is a bug (two different effects mapped to one id, or a non-deterministic replay), never noise. qa: STOP and call domain with the log line, the mission and partition id, and the time. Do NOT delete or edit rows (alarm_episodes, alarm_episode_events, managed_action_requests, partition_stream_keys), and don't restart the partition repeatedly: the retry hits it again. Also watch for MM_REPLAY_ID_INDEX_OVERFLOW (warning; counter [:cadence, :replay_id, :index_overflow]): an input had more than 32,768 effects of one kind, so the rest got non-replay-safe ids. Not an outage; report it to domain the same day.
+
 ## Known limits
 
 - **Live telemetry saturates the shared laptop.** On 2026-11-08, ten 1 Hz feeds plus team builds
