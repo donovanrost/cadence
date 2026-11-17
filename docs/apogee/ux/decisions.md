@@ -894,7 +894,7 @@ configuration failure P3. The amendments to fe-ops' drafts:
 | connect_failed | "Cadence couldn't reach Northlight's endpoint for this pass." | `Check provider` (Setup › Ground stations › Providers) |
 | ingress_pipeline_failed | "Cadence couldn't start storing telemetry for this pass." | — |
 | uplink_session_failed | "Cadence couldn't start the uplink session for this pass." | — |
-| no_runtime_spec | "The mission's runtime has no active configuration, so passes can't start." | `Open Changes` |
+| no_runtime_spec | By `reason_detail` (U91). `no_configuration` and null: "No configuration has been activated on this mission yet, so passes can't start. EARENDIL-004's configuration has to be reviewed and activated first." (no spacecraft: "…Each spacecraft's configuration has to be reviewed and activated first."). It says where the fix is, not that the console does it: today review and activate exist only in the legacy host's spacecraft page (domain 11-17), a gap taken to lead.. A change set can't start a mission (U93, domain 11-17), so never `Open Changes`. `configuration_unverifiable`: U91's words. | `Open spacecraft` (Setup › Spacecraft › EARENDIL-004; without a spacecraft, the list). `configuration_unverifiable`: `Open pass` |
 | transport_archived | "This pass's transport, INU S-band, was archived after the pass was booked, so it can't start, and every try fails the same way. Book another pass for this spacecraft." Without `transport_name`: "This pass's transport was archived after…". Only this pass: later bookings take a live route (domain 11-17: the template is taken at booking, and the in-use check keeps routes and booked passes off an archived transport), so nothing is said about later passes. (api 11-17; U82) **Building (api):** this refusal comes before the pass exists, so today it raises no item; api is recording every realization refusal on the booked pass (lead 11-17), and the item anchors there. Other realization refusals read the `unknown` line. | `Book a pass` (Contacts, for this spacecraft) |
 | unknown | "Starting failed." | — |
 | (missing) | "No reason was recorded." | — |
@@ -2846,7 +2846,10 @@ nor the Apply aside says so, and after apply the outcome reads "r1 is active · 
   nothing started." Not "is active", and no runtime clause.
 - **Signal:** only when api's preview read (and the apply result) says nothing is running on the mission, never
   inferred from the submit result's `not_applicable` alone, which also covers changes the runtime doesn't use.
-  api confirms the field; fe-ops reads it first.
+  api's key (11-17; named by lead): `has_active_configuration`, a
+  boolean, never null, on the preview read and on the apply result; false gives these lines. It's false when the
+  mission has no active activation; it's about an activation existing, not the runtime's health (U91's banner covers that). fe-ops reads
+  it first.
 - Once anything runs, the line goes; the runtime clauses (U38's verbs) take over as today.
 
 ### U92 · Refusal `command_group_members_changed`: the group changed after it was submitted (P0 fix; api-ops 8f60ccd94) (api-ops / fe-ops)
@@ -2863,3 +2866,47 @@ and should never fire; when it does, something went round the product. NO-GO, se
 - **Not up front:** the group read has no `members_changed` flag; since this should never fire, none is needed
   now. If one is added (api-ops offers it as an 11-18 follow-up), GO is disabled before a click with the same line.
 - **Nowhere else:** it isn't on Now or in the audit by itself; only at GO.
+
+### U91 · The runtime can't verify its configuration: telemetry, passes and who fixes it (11-17 Earendil incident; amends U38) (api / domain / api-ops / fe-ops)
+Today's incident was U38's `spec_mismatch` with `reason_detail: binding_set_content_sha256`: after a restart, the
+stored activation's binding-set hash didn't verify under the running code, so nothing ran and no pass could start.
+It's U38's item (same title, banner, P1, system close); this entry changes its words and adds what happens to
+telemetry. Facts: api, domain, api-ops (the telemetry cases from reading the code, not a live run).
+
+- **`spec_mismatch` evidence** (replaces "What's running doesn't match it."): "Cadence can't verify this mission's
+  active configuration, so it won't run it." When `applied_generation` isn't null, it adds "It's still running the
+  earlier one."
+- **Who fixes it** (domain: the mission can't; a code fix or a rollback restart can): replaces the retry sentence
+  for `spec_mismatch`: "It's a fault in Cadence, not in this mission's setup. Tell the team that runs Cadence for
+  you; nothing in the console fixes it." No `Review` primary, and never a suggestion to activate a configuration
+  again: that would re-record the hash and hide the fault (director). The banner's added sentence becomes " It needs
+  a fix in Cadence." for `spec_mismatch`, and so does the Changes outcome after an apply ("r6 is active, but the
+  runtime hasn't applied it yet. It needs a fix in Cadence."). Never "support is working on it" (U20: the console can't know that, and
+  there's no support desk, U84). `reconcile_crashed` is a Cadence fault too (api confirmed: the generation couldn't be built), so it
+  takes the same who-fixes sentence and banner sentence, and no `Review`; `runtime_not_running` and `apply_failed` keep U38's "Cadence keeps
+  trying every 30 s." No reason that reaches this row is the mission's to fix.
+- **Telemetry, only while nothing runs** (`applied_generation` null; passes can't start then):
+  - "Until this is fixed, passes can't start, so their telemetry isn't received. Cadence keeps trying to start a
+    pass while its window is open, so it receives telemetry from the moment this is fixed."
+  - `next_pass` (api's new optional key; within 2 h or in progress):
+    - Not started: "The next pass starts at 15:10Z: EARENDIL-004, SVA."
+    - In progress and started before this (`started: true`): "EARENDIL-004's SVA pass started before this, so its
+      telemetry is kept and processed once the runtime is back." (U47 covers the buffer filling.)
+    - In progress, couldn't start: "EARENDIL-004's SVA pass couldn't start, so its telemetry isn't being received."
+      It also has its own U45 row (`no_runtime_spec`).
+- **U45's `no_runtime_spec` is two causes:** no configuration activated (the mission fixes it, from the
+  spacecraft's configuration, not Changes: U45's row, corrected after domain's review 11-17), and a
+  configuration Cadence can't verify (today's incident: Cadence's to fix). For the second, the pass row reads
+  "Cadence can't verify this mission's active configuration, so this pass can't start. It's a fault in Cadence: tell
+  the team that runs Cadence for you." with `Open pass`, never `Open Changes`. The pass detail (Contacts drawer) adds
+  "Cadence keeps trying while the window is open, so the pass receives telemetry from the moment this is fixed."
+  and has no action. api's key: `reason_detail` `configuration_unverifiable` (this form) / `no_configuration` and null (U45's corrected words and `Open
+  spacecraft`). The field that failed stays in `failure_message`, for Technical details.
+    - The forms key on api's final shape: not started = `in_progress` false; started before = `started` true;
+      couldn't start = `in_progress` true and `started` false.
+    - Nulls: no `spacecraft_name`, the line drops the name ("The next pass starts at 15:10Z: SVA." / "The SVA
+      pass started before this, …"), never an id (U25). No `station`: "The next pass starts at 15:10Z:
+      EARENDIL-004." / "EARENDIL-004's pass …". Neither: "The next pass starts at 15:10Z." The station reads its
+      `code`, else its `name`, as U47's pass label. `reason_detail` goes in Technical details only.
+  - While the earlier configuration still runs, passes start on it, and no telemetry line shows.
+- **Resolved:** the row "Resolved: runtime started"; the banner as U38, "Telemetry processing resumed at 14:26Z."
