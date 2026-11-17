@@ -47,6 +47,36 @@ defmodule Cadence.MissionModels.RevisionDecisionsTest do
     assert id == report["comparison_report_id"]
   end
 
+  test "a mission's first revision, with no configuration yet, compares against nothing and is approved",
+       c do
+    revision = import!(c, requested_by: %{"user_id" => "admin-a"})
+
+    # No activation, so no binding set: the comparison records none, and no baseline.
+    assert {:ok, report} =
+             Comparison.run(c.org, c.mid, revision, nil, nil, baseline_revision_id: nil)
+
+    assert %{"status" => "passed", "baseline_revision_id" => nil, "binding_set_id" => nil} =
+             report
+
+    assert report["binding_set_version"] == nil
+    assert report["replay"]["status"] in ["not_run", "not_required"]
+    assert report["static"]["added"] != []
+
+    # The same comparison again is the same report.
+    assert {:ok, %{"comparison_report_id" => id}} =
+             Comparison.run(c.org, c.mid, revision, nil, nil, baseline_revision_id: nil)
+
+    assert id == report["comparison_report_id"]
+
+    assert {:error, :mission_model_self_approval_forbidden} =
+             MissionModels.approve_revision(c.admin, c.mid, revision, id)
+
+    other = scope(c.organization, "admin-b", :organization_admin)
+
+    assert {:ok, %{status: :approved}} =
+             MissionModels.approve_revision(other, c.mid, revision, id)
+  end
+
   test "members and services can't decide", c do
     revision = import!(c)
     report = compare!(c, revision)
