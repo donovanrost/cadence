@@ -164,13 +164,22 @@ effects: the same assertion across a restart, with fire times.
   and the event are insert-or-get; a stored id means a replay and the episode change is skipped
   (`seen?` isn't read for keyed observations). Inputs without a journal position, ground limits
   and acknowledgements keep `Ids.new`.
-- **The tripwire compares what derives from the input:** an event's source ref and time (an honest
-  replay can decide a different event kind, because the episode moved on since, and the payload
-  holds acknowledgement state); an action request's kind and document. A mismatch is
-  `MM_REPLAY_ID_CONFLICT`, an error that rolls the batch back.
-- **Not yet done:** the end-to-end crash test (a pass through a live partition, kill, recover from
-  snapshot + archive, byte-identical ids). The pieces it chains are each tested (re-batched frames,
-  re-batched prepared results, replays of every episode path, numbering, init across a restart).
+- **The tripwire compares what derives from the input:** an episode's or event's subject and
+  observation time (not its source ref: a transition's id derives from its sample id, which
+  includes the evidence id, and that changes when a replay batches the journal differently; not
+  the event kind or payload either: an honest replay can decide a different kind because the
+  episode moved on, and the payload holds acknowledgement state); an action request's kind and
+  document. A mismatch is `MM_REPLAY_ID_CONFLICT`, an error that rolls the batch back.
+- **The end-to-end test** (`monitoring_replay_ids_e2e_test.exs`): a live mission runtime with a
+  catalog limit; a frame raises it, a later frame clears it. Then the crash window (the
+  partition's semantic rows and the monitoring seed's latest alarm state dropped, the owner
+  killed) and the journal replays the raise, as the same evidence and re-cut mid-frame:
+  monitoring re-derives the raise and, with no open episode, would open a second one (what an
+  `Ids.new` id did); the stored episode id stops it. It found the source-ref tripwire problem
+  above.
+- **Known, not #99:** the transition and evaluation rows keep content ids over the sample id, so a
+  replay that batches differently writes them again (new evidence id, new sample id). They are
+  low-volume (written only on a transition) and covered by the identity-v2 audit below.
 
 *Transitions and evaluations* keep their content ids for now (see the volumes below). They are
 replay-stable only if `update_id` (the sample id) is: that is on the identity-v2 audit
