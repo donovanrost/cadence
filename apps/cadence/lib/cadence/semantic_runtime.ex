@@ -426,11 +426,14 @@ defmodule Cadence.SemanticRuntime do
     else
       {mission_id, spacecraft_id} = trigger.scope
 
-      %{
-        trigger_sample_id: trigger.trigger_id,
-        mission_id: mission_id,
-        spacecraft_id: spacecraft_id
-      }
+      put_trigger_frame(
+        %{
+          trigger_sample_id: trigger.trigger_id,
+          mission_id: mission_id,
+          spacecraft_id: spacecraft_id
+        },
+        trigger
+      )
     end
   end
 

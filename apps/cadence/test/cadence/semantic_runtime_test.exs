@@ -237,6 +237,83 @@ defmodule Cadence.SemanticRuntimeTest do
     assert state.sequence == 1
   end
 
+  # DECISIONS #99: a derived update's monitoring effects are keyed on its TRIGGER's input, never
+  # on the frame of the input whose metadata it copies (which can be older, its ids taken).
+  test "a derived update carries its trigger's effect source, a timer its own stream" do
+    plan = %{
+      algorithms: [
+        AlgorithmPlan.new(%{
+          algorithm_id: "algorithm:sum",
+          input_parameter_ids: ["parameter:raw", "parameter:other"],
+          outputs: [
+            %{
+              parameter_id: "parameter:sum",
+              qualified_name: "/parameters/sum",
+              expression:
+                expression(
+                  {:+, {:parameter, "parameter:raw"}, {:parameter, "parameter:other"}},
+                  :number
+                )
+            }
+          ]
+        })
+      ],
+      monitoring: []
+    }
+
+    at = ~U[2026-11-17 01:00:00.000000Z]
+    older = framed(%{update("a-other", 1, at) | parameter_id: "parameter:other"}, 14, at)
+    {:ok, _result, state} = Cadence.SemanticRuntime.process(%State{}, [older], plan)
+
+    later = DateTime.add(at, 1, :second)
+    trigger = framed(update("raw:2", 2, later), 28, later)
+    {:ok, result, _state} = Cadence.SemanticRuntime.process(state, [trigger], plan)
+
+    assert [sum] = Enum.filter(result.parameter_updates, &(&1.parameter_id == "parameter:sum"))
+    assert sum.metadata.effect_source == trigger.metadata.effect_source
+
+    heartbeat = %{
+      algorithms: [
+        AlgorithmPlan.new(%{
+          algorithm_id: "algorithm:heartbeat",
+          input_parameter_ids: [],
+          triggers: [%{kind: :periodic, interval_ms: 1_000}],
+          outputs: [
+            %{
+              parameter_id: "parameter:heartbeat",
+              qualified_name: "/parameters/heartbeat",
+              expression: expression({:literal, 1}, :number)
+            }
+          ]
+        })
+      ],
+      monitoring: []
+    }
+
+    {:ok, %{parameter_updates: [tick]}, _state} =
+      Cadence.SemanticRuntime.timer(
+        %State{},
+        {"mission", "sc"},
+        "algorithm:heartbeat",
+        at,
+        heartbeat
+      )
+
+    assert tick.metadata.effect_source ==
+             ["timer:algorithm:heartbeat", 0, DateTime.to_unix(at, :microsecond)]
+  end
+
+  defp framed(update, offset, at),
+    do: %{
+      update
+      | metadata:
+          Map.put(update.metadata || %{}, :effect_source, [
+            "journal-1",
+            offset,
+            DateTime.to_unix(at, :microsecond)
+          ])
+    }
+
   defp expression(node, type), do: Expression.new(%{node: node, result_type: type})
 
   defp update(id, value, at) do
