@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { ApStatusMark, ApTag } from "@/ui";
 import type { Comparison } from "./api.ts";
-import { replayLine, riskTag, sectionLine, verdictLine } from "./words.ts";
+import { replayLine, riskTag, sectionLine, verdictLine, verdictState } from "./words.ts";
 
 /** ux U65 report body: verdict, failing parts, risk, replay, one line per changed kind. */
 const props = defineProps<{ report: Comparison }>();
@@ -16,7 +16,7 @@ const replay = computed(() => replayLine(props.report));
 <template>
   <div class="flex flex-col gap-2">
     <p class="m-0 flex items-center gap-2 text-base text-readout">
-      <ApStatusMark :state="report.passed ? 'nominal' : 'crit'" />{{ verdictLine(report) }}
+      <ApStatusMark :state="verdictState(report)" />{{ verdictLine(report) }}
       <ApTag :state="risk.state" :label="risk.label" />
     </p>
     <ul v-if="report.replay.failed_cases.length" class="m-0 list-none p-0 text-md text-text-2">

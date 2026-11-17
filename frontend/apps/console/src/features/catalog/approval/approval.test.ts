@@ -201,3 +201,67 @@ describe("a revision the catalog doesn't list (U88)", () => {
     });
   });
 });
+
+/** ux U90: a comparison with nothing earlier to compare against (against null). */
+describe("no earlier configuration (U90)", () => {
+  const first = (o: Record<string, unknown> = {}) => ({
+    ...comparison,
+    passed: true,
+    against: null,
+    sections: [
+      { kind: "command", added: 1200, removed: 0, changed: 0 },
+      { kind: "unit", added: 84, removed: 0, changed: 0 },
+    ],
+    ...o,
+  });
+  const CALLOUT =
+    "There's no earlier configuration for this mission, so there was nothing to compare it with. All 1,284 declarations are new, and none has been checked against an earlier version.";
+
+  it("never reads passed: caution verdict, meta, callout at the top, the line above Approve", () => {
+    const w = panel({
+      catalog_revision: { id: "cr-1", number: 1, label: null, database_id: "db-1" },
+      comparison: first(),
+    });
+    const t = text(w);
+    expect(t).toContain("NO EARLIER CONFIGURATION");
+    expect(t).not.toContain("AGAINST REV");
+    expect(t).toContain("Not compared: there's no earlier configuration");
+    expect(t).not.toContain("Comparison passed");
+    expect(w.find(".ap-mark--nominal").exists()).toBe(false);
+    expect(t.indexOf(CALLOUT)).toBeGreaterThanOrEqual(0);
+    expect(t.indexOf(CALLOUT)).toBeLessThan(t.indexOf("Replay: not run"));
+    expect(t.indexOf("Approving it accepts every declaration as new.")).toBeLessThan(
+      t.indexOf("Approve rev 1"),
+    );
+    expect(t).toContain("Reject…");
+  });
+
+  it("decided: the callout stays, not folded behind Show report", () => {
+    const t = text(
+      panel({
+        status: "approved",
+        viewer_can_decide: false,
+        cannot_decide_because: "not_approvable",
+        comparison: first(),
+        decision: {
+          kind: "approved",
+          by: { id: "u-ana", name: "Ana R." },
+          at: "2026-11-15T09:12:00Z",
+          report_id: "rep-1",
+          reason: null,
+        },
+      }),
+    );
+    expect(t).toContain(CALLOUT);
+    expect(t).not.toContain("Approving it accepts");
+  });
+
+  it("without a count it says every declaration; an earlier revision reads as before", () => {
+    expect(text(panel({ comparison: first({ sections: [] }) }))).toContain(
+      "Every declaration is new, and none has been checked against an earlier version.",
+    );
+    const t = text(panel());
+    expect(t).toContain("Comparison passed against rev 3");
+    expect(t).not.toContain("no earlier configuration");
+  });
+});

@@ -1,5 +1,5 @@
 import { isError, isKnown, vocabularyText, type ApiError, type Unrecognized } from "@/api/index.ts";
-import { formatShort } from "@/ui";
+import { formatCount, formatShort } from "@/ui";
 import type { Comparison, DeclarationKind, ModelRevision } from "./api.ts";
 
 /** ux U65 words. Visible text says "catalog rev 4"; the model revision id is Technical details. */
@@ -50,9 +50,27 @@ export function riskTag(c: Comparison): { label: string; state: "neutral" | "cau
 
 const against = (c: Comparison) =>
   c.against ? ` against rev ${c.against.catalog_revision_number}` : "";
-/** "Comparison passed against rev 3" / "Comparison didn't pass against rev 3". */
+/**
+ * "Comparison passed against rev 3" / "Comparison didn't pass against rev 3". U90: with nothing
+ * earlier (against null) it was never compared, whatever `passed` says.
+ */
 export const verdictLine = (c: Comparison) =>
-  `Comparison ${c.passed ? "passed" : "didn't pass"}${against(c)}`;
+  c.against === null
+    ? "Not compared: there's no earlier configuration"
+    : `Comparison ${c.passed ? "passed" : "didn't pass"}${against(c)}`;
+/** The verdict's mark: U90's not-compared is caution, never the pass glyph. */
+export const verdictState = (c: Comparison): "nominal" | "crit" | "caution" =>
+  c.against === null ? "caution" : c.passed ? "nominal" : "crit";
+
+/** U90's callout (never folded away): nothing earlier, so every declaration is new and unchecked. */
+export function noEarlierLine(c: Comparison): string | null {
+  if (c.against !== null) return null;
+  const n = c.sections.reduce((sum, s) => sum + s.added, 0);
+  const all = n > 1 ? `All ${formatCount(n)} declarations are new` : "Every declaration is new";
+  return `There's no earlier configuration for this mission, so there was nothing to compare it with. ${all}, and none has been checked against an earlier version.`;
+}
+/** U90: above Approve when nothing was compared. */
+export const NO_EARLIER_APPROVE = "Approving it accepts every declaration as new.";
 
 /** The director's condition: never folded away, never shown as passed. */
 export const REPLAY_NOT_RUN =

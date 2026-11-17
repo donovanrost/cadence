@@ -8,7 +8,14 @@ import ApprovalFacts from "./ApprovalFacts.vue";
 import ComparisonReport from "./ComparisonReport.vue";
 import RejectSheet from "./RejectSheet.vue";
 import { useApproval } from "./useApproval.ts";
-import { cannotApproveLine, cannotDecideLine, decidedLine, REPLAY_NOT_RUN } from "./words.ts";
+import {
+  cannotApproveLine,
+  cannotDecideLine,
+  decidedLine,
+  NO_EARLIER_APPROVE,
+  noEarlierLine,
+  REPLAY_NOT_RUN,
+} from "./words.ts";
 
 /**
  * ux U65 Approval · catalog rev N: the comparison against the revision it would replace, who
@@ -22,9 +29,15 @@ const revWord = computed(() => (rev.value === null ? "this revision" : `rev ${re
 const title = computed(() =>
   rev.value === null ? "Approval" : `Approval · catalog rev ${rev.value}`,
 );
-const meta = computed(() =>
-  report.value?.against ? `AGAINST REV ${report.value.against.catalog_revision_number}` : undefined,
-);
+const meta = computed(() => {
+  const r = report.value;
+  if (!r) return undefined;
+  // U90: nothing earlier to compare with.
+  return r.against
+    ? `AGAINST REV ${r.against.catalog_revision_number}`
+    : "NO EARLIER CONFIGURATION";
+});
+const noEarlier = computed(() => (report.value ? noEarlierLine(report.value) : null));
 const decided = computed(() => decidedLine(props.revision));
 const blocked = computed(() => cannotDecideLine(props.revision));
 const approveBlocked = computed(() => cannotApproveLine(props.revision));
@@ -60,6 +73,8 @@ function runAgain() {
 
 <template>
   <ApPanel index="A1" :title="title" :meta="meta">
+    <!-- U90: at the top, above the replay callout, decided or not. -->
+    <ApCallout v-if="noEarlier" class="mb-3" tone="caution">{{ noEarlier }}</ApCallout>
     <div v-if="decided" class="flex flex-col gap-2">
       <p data-approval-decided class="m-0 text-md text-readout">
         {{ decided }}
@@ -90,6 +105,12 @@ function runAgain() {
       <p v-else-if="approveBlocked && revision.viewer_can_decide" class="m-0 text-md text-text-2">
         {{ approveBlocked }}
         <RouterLink :to="CATALOG" class="text-readout underline">Open the catalog</RouterLink>
+      </p>
+      <p
+        v-if="noEarlier && !blocked && !approveBlocked && revision.viewer_can_decide"
+        class="m-0 text-md text-text-2"
+      >
+        {{ NO_EARLIER_APPROVE }}
       </p>
       <ApprovalActions
         v-if="!blocked && revision.viewer_can_decide"
