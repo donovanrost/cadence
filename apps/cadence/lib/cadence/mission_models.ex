@@ -106,6 +106,28 @@ defmodule Cadence.MissionModels do
     |> Enum.map(&LayerRow.to_domain/1)
   end
 
+  @doc """
+  Holds `revision_ids` FOR SHARE until the caller's transaction ends, so a decision on one of them
+  (`RevisionDecisions`, FOR UPDATE) waits: an activation approval that just checked the model gate
+  can't have it change before its record (director 11-17). Must run inside a transaction.
+  """
+  @spec share_lock_revisions(binary(), binary(), [binary()]) :: :ok
+  def share_lock_revisions(_organization_id, _mission_id, []), do: :ok
+
+  def share_lock_revisions(organization_id, mission_id, revision_ids) do
+    RevisionRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.revision_id in ^revision_ids
+    )
+    |> lock("FOR SHARE")
+    |> select([row], row.revision_id)
+    |> Repo.all()
+
+    :ok
+  end
+
   @spec fetch_revision(binary() | nil, binary(), binary()) ::
           {:ok, Revision.t()} | {:error, term()}
   def fetch_revision(organization_id, mission_id, revision_id)

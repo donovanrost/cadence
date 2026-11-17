@@ -11,6 +11,7 @@ defmodule Cadence.Governance.ActivationPolicy do
   def load(organization_id, mission_id),
     do: ScopedSettings.load(organization_id, mission_id, @section, default())
 
+  @doc "The policy lock (first in `Cadence.Governance.ActivationLocks`' order) around `operation`."
   def with_lock(organization_id, operation),
     do: ScopedSettings.with_lock(organization_id, @section, operation)
 

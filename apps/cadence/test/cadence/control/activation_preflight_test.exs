@@ -112,6 +112,54 @@ defmodule Cadence.Control.ActivationPreflightTest do
     assert_undecided(c)
   end
 
+  test "the approval holds the request's model revision until it records (an un-approval waits)",
+       c do
+    handler = "preflight-share-lock-#{System.unique_integer([:positive])}"
+    config = %{pid: self()}
+    :ok = :telemetry.attach(handler, [:cadence, :repo, :query], &__MODULE__.capture/4, config)
+
+    try do
+      assert {:ok, _request, _decision, _approved} = approve(c)
+    after
+      :telemetry.detach(handler)
+    end
+
+    queries = drain([])
+    revision_id = c.revision.revision_id
+
+    share =
+      Enum.find_index(queries, fn {query, params} ->
+        query =~ "mission_model_revisions" and query =~ "FOR SHARE" and
+          Enum.any?(params, &(&1 == [revision_id] or &1 == revision_id))
+      end)
+
+    decision =
+      Enum.find_index(queries, fn {query, _params} ->
+        query =~ ~r/INSERT INTO "activation_decisions"/
+      end)
+
+    assert is_integer(share), "no FOR SHARE on the request's model revision"
+    assert is_integer(decision)
+    # Held from before the preflight to the end of the decision's transaction: a revision
+    # decision (FOR UPDATE on that row) waits until the approval commits.
+    assert share < decision
+  end
+
+  @doc false
+  def capture(_event, _measurements, %{query: query, params: params}, %{pid: pid}) do
+    if self() == pid, do: send(pid, {:query, query, params})
+  end
+
+  def capture(_event, _measurements, _metadata, _config), do: :ok
+
+  defp drain(acc) do
+    receive do
+      {:query, query, params} -> drain([{query, params} | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
   defp approve(c),
     do: ControlActivations.approve(c.approver, c.request.activation_request_id, "Reviewed")
 

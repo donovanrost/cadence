@@ -17,16 +17,26 @@ defmodule Cadence.Platform.ScopedSettings do
   # The organization and its missions share a section lock. Approval admission
   # uses this same lock so a setting cannot change during its durable effect.
   def with_lock(organization_id, section_id, operation) do
-    <<key::signed-64, _::binary>> =
-      :crypto.hash(:sha256, :erlang.term_to_binary({__MODULE__, organization_id, section_id}))
-
     case Repo.transaction(fn ->
-           SQL.query!(Repo, "SELECT pg_advisory_xact_lock($1::bigint)", [key])
+           :ok = section_lock(organization_id, section_id)
            rollback_error(operation.())
          end) do
       {:ok, result} -> result
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  @doc """
+  Takes the section lock inside the caller's transaction, held to its end. For the activation
+  policy section, the order against other locks is `Cadence.Governance.ActivationLocks`'.
+  """
+  @spec section_lock(binary(), binary()) :: :ok
+  def section_lock(organization_id, section_id) do
+    <<key::signed-64, _::binary>> =
+      :crypto.hash(:sha256, :erlang.term_to_binary({__MODULE__, organization_id, section_id}))
+
+    SQL.query!(Repo, "SELECT pg_advisory_xact_lock($1::bigint)", [key])
+    :ok
   end
 
   defp rollback_error({:error, reason}), do: Repo.rollback(reason)

@@ -10,7 +10,6 @@ defmodule Cadence.Activations do
 
   import Ecto.Query
 
-  alias Ecto.Adapters.SQL
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -23,6 +22,7 @@ defmodule Cadence.Activations do
   alias Cadence.Activations.Facts
 
   alias Cadence.Governance
+  alias Cadence.Governance.ActivationLocks
   alias Cadence.Missions
   alias Cadence.OperationalEvents
   alias Cadence.OperationalEvents.Event, as: OperationalEvent
@@ -370,12 +370,9 @@ defmodule Cadence.Activations do
   defp maybe_persist_activation_operational_event(_repo, %{inserted?: false}),
     do: {:ok, :unchanged}
 
-  defp acquire_generation_lock(repo, mission_id) do
-    case SQL.query(repo, "SELECT pg_advisory_xact_lock(hashtext($1))", [mission_id]) do
-      {:ok, _result} -> {:ok, :locked}
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  # The lock order (policy, generation, configuration) is Governance.ActivationLocks'.
+  defp acquire_generation_lock(repo, mission_id),
+    do: ActivationLocks.generation(repo, mission_id)
 
   defp next_generation(repo, mission_id) do
     BindingSetActivationRow

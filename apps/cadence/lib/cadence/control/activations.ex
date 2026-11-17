@@ -24,6 +24,7 @@ defmodule Cadence.Control.Activations do
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.ApprovedActivation
+  alias Cadence.MissionModels
   alias Cadence.Repo
   alias Cadence.Runtime.MissionRuntimeSpec
 
@@ -80,11 +81,44 @@ defmodule Cadence.Control.Activations do
   @spec approve(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, term(), term(), term()} | {:error, term()}
   def approve(%Scope{} = scope, request_id, reason, opts \\ []) do
-    with :ok <- ManagementActivations.decidable(scope, request_id, :approved),
-         {:ok, request} <- ManagementActivations.fetch(scope, request_id),
-         :ok <- preflight(request, opts) do
-      ManagementActivations.approve(scope, request_id, reason, Keyword.delete(opts, :checks))
-    end
+    # Under the policy lock (the decision's own first lock), so the order is policy -> configuration
+    # (the preflight's admission) -> request row, as execute's: no inversion with a concurrent apply.
+    # Both advisory locks are held to the end of this transaction, and the request's model
+    # revisions are held FOR SHARE, so what the preflight read can't change before the record.
+    ActivationPolicy.with_lock(scope.organization_id, fn ->
+      with :ok <- ManagementActivations.decidable(scope, request_id, :approved),
+           {:ok, request} <- ManagementActivations.fetch(scope, request_id),
+           :ok <-
+             MissionModels.share_lock_revisions(
+               request.organization_id,
+               request.mission_id,
+               model_revision_ids(request)
+             ),
+           :ok <- preflight(request, opts) do
+        ManagementActivations.approve(scope, request_id, reason, Keyword.delete(opts, :checks))
+      end
+    end)
+  end
+
+  defp model_revision_ids(%{metadata: metadata}) do
+    from_fleet =
+      if FleetSnapshot.fleet?(metadata) do
+        case FleetSnapshot.entries(metadata) do
+          {:ok, entries} ->
+            Enum.map(entries, fn {_id, entry} ->
+              get_in(entry, ["mission_model", "revision_id"])
+            end)
+
+          _unreadable ->
+            []
+        end
+      else
+        []
+      end
+
+    [get_in(metadata, ["mission_model", "revision_id"]) | from_fleet]
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
   end
 
   @spec approve_and_execute(Scope.t(), binary(), binary(), keyword()) ::

@@ -27,7 +27,7 @@ defmodule Cadence.Configuration.Submission do
     ReviewRow
   }
 
-  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Governance.{ActivationLocks, ActivationPolicy}
   alias Cadence.Ids
   alias Cadence.Repo
 
@@ -292,7 +292,18 @@ defmodule Cadence.Configuration.Submission do
   # has a 120 s timeout (step 4, 11-15). Logged too when it is slow.
   defp timed_transaction(set, fun) do
     started = System.monotonic_time()
-    result = Repo.transaction(fun, timeout: @apply_timeout_ms)
+    # Policy, then generation, BEFORE the set's rows and the configuration lock the pipeline and
+    # the generation take: the one lock order (Governance.ActivationLocks), so an apply can't
+    # deadlock with an approval or an execute on its mission.
+    result =
+      Repo.transaction(
+        fn ->
+          :ok = ActivationLocks.acquire(set.organization_id, set.mission_id)
+          fun.()
+        end,
+        timeout: @apply_timeout_ms
+      )
+
     duration = System.monotonic_time() - started
     ms = System.convert_time_unit(duration, :native, :millisecond)
 
