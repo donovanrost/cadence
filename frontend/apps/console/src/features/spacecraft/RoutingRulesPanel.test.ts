@@ -19,7 +19,7 @@ const rule = (r: Record<string, unknown>) => ({
   role: "primary",
   enabled: true,
   active: true,
-  transport: { id: "t-1", name: "INU S-band", version: 1 },
+  transport: { id: "t-1", name: "INU S-band" },
   ...r,
 });
 function rules() {

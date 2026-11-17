@@ -9,7 +9,7 @@ export function olderRules(extra: readonly Record<string, unknown>[] = []) {
     role: "primary",
     enabled: true,
     active: true,
-    transport: { id: "t-1", name: "AWA S-band", version: 1 },
+    transport: { id: "t-1", name: "AWA S-band" },
     route_id: null,
   };
   const result = decode(detailReader, {

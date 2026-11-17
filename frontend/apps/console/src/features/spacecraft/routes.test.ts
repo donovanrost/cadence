@@ -18,7 +18,7 @@ const base = {
   role: "primary",
   enabled: true,
   active: true,
-  transport: { id: "t-1", name: "INU S-band", version: 1 },
+  transport: { id: "t-1", name: "INU S-band" },
 };
 function rules(rows: Record<string, unknown>[]): readonly RoutingRule[] {
   const result = decode(detailReader, {
