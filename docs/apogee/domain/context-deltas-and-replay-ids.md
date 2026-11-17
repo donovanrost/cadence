@@ -182,7 +182,10 @@ effects: the same assertion across a restart, with fire times.
   includes the evidence id, and that changes when a replay batches the journal differently; not
   the event kind or payload either: an honest replay can decide a different kind because the
   episode moved on, and the payload holds acknowledgement state); an action request's kind, timer
-  key and delay (not its metadata, which is the capability's and could carry batch-dependent ids). A mismatch is `MM_REPLAY_ID_CONFLICT`, an error that rolls the batch back.
+  key and delay (not its metadata, which is the capability's and could carry batch-dependent ids).
+  Today's managed request kinds are schedule and cancel timer. A kind that sets no timer would be
+  compared on its kind alone: safe (no false trips) but weak, so a new request kind brings its own
+  input projection (api-ops' review note). A mismatch is `MM_REPLAY_ID_CONFLICT`, an error that rolls the batch back.
 - **The end-to-end test** (`monitoring_replay_ids_e2e_test.exs`): a live mission runtime with a
   catalog limit; a frame raises it, a later frame clears it. Then the crash window (the
   partition's semantic rows and the monitoring seed's latest alarm state dropped, the owner
