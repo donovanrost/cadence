@@ -2326,8 +2326,8 @@ The as-built create summary "Add an extra route for <spacecraft_id>" shows a raw
   (the converted Earendil pairs): "Remove extra route “Fairbanks (Demo) — uplink” · EARENDIL-389" (the rendered
   name, quoted). A route with no name: "Remove extra route INU · EARENDIL-389".
 
-**Dropped by design** (the director takes it to the user): pinning a transport version, and routes over a transport
-with no station.
+**Dropped on purpose (user, via director, 11-16; recorded by lead in DECISIONS):** pinning a route to a transport
+version, and routes over a transport with no station. Neither gets words or a control in the console.
 
 ### U80 · Investigate's Sample aside (§11c(D) D1; api's one-sample read, final shape 11-16) (api / fe-ops)
 One place for the words. The review (`reviews/2026-11-16-parity-ops-d.md` D1) has the reasoning.
@@ -2523,3 +2523,8 @@ page's header actions. It's not a primary button anywhere.
 **Archived rows:** hidden by default. A `Show archived` switch in the list header shows them under the active ones,
 with an `ARCHIVED` tag (no status colour), the name at full contrast, and no actions but opening. Pickers (routes,
 bookings) never offer archived items.
+- **Pass through an archived transport's pinned profile** (domain ae6ae335a: a pinned path version no longer
+  resolves once its transport is archived). Today it reaches U45 as `unknown`, "Starting failed." It's rare: the
+  in-use check blocks bookings, routes and open passes first. If domain adds `transport_archived` (a follow-up, lead
+  to prioritise), U45's line is "Its transport, INU S-band, was archived, so this pass can't start. Choose another
+  route for this spacecraft."
