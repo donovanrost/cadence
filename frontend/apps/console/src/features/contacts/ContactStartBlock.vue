@@ -11,6 +11,7 @@ import {
   serverKey,
   short,
   startEvidence,
+  startKeepsTrying,
   startReasonAction,
   type Attention,
 } from "@/features/now/index.ts";
@@ -42,6 +43,7 @@ const holder = computed((): { label: string; to: RouteLocationRaw } | null => {
     : null;
 });
 const fix = computed(() => startReasonAction(props.attention, props.spacecraftId ?? null));
+const keepsTrying = computed(() => startKeepsTrying(props.attention));
 /** "Cadence is retrying · 3 tries · last at 03:12Z"; nothing once missed. */
 const tries = computed(() => {
   const a = props.attention;
@@ -81,6 +83,8 @@ async function markSeen() {
       {{ missed ? "This pass was missed." : "This pass hasn't started." }}
     </p>
     <p class="m-0 text-text-2">{{ busy ? "Marking…" : startEvidence(attention, now) }}</p>
+    <!-- U91: Cadence's fault, so it keeps trying; the pass gets telemetry once it's fixed. -->
+    <p v-if="keepsTrying" class="m-0 text-text-2">{{ keepsTrying }}</p>
     <p v-if="tries" class="m-0 text-sm text-text-3">{{ tries }}</p>
     <p v-if="holder || fix" class="m-0 flex flex-wrap gap-3 text-sm">
       <RouterLink

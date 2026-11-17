@@ -175,6 +175,8 @@ describe("attention block words (U32)", () => {
     acknowledged_note: undefined,
     reraised: undefined,
     stuck_processing_id: undefined,
+    reason_detail: undefined,
+    next_pass: undefined,
     ends_at: undefined,
     deadline_at: undefined,
     failure_kind: undefined,

@@ -130,6 +130,9 @@ export function resolvedWords(r: ResolvedEntry, now: Date = new Date()): string 
     if (r.path === "timer") return "Resolved: timed actions running.";
     return "Resolved: processing resumed.";
   }
+  // U91: the runtime is back on the active configuration.
+  if (r.id.startsWith("attention:mission_runtime:") && r.action === "applied")
+    return "Resolved: runtime started.";
   if (r.id.startsWith("attention:activation_apply:")) {
     if (r.action === "superseded") return "Replaced by a newer request.";
     if (r.action === "applied") return `Applied at ${at}.`;

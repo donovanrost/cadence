@@ -65,8 +65,21 @@ function archivedWords(a: Attention): string {
 }
 
 /** U45's reason line; a key this console doesn't know reads as unknown, a missing one says so. */
+/** U91 (api): the active configuration failed its integrity check, a fault in Cadence. */
+const unverifiable = (a: Attention) =>
+  startReasonOf(a) === "no_runtime_spec" && a.reason_detail === "configuration_unverifiable";
+const UNVERIFIABLE =
+  "Cadence can't verify this mission's active configuration, so this pass can't start. It's a fault in Cadence: tell the team that runs Cadence for you.";
+/** U91: the pass detail adds this (not on Now's row, and not once the pass was missed). */
+export function startKeepsTrying(a: Attention): string | null {
+  return unverifiable(a) && !missed(a)
+    ? "Cadence keeps trying while the window is open, so the pass receives telemetry from the moment this is fixed."
+    : null;
+}
+
 export function startReasonWords(a: Attention, now: Date = new Date()): string {
   const reason = startReasonOf(a);
+  if (unverifiable(a)) return UNVERIFIABLE;
   if (reason === "listener_in_use")
     return `Cadence couldn't open the station connection because ${a.holder ? `the ${holderPass(a.holder, now)}` : "another pass"} was still holding it.`;
   if (reason === "listen_endpoint_claimed") return claimedWords(a);
@@ -90,7 +103,8 @@ export function startReasonAction(
     case "connect_failed":
       return { label: "Check provider", to: { name: "setup.stations.providers" } };
     case "no_runtime_spec":
-      return { label: "Open Changes", to: { name: "setup.changes" } };
+      // U91: never Open Changes when it's Cadence's to fix; null and no_configuration keep it.
+      return unverifiable(a) ? null : { label: "Open Changes", to: { name: "setup.changes" } };
     case "listen_endpoint_claimed":
       return a.transport_id
         ? {

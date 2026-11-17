@@ -20,8 +20,8 @@ export function outageText(runtime: RuntimeStatus, mission: string): string {
   const what = runtime.activated_at
     ? `configuration activated at ${at(runtime.activated_at)}`
     : "active configuration";
-  // Retrying can't clear these (domain), so the operator knows it waits on a fix (ux U38).
-  const fix = NEEDS_FIX.has(runtime.reason ?? "") ? " It needs a configuration fix." : "";
+  // Retrying can't clear these: a fault in Cadence (domain, ux U91), not the mission's to fix.
+  const fix = NEEDS_FIX.has(runtime.reason ?? "") ? " It needs a fix in Cadence." : "";
   return `Telemetry isn't being processed for ${mission}${since}. The runtime hasn't applied the ${what}.${fix}`;
 }
 

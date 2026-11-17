@@ -40,6 +40,7 @@ export { actionText, short } from "./attention.ts";
 export {
   holderPass,
   startEvidence,
+  startKeepsTrying,
   startReasonAction,
   startReasonOf,
   startReasonWords,

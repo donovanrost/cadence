@@ -27,13 +27,13 @@ describe("U38 runtime banner words", () => {
     );
   });
 
-  it("adds the fix line only where retrying can't clear it", () => {
+  it("adds the fix line only where retrying can't clear it (U91: a fix in Cadence)", () => {
     for (const reason of ["spec_mismatch", "reconcile_crashed"] as const)
       expect(outageText({ ...down, reason }, "EARENDIL")).toMatch(
-        / at 23:10Z\. It needs a configuration fix\.$/,
+        / at 23:10Z\. It needs a fix in Cadence\.$/,
       );
     for (const reason of ["runtime_not_running", "apply_failed", null] as const)
-      expect(outageText({ ...down, reason }, "EARENDIL")).not.toMatch(/configuration fix/);
+      expect(outageText({ ...down, reason }, "EARENDIL")).not.toMatch(/needs a fix/);
   });
 
   it("says resumed only with the server's applied_at", () => {

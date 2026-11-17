@@ -812,18 +812,24 @@ describe("mission_runtime (U38; domain 292c8e6b reasons)", () => {
     return presentQueue(r.value, new Date("2026-11-11T23:20:00Z"), "EARENDIL")[0];
   };
   const head = "The runtime hasn't applied the active configuration;";
+  const TELL =
+    "It's a fault in Cadence, not in this mission's setup. Tell the team that runs Cadence for you; nothing in the console fixes it.";
+  const NO_TELEMETRY =
+    "Until this is fixed, passes can't start, so their telemetry isn't received. Cadence keeps trying to start a pass while its window is open, so it receives telemetry from the moment this is fixed.";
 
   it("names the mission, says what's running, with meta and the age; no command", () => {
     const row = rowOf();
     expect(row?.title).toBe("EARENDIL · Telemetry isn't being processed.");
+    // U91: spec_mismatch is Cadence failing to verify it; a fault in Cadence, tell the team.
     expect(row?.sentence).toBe(
-      `${head} it's still running the earlier one. What's running doesn't match it. Retrying won't fix this. The configuration needs a fix, or a new one needs activating.`,
+      `Cadence can't verify this mission's active configuration, so it won't run it. It's still running the earlier one. ${TELL}`,
     );
     expect(row?.meta).toBe("GENERATION 8 · RUNNING 7 · SINCE 23:10Z");
     expect(row?.due).toEqual({ label: "", at: "2026-11-11T23:10:00Z" });
     expect(row?.action).toEqual({ label: "Review", to: { name: "setup.changes" } });
     expect(row?.command).toBeUndefined();
-    expect(row?.primary).toBe(true);
+    // U91: no Review primary for a fault in Cadence.
+    expect(row?.primary).toBeUndefined();
   });
 
   it("tails by reason key; null or unknown adds none; none running reads so", () => {
@@ -835,13 +841,14 @@ describe("mission_runtime (U38; domain 292c8e6b reasons)", () => {
       / Applying it failed: 3 apps differ\. Cadence keeps trying every 30 s\.$/,
     );
     expect(rowOf({ reason: "apply_failed" })?.primary).toBeUndefined();
-    expect(tail("reconcile_crashed")).toMatch(
-      / Cadence's apply process hit an error: 3 apps differ\. Retrying won't fix this\. The configuration needs a fix, or a new one needs activating\.$/,
+    expect(tail("reconcile_crashed")).toBe(
+      `${head} it's still running the earlier one. Cadence's apply process hit an error: 3 apps differ. ${TELL}`,
     );
+    expect(rowOf({ reason: "reconcile_crashed" })?.primary).toBeUndefined();
     expect(tail(null)).toBe(`${head} it's still running the earlier one.`);
     expect(tail("something_new")).toBe(`${head} it's still running the earlier one.`);
-    expect(rowOf({ applied_generation: null })?.sentence).toMatch(
-      /; no configuration is running\./,
+    expect(rowOf({ applied_generation: null, reason: null })?.sentence).toBe(
+      `${head} no configuration is running. ${NO_TELEMETRY}`,
     );
     expect(rowOf({ applied_generation: null })?.meta).toBe(
       "GENERATION 8 · RUNNING — · SINCE 23:10Z",

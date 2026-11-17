@@ -22,6 +22,7 @@ import { expiredGroupFields } from "./expiredGroup.ts";
 import { journalDiskFields } from "./journalDisk.ts";
 import { providerChangeReader } from "./providerChangeReader.ts";
 import { replayConflictFields, replayConflictPaths } from "./replayConflictFields.ts";
+import { runtimeFields } from "./runtimeFields.ts";
 import { scidMismatchFields } from "./scidMismatch.ts";
 
 /**
@@ -288,6 +289,8 @@ export const attentionReader = d.object({
   ...scidMismatchFields,
   /** replay_conflict (U84): the stuck unit, who it affects, its buffer and its ack note. */
   ...replayConflictFields,
+  /** mission_runtime (U91): the field that failed to verify, and the pass at stake. */
+  ...runtimeFields,
   resolution: d.nullable(
     d.object({
       /** How it closed: a known key (archive 'discarded', a job 'closed'…), else the raw word. */
