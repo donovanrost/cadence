@@ -7,9 +7,6 @@ import type { ConfigurationDocument, ConfigurationSnapshot, SwitchState } from "
  * binding, token, ids (Technical details only). Versions read v4, never r4 (a change-set revision).
  */
 
-/** "v4"; a version of 0 (set before this workspace) has no number (U94). */
-export const versionWord = (v: number) => (v > 0 ? `v${v}` : "");
-
 const same = (a: ConfigurationDocument, b: ConfigurationDocument) =>
   JSON.stringify(a) === JSON.stringify(b);
 
@@ -18,13 +15,21 @@ export function draftDiffers(s: ConfigurationSnapshot): boolean {
   return s.saved_version !== null && (s.active === null || !same(s.document, s.active.document));
 }
 
-/** The section header's tag: NOT SET UP / DRAFT SAVED · v4 (caution) / ACTIVE · v3. */
+/** The header's tag, state only (ux U94 (b)): DRAFT SAVED (caution) / NOT SET UP / ACTIVE. */
 export function statusTag(s: ConfigurationSnapshot): Readonly<{ label: string; state: OpState }> {
   if (s.saved_version !== null && draftDiffers(s))
-    return { label: `Draft saved · v${s.saved_version}`, state: "caution" };
+    return { label: "Draft saved", state: "caution" };
   if (s.active === null) return { label: "Not set up", state: "off" };
-  const v = versionWord(s.active.version);
-  return { label: v ? `Active · ${v}` : "Active", state: "nominal" };
+  return { label: "Active", state: "nominal" };
+}
+
+/** U94 (b): the versions, mono and lowercase beside the title: "v3 active, v4 saved". */
+export function versionsLine(s: ConfigurationSnapshot): string | null {
+  const parts = [
+    s.active && s.active.version > 0 ? `v${s.active.version} active` : null,
+    s.saved_version !== null && draftDiffers(s) ? `v${s.saved_version} saved` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length ? parts.join(", ") : null;
 }
 
 /** U94 "Steps before it can be sent" (the host's setup issues), in the console's words. */
@@ -126,6 +131,23 @@ export function comparisonRows(s: ConfigurationSnapshot): readonly ComparisonRow
 
 export const NOTHING_ACTIVE = "Nothing is active yet, so every setting is new.";
 export const DRAFT_MATCHES = "The draft matches the active configuration.";
+
+/**
+ * U94's read refusals, as the section's state (the craft's name isn't known when the read fails).
+ * null: anything else, which ApRemote words with Retry.
+ */
+export function readRefusal(
+  code: string | null,
+): Readonly<{ text: string; comms: boolean }> | null {
+  if (code === "spacecraft_not_found")
+    return { text: "This spacecraft isn't on this mission.", comms: false };
+  if (code === "spacecraft_source_limit_exceeded")
+    return {
+      text: "This spacecraft has more packet sources than one configuration can carry, so it can't be shown or sent. Remove some in Setup › Comms.",
+      comms: true,
+    };
+  return null;
+}
 
 /** U94 "Not set up": the info line under "Set up EARENDIL-004". */
 export const notSetUpLine = (craft: string) =>

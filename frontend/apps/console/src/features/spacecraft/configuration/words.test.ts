@@ -11,9 +11,11 @@ import {
   catalogWord,
   comparisonRows,
   framingWord,
+  readRefusal,
   setupSteps,
   statusTag,
   switchLine,
+  versionsLine,
 } from "./words.ts";
 
 const read = (o: Record<string, unknown> = {}) => {
@@ -25,19 +27,29 @@ const stubs = { RouterLink: { props: ["to"], template: "<a :data-to='to.name'><s
 
 /** ux U94: the workspace's words (read side). */
 describe("U94 status, steps and fields", () => {
-  it("tags the craft: draft saved (caution), active, not set up; v0 has no number", () => {
-    expect(statusTag(read())).toEqual({ label: "Draft saved · v4", state: "caution" });
+  it("tags carry the state only; versions go in the header line (U94 (b))", () => {
+    expect(statusTag(read())).toEqual({ label: "Draft saved", state: "caution" });
+    expect(versionsLine(read())).toBe("v3 active, v4 saved");
     const same = read({ document: documentWire({ handled_apids: [42] }) });
-    expect(statusTag(same)).toEqual({ label: "Active · v3", state: "nominal" });
-    expect(statusTag(read({ active: null, saved_version: null }))).toEqual({
-      label: "Not set up",
-      state: "off",
-    });
+    expect(statusTag(same)).toEqual({ label: "Active", state: "nominal" });
+    expect(versionsLine(same)).toBe("v3 active");
+    const fresh = read({ active: null, saved_version: null });
+    expect(statusTag(fresh)).toEqual({ label: "Not set up", state: "off" });
+    expect(versionsLine(fresh)).toBeNull();
+    expect(versionsLine(read({ active: null }))).toBe("v4 saved");
     const v0 = read({
       saved_version: null,
       active: { version: 0, generation: 1, document: documentWire() },
     });
-    expect(statusTag(v0).label).toBe("Active");
+    expect(versionsLine(v0)).toBeNull();
+  });
+
+  it("reads the snapshot's refusals as a state", () => {
+    expect(readRefusal("spacecraft_not_found")?.text).toBe(
+      "This spacecraft isn't on this mission.",
+    );
+    expect(readRefusal("spacecraft_source_limit_exceeded")?.comms).toBe(true);
+    expect(readRefusal("http_500")).toBeNull();
   });
 
   it("lists the steps left, in U94's words", () => {

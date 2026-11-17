@@ -35,7 +35,7 @@ const rows = () => [
   <ApPanel index="C2" title="Operation" flush>
     <ul class="m-0 list-none divide-y divide-hairline p-0">
       <li v-for="r in rows()" :key="r.key" class="flex flex-col gap-1 px-4 py-3">
-        <span class="hud-label">{{ r.label }}</span>
+        <span class="ap-label">{{ r.label }}</span>
         <span class="text-md text-readout">{{ r.line }}</span>
         <RouterLink
           :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: snapshot.spacecraft_id } }"

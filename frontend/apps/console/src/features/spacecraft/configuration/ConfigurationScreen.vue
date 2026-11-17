@@ -2,11 +2,13 @@
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { SpacecraftId } from "@/api/index.ts";
-import { useRemoteQuery } from "@/api/index.ts";
+import { codeOf, useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import {
   ApBreadcrumb,
+  ApButton,
+  ApEmptyState,
   ApPageHeader,
   ApRemote,
   ApSelect,
@@ -20,7 +22,7 @@ import ComparisonTable from "./ComparisonTable.vue";
 import SettingsPanel from "./SettingsPanel.vue";
 import SetupSteps from "./SetupSteps.vue";
 import SwitchesPanel from "./SwitchesPanel.vue";
-import { statusTag } from "./words.ts";
+import { readRefusal, statusTag, versionsLine } from "./words.ts";
 
 /**
  * (B) ux U94: Setup › Spacecraft › EARENDIL-004 › Configuration, the host's workspace in the
@@ -86,6 +88,10 @@ function switchTo(id: string) {
       params: { spacecraftId: id, section: section.value },
     });
 }
+/** U94: the snapshot's own refusals read as a state, not a Retry. */
+const refusal = computed(() =>
+  state.value.status === "failed" ? readRefusal(codeOf(state.value.error)) : null,
+);
 const craftOptions = (s: ConfigurationSnapshot) =>
   s.fleet.map((c) => ({ value: c.id, label: c.name }));
 </script>
@@ -93,7 +99,12 @@ const craftOptions = (s: ConfigurationSnapshot) =>
 <template>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApBreadcrumb :crumbs="crumbs" />
-    <ApRemote :state="state" loading-label="Loading configuration…" @retry="refetch">
+    <ApEmptyState v-if="refusal" state="off" :headline="refusal.text">
+      <ApButton v-if="refusal.comms" size="compact" :to="{ name: 'setup.comms' }"
+        >Open Comms</ApButton
+      >
+    </ApEmptyState>
+    <ApRemote v-else :state="state" loading-label="Loading configuration…" @retry="refetch">
       <template #default="{ value }">
         <ApPageHeader
           :title="value.active ? `${value.name}'s configuration` : `Set up ${value.name}`"
@@ -112,7 +123,13 @@ const craftOptions = (s: ConfigurationSnapshot) =>
             @update:model-value="switchTo"
           />
         </ApPageHeader>
-        <ApTabLinks :links="links(value)" :active="section" label="Configuration sections" />
+        <p v-if="versionsLine(value)" class="m-0 font-mono text-sm text-text-2">
+          {{ versionsLine(value) }}
+        </p>
+        <!-- Four tabs overflow a phone's width: they scroll sideways instead of the page. -->
+        <div class="overflow-x-auto">
+          <ApTabLinks :links="links(value)" :active="section" label="Configuration sections" />
+        </div>
         <SetupSteps :snapshot="value" />
         <template v-if="section === 'changes'">
           <ComparisonTable :snapshot="value" />
