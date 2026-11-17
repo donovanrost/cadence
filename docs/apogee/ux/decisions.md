@@ -2550,7 +2550,7 @@ connection by its first frame's SCID (#87). The words go on the transport kind's
 schema labels), so fe-setup's KindEditor shows them as they are.
 
 - **Where:** the TCP Capability group, right after `TCP Port`.
-- **Shown only** when `TCP Mode` is `TCP server (listen)` AND `Direction Capability` is `Inbound`. Otherwise it's
+- **Shown only** when `TCP Mode` is `TCP server (listen)` AND `Direction` is `Downlink` (U85). Otherwise it's
   hidden, not disabled. A value hidden by a change to either field isn't sent; the transport keeps the default.
 - **Label:** `Listener`
 - **Options** (select, in this order):
@@ -2562,15 +2562,15 @@ schema labels), so fe-setup's KindEditor shows them as they are.
 - **Refusal** (the field's error, when `listener` is set on a transport it doesn't apply to, e.g. through the API
   or a stale form):
   - Not listening (`connect`): "Only a transport that listens (TCP server) can choose its listener."
-  - Not a downlink (`outbound` or `bidirectional`): "Only an inbound (downlink) transport can choose its listener."
+  - Not a downlink (`outbound` or `bidirectional`): "Only a downlink transport can choose its listener."
   - Both at once: the first line only.
 - **Change summary and diff:** the option words, e.g. "Listener: Own listener for each pass → Shared, routed by SCID".
-- **A shared transport switched to connect, outbound or bidirectional** (lead/api, 11-16): the field hides and the
+- **A shared transport switched to connect, Uplink or Both** (lead/api, 11-16): the field hides and the
   console sends `listener: own` in the same stage, so the server doesn't refuse a hidden field.
-  - In the form, at the switch, an info line under the field that changed (TCP Mode or Direction Capability):
-    "This transport will stop sharing its listener: only an inbound transport that listens can share one."
+  - In the form, at the switch, an info line under the field that changed (TCP Mode or Direction):
+    "This transport will stop sharing its listener: only a downlink transport that listens can share one."
   - The diff line shows, because it changes how passes connect, with the reason after it: "Listener: Shared, routed
-    by SCID → Own listener for each pass (only an inbound transport that listens can share one)". The same words in
+    by SCID → Own listener for each pass (only a downlink transport that listens can share one)". The same words in
     the change set's review.
   - Switching back before staging restores the field with `Own listener for each pass` chosen; the info line goes.
   - Who renders it (fe-setup, 11-16): the console writes the stage summary. The review's field rows come from the
@@ -2678,3 +2678,23 @@ Cadence for the mission's organization (today, domain).
     `failure_kind: "replay_id_conflict"`, evidence "1,204 entries (3.4 MB) are on disk. Cadence can't store them
     until the stuck processing is fixed." (no retry sentence, no "Next try"); it folds by its own key, as U37's
     other kinds. U38 carries it only if its reason can be the conflict (api checks at build).
+
+### U85 · A transport's direction: one set of words (ux, 11-17) (api / fe-setup)
+The Transports list says `Downlink` / `Uplink` / `Both` (`directionLabel`), but the TCP kind's form says `Direction
+Capability` with `Inbound` / `Outbound` / `Bidirectional`. The same choice reads two ways, one screen apart. The
+operator's words win: a mission team thinks in downlink and uplink, and "capability" adds nothing to the label.
+
+- **Label:** `Direction` (the server's field definition; the field stays `direction_capability`, so values and the
+  API don't change).
+- **Options** (select, in this order): `Downlink` (`inbound`), `Uplink` (`outbound`), `Both` (`bidirectional`).
+- **Help** (the field's description): "Downlink carries data from the spacecraft, Uplink carries commands to it,
+  and Both carries each."
+- **Everywhere else** the console names a direction it uses the same three words: the list, the change summary,
+  the review's diff (through U83's `before_label` / `after_label`, e.g. "Direction: Downlink → Both") and any
+  refusal. Never `inbound`, `outbound` or `bidirectional` in visible text; they go in Technical details.
+- **U83 follows it:** shown when `Direction` is `Downlink`; "Only a downlink transport can choose its listener.";
+  "only a downlink transport that listens can share one" (info line, diff note and server note alike).
+- **Who:** api changes the field definition's label and option labels, and writes U83's refusal and note in these
+  words. fe-setup needs no code change for the form (KindEditor shows the schema's words); only fixtures and tests
+  that assert the old words or U83's earlier "inbound" note (`diff-words.test.ts`) change. No legacy page renders
+  this schema, so the server copy is free to change.
