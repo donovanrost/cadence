@@ -145,6 +145,42 @@ defmodule Cadence.Control.ActivationPreflightTest do
     assert share < decision
   end
 
+  test "a held apply resumes only once its model is approved again, on the same decision (P4)",
+       c do
+    assert {:ok, _request, _decision, approved} = approve(c)
+
+    # Approved, then the model's approval goes away before the apply (the window the preflight
+    # closes at approve; an older request can still be held here).
+    set_revision_status(c, "candidate")
+
+    assert {:error, :mission_model_revision_not_approved} = ControlActivations.execute(approved)
+
+    assert {:ok, %{status: :failed}} =
+             ControlActivations.fetch_execution(c.request.activation_request_id)
+
+    # Retry apply re-runs the model gate: refused while the model is unapproved.
+    assert {:error, :mission_model_revision_not_approved} =
+             ControlActivations.resume(c.approver, c.mission_id, c.request.activation_request_id)
+
+    assert {:ok, %{status: :failed}} =
+             ControlActivations.fetch_execution(c.request.activation_request_id)
+
+    # Approved again: the resume applies, on the SAME activation decision (no new one).
+    set_revision_status(c, "approved")
+
+    assert {:ok, %{status: :succeeded}} =
+             ControlActivations.resume(c.approver, c.mission_id, c.request.activation_request_id)
+
+    assert [_one] = decisions(c)
+  end
+
+  defp set_revision_status(c, status) do
+    {1, _} =
+      RevisionRow
+      |> where([row], row.revision_id == ^c.revision.revision_id)
+      |> Repo.update_all(set: [status: status])
+  end
+
   @doc false
   def capture(_event, _measurements, %{query: query, params: params}, %{pid: pid}) do
     if self() == pid, do: send(pid, {:query, query, params})
