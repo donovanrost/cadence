@@ -338,8 +338,9 @@ path.
 **Struct fields under a stored hash** (director, DECISIONS #108, 11-17). A commit that adds a field to a struct
 reachable from a stored, recomputed hash (binding set, runtime basis, spacecraft-configuration inputs, activation
 review token, authored-override fingerprint) must carry a golden-hash test showing the stored hash unchanged. At
-hand-off qa checks the set's diff for `defstruct` or struct-key changes, under `packages/` as well as `apps/`, and
-holds the set until that test is named. Every restart's post-checks include the mission runtime's admission:
+hand-off qa runs `var/qa-scripts/struct-hash-check.sh <base> <tip>`, which looks under `packages/` as well as
+`apps/` and checks domain's struct list (`var/struct-hash-checklist.md`). Every dry runs it too. On a hit, qa holds
+the set until the same commit carries the hash kept stable plus a legacy-value test, or a director-approved plan. Every restart's post-checks include the mission runtime's admission:
 `MissionCoordinator.active_spec` answers at the live generation, and the reconciler's `last_error` is nil
 (`var/qa-scripts/calib-rollback-post.exs`). This matters because the restart dry can't catch it: it runs on a fresh
 test database, which has no binding set stored before the change.
