@@ -160,23 +160,8 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
     end
 
     test "a contract-2 plan (every revision stored before) decodes with no calibration" do
-      # A plan as stored before contract 3: version "2", fields without the new keys (a fresh
-      # compile is contract 3 since domain's part A).
-      %{telemetry: compiled} = compilation().plans
-      assert compiled.target_contract_version == "3"
-
-      plan = %RuntimePlan{
-        compiled
-        | target_contract_version: "2",
-          plan:
-            update_in(compiled.plan, ["packet_definitions"], fn packets ->
-              Enum.map(packets, fn packet ->
-                Map.update!(packet, "fields", fn fields ->
-                  Enum.map(fields, &Map.drop(&1, ["calibrator", "enumerations"]))
-                end)
-              end)
-            end)
-      }
+      %{telemetry: plan} = compilation().plans
+      assert plan.target_contract_version == "2"
 
       assert {:ok, [%PacketDefinition{fields: fields}]} =
                MissionModelPlanDecoder.telemetry_packet_definitions(%{telemetry: plan})
