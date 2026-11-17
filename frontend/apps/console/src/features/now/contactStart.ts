@@ -36,7 +36,9 @@ const REASON_WORDS: Readonly<
   connect_failed: "Cadence couldn't reach the provider's endpoint for this pass.",
   ingress_pipeline_failed: "Cadence couldn't start storing telemetry for this pass.",
   uplink_session_failed: "Cadence couldn't start the uplink session for this pass.",
-  no_runtime_spec: "The mission's runtime has no active configuration, so passes can't start.",
+  // U45 corrected: worded by notActivatedWords (it names the craft); this is its no-craft form.
+  no_runtime_spec:
+    "No configuration has been activated on this mission yet, so passes can't start. Each spacecraft's configuration has to be reviewed and activated first.",
   unknown: "Starting failed.",
 };
 
@@ -77,9 +79,27 @@ export function startKeepsTrying(a: Attention): string | null {
     : null;
 }
 
-export function startReasonWords(a: Attention, now: Date = new Date()): string {
+/**
+ * U45 corrected (domain, 11-17): a never-activated mission starts from each spacecraft's
+ * configuration (review, then activate), never from a change set. The console can't do that yet
+ * (legacy host only), so the words say what has to happen, not where. no_configuration and null.
+ */
+function notActivatedWords(spacecraftName: string | null): string {
+  const first = spacecraftName
+    ? `${spacecraftName}'s configuration has to be reviewed and activated first.`
+    : "Each spacecraft's configuration has to be reviewed and activated first.";
+  return `No configuration has been activated on this mission yet, so passes can't start. ${first}`;
+}
+
+export function startReasonWords(
+  a: Attention,
+  now: Date = new Date(),
+  /** The pass's spacecraft, named in no_runtime_spec's next step (U45). */
+  spacecraftName: string | null = null,
+): string {
   const reason = startReasonOf(a);
   if (unverifiable(a)) return UNVERIFIABLE;
+  if (reason === "no_runtime_spec") return notActivatedWords(spacecraftName);
   if (reason === "listener_in_use")
     return `Cadence couldn't open the station connection because ${a.holder ? `the ${holderPass(a.holder, now)}` : "another pass"} was still holding it.`;
   if (reason === "listen_endpoint_claimed") return claimedWords(a);
@@ -103,8 +123,14 @@ export function startReasonAction(
     case "connect_failed":
       return { label: "Check provider", to: { name: "setup.stations.providers" } };
     case "no_runtime_spec":
-      // U91: never Open Changes when it's Cadence's to fix; null and no_configuration keep it.
-      return unverifiable(a) ? null : { label: "Open Changes", to: { name: "setup.changes" } };
+      // U91/U45: Cadence's fault has no way out here; otherwise the spacecraft, never Changes.
+      if (unverifiable(a)) return null;
+      return {
+        label: "Open spacecraft",
+        to: spacecraftId
+          ? { name: "setup.spacecraft.one", params: { spacecraftId } }
+          : { name: "setup.spacecraft" },
+      };
     case "listen_endpoint_claimed":
       return a.transport_id
         ? {
@@ -138,8 +164,12 @@ export function startTitle(a: Attention, now: Date = new Date()): string {
   return `${pass} ${missed(a) ? "was missed" : "hasn't started"}`;
 }
 
-export function startEvidence(a: Attention, now: Date = new Date()): string {
-  const why = startReasonWords(a, now);
+export function startEvidence(
+  a: Attention,
+  now: Date = new Date(),
+  spacecraftName: string | null = null,
+): string {
+  const why = startReasonWords(a, now, spacecraftName);
   return missed(a) ? `The pass ended before Cadence could start it. ${why}` : why;
 }
 
@@ -175,7 +205,7 @@ export function contactStartRow(
     key,
     title: `${spacecraftName ?? "Spacecraft"} · ${startTitle(a, now)}`,
     titleTo: to,
-    sentence: startEvidence(a, now),
+    sentence: startEvidence(a, now, spacecraftName),
     meta: startMeta(a, now),
     action: { label: "Open pass", to },
     ...(missed(a)

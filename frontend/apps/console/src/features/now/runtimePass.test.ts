@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api/index.ts";
+import { decode, spacecraftId } from "@/api/index.ts";
 import { attentionReader, type Attention } from "./attention.ts";
 import { startEvidence, startKeepsTrying, startReasonAction } from "./contactStart.ts";
 import { resolvedWords } from "./resolved.ts";
@@ -133,13 +133,23 @@ describe("contact_start no_runtime_spec by reason_detail (U91)", () => {
     ).toBeNull();
   });
 
-  it("no_configuration and null keep today's words and Open Changes", () => {
+  it("no_configuration and null: not activated yet, Open spacecraft, never Open Changes (U45)", () => {
     for (const detail of ["no_configuration", null]) {
       const a = start(detail);
-      expect(startEvidence(a, NOW)).toBe(
-        "The mission's runtime has no active configuration, so passes can't start.",
+      expect(startEvidence(a, NOW, "EARENDIL-004")).toBe(
+        "No configuration has been activated on this mission yet, so passes can't start. EARENDIL-004's configuration has to be reviewed and activated first.",
       );
-      expect(startReasonAction(a)?.label).toBe("Open Changes");
+      expect(startEvidence(a, NOW)).toBe(
+        "No configuration has been activated on this mission yet, so passes can't start. Each spacecraft's configuration has to be reviewed and activated first.",
+      );
+      expect(startReasonAction(a, spacecraftId("spacecraft-earendil-004"))).toEqual({
+        label: "Open spacecraft",
+        to: { name: "setup.spacecraft.one", params: { spacecraftId: "spacecraft-earendil-004" } },
+      });
+      expect(startReasonAction(a)).toEqual({
+        label: "Open spacecraft",
+        to: { name: "setup.spacecraft" },
+      });
       expect(startKeepsTrying(a)).toBeNull();
     }
   });

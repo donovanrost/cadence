@@ -51,13 +51,13 @@ export function outcomeRuntime(
         : "none";
 }
 
-/** Retrying can't clear these (domain, as lead's U38 banner says). */
+/** Retrying can't clear these: a fault in Cadence (domain, ux U91, as the banner says). */
 const NEEDS_FIX: ReadonlySet<string> = new Set(["spec_mismatch", "reconcile_crashed"]);
 
 /**
  * ux: the config is active, the runtime applies it. `r6 is active · 2 changes. The runtime is
  * applying it.` / `r6 is active and the runtime has applied it · 2 changes.` / `r6 is active, but
- * the runtime hasn't applied it yet.` (+ "It needs a configuration fix." as U38 says).
+ * the runtime hasn't applied it yet.` (+ "It needs a fix in Cadence." as U91 says).
  */
 export function outcomeText(
   revision: number,
@@ -79,7 +79,7 @@ export function outcomeText(
     case "not_applied":
       return {
         tone: "caution",
-        text: `r${revision} is active, but the runtime hasn't applied it yet.${NEEDS_FIX.has(reason ?? "") ? " It needs a configuration fix." : ""}`,
+        text: `r${revision} is active, but the runtime hasn't applied it yet.${NEEDS_FIX.has(reason ?? "") ? " It needs a fix in Cadence." : ""}`,
       };
     case "none":
       return { tone: "nominal", text: `r${revision} is active · ${changes}.` };

@@ -129,8 +129,9 @@ describe("contact_start on Now (ux U45)", () => {
     expect(said("uplink_session_failed")).toBe(
       "Cadence couldn't start the uplink session for this pass.",
     );
+    // U45 corrected: the row names its craft (Now has the name).
     expect(said("no_runtime_spec")).toBe(
-      "The mission's runtime has no active configuration, so passes can't start.",
+      "No configuration has been activated on this mission yet, so passes can't start. EARENDIL-312's configuration has to be reviewed and activated first.",
     );
     expect(said("unknown")).toBe("Starting failed.");
     expect(said("something_new")).toBe("Starting failed.");

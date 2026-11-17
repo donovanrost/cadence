@@ -4,11 +4,11 @@ import type { RuntimeRow } from "./api.ts";
 /** Words for the admin area (ux screens/Admin.md); runtime in U38's words. */
 
 type Reason = NonNullable<NonNullable<RuntimeRow["runtime"]>["reason"]>;
-/** U38: retrying can't clear spec_mismatch / reconcile_crashed, so they need a configuration fix. */
+/** U38/U91: retrying can't clear spec_mismatch / reconcile_crashed: faults in Cadence. */
 const reasonWords: Readonly<Record<Reason, string>> = {
   apply_failed: "applying the configuration failed",
-  spec_mismatch: "it needs a configuration fix",
-  reconcile_crashed: "it needs a configuration fix",
+  spec_mismatch: "it needs a fix in Cadence",
+  reconcile_crashed: "it needs a fix in Cadence",
   runtime_not_running: "the runtime isn't running",
   unrecognized: "the reason isn't known to the console",
 };

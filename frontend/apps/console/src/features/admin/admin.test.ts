@@ -29,7 +29,7 @@ describe("admin runtime (Admin.md, U38 words)", () => {
         reason: "spec_mismatch",
         since: "2026-11-13T23:10:00Z",
       }).text,
-    ).toBe("NOT APPLIED since 23:10Z: it needs a configuration fix");
+    ).toBe("NOT APPLIED since 23:10Z: it needs a fix in Cadence");
     expect(runtimeText(null)).toEqual({ state: "stale", text: "Not known on this node" });
   });
   it("sorts worst first", () => {

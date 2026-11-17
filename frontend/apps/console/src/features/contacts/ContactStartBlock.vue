@@ -27,6 +27,8 @@ const props = defineProps<{
   now: Date;
   /** The pass's craft: transport_archived's Book a pass books for it (ux U45). */
   spacecraftId?: SpacecraftId | null | undefined;
+  /** U45: named in no_runtime_spec's next step. */
+  spacecraftName?: string | null | undefined;
 }>();
 const emit = defineEmits<{ changed: [] }>();
 
@@ -82,7 +84,9 @@ async function markSeen() {
     <p class="m-0 font-semibold">
       {{ missed ? "This pass was missed." : "This pass hasn't started." }}
     </p>
-    <p class="m-0 text-text-2">{{ busy ? "Marking…" : startEvidence(attention, now) }}</p>
+    <p class="m-0 text-text-2">
+      {{ busy ? "Marking…" : startEvidence(attention, now, spacecraftName ?? null) }}
+    </p>
     <!-- U91: Cadence's fault, so it keeps trying; the pass gets telemetry once it's fixed. -->
     <p v-if="keepsTrying" class="m-0 text-text-2">{{ keepsTrying }}</p>
     <p v-if="tries" class="m-0 text-sm text-text-3">{{ tries }}</p>

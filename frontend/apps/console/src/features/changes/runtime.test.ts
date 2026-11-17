@@ -52,7 +52,7 @@ describe("outcome after Apply (ux, U38 verbs)", async () => {
     );
     expect(outcomeText(6, "2 changes", "not_applied", "spec_mismatch")).toEqual({
       tone: "caution",
-      text: "r6 is active, but the runtime hasn't applied it yet. It needs a configuration fix.",
+      text: "r6 is active, but the runtime hasn't applied it yet. It needs a fix in Cadence.",
     });
   });
 });
