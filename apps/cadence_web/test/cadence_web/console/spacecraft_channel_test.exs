@@ -67,7 +67,9 @@ defmodule CadenceWeb.Console.SpacecraftChannelTest do
 
     # A new selection replies with its points and pushes their current values.
     ref = Phoenix.ChannelTest.push(socket, "points:set", %{"point_ids" => ["HK.counter"]})
-    assert_reply(ref, :ok, %{points: [%{point_id: "HK.counter"}]})
+
+    # The default 100 ms flaked under load (devops 11-17, seed 925505); its neighbours allow 2-3 s.
+    assert_reply(ref, :ok, %{points: [%{point_id: "HK.counter"}]}, 2_000)
     assert_push("points", %{seq: 2, samples: [%{point_id: "HK.counter"}]}, 3_000)
   end
 
