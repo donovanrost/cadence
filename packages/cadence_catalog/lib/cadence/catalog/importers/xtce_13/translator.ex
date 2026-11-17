@@ -4,7 +4,6 @@ defmodule Cadence.Catalog.Importers.Xtce13.Translator do
   @moduledoc "Translates the XTCE 1.3 source tree into a canonical declaration layer."
 
   alias Cadence.Catalog.Diagnostic
-  alias Cadence.Catalog.Importers.Xtce13.Calibration
 
   alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Layer, Path, Reference}
   alias Cadence.Catalog.Source
@@ -117,14 +116,10 @@ defmodule Cadence.Catalog.Importers.Xtce13.Translator do
         qualified_name = declaration_path(system_path, "types", name)
         alarm = alarm_definition(element)
         {acc, unit_refs} = put_units(acc, system_path, element)
-        {acc, calibrator_refs} = put_calibrators(acc, system_path, name, element)
-        {enumerations, issues} = Calibration.enumerations(element)
-        acc = put_issues(acc, issues)
 
         definition = %{
           base_type: parameter_base_type(element.name),
           encoding: type_encoding(element),
-          enumerations: enumerations,
           alarm_rules: alarm.rules,
           xtce_type: element.name
         }
@@ -132,7 +127,7 @@ defmodule Cadence.Catalog.Importers.Xtce13.Translator do
         references =
           Enum.map(unit_refs, fn unit_path ->
             Reference.new(%{expected_kind: :unit, source_ref: unit_path, role: :unit})
-          end) ++ calibrator_refs
+          end)
 
         acc
         |> put_declaration(
@@ -544,31 +539,6 @@ defmodule Cadence.Catalog.Importers.Xtce13.Translator do
           references: command_parameter_references(verifier, system_path)
         )
       )
-    end)
-  end
-
-  # The type's calibrators as declarations under /<system>/calibrators/<type>/, referenced by
-  # the type (#92 (c); the YAML importer's polynomial conversion). The default one has role
-  # :calibrator, which target lowering reads; context calibrators are declared so legalization
-  # reports them.
-  defp put_calibrators(state, system_path, type_name, type_element) do
-    {calibrators, issues} = Calibration.calibrators(type_element)
-    base = declaration_path(system_path, "calibrators", type_name)
-
-    Enum.reduce(calibrators, {put_issues(state, issues), []}, fn calibrator, {acc, refs} ->
-      path = Path.join(base, calibrator.suffix)
-      declaration = declaration(:calibrator, path, calibrator.definition, calibrator.element, acc)
-
-      reference =
-        Reference.new(%{expected_kind: :calibrator, source_ref: path, role: calibrator.role})
-
-      {put_declaration(acc, declaration), refs ++ [reference]}
-    end)
-  end
-
-  defp put_issues(state, issues) do
-    Enum.reduce(issues, state, fn {code, message, element}, acc ->
-      put_diagnostic(acc, diagnostic(:warning, code, message, element))
     end)
   end
 

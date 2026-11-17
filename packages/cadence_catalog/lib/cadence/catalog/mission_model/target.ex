@@ -107,20 +107,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
       kind when kind in [:polynomial, "polynomial"] ->
         []
 
-      # XTCE adds math operations and context calibrators (#92 (c), part A).
-      kind
-      when kind in [
-             :table,
-             :state_map,
-             :spline,
-             :math_operation,
-             :context,
-             "table",
-             "state_map",
-             "spline",
-             "math_operation",
-             "context"
-           ] ->
+      kind when kind in [:table, :state_map, :spline, "table", "state_map", "spline"] ->
         [unsupported(declaration, :telemetry, "MM_CALIBRATOR_RUNTIME_UNSUPPORTED")]
 
       _other ->
