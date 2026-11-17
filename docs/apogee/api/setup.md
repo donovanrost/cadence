@@ -192,8 +192,12 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
 - `GET /:id` → `{id, status, imported_at, imported_by, catalog_revision, decision {kind:
   approved|rejected, by {id, name}, at, report_id | null, reason | null, retroactive} | null,
   viewer_can_decide, viewer_is_importer, cannot_decide_because: not_admin | not_approvable |
-  self_approval | plans_not_ready | null, plans_ready, comparison: <cmp> | null}`. `imported_by`
-  null reads "Importer not recorded". Importers (11-17) are the people recorded on the catalog
+  self_approval | plans_not_ready | null, cannot_approve_because: not_in_catalog | null,
+  plans_ready, comparison: <cmp> | null}`. `imported_by`
+  null reads "Importer not recorded". `cannot_approve_because` (11-17, ux U88) is
+  `not_in_catalog` when no catalog revision names the model revision (a second run of a file
+  makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
+  `cannot_decide_because` wins when both are set. Importers (11-17) are the people recorded on the catalog
   revisions naming the model revision plus the people who ran a completed import run that made
   it (every run makes its own model revision, so a reimport's has only its runner);
   `imported_by` is the first. A service or Cadence's own seed never counts as one.

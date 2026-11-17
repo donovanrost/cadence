@@ -228,6 +228,10 @@ defmodule CadenceWeb.Console.Problem do
     mission_model_decision_reason_too_long: {422, "Keep the reason under 2,000 characters."},
     mission_model_no_active_binding_set:
       {409, "There's no active configuration to compare this revision against."},
+    # ux U88 (d9f3c0295): domain's guard; no catalog revision names the model revision.
+    mission_model_revision_not_in_catalog:
+      {409,
+       "Not approved: the catalog doesn't list this revision. To approve it, import its file as a new catalog revision."},
     mission_model_unavailable: {503, "Mission models are unavailable right now."},
     contact_not_cancelable: {409, "This contact can't be canceled now."},
     contact_not_live: {409, "This contact isn't live, so it can't be ended."},

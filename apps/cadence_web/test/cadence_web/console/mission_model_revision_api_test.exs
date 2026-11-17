@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
+  alias Cadence.TestSupport.CatalogTestActor
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -35,6 +36,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
       member: member,
       mission: mission,
       revision: revision.mission_model_revision_id,
+      artifact_id: revision.artifact_id,
       base: "/api/console/v1/missions/#{mission.mission_id}"
     }
   end
@@ -73,6 +75,42 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
 
     assert read["viewer_can_decide"] == read["plans_ready"]
     assert read["cannot_decide_because"] in [nil, "plans_not_ready"]
+    assert read["cannot_approve_because"] == nil
+  end
+
+  test "U88: a model revision no catalog revision names can't be approved; Reject stays", c do
+    # A second run of the file makes its own model revision and no catalog revision (domain).
+    {:ok, run} =
+      Cadence.Catalog.start_import_run(
+        c.org.organization_id,
+        c.mission.mission_id,
+        c.artifact_id,
+        "cadence_yaml",
+        requested_by: CatalogTestActor.system()
+      )
+
+    {:ok, %{result_document: %{"mission_model" => %{"revision_id" => orphan}}}} =
+      Cadence.Catalog.execute_enqueued_run(run.import_run_id)
+
+    read =
+      c
+      |> get_as(c.admin, "/mission-model-revisions/#{orphan}")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert %{"catalog_revision" => nil, "cannot_approve_because" => "not_in_catalog"} = read
+    assert read["cannot_decide_because"] in [nil, "plans_not_ready"]
+
+    assert %{
+             "error" => %{
+               "code" => "mission_model_revision_not_in_catalog",
+               "message" =>
+                 "Not approved: the catalog doesn't list this revision. To approve it, import its file as a new catalog revision."
+             }
+           } =
+             build_conn()
+             |> CadenceWeb.Console.Problem.respond(:mission_model_revision_not_in_catalog)
+             |> json_response(409)
   end
 
   test "compare, then approve against it; the decision reads back and reaches the audit", c do

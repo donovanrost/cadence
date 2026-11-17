@@ -82,7 +82,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionController do
             mission_model_runtime_plans_not_ready mission_model_revision_not_approvable
             mission_model_revision_not_found mission_model_comparison_report_not_found
             mission_model_decision_reason_required mission_model_decision_reason_too_long
-            mission_model_no_active_binding_set)a
+            mission_model_no_active_binding_set mission_model_revision_not_in_catalog)a
 
   defp error(conn, reason) when reason in @codes, do: Problem.respond(conn, reason)
 

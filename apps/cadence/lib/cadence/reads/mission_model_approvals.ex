@@ -49,6 +49,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
 
       viewer_id = scope.user && scope.user.user_id
       blocked = cannot_decide(scope, mission_id, row, importers, plans_ready)
+      catalog_revision = org |> ModelRevisions.for_models(mission_id, [row.id]) |> Map.get(row.id)
 
       {:ok,
        %{
@@ -56,12 +57,14 @@ defmodule Cadence.Reads.MissionModelApprovals do
          status: row.status,
          imported_at: row.imported_at,
          imported_by: first_importer(importers),
-         catalog_revision:
-           org |> ModelRevisions.for_models(mission_id, [row.id]) |> Map.get(row.id),
+         catalog_revision: catalog_revision,
          decision: decision(row),
          viewer_can_decide: is_nil(blocked),
          viewer_is_importer: is_binary(viewer_id) and viewer_id in importers,
          cannot_decide_because: blocked,
+         # Approve only (lead 11-17, ux U88): no catalog revision names this model revision, so
+         # domain's guard refuses approving it; Reject stays. cannot_decide_because wins if set.
+         cannot_approve_because: if(is_nil(catalog_revision), do: "not_in_catalog"),
          plans_ready: plans_ready,
          comparison: report && summary(org, mission_id, report)
        }}
