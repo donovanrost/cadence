@@ -335,6 +335,19 @@ admin's approve-and-apply writes the submission but no row in `mission_config_re
 through the standalone request approve. After an armed run, qa checks that its group went only through the group
 path.
 
+**Struct fields under a stored hash** (director, DECISIONS #108, 11-17). A commit that adds a field to a struct
+reachable from a stored, recomputed hash (binding set, runtime basis, spacecraft-configuration inputs, activation
+review token, authored-override fingerprint) must carry a golden-hash test showing the stored hash unchanged. At
+hand-off qa checks the set's diff for `defstruct` or struct-key changes, under `packages/` as well as `apps/`, and
+holds the set until that test is named. Every restart's post-checks include the mission runtime's admission:
+`MissionCoordinator.active_spec` answers at the live generation, and the reconciler's `last_error` is nil
+(`var/qa-scripts/calib-rollback-post.exs`). This matters because the restart dry can't catch it: it runs on a fresh
+test database, which has no binding set stored before the change.
+
+Why: on 11-17 the calibration restart added two default-valued keys to `%FieldDefinition{}`. The binding-set hash,
+taken over the whole struct, no longer matched the stored one, and Earendil's runtime wasn't admitted. Nothing was
+logged at info. It was rolled back 7 minutes later, between passes.
+
 ## Daily dev retention slot
 
 Once a day, in a qa slot outside passes (no active contact; not within 1 h of an armed pass), on `cadence_apogee_dev`
