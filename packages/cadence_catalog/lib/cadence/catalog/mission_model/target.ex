@@ -9,11 +9,8 @@ defmodule Cadence.Catalog.MissionModel.Target do
     TargetLowering
   }
 
-  # Telemetry contract 3 (#92 (c)): fields carry their calibrator and enumerations, so decom
-  # computes engineering values. It's OFF unless the server's configuration turns it on
-  # (`calibration?/1`); off, every target compiles exactly as before calibration (contract 2).
-  @contracts %{telemetry: "2", algorithm: "1", monitoring: "1", command: "2"}
-  @calibrated_telemetry_contract "3"
+  # telemetry 3 (#92 c, 11-15): fields carry their calibrator and enumerations.
+  @contracts %{telemetry: "3", algorithm: "1", monitoring: "1", command: "2"}
 
   @target_kinds %{
     telemetry: [
@@ -50,14 +47,8 @@ defmodule Cadence.Catalog.MissionModel.Target do
     ]
   }
 
-  @doc """
-  Compiles `revision` for `target`. `opts[:telemetry_calibration]` overrides the server's
-  calibration setting (`calibration?/1`).
-  """
-  @spec compile(Revision.t(), atom(), keyword()) :: RuntimePlan.t()
-  def compile(%Revision{} = revision, target, opts \\ []) when is_map_key(@contracts, target) do
-    calibration? = calibration?(opts)
-
+  @spec compile(Revision.t(), atom()) :: RuntimePlan.t()
+  def compile(%Revision{} = revision, target) when is_map_key(@contracts, target) do
     declarations =
       revision.declarations
       |> Map.values()
@@ -65,44 +56,16 @@ defmodule Cadence.Catalog.MissionModel.Target do
       |> Enum.sort_by(&{&1.qualified_name, &1.kind})
 
     legalization_diagnostics =
-      revision.diagnostics ++
-        Enum.flat_map(declarations, &legalize(&1, target, calibration?))
+      revision.diagnostics ++ Enum.flat_map(declarations, &legalize(&1, target))
 
-    {plan, lowering_diagnostics} =
-      lower_plan(target, revision, declarations, revision.edges, calibration?)
-
+    {plan, lowering_diagnostics} = lower_plan(target, revision, declarations, revision.edges)
     diagnostics = legalization_diagnostics ++ lowering_diagnostics
 
-    RuntimePlan.new(revision, target, Map.fetch!(contracts(opts), target), plan, diagnostics)
+    RuntimePlan.new(revision, target, Map.fetch!(@contracts, target), plan, diagnostics)
   end
 
-  @doc "Each target's contract version: telemetry is 3 only with calibration on."
-  @spec contracts(keyword()) :: %{atom() => binary()}
-  def contracts(opts \\ []) do
-    if calibration?(opts),
-      do: %{@contracts | telemetry: @calibrated_telemetry_contract},
-      else: @contracts
-  end
-
-  @doc """
-  Whether compiles lower calibration (telemetry contract 3, #92 (c)). Server configuration only,
-  default off: `config :cadence_catalog, telemetry_calibration: true` turns it on, and that's the
-  user's call (DECISIONS); the console can't set it. `opts[:telemetry_calibration]` overrides it.
-  """
-  @spec calibration?(keyword()) :: boolean()
-  def calibration?(opts \\ []) do
-    Keyword.get_lazy(opts, :telemetry_calibration, fn ->
-      Application.get_env(:cadence_catalog, :telemetry_calibration, false)
-    end) == true
-  end
-
-  # With calibration on, a polynomial calibrator lowers and states are checked; anything else
-  # legalizes as it does with it off.
-  defp legalize(%Declaration{kind: kind} = declaration, :telemetry, true)
-       when kind in [:calibrator, :parameter_type],
-       do: legalize_calibrated(declaration)
-
-  defp legalize(declaration, target, _calibration?), do: legalize(declaration, target)
+  @spec contracts() :: %{atom() => binary()}
+  def contracts, do: @contracts
 
   defp legalize(%Declaration{kind: :algorithm} = declaration, :algorithm) do
     implementation = value(declaration.definition, :implementation, %{})
@@ -137,15 +100,63 @@ defmodule Cadence.Catalog.MissionModel.Target do
     end
   end
 
-  # Calibration off (contract 2): no calibrator executes, so each is reported as before.
+  # Polynomial calibrators execute at decom (contract 3); state maps arrive as the parameter
+  # type's enumerations; tables and splines aren't executable yet and say so.
   defp legalize(%Declaration{kind: :calibrator} = declaration, :telemetry) do
     case value(declaration.definition, :algorithm_type) do
-      kind when kind in [:polynomial, :table, :state_map, "polynomial", "table", "state_map"] ->
+      kind when kind in [:polynomial, "polynomial"] ->
+        []
+
+      # XTCE adds math operations and context calibrators (#92 (c), part A).
+      kind
+      when kind in [
+             :table,
+             :state_map,
+             :spline,
+             :math_operation,
+             :context,
+             "table",
+             "state_map",
+             "spline",
+             "math_operation",
+             "context"
+           ] ->
         [unsupported(declaration, :telemetry, "MM_CALIBRATOR_RUNTIME_UNSUPPORTED")]
 
       _other ->
         [unsupported(declaration, :telemetry, "MM_CALIBRATOR_UNSUPPORTED")]
     end
+  end
+
+  # A state whose value isn't an integer, or two states for one value, would make decom read the
+  # raw value as an undefined state with nothing at compile time saying why (api-ops, 11-15).
+  defp legalize(%Declaration{kind: :parameter_type} = declaration, :telemetry) do
+    states = List.wrap(value(declaration.definition, :enumerations))
+    values = for state <- states, do: value(state, :value)
+
+    invalid =
+      for state <- states, not is_integer(value(state, :value)), do: value(state, :label)
+
+    duplicated =
+      values
+      |> Enum.filter(&is_integer/1)
+      |> Enum.frequencies()
+      |> Enum.filter(&(elem(&1, 1) > 1))
+
+    Enum.map(invalid, fn label ->
+      enumeration_warning(
+        declaration,
+        "MM_ENUMERATION_VALUE_INVALID",
+        "state #{inspect(label)} of #{declaration.name} has no integer value, so it never matches"
+      )
+    end) ++
+      Enum.map(duplicated, fn {state_value, _count} ->
+        enumeration_warning(
+          declaration,
+          "MM_ENUMERATION_VALUE_DUPLICATE",
+          "#{declaration.name} names value #{state_value} more than once; the first label wins"
+        )
+      end)
   end
 
   defp legalize(%Declaration{kind: :container} = declaration, :telemetry) do
@@ -176,66 +187,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
 
   defp legalize(%Declaration{}, _target), do: []
 
-  # Calibration on (contract 3): polynomial calibrators execute at decom; state maps arrive as the
-  # parameter type's enumerations; tables and splines aren't executable yet and say so.
-  defp legalize_calibrated(%Declaration{kind: :calibrator} = declaration) do
-    case value(declaration.definition, :algorithm_type) do
-      kind when kind in [:polynomial, "polynomial"] ->
-        []
-
-      # XTCE adds math operations and context calibrators (#92 (c), part A).
-      kind
-      when kind in [
-             :table,
-             :state_map,
-             :spline,
-             :math_operation,
-             :context,
-             "table",
-             "state_map",
-             "spline",
-             "math_operation",
-             "context"
-           ] ->
-        [unsupported(declaration, :telemetry, "MM_CALIBRATOR_RUNTIME_UNSUPPORTED")]
-
-      _other ->
-        [unsupported(declaration, :telemetry, "MM_CALIBRATOR_UNSUPPORTED")]
-    end
-  end
-
-  # A state whose value isn't an integer, or two states for one value, would make decom read the
-  # raw value as an undefined state with nothing at compile time saying why (api-ops, 11-15).
-  defp legalize_calibrated(%Declaration{kind: :parameter_type} = declaration) do
-    states = List.wrap(value(declaration.definition, :enumerations))
-    values = for state <- states, do: value(state, :value)
-
-    invalid =
-      for state <- states, not is_integer(value(state, :value)), do: value(state, :label)
-
-    duplicated =
-      values
-      |> Enum.filter(&is_integer/1)
-      |> Enum.frequencies()
-      |> Enum.filter(&(elem(&1, 1) > 1))
-
-    Enum.map(invalid, fn label ->
-      enumeration_warning(
-        declaration,
-        "MM_ENUMERATION_VALUE_INVALID",
-        "state #{inspect(label)} of #{declaration.name} has no integer value, so it never matches"
-      )
-    end) ++
-      Enum.map(duplicated, fn {state_value, _count} ->
-        enumeration_warning(
-          declaration,
-          "MM_ENUMERATION_VALUE_DUPLICATE",
-          "#{declaration.name} names value #{state_value} more than once; the first label wins"
-        )
-      end)
-  end
-
-  defp lower_plan(:algorithm, _revision, declarations, edges, _calibration?) do
+  defp lower_plan(:algorithm, _revision, declarations, edges) do
     {%{
        "target" => "algorithm",
        "algorithms" =>
@@ -247,7 +199,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
      }, []}
   end
 
-  defp lower_plan(:monitoring, _revision, declarations, edges, _calibration?) do
+  defp lower_plan(:monitoring, _revision, declarations, edges) do
     {%{
        "target" => "monitoring",
        "policies" =>
@@ -258,11 +210,11 @@ defmodule Cadence.Catalog.MissionModel.Target do
      }, []}
   end
 
-  defp lower_plan(:telemetry, revision, declarations, _edges, calibration?),
-    do: TargetLowering.telemetry(revision, declarations, calibration?)
+  defp lower_plan(:telemetry, revision, declarations, _edges),
+    do: TargetLowering.telemetry(revision, declarations)
 
-  defp lower_plan(:command, revision, declarations, _edges, calibration?),
-    do: TargetLowering.command(revision, declarations, calibration?)
+  defp lower_plan(:command, revision, declarations, _edges),
+    do: TargetLowering.command(revision, declarations)
 
   defp lower_algorithm(declaration) do
     inputs =

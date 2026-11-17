@@ -118,7 +118,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
 
   describe "telemetry contract 3: calibration per field (#92 (c))" do
     test "a contract-3 plan carries each field's calibrator and enumerations, persisted as JSON" do
-      %{telemetry: %RuntimePlan{} = plan} = compilation().plans
+      %{telemetry: plan} = compilation().plans
 
       [packet] =
         plan.plan |> Jason.encode!() |> Jason.decode!() |> Map.fetch!("packet_definitions")
@@ -160,9 +160,9 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
     end
 
     test "a contract-2 plan (every revision stored before) decodes with no calibration" do
-      # A plan as stored before contract 3 (and as compiled with calibration off): version "2",
-      # fields without the new keys.
-      %{telemetry: %RuntimePlan{} = compiled} = compilation().plans
+      # A plan as stored before contract 3: version "2", fields without the new keys (a fresh
+      # compile is contract 3 since domain's part A).
+      %{telemetry: compiled} = compilation().plans
       assert compiled.target_contract_version == "3"
 
       plan = %RuntimePlan{
@@ -184,36 +184,8 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
       assert Enum.all?(fields, &(&1.calibrator == nil and &1.enumerations == []))
     end
 
-    test "a contract-2 plan's fields are read without calibration, whatever they carry" do
-      %{telemetry: %RuntimePlan{} = compiled} = compilation().plans
-
-      plan = %RuntimePlan{
-        compiled
-        | target_contract_version: "2",
-          plan:
-            update_in(compiled.plan, ["packet_definitions"], fn packets ->
-              Enum.map(packets, fn packet ->
-                Map.update!(packet, "fields", fn fields ->
-                  Enum.map(
-                    fields,
-                    &Map.merge(&1, %{
-                      "calibrator" => %{"type" => "polynomial", "coefficients" => [1, 2]},
-                      "enumerations" => [%{"value" => 0, "label" => "OFF"}]
-                    })
-                  )
-                end)
-              end)
-            end)
-      }
-
-      assert {:ok, [%PacketDefinition{fields: fields}]} =
-               MissionModelPlanDecoder.telemetry_packet_definitions(%{telemetry: plan})
-
-      assert Enum.all?(fields, &(&1.calibrator == nil and &1.enumerations == []))
-    end
-
     test "an unknown contract still fails closed" do
-      %{telemetry: %RuntimePlan{} = plan} = compilation().plans
+      %{telemetry: plan} = compilation().plans
 
       assert {:error, {:unsupported_mission_model_runtime_plan, :telemetry, "4"}} =
                MissionModelPlanDecoder.telemetry_packet_definitions(%{
@@ -238,13 +210,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoderTest do
     assert {:ok, import_result} =
              CadenceYamlDatabase.import(source, %{import_run_id: "runtime-test"})
 
-    # Calibration is off unless the server turns it on (Target.calibration?/1); these tests are
-    # about contract 3, so they compile with it on.
-    assert {:ok, compilation} =
-             Compiler.compile(import_result.bundle.declaration_layers,
-               telemetry_calibration: true
-             )
-
+    assert {:ok, compilation} = Compiler.compile(import_result.bundle.declaration_layers)
     assert Enum.all?(compilation.plans, fn {_target, plan} -> plan.status == :ready end)
     compilation
   end

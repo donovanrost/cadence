@@ -67,7 +67,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
 
       %RuntimePlan{status: :ready, target_contract_version: contract, plan: plan}
       when contract in @telemetry_contracts ->
-        decode_telemetry_plan(plan, contract == "3")
+        decode_telemetry_plan(plan)
 
       %RuntimePlan{} = plan ->
         {:error,
@@ -105,24 +105,22 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
     end
   end
 
-  # Only a contract-3 plan's calibration is read: a contract-2 plan decodes with none, whatever
-  # its fields carry.
-  defp decode_telemetry_plan(plan, calibrated?) when is_map(plan) do
+  defp decode_telemetry_plan(plan) when is_map(plan) do
     case value(plan, :runtime_contract) do
       "mission_model_telemetry_v1" ->
         plan
         |> list(:packet_definitions)
-        |> decode_many(&decode_packet_definition(&1, calibrated?), :telemetry)
+        |> decode_many(&decode_packet_definition/1, :telemetry)
 
       contract ->
         {:error, {:unsupported_mission_model_runtime_contract, :telemetry, contract}}
     end
   end
 
-  defp decode_telemetry_plan(_plan, _calibrated?),
+  defp decode_telemetry_plan(_plan),
     do: {:error, {:invalid_mission_model_runtime_plan, :telemetry}}
 
-  defp decode_packet_definition(document, calibrated?) when is_map(document) do
+  defp decode_packet_definition(document) when is_map(document) do
     fields =
       document
       |> list(:fields)
@@ -137,8 +135,8 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
           data_type: value(field, :data_type, :uint),
           byte_order: value(field, :byte_order, :big_endian),
           engineering_unit: value(field, :engineering_unit),
-          calibrator: if(calibrated?, do: value(field, :calibrator)),
-          enumerations: if(calibrated?, do: value(field, :enumerations, []), else: [])
+          calibrator: value(field, :calibrator),
+          enumerations: value(field, :enumerations, [])
         })
       end)
 
