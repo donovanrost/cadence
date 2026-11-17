@@ -211,6 +211,8 @@ export const errorCodes = [
   // Model approval gate (ux U65, domain 742567770)
   "human_mission_model_approver_required",
   "mission_model_self_approval_forbidden",
+  // U88 (domain's orphan guard, 11-18): approve refused, no catalog revision names it.
+  "mission_model_revision_not_in_catalog",
   "mission_model_comparison_not_passed",
   "mission_model_comparison_mismatch",
   "mission_model_runtime_plans_not_ready",

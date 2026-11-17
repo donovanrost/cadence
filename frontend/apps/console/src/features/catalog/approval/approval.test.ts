@@ -144,3 +144,60 @@ describe("U65 words", () => {
     });
   });
 });
+
+/** ux U88 (domain's orphan guard, 11-18): approve is refused; Reject stays to clear it. */
+describe("a revision the catalog doesn't list (U88)", () => {
+  const LINE =
+    "The catalog doesn't list this revision, so it can't be approved. To approve it, import its file as a new catalog revision. Reject it to clear it from the queue.";
+  const stubs = { RouterLink: { props: ["to"], template: "<a :data-to='to.name'><slot /></a>" } };
+  const blockedPanel = (o: Record<string, unknown> = {}) =>
+    mount(ApprovalPanel, {
+      props: {
+        revision: read({ catalog_revision: null, cannot_approve_because: "not_in_catalog", ...o }),
+        modelKey: key,
+      },
+      global: { stubs },
+    });
+
+  it("Approve is off with the line and Open the catalog; Reject stays; no Run comparison", () => {
+    const w = blockedPanel({ comparison: null });
+    const t = text(w);
+    expect(t).toContain(`${LINE} Open the catalog`);
+    expect(w.find("a").attributes("data-to")).toBe("setup.catalog");
+    const approve = w.findAll("button").find((b) => b.text().startsWith("Approve this revision"));
+    expect(approve?.attributes("aria-disabled")).toBe("true");
+    expect(approve?.attributes("title")).toBe(LINE);
+    const reject = w.findAll("button").find((b) => b.text() === "Reject…");
+    expect(reject?.attributes("aria-disabled")).toBeUndefined();
+    expect(t).not.toContain("Run comparison");
+  });
+
+  it("an older server (field absent) or null leaves Approve as it was", () => {
+    expect(text(panel())).not.toContain("The catalog doesn't list");
+    expect(text(panel({ cannot_approve_because: null }))).not.toContain("The catalog doesn't list");
+  });
+
+  it("someone who can't decide reads that reason, not this one", () => {
+    const t = text(blockedPanel({ viewer_can_decide: false, cannot_decide_because: "not_admin" }));
+    expect(t).toContain("Org admins approve catalog revisions.");
+    expect(t).not.toContain("The catalog doesn't list");
+  });
+
+  it("the 409 refusal words it and links the catalog, never the 503 words", () => {
+    expect(
+      decisionFailure(
+        {
+          kind: "conflict",
+          code: "mission_model_revision_not_in_catalog",
+          message: "x",
+          details: null,
+        },
+        null,
+      ),
+    ).toEqual({
+      text: "Not approved: the catalog doesn't list this revision. To approve it, import its file as a new catalog revision.",
+      runAgain: false,
+      openCatalog: true,
+    });
+  });
+});

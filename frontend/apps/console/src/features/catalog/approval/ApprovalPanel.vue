@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { RouterLink } from "vue-router";
 import { ApButton, ApCallout, ApPanel, focusFirstConnected, refocusFirst } from "@/ui";
 import type { ModelKey, ModelRevision } from "./api.ts";
 import ApprovalActions from "./ApprovalActions.vue";
@@ -7,7 +8,7 @@ import ApprovalFacts from "./ApprovalFacts.vue";
 import ComparisonReport from "./ComparisonReport.vue";
 import RejectSheet from "./RejectSheet.vue";
 import { useApproval } from "./useApproval.ts";
-import { cannotDecideLine, decidedLine, REPLAY_NOT_RUN } from "./words.ts";
+import { cannotApproveLine, cannotDecideLine, decidedLine, REPLAY_NOT_RUN } from "./words.ts";
 
 /**
  * ux U65 Approval · catalog rev N: the comparison against the revision it would replace, who
@@ -26,7 +27,10 @@ const meta = computed(() =>
 );
 const decided = computed(() => decidedLine(props.revision));
 const blocked = computed(() => cannotDecideLine(props.revision));
+const approveBlocked = computed(() => cannotApproveLine(props.revision));
 const showReport = ref(false);
+/** U88: Setup › Catalog, where its file can be imported as a new catalog revision. */
+const CATALOG = { name: "setup.catalog" } as const;
 const sheet = ref<InstanceType<typeof RejectSheet> | null>(null);
 const act = useApproval(
   computed(() => props.modelKey),
@@ -82,11 +86,17 @@ function runAgain() {
       </p>
       <ApprovalFacts :revision="revision" />
       <p v-if="blocked" class="m-0 text-md text-text-2">{{ blocked }}</p>
+      <!-- ux U88 (A6): Approve's reason, with the way on; Reject stays. -->
+      <p v-else-if="approveBlocked && revision.viewer_can_decide" class="m-0 text-md text-text-2">
+        {{ approveBlocked }}
+        <RouterLink :to="CATALOG" class="text-readout underline">Open the catalog</RouterLink>
+      </p>
       <ApprovalActions
-        v-else-if="revision.viewer_can_decide"
+        v-if="!blocked && revision.viewer_can_decide"
         :rev-word="revWord"
         :report-id="report?.report_id ?? null"
         :busy="act.busy.value"
+        :approve-blocked="approveBlocked"
         @run="act.run"
         @approve="act.approve"
         @reject="sheet?.open()"
@@ -95,6 +105,11 @@ function runAgain() {
         >{{ panelFailure.text }}
         <template v-if="panelFailure.runAgain" #action
           ><ApButton size="compact" @click="runAgain">Run comparison</ApButton></template
+        >
+        <template v-else-if="panelFailure.openCatalog" #action
+          ><RouterLink :to="CATALOG" class="text-sm text-readout underline"
+            >Open the catalog</RouterLink
+          ></template
         >
       </ApCallout>
     </div>

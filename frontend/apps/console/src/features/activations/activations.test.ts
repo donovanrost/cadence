@@ -121,6 +121,15 @@ describe("app activation approvals (L10)", () => {
     expect(stale?.text).toContain("EARENDIL-312's configuration changed");
     expect(stale?.next).toBe("Request activation again so the current version can be approved.");
     expect(applySentence(exec("unrecognized", null).execution)).toBe("Applying failed.");
+    // U88: domain makes it non-retryable; the request-again step, no Retry apply.
+    const orphan = exec("mission_model_revision_not_in_catalog", null);
+    expect(notApplied({ ...orphan, execution: { ...orphan.execution, retryable: false } })).toEqual(
+      {
+        text: "Approved, but it didn't apply. The catalog doesn't list the revision this request names, so it can't be applied. Since 11-13 02:14Z.",
+        retry: false,
+        next: "Request activation again so the current version can be approved.",
+      },
+    );
     expect(notApplied(request)).toBeNull();
     // ux: unknown retryability says neither Retry nor "Request activation again".
     const unknown = exec("activation_execution_interrupted", null);

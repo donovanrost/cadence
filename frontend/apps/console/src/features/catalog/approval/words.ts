@@ -108,6 +108,15 @@ export function cannotDecideLine(r: ModelRevision): string | null {
   return why.unrecognized.replaceAll("_", " ");
 }
 
+/** ux U88: why Approve is off while Reject stays (null: Approve isn't blocked). */
+export function cannotApproveLine(r: ModelRevision): string | null {
+  const why = r.cannot_approve_because;
+  if (why === null || why === undefined) return null;
+  if (why === "not_in_catalog")
+    return "The catalog doesn't list this revision, so it can't be approved. To approve it, import its file as a new catalog revision. Reject it to clear it from the queue.";
+  return why.unrecognized.replaceAll("_", " ");
+}
+
 /** api: a reject reason is at most 2,000 characters (the sheet's limit too). */
 export const REASON_MAX = 2000;
 
@@ -115,8 +124,15 @@ export const REASON_MAX = 2000;
 export function decisionFailure(
   e: ApiError,
   rev: number | null,
-): Readonly<{ text: string; runAgain: boolean }> {
+): Readonly<{ text: string; runAgain: boolean; openCatalog?: true }> {
   const base = (text: string, runAgain = false) => ({ text, runAgain });
+  if (isError(e, "mission_model_revision_not_in_catalog"))
+    return {
+      ...base(
+        "Not approved: the catalog doesn't list this revision. To approve it, import its file as a new catalog revision.",
+      ),
+      openCatalog: true,
+    };
   if (isError(e, "mission_model_self_approval_forbidden"))
     return base(
       "Not approved: you imported this revision, so another org admin has to approve it.",

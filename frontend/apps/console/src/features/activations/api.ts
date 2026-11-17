@@ -28,6 +28,8 @@ export const applyCodes = [
   "activation_execution_interrupted",
   "spacecraft_configuration_review_stale",
   "approved_activation_content_mismatch",
+  // U88 (domain, 11-18): not retryable; a new request is the only way on.
+  "mission_model_revision_not_in_catalog",
 ] as const;
 
 export const requestStates = [
@@ -166,6 +168,8 @@ const APPLY_WORDS: Readonly<Record<ApplyCode, string>> = {
     "A spacecraft's configuration changed after it was reviewed, so the reviewed version can't be applied.",
   approved_activation_content_mismatch:
     "What would be applied now differs from what was approved, so it wasn't applied.",
+  mission_model_revision_not_in_catalog:
+    "The catalog doesn't list the revision this request names, so it can't be applied.",
   unrecognized: "Applying failed.",
 };
 /**

@@ -17,6 +17,8 @@ export function useApproval(
   const failure = ref<{
     text: string;
     runAgain: boolean;
+    /** U88: the refusal's way on is the catalog. */
+    openCatalog?: true;
     from: "run" | "approve" | "reject";
   } | null>(null);
 

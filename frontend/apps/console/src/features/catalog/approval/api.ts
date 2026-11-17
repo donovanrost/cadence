@@ -91,6 +91,11 @@ export const modelRevisionReader = d.object({
   cannot_decide_because: d.nullable(
     d.knownText(["not_admin", "self_approval", "plans_not_ready", "not_approvable"] as const),
   ),
+  /**
+   * U88 (api, 11-18): Approve only; Reject stays allowed, so an orphan clears from the queue.
+   * Optional until api ships it.
+   */
+  cannot_approve_because: d.optional(d.nullable(d.knownText(["not_in_catalog"] as const))),
   plans_ready: d.boolean,
   comparison: d.nullable(comparisonReader),
 });

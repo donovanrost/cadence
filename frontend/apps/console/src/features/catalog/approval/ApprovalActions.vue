@@ -9,6 +9,8 @@ defineProps<{
   revWord: string;
   reportId: string | null;
   busy: "run" | "approve" | "reject" | null;
+  /** ux U88: Approve is off for this reason (the panel shows it as a line); Reject stays. */
+  approveBlocked: string | null;
 }>();
 defineEmits<{ run: []; approve: [reportId: string]; reject: [] }>();
 </script>
@@ -16,7 +18,7 @@ defineEmits<{ run: []; approve: [reportId: string]; reject: [] }>();
 <template>
   <div class="flex flex-wrap items-center gap-2">
     <ApButton
-      v-if="reportId === null"
+      v-if="reportId === null && approveBlocked === null"
       data-approval-run
       variant="primary"
       :disabled="busy !== null"
@@ -26,9 +28,11 @@ defineEmits<{ run: []; approve: [reportId: string]; reject: [] }>();
     >
     <ApButton
       data-approval-approve
-      :variant="reportId === null ? 'secondary' : 'primary'"
-      :disabled="reportId === null || busy !== null"
-      :disabled-reason="reportId === null ? 'Run the comparison first.' : 'Approving…'"
+      :variant="reportId === null || approveBlocked ? 'secondary' : 'primary'"
+      :disabled="approveBlocked !== null || reportId === null || busy !== null"
+      :disabled-reason="
+        approveBlocked ?? (reportId === null ? 'Run the comparison first.' : 'Approving…')
+      "
       @click="reportId && $emit('approve', reportId)"
       >Approve {{ revWord }}</ApButton
     >
