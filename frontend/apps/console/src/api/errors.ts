@@ -100,6 +100,9 @@ export const errorCodes = [
   "mission_model_activation_manifest_required",
   "spacecraft_configuration_review_stale",
   "mission_model_comparison_report_required",
+  // U95 additions (api b417a5757 with domain's R1).
+  "spacecraft_configuration_review_required",
+  "spacecraft_model_not_active",
   "activation_execution_in_progress",
   "activation_request_not_found",
   "app_not_found",

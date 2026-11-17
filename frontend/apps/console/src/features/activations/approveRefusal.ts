@@ -47,10 +47,13 @@ const comparisonFailed = d.object({
   /** Asked of api (optional): the model revision whose Approval page shows the report. */
   mission_model_revision_id: d.optional(d.token),
 });
-const reviewStale = d.object({
-  // free-text: a spacecraft's display name (asked of api; optional)
-  spacecraft: d.optional(d.array(d.object({ id: d.token, name: d.string }), 100)),
+/** review_stale and model_not_active (api): the craft, each name possibly unknown. */
+const craftDetails = d.object({
+  // free-text: a spacecraft's display name; null when api can't resolve it
+  spacecraft: d.optional(d.array(d.object({ id: d.token, name: d.nullable(d.string) }), 100)),
 });
+const craftNames = (e: ApiError): string[] =>
+  (detailsOf(e, craftDetails)?.spacecraft ?? []).flatMap((s) => (s.name ? [s.name] : []));
 
 const line = (
   text: string,
@@ -100,7 +103,7 @@ function comparisonLine(e: ApiError): ApproveRefusal {
 }
 
 function staleLine(e: ApiError): ApproveRefusal {
-  const names = (detailsOf(e, reviewStale)?.spacecraft ?? []).map((s) => s.name);
+  const names = craftNames(e);
   const whose =
     names.length === 1
       ? `${names[0]}'s configuration`
@@ -109,6 +112,17 @@ function staleLine(e: ApiError): ApproveRefusal {
         : "a spacecraft's configuration";
   return line(
     `${whose} changed after this was requested, so it isn't what was reviewed. The requester sends it again.`,
+  );
+}
+
+/** U95 addition: "the catalog revision EARENDIL-004 was reviewed with isn't the active one any more". */
+function modelNotActiveLine(e: ApiError): ApproveRefusal {
+  const names = craftNames(e);
+  const whose = names.length
+    ? `${list(names)} ${names.length === 1 ? "was" : "were"}`
+    : "a spacecraft was";
+  return line(
+    `the catalog revision ${whose} reviewed with isn't the active one any more, so this isn't what was reviewed. The requester sends it again.`,
   );
 }
 
@@ -131,6 +145,11 @@ export function approveRefusal(e: ApiError): ApproveRefusal | null {
       "the mission's approval setting changed after this was requested. The requester sends it again.",
     );
   if (isError(e, "spacecraft_configuration_review_stale")) return staleLine(e);
+  if (isError(e, "spacecraft_configuration_review_required"))
+    return line(
+      "on this mission, changes are activated from each spacecraft's configuration (Setup › Spacecraft), so this request can't apply. Reject it, and send the change from the spacecraft's configuration instead.",
+    );
+  if (isError(e, "spacecraft_model_not_active")) return modelNotActiveLine(e);
   if (isError(e, "change_set_activation_stale"))
     return line(
       "what's running on this mission changed after this was requested, so it isn't what was reviewed. The requester sends it again.",

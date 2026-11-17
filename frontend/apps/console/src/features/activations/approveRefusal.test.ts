@@ -112,6 +112,33 @@ describe("approve refusals (U95)", () => {
   });
 });
 
+describe("U95 additions", () => {
+  it("configuration review required: reject it and send it from the spacecraft", () => {
+    expect(said("spacecraft_configuration_review_required")?.text).toBe(
+      `Not approved: on this mission, changes are activated from each spacecraft's configuration (Setup › Spacecraft), so this request can't apply. Reject it, and send the change from the spacecraft's configuration instead.${END}`,
+    );
+  });
+
+  it("model not active names the craft, skips unknown names, else 'a spacecraft'", () => {
+    const craft = (...names: (string | null)[]) => ({
+      spacecraft_ids: names.map((_, i) => `sc-${i}`),
+      spacecraft: names.map((name, i) => ({ id: `sc-${i}`, name })),
+    });
+    expect(said("spacecraft_model_not_active", craft("EARENDIL-004"))?.text).toBe(
+      `Not approved: the catalog revision EARENDIL-004 was reviewed with isn't the active one any more, so this isn't what was reviewed. The requester sends it again.${END}`,
+    );
+    expect(said("spacecraft_model_not_active", craft("EARENDIL-004", null))?.text).toContain(
+      "the catalog revision EARENDIL-004 was reviewed with",
+    );
+    expect(said("spacecraft_model_not_active", craft(null))?.text).toContain(
+      "the catalog revision a spacecraft was reviewed with",
+    );
+    expect(
+      said("spacecraft_configuration_review_stale", craft(null, "EARENDIL-005"))?.text,
+    ).toContain("EARENDIL-005's configuration changed");
+  });
+});
+
 describe("the decide panel after a refused Approve (U95)", () => {
   const detail: ActivationDetail = {
     id: "act_1",
