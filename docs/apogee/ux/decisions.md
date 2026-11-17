@@ -2569,8 +2569,9 @@ schema labels), so fe-setup's KindEditor shows them as they are.
 A part of the mission's processing hit a fault in Cadence and keeps retrying the same input. Nothing in the console
 fixes it; only a fix to Cadence clears it. One item per stuck unit, acknowledge-only, system-closed when the fix lands.
 Director's conditions: word it for whoever operates the mission, name who to tell (there's no support desk), and
-say a restart won't help only because api confirms it. api confirmed (11-17): replaying the same stored input gives
-the same conflict, so a pass, partition, node or app restart can't clear it. Who to call is the team that runs
+say a restart won't help only because api confirms it. api (11-17, corrected): it can't confirm that, because one
+known cause (a replay that rebuilds in-memory state differently) might get past by chance after a restart, so the
+console says nothing about restarting; whether a restart is worth trying is the Cadence team's call. Who to call is the team that runs
 Cadence for the mission's organization (today, domain).
 
 - **Name for operators:** `Stuck processing` (filters, the cause tag, Technical details' source line). Never
@@ -2593,7 +2594,7 @@ Cadence for the mission's organization (today, domain).
   action comes due (api: at most about every 30 s), and the same sentence holds. There's no restart loop and no
   given-up state (api, 11-17).
 - **What to do** (third line): "Tell the team that runs Cadence for you, and send them the details. Nothing in
-  the console fixes this, and restarting won't clear it: it hits the same fault."
+  the console fixes this." No restart line (see above).
   - `Copy details` is a quiet button (it copies, it doesn't navigate): the item's Technical details as plain text
     (source, path, unit, spacecraft, pass, since, last seen, occurrences, buffer, error). Afterwards "Copied"
     for 2 s in a live region. It changes nothing on the server.
@@ -2601,13 +2602,19 @@ Cadence for the mission's organization (today, domain).
   - Filling: "Incoming telemetry is kept in Cadence's buffer meanwhile: 3.3 of 8.6 GB used. Once it's full, new
     telemetry is lost." Meta `BUFFER 39% · SINCE 03:10Z · 14 TRIES`.
   - Dropping (the urgent state, crit ◆, sorts first): "Cadence's buffer is full, so new telemetry from these
-    spacecraft is being lost. Telemetry received before 04:40Z is kept." (the time when dropping started, if sent;
+    spacecraft is being lost. Telemetry received before 04:40Z is kept." (`dropping_since`, when sent;
     else "Telemetry already received is kept.") Meta `BUFFER FULL · LOSING NEW TELEMETRY`.
   - Otherwise the mark is caution ▲.
 - **Acknowledge** (operate_mission; without it: "Operators acknowledge this."): an optional note, placeholder
   "Who you told, e.g. domain at 03:18Z". After it: "Acknowledged by Mira K. at 03:20Z: told domain at 03:18Z." (no
   note: "Acknowledged by Mira K. at 03:20Z."). The row stays listed, sorted last in its priority (U31), with
   `ACK MIRA K.` in the meta. The dropping state un-sorts it again: frames being lost is new.
+  - api (11-17): the note is plain text, 500 characters at most (`acknowledged_note`, with `acknowledged_by` and
+    `acknowledged_at`). When dropping starts after an ack, the item is open again and keeps the ack; the line reads
+    "Acknowledged by Mira K. at 03:20Z, before new telemetry started being lost: told domain at 03:18Z." and the
+    meta drops `ACK`, so it can be acknowledged again.
+  - Fields: `occurrences`, `first_seen_at`, `last_seen_at` back the why line; `journal_used_bytes` /
+    `journal_max_bytes` back the buffer line.
 - **Resolved** (system, U31: the action only): the row fades for 5 s with `Resolved: telemetry storage resumed` /
   `Resolved: processing resumed` / `Resolved: timed actions running`. Frames lost while dropping stay as U47's
   `frames_dropped` item.
