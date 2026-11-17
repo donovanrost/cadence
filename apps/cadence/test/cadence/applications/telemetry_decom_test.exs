@@ -284,6 +284,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         TelemetryDecomFixtures.setup_imported_mission!(@organization_id, @mission_id,
           approve: false
         )
+
       scope = user_scope("preflight-ready")
       host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
 

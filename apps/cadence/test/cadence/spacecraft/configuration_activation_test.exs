@@ -12,7 +12,6 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModelApproval
-  alias Cadence.MissionModels
   alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow, RevisionRow}
   alias Cadence.Platform.ContentHash
   alias Cadence.Reads.Catalog.{Databases, Revisions}
