@@ -359,8 +359,9 @@ first-seen canonical observation (#99).
   rollback past B is a last resort. If one ever happens, there are no Data operations writes until B is rolled
   forward again: no legacy `/ops/data-operations` requests, no backfill, no late-data accept. **Before that rollback
   restart, qa checks that no such job is queued or running.** Why this is enough: dev only, no production; rows
-  keep their provenance in the B columns; the one harmful path is the parked legacy page, where pre-B code
-  re-persists a decoded map without the columns.
+  keep their provenance in the B columns. The one harmful path is a write-back by pre-B code (the parked legacy
+  page): pre-B code reads only the residual JSON (null for packet rows), so it would re-persist such a row without
+  its promoted provenance keys, losing them for good (lead's wording).
 - **Replay.Diff after aa7c64264 shows timer outputs with no live counterpart over downtime:** a live clock now skips
   to now after downtime (one late tick), a replay clock keeps every tick. Expected, not divergence (api-ops note B).
 - **Deploy identity v2 with a graceful stop (journal sealed), not a kill.** A crash with a persisted-but-unacked batch
