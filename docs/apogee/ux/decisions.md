@@ -2613,6 +2613,8 @@ Cadence for the mission's organization (today, domain).
     `acknowledged_at`). When dropping starts after an ack, the item is open again and keeps the ack; the line reads
     "Acknowledged by Mira K. at 03:20Z, before new telemetry started being lost: told domain at 03:18Z." and the
     meta drops `ACK`, so it can be acknowledged again.
+  - Acknowledged again after that (fe-ops, 11-17): the line shows only the newest ack, as the first form. The
+    earlier one belongs to the audit, not the row, so api sends only the latest.
   - Fields: `occurrences`, `first_seen_at`, `last_seen_at` back the why line; `journal_used_bytes` /
     `journal_max_bytes` back the buffer line.
 - **Resolved** (system, U31: the action only): the row fades for 5 s with `Resolved: telemetry storage resumed` /
