@@ -2326,7 +2326,7 @@ The as-built create summary "Add an extra route for <spacecraft_id>" shows a raw
   (the converted Earendil pairs): "Remove extra route “Fairbanks (Demo) — uplink” · EARENDIL-389" (the rendered
   name, quoted). A route with no name: "Remove extra route INU · EARENDIL-389".
 
-**Dropped on purpose (user, via director, 11-16; recorded by lead in DECISIONS):** pinning a route to a transport
+**Dropped on purpose (DECISIONS #104; user, via director, 11-16):** pinning a route to a transport
 version, and routes over a transport with no station. Neither gets words or a control in the console.
 
 ### U80 · Investigate's Sample aside (§11c(D) D1; api's one-sample read, final shape 11-16) (api / fe-ops)
