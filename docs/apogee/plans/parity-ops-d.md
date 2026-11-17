@@ -6,9 +6,13 @@ page → in the console (where), partial, or missing; tiered; what each gap need
 each console "Yes" traced to code. **C** = `frontend/apps/console/src/features`.
 
 ## Gate (ux review 11-16, `ux/reviews/2026-11-16-parity-ops-d.md`)
-DECISIONS #75 parks **L16** (data operations) and **L20** (canned questions): their legacy pages stay until the user
-revisits. So `/ops/explore` and `/ops/data-operations` can't be deleted by building gaps alone; each needs the user's
-call (unpark and build, or accept the gap).
+DECISIONS #75 parks **L16** (data operations): its legacy page stays until the user decides (domain's assessment
+first). **L20** (canned questions) is decided: replaced by the four empty-state links, not rebuilt (DECISIONS #105,
+user 11-16). So `/ops/explore` is deletable once D1, D2 and D12 are built and qa-checked (then the usual deletion
+batch); `/ops/data-operations` still needs the user's call on L16.
+Status (lead, 11-17 00:2xZ): D1 on head (api bdb86f256 + d8ee3e532/5e2ccff36; console Sample aside daea2deaf, ad4b47117);
+D2 on head (8a563b0c5, 832cc35a0, 63b374715); D12 5407369c4 rides C1 (qa's dry 11-17 ~19:45Z). qa's live checks of
+D1/D2/D12 come before the /ops/explore deletion batch.
 
 ## Status (11-16)
 - **D11 built:** the capped-read line on both screens, with ux's words naming the part shown (api: the fallback
@@ -54,9 +58,10 @@ call (unpark and build, or accept the gap).
 - Render decoded-but-unused fields: bucket `count` (`investigate/api.ts:22`), the limit interval's `limit_set_name`, definition id/version and scope (`:55-61`); Sources' binding `realm` in Technical details (`sources/bindings.ts:27`) (frontend only).
 - Data operations' extra summary counts, `blocked_count`, audit `actor_id`/`event_type`, job times, Validate's per-field feedback (legacy wire only, so api).
 
-### Gone by design / obsolete (ux confirmed 11-16, except canned questions)
-- **Canned questions** (`apply_question`): NOT gone by design; L20 is parked (DECISIONS #75), so it's the user's
-  call. ux's four empty-state links shipped meanwhile (`telemetry/PlotPanel.vue`).
+### Gone by design / obsolete (ux confirmed 11-16; canned questions by the user's decision)
+- **Canned questions** (`apply_question`): gone by design (DECISIONS #105, user 11-16, amends #75's L20 park). Legacy
+  only opened Explore with a preset window and the mission's first catalog point; ux's four empty-state links
+  (`telemetry/PlotPanel.vue`) answer them better. Real canned questions would be new work with automation/procedures.
 - **Row limit and order:** meaningless for a bucketed plot.
 - **"Refreshed result could not be confirmed":** replaced by live invalidation, on ux's condition that a failed
   re-read keeps the last plot with its read time (built 11-16).
@@ -98,7 +103,7 @@ Route `router.ex:542-544` (`host_policy: :ops`), rj `dashboards.exploration`; se
 | Non-numeric values | info | No | D7 |
 | Row sample id; source / binding / realm / dataset | info | No | D1, D9 |
 | Select a sample → Selected sample panel (quality, times, raw/engineering json/hex, source, binding, provenance) + Clear | action/info | No | D1 |
-| Canned questions | action | Partial by design: four links | L20 parked |
+| Canned questions | action | Gone by design: four links (#105) | L20 done |
 
 ### /ops/telemetry/explore
 A redirect, not a page: `router.ex:211-215` → `LegacyOpsRedirectController.telemetry_explore` → 301 to
