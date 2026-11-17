@@ -15,6 +15,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.Persistence
   alias Cadence.Runtime.ProcessedIngressBatch
+  alias Cadence.Runtime.ReplayConflicts.Recorder
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
 
@@ -47,7 +48,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
           failed_count: non_neg_integer(),
           last_completed_at: DateTime.t() | nil,
           last_error: binary() | nil,
-          capacity_waiters: %{optional(reference()) => map()}
+          capacity_waiters: %{optional(reference()) => map()},
+          replay_conflict: Recorder.tracking()
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -165,7 +167,8 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
        failed_count: 0,
        last_completed_at: nil,
        last_error: nil,
-       capacity_waiters: %{}
+       capacity_waiters: %{},
+       replay_conflict: :unknown
      }}
   end
 
@@ -355,7 +358,10 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   defp first_raw_evidence([]), do: raise(ArgumentError, "processed ingress batch is empty")
 
   defp handle_dequeued_persist_batch(state, %ProcessedIngressBatch{} = batch, rest, batch_size) do
-    case persist_batch(batch, state) do
+    result = persist_batch(batch, state)
+    state = %{state | replay_conflict: track_replay_conflict(result, batch, state)}
+
+    case result do
       :ok ->
         notify_batch_completed(batch)
 
@@ -681,6 +687,21 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       },
       metadata
     )
+  end
+
+  # #99 follow-up: after the batch's transaction returned, record a replay-id conflict on this
+  # stream or resolve it (ReplayConflicts); never changes the retry.
+  defp track_replay_conflict(result, %ProcessedIngressBatch{} = batch, state) do
+    unit =
+      Recorder.stream_unit(
+        :storage,
+        batch.mission_id,
+        batch.realized_contact_id,
+        batch.path_id,
+        batch.provider_binding_id
+      )
+
+    Recorder.track(result, unit, state.replay_conflict)
   end
 
   defp mark_persistence_result(:ok, %ProcessedIngressBatch{} = batch) do

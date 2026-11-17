@@ -8,7 +8,7 @@ defmodule Cadence.Observability.Metrics.Catalog do
   """
 
   alias Cadence.Dashboards.RuntimeInvalidation
-  alias Cadence.Observability.Metrics.{Definition, MissionRuntimeMetrics}
+  alias Cadence.Observability.Metrics.{Definition, MissionRuntimeMetrics, ReplayConflictMetrics}
   alias Cadence.ProviderAdapters.TCPSocket.Instrumentation, as: TCPSocketInstrumentation
   alias Cadence.Telemetry.Profiler
 
@@ -36,7 +36,9 @@ defmodule Cadence.Observability.Metrics.Catalog do
                               "cadence.commanding.queue.pending",
                               "cadence.telemetry.availability.interval",
                               "cadence.telemetry.expected",
-                              "cadence.telemetry.freshness"
+                              "cadence.telemetry.freshness",
+                              # #99 follow-up: ReplayConflictMetrics (bounded: few missions).
+                              "cadence.runtime.replay_id.conflict"
                             ] ++ MissionRuntimeMetrics.names()
                           )
 
@@ -1089,7 +1091,7 @@ defmodule Cadence.Observability.Metrics.Catalog do
         measurement: &native_time_to_seconds/2,
         tag_values: &take_string_keys(&1, ["boundary"])
       )
-    ] ++ MissionRuntimeMetrics.definitions()
+    ] ++ MissionRuntimeMetrics.definitions() ++ ReplayConflictMetrics.definitions()
   end
 
   @spec events() :: [[atom()]]

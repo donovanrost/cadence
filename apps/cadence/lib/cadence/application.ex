@@ -42,6 +42,7 @@ defmodule Cadence.Application do
         {Cadence.Control.Supervisor, control_supervisor_opts},
         {Cadence.Projections.Supervisor, root_composition: root_composition}
       ] ++
+        replay_conflict_sampler() ++
         background_job_children(root_composition) ++
         [{Drain, callback: fn -> drain_runtime(root_composition) end}]
 
@@ -95,6 +96,14 @@ defmodule Cadence.Application do
     end
 
     :ok
+  end
+
+  # #99 follow-up: stuck-processing buffer readings and gauges, beside (not under) the runtime so a
+  # crash restarts only it. Off in tests; they sample directly.
+  defp replay_conflict_sampler do
+    if Keyword.get(Application.get_env(:cadence, :replay_conflict_sampler, []), :enabled, true),
+      do: [Cadence.Runtime.ReplayConflicts.Sampler],
+      else: []
   end
 
   defp background_job_children(%RootComposition{} = root_composition) do
