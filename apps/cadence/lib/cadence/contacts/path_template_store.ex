@@ -10,7 +10,7 @@ defmodule Cadence.Contacts.PathTemplateStore do
   alias Cadence.Comms.ConfigurationValidation
   alias Cadence.Contacts.Path
   alias Cadence.Contacts.PathTemplate
-  alias Cadence.Contacts.PathTemplateStore.PathTemplateRow
+  alias Cadence.Contacts.PathTemplateStore.{ArchivedProfile, PathTemplateRow}
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Contacts.ProviderBinding
   alias Cadence.Contacts.ProviderProfile
@@ -464,7 +464,8 @@ defmodule Cadence.Contacts.PathTemplateStore do
   end
 
   # A pinned profile version resolves only while the profile itself is live: once its latest
-  # version is deleted (e.g. its transport was archived, lead 11-16), no new path is built on it.
+  # version is deleted (e.g. its transport was archived, lead 11-16), no new path is built on it,
+  # and the refusal names that transport (ArchivedProfile, ux U45 transport_archived).
   defp live_provider_profile_version(organization_id, mission_id, provider_profile_id, version) do
     with {:ok, profile} <-
            ProfileStore.fetch_provider_profile_version(
@@ -473,8 +474,15 @@ defmodule Cadence.Contacts.PathTemplateStore do
              provider_profile_id,
              version
            ),
-         {:ok, _latest} <-
-           ProfileStore.fetch_provider_profile(organization_id, mission_id, provider_profile_id) do
+         :ok <-
+           ArchivedProfile.live(
+             ProfileStore.fetch_provider_profile(
+               organization_id,
+               mission_id,
+               provider_profile_id
+             ),
+             profile
+           ) do
       {:ok, profile}
     end
   end
@@ -482,7 +490,11 @@ defmodule Cadence.Contacts.PathTemplateStore do
   defp live_provider_profile_version(mission_id, provider_profile_id, version) do
     with {:ok, profile} <-
            ProfileStore.fetch_provider_profile_version(mission_id, provider_profile_id, version),
-         {:ok, _latest} <- ProfileStore.fetch_provider_profile(mission_id, provider_profile_id) do
+         :ok <-
+           ArchivedProfile.live(
+             ProfileStore.fetch_provider_profile(mission_id, provider_profile_id),
+             profile
+           ) do
       {:ok, profile}
     end
   end

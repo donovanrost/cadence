@@ -13,16 +13,19 @@ defmodule Cadence.Contacts.ContactStartAttention do
   `reason` is one of `ContactStartFailure.reasons/0`; for `listener_in_use`, `holder` is the pass
   holding the listener; for `listen_endpoint_claimed`, `listen_port`, `transport_id` and
   `transport_name` say
-  which transport's port another mission listens on (never which mission). Pass fields as
-  `contact_settlement`'s.
+  which transport's port another mission listens on (never which mission); for
+  `transport_archived`, the archived transport. Pass fields as `contact_settlement`'s.
+
+  A pass that couldn't be realized (no run exists; `RealizationFailure`) is listed too, anchored
+  on its booking with `realized_contact_id` null (`ContactStartAttention.Unrealized`).
   """
 
   import Ecto.Query
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Contacts.ContactStartAttention.{Passes, Unrealized}
   alias Cadence.Contacts.{ContactStartFailure, ContactStore, ProfileStore, RealizedContact}
   alias Cadence.Contacts.ContactStore.RealizedContactRow
-  alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
@@ -36,7 +39,7 @@ defmodule Cadence.Contacts.ContactStartAttention do
     now = DateTime.utc_now()
     contacts = open_contacts(org, mission)
     holders = holders(org, mission, contacts)
-    reservations = reservations(org, mission, contacts ++ Map.values(holders))
+    reservations = Passes.reservations(org, mission, contacts ++ Map.values(holders))
 
     contacts
     |> Enum.map(fn contact ->
@@ -50,11 +53,16 @@ defmodule Cadence.Contacts.ContactStartAttention do
         now
       )
     end)
+    |> Kernel.++(Unrealized.items(org, mission, now))
     |> Enum.sort_by(&(&1.raised_at || @epoch), DateTime)
   end
 
   @spec counts(binary(), binary()) :: %{open: non_neg_integer(), acknowledged: 0}
-  def counts(org, mission), do: %{open: length(open_contacts(org, mission)), acknowledged: 0}
+  def counts(org, mission),
+    do: %{
+      open: length(open_contacts(org, mission)) + Unrealized.count(org, mission),
+      acknowledged: 0
+    }
 
   @spec resolved_since(binary(), binary(), DateTime.t()) :: [map()]
   def resolved_since(org, mission, %DateTime{} = since) do
@@ -65,11 +73,13 @@ defmodule Cadence.Contacts.ContactStartAttention do
       %{
         id: contact.realized_contact_id,
         source: @source,
+        # fe-ops: null on a realization item, so 'Set up at' reads apart from 'Started at'.
+        realized_contact_id: contact.realized_contact_id,
         resolved_by: by,
         action: action,
         resolved_at: at
       }
-    end
+    end ++ Unrealized.resolved_since(org, mission, since)
   end
 
   @doc """
@@ -79,10 +89,28 @@ defmodule Cadence.Contacts.ContactStartAttention do
   @spec acknowledge(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
   def acknowledge(%Scope{} = scope, mission, id) do
     now = DateTime.utc_now()
+    org = scope.organization_id
 
-    with {:ok, actor} <- actor(scope, mission),
-         {:ok, contact} <- fetch_open(scope.organization_id, mission, id),
-         :ok <- missed(scope.organization_id, mission, contact, now),
+    with {:ok, actor} <- actor(scope, mission) do
+      result =
+        case fetch_open(org, mission, id) do
+          {:ok, contact} ->
+            acknowledge_realized(org, mission, contact, actor, now)
+
+          # No realized contact by that id: an unrealized pass's item (RealizationFailure).
+          {:error, :attention_item_not_found} ->
+            Unrealized.acknowledge(org, mission, id, actor, now)
+        end
+
+      with {:ok, _item} <- result do
+        ScopedReadUpdates.publish(:attention_changed, org, mission)
+        result
+      end
+    end
+  end
+
+  defp acknowledge_realized(org, mission, contact, actor, now) do
+    with :ok <- missed(org, mission, contact, now),
          failure =
            Map.merge(contact.metadata["start_failure"], %{
              "acknowledged_at" => DateTime.to_iso8601(now),
@@ -92,8 +120,7 @@ defmodule Cadence.Contacts.ContactStartAttention do
            ContactStore.update_realized_lifecycle(contact, contact.lifecycle_state, %{
              "start_failure" => failure
            }) do
-      ScopedReadUpdates.publish(:attention_changed, scope.organization_id, mission)
-      reservations = reservations(scope.organization_id, mission, [updated])
+      reservations = Passes.reservations(org, mission, [updated])
 
       {:ok,
        updated
@@ -115,10 +142,10 @@ defmodule Cadence.Contacts.ContactStartAttention do
   def retry(_scope, _mission, _id), do: {:error, :attention_item_not_found}
 
   defp resolution(%{"started_at" => at}),
-    do: [{"started", timestamp(at), %{"kind" => "system"}}]
+    do: [{"started", Passes.timestamp(at), %{"kind" => "system"}}]
 
   defp resolution(%{"acknowledged_at" => at, "acknowledged_by" => by}),
-    do: [{"acknowledged", timestamp(at), by}]
+    do: [{"acknowledged", Passes.timestamp(at), by}]
 
   defp resolution(_failure), do: []
 
@@ -147,7 +174,8 @@ defmodule Cadence.Contacts.ContactStartAttention do
   defp missing, do: {:error, :attention_item_not_found}
 
   defp missed(org, mission, contact, now) do
-    reservation = Map.get(reservations(org, mission, [contact]), contact.scheduled_contact_id)
+    reservation =
+      Map.get(Passes.reservations(org, mission, [contact]), contact.scheduled_contact_id)
 
     if conflict(contact, reservation, now) == "missed",
       do: :ok,
@@ -239,21 +267,6 @@ defmodule Cadence.Contacts.ContactStartAttention do
 
   defp realized_key(_contact), do: 0
 
-  defp reservations(_org, _mission, []), do: %{}
-
-  defp reservations(org, mission, contacts) do
-    ids = contacts |> Enum.map(& &1.scheduled_contact_id) |> Enum.reject(&is_nil/1)
-
-    from(row in ProviderReservationRow,
-      where:
-        row.organization_id == ^org and row.mission_id == ^mission and
-          row.scheduled_contact_id in ^ids
-    )
-    |> Repo.all()
-    |> Enum.map(&ProviderReservationRow.to_domain/1)
-    |> Map.new(&{&1.scheduled_contact_id, &1})
-  end
-
   defp item(%RealizedContact{} = contact, reservation, holder, reservations, now) do
     failure = contact.metadata["start_failure"] || %{}
 
@@ -274,15 +287,15 @@ defmodule Cadence.Contacts.ContactStartAttention do
       transport_name: failure["transport_name"],
       reason_detail: failure["reason_detail"],
       holder: holder_fields(holder, reservations),
-      raised_at: timestamp(failure["first_failed_at"]),
-      last_attempt_at: timestamp(failure["last_attempt_at"]),
+      raised_at: Passes.timestamp(failure["first_failed_at"]),
+      last_attempt_at: Passes.timestamp(failure["last_attempt_at"]),
       attempts: failure["attempts"] || 0,
       retry: "automatic",
       expires_at: nil,
       acknowledged_by: nil,
       resolution: nil
     }
-    |> Map.merge(pass(reservation))
+    |> Map.merge(Passes.pass(reservation))
   end
 
   # The window comes from the booking, else the scheduled contact's own ends_at.
@@ -316,7 +329,7 @@ defmodule Cadence.Contacts.ContactStartAttention do
     Map.merge(
       %{realized_contact_id: holder.realized_contact_id, contact_id: holder.scheduled_contact_id},
       reservation
-      |> pass()
+      |> Passes.pass()
       |> Map.take([
         :spacecraft_id,
         :provider_reservation_id,
@@ -326,42 +339,4 @@ defmodule Cadence.Contacts.ContactStartAttention do
       ])
     )
   end
-
-  defp pass(nil) do
-    %{
-      spacecraft_id: nil,
-      provider_reservation_id: nil,
-      ground_station_ref: nil,
-      provider_id: nil,
-      starts_at: nil,
-      ends_at: nil
-    }
-  end
-
-  defp pass(reservation) do
-    %{
-      spacecraft_id: reservation.spacecraft_id,
-      provider_reservation_id: reservation.provider_reservation_id,
-      ground_station_ref: ground_station_ref(reservation),
-      provider_id: reservation.provider_id,
-      starts_at: reservation.starts_at,
-      ends_at: reservation.ends_at
-    }
-  end
-
-  defp ground_station_ref(reservation) do
-    Enum.find_value(
-      [reservation.provider_confirmed_snapshot_document, reservation.request_document],
-      &(is_map(&1) && &1["ground_station_ref"])
-    )
-  end
-
-  defp timestamp(at) when is_binary(at) do
-    case DateTime.from_iso8601(at) do
-      {:ok, datetime, _offset} -> datetime
-      _error -> nil
-    end
-  end
-
-  defp timestamp(_at), do: nil
 end

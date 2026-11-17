@@ -12,14 +12,17 @@ defmodule Cadence.Contacts.ContactStartFailure do
   characters), `provider_binding_id` (the listener's, for `listener_in_use` and
   `listen_endpoint_claimed`), `attempts`, `first_failed_at`, `last_attempt_at`, and, once it has
   started, `started_at`. For `listen_endpoint_claimed` (another mission listens on the pass's
-  port, ux U81) also `listen_port`, `transport_id` and `transport_name`.
+  port, ux U81) also `listen_port`, `transport_id` and `transport_name`; for `transport_archived`
+  (its path is pinned to the provider profile of a transport since archived, ux U45) also
+  `transport_id` and `transport_name`, that transport's.
   """
 
-  alias Cadence.Contacts.{ContactStore, RealizedContact}
+  alias Cadence.Contacts.{ContactStore, RealizedContact, ScheduledContact}
   alias Cadence.Platform.ScopedReadUpdates
 
   @reasons ~w(listener_in_use listener_unavailable connect_failed ingress_pipeline_failed
-              uplink_session_failed no_runtime_spec listen_endpoint_claimed unknown)
+              uplink_session_failed no_runtime_spec listen_endpoint_claimed transport_archived
+              unknown)
 
   # Matched by name: the runtime's children are the data plane's, not this context's to depend on.
   @ingress_children ~w(IngressJournal.FileSystem Runtime.IngressJournalConsumer
@@ -33,9 +36,12 @@ defmodule Cadence.Contacts.ContactStartFailure do
   @spec reasons() :: [binary()]
   def reasons, do: @reasons
 
-  @doc "The metadata patch recording a failed start attempt at `at`."
-  @spec failed(RealizedContact.t(), term(), DateTime.t()) :: map()
-  def failed(%RealizedContact{} = contact, error, %DateTime{} = at) do
+  @doc """
+  The metadata patch recording a failed start attempt at `at`: on the realized contact, or on
+  the scheduled contact when its realization failed (`RealizationFailure`).
+  """
+  @spec failed(RealizedContact.t() | ScheduledContact.t(), term(), DateTime.t()) :: map()
+  def failed(%{metadata: _metadata} = contact, error, %DateTime{} = at) do
     previous = open_failure(contact) || %{}
     {reason, provider_binding_id} = classify(error)
     at = DateTime.to_iso8601(at)
@@ -85,7 +91,24 @@ defmodule Cadence.Contacts.ContactStartFailure do
       "transport_name" => Map.get(claim, :transport_name)
     }
 
-  defp claim_details(_error), do: %{}
+  defp claim_details(error) do
+    case find_archived(error) do
+      %{} = transport ->
+        %{"transport_id" => transport.transport_id, "transport_name" => transport.transport_name}
+
+      nil ->
+        %{}
+    end
+  end
+
+  # ArchivedProfile's refusal, wherever the runtime nests it.
+  defp find_archived({:contact_provider_profile_archived, %{} = transport}), do: transport
+
+  defp find_archived(term) when is_tuple(term),
+    do: term |> Tuple.to_list() |> Enum.find_value(&find_archived/1)
+
+  defp find_archived(term) when is_list(term), do: Enum.find_value(term, &find_archived/1)
+  defp find_archived(_term), do: nil
 
   @doc "Records a failed start attempt on the contact and tells the Now queue."
   @spec record(RealizedContact.t(), term(), DateTime.t()) ::
@@ -124,13 +147,16 @@ defmodule Cadence.Contacts.ContactStartFailure do
     end
   end
 
-  @doc "The contact's failure while it hasn't started since, else nil."
-  @spec open_failure(RealizedContact.t()) :: map() | nil
-  def open_failure(%RealizedContact{metadata: %{"start_failure" => %{} = failure}})
-      when not is_map_key(failure, "started_at"),
+  @doc """
+  The contact's failure while it hasn't started (or, on a scheduled contact, been realized) since,
+  else nil.
+  """
+  @spec open_failure(RealizedContact.t() | ScheduledContact.t()) :: map() | nil
+  def open_failure(%{metadata: %{"start_failure" => %{} = failure}})
+      when not is_map_key(failure, "started_at") and not is_map_key(failure, "realized_at"),
       do: failure
 
-  def open_failure(%RealizedContact{}), do: nil
+  def open_failure(%{}), do: nil
 
   @doc """
   `{reason, provider_binding_id}` for a start error. The runtime nests the cause in
@@ -150,6 +176,8 @@ defmodule Cadence.Contacts.ContactStartFailure do
 
   defp find({:listen_endpoint_claimed, %{} = claim}),
     do: {"listen_endpoint_claimed", Map.get(claim, :provider_binding_id)}
+
+  defp find({:contact_provider_profile_archived, %{}}), do: {"transport_archived", nil}
 
   defp find(:no_active_binding_set), do: {"no_runtime_spec", nil}
   defp find({:mission_runtime_spec_mismatch, _field}), do: {"no_runtime_spec", nil}

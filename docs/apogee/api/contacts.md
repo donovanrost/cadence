@@ -272,7 +272,8 @@ there's none. Show the first as the tag with "+N" for the rest; the pass detail 
 
 ### A contact that didn't start: the `contact_start` source (ux U45)
 
-Now and pass rows carry `source: "contact_start"`, `id` = the realized contact id, `conflict`:
+Now and pass rows carry `source: "contact_start"`, `id` = the realized contact id (the scheduled
+contact id for a pass that couldn't be realized, below), `conflict`:
 
 - `not_started` while the pass's window is on: Cadence retries by itself (`retry: "automatic"`),
   at once when the holder frees the station and on every reconcile. **P1**, due at LOS
@@ -282,7 +283,8 @@ Now and pass rows carry `source: "contact_start"`, `id` = the realized contact i
 
 The item's keys, flattened as for `contact_settlement`: `reason` (`listener_in_use |
 listener_unavailable | connect_failed | ingress_pipeline_failed | uplink_session_failed |
-no_runtime_spec | unknown`, or null; ux words each), `holder`, `provider_profile_id`,
+no_runtime_spec | listen_endpoint_claimed | transport_archived | unknown`, or null; ux words
+each), `holder`, `provider_profile_id`,
 `provider_profile_name`, `realized_contact_id`, `contact_id`, `reservation_id`, `ends_at` (null
 without a booking), `attempts`, `last_attempt_at`, `retry`, `failure_message` (raw, Technical
 details only), `expires_at: null`, `reason_detail` (11-17, ux U91): for `no_runtime_spec`,
@@ -293,8 +295,21 @@ fix, Open pass, never Open Changes); null for other reasons and for failures sto
 - `holder` (only for `listener_in_use`): the pass still holding the station listener,
   `{realized_contact_id, contact_id, reservation_id, spacecraft: {id, name}, station: <station
   object>, starts_at, ends_at} | null`.
+- `transport_archived` (ux U45): the pass's path was pinned, at booking, to the provider profile
+  of a transport archived since. `transport_id` and `transport_name` name that transport (its
+  name when it was archived). Every try fails the same way; only that one pass is affected.
+- **A pass that couldn't be realized** (U45, lead 11-17): Cadence refused to build its run (its
+  paths didn't resolve: an archived or deleted profile, a missing template), so no realized
+  contact exists. Until 11-17 it was silent. The failure is kept on the scheduled contact and the
+  item is anchored on the booking: `id` and `contact_id` are the scheduled contact id,
+  `realized_contact_id`, `provider_profile_*` and `holder` are null, `reason` is
+  `transport_archived` or another key (usually `unknown`), and the scheduler retries every
+  reconcile. It resolves `started` once realization succeeds; if that run then fails to start,
+  the realized contact's own item takes over.
 - Resolved: `action: "started"` by the system, or `"acknowledged"` by the operator who marked it
-  as seen.
+  as seen. Entries carry `realized_contact_id`: the ITEM's, as it was while open (null for a pass
+  that couldn't be realized, even after it's later realized; never the new run's id). The console
+  keys 'Set up at' (null) versus 'Started at' on it (fe-ops, ux U45).
 - `POST …/attention/contact_start/:id/acknowledge` (no body; `operate_mission`): only on a
   `missed` item. `409 contact_start_not_missed` while it's still `not_started`; `403` "Operators
   mark missed passes as seen."; `404 attention_item_not_found`. `resolve` and `retry` are 404 for

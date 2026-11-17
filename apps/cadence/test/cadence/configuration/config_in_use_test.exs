@@ -6,15 +6,19 @@ defmodule Cadence.Configuration.ConfigInUseTest do
   use Cadence.DataCase, async: false
 
   import Cadence.ConfigurationFixtures
+  import ExUnit.CaptureLog
 
   alias Cadence.Comms.{ListenClaims, RoutingRule, RoutingRuleStore, TransportStore}
+  alias Cadence.Contacts
 
   alias Cadence.Contacts.{
+    ContactStartAttention,
     ContactStore,
     PathTemplate,
     PathTemplateStore,
     ProfileStore,
-    RealizedContact
+    RealizedContact,
+    ScheduledContact
   }
 
   alias Cadence.Control.{Configuration, ConfigUsers}
@@ -177,43 +181,102 @@ defmodule Cadence.Configuration.ConfigInUseTest do
     end
 
     test "a path pinned to the archived transport's profile version no longer resolves", ctx do
-      {:ok, transport} = TransportStore.fetch_transport(ctx.org, ctx.mission, ctx.ids.spare)
-
-      {:ok, profile} =
-        ProfileStore.fetch_provider_profile(
-          ctx.org,
-          ctx.mission,
-          transport.materialized_provider_profile_id
-        )
-
-      {:ok, template} =
-        PathTemplateStore.persist(
-          ctx.org,
-          PathTemplate.new(%{
-            path_template_id: unique("path"),
-            mission_id: ctx.mission,
-            path_id: unique("downlink"),
-            direction: :downlink,
-            selection_role: :selected,
-            source_endpoint_ref: "source-" <> ctx.sc,
-            provider_profile_refs: [
-              %{
-                "provider_profile_id" => profile.provider_profile_id,
-                "version" => profile.version
-              }
-            ]
-          })
-        )
-
+      template = pinned_template!(ctx)
       assert {:ok, _path} = PathTemplateStore.resolve(template)
 
       apply_ops(ctx, "Archive spare", [archive("transport", ctx.ids.spare)])
 
-      assert {:error, :contact_provider_profile_not_found} = PathTemplateStore.resolve(template)
+      # ux U45 transport_archived: the refusal names the transport, from the version's metadata.
+      spare = ctx.ids.spare
+
+      assert {:error,
+              {:contact_provider_profile_archived,
+               %{transport_id: ^spare, transport_name: "Spare", provider_profile_id: _}}} =
+               PathTemplateStore.resolve(template)
+    end
+
+    # U45 (lead 11-17, A): a pass refused at realization used to be only a count in the
+    # scheduler's summary; it now shows on contact_start, anchored on the booking.
+    test "a scheduled pass pinned to it isn't silent: contact_start shows why, on each try",
+         ctx do
+      template = pinned_template!(ctx)
+      now = DateTime.utc_now()
+      scheduled_id = unique("scheduled")
+
+      {:ok, _} =
+        Contacts.persist_scheduled_contact(
+          ctx.org,
+          ScheduledContact.new(%{
+            scheduled_contact_id: scheduled_id,
+            organization_id: ctx.org,
+            mission_id: ctx.mission,
+            starts_at: DateTime.add(now, -60, :second),
+            ends_at: DateTime.add(now, 600, :second),
+            source_endpoint_refs: [],
+            path_template_ids: [template.path_template_id]
+          })
+        )
+
+      apply_ops(ctx, "Archive spare", [archive("transport", ctx.ids.spare)])
+
+      capture_log(fn -> {:ok, _summary} = Contacts.reconcile(ctx.mission, now) end)
+
+      assert [item] =
+               ctx.org
+               |> ContactStartAttention.items(ctx.mission)
+               |> Enum.filter(&(&1.id == scheduled_id))
+
+      spare = ctx.ids.spare
+
+      assert %{
+               conflict: "not_started",
+               reason: "transport_archived",
+               transport_id: ^spare,
+               transport_name: "Spare",
+               realized_contact_id: nil,
+               contact_id: ^scheduled_id,
+               attempts: 1
+             } = item
+
+      capture_log(fn -> {:ok, _summary} = Contacts.reconcile(ctx.mission, now) end)
+
+      assert [%{attempts: 2}] =
+               ctx.org
+               |> ContactStartAttention.items(ctx.mission)
+               |> Enum.filter(&(&1.id == scheduled_id))
     end
   end
 
   # Its own listen port (5310), so its claim is the only one on it.
+  defp pinned_template!(ctx) do
+    {:ok, transport} = TransportStore.fetch_transport(ctx.org, ctx.mission, ctx.ids.spare)
+
+    {:ok, profile} =
+      ProfileStore.fetch_provider_profile(
+        ctx.org,
+        ctx.mission,
+        transport.materialized_provider_profile_id
+      )
+
+    {:ok, template} =
+      PathTemplateStore.persist(
+        ctx.org,
+        PathTemplate.new(%{
+          path_template_id: unique("path"),
+          mission_id: ctx.mission,
+          path_id: unique("downlink"),
+          direction: :downlink,
+          selection_role: :selected,
+          source_endpoint_ref: "source-" <> ctx.sc,
+          provider_profile_refs: [
+            %{"provider_profile_id" => profile.provider_profile_id, "version" => profile.version}
+          ]
+        })
+      )
+
+    template
+  end
+
   defp spare_doc,
     do:
       "Spare"

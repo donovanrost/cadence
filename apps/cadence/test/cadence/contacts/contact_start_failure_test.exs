@@ -21,6 +21,8 @@ defmodule Cadence.Contacts.ContactStartFailureTest do
        {"ingress_pipeline_failed", nil}},
       {{:listen_endpoint_claimed, %{port: 5012, provider_binding_id: "b"}},
        {"listen_endpoint_claimed", "b"}},
+      {{:contact_provider_profile_archived, %{transport_id: "t", transport_name: "INU S-band"}},
+       {"transport_archived", nil}},
       {:something_else, {"unknown", nil}}
     ]
 
@@ -29,7 +31,21 @@ defmodule Cadence.Contacts.ContactStartFailureTest do
     assert Enum.sort(ContactStartFailure.reasons()) ==
              Enum.sort(~w(listener_in_use listener_unavailable connect_failed
                           ingress_pipeline_failed uplink_session_failed no_runtime_spec
-                          listen_endpoint_claimed unknown))
+                          listen_endpoint_claimed transport_archived unknown))
+  end
+
+  # ux U45: a pass pinned to the profile of a transport since archived names that transport.
+  test "an archived transport's refusal records the transport, even nested" do
+    refusal =
+      {:contact_provider_profile_archived, %{transport_id: "t", transport_name: "INU S-band"}}
+
+    assert %{
+             "start_failure" => %{
+               "reason" => "transport_archived",
+               "transport_id" => "t",
+               "transport_name" => "INU S-band"
+             }
+           } = ContactStartFailure.failed(contact(%{}), {:error, {:realize, refusal}}, @at)
   end
 
   test "attempts count up from the first failure, and a start closes the failure" do

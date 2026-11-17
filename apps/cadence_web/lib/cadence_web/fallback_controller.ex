@@ -75,6 +75,12 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "contact_provider_profile_not_found")
   end
 
+  # A pinned version of a profile whose transport was archived (ux U45 transport_archived): the
+  # same 404 as before it named the transport.
+  def call(conn, {:error, {:contact_provider_profile_archived, _transport}}) do
+    error_response(conn, :not_found, "contact_provider_profile_not_found")
+  end
+
   def call(conn, {:error, :contact_transport_profile_not_found}) do
     error_response(conn, :not_found, "contact_transport_profile_not_found")
   end

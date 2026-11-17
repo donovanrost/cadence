@@ -12,6 +12,7 @@ defmodule Cadence.Contacts.ContactLifecycle do
   alias Cadence.Contacts.ContactStartFailure
   alias Cadence.Contacts.ContactStore
   alias Cadence.Contacts.JournalReclaim
+  alias Cadence.Contacts.RealizationFailure
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Contacts.Validation
@@ -404,12 +405,15 @@ defmodule Cadence.Contacts.ContactLifecycle do
            metadata: %{scheduler_realized?: true}
          ) do
       {:ok, %RealizedContact{} = realized_contact} ->
+        _ = RealizationFailure.realized(scheduled_contact, reference_time)
         {:ok, realized_contact.realized_contact_id}
 
       {:error, :scheduled_contact_already_realized} ->
         :skip
 
+      # U45 (lead 11-17, A): never silent. Recorded on the scheduled contact for contact_start.
       {:error, reason} ->
+        _ = RealizationFailure.after_error(scheduled_contact, reason, reference_time)
         {:error, reconcile_error(:scheduled_contact_realization, scheduled_contact, reason)}
     end
   end
