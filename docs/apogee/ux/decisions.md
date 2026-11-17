@@ -487,6 +487,13 @@ want better gap reasons (acknowledgements are per submit), so a forced, meaningl
   "Resubmitted by Tomás R. · 11:20Z: <note>", or "Resubmitted unchanged" when it's empty.
 - **Reviewer view:** the header context includes `v2 · RESUBMITTED`, and a text-3 line shows the earlier round:
   "v1 sent back by Mira K. at 10:52Z: <reason>".
+- **The sheet's title names the act** (lead's finding approving the 11-18 plan, 11-17; it read "Submit the plan" for
+  every case). With unmet gaps the title stays `Accept 2 gaps · …`. Otherwise, matching the commit button without
+  its count:
+  - draft, not an admin: `Request approval`; sent back: `Submit the plan again`
+  - draft or sent back, admin (submitting approves and books): `Approve and book the plan`
+  - awaiting approval, admin: `Approve and book the plan`
+  - Re-plan's proposal: not an admin `Request approval for the proposal`; admin `Approve and apply the proposal`
 - `contact_plan_version_already_decided` should then only occur in a race (someone else decided first): "This
   version was already decided by <actor>. Reload to see it."
 
@@ -888,9 +895,16 @@ configuration failure P3. The amendments to fe-ops' drafts:
 | ingress_pipeline_failed | "Cadence couldn't start storing telemetry for this pass." | — |
 | uplink_session_failed | "Cadence couldn't start the uplink session for this pass." | — |
 | no_runtime_spec | "The mission's runtime has no active configuration, so passes can't start." | `Open Changes` |
-| transport_archived | "Its transport, INU S-band, was archived, so this pass can't start. Choose another route for this spacecraft; until then every try fails the same way." Without `transport_name`: "Its transport was archived, so…" (api 11-17; U82) | `Open routing` (the spacecraft's routing page) |
+| transport_archived | "This pass's transport, INU S-band, was archived after the pass was booked, so it can't start, and every try fails the same way. Book another pass for this spacecraft." Without `transport_name`: "This pass's transport was archived after…". Only this pass: later bookings take a live route (domain 11-17: the template is taken at booking, and the in-use check keeps routes and booked passes off an archived transport), so nothing is said about later passes. (api 11-17; U82) **Building (api):** this refusal comes before the pass exists, so today it raises no item; api is recording every realization refusal on the booked pass (lead 11-17), and the item anchors there. Other realization refusals read the `unknown` line. | `Book a pass` (Contacts, for this spacecraft) |
 | unknown | "Starting failed." | — |
 | (missing) | "No reason was recorded." | — |
+
+- **Failed before the pass was set up** (api, lead's (A), 11-17: `realized_contact_id` null, the item anchored on the
+  booked pass): titles, meta, retries and Mark as seen as above. `unknown` reads "Cadence couldn't set up this
+  pass." instead of "Starting failed." (it's known the failure came before the start; `failure_message` in Technical
+  details). Other keys use their row. Resolved (`started` at setup): "Set up at 03:12Z." (not "Started": the start
+  itself can still fail, and then the usual item appears). The resolved entry's `realized_contact_id` is what the
+  item was while open (api 11-17): null reads "Set up at…", a value "Started at…".
 
   There's no "Start now": Cadence already retries as soon as it can (domain), so `Open pass` is the only action.
   Domain sends any new key before it's used.
@@ -2527,8 +2541,8 @@ bookings) never offer archived items.
 - **Pass through an archived transport's pinned profile** (domain ae6ae335a: a pinned path version no longer
   resolves once its transport is archived). Today it reaches U45 as `unknown`, "Starting failed." It's rare: the
   in-use check blocks bookings, routes and open passes first. api adds `transport_archived` (11-17, after the 11-18
-  in-use restart); its words are in U45's table. Re-adding the transport doesn't help: it makes a new provider
-  profile, so only another route does.
+  in-use restart); its words are in U45's table. Re-adding the transport doesn't help (it makes a new provider
+  profile), and changing the route doesn't fix a pass already booked; another booking does.
 
 ### U83 · A transport's listener: own or shared (lead, 11-16; DECISIONS #87) (domain / api / fe-setup)
 A listen-mode downlink transport chooses whether its passes get their own listener or share one that routes each
