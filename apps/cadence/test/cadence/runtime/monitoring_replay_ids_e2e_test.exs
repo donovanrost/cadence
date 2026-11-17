@@ -28,7 +28,7 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   alias CCSDS.Core.SDUOctets
   alias CCSDS.SDLP.TM.Segmentation
 
-  # HEALTH.mode carries catalog limits; 50 is past red_high.
+  # HEALTH.mode and HEALTH.aux carry catalog limits; 50 is past red_high.
   @limited_yaml """
   packets:
     - name: HEALTH
@@ -37,6 +37,13 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
         - name: mode
           data_type: uint
           bit_offset: 0
+          bit_size: 8
+          limits:
+            yellow_high: 5
+            red_high: 20
+        - name: aux
+          data_type: uint
+          bit_offset: 8
           bit_size: 8
           limits:
             yellow_high: 5
@@ -79,8 +86,8 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
   end
 
   test "a replay after the crash window, as one batch or re-cut, finds the same alarm ids", c do
-    raise_frames = frames(mode: 50, sequence: 1)
-    clear_frames = frames(mode: 0, sequence: 2)
+    raise_frames = frames(mode: 50, aux: 0, sequence: 1)
+    clear_frames = frames(mode: 0, aux: 0, sequence: 2)
     clear_at = byte_size(raise_frames)
 
     log =
@@ -115,26 +122,76 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     refute log =~ "MM_REPLAY_ID_CONFLICT"
   end
 
+  # api-ops' wedge (review 11-17). A partition that starts EMPTY (its checkpoint missing, or a
+  # basis change) is seeded from the latest alarm states, which hold only NON-normal states and
+  # can be later than the frame the journal replays. F1 raises mode and aux; F2 clears aux. After
+  # an empty start the seed has mode critical and aux normal (the default), so replaying F1
+  # re-derives only aux's raise. Numbered by transition, aux would take mode's index 0 and trip
+  # MM_REPLAY_ID_CONFLICT on every retry (a wedged partition); numbered by evaluation, aux keeps
+  # its own index and finds its stored episode.
+  test "a replay that re-derives only some of a frame's transitions keeps each effect's id", c do
+    f1 = frames(mode: 50, aux: 50, sequence: 1)
+    f2 = frames(mode: 50, aux: 0, sequence: 2)
+
+    log =
+      capture_log(fn ->
+        assert transition?(ingest!(evidence(c, f1, 0)), :critical)
+        assert transition?(ingest!(evidence(c, f2, byte_size(f1))), :normal)
+        first = effect_ids(c)
+        assert length(first.episodes) == 2 and length(first.events) == 3
+
+        # Empty start: the semantic runtime rows gone, the latest alarm states (the seed) kept.
+        drop_semantic_rows!(c)
+        kill_partition!(c)
+
+        replay = ingest!(evidence(c, f1, 0))
+        assert [%{update_id: aux_update}] = transitions(replay)
+        assert point(replay, aux_update) == "HEALTH.aux"
+        assert effect_ids(c) == first
+      end)
+
+    refute log =~ "MM_REPLAY_ID_CONFLICT"
+  end
+
+  @semantic_tables [
+    "semantic_runtime_commits",
+    "semantic_runtime_heads",
+    "semantic_runtime_checkpoints"
+  ]
+
+  defp drop_semantic_rows!(c) do
+    for table <- Enum.reverse(@semantic_tables) do
+      Repo.query!("DELETE FROM #{table} WHERE mission_id = $1", [c.mission.mission_id])
+    end
+  end
+
+  defp transitions(%{semantic_result: %{monitoring_results: results}}),
+    do: Enum.filter(results, & &1.transition)
+
+  defp point(result, update_id) do
+    Enum.find_value(result.semantic_result.parameter_updates, fn update ->
+      update.update_id == update_id && update.qualified_name |> String.split("/") |> List.last()
+    end)
+    |> then(&("HEALTH." <> &1))
+  end
+
   # The window #99 covers: the alarm effects were written, the partition's monitoring state wasn't
   # kept. Drop the partition's semantic runtime rows and the latest alarm state (MonitoringSeed
   # restores monitoring from it at recovery), then kill the owner: it recovers from before the
   # input, so the replay re-derives the same transition and the writer meets the stored ids.
   defp crash_window!(c) do
-    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
-    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
-
-    for table <- [
-          "semantic_runtime_commits",
-          "semantic_runtime_heads",
-          "semantic_runtime_checkpoints"
-        ] do
-      Repo.delete_all(from(row in table, where: field(row, :mission_id) == ^c.mission.mission_id))
-    end
+    drop_semantic_rows!(c)
 
     Repo.delete_all(
       from(row in "semantic_latest_alarm_states", where: row.mission_id == ^c.mission.mission_id)
     )
 
+    kill_partition!(c)
+  end
+
+  defp kill_partition!(c) do
+    key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
+    {:ok, owner} = PartitionOwner.lookup(c.mission.mission_id, key)
     Process.exit(owner, :kill)
 
     assert_eventually(fn ->
@@ -198,8 +255,8 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
         do: {start, DateTime.add(~U[2026-11-17 01:00:00.000000Z], start, :millisecond)}
   end
 
-  defp frames(mode: mode, sequence: sequence) do
-    packet = <<0::3, 0::1, 0::1, 42::11, 3::2, sequence::14, 0::16, mode::8>>
+  defp frames(mode: mode, aux: aux, sequence: sequence) do
+    packet = <<0::3, 0::1, 0::1, 42::11, 3::2, sequence::14, 1::16, mode::8, aux::8>>
 
     sdu = %SDUOctets{
       profile: :tm,

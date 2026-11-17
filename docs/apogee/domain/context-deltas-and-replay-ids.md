@@ -70,7 +70,7 @@ the index's right edge; the other N-1 split interior pages 50/50 and leave them 
 ```
 
 All four fields are fixed-width base32hex (`0-9a-v`). The columns use C collation, so the id sorts
-like the numbers. That is **30 bytes**: today's ids are 39 (action requests), 30 (episodes) and 28
+like the numbers. That is **30 bytes** (as built: 31, a 3-digit index; see "As built"): today's ids are 39 (action requests), 30 (episodes) and 28
 (events).
 - `kind`: `mar` (managed action request), `aep` (alarm episode), `aev` (episode event).
 - `receipt µs`: the input frame's receipt time, in µs since 2020-01-01 (2^50 µs is about 35 years).
@@ -150,9 +150,22 @@ effects: the same assertion across a restart, with fire times.
 - **A derived update is keyed on its trigger**, never on the frame of the input whose metadata it
   copies (that can be older, its ids already taken). A timer-triggered algorithm uses the stream
   `timer:<algorithm>` and its fire time.
-- **The index is per input, across everything.** Effects are numbered per (stream, offset) in
-  deterministic order after the input is processed: all of a frame's packets and every capability
-  that answers them (two capabilities answering one frame get 0 and 1, not 0 and 0).
+- **The index is per input, and stable whatever recovery restored.** Action requests are numbered
+  per (stream, offset) in deterministic order after the input is processed, across all of a
+  frame's packets and every capability that answers them (two capabilities on one frame get 0 and
+  1, not 0 and 0). Alarm effects are numbered over the frame's monitoring EVALUATIONS (every
+  monitored update x policy, emitted whatever the state), and a transition takes its evaluation's
+  index. Not over the transitions: which of them a replay re-derives depends on the monitoring
+  state recovery restored. A partition that starts empty is seeded with only the NON-normal latest
+  states, so a replay can re-derive a subset, and numbering transitions would hand one subject
+  another's stored id and wedge the partition on MM_REPLAY_ID_CONFLICT (api-ops' review; the
+  two-subject end-to-end test reproduces it on transition numbering and passes on evaluation
+  numbering).
+- **The index is 3 base32hex digits (32,768 per input per kind)**, so ids are **31 bytes**. A
+  frame's evaluations are bounded by its bits: a 1,115-byte TM frame of 8-bit fields is ~1,100
+  updates, x 3 policies ~3,300; a 2,048-byte AOS frame ~6,100. Past 32,768 an effect keeps an
+  `Ids.new` id (no replay dedupe), logged as `MM_REPLAY_ID_INDEX_OVERFLOW` and counted as the
+  telemetry event `[:cadence, :replay_id, :index_overflow]`.
 - **Timers and initialization have their own allocated streams**, so they never share an ordinal
   by chance: a managed timer `timer:<capability>:<timer key>` at its fire time; a managed
   application's **initialization** `init:<activation>:<capability>` with offset = the binding set
@@ -168,15 +181,17 @@ effects: the same assertion across a restart, with fire times.
   observation time (not its source ref: a transition's id derives from its sample id, which
   includes the evidence id, and that changes when a replay batches the journal differently; not
   the event kind or payload either: an honest replay can decide a different kind because the
-  episode moved on, and the payload holds acknowledgement state); an action request's kind and
-  document. A mismatch is `MM_REPLAY_ID_CONFLICT`, an error that rolls the batch back.
+  episode moved on, and the payload holds acknowledgement state); an action request's kind, timer
+  key and delay (not its metadata, which is the capability's and could carry batch-dependent ids). A mismatch is `MM_REPLAY_ID_CONFLICT`, an error that rolls the batch back.
 - **The end-to-end test** (`monitoring_replay_ids_e2e_test.exs`): a live mission runtime with a
   catalog limit; a frame raises it, a later frame clears it. Then the crash window (the
   partition's semantic rows and the monitoring seed's latest alarm state dropped, the owner
   killed) and the journal replays the raise, as the same evidence and re-cut mid-frame:
   monitoring re-derives the raise and, with no open episode, would open a second one (what an
   `Ids.new` id did); the stored episode id stops it. It found the source-ref tripwire problem
-  above.
+  above. Two more: the two-subject wedge (an empty start, seeded, replays a frame where only one of
+  two subjects re-derives), and a managed application's request re-emitted after a restart and a
+  re-cut replay (one row, the same id).
 - **Known, not #99:** the transition and evaluation rows keep content ids over the sample id, so a
   replay that batches differently writes them again (new evidence id, new sample id). They are
   low-volume (written only on a transition) and covered by the identity-v2 audit below.

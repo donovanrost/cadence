@@ -128,15 +128,19 @@ defmodule Cadence.SemanticObservations do
     context = semantic_context(prepared)
     rules = Map.get(prepared, :alarm_rules, %{})
 
-    # Replay-safe effect keys (DECISIONS #99): numbered per input (journal frame or timer) in
-    # transition order, so a replay of the same input, however it was batched, gets the same ones.
-    keys =
-      transitions
-      |> ReplayId.number(
-        &effect_source(Map.fetch!(updates, &1.update_id)),
-        Map.get(prepared, :effect_ordinals, %{})
-      )
-      |> Enum.map(fn {_transition, key} -> key end)
+    # Replay-safe effect keys (DECISIONS #99): numbered per input (journal frame or timer) over ALL
+    # of its monitoring evaluations (every monitored update x policy, emitted whatever the state),
+    # not over its transitions. Which of them transition depends on the monitoring state recovery
+    # restored (the seed restores only non-normal states), so a replay can derive a subset; the
+    # evaluations' order depends only on the input, so each transition keeps its index.
+    ordinals = Map.get(prepared, :effect_ordinals, %{})
+
+    evaluation_keys =
+      result.monitoring_results
+      |> ReplayId.number(&effect_source(Map.fetch!(updates, &1.update_id)), ordinals)
+      |> Map.new(fn {evaluation, key} -> {{evaluation.update_id, evaluation.policy_id}, key} end)
+
+    keys = Enum.map(transitions, &Map.get(evaluation_keys, {&1.update_id, &1.policy_id}))
 
     transitions
     |> Enum.zip(keys)

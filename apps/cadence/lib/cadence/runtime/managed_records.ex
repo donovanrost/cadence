@@ -3,6 +3,7 @@ defmodule Cadence.Runtime.ManagedRecords do
 
   import Ecto.Query
 
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ReplayId
   alias Cadence.Repo
   alias Cadence.Runtime.{ManagedActionRequest, ManagedCapabilityRecord, ManagedTimerEvent}
@@ -102,8 +103,20 @@ defmodule Cadence.Runtime.ManagedRecords do
     end)
   end
 
-  # What a request derives from its input: the action and its document (not times or ids).
-  defp request_effect(row), do: %{action_kind: row.action_kind, document: row.request_document}
+  # What a request derives from its input: the action and the timer it names and sets. Not the
+  # rest of the document: metadata is the capability's, and could carry ids that change when a
+  # replay batches the journal differently (as a transition's sample id does).
+  defp request_effect(row) do
+    document = JsonDocument.unwrap_value(row.request_document) || %{}
+
+    %{
+      action_kind: row.action_kind,
+      timer_key: field(document, :timer_key),
+      delay_ms: field(document, :delay_ms)
+    }
+  end
+
+  defp field(document, key), do: Map.get(document, key, Map.get(document, Atom.to_string(key)))
 
   @spec add_timer_event_inserts(Multi.t(), [ManagedTimerEvent.t()]) :: Multi.t()
   def add_timer_event_inserts(%Multi{} = multi, events) when is_list(events) do

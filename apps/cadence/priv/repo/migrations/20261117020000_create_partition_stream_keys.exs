@@ -7,9 +7,10 @@ defmodule Cadence.Repo.Migrations.CreatePartitionStreamKeys do
   def change do
     create table(:partition_stream_keys, primary_key: false) do
       add(:ordinal, :bigserial, primary_key: true)
-      add(:mission_id, :string, null: false)
-      add(:partition_id, :string, null: false)
-      add(:stream_key, :string, null: false)
+      add(:mission_id, :text, null: false)
+      add(:partition_id, :text, null: false)
+      # Text: a timer or init key embeds a capability instance id (decom ids run ~240 chars).
+      add(:stream_key, :text, null: false)
       add(:inserted_at, :utc_datetime_usec, null: false, default: fragment("now()"))
     end
 

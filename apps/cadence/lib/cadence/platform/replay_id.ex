@@ -4,7 +4,7 @@ defmodule Cadence.Platform.ReplayId do
   context-deltas-and-replay-ids.md). An effect replayed after a crash gets the same id as the first
   time, so it is written insert-or-get instead of twice.
 
-      <kind>_<receipt µs, 10><stream ordinal, 6><offset, 8><index, 2>     e.g. aep_65ahf2ggn6000k3v0000a3f100
+      <kind>_<receipt µs, 10><stream ordinal, 6><offset, 8><index, 3>     e.g. aep_65ahf2ggn6000k3v0000a3f1000
 
   Every field is fixed-width base32hex (`0-9a-v`), so under C collation the ids sort like the
   numbers: time first, so inserts from every stream append at the index's right edge.
@@ -13,7 +13,9 @@ defmodule Cadence.Platform.ReplayId do
   - stream ordinal: allocated per (partition, journal stream), never hashed, so two streams can't
     share one (`partition_stream_keys`); timers and partition init have their own ordinals;
   - offset: the input frame's absolute journal offset (2^40 bytes per stream);
-  - index: the effect's position among that frame's effects of this kind in this partition (< 1,024).
+  - index: the effect's position among that input's effects of this kind in this partition
+    (< 32,768: a frame's monitoring evaluations, every monitored update x policy, fit; past it an
+    effect keeps an `Ids.new` id, counted as `[:cadence, :replay_id, :index_overflow]`).
   """
 
   require Logger
@@ -22,7 +24,8 @@ defmodule Cadence.Platform.ReplayId do
   @epoch_us DateTime.to_unix(~U[2020-01-01 00:00:00Z], :microsecond)
 
   @kinds %{managed_action_request: "mar", alarm_episode: "aep", alarm_event: "aev"}
-  @widths [receipt: 10, ordinal: 6, offset: 8, index: 2]
+  @widths [receipt: 10, ordinal: 6, offset: 8, index: 3]
+  @max_index 32 * 32 * 32
 
   @type kind :: :managed_action_request | :alarm_episode | :alarm_event
   @type key :: %{
@@ -61,15 +64,8 @@ defmodule Cadence.Platform.ReplayId do
           [stream, offset, receipt_us]
           when is_map_key(ordinals, stream) and is_integer(offset) and is_integer(receipt_us) ->
             index = Map.get(counters, {stream, offset}, 0)
-
-            key = %{
-              receipt: DateTime.from_unix!(receipt_us, :microsecond),
-              ordinal: Map.fetch!(ordinals, stream),
-              offset: offset,
-              index: index
-            }
-
-            {{item, key}, Map.put(counters, {stream, offset}, index + 1)}
+            counters = Map.put(counters, {stream, offset}, index + 1)
+            {{item, key(receipt_us, Map.fetch!(ordinals, stream), offset, index)}, counters}
 
           _no_source ->
             {{item, nil}, counters}
@@ -77,6 +73,33 @@ defmodule Cadence.Platform.ReplayId do
       end)
 
     numbered
+  end
+
+  # An input with more than @max_index effects of one kind can't number them all: those past it
+  # keep an Ids.new id (not replay-safe) with a warning, rather than crashing the partition.
+  defp key(receipt_us, ordinal, offset, index) when index < @max_index,
+    do: %{
+      receipt: DateTime.from_unix!(receipt_us, :microsecond),
+      ordinal: ordinal,
+      offset: offset,
+      index: index
+    }
+
+  defp key(_receipt_us, ordinal, offset, index) do
+    :telemetry.execute([:cadence, :replay_id, :index_overflow], %{count: 1}, %{
+      ordinal: ordinal,
+      offset: offset
+    })
+
+    if index == @max_index do
+      Logger.warning(
+        "MM_REPLAY_ID_INDEX_OVERFLOW: more than #{@max_index} effects for one input (ordinal " <>
+          "#{ordinal}, offset #{offset}); the rest keep non-replay-safe ids, each counted as " <>
+          "[:cadence, :replay_id, :index_overflow]"
+      )
+    end
+
+    nil
   end
 
   @doc "The stream keys of the sources among `sources` (nils skipped), once each."
@@ -120,10 +143,10 @@ defmodule Cadence.Platform.ReplayId do
              index: integer()
            }}
           | :error
-  def parse(<<prefix::binary-size(3), "_", body::binary-size(26)>>) do
+  def parse(<<prefix::binary-size(3), "_", body::binary-size(27)>>) do
     with {:ok, kind} <- kind(prefix),
          <<receipt::binary-size(10), ordinal::binary-size(6), offset::binary-size(8),
-           index::binary-size(2)>> <- body,
+           index::binary-size(3)>> <- body,
          {:ok, receipt} <- decode(receipt),
          {:ok, ordinal} <- decode(ordinal),
          {:ok, offset} <- decode(offset),
