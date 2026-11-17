@@ -888,6 +888,7 @@ configuration failure P3. The amendments to fe-ops' drafts:
 | ingress_pipeline_failed | "Cadence couldn't start storing telemetry for this pass." | — |
 | uplink_session_failed | "Cadence couldn't start the uplink session for this pass." | — |
 | no_runtime_spec | "The mission's runtime has no active configuration, so passes can't start." | `Open Changes` |
+| transport_archived | "Its transport, INU S-band, was archived, so this pass can't start. Choose another route for this spacecraft; until then every try fails the same way." Without `transport_name`: "Its transport was archived, so…" (api 11-17; U82) | `Open routing` (the spacecraft's routing page) |
 | unknown | "Starting failed." | — |
 | (missing) | "No reason was recorded." | — |
 
@@ -2525,9 +2526,9 @@ with an `ARCHIVED` tag (no status colour), the name at full contrast, and no act
 bookings) never offer archived items.
 - **Pass through an archived transport's pinned profile** (domain ae6ae335a: a pinned path version no longer
   resolves once its transport is archived). Today it reaches U45 as `unknown`, "Starting failed." It's rare: the
-  in-use check blocks bookings, routes and open passes first. If domain adds `transport_archived` (a follow-up, lead
-  to prioritise), U45's line is "Its transport, INU S-band, was archived, so this pass can't start. Choose another
-  route for this spacecraft."
+  in-use check blocks bookings, routes and open passes first. api adds `transport_archived` (11-17, after the 11-18
+  in-use restart); its words are in U45's table. Re-adding the transport doesn't help: it makes a new provider
+  profile, so only another route does.
 
 ### U83 · A transport's listener: own or shared (lead, 11-16; DECISIONS #87) (domain / api / fe-setup)
 A listen-mode downlink transport chooses whether its passes get their own listener or share one that routes each
@@ -2598,7 +2599,8 @@ Cadence for the mission's organization (today, domain).
   - one craft: "It affects EARENDIL-009, and may affect others."
   - two or more, all named: "It affects at least 2 spacecraft: EARENDIL-004 and EARENDIL-005."
   - some unnamed, or more than 3: "It affects at least 3 spacecraft, including EARENDIL-004 and EARENDIL-005." (up
-    to 3 names; never "1 other spacecraft, and may affect others")
+    to 3 names, however many are named: "…at least 3 spacecraft, including EARENDIL-004."; never "1 other
+    spacecraft, and may affect others"). A name never breaks at its hyphen when the line wraps.
   - one unnamed craft only: "It affects at least 1 spacecraft." None known: "It isn't known yet which spacecraft it
     affects."
   - `storage` (one pass) keeps the named title above; with several craft its line reads "…so alarms and current
@@ -2612,6 +2614,10 @@ Cadence for the mission's organization (today, domain).
     why line has no counts: "It's a fault in Cadence, not in this mission's setup or data. It stopped while
     starting up and won't start again until Cadence is fixed." Meta `STOPPED · SINCE 03:10Z` (no TRIES). The
     what-stopped and what-to-do lines are unchanged.
+    - By `stopped_while` (api, #99 R1, 11-17): `starting` as above; `applying`: "…It stopped while applying a
+      configuration change and won't start again until Cadence is fixed."; null: "…It stopped and won't start
+      again until Cadence is fixed." Since an apply that trips leaves the configuration unapplied, U38's runtime
+      item can now carry `stuck_processing_id` (tag `STUCK PROCESSING`) when that's its cause.
 - **What to do** (third line): "Tell the team that runs Cadence for you, and send them the details. Nothing in
   the console fixes this." No restart line (see above).
   - `Copy details` is a quiet button (it copies, it doesn't navigate): the item's Technical details as plain text
