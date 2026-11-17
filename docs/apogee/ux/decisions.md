@@ -2558,5 +2558,9 @@ schema labels), so fe-setup's KindEditor shows them as they are.
     by SCID → Own listener for each pass (only an inbound transport that listens can share one)". The same words in
     the change set's review.
   - Switching back before staging restores the field with `Own listener for each pass` chosen; the info line goes.
+  - Who renders it (fe-setup, 11-16): the console writes the stage summary. The review's field rows come from the
+    server's diff, so api adds the option labels for every select field (`before_label` / `after_label`, null when
+    there's none; the console then shows the raw value) and, for this case, a server-derived note in brackets after
+    the after value. Until then the review reads "Listener  shared → own", as the other select rows do; not a blocker.
 - **Not here:** the refusals a shared listener makes during a pass are U50's `listener_refusal` (and U58 for an own
   listener held by another pass). This field adds no new Now or record words.
