@@ -12,9 +12,14 @@ stay until the user revisits." The four empty-state links "don't replace the fea
 - So the canned questions **can't** go on the "gone by design" list; that's the user's call, not ux's. Everything
   else in D can be built now, so it's ready when the user decides.
 - This doesn't hold up `/ops/telemetry/explore`: it's only a redirect (D12).
+- **Update (user, via director, 11-16): L20 is settled.** The canned questions are replaced by the console's four
+  empty-state links and aren't rebuilt (legacy's question only opened Explore with a preset window and the mission's
+  first point). Real canned questions, if ever wanted, are a new feature for the future automation/procedures work.
+  `/ops/explore` is now gated only on D1, D2 and D12. L16 stays parked.
 
 ## "Gone by design": confirmations
-- **Canned questions:** not confirmed by ux (above). The four links stay as an interim, as shipped.
+- **Canned questions: gone by design** (user, 11-16; see the update above). The four empty-state links are the
+  replacement, as shipped, no longer an interim.
 - **Row limit and order: confirmed** for the bucketed plot. Where raw samples show (Investigate T3, and D6 later),
   the order is fixed newest first and the count is the range's, so neither control comes back.
 - **"Refreshed result could not be confirmed": confirmed, with one condition.** Live invalidation replaces it, but a
@@ -93,4 +98,4 @@ must not draw an empty plot. T2 reads "Pick a spacecraft to plot ADCS rate X." w
 ## Order
 Agreed, with the gate added: D11 and the D12 frontend fix now (frontend, S) → D2 + D12 redirect (api) → D1 with A7c
 → D6–D10 as the reads grow. Then the director takes **both parked rows (L16, L20) to the user** before `/ops/explore`
-or `/ops/data-operations` can be deleted.
+or `/ops/data-operations` can be deleted. (L20 was decided 11-16; L16 is still parked.)
