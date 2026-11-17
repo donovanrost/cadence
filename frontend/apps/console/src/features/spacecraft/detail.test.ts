@@ -23,7 +23,7 @@ const body = (extra: Record<string, unknown> = {}) => ({
       role: "primary",
       enabled: true,
       active: true,
-      transport: { id: "t-1", name: "Svalbard X-band", version: 2 },
+      transport: { id: "t-1", name: "Svalbard X-band" },
     },
   ],
   readiness: {

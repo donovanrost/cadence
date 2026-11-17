@@ -37,7 +37,8 @@ const rule = object({
   role: oneOf(["primary", "candidate", "contributing"]),
   enabled: boolean,
   active: boolean,
-  transport: object({ id: token, name: string, version: integer }),
+  // No version: a route names the transport and the current version resolves at apply (DECISIONS #104).
+  transport: object({ id: token, name: string }),
 });
 /** Readiness checks (Reads.SpacecraftDetail); a new one reads as its key. */
 const readinessKeys = ["identity", "profile", "routing", "telemetry"] as const;

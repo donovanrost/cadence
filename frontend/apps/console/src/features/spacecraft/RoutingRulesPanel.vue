@@ -45,10 +45,7 @@ const columns: readonly ApColumn[] = [
       <template #cell-role="{ row }"
         ><span class="capitalize">{{ row.role }}</span></template
       >
-      <template #cell-transport="{ row }">
-        {{ row.transport.name
-        }}<span class="font-mono text-xs text-text-4"> v{{ row.transport.version }}</span>
-      </template>
+      <template #cell-transport="{ row }">{{ row.transport.name }}</template>
       <template #cell-state="{ row }">
         <span :class="row.enabled ? 'text-text-3' : 'text-caution-text'">{{
           row.enabled ? "Enabled" : "Disabled"
