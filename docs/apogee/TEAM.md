@@ -97,6 +97,19 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
   the director's OK BEFORE it runs. "Say if you'd rather…" is only for calls that are safe to have already
   happened.
 
+## Running the restart chain (director, 2026-11-17)
+
+On 11-17 an approver's session died mid-turn at 09:17Z, right after qa's hand-over, and the chain (step 4
+part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold with no end time.
+
+1. **Start AND end.** The chain owner (lead) checks each step's expected END as well as its start, and pings
+   within 15 min of either being missed. An idle pane ending in an API error is a dead turn, not work in progress.
+2. **Backup approver.** Every approval step in a chain names a backup approver, a different agent from the
+   stager. If the named approver hasn't acted within 15 min of the hand-off, the owner switches to the backup.
+   An approval never sits waiting on one session.
+3. **Holds end.** Every heavy-job hold has an end time when it's set. If the step it protects hasn't started
+   by then, the hold lapses and the owner re-sets it explicitly, with a new end time.
+
 ## Git
 
 - Commit small and often on `ui/apogee-spa`. Never push, rebase, reset, or stash. The director handles PRs.
