@@ -18,14 +18,29 @@ const submitReader = d.object({
 });
 export type SubmitResult = Decoded<typeof submitReader>;
 
+/**
+ * U76: where a Submit's note goes. Approving a pending plan records it on the decision
+ * (`decision_note`); any other submit records it with the submission (`note`). Empty: none.
+ */
+export function noteFor(
+  plan: Readonly<{ state: string }>,
+  text: string | undefined,
+): Readonly<{ key: "note" | "decision_note"; text: string }> | undefined {
+  if (!text) return undefined;
+  return { key: plan.state === "pending_approval" ? "decision_note" : "note", text };
+}
+
 /** S5. Member → pending_approval; org admin → approve + execute off the request (202). */
 export function submitPlan(
   missionId: MissionId,
   plan: Readonly<{ id: string; version: number }>,
   operationId: string,
   acknowledgements: readonly Acknowledgement[],
-  /** U36: one line for the reviewer when resubmitting (≤ 500). */
-  note?: string,
+  /**
+   * U76: the optional note for the record (≤ 2,000). A submit sends it as `note`; an org admin
+   * approving a pending plan sends it as `decision_note`, recorded on the approval (api).
+   */
+  note?: Readonly<{ key: "note" | "decision_note"; text: string }>,
 ): Promise<ApiResult<SubmitResult>> {
   return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/submit`, submitReader, {
     method: "POST",
@@ -33,7 +48,7 @@ export function submitPlan(
       expected_version: plan.version,
       operation_id: operationId,
       ...(acknowledgements.length > 0 ? { acknowledgements } : {}),
-      ...(note ? { note } : {}),
+      ...(note ? { [note.key]: note.text } : {}),
     },
   });
 }

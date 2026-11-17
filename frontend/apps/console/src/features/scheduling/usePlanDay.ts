@@ -17,6 +17,7 @@ import {
   type PlanningSetup,
   rejectPlan,
   startDraft,
+  noteFor,
   submitPlan,
   type Acknowledgement,
   type PlanDetail,
@@ -181,7 +182,7 @@ export function usePlanDay(
         plan,
         crypto.randomUUID(),
         acknowledgements,
-        note,
+        noteFor(plan, note),
       );
       refresh();
       return result;

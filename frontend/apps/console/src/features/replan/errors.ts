@@ -1,4 +1,7 @@
-import { codeOf, type ApiError } from "@/api";
+import { codeOf, decoders as d, detailsOf, type ApiError } from "@/api";
+import { noneLeftLine } from "./windowMeta.ts";
+
+const attemptLimit = d.object({ used: d.integer, max: d.integer });
 import { planErrorText } from "@/features/scheduling/index.ts";
 
 /** K2's known rejections in words (S8 / S5 / CP), falling back to the server's message. */
@@ -13,6 +16,13 @@ export function replanErrorText(error: ApiError): string {
       return "A contact rule this plan depends on isn't active any more. Check Setup › Contact planning, then try again.";
     case "fleet_repair_horizon_exceeded":
       return "That re-plan window is longer than the policy's repair window. Re-plan a shorter span around the lost bookings, or raise the repair window in Setup › Contact planning › Policy.";
+    case "fleet_repair_attempt_limit_exceeded": {
+      // U76: the same line as the header's, from the refusal's own counts when it carries them.
+      const a = detailsOf(error, attemptLimit);
+      return a ? noneLeftLine(a) : "No re-plan attempts left. The planning policy sets the limit.";
+    }
+    case "fleet_repair_horizon_invalid":
+      return "That re-plan window can't be used. Propose again around the lost bookings.";
     case "plan_superseded":
       return "Nothing was booked: the rules behind this proposal changed since it was made. Propose again.";
     case "inputs_changed":

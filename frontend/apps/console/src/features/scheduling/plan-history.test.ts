@@ -30,6 +30,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   repair_of: null,
   superseded_by: null,
   latest_version: undefined,
+  repair: undefined,
   ...over,
 });
 

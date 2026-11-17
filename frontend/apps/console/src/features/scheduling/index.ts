@@ -27,6 +27,7 @@ export {
   stationCode,
   stationKey,
   stationName,
+  noteFor,
   submitPlan,
   type Acknowledgement,
   type Availability,
@@ -40,6 +41,7 @@ export {
 export { contactsShortText, coverage, gapGroups, spacecraftNotCovered } from "./coverage.ts";
 export { dayLabel, useSpacecraftNames, type SpacecraftName } from "./names.ts";
 export { planErrorText } from "./errors.ts";
+export type { RepairInfo } from "./repair-info.ts";
 export { planHeaderTail, planPrimary, type PlanPrimary } from "./plan-primary.ts";
 export type { PlanView } from "./plan-state.ts";
 export { default as DraftGantt } from "./DraftGantt.vue";
