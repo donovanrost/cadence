@@ -4,7 +4,7 @@ defmodule Cadence.Activations.ApprovalAdmission do
   alias Cadence.Management.Activations
 
   def lock_and_admit(%{activation_request_id: id} = attrs) when is_binary(id) do
-    ActivationPolicy.with_lock(attrs.organization_id, fn ->
+    ActivationPolicy.with_stable_policy(attrs.organization_id, fn ->
       with {:ok, approved} <- Activations.fetch_approved(id),
            true <- approved.organization_id == attrs.organization_id,
            true <- approved.mission_id == attrs.mission_id,

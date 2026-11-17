@@ -27,17 +27,37 @@ defmodule Cadence.Platform.ScopedSettings do
   end
 
   @doc """
-  Takes the section lock inside the caller's transaction, held to its end. For the activation
-  policy section, the order against other locks is `Cadence.Governance.ActivationLocks`'.
+  Runs `operation` in a transaction holding the section lock SHARED: readers that need the section
+  to stay stable don't block each other, while a write (`with_lock/3`, `save`) waits for them and,
+  once queued, holds back new readers. The activation policy's order against other locks is
+  `Cadence.Governance.ActivationLocks`'.
   """
-  @spec section_lock(binary(), binary()) :: :ok
-  def section_lock(organization_id, section_id) do
+  def with_shared_lock(organization_id, section_id, operation) do
+    case Repo.transaction(fn ->
+           :ok = section_lock(organization_id, section_id, :shared)
+           rollback_error(operation.())
+         end) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Takes the section lock inside the caller's transaction, held to its end: `:exclusive` for a
+  write, `:shared` for a reader that needs the section stable. Never take it shared and then
+  exclusive in one transaction: two such upgraders deadlock.
+  """
+  @spec section_lock(binary(), binary(), :exclusive | :shared) :: :ok
+  def section_lock(organization_id, section_id, mode \\ :exclusive) do
     <<key::signed-64, _::binary>> =
       :crypto.hash(:sha256, :erlang.term_to_binary({__MODULE__, organization_id, section_id}))
 
-    SQL.query!(Repo, "SELECT pg_advisory_xact_lock($1::bigint)", [key])
+    SQL.query!(Repo, lock_sql(mode), [key])
     :ok
   end
+
+  defp lock_sql(:exclusive), do: "SELECT pg_advisory_xact_lock($1::bigint)"
+  defp lock_sql(:shared), do: "SELECT pg_advisory_xact_lock_shared($1::bigint)"
 
   defp rollback_error({:error, reason}), do: Repo.rollback(reason)
   defp rollback_error(result), do: result

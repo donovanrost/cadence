@@ -356,7 +356,7 @@ defmodule Cadence.Management.Activations do
   defp decided_at(false, requested_at), do: requested_at
 
   defp transact_decision(scope, request_id, decision, actor, reason, decided_at) do
-    ActivationPolicy.with_lock(scope.organization_id, fn ->
+    ActivationPolicy.with_stable_policy(scope.organization_id, fn ->
       {:ok, persist_decision(scope, request_id, decision, actor, reason, decided_at)}
     end)
   end

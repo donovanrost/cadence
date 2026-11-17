@@ -15,9 +15,10 @@ defmodule Cadence.Governance.ActivationLockOrderTest do
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
-  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Governance.{ActivationLocks, ActivationPolicy}
   alias Cadence.Management.Activations
   alias Cadence.Platform.ScopedSettings
+  alias Ecto.Adapters.SQL.Sandbox
 
   @rank %{policy: 1, generation: 2, configuration: 3}
 
@@ -86,9 +87,116 @@ defmodule Cadence.Governance.ActivationLockOrderTest do
     assert_one_order(locks, [:policy, :generation, :configuration])
   end
 
-  # Each lock's first acquisition, in order; a later one may re-enter (same transaction).
+  test "a spacecraft review takes the configuration lock and never the policy or generation lock",
+       c do
+    set_policy(c.scope, c.mission.mission_id, "independent")
+    save(c.scope, c.mission, c.craft, c.catalog, [42])
+
+    {result, locks} = locks_taken(c, fn -> review(c.scope, c.mission, c.craft) end)
+
+    assert {:ok, %{state: :approval_pending}} = result
+    kinds = locks |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    assert kinds == [:configuration]
+  end
+
+  # The policy lock is shared by every activation path: two of them, in any of an organization's
+  # missions, hold it at once. A policy save (exclusive) waits for them, and once it's queued a
+  # reader that comes later waits behind it, so a save can't starve. Locks only: no data, so each
+  # connection is independent (outside the sandbox) and nothing needs cleaning up.
+  test "readers share the policy lock; a policy save waits for them and holds back later readers" do
+    org = "org-policy-share-#{System.unique_integer([:positive])}"
+    parent = self()
+
+    first = hold_policy(org, parent, :first)
+    assert_receive {:held, :first}, 2_000
+    second = hold_policy(org, parent, :second)
+    assert_receive {:held, :second}, 2_000
+
+    writer =
+      independent(fn ->
+        send(parent, {:writer, backend_pid()})
+
+        ScopedSettings.with_lock(org, ActivationPolicy.section_id(), fn ->
+          send(parent, :written)
+          :ok
+        end)
+      end)
+
+    assert_receive {:writer, writer_pid}, 2_000
+    assert waiting?(writer_pid, 100)
+    refute_received :written
+
+    late = hold_policy(org, parent, :late)
+    refute_receive {:held, :late}, 300
+
+    for reader <- [first, second], do: send(reader.pid, :release)
+    for reader <- [first, second], do: assert(:ok = Task.await(reader))
+    assert_receive :written, 2_000
+    assert_receive {:held, :late}, 2_000
+    send(late.pid, :release)
+    assert :ok = Task.await(late)
+    assert :ok = Task.await(writer)
+  end
+
+  defp hold_policy(org, parent, name) do
+    independent(fn ->
+      {:ok, :ok} =
+        Repo.transaction(fn ->
+          :ok = ActivationLocks.policy(org)
+          send(parent, {:held, name})
+
+          receive do
+            :release -> :ok
+          after
+            5_000 -> raise "#{name} was not released"
+          end
+        end)
+
+      :ok
+    end)
+  end
+
+  defp independent(operation) do
+    Task.async(fn ->
+      :ok = Sandbox.checkout(Repo, sandbox: false)
+
+      try do
+        operation.()
+      after
+        Sandbox.checkin(Repo)
+      end
+    end)
+  end
+
+  defp backend_pid do
+    %{rows: [[pid]]} = Repo.query!("SELECT pg_backend_pid()")
+    pid
+  end
+
+  defp waiting?(_pid, 0), do: false
+
+  defp waiting?(pid, attempts) do
+    %{rows: [[count]]} =
+      Repo.query!(
+        "SELECT count(*) FROM pg_locks WHERE pid = $1 AND locktype = 'advisory' AND NOT granted",
+        [pid]
+      )
+
+    if count > 0 do
+      true
+    else
+      Process.sleep(20)
+      waiting?(pid, attempts - 1)
+    end
+  end
+
+  # Each lock's first acquisition, in order; a later one may re-enter (same transaction). The
+  # policy lock is always taken SHARED by these paths: only a policy save takes it exclusive.
   defp assert_one_order(locks, expected_present) do
-    first = Enum.uniq(locks)
+    first = locks |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+
+    for {:policy, mode} <- locks,
+        do: assert(mode == :shared, "the policy lock taken #{mode}, not shared")
 
     for lock <- expected_present,
         do: assert(lock in first, "expected the #{lock} lock among #{inspect(first)}")
@@ -123,12 +231,14 @@ defmodule Cadence.Governance.ActivationLockOrderTest do
     if self() == config.pid and query =~ "pg_advisory_xact_lock" do
       case lock_kind(query, params, config) do
         nil -> :ok
-        kind -> send(config.pid, {:activation_lock, kind})
+        kind -> send(config.pid, {:activation_lock, kind, mode(query)})
       end
     end
   end
 
   def capture_lock(_event, _measurements, _metadata, _config), do: :ok
+
+  defp mode(query), do: if(query =~ "pg_advisory_xact_lock_shared", do: :shared, else: :exclusive)
 
   defp lock_kind(query, [mission_id], %{mission_id: mission_id}) when is_binary(mission_id) do
     if query =~ "hashtext", do: :generation
@@ -139,7 +249,7 @@ defmodule Cadence.Governance.ActivationLockOrderTest do
 
   defp drain(acc) do
     receive do
-      {:activation_lock, kind} -> drain([kind | acc])
+      {:activation_lock, kind, mode} -> drain([{kind, mode} | acc])
     after
       0 -> Enum.reverse(acc)
     end

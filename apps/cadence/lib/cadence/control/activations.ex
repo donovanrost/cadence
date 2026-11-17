@@ -9,22 +9,18 @@ defmodule Cadence.Control.Activations do
 
   alias Cadence.Activations
   alias Cadence.Activations.BindingSetActivation
-  alias Cadence.Activations.SpacecraftConfiguration, as: ConfigurationActivation
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow, ExecutionLock}
+  alias Cadence.Control.Activations.{Approval, Preflight}
   alias Cadence.Control.Activations.Resume
   alias Cadence.Control.Activations.Review
-  alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Governance
-  alias Cadence.Governance.ActivationPolicy
-  alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.ApprovedActivation
-  alias Cadence.MissionModels
   alias Cadence.Repo
   alias Cadence.Runtime.MissionRuntimeSpec
 
@@ -73,53 +69,13 @@ defmodule Cadence.Control.Activations do
   def review(%Scope{} = scope, mission_id, input), do: Review.decide(scope, mission_id, input)
 
   @doc """
-  Approves `request_id` only if its apply could run (`preflight/2`); otherwise nothing is recorded
-  and the request stays pending. Every approve path goes through here (director 11-17). The
-  decision's own checks (`ManagementActivations.decidable/3`: pending, authorized, current
-  policy, a distinct approver) run first, so their refusals keep their precedence.
+  Approves `request_id` only if its apply could run; otherwise nothing is recorded and the request
+  stays pending. Every approve path goes through here (director 11-17): `Cadence.Control.Activations.Approval`.
   """
   @spec approve(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, term(), term(), term()} | {:error, term()}
-  def approve(%Scope{} = scope, request_id, reason, opts \\ []) do
-    # Under the policy lock (the decision's own first lock), so the order is policy -> configuration
-    # (the preflight's admission) -> request row, as execute's: no inversion with a concurrent apply.
-    # Both advisory locks are held to the end of this transaction, and the request's model
-    # revisions are held FOR SHARE, so what the preflight read can't change before the record.
-    ActivationPolicy.with_lock(scope.organization_id, fn ->
-      with :ok <- ManagementActivations.decidable(scope, request_id, :approved),
-           {:ok, request} <- ManagementActivations.fetch(scope, request_id),
-           :ok <-
-             MissionModels.share_lock_revisions(
-               request.organization_id,
-               request.mission_id,
-               model_revision_ids(request)
-             ),
-           :ok <- preflight(request, opts) do
-        ManagementActivations.approve(scope, request_id, reason, Keyword.delete(opts, :checks))
-      end
-    end)
-  end
-
-  defp model_revision_ids(%{metadata: metadata}) do
-    from_fleet =
-      if FleetSnapshot.fleet?(metadata) do
-        case FleetSnapshot.entries(metadata) do
-          {:ok, entries} ->
-            Enum.map(entries, fn {_id, entry} ->
-              get_in(entry, ["mission_model", "revision_id"])
-            end)
-
-          _unreadable ->
-            []
-        end
-      else
-        []
-      end
-
-    [get_in(metadata, ["mission_model", "revision_id"]) | from_fleet]
-    |> Enum.filter(&is_binary/1)
-    |> Enum.uniq()
-  end
+  def approve(%Scope{} = scope, request_id, reason, opts \\ []),
+    do: Approval.approve(scope, request_id, reason, opts)
 
   @spec approve_and_execute(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, ActivationExecution.t()} | {:error, term()}
@@ -186,7 +142,11 @@ defmodule Cadence.Control.Activations do
                approved_activation.binding_set_version
              ),
            :ok <-
-             deterministic_checks(approved_activation, binding_set, [executing?: true] ++ opts),
+             Preflight.run_checks(
+               approved_activation,
+               binding_set,
+               [executing?: true] ++ opts
+             ),
            {:ok, %BindingSetActivation{} = activation} <-
              execute_activation(
                approved_activation.organization_id,
@@ -305,107 +265,12 @@ defmodule Cadence.Control.Activations do
   defp error_code({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
   defp error_code(_reason), do: nil
 
-  @doc """
-  Whether an approval of `request` could apply: the deterministic checks an apply runs before it
-  changes anything (the approved content, the mission-model gate, the policy, a spacecraft review's
-  freshness), run BEFORE a decision is recorded (director 11-17). An approval of a request that
-  can't apply would record 'approved' for something that never ran. Every approve path calls this
-  before deciding; execute runs the SAME list (`deterministic_checks/3`), so the two can't drift.
-  Only transient failures (the runtime apply, a lost connection) are left for after the decision,
-  where Retry apply handles them. `opts[:checks]` replaces the list (tests).
-
-  It runs OUTSIDE the decision's lock (the configuration admission takes the configuration lock,
-  which the host decide takes before the request row), so a change in the small window between
-  the preflight and the record (a model un-approved just then) still records 'approved' and fails
-  at execute, as before this check. For a reviewed-spacecraft request the admission also locks
-  each reviewed craft briefly, so a large review's approval can contend with a concurrent
-  change-set apply.
-  """
+  @doc "Whether an approval of `request` could apply: `Cadence.Control.Activations.Preflight.run/2`."
   @spec preflight(map(), keyword()) :: :ok | {:error, term()}
-  def preflight(request, opts \\ []) do
-    with {:ok, %BindingSet{} = binding_set} <-
-           Governance.fetch_binding_set(
-             request.organization_id,
-             request.mission_id,
-             request.binding_set_id,
-             request.binding_set_version
-           ) do
-      deterministic_checks(request, binding_set, opts)
-    end
-  end
+  def preflight(request, opts \\ []), do: Preflight.run(request, opts)
 
-  @doc "The deterministic checks, in order: what both an apply and an approval's preflight run."
-  def deterministic_check_list,
-    do: [
-      &exact_approved_content/2,
-      &model_gate/2,
-      &__MODULE__.policy_current/2,
-      &__MODULE__.configuration_current/2
-    ]
-
-  # The policy and the configuration admission: an apply runs them inside the activation's own
-  # transaction, under its locks and only for a not-yet-recorded activation (Activations), so
-  # execute's pre-check skips them; the approval preflight runs the whole list.
-  @admitted_in_transaction [&__MODULE__.policy_current/2, &__MODULE__.configuration_current/2]
-
-  defp deterministic_checks(activation, binding_set, opts) do
-    opts
-    |> Keyword.get(:checks, deterministic_check_list())
-    |> Enum.reject(&(Keyword.get(opts, :executing?, false) and &1 in @admitted_in_transaction))
-    |> Enum.reduce_while(:ok, fn check, :ok ->
-      case check.(activation, binding_set) do
-        :ok -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-  end
-
-  defp model_gate(activation, binding_set),
-    do:
-      MissionModelPromotion.validate_activation_metadata(
-        activation.organization_id,
-        activation.mission_id,
-        binding_set,
-        activation.metadata
-      )
-
-  @doc false
-  def policy_current(activation, _binding_set),
-    do:
-      ActivationPolicy.validate(
-        activation.organization_id,
-        activation.mission_id,
-        activation.policy_document
-      )
-
-  # A spacecraft review or change-set fleet still matches what's active (read-only, under the
-  # configuration lock; the activation's own transaction runs it again).
-  @doc false
-  def configuration_current(activation, _binding_set) do
-    activation
-    |> Map.take([
-      :organization_id,
-      :mission_id,
-      :binding_set_id,
-      :binding_set_version,
-      :binding_set_content_sha256,
-      :metadata,
-      :activation_request_id
-    ])
-    |> ConfigurationActivation.admit()
-    |> case do
-      {:ok, _admitted} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp exact_approved_content(approved_activation, binding_set) do
-    if BindingSet.content_sha256(binding_set) == approved_activation.binding_set_content_sha256 do
-      :ok
-    else
-      {:error, :approved_activation_content_mismatch}
-    end
-  end
+  @doc "The deterministic checks both an apply and an approval run: `Cadence.Control.Activations.Preflight.checks/0`."
+  def deterministic_check_list, do: Preflight.checks()
 
   defp executor_actor(opts) do
     Keyword.get(opts, :executor_actor_document, %{

@@ -11,9 +11,13 @@ defmodule Cadence.Governance.ActivationPolicy do
   def load(organization_id, mission_id),
     do: ScopedSettings.load(organization_id, mission_id, @section, default())
 
-  @doc "The policy lock (first in `Cadence.Governance.ActivationLocks`' order) around `operation`."
-  def with_lock(organization_id, operation),
-    do: ScopedSettings.with_lock(organization_id, @section, operation)
+  @doc """
+  Runs `operation` with the policy held STABLE: the policy lock taken shared (first in
+  `Cadence.Governance.ActivationLocks`' order). Approvals, decisions and applies don't block each
+  other on it; a policy save (`save/4`, exclusive) waits for them.
+  """
+  def with_stable_policy(organization_id, operation),
+    do: ScopedSettings.with_shared_lock(organization_id, @section, operation)
 
   def settings_snapshot(organization_id, nil) do
     missions = Missions.settings_overview(organization_id)
