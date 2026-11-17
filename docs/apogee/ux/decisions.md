@@ -2528,3 +2528,27 @@ bookings) never offer archived items.
   in-use check blocks bookings, routes and open passes first. If domain adds `transport_archived` (a follow-up, lead
   to prioritise), U45's line is "Its transport, INU S-band, was archived, so this pass can't start. Choose another
   route for this spacecraft."
+
+### U83 · A transport's listener: own or shared (lead, 11-16; DECISIONS #87) (domain / api / fe-setup)
+A listen-mode downlink transport chooses whether its passes get their own listener or share one that routes each
+connection by its first frame's SCID (#87). The words go on the transport kind's field definition (the server's
+schema labels), so fe-setup's KindEditor shows them as they are.
+
+- **Where:** the TCP Capability group, right after `TCP Port`.
+- **Shown only** when `TCP Mode` is `TCP server (listen)` AND `Direction Capability` is `Inbound`. Otherwise it's
+  hidden, not disabled. A value hidden by a change to either field isn't sent; the transport keeps the default.
+- **Label:** `Listener`
+- **Options** (select, in this order):
+  - `Own listener for each pass` (`own`)
+  - `Shared, routed by SCID` (`shared`)
+- **Help** (the field's description): "Own: each pass opens this port itself, so passes that overlap on it can't
+  all connect. Shared: passes that overlap share one listener, and Cadence sends each connection to its pass by the
+  SCID in its first frame. A connection it can't match is refused."
+- **Refusal** (the field's error, when `listener` is set on a transport it doesn't apply to, e.g. through the API
+  or a stale form):
+  - Not listening (`connect`): "Only a transport that listens (TCP server) can choose its listener."
+  - Not a downlink (`outbound` or `bidirectional`): "Only an inbound (downlink) transport can choose its listener."
+  - Both at once: the first line only.
+- **Change summary and diff:** the option words, e.g. "Listener: Own listener for each pass → Shared, routed by SCID".
+- **Not here:** the refusals a shared listener makes during a pass are U50's `listener_refusal` (and U58 for an own
+  listener held by another pass). This field adds no new Now or record words.
