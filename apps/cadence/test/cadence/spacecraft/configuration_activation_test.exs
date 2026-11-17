@@ -6,8 +6,8 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Applications.TelemetryDecom.ActionProvider, as: DecomActions
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations, as: ControlActivations
-  alias Cadence.Control.SpacecraftConfiguration
   alias Cadence.Control.ModelApprovalGate
+  alias Cadence.Control.SpacecraftConfiguration
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
