@@ -268,7 +268,9 @@ defmodule Cadence.Runtime.PartitionOwner do
     persist_runtime_records? = Keyword.get(opts, :persist_runtime_records?, true)
 
     persistence_policy =
-      Keyword.get_lazy(opts, :persistence_policy, &Persistence.configured_policy/0)
+      opts
+      |> Keyword.get_lazy(:persistence_policy, &Persistence.configured_policy/0)
+      |> Map.put(:runtime_writer, Keyword.get(opts, :runtime_writer, Persistence))
 
     clock_mode = Keyword.get(opts, :clock_mode, :live)
 
@@ -305,7 +307,11 @@ defmodule Cadence.Runtime.PartitionOwner do
            ),
          semantic_timers <-
            build_semantic_timers(active_activation, timer_service, semantic_timer_cursors) do
-      case maybe_persist_runtime_records(persist_runtime_records?, runtime_records) do
+      case maybe_persist_runtime_records(
+             persist_runtime_records?,
+             runtime_records,
+             persistence_policy
+           ) do
         {:ok, pending_runtime_records} ->
           {:ok,
            %{
@@ -481,7 +487,8 @@ defmodule Cadence.Runtime.PartitionOwner do
                        capability_records: [],
                        action_requests: [],
                        timer_events: previous_timer_events
-                     })
+                     }),
+                     state.persistence_policy
                    ) do
               _ = TimerService.cancel_all(state.timer_service)
               cancel_semantic_timers(state.semantic_timers)
@@ -571,7 +578,8 @@ defmodule Cadence.Runtime.PartitionOwner do
              fn ->
                maybe_persist_runtime_records(
                  next_state.persist_runtime_records?,
-                 all_runtime_records
+                 all_runtime_records,
+                 next_state.persistence_policy
                )
              end
            ) do
@@ -714,7 +722,7 @@ defmodule Cadence.Runtime.PartitionOwner do
       with {:ok, effect_ordinals} <-
              result_effect_ordinals(activation.mission_id, partition_key, entry.result),
            :ok <-
-             Persistence.persist_semantic_timer_result(
+             runtime_writer(persistence_policy).persist_semantic_timer_result(
                persistence_policy,
                activation,
                entry.result,
@@ -990,7 +998,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     with {:ok, effect_ordinals} <-
            result_effect_ordinals(state.active_activation.mission_id, state.partition_key, result),
          :ok <-
-           Persistence.persist_semantic_timer_result(
+           runtime_writer(state.persistence_policy).persist_semantic_timer_result(
              state.persistence_policy,
              state.active_activation,
              result,
@@ -1070,7 +1078,11 @@ defmodule Cadence.Runtime.PartitionOwner do
     all_runtime_records =
       merge_runtime_records(next_state.pending_runtime_records, runtime_records)
 
-    case maybe_persist_runtime_records(next_state.persist_runtime_records?, all_runtime_records) do
+    case maybe_persist_runtime_records(
+           next_state.persist_runtime_records?,
+           all_runtime_records,
+           next_state.persistence_policy
+         ) do
       {:ok, pending_runtime_records} ->
         {:noreply, %{next_state | pending_runtime_records: pending_runtime_records}}
 
@@ -1496,37 +1508,47 @@ defmodule Cadence.Runtime.PartitionOwner do
     )
   end
 
-  defp persist_runtime_records(%{
-         capability_records: capability_records,
-         action_requests: action_requests,
-         timer_events: timer_events
-       })
+  defp persist_runtime_records(
+         %{
+           capability_records: capability_records,
+           action_requests: action_requests,
+           timer_events: timer_events
+         },
+         _policy
+       )
        when capability_records == [] and action_requests == [] and timer_events == [] do
     :ok
   end
 
-  defp persist_runtime_records(%{
-         capability_records: capability_records,
-         action_requests: action_requests,
-         timer_events: timer_events
-       }) do
-    Persistence.persist_managed_runtime_records(
+  defp persist_runtime_records(
+         %{
+           capability_records: capability_records,
+           action_requests: action_requests,
+           timer_events: timer_events
+         },
+         policy
+       ) do
+    runtime_writer(policy).persist_managed_runtime_records(
       capability_records,
       action_requests,
       timer_events
     )
   end
 
-  defp maybe_persist_runtime_records(true, runtime_records) do
+  defp maybe_persist_runtime_records(true, runtime_records, policy) do
     with {:ok, runtime_records} <- EffectIds.assign(runtime_records),
-         :ok <- persist_runtime_records(runtime_records) do
+         :ok <- persist_runtime_records(runtime_records, policy) do
       {:ok, empty_runtime_records()}
     end
   end
 
-  defp maybe_persist_runtime_records(false, runtime_records) do
+  defp maybe_persist_runtime_records(false, runtime_records, _policy) do
     {:ok, runtime_records}
   end
+
+  # Where runtime records and semantic timer results are written: Persistence, unless the owner
+  # was started with `runtime_writer:` (a module with the same two functions; tests).
+  defp runtime_writer(policy), do: Map.get(policy, :runtime_writer, Persistence)
 
   defp drain_timer_records(state) do
     case next_timer_entry(state.timer_service) do
