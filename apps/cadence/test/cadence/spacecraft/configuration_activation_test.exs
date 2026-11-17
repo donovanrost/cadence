@@ -7,12 +7,13 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.SpacecraftConfiguration
+  alias Cadence.Control.ModelApprovalGate
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModelApproval
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow}
+  alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow, RevisionRow}
   alias Cadence.Platform.ContentHash
   alias Cadence.Reads.Catalog.{Databases, Revisions}
   alias Cadence.Reads.Spacecraft.Configuration, as: ConfigurationRead
@@ -418,6 +419,14 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
     {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
 
+    # Before the submit: the model is approved by the fixture, and the baseline #92 a compares it
+    # against is the revision this spacecraft runs in the active generation (nil with none).
+    model_id = c.revision.mission_model_revision_id
+    approval = fn -> model_approval(c, model_id) end
+    approved_before = approval.()
+    assert approved_before.status == "approved"
+    baseline = running_model(c, c.first.spacecraft_id)
+
     assert {:error, :activation_policy_changed} =
              SpacecraftConfiguration.submit(
                c.scope,
@@ -443,15 +452,9 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     assert source_model(spec, c.endpoint.source_endpoint_id).mission_model_revision_id ==
              c.revision.mission_model_revision_id
 
-    # DECISIONS #92 a: a generation can't introduce a model nobody approved, so the fixture's
-    # import is approved (test setup); the activation approves nothing. The gate compares the
-    # introduced model once against the spacecraft's baseline (one passed report); no qualification.
-    assert {:ok, %{status: :approved}} =
-             MissionModels.fetch_revision(
-               c.org,
-               c.mission.mission_id,
-               c.revision.mission_model_revision_id
-             )
+    # The activation approved nothing (the approval is the fixture's, unchanged) and the gate
+    # ran its one comparison of the introduced model against the baseline; no qualification.
+    assert approval.() == approved_before
 
     scoped = fn schema ->
       from(row in schema,
@@ -459,7 +462,10 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
       )
     end
 
-    assert Repo.aggregate(scoped.(ComparisonReportRow), :count) == 1
+    assert [report] = Repo.all(scoped.(ComparisonReportRow))
+    assert report.status == :passed
+    assert report.candidate_revision_id == model_id
+    assert report.baseline_revision_id == baseline
     refute Repo.exists?(scoped.(QualificationCaseRow))
   end
 
@@ -670,6 +676,23 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
     for row <- usage.usage do
       assert row.href == "/missions/#{c.mission.mission_id}/spacecraft/#{row.id}?section=changes"
+    end
+  end
+
+  defp model_approval(c, model_id) do
+    RevisionRow
+    |> Repo.get_by!(mission_id: c.mission.mission_id, revision_id: model_id)
+    |> Map.take([:status, :approved_at, :approved_by])
+  end
+
+  # The revision #92 a's gate treats as a spacecraft's baseline: the one it runs in the active
+  # generation (a legacy activation's mission-wide entry counts for every spacecraft), else nil.
+  defp running_model(c, spacecraft_id) do
+    running = ModelApprovalGate.running_entries(c.org, c.mission.mission_id)
+
+    case running[spacecraft_id] || running["__mission__"] do
+      %{"mission_model" => %{"revision_id" => id}} -> id
+      _none -> nil
     end
   end
 
