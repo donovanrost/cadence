@@ -10,14 +10,21 @@ export type ApTabLink = Readonly<{
   count?: number;
 }>;
 const props = defineProps<{ links: readonly ApTabLink[]; active: string; label: string }>();
-/** On a narrow screen the strip scrolls sideways; the active link is kept in view (ux U94). */
+/**
+ * On a narrow screen the strip scrolls sideways; the active link is kept in view (ux U94). Only the
+ * strip scrolls (scrollLeft), never the page, so a re-mount far down a long page can't jump (lead).
+ */
 const nav = ref<HTMLElement | null>(null);
 function showActive() {
-  void nextTick(() =>
-    nav.value
-      ?.querySelector<HTMLElement>('[aria-current="page"]')
-      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" }),
-  );
+  void nextTick(() => {
+    const strip = nav.value;
+    const link = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!strip || !link) return;
+    const box = strip.getBoundingClientRect();
+    const at = link.getBoundingClientRect();
+    if (at.left < box.left) strip.scrollLeft += at.left - box.left;
+    else if (at.right > box.right) strip.scrollLeft += at.right - box.right;
+  });
 }
 onMounted(showActive);
 watch(() => props.active, showActive);

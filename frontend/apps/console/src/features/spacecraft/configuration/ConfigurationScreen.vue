@@ -117,10 +117,19 @@ const craftOptions = (s: ConfigurationSnapshot) =>
           <template #status>
             <ApTag :state="statusTag(value).state" :label="statusTag(value).label" />
           </template>
+          <ApSelect
+            v-if="value.fleet.length > 1 && !versionsLine(value)"
+            :model-value="value.spacecraft_id"
+            label="Spacecraft"
+            hidden-label
+            size="compact"
+            :options="craftOptions(value)"
+            @update:model-value="switchTo"
+          />
         </ApPageHeader>
         <!-- Phone order (ux): title, tag, versions, then the switcher. -->
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p class="m-0 font-mono text-sm text-text-2">{{ versionsLine(value) ?? "" }}</p>
+        <div v-if="versionsLine(value)" class="flex flex-wrap items-center justify-between gap-3">
+          <p class="m-0 font-mono text-sm text-text-2">{{ versionsLine(value) }}</p>
           <ApSelect
             v-if="value.fleet.length > 1"
             :model-value="value.spacecraft_id"

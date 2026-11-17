@@ -18,7 +18,7 @@ const telemetryOn = computed(
   <ApCallout v-if="snapshot.active === null" tone="info">{{
     notSetUpLine(snapshot.name, telemetryOn)
   }}</ApCallout>
-  <ApPanel v-if="steps.length" index="C0" title="Steps before it can be sent" flush>
+  <ApPanel v-if="steps.length" index="C1" title="Steps before it can be sent" flush>
     <ol class="m-0 flex list-decimal flex-col gap-2 py-3 pr-4 pl-9">
       <li v-for="s in steps" :key="s.key" class="text-md text-readout">
         <RouterLink

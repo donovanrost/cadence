@@ -21,7 +21,7 @@ const cell = (r: ComparisonRow, key: string) =>
 </script>
 
 <template>
-  <ApPanel index="C3" title="Changes" flush>
+  <ApPanel index="C2" title="Changes" flush>
     <ApCallout v-if="snapshot.active === null" tone="info">{{ NOTHING_ACTIVE }}</ApCallout>
     <p v-if="rows.length === 0" class="m-0 px-4 py-3 text-md text-text-2">{{ DRAFT_MATCHES }}</p>
     <ApTable

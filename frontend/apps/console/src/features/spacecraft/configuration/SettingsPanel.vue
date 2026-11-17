@@ -42,7 +42,7 @@ const title = computed(() =>
 </script>
 
 <template>
-  <ApPanel index="C1" :title="title" flush>
+  <ApPanel index="C2" :title="title" flush>
     <template v-if="changes" #meta>
       <span class="font-mono text-xs normal-case text-caution-text">{{ changes }}</span>
       <RouterLink
