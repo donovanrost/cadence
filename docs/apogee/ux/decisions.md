@@ -2724,6 +2724,15 @@ break U20 and U45's "never silent": a dropped item may be the most urgent thing 
   false.
 - **It goes** as soon as a read has nothing dropped. A whole read that fails is not this line; it keeps the list's
   own error state.
+- **More lists (fe-ops, lead's go, 11-17):** Contacts' schedule panel, Now's Passes panel (A4), Investigate's Passes
+  tab and Org Audit's results, each with the line at the top, above the first row or the table.
+  - The noun follows the list: "This console can't show 1 pass." / "… 3 passes."; Audit: "… 1 event." / "… 3
+    events." The rest of the line is as above. Technical details: `contact · pass-123`; Audit: the event's kind and id.
+  - Counts include them, as above. A plan's pass resolutions don't count a dropped pass, since its attention isn't
+    known.
+  - **Audit export:** the file is built from the events the console could read, so it must say what's missing. The
+    export's note, where the size cap already speaks: "3 events couldn't be read, so they aren't in this file."
+    Never a silent short file.
 
 ### U87 · A group member can't be approved on its own (director's procedure rule; accepted, lead 11-17) (fe-ops / api or api-ops)
 Director's rule, until a test settles it: a command that belongs to a command group is approved only through the
@@ -2735,7 +2744,9 @@ the fix (with the P0 result); the console's disable is its reader.
 - **No console surface today** (fe-ops checked, 11-17): the console's only approval write is the group's GO/NO-GO,
   and its request page is keyed by group id. The request-page rule above is for any future surface that approves a
   single command.
-- **REST and the legacy ops page:** the standalone approve refuses a group member in the same words. Whoever owns
+- **REST and the legacy ops page:** the standalone approve refuses a group member in the same words. The standalone
+  reject says what it does (api, P0 review): "This command is part of a command group. Reject it with the group's
+  NO-GO." Whoever owns
   the P0 fix (api or api-ops) builds it.
 - **Not here:** the group's own GO/NO-GO is unchanged; this only closes the standalone way round it.
 
@@ -2822,3 +2833,33 @@ null `against` reads "Comparison passed", which is the wrong claim.
   the previous import, else the revision most spacecraft run; only when neither exists is it null. No new field,
   and no split by reason: the approver needs the same words either way. "No comparison has been run yet" (U65) is
   a missing report, not this.
+
+### U93 · Applying a change set on a mission with nothing running (domain's design, via lead, 11-17) (api / fe-ops)
+On a mission with nothing running, a change-set apply saves the changes but makes no generation and starts nothing.
+A mission's first run comes from each spacecraft's configuration (Review, then Activate). Today neither the preview
+nor the Apply aside says so, and after apply the outcome reads "r1 is active · 2 changes.", which suggests it runs.
+
+- **Before (preview and the Apply aside, info, above the Apply button):** "Nothing is running on this mission yet,
+  so applying saves these changes and starts nothing. Each spacecraft starts when its configuration is reviewed and
+  activated."
+- **After (the outcome line, nominal):** "r1 is saved · 2 changes. Nothing is running on this mission yet, so
+  nothing started." Not "is active", and no runtime clause.
+- **Signal:** only when api's preview read (and the apply result) says nothing is running on the mission, never
+  inferred from the submit result's `not_applicable` alone, which also covers changes the runtime doesn't use.
+  api confirms the field; fe-ops reads it first.
+- Once anything runs, the line goes; the runtime clauses (U38's verbs) take over as today.
+
+### U92 · Refusal `command_group_members_changed`: the group changed after it was submitted (P0 fix; api-ops 8f60ccd94) (api-ops / fe-ops)
+The GO (and GO with exclusions) is refused with 409 when the group's member rows no longer match the count it was
+submitted with. With the P0 fix nothing on a product path can change a submitted group, so this is defence in depth
+and should never fire; when it does, something went round the product. NO-GO, send back and abort still go through.
+
+- **The line** (the GO/NO-GO panel, crit, in the "Not released" pattern): "Not released: this group's commands
+  changed after it was submitted (12 then, 13 now), so it isn't what was reviewed. Give it NO-GO and submit the
+  commands again. Tell the team that runs Cadence for you: a group shouldn't change after it's submitted."
+  - The counts come from the 409's `submitted_member_count` and `current_member_count`; without both, the bracket
+    is left out.
+- **After it:** the panel stays open, `GO` disabled with this line as its A6 reason, and `NO-GO` is the way out.
+- **Not up front:** the group read has no `members_changed` flag; since this should never fire, none is needed
+  now. If one is added (api-ops offers it as an 11-18 follow-up), GO is disabled before a click with the same line.
+- **Nowhere else:** it isn't on Now or in the audit by itself; only at GO.
