@@ -509,6 +509,7 @@ Telemetry Explore and Investigate `Dashboards ↗` (L8); ~~account menu and admi
 - ~~Redirect-only controllers point at console routes~~ done (api c1396fba2, qa PASS 11-13); delete them with the pages later.
 - Keep: DELETE `/session`, PUT `/session/organization` (plain controllers the console uses); the downloads `/catalog/artifacts/:id/download` and `/ops/dashboards/:id/export` until L18/L8 decide.
 - Covered already (no work): org home, missions, timeline, settings, spacecraft create, profiles, routing (replacement model), transports, stations, catalog import, planning runs, commanding (replacement model), alarms, app install, people.
+- Dropped by design, not parity gaps (user, via director, 11-16; DECISIONS #104): legacy routing's pin to a specific transport version (routes name the transport and the current version resolves at apply; the pin was the no-re-point gap, and booked contacts already snapshot their path), and routes over a transport with no ground station (every route names a station; no real data, only the QA station-less rule, which leaves through its staged Remove applied in the console). **Leftover of (a) (api, 11-16):** the spacecraft detail read still sends the rule's stored transport.version and the console's RoutingRulesPanel shows it as ' vN', which is now untrue. Readers first: fe-setup drops the v-suffix, then api removes transport.version from the read and setup.md, riding the 11-18 route restart with U79.
 
 ## 12. Typing (director 11-13; audit `typing-audit.md`, 7025e879)
 
