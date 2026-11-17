@@ -94,6 +94,12 @@ export const errorCodes = [
   "nothing_to_resume",
   "not_resumable",
   "activation_policy_changed",
+  // U95 (domain's approve preflight a87fe44f6, api): approve refused, nothing recorded.
+  "approved_activation_content_mismatch",
+  "change_set_activation_stale",
+  "mission_model_activation_manifest_required",
+  "spacecraft_configuration_review_stale",
+  "mission_model_comparison_report_required",
   "activation_execution_in_progress",
   "activation_request_not_found",
   "app_not_found",

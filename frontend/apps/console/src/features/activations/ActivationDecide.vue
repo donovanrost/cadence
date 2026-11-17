@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { fieldErrors } from "@/api";
+import { RouterLink } from "vue-router";
 import { ApButton, ApCallout, ApPanel, ApTextarea } from "@/ui";
+import { approveRefusal, type ApproveRefusal } from "./approveRefusal.ts";
 import {
   decide,
   decidedLine,
@@ -30,10 +32,13 @@ const canAct = computed(
 const reason = ref("");
 const error = ref<string | null>(null);
 const failure = ref<string | null>(null);
+/** U95: an Approve the preflight refused; nothing was recorded, so Approve stays off with it. */
+const refused = ref<ApproveRefusal | null>(null);
 const busy = ref<Verb | null>(null);
 const blocked = computed(() =>
   busy.value ? "Working…" : reason.value.trim() === "" ? "Give a reason first." : null,
 );
+const approveBlocked = computed(() => (refused.value?.final ? refused.value.text : blocked.value));
 async function go(verb: Verb) {
   if (blocked.value !== null) return;
   busy.value = verb;
@@ -41,7 +46,8 @@ async function go(verb: Verb) {
     const r = await decide(props.requestKey, verb, reason.value.trim());
     if (r.ok) return void emit("decided", decidedLine(verb, r.value));
     error.value = fieldErrors(r.error)["reason"] ?? null;
-    failure.value = error.value ? null : decideFailure(r.error);
+    refused.value = verb === "approve" && !error.value ? approveRefusal(r.error) : null;
+    failure.value = error.value || refused.value ? null : decideFailure(r.error);
   } finally {
     busy.value = null;
   }
@@ -67,12 +73,26 @@ async function go(verb: Verb) {
         :error="error"
       />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+      <ApCallout v-if="refused" tone="crit">
+        {{ refused.text }}
+        <details v-if="refused.code" class="mt-1 text-xs text-text-3">
+          <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
+          <p class="m-0 font-mono">{{ refused.code }}</p>
+        </details>
+        <template v-if="refused.link" #action
+          ><RouterLink
+            :to="refused.link.to"
+            class="text-sm text-readout underline hover:text-bright"
+            >{{ refused.link.label }}</RouterLink
+          ></template
+        >
+      </ApCallout>
       <div v-if="canAct" class="flex flex-wrap gap-2">
         <template v-if="mayDecide(request, viewer)">
           <ApButton
             variant="primary"
-            :disabled="blocked !== null"
-            :disabled-reason="blocked ?? ''"
+            :disabled="approveBlocked !== null"
+            :disabled-reason="approveBlocked ?? ''"
             @click="go('approve')"
             >Approve and apply</ApButton
           >
