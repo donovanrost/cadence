@@ -2091,6 +2091,8 @@ are §4.
 - Format: "Window 02:45–10:45Z · from the outage's start, 8 h by the planning policy · attempt 2 of 3".
 - The cause names itself, for example "from Northlight's change at 02:45Z" or "from the station outage at 02:45Z".
   The horizon is the policy's `repair_horizon_seconds`, in §4 duration form.
+- No cause (api's `cause` null when it can't attribute one cleanly, 11-17): the clause goes and nothing is guessed
+  (U20): "Window 02:45–10:45Z · 8 h by the planning policy · attempt 2 of 3".
 - The last attempt is in caution: "attempt 3 of 3, the last the policy allows".
 - With none left: Apply is disabled with "No re-plan attempts left (3 of 3). The planning policy sets the limit."
   plus a link `Planning policy` for admins.
@@ -2098,7 +2100,8 @@ are §4.
 
 **Optional note on Submit and on Approve:**
 - Field `Note for the record (optional)`, with the hint "Saved with your name in the plan's history."
-- Over 2,000 characters: "Keep the note under 2,000 characters." The counter appears from 1,800, as with U65's
+- Over 2,000 characters: "Keep the note under 2,000 characters." The same 2,000 on Submit and on Approve (lead,
+  11-17: api raises Submit's 500), so one field never has two limits. The counter appears from 1,800, as with U65's
   reasons.
 - It appears in U73's history quoted under its decision row. `Send back` keeps its required `Reason`.
 
@@ -3022,3 +3025,40 @@ Communications, Changes) for ux's look.
   but decodes nothing: no live values, alarms or history. Turn telemetry on with a change set first." with `Open
   Operation`. A new craft's first start is a change set turning telemetry on, then this Activate (director's end-to-
   end test on a fresh mission, then qa's live check).
+
+### U95 · Approve refused before anything is recorded (L10 decide panel; P3 "approved = applied", ahead of (B)) (api / fe-ops)
+The Activations decide panel's Approve now checks that the request can apply, and refuses before recording a decision.
+Every line starts "Not approved:", says what to do, and ends "Your approval wasn't recorded." After a refusal, Approve
+is disabled with the line as its A6 reason; Reject stays, so the request can be cleared. Words reuse U41, U65, U88,
+U90 and U94.
+
+- `approved_activation_content_mismatch` (U41's cause): "Not approved: what this request would apply changed after it
+  was requested, so it isn't what you reviewed. The requester sends it again."
+- `mission_model_revision_not_approved` (U65; `details.catalog_revisions`, a list): one with a number "Not approved:
+  catalog rev 4 isn't approved yet, so this can't apply. An org admin approves it in Setup › Catalog first." with
+  `Open rev 4`; several "catalog revs 4 and 5 aren't approved yet, so this can't apply. An org admin approves them
+  in Setup › Catalog first." (up to 3, then "and N more") with `Open the catalog`; an entry with no number "a catalog revision it uses isn't approved yet".
+- `mission_model_revision_not_in_catalog` (U88): "Not approved: the catalog doesn't list the revision this request
+  uses, so it can't apply. The requester sends a request for a revision the catalog lists." with `Open the catalog`.
+- `mission_model_comparison_failed` (U65): "Not approved: catalog rev 4's comparison didn't pass, so this can't
+  apply." with `Open the report` (`comparison_report_id`); without a number, "the comparison for the catalog revision
+  it uses didn't pass".
+- `mission_model_comparison_report_required` (U65): "Not approved: the catalog revision it uses hasn't been compared
+  yet. Run the comparison in Setup › Catalog first." with `Open the catalog`.
+- `mission_model_runtime_plans_not_ready` (U65): "Not approved: Cadence is still preparing the catalog revision it
+  uses. Try again in a moment."
+- `activation_policy_changed` (U94): "Not approved: the mission's approval setting changed after this was requested.
+  The requester sends it again."
+- `spacecraft_configuration_review_stale` (U94; `details.spacecraft_ids`, names from the fleet): "Not approved:
+  EARENDIL-004's configuration changed after this was requested, so it isn't what was reviewed. The requester sends
+  it again." Several: "The configuration of EARENDIL-004 and EARENDIL-005 changed…" (up to 3, then "and N more");
+  none or unnamed: "A spacecraft's configuration changed…" (U41, U25).
+- `change_set_activation_stale`: "Not approved: what's running on this mission changed after this was requested, so
+  it isn't what was reviewed. The requester sends it again."
+- `mission_model_activation_manifest_required` (the request doesn't name the catalog revision it activates; a request
+  from the console always does): "Not approved: this request doesn't say which catalog revision it activates, so it
+  can't apply. The requester sends it again; if it keeps happening, tell the team that runs Cadence."
+- Any other 409 code (api lists `invalid_mission_model_activation_manifest`, `mission_model_manifest_mismatch`,
+  `mission_model_runtime_plan_manifest_mismatch`, `invalid_spacecraft_model_bindings`): "Not approved: this request
+  can't apply as it stands." plus the code in Technical details, then "Your approval wasn't recorded."
+- Refusals before the check keep their words (self approval, not pending, not found).
