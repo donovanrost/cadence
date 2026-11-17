@@ -89,22 +89,80 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesRaceTest do
     assert unboxed_fetch(decided.observation_identity_id).decision_event_id
   end
 
+  test "two batches creating the same two new identities in opposite order both commit", %{
+    mission_id: mission_id
+  } do
+    # `low` sorts before `high`. The holder creates `low`, then (same transaction) `high`; the other
+    # batch arrives with `high` first. Inserted one at a time in arrival order, the two would each
+    # hold one new row and wait for the other's (dashboards' review, 11-17); in identity order the
+    # other batch waits on `low` before it takes `high`.
+    [low, high] =
+      for point <- ["HK.alpha", "HK.beta"] do
+        envelope(
+          mission_id: mission_id,
+          point_id: point,
+          sample_id: "order-" <> point,
+          validity_state: :advisory
+        )
+      end
+      |> Enum.sort_by(& &1.observation_identity_id)
+
+    holder = hold_batch(low, then: high)
+
+    other =
+      for env <- [high, low] do
+        %{
+          env
+          | sample_id: env.sample_id <> "-other",
+            observation_id: env.observation_id <> "-other"
+        }
+      end
+
+    waiter =
+      unboxed_async(fn ->
+        ObservationIdentityStates.record_envelopes(other, publish_facts?: false)
+      end)
+
+    refute_receive {:done, _result}, 300
+    send(holder.pid, :next)
+    assert_receive :held_next, 2_000
+    send(holder.pid, :commit)
+    assert_receive {:done, :ok}, 3_000
+    assert {:ok, :ok} = Task.await(holder)
+    Task.await(waiter)
+
+    for env <- [low, high] do
+      assert unboxed_fetch(env.observation_identity_id).advisory_count == 2
+    end
+  end
+
   # Records `envelope` in a real transaction that stays open until the test sends :commit.
-  defp hold_batch(envelope) do
+  # With `then:`, it records that envelope too, in the same transaction, on :next.
+  defp hold_batch(envelope, opts \\ []) do
     test_pid = self()
 
-    holder = Task.async(fn -> Sandbox.unboxed_run(Repo, fn -> hold(envelope, test_pid) end) end)
+    holder =
+      Task.async(fn ->
+        Sandbox.unboxed_run(Repo, fn -> hold(envelope, opts[:then], test_pid) end)
+      end)
 
     assert_receive :held, 2_000
     holder
   end
 
-  defp hold(envelope, test_pid) do
+  defp hold(envelope, next, test_pid) do
     Repo.transaction(fn ->
       :ok = ObservationIdentityStates.record_envelopes([envelope], publish_facts?: false)
       send(test_pid, :held)
+      if next, do: record_next(next, test_pid)
       receive do: (:commit -> :ok)
     end)
+  end
+
+  defp record_next(envelope, test_pid) do
+    receive do: (:next -> :ok)
+    :ok = ObservationIdentityStates.record_envelopes([envelope], publish_facts?: false)
+    send(test_pid, :held_next)
   end
 
   defp unboxed_async(fun) do
