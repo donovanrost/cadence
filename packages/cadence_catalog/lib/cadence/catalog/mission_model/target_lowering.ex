@@ -509,9 +509,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     end
   end
 
-  # The type's states as {value, label}, by value; [] for a type without any. A value named twice
-  # keeps its first label in source order (legalization warns about it, and about non-integer
-  # values, which are left out).
+  # The type's states as {value, label}, by value; [] for a type without any.
   defp enumerations(type) do
     for state <- List.wrap(value(type.definition, :enumerations)),
         state_value = value(state, :value),
@@ -519,7 +517,6 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
         is_integer(state_value) and is_binary(label) do
       %{value: state_value, label: label}
     end
-    |> Enum.uniq_by(& &1.value)
     |> Enum.sort_by(& &1.value)
   end
 

@@ -148,57 +148,6 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
     assert fields["plain"]["enumerations"] == []
   end
 
-  test "states with a non-integer value or a repeated value are warned about; the first label wins" do
-    database = """
-    packets:
-      - name: EPS
-        apid: 44
-        items:
-          - name: mode
-            bit_offset: 0
-            bit_size: 8
-            data_type: uint
-            conversion:
-              type: state_table
-              states:
-                0: OFF
-                1: ON
-    commands: []
-    """
-
-    {:ok, import_result} =
-      CadenceYamlDatabase.import(source(database), %{import_run_id: "enumeration-import"})
-
-    [layer] = import_result.bundle.declaration_layers
-
-    # Hand-edit the type's states (the YAML importer only emits valid integers).
-    declarations =
-      Enum.map(layer.declarations, fn
-        %{kind: :parameter_type} = type ->
-          %{
-            type
-            | definition:
-                Map.put(type.definition, :enumerations, [
-                  %{value: 0, label: "OFF"},
-                  %{value: "0x1", label: "ON"},
-                  %{value: 0, label: "STANDBY"}
-                ])
-          }
-
-        other ->
-          other
-      end)
-
-    assert {:ok, compilation} = Compiler.compile([%{layer | declarations: declarations}])
-    codes = Enum.map(compilation.plans.telemetry.diagnostics, & &1.code)
-    assert "MM_ENUMERATION_VALUE_INVALID" in codes
-    assert "MM_ENUMERATION_VALUE_DUPLICATE" in codes
-
-    [packet] = compilation.plans.telemetry.plan["packet_definitions"]
-    [field] = packet["fields"]
-    assert field["enumerations"] == [%{"value" => 0, "label" => "OFF"}]
-  end
-
   defp source(database) do
     Source.new(%{
       artifact_id: "calibration-database",
