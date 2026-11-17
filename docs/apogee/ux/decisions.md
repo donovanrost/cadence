@@ -2564,3 +2564,53 @@ schema labels), so fe-setup's KindEditor shows them as they are.
     the after value. Until then the review reads "Listener  shared → own", as the other select rows do; not a blocker.
 - **Not here:** the refusals a shared listener makes during a pass are U50's `listener_refusal` (and U58 for an own
   listener held by another pass). This field adds no new Now or record words.
+
+### U84 · Now source `replay_conflict`: stuck processing (after #99; api's words request, director's conditions) (api / domain / fe-ops)
+A part of the mission's processing hit a fault in Cadence and keeps retrying the same input. Nothing in the console
+fixes it; only a fix to Cadence clears it. One item per stuck unit, acknowledge-only, system-closed when the fix lands.
+Director's conditions: word it for whoever operates the mission, name who to tell (there's no support desk), and
+say a restart won't help only because api confirms it. api confirmed (11-17): replaying the same stored input gives
+the same conflict, so a pass, partition, node or app restart can't clear it. Who to call is the team that runs
+Cadence for the mission's organization (today, domain).
+
+- **Name for operators:** `Stuck processing` (filters, the cause tag, Technical details' source line). Never
+  "replay", "conflict", "partition", "journal", "effect" or "runtime" in visible text; they go in Technical details.
+- **Spacecraft names:** up to 3, then "and N more"; one craft leads the title, as in U37/U47.
+- **Title** (by `path`):
+  - (1) pass: `EARENDIL-001 · SVA 18:49Z pass · telemetry storage is stuck` (several craft: `EARENDIL-001 and 2
+    others · SVA 18:49Z pass · …`; the pass label as U47).
+  - (2) incoming data: `EARENDIL-004 · incoming data is stuck`; several: `Incoming data for 12 spacecraft is stuck`.
+  - (3) timed actions: `EARENDIL-004 · timed actions are stuck`; several: `Timed actions for 4 spacecraft are stuck`.
+- **What stopped** (first body line, by `path`):
+  - (1) "Cadence stopped storing this pass's telemetry, so EARENDIL-001's alarms and current values aren't updating."
+  - (2) "Cadence stopped processing incoming data for 12 spacecraft: EARENDIL-004, EARENDIL-005, EARENDIL-009 and 9
+    more. Their telemetry isn't stored, and their alarms and current values aren't updating." (One craft: "…for
+    EARENDIL-004. Its telemetry isn't stored, and its alarms…")
+  - (3) "Timed actions for 4 spacecraft aren't running: EARENDIL-004, …"
+- **Why** (second line, all paths): "It's a fault in Cadence, not in this mission's setup or data. Cadence retries
+  by itself and hits the same fault each time: 14 tries since 03:10Z, the last at 03:52Z." (`occurrences`, `since`,
+  `last_seen`; drop a clause whose field is null, U20.) For (3) the retries come only when new data or a timed
+  action comes due (api: at most about every 30 s), and the same sentence holds. There's no restart loop and no
+  given-up state (api, 11-17).
+- **What to do** (third line): "Tell the team that runs Cadence for you, and send them the details. Nothing in
+  the console fixes this, and restarting won't clear it: it hits the same fault."
+  - `Copy details` is a quiet button (it copies, it doesn't navigate): the item's Technical details as plain text
+    (source, path, unit, spacecraft, pass, since, last seen, occurrences, buffer, error). Afterwards "Copied"
+    for 2 s in a live region. It changes nothing on the server.
+- **Buffer, (1) and (2)** (the U47 word "buffer", never "journal"; bytes with the console's formatter):
+  - Filling: "Incoming telemetry is kept in Cadence's buffer meanwhile: 3.3 of 8.6 GB used. Once it's full, new
+    telemetry is lost." Meta `BUFFER 39% · SINCE 03:10Z · 14 TRIES`.
+  - Dropping (the urgent state, crit ◆, sorts first): "Cadence's buffer is full, so new telemetry from these
+    spacecraft is being lost. Telemetry received before 04:40Z is kept." (the time when dropping started, if sent;
+    else "Telemetry already received is kept.") Meta `BUFFER FULL · LOSING NEW TELEMETRY`.
+  - Otherwise the mark is caution ▲.
+- **Acknowledge** (operate_mission; without it: "Operators acknowledge this."): an optional note, placeholder
+  "Who you told, e.g. domain at 03:18Z". After it: "Acknowledged by Mira K. at 03:20Z: told domain at 03:18Z." (no
+  note: "Acknowledged by Mira K. at 03:20Z."). The row stays listed, sorted last in its priority (U31), with
+  `ACK MIRA K.` in the meta. The dropping state un-sorts it again: frames being lost is new.
+- **Resolved** (system, U31: the action only): the row fades for 5 s with `Resolved: telemetry storage resumed` /
+  `Resolved: processing resumed` / `Resolved: timed actions running`. Frames lost while dropping stay as U47's
+  `frames_dropped` item.
+- **Cause tag on the folded rows** (U37 telemetry not stored, U47 buffer filling, U38 runtime not applied, for the
+  same unit): tag `STUCK PROCESSING`, rows shown under this item. Their own actions that would retry (U37's `Retry
+  storing`) are disabled with the A6 reason "Retrying won't help until the stuck processing is fixed."
