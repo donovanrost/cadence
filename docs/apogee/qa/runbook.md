@@ -325,6 +325,16 @@ Why: on 11-17 step 4 part 2 (the r10 apply) stalled from 09:17Z to 12:4xZ. The a
 connection error right after qa's hand-off. qa held the slot lock and waited for the approver's ping, and nobody
 checked the step's expected end. The hold and lock had no end time, so the whole chain waited about three hours.
 
+**Configuration changes: four-eyes** (director 11-16, 11-17). Outside QA test data, the approver is a different agent
+from the stager, and reads the preview themselves through `qa-org-admin-2`. The checklist names the agent behind
+each account. From 11-18, once Earendil and the QA mission are on the independent policy (a console action by an
+admin, first item that day), the flow is: **stage, submit, then a second agent approves and applies**. Until then an
+admin's approve-and-apply writes the submission but no row in `mission_config_reviews`; record it as found.
+
+**Command groups** (director 11-17, until the P0 audit item is settled): nobody approves a command-group member
+through the standalone request approve. After an armed run, qa checks that its group went only through the group
+path.
+
 ## Daily dev retention slot
 
 Once a day, in a qa slot outside passes (no active contact; not within 1 h of an armed pass), on `cadence_apogee_dev`
