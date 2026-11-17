@@ -34,6 +34,14 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "spacecraft", title: "Spacecraft" },
   },
   {
+    // (B) ux U94: the craft's configuration workspace (ported from the host's spacecraft page).
+    path: "setup/spacecraft/:spacecraftId/configuration/:section(overview|catalog|communications|changes)?",
+    name: "setup.spacecraft.configuration",
+    component: () => import("@/features/spacecraft/configuration/ConfigurationScreen.vue"),
+    props: (to) => ({ spacecraftId: spacecraftIdParam(paramText(to.params, "spacecraftId")) }),
+    meta: { mode: "setup", nav: "spacecraft", title: "Configuration" },
+  },
+  {
     // L19 (ux AppSurfaces.md; plans/spacecraft-apps.md): a spacecraft-scope app in the L9 host frame.
     path: "setup/spacecraft/:spacecraftId/apps/:appKey/:surface?",
     name: "setup.spacecraft.app",

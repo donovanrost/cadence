@@ -13,6 +13,9 @@ import {
  * from the host's SpacecraftConfigurationPage). Its own subtree, so Investigate's
  * `GET …/spacecraft/:sc/configuration` read stays as it is. Approve and reject stay on L10.
  */
+/** Off until api's workspace GET is live (readers first); then the craft's page links here. */
+export const CONFIGURATION_WORKSPACE_LIVE = false;
+
 export const workspacePath = (missionId: MissionId, spacecraftId: SpacecraftId) =>
   `/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/configuration/workspace`;
 
@@ -104,6 +107,8 @@ export const snapshotReader = d.object({
       declarations: d.integer,
       packets: d.integer,
       commands: d.integer,
+      /** The catalog revision number, for U65's "catalog rev 14"; optional until api adds it. */
+      number: d.optional(d.integer),
     }),
     500,
   ),
@@ -161,6 +166,8 @@ export function fetchWorkspace(
 /** GET …/workspace/catalogs/:id/packets: the packet choices for a catalog revision. */
 export const packetChoicesReader = d.object({
   catalog_id: d.token,
+  /** The 14 in "catalog rev 14" (api); optional until shipped. */
+  catalog_number: d.optional(d.integer),
   packets: d.array(
     // free-text: a packet's name from the catalog
     d.object({ apid: d.integer, name: d.string, definitions: d.integer }),

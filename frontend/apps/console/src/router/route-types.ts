@@ -21,6 +21,9 @@ export const spacecraftTabs = [
 export type SpacecraftTab = (typeof spacecraftTabs)[number];
 export const addSpacecraftSteps = ["source", "identity", "orbit", "review"] as const;
 export type AddSpacecraftStep = (typeof addSpacecraftSteps)[number];
+/** (B) ux U94: the configuration workspace's sections (the host's four). */
+export const configurationSections = ["overview", "catalog", "communications", "changes"] as const;
+export type ConfigurationSection = (typeof configurationSections)[number];
 
 export type Plain<N extends string, P extends string> = RouteRecordInfo<
   N,
