@@ -14,7 +14,7 @@ import {
 } from "@/api";
 
 /** Change-set writes and the dry run. Contract: docs/apogee/api/changes.md. */
-const { array, integer, object, oneOf, string, token } = decoders;
+const { array, integer, object, string, token } = decoders;
 
 const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}/config`;
 import {
@@ -25,6 +25,8 @@ import {
   type PreviewItem,
 } from "./preview.ts";
 import { changeSetStates, configKindText } from "./shapes.ts";
+import { submitReader, type SubmitResult } from "./submitResult.ts";
+export type { SubmitResult } from "./submitResult.ts";
 export {
   diffEntry,
   diffField,
@@ -128,24 +130,6 @@ const versionResult = object({
   version: integer,
   state: decoders.known(changeSetStates),
 });
-
-const submitReader = decoders.variant("state", {
-  applied: object({
-    state: decoders.literal("applied"),
-    change_set_id: token,
-    revision: integer,
-    staged_count: integer,
-    runtime: oneOf(["not_applicable", "converging", "applied", "degraded"]),
-    degraded_partitions: array(string, 1000),
-  }),
-  in_review: object({
-    state: decoders.literal("in_review"),
-    change_set_id: token,
-    version: integer,
-  }),
-  open: object({ state: decoders.literal("open"), change_set_id: token, version: integer }),
-});
-export type SubmitResult = Decoded<typeof submitReader>;
 
 export function previewChangeSet(
   key: Readonly<{ missionId: MissionId; changeSetId: string; version: number }>,

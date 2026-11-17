@@ -2,7 +2,8 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import type { RemoteState } from "@/api";
-import { ApButton, ApField, ApPanel, ApStatTile } from "@/ui";
+import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
+import { NOTHING_RUNNING } from "./nothingRunning.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import {
   blockingReason,
@@ -45,6 +46,9 @@ const busy = ref(false);
 const failure = ref<FailureOutcome | null>(null);
 const next = computed(() => props.config.head.revision + 1);
 const needsReview = computed(() => props.changeSet.approval_required === true);
+const nothingRunning = computed(
+  () => props.preview.status === "ready" && props.preview.value.has_active_configuration === false,
+);
 const verdict = computed(() =>
   props.preview.status === "ready" ? props.preview.value.verdict : null,
 );
@@ -116,6 +120,8 @@ async function apply() {
         I've read the holds
       </label>
       <FailureOutcomeCallout v-if="failure" :outcome="failure" />
+      <!-- U93: only when the preview says no activation exists on the mission. -->
+      <ApCallout v-if="nothingRunning" tone="info">{{ NOTHING_RUNNING }}</ApCallout>
       <ApButton
         variant="primary"
         size="commit"

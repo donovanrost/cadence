@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useRuntimeStatus } from "@/shell";
 import { ApButton, ApCallout, plural } from "@/ui";
 import type { SubmitResult } from "./actions.ts";
+import { savedOnlyText } from "./nothingRunning.ts";
 import { configRuntime, outcomeRuntime, outcomeText } from "./runtime.ts";
 
 /** What staging elsewhere or submitting here just did (ux: say what happened and when it lands). */
@@ -29,6 +30,12 @@ watch(live, (l) => {
 const applied = computed(() => {
   const o = props.outcome;
   if (o?.state !== "applied") return null;
+  // U93: only when the server says no activation exists (never from runtime not_applicable).
+  if (o.has_active_configuration === false)
+    return {
+      tone: "info" as const,
+      text: savedOnlyText(o.revision, o.staged_count),
+    };
   const runtime = outcomeRuntime(o.runtime, live.value, sawApplying.value);
   return outcomeText(
     o.revision,

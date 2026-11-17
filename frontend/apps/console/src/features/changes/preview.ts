@@ -159,6 +159,8 @@ const humanizeKey = (key: string) => {
 
 export const previewReader = object({
   verdict,
+  /** U93 (api): false = no activation exists, so applying starts nothing. Optional until shipped. */
+  has_active_configuration: decoders.optional(boolean),
   diffs: decoders.optional(array(diffEntry, 5000)),
   checks: array(
     object({
