@@ -1,5 +1,13 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders, pathGet, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import {
+  DecodeError,
+  decoders,
+  pathGet,
+  request,
+  type ApiResult,
+  type Decoded,
+  type Reader,
+} from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:id/config/kinds/:kind/schema`. */
 const { array, boolean, nullable, number, object, optional, string, token } = decoders;
@@ -8,14 +16,21 @@ const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
 
 const condition = object({ path: string, equals: raw });
 const allConditions = object({ all: array(condition, 20) });
-/** One condition, or (U83, a transport's listener) `{all: [...]}`: shown when every one holds. */
+/**
+ * One condition, or (U83, a transport's listener) `{all: [...]}`: shown when every one holds.
+ * An empty list is refused, not read as always shown (lead).
+ */
 const visibleWhen: Reader<Decoded<typeof condition> | Decoded<typeof allConditions>> = (
   value,
   path = "",
-) =>
-  typeof value === "object" && value !== null && Object.hasOwn(value, "all")
-    ? allConditions(value, path)
-    : condition(value, path);
+) => {
+  if (typeof value !== "object" || value === null || !Object.hasOwn(value, "all"))
+    return condition(value, path);
+  const read = allConditions(value, path);
+  if (read.all.length === 0)
+    throw new DecodeError(path ? `${path}.all` : "all", "at least 1 condition");
+  return read;
+};
 
 export const schemaFieldReader = object({
   path: string,

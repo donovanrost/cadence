@@ -141,6 +141,7 @@ describe("visible_when with every condition (U83, a transport's listener)", () =
     expect(listener({ path: "configuration.mode", equals: "listen" }).ok).toBe(true);
     expect(listener({ all: [{ equals: "listen" }] }).ok).toBe(false);
     expect(listener({ all: "listen" }).ok).toBe(false);
+    expect(listener({ all: [] }).ok).toBe(false);
   });
 });
 
