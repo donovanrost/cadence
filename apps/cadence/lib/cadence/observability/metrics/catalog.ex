@@ -8,7 +8,7 @@ defmodule Cadence.Observability.Metrics.Catalog do
   """
 
   alias Cadence.Dashboards.RuntimeInvalidation
-  alias Cadence.Observability.Metrics.Definition
+  alias Cadence.Observability.Metrics.{Definition, MissionRuntimeMetrics}
   alias Cadence.ProviderAdapters.TCPSocket.Instrumentation, as: TCPSocketInstrumentation
   alias Cadence.Telemetry.Profiler
 
@@ -27,16 +27,18 @@ defmodule Cadence.Observability.Metrics.Catalog do
                           "trace.id"
                         ])
 
-  @mission_health_metrics MapSet.new([
-                            "cadence.contact.expected",
-                            "cadence.contact.realization.delay",
-                            "cadence.commanding.deadline.result",
-                            "cadence.commanding.queue.oldest_eligible.age",
-                            "cadence.commanding.queue.pending",
-                            "cadence.telemetry.availability.interval",
-                            "cadence.telemetry.expected",
-                            "cadence.telemetry.freshness"
-                          ])
+  @mission_health_metrics MapSet.new(
+                            [
+                              "cadence.contact.expected",
+                              "cadence.contact.realization.delay",
+                              "cadence.commanding.deadline.result",
+                              "cadence.commanding.queue.oldest_eligible.age",
+                              "cadence.commanding.queue.pending",
+                              "cadence.telemetry.availability.interval",
+                              "cadence.telemetry.expected",
+                              "cadence.telemetry.freshness"
+                            ] ++ MissionRuntimeMetrics.names()
+                          )
 
   @duration_buckets [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
   @journal_duration_buckets [
@@ -1087,7 +1089,7 @@ defmodule Cadence.Observability.Metrics.Catalog do
         measurement: &native_time_to_seconds/2,
         tag_values: &take_string_keys(&1, ["boundary"])
       )
-    ]
+    ] ++ MissionRuntimeMetrics.definitions()
   end
 
   @spec events() :: [[atom()]]

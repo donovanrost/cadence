@@ -39,6 +39,13 @@ defmodule Cadence.Reads.EventContacts do
     {entries, facts}
   end
 
+  @doc """
+  `%{scheduled_contact_id => %{spacecraft_id, station: %{name, code} | nil, starts_at, ends_at}}`
+  for `ids` (also the runtime item's next pass, U91).
+  """
+  @spec contact_facts(binary(), binary(), [binary()]) :: map()
+  def contact_facts(organization_id, mission_id, ids), do: facts(organization_id, mission_id, ids)
+
   defp facts(_organization_id, _mission_id, []), do: %{}
 
   defp facts(organization_id, mission_id, ids) do

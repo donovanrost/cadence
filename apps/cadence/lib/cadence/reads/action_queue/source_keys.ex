@@ -43,7 +43,10 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :applied_generation,
       :since,
       :activated_at,
-      :change_set_id
+      :change_set_id,
+      # U91: what a spec mismatch failed to verify, and the pass the failure costs.
+      :reason_detail,
+      :next_pass
     ],
     # Director C / ux U41: an approved activation whose apply failed or stalled (Retry apply).
     "activation_apply" => [

@@ -285,7 +285,10 @@ listener_unavailable | connect_failed | ingress_pipeline_failed | uplink_session
 no_runtime_spec | unknown`, or null; ux words each), `holder`, `provider_profile_id`,
 `provider_profile_name`, `realized_contact_id`, `contact_id`, `reservation_id`, `ends_at` (null
 without a booking), `attempts`, `last_attempt_at`, `retry`, `failure_message` (raw, Technical
-details only), `expires_at: null`.
+details only), `expires_at: null`, `reason_detail` (11-17, ux U91): for `no_runtime_spec`,
+`no_configuration` (no configuration activated: the mission's to fix, Open Changes) or
+`configuration_unverifiable` (the active configuration failed its integrity check: Cadence's to
+fix, Open pass, never Open Changes); null for other reasons and for failures stored before it.
 
 - `holder` (only for `listener_in_use`): the pass still holding the station listener,
   `{realized_contact_id, contact_id, reservation_id, spacecraft: {id, name}, station: <station

@@ -51,8 +51,30 @@ defmodule Cadence.Contacts.ContactStartFailure do
           "last_attempt_at" => at
         }
         |> Map.merge(claim_details(error))
+        |> Map.merge(runtime_spec_detail(reason, error))
     }
   end
+
+  # U91: no_runtime_spec has two causes an operator must tell apart. No configuration activated
+  # is the mission's to fix (Open Changes); one that fails its integrity check (a spec mismatch)
+  # is Cadence's (Open pass, never Changes). The failed field stays in failure_message.
+  defp runtime_spec_detail("no_runtime_spec", error) do
+    case spec_cause(error) do
+      nil -> %{}
+      detail -> %{"reason_detail" => detail}
+    end
+  end
+
+  defp runtime_spec_detail(_reason, _error), do: %{}
+
+  defp spec_cause(:no_active_binding_set), do: "no_configuration"
+  defp spec_cause({:mission_runtime_spec_mismatch, _field}), do: "configuration_unverifiable"
+
+  defp spec_cause(tuple) when is_tuple(tuple),
+    do: tuple |> Tuple.to_list() |> Enum.find_value(&spec_cause/1)
+
+  defp spec_cause(list) when is_list(list), do: Enum.find_value(list, &spec_cause/1)
+  defp spec_cause(_other), do: nil
 
   # `listen_endpoint_claimed` (ListenClaims, ux U81): the port another mission listens on and the
   # transport whose port it is, so the item can say which port to change.

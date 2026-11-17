@@ -11,6 +11,7 @@ defmodule Cadence.Observability.Metrics.MissionHealthSampler do
   alias Cadence.Commanding
   alias Cadence.Contacts
   alias Cadence.Contacts.{RealizedContact, ScheduledContact}
+  alias Cadence.Control.MissionRuntimeGauges
   alias Cadence.Observability.Metrics.Reporter
   alias Cadence.Runtime
   alias Cadence.Telemetry.CurrentValueStore
@@ -53,6 +54,7 @@ defmodule Cadence.Observability.Metrics.MissionHealthSampler do
       state
       |> prune_seen(now)
       |> sample_missions(now)
+      |> sample_runtime_generations()
 
     {:noreply, state}
   end
@@ -61,6 +63,22 @@ defmodule Cadence.Observability.Metrics.MissionHealthSampler do
     Enum.reduce(state.mission_ids_fun.(), state, fn mission_id, acc ->
       sample_mission(acc, mission_id, now)
     end)
+  rescue
+    _exception -> state
+  end
+
+  # Director 11-17 (U91): per ACTIVE mission, desired vs applied generation, so a runtime that
+  # can't admit its generation alerts (devops: desired - applied != 0 for 2 min). Its own mission
+  # list, not the running ones: a mission whose runtime isn't running is the case to see.
+  defp sample_runtime_generations(state) do
+    for gauge <- MissionRuntimeGauges.read() do
+      attributes = %{"cadence.mission.id" => gauge.mission_id}
+      record(state, "cadence.mission_runtime.desired_generation", gauge.desired, attributes)
+      record(state, "cadence.mission_runtime.applied_generation", gauge.applied, attributes)
+      record(state, "cadence.mission_runtime.admitted", gauge.admitted, attributes)
+    end
+
+    state
   rescue
     _exception -> state
   end

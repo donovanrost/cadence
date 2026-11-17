@@ -5,9 +5,12 @@ defmodule Cadence.Reads.MissionRuntimeAttention do
   Derived from `Cadence.Reads.MissionRuntimeStatus` (same record and reasons as `/counts`
   `runtime`), open once that reads `not_applied` (after its 60 s debounce). P1, nothing to
   acknowledge; it resolves (`resolved_by` kind `system`, action `applied`) when the runtime
-  applies a generation again. One item per mission, id = the mission id.
+  applies a generation again. One item per mission, id = the mission id. U91 adds
+  `reason_detail` (what a spec mismatch failed to verify) and `next_pass` (the pass in progress,
+  else the next within 2 h; `Reads.MissionRuntimeAttention.NextPass`).
   """
 
+  alias Cadence.Reads.MissionRuntimeAttention.NextPass
   alias Cadence.Reads.MissionRuntimeStatus
 
   @source "mission_runtime"
@@ -18,7 +21,7 @@ defmodule Cadence.Reads.MissionRuntimeAttention do
   @spec items(binary(), binary()) :: [map()]
   def items(org, mission) do
     case MissionRuntimeStatus.status(org, mission) do
-      %{state: "not_applied"} = status -> [item(mission, status)]
+      %{state: "not_applied"} = status -> [item(org, mission, status)]
       _applied_or_unknown -> []
     end
   end
@@ -46,9 +49,17 @@ defmodule Cadence.Reads.MissionRuntimeAttention do
   end
 
   @spec counts(binary(), binary()) :: %{open: non_neg_integer(), acknowledged: 0}
-  def counts(org, mission), do: %{open: length(items(org, mission)), acknowledged: 0}
+  def counts(org, mission) do
+    # From the status alone: the item's next_pass is a query, not needed for a count.
+    open =
+      if match?(%{state: "not_applied"}, MissionRuntimeStatus.status(org, mission)),
+        do: 1,
+        else: 0
 
-  defp item(mission, status) do
+    %{open: open, acknowledged: 0}
+  end
+
+  defp item(org, mission, status) do
     %{
       id: mission,
       source: @source,
@@ -56,6 +67,10 @@ defmodule Cadence.Reads.MissionRuntimeAttention do
       state: "open",
       reason: status.reason,
       failure_message: status.failure_message,
+      # U91: the field a spec mismatch failed to verify (opaque, Technical details), and the
+      # pass this costs.
+      reason_detail: MissionRuntimeStatus.reason_detail(org, mission),
+      next_pass: NextPass.for_mission(org, mission, DateTime.utc_now()),
       desired_generation: status.desired_generation,
       applied_generation: status.applied_generation,
       since: status.since,

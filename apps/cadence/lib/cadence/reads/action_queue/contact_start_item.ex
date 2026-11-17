@@ -25,7 +25,10 @@ defmodule Cadence.Reads.ActionQueue.ContactStartItem do
     # reason.
     :listen_port,
     :transport_id,
-    :transport_name
+    :transport_name,
+    # U91: for no_runtime_spec, no_configuration (the mission's to fix) or
+    # configuration_unverifiable (Cadence's); nil otherwise and on failures stored before it.
+    :reason_detail
   ]
 
   @doc "The source's wire keys, `holder` serialized with `station` (a `StationRefs` resolver)."

@@ -272,6 +272,7 @@ defmodule Cadence.Contacts.ContactStartAttention do
       listen_port: failure["listen_port"],
       transport_id: failure["transport_id"],
       transport_name: failure["transport_name"],
+      reason_detail: failure["reason_detail"],
       holder: holder_fields(holder, reservations),
       raised_at: timestamp(failure["first_failed_at"]),
       last_attempt_at: timestamp(failure["last_attempt_at"]),

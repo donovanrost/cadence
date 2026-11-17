@@ -51,6 +51,21 @@ defmodule Cadence.Contacts.ContactStartFailureTest do
     assert ContactStartFailure.open_failure(contact(%{})) == nil
   end
 
+  test "U91: no_runtime_spec says whether the mission has no configuration or Cadence can't verify it" do
+    detail = fn error ->
+      ContactStartFailure.failed(contact(%{}), error, @at)["start_failure"]
+      |> Map.take(["reason", "reason_detail"])
+    end
+
+    assert %{"reason" => "no_runtime_spec", "reason_detail" => "no_configuration"} =
+             detail.({:error, :no_active_binding_set})
+
+    assert %{"reason" => "no_runtime_spec", "reason_detail" => "configuration_unverifiable"} =
+             detail.({:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}})
+
+    assert detail.(wrap(:eaddrinuse)) |> Map.has_key?("reason_detail") == false
+  end
+
   test "the stored failure message is bounded" do
     huge = {:error, String.duplicate("x", 5_000)}
 

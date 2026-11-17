@@ -234,7 +234,15 @@ about 10 s (`posture.stale` changes with time).
   - `activated_at`, `change_set_id`: the desired generation's activation and the change set that
     made it, when known; `null` otherwise.
   - Times are ISO-8601 UTC; generations are integers. A flip between `applied` and `not_applied`
-    publishes `attention`, so refetch on `invalidate` with `attention` (no new topic).
+    publishes `attention`, so refetch on `invalidate` with `attention` (no new topic). Since 11-17
+    (U91) that includes the moment the 60 s debounce makes `not_applied` visible, even though
+    nothing else changed then.
+  - The `mission_runtime` attention item carries these fields plus two (11-17, ux U91; not on
+    `runtime` here): `reason_detail` (`null` | string; for `spec_mismatch`, the field that failed
+    to verify, e.g. `binding_set_content_sha256`; Technical details only) and `next_pass`
+    (`null` | `{contact_id, spacecraft_id | null, spacecraft_name | null, station: {name, code |
+    null} | null, starts_at, ends_at | null, in_progress, started}`: the pass in progress, else
+    the next one starting within 2 h; `started` is true only when its contact actually started).
 
 - `posture` (the top bar's fleet posture; dashboards, fe-ops 11-16): spacecraft counted by their
   worst condition, **the same numbers as `GET /fleet` `counts`** (`critical`, `caution`, `stale`,
