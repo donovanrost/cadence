@@ -118,6 +118,10 @@ export const diffField = object({
   format: decoders.optional(nullable(string)),
   before: (v: unknown) => (v === undefined ? null : v),
   after: (v: unknown) => (v === undefined ? null : v),
+  /** U83 (api): the option's words beside the raw value, and the row's reason. */
+  before_label: decoders.optional(nullable(string)),
+  after_label: decoders.optional(nullable(string)),
+  note: decoders.optional(nullable(string)),
 });
 export const diffEntry = object({
   kind: configKind,

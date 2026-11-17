@@ -179,6 +179,10 @@ export const field = object({
   format: optional(nullable(string)),
   before: raw,
   after: raw,
+  /** U83 (api): the option's words beside the raw value, and the row's reason. */
+  before_label: optional(nullable(string)),
+  after_label: optional(nullable(string)),
+  note: optional(nullable(string)),
 });
 export const entry = object({
   revision: revisionNumber,

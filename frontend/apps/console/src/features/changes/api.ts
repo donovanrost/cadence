@@ -52,6 +52,21 @@ export function showValue(value: unknown, unit?: string | null, format?: string 
   return unit && typeof value === "number" ? `${text} ${unit}` : text;
 }
 
+type DiffSide = Readonly<{
+  before: unknown;
+  after: unknown;
+  unit?: string | null | undefined;
+  format?: string | null | undefined;
+  before_label?: string | null | undefined;
+  after_label?: string | null | undefined;
+  note?: string | null | undefined;
+}>;
+/** A diff row's old side: the option's words when the server sends them (U83), else the value. */
+export const beforeText = (f: DiffSide) => f.before_label ?? showValue(f.before, f.unit, f.format);
+/** The new side, with the row's reason in brackets after it (ux U83). */
+export const afterText = (f: DiffSide) =>
+  `${f.after_label ?? showValue(f.after, f.unit, f.format)}${f.note ? ` (${f.note})` : ""}`;
+
 /**
  * The revisions touching one entity, newest first, each with just that entity's labelled entries
  * (api c3b07440d; Profile History). An unknown kind is 422 details.entity_kind.
