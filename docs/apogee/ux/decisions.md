@@ -2759,3 +2759,43 @@ and the code go in Technical details. The refusal carries no catalog rev and non
   revision this request names, so it can't be applied." Then U41's request-again sentence; no `Retry apply`.
 - The panel or form stays as it was after a refusal; nothing was recorded.
 - **Not here:** whether such revisions show in the approval queue at all is domain's question to the director.
+
+### U89 · The four-eyes record in Audit and change history (P3; dashboards' shape diff, lead and director accepted the design, 11-17) (dashboards / api / domain / fe-ops)
+P3 makes every approval gate keep its own record. These are the words for what readers show. Server-made sentences
+stay server-made; the lines below are what they should say. No digest is ever shown (P3 §3).
+
+- **`not_required`** (the policy needed no second person). The setting is "Approval for changes and app
+  activations", option `Applies without approval`, so the sentence names it in those words, never "direct":
+  - Change set: "Applied r10 without a second person's approval, as this mission's setting allows." Activation:
+    "Applied <the activation's summary> without a second person's approval, as this mission's setting allows."
+  - The setting's words are the server's (`console_settings.ex`), shown by Settings as they are.
+  - Commanding has no one setting; the command policies (People › Command policies) decide, and the console already
+    says "No second GO was needed; it was released at submit." So: "Released <group> at submit without a second GO:
+    none of this mission's command policies needed one."
+  - Provider changes have no visible setting; Now says "Accepted by the mission's policy at T." So, with the actor
+    `Cadence` (never an id): "Accepted <the change in words> by the mission's policy, without a person's approval."
+- **Admin mode:** a neutral tag `ADMIN MODE` right after the actor's name, wherever `admin_mode` is true (Org Audit
+  rows, change history, approval lines). Its title and accessible name: "Acting as a platform admin, not as a
+  member of this organization." Admin Audit's rows carry the same tag, so its sentence drops "(admin mode)": "Approved
+  change set v3 in Earendil Ops", not both. `false` and `null` show no tag.
+- **Not recorded** (`admin_mode` null, no reviewed version, rows from before the cutover):
+  - Rows show nothing for it; a missing tag isn't read as a claim (U20), because the detail says so.
+  - A row's detail (or Technical details) reads `Admin mode  Not recorded` and `Reviewed version  Not recorded`
+    for null, never `No`. `true` / `false` read `Yes` / `No`.
+  - An admin-mode filter, if one is added, says under it: "Recorded since <cutover date>."
+- **Audit kinds:** `activations` → `Activations`, `provider_changes` → `Provider changes` (add both to `kindLabel`).
+- **Contact plan events** (dashboards: `contact plan vN` is the number the console shows as `R41`): every contact
+  plan event names it as the console does, "Submitted plan R41 for 11-16", "Approved plan R41 for 11-16", in place
+  of "contact plan v41". The day is derived as the console derives it (the plan's window, first pass); api builds
+  it. If no day can be derived: "Submitted plan R41".
+- **Change history** (Setup › Changes › revisions; `applied_by`'s meaning changes at the cutover; `submitted_by`
+  is null only before it):
+  - Table: `By` becomes `Submitted by` (`submitted_by`, or before the cutover `applied_by`, which was the
+    submitter then), plus a new `Approved by` column: the approvers' names; `Not needed` for `not_required`; `None`
+    before the cutover with no approvals.
+  - Revision header, after the cutover: "Submitted by Mira K. · approved and applied by Ana R. · 11-17 09:12Z"
+    (approver = applier). If they differ: "· approved by Ana R. · applied by Owen P.". Direct: "Submitted and applied
+    by Mira K. · 11-17 09:12Z · no second approval needed".
+  - Before the cutover, never name an applier for an approved row, because `applied_by` was the submitter:
+    "Submitted by Mira K. · approved by Ana R. · applied 11-17 09:12Z". With no approvals: "Submitted and applied
+    by Mira K. · 11-17 09:12Z".
