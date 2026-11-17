@@ -480,7 +480,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
     GenServer.reply(from, reply)
     counts = Map.update!(state.request_counts, key, &(&1 - 1))
     counts = if counts[key] == 0, do: Map.delete(counts, key), else: counts
-    {:noreply, %{state | request_counts: counts}}
+    {:noreply, state |> Map.put(:request_counts, counts) |> clear_backoff(key, response)}
   end
 
   defp handle_partition_response(response, {:reconcile, key}, state) do
@@ -495,6 +495,13 @@ defmodule Cadence.Runtime.MissionCoordinator do
 
     finish_application(%{state | pending_application: pending})
   end
+
+  # The owner answered, so it initialized: a partition that came back from a backoff isn't left
+  # with a doubled delay for its next failure.
+  defp clear_backoff(state, key, {:reply, _reply}),
+    do: Map.update(state, :partition_backoff, %{}, &Map.delete(&1, key))
+
+  defp clear_backoff(state, _key, _response), do: state
 
   defp partition_reply({:reply, reply}), do: reply
 
@@ -604,7 +611,12 @@ defmodule Cadence.Runtime.MissionCoordinator do
       else: Map.put(state, :owner_monitors, Map.put(monitors, pid, {Process.monitor(pid), key}))
   end
 
-  defp owner_down(state, key, {:shutdown, {:partition_initialization_failed, reason}}) do
+  # A partition that failed to initialize, or tripped on a replay-id conflict (DECISIONS #99) and
+  # stopped with a shutdown so its supervisor doesn't restart it, is backed off; the next request
+  # after the delay starts it again (a managed-application timer trip resumes; a trip that recurs
+  # in initialization backs off again, up to 30 s).
+  defp owner_down(state, key, {:shutdown, {kind, reason}})
+       when kind in [:partition_initialization_failed, :replay_id_tripped] do
     {backoff, delay} =
       PartitionBackoff.failed(
         Map.get(state, :partition_backoff, %{}),
@@ -614,7 +626,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
       )
 
     Logger.warning(
-      "Partition #{inspect(PartitionKey.identifier(key))} failed to initialize; " <>
+      "Partition #{inspect(PartitionKey.identifier(key))} #{down_words(kind)}; " <>
         "not starting it again for #{delay}ms: #{inspect(reason, limit: 10, printable_limit: 300)}",
       mission_id: state.mission_id
     )
@@ -623,6 +635,11 @@ defmodule Cadence.Runtime.MissionCoordinator do
   end
 
   defp owner_down(state, _key, _reason), do: state
+
+  defp down_words(:partition_initialization_failed), do: "failed to initialize"
+
+  defp down_words(:replay_id_tripped),
+    do: "stopped on a replay-id conflict (MM_REPLAY_ID_CONFLICT)"
 
   defp start_partition_owner(
          process_namespace,
