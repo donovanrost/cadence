@@ -199,6 +199,60 @@ effects: the same assertion across a restart, with fire times.
   replay that batches differently writes them again (new evidence id, new sample id). They are
   low-volume (written only on a transition) and covered by the identity-v2 audit below.
 
+**Measured, A/B (domain, 11-17; the director's landing condition 3).** Base `2dec10bc2` against
+built `16e80e241` (the code as approved at `e80f6cbc6`). Both benches ran interleaved, built x3,
+base x3, built x3, each phase one gated job (a force compile, then the bench) on test partition
+12. WAL comes from `pg_waldump`, filtered to the test database and summed per relation inside each
+run's LSN window. Statements are counted from the repo's query telemetry, per source table. Id
+bytes are `pg_column_size`. Figures are means of the per-run figures: 6 built runs, 3 base.
+
+*1. Alarm effects, through the live pipeline (03:56-03:59Z).* A real mission runtime with catalog
+limits on two parameters (the end-to-end test's setup): 10 warm-up frames, then 1,000 timed frames
+per run. Both limits flap on every frame (two raises, then two clears), so a run writes 1,010
+episodes and 2,020 events, two transitions per frame: the worst case. Decode-to-commit is the wall
+time of `Cadence.process_telemetry_ingress/1` plus the projector's
+`Persistence.persist_semantic_processing_results/1`, made synchronously, per frame.
+
+| | Base | Built | Delta |
+|---|---|---|---|
+| Decode-to-commit p50 / p95 / p99 | 13.8 / 21.7 / 27.1 ms | 13.9 / 22.8 / 28.3 ms | within run-to-run spread (built p50 12.1-16.9, base 12.6-15.0; run medians 13.7 vs 13.9) |
+| Statements per frame | 45 | 43 | -2 (`alarm_episode_events` 4 to 2: a keyed episode skips `seen?`; `alarm_episodes` 5 both) |
+| Id bytes, `episode_id` / `event_id` | 29.0 / 27.0 | 32.0 / 32.0 | +3 / +5 |
+| WAL, `alarm_episodes` + `alarm_episode_events`, per 1,000 frames | 4.99 MB | 5.13 MB | +134 KB (+2.7%), ~+44 B per effect row |
+
+Where the WAL comes from: insert-or-get (`ON CONFLICT DO NOTHING`) is a speculative insert plus a
+confirm record, so the heap WAL records double on those rows (events 2,000 to 4,000 records,
++112 KB; episodes +53 KB). Primary-key WAL is LOWER (events 257 to 229 KB, episodes 257 to 224 KB)
+because the time-first ids append at the right edge. The director accepted this row as measured.
+
+*2. Managed action requests, through the partition owner's writer path (04:02-04:05Z; the
+director's condition).* Per batch, as the owner builds it: 25 frames x 2 capabilities x 2 timer
+requests each = 100 requests (plus 50 capability records), from `RuntimeRecords.for_execution/7`
+per (packet, capability), merged; then on built `EffectIds.assign/1`; then
+`Persistence.persist_managed_runtime_records/3`. 10 warm-up batches, then 200 timed batches per
+run (20,000 requests). Base writes one insert per request; built writes one
+`insert_all ... ON CONFLICT DO NOTHING RETURNING` per batch. All 21,000 built rows carry replay ids.
+
+| | Base | Built | Delta |
+|---|---|---|---|
+| Batch write p50 / p95 / p99 (100 requests) | 55.3 / 67.6 / 70.9 ms | 43.9 / 52.5 / 62.0 ms | **-21% / -22% / -13%** (built p50 43.1-44.7 in every run, base 52.2-57.0) |
+| Statements per batch | 502 | 403 | -99 (`managed_action_requests` 100 to 1; the capability-record, mission and event statements are identical) |
+| `action_request_id` bytes | 38.0-39.0 | 32.0 | -6.5 |
+| WAL, `managed_action_requests` (heap + 4 indexes), per 20,000 requests | 15.8 MB | 15.7 MB (15.4-16.2) | **-0.5%, neutral** |
+
+Base WAL is the two base runs without a checkpoint. The third base run (19.0 MB) took a
+checkpoint's full-page writes and is left out; counting it, built is 6.7% lower. Inside the total:
+the heap is +800 KB (+40 B per request; the speculative insert's confirm record, 20,000 to 40,000
+records), and the primary key is about -720 KB (2.93 to 2.21 MB, -24%: shorter ids appended at the
+right edge). The other three indexes don't change.
+
+*Not covered:* index growth per run. Sandbox rollbacks leave free pages behind, so it reads 0 to
+188 KB at random; the SQL-level bench above (100k rows per table) stands for primary-key bytes.
+*Caveats:* the test sandbox runs one transaction per test, so neither side pays a commit fsync.
+The machine was shared with the live :4011 stack. Bench 1 is the worst-case flapping workload.
+qa's 06:01Z baseline is for scale only; the live after-numbers come from qa's `measure-98-99` once
+#99 lands.
+
 *Transitions and evaluations* keep their content ids for now (see the volumes below). They are
 replay-stable only if `update_id` (the sample id) is: that is on the identity-v2 audit
 (recovery-from-archive.md (b)).
