@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { Draft, PlanSummary } from "./api.ts";
+// Static, not `await import` in a test body: the module's transform and load counted against the
+// 5 s test timeout and timed out under load (devops' flake tracker, 11-17).
+import { planDetailReader, plansReader, type Draft, type PlanSummary } from "./api.ts";
 import { planView } from "./plan-state.ts";
 
 const ready = <T>(value: T) => ({ status: "ready" as const, value, receivedAt: new Date(0) });
@@ -125,8 +127,7 @@ describe("planOfDay (superseded state)", () => {
 });
 
 describe("plan state decoding (#52)", () => {
-  it("reads unconfirmed, and an unknown state as unrecognized instead of failing", async () => {
-    const { plansReader } = await import("./api.ts");
+  it("reads unconfirmed, and an unknown state as unrecognized instead of failing", () => {
     const row = (state: string) => ({
       id: "p",
       version: 1,
@@ -143,8 +144,7 @@ describe("plan state decoding (#52)", () => {
 });
 
 describe("plan detail chain_head (qa #30)", () => {
-  it("reads the server's bare id, an {id, version} object, or nothing", async () => {
-    const { planDetailReader } = await import("./api.ts");
+  it("reads the server's bare id, an {id, version} object, or nothing", () => {
     const detail = (chain_head: unknown) => ({
       id: "p",
       version: 1,
