@@ -116,6 +116,8 @@ export const errorCodes = [
   "command_group_basis_changed",
   "command_group_review_stale",
   "command_group_self_approval_not_allowed",
+  // U92 (api-ops' P0 fix 02901b298): GO refused, the group's members changed after submit.
+  "command_group_members_changed",
   "command_group_too_large",
   "command_request_not_found",
   "command_request_already_started",

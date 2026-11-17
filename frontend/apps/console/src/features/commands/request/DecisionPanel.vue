@@ -15,6 +15,7 @@ import {
   decisionRecord,
   decisionOptions,
   flaggedTargets,
+  membersChangedLine,
   noGoAfter,
 } from "./decision.ts";
 
@@ -43,9 +44,12 @@ const options = computed(() => decisionOptions(props.group, flagged.value));
 const acks = ref<HoldAcks>({});
 const holds = computed(() => reviewHolds(props.review, props.group.events));
 const goKind = computed(() => choice.value === "go" || choice.value === "go_excluding");
+/** U92: a GO refused because the group changed; GO stays off with it, NO-GO stays open. */
+const membersChanged = ref<string | null>(null);
 const blocked = computed(() => {
   const who = cannotDecide(props.group, props.viewerId, props.canApprove, props.nameOf);
   if (who) return who;
+  if (goKind.value && membersChanged.value) return membersChanged.value;
   const noGo =
     choice.value === "go"
       ? noGoAfter(props.review, new Set())
@@ -79,6 +83,12 @@ async function commit({ value, note }: { value: DecisionKind; note: string }) {
       emit("decided");
     } else if (result.status === "rejected") {
       const e = result.error;
+      if (isError(e, "command_group_members_changed")) {
+        const line = membersChangedLine(e.kind === "conflict" ? e.details : undefined);
+        membersChanged.value = line;
+        outcome.value = { tone: "crit", text: line, reload: false };
+        return;
+      }
       outcome.value = {
         tone: "crit",
         text: `Not recorded. Nothing changed: ${decisionErrorWords(e)}`,

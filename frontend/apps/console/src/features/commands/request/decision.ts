@@ -1,4 +1,11 @@
-import { describeApiError, knownErrorCode, type ApiError, type ErrorCode } from "@/api/index.ts";
+import {
+  decode,
+  decoders as d,
+  describeApiError,
+  knownErrorCode,
+  type ApiError,
+  type ErrorCode,
+} from "@/api/index.ts";
 import { plural } from "@/ui";
 import type { Preflight } from "../groups/api.ts";
 import { checkLabel } from "../groups/checks.ts";
@@ -119,6 +126,26 @@ const ERROR_WORDS: Readonly<Partial<Record<ErrorCode, string>>> = {
   holds_unacknowledged:
     "A HOLD isn't acknowledged against the latest checks. They've been re-run; read them and acknowledge again.",
 };
+/**
+ * ux U92: GO refused because the group's commands changed after it was submitted. The whole line
+ * replaces "Not recorded…"; the panel keeps it as GO's reason (A6), and NO-GO stays the way out.
+ */
+export function membersChangedLine(details: unknown): string {
+  const c = decode(memberCounts, details);
+  const counts =
+    c.ok &&
+    c.value.submitted_member_count !== undefined &&
+    c.value.current_member_count !== undefined
+      ? ` (${c.value.submitted_member_count} then, ${c.value.current_member_count} now)`
+      : "";
+  return `Not released: this group's commands changed after it was submitted${counts}, so it isn't what was reviewed. Give it NO-GO and submit the commands again. Tell the team that runs Cadence for you: a group shouldn't change after it's submitted.`;
+}
+/** U92 (api-ops): both counts, or the bracket goes. */
+const memberCounts = d.object({
+  submitted_member_count: d.optional(d.integer),
+  current_member_count: d.optional(d.integer),
+});
+
 /** A refused decision in words: the code's sentence when the console has one, else the server's. */
 export function decisionErrorWords(e: ApiError): string {
   const code = knownErrorCode(e);
