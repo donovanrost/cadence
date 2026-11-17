@@ -58,12 +58,17 @@ defmodule Cadence.Alarms.EpisodeReplayIdsTest do
   test "a different input under a stored id is refused, not swallowed", ctx do
     {:ok, :changed} = Episodes.observe(Repo, observation(ctx, :caution, 0, "ref-a"))
 
-    # Same key (a bug: two inputs mapped to one id), another source record.
-    impostor = %{observation(ctx, :critical, 0, "ref-other") | effect_key: key(ctx, 0)}
+    # Same key (a bug: two inputs mapped to one id), another subject.
+    impostor = %{
+      observation(ctx, :critical, 0, "ref-other")
+      | effect_key: key(ctx, 0),
+        subject_key: "TEMP/policy-2"
+    }
 
     log =
       capture_log(fn ->
-        assert {:error, {:replay_id_conflict, :alarm_event, _id}} =
+        # Another subject has no open episode, so the open's episode id meets the stored one.
+        assert {:error, {:replay_id_conflict, :alarm_episode, _id}} =
                  Episodes.observe(Repo, impostor)
       end)
 

@@ -11,8 +11,10 @@ defmodule Cadence.Alarms.Episodes do
   An observation with an `effect_key` (DECISIONS #99: one from a journal frame or a timer) gets
   replay-safe ids instead of `Ids.new`: its episode and event are written insert-or-get, and an id
   already stored means a replay, so the episode change is skipped (no `seen?` read). The stored row
-  must be the same effect (`ReplayId.check_replay/4`, on the source ref and time), else
-  `MM_REPLAY_ID_CONFLICT`. Observations without a key (ground limits) work as before.
+  must be the same effect (`ReplayId.check_replay/4`, on its subject and observation time), else
+  `MM_REPLAY_ID_CONFLICT`. Not on the source ref: a transition's id derives from its sample id,
+  which includes the evidence id, and a replay that batches the journal differently gets another
+  evidence id (11-17 end-to-end test). Observations without a key (ground limits) work as before.
 
   | Previous → next | Effect |
   | --- | --- |
@@ -292,18 +294,19 @@ defmodule Cadence.Alarms.Episodes do
     }
 
     insert_or_get(repo, row, :alarm_event, observation, fn stored ->
-      %{source_ref: stored.source_ref, at: stored.at}
+      %{subject: repo.get!(EpisodeRow, stored.episode_id).subject_key, at: stored.at}
     end)
   end
 
   defp insert_episode(repo, episode, observation) do
     insert_or_get(repo, episode, :alarm_episode, observation, fn stored ->
-      %{source_ref: stored.opened_by_ref, at: stored.opened_at}
+      %{subject: stored.subject_key, at: stored.opened_at}
     end)
   end
 
   # Unkeyed: a plain insert, as before. Keyed: insert-or-get on the replay-safe id; an id already
-  # stored is a replay of the same input (checked), so the caller skips its change.
+  # stored is a replay of the same input (checked on subject and time), so the caller skips its
+  # change.
   defp insert_or_get(repo, row, _kind, %{effect_key: nil}, _input_of), do: plain_insert(repo, row)
 
   defp insert_or_get(repo, %schema{} = row, kind, %{effect_key: %{}} = observation, input_of) do
@@ -317,7 +320,7 @@ defmodule Cadence.Alarms.Episodes do
 
       {0, []} ->
         stored = repo.get!(schema, id)
-        new = %{source_ref: observation.ref, at: observation.observed_at}
+        new = %{subject: observation.subject_key, at: observation.observed_at}
 
         with :ok <- ReplayId.check_replay(kind, id, input_of.(stored), new),
              do: {:ok, :replayed}
