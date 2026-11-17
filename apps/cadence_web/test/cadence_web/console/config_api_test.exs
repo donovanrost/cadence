@@ -15,7 +15,13 @@ defmodule CadenceWeb.Console.ConfigAPITest do
     previous = Application.get_env(:cadence, :activation_governance, [])
     on_exit(fn -> Application.put_env(:cadence, :activation_governance, previous) end)
 
-    %{alice: alice, bob: bob, base: "/api/console/v1/missions/#{mission.mission_id}/config"}
+    %{
+      alice: alice,
+      bob: bob,
+      org: org,
+      mission: mission,
+      base: "/api/console/v1/missions/#{mission.mission_id}/config"
+    }
   end
 
   defp approval_required(required?),
@@ -78,6 +84,8 @@ defmodule CadenceWeb.Console.ConfigAPITest do
       |> Map.fetch!("data")
 
     assert preview["verdict"] == "go"
+    # ux U93: nothing has been activated on this mission, so applying starts nothing.
+    assert preview["has_active_configuration"] == false
 
     applied =
       c.alice
@@ -88,7 +96,12 @@ defmodule CadenceWeb.Console.ConfigAPITest do
       |> json_response(200)
       |> Map.fetch!("data")
 
-    assert %{"state" => "applied", "revision" => 2, "runtime" => "not_applicable"} = applied
+    assert %{
+             "state" => "applied",
+             "revision" => 2,
+             "runtime" => "not_applicable",
+             "has_active_configuration" => false
+           } = applied
 
     revisions =
       c.alice
@@ -123,6 +136,25 @@ defmodule CadenceWeb.Console.ConfigAPITest do
     })
     |> json_response(200)
     |> Map.fetch!("data")
+  end
+
+  test "U93: the preview says the mission has an active configuration once it has one", c do
+    {:ok, _} =
+      Cadence.Activations.record_binding_set_activation(
+        c.org.organization_id,
+        c.mission.mission_id,
+        "u93-binding",
+        1,
+        binding_set_content_sha256: String.duplicate("0", 64)
+      )
+
+    %{"change_set_id" => set_id} = stage!(c, c.alice, "Kiruna")
+
+    assert %{"has_active_configuration" => true} =
+             c.alice
+             |> call(:post, "#{c.base}/change-sets/#{set_id}/preview")
+             |> json_response(200)
+             |> Map.fetch!("data")
   end
 
   test "revisions by entity: only the revisions that touch it, with its labelled entries", c do

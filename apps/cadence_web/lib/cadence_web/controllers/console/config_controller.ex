@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.ConfigController do
   use CadenceWeb, :controller
 
   alias Cadence.Configuration.Kinds
-  alias Cadence.Control.{Configuration, ConfigurationRollback, SpacecraftOps}
+  alias Cadence.Control.{Activations, Configuration, ConfigurationRollback, SpacecraftOps}
   alias Cadence.Reads.{ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
@@ -48,6 +48,7 @@ defmodule CadenceWeb.Console.ConfigController do
     do:
       Configuration.preview(scope(conn), mission_id(conn), id)
       |> labelled(conn)
+      |> with_active_configuration(conn)
       |> wrap()
       |> reply(conn)
 
@@ -56,7 +57,9 @@ defmodule CadenceWeb.Console.ConfigController do
          {:ok, ops} <-
            params(SpacecraftOps.prepare(scope(conn).organization_id, mission_id(conn), ops)),
          {:ok, preview} <-
-           labelled(Configuration.preview(scope(conn), mission_id(conn), {:ops, ops}), conn) do
+           Configuration.preview(scope(conn), mission_id(conn), {:ops, ops})
+           |> labelled(conn)
+           |> with_active_configuration(conn) do
       ok(conn, preview)
     end
     |> reply(conn)
@@ -73,7 +76,7 @@ defmodule CadenceWeb.Console.ConfigController do
   def submit(conn, %{"change_set_id" => id} = body) do
     with {:ok, submit} <- params(ConfigParams.submit(body)),
          {:ok, result} <- Configuration.submit(scope(conn), mission_id(conn), id, submit) do
-      ok(conn, result)
+      ok(conn, applied_with_configuration(result, conn))
     end
     |> reply(conn)
   end
@@ -82,7 +85,7 @@ defmodule CadenceWeb.Console.ConfigController do
     with {:ok, decision, review} <- params(ConfigParams.review(body)),
          {:ok, result} <-
            Configuration.review(scope(conn), mission_id(conn), id, decision, review) do
-      ok(conn, result)
+      ok(conn, applied_with_configuration(result, conn))
     end
     |> reply(conn)
   end
@@ -189,6 +192,27 @@ defmodule CadenceWeb.Console.ConfigController do
     do: {:ok, ConfigLabels.preview(scope(conn).organization_id, mission_id(conn), preview)}
 
   defp labelled(other, _conn), do: other
+
+  # ux U93: whether the mission has an active configuration (an activation exists; not runtime
+  # health). With none, applying saves the changes and starts nothing: a mission's first
+  # generation comes from each spacecraft's configuration (domain, 11-17). On every preview, and
+  # on a result that applied.
+  defp with_active_configuration({:ok, preview}, conn),
+    do: {:ok, Map.put(preview, :has_active_configuration, active_configuration?(conn))}
+
+  defp with_active_configuration(other, _conn), do: other
+
+  defp applied_with_configuration(%{state: :applied} = result, conn),
+    do: Map.put(result, :has_active_configuration, active_configuration?(conn))
+
+  defp applied_with_configuration(result, _conn), do: result
+
+  defp active_configuration?(conn) do
+    match?(
+      {:ok, _activation},
+      Activations.fetch_active_basis(scope(conn).organization_id, mission_id(conn))
+    )
+  end
 
   defp ok(conn, data), do: {:sent, json(conn, %{data: ConfigJSON.encode(data)})}
 
