@@ -510,15 +510,15 @@ defmodule Cadence.Runtime.PartitionOwner do
             else
               {:error, reason} ->
                 _ = TimerService.cancel_all(timer_service)
-                {:stop, reason, {:error, reason}, state}
+                {:stop, tripped(reason), {:error, reason}, state}
             end
 
           {:error, reason} ->
-            {:stop, reason, {:error, reason}, state}
+            {:stop, tripped(reason), {:error, reason}, state}
         end
 
       {:error, reason} ->
-        {:stop, reason, {:error, reason}, state}
+        {:stop, tripped(reason), {:error, reason}, state}
     end
   end
 
@@ -1550,8 +1550,9 @@ defmodule Cadence.Runtime.PartitionOwner do
   # was started with `runtime_writer:` (a module with the same two functions; tests).
   defp runtime_writer(policy), do: Map.get(policy, :runtime_writer, Persistence)
 
-  # A replay-id conflict (DECISIONS #99) is a bug the retry hits again. On the timer paths the owner
-  # stops with a shutdown so its transient child isn't restarted: one restart per tripped partition
+  # A replay-id conflict (DECISIONS #99) is a bug the retry hits again. On the timer and activation
+  # reconcile paths (reconcile runs in every live partition at once) the owner stops with a shutdown
+  # so its transient child isn't restarted: one restart per tripped partition
   # would let a few partitions tripping together exhaust the mission's partition pool and take
   # every partition of the mission down. The coordinator backs the partition off instead
   # (MissionCoordinator.owner_down/3) and starts it again on the next request after the delay.
@@ -1560,6 +1561,8 @@ defmodule Cadence.Runtime.PartitionOwner do
     if replay_id_conflict?(reason), do: {:shutdown, {:replay_id_tripped, reason}}, else: reason
   end
 
+  # Today's error reasons nest the conflict in tuples only. A conflict wrapped in a map or list
+  # isn't found and falls back to the abnormal exit (restart and count): the old behaviour.
   defp replay_id_conflict?({:replay_id_conflict, _kind, _id}), do: true
 
   defp replay_id_conflict?(reason) when is_tuple(reason),

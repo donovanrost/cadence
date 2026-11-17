@@ -35,6 +35,8 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
   @mission "trip-supervision-mission"
   @org "trip-supervision-org"
   @apid 42
+  # An owner up this long before failing starts its backoff over (production: 30 s).
+  @stable_ms 300
   @namespace %ProcessNamespace{
     root_supervisor: __MODULE__.Root,
     registry: __MODULE__.Registry,
@@ -53,16 +55,21 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
       {Runtime.Supervisor,
        process_namespace: @namespace,
        resource_children: [],
-       mission_runtime_opts: [runtime_writer: TrippingRuntimeWriter],
+       mission_runtime_opts: [
+         runtime_writer: TrippingRuntimeWriter,
+         partition_stable_ms: @stable_ms
+       ],
        profiler: :disabled}
     )
 
-    assert {:ok, _} = Missions.apply(@namespace, runtime_spec(tags[:periodic_ms]))
+    spec = runtime_spec(tags[:periodic_ms])
+    assert {:ok, _} = Missions.apply(@namespace, spec)
     beta = key("beta")
     assert {:ok, _} = Runtime.partition_snapshot(@namespace, @mission, beta)
     assert {:ok, beta_owner} = PartitionOwner.lookup(@namespace, @mission, beta)
 
     %{
+      spec: spec,
       beta: beta,
       beta_owner: beta_owner,
       pool: GenServer.whereis(MissionRuntime.partition_supervisor_name(@namespace, @mission)),
@@ -70,7 +77,7 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
     }
   end
 
-  test "a managed-application timer trip stops with a shutdown, backs off, comes back and clears",
+  test "a managed-application timer trip stops with a shutdown, backs off, comes back, resets",
        ctx do
     alpha = key("alpha")
     assert {:ok, _} = Runtime.partition_snapshot(@namespace, @mission, alpha)
@@ -102,16 +109,91 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
 
     assert retry_ms <= 250
 
-    # It comes back through the backoff (director (1)), and a start that answers clears the
-    # backoff, so its next failure starts at 250 ms again, not doubled (lead (2)).
+    # It comes back through the backoff (director (1)).
     TrippingRuntimeWriter.configure(@mission, trip: [], notify: self())
     Process.sleep(retry_ms + 20)
     assert {:ok, _} = Runtime.partition_snapshot(@namespace, @mission, alpha)
     assert {:ok, back} = PartitionOwner.lookup(@namespace, @mission, alpha)
     assert back != owner
-    refute Map.has_key?(:sys.get_state(ctx.coordinator).partition_backoff, alpha)
 
+    # After a stable run, its next trip starts the backoff over at 250 ms, not doubled (lead (2)).
+    Process.sleep(@stable_ms + 50)
+    ref = Process.monitor(back)
+    TrippingRuntimeWriter.configure(@mission, trip: [:timer_handled], notify: self())
+
+    capture_log(fn ->
+      assert {:ok, _} = ingest(alpha, 2)
+      assert_receive {:DOWN, ^ref, :process, ^back, {:shutdown, {:replay_id_tripped, _}}}, 2_000
+    end)
+
+    assert {:error, {:partition_initialization_backoff, _, again_ms}} =
+             Runtime.partition_snapshot(@namespace, @mission, alpha)
+
+    assert again_ms <= 250
     assert_untouched(ctx)
+  end
+
+  test "a timer trip recurring right after each restart backs off 250, 500, 1000 ms", ctx do
+    alpha = key("alpha")
+    TrippingRuntimeWriter.configure(@mission, trip: [:timer_handled], notify: self())
+
+    delays =
+      capture_log_result(fn ->
+        for sequence <- 1..3 do
+          # The request starts the partition (after the previous delay); its packet arms the
+          # flush timer, which trips 25 ms later: well inside the stable time.
+          assert {:ok, _} = ingest(alpha, sequence)
+          {:ok, owner} = PartitionOwner.lookup(@namespace, @mission, alpha)
+          ref = Process.monitor(owner)
+
+          assert_receive {:DOWN, ^ref, :process, ^owner, {:shutdown, {:replay_id_tripped, _}}},
+                         2_000
+
+          assert {:error, {:partition_initialization_backoff, _, delay}} =
+                   Runtime.partition_snapshot(@namespace, @mission, alpha)
+
+          Process.sleep(delay + 30)
+          delay
+        end
+      end)
+
+    assert [first, second, third] = delays
+    assert first <= 250
+    assert second > 250 and second <= 500
+    assert third > 500 and third <= 1_000
+    assert_untouched(ctx)
+  end
+
+  test "an activation reconcile that trips in every partition at once leaves the pool alive",
+       ctx do
+    keys = for name <- ~w(p1 p2 p3 p4), do: key(name)
+
+    owners =
+      for k <- [ctx.beta | keys] do
+        assert {:ok, _} = Runtime.partition_snapshot(@namespace, @mission, k)
+        {:ok, owner} = PartitionOwner.lookup(@namespace, @mission, k)
+        {owner, Process.monitor(owner)}
+      end
+
+    # A generation apply reconciles every live partition at once; each writes the new
+    # generation's initialization records, the tripped write (api-ops R1).
+    TrippingRuntimeWriter.configure(@mission, trip: [:initialized], notify: self())
+    next = %{ctx.spec | generation: 2, activation_id: "trip-next"}
+
+    capture_log(fn ->
+      assert {:error, {:generation_incomplete, 2, failed}} = Missions.apply(@namespace, next)
+      assert MapSet.new(Map.keys(failed)) == MapSet.new([ctx.beta | keys])
+
+      for {owner, ref} <- owners do
+        assert_receive {:DOWN, ^ref, :process, ^owner, {:shutdown, {:replay_id_tripped, _}}},
+                       3_000
+      end
+
+      Process.sleep(300)
+    end)
+
+    assert GenServer.whereis(pool_name()) == ctx.pool
+    assert Process.alive?(ctx.pool)
   end
 
   @tag periodic_ms: 150
@@ -192,7 +274,8 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
       Enum.each(keys, &({:ok, _} = ingest(&1, 1)))
 
       for {owner, ref} <- owners do
-        assert_receive {:DOWN, ^ref, :process, ^owner, _reason}, 3_000
+        assert_receive {:DOWN, ^ref, :process, ^owner, {:shutdown, {:replay_id_tripped, _}}},
+                       3_000
       end
 
       # Room for the pool to restart them (before the fix it did, and gave up at the fourth).
@@ -235,6 +318,13 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
     assert Process.alive?(ctx.pool)
     assert Process.alive?(ctx.beta_owner)
     assert PartitionOwner.lookup(@namespace, @mission, ctx.beta) == {:ok, ctx.beta_owner}
+  end
+
+  defp capture_log_result(fun) do
+    parent = self()
+    capture_log(fn -> send(parent, {:result, fun.()}) end)
+    assert_received {:result, result}
+    result
   end
 
   defp restarted?(key, old) do
