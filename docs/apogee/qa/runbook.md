@@ -289,6 +289,28 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 | 27–29 | unclaimed | main ports: claim before use |
 | 31 | qa | restart dry assemblies (`scratchpad/dry-b-wt`; (B) 11-14 01:23–01:35Z, the L8 + L4 bundle next) |
 
+## Trial picks the evening before
+
+(Director, 11-17, ruling 6.) The evening before a slot, qa trial-picks every set queued for it onto the current
+shared head. This is read-only and runs in a side worktree, never the shared tree: `git cherry-pick -x` in order.
+
+- Record the pick rc and each commit's `git patch-id --stable` against the source in the checklist.
+- When a set deletes or renames a module, `git grep` the head for its remaining users. A clean pick does not prove
+  that nothing else depends on it.
+- A conflict, or a remaining user, goes to the set's owner and lead that same evening, so the re-cut is ready before
+  the slot.
+- Re-run the trial for any set whose base moves after the evening check.
+- The trial is not the dry. The slot still needs its dry on the exact tree.
+
+Why: on 11-17 the step 4 drift-fix set, reviewed 11-15 on an older base, failed its pick at slot time. 67e87cdfd
+deleted `Platform.ReadMemo`, which U61 (8cc9f07c8, landed 11-16) had started using in `Reads.Attention` and
+`Reads.PlanCoverageAttention`. Purging it on the live node would have broken every Now attention load.
+
+**Restart chain order is fixed** (director via lead, 11-17). A chain runs in its agreed order, each step after the
+previous one's post-checks. A later step never moves ahead to keep its time. When an earlier step slips, everything
+after it slides; what no longer fits the day moves to the next day in the same order, never compressed. Protected
+windows (for example, around an armed run) stay closed whatever slips.
+
 ## Daily dev retention slot
 
 Once a day, in a qa slot outside passes (no active contact; not within 1 h of an armed pass), on `cadence_apogee_dev`
