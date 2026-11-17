@@ -42,12 +42,13 @@ defmodule Cadence.Control.ActivationRequests do
   end
 
   @doc "Approves and applies: `{:ok, %{request, outcome: applied | needs_review}}`."
-  @spec approve(Scope.t(), binary(), binary(), map()) :: {:ok, map()} | {:error, term()}
-  def approve(%Scope{} = scope, mission_id, request_id, params) do
+  @spec approve(Scope.t(), binary(), binary(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def approve(%Scope{} = scope, mission_id, request_id, params, opts \\ []) do
     with {:ok, reason} <- reason(params["reason"]),
          {:ok, _request} <- pending(scope, mission_id, request_id),
          {:ok, _request, _decision, approved} <-
-           decision_result(ManagementActivations.approve(scope, request_id, reason)) do
+           decision_result(ControlActivations.approve(scope, request_id, reason, opts)) do
       outcome = scope |> execute(approved) |> outcome()
       announce(scope, mission_id)
       reply(scope, mission_id, request_id, outcome)

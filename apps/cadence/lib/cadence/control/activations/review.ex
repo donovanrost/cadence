@@ -46,7 +46,7 @@ defmodule Cadence.Control.Activations.Review do
   end
 
   defp execute(scope, id, reason, "approved") do
-    with {:ok, request, _decision, approved} <- Activations.approve(scope, id, reason) do
+    with {:ok, request, _decision, approved} <- ControlActivations.approve(scope, id, reason) do
       {:ok, apply_approved(request.activation_request_id, approved)}
     end
   end

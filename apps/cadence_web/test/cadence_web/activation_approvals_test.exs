@@ -172,7 +172,20 @@ defmodule CadenceWeb.ActivationApprovalsTest do
   end
 
   test "approved intent is reported separately when runtime application fails", context do
-    pending = request(context)
+    # An applicable request (approve refuses one that could never apply, Control.Activations
+    # preflight/2), whose apply then fails transiently AFTER the approval: the activation's own
+    # insert is interrupted, as a lost connection would.
+    pending = request(context, model: true)
+
+    Cadence.Repo.query!("""
+    CREATE FUNCTION pg_temp.interrupt_apply() RETURNS trigger AS $$
+    BEGIN RAISE EXCEPTION 'connection lost (injected)'; END $$ LANGUAGE plpgsql
+    """)
+
+    Cadence.Repo.query!("""
+    CREATE TRIGGER interrupt_apply BEFORE INSERT ON mission_binding_set_activations
+    FOR EACH ROW EXECUTE FUNCTION pg_temp.interrupt_apply()
+    """)
 
     assert {:ok, %{"decision" => "approved", "outcome" => "application_needs_review"}} =
              ControlActivations.review(

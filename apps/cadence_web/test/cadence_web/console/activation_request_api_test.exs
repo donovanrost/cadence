@@ -4,6 +4,7 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Management.Activations
   alias CadenceWeb.TestFixtures
 
@@ -121,7 +122,9 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
   end
 
   test "approve answers with the row and whether it applied", c do
-    id = request(c).activation_request_id
+    # An applicable request (an approved model): approve refuses one whose apply couldn't run
+    # (Control.Activations.preflight/2, director 11-17).
+    id = applicable_request(c).activation_request_id
 
     data =
       c.approver
@@ -194,6 +197,53 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
 
   defp get_conn(user, path), do: user |> TestFixtures.member_conn() |> get(path)
   defp post_conn(user, path, body), do: user |> TestFixtures.member_conn() |> post(path, body)
+
+  defp applicable_request(c) do
+    binding =
+      BindingSet.new(%{
+        organization_id: c.org.organization_id,
+        mission_id: c.mission.mission_id,
+        binding_set_id: Cadence.Ids.new("review-basis"),
+        version: 1
+      })
+
+    {:ok, binding} = Cadence.Governance.persist_binding_set(c.org.organization_id, binding)
+
+    layer =
+      Layer.new(%{
+        organization_id: c.org.organization_id,
+        mission_id: c.mission.mission_id,
+        name: "applicable model",
+        declarations: [%{kind: :space_system, qualified_name: "/"}]
+      })
+
+    {:ok, compilation} = Cadence.MissionModels.compile_layers([layer])
+
+    # The orphan guard (item 3): an approved model revision is one a catalog revision names.
+    Cadence.MissionModelCatalogNaming.name!(
+      c.org.organization_id,
+      c.mission.mission_id,
+      compilation.revision.revision_id
+    )
+
+    {:ok, _approved} =
+      Cadence.MissionModelApproval.approve!(
+        c.org.organization_id,
+        c.mission.mission_id,
+        compilation.revision.revision_id
+      )
+
+    {:ok, request} =
+      Cadence.MissionModels.request_promotion(
+        c.scope,
+        c.mission.mission_id,
+        compilation.revision.revision_id,
+        binding.binding_set_id,
+        binding.version
+      )
+
+    request
+  end
 
   defp request(c, binding_set_id \\ nil) do
     id =

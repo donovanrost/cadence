@@ -417,14 +417,33 @@ defmodule Cadence.Management.Activations do
     |> Repo.update()
   end
 
-  defp lock_pending_request(%Scope{} = scope, request_id) do
+  @doc """
+  Whether `scope` may make `decision` on `request_id` now: the same checks a decision runs (a human
+  approver, pending, authorized, the current policy for an approval, a distinct approver), with
+  nothing recorded. Control's approve runs these BEFORE its apply preflight, so an authorization or
+  separation refusal keeps its precedence; the decision re-checks them under its lock.
+  """
+  @spec decidable(Scope.t(), binary(), :approved | :rejected) :: :ok | {:error, term()}
+  def decidable(%Scope{} = scope, request_id, decision) when decision in [:approved, :rejected] do
+    with {:ok, actor} <- human_approver(scope),
+         {:ok, row} <- pending_request(scope, request_id, false),
+         :ok <- authorize_decision(scope, row),
+         :ok <- current_policy(decision, row) do
+      distinct_approver(row, actor)
+    end
+  end
+
+  defp lock_pending_request(%Scope{} = scope, request_id),
+    do: pending_request(scope, request_id, true)
+
+  defp pending_request(%Scope{} = scope, request_id, lock?) do
     ActivationRequestRow
     |> where(
       [request],
       request.activation_request_id == ^request_id and
         request.organization_id == ^scope.organization_id
     )
-    |> lock("FOR UPDATE")
+    |> then(&if(lock?, do: lock(&1, "FOR UPDATE"), else: &1))
     |> Repo.one()
     |> case do
       nil -> {:error, :activation_request_not_found}
