@@ -355,6 +355,12 @@ first-seen canonical observation (#99).
 - **Rollback below aa7c64264 (semantic empty-start seed, domain 11-15):** once a partition has a `'seed'` commit
   (input `{:seed_monitoring, …}`), OLD code can't replay it ("unsupported input"). That only bites if that partition's
   checkpoint is also lost. Before rolling back past it, check the partition checkpoints are intact (api-ops note C).
+- **Provenance B: roll FORWARD, not back** (director, 11-17, option A; DECISIONS #103). After B lands, a code
+  rollback past B is a last resort. If one ever happens, there are no Data operations writes until B is rolled
+  forward again: no legacy `/ops/data-operations` requests, no backfill, no late-data accept. **Before that rollback
+  restart, qa checks that no such job is queued or running.** Why this is enough: dev only, no production; rows
+  keep their provenance in the B columns; the one harmful path is the parked legacy page, where pre-B code
+  re-persists a decoded map without the columns.
 - **Replay.Diff after aa7c64264 shows timer outputs with no live counterpart over downtime:** a live clock now skips
   to now after downtime (one late tick), a replay clock keeps every tick. Expected, not divergence (api-ops note B).
 - **Deploy identity v2 with a graceful stop (journal sealed), not a kill.** A crash with a persisted-but-unacked batch
