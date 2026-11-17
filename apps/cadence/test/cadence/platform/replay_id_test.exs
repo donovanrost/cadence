@@ -73,4 +73,47 @@ defmodule Cadence.Platform.ReplayIdTest do
       assert ReplayId.parse(id) == :error
     end
   end
+
+  describe "number/3" do
+    @us DateTime.to_unix(~U[2026-11-17 01:00:00Z], :microsecond)
+
+    test "numbers per (stream, offset) in order; sources without an ordinal or nil get nil" do
+      items = [
+        {:a, ["j1", 14, @us]},
+        {:b, ["j1", 14, @us]},
+        {:c, ["j1", 28, @us]},
+        {:d, nil},
+        {:e, ["j2", 14, @us]},
+        {:f, ["unknown", 14, @us]},
+        {:g, ["j1", 14, @us]}
+      ]
+
+      numbered = ReplayId.number(items, &elem(&1, 1), %{"j1" => 3, "j2" => 4})
+
+      assert Enum.map(numbered, fn
+               {{name, _}, nil} -> {name, nil}
+               {{name, _}, key} -> {name, key.ordinal, key.offset, key.index}
+             end) == [
+               {:a, 3, 14, 0},
+               {:b, 3, 14, 1},
+               {:c, 3, 28, 0},
+               {:d, nil},
+               {:e, 4, 14, 0},
+               {:f, nil},
+               {:g, 3, 14, 2}
+             ]
+    end
+
+    test "the same items numbered again give the same keys" do
+      items = for n <- 1..5, do: {n, ["j1", div(n, 2) * 14, @us]}
+      ordinals = %{"j1" => 9}
+
+      assert ReplayId.number(items, &elem(&1, 1), ordinals) ==
+               ReplayId.number(items, &elem(&1, 1), ordinals)
+    end
+
+    test "stream_keys/1 lists each stream once and skips nils" do
+      assert ReplayId.stream_keys([["a", 0, 1], nil, ["b", 0, 1], ["a", 14, 1]]) == ["a", "b"]
+    end
+  end
 end
