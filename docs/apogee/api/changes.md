@@ -18,6 +18,14 @@ Base: `/api/console/v1/missions/:mission_id/config`. Write calls need `x-csrf-to
 | `POST /change-sets/:id/review` | `review/5` | `{decision: approve \| send_back, comment, expected_version}` | `{state: applied \| open, …}` |
 | `POST /changes/:change_id/withdraw` | `withdraw/3` | | `{change_set_id, version, state}` |
 | `POST /ops/:op_id/rebase` | `rebase/4` | `{choice: keep_mine \| take_live}` | `{change_set_id, version, state}` |
+
+`has_active_configuration` (11-17, ux U93; additive, readers first): a boolean, never null, on
+every preview (`POST /preview`, `POST /change-sets/:id/preview`) and on a submit or review result
+whose `state` is `applied`. It is true when the mission has an active activation, and says
+nothing about runtime health (a mission whose runtime isn't admitted, U91, reads true). With
+`false`, applying saves the changes and starts nothing: a mission's first generation comes from
+each spacecraft's configuration. Don't infer it from `runtime: not_applicable`, which also covers
+changes the runtime doesn't use. On a result it is read right after the apply commits.
 | `GET /revisions?limit=&before=` | `list_revisions/3` | | `{revisions: [revision_summary]}` (newest first; `limit` 1–100) |
 | `GET /revisions/:n` | `get_revision/3` | | revision_summary + `entries` |
 | `GET /revisions?entity_kind=&entity_id=&limit=` | `entity_revisions/5` | | `{revisions: [revision_summary + entries]}`: only the revisions touching that entity, newest first, each with just that entity's entries, labelled as `GET /revisions/:n`'s (Profile History; `422 details.entity_kind` for an unknown kind) |

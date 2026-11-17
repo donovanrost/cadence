@@ -138,7 +138,10 @@ defmodule CadenceWeb.Console.ConfigAPITest do
     |> Map.fetch!("data")
   end
 
-  test "U93: the preview says the mission has an active configuration once it has one", c do
+  test "U93: the preview and the apply say the mission has an active configuration once it has one",
+       c do
+    approval_required(false)
+
     {:ok, _} =
       Cadence.Activations.record_binding_set_activation(
         c.org.organization_id,
@@ -148,11 +151,21 @@ defmodule CadenceWeb.Console.ConfigAPITest do
         binding_set_content_sha256: String.duplicate("0", 64)
       )
 
-    %{"change_set_id" => set_id} = stage!(c, c.alice, "Kiruna")
+    %{"change_set_id" => set_id, "version" => version} = stage!(c, c.alice, "Kiruna")
 
     assert %{"has_active_configuration" => true} =
              c.alice
              |> call(:post, "#{c.base}/change-sets/#{set_id}/preview")
+             |> json_response(200)
+             |> Map.fetch!("data")
+
+    # And the apply's result says so too (dashboards' review ask).
+    assert %{"state" => "applied", "has_active_configuration" => true} =
+             c.alice
+             |> call(:post, "#{c.base}/change-sets/#{set_id}/submit", %{
+               "reason" => "Add the Kiruna station",
+               "expected_version" => version
+             })
              |> json_response(200)
              |> Map.fetch!("data")
   end
