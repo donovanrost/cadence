@@ -2799,3 +2799,26 @@ stay server-made; the lines below are what they should say. No digest is ever sh
   - Before the cutover, never name an applier for an approved row, because `applied_by` was the submitter:
     "Submitted by Mira K. · approved by Ana R. · applied 11-17 09:12Z". With no approvals: "Submitted and applied
     by Mira K. · 11-17 09:12Z".
+
+### U90 · A comparison with nothing to compare against (director, via lead, 11-17; amends U65) (domain / api / fe-ops)
+A mission's first catalog revision can now be compared with no earlier configuration. The report then passes with
+`against: null`, every declaration counts as added, and replay is `not_run`. That pass checks nothing like for like,
+so the panel must never read it as one. The read already has `against` nullable (the console decodes it); today a
+null `against` reads "Comparison passed", which is the wrong claim.
+
+- **Verdict line** (the Approval panel, in place of `■ Comparison passed against rev 3`): `▲ Not compared: there's no
+  earlier configuration` (caution). Never "passed", never the pass glyph, whatever `passed` says.
+- **Callout at the top of the panel** (caution, above the replay callout, never folded away): "There's no earlier
+  configuration for this mission, so there was nothing to compare it with. All 1,284 declarations are new, and
+  none has been checked against an earlier version." The count is the sum of the sections' added; without one,
+  "Every declaration is new, and none has been checked against an earlier version."
+- **Panel meta:** `NO EARLIER CONFIGURATION` in place of `AGAINST REV 3`.
+- **Report body:** unchanged: "Commands: 412 added", and so on.
+- **Above `Approve rev 1`:** "Approving it accepts every declaration as new." The button and Reject stay as U65.
+- **Short form, everywhere the summary shows** (the decided line's `Show report`, the catalog row's detail, the
+  audit): "not compared: no earlier configuration". Audit: "Approved catalog rev 1 (not compared: no earlier
+  configuration; replay not run)".
+- **Rule for the console** (domain, 11-17): `against: null` on a report means exactly this case. The baseline is
+  the previous import, else the revision most spacecraft run; only when neither exists is it null. No new field,
+  and no split by reason: the approver needs the same words either way. "No comparison has been run yet" (U65) is
+  a missing report, not this.
