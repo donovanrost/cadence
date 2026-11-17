@@ -48,27 +48,27 @@ defmodule Cadence.Runtime.PartitionOwner.EffectIds do
   @spec ordinals(binary(), binary(), [binary()]) ::
           {:ok, %{optional(binary()) => pos_integer()}} | {:error, term()}
   def ordinals(mission_id, partition_id, stream_keys) do
-    cache = Process.get(@cache, %{})
-
     Enum.reduce_while(stream_keys, {:ok, %{}}, fn stream, {:ok, acc} ->
-      case Map.fetch(cache, {mission_id, partition_id, stream}) do
-        {:ok, ordinal} ->
-          {:cont, {:ok, Map.put(acc, stream, ordinal)}}
-
-        :error ->
-          case PartitionStreamKeys.ordinal(mission_id, partition_id, stream) do
-            {:ok, ordinal} ->
-              Process.put(
-                @cache,
-                Map.put(Process.get(@cache, %{}), {mission_id, partition_id, stream}, ordinal)
-              )
-
-              {:cont, {:ok, Map.put(acc, stream, ordinal)}}
-
-            {:error, reason} ->
-              {:halt, {:error, {:partition_stream_key_failed, stream, reason}}}
-          end
+      case ordinal(mission_id, partition_id, stream) do
+        {:ok, ordinal} -> {:cont, {:ok, Map.put(acc, stream, ordinal)}}
+        {:error, reason} -> {:halt, {:error, {:partition_stream_key_failed, stream, reason}}}
       end
     end)
+  end
+
+  defp ordinal(mission_id, partition_id, stream) do
+    key = {mission_id, partition_id, stream}
+
+    case Map.fetch(Process.get(@cache, %{}), key) do
+      {:ok, ordinal} -> {:ok, ordinal}
+      :error -> allocate(key)
+    end
+  end
+
+  defp allocate({mission_id, partition_id, stream} = key) do
+    with {:ok, ordinal} <- PartitionStreamKeys.ordinal(mission_id, partition_id, stream) do
+      Process.put(@cache, Map.put(Process.get(@cache, %{}), key, ordinal))
+      {:ok, ordinal}
+    end
   end
 end

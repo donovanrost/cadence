@@ -15,7 +15,7 @@ defmodule Cadence.Runtime.ManagedActionRequestReplayIdsTest do
   alias Cadence.Capabilities.{ExecutionContext, ExecutionResult}
   alias Cadence.Platform.ReplayId
   alias Cadence.Protocol.PacketRecord
-  alias Cadence.Runtime.{ManagedRecords, PartitionKey, Persistence, PartitionStreamKeys}
+  alias Cadence.Runtime.{ManagedRecords, PartitionKey, PartitionStreamKeys, Persistence}
   alias Cadence.Runtime.PartitionOwner.{EffectIds, RuntimeRecords}
 
   @receipt ~U[2026-11-17 01:00:00.123456Z]
