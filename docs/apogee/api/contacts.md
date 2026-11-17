@@ -503,6 +503,47 @@ Writes (operators, `operate_mission`; neither changes the provider booking, whic
 - Hand-started contacts aren't pass rows, so they're out of this step: ending one from Uplink's
   contact view is a follow-up.
 
+### Stuck processing: the `replay_conflict` source (#99 follow-up, director GO 11-17; ux U84)
+
+#99's tripwire found an effect whose replay-safe id another effect already holds (a bug, logged as
+`MM_REPLAY_ID_CONFLICT`). The write rolls back and its unit retries the same input forever, so the
+unit is stuck until Cadence is fixed. Each stalled unit's record lives in `replay_id_conflicts`,
+written after the failed transaction returns and resolved when the unit next commits. Now carries
+one item per unit: `source: "replay_conflict"`, `conflict: "replay_id_conflict"`, `id` = the unit's
+oldest open record. **P2**, and **P1 while `dropping`**. `state` is `open | acknowledged`.
+
+Keys besides the shared ones: `path` (`storage` = the pass's telemetry storage, `processing` =
+incoming data, `timer` = a partition's timed actions); `effect_kind` (`alarm_effect |
+managed_action_request`), `effect_id`, `effect_count`; `partition_id` (timer only, else null),
+`partition_stopped` and `stopped_while` (`starting | applying`, else null: the partition stopped
+while starting, or while applying a configuration change (an activation reconcile, api-ops R1), and
+stays down until its next start succeeds);
+`realized_contact_id`, `path_id`, `stream_key` (free text, Technical details only; all null on
+timer); `contact {id, station_code, starts_at}` or null (the pass label); `spacecraft_ids`,
+`spacecraft_count`, `affected_spacecraft [{id, name, scid}]` (at least these; empty when not known);
+`first_seen_at`, `last_seen_at` (the log line's times), `occurrences` (retries that hit it);
+`buffer {used_bytes, max_bytes}` or null (the stream's journal, sampled every 10 s; null on timer);
+`dropping`, `dropping_since` (the buffer is full, so new telemetry is being lost);
+`acknowledged_at`, `acknowledged_note`, `reraised` (dropping began after the acknowledgement, so it
+reads open again; the earlier ack fields stay). Resolved entries: `{id, source, conflict, path,
+spacecraft_ids, resolved_at, resolved_by: {kind: "system", id: null, name: null}, action:
+"resumed"}`.
+
+- `POST …/attention/replay_conflict/:id/acknowledge {note?}` (`operate_mission`): `note` is plain
+  text, 500 characters at most ('who you told'); a later acknowledgement replaces it. `422
+  invalid_note`, `403 forbidden`, `404 attention_item_not_found`. Nothing to resolve or retry:
+  Cadence retries by itself, and only a fix clears it.
+- While one is open, that contact's `contact_settlement` item whose `failure_kind` is
+  `replay_id_conflict` (its storage failed on the conflict), and the stream's `ingress_backpressure`
+  item, carry `stuck_processing_id`; so does `mission_runtime` when a partition's record with
+  `stopped_while: "applying"` was first seen during its not-applied period (an activation apply
+  that tripped, api-ops R1).
+- Operations (devops): metrics `cadence.runtime.replay_id.conflict` (counter: kind, path,
+  `cadence.mission.id`), `cadence.runtime.replay_id.tripped.{units, oldest_age_seconds}` (per
+  path), `….tripped.{streams, stream_headroom_bytes}` (each stream once) and
+  `cadence.ingress.journal.disk.free_bytes`. The table carries `conflict_count`,
+  `last_conflict_at`, `buffer_sampled_at` and `resolved_at` for SQL polling (open rows are indexed).
+
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id`: `pass_resolution` (the

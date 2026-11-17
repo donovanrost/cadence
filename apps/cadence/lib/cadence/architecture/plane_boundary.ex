@@ -524,6 +524,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/platform/content_hash.ex",
                               "lib/cadence/runtime/generation_applied.ex",
                               "lib/cadence/runtime/contacts.ex",
+                              # #99 follow-up: stuck-processing records, read by their attention source.
+                              "lib/cadence/runtime/replay_conflicts.ex",
                               "lib/cadence/runtime/ingress.ex",
                               "lib/cadence/projections/contact_status.ex",
                               "lib/cadence/runtime/commanding.ex",
