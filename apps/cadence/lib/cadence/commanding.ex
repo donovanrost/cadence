@@ -889,7 +889,13 @@ defmodule Cadence.Commanding do
 
         {:error, :command_group_not_armed}
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        Logger.error(
+          "command release refused: a member of command group #{group_id} is queued but the " <>
+            "group can't be read: #{inspect(reason)}",
+          mission_id: mission_id
+        )
+
         {:error, :command_group_not_armed}
     end
   end

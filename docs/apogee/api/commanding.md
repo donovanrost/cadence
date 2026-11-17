@@ -364,8 +364,9 @@ confirm_unbooked: bool (default false)}`; `operate_mission`, a fresh human (GO/N
 
 Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_approver`,
 `409 command_group_not_pending`, `409 command_group_review_stale`, `409 command_group_basis_changed`
-(the active catalog changed since submit, so resubmit), `409 command_group_members_changed` (the
-group's member rows no longer match what submission recorded; resubmit), `422 note_required`, `422 exclusions_required`,
+(the active catalog changed since submit, so resubmit), `409 command_group_members_changed` (GO
+only: the group's member rows no longer match what submission recorded; details
+`submitted_member_count`, `current_member_count`; send back and NO-GO stay allowed; resubmit), `422 note_required`, `422 exclusions_required`,
 `422 unknown_excluded_target`, `422 invalid_params`.
 
 **HOLDs at GO** (DECISIONS #61): `go` and `go_excluding` re-run the review preflight

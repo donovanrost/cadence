@@ -18,6 +18,7 @@ defmodule Cadence.CommandingTest do
     CommandQueueEntryRow,
     CommandReleaseAttempt,
     CommandRequest,
+    CommandRequestRow,
     CommandStage,
     CommandVerifierInstance,
     ReleaseStore,
@@ -130,6 +131,52 @@ defmodule Cadence.CommandingTest do
     assert listed_item.staged_command_item_id == persisted_item.staged_command_item_id
     assert listed_item.argument_values == %{"mode" => 3}
     assert listed_item.priority == 1
+  end
+
+  test "a staged item whose metadata names a command group submits as a non-member (P0 pin)",
+       %{source_endpoint: source_endpoint, command_model: command_model} do
+    {:ok, stage} =
+      ManagementCommanding.persist_command_stage(
+        @organization_id,
+        CommandStage.new(%{
+          mission_id: @mission_id,
+          stage_name: "Forged group",
+          owner: %{"user_id" => "user-456"},
+          visibility: :shared
+        })
+      )
+
+    group = %{"id" => "command-group-forged", "target_index" => 0, "position" => 0}
+
+    {:ok, item} =
+      ManagementCommanding.persist_staged_command_item(
+        @organization_id,
+        StagedCommandItem.new(%{
+          mission_id: @mission_id,
+          command_stage_id: stage.command_stage_id,
+          source_endpoint_ref: source_endpoint.source_endpoint_id,
+          mission_model_revision_id: command_model.revision_id,
+          command_id: fetch_command_id(command_model, "SET_MODE"),
+          argument_values: %{"mode" => 1},
+          priority: 2,
+          item_order: 0,
+          metadata: %{"group" => group}
+        })
+      )
+
+    assert {:ok, [request]} =
+             ManagementCommanding.submit_staged_command_items(
+               @organization_id,
+               @mission_id,
+               stage.command_stage_id,
+               [item.staged_command_item_id],
+               %{"user_id" => "user-789"}
+             )
+
+    row = Repo.get!(CommandRequestRow, request.command_request_id)
+    assert row.command_group_id == nil
+    refute Map.has_key?(request.metadata, "group")
+    assert request.metadata["stage_item_metadata"] == %{"group" => group}
   end
 
   test "submits staged command items into approval-pending command requests when review is required",

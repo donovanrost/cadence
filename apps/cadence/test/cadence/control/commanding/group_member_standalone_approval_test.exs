@@ -21,7 +21,7 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
   }
 
   alias Cadence.Commanding.Groups.GroupStore
-  alias Cadence.Control.Commanding.{GroupDecision, GroupSubmission}
+  alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupSubmission}
   alias Cadence.Ids
   alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Management.Commanding.RequestReview
@@ -205,16 +205,43 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
       standalone = standalone_request!(c)
       join!(standalone.command_request_id, c.group.command_group_id, 1, 1)
 
-      assert {:error, :command_group_members_changed} = go(c)
+      assert {:error, {:command_group_members_changed, 2, 3}} = go(c)
       assert {:ok, %{state: :approval_pending}} = fetch_group(c)
+      refute queued?(c, standalone.command_request_id)
+
+      # NO-GO stays the way out: it releases nothing.
+      assert {:ok, %{state: :rejected}} =
+               GroupDecision.decide(c.approver, c.mission, c.group.command_group_id, %{
+                 kind: :no_go,
+                 note: "changed after submission"
+               })
+
       refute queued?(c, standalone.command_request_id)
     end
 
     test "a member row taken out of the group", c do
       join!(c.member.command_request_id, nil, nil, nil)
 
-      assert {:error, :command_group_members_changed} = go(c)
+      assert {:error, {:command_group_members_changed, 2, 1}} = go(c)
       assert {:ok, %{state: :approval_pending}} = fetch_group(c)
+
+      assert {:ok, %{state: :sent_back}} =
+               GroupDecision.decide(c.approver, c.mission, c.group.command_group_id, %{
+                 kind: :send_back,
+                 note: "changed after submission"
+               })
+    end
+
+    test "abort stays allowed on a changed group", c do
+      standalone = standalone_request!(c)
+      join!(standalone.command_request_id, c.group.command_group_id, 1, 1)
+
+      assert {:error, {:command_group_members_changed, 2, 3}} = go(c)
+
+      assert {:ok, %{state: :aborted}} =
+               GroupAbort.abort(c.approver, c.mission, c.group.command_group_id, "changed")
+
+      refute queued?(c, standalone.command_request_id)
     end
 
     test "an untouched group is GO'd as before", c do
@@ -239,6 +266,26 @@ defmodule Cadence.Control.Commanding.GroupMemberStandaloneApprovalTest do
         Enum.filter(members(c), &(&1.command_request_id == c.member.command_request_id))
 
       assert member.lifecycle_state == :queued
+    end
+
+    test "a queued member whose group row is missing doesn't release, and it's logged", c do
+      entry = queue_behind_the_groups_back!(c)
+      join!(c.member.command_request_id, "command_group_missing", 0, 0)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:error, :command_group_not_armed} =
+                   Commanding.release_command_queue_entry(
+                     c.org,
+                     c.mission,
+                     entry.command_queue_entry_id,
+                     "realized_contact_none",
+                     user(c.other)
+                   )
+        end)
+
+      assert log =~ "[error]"
+      assert log =~ "command_group_missing"
     end
 
     test "after the group's GO its members get past the group check", c do

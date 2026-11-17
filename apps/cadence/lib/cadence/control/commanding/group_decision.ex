@@ -73,7 +73,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
     with {:ok, group} <- GroupStore.fetch(org, mission, group_id, lock: true),
          :ok <- decidable(group, actor, decision),
          :ok <- same_basis(group, snapshot),
-         :ok <- members_as_submitted(group) do
+         :ok <- members_as_submitted(group, decision) do
       apply_decision(group, actor, decision)
     end
   end
@@ -105,16 +105,22 @@ defmodule Cadence.Control.Commanding.GroupDecision do
     Enum.all?(excluded, &MapSet.member?(ids, &1))
   end
 
-  # The decision acts on the group's member rows, but the review token covers only the group row's
-  # member_count, not the member ids. A group whose member rows no longer match what submission
-  # recorded is refused rather than decided (four-eyes audit 11-17, P0, defence in depth).
-  defp members_as_submitted(group) do
-    members = GroupStore.members(group.organization_id, group.mission_id, group.command_group_id)
+  # A GO acts on the group's member rows, but the review token covers only the group row's
+  # member_count, not the member ids. A GO on a group whose member rows no longer match what
+  # submission recorded is refused (four-eyes audit 11-17, P0, defence in depth). Send back and
+  # NO-GO stay allowed: they release nothing, and a group nobody can stop is worse (ux U92).
+  defp members_as_submitted(group, %{kind: kind}) when kind in [:go, :go_excluding] do
+    current =
+      group.organization_id
+      |> GroupStore.members(group.mission_id, group.command_group_id)
+      |> length()
 
-    if length(members) == group.member_count,
+    if current == group.member_count,
       do: :ok,
-      else: {:error, :command_group_members_changed}
+      else: {:error, {:command_group_members_changed, group.member_count, current}}
   end
+
+  defp members_as_submitted(_group, _decision), do: :ok
 
   defp same_basis(group, snapshot) do
     if group.basis["token"] == snapshot.token,
