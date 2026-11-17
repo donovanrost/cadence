@@ -83,6 +83,15 @@ describe("replay_conflict reader (ux U84, readers first)", () => {
     expect(r.value.acknowledged_note).toBe("told domain at 03:18Z");
   });
 
+  it("reads a pass with no scheduled contact: contact.id null, all else null (api's wire)", () => {
+    const r = decode(
+      attentionReader,
+      stuck({ contact: { id: null, station_code: null, starts_at: null } }),
+    );
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.contact).toEqual({ id: null, station_code: null, starts_at: null });
+  });
+
   it("reads the timer path, whose stream, pass, buffer and craft are null", () => {
     const r = decode(
       attentionReader,

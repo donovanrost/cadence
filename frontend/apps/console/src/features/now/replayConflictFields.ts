@@ -32,7 +32,8 @@ export const replayConflictFields = {
   contact: d.optional(
     d.nullable(
       d.object({
-        id: d.token,
+        /** The scheduled contact; null for a hand-started one or one api can't find (api 0333fde1c). */
+        id: d.nullable(d.token),
         // free-text: the station's short code ("SVA")
         station_code: d.nullable(d.string),
         starts_at: d.nullable(d.timestamp),

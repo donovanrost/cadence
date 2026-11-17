@@ -64,6 +64,14 @@ describe("Stuck processing words (ux U84)", () => {
     );
   });
 
+  it("a pass api can't label titles without it, never with an id", () => {
+    const bare = stuck({ contact: { id: null, station_code: null, starts_at: null } });
+    expect(stuckTitle(bare, NOW)).toBe("EARENDIL-001 · telemetry storage is stuck");
+    expect(stuckTitle(stuck({ contact: null, affected_spacecraft: [] }), NOW)).toBe(
+      "Telemetry storage is stuck",
+    );
+  });
+
   it("names nobody in the processing and timer titles", () => {
     expect(stuckTitle(stuck({ path: "processing" }), NOW)).toBe("Incoming data is stuck");
     expect(stuckTitle(stuck({ path: "timer" }), NOW)).toBe("Timed actions are stuck");
