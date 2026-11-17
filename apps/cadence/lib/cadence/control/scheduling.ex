@@ -23,6 +23,7 @@ defmodule Cadence.Control.Scheduling do
 
   alias Cadence.ContactPlanning.{
     ContactPlan,
+    ContactPlanApprovals,
     ContactPlanExecutions,
     ContactPlans,
     FleetPlanner,
@@ -257,10 +258,16 @@ defmodule Cadence.Control.Scheduling do
       Policy.authorize(scope, :approve_contact_plans, %{organization_id: scope.organization_id}) ==
         :ok
 
+  # An approver's Submit also approves, but only under 'direct' approval. Under 'independent' a
+  # second person approves (director 11-15), so it waits like a member's.
   defp decide(scope, mission_id, plan, version, params) do
-    if approver?(scope, mission_id),
-      do: approve(scope, mission_id, plan, version, params),
-      else: {:ok, :pending_approval}
+    if approver?(scope, mission_id) and
+         not ContactPlanApprovals.separation_required?(%{
+           organization_id: scope.organization_id,
+           mission_id: mission_id
+         }),
+       do: approve(scope, mission_id, plan, version, params),
+       else: {:ok, :pending_approval}
   end
 
   defp approve(scope, mission_id, plan, version, params) do

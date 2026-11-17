@@ -4,6 +4,7 @@ defmodule CadenceWeb.ContactPlanningFixtures do
   import ExUnit.Assertions
 
   alias Cadence.Auth.Scope
+  alias Cadence.Governance.ActivationPolicy
 
   alias Cadence.ContactPlanning.{
     ContactPlans,
@@ -15,6 +16,28 @@ defmodule CadenceWeb.ContactPlanningFixtures do
   @now ~U[2027-01-01 00:00:00Z]
 
   def now, do: @now
+
+  @doc """
+  Sets the mission's approval to 'direct', so an administrator's own submit also approves.
+  'independent' (the default) needs a second person (director 11-15).
+  """
+  def approve_directly!(org, user, membership, mission) do
+    scope =
+      Scope.new(%{
+        user: user,
+        organization_id: org.organization_id,
+        organization_membership: membership
+      })
+
+    policy = ActivationPolicy.load(org.organization_id, mission.mission_id)
+
+    {:ok, _saved} =
+      ActivationPolicy.save(scope, mission.mission_id, policy.token, %{
+        "value" => %{"approval_requirement" => "direct"}
+      })
+
+    :ok
+  end
 
   @doc """
   A spacecraft with one minimum-duration downlink requirement, a planning run

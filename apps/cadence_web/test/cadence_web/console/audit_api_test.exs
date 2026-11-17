@@ -98,6 +98,8 @@ defmodule CadenceWeb.Console.AuditAPITest do
     membership = TestFixtures.grant_membership!(admin, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org)
     fixture = CadenceWeb.ContactPlanningFixtures.plan_fixture(org, admin, membership, mission)
+    # An admin's own submit approves only under 'direct' approval (director 11-15).
+    CadenceWeb.ContactPlanningFixtures.approve_directly!(org, admin, membership, mission)
 
     admin
     |> TestFixtures.member_conn()

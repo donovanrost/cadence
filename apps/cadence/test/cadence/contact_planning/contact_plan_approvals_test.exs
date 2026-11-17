@@ -11,6 +11,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     Planner
   }
 
+  alias Cadence.Governance.ActivationPolicy
   alias Cadence.Spacecraft
 
   @organization_id "org-contact-plan-approvals"
@@ -336,6 +337,63 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
              )
   end
 
+  describe "no self-approval under 'independent' approval (director 11-15)" do
+    setup context do
+      %{admin_plan: admin_plan(context)}
+    end
+
+    test "the administrator who wrote and submitted a version can't approve it", context do
+      assert {:error, :contact_plan_self_approval_forbidden} =
+               approve_as(context.admin_scope, context.admin_plan)
+
+      assert {:ok, plan, _version} =
+               ContactPlans.fetch(
+                 @organization_id,
+                 @mission_id,
+                 context.admin_plan.plan.contact_plan_id
+               )
+
+      assert plan.lifecycle_state == :pending_approval
+    end
+
+    test "another administrator approves it", context do
+      assert {:ok, plan, _version, _approval} =
+               approve_as(other_admin_scope(context), context.admin_plan)
+
+      assert plan.lifecycle_state == :approved
+    end
+
+    test "the requester may still send it back", context do
+      assert {:ok, plan, _version, _decision} =
+               ContactPlanApprovals.reject(
+                 context.admin_scope,
+                 @mission_id,
+                 context.admin_plan.plan.contact_plan_id,
+                 context.admin_plan.plan.current_version,
+                 context.admin_plan.version.content_sha256,
+                 "Not this window after all",
+                 now: DateTime.add(@now, 2, :second)
+               )
+
+      # A send back returns it to draft for a new version.
+      assert plan.lifecycle_state == :draft
+    end
+
+    test "under 'direct' approval the same administrator may approve", context do
+      policy = ActivationPolicy.load(@organization_id, @mission_id)
+
+      assert {:ok, _saved} =
+               ActivationPolicy.save(context.admin_scope, @mission_id, policy.token, %{
+                 "value" => %{"approval_requirement" => "direct"}
+               })
+
+      assert {:ok, plan, _version, _approval} =
+               approve_as(context.admin_scope, context.admin_plan)
+
+      assert plan.lifecycle_state == :approved
+    end
+  end
+
   test "approval records immutable route bindings without invoking Control", context do
     assert {:ok, _plan, _version, _approval} =
              ContactPlanApprovals.approve(
@@ -441,6 +499,65 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
 
     assert revised.current_version == 2
     assert version_two.content_sha256 != version.content_sha256
+  end
+
+  # A plan an administrator wrote and submitted, from the same planning snapshot; the setup's own
+  # plan (a member's) is sent back first, so only this one is pending.
+  defp admin_plan(context) do
+    assert {:ok, _rejected, _version, _decision} =
+             ContactPlanApprovals.reject(
+               context.admin_scope,
+               @mission_id,
+               context.plan.contact_plan_id,
+               context.plan.current_version,
+               context.plan_version.content_sha256,
+               "Replaced by the administrator's own plan",
+               now: DateTime.add(@now, 1, :second)
+             )
+
+    assert {:ok, plan, version} =
+             ContactPlans.create(
+               context.admin_scope,
+               @mission_id,
+               %{
+                 planning_run_ids: [context.snapshot.contact_planning_run_id],
+                 selected_snapshot_ids: [context.snapshot.contact_opportunity_snapshot_id],
+                 rationale: "The administrator's own plan"
+               },
+               now: DateTime.add(@now, 1, :second)
+             )
+
+    assert {:ok, pending} =
+             ContactPlans.submit(
+               context.admin_scope,
+               @mission_id,
+               plan.contact_plan_id,
+               plan.current_version,
+               "Ready",
+               now: DateTime.add(@now, 1, :second)
+             )
+
+    %{plan: pending, version: version}
+  end
+
+  defp approve_as(scope, %{plan: plan, version: version}) do
+    ContactPlanApprovals.approve(
+      scope,
+      @mission_id,
+      plan.contact_plan_id,
+      plan.current_version,
+      version.content_sha256,
+      "Reviewed provider, station, policy, and expiry",
+      now: DateTime.add(@now, 2, :second),
+      resolve_route: route_resolver()
+    )
+  end
+
+  defp other_admin_scope(context) do
+    scope = context.admin_scope
+    user = %{scope.user | user_id: "contact-plan-approval-second-admin"}
+    membership = %{scope.organization_membership | user_id: user.user_id}
+    %{scope | user: user, organization_membership: membership}
   end
 
   defp approve(context) do

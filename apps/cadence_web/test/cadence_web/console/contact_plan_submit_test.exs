@@ -25,6 +25,10 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
     }
   end
 
+  # The mission's governance setting: 'independent' (the default) needs a second person.
+  defp approve_directly!(c),
+    do: ContactPlanningFixtures.approve_directly!(c.org, c.admin, c.admin_membership, c.mission)
+
   defp submit(c, user, plan_id, body),
     do: user |> TestFixtures.member_conn() |> post("#{c.base}/#{plan_id}/submit", body)
 
@@ -47,7 +51,18 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
     assert %{"state" => "pending_approval", "outcome" => "replayed"} = replay
   end
 
-  test "an admin's submit approves and executes off the request", c do
+  test "under 'independent' approval an admin's own submit waits for a second approver", c do
+    fixture = ContactPlanningFixtures.plan_fixture(c.org, c.admin, c.admin_membership, c.mission)
+    plan_id = fixture.plan.contact_plan_id
+
+    conn = submit(c, c.admin, plan_id, %{"expected_version" => 1, "operation_id" => "op-self"})
+
+    assert %{"state" => "pending_approval", "outcome" => "pending_approval"} =
+             json_response(conn, 200)["data"]
+  end
+
+  test "under 'direct' approval an admin's submit approves and executes off the request", c do
+    approve_directly!(c)
     fixture = ContactPlanningFixtures.plan_fixture(c.org, c.admin, c.admin_membership, c.mission)
     plan_id = fixture.plan.contact_plan_id
     :ok = SchedulingRunner.subscribe(c.mission.mission_id)
@@ -67,6 +82,8 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
   end
 
   test "unmet requirements block until acknowledged", c do
+    approve_directly!(c)
+
     fixture =
       ContactPlanningFixtures.plan_fixture(c.org, c.admin, c.admin_membership, c.mission,
         select?: false

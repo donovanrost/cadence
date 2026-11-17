@@ -6,6 +6,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.ContactPlanning.PlanUpdates
+  alias Cadence.Governance.ActivationPolicy
 
   alias Cadence.ContactPlanning.{
     AutomationGrants,
@@ -242,6 +243,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
          :ok <- pending_plan(plan_row),
          :ok <- exact_version(plan_row, context.expected_version),
          {:ok, version_row} <- fetch_version_row(plan_row, context.expected_version),
+         :ok <- separate_approver(context.decision, plan_row, version_row, context.actor),
          :ok <- exact_hash(version_row, context.expected_hash),
          version <- ContactPlanVersionRow.to_domain(version_row),
          {:ok, requirements} <- lock_current_requirements(version),
@@ -539,6 +541,26 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
       row -> {:ok, row}
     end
   end
+
+  # Under 'independent' approval (the governance setting; ActivationPolicy's separation of duties),
+  # whoever submitted this version or authored it can't approve it (director 11-15: an admin's own
+  # Submit approved and booked in one step). Under 'direct' it's allowed, as before. A send back
+  # by the requester is fine either way.
+  defp separate_approver(:approved, plan_row, version_row, %{"kind" => "user", "id" => actor_id}) do
+    requesters = Enum.reject([plan_row.lifecycle_changed_by, version_row.created_by], &is_nil/1)
+
+    if actor_id in requesters and separation_required?(plan_row) do
+      {:error, :contact_plan_self_approval_forbidden}
+    else
+      :ok
+    end
+  end
+
+  defp separate_approver(_decision, _plan_row, _version_row, _actor), do: :ok
+
+  @doc "Whether the mission's approval setting requires a second person ('independent')."
+  def separation_required?(%{organization_id: organization_id, mission_id: mission_id}),
+    do: ActivationPolicy.evidence(organization_id, mission_id)["separation_of_duties"] == true
 
   defp pending_plan(%ContactPlanRow{lifecycle_state: "pending_approval"}), do: :ok
   defp pending_plan(_plan), do: {:error, :contact_plan_not_pending_approval}
