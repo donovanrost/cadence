@@ -26,9 +26,24 @@ describe("ux U80: the Sample aside's rows", () => {
 
   it("says how much later it arrived, and nothing when that isn't later", () => {
     const g = "2026-11-08T02:00:00Z";
+    expect(laterBy(g, "2026-11-08T02:00:00.001Z")).toBe("1 ms later");
+    expect(laterBy(g, "2026-11-08T02:00:00.040Z")).toBe("40 ms later");
+    expect(laterBy(g, "2026-11-08T02:00:00.999Z")).toBe("999 ms later");
+    expect(laterBy(g, "2026-11-08T02:00:01Z")).toBe("1.0 s later");
+    expect(laterBy(g, "2026-11-08T02:00:01.700Z")).toBe("1.7 s later");
+    expect(laterBy(g, "2026-11-08T02:00:59.949Z")).toBe("59.9 s later");
+    expect(laterBy(g, "2026-11-08T02:00:59.950Z")).toBe("1 min later");
     expect(laterBy(g, "2026-11-08T02:03:10Z")).toBe("3 min later");
+    expect(laterBy(g, "2026-11-08T02:59:29.999Z")).toBe("59 min later");
+    expect(laterBy(g, "2026-11-08T02:59:30Z")).toBe("1 h later");
     expect(laterBy(g, "2026-11-08T04:10:00Z")).toBe("2 h later");
+    // A gap that rounds to 0 ms isn't later: no suffix, never "0 ms" or "0.0 s" (U80).
     expect(laterBy(g, g)).toBeNull();
+    expect(laterBy(g, "2026-11-08T02:00:00.0004Z")).toBeNull();
+    expect(laterBy(g, "2026-11-08T01:59:59.960Z")).toBeNull();
+    expect(rows({ receipt_time: g, generation_time: g }).find(([k]) => k === "Received")?.[1]).toBe(
+      "02:00:00.000Z",
+    );
     expect(laterBy(null, g)).toBeNull();
     expect(rows({ generation_time: null }).map(([k]) => k)).not.toContain("Generated");
   });

@@ -16,14 +16,20 @@ export function sampleTime(iso: string, today: string): string {
   return day === today ? clock : `${day.slice(5)} ${clock}`;
 }
 
-/** `1.7 s later` under a minute, then `3 min later` / `2 h later`; null unless after `from`. */
+/**
+ * ux U80: `40 ms later` under 1 s, `1.7 s later` under a minute, then `3 min later` / `2 h later`.
+ * Null unless at least 1 ms after `from`: a gap that rounds to 0 ms is not later (never `0 ms`).
+ */
 export function laterBy(from: string | null, to: string): string | null {
   if (from === null) return null;
-  const s = (Date.parse(to) - Date.parse(from)) / 1000;
-  if (!(s > 0)) return null;
-  if (s < 60) return `${s.toFixed(1)} s later`;
-  if (s < 3600) return `${Math.round(s / 60)} min later`;
-  return `${Math.round(s / 3600)} h later`;
+  const ms = Math.round(Date.parse(to) - Date.parse(from));
+  if (!(ms >= 1)) return null;
+  if (ms < 1000) return `${ms} ms later`;
+  // U80: a gap that would round up to a band's limit reads in the next band (never `60.0 s`, never
+  // `60 min`).
+  if (ms < 59_950) return `${(ms / 1000).toFixed(1)} s later`;
+  if (ms < 3_570_000) return `${Math.round(ms / 60_000)} min later`;
+  return `${Math.round(ms / 3_600_000)} h later`;
 }
 
 const valueWords = {
