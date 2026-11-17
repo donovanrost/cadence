@@ -2352,7 +2352,7 @@ One place for the words. The review (`reviews/2026-11-16-parity-ops-d.md` D1) ha
 | Raw | raw `text`, mono |
 | Quality | `Good`, or `▲ Suspect` / `▲ Bad` (caution mark + word) |
 | Generated | `02:08:11.204Z` (§4, with milliseconds; the date when not today) |
-| Received | `02:08:12.880Z · 1.7 s later` (under 60 s with one decimal, then `3 min later`, `2 h later`; omitted when generation is unknown or receipt isn't after it) |
+| Received | `02:08:12.880Z · 1.7 s later` (under 1 s in whole ms, `40 ms later`; under 60 s with one decimal, then `3 min later`, `2 h later`; never `0.0 s` or `0 ms`; a gap that would round up to a band's limit reads in the next band, so 59.95 s is `1 min later`, never `60.0 s`; omitted when generation is unknown or receipt isn't after it) |
 | Packet | `HK_EPS v4` (the definition's name and version) |
 | Record | see below; no row when `validity_state` is null |
 | Came in through | `Fairbanks · binding Earendil telemetry v3`: `endpoint_label`, then `binding <label> v<version>`. If neither resolves, `data_source_name`; if nothing does, no row |
