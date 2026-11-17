@@ -95,6 +95,7 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
       receipt_time: packet_record.receipt_time,
       generation_time_source: generation_time_source(packet_record),
       frame_ref: frame_ref(packet_record),
+      journal_frame: packet_record.journal_frame,
       provenance: %{
         evidence_id: packet_record.evidence_id,
         packet_id: packet_record.packet_id,

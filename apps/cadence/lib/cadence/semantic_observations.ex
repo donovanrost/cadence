@@ -14,6 +14,7 @@ defmodule Cadence.SemanticObservations do
   alias Cadence.Alarms.{Episodes, Notify, Sources}
   alias Cadence.Catalog.MissionModel.Canonical
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.ReplayId
   alias Cadence.Repo
   alias Cadence.SemanticRuntime.Result
 
@@ -127,9 +128,21 @@ defmodule Cadence.SemanticObservations do
     context = semantic_context(prepared)
     rules = Map.get(prepared, :alarm_rules, %{})
 
+    # Replay-safe effect keys (DECISIONS #99): numbered per input (journal frame or timer) in
+    # transition order, so a replay of the same input, however it was batched, gets the same ones.
+    keys =
+      transitions
+      |> ReplayId.number(
+        &effect_source(Map.fetch!(updates, &1.update_id)),
+        Map.get(prepared, :effect_ordinals, %{})
+      )
+      |> Enum.map(fn {_transition, key} -> key end)
+
     transitions
+    |> Enum.zip(keys)
     |> Enum.with_index()
-    |> Enum.reduce(accumulator, fn {monitoring_result, index}, {multi, evaluations} ->
+    |> Enum.reduce(accumulator, fn {{monitoring_result, effect_key}, index},
+                                   {multi, evaluations} ->
       update = Map.fetch!(updates, monitoring_result.update_id)
       evaluation_attrs = MonitoringEvaluationRow.attrs(monitoring_result, update, context)
       match = Map.get(rules, {monitoring_result.policy_id, monitoring_result.update_id})
@@ -140,7 +153,7 @@ defmodule Cadence.SemanticObservations do
          index,
          monitoring_result,
          evaluation_attrs,
-         {update, match}
+         {update, match, effect_key}
        ), [MonitoringEvaluationRow.changeset(evaluation_attrs) | evaluations]}
     end)
   end
@@ -180,7 +193,14 @@ defmodule Cadence.SemanticObservations do
     end)
   end
 
-  defp add_transition(multi, prepared, index, result, evaluation_attrs, {update, match}) do
+  defp add_transition(
+         multi,
+         prepared,
+         index,
+         result,
+         evaluation_attrs,
+         {update, match, effect_key}
+       ) do
     transition_attrs = AlarmTransitionRow.attrs(evaluation_attrs, result)
 
     latest_attrs = %{
@@ -211,11 +231,18 @@ defmodule Cadence.SemanticObservations do
     )
     |> Multi.run({:alarm_episode, prepared.raw_evidence.evidence_id, index}, fn repo, _changes ->
       observation =
-        Sources.catalog(evaluation_attrs, update, transition_attrs.transition_id, match)
+        evaluation_attrs
+        |> Sources.catalog(update, transition_attrs.transition_id, match)
+        |> Map.put(:effect_key, effect_key)
 
       Episodes.record(repo, observation)
     end)
   end
+
+  defp effect_source(%{metadata: metadata}) when is_map(metadata),
+    do: Map.get(metadata, :effect_source, Map.get(metadata, "effect_source"))
+
+  defp effect_source(_update), do: nil
 
   defp semantic_context(%{observation_context: context}) when is_map(context), do: context
 

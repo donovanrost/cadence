@@ -8,6 +8,12 @@ defmodule Cadence.Alarms.Episodes do
   ignored, so replays are idempotent. Observations older than the episode's last observation
   are ignored too.
 
+  An observation with an `effect_key` (DECISIONS #99: one from a journal frame or a timer) gets
+  replay-safe ids instead of `Ids.new`: its episode and event are written insert-or-get, and an id
+  already stored means a replay, so the episode change is skipped (no `seen?` read). The stored row
+  must be the same effect (`ReplayId.check_replay/4`, on the source ref and time), else
+  `MM_REPLAY_ID_CONFLICT`. Observations without a key (ground limits) work as before.
+
   | Previous → next | Effect |
   | --- | --- |
   | none → caution/critical | open (`raised`) |
@@ -22,6 +28,7 @@ defmodule Cadence.Alarms.Episodes do
   alias Cadence.Alarms.{EpisodeEventRow, EpisodeRow}
   alias Cadence.Ids
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.ReplayId
 
   @mission_scope "__mission__"
   @rank %{"caution" => 1, "critical" => 2}
@@ -41,18 +48,21 @@ defmodule Cadence.Alarms.Episodes do
           required(:ref) => String.t(),
           optional(:point_name) => String.t() | nil,
           optional(:value) => term(),
-          optional(:context) => map()
+          optional(:context) => map(),
+          optional(:effect_key) => ReplayId.key() | nil
         }
 
   @doc """
   `observe/2` for use as an `Ecto.Multi.run/3` step. Returns `{:ok, {:changed, mission_id}}` or
   `{:ok, :unchanged}`, so the caller can notify after commit.
   """
-  @spec record(module(), observation()) :: {:ok, {:changed, String.t()} | :unchanged}
+  @spec record(module(), observation()) ::
+          {:ok, {:changed, String.t()} | :unchanged} | {:error, term()}
   def record(repo, observation) do
     case observe(repo, observation) do
       {:ok, :changed} -> {:ok, {:changed, observation.mission_id}}
       {:ok, :unchanged} -> {:ok, :unchanged}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -70,7 +80,7 @@ defmodule Cadence.Alarms.Episodes do
     {:ok, changed}
   end
 
-  @spec observe(module(), observation()) :: {:ok, :changed | :unchanged}
+  @spec observe(module(), observation()) :: {:ok, :changed | :unchanged} | {:error, term()}
   def observe(repo, %{level: level} = observation) do
     observation = precise(observation)
 
@@ -149,7 +159,7 @@ defmodule Cadence.Alarms.Episodes do
     severity = Atom.to_string(observation.level)
 
     episode = %EpisodeRow{
-      episode_id: Ids.new("alarm_episode"),
+      episode_id: effect_id(:alarm_episode, observation, "alarm_episode"),
       organization_id: observation.organization_id,
       mission_id: observation.mission_id,
       spacecraft_id: observation.spacecraft_id,
@@ -171,44 +181,49 @@ defmodule Cadence.Alarms.Episodes do
       last_evaluated_at: observation.evaluated_at
     }
 
-    episode = repo.insert!(episode)
-
-    event(repo, episode, "raised", observation, %{
-      "severity" => severity,
-      "source_state" => observation.source_state,
-      "value" => value(observation)
-    })
-
-    {:ok, :changed}
+    with {:ok, :inserted} <- insert_episode(repo, episode, observation),
+         {:ok, :inserted} <-
+           event(repo, episode, "raised", observation, %{
+             "severity" => severity,
+             "source_state" => observation.source_state,
+             "value" => value(observation)
+           }) do
+      {:ok, :changed}
+    else
+      {:ok, :replayed} -> {:ok, :unchanged}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp escalate(repo, episode, observation, next) do
     acked? = not is_nil(episode.acknowledged_at)
 
-    event(repo, episode, "escalated", observation, %{
+    repo
+    |> event(episode, "escalated", observation, %{
       "from" => episode.severity,
       "to" => next,
       "source_state" => observation.source_state,
       "value" => value(observation),
       "acknowledgement_cleared" => acked?
     })
-
-    update(repo, episode, observation,
-      severity: next,
-      peak_severity: max_severity(next, episode.peak_severity),
-      acknowledged_at: nil,
-      acknowledged_by: nil
-    )
+    |> unless_replayed(fn ->
+      update(repo, episode, observation,
+        severity: next,
+        peak_severity: max_severity(next, episode.peak_severity),
+        acknowledged_at: nil,
+        acknowledged_by: nil
+      )
+    end)
   end
 
   defp deescalate(repo, episode, observation, next) do
-    event(repo, episode, "deescalated", observation, %{
+    repo
+    |> event(episode, "deescalated", observation, %{
       "from" => episode.severity,
       "to" => next,
       "value" => value(observation)
     })
-
-    update(repo, episode, observation, severity: next)
+    |> unless_replayed(fn -> update(repo, episode, observation, severity: next) end)
   end
 
   defp touch(repo, episode, observation) do
@@ -219,25 +234,32 @@ defmodule Cadence.Alarms.Episodes do
   defp clear(repo, episode, observation, cause) do
     unacknowledged = is_nil(episode.acknowledged_at)
 
-    event(repo, episode, "cleared", observation, %{
+    repo
+    |> event(episode, "cleared", observation, %{
       "cause" => Atom.to_string(cause),
       "value" => value(observation),
       "unacknowledged" => unacknowledged
     })
+    |> unless_replayed(fn ->
+      episode
+      |> Ecto.Changeset.change(
+        state: "cleared",
+        cleared_at: observation.observed_at,
+        cleared_by_ref: observation.ref,
+        cleared_unacknowledged: unacknowledged,
+        last_value: value(observation) || episode.last_value,
+        last_evaluated_at: Map.get(observation, :evaluated_at, observation.observed_at)
+      )
+      |> repo.update!()
 
-    episode
-    |> Ecto.Changeset.change(
-      state: "cleared",
-      cleared_at: observation.observed_at,
-      cleared_by_ref: observation.ref,
-      cleared_unacknowledged: unacknowledged,
-      last_value: value(observation) || episode.last_value,
-      last_evaluated_at: Map.get(observation, :evaluated_at, observation.observed_at)
-    )
-    |> repo.update!()
-
-    {:ok, :changed}
+      {:ok, :changed}
+    end)
   end
+
+  # The episode change runs only when the event was new; a replayed event means it already ran.
+  defp unless_replayed({:ok, :inserted}, change), do: change.()
+  defp unless_replayed({:ok, :replayed}, _change), do: {:ok, :unchanged}
+  defp unless_replayed({:error, reason}, _change), do: {:error, reason}
 
   defp update(repo, episode, observation, fields) do
     episode
@@ -258,8 +280,8 @@ defmodule Cadence.Alarms.Episodes do
   end
 
   defp event(repo, episode, kind, observation, payload) do
-    repo.insert!(%EpisodeEventRow{
-      event_id: Ids.new("alarm_event"),
+    row = %EpisodeEventRow{
+      event_id: effect_id(:alarm_event, observation, "alarm_event"),
       episode_id: episode.episode_id,
       organization_id: episode.organization_id,
       mission_id: episode.mission_id,
@@ -267,9 +289,64 @@ defmodule Cadence.Alarms.Episodes do
       at: observation.observed_at,
       source_ref: observation.ref,
       payload: payload
-    })
+    }
+
+    insert_or_get(repo, row, :alarm_event, observation, fn stored ->
+      %{source_ref: stored.source_ref, at: stored.at}
+    end)
   end
 
+  defp insert_episode(repo, episode, observation) do
+    insert_or_get(repo, episode, :alarm_episode, observation, fn stored ->
+      %{source_ref: stored.opened_by_ref, at: stored.opened_at}
+    end)
+  end
+
+  # Unkeyed: a plain insert, as before. Keyed: insert-or-get on the replay-safe id; an id already
+  # stored is a replay of the same input (checked), so the caller skips its change.
+  defp insert_or_get(repo, row, _kind, %{effect_key: nil}, _input_of), do: plain_insert(repo, row)
+
+  defp insert_or_get(repo, %schema{} = row, kind, %{effect_key: %{}} = observation, input_of) do
+    fields = row |> Map.from_struct() |> Map.delete(:__meta__) |> with_timestamps(schema)
+    [key] = schema.__schema__(:primary_key)
+    id = Map.fetch!(fields, key)
+
+    case repo.insert_all(schema, [fields], on_conflict: :nothing, returning: [key]) do
+      {1, _rows} ->
+        {:ok, :inserted}
+
+      {0, []} ->
+        stored = repo.get!(schema, id)
+        new = %{source_ref: observation.ref, at: observation.observed_at}
+
+        with :ok <- ReplayId.check_replay(kind, id, input_of.(stored), new),
+             do: {:ok, :replayed}
+    end
+  end
+
+  defp insert_or_get(repo, row, _kind, _observation, _input_of), do: plain_insert(repo, row)
+
+  defp plain_insert(repo, row) do
+    repo.insert!(row)
+    {:ok, :inserted}
+  end
+
+  defp with_timestamps(fields, schema) do
+    now = DateTime.utc_now()
+
+    Enum.reduce([:inserted_at, :updated_at], fields, fn field, acc ->
+      case {schema.__schema__(:type, field), Map.get(acc, field)} do
+        {:utc_datetime_usec, nil} -> Map.put(acc, field, now)
+        {:utc_datetime, nil} -> Map.put(acc, field, DateTime.truncate(now, :second))
+        _other -> acc
+      end
+    end)
+  end
+
+  defp effect_id(kind, %{effect_key: %{} = key}, _prefix), do: ReplayId.id(kind, key)
+  defp effect_id(_kind, _observation, prefix), do: Ids.new(prefix)
+
+  defp seen?(_repo, %{effect_key: %{}}), do: false
   defp seen?(_repo, %{ref: nil}), do: false
 
   defp seen?(repo, %{mission_id: mission_id, ref: ref}) do

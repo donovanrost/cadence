@@ -18,6 +18,7 @@ defmodule Cadence.Protocol.PacketRecord do
           packet_data: binary(),
           source_time: DateTime.t() | nil,
           receipt_time: DateTime.t(),
+          journal_frame: {binary(), non_neg_integer(), DateTime.t()} | nil,
           provenance: map()
         }
 
@@ -36,6 +37,9 @@ defmodule Cadence.Protocol.PacketRecord do
     :packet_data,
     :source_time,
     :receipt_time,
+    # {journal stream, absolute offset of the frame that completed the packet, receipt time of its
+    # last byte}, or nil (DECISIONS #99). Not archived: replays decode the raw evidence again.
+    :journal_frame,
     provenance: %{}
   ]
 end

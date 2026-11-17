@@ -42,7 +42,10 @@ defmodule Cadence.Runtime.PartitionOwner do
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{AlarmRules, PlanDecoder, Result, Scope, State, Store, Update}
 
+  alias Cadence.Platform.ReplayId
+
   alias Cadence.Runtime.PartitionOwner.{
+    EffectIds,
     MonitoringSeed,
     PartitionBuilder,
     RuntimeRecords,
@@ -559,6 +562,8 @@ defmodule Cadence.Runtime.PartitionOwner do
          raw_outputs <- Enum.flat_map(dispatch_result.dispatch_results, & &1.outputs),
          {:ok, outputs, semantic_result, next_state} <-
            process_semantic_outputs(raw_outputs, next_state),
+         {:ok, effect_ordinals} <-
+           semantic_effect_ordinals(raw_evidence.mission_id, semantic_result, next_state),
          {:ok, pending_runtime_records} <-
            TelemetryProfiler.with_runtime_component(
              raw_evidence.mission_id,
@@ -585,6 +590,9 @@ defmodule Cadence.Runtime.PartitionOwner do
          dispatch_decisions: dispatch_decisions,
          outputs: outputs,
          semantic_result: semantic_result,
+         # The stream ordinals of this result's monitoring effects (DECISIONS #99), for the alarm
+         # writer's replay-safe ids.
+         effect_ordinals: effect_ordinals,
          observation_context:
            MissionRuntimeSpec.observation_context(next_state.active_activation),
          alarm_rules:
@@ -592,6 +600,20 @@ defmodule Cadence.Runtime.PartitionOwner do
          runtime_records: all_runtime_records
        }, %{next_state | pending_runtime_records: pending_runtime_records}}
     end
+  end
+
+  defp semantic_effect_ordinals(mission_id, semantic_result, state),
+    do: result_effect_ordinals(mission_id, state.partition_key, semantic_result)
+
+  # The stream ordinals of a semantic result's effect sources (DECISIONS #99), for the alarm
+  # writer's replay-safe ids.
+  defp result_effect_ordinals(mission_id, partition_key, result) do
+    stream_keys =
+      result.parameter_updates
+      |> Enum.map(&metadata_value(&1, :effect_source))
+      |> ReplayId.stream_keys()
+
+    EffectIds.ordinals(mission_id, PartitionKey.identifier(partition_key), stream_keys)
   end
 
   defp process_semantic_outputs(outputs, %{active_activation: activation} = state) do
@@ -689,14 +711,17 @@ defmodule Cadence.Runtime.PartitionOwner do
         |> Enum.filter(&(&1.producer_kind == :algorithm))
         |> Enum.map(&derived_sample(&1, activation))
 
-      with :ok <-
+      with {:ok, effect_ordinals} <-
+             result_effect_ordinals(activation.mission_id, partition_key, entry.result),
+           :ok <-
              Persistence.persist_semantic_timer_result(
                persistence_policy,
                activation,
                entry.result,
                derived_samples,
                at: entry.at,
-               timer_key: entry.timer_key
+               timer_key: entry.timer_key,
+               effect_ordinals: effect_ordinals
              ),
            :ok <-
              Store.mark_timer_projected(
@@ -749,6 +774,7 @@ defmodule Cadence.Runtime.PartitionOwner do
           evidence_id: sample.evidence_id,
           trigger_sample_id: sample.sample_id,
           trigger_frame_ref: Sample.encode_frame_ref(sample.frame_ref),
+          effect_source: Sample.encode_journal_frame(sample.journal_frame),
           generation_time_source:
             sample.generation_time_source && Atom.to_string(sample.generation_time_source)
         }
@@ -961,14 +987,17 @@ defmodule Cadence.Runtime.PartitionOwner do
          result,
          derived_samples
        ) do
-    with :ok <-
+    with {:ok, effect_ordinals} <-
+           result_effect_ordinals(state.active_activation.mission_id, state.partition_key, result),
+         :ok <-
            Persistence.persist_semantic_timer_result(
              state.persistence_policy,
              state.active_activation,
              result,
              derived_samples,
              at: entry.due_at,
-             timer_key: entry.timer_key
+             timer_key: entry.timer_key,
+             effect_ordinals: effect_ordinals
            ) do
       Store.mark_timer_projected(
         state.active_activation,
@@ -1489,9 +1518,9 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp maybe_persist_runtime_records(true, runtime_records) do
-    case persist_runtime_records(runtime_records) do
-      :ok -> {:ok, empty_runtime_records()}
-      {:error, reason} -> {:error, reason}
+    with {:ok, runtime_records} <- EffectIds.assign(runtime_records),
+         :ok <- persist_runtime_records(runtime_records) do
+      {:ok, empty_runtime_records()}
     end
   end
 
