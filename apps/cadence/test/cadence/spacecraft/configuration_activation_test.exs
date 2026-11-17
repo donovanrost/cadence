@@ -469,7 +469,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     refute Repo.exists?(scoped.(QualificationCaseRow))
   end
 
-  test "the same direct activation onto an imported catalog whose model isn't approved is refused",
+  test "the same direct activation onto an imported catalog whose model isn't approved is held, not activated",
        c do
     unapproved =
       Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
@@ -491,11 +491,16 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
     model_id = unapproved.mission_model_revision_id
 
-    assert {:error, {:mission_model_revision_not_approved, [^model_id]}} = submit_direct(c, page)
+    # #92 a's gate refuses the generation (mission_model_revision_not_approved); the direct
+    # path reports any execution refusal as needing review, and nothing is activated.
+    assert ModelApprovalGate.unapproved(c.org, c.mission.mission_id, [model_id]) == [model_id]
+    assert {:ok, %{"outcome" => "application_needs_review"}} = submit_direct(c, page)
+    refute running_on?(c, model_id)
 
     MissionModelApproval.approve!(c.org, c.mission.mission_id, model_id)
     {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
     assert {:ok, %{state: "active"}} = submit_direct(c, page)
+    assert running_on?(c, model_id)
   end
 
   test "activation still requires the exact artifacts stored during import", c do
@@ -693,6 +698,20 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     case running[spacecraft_id] || running["__mission__"] do
       %{"mission_model" => %{"revision_id" => id}} -> id
       _none -> nil
+    end
+  end
+
+  # Whether the first spacecraft's source runs `model_id` in the applied generation.
+  defp running_on?(c, model_id) do
+    case RuntimeMissions.applied_spec(c.mission.mission_id) do
+      {:ok, spec} ->
+        case source_model(spec, c.endpoint.source_endpoint_id) do
+          %{mission_model_revision_id: ^model_id} -> true
+          _other -> false
+        end
+
+      _none ->
+        false
     end
   end
 
