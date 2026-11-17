@@ -87,6 +87,21 @@ defmodule Cadence.Applications.TelemetryDecomFixtures do
     {spacecraft, revision, endpoint}
   end
 
+  @doc """
+  The Telemetry and Commanding switches `document` asks for, set on the spacecraft as a change set
+  would (DECISIONS #109: change sets are their only writer, and a saved configuration takes them
+  from the spacecraft row). Call it before a `Drafts.save` that needs a switch on.
+  """
+  def change_set_switches!(organization_id, mission_id, spacecraft_id, document) do
+    {:ok, _spacecraft} =
+      Cadence.SpacecraftStore.put_switches(organization_id, mission_id, spacecraft_id, %{
+        telemetry_enabled: document["telemetry_enabled"] == true,
+        commanding_enabled: document["commanding_enabled"] == true
+      })
+
+    :ok
+  end
+
   def persist_spacecraft!(organization_id, mission_id, opts) do
     spacecraft =
       Spacecraft.new(%{

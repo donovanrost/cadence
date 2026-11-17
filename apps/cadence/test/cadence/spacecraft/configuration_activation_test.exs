@@ -741,13 +741,23 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
         "handled_apids" => [42]
     }
 
+    document = Map.merge(document, overrides)
+
+    :ok =
+      Fixtures.change_set_switches!(
+        c.org,
+        c.mission.mission_id,
+        spacecraft.spacecraft_id,
+        document
+      )
+
     assert {:ok, row} =
              ConfigurationDrafts.save(
                c.scope,
                c.mission.mission_id,
                spacecraft.spacecraft_id,
                snapshot.token,
-               Map.merge(document, overrides)
+               document
              )
 
     row

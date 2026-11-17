@@ -326,10 +326,25 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     end
   end
 
+  # Change sets are the ONLY writer of a craft's Telemetry and Commanding switches (DECISIONS #109):
+  # a saved configuration takes the spacecraft's values (unset reads off) and ignores switch input.
+  # CatalogAuthority.switches_check stays as the backstop at review.
+  defp change_set_switches(document, spacecraft) do
+    document
+    |> Map.put("telemetry_enabled", Map.get(spacecraft, :telemetry_enabled) == true)
+    |> Map.put("commanding_enabled", Map.get(spacecraft, :commanding_enabled) == true)
+  end
+
   defp save_locked(scope, mission, spacecraft, expected_token, document) do
     mission_id = mission.mission_id
     spacecraft_id = spacecraft.spacecraft_id
     current = snapshot(mission, spacecraft)
+    # The row as it is under the configuration lock, not the authorize read before it: a change
+    # set that set a switch in between is what this save stores.
+    {:ok, locked} =
+      SpacecraftStore.fetch_spacecraft(mission.organization_id, mission_id, spacecraft_id)
+
+    document = change_set_switches(document, locked)
 
     with :ok <- exact_token(current.token, expected_token),
          :ok <- validate_references(mission, spacecraft, document),

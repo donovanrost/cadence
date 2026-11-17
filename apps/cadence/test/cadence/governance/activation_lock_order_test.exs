@@ -282,6 +282,14 @@ defmodule Cadence.Governance.ActivationLockOrderTest do
         "handled_apids" => apids
       })
 
+    :ok =
+      Fixtures.change_set_switches!(
+        scope.organization_id,
+        mission.mission_id,
+        craft.spacecraft_id,
+        document
+      )
+
     {:ok, _} =
       Drafts.save(scope, mission.mission_id, craft.spacecraft_id, current.token, document)
   end

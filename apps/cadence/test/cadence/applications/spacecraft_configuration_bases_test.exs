@@ -101,6 +101,9 @@ defmodule Cadence.Applications.SpacecraftConfigurationBasesTest do
         "handled_apids" => [42]
       })
 
+    :ok =
+      Fixtures.change_set_switches!(c.scope.organization_id, @mid, craft.spacecraft_id, document)
+
     assert {:ok, _} =
              Drafts.save(c.scope, @mid, craft.spacecraft_id, current.token, document)
   end

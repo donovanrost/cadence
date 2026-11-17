@@ -67,13 +67,13 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
     assert get_in(metadata, ["value", "cancellation", "reason"]) =~ "commanding_disabled: "
   end
 
-  test "unset switches follow the configuration; turning commanding off is a generation the configuration follows",
+  test "turning commanding off is a generation the configuration follows; a save can't turn it back on",
        c do
     id = c.craft.spacecraft_id
 
-    # Not set by a change set yet: the spacecraft's own configuration decides.
+    # Set by a change set (the fixture stands in for it, DECISIONS #109).
     assert %{^id => document} = SpacecraftKind.load(c.org, c.mission.mission_id, [id])
-    refute Map.has_key?(document, "commanding_enabled")
+    assert document["commanding_enabled"] == true
 
     assert SpacecraftKind.runtime_impact(
              :update,
@@ -97,7 +97,7 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
     assert entry["document"]["commanding_enabled"] == false
     assert entry["document"]["telemetry_enabled"] == true
 
-    assert {:ok, %{commanding_enabled: false, telemetry_enabled: nil} = craft} =
+    assert {:ok, %{commanding_enabled: false, telemetry_enabled: true} = craft} =
              SpacecraftStore.fetch_spacecraft(c.org, c.mission.mission_id, id)
 
     assert Drafts.latest(c.org, c.mission.mission_id, id).document["commanding_enabled"] == false
@@ -105,13 +105,34 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
     assert %{^id => %{"commanding_enabled" => false} = document} =
              SpacecraftKind.load(c.org, c.mission.mission_id, [id])
 
-    refute Map.has_key?(document, "telemetry_enabled")
+    assert document["telemetry_enabled"] == true
 
-    # One writer: the spacecraft's own configuration can't turn it back on.
+    # One writer (#109): a saved configuration takes the spacecraft's switch, whatever it asks.
+    current = Drafts.snapshot(c.mission, c.craft)
+
+    assert {:ok, _} =
+             Drafts.save(
+               c.scope,
+               c.mission.mission_id,
+               id,
+               current.token,
+               Map.put(current.document, "commanding_enabled", true)
+             )
+
+    assert Drafts.latest(c.org, c.mission.mission_id, id).document["commanding_enabled"] == false
+
+    # The review's backstop still refuses a configuration that disagrees.
     assert {:error, :spacecraft_switch_set_by_change_set} =
-             CatalogAuthority.switches_check(craft, %{"commanding_enabled" => true})
+             CatalogAuthority.switches_check(craft, %{
+               "commanding_enabled" => true,
+               "telemetry_enabled" => true
+             })
 
-    assert :ok = CatalogAuthority.switches_check(craft, %{"commanding_enabled" => false})
+    assert :ok =
+             CatalogAuthority.switches_check(craft, %{
+               "commanding_enabled" => false,
+               "telemetry_enabled" => true
+             })
   end
 
   test "turning telemetry off holds for acknowledgment, drops the decode, and turns back on", c do
@@ -241,6 +262,14 @@ defmodule Cadence.Configuration.SwitchGenerationTest do
         "commanding_enabled" => true,
         "handled_apids" => [42]
       })
+
+    :ok =
+      Fixtures.change_set_switches!(
+        scope.organization_id,
+        mission.mission_id,
+        craft.spacecraft_id,
+        document
+      )
 
     {:ok, _} =
       Drafts.save(scope, mission.mission_id, craft.spacecraft_id, current.token, document)

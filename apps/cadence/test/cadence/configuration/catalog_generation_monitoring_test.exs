@@ -222,6 +222,14 @@ defmodule Cadence.Configuration.CatalogGenerationMonitoringTest do
         "handled_apids" => [42]
       })
 
+    :ok =
+      Fixtures.change_set_switches!(
+        scope.organization_id,
+        mission.mission_id,
+        craft.spacecraft_id,
+        document
+      )
+
     {:ok, _} =
       Drafts.save(scope, mission.mission_id, craft.spacecraft_id, current.token, document)
 

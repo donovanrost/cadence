@@ -98,6 +98,108 @@ defmodule Cadence.Configuration.SwitchOwnerTest do
     assert entry["telemetry_capability_ids"] != []
   end
 
+  test "a change set that sets a switch while a save waits for the configuration lock is what the save stores",
+       c do
+    # The save authorizes (reading the spacecraft) BEFORE it takes the configuration lock. A change
+    # set landing in between is simulated right after the lock is granted: the save must store the
+    # row's switch as it is under the lock, not the earlier read (api-ops R1).
+    lock_key = key(Cadence.Applications.ConfigurationLock, c.org, c.mission.mission_id)
+    handler = "switch-owner-race-#{System.unique_integer([:positive])}"
+    config = %{pid: self(), key: lock_key, c: c}
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:cadence, :repo, :query],
+        &__MODULE__.set_switches_once/4,
+        config
+      )
+
+    try do
+      assert {:ok, _} = save(c, %{})
+    after
+      :telemetry.detach(handler)
+    end
+
+    assert Process.get(:switches_set_under_lock) == true
+    assert %{"telemetry_enabled" => true, "commanding_enabled" => true} = latest(c)
+  end
+
+  test "aligning unset row switches to the running values applies with no generation (the alignment change set)",
+       c do
+    id = c.craft.spacecraft_id
+    switches_on(c)
+    assert {:ok, _} = save(c, %{})
+    token = Drafts.snapshot(c.mission, c.craft).token
+    {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, %{id => token})
+    {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+    {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
+    {:ok, before} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+
+    # The legacy state (qa, Earendil 11-17): running with both switches on, rows never set.
+    Repo.query!(
+      "UPDATE mission_spacecraft SET telemetry_enabled = NULL, commanding_enabled = NULL WHERE spacecraft_id = $1",
+      [id]
+    )
+
+    op = %{
+      kind: "spacecraft",
+      action: :update,
+      entity_id: id,
+      changes: [
+        %{path: "telemetry_enabled", value: true},
+        %{path: "commanding_enabled", value: true}
+      ]
+    }
+
+    {:ok, staged} = Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Align"}, [op])
+
+    assert {:ok, %{checks: checks} = preview} =
+             Configuration.preview(c.scope, c.mission.mission_id, staged.change_set_id)
+
+    refute preview[:verdict] == :hold
+    assert checks |> Enum.flat_map(& &1.items) |> Enum.filter(&(&1[:blocking] == true)) == []
+
+    assert {:ok, %{state: :applied, generation: nil, activation_id: nil}} =
+             Configuration.submit(c.scope, c.mission.mission_id, staged.change_set_id, %{
+               reason: "Align the row switches with what runs",
+               expected_version: staged.version,
+               acknowledged_holds: true
+             })
+
+    {:ok, after_align} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    assert after_align.activation_id == before.activation_id
+
+    assert {:ok, %{telemetry_enabled: true, commanding_enabled: true}} =
+             SpacecraftStore.fetch_spacecraft(c.org, c.mission.mission_id, id)
+  end
+
+  @doc false
+  def set_switches_once(_event, _measurements, %{query: query, params: params}, config) do
+    if self() == config.pid and query =~ "pg_advisory_xact_lock" and params == [config.key] and
+         Process.get(:switches_set_under_lock) != true do
+      Process.put(:switches_set_under_lock, true)
+      switches_on(config.c)
+    end
+  end
+
+  def set_switches_once(_event, _measurements, _metadata, _config), do: :ok
+
+  defp switches_on(c) do
+    {:ok, _} =
+      SpacecraftStore.put_switches(c.org, c.mission.mission_id, c.craft.spacecraft_id, %{
+        telemetry_enabled: true,
+        commanding_enabled: true
+      })
+  end
+
+  defp key(module, organization_id, id) do
+    <<key::signed-64, _::binary>> =
+      :crypto.hash(:sha256, :erlang.term_to_binary({module, organization_id, id}))
+
+    key
+  end
+
   defp save(c, switches) do
     current = Drafts.snapshot(c.mission, c.craft)
 
