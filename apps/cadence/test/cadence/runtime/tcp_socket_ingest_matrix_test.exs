@@ -9,7 +9,6 @@ defmodule Cadence.Runtime.TCPSocketIngestMatrixTest do
   import Cadence.TestSupport.TCPContactFixture
 
   alias Cadence.Ingress.ReceiveBackpressure
-  alias Cadence.Telemetry.Storage.ObservationIdentityStates
 
   @moduletag :ingest_journal_matrix
 
@@ -44,7 +43,10 @@ defmodule Cadence.Runtime.TCPSocketIngestMatrixTest do
     times = rows |> Enum.map(& &1.receipt_time) |> Enum.sort(DateTime)
     assert length(Enum.uniq(times)) == 8, "each frame keeps its own receipt time"
 
-    assert mission_id |> ObservationIdentityStates.list_for_selection() |> length() == 8
+    # Each frame its own identity. First-seen rule (11-17): a canonical sighting writes no
+    # identity-state row, so the identities are read from the stored samples.
+    identities = Enum.map(rows, & &1.provenance["storage"]["observation_identity_id"])
+    assert identities |> Enum.reject(&is_nil/1) |> Enum.uniq() |> length() == 8
     refute_received {:dropped, _measurements}
   end
 end

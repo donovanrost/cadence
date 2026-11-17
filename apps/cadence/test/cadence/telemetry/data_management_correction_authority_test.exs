@@ -290,6 +290,9 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
                [
                  %{
                    observation_identity_id: counter_envelope.observation_identity_id,
+                   point_id: counter_envelope.point_id,
+                   sample_id: counter_envelope.sample_id,
+                   observed_at: counter_envelope.generation_time,
                    evidence_ref: %{
                      "placement_id" => "placement-counter",
                      "comparison_finding" => %{"placement_id" => "placement-counter"}
@@ -297,6 +300,9 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
                  },
                  %{
                    observation_identity_id: voltage_envelope.observation_identity_id,
+                   point_id: voltage_envelope.point_id,
+                   sample_id: voltage_envelope.sample_id,
+                   observed_at: voltage_envelope.generation_time,
                    evidence_ref: %{
                      "placement_id" => "placement-voltage",
                      "comparison_finding" => %{"placement_id" => "placement-voltage"}
@@ -318,7 +324,10 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
                  selection_kind: "open_comparison_findings",
                  evidence_ref: %{"kind" => "dashboard_comparison_review_finding"}
                },
-               dashboard_runtime_invalidation?: false
+               dashboard_runtime_invalidation?: false,
+               # First-seen rule (11-17): these canonical sightings have no identity-state row, so
+               # each decision reads its stored row (here the envelope the captured writer saw).
+               decision_opts: [fetch_sample_fun: stored_sample_fun(envelopes)]
              )
 
     assert summary.workflow_id == "review-request-1"
@@ -358,5 +367,14 @@ defmodule Cadence.Telemetry.DataManagementCorrectionAuthorityTest do
                },
                persistence_policy: persistence_policy
              )
+  end
+
+  defp stored_sample_fun(envelopes) do
+    fn query, _opts ->
+      case Enum.find(envelopes, &(&1.sample_id == query.sample_id)) do
+        nil -> {:error, :not_found}
+        envelope -> {:ok, Cadence.Telemetry.Storage.ObservationEnvelope.to_sample(envelope)}
+      end
+    end
   end
 end

@@ -136,7 +136,9 @@ defmodule Cadence.Platform.FactPublicationIsolationTest do
     assert_fact(:bus_b, {:cadence, :telemetry, :facts}, ObservationsCommitted)
     refute_any_fact()
 
-    assert length(Storage.list_observation_identity_states(mission_id)) == 2
+    # First-seen rule (11-17): canonical first sightings write no identity-state row; the
+    # ObservationIdentityStateChanged facts above show both writes went through their own bus.
+    assert Storage.list_observation_identity_states(mission_id) == []
 
     assert :ok = Persistence.persist_managed_runtime_records(bus_a, [], [], [])
     assert_fact(:bus_a, {:cadence, :runtime, :facts}, ManagedRecordsPersisted)

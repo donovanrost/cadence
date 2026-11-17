@@ -66,9 +66,10 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
     full = ObservationIdentityStates.list_for_selection(@mission, @filters)
     by_id = by_id(samples)
 
-    # The full query also loaded the states the rows never needed; by id loads one per identity.
-    assert length(by_id) == 6
-    assert length(full) == 6
+    # First-seen rule (11-17): only decided identities have rows (decided, excluded); the plain
+    # and corrected sightings, and the other spacecraft and point, wrote none.
+    assert length(by_id) == 2
+    assert length(full) == 2
 
     selected = selected(samples, full)
     assert selected(samples, by_id) == selected
@@ -88,7 +89,8 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
     window = Enum.filter(samples, &(&1.sample_id =~ ~r/^(decided|excluded|plain-2)/))
     full = ObservationIdentityStates.list_for_selection(@mission, @filters)
 
-    assert length(by_id(window)) == 3
+    # decided and excluded have rows; plain-2 (a canonical sighting) has none.
+    assert length(by_id(window)) == 2
     assert selected(window, by_id(window)) == selected(window, full)
   end
 
@@ -147,7 +149,14 @@ defmodule Cadence.Telemetry.Storage.IdentitySelectionByIdTest do
                  binding_id: envelope.binding_id,
                  decision_reason: "operator_#{decision}",
                  decided_at: ~U[2026-06-22 12:10:00Z],
-                 operator_id: "ops-1"
+                 operator_id: "ops-1",
+                 # First-seen rule: an identity without a row is decided from its stored row.
+                 point_id: envelope.point_id,
+                 sample_id: envelope.sample_id,
+                 observed_at: envelope.generation_time || envelope.receipt_time,
+                 fetch_sample_fun: fn _query, _opts ->
+                   {:ok, ObservationEnvelope.to_sample(envelope)}
+                 end
                ] ++ extra
              )
   end

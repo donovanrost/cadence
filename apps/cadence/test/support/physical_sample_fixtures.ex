@@ -2,7 +2,7 @@ defmodule Cadence.TestSupport.PhysicalSampleFixtures do
   @moduledoc false
 
   alias Cadence.Telemetry.{PhysicalSampleQuery, Sample}
-  alias Cadence.Telemetry.Storage.QuestDB.ObservationReader
+  alias Cadence.Telemetry.Storage.QuestDB.PhysicalSampleReader
 
   def attrs(overrides \\ %{}) do
     Map.merge(
@@ -57,7 +57,7 @@ defmodule Cadence.TestSupport.PhysicalSampleFixtures do
   end
 
   def questdb_result(samples) do
-    columns = ["organization_id" | ObservationReader.select_columns()]
+    columns = PhysicalSampleReader.columns()
 
     %{
       "columns" => Enum.map(columns, &%{"name" => &1}),
