@@ -2698,3 +2698,64 @@ operator's words win: a mission team thinks in downlink and uplink, and "capabil
   words. fe-setup needs no code change for the form (KindEditor shows the schema's words); only fixtures and tests
   that assert the old words or U83's earlier "inbound" note (`diff-words.test.ts`) change. No legacy page renders
   this schema, so the server copy is free to change.
+
+### U86 · Items the console can't read (lead's console resilience item; accepted as written, lead 11-17) (fe-ops / lead)
+The Now queue and the attention lists decode each item on its own. An item the console can't read (a source this
+build doesn't know yet, or a shape it can't decode) is dropped and the rest still show. Dropping it silently would
+break U20 and U45's "never silent": a dropped item may be the most urgent thing on the list.
+
+- **The line** (caution, a callout, not a row):
+  - One: "This console can't show 1 item. Reload to try again. If it's still missing, tell the team that runs
+    Cadence for you."
+  - Several: "This console can't show 3 items. Reload to try again. If they're still missing, tell the team that
+    runs Cadence for you."
+  - Action: `Reload` (quiet button; it reloads the page, which picks up a newer console if there is one).
+  - Technical details (disclosure, closed): one line per dropped item, its kind and id as sent (`attention ·
+    contact_start · 7f3c…`), or "an item with no readable kind" when even that is missing. Never the payload.
+    The same goes to `console.warn`.
+- **Where:** at the TOP of the list, above the first row, because a dropped item's priority isn't known. The same
+  line, with its own count, in each list that drops something (Now's queue; a pass's attention blocks; the
+  resolutions callout).
+- **Counts and badges include dropped items:** an open item is open whether or not this console can draw it. Now's
+  header reads `6 open · sorted by urgency` with 5 rows and the line for 1. The mobile Now badge and any `/counts`
+  total do the same. A count split by priority, source or filter counts only the items it can read, since a dropped
+  item's priority and source aren't known.
+- **Every item dropped:** the line shows alone. Never the list's empty state ("Nothing needs you"), which would be
+  false.
+- **It goes** as soon as a read has nothing dropped. A whole read that fails is not this line; it keeps the list's
+  own error state.
+
+### U87 · A group member can't be approved on its own (director's procedure rule; accepted, lead 11-17) (fe-ops / api or api-ops)
+Director's rule, until a test settles it: a command that belongs to a command group is approved only through the
+group's GO/NO-GO, never through the standalone command request approve (ops page or REST). The server's refusal is
+the fix (with the P0 result); the console's disable is its reader.
+
+- **Request page:** `Approve` stays disabled, with the A6 reason line under it: "This command is part of a command
+  group. Approve it with the group's GO/NO-GO." Beside the line, a link `Open command group` to the group's page.
+- **No console surface today** (fe-ops checked, 11-17): the console's only approval write is the group's GO/NO-GO,
+  and its request page is keyed by group id. The request-page rule above is for any future surface that approves a
+  single command.
+- **REST and the legacy ops page:** the standalone approve refuses a group member in the same words. Whoever owns
+  the P0 fix (api or api-ops) builds it.
+- **Not here:** the group's own GO/NO-GO is unchanged; this only closes the standalone way round it.
+
+### U88 · Refusal `mission_model_revision_not_in_catalog`: a revision the catalog doesn't list (domain's interim guard, strict form; lead, 11-17) (domain / api / fe-ops)
+Some imports leave a compiled revision that no catalog revision names: the console's Reimport, a REST import run on an
+existing file without asking for a catalog revision, possibly a failed catalog-revision step (domain, 11-17). It was
+never listed, so the words say "doesn't list", never "no longer lists", and never "reimport". Domain's guard refuses
+approving it and requesting its activation; **Reject stays allowed** (lead, domain), so it can be cleared from the
+queue. Rare: dev had none at 13:19Z. Per U65, visible text never says "mission model" or "model"; the revision ids
+and the code go in Technical details. The refusal carries no catalog rev and none can be found, so none is named.
+
+- **Before a click** (api's approval read, new nullable `cannot_approve_because: "not_in_catalog"`;
+  `cannot_decide_because` unchanged): `Approve` disabled, with the A6 reason line "The catalog doesn't list this
+  revision, so it can't be approved. To approve it, import its file as a new catalog revision. Reject it to clear it
+  from the queue." Link `Open the catalog` (Setup › Catalog). `Reject…` stays as U65 has it (reason required).
+- **Approve refused** (409, U65's refusal list): "Not approved: the catalog doesn't list this revision. To approve it,
+  import its file as a new catalog revision." Same link. Never the 503 words.
+- **Activation request refused** (422 reason): "Not requested: the catalog doesn't list this revision. Request
+  activation of a revision the catalog lists instead." Same link.
+- **Apply or Retry apply** (U41's error sentence, `retryable: false` per domain): "The catalog doesn't list the
+  revision this request names, so it can't be applied." Then U41's request-again sentence; no `Retry apply`.
+- The panel or form stays as it was after a refusal; nothing was recorded.
+- **Not here:** whether such revisions show in the approval queue at all is domain's question to the director.
