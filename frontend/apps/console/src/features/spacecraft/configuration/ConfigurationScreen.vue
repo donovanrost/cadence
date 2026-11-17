@@ -22,7 +22,7 @@ import ComparisonTable from "./ComparisonTable.vue";
 import SettingsPanel from "./SettingsPanel.vue";
 import SetupSteps from "./SetupSteps.vue";
 import SwitchesPanel from "./SwitchesPanel.vue";
-import { readRefusal, statusTag, versionsLine } from "./words.ts";
+import { changesCount, readRefusal, statusTag, versionsLine } from "./words.ts";
 
 /**
  * (B) ux U94: Setup › Spacecraft › EARENDIL-004 › Configuration, the host's workspace in the
@@ -58,15 +58,19 @@ const LABELS = {
   communications: "Communications",
   changes: "Changes",
 } as const;
-const links = (s: ConfigurationSnapshot): readonly ApTabLink[] =>
-  sections.map((key) => ({
-    key,
-    label: LABELS[key],
-    to: {
-      name: "setup.spacecraft.configuration",
+function links(s: ConfigurationSnapshot): readonly ApTabLink[] {
+  // U94: the Changes tab counts what differs ("Changes 2").
+  const count = changesCount(s);
+  return sections.map((key) => {
+    const to = {
+      name: "setup.spacecraft.configuration" as const,
       params: { spacecraftId: s.spacecraft_id, section: key },
-    },
-  }));
+    };
+    return key === "changes" && count !== undefined
+      ? { key, label: LABELS[key], to, count }
+      : { key, label: LABELS[key], to };
+  });
+}
 const name = computed(() =>
   state.value.status === "ready" ? state.value.value.name : "Spacecraft",
 );
@@ -113,6 +117,10 @@ const craftOptions = (s: ConfigurationSnapshot) =>
           <template #status>
             <ApTag :state="statusTag(value).state" :label="statusTag(value).label" />
           </template>
+        </ApPageHeader>
+        <!-- Phone order (ux): title, tag, versions, then the switcher. -->
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="m-0 font-mono text-sm text-text-2">{{ versionsLine(value) ?? "" }}</p>
           <ApSelect
             v-if="value.fleet.length > 1"
             :model-value="value.spacecraft_id"
@@ -122,20 +130,19 @@ const craftOptions = (s: ConfigurationSnapshot) =>
             :options="craftOptions(value)"
             @update:model-value="switchTo"
           />
-        </ApPageHeader>
-        <p v-if="versionsLine(value)" class="m-0 font-mono text-sm text-text-2">
-          {{ versionsLine(value) }}
-        </p>
-        <!-- Four tabs overflow a phone's width: they scroll sideways instead of the page. -->
-        <div class="overflow-x-auto">
-          <ApTabLinks :links="links(value)" :active="section" label="Configuration sections" />
         </div>
+        <ApTabLinks :links="links(value)" :active="section" label="Configuration sections" />
         <SetupSteps :snapshot="value" />
         <template v-if="section === 'changes'">
           <ComparisonTable :snapshot="value" />
         </template>
+        <SettingsPanel
+          v-else-if="section === 'communications'"
+          :snapshot="value"
+          show="communications"
+        />
         <div v-else class="grid grid-cols-1 gap-3 console:grid-cols-[minmax(0,1fr)_360px]">
-          <SettingsPanel :snapshot="value" :show="section === 'overview' ? 'all' : section" />
+          <SettingsPanel :snapshot="value" :show="section === 'overview' ? 'all' : 'catalog'" />
           <SwitchesPanel :snapshot="value" />
         </div>
       </template>

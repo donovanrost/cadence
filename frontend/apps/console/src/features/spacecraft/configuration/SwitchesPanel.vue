@@ -39,7 +39,7 @@ const rows = () => [
         <span class="text-md text-readout">{{ r.line }}</span>
         <RouterLink
           :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: snapshot.spacecraft_id } }"
-          class="max-md:hit-44 text-sm text-readout underline-offset-2 hover:underline"
+          class="max-md:hit-44 self-start text-sm text-readout underline hover:text-bright"
           >Open Operation</RouterLink
         >
       </li>

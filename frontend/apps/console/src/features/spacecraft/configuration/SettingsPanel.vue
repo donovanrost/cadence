@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { RouterLink } from "vue-router";
 import { ApKeyValue, ApPanel, type ApKeyValueItem } from "@/ui";
 import type { ConfigurationSnapshot } from "./api.ts";
-import { apidsWord, catalogWord, framingWord, sourceWord } from "./words.ts";
+import { apidsWord, catalogWord, changesFromLine, framingWord, sourceWord } from "./words.ts";
 
 /**
  * The draft's settings, read-only until the draft routes land (lead: read side first). Which
@@ -29,6 +30,8 @@ const items = computed((): readonly ApKeyValueItem[] => {
       ? comms
       : [...catalog, ...comms];
 });
+/** U94: on the Overview, the draft's pointer to the Changes tab ("2 changes from v3 · Review"). */
+const changes = computed(() => (props.show === "all" ? changesFromLine(props.snapshot) : null));
 const title = computed(() =>
   props.show === "catalog"
     ? "Catalog & applications"
@@ -40,6 +43,17 @@ const title = computed(() =>
 
 <template>
   <ApPanel index="C1" :title="title" flush>
+    <template v-if="changes" #meta>
+      <span class="font-mono text-xs normal-case text-caution-text">{{ changes }}</span>
+      <RouterLink
+        :to="{
+          name: 'setup.spacecraft.configuration',
+          params: { spacecraftId: snapshot.spacecraft_id, section: 'changes' },
+        }"
+        class="max-md:hit-44 ml-2 text-sm text-readout underline hover:text-bright"
+        >Review</RouterLink
+      >
+    </template>
     <div class="px-4 py-3"><ApKeyValue :items="items" /></div>
   </ApPanel>
 </template>

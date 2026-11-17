@@ -29,7 +29,7 @@ export function versionsLine(s: ConfigurationSnapshot): string | null {
     s.active && s.active.version > 0 ? `v${s.active.version} active` : null,
     s.saved_version !== null && draftDiffers(s) ? `v${s.saved_version} saved` : null,
   ].filter((p): p is string => p !== null);
-  return parts.length ? parts.join(", ") : null;
+  return parts.length ? parts.join(" · ") : null;
 }
 
 /** U94 "Steps before it can be sent" (the host's setup issues), in the console's words. */
@@ -96,7 +96,13 @@ export function switchLine(sw: SwitchState | undefined, value: boolean, craft: s
     : `${on} · set through Setup › Changes.`;
 }
 
-export type ComparisonRow = Readonly<{ setting: string; active: string; draft: string }>;
+export type ComparisonRow = Readonly<{
+  setting: string;
+  active: string;
+  draft: string;
+  /** Literal values (APIDs, framing) read in mono, as on the Overview (ux U94). */
+  mono?: true;
+}>;
 /**
  * U94's Changes: Setting / Active / Draft, changed rows only; with nothing active, every setting
  * (Active reads —). The switches never show as a change (#109: the draft takes their values).
@@ -119,11 +125,13 @@ export function comparisonRows(s: ConfigurationSnapshot): readonly ComparisonRow
       setting: "Handled APIDs",
       active: a ? apidsWord(a.handled_apids) : "—",
       draft: apidsWord(d.handled_apids),
+      mono: true,
     },
     {
       setting: "Framing",
       active: a ? framingWord(a.protocol) : "—",
       draft: framingWord(d.protocol),
+      mono: true,
     },
   ];
   return a ? rows.filter((r) => r.active !== r.draft) : rows;
@@ -149,6 +157,24 @@ export function readRefusal(
   return null;
 }
 
-/** U94 "Not set up": the info line under "Set up EARENDIL-004". */
-export const notSetUpLine = (craft: string) =>
-  `Nothing runs for ${craft} until its configuration is activated.`;
+/**
+ * U94 "Not set up": the info line under "Set up EARENDIL-004"; with telemetry off it adds what a new
+ * craft needs first (#109: a change set turns telemetry on).
+ */
+export const notSetUpLine = (craft: string, telemetryOn: boolean) =>
+  `Nothing runs for ${craft} until its configuration is activated${telemetryOn ? "" : ", and nothing is decoded until a change set turns telemetry on"}.`;
+
+/** U94: the Draft panel's pointer to Changes, "2 changes from v3"; null when nothing differs. */
+export function changesFromLine(s: ConfigurationSnapshot): string | null {
+  if (!s.active || !draftDiffers(s)) return null;
+  const n = comparisonRows(s).length;
+  if (n === 0) return null;
+  const v = s.active.version > 0 ? ` from v${s.active.version}` : "";
+  return `${n === 1 ? "1 change" : `${n} changes`}${v}`;
+}
+
+/** The Changes tab's count (U94): settings that differ, or every setting on a first start. */
+export function changesCount(s: ConfigurationSnapshot): number | undefined {
+  if (s.active !== null && !draftDiffers(s)) return undefined;
+  return comparisonRows(s).length || undefined;
+}

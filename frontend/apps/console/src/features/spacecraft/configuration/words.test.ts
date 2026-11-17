@@ -9,8 +9,11 @@ import SwitchesPanel from "./SwitchesPanel.vue";
 import {
   apidsWord,
   catalogWord,
+  changesCount,
+  changesFromLine,
   comparisonRows,
   framingWord,
+  notSetUpLine,
   readRefusal,
   setupSteps,
   statusTag,
@@ -29,7 +32,7 @@ const stubs = { RouterLink: { props: ["to"], template: "<a :data-to='to.name'><s
 describe("U94 status, steps and fields", () => {
   it("tags carry the state only; versions go in the header line (U94 (b))", () => {
     expect(statusTag(read())).toEqual({ label: "Draft saved", state: "caution" });
-    expect(versionsLine(read())).toBe("v3 active, v4 saved");
+    expect(versionsLine(read())).toBe("v3 active · v4 saved");
     const same = read({ document: documentWire({ handled_apids: [42] }) });
     expect(statusTag(same)).toEqual({ label: "Active", state: "nominal" });
     expect(versionsLine(same)).toBe("v3 active");
@@ -113,10 +116,24 @@ describe("U94 switches (DECISIONS #109)", () => {
   });
 });
 
+describe("U94 pointers to Changes", () => {
+  it("counts the differences on the tab and says them on the Overview", () => {
+    expect(changesCount(read())).toBe(1);
+    expect(changesFromLine(read())).toBe("1 change from v3");
+    const same = read({ document: documentWire({ handled_apids: [42] }) });
+    expect(changesCount(same)).toBeUndefined();
+    expect(changesFromLine(same)).toBeNull();
+    expect(changesCount(read({ active: null }))).toBe(4);
+    expect(notSetUpLine("EARENDIL-004", true)).toBe(
+      "Nothing runs for EARENDIL-004 until its configuration is activated.",
+    );
+  });
+});
+
 describe("U94 comparison", () => {
   it("shows only changed settings, never the switches", () => {
     expect(comparisonRows(read())).toEqual([
-      { setting: "Handled APIDs", active: "0x2A", draft: "0x2A, 0x2B" },
+      { setting: "Handled APIDs", active: "0x2A", draft: "0x2A, 0x2B", mono: true },
     ]);
     const switched = read({
       document: documentWire({ handled_apids: [42], commanding_enabled: true }),
@@ -124,14 +141,16 @@ describe("U94 comparison", () => {
     expect(comparisonRows(switched)).toEqual([]);
   });
 
-  it("nothing active: every setting, Active reads —, and U90's line", () => {
+  it("nothing active: every setting, no Active column, and U90's line", () => {
     const w = mount(ComparisonTable, {
       props: { snapshot: read({ active: null }) },
       global: { stubs },
     });
     expect(w.text()).toContain("Nothing is active yet, so every setting is new.");
     expect(w.findAll("tbody tr")).toHaveLength(4);
-    expect(w.text()).toContain("—");
+    // U94: a first start drops the Active column instead of a column of dashes.
+    expect(w.findAll("th").map((t) => t.text())).toEqual(["Setting", "Draft"]);
+    expect(w.text()).not.toContain("—");
   });
 
   it("no changes: the draft matches", () => {
@@ -145,13 +164,21 @@ describe("U94 comparison", () => {
   it("not set up: the info line and the steps link to Catalog & applications", () => {
     const w = mount(SetupSteps, {
       props: {
-        snapshot: read({ active: null, document: documentWire({ catalog_revision_id: null }) }),
+        snapshot: read({
+          active: null,
+          document: documentWire({ catalog_revision_id: null }),
+          switches: {
+            telemetry_enabled: { value: false, set: false, revision: null },
+            commanding_enabled: { value: false, set: false, revision: null },
+          },
+        }),
       },
       global: { stubs },
     });
     expect(w.text()).toContain(
-      "Nothing runs for EARENDIL-004 until its configuration is activated.",
+      "Nothing runs for EARENDIL-004 until its configuration is activated, and nothing is decoded until a change set turns telemetry on.",
     );
+    expect(w.find("ol").exists()).toBe(true);
     expect(w.find("a").text()).toBe("Choose a catalog revision");
   });
 });
