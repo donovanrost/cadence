@@ -10,6 +10,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.MissionModelApproval
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow}
   alias Cadence.Platform.ContentHash
@@ -398,7 +399,11 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     end
   end
 
-  test "one operator activates an imported catalog without model approval or replay, using current settings",
+  # Under DECISIONS #92 a the property is: with the `direct` activation policy, ONE operator's
+  # single submit activates a spacecraft onto an imported catalog whose model is approved: no
+  # separate approval step, no qualification, no replay, the current settings. An imported model
+  # that isn't approved is refused on this path (the next test), not activated.
+  test "one operator activates an approved imported catalog directly: no separate approval step, qualification or replay",
        c do
     save(c, c.first, c.revision)
     policy = ActivationPolicy.load(c.org, c.mission.mission_id)
@@ -438,20 +443,53 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     assert source_model(spec, c.endpoint.source_endpoint_id).mission_model_revision_id ==
              c.revision.mission_model_revision_id
 
-    assert {:ok, %{status: :candidate}} =
+    # DECISIONS #92 a: a generation can't introduce a model nobody approved, so the fixture's
+    # import is approved (test setup); the activation approves nothing. The gate compares the
+    # introduced model once against the spacecraft's baseline (one passed report); no qualification.
+    assert {:ok, %{status: :approved}} =
              MissionModels.fetch_revision(
                c.org,
                c.mission.mission_id,
                c.revision.mission_model_revision_id
              )
 
-    for schema <- [ComparisonReportRow, QualificationCaseRow] do
-      refute Repo.exists?(
-               from(row in schema,
-                 where: row.organization_id == ^c.org and row.mission_id == ^c.mission.mission_id
-               )
-             )
+    scoped = fn schema ->
+      from(row in schema,
+        where: row.organization_id == ^c.org and row.mission_id == ^c.mission.mission_id
+      )
     end
+
+    assert Repo.aggregate(scoped.(ComparisonReportRow), :count) == 1
+    refute Repo.exists?(scoped.(QualificationCaseRow))
+  end
+
+  test "the same direct activation onto an imported catalog whose model isn't approved is refused",
+       c do
+    unapproved =
+      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
+        revision_label: "Unapproved",
+        approve: false
+      )
+
+    save(c, c.first, unapproved)
+    policy = ActivationPolicy.load(c.org, c.mission.mission_id)
+
+    assert {:ok, _} =
+             ActivationPolicy.save(
+               c.scope,
+               c.mission.mission_id,
+               policy.token,
+               %{"value" => %{"approval_requirement" => "direct"}}
+             )
+
+    {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
+    model_id = unapproved.mission_model_revision_id
+
+    assert {:error, {:mission_model_revision_not_approved, [^model_id]}} = submit_direct(c, page)
+
+    MissionModelApproval.approve!(c.org, c.mission.mission_id, model_id)
+    {:ok, page} = ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
+    assert {:ok, %{state: "active"}} = submit_direct(c, page)
   end
 
   test "activation still requires the exact artifacts stored during import", c do
@@ -633,6 +671,17 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     for row <- usage.usage do
       assert row.href == "/missions/#{c.mission.mission_id}/spacecraft/#{row.id}?section=changes"
     end
+  end
+
+  defp submit_direct(c, page) do
+    SpacecraftConfiguration.submit(
+      c.scope,
+      c.mission.mission_id,
+      c.first.spacecraft_id,
+      page.token,
+      page.approval.token,
+      :activate
+    )
   end
 
   defp save(c, spacecraft, revision, overrides \\ %{}) do
