@@ -135,6 +135,43 @@ work): run a pass and record every effect id; crash the partition; recover from 
 assert the replayed effects' ids are **byte-identical**, and that no new rows appear. Timer
 effects: the same assertion across a restart, with fire times.
 
+**As built (domain, 11-17, branch `domain/replay-ids`; lead's three rulings).**
+
+- **The input is the frame, not the evidence batch.** A raw evidence's start offset changes when a
+  replay batches the journal differently, so effects are keyed on the frame that completed the
+  packet: (journal stream, the frame's absolute offset). Frame ingress already computes that offset
+  for `journal_packet_id` (#71); it is now carried as `PacketRecord.journal_frame` →
+  `Sample.journal_frame` → the semantic update's metadata (`effect_source`). The receipt time in
+  the id is that of the journal record holding the frame's **last** byte (its first byte can sit
+  in an earlier evidence, whose records a different batch doesn't have).
+- **Not stored, not archived.** `journal_frame` is a struct field, not provenance: the archive
+  entry, `journal_packet_id` and the stored observation (provenance, row, identity) are unchanged,
+  so a pre-#99 archived range replays with no conflict and B's residual stays null for packet rows.
+- **A derived update is keyed on its trigger**, never on the frame of the input whose metadata it
+  copies (that can be older, its ids already taken). A timer-triggered algorithm uses the stream
+  `timer:<algorithm>` and its fire time.
+- **The index is per input, across everything.** Effects are numbered per (stream, offset) in
+  deterministic order after the input is processed: all of a frame's packets and every capability
+  that answers them (two capabilities answering one frame get 0 and 1, not 0 and 0).
+- **Timers and initialization have their own allocated streams**, so they never share an ordinal
+  by chance: a managed timer `timer:<capability>:<timer key>` at its fire time; a managed
+  application's **initialization** `init:<activation>:<capability>` with offset = the binding set
+  version and a fixed receipt time. A restart re-runs init and gets the existing request back
+  (insert-or-get); it never re-issues it. Only a new activation or a new binding set version gives
+  a new id.
+- **Writing:** action requests in one `insert_all ... ON CONFLICT DO NOTHING RETURNING` per batch
+  (one statement, fewer than today's one per request). Episodes and events: the episode (on open)
+  and the event are insert-or-get; a stored id means a replay and the episode change is skipped
+  (`seen?` isn't read for keyed observations). Inputs without a journal position, ground limits
+  and acknowledgements keep `Ids.new`.
+- **The tripwire compares what derives from the input:** an event's source ref and time (an honest
+  replay can decide a different event kind, because the episode moved on since, and the payload
+  holds acknowledgement state); an action request's kind and document. A mismatch is
+  `MM_REPLAY_ID_CONFLICT`, an error that rolls the batch back.
+- **Not yet done:** the end-to-end crash test (a pass through a live partition, kill, recover from
+  snapshot + archive, byte-identical ids). The pieces it chains are each tested (re-batched frames,
+  re-batched prepared results, replays of every episode path, numbering, init across a restart).
+
 *Transitions and evaluations* keep their content ids for now (see the volumes below). They are
 replay-stable only if `update_id` (the sample id) is: that is on the identity-v2 audit
 (recovery-from-archive.md (b)).
