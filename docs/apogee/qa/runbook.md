@@ -340,9 +340,13 @@ reachable from a stored, recomputed hash (binding set, runtime basis, spacecraft
 review token, authored-override fingerprint) must carry a golden-hash test showing the stored hash unchanged. At
 hand-off qa runs `var/qa-scripts/struct-hash-check.sh <base> <tip>`, which looks under `packages/` as well as
 `apps/` and checks domain's struct list (`var/struct-hash-checklist.md`). Every dry runs it too. On a hit, qa holds
-the set until the same commit carries the hash kept stable plus a legacy-value test, or a director-approved plan. Every restart's post-checks include the mission runtime's admission:
-`MissionCoordinator.active_spec` answers at the live generation, and the reconciler's `last_error` is nil
-(`var/qa-scripts/calib-rollback-post.exs`). This matters because the restart dry can't catch it: it runs on a fresh
+the set until the same commit carries the hash kept stable plus a legacy-value test, or a director-approved plan.
+
+**Every restart's post-checks** (director, 11-17) include, for EVERY active mission: the desired generation equals
+the applied one, `MissionCoordinator.active_spec` answers at that generation, the reconciler's `last_error` is nil,
+and the stored binding-set hash equals the recomputed one. Run `var/qa-scripts/admission-check.exs`; it must print
+`ADMISSION OK`. It's needed alongside the boot checks because an admission failure retries silently: nothing is
+logged at info. This matters because the restart dry can't catch it: it runs on a fresh
 test database, which has no binding set stored before the change.
 
 Why: on 11-17 the calibration restart added two default-valued keys to `%FieldDefinition{}`. The binding-set hash,
