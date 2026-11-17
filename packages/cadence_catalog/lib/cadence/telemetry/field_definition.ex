@@ -8,15 +8,6 @@ defmodule Cadence.Telemetry.FieldDefinition do
   @type data_type :: :uint | :int | :bool | :float | :binary | :string
   @type byte_order :: :big_endian | :little_endian
 
-  @typedoc """
-  A field's calibrator (mission-model telemetry contract 3): a polynomial over the raw value,
-  coefficients lowest order first. `nil`: the engineering value is the raw value.
-  """
-  @type calibrator :: %{type: :polynomial, coefficients: [number()]} | nil
-
-  @typedoc "The field's defined states (raw integer value and label), from its parameter type."
-  @type enumeration :: %{value: integer(), label: binary()}
-
   @type t :: %__MODULE__{
           field_id: binary(),
           parameter_id: binary() | nil,
@@ -26,9 +17,7 @@ defmodule Cadence.Telemetry.FieldDefinition do
           size_bits: pos_integer(),
           data_type: data_type(),
           byte_order: byte_order(),
-          engineering_unit: binary() | nil,
-          calibrator: calibrator(),
-          enumerations: [enumeration()]
+          engineering_unit: binary() | nil
         }
 
   defstruct [
@@ -40,9 +29,7 @@ defmodule Cadence.Telemetry.FieldDefinition do
     :size_bits,
     :data_type,
     :engineering_unit,
-    :calibrator,
-    byte_order: :big_endian,
-    enumerations: []
+    byte_order: :big_endian
   ]
 
   @spec new(map()) :: t()
@@ -62,41 +49,9 @@ defmodule Cadence.Telemetry.FieldDefinition do
         attrs
         |> Map.get(:byte_order, :big_endian)
         |> normalize_byte_order(),
-      engineering_unit: Map.get(attrs, :engineering_unit),
-      calibrator: attrs |> Map.get(:calibrator) |> normalize_calibrator(),
-      enumerations: attrs |> Map.get(:enumerations, []) |> normalize_enumerations()
+      engineering_unit: Map.get(attrs, :engineering_unit)
     }
   end
-
-  # Plans are stored as JSON documents, so keys and the type arrive as strings there.
-  defp normalize_calibrator(nil), do: nil
-
-  defp normalize_calibrator(calibrator) when is_map(calibrator) do
-    with type when type in [:polynomial, "polynomial"] <- field(calibrator, :type),
-         coefficients when is_list(coefficients) and coefficients != [] <-
-           field(calibrator, :coefficients),
-         true <- Enum.all?(coefficients, &is_number/1) do
-      %{type: :polynomial, coefficients: coefficients}
-    else
-      _other -> raise ArgumentError, "unsupported telemetry calibrator: #{inspect(calibrator)}"
-    end
-  end
-
-  defp normalize_enumerations(nil), do: []
-
-  defp normalize_enumerations(enumerations) when is_list(enumerations) do
-    Enum.map(enumerations, fn enumeration ->
-      case {field(enumeration, :value), field(enumeration, :label)} do
-        {value, label} when is_integer(value) and is_binary(label) ->
-          %{value: value, label: label}
-
-        _other ->
-          raise ArgumentError, "invalid telemetry enumeration: #{inspect(enumeration)}"
-      end
-    end)
-  end
-
-  defp field(map, key) when is_map(map), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
 
   defp normalize_data_type(data_type) when is_atom(data_type), do: data_type
 

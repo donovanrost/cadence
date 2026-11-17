@@ -23,9 +23,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
   alias Cadence.SemanticRuntime.PlanDecoder, as: SemanticPlanDecoder
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
-  # Contract 3 adds each field's calibrator and enumerations (calibration, #92); contract 2 plans
-  # (every revision stored before it) decode with neither, i.e. engineering = raw.
-  @telemetry_contracts ["2", "3"]
+  @telemetry_contract "2"
   @command_contract "2"
 
   @spec validate(%{optional(atom()) => RuntimePlan.t()}) :: :ok | {:error, term()}
@@ -65,8 +63,11 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
       nil ->
         {:error, {:mission_model_runtime_plan_required, :telemetry}}
 
-      %RuntimePlan{status: :ready, target_contract_version: contract, plan: plan}
-      when contract in @telemetry_contracts ->
+      %RuntimePlan{
+        status: :ready,
+        target_contract_version: @telemetry_contract,
+        plan: plan
+      } ->
         decode_telemetry_plan(plan)
 
       %RuntimePlan{} = plan ->
@@ -134,9 +135,7 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
           size_bits: value(field, :size_bits),
           data_type: value(field, :data_type, :uint),
           byte_order: value(field, :byte_order, :big_endian),
-          engineering_unit: value(field, :engineering_unit),
-          calibrator: value(field, :calibrator),
-          enumerations: value(field, :enumerations, [])
+          engineering_unit: value(field, :engineering_unit)
         })
       end)
 

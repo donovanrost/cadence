@@ -10,7 +10,7 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
   alias Cadence.Capabilities.Definitions.DefinitionBoundTelemetry, as: Definition
   alias Cadence.Platform.ContentHash
   alias Cadence.Protocol.PacketRecord
-  alias Cadence.Telemetry.{Calibration, Extractor, PacketDefinition, Sample}
+  alias Cadence.Telemetry.{Extractor, PacketDefinition, Sample}
 
   @impl true
   defdelegate descriptor(), to: Definition
@@ -65,9 +65,6 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
 
   defp to_sample({field_definition, raw_value}, packet_record, packet_definition, work_item) do
     point_name = packet_definition.packet_name <> "." <> field_definition.name
-    # The one place a field's calibration runs (#92 (c)): the raw value stays as decoded, and the
-    # identity below still hashes the raw value, so a calibration change isn't a new measurement.
-    calibrated = Calibration.apply(field_definition, raw_value)
 
     %Sample{
       sample_id:
@@ -92,34 +89,23 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
       packet_id: packet_record.packet_id,
       evidence_id: packet_record.evidence_id,
       raw_value: raw_value,
-      engineering_value: calibrated.engineering_value,
-      quality_state: calibrated.quality_state,
+      engineering_value: raw_value,
+      quality_state: :good,
       generation_time: packet_record.source_time,
       receipt_time: packet_record.receipt_time,
       generation_time_source: generation_time_source(packet_record),
       frame_ref: frame_ref(packet_record),
-      provenance:
-        maybe_calibration(
-          %{
-            evidence_id: packet_record.evidence_id,
-            packet_id: packet_record.packet_id,
-            binding_rule_id: work_item.binding_rule_id,
-            semantic_id: field_definition.parameter_id,
-            qualified_name: field_definition.qualified_name,
-            producer_kind: :container,
-            producer_id: packet_definition.packet_definition_id
-          },
-          calibrated.calibration
-        )
+      provenance: %{
+        evidence_id: packet_record.evidence_id,
+        packet_id: packet_record.packet_id,
+        binding_rule_id: work_item.binding_rule_id,
+        semantic_id: field_definition.parameter_id,
+        qualified_name: field_definition.qualified_name,
+        producer_kind: :container,
+        producer_id: packet_definition.packet_definition_id
+      }
     }
   end
-
-  # What produced the engineering value, when anything did: history then says which calibration
-  # (or that none applied, and why).
-  defp maybe_calibration(provenance, nil), do: provenance
-
-  defp maybe_calibration(provenance, calibration),
-    do: Map.put(provenance, :calibration, calibration)
 
   # Identity v2: a CCSDS packet is told apart by its source sequence count, with or without
   # on-board time. Count-less packets would need a stream position; no producer has one today.

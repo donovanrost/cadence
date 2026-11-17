@@ -45,15 +45,4 @@ defmodule Cadence.Reads.PointHistoryTest do
     assert t0 == @from
     assert hd(buckets).t_end == DateTime.add(@from, 10)
   end
-
-  test "an enumerated point (engineering = label after calibration, #92 (c)) plots its raw states" do
-    states = [
-      %{sample(0, "SAFE") | raw_value: 2},
-      %{sample(5, "SCIENCE") | raw_value: 4},
-      %{sample(12, "SCIENCE") | raw_value: 4}
-    ]
-
-    assert [%{min: 2, max: 4, count: 2}, %{min: 4, max: 4, count: 1}] =
-             PointHistory.bucket_samples(states, @from, 10_000)
-  end
 end

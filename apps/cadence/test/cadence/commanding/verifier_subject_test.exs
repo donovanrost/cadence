@@ -88,47 +88,6 @@ defmodule Cadence.Commanding.VerifierSubjectTest do
     end
   end
 
-  # Calibration (#92 (c)): an enumerated parameter's engineering value is its label, its raw value
-  # the state number. A criterion reads the label when use_calibrated is true, the raw value when
-  # false, and never converts one into the other.
-  describe "an enumerated parameter after calibration" do
-    defp calibrated(id, at, raw, label),
-      do: %{sample(id, at, raw) | engineering_value: label}
-
-    @at ~U[2026-11-14 00:35:09.751692Z]
-
-    test "'Mode applied' (raw, use_calibrated: false) still matches the commanded state" do
-      assert %CommandVerifierInstance{lifecycle_state: :satisfied} =
-               VerifierEvaluation.evaluate_samples(mode_applied(@mode_parameter), [
-                 calibrated("applied", @at, 4, "SCIENCE")
-               ])
-    end
-
-    test "use_calibrated: true compares the label" do
-      verifier =
-        mode_applied(@mode_parameter, %{
-          use_calibrated: true,
-          value_from_argument: nil,
-          value: "SCIENCE"
-        })
-
-      assert %CommandVerifierInstance{lifecycle_state: :satisfied} =
-               VerifierEvaluation.evaluate_samples(verifier, [
-                 calibrated("applied", @at, 4, "SCIENCE")
-               ])
-    end
-
-    test "use_calibrated: true with a NUMBER doesn't silently compare the raw state" do
-      verifier =
-        mode_applied(@mode_parameter, %{use_calibrated: true, value_from_argument: nil, value: 4})
-
-      assert VerifierEvaluation.evaluate_samples(verifier, [
-               calibrated("applied", @at, 4, "SCIENCE")
-             ]) ==
-               nil
-    end
-  end
-
   describe "the workflow (#38)" do
     setup do
       persist_mission_scope(@organization_id, @mission_id)
@@ -158,7 +117,7 @@ defmodule Cadence.Commanding.VerifierSubjectTest do
 
   # DOVW1 as the release built it: released 00:35:05.169827Z, no plan delay, a 60 s timeout,
   # equal to the commanded mode (sent as "4"), raw.
-  defp mode_applied(subject_ref, criteria \\ %{}) do
+  defp mode_applied(subject_ref) do
     request =
       CommandRequest.new(
         Map.merge(@ids, %{command_name: "SET_MODE", resolved_argument_values: %{"mode" => "4"}})
@@ -172,18 +131,13 @@ defmodule Cadence.Commanding.VerifierSubjectTest do
         phase: :completion,
         timeout_ms: 60_000,
         success_criteria:
-          MatchCriteria.new(
-            Map.merge(
-              %{
-                criteria_type: :comparison,
-                subject_ref: subject_ref,
-                comparison: :equal,
-                value_from_argument: "argument:mode",
-                use_calibrated: false
-              },
-              criteria
-            )
-          )
+          MatchCriteria.new(%{
+            criteria_type: :comparison,
+            subject_ref: subject_ref,
+            comparison: :equal,
+            value_from_argument: "argument:mode",
+            use_calibrated: false
+          })
       })
 
     [instance] =

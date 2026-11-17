@@ -397,12 +397,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry.FrameBuilder do
   end
 
   defp sample_value(%Sample{} = sample, :raw), do: sample.raw_value
-  # An enumerated point's engineering value is its label (calibration, #92 (c)); its frame keeps
-  # the raw state (kind number), and the reader names it from the point's label set.
-  defp sample_value(%Sample{engineering_value: label, raw_value: raw}, :engineering)
-       when is_binary(label) and is_integer(raw),
-       do: raw
-
   defp sample_value(%Sample{} = sample, :engineering), do: sample.engineering_value
 
   defp bucket_representative_value(bucket) do
