@@ -24,6 +24,7 @@ import {
 import { stationName } from "./names.ts";
 import StationsTable from "./StationsTable.vue";
 import { fetchStations } from "./api.ts";
+import { codeSuggestion, withCodeRule } from "./code-field.ts";
 import { useConfirmCode } from "./useConfirmCode.ts";
 
 /** Setup › Ground stations (rail 06). Edits stage into the change set (ground_station kind). */
@@ -37,7 +38,7 @@ const { state, refetch } = useRemoteQuery(
 );
 /** U82: an in-use refusal, shown in place of the confirm with what still uses it. */
 const refused = ref<RefusalOutcome | null>(null);
-/** The station being edited (null on Add); U82's header Archive… is for an active one. */
+/** The station being edited (null on Add): U82's header Archive… (an active one), U25's Code rule. */
 const edited = computed(() =>
   state.value.status === "ready" && editing.value && editing.value !== "new"
     ? (state.value.value.find((s) => s.id === editing.value) ?? null)
@@ -97,6 +98,8 @@ const notProvided = computed(
         index="G2"
         surface="stations"
         :done="{ name: 'setup.stations' }"
+        :prepare="withCodeRule(edited?.code ?? null)"
+        :suggestion="codeSuggestion(edited?.suggested_code)"
       >
         <template v-if="edited?.lifecycle_state === 'active'" #actions>
           <StagedArchive

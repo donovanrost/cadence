@@ -37,6 +37,8 @@ const props = defineProps<{
   finish?: (
     changes: readonly { path: string; value: unknown }[],
   ) => readonly { path: string; value: unknown }[];
+  /** A value the read suggests for one field, offered as 'Suggested: X' + 'Use X' (ux U25). */
+  suggestion?: Readonly<{ path: string; value: string }> | null;
 }>();
 const router = useRouter();
 const fetched = useRemoteQuery(
@@ -71,6 +73,15 @@ watch(
   { immediate: true },
 );
 const title = computed(() => (props.entityId ? `Edit ${props.name}` : `Add ${props.name}`));
+/** Offered until the field holds it; using it only fills the form (staged with the edit). */
+const offered = computed(() => {
+  const s = props.suggestion;
+  return s && (values.value[s.path] ?? "") !== s.value ? s : null;
+});
+function useSuggestion() {
+  const s = offered.value;
+  if (s) values.value = { ...values.value, [s.path]: s.value };
+}
 const show = (v: unknown) =>
   v === null ? "cleared" : typeof v === "string" ? v : JSON.stringify(v);
 
@@ -139,6 +150,10 @@ async function stage() {
       <template #default="{ value: kindSchema }">
         <form class="flex flex-col gap-4" @submit.prevent="stage">
           <SchemaForm v-model="values" :schema="kindSchema" :errors="errors" />
+          <p v-if="offered" class="m-0 flex flex-wrap items-center gap-2 text-sm text-text-3">
+            Suggested: <span class="font-mono text-readout">{{ offered.value }}</span>
+            <ApButton size="compact" @click="useSuggestion">Use {{ offered.value }}</ApButton>
+          </p>
           <FailureOutcomeCallout v-if="failure" :outcome="failure" tone="caution" />
           <div class="flex flex-wrap gap-2">
             <ApButton type="submit" variant="primary" :disabled="busy" disabled-reason="Staging…"
