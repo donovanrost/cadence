@@ -60,9 +60,15 @@ const row = d.object({
       at: d.timestamp,
       // free-text: the reason the reviewer gave; an approve's comment is optional (P3 ruling 3).
       reason: orNull(d.string),
-      /** P3 (#227): the change-set review a born-approved request came from. */
+      /** P3 (#227): what a born-approved request came from (a change-set review, a workspace). */
       source: d.optional(
-        d.nullable(d.object({ kind: d.knownText(["change_set_review"] as const), id: d.token })),
+        d.nullable(
+          d.object({
+            // api 11-18: (B)'s workspace sends spacecraft_configuration; read any other kind as text.
+            kind: d.knownText(["change_set_review", "spacecraft_configuration"] as const),
+            id: d.token,
+          }),
+        ),
       ),
       ...decisionRecordFields,
     }),
@@ -245,18 +251,23 @@ export const requestedLine = (r: ActivationRequest) =>
 /**
  * "Approved by Ada L. on 11-13 02:20Z: looks right", for a decided request, with the ADMIN MODE
  * tag after the decider when it applies (U89). A request the mission's setting let through (P3
- * `not_required`): "Applied <summary> without a second person's approval, as this mission's
- * setting allows."
+ * `not_required`): "Applied <summary> on 11-17 09:12Z without a second person's approval, as this
+ * mission's setting allows."
  */
 export function decisionLine(r: ActivationRequest): readonly HeaderPart[] | null {
   const dcs = r.decision;
   if (!dcs) return null;
-  if (dcs.state === "not_required")
+  const at = formatShort(new Date(dcs.at));
+  // U29: the time goes with the act. Only an apply that succeeded reads "Applied" (fe-ops, #227);
+  // the other execution states wait for ux's words and show no decision line.
+  if (dcs.state === "not_required") {
+    if (r.execution?.state !== "succeeded") return null;
     return [
       {
-        text: `Applied ${r.summary.replace(/\.$/, "")} without a second person's approval, as this mission's setting allows.`,
+        text: `Applied ${r.summary.replace(/\.$/, "")} on ${at} without a second person's approval, as this mission's setting allows.`,
       },
     ];
+  }
   const word = {
     approved: "Approved",
     rejected: "Rejected",
@@ -266,11 +277,15 @@ export function decisionLine(r: ActivationRequest): readonly HeaderPart[] | null
   const by: HeaderPart = {
     actor: { name: dcs.by?.name ?? "someone", adminMode: dcs.admin_mode === true },
   };
-  const at = formatShort(new Date(dcs.at));
   const reason = dcs.reason?.trim() ?? "";
-  // ux U41: "Withdrawn by Mira K. at 11-13 02:20Z: <reason>." (§4 short time, one closing period).
+  // ux U41: "Withdrawn by Mira K. at 11-13 02:20Z: <reason>." (§4 short time, one closing period);
+  // with no reason it ends at the time (ux, #227).
   if (dcs.state === "withdrawn")
-    return [{ text: "Withdrawn by " }, by, { text: ` at ${at}: ${reason.replace(/\.$/, "")}.` }];
+    return [
+      { text: "Withdrawn by " },
+      by,
+      { text: ` at ${at}${reason ? `: ${reason.replace(/\.$/, "")}` : ""}.` },
+    ];
   return [{ text: `${word} by ` }, by, { text: ` on ${at}${reason ? `: ${reason}` : ""}` }];
 }
 

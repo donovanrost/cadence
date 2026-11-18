@@ -72,6 +72,16 @@ describe("app activation approvals (L10)", () => {
     },
   };
 
+  const applied = {
+    execution: {
+      state: "succeeded" as const,
+      since: undefined,
+      error_code: undefined,
+      retryable: undefined,
+      error: null,
+    },
+  };
+
   it("reads a decided request's line", () => {
     expect(decisionLine(request)).toBeNull();
     expect(decisionText(decided)).toMatch(/^Approved by Ada L\. on 11-13.*: looks right$/);
@@ -81,6 +91,13 @@ describe("app activation approvals (L10)", () => {
       decision: { ...decided.decision, state: "withdrawn" as const, reason: "not needed." },
     };
     expect(decisionText(withdrawn)).toBe("Withdrawn by Ada L. at 11-13 02:20Z: not needed.");
+    // No reason: the line ends at the time, never ": ." (ux, #227).
+    expect(decisionText({ ...withdrawn, decision: { ...withdrawn.decision, reason: null } })).toBe(
+      "Withdrawn by Ada L. at 11-13 02:20Z.",
+    );
+    expect(decisionText({ ...withdrawn, decision: { ...withdrawn.decision, reason: "  " } })).toBe(
+      "Withdrawn by Ada L. at 11-13 02:20Z.",
+    );
   });
 
   it("words the four-eyes record's new decisions (U89, P3 #227)", () => {
@@ -88,13 +105,18 @@ describe("app activation approvals (L10)", () => {
     expect(decisionText({ ...decided, decision: { ...decided.decision, reason: null } })).toBe(
       "Approved by Ada L. on 11-13 02:20Z",
     );
-    // not_required: the setting's words, never "direct".
+    // not_required: the setting's words, never "direct", and only once the apply succeeded.
     const notRequired = {
       ...decided,
       decision: { ...decided.decision, state: "not_required" as const, reason: null },
     };
-    expect(decisionText(notRequired)).toBe(
-      "Applied Decom composition for 3 spacecraft without a second person's approval, as this mission's setting allows.",
+    expect(decisionLine(notRequired)).toBeNull();
+    for (const state of ["in_progress", "failed"] as const)
+      expect(
+        decisionLine({ ...notRequired, execution: { ...applied.execution, state } }),
+      ).toBeNull();
+    expect(decisionText({ ...notRequired, ...applied })).toBe(
+      "Applied Decom composition for 3 spacecraft on 11-13 02:20Z without a second person's approval, as this mission's setting allows.",
     );
     // ADMIN MODE goes right after the decider's name, only when true.
     const admin = decisionLine({ ...decided, decision: { ...decided.decision, admin_mode: true } });
@@ -283,6 +305,67 @@ describe("app activation approvals (L10)", () => {
         subject: { version: 4 },
         admin_mode: false,
       });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("reads a decision whose record fields are all null, or all absent (fe-ops, #227)", async () => {
+    const decided = (extra: Record<string, unknown>) => ({
+      id: "activation_request_3",
+      kind: "spacecraft_configuration",
+      app: null,
+      summary: "EARENDIL-004 configuration v5",
+      binding_set: { id: "bs_3", version: 5 },
+      requested_by: { kind: "user", id: "u1", name: "Mira K." },
+      requested_at: "2026-11-18T02:10:00Z",
+      state: "approved",
+      decision: {
+        state: "approved",
+        by: { kind: "user", id: "u2", name: "Ada L." },
+        at: "2026-11-18T02:12:00Z",
+        ...extra,
+      },
+      execution: null,
+      can_decide: false,
+    });
+    const nulls = {
+      reason: null,
+      source: null,
+      subject: null,
+      separated_from: null,
+      admin_mode: null,
+    };
+    // api 11-18: (B)'s workspace sends source kind spacecraft_configuration; others read as text.
+    const workspace = { source: { kind: "spacecraft_configuration", id: "rev_12" } };
+    const other = { source: { kind: "plan_review", id: "p1" } };
+    const original = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            requests: [decided(nulls), decided({}), decided(workspace), decided(other)],
+            next: null,
+            permissions: [],
+          },
+        }),
+        { status: 200 },
+      );
+    try {
+      const r = await fetchActivations(
+        { missionId: missionIdReader("m"), state: "decided" },
+        new AbortController().signal,
+      );
+      expect(r.ok).toBe(true);
+      const rows = r.ok ? r.value.requests : [];
+      expect(rows.map((x) => x.decision?.source?.kind ?? null)).toEqual([
+        null,
+        null,
+        "spacecraft_configuration",
+        { unrecognized: "plan_review" },
+      ]);
+      for (const row of rows.slice(0, 2))
+        expect(decisionText(row)).toBe("Approved by Ada L. on 11-18 02:12Z");
     } finally {
       globalThis.fetch = original;
     }

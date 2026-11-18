@@ -83,7 +83,7 @@ export const revisionApproval = object({
   // free-text: the approver's comment.
   comment: nullable(string),
   decided_at: timestamp,
-  decision: optional(decisionKind),
+  decision: optional(nullable(decisionKind)),
   ...decisionRecordFields,
 });
 

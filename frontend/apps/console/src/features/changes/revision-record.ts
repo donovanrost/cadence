@@ -18,7 +18,8 @@ export type ApprovedBy =
   | Readonly<{ kind: "approvers"; approvers: readonly NamedActor[] }>
   | Readonly<{ kind: "none" }>;
 
-const who = (a: Actor | null | undefined): string =>
+/** A known actor's name; "someone" when the server doesn't know it (a deleted user). */
+export const who = (a: Actor | null | undefined): string =>
   a?.name ?? (a?.kind === "system" ? "Cadence" : "someone");
 
 const named = (a: Actor | null | undefined, adminMode = false): NamedActor => ({
@@ -26,8 +27,9 @@ const named = (a: Actor | null | undefined, adminMode = false): NamedActor => ({
   adminMode,
 });
 
-/** Before P3 every entry was an approval, so an entry without `decision` is one. */
-const isApproval = (a: RevisionApproval) => a.decision === undefined || a.decision === "approved";
+/** Before P3 every entry was an approval, so an entry without `decision` (absent or null) is one. */
+const isApproval = (a: RevisionApproval) =>
+  a.decision === undefined || a.decision === null || a.decision === "approved";
 const isNotRequired = (a: RevisionApproval) => a.decision === "not_required";
 
 /** The Submitted by column: `submitted_by`, or `applied_by` on a pre-P3 row (the same person). */
@@ -64,7 +66,8 @@ function joined(names: readonly NamedActor[]): readonly HeaderPart[] {
  * applied by Mira K. · 11-17 09:12Z · no second approval needed" when none was needed.
  */
 export function revisionHeader(row: RevisionSummary): readonly HeaderPart[] {
-  if (row.submitted_by === undefined) return appliedLine(row);
+  // A null actor drops its clause, as the table shows a dash; a nameless one reads "someone".
+  if (!row.submitted_by) return appliedLine(row);
   const at = formatShort(new Date(row.applied_at));
   const approval = approvedBy(row);
   if (approval.kind === "not_needed")
@@ -86,7 +89,9 @@ export function revisionHeader(row: RevisionSummary): readonly HeaderPart[] {
     { actor: named(row.submitted_by) },
     { text: appliedByApprover ? " · approved and applied by " : " · approved by " },
     ...joined(approval.approvers),
-    ...(appliedByApprover ? [] : [{ text: " · applied by " }, { actor: named(row.applied_by) }]),
+    ...(appliedByApprover || !row.applied_by
+      ? []
+      : [{ text: " · applied by " }, { actor: named(row.applied_by) }]),
     { text: ` · ${at}` },
   ];
 }

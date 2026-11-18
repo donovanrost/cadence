@@ -99,6 +99,44 @@ describe("the four-eyes record in change history (U89, P3 #227)", () => {
     expect(approvedBy(row)).toEqual({ kind: "none" });
   });
 
+  it("reads every new field null, or every one absent, without failing the list (fe-ops)", () => {
+    const nulls = { decision: null, subject: null, separated_from: null, admin_mode: null };
+    const nullRow = revisionSummary({
+      ...preP3,
+      submitted_by: null,
+      approvals: [{ ...preP3.approvals[0], ...nulls }],
+    });
+    // A null decision is an approval, as an absent one is (pre-P3).
+    expect(approvedBy(nullRow)).toEqual({
+      kind: "approvers",
+      approvers: [{ name: "Ana R.", adminMode: false }],
+    });
+    expect(submittedBy(nullRow)).toBeNull();
+    // A null submitter drops its clause, as the table shows a dash.
+    expect(text(revisionHeader(nullRow))).toBe(
+      "Applied 2026-11-17 09:12:00Z by Mira K. · approved by Ana R.",
+    );
+    const absentRow = revisionSummary(preP3);
+    expect(absentRow.approvals[0]).toMatchObject({
+      decision: undefined,
+      subject: undefined,
+      separated_from: undefined,
+      admin_mode: undefined,
+    });
+  });
+
+  it("drops the applied-by clause when the applier is unknown", () => {
+    const row = revisionSummary({
+      ...preP3,
+      submitted_by: mira,
+      applied_by: null,
+      approvals: [approval(ana)],
+    });
+    expect(text(revisionHeader(row))).toBe(
+      "Submitted by Mira K. · approved by Ana R. · 11-17 09:12Z",
+    );
+  });
+
   it("still refuses a malformed record field", () => {
     expect(() => p3([approval(ana, { admin_mode: "yes" })])).toThrow();
     expect(() => p3([approval(ana, { separated_from: [{ id: "u1" }] })])).toThrow();

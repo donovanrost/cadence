@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ApTable, ApTag, formatAbsolute, plural, type ApColumn } from "@/ui";
 import RecordLine from "./RecordLine.vue";
-import { approvedBy, submittedBy } from "./revision-record.ts";
+import { approvedBy, submittedBy, who } from "./revision-record.ts";
 import type { RevisionSummary } from "./shapes.ts";
 
 /** Mission configuration revisions, newest first; the live one is marked. */
@@ -67,7 +67,7 @@ function kindLabel(row: RevisionSummary): string {
       /></span>
     </template>
     <template #cell-applied="{ row }">{{ formatAbsolute(new Date(row.applied_at)) }}</template>
-    <template #cell-by="{ row }">{{ submittedBy(row)?.name ?? "—" }}</template>
+    <template #cell-by="{ row }">{{ submittedBy(row) ? who(submittedBy(row)) : "—" }}</template>
     <template #cell-approved="{ row }">
       <template v-if="approvedBy(row).kind === 'not_needed'">Not needed</template>
       <RecordLine v-else-if="approvedBy(row).kind === 'approvers'" :parts="approverParts(row)" />

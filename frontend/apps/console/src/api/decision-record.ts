@@ -46,10 +46,13 @@ export const separatedFrom: Reader<readonly string[]> = (value, path = "") => {
   });
 };
 
-/** The contract fields a decision row gains, all optional while readers ship first. */
+/**
+ * The contract fields a decision row gains, all optional while readers ship first. Absent and null
+ * both read (lists are strict arrays, so one null must never fail a whole screen: fe-ops, #227).
+ */
 export const decisionRecordFields = {
   subject: optional(nullable(decisionSubject)),
-  separated_from: optional(separatedFrom),
+  separated_from: optional(nullable(separatedFrom)),
   admin_mode: optional(nullable(boolean)),
 } as const;
 
