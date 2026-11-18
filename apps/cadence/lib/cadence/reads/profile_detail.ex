@@ -11,7 +11,7 @@ defmodule Cadence.Reads.ProfileDetail do
   """
 
   alias Cadence.Catalog
-  alias Cadence.Reads.ProfileRouting
+  alias Cadence.Reads.{CatalogRollout, ProfileRouting}
   alias Cadence.SpacecraftType
   alias Cadence.SpacecraftType.Schema
 
@@ -23,6 +23,8 @@ defmodule Cadence.Reads.ProfileDetail do
            profile_id
          ) do
       {:ok, %SpacecraftType{} = profile} ->
+        revisions = Catalog.list_revisions(organization_id, mission_id)
+
         {:ok,
          build(%{
            profile: profile,
@@ -37,7 +39,8 @@ defmodule Cadence.Reads.ProfileDetail do
            rules: ProfileRouting.rules(organization_id, mission_id, profile),
            overrides: ProfileRouting.overrides(organization_id, mission_id, profile),
            extra_routes: ProfileRouting.extra_routes(organization_id, mission_id, profile),
-           catalog_choices: catalog_choices(organization_id, mission_id)
+           catalog_choices: Enum.map(revisions, &catalog_choice/1),
+           revision_numbers: Map.new(revisions, &{&1.catalog_revision_id, &1.revision_number})
          })}
 
       _missing ->
@@ -65,7 +68,10 @@ defmodule Cadence.Reads.ProfileDetail do
         id: profile.spacecraft_type_id,
         name: profile.display_name,
         version: profile.version,
-        catalog_revision: profile.catalog_revision_id && %{id: profile.catalog_revision_id},
+        # {id, number, label} as the profile list sends it (qa 11-18: the console requires the
+        # number; {id} alone made the page unreadable for a profile with a catalog revision).
+        catalog_revision:
+          CatalogRollout.ref(profile.catalog_revision_id, Map.get(input, :revision_numbers, %{})),
         protocols: %{
           downlink: enum_value(profile.downlink_protocol),
           uplink: enum_value(profile.uplink_protocol),
@@ -125,11 +131,8 @@ defmodule Cadence.Reads.ProfileDetail do
 
   defp with_choices(field, _choices), do: field
 
-  defp catalog_choices(organization_id, mission_id) do
-    organization_id
-    |> Catalog.list_revisions(mission_id)
-    |> Enum.map(&%{value: &1.catalog_revision_id, label: catalog_label(&1)})
-  end
+  defp catalog_choice(revision),
+    do: %{value: revision.catalog_revision_id, label: catalog_label(revision)}
 
   # ux U25 / Profile.md P3 (611078ce): "rev 4 · imported 11-10", or "rev 4 · <source>" when the
   # import date isn't known. Never "rN": that's a change-set revision ("since r3" on the same row).

@@ -458,7 +458,7 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
 - The catalog field's `enum` lists the mission's catalog revisions, newest first, as `[{value:
   <catalog revision id>, label: "r3 · demo_spacecraft.yaml"}]` (render a select), or `null` when
   the mission has none.
-- `catalog_revision` is `{id}` (or `null`), and the catalog field's `value` is the profile's
+- `catalog_revision` is `{id, number, label: "rev N"}` (or `null`), as the profile list sends it (#246), and the catalog field's `value` is the profile's
   `catalog_revision_id`. `versions[].actor` and `last_change.actor` are `null` because profile versions don't
   record an author (change-set revisions do; `last_change.revision` fills in when profile edits go
   through change sets).

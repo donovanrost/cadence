@@ -176,7 +176,8 @@ defmodule CadenceWeb.TestFixtures do
             "secondary_header_length" => 0,
             "ocf_length" => 0
           }),
-        applications: Keyword.get(opts, :applications, %{"telemetry_decom" => %{}})
+        applications: Keyword.get(opts, :applications, %{"telemetry_decom" => %{}}),
+        catalog_revision_id: Keyword.get(opts, :catalog_revision_id)
       })
 
     assert {:ok, persisted} =
