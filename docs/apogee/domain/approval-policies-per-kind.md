@@ -1,6 +1,6 @@
 # Approval policies per kind: design note (domain and api)
 
-For board #201 and its sub-stories #221-#225 (DECISIONS #111). Status: DRAFT; questions 2 and 3 ruled by the director, 1, 4, 5 and 6 with the user. No build until
+For board #201 and its sub-stories #221-#225 (DECISIONS #111). Status: DRAFT; questions 2 and 3 ruled by the director, 6 answered by the user, 1, 4 and 5 with the user. No build until
 they're answered. The settings authz finding is #233 (M2, ahead of this build).
 Breaking changes are fine (DECISIONS #112): no compatibility reads are kept for dev data.
 
@@ -104,8 +104,10 @@ change, readers first.
 4. **Commands:** confirm the option set, especially a second GO for ROUTINE commands and armed runs.
 5. **Per-kind lock:** should an organization lock individual kinds (for example commands) while missions
    choose others, or is one lock for the whole Approvals section enough?
-6. **Who may change approval policies:** organization admins only, any mission admin, or should changing
-   a mission's approval policy itself need a second person?
+6. ~~**Who may change approval policies:**~~ ANSWERED (user, via the director 11-18): only an ORGANIZATION ADMIN may
+   LOOSEN a policy (independent to one person); a MISSION ADMIN may TIGHTEN one; operators can't change
+   them at all; every change is audited (who, when, before and after). #233 builds this for today's
+   single setting first.
 
 Context: board #201, #221-#225; DECISIONS #92 (a), #107, #109, #111, #112; Governance.ActivationLocks;
 Commanding.CommandPolicy; M2 policy evidence (#226).
