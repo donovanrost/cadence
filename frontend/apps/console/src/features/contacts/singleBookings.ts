@@ -121,6 +121,16 @@ export const stationWords = (o: Offer) => {
 export const providerWords = (o: Offer) => o.provider.name ?? "the provider";
 export const windowWords = (o: Offer) => `${clock(o.starts_at)}Z–${clock(o.ends_at)}Z`;
 
+/**
+ * An overlapped pass whose craft has no name (fe-setup, #190): same_spacecraft is the searched
+ * craft's own pass; an unknown reason says only that a pass is booked.
+ */
+const NAMELESS_OWNER = {
+  same_spacecraft: "this spacecraft's",
+  same_antenna: "another spacecraft's",
+  unrecognized: "a booked",
+} as const;
+
 /** Why an offer can't be chosen, or null: it overlaps a booked pass, or its token expired. */
 export function offerBlocked(o: Offer, now: Date): string | null {
   if (Date.parse(o.expires_at) <= now.getTime()) return "Offer expired. Search again.";
@@ -128,8 +138,10 @@ export function offerBlocked(o: Offer, now: Date): string | null {
   if (o.availability === "unavailable")
     return `${o.provider.name ?? "The provider"} reports this window as unavailable.`;
   const ov = o.overlaps;
-  if (ov)
-    return `Overlaps ${ov.spacecraft.name ? `${ov.spacecraft.name}'s` : "another spacecraft's"} ${ov.station_code ? `${ov.station_code} ` : ""}${formatHourMinute(new Date(ov.starts_at))} pass.`;
+  if (ov) {
+    const owner = ov.spacecraft.name ? `${ov.spacecraft.name}'s` : NAMELESS_OWNER[ov.reason];
+    return `Overlaps ${owner} ${ov.station_code ? `${ov.station_code} ` : ""}${formatHourMinute(new Date(ov.starts_at))} pass.`;
+  }
   return null;
 }
 

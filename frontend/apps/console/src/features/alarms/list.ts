@@ -121,8 +121,14 @@ export function lastClearedLine(cleared: readonly Episode[], now: Date): string 
   const iso = last.cleared_at;
   const today = iso.slice(0, 10) === now.toISOString().slice(0, 10);
   const when = `${today ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
-  return `Last cleared ${when} on ${last.spacecraft?.name ?? "the mission"}.`;
+  const on = last.spacecraft ? (last.spacecraft.name ?? "an unknown spacecraft") : "the mission";
+  return `Last cleared ${when} on ${on}.`;
 }
+
+/** A row's spacecraft label: its name, "Unknown spacecraft" when it has none, "Mission" for a
+ * mission-level alarm (ux, #190: never "Mission" for a craft's alarm). */
+export const craftOrMission = (e: Pick<Episode, "spacecraft">) =>
+  e.spacecraft ? (e.spacecraft.name ?? "Unknown spacecraft") : "Mission";
 
 export function ownerText(e: Episode): string {
   if (e.status === "cleared") return e.cleared_unacknowledged ? "Cleared unacknowledged" : "—";

@@ -11,7 +11,7 @@ import {
 import { nextContact } from "@/features/fleet/index.ts";
 import { conditionWords } from "./api.ts";
 import { formatLimitLike, formatValue, withUnit } from "./format.ts";
-import type { AlarmListRow } from "./list.ts";
+import { craftOrMission, type AlarmListRow } from "./list.ts";
 
 /** L1 · Alarm episodes. The Spacecraft cell links to Investigate on that point (name-cell link). */
 defineProps<{ rows: readonly AlarmListRow[] }>();
@@ -86,7 +86,7 @@ const to = (row: AlarmListRow, sc: NonNullable<AlarmListRow["sc"]>): RouteLocati
         class="max-md:hit-44 whitespace-nowrap text-readout no-underline hover:text-bright hover:underline"
         >{{ row.sc.name }}</RouterLink
       >
-      <span v-else class="text-text-3">{{ row.episode.spacecraft?.name ?? "Mission" }}</span>
+      <span v-else class="text-text-3">{{ craftOrMission(row.episode) }}</span>
     </template>
     <template #cell-point="{ row }">
       <span class="font-mono whitespace-nowrap text-readout">{{ row.episode.point.name }}</span>

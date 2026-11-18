@@ -63,6 +63,22 @@ describe("Book a pass words (ux Contacts.md § Book a pass)", () => {
       },
     });
     expect(offerBlocked(overlap, now)).toBe("Overlaps EARENDIL-312's KIR 03:00Z pass.");
+    // No name (fe-setup, #190): the searched craft's own pass, another craft's, or just booked.
+    const nameless = (reason: "same_spacecraft" | "same_antenna" | "unrecognized") => {
+      const ov = overlap.overlaps;
+      if (!ov) throw new Error("fixture");
+      return {
+        ...overlap,
+        overlaps: { ...ov, spacecraft: { ...ov.spacecraft, name: null }, reason },
+      };
+    };
+    expect(offerBlocked(nameless("same_spacecraft"), now)).toBe(
+      "Overlaps this spacecraft's KIR 03:00Z pass.",
+    );
+    expect(offerBlocked(nameless("same_antenna"), now)).toBe(
+      "Overlaps another spacecraft's KIR 03:00Z pass.",
+    );
+    expect(offerBlocked(nameless("unrecognized"), now)).toBe("Overlaps a booked KIR 03:00Z pass.");
   });
 
   it("says each outcome", () => {
