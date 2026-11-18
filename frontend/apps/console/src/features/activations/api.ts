@@ -1,6 +1,7 @@
 import type { MissionId } from "@/api/index.ts";
 import {
   actor,
+  decisionRecordFields,
   decoders as d,
   detailsOf,
   isError,
@@ -9,7 +10,7 @@ import {
   type ApiError,
   type Decoded,
 } from "@/api";
-import { failureOutcome } from "@/features/changes/index.ts";
+import { failureOutcome, type HeaderPart } from "@/features/changes/index.ts";
 import { formatShort, type OpState } from "@/ui";
 
 /**
@@ -53,11 +54,17 @@ const row = d.object({
   state: d.known(requestStates),
   decision: d.nullable(
     d.object({
-      state: d.known(["approved", "rejected", "withdrawn"] as const),
+      /** P3 (#227): `not_required` when the mission's setting needed no second person. */
+      state: d.known(["approved", "rejected", "withdrawn", "not_required"] as const),
       by: orNull(actor),
       at: d.timestamp,
-      // free-text: the reason the reviewer gave.
-      reason: d.string,
+      // free-text: the reason the reviewer gave; an approve's comment is optional (P3 ruling 3).
+      reason: orNull(d.string),
+      /** P3 (#227): the change-set review a born-approved request came from. */
+      source: d.optional(
+        d.nullable(d.object({ kind: d.knownText(["change_set_review"] as const), id: d.token })),
+      ),
+      ...decisionRecordFields,
     }),
   ),
   execution: d.nullable(
@@ -235,22 +242,43 @@ export const stateTag = (r: ActivationRequest) => TAGS[r.state];
 export const requestedLine = (r: ActivationRequest) =>
   `${r.requested_by?.name ?? "Someone"} · ${formatShort(new Date(r.requested_at))}`;
 
-/** "Approved by Ada L. on 11-13 02:20Z: looks right", for a decided request. */
-export function decisionLine(r: ActivationRequest): string | null {
+/**
+ * "Approved by Ada L. on 11-13 02:20Z: looks right", for a decided request, with the ADMIN MODE
+ * tag after the decider when it applies (U89). A request the mission's setting let through (P3
+ * `not_required`): "Applied <summary> without a second person's approval, as this mission's
+ * setting allows."
+ */
+export function decisionLine(r: ActivationRequest): readonly HeaderPart[] | null {
   const dcs = r.decision;
   if (!dcs) return null;
+  if (dcs.state === "not_required")
+    return [
+      {
+        text: `Applied ${r.summary.replace(/\.$/, "")} without a second person's approval, as this mission's setting allows.`,
+      },
+    ];
   const word = {
     approved: "Approved",
     rejected: "Rejected",
     withdrawn: "Withdrawn",
     unrecognized: "Decided",
   }[dcs.state];
-  const by = dcs.by?.name ?? "someone";
+  const by: HeaderPart = {
+    actor: { name: dcs.by?.name ?? "someone", adminMode: dcs.admin_mode === true },
+  };
+  const at = formatShort(new Date(dcs.at));
+  const reason = dcs.reason?.trim() ?? "";
   // ux U41: "Withdrawn by Mira K. at 11-13 02:20Z: <reason>." (§4 short time, one closing period).
   if (dcs.state === "withdrawn")
-    return `Withdrawn by ${by} at ${formatShort(new Date(dcs.at))}: ${dcs.reason.replace(/\.$/, "")}.`;
-  return `${word} by ${by} on ${formatShort(new Date(dcs.at))}: ${dcs.reason}`;
+    return [{ text: "Withdrawn by " }, by, { text: ` at ${at}: ${reason.replace(/\.$/, "")}.` }];
+  return [{ text: `${word} by ` }, by, { text: ` on ${at}${reason ? `: ${reason}` : ""}` }];
 }
+
+/** The decision line as plain text (tests, titles). */
+export const decisionText = (r: ActivationRequest): string | null =>
+  decisionLine(r)
+    ?.map((p) => ("text" in p ? p.text : p.actor.name))
+    .join("") ?? null;
 
 /** lead 11-13: a superseded request names the one that replaced it (the link is the caller's). */
 export function replacedBy(r: ActivationRequest): string | null {

@@ -22,6 +22,8 @@ export type { FleetPostureCounts, RuntimeStatus } from "./counts.ts";
 /** L6 admin mode for features (L7 admin pages): state, enter/leave, and the step-up form. */
 export { enterAdminMode, leaveAdminMode, useAdminMode } from "./admin-mode.ts";
 export { default as AdminModeForm } from "./AdminModeForm.vue";
+/** U89: the ADMIN MODE tag after an actor who decided in platform admin mode. */
+export { default as AdminModeTag } from "./AdminModeTag.vue";
 export { paramText } from "./route-params.ts";
 /** Typed route names and the Investigate tab union (router/route-map.ts, typing audit Fix 4). */
 export {

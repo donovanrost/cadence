@@ -60,6 +60,16 @@ export {
   type SpacecraftRef,
   type StationRef,
 } from "./entities.ts";
+/** The four-eyes decision record's contract fields (P3, DECISIONS #112; #227 tolerant readers). */
+export {
+  ADMIN_MODE_NAME,
+  decisionKind,
+  decisionKinds,
+  decisionRecordFields,
+  decisionSubject,
+  separatedFrom,
+  type DecisionKind,
+} from "./decision-record.ts";
 /** Branded resource ids (typing §12C): minted only by these decoders and param readers. */
 export {
   missionId,

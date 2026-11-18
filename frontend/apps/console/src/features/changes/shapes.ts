@@ -1,4 +1,12 @@
-import { actor, decoders, type Decoded, type Reader, type Unrecognized } from "@/api";
+import {
+  actor,
+  decisionKind,
+  decisionRecordFields,
+  decoders,
+  type Decoded,
+  type Reader,
+  type Unrecognized,
+} from "@/api";
 
 /**
  * Change-set wire shapes. Requested: docs/apogee/plans/setup-shapes.md §K (a JSON passthrough
@@ -66,19 +74,35 @@ const revisionNumber: Reader<number> = (value, path = "") => {
   return n;
 };
 
+/**
+ * One decision on the revision's change set. P3 (#227) adds the record's fields, optional until
+ * the dev reset; an entry without `decision` is an approval (the only kind sent before P3).
+ */
+export const revisionApproval = object({
+  actor,
+  // free-text: the approver's comment.
+  comment: nullable(string),
+  decided_at: timestamp,
+  decision: optional(decisionKind),
+  ...decisionRecordFields,
+});
+
 export const revisionSummary = object({
   revision: revisionNumber,
   kind: oneOf(["baseline", "change_set", "rollback", "legacy_activation"]),
   live: boolean,
   applied_at: timestamp,
+  /** P3: whoever's request ran the apply, on every row (DECISIONS #112). */
   applied_by: nullable(actor),
+  /** P3 (#227): who submitted the change set. TIGHTEN to required with the dev reset. */
+  submitted_by: optional(nullable(actor)),
   // free-text: the reason a person gave for the revision.
   reason: nullable(string),
   summary: nullable(string),
   entry_count: integer,
   change_set_id: nullable(token),
   rolls_back_to: nullable(revisionNumber),
-  approvals: array(object({ actor, comment: nullable(string), decided_at: timestamp }), 20),
+  approvals: array(revisionApproval, 20),
 });
 
 const op = object({
@@ -202,6 +226,7 @@ export const revisionDetailReader = (value: unknown, path = "") => ({
 
 export type Actor = Decoded<typeof actor>;
 export type RevisionSummary = Decoded<typeof revisionSummary>;
+export type RevisionApproval = Decoded<typeof revisionApproval>;
 export type Change = Decoded<typeof change>;
 export type ChangeSet = Decoded<typeof changeSet>;
 export type ConfigState = ReturnType<typeof configStateReader>;

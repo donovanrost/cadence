@@ -40,3 +40,6 @@ export {
 export type { ChangeSet, RevisionDetail } from "./shapes.ts";
 export { fetchEntityRevisions } from "./api.ts";
 export { default as FieldRows } from "./FieldRows.vue";
+/** U89 record lines with the ADMIN MODE tag (P3 #227), shared with activations. */
+export { default as RecordLine } from "./RecordLine.vue";
+export type { HeaderPart } from "./revision-record.ts";

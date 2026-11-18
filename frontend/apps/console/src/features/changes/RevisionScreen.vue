@@ -3,8 +3,10 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
-import { ApBreadcrumb, ApPageHeader, ApRemote, ApTag, formatAbsolute, type ApCrumb } from "@/ui";
+import { ApBreadcrumb, ApPageHeader, ApRemote, ApTag, type ApCrumb } from "@/ui";
 import EntryList from "./EntryList.vue";
+import RecordLine from "./RecordLine.vue";
+import { revisionHeader } from "./revision-record.ts";
 import RollbackPanel from "./RollbackPanel.vue";
 import { useConfigState } from "./useConfigState.ts";
 import { fetchRevision } from "./api.ts";
@@ -52,11 +54,8 @@ const crumbs = computed((): readonly ApCrumb[] => [
       /></template>
       <template v-if="state.status === 'ready'" #subtitle>
         <span class="text-md text-text-3">
-          Applied {{ formatAbsolute(new Date(state.value.applied_at)) }}
-          <template v-if="state.value.applied_by"> by {{ state.value.applied_by.name }}</template>
-          <template v-if="state.value.reason"> · “{{ state.value.reason }}”</template>
-          <template v-for="a in state.value.approvals" :key="a.decided_at">
-            · approved by {{ a.actor.name }}</template
+          <RecordLine :parts="revisionHeader(state.value)" /><template v-if="state.value.reason">
+            · “{{ state.value.reason }}”</template
           >
         </span>
       </template>
