@@ -1132,7 +1132,7 @@ inherited_value}], locked, version: {version, at, actor: {name}} | null}], permi
   | Viewer | Organization level | Mission level |
   |---|---|---|
   | Organization admin (or a platform admin in admin mode) | both values; `allow_override` both | both values; `can_inherit: true` |
-  | Mission admin (its own mission) | `[]` (a mission scope can't save there) | `["independent"]` while the effective value is `direct`, else `[]`; `can_inherit` only when the organization's value isn't looser |
+  | Mission admin (its own mission) | `[]` (a mission scope can't save there) | `["independent"]` (tighten, or pin an inherited `independent` so the mission stays strict if the organization loosens; ux), `[]` once the mission sets its own `independent`; never `direct`, even while it's in effect (pinning it loosens in advance; lead); `can_inherit` only when the organization's value isn't looser |
   | Operator | `[]` | `[]`; `can_inherit: false` |
   | Anyone, while the organization doesn't allow an override (`locked`) | as above | `[]`; `can_inherit: false` (an organization admin changes the organization's value) |
 

@@ -76,6 +76,8 @@ defmodule Cadence.Reads.OrganizationAudit.ApprovalSettingLines do
   defp override_sentence(true), do: "Missions may now set their own approval setting."
   defp override_sentence(_false), do: "Missions can no longer set their own approval setting."
 
+  # No value before (an organization that never saved one): neither way, just set.
+  defp direction(nil, _to), do: "Set"
   defp direction("independent", "direct"), do: "Loosened"
   defp direction(_from, _to), do: "Tightened"
 

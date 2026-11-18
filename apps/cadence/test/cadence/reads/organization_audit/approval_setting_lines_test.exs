@@ -56,6 +56,17 @@ defmodule Cadence.Reads.OrganizationAudit.ApprovalSettingLinesTest do
     assert Lines.line(mission(@direct, @direct, @direct, @direct), @mission) == nil
   end
 
+  test "no value before: set, neither loosened nor tightened (api-ops)" do
+    org = %{
+      "scope" => "organization",
+      "before" => %{"value" => nil, "allow_override" => true},
+      "after" => %{"value" => @independent, "allow_override" => true}
+    }
+
+    assert {"Set approval (organization default): Not set → Needs a second person's approval", _} =
+             Lines.line(org, nil)
+  end
+
   test "a revision saved before #233 has no audit" do
     assert Lines.line(nil, @mission) == nil
   end

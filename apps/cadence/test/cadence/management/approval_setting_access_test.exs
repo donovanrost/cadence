@@ -32,7 +32,11 @@ defmodule Cadence.Management.ApprovalSettingAccessTest do
   test "each role's flags, on a mission that inherits 'independent'", c do
     assert flags(c, c.org_admin) == %{allowed_values: @values, can_inherit: true}
     assert flags(c, c.platform_admin) == %{allowed_values: @values, can_inherit: true}
-    # Already the strictest: nothing to tighten; inheriting 'independent' isn't looser.
+    # It may pin the inherited 'independent' (ux); inheriting 'independent' isn't looser.
+    assert flags(c, c.mission_admin) == %{allowed_values: ["independent"], can_inherit: true}
+
+    # Once the mission sets its own 'independent', there's nothing left to tighten.
+    {:ok, _} = save(c.mission_admin, c.mission, %{"approval_requirement" => "independent"})
     assert flags(c, c.mission_admin) == %{allowed_values: [], can_inherit: true}
     assert flags(c, c.operator) == %{allowed_values: [], can_inherit: false}
   end
@@ -94,15 +98,21 @@ defmodule Cadence.Management.ApprovalSettingAccessTest do
       at.()
       %{allowed_values: allowed, can_inherit: inherit?} = flags(c, scope)
       current = requirement(c)
+      policy = ActivationPolicy.load(c.org, c.mission)
+      own = if policy.source == "overridden", do: (policy.saved || %{})["approval_requirement"]
 
       for value <- @values do
         at.()
         saved? = match?({:ok, _}, save(scope, c.mission, %{"approval_requirement" => value}))
         who = "#{scope.user.user_id}: #{value} from #{current}"
 
-        # Offered: it saves. Withheld: refused, except a no-change save the console doesn't offer.
+        # Offered: it saves. Withheld: refused, except re-saving the mission's own 'independent'
+        # (a no-change the save allows; nothing to offer). Pinning 'direct' always needs an
+        # organization admin (lead, 11-18).
         if value in allowed, do: assert(saved?, who)
-        if value not in allowed and value != current, do: refute(saved?, who)
+
+        if value not in allowed and not (own == "independent" and value == own),
+          do: refute(saved?, who)
       end
 
       at.()

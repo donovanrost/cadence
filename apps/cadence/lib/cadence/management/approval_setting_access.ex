@@ -6,9 +6,11 @@ defmodule Cadence.Management.ApprovalSettingAccess do
 
   - An organization admin (or a platform admin in admin mode) may set either value, at the
     organization and on any mission, and hand a mission back to the organization's value.
-  - A mission admin may only TIGHTEN its own mission: `independent` while the mission's effective
-    value is `direct`, else nothing; and hand it back to the organization's value only when that
-    isn't looser.
+  - A mission admin may only TIGHTEN its own mission: `independent`, unless the mission already
+    sets its own `independent` (ux 11-18: pinning an inherited `independent` keeps the mission
+    strict if the organization later loosens); never `direct`, even while `direct` is in effect
+    (pinning it would loosen in advance; lead 11-18). It may hand the mission back to the
+    organization's value only when that isn't looser.
   - An operator may change nothing.
   - While the organization doesn't allow an override, nobody changes a mission's value (the
     organization's is changed at the organization).
@@ -42,7 +44,7 @@ defmodule Cadence.Management.ApprovalSettingAccess do
 
       mission_admin?(scope, mission_id) ->
         %{
-          allowed_values: if(effective == "direct", do: ["independent"], else: []),
+          allowed_values: if(own(snapshot) == "independent", do: [], else: ["independent"]),
           can_inherit: not loosens?(effective, inherited)
         }
 
@@ -56,6 +58,10 @@ defmodule Cadence.Management.ApprovalSettingAccess do
   defp loosens?(before, after_value), do: before == "independent" and after_value == "direct"
 
   defp requirement(document), do: (document || %{})["approval_requirement"]
+
+  # The mission's own value, when its override sets one.
+  defp own(%{source: "overridden", saved: saved}), do: requirement(saved)
+  defp own(_snapshot), do: nil
 
   # The same named Policy actions ActivationPolicy.save checks (its todo(authz) marks them for
   # Cedar).
