@@ -3021,13 +3021,13 @@ Communications, Changes) for ux's look.
   - Keys (api): `switches.telemetry_enabled` / `switches.commanding_enabled`, each `{value, set, revision}`. `set`
     false gives the never-set line; `set` true with `revision` gives "set by r7", without it "set through Setup ›
     Changes".
-  - **Unset while the active configuration runs it** (lead, 11-17; Earendil's 500 craft today): api adds `active` to each
-    switch (its value in the active document; null when nothing is active; the version comes from `active`). When it's on, the line is "On in the active configuration (v3); no change
-    set has set it yet. Saving a new version turns it off unless a change set turns it on first." Never a bare
-    "Off" next to a craft that runs it on (U20).
-  - The draft takes the switch values. They show as a change in the comparison only when the draft's effective
-    value differs from the active configuration's ("Telemetry: On → Off"), and then the crit telemetry-off warning
-    shows on Save as well as on Activate / Request approval.
+  - The draft takes the switch values, and switches never show as a change in the comparison: a change set that sets
+    one also moves the running configuration, so draft and active can't differ (and neither document carries the
+    switch keys). The crit telemetry-off warning keys on the switch's value and shows on Save as well as on Activate /
+    Request approval.
+  - No "unset while running on" state: after #109 an unset switch runs off, and the only older data (Earendil's
+    craft) is aligned before this ships (lead, 11-18, under the breaking-changes direction), so `switch.active` and
+    its line were dropped.
   - A draft that sends either switch (422, API clients only; the console never sends them): top level "Not saved:
     Telemetry and Commanding are changed with a change set, not in a spacecraft's configuration."; on
     `document.telemetry_enabled` / `document.commanding_enabled`: "Change this with a change set, from the
