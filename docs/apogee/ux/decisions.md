@@ -2795,28 +2795,21 @@ stay server-made; the lines below are what they should say. No digest is ever sh
 - **Admin mode:** a neutral tag `ADMIN MODE` right after the actor's name, wherever `admin_mode` is true (Org Audit
   rows, change history, approval lines). Its title and accessible name: "Acting as a platform admin, not as a
   member of this organization." Admin Audit's rows carry the same tag, so its sentence drops "(admin mode)": "Approved
-  change set v3 in Earendil Ops", not both. `false` and `null` show no tag.
-- **Not recorded** (`admin_mode` null, no reviewed version, rows from before the cutover):
-  - Rows show nothing for it; a missing tag isn't read as a claim (U20), because the detail says so.
-  - A row's detail (or Technical details) reads `Admin mode  Not recorded` and `Reviewed version  Not recorded`
-    for null, never `No`. `true` / `false` read `Yes` / `No`.
-  - An admin-mode filter, if one is added, says under it: "Recorded since <cutover date>."
+  change set v3 in Earendil Ops", not both. `false` shows no tag; a row's detail reads `Admin mode  Yes` / `No`.
+- **Every field is always recorded** (DECISIONS #112, director 11-18): `admin_mode` is never null, `subject` and
+  `separated_from` are always present, and `applied_by` is whoever ran the apply on every row. Dev missions are
+  recreated, so there are no pre-cutover rows and no "Not recorded" words.
 - **Audit kinds:** `activations` → `Activations`, `provider_changes` → `Provider changes` (add both to `kindLabel`).
 - **Contact plan events** (dashboards: `contact plan vN` is the number the console shows as `R41`): every contact
   plan event names it as the console does, "Submitted plan R41 for 11-16", "Approved plan R41 for 11-16", in place
   of "contact plan v41". The day is derived as the console derives it (the plan's window, first pass); api builds
   it. If no day can be derived: "Submitted plan R41".
-- **Change history** (Setup › Changes › revisions; `applied_by`'s meaning changes at the cutover; `submitted_by`
-  is null only before it):
-  - Table: `By` becomes `Submitted by` (`submitted_by`, or before the cutover `applied_by`, which was the
-    submitter then), plus a new `Approved by` column: the approvers' names; `Not needed` for `not_required`; `None`
-    before the cutover with no approvals.
-  - Revision header, after the cutover: "Submitted by Mira K. · approved and applied by Ana R. · 11-17 09:12Z"
-    (approver = applier). If they differ: "· approved by Ana R. · applied by Owen P.". Direct: "Submitted and applied
-    by Mira K. · 11-17 09:12Z · no second approval needed".
-  - Before the cutover, never name an applier for an approved row, because `applied_by` was the submitter:
-    "Submitted by Mira K. · approved by Ana R. · applied 11-17 09:12Z". With no approvals: "Submitted and applied
-    by Mira K. · 11-17 09:12Z".
+- **Change history** (Setup › Changes › revisions):
+  - Table: `By` becomes `Submitted by` (`submitted_by`), plus a new `Approved by` column: the approvers' names, or
+    `Not needed` for `not_required`.
+  - Revision header: "Submitted by Mira K. · approved and applied by Ana R. · 11-17 09:12Z" (approver = applier). If
+    they differ: "· approved by Ana R. · applied by Owen P.". Direct: "Submitted and applied by Mira K. · 11-17
+    09:12Z · no second approval needed".
 
 ### U90 · A comparison with nothing to compare against (director, via lead, 11-17; amends U65) (domain / api / fe-ops)
 A mission's first catalog revision can now be compared with no earlier configuration. The report then passes with
