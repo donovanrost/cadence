@@ -278,20 +278,17 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 | Partition | Owner | Purpose |
 |---|---|---|
 | empty (`cadence_test`) | team | shared-tree runs through check-slot (no `MIX_TEST_PARTITION`): no claim needed; never drop it |
-| 2, 4, 5, 6, 8, 10, 11, 14–17, 19 | unclaimed | worktree runs: claim before use |
-| 3 | api-ops | L4 policy worktree (`scratchpad/policy-wt`) |
-| 7 | api-ops | ingest fix / journal-matrix worktree (`scratchpad/ingest-wt`) |
+| 2, 4, 5, 6, 7, 8, 10, 11, 14–17, 19 | unclaimed | worktree runs: claim before use |
+| 3 | api-ops | provenance B (#171) side worktree `api-ops-provenance-b` (DB dropped for disk 11-18 ~09:5xZ; recreated fresh before its evidence run) |
 | 9 | api | api's side worktree for slot work (`…/cadence/api-held`) |
 | 12 | domain | domain's evidence runs (archive fix, #83) |
 | 13 | fe-setup | L10/L12/L13 worktree (`fe-setup-l10-13`; re-labelled 11-14 from the L8b worktree, lead) |
 | 18 | fe-ops | L8 worktree |
-| 20 | api-ops | develop ports (L4, ingest fix) |
 | 21 | domain | domain's develop ports (verifier fix, gate, contact start, archive fix) |
-| 22–23 | unclaimed | develop ports: claim before use |
+| 20, 22–23 | unclaimed | develop ports: claim before use |
 | 24 | devops | devops' develop evidence |
-| 25 | api-ops | main ports and main reruns (`scratchpad/main-wt`, L4, ingest fix) |
 | 26 | domain | domain's main ports |
-| 27–29 | unclaimed | main ports: claim before use |
+| 25, 27–29 | unclaimed | main ports: claim before use |
 | 31 | qa | restart dry assemblies (`scratchpad/dry-b-wt`; (B) 11-14 01:23–01:35Z, the L8 + L4 bundle next) |
 
 ## Trial picks the evening before
