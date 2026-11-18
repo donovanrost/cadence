@@ -1,6 +1,6 @@
 defmodule Cadence.Governance.ActivationPolicy do
   @moduledoc "Organization approval requirements, mission overrides, and exact policy evidence."
-  alias Cadence.Auth.SettingsAccess
+  alias Cadence.Auth.{Policy, SettingsAccess}
   alias Cadence.Missions
   alias Cadence.Platform.ScopedSettings
 
@@ -42,6 +42,19 @@ defmodule Cadence.Governance.ActivationPolicy do
 
   def settings_snapshot(organization_id, mission_id), do: load(organization_id, mission_id)
 
+  @doc """
+  Saves the approval setting for the organization (`mission_id` nil) or a mission (DECISIONS #111,
+  the user's rule, board #233). Who may change it, decided under the section lock against what the
+  save replaces:
+    * the organization's setting (its default and whether missions may override): an organization
+      admin only, in either direction;
+    * a mission's setting: LOOSENING (its effective requirement goes from 'independent' to
+      'direct') or pinning its own 'direct' (even while 'direct' is inherited) needs an
+      organization admin; TIGHTENING or leaving it as it is needs that mission's admin (or an
+      organization admin). Operators can't change it at all.
+  Every change records who, when, and the effective setting before and after (`audit`); a refused
+  change records nothing.
+  """
   def save(scope, mission_id, token, input) do
     with :ok <- SettingsAccess.authorize(scope, :manage_settings, mission_id),
          {:ok, document} <- decode(mission_id, input) do
@@ -52,9 +65,79 @@ defmodule Cadence.Governance.ActivationPolicy do
         default(),
         token,
         document,
-        SettingsAccess.actor(scope)
+        SettingsAccess.actor(scope),
+        check: &may_change(scope, mission_id, &1, document),
+        audit: &audit(mission_id, &1, document)
       )
     end
+  end
+
+  # todo(authz): these named Policy actions are the boundary Cedar will decide (organization admin,
+  # mission admin); the direction rule stays here.
+  defp may_change(scope, nil, _current, _document),
+    do: organization_admin(scope)
+
+  # Pinning a mission's own 'direct' is reserved for an organization admin even when 'direct' is
+  # already in effect (inherited): it's a loosening in advance, since the organization's later
+  # tightening would never reach that mission (api-ops, lead 11-18).
+  defp may_change(scope, mission_id, current, document) do
+    if loosens?(current.effective, after_effective(current, document)) or pins_direct?(document),
+      do: organization_admin(scope),
+      else: mission_admin(scope, mission_id)
+  end
+
+  defp pins_direct?(%{"value" => %{"approval_requirement" => "direct"}}), do: true
+  defp pins_direct?(_document), do: false
+
+  defp organization_admin(scope) do
+    case Policy.authorize(scope, :manage_missions, %{organization_id: scope.organization_id}) do
+      :ok -> :ok
+      _refused -> {:error, :approval_policy_change_requires_organization_admin}
+    end
+  end
+
+  defp mission_admin(scope, mission_id) do
+    case Policy.authorize(scope, :manage_mission, %{
+           organization_id: scope.organization_id,
+           mission_id: mission_id
+         }) do
+      :ok -> :ok
+      _refused -> {:error, :approval_policy_change_requires_mission_admin}
+    end
+  end
+
+  defp loosens?(before, after_value),
+    do: requirement(before) == "independent" and requirement(after_value) == "direct"
+
+  defp requirement(effective), do: (effective || %{})["approval_requirement"]
+
+  # A mission's effective setting after the save: the organization's value with the new override
+  # merged in (a nil override hands it back to the organization), as ScopedSettings.load reads it.
+  defp after_effective(current, %{"value" => nil}), do: current.organization_default
+
+  defp after_effective(current, %{"value" => value}),
+    do: Map.merge(current.organization_default || %{}, value)
+
+  defp audit(nil, current, document) do
+    %{
+      "scope" => "organization",
+      "before" => %{
+        "value" => current.organization_default,
+        "allow_override" => current.allow_override
+      },
+      "after" => %{"value" => document["value"], "allow_override" => document["allow_override"]}
+    }
+  end
+
+  defp audit(_mission_id, current, document) do
+    %{
+      "scope" => "mission",
+      "before" => %{"effective" => current.effective, "override" => current.saved},
+      "after" => %{
+        "effective" => after_effective(current, document),
+        "override" => document["value"]
+      }
+    }
   end
 
   def evidence(organization_id, mission_id) do
