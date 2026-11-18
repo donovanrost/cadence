@@ -40,6 +40,41 @@ defmodule CadenceWeb.Console.ApproveRefusals do
 
   @generic "Not approved: this request can't apply as it stands."
 
+  @doc """
+  #236 (ux): an author of the configuration being activated is refused (403), naming up to three
+  of the spacecraft they saved, then "and N more". Without names, the generic line.
+  """
+  @spec authored(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def authored(conn, %{spacecraft_ids: ids, spacecraft: named} = details) do
+    names = named |> Enum.map(& &1.name) |> Enum.filter(&is_binary/1) |> Enum.take(3)
+    {status, code, generic} = Problem.describe(:activation_approver_authored_content)
+
+    conn
+    |> put_status(status)
+    |> Phoenix.Controller.json(
+      Problem.body(code, authored_line(names, length(ids)) || generic, details)
+    )
+    |> halt()
+  end
+
+  defp authored_line([], _count), do: nil
+
+  defp authored_line([name], 1),
+    do:
+      "Not approved: you saved #{name}'s configuration in this request, so another person approves it." <>
+        @recorded
+
+  defp authored_line(names, count) when length(names) == count,
+    do: authored_many(Enum.join(Enum.drop(names, -1), ", ") <> " and " <> List.last(names))
+
+  defp authored_line(names, count),
+    do: authored_many(Enum.join(names, ", ") <> " and #{count - length(names)} more spacecraft")
+
+  defp authored_many(list),
+    do:
+      "Not approved: you saved the configurations of #{list} in this request, so another person approves it." <>
+        @recorded
+
   @spec respond(Plug.Conn.t(), atom(), map() | nil) :: Plug.Conn.t()
   def respond(conn, code, details) when is_atom(code) do
     message = Map.get(@messages, code, @generic) <> @recorded

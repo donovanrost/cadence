@@ -126,6 +126,14 @@ Errors:
   `{spacecraft_ids, service: null}` instead. A version saved under a service's id counts as that
   service's accountable people for `activation_approver_authored_content`. Nothing is recorded.
   REST activations carry no details.
+- `403 activation_approver_authored_content` (#236): you saved a version of a reviewed spacecraft's
+  configuration since its active one, so another person approves it, even when someone else
+  submitted it (only where the request's policy needs an independent approver). `details:
+  {spacecraft_ids, spacecraft: [{id, name}]}`: `spacecraft_ids` lists every reviewed craft you
+  authored; `spacecraft` names the first 5. ux's words: one craft "Not approved: you saved
+  EARENDIL-004's configuration in this request, so another person approves it. Your approval
+  wasn't recorded."; several, up to three names then "and N more spacecraft"; else the generic
+  line. Nothing is recorded; Reject stays open to you.
 - `409 activation_policy_changed` (approve only; reject always works): the activation policy
   changed since the request; request it again. (It's not `policy_changed`, which is the planning policy's code.)
 - `409 nothing_to_resume {state}` (resume): `succeeded` ("It already applied."), `in_progress`

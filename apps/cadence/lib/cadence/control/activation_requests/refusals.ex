@@ -19,6 +19,15 @@ defmodule Cadence.Control.ActivationRequests.Refusals do
 
   @doc "The approve result, with a preflight refusal explained; anything else unchanged."
   @spec explain(term(), binary(), binary(), map()) :: term()
+  # #236: the approver authored content being activated. Not a preflight refusal (a 403, not a
+  # 409): it names the reviewed spacecraft they saved, as the stale review does.
+  def explain({:error, {:activation_approver_authored_content, ids}}, org, mission, _request)
+      when is_list(ids),
+      do:
+        {:error,
+         {:activation_approver_authored_content,
+          %{spacecraft_ids: ids, spacecraft: named(org, mission, ids)}}}
+
   def explain({:error, reason}, org, mission, request) do
     case refusal(reason, org, mission, request) do
       nil -> {:error, reason}

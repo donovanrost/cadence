@@ -51,6 +51,10 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, {:approve_refused, code, details}),
     do: ApproveRefusals.respond(conn, code, details)
 
+  # #236: an author of the configuration being activated can't approve it (nothing recorded).
+  defp error(conn, {:activation_approver_authored_content, details}),
+    do: ApproveRefusals.authored(conn, details)
+
   defp error(conn, {:not_resumable, code}),
     do: Problem.respond(conn, :not_resumable, %{error_code: code})
 
