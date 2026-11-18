@@ -161,7 +161,8 @@ defmodule Cadence.Control.ActivationRequests.ConfigurationChanges do
         spacecraft: ids
       }
     end)
-    |> Enum.sort_by(&(&1.rows == []))
+    # A first start always changes something (the craft starts running), even with no set field.
+    |> Enum.sort_by(&(&1.rows == [] and not &1.first_start))
   end
 
   defp rows(before, document, lookups) do
