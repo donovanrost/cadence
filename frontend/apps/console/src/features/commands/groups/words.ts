@@ -169,7 +169,8 @@ function memberName(e: GroupEvent, targets: EventTargets): string {
   const p = e.payload;
   const t = targets.find((x) => x.spacecraft_id === p?.spacecraft_id);
   const cmd = t?.members.find((m) => m.position === p?.position)?.command_name;
-  const sc = t?.name ?? p?.spacecraft_id;
+  // ux U25 (#237): a target without a name is "an unknown spacecraft", never its id.
+  const sc = t?.name ?? (p?.spacecraft_id ? "an unknown spacecraft" : null);
   return cmd && sc ? `${cmd} on ${sc}` : sc ? `An uplink to ${sc}` : "An uplink";
 }
 

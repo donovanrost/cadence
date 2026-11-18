@@ -2,12 +2,12 @@ import type { MissionId } from "@/api/index.ts";
 import {
   actor,
   decoders,
+  orNull,
   request,
-  spacecraftId,
+  spacecraftRef,
   type ApiResult,
   type Decoded,
   type Reader,
-  orNull,
 } from "@/api";
 import { formatCount } from "@/ui";
 
@@ -61,8 +61,31 @@ const rule = object({
 });
 export type ProfileRule = Decoded<typeof rule>;
 
+/** U79 (api C, additive): a spacecraft's own extra route on this profile, one entry per route. */
+const extraRoute = object({
+  spacecraft: spacecraftRef,
+  route_id: token,
+  name: string,
+  station: nullable(
+    object({
+      id: token,
+      // free-text: the station's short code, an identifier (null when the station is gone).
+      code: nullable(string),
+      name: nullable(string),
+    }),
+  ),
+  legs: array(
+    object({
+      direction: oneOf(["downlink", "uplink"]),
+      role: oneOf(["primary", "candidate", "contributing"]),
+    }),
+    2,
+  ),
+});
+export type ExtraRouteRow = Decoded<typeof extraRoute>;
+
 const override = object({
-  spacecraft: object({ id: spacecraftId, name: string }),
+  spacecraft: spacecraftRef,
   section: token,
   path: string,
   profile_value: raw,
@@ -97,6 +120,8 @@ export const profileDetailReader = object({
   applications: raw,
   rules: array(rule, 200),
   overrides: array(override, 5000),
+  /** Optional until api serves it (U79 C); absent reads as none. */
+  extra_routes: decoders.optional(array(extraRoute, 5000)),
   routing_model: oneOf(["per_spacecraft", "profile"]),
   versions: array(
     object({

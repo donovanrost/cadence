@@ -191,11 +191,13 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
        )
        when is_binary(mission_id) and is_binary(plan_id) and is_integer(expected_version) and
               expected_version > 0 and is_binary(expected_hash) and is_list(opts) do
+    # U76 (lead 11-17; P3: blank is none): a rejection needs its reason; an approval's note is
+    # optional and recorded as NULL when absent or blank, never a canned text.
     reason = reason |> to_string() |> String.trim()
     now = now(opts)
 
     with {:ok, actor} <- authorize_actor(current_scope, mission_id, decision, opts),
-         :ok <- require_reason(reason) do
+         :ok <- require_reason(decision, reason) do
       Repo.transaction(fn ->
         decide_transaction(%{
           organization_id: current_scope.organization_id,
@@ -204,7 +206,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
           expected_version: expected_version,
           expected_hash: expected_hash,
           decision: decision,
-          reason: reason,
+          reason: if(reason == "", do: nil, else: reason),
           actor: actor,
           now: now,
           opts: opts
@@ -240,10 +242,13 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   defp decide_transaction(context) do
     with {:ok, plan_row} <-
            lock_plan(context.organization_id, context.mission_id, context.plan_id),
+         # One read of the approval policy: the separation check uses it and the decision records
+         # it (M2: the policy in force at decision time).
+         policy = ActivationPolicy.evidence(context.organization_id, context.mission_id),
          :ok <- pending_plan(plan_row),
          :ok <- exact_version(plan_row, context.expected_version),
          {:ok, version_row} <- fetch_version_row(plan_row, context.expected_version),
-         :ok <- separate_approver(context.decision, plan_row, version_row, context.actor),
+         :ok <- separate_approver(context.decision, plan_row, version_row, context.actor, policy),
          :ok <- exact_hash(version_row, context.expected_hash),
          version <- ContactPlanVersionRow.to_domain(version_row),
          {:ok, requirements} <- lock_current_requirements(version),
@@ -268,7 +273,11 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
              context.now
            ),
          approval <- %{approval | exceptions: exceptions(context.decision, version, context.opts)},
-         {:ok, approval_row} <- Repo.insert(ContactPlanApprovalRow.changeset(approval)),
+         {:ok, approval_row} <-
+           approval
+           |> ContactPlanApprovalRow.changeset()
+           |> Ecto.Changeset.put_change(:policy_document, policy)
+           |> Repo.insert(),
          {:ok, updated_plan_row} <-
            update_plan(
              plan_row,
@@ -493,7 +502,9 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
       lifecycle_state: "approved",
       lifecycle_changed_by: actor["id"],
       lifecycle_changed_at: now,
-      lifecycle_reason: reason,
+      # The plan's lifecycle projection (not the decision record, which keeps NULL): its column
+      # is required, so a note-less approval reads 'Approved' here.
+      lifecycle_reason: reason || "Approved",
       approved_version: version.version,
       approved_at: now,
       approved_by: actor["id"]
@@ -546,17 +557,23 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   # whoever submitted this version or authored it can't approve it (director 11-15: an admin's own
   # Submit approved and booked in one step). Under 'direct' it's allowed, as before. A send back
   # by the requester is fine either way.
-  defp separate_approver(:approved, plan_row, version_row, %{"kind" => "user", "id" => actor_id}) do
+  defp separate_approver(
+         :approved,
+         plan_row,
+         version_row,
+         %{"kind" => "user", "id" => actor_id},
+         policy
+       ) do
     requesters = Enum.reject([plan_row.lifecycle_changed_by, version_row.created_by], &is_nil/1)
 
-    if actor_id in requesters and separation_required?(plan_row) do
+    if actor_id in requesters and policy["separation_of_duties"] == true do
       {:error, :contact_plan_self_approval_forbidden}
     else
       :ok
     end
   end
 
-  defp separate_approver(_decision, _plan_row, _version_row, _actor), do: :ok
+  defp separate_approver(_decision, _plan_row, _version_row, _actor, _policy), do: :ok
 
   @doc "Whether the mission's approval setting requires a second person ('independent')."
   def separation_required?(%{organization_id: organization_id, mission_id: mission_id}),
@@ -568,8 +585,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   defp exact_version(_plan, _version), do: {:error, :stale_contact_plan_version}
   defp exact_hash(%ContactPlanVersionRow{content_sha256: hash}, hash), do: :ok
   defp exact_hash(_version, _hash), do: {:error, :stale_contact_plan_content}
-  defp require_reason(""), do: {:error, :contact_plan_decision_reason_required}
-  defp require_reason(_reason), do: :ok
+  defp require_reason(:rejected, ""), do: {:error, :contact_plan_decision_reason_required}
+  defp require_reason(_decision, _reason), do: :ok
 
   defp authorize_actor(
          %Scope{actor_kind: :user, user: user} = scope,

@@ -39,6 +39,22 @@ const rule = object({
   active: boolean,
   // No version: a route names the transport and the current version resolves at apply (DECISIONS #104).
   transport: object({ id: token, name: string }),
+  /**
+   * U79 (api, additive; optional until it lands): where the route comes from, the extra route it
+   * belongs to (Edit / Remove key on it; two legs share one), and its station.
+   */
+  origin: decoders.optional(decoders.knownText(["legacy", "profile", "spacecraft"] as const)),
+  route_id: decoders.optional(nullable(token)),
+  station: decoders.optional(
+    nullable(
+      object({
+        id: token,
+        // free-text: the station's short code, an identifier (null when the station is gone).
+        code: nullable(string),
+        name: nullable(string),
+      }),
+    ),
+  ),
 });
 /** Readiness checks (Reads.SpacecraftDetail); a new one reads as its key. */
 const readinessKeys = ["identity", "profile", "routing", "telemetry"] as const;

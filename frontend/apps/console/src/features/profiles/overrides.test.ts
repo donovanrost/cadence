@@ -87,7 +87,7 @@ describe("override text", () => {
     ],
   };
   const held = {
-    spacecraft: { id: spacecraftId("sc_1"), name: "EARENDIL-001" },
+    spacecraft: { id: spacecraftId("sc_1"), name: "EARENDIL-001", scid: null },
     section: "other",
     path: "catalog_revision_id",
     profile_value: "cat_3",

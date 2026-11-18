@@ -11,6 +11,7 @@ import {
   formatShort,
   type ApColumn,
 } from "@/ui";
+import { AdminModeTag } from "@/shell";
 import AuditAction from "./AuditAction.vue";
 import AuditOrg from "./AuditOrg.vue";
 import { fetchPlatformAudit, type PlatformAuditEvent, type UnreadableAuditEvent } from "./api.ts";
@@ -73,7 +74,9 @@ const columns: readonly ApColumn[] = [
           caption="Platform audit"
         >
           <template #cell-at="{ row }">{{ atText(row) }}</template>
-          <template #cell-actor="{ row }">{{ whoText(row) }}</template>
+          <template #cell-actor="{ row }"
+            >{{ whoText(row) }}<AdminModeTag v-if="readable(row)?.admin_mode === true" class="ml-2"
+          /></template>
           <template #cell-action="{ row }"
             ><AuditAction :event="readable(row)" :raw="'raw' in row ? row.raw : []"
           /></template>

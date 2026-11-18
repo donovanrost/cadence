@@ -22,6 +22,8 @@ import {
 } from "@/features/scheduling/index.ts";
 import ChangesPanel from "./ChangesPanel.vue";
 import { replanErrorText } from "./errors.ts";
+import ReplanWindowMeta from "./ReplanWindowMeta.vue";
+import { noneLeftLine } from "./windowMeta.ts";
 import { lostWindow } from "./impact.ts";
 import { bookingRequests } from "./applied.ts";
 import { useLostBookings } from "./useLostBookings.ts";
@@ -128,6 +130,11 @@ const applyConfirm = computed(() => {
   const kept = proposal.value?.diff?.kept.length ?? 0;
   return `This approves the proposal and sends ${plural(requests.value, "booking request")}. The ${plural(kept, "kept pass", "kept passes")} stay booked.`;
 });
+/** U76: the plan's re-plan window and attempts (null until api sends them, or not repairable). */
+const repairInfo = computed(() => liveSource.value?.repair ?? null);
+const noAttempts = computed(() =>
+  repairInfo.value && !repairInfo.value.available ? noneLeftLine(repairInfo.value.attempts) : null,
+);
 const primary = computed(() =>
   footerPlan.value
     ? planPrimary(footerPlan.value, isAdmin.value, { requestsLeft: stopped.value?.left ?? null })
@@ -188,10 +195,10 @@ const title = computed(() => {
     return `r${s.value.version} → proposal · ${changeWords.value}`;
   return station.stationId.value ? stationTitle.value : "Re-plan after provider changes";
 });
-async function onApply(acks: Acknowledgement[]) {
+async function onApply(acks: Acknowledgement[], note?: string) {
   const plan = proposal.value?.plan;
   if (!plan) return;
-  const result = await apply(plan, acks);
+  const result = await apply(plan, acks, note);
   if (result.ok) sheet.value?.close();
   else sheetError.value = result.error;
 }
@@ -209,6 +216,7 @@ async function onApply(acks: Acknowledgement[]) {
       ><ApStationBar :steps="STEPS" :current="step" label="Re-plan steps"
     /></template>
   </TakeoverHeader>
+  <ReplanWindowMeta v-if="repairInfo" :repair="repairInfo" :now="new Date()" :admin="isAdmin" />
   <template v-if="!planId && station.stationId.value">
     <ApRemote :state="station.availability.value" loading-label="Loading station status…">
       <template #default="{ value: avail }">
@@ -366,7 +374,8 @@ async function onApply(acks: Acknowledgement[]) {
           v-if="!runId && canPropose"
           variant="primary"
           size="commit"
-          :disabled="busy"
+          :disabled="busy || noAttempts !== null"
+          :disabled-reason="noAttempts ?? 'Working…'"
           @click="proposeAround"
           >Propose a re-plan</ApButton
         >

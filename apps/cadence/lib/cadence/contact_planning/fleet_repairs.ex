@@ -115,6 +115,11 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     end
   end
 
+  @doc "The attempt number a repair of `run`'s chain would be (1 for a first repair; U76's header)."
+  @spec next_attempt(binary(), binary(), struct()) :: {:ok, pos_integer()} | {:error, term()}
+  def next_attempt(organization_id, mission_id, run),
+    do: repair_attempt(organization_id, mission_id, run)
+
   @spec source(binary(), binary(), binary(), binary(), pos_integer()) ::
           {:ok, source()} | {:error, term()}
   def source(organization_id, mission_id, run_id, plan_id, plan_version) do

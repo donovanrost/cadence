@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { missionId as missionIdReader } from "@/api/index.ts";
+import { missionId as missionIdReader, spacecraftId } from "@/api/index.ts";
 import { allLost, reviewCsv, reviewFileName, type LostLine } from "./export.ts";
 
 const station = { ref: "KIR", id: null, code: "KIR", name: "Kiruna" };
@@ -7,7 +7,7 @@ const lost: LostLine[] = [
   {
     station,
     provider: null,
-    spacecraft: { id: "sc-4", name: "EARENDIL-004" },
+    spacecraft: { id: spacecraftId("sc-4"), name: "EARENDIL-004", scid: null },
     planned_aos: "2026-11-10T00:54:00Z",
     planned_los: "2026-11-10T01:02:00Z",
     actual_aos: null,

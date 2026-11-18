@@ -254,6 +254,8 @@ const auditEvent = d.object({
     }),
   ),
   organization: d.nullable(d.object({ id: d.token, name: d.string })),
+  /** P3 (#228): the decider acted in platform admin mode (ux U89 tag). TIGHTEN with the dev reset. */
+  admin_mode: d.optional(d.nullable(d.boolean)),
 });
 export type PlatformAuditEvent = Decoded<typeof auditEvent>;
 /** A row the console can't read stays in the list as such (lead): one bad event can't hide the rest. */

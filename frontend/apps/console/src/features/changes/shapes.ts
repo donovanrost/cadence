@@ -34,11 +34,14 @@ export const configKinds = [
   "spacecraft_profile",
   "spacecraft_override",
   "spacecraft_routes",
+  "spacecraft_route",
   "framing_compatibility",
   "catalog_compatibility",
   "switch_compatibility",
   "derived_telemetry",
   "limit_definition",
+  // U79 (director): an older route set up on the old routing page, removed through the set (domain).
+  "legacy_routing_rule",
 ] as const;
 export type ConfigKind = (typeof configKinds)[number];
 const configKindWords: Readonly<Record<ConfigKind, string>> = {
@@ -48,11 +51,14 @@ const configKindWords: Readonly<Record<ConfigKind, string>> = {
   spacecraft_profile: "Profile",
   spacecraft_override: "Override",
   spacecraft_routes: "Spacecraft routes",
+  // U79: one spacecraft's own route (domain 774471695).
+  spacecraft_route: "Extra route",
   framing_compatibility: "Framing compatibility",
   catalog_compatibility: "Catalog compatibility",
   switch_compatibility: "Commanding and telemetry switches",
   derived_telemetry: "Derived point",
   limit_definition: "Limits",
+  legacy_routing_rule: "Older route",
 };
 export const configKind = decoders.knownText(configKinds);
 /** A kind in words, or the server's word for a kind the console doesn't know yet. */

@@ -13,7 +13,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
           contact_plan_version: pos_integer(),
           decision: :approved | :rejected,
           content_sha256: binary(),
-          reason: binary(),
+          # A rejection's reason; an approval's optional note (NULL when none, U76).
+          reason: binary() | nil,
           actor_kind: :user | :service,
           actor_id: binary(),
           actor_document: map(),
@@ -56,7 +57,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
       contact_plan_version: positive(value(attrs, :contact_plan_version), :contact_plan_version),
       decision: normalize_decision(value(attrs, :decision)),
       content_sha256: required(attrs, :content_sha256),
-      reason: required(attrs, :reason),
+      reason: optional_string(value(attrs, :reason)),
       actor_kind: normalize_actor_kind(value(attrs, :actor_kind, :user)),
       actor_id: required(attrs, :actor_id),
       actor_document: document(value(attrs, :actor_document), :actor_document),

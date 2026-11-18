@@ -1,4 +1,4 @@
-import { decoders, recordOf, request, type ApiResult, type Decoded } from "@/api";
+import { actor, decoders, recordOf, request, type ApiResult, type Decoded } from "@/api";
 import { schemaFieldReader, type KindSchema } from "@/features/changes/index.ts";
 import type { OpState } from "@/ui";
 import { ingestionModes } from "./ingestion.ts";
@@ -23,7 +23,7 @@ const account = object({
   last_success_at: nullable(timestamp),
   missions: array(object({ id: token, name: string }), 500),
   added_at: timestamp,
-  added_by: nullable(object({ name: string })),
+  added_by: nullable(actor),
   /** The current version's event ingestion mode (api-ops, 11-16); absent on older reads. */
   event_ingestion_mode: decoders.optional(nullable(decoders.knownText(ingestionModes))),
 });

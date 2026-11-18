@@ -1,4 +1,5 @@
 import {
+  actor,
   actorKinds,
   decoders as d,
   request,
@@ -45,7 +46,7 @@ export type StationRef = Decoded<typeof stationReader>;
 export const supersededReader = d.nullable(
   d.object({
     at: d.timestamp,
-    by: d.nullable(d.object({ name: d.string })),
+    by: d.nullable(actor),
     reason: d.knownText(["template_changed", "requirement_changed", "requirement_closed"]),
     changes: d.array(
       d.object({

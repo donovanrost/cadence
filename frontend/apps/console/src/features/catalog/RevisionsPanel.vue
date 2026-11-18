@@ -67,7 +67,7 @@ const columns: readonly ApColumn[] = [
         <time :datetime="row.imported_at" class="font-mono text-xs text-text-3">{{
           formatShort(new Date(row.imported_at))
         }}</time>
-        <span v-if="row.actor" class="text-text-3"> · {{ row.actor.name }}</span>
+        <span v-if="row.actor?.name" class="text-text-3"> · {{ row.actor.name }}</span>
       </template>
     </ApTable>
   </ApPanel>

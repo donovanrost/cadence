@@ -69,7 +69,12 @@ export const kindSchemaReader = object({
 });
 export type KindSchema = Decoded<typeof kindSchemaReader>;
 export type SchemaField = Decoded<typeof schemaFieldReader>;
-export type EditableKind = "ground_station" | "transport" | "spacecraft_profile" | "spacecraft";
+export type EditableKind =
+  | "ground_station"
+  | "transport"
+  | "spacecraft_profile"
+  | "spacecraft"
+  | "spacecraft_route";
 
 export function fetchKindSchema(
   key: Readonly<{ missionId: MissionId; kind: EditableKind }>,

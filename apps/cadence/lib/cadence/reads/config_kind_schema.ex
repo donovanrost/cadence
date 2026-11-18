@@ -20,11 +20,15 @@ defmodule Cadence.Reads.ConfigKindSchema do
   `spacecraft` (L17/L22) is identity (`section: "identity"`) plus the commanding and telemetry
   switches (`section: "switches"`, help is ux's U40). Profile choices are the mission's shared
   profiles; a version left empty means the profile's latest (`Cadence.Control.SpacecraftOps`).
+  `spacecraft_route` (DECISIONS #3, ux U79): spacecraft (`create_only`), station, optional
+  transport, required `downlink` and `uplink` (`none` or a role; the kind maps them to legs),
+  route name and purpose.
   """
 
   alias Cadence.Catalog
-  alias Cadence.Comms.TransportKind
+  alias Cadence.Comms.{GroundStationStore, TransportKind, TransportStore}
   alias Cadence.Reads.ProfileDetail
+  alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType.Schema, as: ProfileSchema
   alias Cadence.SpacecraftTypeStore
 
@@ -66,8 +70,9 @@ defmodule Cadence.Reads.ConfigKindSchema do
     {:ok,
      [
        field("display_name", "Name", :string, required: true, range: %{min: 1, max: 200}),
+       # ux U25: optional while none is stored (the console marks it required once set).
        field("code", "Code", :string,
-         required: true,
+         required: false,
          range: %{min: 2, max: 8},
          help: "2–8 capital letters or digits, unique in the mission (e.g. SVB)."
        )
@@ -127,7 +132,69 @@ defmodule Cadence.Reads.ConfigKindSchema do
        Enum.map(switches, &Map.put(&1, :section, "switches"))}
   end
 
+  # A spacecraft's own extra route (DECISIONS #3; lead + ux U79, 11-16). downlink and uplink are
+  # required so the create form opens on their defaults (primary / none); the kind maps them to
+  # legs. Words are ux's.
+  def fields("spacecraft_route", organization_id, mission_id) do
+    stations = GroundStationStore.list_ground_stations(organization_id, mission_id)
+    station_names = Map.new(stations, &{&1.ground_station_id, &1.display_name})
+
+    roles =
+      Enum.map(
+        [{"none", "Not used"}, {"primary", "Primary"}] ++
+          [{"candidate", "Candidate"}, {"contributing", "Contributing"}],
+        fn {value, label} -> %{value: value, label: label} end
+      )
+
+    {:ok,
+     [
+       "spacecraft_id"
+       |> field("Spacecraft", :enum,
+         required: true,
+         enum:
+           organization_id
+           |> SpacecraftStore.list_spacecraft(mission_id)
+           |> Enum.map(&%{value: &1.spacecraft_id, label: &1.display_name})
+       )
+       |> Map.put(:create_only, true),
+       field("ground_station_id", "Station", :enum,
+         required: true,
+         enum: Enum.map(stations, &%{value: &1.ground_station_id, label: station_label(&1)})
+       ),
+       field("transport_id", "Transport", :enum,
+         enum:
+           organization_id
+           |> TransportStore.list_transports(mission_id)
+           |> Enum.reject(&is_nil(&1.ground_station_id))
+           |> Enum.map(
+             &%{
+               value: &1.transport_id,
+               label: "#{&1.display_name} · #{station_names[&1.ground_station_id]}"
+             }
+           ),
+         help: "Leave empty to use the station's transport for each direction."
+       ),
+       field("downlink", "Downlink", :enum, required: true, enum: roles, default: "primary"),
+       field("uplink", "Uplink", :enum, required: true, enum: roles, default: "none"),
+       field("display_name", "Route name", :string,
+         range: %{max: 200},
+         help:
+           "Leave empty for “{station} · {spacecraft}”. You can use {station}, {spacecraft} " <>
+             "and {scid}."
+       ),
+       field("purpose_label", "Purpose", :string,
+         range: %{max: 200},
+         help: "Shown with the route, e.g. Anomaly recovery."
+       )
+     ]}
+  end
+
   def fields(kind, _organization_id, _mission_id), do: fields(kind)
+
+  defp station_label(%{code: code, display_name: name}) when is_binary(code) and code != "",
+    do: "#{name} · #{code}"
+
+  defp station_label(station), do: station.display_name
 
   @spec fields(binary()) :: {:ok, [map()]} | {:error, :unknown_kind}
   def fields("transport") do

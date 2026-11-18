@@ -9,6 +9,7 @@ defmodule Cadence.ContactPlanning.PlanSubmissions do
 
   import Ecto.Query
 
+  alias Cadence.Governance.ActivationPolicy
   alias Cadence.Repo
 
   @primary_key {:contact_plan_submission_id, :string, autogenerate: false}
@@ -22,6 +23,8 @@ defmodule Cadence.ContactPlanning.PlanSubmissions do
     field(:note, :string)
     field(:unchanged, :boolean, default: false)
     field(:acknowledgements_document, {:array, :map}, default: [])
+    # The approval policy in force at submit (M2): under 'direct' an admin's submit also approves.
+    field(:policy_document, :map)
     field(:submitted_at, :utc_datetime_usec)
   end
 
@@ -41,6 +44,7 @@ defmodule Cadence.ContactPlanning.PlanSubmissions do
       note: attrs[:note],
       unchanged: attrs[:unchanged] || false,
       acknowledgements_document: attrs[:acknowledgements] || [],
+      policy_document: ActivationPolicy.evidence(attrs.organization_id, attrs.mission_id),
       submitted_at: DateTime.utc_now()
     }
     |> Ecto.Changeset.change()

@@ -17,6 +17,7 @@ defmodule CadenceWeb.Console.Problem do
     mission_not_found: {404, "Mission not found."},
     organization_not_found: {404, "Organization not found."},
     spacecraft_not_found: {404, "Spacecraft not found."},
+    spacecraft_route_not_found: {404, "Extra route not found."},
     profile_not_found: {404, "Profile not found."},
     catalog_revision_not_found: {404, "Catalog revision not found."},
     artifact_not_found: {404, "Source file not found."},
@@ -89,6 +90,12 @@ defmodule CadenceWeb.Console.Problem do
       {409, "The template can't move to that state from where it is."},
     requirement_rejected: {422, "The requirement change was refused."},
     policy_rejected: {422, "The policy change was refused."},
+    # ux U76: a re-plan the planning policy doesn't allow.
+    fleet_repair_attempt_limit_exceeded:
+      {409, "No re-plan attempts left. The planning policy sets the limit."},
+    fleet_repair_horizon_exceeded:
+      {422, "That window is longer than the planning policy allows for a re-plan."},
+    fleet_repair_horizon_invalid: {422, "Choose a window that ends after it starts."},
     plan_not_repairable:
       {409,
        "This plan can't be re-planned (it must come from a draft and be executing, partially reserved or failed)."},

@@ -12,7 +12,7 @@ const artifact: ArtifactPage["artifact"] = {
   size_bytes: 2_400_000,
   sha256: "ab".repeat(32),
   uploaded_at: "2026-11-12T14:03:00Z",
-  uploaded_by: { name: "Mira K." },
+  uploaded_by: { kind: "user" as const, id: null, name: "Mira K." },
   database: { id: "db1", name: "Flight" },
   download_url: "/api/console/v1/missions/m/catalog/artifacts/art_1/download",
 };

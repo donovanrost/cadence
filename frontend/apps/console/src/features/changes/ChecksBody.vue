@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApCheckRows, plural, type ApCheckRow } from "@/ui";
-import { groupedLines, type Preview } from "./actions.ts";
+import { type Preview } from "./actions.ts";
+import { groupedLines } from "./itemLines.ts";
 import AlarmLinks from "./AlarmLinks.vue";
 import AppInstallLinks from "./AppInstallLinks.vue";
 import DependentLinks from "./DependentLinks.vue";

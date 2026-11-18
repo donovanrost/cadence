@@ -1,6 +1,7 @@
 import { createMemoryHistory, createRouter } from "vue-router";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
+import { spacecraftId } from "@/api";
 import type { Expired, SupersededBy } from "./lifecycle.ts";
 import PlanLifecycleCallouts from "./PlanLifecycleCallouts.vue";
 
@@ -25,7 +26,7 @@ describe("U61 lifecycle callouts on K1", () => {
       {
         plan_id: "contact_plan_44",
         revision: 44,
-        author: { id: "u", name: "Mira K." },
+        author: { kind: "user" as const, id: "u", name: "Mira K." },
         at: "2026-11-16T10:05:00Z",
       },
       null,
@@ -42,7 +43,7 @@ describe("U61 lifecycle callouts on K1", () => {
       reservable_count: 1476,
       items: [
         {
-          spacecraft: { id: "sc_1", name: "EARENDIL-001" },
+          spacecraft: { id: spacecraftId("sc_1"), name: "EARENDIL-001", scid: null },
           station: { ref: "svalbard-1", id: null, code: "SVA", name: null },
           aos: "2026-11-16T00:10:00Z",
         },

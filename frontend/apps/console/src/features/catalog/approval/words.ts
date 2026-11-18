@@ -92,7 +92,8 @@ const when = (iso: string) => formatShort(new Date(iso));
 /** "Imported by Mira K. at 11-14 22:10Z."; null when the importer isn't recorded (its own line). */
 export function importerLine(r: ModelRevision): string | null {
   if (!r.imported_by) return null;
-  return `Imported by ${r.imported_by.name}${r.imported_at ? ` at ${when(r.imported_at)}` : ""}.`;
+  const by = r.imported_by.name ? ` by ${r.imported_by.name}` : "";
+  return `Imported${by}${r.imported_at ? ` at ${when(r.imported_at)}` : ""}.`;
 }
 
 /** "Approved by Ana R. at 11-15 09:12Z." / "Rejected by …: “Wrong FSW build.”" */
@@ -101,7 +102,8 @@ export function decidedLine(r: ModelRevision): string | null {
   if (!dcs) return null;
   const what = vocabularyText(dcs.kind, { approved: "Approved", rejected: "Rejected" });
   const why = dcs.kind === "rejected" && dcs.reason ? `: “${dcs.reason.trim()}”` : "";
-  return `${what} by ${dcs.by.name} at ${when(dcs.at)}${why}.`;
+  const by = dcs.by.name ? ` by ${dcs.by.name}` : "";
+  return `${what}${by} at ${when(dcs.at)}${why}.`;
 }
 
 /** U65 row tag: NEEDS APPROVAL (caution) / APPROVED / REJECTED; none otherwise. */

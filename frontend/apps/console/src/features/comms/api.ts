@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders, jsonObject, request, type ApiResult, type Decoded } from "@/api";
+import { decoders, jsonObject, request, spacecraftRef, type ApiResult, type Decoded } from "@/api";
 
 /** Requested shapes: docs/apogee/plans/setup-shapes.md §T1/§T2 (final contract in api/setup.md). */
 const { array, boolean, integer, nullable, object, oneOf, string, token } = decoders;
@@ -29,7 +29,7 @@ const rule = object({
   direction,
   role,
   enabled: boolean,
-  spacecraft: object({ id: token, name: string }),
+  spacecraft: spacecraftRef,
   transport: object({ id: token, display_name: string, version: integer }),
 });
 export type RoutingRule = Decoded<typeof rule>;

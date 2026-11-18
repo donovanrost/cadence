@@ -57,6 +57,22 @@ export function useYourGo(missionId: Ref<MissionId>, spacecraftId: Ref<string | 
   return { group, review, refetch };
 }
 
+/**
+ * ux #237, lead's ruling: a target with no name doesn't block GO. The caution says how many, and
+ * Technical details keeps their exact ids (U25: ids live there, never in place of a name).
+ */
+export function namelessTargets(
+  group: Group,
+): Readonly<{ line: string; ids: readonly string[] }> | null {
+  const ids = group.targets.flatMap((t) => (t.name ? [] : [t.spacecraft_id]));
+  const n = ids.length;
+  if (n === 0) return null;
+  return {
+    line: `This console can't show the name of ${n} target spacecraft. Check ${n === 1 ? "its id" : "their ids"} in Technical details before you give GO.`,
+    ids,
+  };
+}
+
 /** "Low power safe · 4 SC", "Mira K. · T+12m", the release sentence and the stack lines. */
 export function yourGoWords(group: Group, nameOf: PersonName, now: Date) {
   const nb = group.release?.not_before;

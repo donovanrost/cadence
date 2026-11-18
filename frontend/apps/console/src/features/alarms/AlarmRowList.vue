@@ -3,7 +3,7 @@ import { RouterLink } from "vue-router";
 import { formatCountdown, useNow, ApStatusMark } from "@/ui";
 import { conditionWords } from "./api.ts";
 import { formatLimitLike, formatValue, withUnit } from "./format.ts";
-import type { AlarmListRow } from "./list.ts";
+import { craftOrMission, type AlarmListRow } from "./list.ts";
 
 /** Alarms under 768px: two lines (spacecraft + severity; point · condition · value / limit · opened · owner). */
 defineProps<{ rows: readonly AlarmListRow[] }>();
@@ -49,7 +49,7 @@ const tint = (row: AlarmListRow) =>
             class="inline-flex min-h-11 items-center font-semibold whitespace-nowrap text-readout no-underline"
             >{{ row.sc.name }}</RouterLink
           >
-          <span v-else class="text-text-3">{{ row.episode.spacecraft?.name ?? "Mission" }}</span>
+          <span v-else class="text-text-3">{{ craftOrMission(row.episode) }}</span>
           <span
             class="inline-flex items-center gap-2 text-md whitespace-nowrap capitalize"
             :class="tint(row)"

@@ -4,6 +4,7 @@ import { fieldErrors } from "@/api";
 import { RouterLink } from "vue-router";
 import { ApButton, ApCallout, ApPanel, ApTextarea } from "@/ui";
 import { approveRefusal, type ApproveRefusal } from "./approveRefusal.ts";
+import { APPROVE_UNSHOWN, unshownCount } from "./changesWords.ts";
 import {
   decide,
   decidedLine,
@@ -22,6 +23,8 @@ const props = defineProps<{
   requestKey: DetailKey;
   request: ActivationDetail;
   viewer: Viewer;
+  /** Its reading-order index: R3 under #235's What changes panel. */
+  index: string;
 }>();
 const emit = defineEmits<{ decided: [note: { tone: "nominal" | "caution"; text: string }] }>();
 const isRequester = computed(() => requestedBy(props.request, props.viewer));
@@ -38,7 +41,14 @@ const busy = ref<Verb | null>(null);
 const blocked = computed(() =>
   busy.value ? "Working…" : reason.value.trim() === "" ? "Give a reason first." : null,
 );
-const approveBlocked = computed(() => (refused.value?.final ? refused.value.text : blocked.value));
+/** ux #235: a change this console can't show keeps Approve off; Reject stays on. */
+const unseen = computed(() => {
+  const c = props.request.configuration_changes;
+  return c && unshownCount(c) > 0 ? APPROVE_UNSHOWN : null;
+});
+const approveBlocked = computed(
+  () => unseen.value ?? (refused.value?.final ? refused.value.text : blocked.value),
+);
 async function go(verb: Verb) {
   if (blocked.value !== null) return;
   busy.value = verb;
@@ -55,7 +65,7 @@ async function go(verb: Verb) {
 </script>
 
 <template>
-  <ApPanel index="R2" :title="isRequester ? 'Your request' : 'Decide'">
+  <ApPanel :index="index" :title="isRequester ? 'Your request' : 'Decide'">
     <div class="flex max-w-[640px] flex-col gap-3">
       <p v-if="isRequester" class="m-0 text-md text-text-2">
         You requested this. Someone else approves it.

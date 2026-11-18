@@ -1,13 +1,11 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 
 /**
  * ux U65 · catalog revision approval (domain's model approval gate, DECISIONS #92 a; api's wire
  * 11-15). A catalog revision's compiled mission model must be approved, against a comparison
  * report, before a change set can move spacecraft onto it.
  */
-
-const person = d.object({ id: d.token, name: d.string });
 
 /** The declaration kinds a report groups its changes by (ux's section words). */
 export const declarationKinds = [
@@ -67,7 +65,7 @@ export const modelRevisionReader = d.object({
   status: d.knownText(["candidate", "approved", "rejected", "retired"] as const),
   imported_at: d.nullable(d.timestamp),
   /** null: Cadence doesn't know who imported it (ux: "Importer not recorded"). */
-  imported_by: d.nullable(person),
+  imported_by: d.nullable(actor),
   catalog_revision: d.nullable(
     d.object({
       id: d.token,
@@ -79,7 +77,7 @@ export const modelRevisionReader = d.object({
   decision: d.nullable(
     d.object({
       kind: d.knownText(["approved", "rejected"] as const),
-      by: person,
+      by: actor,
       at: d.timestamp,
       report_id: d.nullable(d.token),
       // free-text: the rejecting admin's own words, shown quoted

@@ -41,7 +41,7 @@ function meta(p: Pass): string {
         :key="p.id"
         :to="{ name: 'ops.contacts', query: { contact: p.id } }"
         class="max-md:hit-44 text-sm text-readout underline-offset-2 hover:underline"
-        >{{ p.spacecraft?.name ?? p.spacecraft_id ?? "Unknown spacecraft" }} · {{ what(p) }}
+        >{{ p.spacecraft?.name ?? "Unknown spacecraft" }} · {{ what(p) }}
         <span class="font-mono text-text-3">{{ meta(p) }}</span></RouterLink
       >
     </span>

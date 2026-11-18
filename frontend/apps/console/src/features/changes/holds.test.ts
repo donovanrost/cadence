@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { previewReader } from "./actions.ts";
 import { alarmPoints, appHolds, checkTitle, modelHolds, whyPlaceholder } from "./holds.ts";
-import { blockingReason } from "./actions.ts";
+import { blockingReason } from "./itemLines.ts";
 
 /** Fixtures: ux U43 (limits HOLD) and U40 (archive HOLDs); domain's details {point_id, …}. */
 function preview(items: readonly object[], action: "update" | "delete" = "update") {

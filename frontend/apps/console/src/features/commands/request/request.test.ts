@@ -344,6 +344,14 @@ describe("#51 system events (b5d6ed6d)", () => {
       "Cadence: SET_MODE on EARENDIL-004 verify timed out · 2 later uplinks stopped",
     );
     expect(failed && eventState(failed)).toBe("crit");
+    // #237: a target with no name, or one not in the list, is never named by its id.
+    const nameless = targets.map((t) => ({ ...t, name: null }));
+    expect(failed && eventText(failed, () => "Cadence", nameless)).toBe(
+      "Cadence: SET_MODE on an unknown spacecraft verify timed out · 2 later uplinks stopped",
+    );
+    expect(failed && eventText(failed, () => "Cadence", [])).toBe(
+      "Cadence: An uplink to an unknown spacecraft verify timed out · 2 later uplinks stopped",
+    );
   });
 
   it("reads a system actor as Cadence, and still requires user_id from people", () => {

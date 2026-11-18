@@ -5,7 +5,7 @@ describe("supersede sentence (ux ContactPlanning.md)", () => {
   const draft = (day: string | null, id: string | null, name: string) => ({
     plan: { id: `p-${day ?? "none"}`, version: 1 },
     day,
-    author: { id, name },
+    author: { kind: "user" as const, id, name },
     state: "draft" as const,
   });
   it("lists day, revision and author, with 'you' for the reader", () => {

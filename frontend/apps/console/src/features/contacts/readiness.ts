@@ -1,17 +1,18 @@
 import type { MissionId } from "@/api/index.ts";
 import type { RouteLocationRaw } from "vue-router";
 import {
-  stationRef,
-  type StationRef,
-  type StationId,
   decoders as d,
   detailsOf,
   isError,
   isKnown,
   knownText,
   request,
+  spacecraftRef,
+  stationRef,
   type ApiError,
   type Decoded,
+  type StationId,
+  type StationRef,
   type Unrecognized,
 } from "@/api/index.ts";
 import type { OpState } from "@/ui";
@@ -115,7 +116,7 @@ export const groupUplinkReader = d.object({
    * U46 (api): the group's first target, whom the whole block describes (domain keys a group by
    * it). name falls back to the id for a deleted spacecraft. Optional until api's build lands.
    */
-  spacecraft: d.optional(d.object({ id: d.token, name: d.string })),
+  spacecraft: d.optional(spacecraftRef),
   pass: d.nullable(passRef),
   /** 12792cb2: the next ready pass it would go on; named only when present. */
   next_pass: d.optional(d.nullable(passRef)),

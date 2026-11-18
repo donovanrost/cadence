@@ -1057,6 +1057,10 @@ defmodule CadenceWeb.Router do
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
+      get("/spacecraft/:spacecraft_id/routes/:route_id", SpacecraftDetailController, :route)
+      # TEMPORARY (removed with 9ac6dc8ee): the legacy route conversion (ux U79).
+      get("/routes/legacy-conversion", LegacyConversionController, :show)
+      post("/routes/legacy-conversion", LegacyConversionController, :stage)
       get("/spacecraft/:spacecraft_id/uplink", SpacecraftUplinkController, :show)
       get("/spacecraft/:spacecraft_id/configuration", SpacecraftConfigController, :show)
       # L19 spacecraft-scope apps (owner: api).

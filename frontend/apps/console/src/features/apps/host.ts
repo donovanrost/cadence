@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import {
+  actor,
   decoders as d,
   request,
   type ApiResult,
@@ -32,7 +33,7 @@ export const appStatus = d.object({
       ? null
       : d.nullable(
           d.object({
-            requested_by: d.nullable(d.object({ name: d.string })),
+            requested_by: d.nullable(actor),
             requested_at: d.timestamp,
           }),
         )(v, path),
@@ -112,6 +113,6 @@ export function pendingLine(status: AppStatus, at: (iso: string) => string): str
   if (status.state !== "activation_pending") return null;
   const r = status.activation_request;
   if (!r) return "Waiting for activation approval";
-  const by = r.requested_by ? ` by ${r.requested_by.name}` : "";
+  const by = r.requested_by?.name ? ` by ${r.requested_by.name}` : "";
   return `Waiting for activation approval · requested${by} at ${at(r.requested_at)}`;
 }

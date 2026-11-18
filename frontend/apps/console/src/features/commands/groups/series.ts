@@ -158,7 +158,8 @@ export function seriesChart(s: VerifierSeries): {
           },
         ];
   const lines: ComparisonSeries[] = s.targets.map((t) => ({
-    name: t.name ?? t.spacecraft_id,
+    // ux U25 (#237): never the id for a name.
+    name: t.name ?? "Unknown spacecraft",
     points: t.samples.flatMap((p) => {
       const v = num(p.value_json);
       return v === null ? [] : [{ t: Date.parse(p.t), min: v, mean: v, max: v }];
@@ -188,7 +189,7 @@ export function pointCaption(p: VerifierPoint, nameOf: (spacecraftId: string) =>
  * EARENDIL-002 and 3 more: 4 met, 1 not met."
  */
 export function plotSentence(s: VerifierSeries): string {
-  const names = s.targets.map((t) => t.name ?? t.spacecraft_id);
+  const names = s.targets.map((t) => t.name ?? "Unknown spacecraft");
   const shown = names.slice(0, 3);
   const more = s.target_count - shown.length;
   const who =

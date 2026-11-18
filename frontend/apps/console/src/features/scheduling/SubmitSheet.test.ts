@@ -39,6 +39,7 @@ const plan: PlanDetail = {
   repair_of: null,
   superseded_by: null,
   latest_version: undefined,
+  repair: undefined,
 };
 
 describe("SubmitSheet", () => {
@@ -88,7 +89,8 @@ describe("SubmitSheet", () => {
       attachTo: document.body,
     });
     await wrapper.get("input[type=checkbox]").setValue(true);
-    expect(wrapper.findAll("textarea")).toHaveLength(1);
+    // One shared reason box, plus U76's note for the record (always last).
+    expect(wrapper.findAll("textarea")).toHaveLength(2);
     await wrapper.get("textarea").setValue("Past windows on today's draft.");
     expect(wrapper.text()).not.toContain("still need");
     expect(wrapper.findAll("li").at(-1)?.text()).toBe("r2 · Provider reports no availability");
@@ -227,6 +229,32 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
   });
 });
 
+describe("SubmitSheet note for the record (U76)", () => {
+  it("offers the note on every submit, with U76's label, hint and a counter from 1,800", async () => {
+    const wrapper = mount(SubmitSheet, {
+      props: {
+        plan,
+        nameOf: () => null,
+        commitLabel: "Submit",
+        title: "Submit",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
+    wrapper.vm.open();
+    await nextTick();
+    expect(wrapper.text()).toContain("Note for the record (optional)");
+    expect(wrapper.text()).toContain("Saved with your name in the plan's history.");
+    const note = wrapper.findAll("textarea").at(-1);
+    expect(note?.attributes("maxlength")).toBe("2000");
+    await note?.setValue("x".repeat(1850));
+    expect(wrapper.text()).toContain("1,850 / 2,000");
+    wrapper.unmount();
+  });
+});
+
 describe("SubmitSheet resubmission (U36)", () => {
   it("prefills last round's reasons and sends the optional note", async () => {
     const sentBack = {
@@ -263,7 +291,8 @@ describe("SubmitSheet resubmission (U36)", () => {
     wrapper.vm.open();
     await nextTick();
     expect(wrapper.text()).not.toContain("still need");
-    await wrapper.get("input[type=text]").setValue("Moved 004 to KIR.");
+    // U76: the note for the record is the sheet's last field.
+    await wrapper.findAll("textarea").at(-1)?.setValue("Moved 004 to KIR.");
     await wrapper.findAll("footer button").at(-1)?.trigger("click");
     const [acks, note] = wrapper.emitted("submit")?.[0] ?? [];
     expect(note).toBe("Moved 004 to KIR.");

@@ -1,5 +1,13 @@
 import { configKind, opActions } from "./shapes.ts";
-import { decoders, isKnown, isRecord, type Decoded, type Unrecognized } from "@/api";
+import {
+  actor,
+  decoders,
+  isKnown,
+  isRecord,
+  spacecraftRef,
+  type Decoded,
+  type Unrecognized,
+} from "@/api";
 
 /** The change-set dry run's shape. Contract: docs/apogee/api/changes.md (preview). */
 const { array, boolean, integer, nullable, object, oneOf, string, token } = decoders;
@@ -113,7 +121,7 @@ const previewItem = object({
         staged: (v: unknown) => (v === undefined ? null : v),
         changed_in: (v: unknown, path = "") =>
           v === "outside" ? ("outside" as const) : integer(v, path),
-        changed_by: decoders.optional(nullable(object({ name: string }))),
+        changed_by: decoders.optional(nullable(actor)),
       }),
       200,
     ),
@@ -189,7 +197,7 @@ export const previewReader = object({
       changes: integer,
       keeps: array(
         object({
-          spacecraft: object({ id: token, name: string }),
+          spacecraft: spacecraftRef,
           // free-text: the server's sentence for why this spacecraft keeps its value.
           reason: string,
           /** domain 2ef4ca79: older_profile_version | catalog_override | framing_governed. */

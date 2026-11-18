@@ -1,15 +1,15 @@
 import type { MissionId } from "@/api/index.ts";
 import {
-  spacecraftId as spacecraftIdReader,
-  type SpacecraftId,
-  scid as scidReader,
   actor as sharedActor,
   decoders as d,
   request,
   requestPage,
+  spacecraftId as spacecraftIdReader,
+  spacecraftRef,
   type ApiError,
   type ApiResult,
   type Decoded,
+  type SpacecraftId,
 } from "@/api/index.ts";
 import { engineeringValue, sourceStates, thresholdsReader } from "./api.ts";
 
@@ -27,7 +27,7 @@ const episodeFields = {
   peak_severity: d.oneOf(["critical", "caution"] as const),
   source_state: d.nullable(d.known(sourceStates)),
   spacecraft_id: d.nullable(spacecraftIdReader),
-  spacecraft: d.nullable(d.object({ id: spacecraftIdReader, name: d.string, scid: scidReader })),
+  spacecraft: d.nullable(spacecraftRef),
   point: d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) }),
   thresholds: d.nullable(thresholdsReader),
   opened_at: d.timestamp,
@@ -38,7 +38,7 @@ const episodeFields = {
   last_evaluated_at: d.nullable(d.timestamp),
   acknowledged_at: d.nullable(d.timestamp),
   acknowledged_by: d.nullable(actor),
-  assignee: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
+  assignee: d.nullable(sharedActor),
   assigned_at: d.nullable(d.timestamp),
   /** U68 R5 (api 0619ac94a): the ground-limit definition that opened it; null for catalog. */
   limit_definition_id: d.optional(d.nullable(d.token)),

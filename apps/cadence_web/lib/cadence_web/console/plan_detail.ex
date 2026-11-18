@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.PlanDetail do
 
   alias Cadence.ContactPlanning.RepairChain
   alias Cadence.Control.{PlanConfirmation, Scheduling}
+  alias Cadence.Reads.PlanRepairHeader
 
   @doc """
   The plan detail of a plan read (`ContactPlanOverview.plan`): the effective state, each pass's
@@ -22,6 +23,10 @@ defmodule CadenceWeb.Console.PlanDetail do
     |> with_bookings(bookings)
     |> Map.merge(confirmation)
     |> Map.merge(chain(conn, plan.id))
+    |> Map.put(
+      :repair,
+      PlanRepairHeader.for_plan(org_id(conn), mission_id(conn), plan.id, DateTime.utc_now())
+    )
   end
 
   # K1 8e: passes[].booking, null for a pass the approved version doesn't book (or before approval).

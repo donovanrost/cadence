@@ -251,30 +251,37 @@ defmodule CadenceWeb.Console.ContactPlanController do
     with {:ok, version} <- positive(params["expected_version"], :expected_version),
          {:ok, operation_id} <- operation_id(params["operation_id"]),
          {:ok, acknowledgements} <- acknowledgements(params["acknowledgements"]),
-         {:ok, note} <- note(params["note"]) do
+         {:ok, note} <- note(params["note"], :note),
+         {:ok, decision_note} <- note(params["decision_note"], :decision_note) do
       {:ok,
        %{
          expected_version: version,
          operation_id: operation_id,
          reason: if(is_binary(params["reason"]), do: params["reason"]),
          note: note,
+         decision_note: decision_note,
          acknowledgements: acknowledgements
        }}
     end
   end
 
-  # U36: an optional one-line note for the reviewer ("What changed").
-  defp note(nil), do: {:ok, nil}
+  # U36: the submitter's optional note for the reviewer ("What changed"); U76: the approver's
+  # optional decision_note for the record (an org admin's submit approves). One cap, 2,000
+  # characters after trimming, with ux U76's line.
+  @note_max 2_000
 
-  defp note(note) when is_binary(note) do
+  defp note(nil, _key), do: {:ok, nil}
+
+  defp note(note, key) when is_binary(note) do
     case String.trim(note) do
       "" -> {:ok, nil}
-      trimmed when byte_size(trimmed) <= 500 -> {:ok, trimmed}
-      _long -> {:error, %{note: "must be at most 500 characters"}}
+      trimmed -> if String.length(trimmed) <= @note_max, do: {:ok, trimmed}, else: too_long(key)
     end
   end
 
-  defp note(_note), do: {:error, %{note: "must be text"}}
+  defp note(_note, key), do: {:error, %{key => "must be text"}}
+
+  defp too_long(key), do: {:error, %{key => "Keep the note under 2,000 characters."}}
 
   defp acknowledgements(nil), do: {:ok, []}
 

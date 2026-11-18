@@ -13,6 +13,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
     FleetPlanningPolicyVersion
   }
 
+  alias Cadence.Governance.ActivationPolicy
   alias Cadence.Missions
 
   alias Cadence.Management.Contacts.Store.{
@@ -375,7 +376,14 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
              context.now
            ),
          {:ok, approval_row} <-
-           Repo.insert(FleetPlanningPolicyApprovalRow.changeset(approval)),
+           approval
+           |> FleetPlanningPolicyApprovalRow.changeset()
+           # The approval policy in force at decision time (M2).
+           |> Ecto.Changeset.put_change(
+             :policy_document,
+             ActivationPolicy.evidence(organization_id, context.mission_id)
+           )
+           |> Repo.insert(),
          {:ok, updated} <-
            project_decision(
              row,

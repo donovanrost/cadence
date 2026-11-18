@@ -43,7 +43,7 @@ const columns: readonly ApColumn[] = [
             <RouterLink
               :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: row.spacecraft.id } }"
               class="text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
-              >{{ row.spacecraft.name }}</RouterLink
+              >{{ row.spacecraft.name ?? "Unknown spacecraft" }}</RouterLink
             >
           </template>
           <template #cell-rule="{ row }"

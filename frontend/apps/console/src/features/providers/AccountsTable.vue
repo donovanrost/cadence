@@ -38,7 +38,7 @@ const when = (iso: string | null) => (iso ? formatShort(new Date(iso)) : "never"
     <template #cell-last="{ row }">{{ when(row.last_success_at) }}</template>
     <template #cell-added="{ row }"
       ><span class="text-text-3"
-        >{{ when(row.added_at) }}{{ row.added_by ? ` by ${row.added_by.name}` : "" }}</span
+        >{{ when(row.added_at) }}{{ row.added_by?.name ? ` by ${row.added_by.name}` : "" }}</span
       ></template
     >
   </ApTable>

@@ -52,8 +52,11 @@ defmodule Cadence.Reads.SpacecraftDetailTest do
 
     assert detail.profile == %{id: "p", name: "Block 1", version: 4, latest_version: 4}
 
-    assert [%{transport: %{name: "Svalbard X"}, active: true, enabled: true}] =
+    assert [%{transport: %{name: "Svalbard X"} = transport, active: true, enabled: true}] =
              detail.routing_rules
+
+    # A route doesn't pin a transport version (routing drop (a)).
+    refute Map.has_key?(transport, :version)
 
     assert detail.spacecraft.plane == 3
   end

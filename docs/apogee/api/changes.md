@@ -44,8 +44,8 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
 
 | Status | Codes |
 | --- | --- |
-| 409 | `holds_blocking` (details = the preview), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone`, `in_use` (details = `{entity, uses}`: an archive of a transport or station still in use, at stage, submit or review; [setup.md](setup.md)) |
-| 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required`, `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field) |
+| 409 | `holds_blocking` (details = the preview), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone`, `in_use` (details = `{entity, uses}`: an archive of a transport or station still in use, at stage, submit or review; [setup.md](setup.md)), `conversion_in_progress` (details = `{change_set_id, batch \| null}`: a legacy route conversion batch is staged, so nothing else can be staged until it's applied or discarded; TEMPORARY, [setup.md](setup.md)), `conversion_already_staged`, `open_change_set_not_empty` (the conversion's own) |
+| 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required`, `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field), `nothing_to_convert` (the conversion's) |
 | 403 | `forbidden` |
 | 404 | `change_set_not_found`, `revision_not_found`, `change_not_found`, `op_not_found`, `mission_not_found` |
 | 503 | `apply_interrupted` (submit/approve: nothing changed; safe to retry) |
@@ -69,6 +69,13 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
   submit means "unclear": refetch the change set and head before telling the operator it failed.
 
 ## Permissions
+
+**Per set, for the viewer** (ux U79): every change set (`GET /config`'s `change_set` and `GET
+/change-sets/:id`) carries `viewer: {can_review: bool, review_blocked_reason: "reviewer_is_author" |
+null}`, the same test the review applies, computed up front: false when the set needs approval and
+the viewer submitted it or authored one of its changes. Gate Approve and Send back on it. A set
+holding a legacy route conversion batch also carries `legacy_conversion: {batch, batches_total}`
+(else `null`; TEMPORARY).
 
 `GET /config` returns the mission's `permissions` (`config.stage`, `config.apply`, `config.review`,
 `config.rollback`, `config.discard_any`). Gate staged-bar actions on them; the server enforces

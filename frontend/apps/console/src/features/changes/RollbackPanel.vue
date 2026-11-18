@@ -4,7 +4,7 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApCallout, ApPanel, ApRemote, plural } from "@/ui";
-import { itemLine } from "./actions.ts";
+import { itemLine } from "./itemLines.ts";
 import RollbackActions from "./RollbackActions.vue";
 import RollbackPreviewBody from "./RollbackPreviewBody.vue";
 import { fetchRollback, rollbackErrorText, stageRollback } from "./rollback.ts";

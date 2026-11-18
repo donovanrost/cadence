@@ -41,6 +41,39 @@ describe("platform admin readers", () => {
     }
   });
 
+  it("reads an admin-mode decision's flag, and events without it (P3 #228)", async () => {
+    const base = {
+      at: "2026-11-18T05:00:00Z",
+      actor: { kind: "user", id: "u9", name: "Pat Admin" },
+      action: "Approved change set v3 in Earendil Ops",
+      target: { kind: "change_set", id: "cs_3", label: "Change set v3" },
+      organization: { id: "o1", name: "Earendil Ops" },
+    };
+    const original = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            events: [
+              { ...base, id: "a", admin_mode: true },
+              { ...base, id: "b", admin_mode: null },
+              { ...base, id: "c" },
+            ],
+            next: null,
+          },
+        }),
+        { status: 200 },
+      );
+    try {
+      const r = await fetchPlatformAudit({ after: null }, new AbortController().signal);
+      expect(
+        r.ok && r.value.events.map((e) => ("unreadable" in e ? "unreadable" : e.admin_mode)),
+      ).toEqual([true, null, undefined]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("says an issue or rotate went through when only its token couldn't be read", () => {
     const malformed = { kind: "malformed" as const, message: "x" };
     expect(tokenFailure(malformed, "issue")).toBe(

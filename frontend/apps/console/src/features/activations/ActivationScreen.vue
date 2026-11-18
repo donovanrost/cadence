@@ -16,6 +16,7 @@ import {
 import ActivationApply from "./ActivationApply.vue";
 import ActivationDecide from "./ActivationDecide.vue";
 import ActivationOutcome from "./ActivationOutcome.vue";
+import ChangesPanel from "./ChangesPanel.vue";
 import { fetchActivation, requestedLine, stateTag } from "./api.ts";
 
 /** L10 review page: what an app activation applies, who asked, and the second person's decision. */
@@ -75,8 +76,15 @@ function decided(n: { tone: "nominal" | "caution"; text: string }) {
           />
           <ActivationOutcome :request="value" />
         </ApPanel>
+        <ChangesPanel
+          v-if="value.configuration_changes"
+          :changes="value.configuration_changes"
+          :request-key="key"
+          index="R2"
+        />
         <ActivationDecide
           v-if="value.state === 'approval_pending'"
+          :index="value.configuration_changes ? 'R3' : 'R2'"
           :request-key="key"
           :request="value"
           :viewer="viewer"

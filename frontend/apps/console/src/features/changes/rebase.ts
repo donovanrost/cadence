@@ -1,7 +1,8 @@
 import type { MissionId } from "@/api/index.ts";
 import { changeSetStates } from "./shapes.ts";
 import { decoders as d, request, type ApiResult } from "@/api";
-import { valueText, type Preview, type PreviewItem } from "./actions.ts";
+import { type Preview, type PreviewItem } from "./actions.ts";
+import { valueText } from "./itemLines.ts";
 
 /** Changes.md K1: a conflicting staged op is rebased onto the live revision: keep mine / take live. */
 export type RebaseChoice = "keep_mine" | "take_live";
@@ -68,7 +69,7 @@ export function conflictRow(items: readonly PreviewItem[], leftBy: string): Conf
     const since =
       f.changed_in === "outside"
         ? "changed outside a change set"
-        : `changed in r${f.changed_in}${f.changed_by ? ` by ${f.changed_by.name}` : ""}`;
+        : `changed in r${f.changed_in}${f.changed_by?.name ? ` by ${f.changed_by.name}` : ""}`;
     return `${f.label ?? f.path} is ${shown(f.live, f)} now, not ${shown(f.base, f)} as ${leftBy} left it (${since}). You staged ${shown(f.staged, f)}.`;
   });
   const only = fields.length === 1 ? fields[0] : undefined;

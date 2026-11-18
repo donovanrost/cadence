@@ -1,6 +1,7 @@
 import {
   decoders,
   invitationState,
+  invitedBy,
   request,
   role,
   roleText,
@@ -27,7 +28,7 @@ const invitation = object({
   id: token,
   email: string,
   role,
-  invited_by: nullable(object({ name: string })),
+  invited_by: invitedBy,
   sent_at: timestamp,
   expires_at: nullable(timestamp),
   /** api-ops L5/L21: `declined` when the invitee turns it down. */

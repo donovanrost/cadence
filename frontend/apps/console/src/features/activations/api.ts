@@ -11,6 +11,7 @@ import {
   type Decoded,
 } from "@/api";
 import { failureOutcome, type HeaderPart } from "@/features/changes/index.ts";
+import { configurationChangesField } from "./configurationChanges.ts";
 import { formatShort, type OpState } from "@/ui";
 
 /**
@@ -112,6 +113,8 @@ const detailReader = (value: unknown, path = "") => ({
     comparison: d.nullable(d.object({ report_id: d.token, label: d.string })),
     /** U41 Retry apply is for people who may approve; absent reads as no (asked of api 11-13). */
     permissions: d.optional(d.array(d.known(["activations.approve"] as const), 10)),
+    /** #235: what a spacecraft-configuration request changes (optional until api ships it). */
+    ...configurationChangesField,
   })(value, path),
 });
 export type ActivationDetail = ReturnType<typeof detailReader>;

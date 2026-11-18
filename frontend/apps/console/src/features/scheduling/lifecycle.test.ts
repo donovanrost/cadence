@@ -3,6 +3,7 @@ import { decoders as d } from "@/api";
 import { planDetailReader } from "./api.ts";
 import { planErrorText } from "./errors.ts";
 import {
+  expiredLine,
   expiredReader,
   lifecycleRefusal,
   partialApproval,
@@ -124,5 +125,27 @@ describe("U61 partial approval", () => {
     expect(e.ok && e.value && partialApproval(e.value)).toBe(
       "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked.",
     );
+  });
+});
+
+describe("an expired pass's line (#190, ux U25)", () => {
+  it("names the spacecraft, says Unknown spacecraft without a name, never its id", () => {
+    const e = d.decode(expiredReader, {
+      count: 2,
+      reservable_count: 0,
+      items: [
+        {
+          spacecraft: { id: "sc_1", name: "EARENDIL-001" },
+          station: null,
+          aos: "2026-11-16T12:10:00Z",
+        },
+        { spacecraft: { id: "sc_2", name: null }, station: null, aos: "2026-11-16T12:20:00Z" },
+      ],
+    });
+    const items = e.ok && e.value ? e.value.items : [];
+    expect(items.map((i) => expiredLine(i, now).split(" · ")[0])).toEqual([
+      "EARENDIL-001",
+      "Unknown spacecraft",
+    ]);
   });
 });

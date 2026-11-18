@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ApTable, ApTag, formatAbsolute, type ApColumn } from "@/ui";
 import { computed } from "vue";
-import { useConsoleScope } from "@/shell";
+import { AdminModeTag, useConsoleScope } from "@/shell";
 import { groupRepeats, targetRoute, targetText, type AuditEvent } from "./api.ts";
 
 /** Audit rows, newest first: time · actor · action in words · mission · why. */
@@ -36,6 +36,7 @@ const columns: readonly ApColumn[] = [
       <template v-if="row.actor">
         <span :class="row.actor.kind === 'service' ? 'font-mono' : ''">{{ row.actor.name }}</span>
         <ApTag v-if="row.actor.kind === 'service'" class="ml-2" label="Service" />
+        <AdminModeTag v-if="row.admin_mode === true" class="ml-2" />
       </template>
       <span v-else class="text-text-3">Not recorded</span>
     </template>

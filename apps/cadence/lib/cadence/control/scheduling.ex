@@ -278,7 +278,7 @@ defmodule Cadence.Control.Scheduling do
              plan.contact_plan_id,
              version.version,
              version.content_sha256,
-             reason(params[:reason]),
+             reason(params[:decision_note] || params[:reason]),
              acknowledged_exceptions: params[:acknowledgements]
            ) do
       {:ok, {:execute, version.version, version.content_sha256}}
@@ -288,8 +288,9 @@ defmodule Cadence.Control.Scheduling do
   defp expected(version, version), do: :ok
   defp expected(_current, _expected), do: {:error, :contact_plan_version_changed}
 
+  # U76: the approver's note for the record, or none (recorded as NULL); never a canned text.
   defp reason(reason) when is_binary(reason) and byte_size(reason) > 0, do: reason
-  defp reason(_reason), do: "Submitted from the console contact plan"
+  defp reason(_reason), do: nil
 
   defp execution_key(organization_id, mission_id, plan_id),
     do: ContactPlanExecutions.execution_key(organization_id, mission_id, plan_id)

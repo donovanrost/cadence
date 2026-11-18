@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { isError, type ApiError } from "@/api";
-import { ApButton, ApCallout, ApField, ApSheet, ApTextarea, plural } from "@/ui";
+import { ApButton, ApCallout, ApSheet, ApTextarea, plural } from "@/ui";
 import {
   reasonText,
   REASON_MAX,
@@ -33,12 +33,19 @@ const props = defineProps<{
   day?: string | undefined;
 }>();
 const emit = defineEmits<{ submit: [acks: Acknowledgement[], note?: string]; close: [] }>();
-/** U36: resubmitting a sent-back draft: previous reasons prefilled, an optional note. */
+/** U36: resubmitting a sent-back draft prefills the previous reasons. */
 const again = computed(() => props.plan.approval?.decision === "rejected");
+/** U76: an optional note for the record on every Submit and Approve (one cap, 2,000; api). */
 const note = ref("");
-const NOTE_MAX = 500;
+const NOTE_MAX = 2000;
 const noteError = computed(() =>
-  note.value.trim().length > NOTE_MAX ? `At most ${NOTE_MAX} characters.` : null,
+  note.value.trim().length > NOTE_MAX ? "Keep the note under 2,000 characters." : null,
+);
+/** U76 (as U65's reasons): a counter from 1,800 characters, else the hint. */
+const noteHint = computed(() =>
+  note.value.length >= 1800
+    ? `${note.value.length.toLocaleString("en-US")} / ${NOTE_MAX.toLocaleString("en-US")}`
+    : "Saved with your name in the plan's history.",
 );
 const error = defineModel<ApiError | null>("error", { default: null });
 
@@ -131,7 +138,7 @@ function submit() {
       reason: reasonFor(keyOf(g.spacecraftId), u.requirement_id) ?? "",
     })),
   );
-  const text = again.value ? note.value.trim() : "";
+  const text = note.value.trim();
   if (text) emit("submit", acks, text);
   else emit("submit", acks);
 }
@@ -243,11 +250,11 @@ defineExpose({ open, close });
         </details>
       </div>
     </template>
-    <ApField
-      v-if="again"
+    <ApTextarea
       v-model="note"
-      label="What changed for the reviewer"
-      hint="Optional. One line, shown to the reviewer with this round."
+      label="Note for the record (optional)"
+      :hint="noteHint"
+      :maxlength="NOTE_MAX"
       :error="noteError"
     />
     <ApCallout v-if="atRisk.length > 0" tone="caution">

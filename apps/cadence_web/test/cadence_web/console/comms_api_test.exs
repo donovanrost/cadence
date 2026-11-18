@@ -132,7 +132,8 @@ defmodule CadenceWeb.Console.CommsAPITest do
              ~w(display_name code provider region metadata)
 
     code = Enum.find(station["fields"], &(&1["path"] == "code"))
-    assert %{"required" => true, "pattern" => "^[A-Z0-9]{2,8}$"} = code
+    # Optional until set (ux U25); the pattern still applies to a code that is given.
+    assert %{"required" => false, "pattern" => "^[A-Z0-9]{2,8}$"} = code
     # No mission providers yet, so provider is free text rather than an empty enum.
     assert Enum.find(station["fields"], &(&1["path"] == "provider"))["type"] == "string"
     # Comms parity (4): metadata is a JSON object, empty by default.

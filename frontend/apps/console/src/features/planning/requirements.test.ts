@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { missionId as missionIdReader, decode } from "@/api";
+import { missionId as missionIdReader, decode, spacecraftId } from "@/api";
 import {
   endedLine,
   fetchRequirements,
@@ -56,7 +56,7 @@ describe("one-off requirements (ux P4, api fb7510be)", () => {
       id: "req_1",
       state: "closed",
       version: 2,
-      spacecraft: { id: "sc1", name: "EARENDIL-001" },
+      spacecraft: { id: spacecraftId("sc1"), name: "EARENDIL-001", scid: null },
       template_id: null,
       content: { earliest_start: "2026-11-14T00:00:00Z", latest_end: "2026-11-15T00:00:00Z" },
       updated_at: "2026-11-12T10:00:00Z",
@@ -112,11 +112,17 @@ describe("one-off requirements (ux P4, api fb7510be)", () => {
     const s = withSpacecraftChoices(schema.value, [{ id: "sc1", name: "EARENDIL-001" }]);
     expect(s.fields[0]?.enum).toEqual([{ value: "sc1", label: "EARENDIL-001" }]);
     const facts = requirementFacts(s, {
-      spacecraft: { id: "sc1", name: "EARENDIL-001" },
+      spacecraft: { id: spacecraftId("sc1"), name: "EARENDIL-001", scid: null },
       content: { contact_count: 2, max_gap_seconds: null },
     });
     expect(facts.find((f) => f.key === "max_gap_seconds")?.value).toBe("No limit");
     expect(facts.find((f) => f.key === "contact_count")?.value).toBe("2");
+    // ux U25 (#190): a nameless spacecraft reads Unknown spacecraft, never its id.
+    const nameless = requirementFacts(s, {
+      spacecraft: { id: spacecraftId("sc1"), name: null, scid: null },
+      content: { contact_count: 2, max_gap_seconds: null },
+    });
+    expect(nameless.find((f) => f.key === "spacecraft")?.value).toBe("Unknown spacecraft");
   });
 });
 

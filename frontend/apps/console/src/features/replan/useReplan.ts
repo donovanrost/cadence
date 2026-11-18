@@ -9,6 +9,7 @@ import {
   fetchPlan,
   fetchRepair,
   startRepair,
+  noteFor,
   submitPlan,
   type Acknowledgement,
   type PlanDetail,
@@ -81,10 +82,16 @@ export function useReplan(missionId: Readonly<Ref<MissionId>>) {
     }
   }
 
-  async function apply(plan: PlanDetail, acks: readonly Acknowledgement[]) {
+  async function apply(plan: PlanDetail, acks: readonly Acknowledgement[], note?: string) {
     busy.value = true;
     try {
-      const result = await submitPlan(missionId.value, plan, crypto.randomUUID(), acks);
+      const result = await submitPlan(
+        missionId.value,
+        plan,
+        crypto.randomUUID(),
+        acks,
+        noteFor(plan, note),
+      );
       repair.refetch();
       source.refetch();
       return result;

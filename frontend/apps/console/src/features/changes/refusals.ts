@@ -1,5 +1,13 @@
 import type { RouteLocationRaw } from "vue-router";
-import { decoders, detailsOf, isError, type ApiError, type Decoded, type Reader } from "@/api";
+import {
+  decoders,
+  detailsOf,
+  isError,
+  spacecraftRef,
+  type ApiError,
+  type Decoded,
+  type Reader,
+} from "@/api";
 import { formatShort } from "@/ui";
 import { failureOutcome, type FailureOutcome } from "./actions.ts";
 
@@ -22,7 +30,7 @@ const details = object({
       object({
         routing_rule_id: token,
         name: nullable(string),
-        spacecraft: named,
+        spacecraft: spacecraftRef,
         station: nullable(
           object({
             id: token,
@@ -39,7 +47,7 @@ const details = object({
     listening_now: count(
       object({
         realized_contact_id: token,
-        spacecraft: named,
+        spacecraft: spacecraftRef,
         // free-text: the station's short code, an identifier (U25), shown as written.
         station_code: nullable(string),
         starts_at: timestamp,
@@ -67,9 +75,10 @@ export const inUseMark = (o: RefusalOutcome | null): InUseMark | null =>
 
 const routeText = (r: InUse["uses"]["routes"]["items"][number]) => {
   const station = r.station?.code || r.station?.name;
+  const craft = r.spacecraft.name ?? "Unknown spacecraft";
   return r.name
-    ? `${r.spacecraft.name} · ${r.name} — ${r.direction}`
-    : `${r.spacecraft.name} · ${station ? `${station} ` : ""}${r.direction}`;
+    ? `${craft} · ${r.name} — ${r.direction}`
+    : `${craft} · ${station ? `${station} ` : ""}${r.direction}`;
 };
 const time = (iso: string) => formatShort(new Date(iso)).slice(-6);
 

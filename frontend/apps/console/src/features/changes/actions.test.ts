@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api";
-import {
-  failureOutcome,
-  groupedLines,
-  itemLine,
-  previewReader,
-  type PreviewItem,
-} from "./actions.ts";
+import { decode, type Actor } from "@/api";
+import { failureOutcome, previewReader, type PreviewItem } from "./actions.ts";
+import { groupedLines, itemLine } from "./itemLines.ts";
 
 const base: PreviewItem = {
   op_id: null,
@@ -175,7 +170,7 @@ describe("conflict sentences (api 062a73f8, ux rollback review #1)", () => {
     live: 1024,
     staged: 1115,
     changed_in: 9 as number | "outside",
-    changed_by: { name: "Mira K." } as { name: string } | null,
+    changed_by: { kind: "user" as const, id: null, name: "Mira K." } as Actor | null,
   };
   const item: PreviewItem = {
     ...base,
@@ -267,7 +262,8 @@ describe("failureOutcome on 5xx (qa #19)", () => {
 
 describe("#65 blocking holds", () => {
   it("reads blocking items as 'can't apply yet' with what clears them", async () => {
-    const { blockingReason, rejectionSentence } = await import("./actions.ts");
+    const { rejectionSentence } = await import("./actions.ts");
+    const { blockingReason } = await import("./itemLines.ts");
     const preview = decode(previewReader, {
       verdict: "hold",
       checks: [

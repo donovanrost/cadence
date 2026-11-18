@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import {
+  actor,
   decoders as d,
   detailsOf,
   isError,
@@ -34,7 +35,7 @@ const artifactReader = d.object({
     sha256: d.string,
     uploaded_at: d.timestamp,
     // The artifact stores who uploaded it by name (an email), with no user id (api).
-    uploaded_by: d.nullable(d.object({ name: d.string })),
+    uploaded_by: d.nullable(actor),
     database: d.object({ id: d.token, name: d.string }),
     download_url: d.string,
   }),

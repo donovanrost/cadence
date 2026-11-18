@@ -199,7 +199,7 @@ const pass = withPassAttentions(
     off_plan: d.optional(
       d.nullable(
         d.object({
-          booked_by: d.nullable(d.object({ id: d.nullable(d.string), name: d.nullable(d.string) })),
+          booked_by: d.nullable(actor),
           booked_at: d.timestamp,
           note: d.nullable(d.string),
         }),

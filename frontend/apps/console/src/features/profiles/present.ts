@@ -15,7 +15,7 @@ export function profileSubline(detail: ProfileDetail): string {
   ];
   const last = detail.profile.last_change;
   if (last) {
-    const by = last.actor ? ` by ${last.actor.name}` : "";
+    const by = last.actor?.name ? ` by ${last.actor.name}` : "";
     parts.push(
       last.revision !== null
         ? `last changed in r${last.revision}`

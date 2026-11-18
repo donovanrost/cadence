@@ -9,6 +9,7 @@ import {
 } from "@/api";
 import { supersededByReader } from "./lifecycle.ts";
 import { base, planRow, stationReader } from "./plans-api.ts";
+import { repairInfoReader } from "./repair-info.ts";
 
 /** Contracts: docs/apogee/api/scheduling.md §4: one plan in detail, with S2 demand and booking. */
 
@@ -253,6 +254,8 @@ export const planDetailReader = d.object({
   /** U61: the plan that replaced this one (a newer plan for the day); absent on older servers. */
   superseded_by: (value: unknown, path?: string) =>
     value === undefined ? null : supersededByReader(value, path),
+  /** U76 (api 1a5976482): what a re-plan started now would cover; optional until it ships. */
+  repair: d.optional(d.nullable(repairInfoReader)),
 });
 export type PlanDetail = Decoded<typeof planDetailReader>;
 export type PlanIssue = PlanDetail["conflicts"][number];

@@ -7,6 +7,7 @@ import {
   alarmRows,
   byPoint,
   groupAlarmRows,
+  craftOrMission,
   lastClearedLine,
   ownerText,
   tabCounts,
@@ -72,7 +73,7 @@ describe("alarm list on episodes", () => {
 
   it("joins fleet identity, finds the limit and words the owner", () => {
     const [row] = alarmRows(
-      [ep("a", { assignee: { id: "t", name: "Tomás R." } })],
+      [ep("a", { assignee: { kind: "user" as const, id: "t", name: "Tomás R." } })],
       fleet,
       "new",
       null,
@@ -174,6 +175,16 @@ describe("alarm grouping and the empty state (OpsLists §Alarms)", () => {
     ];
     expect(lastClearedLine(cleared, now)).toBe("Last cleared 01:12Z on EARENDIL-002.");
     expect(lastClearedLine([], now)).toBeNull();
+    // A craft's alarm without a name is never the mission's (fe-setup, #190).
+    const first = ep("c1", { ...at(2), status: "cleared", cleared_at: "2026-11-09T01:12:00Z" });
+    const nameless = { ...first, spacecraft: { ...at(2).spacecraft, name: null } };
+    expect(lastClearedLine([nameless], now)).toBe("Last cleared 01:12Z on an unknown spacecraft.");
+    expect(lastClearedLine([{ ...nameless, spacecraft: null }], now)).toBe(
+      "Last cleared 01:12Z on the mission.",
+    );
+    expect(craftOrMission(nameless)).toBe("Unknown spacecraft");
+    expect(craftOrMission({ spacecraft: null })).toBe("Mission");
+    expect(craftOrMission(first)).toBe("EARENDIL-002");
   });
 });
 

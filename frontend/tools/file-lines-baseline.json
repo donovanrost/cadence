@@ -71,10 +71,6 @@
     "lines": 467,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "apps/console/src/features/changes/actions.ts": {
-    "lines": 423,
-    "owner": "fe-setup (split on dashboards/extra-route)"
-  },
   "packages/plugin-sdk/src/bridge.ts": {
     "lines": 418,
     "owner": "legacy (#80): frozen, leaves with its row"

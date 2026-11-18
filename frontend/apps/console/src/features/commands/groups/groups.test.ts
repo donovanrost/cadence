@@ -22,7 +22,13 @@ import { memberStageWord } from "./words.ts";
 import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
 import { showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
-import { notPlottable, seriesChart, seriesMeta, type VerifierSeries } from "./series.ts";
+import {
+  notPlottable,
+  plotSentence,
+  seriesChart,
+  seriesMeta,
+  type VerifierSeries,
+} from "./series.ts";
 import { onlyFrom } from "../compose/useResend.ts";
 import { fetchEncoding, hexBytes } from "./encoding.ts";
 
@@ -437,6 +443,14 @@ describe("M26 verifier series (U2)", () => {
     expect(notPlottable({ ...base, window: null })).toBe(
       "Nothing to plot until the first uplink is released",
     );
+  });
+  it("names a target with no name Unknown spacecraft, never its id (#237)", () => {
+    const [a, b] = base.targets;
+    if (!a || !b) throw new Error("fixture");
+    const nameless = { ...base, targets: [{ ...a, name: null }, b] };
+    expect(seriesChart(nameless)?.lines.map((l) => l.name)).toContain("Unknown spacecraft");
+    expect(plotSentence(nameless)).toContain("Unknown spacecraft and B");
+    expect(plotSentence(nameless)).not.toContain("a and");
   });
   it("Re-send narrows to ?only=", () => {
     expect(onlyFrom("a,b")).toEqual(["a", "b"]);

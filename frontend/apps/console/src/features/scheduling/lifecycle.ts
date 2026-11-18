@@ -1,4 +1,13 @@
-import { decoders as d, detailsOf, isError, stationRef, type ApiError, type Decoded } from "@/api";
+import {
+  actor,
+  decoders as d,
+  detailsOf,
+  isError,
+  spacecraftRef,
+  stationRef,
+  type ApiError,
+  type Decoded,
+} from "@/api";
 import { formatCount, plural } from "@/ui";
 
 /**
@@ -7,11 +16,9 @@ import { formatCount, plural } from "@/ui";
  * approval books what's still bookable and reports the passes that had already started.
  */
 
-const person = d.object({ id: d.token, name: d.nullable(d.string) });
-
 /** Plan read: the plan that replaced this one; null when it wasn't replaced. */
 export const supersededByReader = d.nullable(
-  d.object({ plan_id: d.token, revision: d.integer, author: d.nullable(person), at: d.timestamp }),
+  d.object({ plan_id: d.token, revision: d.integer, author: d.nullable(actor), at: d.timestamp }),
 );
 export type SupersededBy = NonNullable<Decoded<typeof supersededByReader>>;
 
@@ -22,7 +29,7 @@ export const expiredReader = d.nullable(
     reservable_count: d.integer,
     items: d.array(
       d.object({
-        spacecraft: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
+        spacecraft: d.nullable(spacecraftRef),
         station: d.nullable(stationRef),
         aos: d.timestamp,
       }),
@@ -128,7 +135,11 @@ export function partialApproval(e: Expired): string {
 /** One left-out pass under `Show 36`: `EARENDIL-001 · SVA · AOS 00:10Z`. */
 export function expiredLine(item: Expired["items"][number], now: Date = new Date()): string {
   const station = item.station?.code ?? item.station?.name ?? item.station?.ref ?? null;
-  return [item.spacecraft?.name ?? item.spacecraft?.id ?? null, station, `AOS ${at(item.aos, now)}`]
+  return [
+    item.spacecraft ? (item.spacecraft.name ?? "Unknown spacecraft") : null,
+    station,
+    `AOS ${at(item.aos, now)}`,
+  ]
     .filter((p): p is string => p !== null)
     .join(" · ");
 }

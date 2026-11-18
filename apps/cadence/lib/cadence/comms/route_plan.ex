@@ -49,6 +49,53 @@ defmodule Cadence.Comms.RoutePlan do
     end
   end
 
+  @doc """
+  A spacecraft-local route (kind `spacecraft_route`, DECISIONS #3 "per-spacecraft overrides"):
+  the same rule shape scoped to one spacecraft, one station and its legs. Planned exactly like a
+  profile rule's (the station's transport, or the named one, must carry each leg), with
+  `origin: :spacecraft` and the route entity's id in `profile_rule_id`. Errors are on
+  `ground_station_id`.
+  """
+  @spec spacecraft_route(map(), String.t(), map(), context()) ::
+          {:ok, [RoutingRule.t()]} | {:error, [map()]}
+  def spacecraft_route(spacecraft, entity_id, document, context) do
+    rule = %{
+      "id" => entity_id,
+      "label" => document["purpose_label"],
+      "name_template" => document["display_name"] || "{station} · {spacecraft}"
+    }
+
+    station = %{
+      "ground_station_id" => document["ground_station_id"],
+      "transport_id" => document["transport_id"]
+    }
+
+    results =
+      for leg <- document["legs"] || [] do
+        with {:ok, route} <- route(spacecraft, nil, nil, rule, station, leg, context) do
+          {:ok,
+           %RoutingRule{
+             route
+             | origin: :spacecraft,
+               profile_rule_id: entity_id,
+               spacecraft_type_id: nil,
+               spacecraft_type_version: nil
+           }}
+        end
+      end
+
+    case Enum.split_with(results, &match?({:ok, _}, &1)) do
+      {ok, []} ->
+        {:ok, Enum.map(ok, &elem(&1, 1))}
+
+      {_ok, errors} ->
+        {:error,
+         errors
+         |> Enum.map(&%{elem(&1, 1) | path: "ground_station_id"})
+         |> Enum.uniq()}
+    end
+  end
+
   @spec route_id(String.t(), String.t(), String.t(), String.t()) :: String.t()
   def route_id(rule_id, spacecraft_id, station_id, leg) do
     "route_" <>

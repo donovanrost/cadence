@@ -118,4 +118,16 @@ describe("impactOf", () => {
       "Booking with Simulator failed",
     ]);
   });
+
+  it("reads a lost pass with no spacecraft name as Unknown spacecraft, never its id (#237)", () => {
+    const rows = read([
+      {
+        ...pass("kir", "canceled", "r1", "sc-4", "KIR"),
+        spacecraft: { id: "sc-4", name: null, scid: 1 },
+      },
+    ]);
+    expect(
+      impactOf(rows, { id: "r1", repair_of: null }, false).rows.map((r) => r.spacecraft),
+    ).toEqual(["Unknown spacecraft"]);
+  });
 });

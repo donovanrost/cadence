@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
-import { decode } from "@/api";
+import { decode, spacecraftId } from "@/api";
 import { historyLines, oldVersionLine, planHistoryReader } from "./plan-history.ts";
 
 const plan = (over: Partial<PlanDetail>): PlanDetail => ({
@@ -30,6 +30,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   repair_of: null,
   superseded_by: null,
   latest_version: undefined,
+  repair: undefined,
   ...over,
 });
 
@@ -164,7 +165,7 @@ describe("gap rows with names (api f3aa9b272)", () => {
         requirement_id: "r1",
         reason: "no window can cover it",
         requirement_label: "Block 1 daily",
-        spacecraft: { id: "sc", name: "EARENDIL-389" },
+        spacecraft: { id: spacecraftId("sc"), name: "EARENDIL-389", scid: null },
         requirement_window: undefined,
       }),
     ).toBe("EARENDIL-389 · Block 1 daily: no window can cover it");
@@ -187,7 +188,7 @@ describe("gap windows (ux U73, api 3386a8bf3)", () => {
       requirement_id: "r1",
       reason: "no window can cover it",
       requirement_label: "Block 1 daily",
-      spacecraft: { id: "sc", name: "EARENDIL-389" },
+      spacecraft: { id: spacecraftId("sc"), name: "EARENDIL-389", scid: null },
       requirement_window: { from, to },
     });
     expect(gapText(gap("2026-11-16T06:00:00Z", "2026-11-16T12:00:00Z"), "2026-11-16")).toBe(

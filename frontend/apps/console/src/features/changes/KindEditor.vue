@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { MissionId } from "@/api/index.ts";
+import type { ApiError, MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApPanel, ApRemote } from "@/ui";
 import { failureOutcome, stageChange, type FailureOutcome } from "./actions.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
+import { fieldErrors } from "./fieldErrors.ts";
 import {
   createDefaults,
   diffEdits,
@@ -37,6 +38,14 @@ const props = defineProps<{
   finish?: (
     changes: readonly { path: string; value: unknown }[],
   ) => readonly { path: string; value: unknown }[];
+  /** A value the read suggests for one field, offered as 'Suggested: X' + 'Use X' (ux U25). */
+  suggestion?: Readonly<{ path: string; value: string }> | null;
+  /** The change-set summary in the kind's own words (U79 "Add extra route INU · EARENDIL-389"). */
+  summarize?: (
+    action: "create" | "update",
+    values: FormValues,
+    changes: readonly { path: string; value: unknown }[],
+  ) => string;
 }>();
 const router = useRouter();
 const fetched = useRemoteQuery(
@@ -64,13 +73,24 @@ watch(
   () => [schema.state.value, props.document] as const,
   ([s, doc]) => {
     if (s.status !== "ready") return;
-    before.value = fromDocument(s.value, doc);
+    const given = fromDocument(s.value, doc);
     // ux: a create preselects required defaults, staged explicitly (they differ from `before`).
-    values.value = props.entityId ? { ...before.value } : createDefaults(s.value, before.value);
+    // So does a create's preset document (U79: the page's spacecraft): `before` is blank then.
+    before.value = props.entityId ? given : fromDocument(s.value, {});
+    values.value = props.entityId ? { ...given } : createDefaults(s.value, given);
   },
   { immediate: true },
 );
 const title = computed(() => (props.entityId ? `Edit ${props.name}` : `Add ${props.name}`));
+/** Offered until the field holds it; using it only fills the form (staged with the edit). */
+const offered = computed(() => {
+  const s = props.suggestion;
+  return s && (values.value[s.path] ?? "") !== s.value ? s : null;
+});
+function useSuggestion() {
+  const s = offered.value;
+  if (s) values.value = { ...values.value, [s.path]: s.value };
+}
 const show = (v: unknown) =>
   v === null ? "cleared" : typeof v === "string" ? v : JSON.stringify(v);
 
@@ -92,6 +112,34 @@ function toDocument(changes: readonly { path: string; value: unknown }[]) {
   return doc;
 }
 
+function defaultSummary(changes: readonly { path: string; value: unknown }[]) {
+  const label = props.entityId ? props.name : (values.value.display_name ?? props.name);
+  return props.entityId
+    ? `${label} · ${changes.map((c) => `${c.path} → ${show(c.value)}`).join(", ")}`
+    : `Add ${label}`;
+}
+
+/** U79: a field's error sits on the field; anything else, and the outcome, in the callout. */
+function rejected(error: ApiError) {
+  const state = schema.state.value;
+  const split =
+    state.status === "ready"
+      ? fieldErrors(error, new Set(state.value.fields.map((f) => f.path)))
+      : null;
+  if (!split || Object.keys(split.onFields).length === 0) {
+    failure.value = failureOutcome(error, "staged");
+    return;
+  }
+  errors.value = split.onFields;
+  failure.value = {
+    changed: false,
+    sentence: [
+      "Nothing was staged.",
+      ...split.rest.map((e) => (e.path ? `${e.path}: ${e.message}` : e.message)),
+    ].join(" "),
+  };
+}
+
 async function stage() {
   if (schema.state.value.status !== "ready" || busy.value) return;
   const edits = diffEdits(schema.state.value.value, before.value, values.value);
@@ -111,16 +159,15 @@ async function stage() {
           changes,
         }
       : { kind: props.kind, action: "create" as const, document: toDocument(changes) };
-    const label = props.entityId ? props.name : (values.value.display_name ?? props.name);
-    const summary = props.entityId
-      ? `${label} · ${changes.map((c) => `${c.path} → ${show(c.value)}`).join(", ")}`
-      : `Add ${label}`;
+    const summary = props.summarize
+      ? props.summarize(props.entityId ? "update" : "create", values.value, changes)
+      : defaultSummary(changes);
     const result = await stageChange(props.missionId, {
       summary,
       source: { surface: props.surface },
       ops: [op],
     });
-    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged"));
+    if (!result.ok) return void rejected(result.error);
     refreshConfigState(props.missionId);
     await router.push(props.done);
   } finally {
@@ -139,6 +186,10 @@ async function stage() {
       <template #default="{ value: kindSchema }">
         <form class="flex flex-col gap-4" @submit.prevent="stage">
           <SchemaForm v-model="values" :schema="kindSchema" :errors="errors" />
+          <p v-if="offered" class="m-0 flex flex-wrap items-center gap-2 text-sm text-text-3">
+            Suggested: <span class="font-mono text-readout">{{ offered.value }}</span>
+            <ApButton size="compact" @click="useSuggestion">Use {{ offered.value }}</ApButton>
+          </p>
           <FailureOutcomeCallout v-if="failure" :outcome="failure" tone="caution" />
           <div class="flex flex-wrap gap-2">
             <ApButton type="submit" variant="primary" :disabled="busy" disabled-reason="Staging…"

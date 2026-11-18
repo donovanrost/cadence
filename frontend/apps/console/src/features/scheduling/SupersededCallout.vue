@@ -15,7 +15,7 @@ const REASONS: Readonly<Record<SupersededReason, string>> = {
 };
 const sentence = computed(() => {
   const s = props.superseded;
-  const who = s.by ? ` by ${s.by.name}` : "";
+  const who = s.by?.name ? ` by ${s.by.name}` : "";
   // An unknown reason still says the rules changed (the server's own word isn't a sentence).
   const why = isKnown(s.reason) ? REASONS[s.reason] : "The contact rules changed";
   return `${why}${who} at ${formatAbsolute(new Date(s.at))}, so this draft no longer matches the current rules. Nothing was submitted.`;

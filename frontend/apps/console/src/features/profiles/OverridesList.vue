@@ -10,7 +10,7 @@ import {
 } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, formatShort } from "@/ui";
 import type { ProfileField, ProfileOverride } from "./detail.ts";
-import { overrideOp, valueText } from "./overrides.ts";
+import { overrideCraft, overrideOp, valueText } from "./overrides.ts";
 
 /** P3 rows: spacecraft · what differs · since · Reset (stages a spacecraft_override reset). */
 const props = defineProps<{
@@ -32,12 +32,12 @@ async function reset(o: ProfileOverride) {
   failure.value = null;
   try {
     const result = await stageChange(props.missionId, {
-      summary: `${o.spacecraft.name} · reset ${fieldOf(o)?.label ?? o.path} to profile`,
+      summary: `${overrideCraft(o)} · reset ${fieldOf(o)?.label ?? o.path} to profile`,
       source: { surface: "profile_overrides" },
       ops: [overrideOp(o.spacecraft.id, o.path, null)],
     });
     if (result.ok) {
-      note.value = `Reset staged for ${o.spacecraft.name}. It applies with the change set.`;
+      note.value = `Reset staged for ${overrideCraft(o)}. It applies with the change set.`;
       refreshConfigState(props.missionId);
     } else failure.value = failureOutcome(result.error, "staged");
   } finally {
@@ -58,7 +58,7 @@ async function reset(o: ProfileOverride) {
       <RouterLink
         :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: o.spacecraft.id } }"
         class="font-mono text-readout no-underline hover:underline max-md:hit-44"
-        >{{ o.spacecraft.name }}</RouterLink
+        >{{ overrideCraft(o) }}</RouterLink
       >
       <span class="text-md text-readout">
         <span :class="fieldOf(o) ? 'text-text-2' : 'font-mono text-text-3'">{{

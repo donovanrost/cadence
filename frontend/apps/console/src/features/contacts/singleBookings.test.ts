@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { missionId as missionIdReader, stationId, decode } from "@/api/index.ts";
+import { missionId as missionIdReader, spacecraftId, stationId, decode } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import BookPassSheet from "./BookPassSheet.vue";
 import {
@@ -56,13 +56,29 @@ describe("Book a pass words (ux Contacts.md § Book a pass)", () => {
     const overlap = offer("b", {
       overlaps: {
         reservation_id: "r",
-        spacecraft: { id: "sc", name: "EARENDIL-312" },
+        spacecraft: { id: spacecraftId("sc"), name: "EARENDIL-312", scid: null },
         station_code: "KIR",
         starts_at: "2026-11-13T03:00:00Z",
         reason: "same_spacecraft",
       },
     });
     expect(offerBlocked(overlap, now)).toBe("Overlaps EARENDIL-312's KIR 03:00Z pass.");
+    // No name (fe-setup, #190): the searched craft's own pass, another craft's, or just booked.
+    const nameless = (reason: "same_spacecraft" | "same_antenna" | "unrecognized") => {
+      const ov = overlap.overlaps;
+      if (!ov) throw new Error("fixture");
+      return {
+        ...overlap,
+        overlaps: { ...ov, spacecraft: { ...ov.spacecraft, name: null }, reason },
+      };
+    };
+    expect(offerBlocked(nameless("same_spacecraft"), now)).toBe(
+      "Overlaps this spacecraft's KIR 03:00Z pass.",
+    );
+    expect(offerBlocked(nameless("same_antenna"), now)).toBe(
+      "Overlaps another spacecraft's KIR 03:00Z pass.",
+    );
+    expect(offerBlocked(nameless("unrecognized"), now)).toBe("Overlaps a booked KIR 03:00Z pass.");
   });
 
   it("says each outcome", () => {
