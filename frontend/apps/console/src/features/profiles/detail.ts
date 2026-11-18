@@ -63,7 +63,7 @@ export type ProfileRule = Decoded<typeof rule>;
 
 /** U79 (api C, additive): a spacecraft's own extra route on this profile, one entry per route. */
 const extraRoute = object({
-  spacecraft: object({ id: spacecraftId, name: string }),
+  spacecraft: spacecraftRef,
   route_id: token,
   name: string,
   station: nullable(

@@ -40,7 +40,7 @@ describe("U79 P3 extra-route rows", () => {
       props: {
         routes: [
           {
-            spacecraft: { id: sc, name: "EARENDIL-389" },
+            spacecraft: { id: sc, name: "EARENDIL-389", scid: null },
             route_id: "route-1",
             name: "INU · EARENDIL-389",
             station: inu,

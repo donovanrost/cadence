@@ -19,7 +19,7 @@ defineProps<{ routes: readonly ExtraRouteRow[] }>();
       <RouterLink
         :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: r.spacecraft.id } }"
         class="font-mono text-readout no-underline hover:underline max-md:hit-44"
-        >{{ r.spacecraft.name }}</RouterLink
+        >{{ r.spacecraft.name ?? "Unknown spacecraft" }}</RouterLink
       >
       <span class="text-md text-readout">{{ extraRouteLine(r) }}</span>
     </li>
