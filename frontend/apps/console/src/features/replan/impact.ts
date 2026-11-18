@@ -82,7 +82,7 @@ export function impactOf(passes: readonly Pass[], plan: ImpactPlan, truncated: b
   return {
     rows: lost.map((p) => ({
       id: p.id,
-      spacecraft: p.spacecraft?.name ?? p.spacecraft_id ?? "Unknown spacecraft",
+      spacecraft: p.spacecraft?.name ?? "Unknown spacecraft",
       station: p.station.code ?? p.station.ref ?? "—",
       startsAt: p.starts_at,
       endsAt: p.ends_at,

@@ -7,6 +7,7 @@ import { ApButton, ApCallout, ApPanel, ApSheet, ApTextarea, useNow } from "@/ui"
 import {
   decide,
   decisionErrorWords,
+  namelessTargets,
   phoneGoBlocked,
   useCommandAccess,
   usePeopleNames,
@@ -48,11 +49,13 @@ const noGoConsequence = useId();
 const busy = ref(false);
 const outcome = ref<{ tone: "info" | "crit" | "caution"; text: string } | null>(null);
 const targetNames = computed(() => {
-  const names = (group.value?.targets ?? []).map((t) => t.name ?? t.spacecraft_id);
+  const names = (group.value?.targets ?? []).map((t) => t.name ?? "Unknown spacecraft");
   return names.length > 8
     ? `${names.slice(0, 8).join(", ")} and ${names.length - 8} more`
     : names.join(", ");
 });
+/** ux #237: a target without a name doesn't block GO; its id stays in Technical details. */
+const nameless = computed(() => (group.value ? namelessTargets(group.value) : null));
 
 async function sign(kind: "go" | "no_go") {
   const g = group.value;
@@ -112,6 +115,13 @@ function openNoGo() {
       </ol>
       <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
       <p v-if="blocked" class="m-0 text-sm text-caution-text">{{ blocked }}</p>
+      <ApCallout v-if="nameless" tone="caution">
+        {{ nameless.line }}
+        <details class="mt-1 text-xs text-text-3">
+          <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
+          <p v-for="id in nameless.ids" :key="id" class="m-0 font-mono">{{ id }}</p>
+        </details>
+      </ApCallout>
       <div class="grid grid-cols-2 gap-2 pt-1">
         <ApButton v-if="!blocked" class="min-h-12" :disabled="busy" @click="goSheet?.open()"
           >GO</ApButton

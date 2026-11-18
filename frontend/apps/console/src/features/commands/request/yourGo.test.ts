@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import { preflightReader, type Preflight } from "../groups/api.ts";
 import { groupOf, showBody } from "../groups/fixtures.ts";
-import { phoneGoBlocked, requestFor, yourGoWords } from "./yourGo.ts";
+import { namelessTargets, phoneGoBlocked, requestFor, yourGoWords } from "./yourGo.ts";
 
 const review = (checks: unknown[]): Preflight => {
   const r = decode(preflightReader, {
@@ -65,5 +65,25 @@ describe("Mobile 'Your GO is requested' (Mobile.md §3)", () => {
     const noGo = review([{ key: "catalog", result: "no_go", per_target: [], evidence: {} }]);
     expect(phoneGoBlocked(g, noGo, "user-9", true, names)).toBe("The Catalog re-check is NO-GO.");
     expect(phoneGoBlocked(g, review([]), "user-9", true, names)).toBeNull();
+  });
+
+  it("cautions about targets with no name without blocking GO, ids kept for Technical details (#237)", () => {
+    const g = groupOf({});
+    expect(namelessTargets(g)).toBeNull();
+    const target = showBody.targets[0];
+    if (!target) throw new Error("fixture");
+    const one = groupOf({ targets: [{ ...target, name: null }] });
+    expect(namelessTargets(one)).toEqual({
+      line: "This console can't show the name of 1 target spacecraft. Check its id in Technical details before you give GO.",
+      ids: [target.spacecraft_id],
+    });
+    const two = groupOf({
+      targets: [
+        { ...target, name: null },
+        { ...target, spacecraft_id: "sc-9", name: null },
+      ],
+    });
+    expect(namelessTargets(two)?.line).toMatch(/of 2 target spacecraft\. Check their ids/);
+    expect(phoneGoBlocked(one, review([]), "user-9", true, names)).toBeNull();
   });
 });
