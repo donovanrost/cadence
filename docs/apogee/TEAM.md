@@ -135,6 +135,34 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
   shared dev stack).
 - Conventional commit messages (`feat(console): …`, `feat(api): …`) with the Co-Authored-By trailer.
 
+## Tracking: the GitHub board (director, 2026-11-18)
+
+Work is tracked on the GitHub project **Cadence**: https://github.com/users/donovanrost/projects/3
+(issues on donovanrost/cadence; repo milestones; Status = Todo / In progress / In review / Ready to land /
+Blocked / Done; Owner = agent). `docs/apogee/BACKLOG.md` is FROZEN as history; DECISIONS.md and the design
+docs stay the record, linked from issues.
+
+- Every NEW piece of work is an issue added to the project (`gh issue create -R donovanrost/cadence …`, then
+  `gh project item-add 3 --owner donovanrost --url <issue url>`), with a milestone, labels and your Owner.
+- Keep YOUR OWN cards' Status current (`gh project item-edit`), and comment on the issue at milestones (SHA,
+  PR, check results). Close an issue when it has landed AND been post-checked.
+- qa ticks the day's restart-chain issue as items land; lead opens the next day's issue each evening.
+- Decisions still go to the director by message; routine progress goes on the board.
+- Everything on GitHub is public. Plain words are fine (security items included), but never the user's
+  email, passwords, tokens, cookies or other credentials.
+
+## Pull requests into develop (user, 2026-11-17; in force from the develop cut-over)
+
+Once `ui/apogee-spa` has merged into `develop` and qa's dev stack runs develop:
+- Every piece of work is a feature branch off `develop`, linked to its issue. Agents push their OWN feature
+  branches and open PRs into `develop`. Never push to or force-push `develop` or `main`.
+- A PR merges only after CI passes AND a different agent reviews it, with the review recorded in the PR (we
+  share one GitHub account, so the record names the reviewing agent). Only lead or the director presses merge.
+- The restart chain picks only MERGED develop commits, by SHA; qa logs the PR number with each pick. Trial
+  picks, dries and the #108 struct-hash check stay.
+- Until the cut-over, the rules in Git above stand (the director pushes; nothing is picked onto the frozen tip
+  during the freeze).
+
 ## Phases
 
 1. **Foundations (now):** ux writes the design spec + IA; lead scaffolds the SPA + shell + Phoenix
