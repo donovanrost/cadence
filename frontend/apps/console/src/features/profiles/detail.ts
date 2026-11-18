@@ -10,6 +10,7 @@ import {
   type Reader,
 } from "@/api";
 import { formatCount } from "@/ui";
+import { catalogRevision } from "./api.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:mission_id/profiles/:profile_id`. */
 const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
@@ -107,7 +108,7 @@ export const profileDetailReader = object({
     id: token,
     name: string,
     version: integer,
-    catalog_revision: nullable(object({ id: token, number: integer, label: nullable(string) })),
+    catalog_revision: nullable(catalogRevision),
     protocols: object({ downlink: enumValue, uplink: enumValue, packet: enumValue }),
     last_change: nullable(
       object({ version: integer, revision: nullable(integer), at: timestamp, actor: actorName }),

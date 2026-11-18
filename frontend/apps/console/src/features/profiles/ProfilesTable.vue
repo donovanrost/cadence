@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApStatusMark, ApTable, formatCount, type ApColumn } from "@/ui";
-import { lastChangeText, manyOverrides, protocolLine, type ProfileSummary } from "./api.ts";
+import {
+  catalogRevText,
+  lastChangeText,
+  manyOverrides,
+  protocolLine,
+  type ProfileSummary,
+} from "./api.ts";
 
 /** Profile rows; the Name cell links to the profile page (Profile.md list). */
 const props = defineProps<{ rows: readonly ProfileSummary[] }>();
@@ -40,7 +46,9 @@ const columns = computed((): readonly ApColumn[] => {
       >
     </template>
     <template #cell-catalog="{ row }">
-      <span v-if="row.catalogRevision">rev {{ row.catalogRevision.number }}</span>
+      <span v-if="row.catalogRevision">{{
+        catalogRevText(row.catalogRevision) ?? "a catalog revision"
+      }}</span>
       <span v-else class="font-sans text-text-3">Set per spacecraft</span>
     </template>
     <template #cell-overrides="{ row }">

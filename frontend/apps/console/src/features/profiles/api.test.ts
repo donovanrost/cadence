@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { lastChangeText, manyOverrides, profilesReader, protocolLine } from "./api.ts";
+import {
+  catalogRevText,
+  lastChangeText,
+  manyOverrides,
+  profilesReader,
+  protocolLine,
+} from "./api.ts";
 
 const profile = (extra: Record<string, unknown> = {}) => ({
   id: "profile-1",
@@ -28,6 +34,26 @@ describe("profilesReader", () => {
     expect(
       decode(profilesReader, { profiles: [profile({ spacecraft_on_older_versions: 501 })] }).ok,
     ).toBe(false);
+  });
+
+  it("reads a catalog revision the server can't number (#246), keeping its id", () => {
+    const result = decode(profilesReader, {
+      profiles: [
+        profile({ catalog_revision: { id: "catalog_revision_9", number: null, label: null } }),
+      ],
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.error));
+    const rev = result.value[0]?.catalogRevision;
+    expect(rev).toEqual({ id: "catalog_revision_9", number: null, label: null });
+    expect(rev && catalogRevText(rev)).toBeNull();
+    const numbered = decode(profilesReader, {
+      profiles: [
+        profile({ catalog_revision: { id: "catalog_revision_4", number: 4, label: "rev 4" } }),
+      ],
+    });
+    if (!numbered.ok) throw new Error(JSON.stringify(numbered.error));
+    const four = numbered.value[0]?.catalogRevision;
+    expect(four && catalogRevText(four)).toBe("rev 4");
   });
 
   it("rejects a protocol without a label", () => {
