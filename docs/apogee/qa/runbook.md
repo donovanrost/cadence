@@ -343,6 +343,11 @@ nothing running, it saves the changes but starts nothing.
 **Command groups:** Group members are approved only through the group's GO/NO-GO (enforced by the product since
 11-18 02:15Z, P0 #106).
 
+**NO REAL SPACECRAFT-CONFIGURATION APPROVALS (director 11-18):** nobody approves a real spacecraft-configuration
+activation request on Earendil (or any non-QA mission) until #235 (Activations shows what a spacecraft configuration
+request changes, with the telemetry-off warning) is LIVE and qa-checked. QA-mission test requests only. END CONDITION:
+qa's post-check of #235 passes and lead announces the end to all panes.
+
 **Director GO conditions** (director, 11-18, after batch 1's step 4 + gate re-check ran late): every condition in a
 director GO is copied VERBATIM into the slot's plan as a checklist; the chain owner (lead) confirms the checklist is in
 the plan BEFORE the slot starts; a slot can't start with a GO condition missing from its plan. qa sends lead each slot's
