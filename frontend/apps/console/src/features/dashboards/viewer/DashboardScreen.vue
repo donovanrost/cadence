@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter, type LocationQueryValue } from "vue-router";
 import { TakeoverHeader, useMissionScope, useSmallScreen } from "@/shell";
 import { useConnection } from "@/live";
-import { ApButton, ApCallout } from "@/ui";
+import { announcePolite, ApButton, ApCallout } from "@/ui";
 import type { Runtime } from "../api.ts";
 import { recordView } from "../directory/api.ts";
 import { exportUrl } from "../settings/api.ts";
@@ -142,8 +142,10 @@ function onMenu(
     case "snapshot":
       return snapshotSheet.value?.open();
     case "export":
-      // A plain download (the server records the export); ux's toast waits for a kit toast.
-      return download(exportUrl({ missionId: missionId.value, dashboardId: dashboardId.value }));
+      // A plain download (the server records the export); ux's toast waits for a kit toast. B6:
+      // until then, a screen reader hears that it started.
+      download(exportUrl({ missionId: missionId.value, dashboardId: dashboardId.value }));
+      return announcePolite("Export started: the dashboard's file is downloading.");
     case "settings":
     case "activity":
       return router.push({

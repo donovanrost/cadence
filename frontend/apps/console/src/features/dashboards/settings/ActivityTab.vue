@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api";
-import { ApButton, ApEmptyState, ApPanel, ApRemote, formatShort } from "@/ui";
+import { ApButton, ApEmptyState, ApPanel, ApRemote, formatShort, refocusFirst } from "@/ui";
 import { fetchActivity, type ActivityEvent, type SettingsKey } from "./api.ts";
 import { activityText } from "./present.ts";
 
@@ -11,22 +11,31 @@ const first = useRemoteQuery(() => ({ ...props.settingsKey, before: null }), fet
 const older = ref<readonly ActivityEvent[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+/** B6: a failed Older is said, in a line that's always there so the words are announced. */
+const olderFailed = ref(false);
 watch(first.state, (s) => {
   if (s.status !== "ready") return;
   older.value = [];
   cursor.value = s.value.next;
+  olderFailed.value = false;
 });
 async function loadOlder() {
   if (!cursor.value || loading.value) return;
   loading.value = true;
+  olderFailed.value = false;
   try {
     const r = await fetchActivity(
       { ...props.settingsKey, before: cursor.value },
       new AbortController().signal,
     );
-    if (!r.ok) return;
+    if (!r.ok) return void (olderFailed.value = true);
+    const firstNew = r.value.events[0]?.id;
     older.value = [...older.value, ...r.value.events];
     cursor.value = r.value.next;
+    // A5: the last page takes Older away; focus goes to the first event it loaded.
+    await nextTick();
+    if (firstNew)
+      refocusFirst(document.querySelector<HTMLElement>(`[data-activity="${firstNew}"]`));
   } finally {
     loading.value = false;
   }
@@ -44,6 +53,7 @@ const hasMore = computed(() => cursor.value !== null);
           <li
             v-for="e in all(value.events)"
             :key="e.id"
+            :data-activity="e.id"
             class="grid grid-cols-[120px_minmax(0,1fr)] gap-3 border-t border-hairline px-4 py-2.5 first:border-t-0"
           >
             <time :datetime="e.at" class="font-mono text-xs text-text-3">{{
@@ -59,6 +69,9 @@ const hasMore = computed(() => cursor.value !== null);
           <ApButton size="compact" :disabled="loading" disabled-reason="Loading…" @click="loadOlder"
             >Older</ApButton
           >
+          <p aria-live="polite" class="m-0 text-sm text-caution-text">
+            {{ olderFailed ? "Couldn't load older activity. Try Older again." : "" }}
+          </p>
         </div>
       </template>
     </ApRemote>
