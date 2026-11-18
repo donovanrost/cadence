@@ -48,7 +48,9 @@ const columns: readonly ApColumn[] = [
       caption="Missed and partial passes"
     >
       <template #cell-aos="{ row }">{{ formatAbsolute(new Date(row.planned_aos)) }}</template>
-      <template #cell-spacecraft="{ row }">{{ row.spacecraft.name ?? row.spacecraft.id }}</template>
+      <template #cell-spacecraft="{ row }">{{
+        row.spacecraft.name ?? "Unknown spacecraft"
+      }}</template>
       <template #cell-antenna="{ row }"
         >{{ stationText(row.station)
         }}<span v-if="row.antenna_ref" class="block font-mono text-xs text-text-3">{{

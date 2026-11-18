@@ -33,7 +33,7 @@ const sourceText = (id: string, version: number | null | undefined) =>
       <RouterLink
         :to="{ name: 'setup.contact-planning.requirement', params: { requirementId: row.id } }"
         class="font-semibold text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
-        >{{ row.spacecraft.name ?? row.spacecraft.id }}</RouterLink
+        >{{ row.spacecraft.name ?? "Unknown spacecraft" }}</RouterLink
       >
     </template>
     <template #cell-window="{ row }">{{ windowText(row.content) }}</template>

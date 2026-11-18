@@ -135,7 +135,11 @@ export function partialApproval(e: Expired): string {
 /** One left-out pass under `Show 36`: `EARENDIL-001 · SVA · AOS 00:10Z`. */
 export function expiredLine(item: Expired["items"][number], now: Date = new Date()): string {
   const station = item.station?.code ?? item.station?.name ?? item.station?.ref ?? null;
-  return [item.spacecraft?.name ?? item.spacecraft?.id ?? null, station, `AOS ${at(item.aos, now)}`]
+  return [
+    item.spacecraft ? (item.spacecraft.name ?? "Unknown spacecraft") : null,
+    station,
+    `AOS ${at(item.aos, now)}`,
+  ]
     .filter((p): p is string => p !== null)
     .join(" · ");
 }

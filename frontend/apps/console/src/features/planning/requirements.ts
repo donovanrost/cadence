@@ -300,7 +300,7 @@ export function requirementFacts(
   r: Pick<RequirementDetail, "content" | "spacecraft">,
 ): { key: string; label: string; value: string; mono?: boolean }[] {
   const facts = [
-    { key: "spacecraft", label: "Spacecraft", value: r.spacecraft.name ?? r.spacecraft.id },
+    { key: "spacecraft", label: "Spacecraft", value: r.spacecraft.name ?? "Unknown spacecraft" },
     { key: "window", label: "Window", value: windowText(r.content), mono: true },
   ];
   for (const f of s.fields) {

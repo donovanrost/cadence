@@ -39,7 +39,7 @@ const title = computed(() => {
   if (isNew.value) return "New requirement";
   const s = state.value;
   return s.status === "ready"
-    ? `${s.value.spacecraft.name ?? s.value.spacecraft.id} · ${windowText(s.value.content)}`
+    ? `${s.value.spacecraft.name ?? "Unknown spacecraft"} · ${windowText(s.value.content)}`
     : "Requirement";
 });
 const crumbs = computed((): readonly ApCrumb[] => [

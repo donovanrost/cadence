@@ -117,6 +117,12 @@ describe("one-off requirements (ux P4, api fb7510be)", () => {
     });
     expect(facts.find((f) => f.key === "max_gap_seconds")?.value).toBe("No limit");
     expect(facts.find((f) => f.key === "contact_count")?.value).toBe("2");
+    // ux U25 (#190): a nameless spacecraft reads Unknown spacecraft, never its id.
+    const nameless = requirementFacts(s, {
+      spacecraft: { id: spacecraftId("sc1"), name: null, scid: null },
+      content: { contact_count: 2, max_gap_seconds: null },
+    });
+    expect(nameless.find((f) => f.key === "spacecraft")?.value).toBe("Unknown spacecraft");
   });
 });
 
