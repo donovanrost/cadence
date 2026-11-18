@@ -14,13 +14,26 @@ import {
 } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /organizations/:id/audit` (AU1). */
-const { array, nullable, object, string, timestamp, token } = decoders;
+const { array, boolean, integer, nullable, object, optional, string, timestamp, token } = decoders;
 
 export const auditKinds = ["config", "commanding", "access", "alarms", "contacts", "data"] as const;
 export type AuditKind = (typeof auditKinds)[number];
 
 const idText = (v: unknown, path = ""): string | null =>
   typeof v === "number" ? String(v) : nullable(token)(v === undefined ? null : v, path);
+
+/** One side of a #233 governance change: raw values, never words (api 11-18). */
+const governanceValue = nullable(
+  object({
+    approval_requirement: optional(
+      nullable(decoders.knownText(["direct", "independent"] as const)),
+    ),
+    /** Mission entries: whether the mission sets its own value. */
+    override: optional(nullable(boolean)),
+    /** The organization's entries: whether missions may set their own. */
+    allow_override: optional(nullable(boolean)),
+  }),
+);
 
 const event = object({
   id: token,
@@ -45,6 +58,28 @@ const event = object({
   mission: nullable(object({ id: token, name: string })),
   // free-text: the reason or note a person gave.
   reason: nullable(string),
+  /**
+   * P3 (#228, dashboards' shape diff): what a decision decided, and whether its decider acted in
+   * platform admin mode. Decision events only; absent on the rest. TIGHTEN with the dev reset:
+   * admin_mode required on decision events (DECISIONS #112).
+   */
+  subject: optional(
+    nullable(
+      object({
+        // free-text: the subject's kind is technical context, for the export only.
+        kind: optional(nullable(token)),
+        id: optional(idText),
+        version: optional(nullable(integer)),
+      }),
+    ),
+  ),
+  admin_mode: optional(nullable(boolean)),
+  /**
+   * #233 (api 11-18): governance settings entries saved after #233 carry the raw values before and
+   * after; older entries and every other event have none. The action sentence already says it in
+   * ux's words (U96), so only the export reads this.
+   */
+  change: optional(nullable(object({ before: governanceValue, after: governanceValue }))),
 });
 const pageShape = object({
   /** U86 follow-up: read event by event; one this console can't read is left out and counted. */
@@ -105,10 +140,17 @@ export const kindLabel: Readonly<Record<AuditKind, string>> = {
   data: "Data",
 };
 
+/**
+ * P3 (#228, ux U89): the decision sources api adds at the dev reset. Worded here, but not queried
+ * by default until the server has them. TIGHTEN with the reset: move them into `auditKinds`.
+ */
+const newerKinds = { activations: "Activations", provider_changes: "Provider changes" } as const;
+
 /** A kind or source in words: the known label, else the key humanized ("provider_accounts" → "Provider accounts"). */
 export function kindText(kind: string): string {
   const known = auditKinds.find((k) => k === kind);
   if (known) return kindLabel[known];
+  if (isKeyOf(newerKinds, kind)) return newerKinds[kind];
   const words = kind.replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

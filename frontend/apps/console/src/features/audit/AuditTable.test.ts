@@ -31,6 +31,9 @@ const row = (over: Partial<AuditEvent>): AuditEvent => ({
   target: { kind: "command_group", id: "group_7", label: "SET_MODE for 1 spacecraft" },
   mission: { id: "mission_1", name: "Earendil" },
   reason: null,
+  subject: undefined,
+  admin_mode: undefined,
+  change: undefined,
   ...over,
 });
 
@@ -70,5 +73,17 @@ describe("audit rows that open a page (qa 11-14)", () => {
     ]);
     expect(wrapper.find("a").exists()).toBe(false);
     expect(wrapper.text()).toContain("Requested NOOP");
+  });
+
+  it("tags an actor who decided in admin mode, only when true (P3 #228, ux U89)", async () => {
+    const wrapper = await render([
+      row({ id: "a", admin_mode: true }),
+      row({ id: "b", admin_mode: false }),
+      row({ id: "c", admin_mode: null }),
+      row({ id: "d" }),
+    ]);
+    const tags = wrapper.findAll('[aria-label^="Acting as a platform admin"]');
+    expect(tags).toHaveLength(1);
+    expect(tags[0]?.text()).toBe("Admin mode");
   });
 });

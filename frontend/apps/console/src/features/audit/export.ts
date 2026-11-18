@@ -1,4 +1,4 @@
-import { actorKindWord } from "@/api";
+import { actorKindWord, vocabularyText } from "@/api";
 import { plural } from "@/ui";
 import type { ApiResult } from "@/api";
 import { kindText, type AuditEvent, type AuditPage, type AuditQuery } from "./api.ts";
@@ -7,7 +7,47 @@ import { kindText, type AuditEvent, type AuditPage, type AuditQuery } from "./ap
  * Audit `Export CSV` (SettingsAuditProviders.md): every event for the current filter, one row per
  * event, full ISO UTC times, words for the kind. Built client-side from the audit read's pages.
  */
-const header = ["Time (UTC)", "Actor", "Actor kind", "Kind", "Action", "Target", "Mission", "Why"];
+const header = [
+  "Time (UTC)",
+  "Actor",
+  "Actor kind",
+  "Kind",
+  "Action",
+  "Target",
+  "Mission",
+  "Why",
+  // P3 (#228, ux): blank on rows that aren't decisions; the export is data, so ids are fine here.
+  "Admin mode",
+  "Subject",
+  "Subject id",
+  "Subject version",
+  // #233 (ux): governance changes in the setting's option words; organization rows add whether
+  // missions may override, when that changed.
+  "Before",
+  "After",
+  "Missions may override",
+];
+const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === false ? "No" : null);
+
+/** U96's option words, never "direct" / "independent"; a value this console doesn't know reads raw. */
+const REQUIREMENT_WORDS = {
+  direct: "Applies without approval",
+  independent: "Needs a second person's approval",
+} as const;
+type Side = NonNullable<NonNullable<AuditEvent["change"]>["before"]>;
+const requirementText = (side: Side | null) => {
+  const v = side?.approval_requirement;
+  return v === null || v === undefined ? null : vocabularyText(v, REQUIREMENT_WORDS);
+};
+/** "Missions may override": organization rows only, the new value, and only when it changed. */
+function overrideText(e: AuditEvent): string | null {
+  const c = e.change;
+  if (!c || e.mission) return null;
+  const before = c.before?.allow_override;
+  const after = c.after?.allow_override;
+  if (typeof after !== "boolean" || before === after) return null;
+  return yesNo(after);
+}
 
 /** At most this many events in one file; past it the export says so instead of implying all. */
 export const exportCap = 10_000;
@@ -27,6 +67,15 @@ export function auditCsv(events: readonly AuditEvent[]): string {
     e.target?.label ?? null,
     e.mission?.name ?? null,
     e.reason,
+    yesNo(e.admin_mode),
+    e.subject?.kind ?? null,
+    e.subject?.id ?? null,
+    e.subject?.version === null || e.subject?.version === undefined
+      ? null
+      : String(e.subject.version),
+    requirementText(e.change?.before ?? null),
+    requirementText(e.change?.after ?? null),
+    overrideText(e),
   ]);
   return [header, ...lines].map((l) => l.map(cell).join(",")).join("\r\n") + "\r\n";
 }

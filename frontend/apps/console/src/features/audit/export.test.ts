@@ -11,6 +11,9 @@ const event = (id: string): AuditEvent => ({
   target: { kind: "revision", id: "6", label: "r6" },
   mission: { id: "m1", name: "Earendil" },
   reason: 'Framing "fix", per #45',
+  subject: undefined,
+  admin_mode: undefined,
+  change: undefined,
 });
 const query: AuditQuery = {
   organizationId: "o1",
@@ -23,10 +26,70 @@ const query: AuditQuery = {
 describe("audit Export CSV", () => {
   it("writes one row per event with words and quoted cells", () => {
     expect(auditCsv([event("e1")]).split("\r\n")).toEqual([
-      "Time (UTC),Actor,Actor kind,Kind,Action,Target,Mission,Why",
-      '2026-11-12T01:12:07Z,Mira K.,user,Config,Applied r6 · 2 changes,r6,Earendil,"Framing ""fix"", per #45"',
+      "Time (UTC),Actor,Actor kind,Kind,Action,Target,Mission,Why,Admin mode,Subject,Subject id,Subject version,Before,After,Missions may override",
+      '2026-11-12T01:12:07Z,Mira K.,user,Config,Applied r6 · 2 changes,r6,Earendil,"Framing ""fix"", per #45",,,,,,,',
       "",
     ]);
+  });
+
+  it("writes a decision's admin mode and subject (P3 #228, ux): Yes / No, blank when not a decision", () => {
+    const decided = {
+      ...event("e2"),
+      kind: "activations",
+      action: "Approved EARENDIL-004 configuration v4",
+      subject: { kind: "activation_request", id: "act_9", version: 4 },
+      admin_mode: true,
+    };
+    const lines = auditCsv([decided, { ...decided, admin_mode: false, subject: null }]).split(
+      "\r\n",
+    );
+    expect(lines[1]?.endsWith(",Yes,activation_request,act_9,4,,,")).toBe(true);
+    expect(lines[1]).toContain(",Activations,");
+    expect(lines[2]?.endsWith(",No,,,,,,")).toBe(true);
+  });
+
+  it("writes a governance change in the setting's words, never direct/independent (#233, ux U96)", () => {
+    const mission = {
+      ...event("g1"),
+      action:
+        "Loosened approval on EARENDIL: Needs a second person's approval → Applies without approval",
+      change: {
+        before: {
+          approval_requirement: "independent" as const,
+          override: true,
+          allow_override: undefined,
+        },
+        after: {
+          approval_requirement: "direct" as const,
+          override: true,
+          allow_override: undefined,
+        },
+      },
+    };
+    const org = {
+      ...mission,
+      id: "g2",
+      mission: null,
+      action: "Missions can no longer set their own approval setting.",
+      change: {
+        before: {
+          approval_requirement: "independent" as const,
+          override: undefined,
+          allow_override: true,
+        },
+        after: {
+          approval_requirement: "independent" as const,
+          override: undefined,
+          allow_override: false,
+        },
+      },
+    };
+    const [, m, o] = auditCsv([mission, org]).split("\r\n");
+    expect(m?.endsWith(",Needs a second person's approval,Applies without approval,")).toBe(true);
+    expect(
+      o?.endsWith(",Needs a second person's approval,Needs a second person's approval,No"),
+    ).toBe(true);
+    expect(auditCsv([mission, org])).not.toMatch(/direct|independent/);
   });
   it("walks every page of the filter", async () => {
     const pages: AuditPage[] = [
