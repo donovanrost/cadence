@@ -123,7 +123,7 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
   - Frontend: typecheck + lint (+ tests) for the console app (see `docs/apogee/ARCHITECTURE.md`).
   - Elixir (api only): `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict` on touched
     files, and the tests for the touched area. **Only api, api-ops and domain run Elixir tests**, since parallel runs fight
-    over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=2`, api-ops uses `3`). qa runs the dev server against the dev database.
+    over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=12`, api-ops uses `3`; partitions are claimed in qa's runbook register). qa runs the dev server against the dev database.
 - **Heavy jobs go through the team gate (director, 2026-11-17):** `var/heavy-gate.sh --agent <you> -- <command>`
   (status: `var/heavy-gate.sh --status`). Heavy = full suites, test directories, hooked commits, builds, vue-tsc /
   typecheck, pnpm install, credo, the architecture check. The gate waits until BOTH the 1-min and 5-min load are
@@ -142,11 +142,21 @@ Work is tracked on the GitHub project **Cadence**: https://github.com/users/dono
 Blocked / Done; Owner = agent). `docs/apogee/BACKLOG.md` is FROZEN as history; DECISIONS.md and the design
 docs stay the record, linked from issues.
 
-- Every NEW piece of work is an issue added to the project (`gh issue create -R donovanrost/cadence …`, then
-  `gh project item-add 3 --owner donovanrost --url <issue url>`), with a milestone, labels and your Owner.
+- The board is PRODUCT work only, written as a software project (user, 2026-11-18). Dev-environment operations
+  (restarts, dev data fixes, dev retention) live in qa's runbook and log, never on GitHub.
+- Every NEW piece of work is an issue created UNDER ITS EPIC (`gh issue create -R donovanrost/cadence … --parent <epic
+  number>`; epics are #207-#219), added to the project (`gh project item-add 3 --owner donovanrost --url <issue url>`),
+  with a milestone (M1-M9) where one fits, labels (one of type:story, type:bug, type:task, plus an area label) and your
+  Owner.
+- Shapes: STORY 'As a <operator / mission admin / platform admin>, I want <capability>, so that <outcome>' + acceptance
+  criteria as checkboxes; BUG: what happens / what should happen / how to reproduce / impact; TASK: what / why / done
+  when. Plain titles, no team shorthand; shorthand, DECISIONS numbers, doc links, branches and SHAs go on a final
+  'Context:' line. Approved samples (11-18): story #150, bug #158, task #166; templates in .github/ISSUE_TEMPLATE after the develop merge.
+- A live check is an acceptance-criteria checkbox ('Verified live on the dev stack') on the story or bug it
+  verifies, never its own issue.
 - Keep YOUR OWN cards' Status current (`gh project item-edit`), and comment on the issue at milestones (SHA,
   PR, check results). Close an issue when it has landed AND been post-checked.
-- qa ticks the day's restart-chain issue as items land; lead opens the next day's issue each evening.
+- Restart chains are NOT on GitHub (user, 11-18): qa's runbook and pass checklist carry them.
 - Decisions still go to the director by message; routine progress goes on the board.
 - Everything on GitHub is public. Plain words are fine (security items included), but never the user's
   email, passwords, tokens, cookies or other credentials.
