@@ -680,18 +680,22 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
       assert_receive :held, 5_000
 
-      assert {:error, :fleet_planning_run_busy} =
-               ControlContacts.execute_approved_plan(
-                 context.member_scope,
-                 context.mission_id,
-                 context.plan.contact_plan_id,
-                 reserve: successful_reserver(test_pid),
-                 resolve_route: context.resolve_route,
-                 now: DateTime.add(@now, 2, :second)
-               )
+      # Released in an after: a failed assert can't leave the holder blocked with its session open.
+      try do
+        assert {:error, :fleet_planning_run_busy} =
+                 ControlContacts.execute_approved_plan(
+                   context.member_scope,
+                   context.mission_id,
+                   context.plan.contact_plan_id,
+                   reserve: successful_reserver(test_pid),
+                   resolve_route: context.resolve_route,
+                   now: DateTime.add(@now, 2, :second)
+                 )
 
-      refute_received {:provider_mutation, _any}
-      send(holder, :release)
+        refute_received {:provider_mutation, _any}
+      after
+        release(holder, key)
+      end
     end
   end
 
@@ -840,7 +844,30 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     try do
       fun.()
     after
-      send(holder, :release)
+      release(holder, key)
+    end
+  end
+
+  # The execution lock is a PostgreSQL session lock (FleetRunLock): the holder lets go by ending
+  # its session, and the server frees the lock only once that session is gone, AFTER the holder
+  # has moved on. So wait for the holder to exit and the server to stop reporting the lock held;
+  # otherwise the next read can still see it held (#182: coverage read nil, "covered", at :726).
+  defp release(holder, key) do
+    ref = Process.monitor(holder)
+    send(holder, :release)
+    assert_receive {:DOWN, ^ref, :process, ^holder, _reason}, 5_000
+    wait_until_free(key, 250)
+  end
+
+  defp wait_until_free(key, 0),
+    do: flunk("the plan's execution lock is still held after its holder exited: #{inspect(key)}")
+
+  # key_held?/1 answers false if its query errors, so this can pass without seeing the lock free;
+  # the test's next read then fails loudly, which is enough here (devops' review).
+  defp wait_until_free(key, tries) do
+    if FleetRunLock.key_held?(key) do
+      Process.sleep(20)
+      wait_until_free(key, tries - 1)
     end
   end
 
