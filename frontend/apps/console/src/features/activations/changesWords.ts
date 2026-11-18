@@ -208,6 +208,12 @@ export const firstStartLine = (g: ChangeGroup) =>
     ? `Nothing is active for ${g.spacecraft[0].name} yet, so every setting is new.`
     : "Nothing is active for these spacecraft yet, so every setting is new.";
 
-/** The rows-[] group: "No changes on 12 spacecraft: EARENDIL-010, EARENDIL-011 and 10 more." */
-export const noChangesLine = (g: ChangeGroup) =>
-  `No changes on ${formatCount(g.count)} spacecraft: ${namesLine(g)}.`;
+/**
+ * The rows-[] group: "No changes on 12 spacecraft: EARENDIL-010, EARENDIL-011, EARENDIL-012 and 9
+ * more."; one craft on its own (ux #235): "Nothing changes for EARENDIL-004: this configuration
+ * matches what's active."
+ */
+export const noChangesLine = (g: ChangeGroup, fleet: boolean) =>
+  !fleet && g.spacecraft[0]
+    ? `Nothing changes for ${g.spacecraft[0].name}: this configuration matches what's active.`
+    : `No changes on ${formatCount(g.count)} spacecraft: ${namesLine(g)}.`;

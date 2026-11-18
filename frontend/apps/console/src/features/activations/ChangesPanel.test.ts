@@ -55,6 +55,7 @@ describe("#235 What changes panel", () => {
     expect(text).toContain("5 spacecraft change: Catalog revision (5).");
     expect(text).toContain("1 has no changes.");
     expect(text).toContain("Telemetry is off for 5 of the 6 spacecraft");
+    expect(text).toContain("Open spacecraft");
     expect(text).toContain("EARENDIL-1, EARENDIL-2, EARENDIL-3 and 2 more");
     expect(text).toContain("Catalog revision: catalog rev 13 → catalog rev 14");
     expect(text).toContain("No changes on 1 spacecraft: EARENDIL-9.");

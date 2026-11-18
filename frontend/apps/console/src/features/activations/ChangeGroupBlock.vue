@@ -46,7 +46,7 @@ async function showAll() {
 <template>
   <section class="flex flex-col gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
     <p v-if="unchanged" class="m-0 text-md text-text-2">
-      {{ all ? `No changes on ${all.length} spacecraft:` : noChangesLine(group) }}
+      {{ all ? `No changes on ${all.length} spacecraft:` : noChangesLine(group, fleet) }}
     </p>
     <div v-else class="flex flex-wrap items-center gap-2">
       <h3 v-if="fleet" class="m-0 text-md text-bright">{{ groupHeading(group) }}</h3>

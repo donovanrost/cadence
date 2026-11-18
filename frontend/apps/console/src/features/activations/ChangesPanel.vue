@@ -32,7 +32,7 @@ const unseenWhat = computed(() => {
   const n = unseenCraft(props.changes);
   return n > 0 ? `what changes for ${plural(n, "spacecraft", "spacecraft")}` : undefined;
 });
-/** One craft: its page, where the Operation panel turns telemetry on; a fleet: the craft list. */
+/** One craft: its page, where the Operation panel turns telemetry on; a fleet: the craft list (ux: "Open spacecraft", as U45). */
 const operation = computed(() => {
   const only = props.changes.groups.items[0]?.spacecraft[0];
   return !fleet.value && only
@@ -52,9 +52,9 @@ const operation = computed(() => {
       <ApCallout v-if="offLine" :tone="offLine.tone">
         {{ offLine.text }}
         <template #action
-          ><RouterLink :to="operation" class="text-sm text-readout underline hover:text-bright"
-            >Open Operation</RouterLink
-          ></template
+          ><RouterLink :to="operation" class="text-sm text-readout underline hover:text-bright">{{
+            fleet ? "Open spacecraft" : "Open Operation"
+          }}</RouterLink></template
         >
       </ApCallout>
       <ChangeGroupBlock

@@ -121,7 +121,7 @@ describe("#235 what a spacecraft configuration request changes", () => {
     expect(groupHeading(first)).toBe("283 spacecraft");
     expect(namesLine(first)).toBe("EARENDIL-001, EARENDIL-002, EARENDIL-003 and 280 more");
     expect(showAllLabel(first)).toBe("Show all 283");
-    expect(noChangesLine(last)).toBe(
+    expect(noChangesLine(last, true)).toBe(
       "No changes on 12 spacecraft: EARENDIL-300, EARENDIL-301, EARENDIL-302 and 9 more.",
     );
     expect(firstStartLine(first)).toBe(
@@ -137,6 +137,9 @@ describe("#235 what a spacecraft configuration request changes", () => {
     expect(groupHeading(g)).toBe("EARENDIL-001");
     expect(namesLine(g)).toBe("EARENDIL-001");
     expect(showAllLabel(g)).toBeNull();
+    expect(noChangesLine(g, false)).toBe(
+      "Nothing changes for EARENDIL-001: this configuration matches what's active.",
+    );
     expect(firstStartLine(g)).toBe(
       "Nothing is active for EARENDIL-001 yet, so every setting is new.",
     );
