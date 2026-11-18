@@ -313,7 +313,12 @@ Saves a draft; the active configuration stays in use. Answers the fresh snapshot
 `{data: {catalog_id, packets: [{apid, name, definitions}]}}` (≤2048). An unknown catalog
 revision: `404 catalog_revision_not_found`.
 
-### Errors (the console envelope; messages are the host's, ux re-words)
+### Errors (the console envelope; messages are ux's U94 words on these routes only)
+
+The messages name the spacecraft and the catalog revision ("catalog rev 14"), never an id ("this
+spacecraft" / "that catalog revision" when it can't be known). The host's page keeps its own copy.
+Someone outside the mission's organization gets `404 mission_not_found` on every route (the
+console's mission scope), so the mission's existence doesn't leak.
 
 | Code | Status | When |
 |---|---|---|
@@ -321,6 +326,7 @@ revision: `404 catalog_revision_not_found`.
 | `spacecraft_configuration_review_unavailable` | 409 | Submit before a save, or with external changes |
 | `spacecraft_configuration_review_stale` | 409 | The active fleet configuration moved |
 | `activation_policy_changed` | 409 | The policy changed since the snapshot |
+| `spacecraft_switch_set_by_change_set` | 409 | (submit) A change set turned a switch on or off after the draft was saved; save again |
 | `spacecraft_catalog_set_by_profile` | 409 | The catalog is the profile's (a change set sets it) |
 | `spacecraft_catalog_required` | 422 | Submit with no catalog |
 | `spacecraft_packet_inputs_required` | 422 | Telemetry on without a source and packets |

@@ -271,6 +271,8 @@ defmodule CadenceWeb.Console.Problem do
       {409, "The active fleet configuration changed. Review the latest state and submit again."},
     spacecraft_configuration_review_unavailable:
       {409, "Save your current configuration and resolve external changes before submitting it."},
+    spacecraft_switch_set_by_change_set:
+      {409, "A change set changed Telemetry or Commanding since this was saved. Save it again."},
     spacecraft_catalog_set_by_profile:
       {409, "This spacecraft's catalog is set by its profile, through a change set."},
     spacecraft_catalog_required: {422, "Choose a catalog before submitting this configuration."},

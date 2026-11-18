@@ -161,6 +161,36 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
              conn(c) |> get(c.path <> "?section=nope") |> json_response(422)
   end
 
+  test "someone outside the mission's organization: not found on every route, and nothing saved",
+       c do
+    outsider = TestFixtures.persist_user!()
+
+    TestFixtures.grant_membership!(outsider, TestFixtures.persist_org!(),
+      role: :organization_admin
+    )
+
+    token = workspace(c)["token"]
+    conn = fn -> TestFixtures.member_conn(outsider) end
+
+    # The console's mission scope refuses before the workspace (operate_mission); it answers
+    # not found, so another organization can't learn the mission exists.
+    for response <- [
+          conn.() |> get(c.path),
+          conn.() |> put(c.path <> "/draft", %{"token" => token, "document" => %{}}),
+          conn.()
+          |> post(c.path <> "/submit", %{
+            "token" => token,
+            "policy_token" => "p",
+            "intent" => "review"
+          }),
+          conn.() |> get(c.path <> "/catalogs/any/packets")
+        ] do
+      assert %{"error" => %{"code" => "mission_not_found"}} = json_response(response, 404)
+    end
+
+    assert workspace(c)["saved_version"] == nil
+  end
+
   defp conn(c), do: TestFixtures.member_conn(c.user)
 
   defp workspace(c), do: conn(c) |> get(c.path) |> json_response(200) |> Map.fetch!("data")
