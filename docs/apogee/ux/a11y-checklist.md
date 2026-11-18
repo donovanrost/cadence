@@ -42,7 +42,20 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
      such as `⋯`. (lead's §6 call, 11-16)
 4. Live updates (Now rows arriving or resolving, counts changing) never move focus. A new crit flash honours
    `prefers-reduced-motion`.
-5. Charts are `role="img"` with a sentence, not "chart".
+5. Charts are `role="img"` with a sentence that states the **result**, not the encoding ("Realization was 92%
+   over 7 days, under the 95% target on 2 days.", not "Bars show realization per day"), and each plotted value is
+   reachable without hover (a table, a list, or focusable marks with names). (#189, dashboards' R3 finding)
+6. **An action's outcome is announced without moving focus.** A result, refusal or failure after the person acts
+   (a refusal line, an error inside a sheet, a failed `Load more` / `Older`, a row's result note) is in a live region:
+   `role="alert"` for refusals and failures, `role="status"` (polite) for results. That includes results with
+   nothing to show: a search with no matches, a download started ("Export started: Power.csv"), a comparison
+   finished. Focus stays where it was (B4). (#189 'live' and 'outcome')
+7. **Every control names what it acts on.** A button repeated per row, widget or section carries its object in its
+   name ("Edit Battery voltage", "Remove section Power"); an untitled one uses its kind and position ("Edit untitled
+   widget 3"), never a name ending in a space. `aria-keyshortcuts` lists every key it answers, modifiers included.
+   (#189 'name')
+8. **Screen-wide keys never override a focused control.** Present's Space, ←/→ and Kiosk's Esc act only when focus
+   isn't on a button, link, field or other control; Space on a focused button presses that button. (#189, Present)
 
 ## C. Surfaces to check by hand (opened, confirmed, closed)
 | Screen | What to open or do | Specific checks |

@@ -3049,6 +3049,10 @@ Communications, Changes) for ux's look.
       craft's name); names "EARENDIL-001, EARENDIL-002, EARENDIL-003 and 297 more" with `Show all 300`; a `TELEMETRY
       OFF` tag when its switch is off; first start "Nothing is active for these spacecraft yet, so every setting is
       new."; then its rows.
+    - Decided requests (api, lead OK): `configuration_changes` is null once decided, so no panel and never "no
+      changes". In its place, a muted line: "What changes is shown only while a request waits for approval. To see
+      what runs now, open the spacecraft's configuration." with `Open configuration` (one craft) or `Open
+      spacecraft` (a fleet: Setup › Spacecraft).
     - The rows-[] group: "No changes on 12 spacecraft: EARENDIL-010, EARENDIL-011, EARENDIL-012 and 9 more." with
       `Show all`. Every group lists 3 names before "and N more". One craft with no changes: "Nothing changes for
       EARENDIL-004: this configuration matches what's active."
@@ -3079,6 +3083,10 @@ Communications, Changes) for ux's look.
     approved: you saved part of what this request activates, so another person approves it. Your approval wasn't
     recorded." Suggested to api/lead: disable Approve up front when the read can say so (A6, the same sentence
     without "Not approved:" and the ending).
+  - Authors unknown (#236 fail closed, lead 11-18; 403 `activation_approver_authors_unknown`, nothing recorded): "Not
+    approved: Cadence can't tell who saved this configuration, so it can't check that you weren't one of them.
+    Your approval wasn't recorded. Reject it so the requester can send it again; if it keeps happening, tell the
+    team that runs Cadence for you." The legacy approve paths keep their generic text (no host copy, lead).
 - **The mission-wide decom app after this** (lead, 11-17): once any craft's configuration is saved here, the
   telemetry_decom app's Save is closed for the mission. It shows disabled with: "Telemetry decoding is now set per
   spacecraft, in each spacecraft's Configuration, so it can't be saved here." and `Open spacecraft` (Setup ›
