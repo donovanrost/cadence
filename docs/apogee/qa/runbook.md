@@ -147,10 +147,10 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev \
 CADENCE_DEV_DATABASE=cadence_apogee_dev \
   mise exec -- mix run --no-start ../../dev/reflect_orbital_planning.exs
 
-# 6. Activate the fleet (once; rerunnable). From the repo root. --single-operator sets
-#    Earendil's *configuration activation* policy to direct, in this DB only (not commanding).
-EARENDIL_CADENCE_NODE=cadence_apogee \
-  mise exec -- elixir --sname earendil_setup_apogee --cookie "$(cat ../../var/qa-erlang-cookie)" dev/reflect_orbital_activate.exs --single-operator
+# 6. Activate the fleet: IN THE CONSOLE ONLY (director 11-18). dev/reflect_orbital_activate.exs is never run on
+#    this stack, in any mode: Earendil's first activation is a four-eyes console activation (stager and
+#    approver different agents, each recorded), done in the slot before Earendil's first pass. See
+#    var/qa-dev-reset-plan-draft.md, step 6 'Activation' (11-21 dev reset).
 
 # ARMED PASSES (director, 2026-11-10). When a command group waits for a real pass:
 #  - No simulator run pause/resume and no :4011 or simulator restart within 1 h of its AOS.

@@ -70,8 +70,9 @@ Follow runbook.md "Start everything from scratch". In order:
    and has no HMR. That's the one open question.
 6. **Seed** (from `apps/cadence_web`, Phoenix running, all rerunnable):
    `dev/reflect_orbital_demo.exs` (500 spacecraft; needs `EARENDIL_PROVIDER_URL`), then
-   `dev/apogee_qa_personas.exs`, then `dev/reflect_orbital_planning.exs`. Then
-   `dev/reflect_orbital_activate.exs --single-operator` against the node (runbook step 6).
+   `dev/apogee_qa_personas.exs`, then `dev/reflect_orbital_planning.exs`. Never
+   `dev/reflect_orbital_activate.exs` (director 11-18): the fleet's first activation is a four-eyes
+   console activation (runbook step 6).
 7. **Browsers:** system Chrome (`channel: "chrome"`); on CI use `npx playwright install chrome`.
 
 Point the suite elsewhere with `BASE_URL` (default `http://127.0.0.1:4011`). `CI=1` only sets
