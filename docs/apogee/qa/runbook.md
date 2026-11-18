@@ -343,6 +343,11 @@ nothing running, it saves the changes but starts nothing.
 **Command groups:** Group members are approved only through the group's GO/NO-GO (enforced by the product since
 11-18 02:15Z, P0 #106).
 
+**Director GO conditions** (director, 11-18, after batch 1's step 4 + gate re-check ran late): every condition in a
+director GO is copied VERBATIM into the slot's plan as a checklist; the chain owner (lead) confirms the checklist is in
+the plan BEFORE the slot starts; a slot can't start with a GO condition missing from its plan. qa sends lead each slot's
+GO-condition checklist ahead of the slot.
+
 **Struct fields under a stored hash** (director, DECISIONS #108, 11-17). A commit that adds a field to a struct
 reachable from a stored, recomputed hash (binding set, runtime basis, spacecraft-configuration inputs, activation
 review token, authored-override fingerprint) must carry a golden-hash test showing the stored hash unchanged. At
