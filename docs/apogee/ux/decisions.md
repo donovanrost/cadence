@@ -2094,8 +2094,9 @@ are §4.
 - No cause (api's `cause` null when it can't attribute one cleanly, 11-17): the clause goes and nothing is guessed
   (U20): "Window 02:45–10:45Z · 8 h by the planning policy · attempt 2 of 3".
 - The last attempt is in caution: "attempt 3 of 3, the last the policy allows".
-- With none left: Apply is disabled with "No re-plan attempts left (3 of 3). The planning policy sets the limit."
-  plus a link `Planning policy` for admins.
+- With none left: `Propose a re-plan` is disabled (an attempt is spent when a re-plan starts; fe-ops, 11-17) with
+  "No re-plan attempts left (3 of 3). The planning policy sets the limit." plus a link `Planning policy` for admins.
+  Applying a proposal already made (the last attempt's) stays allowed.
 - The window isn't editable (U-review 2026-11-15 A14d).
 
 **Optional note on Submit and on Approve:**
@@ -2738,8 +2739,9 @@ break U20 and U45's "never silent": a dropped item may be the most urgent thing 
     Never a silent short file.
 
 ### U87 · A group member can't be approved on its own (director's procedure rule; accepted, lead 11-17) (fe-ops / api or api-ops)
-Director's rule, until a test settles it: a command that belongs to a command group is approved only through the
-group's GO/NO-GO, never through the standalone command request approve (ops page or REST). The server's refusal is
+Director's rule, now enforced by the product (P0 guard live 11-18 02:15Z; the procedure rule is lifted): a command
+that belongs to a command group is approved only through the group's GO/NO-GO, never through the standalone command
+request approve, reject or enqueue (ops page or REST), and a standalone create can't name a group. The server's refusal is
 the fix (with the P0 result); the console's disable is its reader.
 
 - **Request page:** `Approve` stays disabled, with the A6 reason line under it: "This command is part of a command
@@ -2751,6 +2753,8 @@ the fix (with the P0 result); the console's disable is its reader.
   reject says what it does (api, P0 review): "This command is part of a command group. Reject it with the group's
   NO-GO." Whoever owns
   the P0 fix (api or api-ops) builds it.
+- **Standalone create naming a group** (REST): "Not created: this request names a command group. A group's commands
+  are submitted with the group."
 - **Not here:** the group's own GO/NO-GO is unchanged; this only closes the standalone way round it.
 
 ### U88 · Refusal `mission_model_revision_not_in_catalog`: a revision the catalog doesn't list (domain's interim guard, strict form; lead, 11-17) (domain / api / fe-ops)
@@ -3017,7 +3021,17 @@ Communications, Changes) for ux's look.
   - Keys (api): `switches.telemetry_enabled` / `switches.commanding_enabled`, each `{value, set, revision}`. `set`
     false gives the never-set line; `set` true with `revision` gives "set by r7", without it "set through Setup ›
     Changes".
-  - The draft takes these values; they never show as a change in the comparison.
+  - **Unset while the active configuration runs it** (lead, 11-17; Earendil's 500 craft today): api adds `active` to each
+    switch (its value in the active document; null when nothing is active; the version comes from `active`). When it's on, the line is "On in the active configuration (v3); no change
+    set has set it yet. Saving a new version turns it off unless a change set turns it on first." Never a bare
+    "Off" next to a craft that runs it on (U20).
+  - The draft takes the switch values. They show as a change in the comparison only when the draft's effective
+    value differs from the active configuration's ("Telemetry: On → Off"), and then the crit telemetry-off warning
+    shows on Save as well as on Activate / Request approval.
+  - A draft that sends either switch (422, API clients only; the console never sends them): top level "Not saved:
+    Telemetry and Commanding are changed with a change set, not in a spacecraft's configuration."; on
+    `document.telemetry_enabled` / `document.commanding_enabled`: "Change this with a change set, from the
+    spacecraft's Operation panel."
   - `spacecraft_switch_set_by_change_set` stays a backstop only: "Not saved: Telemetry and Commanding are set
     through Setup › Changes, and they changed after this page loaded. Reload to see them."
 - **Activating with telemetry off** (crit, right above `Activate v4` / `Request approval for v4`, and on L10's What
@@ -3055,6 +3069,13 @@ U90 and U94.
   none or unnamed: "A spacecraft's configuration changed…" (U41, U25).
 - `change_set_activation_stale`: "Not approved: what's running on this mission changed after this was requested, so
   it isn't what was reviewed. The requester sends it again."
+- `spacecraft_configuration_review_required` (the mission's activations go through each spacecraft's configuration,
+  so a plain request can't be approved): "Not approved: on this mission, changes are activated from each
+  spacecraft's configuration (Setup › Spacecraft), so this request can't apply. Reject it, and send the change from
+  the spacecraft's configuration instead."
+- `spacecraft_model_not_active`: "Not approved: the catalog revision EARENDIL-004 was reviewed with isn't the active
+  one any more, so this isn't what was reviewed. The requester sends it again." Without spacecraft ids: "a
+  spacecraft was reviewed with" (U25).
 - `mission_model_activation_manifest_required` (the request doesn't name the catalog revision it activates; a request
   from the console always does): "Not approved: this request doesn't say which catalog revision it activates, so it
   can't apply. The requester sends it again; if it keeps happening, tell the team that runs Cadence."
