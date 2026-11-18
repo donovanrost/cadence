@@ -85,6 +85,11 @@ defmodule CadenceWeb.Console.Problem do
     provider_not_found: {404, "Provider not found."},
     grant_revoked: {409, "That grant was revoked. Ask an organization admin for a new one."},
     already_retired: {409, "This account was already removed."},
+    approval_policy_change_requires_organization_admin:
+      {403, "Not saved: only an organization admin can change this approval setting."},
+    approval_policy_change_requires_mission_admin:
+      {403,
+       "Not saved: only a mission admin or an organization admin can change approval settings."},
     settings_enforced_by_organization:
       {409, "The organization doesn't let missions change this setting."},
     app_action_failed: {422, "The app change was refused."},

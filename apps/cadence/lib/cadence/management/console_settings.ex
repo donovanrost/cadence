@@ -13,7 +13,7 @@ defmodule Cadence.Management.ConsoleSettings do
   """
 
   alias Cadence.Auth.{Scope, SettingsAccess}
-  alias Cadence.Management.{ConfigurationSettingsSection, Settings}
+  alias Cadence.Management.{ApprovalSettingAccess, ConfigurationSettingsSection, Settings}
   alias Cadence.Platform.ScopedSettings
 
   @configuration %{
@@ -212,11 +212,22 @@ defmodule Cadence.Management.ConsoleSettings do
       key: id,
       title: section.title,
       purpose: section.description,
-      fields: fields,
+      fields: governed(scope, mission_id, id, fields, snapshot),
       locked: mission_id != nil and snapshot.source == "enforced",
       version: version(scope.organization_id, mission_id, id, snapshot)
     }
   end
+
+  # #233: the approval setting's fields say what THIS viewer may change (allowed_values,
+  # can_inherit); other fields carry neither key (no field-level limit).
+  defp governed(scope, mission_id, "cadence.governance", fields, snapshot),
+    do:
+      Enum.map(
+        fields,
+        &Map.merge(&1, ApprovalSettingAccess.flags(scope, mission_id, &1.path, snapshot))
+      )
+
+  defp governed(_scope, _mission_id, _id, fields, _snapshot), do: fields
 
   # Per field: a mission's field is its own only when its override sets that path.
   defp source(nil, _set_here?), do: "organization"

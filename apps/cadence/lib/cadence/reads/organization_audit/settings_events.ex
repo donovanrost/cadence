@@ -9,6 +9,7 @@ defmodule Cadence.Reads.OrganizationAudit.SettingsEvents do
   """
 
   alias Cadence.Platform.ScopedSettings
+  alias Cadence.Reads.OrganizationAudit.ApprovalSettingLines
 
   @settings [
     {"cadence.governance", "Governance"},
@@ -32,7 +33,21 @@ defmodule Cadence.Reads.OrganizationAudit.SettingsEvents do
     Enum.map(changed, &changed(&1, where, mission)) ++ migrated(migrated, mission_id, mission)
   end
 
-  defp changed(entry, where, mission) do
+  # #233: an approval setting change says which way it went, with the raw before and after.
+  defp changed(%{section: "cadence.governance", audit: audit} = entry, where, mission)
+       when is_map(audit) do
+    case ApprovalSettingLines.line(audit, mission) do
+      {action, change} ->
+        entry |> changed_entry(where, mission) |> Map.merge(%{action: action, change: change})
+
+      nil ->
+        changed_entry(entry, where, mission)
+    end
+  end
+
+  defp changed(entry, where, mission), do: changed_entry(entry, where, mission)
+
+  defp changed_entry(entry, where, mission) do
     %{
       id: "config:settings:#{entry.section}:#{DateTime.to_unix(entry.at, :microsecond)}",
       at: entry.at,
