@@ -78,6 +78,8 @@ const row = d.object({
       state: d.known(["in_progress", "succeeded", "failed"] as const),
       /** Resume addition (plans/activations.md): when it failed or stalled, and why by code. */
       since: d.optional(d.nullable(d.timestamp)),
+      /** #227 (ux U89, 11-18): when a succeeded apply finished; absent until api sends it. */
+      finished_at: d.optional(d.nullable(d.timestamp)),
       error_code: d.optional(d.nullable(d.known(applyCodes))),
       /** U41 (domain 8f30aac21): whether Retry apply can succeed; absent reads as no. */
       retryable: d.optional(d.boolean),
@@ -251,20 +253,29 @@ export const requestedLine = (r: ActivationRequest) =>
 /**
  * "Approved by Ada L. on 11-13 02:20Z: looks right", for a decided request, with the ADMIN MODE
  * tag after the decider when it applies (U89). A request the mission's setting let through (P3
- * `not_required`): "Applied <summary> on 11-17 09:12Z without a second person's approval, as this
- * mission's setting allows."
+ * `not_required`): "Applied <summary> on <finished_at> without a second person's approval, as this
+ * mission's setting allows."; before that apply succeeds, "No second person's approval was needed,
+ * as this mission's setting allows · 11-17 09:12Z".
  */
 export function decisionLine(r: ActivationRequest): readonly HeaderPart[] | null {
   const dcs = r.decision;
   if (!dcs) return null;
   const at = formatShort(new Date(dcs.at));
-  // U29: the time goes with the act. Only an apply that succeeded reads "Applied" (fe-ops, #227);
-  // the other execution states wait for ux's words and show no decision line.
+  // ux U89 (11-18): until the apply succeeds the line claims only the decision, at the decision's
+  // time; the apply state and U41's words say the rest. "Applied" carries the apply's own finish
+  // time, or no time until api sends it (never the decision's: U20).
   if (dcs.state === "not_required") {
-    if (r.execution?.state !== "succeeded") return null;
+    const ex = r.execution;
+    if (ex?.state !== "succeeded")
+      return [
+        {
+          text: `No second person's approval was needed, as this mission's setting allows · ${at}`,
+        },
+      ];
+    const done = ex.finished_at ? ` on ${formatShort(new Date(ex.finished_at))}` : "";
     return [
       {
-        text: `Applied ${r.summary.replace(/\.$/, "")} on ${at} without a second person's approval, as this mission's setting allows.`,
+        text: `Applied ${r.summary.replace(/\.$/, "")}${done} without a second person's approval, as this mission's setting allows.`,
       },
     ];
   }

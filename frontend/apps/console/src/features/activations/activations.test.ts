@@ -43,6 +43,7 @@ describe("app activation approvals (L10)", () => {
       execution: {
         state: "failed" as const,
         since: undefined,
+        finished_at: undefined,
         error_code: undefined,
         retryable: undefined,
         error: null,
@@ -76,6 +77,7 @@ describe("app activation approvals (L10)", () => {
     execution: {
       state: "succeeded" as const,
       since: undefined,
+      finished_at: "2026-11-13T02:31:00Z" as string | null | undefined,
       error_code: undefined,
       retryable: undefined,
       error: null,
@@ -110,13 +112,26 @@ describe("app activation approvals (L10)", () => {
       ...decided,
       decision: { ...decided.decision, state: "not_required" as const, reason: null },
     };
-    expect(decisionLine(notRequired)).toBeNull();
+    // Not applied yet, applying, or failed: the line claims only the decision (ux U89, 11-18).
+    const decisionOnly =
+      "No second person's approval was needed, as this mission's setting allows · 11-13 02:20Z";
+    expect(decisionText(notRequired)).toBe(decisionOnly);
     for (const state of ["in_progress", "failed"] as const)
-      expect(
-        decisionLine({ ...notRequired, execution: { ...applied.execution, state } }),
-      ).toBeNull();
+      expect(decisionText({ ...notRequired, execution: { ...applied.execution, state } })).toBe(
+        decisionOnly,
+      );
+
+    // Applied carries the apply's finish time, never the decision's (U20); none until api sends it.
     expect(decisionText({ ...notRequired, ...applied })).toBe(
-      "Applied Decom composition for 3 spacecraft on 11-13 02:20Z without a second person's approval, as this mission's setting allows.",
+      "Applied Decom composition for 3 spacecraft on 11-13 02:31Z without a second person's approval, as this mission's setting allows.",
+    );
+    expect(
+      decisionText({
+        ...notRequired,
+        execution: { ...applied.execution, finished_at: undefined },
+      }),
+    ).toBe(
+      "Applied Decom composition for 3 spacecraft without a second person's approval, as this mission's setting allows.",
     );
     // ADMIN MODE goes right after the decider's name, only when true.
     const admin = decisionLine({ ...decided, decision: { ...decided.decision, admin_mode: true } });
@@ -152,6 +167,7 @@ describe("app activation approvals (L10)", () => {
       execution: {
         state: "failed" as const,
         since: "2026-11-13T02:14:00Z",
+        finished_at: undefined,
         error_code,
         error,
         retryable: error_code !== "spacecraft_configuration_review_stale",
@@ -197,6 +213,7 @@ describe("app activation approvals (L10)", () => {
       execution: {
         state: "in_progress" as const,
         since: "2026-11-13T02:14:00Z",
+        finished_at: undefined,
         error_code: null,
         error: "Applying didn't finish, and nothing is working on it now.",
         retryable: true,
@@ -241,6 +258,7 @@ describe("app activation approvals (L10)", () => {
       execution: {
         state: "failed",
         since: "2026-11-13T02:14:00Z",
+        finished_at: undefined,
         error_code: "spacecraft_configuration_review_stale",
         error:
           "A spacecraft's configuration changed after it was reviewed, so the reviewed version can't be applied.",
