@@ -109,6 +109,10 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
    An approval never sits waiting on one session.
 3. **Holds end.** Every heavy-job hold has an end time when it's set. If the step it protects hasn't started
    by then, the hold lapses and the owner re-sets it explicitly, with a new end time.
+4. **GO conditions are in the slot's plan (director, 2026-11-18).** Every condition in a director GO is copied VERBATIM into
+   the slot's plan as a checklist, and the chain owner confirms the checklist is in the plan BEFORE the slot starts.
+   A slot can't start with a GO condition missing from its plan. (11-18: comms batch 1 landed with only its dry's
+   post-checks; its GO conditions, incl. a step-4 + gate re-check meant to come BEFORE it, ran late.)
 
 ## Git
 
@@ -152,6 +156,7 @@ docs stay the record, linked from issues.
   criteria as checkboxes; BUG: what happens / what should happen / how to reproduce / impact; TASK: what / why / done
   when. Plain titles, no team shorthand; shorthand, DECISIONS numbers, doc links, branches and SHAs go on a final
   'Context:' line. Approved samples (11-18): story #150, bug #158, task #166; templates in .github/ISSUE_TEMPLATE after the develop merge.
+- LABELS (director, 11-18): no issue without a TYPE (type:story / type:bug / type:task / type:epic), at least one DOMAIN (domain:telemetry, alarms, dashboards, commanding, contacts, comms, mission-model, spacecraft, approvals, identity, applications, providers, data-management) and at least one COMPONENT (component:management-plane, control-plane, data-plane, api, console, legacy-ui, platform, simulator, tooling).
 - A live check is an acceptance-criteria checkbox ('Verified live on the dev stack') on the story or bug it
   verifies, never its own issue.
 - Keep YOUR OWN cards' Status current (`gh project item-edit`), and comment on the issue at milestones (SHA,
