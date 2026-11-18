@@ -22,52 +22,80 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   @spec by_spacecraft(map(), map()) :: {:ok, %{binary() => [binary()]}} | {:error, term()}
   def by_spacecraft(mission, %{"configuration_review" => _} = metadata) do
     with {:ok, ids} <- SpacecraftModelBindings.reviewed_spacecraft_ids(metadata),
-         {:ok, active} <- Active.load(mission) do
-      Enum.reduce_while(ids, {:ok, %{}}, &collect(mission, metadata, active, &1, &2))
+         {:ok, active} <- Active.load(mission),
+         {:ok, reviewed} <- reviewed_versions(metadata, ids) do
+      {:ok, authors(mission, reviewed, active.entries)}
     else
+      {:error, {:activation_approver_authors_unknown, _ids}} = unknown -> unknown
       _unreadable -> {:error, {:activation_approver_authors_unknown, reviewed_ids(metadata)}}
     end
   end
 
   def by_spacecraft(_mission, _metadata), do: {:ok, %{}}
 
-  defp collect(mission, metadata, active, id, {:ok, acc}) do
-    review = SpacecraftModelBindings.review_for(metadata, id) || %{}
+  # ONE query for every reviewed craft's reviewed version (a fleet review holds up to 500, and
+  # approval runs this under its locks; api-ops, lead 11-18). A craft whose review names no
+  # revision, or whose revision is missing or another craft's, fails closed: the first such craft
+  # in review order, as before.
+  defp reviewed_versions(metadata, ids) do
+    revision_ids =
+      Map.new(ids, fn id ->
+        {id,
+         (SpacecraftModelBindings.review_for(metadata, id) || %{})["configuration_revision_id"]}
+      end)
 
-    case authors(mission, id, review["configuration_revision_id"], active.entries[id]) do
-      {:ok, authors} -> {:cont, {:ok, Map.put(acc, id, authors)}}
-      :error -> {:halt, {:error, {:activation_approver_authors_unknown, [id]}}}
-    end
+    rows = revision_rows(revision_ids |> Map.values() |> Enum.filter(&is_binary/1))
+
+    Enum.reduce_while(ids, {:ok, %{}}, fn id, {:ok, acc} ->
+      case rows[revision_ids[id]] do
+        {^id, version} ->
+          {:cont, {:ok, Map.put(acc, id, version)}}
+
+        _missing_or_another_craft ->
+          {:halt, {:error, {:activation_approver_authors_unknown, [id]}}}
+      end
+    end)
   end
+
+  defp revision_rows([]), do: %{}
+
+  defp revision_rows(revision_ids) do
+    RevisionRow
+    |> where([row], row.configuration_revision_id in ^revision_ids)
+    |> select([row], {row.configuration_revision_id, {row.spacecraft_id, row.version}})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  # ONE query for the authors: every version of the reviewed craft between the lowest floor and
+  # the highest reviewed version; each craft's own window (after its active version, up to its
+  # reviewed one) is applied here.
+  defp authors(_mission, reviewed, _entries) when map_size(reviewed) == 0, do: %{}
+
+  defp authors(mission, reviewed, entries) do
+    floors = Map.new(reviewed, fn {id, _version} -> {id, floor_version(entries[id])} end)
+    ids = Map.keys(reviewed)
+
+    RevisionRow
+    |> where(
+      [row],
+      row.organization_id == ^mission.organization_id and row.mission_id == ^mission.mission_id and
+        row.spacecraft_id in ^ids and row.version > ^Enum.min(Map.values(floors)) and
+        row.version <= ^Enum.max(Map.values(reviewed))
+    )
+    |> select([row], {row.spacecraft_id, row.version, row.created_by})
+    |> Repo.all()
+    |> Enum.filter(fn {id, version, _by} -> version > floors[id] and version <= reviewed[id] end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 2))
+    |> then(&Map.new(reviewed, fn {id, _version} -> {id, Enum.uniq(Map.get(&1, id, []))} end))
+  end
+
+  defp floor_version(active_entry), do: (active_entry || %{})["configuration_version"] || 0
 
   defp reviewed_ids(metadata) do
     case SpacecraftModelBindings.reviewed_spacecraft_ids(metadata) do
       {:ok, ids} -> ids
       _unreadable -> []
-    end
-  end
-
-  defp authors(_mission, _id, nil, _active_entry), do: :error
-
-  defp authors(mission, id, revision_id, active_entry) do
-    case Repo.get(RevisionRow, revision_id) do
-      %RevisionRow{version: reviewed, spacecraft_id: ^id} ->
-        floor = (active_entry || %{})["configuration_version"] || 0
-
-        RevisionRow
-        |> where(
-          [row],
-          row.organization_id == ^mission.organization_id and
-            row.mission_id == ^mission.mission_id and row.spacecraft_id == ^id and
-            row.version > ^floor and row.version <= ^reviewed
-        )
-        |> select([row], row.created_by)
-        |> distinct(true)
-        |> Repo.all()
-        |> then(&{:ok, &1})
-
-      _missing_or_another_craft ->
-        :error
     end
   end
 end
