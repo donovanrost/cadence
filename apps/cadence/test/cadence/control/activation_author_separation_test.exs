@@ -8,7 +8,7 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   """
   use Cadence.RuntimeCase, async: false
 
-  alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
+  alias Cadence.Applications.SpacecraftConfiguration.{Authors, Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
@@ -69,6 +69,26 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
 
     assert {:error, {:activation_approver_authored_content, [^id]}} = approve(c.a, request)
     assert {:ok, _request, _decision, _approved} = approve(c.c, request)
+  end
+
+  test "authors fail closed: a review whose version can't be found can't be approved by anyone",
+       c do
+    review = %{
+      "configuration_review" => %{
+        "spacecraft_id" => c.craft.spacecraft_id,
+        "configuration_revision_id" => "no-such-revision",
+        "configuration_token" => "x",
+        "base_activation_id" => nil
+      }
+    }
+
+    id = c.craft.spacecraft_id
+
+    assert {:error, {:activation_approver_authors_unknown, [^id]}} =
+             Authors.by_spacecraft(c.mission, review)
+
+    assert {:ok, %{}} =
+             Authors.by_spacecraft(c.mission, %{})
   end
 
   defp save(c, scope, craft, apids) do

@@ -8,12 +8,14 @@ defmodule Cadence.Control.Activations.Approval do
   under the locks in `Cadence.Governance.ActivationLocks`' order.
   """
   alias Cadence.Applications.ConfigurationLock
+  alias Cadence.Applications.SpacecraftConfiguration.Authors
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations.Preflight
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels
+  alias Cadence.Missions
 
   @doc """
   Approves `request_id` only if its apply could run (`preflight/2`); otherwise nothing is recorded
@@ -49,7 +51,8 @@ defmodule Cadence.Control.Activations.Approval do
              request.mission_id,
              model_revision_ids(request)
            ),
-         :ok <- Preflight.run(request, opts) do
+         :ok <- Preflight.run(request, opts),
+         :ok <- distinct_from_authors(scope, request) do
       ManagementActivations.approve(
         scope,
         request.activation_request_id,
@@ -58,6 +61,32 @@ defmodule Cadence.Control.Activations.Approval do
       )
     end
   end
+
+  # Board #236: where the policy requires an independent approver, the approver may not be ANY
+  # author of the spacecraft configuration under review (not only its requester, which
+  # Management's decidable checks). Checked against the request's recorded policy, validated
+  # current by the preflight.
+  defp distinct_from_authors(scope, %{metadata: %{"configuration_review" => _}} = request) do
+    with true <- separation?(request),
+         {:ok, mission} <- Missions.fetch_mission(request.organization_id, request.mission_id),
+         {:ok, by_spacecraft} <- Authors.by_spacecraft(mission, request.metadata) do
+      authored = for {id, authors} <- by_spacecraft, scope.user.user_id in authors, do: id
+
+      if authored == [],
+        do: :ok,
+        else: {:error, {:activation_approver_authored_content, Enum.sort(authored)}}
+    else
+      false -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp distinct_from_authors(_scope, _request), do: :ok
+
+  # Fails closed (api-ops): only a request whose recorded policy says separation is OFF ('direct')
+  # skips the author check; a missing or malformed policy runs it.
+  defp separation?(%{policy_document: %{"separation_of_duties" => false}}), do: false
+  defp separation?(_request), do: true
 
   defp model_revision_ids(%{metadata: metadata}) do
     from_fleet = if FleetSnapshot.fleet?(metadata), do: fleet_revision_ids(metadata), else: []
