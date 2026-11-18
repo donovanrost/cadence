@@ -23,7 +23,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   def by_spacecraft(mission, %{"configuration_review" => _} = metadata) do
     with {:ok, ids} <- SpacecraftModelBindings.reviewed_spacecraft_ids(metadata),
          {:ok, active} <- Active.load(mission),
-         {:ok, reviewed} <- reviewed_versions(metadata, ids) do
+         {:ok, reviewed} <- reviewed_versions(mission, metadata, ids) do
       {:ok, authors(mission, reviewed, active.entries)}
     else
       {:error, {:activation_approver_authors_unknown, _ids}} = unknown -> unknown
@@ -37,14 +37,14 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   # approval runs this under its locks; api-ops, lead 11-18). A craft whose review names no
   # revision, or whose revision is missing or another craft's, fails closed: the first such craft
   # in review order, as before.
-  defp reviewed_versions(metadata, ids) do
+  defp reviewed_versions(mission, metadata, ids) do
     revision_ids =
       Map.new(ids, fn id ->
         {id,
          (SpacecraftModelBindings.review_for(metadata, id) || %{})["configuration_revision_id"]}
       end)
 
-    rows = revision_rows(revision_ids |> Map.values() |> Enum.filter(&is_binary/1))
+    rows = revision_rows(mission, revision_ids |> Map.values() |> Enum.filter(&is_binary/1))
 
     Enum.reduce_while(ids, {:ok, %{}}, fn id, {:ok, acc} ->
       case rows[revision_ids[id]] do
@@ -57,11 +57,15 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
     end)
   end
 
-  defp revision_rows([]), do: %{}
+  defp revision_rows(_mission, []), do: %{}
 
-  defp revision_rows(revision_ids) do
+  defp revision_rows(mission, revision_ids) do
     RevisionRow
-    |> where([row], row.configuration_revision_id in ^revision_ids)
+    |> where(
+      [row],
+      row.organization_id == ^mission.organization_id and row.mission_id == ^mission.mission_id and
+        row.configuration_revision_id in ^revision_ids
+    )
     |> select([row], {row.configuration_revision_id, {row.spacecraft_id, row.version}})
     |> Repo.all()
     |> Map.new()

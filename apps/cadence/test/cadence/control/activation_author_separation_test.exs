@@ -8,7 +8,14 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   """
   use Cadence.RuntimeCase, async: false
 
-  alias Cadence.Applications.SpacecraftConfiguration.{Authors, Drafts, Review, RevisionRow}
+  alias Cadence.Applications.SpacecraftConfiguration.{
+    Active,
+    Authors,
+    Drafts,
+    Review,
+    RevisionRow
+  }
+
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
@@ -93,6 +100,36 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
              Authors.by_spacecraft(c.mission, %{})
   end
 
+  test "authors count only after EACH craft's active version: an author of an active one may approve the next",
+       c do
+    save(c, c.a, c.craft, [42])
+    {:ok, first} = submit(c, c.b, [c.craft])
+
+    assert {:ok, %{status: :succeeded}} =
+             ControlActivations.approve_and_execute(c.c, first.activation_request_id, "Reviewed")
+
+    assert {:ok, active} = Active.load(c.mission)
+    assert active.entries[c.craft.spacecraft_id]["configuration_version"] == 1
+
+    # A second craft with nothing active, so the fleet's floors are mixed (1 and 0): the authors
+    # query reads from the lowest floor, and each craft's own floor must still apply.
+    other = Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Second")
+
+    Fixtures.persist_source_endpoint!(c.org, c.mission.mission_id, other.spacecraft_id,
+      display_name: "Second TT&C"
+    )
+
+    save(c, c.b, c.craft, [42])
+    save(c, c.b, other, [42])
+    {:ok, second} = submit(c, c.c, [c.craft, other])
+    ids = Enum.sort([c.craft.spacecraft_id, other.spacecraft_id])
+
+    # B saved the reviewed version of both craft: B authored them and can't approve.
+    assert {:error, {:activation_approver_authored_content, ^ids}} = approve(c.b, second)
+    # A saved only the first craft's ACTIVE version 1, which isn't in this review: A may approve.
+    assert {:ok, _request, _decision, _approved} = approve(c.a, second)
+  end
+
   test "a 500-craft fleet review reads its authors in two queries, each craft in its own window",
        c do
     now = DateTime.utc_now()
@@ -168,12 +205,12 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
     me = self()
     handler = "author-queries-#{inspect(ref)}"
 
+    # The handler runs in the querying process: count only this test's own queries, not those of
+    # other processes running meanwhile.
     :telemetry.attach(
       handler,
       [:cadence, :repo, :query],
-      fn _event, _measure, _meta, _cfg ->
-        send(me, {:query, ref})
-      end,
+      fn _event, _measure, _meta, _cfg -> if self() == me, do: send(me, {:query, ref}) end,
       nil
     )
 
