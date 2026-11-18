@@ -336,9 +336,12 @@ each account. From 11-18, once Earendil and the QA mission are on the independen
 admin, first item that day), the flow is: **stage, submit, then a second agent approves and applies**. Until then an
 admin's approve-and-apply writes the submission but no row in `mission_config_reviews`; record it as found.
 
-**Command groups** (director 11-17, until the P0 audit item is settled): nobody approves a command-group member
-through the standalone request approve. After an armed run, qa checks that its group went only through the group
-path.
+**New missions vs change sets** (domain, 11-18 item 3): a new mission starts running through each spacecraft's
+configuration (Review, then Activate). A change set changes a mission that's already running; on a mission with
+nothing running, it saves the changes but starts nothing.
+
+**Command groups:** Group members are approved only through the group's GO/NO-GO (enforced by the product since
+11-18 02:15Z, P0 #106).
 
 **Struct fields under a stored hash** (director, DECISIONS #108, 11-17). A commit that adds a field to a struct
 reachable from a stored, recomputed hash (binding set, runtime basis, spacecraft-configuration inputs, activation
