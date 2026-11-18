@@ -3081,8 +3081,12 @@ Communications, Changes) for ux's look.
     approved: you saved the configurations of EARENDIL-004, EARENDIL-009 and 3 more spacecraft in this request, so
     another person approves it. Your approval wasn't recorded." (3 names, then "and N more"); no names: "Not
     approved: you saved part of what this request activates, so another person approves it. Your approval wasn't
-    recorded." Suggested to api/lead: disable Approve up front when the read can say so (A6, the same sentence
-    without "Not approved:" and the ending).
+    recorded." Up front (#240: `cannot_approve_because` `authored_content` | `authors_unknown` on the detail;
+    `can_decide` stays true, so Reject stays on): Approve is disabled, and its reason (muted, under the Decide
+    panel's intro line, and as the button's description) is the same sentence without "Not approved:" and the
+    ending; for authors_unknown it keeps "Reject it so the requester…". A reason the console doesn't know: "You
+    can't approve this request, so another person approves it. Reject it if it shouldn't wait." with the code in
+    Technical details (never the authors_unknown line, U20).
   - Authors unknown (#236 fail closed, lead 11-18; 403 `activation_approver_authors_unknown`, nothing recorded): "Not
     approved: Cadence can't tell who saved this configuration, so it can't check that you weren't one of them.
     Your approval wasn't recorded. Reject it so the requester can send it again; if it keeps happening, tell the

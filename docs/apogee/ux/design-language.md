@@ -183,7 +183,9 @@ themselves.
 - **Focus [decision]:** canvas defines none. Use `outline: 2px solid readout; outline-offset: 2px`
   on `:focus-visible` for every interactive element. Inside the fleet matrix and pass strips, where
   a white ring already means "in contact", focus uses the same ring **plus** the inspector/tooltip
-  naming the cell, so focus is never ambiguous.
+  naming the cell, so focus is never ambiguous. A full-width search bar at the top of a sheet or the
+  palette (#243) has no ring: on focus its bottom edge becomes 2px `readout` (1px border plus a 1px inset
+  shadow, so nothing shifts).
 - Hover: buttons and rows go to `raised`; text links go `readout → bright`. No color shifts on
   status elements.
 - Pressed/selected: white inset bar (rows, tabs, steps) or white fill (choice segments, mode switch).
