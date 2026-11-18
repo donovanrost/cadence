@@ -48,6 +48,8 @@ const mountField = (confirmReset: boolean) => {
       busy: false,
       confirmReset,
       orgName: "Reflect Orbital",
+      missionName: "EARENDIL",
+      explain: true,
     },
     attachTo: document.body,
   });

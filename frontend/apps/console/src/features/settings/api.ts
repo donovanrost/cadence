@@ -15,6 +15,13 @@ const where = object({
   // known: one new server value mustn't fail the whole settings read (ux, typing rules).
   source: optional(nullable(decoders.known(["mission", "organization", "default"] as const))),
   inherited_value: raw,
+  /**
+   * #233 (api): the values THIS viewer may choose, as the enum's own values; [] = the viewer can't
+   * change it. Absent (fields that aren't governed) = no field-level limit.
+   */
+  allowed_values: optional(nullable(array(raw, 50))),
+  /** #233, mission only: whether this viewer may clear the mission's value back to the organization's. */
+  can_inherit: optional(nullable(boolean)),
 });
 /** A kind-schema field plus its effective value and where that value comes from. */
 const field: Reader<SchemaField & Decoded<typeof where>> = (value, path = "") => ({

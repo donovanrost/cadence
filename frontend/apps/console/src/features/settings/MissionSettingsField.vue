@@ -3,6 +3,14 @@ import { computed, ref, watch } from "vue";
 import { diffEdits, SchemaForm, type FormValues } from "@/features/changes/index.ts";
 import { ApButton, ApInlineConfirm, ApTag, refocusFirst, useInPlaceSwap } from "@/ui";
 import { fieldTag, initialValues, resetConfirm, valueText, type SettingsField } from "./api.ts";
+import {
+  canInherit,
+  disabledValues,
+  inheritHint,
+  optionsHint,
+  readOnly,
+  readOnlyHint,
+} from "./governance.ts";
 
 /**
  * One mission setting (ux per-field overrides, the Profile P3 pattern): its value and source tag;
@@ -15,6 +23,9 @@ const props = defineProps<{
   /** Governance/approval: Reset confirms first, naming the organization's value (ux). */
   confirmReset: boolean;
   orgName: string;
+  missionName: string;
+  /** Explain #233's limits (ux U96); off in a locked section, whose callout says why. */
+  explain: boolean;
 }>();
 const emit = defineEmits<{
   save: [values: Readonly<Record<string, unknown>>];
@@ -22,6 +33,19 @@ const emit = defineEmits<{
   unchanged: [];
 }>();
 const setHere = computed(() => props.field.source === "mission");
+/** #233: this viewer may choose no value here (allowed_values []), so there's no Change/Override. */
+const fixed = computed(() => readOnly(props.field));
+const inherits = computed(() => canInherit(props.field));
+const disabled = computed(() => disabledValues([props.field]));
+/** ux U96's lines for what this viewer can't do, shown before any save. */
+const hints = computed(() =>
+  props.explain
+    ? [
+        editing.value ? optionsHint(props.field) : readOnlyHint(props.field),
+        setHere.value && !editing.value ? inheritHint(props.field, props.missionName) : null,
+      ].filter((h): h is string => h !== null)
+    : [],
+);
 const schema = computed(() => ({ kind: "settings", fields: [props.field] }));
 // a11y A1/A5: Override and Change swap in the field (focus it); Save and Cancel swap back to the
 // opener. A reset or save that flips the source re-renders the buttons; land on the opener then.
@@ -67,6 +91,7 @@ function save() {
       v-model="values"
       :schema="schema"
       :errors="errors"
+      :disabled-values="disabled"
     />
     <span v-else class="font-mono text-md" :class="setHere ? 'text-readout' : 'text-text-4'">{{
       valueText(field)
@@ -85,7 +110,7 @@ function save() {
         <ApButton size="compact" variant="ghost" @click="edit.hide()">Cancel</ApButton>
       </template>
       <template v-else>
-        <ApButton size="compact" data-swap-opener @click="start">{{
+        <ApButton v-if="!fixed" size="compact" data-swap-opener @click="start">{{
           setHere ? "Change" : "Override"
         }}</ApButton>
         <ApInlineConfirm
@@ -100,8 +125,8 @@ function save() {
             <ApButton
               size="compact"
               variant="ghost"
-              :disabled="busy"
-              disabled-reason="Saving…"
+              :disabled="busy || !inherits"
+              :disabled-reason="busy ? 'Saving…' : (inheritHint(field, missionName) ?? undefined)"
               v-bind="attrs"
               >Reset to inherited…</ApButton
             >
@@ -112,12 +137,13 @@ function save() {
           v-else-if="setHere"
           size="compact"
           variant="ghost"
-          :disabled="busy"
-          disabled-reason="Saving…"
+          :disabled="busy || !inherits"
+          :disabled-reason="busy ? 'Saving…' : (inheritHint(field, missionName) ?? undefined)"
           @click="emit('reset')"
           >Reset to inherited</ApButton
         >
       </template>
     </div>
+    <span v-for="h in hints" :key="h" class="text-sm text-text-3">{{ h }}</span>
   </div>
 </template>

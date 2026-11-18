@@ -18,12 +18,16 @@ import { useSectionSave } from "./useSectionSave.ts";
  */
 const props = defineProps<{ scope: SettingsScope; section: SettingsSection; canChange: boolean }>();
 const emit = defineEmits<{ saved: [] }>();
+const where = useConsoleScope();
+const missionName = computed(() =>
+  where.value.kind === "mission" ? where.value.mission.name : "this mission",
+);
 const { busy, note, save } = useSectionSave(
   () => props.scope,
   () => props.section,
   () => emit("saved"),
+  () => missionName.value,
 );
-const where = useConsoleScope();
 const orgName = computed(() =>
   where.value.kind === "organization" || where.value.kind === "mission"
     ? where.value.organization.name
@@ -50,6 +54,8 @@ function unchanged() {
       :busy="busy"
       :confirm-reset="confirmsReset(section.key)"
       :org-name="orgName"
+      :mission-name="missionName"
+      :explain="section.locked !== true"
       @save="(v) => void save(v)"
       @reset="reset(f)"
       @unchanged="unchanged"

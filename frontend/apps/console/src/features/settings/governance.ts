@@ -1,0 +1,89 @@
+import { isError, type ApiError } from "@/api";
+import type { SettingsField, SettingsScope } from "./api.ts";
+
+/**
+ * #233 (api's allowed_values / can_inherit; ux U96): who may change a mission's approval setting.
+ * The console can't see the viewer's role, so every line is picked from what the read says: the
+ * values this viewer may choose, whether they may inherit, and the field's current value.
+ */
+
+// compared-as-text: a settings field path, an open set from the governance section's schema
+const isApproval = (f: Pick<SettingsField, "path">) => f.path === "approval_requirement";
+/** The strictest approval requirement (needs a second person's approval). */
+const STRICTEST = "independent";
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** The form's text for an enum value (SchemaForm's option value). */
+const optionText = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
+
+/** The viewer can't change this field at all (allowed_values []). */
+export const readOnly = (f: SettingsField) => f.allowed_values?.length === 0;
+
+/**
+ * Per field, the enum options this viewer can't choose, as SchemaForm option text: shown disabled,
+ * not hidden (ux U96 A6). Absent allowed_values limits nothing.
+ */
+export function disabledValues(
+  fields: readonly SettingsField[],
+): Readonly<Record<string, readonly string[]>> {
+  const out: Record<string, readonly string[]> = {};
+  for (const f of fields) {
+    const allowed = f.allowed_values;
+    if (!allowed || allowed.length === 0 || !f.enum) continue;
+    const off = f.enum.filter((o) => !allowed.some((v) => same(v, o.value)));
+    if (off.length > 0) out[f.path] = off.map((o) => optionText(o.value));
+  }
+  return out;
+}
+
+/** ux U96: why the approval setting is read-only, by its current value (no role in the read). */
+export function readOnlyHint(f: SettingsField): string | null {
+  if (!isApproval(f) || !readOnly(f)) return null;
+  return same(f.value, STRICTEST)
+    ? "It's already set to the strictest option. Only an organization admin can loosen it."
+    : "Only a mission admin or an organization admin can change this.";
+}
+
+/** ux U96: under the form, when an option is shown disabled. */
+export const optionsHint = (f: SettingsField): string | null =>
+  isApproval(f) && disabledValues([f])[f.path]
+    ? "Only an organization admin can let changes apply without approval."
+    : null;
+
+/** The viewer may clear the mission's value back to the organization's (absent = may). */
+export const canInherit = (f: SettingsField) => f.can_inherit !== false;
+
+/** ux U96: why Reset to inherited is disabled. */
+export const inheritHint = (f: SettingsField, missionName: string): string | null =>
+  isApproval(f) && !canInherit(f)
+    ? `The organization's setting lets changes apply without approval, so only an organization admin can switch ${missionName} to it.`
+    : null;
+
+/**
+ * ux U96: a refused approval-setting save, worded by the level it saved; null for any other failure
+ * (the shared failure outcome words it). A mission admin's save at the organization level is a plain
+ * 403 forbidden.
+ */
+export function approvalRefusal(
+  error: ApiError,
+  scope: SettingsScope["kind"],
+  sectionKey: string,
+  missionName: string,
+): string | null {
+  if (isError(error, "approval_policy_change_requires_mission_admin"))
+    return "Not saved: only a mission admin or an organization admin can change approval settings.";
+  const orgOnly =
+    isError(error, "approval_policy_change_requires_organization_admin") ||
+    // compared-as-text: a settings section key, an open set from the server's settings registry
+    (error.kind === "forbidden" && scope === "organization" && sectionKey === "cadence.governance");
+  if (!orgOnly) return null;
+  return scope === "mission"
+    ? `Not saved: only an organization admin can let changes on ${missionName} apply without approval.`
+    : "Not saved: only an organization admin can change the organization's approval setting.";
+}
+
+/** ux U96, the enforced case: the governance section's locked line (other sections keep theirs). */
+export const lockedLine = (sectionKey: string) =>
+  // compared-as-text: a settings section key, an open set from the server's settings registry
+  sectionKey === "cadence.governance"
+    ? "The organization sets this for every mission, and missions can't change it. An organization admin changes it in the organization's settings."
+    : "The organization sets these and doesn't allow missions to override them.";

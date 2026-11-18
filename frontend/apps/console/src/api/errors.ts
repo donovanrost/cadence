@@ -39,6 +39,9 @@ export const errorCodes = [
   "invitation_for_another_account",
   "service_identity_not_found",
   "settings_enforced_by_organization",
+  // #233 (api): who may change a mission or organization approval setting (ux U96 words).
+  "approval_policy_change_requires_organization_admin",
+  "approval_policy_change_requires_mission_admin",
   // Missions, spacecraft, setup
   "mission_not_found",
   "spacecraft_not_found",
