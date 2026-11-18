@@ -81,11 +81,23 @@ async function expectTrapped(page: Page, sheet: Locator, nonModal: boolean): Pro
         'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ).length,
   );
+  // A native showModal() dialog lets Tab pass from its last control to the browser's own UI,
+  // where the page sees <body> focused; that isn't the page behind, so it passes. Focus on any
+  // element outside the sheet fails.
   for (const key of ["Tab", "Shift+Tab"]) {
     for (let i = 0; i < stops + 2; i++) {
       await page.keyboard.press(key);
-      const inside = await sheet.evaluate((d) => d.contains(document.activeElement));
-      expect(inside, `A3: ${key} ×${i + 1} stays inside the sheet`).toBe(true);
+      const where = await sheet.evaluate((d) => {
+        const active = document.activeElement;
+        if (active === null || active === document.body) return "browser";
+        return d.contains(active)
+          ? "inside"
+          : `${active.tagName.toLowerCase()} "${(active.textContent ?? "").trim().slice(0, 40)}"`;
+      });
+      expect(
+        ["inside", "browser"],
+        `A3: ${key} ×${i + 1} reached ${where} behind the sheet`,
+      ).toContain(where);
     }
   }
 }
