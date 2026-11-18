@@ -17,6 +17,10 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const hostFiles = new Set(["host.js"]);
 // Explicitly reviewed producer outputs; never derive this allowlist from the artifact being checked.
 const authoritativeHostJavascriptDigests = new Set([
+  // Reviewed the team-to-develop merge (#198; ui/apogee-spa a3a151bfa + develop 2d8951f11): the checker's
+  // tokenizer finds the same 2 federation-loader templates as before and nothing new; identical digest from
+  // two pinned build:publication runs. Reviewed by devops; approved by the director.
+  "228b53d50153c9fb6d8024ce2201c6ccec00770cb5143db1759fcacd05edbdc5",
   // Reviewed Vue 3.5.41 -> 3.5.45 runtime update (HIGH-advisory bump), replacing 851ab38c…: the
   // checker's tokenizer finds the same 2 federation-loader templates as before and nothing new;
   // identical digest from two pinned build:phoenix runs. Reviewed by director from devops evidence.
