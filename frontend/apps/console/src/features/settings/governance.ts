@@ -35,7 +35,11 @@ export function disabledValues(
   return out;
 }
 
-/** ux U96: why the approval setting is read-only, by its current value (no role in the read). */
+/**
+ * ux U96: why the approval setting is read-only, by its current value (no role in the read).
+ * TODO(#233): only approval_requirement is governed today; a field governed later needs ux's line
+ * here too, or its read-only state has no reason (A6).
+ */
 export function readOnlyHint(f: SettingsField): string | null {
   if (!isApproval(f) || !readOnly(f)) return null;
   return same(f.value, STRICTEST)
@@ -49,10 +53,25 @@ export const optionsHint = (f: SettingsField): string | null =>
     ? "Only an organization admin can let changes apply without approval."
     : null;
 
+/**
+ * ux U96 pin: the value comes from the organization and this viewer may set that same value for the
+ * mission, so it's kept if the organization's setting changes (api: a mission admin on a mission
+ * inheriting independent gets allowed_values [independent]).
+ */
+export const pinnable = (f: SettingsField) =>
+  f.source !== "mission" && (f.allowed_values?.some((v) => same(v, f.value)) ?? false);
+
+/** Setting the inherited value is the viewer's only choice, so Override would offer nothing more. */
+export const onlyPin = (f: SettingsField) => pinnable(f) && f.allowed_values?.length === 1;
+
+/** ux U96: the line beside 'Set for <mission>'. */
+export const pinLine = (missionName: string) =>
+  `${missionName} uses the organization's setting. Set it for ${missionName} to keep it if the organization's setting changes.`;
+
 /** The viewer may clear the mission's value back to the organization's (absent = may). */
 export const canInherit = (f: SettingsField) => f.can_inherit !== false;
 
-/** ux U96: why Reset to inherited is disabled. */
+/** ux U96: why Reset to inherited is disabled. TODO(#233): approval-only, as readOnlyHint. */
 export const inheritHint = (f: SettingsField, missionName: string): string | null =>
   isApproval(f) && !canInherit(f)
     ? `The organization's setting lets changes apply without approval, so only an organization admin can switch ${missionName} to it.`

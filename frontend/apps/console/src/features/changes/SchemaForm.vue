@@ -15,6 +15,8 @@ const props = defineProps<{
   errors: Readonly<Record<string, string>>;
   /** Per field path, enum options shown but not choosable (option text; settings #233, ux U96). */
   disabledValues?: Readonly<Record<string, readonly string[]>>;
+  /** Per field path, an extra line in the field's own hint, so it's announced with the control (A6). */
+  hints?: Readonly<Record<string, string>>;
 }>();
 const values = defineModel<FormValues>({ required: true });
 const option = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
@@ -49,6 +51,7 @@ const hint = (f: SchemaField) =>
     f.help,
     f.unit === "s" ? "e.g. 48h, 2d, 90m" : null,
     f.default !== null && f.type !== "boolean" ? `Default ${defaultText(f)}` : null,
+    props.hints?.[f.path] ?? null,
   ]
     .filter(Boolean)
     .join(" · ") || undefined;

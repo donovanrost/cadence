@@ -8,7 +8,9 @@ import {
   disabledValues,
   inheritHint,
   lockedLine,
+  onlyPin,
   optionsHint,
+  pinnable,
   readOnly,
   readOnlyHint,
 } from "./governance.ts";
@@ -171,7 +173,7 @@ describe("a mission's approval setting, per #233 limits (ux U96 A6)", () => {
     expect(w.emitted("reset")).toBeUndefined();
     expect(w.text()).toContain("so only an organization admin can switch EARENDIL to it.");
   });
-  it("Change shows the looser option disabled, with the line under the form", async () => {
+  it("Change shows the looser option disabled, its reason in the select's own hint", async () => {
     const w = mountField(approval({ allowed_values: ["independent"], can_inherit: true }));
     await w
       .findAll("button")
@@ -185,12 +187,72 @@ describe("a mission's approval setting, per #233 limits (ux U96 A6)", () => {
       ["direct", true],
       ["independent", false],
     ]);
-    expect(w.text()).toContain(
+    // A6: the reason is announced with the control, through the select's aria-describedby.
+    const described = (w.get("select").attributes("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ");
+    expect(described).toContain(
       "Only an organization admin can let changes apply without approval.",
     );
+  });
+  it("keeps a current value that's now disabled shown and selected while editing", async () => {
+    const w = mountField(
+      approval({ allowed_values: ["independent"], can_inherit: true }, "direct"),
+    );
+    await w
+      .findAll("button")
+      .find((b) => b.text() === "Change")
+      ?.trigger("click");
+    await flushPromises();
+    const select = w.get("select").element;
+    if (!(select instanceof HTMLSelectElement)) throw new Error("no select");
+    expect(select.value).toBe("direct");
+    expect(select.selectedOptions[0]?.disabled).toBe(true);
+    await w
+      .findAll("button")
+      .find((b) => b.text() === "Save")
+      ?.trigger("click");
+    expect(w.emitted("unchanged")).toHaveLength(1);
+    expect(w.emitted("save")).toBeUndefined();
   });
   it("explains nothing in a locked section (its callout does)", () => {
     const w = mountField(approval({ allowed_values: [], can_inherit: false }, "direct"), false);
     expect(w.text()).not.toContain("Only a mission admin");
+  });
+});
+
+describe("Set for <mission>: keep the organization's value (ux U96 pin)", () => {
+  /** A mission inheriting independent, as api reads it to a mission admin: allowed [independent]. */
+  const inherited = (allowed: readonly unknown[]) =>
+    approval({ source: "organization", allowed_values: allowed, can_inherit: true }, "independent");
+  it("offers it only for an inherited value this viewer may set", () => {
+    expect([pinnable(inherited(["independent"])), onlyPin(inherited(["independent"]))]).toEqual([
+      true,
+      true,
+    ]);
+    // An organization admin may also choose another value, so Override stays.
+    expect(onlyPin(inherited(["direct", "independent"]))).toBe(false);
+    expect(pinnable(inherited([]))).toBe(false);
+    expect(pinnable(approval({ allowed_values: ["independent"] }, "independent"))).toBe(false);
+    expect(pinnable(approval({ source: "organization" }, "independent"))).toBe(false);
+  });
+  it("sets the inherited value for the mission, with ux's line, in place of Override", async () => {
+    const w = mountField(inherited(["independent"]));
+    expect(buttons(w)).toEqual(["Set for EARENDIL"]);
+    expect(w.text()).toContain(
+      "EARENDIL uses the organization's setting. Set it for EARENDIL to keep it if the organization's setting changes.",
+    );
+    await w
+      .findAll("button")
+      .find((b) => b.text() === "Set for EARENDIL")
+      ?.trigger("click");
+    expect(w.emitted("save")).toEqual([[{ approval_requirement: "independent" }]]);
+  });
+  it("keeps Override beside it when the viewer may choose more", () => {
+    expect(buttons(mountField(inherited(["direct", "independent"])))).toEqual([
+      "Set for EARENDIL",
+      "Override",
+    ]);
   });
 });

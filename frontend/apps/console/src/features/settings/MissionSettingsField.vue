@@ -7,7 +7,10 @@ import {
   canInherit,
   disabledValues,
   inheritHint,
+  onlyPin,
   optionsHint,
+  pinLine,
+  pinnable,
   readOnly,
   readOnlyHint,
 } from "./governance.ts";
@@ -36,13 +39,22 @@ const setHere = computed(() => props.field.source === "mission");
 /** #233: this viewer may choose no value here (allowed_values []), so there's no Change/Override. */
 const fixed = computed(() => readOnly(props.field));
 const inherits = computed(() => canInherit(props.field));
+/** ux U96 pin: keep the organization's current value for this mission ('Set for <mission>'). */
+const pin = computed(() => pinnable(props.field));
+const override = computed(() => !fixed.value && !onlyPin(props.field));
 const disabled = computed(() => disabledValues([props.field]));
+/** ux U96: why an option is disabled, in the select's own hint (aria-describedby, A6). */
+const formHints = computed((): Readonly<Record<string, string>> => {
+  const h = props.explain ? optionsHint(props.field) : null;
+  return h ? { [props.field.path]: h } : {};
+});
 /** ux U96's lines for what this viewer can't do, shown before any save. */
 const hints = computed(() =>
   props.explain
     ? [
-        editing.value ? optionsHint(props.field) : readOnlyHint(props.field),
+        editing.value ? null : readOnlyHint(props.field),
         setHere.value && !editing.value ? inheritHint(props.field, props.missionName) : null,
+        pin.value && !editing.value && props.canChange ? pinLine(props.missionName) : null,
       ].filter((h): h is string => h !== null)
     : [],
 );
@@ -92,6 +104,7 @@ function save() {
       :schema="schema"
       :errors="errors"
       :disabled-values="disabled"
+      :hints="formHints"
     />
     <span v-else class="font-mono text-md" :class="setHere ? 'text-readout' : 'text-text-4'">{{
       valueText(field)
@@ -110,7 +123,15 @@ function save() {
         <ApButton size="compact" variant="ghost" @click="edit.hide()">Cancel</ApButton>
       </template>
       <template v-else>
-        <ApButton v-if="!fixed" size="compact" data-swap-opener @click="start">{{
+        <ApButton
+          v-if="pin"
+          size="compact"
+          :disabled="busy"
+          disabled-reason="Saving…"
+          @click="emit('save', { [field.path]: field.value })"
+          >Set for {{ missionName }}</ApButton
+        >
+        <ApButton v-if="override" size="compact" data-swap-opener @click="start">{{
           setHere ? "Change" : "Override"
         }}</ApButton>
         <ApInlineConfirm
