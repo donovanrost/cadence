@@ -125,6 +125,52 @@ defmodule Cadence.Configuration.SwitchOwnerTest do
     assert %{"telemetry_enabled" => true, "commanding_enabled" => true} = latest(c)
   end
 
+  test "a change set that turns a switch OFF while a save waits for the lock: the save stores off, no refusal",
+       c do
+    # Set on both; the save authorizes reading true/true, then a change set turns commanding off
+    # before the lock. The save stores what the row says under the lock, and its checks compare
+    # with that same row (api-ops' review of (B): comparing with the authorize read refused it).
+    switches_on(c)
+    lock_key = key(Cadence.Applications.ConfigurationLock, c.org, c.mission.mission_id)
+    handler = "switch-owner-off-#{System.unique_integer([:positive])}"
+    config = %{pid: self(), key: lock_key, c: c}
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:cadence, :repo, :query],
+        &__MODULE__.commanding_off_once/4,
+        config
+      )
+
+    try do
+      assert {:ok, _} = save(c, %{})
+    after
+      :telemetry.detach(handler)
+    end
+
+    assert Process.get(:commanding_off_under_lock) == true
+    assert %{"telemetry_enabled" => true, "commanding_enabled" => false} = latest(c)
+  end
+
+  @doc false
+  def commanding_off_once(_event, _measurements, %{query: query, params: params}, config) do
+    if self() == config.pid and query =~ "pg_advisory_xact_lock" and params == [config.key] and
+         Process.get(:commanding_off_under_lock) != true do
+      Process.put(:commanding_off_under_lock, true)
+
+      {:ok, _} =
+        SpacecraftStore.put_switches(
+          config.c.org,
+          config.c.mission.mission_id,
+          config.c.craft.spacecraft_id,
+          %{telemetry_enabled: true, commanding_enabled: false}
+        )
+    end
+  end
+
+  def commanding_off_once(_event, _measurements, _metadata, _config), do: :ok
+
   test "aligning unset row switches to the running values applies with no generation (the alignment change set)",
        c do
     id = c.craft.spacecraft_id

@@ -340,16 +340,16 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     spacecraft_id = spacecraft.spacecraft_id
     current = snapshot(mission, spacecraft)
     # The row as it is under the configuration lock, not the authorize read before it: a change
-    # set that set a switch in between is what this save stores.
+    # set that set a switch in between is what this save stores, and what its checks compare with.
     {:ok, locked} =
       SpacecraftStore.fetch_spacecraft(mission.organization_id, mission_id, spacecraft_id)
 
     document = change_set_switches(document, locked)
 
     with :ok <- exact_token(current.token, expected_token),
-         :ok <- validate_references(mission, spacecraft, document),
+         :ok <- validate_references(mission, locked, document),
          {:ok, document} <-
-           ConfigurationApplications.persist(scope, mission, spacecraft, document) do
+           ConfigurationApplications.persist(scope, mission, locked, document) do
       updated = snapshot(mission, spacecraft)
 
       Repo.insert(
