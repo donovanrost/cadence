@@ -24,12 +24,5 @@
         ],
     },
   "files": ["apps/console/src/**"],
-  "ignores": [
-      "**/*.test.ts",
-      "ast-grep/fixtures/**",
-      # Not migrated yet (BACKLOG §12B rule A, 11-15): each owner removes their file as they migrate.
-      "apps/console/src/features/dashboards/editor/keyboard-layout.ts",
-      "apps/console/src/features/dashboards/fixtures.test-support.ts",
-      "apps/console/src/features/dashboards/model/time-range.ts",
-    ],
+  "ignores": ["**/*.test.ts", "ast-grep/fixtures/**"],
 }
