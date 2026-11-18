@@ -33,7 +33,10 @@ that fails or stalls shows on Now).
   name}, at, reason}`, or null. A request approved by policy alone (no reviewer) is `approved`
   with a null decision. A superseded one has no decision (the system did it).
 - `execution`: null until an apply starts, then `{state: in_progress | succeeded | failed, since,
-  error_code, error, retryable}`.
+  finished_at, error_code, error, retryable}`.
+  - `finished_at` (ux #227, added 11-18; read it as optional): when the apply succeeded or failed;
+    null while it runs, including after a resume until it finishes again. It's never the
+    decision's time: a held apply that resumes later reads its own finish time.
   - `error_code` (closed set): `activation_execution_interrupted |
     spacecraft_configuration_review_stale | approved_activation_content_mismatch`, or another
     domain code (word it as the generic failure). It's null unless `failed`.
