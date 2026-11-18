@@ -373,6 +373,9 @@ logged at info. It was rolled back 7 minutes later, between passes.
 
 ## Daily dev retention slot
 
+**It is a chain item EVERY night** (lead 11-18, after the 11-18 03:00Z run was missed): the 03:00Z retention goes into each
+night's chain with its own times and its own done-line in the checklist; if a night has no gap for it, the next no-pass gap.
+
 Once a day, in a qa slot outside passes (no active contact; not within 1 h of an armed pass), on `cadence_apogee_dev`
 and this stack's QuestDB only. devops samples disk before and after (qa pastes their lines into the checklist).
 
