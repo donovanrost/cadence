@@ -1,6 +1,7 @@
 # Approval policies per kind: design note (domain and api)
 
-For board #201 and its sub-stories #221-#225 (DECISIONS #111). Status: DRAFT for lead and the director.
+For board #201 and its sub-stories #221-#225 (DECISIONS #111). Status: DRAFT; questions 2 and 3 ruled by the director, 1, 4, 5 and 6 with the user. No build until
+they're answered. The settings authz finding is #233 (M2, ahead of this build).
 Breaking changes are fine (DECISIONS #112): no compatibility reads are kept for dev data.
 
 ## Today
@@ -26,7 +27,8 @@ Breaking changes are fine (DECISIONS #112): no compatibility reads are kept for 
 ## Proposal
 
 1. **One settings section, per-kind entries:** `cadence.approvals`, holding
-   `kinds: %{commands, change_sets, activations, model_revisions, contact_plans}`. Each kind has
+   `kinds: %{commands, change_sets, activations, model_revisions, contact_plans, provider_changes}`
+   (contact_plans covers fleet planning policies too; rulings 2 and 3). Each kind has
    `mode: one_person | independent` plus its own options. ScopedSettings already stores per-path mission
    overrides, so an organization sets each kind's default and a mission overrides only the kinds it changes.
    Keeping ONE section keeps ONE policy lock: the lock order and the shared-reader behaviour are unchanged.
@@ -58,7 +60,7 @@ change, readers first.
 
 - **Fields** (paths inside the section; the console form renders them as it does Governance today):
   - `kinds.<kind>.mode` for each of `commands`, `change_sets`, `activations`, `model_revisions`,
-    `contact_plans`: enum `one_person` / `independent`, labelled per kind ("Change sets: one person
+    `contact_plans` (with fleet planning policies), `provider_changes`: enum `one_person` / `independent`, labelled per kind ("Change sets: one person
     approves" / "...a second person approves"), with ux's help text. Each field carries its kind as the
     form's `section`, so the console groups them by kind.
   - commands' options, using field types the console already renders (no new type): booleans
@@ -95,8 +97,10 @@ change, readers first.
    change set or model (DECISIONS #92 (a)'s single-operator path). With self-approval always refused,
    a mission can't be run by one person alone. Is that intended, or should 'one person' still allow
    self-approval while 'independent' refuses it?
-2. **Fleet planning policies:** their own kind, or part of contact plans? Today they're always 'independent'.
-3. **Provider changes:** a sixth kind, or out of scope?
+2. ~~**Fleet planning policies:** their own kind, or part of contact plans?~~ RULED (director 11-18, unless the user
+   objects): they fold into `contact_plans`, one planning kind.
+3. ~~**Provider changes:** a sixth kind, or out of scope?~~ RULED (director 11-18, unless the user objects): their
+   own kind, `provider_changes`, since credentials and provider bindings are sensitive (ties in #117).
 4. **Commands:** confirm the option set, especially a second GO for ROUTINE commands and armed runs.
 5. **Per-kind lock:** should an organization lock individual kinds (for example commands) while missions
    choose others, or is one lock for the whole Approvals section enough?
