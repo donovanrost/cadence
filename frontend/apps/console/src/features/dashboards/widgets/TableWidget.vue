@@ -12,14 +12,9 @@ const name = computed(() => widgetTitle(props.placement));
 
 <template>
   <!-- B1: the scroll box is a tab stop named by its widget, and the table has a caption. -->
-  <div
-    class="h-full min-h-0 overflow-auto"
-    role="region"
-    tabindex="0"
-    :aria-label="name"
-  >
+  <div class="h-full min-h-0 overflow-auto" role="region" tabindex="0" :aria-label="name">
     <table class="w-full border-collapse text-md">
-      <caption class="sr-only">{{ name }}</caption>
+      <caption class="sr-only" v-text="name" />
       <thead class="sticky top-0 bg-panel">
         <tr>
           <th
