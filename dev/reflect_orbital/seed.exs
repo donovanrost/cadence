@@ -323,6 +323,18 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
           {:ok, craft} =
             Cadence.SpacecraftStore.persist_spacecraft(F.organization_id(), Spacecraft.new(attrs))
 
+          # DECISIONS #109: change sets are the only writer of a spacecraft's Telemetry and
+          # Commanding switches, and a saved configuration takes them from the spacecraft. Set
+          # them here at the store level, like the spacecraft itself (no decision recorded), so
+          # configuration.exs saves telemetry and commanding on (board #234).
+          {:ok, _switched} =
+            Cadence.SpacecraftStore.put_switches(
+              F.organization_id(),
+              F.mission_id(),
+              craft.spacecraft_id,
+              %{telemetry_enabled: true, commanding_enabled: true}
+            )
+
           {:ok, _source} =
             Cadence.SourceEndpoints.persist_source_endpoint(
               F.organization_id(),
