@@ -139,6 +139,51 @@ defmodule Cadence.MissionModels.RevisionDecisionsTest do
              )
   end
 
+  test "each decision records the approval policy in force at decision time", c do
+    revision = import!(c, requested_by: %{"user_id" => "admin-a"})
+    report = compare!(c, revision)
+    other = scope(c.organization, "admin-b", :organization_admin)
+
+    assert {:ok, %{status: :approved}} =
+             MissionModels.approve_revision(
+               other,
+               c.mid,
+               revision,
+               report["comparison_report_id"]
+             )
+
+    approved_by = RevisionRow |> Repo.get!(revision) |> Map.get(:approved_by)
+
+    assert %{
+             "policy" =>
+               %{"policy" => "scoped_activation_approvals_v1", "separation_of_duties" => true} =
+                 policy
+           } = JsonDocument.unwrap_value(approved_by)
+
+    assert policy == ActivationPolicy.evidence(c.org, c.mid)
+
+    # A rejection under 'direct' records that policy (no separation) and its settings version.
+    current = ActivationPolicy.load(c.org, c.mid)
+
+    {:ok, _} =
+      ActivationPolicy.save(c.admin, c.mid, current.token, %{
+        "value" => %{"approval_requirement" => "direct"}
+      })
+
+    second = import!(c, revision_label: "Rev 2", yaml: other_yaml())
+
+    assert {:ok, %{status: :rejected}} =
+             MissionModels.reject_revision(c.admin, c.mid, second, "No")
+
+    rejected_by = RevisionRow |> Repo.get!(second) |> Map.get(:rejected_by)
+
+    assert %{"policy" => %{"separation_of_duties" => false, "settings_token" => token}} =
+             JsonDocument.unwrap_value(rejected_by)
+
+    assert token == ActivationPolicy.load(c.org, c.mid).token
+    refute token == policy["settings_token"]
+  end
+
   test "under 'direct' approval the importer may approve", c do
     policy = ActivationPolicy.load(c.org, c.mid)
 

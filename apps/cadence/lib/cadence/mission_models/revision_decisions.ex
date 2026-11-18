@@ -53,9 +53,12 @@ defmodule Cadence.MissionModels.RevisionDecisions do
          :ok <- require_ready_plans(organization_id, mission_id, revision_id),
          {:ok, comparison} <- Comparison.fetch(organization_id, mission_id, comparison_report_id),
          :ok <- passed_for(comparison, revision_id),
-         {:ok, importers} <- independent(organization_id, mission_id, revision_id, actor) do
+         policy = ActivationPolicy.evidence(organization_id, mission_id),
+         {:ok, importers} <- independent(organization_id, mission_id, revision_id, actor, policy) do
       evidence =
         Map.merge(actor, %{
+          # The approval policy in force at decision time (M2, director 11-18).
+          "policy" => policy,
           "comparison_report_id" => comparison_report_id,
           "replay" => get_in(comparison, ["replay", "status"]),
           "importer_recorded" => importers != [],
@@ -151,7 +154,13 @@ defmodule Cadence.MissionModels.RevisionDecisions do
 
   defp reject_locked(%RevisionRow{status: "candidate"} = row, actor, reason, opts) do
     row
-    |> RevisionRow.status_changeset(:rejected, Map.put(actor, "reason", reason), at(opts))
+    |> RevisionRow.status_changeset(
+      :rejected,
+      actor
+      |> Map.put("reason", reason)
+      |> Map.put("policy", ActivationPolicy.evidence(row.organization_id, row.mission_id)),
+      at(opts)
+    )
     |> Repo.update()
   end
 
@@ -203,9 +212,9 @@ defmodule Cadence.MissionModels.RevisionDecisions do
 
   defp passed_for(_comparison, _id), do: {:error, :mission_model_comparison_mismatch}
 
-  defp independent(organization_id, mission_id, revision_id, %{"id" => actor_id}) do
+  defp independent(organization_id, mission_id, revision_id, %{"id" => actor_id}, policy) do
     importers = Catalog.model_importers(organization_id, mission_id, revision_id)
-    separation = ActivationPolicy.evidence(organization_id, mission_id)["separation_of_duties"]
+    separation = policy["separation_of_duties"]
 
     if separation == true and actor_id in importers,
       do: {:error, :mission_model_self_approval_forbidden},
