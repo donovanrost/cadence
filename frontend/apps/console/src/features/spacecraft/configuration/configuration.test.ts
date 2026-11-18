@@ -16,7 +16,6 @@ describe("the configuration workspace snapshot", () => {
       value: true,
       set: true,
       revision: 7,
-      active: true,
     });
   });
 

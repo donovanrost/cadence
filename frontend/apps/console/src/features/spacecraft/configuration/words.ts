@@ -86,19 +86,10 @@ export function framingWord(p: ConfigurationDocument["protocol"]): string {
 
 /**
  * DECISIONS #109 (U94): change sets own both switches. "On · set by r7." / "Off · no change set has
- * turned it on yet. …" / "On · set through Setup › Changes." (set, revision unknown). U94 amended:
- * never set, but the active configuration runs it, says a new version would turn it off.
+ * turned it on yet. …" / "On · set through Setup › Changes." (set, revision unknown).
  */
-export function switchLine(
-  sw: SwitchState,
-  craft: string,
-  activeVersion: number | null = null,
-): string {
+export function switchLine(sw: SwitchState, craft: string): string {
   const on = sw.value ? "On" : "Off";
-  if (!sw.set && sw.active === true) {
-    const v = activeVersion !== null && activeVersion > 0 ? ` (v${activeVersion})` : "";
-    return `On in the active configuration${v}; no change set has set it yet. Saving a new version turns it off unless a change set turns it on first.`;
-  }
   if (!sw.set)
     return `Off · no change set has turned it on yet. Turn it on in ${craft}'s Operation panel; it applies with the next change set.`;
   return sw.revision !== null
@@ -144,17 +135,6 @@ export function comparisonRows(s: ConfigurationSnapshot): readonly ComparisonRow
       mono: true,
     },
   ];
-  // U94 amended: a switch is a change only when the draft's value differs from the active one's.
-  for (const [label, sw] of [
-    ["Telemetry", s.switches.telemetry_enabled],
-    ["Commanding", s.switches.commanding_enabled],
-  ] as const)
-    if (a && sw.active !== null && sw.active !== sw.value)
-      rows.push({
-        setting: label,
-        active: sw.active ? "On" : "Off",
-        draft: sw.value ? "On" : "Off",
-      });
   return a ? rows.filter((r) => r.active !== r.draft) : rows;
 }
 

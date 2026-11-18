@@ -52,8 +52,6 @@ const switchReader = d.object({
   value: d.boolean,
   set: d.boolean,
   revision: d.nullable(d.integer),
-  /** The switch in the craft's ACTIVE configuration; null when nothing is active (api, U94). */
-  active: d.nullable(d.boolean),
 });
 export type SwitchState = Decoded<typeof switchReader>;
 

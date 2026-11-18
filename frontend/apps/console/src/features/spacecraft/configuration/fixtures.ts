@@ -63,8 +63,8 @@ export const snapshotWire = (o: Record<string, unknown> = {}) => ({
   sources: [{ id: "src-1", name: "SVA S-band" }],
   presets: [],
   switches: {
-    telemetry_enabled: { value: true, set: true, revision: 7, active: true },
-    commanding_enabled: { value: false, set: false, revision: null, active: false },
+    telemetry_enabled: { value: true, set: true, revision: 7 },
+    commanding_enabled: { value: false, set: false, revision: null },
   },
   ...o,
 });
