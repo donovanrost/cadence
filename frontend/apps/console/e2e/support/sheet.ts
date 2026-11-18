@@ -55,7 +55,10 @@ export async function expectSheetChecks(page: Page, check: SheetCheck): Promise<
 async function open(page: Page, check: SheetCheck): Promise<Locator> {
   await check.opener.focus();
   await page.keyboard.press("Enter");
-  const sheet = page.getByRole("dialog", { name: check.name });
+  const sheet = page.getByRole("dialog", {
+    name: check.name,
+    exact: typeof check.name === "string",
+  });
   await expect(sheet, "A2: a dialog named by its title").toBeVisible();
   const inside = () => sheet.evaluate((d) => d.contains(document.activeElement));
   await expect.poll(inside, { message: "A1: focus starts inside the sheet" }).toBe(true);

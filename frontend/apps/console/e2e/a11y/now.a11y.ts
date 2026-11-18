@@ -32,17 +32,20 @@ test.describe("Now · a11y", () => {
   });
 
   test("the search palette passes A1–A5", async ({ page }, info) => {
-    // Desktop opens it from the top bar's query line, a phone from the tab bar's Search.
-    const opener = onPhone(info)
+    // Desktop opens the palette from the top bar's query line; a phone opens the full-screen
+    // Search sheet from the tab bar, with a searchbox instead of the palette's combobox.
+    const phone = onPhone(info);
+    const opener = phone
       ? page
           .getByRole("navigation", { name: "On-call tabs" })
           .getByRole("button", { name: "Search" })
       : page.getByRole("banner").locator('button[aria-keyshortcuts~="Control+K"]');
-    const dialog = page.getByRole("dialog", { name: "Search and run commands" });
+    const name = phone ? "Search" : "Search and run commands";
+    const dialog = page.getByRole("dialog", { name, exact: true });
     await expectSheetChecks(page, {
       opener,
-      name: "Search and run commands",
-      initialFocus: dialog.getByRole("combobox", { name: "Search" }),
+      name,
+      initialFocus: dialog.getByRole(phone ? "searchbox" : "combobox", { name: "Search" }),
     });
   });
 });

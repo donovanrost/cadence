@@ -173,7 +173,9 @@ function probeStop(exclude: readonly string[]): ProbedStop | null {
       problems.push("off screen when focused");
     } else {
       const top = document.elementFromPoint(x, y);
-      if (top && top !== el && !el.contains(top) && !top.contains(el))
+      // An excluded overlay (the dev-only toolbar) isn't in production, so it doesn't count.
+      const excludedCover = top !== null && exclude.some((s) => top.closest(s) !== null);
+      if (top && !excludedCover && top !== el && !el.contains(top) && !top.contains(el))
         problems.push(`covered by ${top.tagName.toLowerCase()} "${nameOf(top).slice(0, 40)}"`);
     }
   }
