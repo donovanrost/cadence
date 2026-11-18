@@ -157,6 +157,7 @@ describe("the decide panel after a refused Approve (U95)", () => {
     details: [],
     comparison: null,
     permissions: undefined,
+    configuration_changes: undefined,
   };
 
   it("shows the line, turns Approve off with it, and keeps Reject", async () => {
