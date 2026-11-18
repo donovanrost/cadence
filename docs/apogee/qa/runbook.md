@@ -52,11 +52,16 @@ From the repo root of this worktree, each long-running command in its own pane:
 
 ```sh
 # 1. Simulator (leave running)
+#    DISTRIBUTION IS LOCAL-ONLY (director 11-17): epmd and the distribution ports bind 127.0.0.1
+#    (ERL_EPMD_ADDRESS + inet_dist_use_interface), and the cookie is a random per-machine value in
+#    var/qa-erlang-cookie (git-ignored, mode 600; NEVER ~/.erlang.cookie; never in a committed file).
+#    Create it once: (umask 077; head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40 > var/qa-erlang-cookie)
+#    Check after any restart: lsof -nP -iTCP -sTCP:LISTEN | grep -E 'epmd|beam' shows 127.0.0.1 only.
 cd apps/cadence_simulator
 # --sname qa_sim makes it reachable over RPC (fault injection, e.g. UplinkSessions.arm/2, 9f09dd32).
 #    Its store is DETS, so a restart keeps bookings. Output goes to var/qa-simulator.log (director:
 #    crash evidence; an Orchestrator restart orphaned a COP-1 peer once, #38).
-EARENDIL_SIMULATOR_PORT=4111 mise exec -- elixir --sname qa_sim --cookie cadence -S mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs 2>&1 | tee -a ../../var/qa-simulator.log
+EARENDIL_SIMULATOR_PORT=4111 ERL_EPMD_ADDRESS=127.0.0.1 mise exec -- elixir --sname qa_sim --cookie "$(cat ../../var/qa-erlang-cookie)" --erl "-kernel inet_dist_use_interface {127,0,0,1}" -S mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs 2>&1 | tee -a ../../var/qa-simulator.log
 
 # 2. QuestDB (once; it keeps running across reboots of the shell, not of OrbStack)
 docker run -d --name cadence-apogee-questdb \
@@ -94,7 +99,7 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127
   CADENCE_INGRESS_JOURNAL_ENABLED=true CADENCE_INGRESS_JOURNAL_PATH="$PWD/../../var/ingress_journal" \
   CADENCE_INGRESS_JOURNAL_MAX_BYTES=2147483648 \
   CADENCE_LIVE_VUE_VITE_PORT=5183 POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
-  mise exec -- env OTEL_EXPORTER_OTLP_ENDPOINT= ELIXIR_ERL_OPTIONS="-logger level info" iex --sname cadence_apogee --cookie cadence -S mix phx.server 2>&1 | tee -a ../../var/qa-server.log
+  ERL_EPMD_ADDRESS=127.0.0.1 mise exec -- env OTEL_EXPORTER_OTLP_ENDPOINT= ELIXIR_ERL_OPTIONS="-logger level info -kernel inet_dist_use_interface {127,0,0,1}" iex --sname cadence_apogee --cookie "$(cat ../../var/qa-erlang-cookie)" -S mix phx.server 2>&1 | tee -a ../../var/qa-server.log
 #    OTEL_EXPORTER_OTLP_ENDPOINT is cleared AFTER mise (api-ops 11-14): set before `mise exec`, mise.toml's
 #    [env] value (http://localhost:4318) wins, runtime.exs turns the OTLP exporter on, and with nothing on
 #    4318 the log gets 'client error exporting … econnrefused' ~12×/min.
@@ -137,7 +142,7 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev \
 # 6. Activate the fleet (once; rerunnable). From the repo root. --single-operator sets
 #    Earendil's *configuration activation* policy to direct, in this DB only (not commanding).
 EARENDIL_CADENCE_NODE=cadence_apogee \
-  mise exec -- elixir --sname earendil_setup_apogee --cookie cadence dev/reflect_orbital_activate.exs --single-operator
+  mise exec -- elixir --sname earendil_setup_apogee --cookie "$(cat ../../var/qa-erlang-cookie)" dev/reflect_orbital_activate.exs --single-operator
 
 # ARMED PASSES (director, 2026-11-10). When a command group waits for a real pass:
 #  - No simulator run pause/resume and no :4011 or simulator restart within 1 h of its AOS.
@@ -166,7 +171,7 @@ cd apps/cadence_simulator
 CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_CADENCE_NODE=cadence_apogee EARENDIL_SIMULATOR_PORT=4111 \
   CADENCE_QUESTDB_HTTP_ENDPOINT=http://127.0.0.1:9200 CADENCE_QUESTDB_HOST=127.0.0.1 CADENCE_QUESTDB_PORT=8822 \
   EARENDIL_DEMO_CONTACT_SECONDS=120 \
-  mise exec -- elixir --hidden --sname earendil_tm_apogee --cookie cadence \
+  mise exec -- elixir --hidden --sname earendil_tm_apogee --cookie "$(cat ../../var/qa-erlang-cookie)" \
   -S mix run --no-start ../../dev/reflect_orbital_live.exs
 
 # 8. Console Vite (leave running)
