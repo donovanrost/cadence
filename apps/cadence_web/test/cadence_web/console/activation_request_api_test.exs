@@ -137,9 +137,13 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
     assert %{"state" => "approved", "decision" => %{"state" => "approved"}, "can_decide" => false} =
              data["request"]
 
-    assert %{"state" => state, "retryable" => retryable} = data["request"]["execution"]
+    assert %{"state" => state, "retryable" => retryable, "finished_at" => finished} =
+             data["request"]["execution"]
+
     assert state in ["succeeded", "failed"]
     assert is_boolean(retryable)
+    # When the apply finished (ux #227: 'Applied … on T'), not when it was decided.
+    assert {:ok, _, 0} = DateTime.from_iso8601(finished)
   end
 
   test "the requester withdraws; nobody else can; a newer request supersedes an older one", c do

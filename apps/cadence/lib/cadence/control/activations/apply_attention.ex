@@ -147,8 +147,11 @@ defmodule Cadence.Control.Activations.ApplyAttention do
 
   @doc """
   One execution in the console's words, for the L10 activation rows (api): `state`, `since`,
-  `error_code`, `error` (the same U41 sentence as the item) and `retryable`. A running execution
-  only gets an error and `retryable: true` once it has stalled.
+  `finished_at`, `error_code`, `error` (the same U41 sentence as the item) and `retryable`. A
+  running execution only gets an error and `retryable: true` once it has stalled.
+
+  `finished_at`: when it succeeded or failed; null while it runs (a resume clears it), so a held
+  apply that resumes later reads its own finish time, not the decision's (ux #227).
   """
   @spec execution_view(map(), DateTime.t()) :: map()
   def execution_view(execution, now \\ DateTime.utc_now()) do
@@ -161,6 +164,7 @@ defmodule Cadence.Control.Activations.ApplyAttention do
     %{
       state: Atom.to_string(execution.status),
       since: since(execution),
+      finished_at: execution.completed_at,
       error_code: code,
       error: if(shown?, do: error_sentence(execution.status, code, execution, ids)),
       retryable: stalled? or (execution.status == :failed and Resume.retryable_code?(code))
