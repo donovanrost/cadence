@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.TestSupport.CatalogTestActor
+  alias CadenceWeb.Console.Problem
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -109,7 +110,7 @@ defmodule CadenceWeb.Console.MissionModelRevisionAPITest do
              }
            } =
              build_conn()
-             |> CadenceWeb.Console.Problem.respond(:mission_model_revision_not_in_catalog)
+             |> Problem.respond(:mission_model_revision_not_in_catalog)
              |> json_response(409)
   end
 
