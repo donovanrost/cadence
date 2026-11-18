@@ -26,6 +26,7 @@ const header = [
   "Before",
   "After",
   "Missions may override",
+  "Mission sets its own",
 ];
 const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === false ? "No" : null);
 
@@ -39,12 +40,15 @@ const requirementText = (side: Side | null) => {
   const v = side?.approval_requirement;
   return v === null || v === undefined ? null : vocabularyText(v, REQUIREMENT_WORDS);
 };
-/** "Missions may override": organization rows only, the new value, and only when it changed. */
-function overrideText(e: AuditEvent): string | null {
+/**
+ * The new value of a switch, only when it changed (ux): "Missions may override" (allow_override)
+ * on organization rows, "Mission sets its own" (override) on mission rows; blank otherwise.
+ */
+function switched(e: AuditEvent, key: "allow_override" | "override"): string | null {
   const c = e.change;
-  if (!c || e.mission) return null;
-  const before = c.before?.allow_override;
-  const after = c.after?.allow_override;
+  if (!c || (key === "allow_override") !== (e.mission === null)) return null;
+  const before = c.before?.[key];
+  const after = c.after?.[key];
   if (typeof after !== "boolean" || before === after) return null;
   return yesNo(after);
 }
@@ -75,7 +79,8 @@ export function auditCsv(events: readonly AuditEvent[]): string {
       : String(e.subject.version),
     requirementText(e.change?.before ?? null),
     requirementText(e.change?.after ?? null),
-    overrideText(e),
+    switched(e, "allow_override"),
+    switched(e, "override"),
   ]);
   return [header, ...lines].map((l) => l.map(cell).join(",")).join("\r\n") + "\r\n";
 }

@@ -79,7 +79,10 @@ const event = object({
    * after; older entries and every other event have none. The action sentence already says it in
    * ux's words (U96), so only the export reads this.
    */
-  change: optional(nullable(object({ before: governanceValue, after: governanceValue }))),
+  // fe-ops: either side may be absent (a first save, or a server that drops a null).
+  change: optional(
+    nullable(object({ before: optional(governanceValue), after: optional(governanceValue) })),
+  ),
 });
 const pageShape = object({
   /** U86 follow-up: read event by event; one this console can't read is left out and counted. */

@@ -26,8 +26,8 @@ const query: AuditQuery = {
 describe("audit Export CSV", () => {
   it("writes one row per event with words and quoted cells", () => {
     expect(auditCsv([event("e1")]).split("\r\n")).toEqual([
-      "Time (UTC),Actor,Actor kind,Kind,Action,Target,Mission,Why,Admin mode,Subject,Subject id,Subject version,Before,After,Missions may override",
-      '2026-11-12T01:12:07Z,Mira K.,user,Config,Applied r6 · 2 changes,r6,Earendil,"Framing ""fix"", per #45",,,,,,,',
+      "Time (UTC),Actor,Actor kind,Kind,Action,Target,Mission,Why,Admin mode,Subject,Subject id,Subject version,Before,After,Missions may override,Mission sets its own",
+      '2026-11-12T01:12:07Z,Mira K.,user,Config,Applied r6 · 2 changes,r6,Earendil,"Framing ""fix"", per #45",,,,,,,,',
       "",
     ]);
   });
@@ -43,9 +43,9 @@ describe("audit Export CSV", () => {
     const lines = auditCsv([decided, { ...decided, admin_mode: false, subject: null }]).split(
       "\r\n",
     );
-    expect(lines[1]?.endsWith(",Yes,activation_request,act_9,4,,,")).toBe(true);
+    expect(lines[1]?.endsWith(",Yes,activation_request,act_9,4,,,,")).toBe(true);
     expect(lines[1]).toContain(",Activations,");
-    expect(lines[2]?.endsWith(",No,,,,,,")).toBe(true);
+    expect(lines[2]?.endsWith(",No,,,,,,,")).toBe(true);
   });
 
   it("writes a governance change in the setting's words, never direct/independent (#233, ux U96)", () => {
@@ -85,11 +85,30 @@ describe("audit Export CSV", () => {
       },
     };
     const [, m, o] = auditCsv([mission, org]).split("\r\n");
-    expect(m?.endsWith(",Needs a second person's approval,Applies without approval,")).toBe(true);
+    expect(m?.endsWith(",Needs a second person's approval,Applies without approval,,")).toBe(true);
     expect(
-      o?.endsWith(",Needs a second person's approval,Needs a second person's approval,No"),
+      o?.endsWith(",Needs a second person's approval,Needs a second person's approval,No,"),
     ).toBe(true);
     expect(auditCsv([mission, org])).not.toMatch(/direct|independent/);
+    // fe-ops/ux: a mission pinning its own value shows in "Mission sets its own", even though
+    // Before and After read the same.
+    const pin = {
+      ...mission,
+      id: "g3",
+      change: {
+        before: {
+          approval_requirement: "independent" as const,
+          override: false,
+          allow_override: undefined,
+        },
+        after: {
+          approval_requirement: "independent" as const,
+          override: true,
+          allow_override: undefined,
+        },
+      },
+    };
+    expect(auditCsv([pin]).split("\r\n")[1]?.endsWith(",,Yes")).toBe(true);
   });
   it("walks every page of the filter", async () => {
     const pages: AuditPage[] = [

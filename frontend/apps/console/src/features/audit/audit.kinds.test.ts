@@ -59,6 +59,23 @@ describe("audit kinds the console doesn't know yet", () => {
       [null, null, null],
       [null, null, undefined],
     ]);
+    // fe-ops: a governance change with no before (a first save) still reads; the row isn't lost.
+    const first = decode(auditReader, {
+      events: [
+        {
+          ...base,
+          id: "g",
+          kind: "config",
+          change: { after: { approval_requirement: "independent", allow_override: true } },
+        },
+      ],
+      sources: { included: ["config"], missing: [] },
+      next_cursor: null,
+    });
+    if (!first.ok) throw first.error;
+    expect(first.value.unshown).toEqual([]);
+    expect(first.value.events[0]?.change?.before).toBeUndefined();
+    expect(first.value.events[0]?.change?.after?.approval_requirement).toBe("independent");
     // ux U89: the two new sources' chips.
     expect(kindText("activations")).toBe("Activations");
     expect(kindText("provider_changes")).toBe("Provider changes");
