@@ -1,9 +1,9 @@
 import type { MissionId } from "@/api/index.ts";
 import {
-  scid as scidReader,
   decoders as d,
-  stationRef,
   request,
+  spacecraftRef,
+  stationRef,
   type ApiResult,
   type Decoded,
   type Reader,
@@ -42,8 +42,7 @@ const offerReader = d.object({
   overlaps: d.nullable(
     d.object({
       reservation_id: d.token,
-      // Not the shared spacecraftRef: the contract names an overlapping live craft (its sentence).
-      spacecraft: d.object({ id: d.token, name: d.string }),
+      spacecraft: spacecraftRef,
       // free-text: a station call sign, not a vocabulary
       station_code: d.nullable(d.string),
       starts_at: d.timestamp,
@@ -54,8 +53,7 @@ const offerReader = d.object({
 export type Offer = Decoded<typeof offerReader>;
 
 export const searchReader = d.object({
-  // Not the shared spacecraftRef: the searched craft is named in its sentences (name required).
-  spacecraft: d.object({ id: d.token, name: d.string, scid: d.nullable(scidReader) }),
+  spacecraft: spacecraftRef,
   window: d.object({ from: d.timestamp, to: d.timestamp }),
   offers: d.array(offerReader, 500),
   hidden: d.object({ no_uplink_route: d.integer }),
@@ -131,7 +129,7 @@ export function offerBlocked(o: Offer, now: Date): string | null {
     return `${o.provider.name ?? "The provider"} reports this window as unavailable.`;
   const ov = o.overlaps;
   if (ov)
-    return `Overlaps ${ov.spacecraft.name}'s ${ov.station_code ? `${ov.station_code} ` : ""}${formatHourMinute(new Date(ov.starts_at))} pass.`;
+    return `Overlaps ${ov.spacecraft.name ? `${ov.spacecraft.name}'s` : "another spacecraft's"} ${ov.station_code ? `${ov.station_code} ` : ""}${formatHourMinute(new Date(ov.starts_at))} pass.`;
   return null;
 }
 
@@ -207,5 +205,5 @@ export function offPlanLine(
 /** Empty search: "No passes for EARENDIL-312 between 03:00Z and 09:00Z." */
 export function emptyWords(s: Search, via = ""): string {
   const at = (iso: string) => formatShort(new Date(iso));
-  return `No passes for ${s.spacecraft.name}${via} between ${at(s.window.from)} and ${at(s.window.to)}.`;
+  return `No passes for ${s.spacecraft.name ?? "this spacecraft"}${via} between ${at(s.window.from)} and ${at(s.window.to)}.`;
 }

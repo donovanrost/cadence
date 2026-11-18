@@ -202,7 +202,7 @@ const outcome = computed(() =>
       <p v-if="search.hidden.no_uplink_route" class="m-0 text-sm text-text-3">
         {{ search.hidden.no_uplink_route }}
         {{ search.hidden.no_uplink_route === 1 ? "station" : "stations" }} hidden: no uplink route
-        to {{ search.spacecraft.name }}.
+        to {{ search.spacecraft.name ?? "this spacecraft" }}.
       </p>
       <p v-if="search.offers.length === 0" class="m-0 text-text-3">
         {{ emptyWords(search, viaWords(routeData?.routes ?? [], routeKeys)) }}

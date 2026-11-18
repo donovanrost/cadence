@@ -44,7 +44,7 @@ describe("alarm episodes", () => {
     const acked = episode({
       status: "acknowledged",
       acknowledged_by: { kind: "user", id: "u1", name: "Mira K." },
-      assignee: { id: "u2", name: "Ana P." },
+      assignee: { kind: "user" as const, id: "u2", name: "Ana P." },
     });
     expect(statusLine(acked).text).toBe("Acknowledged by Mira K. · assigned to Ana P.");
     const mine = episode({

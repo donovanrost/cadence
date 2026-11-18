@@ -38,7 +38,7 @@ const episodeFields = {
   last_evaluated_at: d.nullable(d.timestamp),
   acknowledged_at: d.nullable(d.timestamp),
   acknowledged_by: d.nullable(actor),
-  assignee: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
+  assignee: d.nullable(sharedActor),
   assigned_at: d.nullable(d.timestamp),
   /** U68 R5 (api 0619ac94a): the ground-limit definition that opened it; null for catalog. */
   limit_definition_id: d.optional(d.nullable(d.token)),

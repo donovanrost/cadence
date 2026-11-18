@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { missionId as missionIdReader, stationId, decode } from "@/api/index.ts";
+import { missionId as missionIdReader, spacecraftId, stationId, decode } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import BookPassSheet from "./BookPassSheet.vue";
 import {
@@ -56,7 +56,7 @@ describe("Book a pass words (ux Contacts.md § Book a pass)", () => {
     const overlap = offer("b", {
       overlaps: {
         reservation_id: "r",
-        spacecraft: { id: "sc", name: "EARENDIL-312" },
+        spacecraft: { id: spacecraftId("sc"), name: "EARENDIL-312", scid: null },
         station_code: "KIR",
         starts_at: "2026-11-13T03:00:00Z",
         reason: "same_spacecraft",

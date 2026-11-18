@@ -47,7 +47,7 @@ const member = d.object({
   // Alarm items only (episodes, bc3d602c); null elsewhere.
   episode_id: d.nullable(d.token),
   status: d.nullable(d.oneOf(["new", "acknowledged"] as const)),
-  assignee: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
+  assignee: d.nullable(actor),
   acknowledged_by: d.nullable(actor),
 });
 export type Member = Decoded<typeof member>;

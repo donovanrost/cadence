@@ -72,7 +72,7 @@ describe("alarm list on episodes", () => {
 
   it("joins fleet identity, finds the limit and words the owner", () => {
     const [row] = alarmRows(
-      [ep("a", { assignee: { id: "t", name: "Tomás R." } })],
+      [ep("a", { assignee: { kind: "user" as const, id: "t", name: "Tomás R." } })],
       fleet,
       "new",
       null,
