@@ -40,7 +40,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     name: "setup.spacecraft.configuration",
     component: () => import("@/features/spacecraft/configuration/ConfigurationScreen.vue"),
     props: (to) => ({ spacecraftId: spacecraftIdParam(paramText(to.params, "spacecraftId")) }),
-    // Until api's workspace GET is live, a typed URL lands on the craft's page (lead), not a 404.
+    // While the flag is off, a typed URL lands on the craft's page (lead), not a 404.
     beforeEnter: (to) =>
       CONFIGURATION_WORKSPACE_LIVE || {
         name: "setup.spacecraft.one",

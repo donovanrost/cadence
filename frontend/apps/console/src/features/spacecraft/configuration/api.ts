@@ -13,8 +13,8 @@ import {
  * from the host's SpacecraftConfigurationPage). Its own subtree, so Investigate's
  * `GET …/spacecraft/:sc/configuration` read stays as it is. Approve and reject stay on L10.
  */
-/** Off until api's workspace GET is live (readers first); then the craft's page links here. */
-export const CONFIGURATION_WORKSPACE_LIVE = false;
+/** On with api's (B) set 1 routes (picked together, lead 11-18); the craft's page links here. */
+export const CONFIGURATION_WORKSPACE_LIVE = true;
 
 export const workspacePath = (missionId: MissionId, spacecraftId: SpacecraftId) =>
   `/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/configuration/workspace`;
@@ -151,7 +151,7 @@ export type WorkspaceKey = Readonly<{
   section: (typeof sections)[number];
 }>;
 
-/** GET …/configuration/workspace?section=… (api; not live yet: readers first). */
+/** GET …/configuration/workspace?section=… (api's (B) set 1). */
 export function fetchWorkspace(
   k: WorkspaceKey,
   signal: AbortSignal,
