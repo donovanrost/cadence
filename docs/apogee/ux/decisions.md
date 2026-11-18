@@ -2785,7 +2785,14 @@ stay server-made; the lines below are what they should say. No digest is ever sh
 - **`not_required`** (the policy needed no second person). The setting is "Approval for changes and app
   activations", option `Applies without approval`, so the sentence names it in those words, never "direct":
   - Change set: "Applied r10 without a second person's approval, as this mission's setting allows." Activation:
-    "Applied <the activation's summary> without a second person's approval, as this mission's setting allows."
+    "Applied <the activation's summary> on 11-17 09:12Z without a second person's approval, as this mission's
+    setting allows." (#227 3ce344243). That line only once the apply succeeded, and its time is when the apply
+    finished (api's `execution.finished_at` on L10's list and detail, set on succeeded or failed, null while
+    applying and after a resume until it finishes; ships with api's (B) set, read as optional), never the decision's: a held apply can resume
+    later. Without that time, the line has none (U20). While it's applying, after it failed, or before it starts,
+    the decision line is "No second person's approval was needed, as this mission's setting allows · 11-17
+    09:12Z" (the decision's time), and the apply state and U41's words below it say the rest (never "Applied"
+    before it has).
   - The setting's words are the server's (`console_settings.ex`), shown by Settings as they are.
   - Commanding has no one setting; the command policies (People › Command policies) decide, and the console already
     says "No second GO was needed; it was released at submit." So: "Released <group> at submit without a second GO:
