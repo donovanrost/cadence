@@ -9,6 +9,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
     FleetPlanningPolicyDocument
   }
 
+  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Contacts.Store.FleetPlanningPolicyApprovalRow
   alias Cadence.PolicyReviewer
 
   @organization_id "org-fleet-planning-policy"
@@ -117,6 +119,17 @@ defmodule Cadence.ContactPlanning.FleetPlanningPoliciesTest do
                @organization_id,
                @mission_id,
                policy.fleet_planning_policy_id
+             )
+
+    # M2: the approval policy in force at decision time is on the decision row.
+    expected = ActivationPolicy.evidence(@organization_id, @mission_id)
+
+    assert [^expected] =
+             Cadence.Repo.all(
+               from(row in FleetPlanningPolicyApprovalRow,
+                 where: row.fleet_planning_policy_id == ^policy.fleet_planning_policy_id,
+                 select: row.policy_document
+               )
              )
   end
 

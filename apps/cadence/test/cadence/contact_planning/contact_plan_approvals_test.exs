@@ -8,10 +8,12 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     ContactPlanApprovals,
     ContactPlans,
     ContactRequirements,
-    Planner
+    Planner,
+    PlanSubmissions
   }
 
   alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
   alias Cadence.Spacecraft
 
   @organization_id "org-contact-plan-approvals"
@@ -356,11 +358,28 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
       assert plan.lifecycle_state == :pending_approval
     end
 
-    test "another administrator approves it", context do
+    test "another administrator approves it; the approval and the submit record the policy",
+         context do
       assert {:ok, plan, _version, _approval} =
                approve_as(other_admin_scope(context), context.admin_plan)
 
       assert plan.lifecycle_state == :approved
+      # M2: the approval policy in force at decision time, on the approval and on the submit.
+      policy = ActivationPolicy.evidence(@organization_id, @mission_id)
+      assert policy["separation_of_duties"] == true
+      assert [^policy] = policy_documents(ContactPlanApprovalRow, plan.contact_plan_id)
+
+      # A submission records it too (under 'direct' an admin's submit also approves).
+      assert {:ok, submission} =
+               PlanSubmissions.record(%{
+                 organization_id: @organization_id,
+                 mission_id: @mission_id,
+                 contact_plan_id: plan.contact_plan_id,
+                 contact_plan_version: plan.current_version,
+                 actor_document: %{"kind" => "user", "id" => "admin-submitter"}
+               })
+
+      assert submission.policy_document == policy
     end
 
     test "the requester may still send it back", context do
@@ -391,7 +410,16 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
                approve_as(context.admin_scope, context.admin_plan)
 
       assert plan.lifecycle_state == :approved
+
+      assert [%{"separation_of_duties" => false}] =
+               policy_documents(ContactPlanApprovalRow, plan.contact_plan_id)
     end
+  end
+
+  defp policy_documents(schema, plan_id) do
+    Cadence.Repo.all(
+      from(row in schema, where: row.contact_plan_id == ^plan_id, select: row.policy_document)
+    )
   end
 
   test "approval records immutable route bindings without invoking Control", context do

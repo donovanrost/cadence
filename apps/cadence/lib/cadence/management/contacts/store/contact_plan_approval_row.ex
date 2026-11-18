@@ -24,6 +24,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     field(:actor_document, :map)
     field(:automation_grant_id, :string)
     field(:automation_grant_content_sha256, :string)
+    # The approval policy in force at decision time (M2); NULL on rows decided before it.
+    field(:policy_document, :map)
     field(:decided_at, :utc_datetime_usec)
     field(:exceptions_document, {:array, :map}, default: [])
 

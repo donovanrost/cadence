@@ -242,10 +242,13 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   defp decide_transaction(context) do
     with {:ok, plan_row} <-
            lock_plan(context.organization_id, context.mission_id, context.plan_id),
+         # One read of the approval policy: the separation check uses it and the decision records
+         # it (M2: the policy in force at decision time).
+         policy = ActivationPolicy.evidence(context.organization_id, context.mission_id),
          :ok <- pending_plan(plan_row),
          :ok <- exact_version(plan_row, context.expected_version),
          {:ok, version_row} <- fetch_version_row(plan_row, context.expected_version),
-         :ok <- separate_approver(context.decision, plan_row, version_row, context.actor),
+         :ok <- separate_approver(context.decision, plan_row, version_row, context.actor, policy),
          :ok <- exact_hash(version_row, context.expected_hash),
          version <- ContactPlanVersionRow.to_domain(version_row),
          {:ok, requirements} <- lock_current_requirements(version),
@@ -270,7 +273,11 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
              context.now
            ),
          approval <- %{approval | exceptions: exceptions(context.decision, version, context.opts)},
-         {:ok, approval_row} <- Repo.insert(ContactPlanApprovalRow.changeset(approval)),
+         {:ok, approval_row} <-
+           approval
+           |> ContactPlanApprovalRow.changeset()
+           |> Ecto.Changeset.put_change(:policy_document, policy)
+           |> Repo.insert(),
          {:ok, updated_plan_row} <-
            update_plan(
              plan_row,
@@ -550,17 +557,23 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   # whoever submitted this version or authored it can't approve it (director 11-15: an admin's own
   # Submit approved and booked in one step). Under 'direct' it's allowed, as before. A send back
   # by the requester is fine either way.
-  defp separate_approver(:approved, plan_row, version_row, %{"kind" => "user", "id" => actor_id}) do
+  defp separate_approver(
+         :approved,
+         plan_row,
+         version_row,
+         %{"kind" => "user", "id" => actor_id},
+         policy
+       ) do
     requesters = Enum.reject([plan_row.lifecycle_changed_by, version_row.created_by], &is_nil/1)
 
-    if actor_id in requesters and separation_required?(plan_row) do
+    if actor_id in requesters and policy["separation_of_duties"] == true do
       {:error, :contact_plan_self_approval_forbidden}
     else
       :ok
     end
   end
 
-  defp separate_approver(_decision, _plan_row, _version_row, _actor), do: :ok
+  defp separate_approver(_decision, _plan_row, _version_row, _actor, _policy), do: :ok
 
   @doc "Whether the mission's approval setting requires a second person ('independent')."
   def separation_required?(%{organization_id: organization_id, mission_id: mission_id}),
