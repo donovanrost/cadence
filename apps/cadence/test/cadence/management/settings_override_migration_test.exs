@@ -13,7 +13,9 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
     org = "override-org-#{System.unique_integer([:positive])}"
     mission = "override-mission-#{System.unique_integer([:positive])}"
     persist_mission_scope(org, mission)
-    scope = member(org, "maya")
+    # The settings saved here include the approval setting at the organization level, which
+    # only an organization admin may change (#233); this test is about the per-field migration.
+    scope = %{member(org, "maya") | capabilities: MapSet.new([:organization_admin])}
 
     save(scope, nil, ActivationPolicy, %{
       "value" => %{"approval_requirement" => "independent"},

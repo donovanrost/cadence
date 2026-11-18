@@ -21,51 +21,60 @@ defmodule Cadence.Governance.ScopedSettingsTest do
       mission: mission,
       other: other,
       scope: member(org, "maya"),
-      reviewer: member(org, "eli")
+      reviewer: member(org, "eli"),
+      # Changing the approval setting needs an organization admin (#233); approving doesn't.
+      admin: %{member(org, "ada") | capabilities: MapSet.new([:organization_admin])}
     }
   end
 
   test "organization defaults, mission overrides, enforcement, and reset keep separate revisions",
        c do
-    save_policy(c.scope, nil, "independent", true)
-    save_policy(c.scope, c.mission, "direct")
+    save_policy(c.admin, nil, "independent", true)
+    save_policy(c.admin, c.mission, "direct")
     assert ActivationPolicy.load(c.org, c.mission).source == "overridden"
     assert ActivationPolicy.load(c.org, c.other).source == "inherited"
-    save_policy(c.scope, nil, "independent", false)
+    save_policy(c.admin, nil, "independent", false)
     enforced = ActivationPolicy.load(c.org, c.mission)
     assert enforced.source == "enforced"
     assert enforced.saved == %{"approval_requirement" => "direct"}
     assert enforced.effective == %{"approval_requirement" => "independent"}
 
     assert {:error, :settings_enforced_by_organization} =
-             ActivationPolicy.save(c.scope, c.mission, enforced.token, %{"value" => nil})
+             ActivationPolicy.save(c.admin, c.mission, enforced.token, %{"value" => nil})
 
-    save_policy(c.scope, nil, "independent", true)
+    save_policy(c.admin, nil, "independent", true)
     restored = ActivationPolicy.load(c.org, c.mission)
     assert restored.effective == %{"approval_requirement" => "direct"}
-    assert {:ok, _} = ActivationPolicy.save(c.scope, c.mission, restored.token, %{"value" => nil})
+    assert {:ok, _} = ActivationPolicy.save(c.admin, c.mission, restored.token, %{"value" => nil})
     assert ActivationPolicy.load(c.org, c.mission).source == "inherited"
   end
 
   test "stale writes and tokens from another mission cannot overwrite settings", c do
     before = ActivationPolicy.load(c.org, c.mission)
-    save_policy(c.scope, nil, "independent", true)
+    save_policy(c.admin, nil, "independent", true)
 
     assert {:error, :settings_changed} =
-             ActivationPolicy.save(c.scope, c.mission, before.token, %{
+             ActivationPolicy.save(c.admin, c.mission, before.token, %{
                "value" => %{"approval_requirement" => "direct"}
              })
 
     other = ActivationPolicy.load(c.org, c.other)
 
     assert {:error, :settings_changed} =
-             ActivationPolicy.save(c.scope, c.mission, other.token, %{"value" => nil})
+             ActivationPolicy.save(c.admin, c.mission, other.token, %{"value" => nil})
   end
 
-  test "named settings permissions admit ordinary members and reject revoked or foreign scopes",
+  test "an ordinary member can't change the approval setting; revoked or foreign scopes are refused",
        c do
     assert MapSet.size(c.scope.capabilities) == 0
-    save_policy(c.scope, c.mission, "direct")
+    current = ActivationPolicy.load(c.org, c.mission)
+
+    assert {:error, :approval_policy_change_requires_organization_admin} =
+             ActivationPolicy.save(c.scope, c.mission, current.token, %{
+               "value" => %{"approval_requirement" => "direct"}
+             })
+
+    save_policy(c.admin, c.mission, "direct")
     current = ActivationPolicy.load(c.org, c.mission)
 
     revoked = %{
@@ -107,19 +116,19 @@ defmodule Cadence.Governance.ScopedSettingsTest do
     assert id == revision.revision_id
 
     assert {:error, :invalid_settings} =
-             ActivationPolicy.save(c.scope, c.mission, governance.token, %{
+             ActivationPolicy.save(c.admin, c.mission, governance.token, %{
                "value" => %{"approval_requirement" => "skip_validation"}
              })
 
     assert {:error, :invalid_settings} =
-             ActivationPolicy.save(c.scope, c.mission, governance.token, %{
+             ActivationPolicy.save(c.admin, c.mission, governance.token, %{
                "value" => nil,
                "organization_id" => "other-org"
              })
   end
 
   test "independent review accepts another ordinary member and forbids self approval", c do
-    save_policy(c.scope, nil, "independent", true)
+    save_policy(c.admin, nil, "independent", true)
     request = request(c)
 
     assert {:error, :activation_self_approval_forbidden} =
@@ -130,9 +139,9 @@ defmodule Cadence.Governance.ScopedSettingsTest do
   end
 
   test "relaxing settings invalidates a pending review without approving it", c do
-    save_policy(c.scope, nil, "independent", true)
+    save_policy(c.admin, nil, "independent", true)
     request = request(c)
-    save_policy(c.scope, c.mission, "direct")
+    save_policy(c.admin, c.mission, "direct")
 
     assert {:error, :activation_policy_changed} =
              Activations.approve(c.reviewer, request.activation_request_id, "Reviewed")
@@ -144,13 +153,13 @@ defmodule Cadence.Governance.ScopedSettingsTest do
   end
 
   test "a changed policy blocks an already approved handoff before recording an activation", c do
-    save_policy(c.scope, nil, "independent", true)
+    save_policy(c.admin, nil, "independent", true)
     request = request(c)
 
     assert {:ok, _, _, _} =
              Activations.approve(c.reviewer, request.activation_request_id, "Reviewed")
 
-    save_policy(c.scope, c.mission, "direct")
+    save_policy(c.admin, c.mission, "direct")
 
     assert {:error, :activation_policy_changed} =
              Cadence.Activations.record_binding_set_activation(
@@ -167,7 +176,7 @@ defmodule Cadence.Governance.ScopedSettingsTest do
 
   test "only committed settings publish scoped updates", c do
     :ok = ScopedReadUpdates.subscribe(:settings_changed, c.org, c.mission)
-    save_policy(c.scope, c.mission, "direct")
+    save_policy(c.admin, c.mission, "direct")
     assert_receive {:settings_changed, org, mission}
     assert {org, mission} == {c.org, c.mission}
     current = ActivationPolicy.load(c.org, c.mission)
@@ -175,7 +184,7 @@ defmodule Cadence.Governance.ScopedSettingsTest do
     assert {:error, :rolled_back} =
              ScopedSettings.with_lock(c.org, ActivationPolicy.section_id(), fn ->
                assert {:ok, _} =
-                        ActivationPolicy.save(c.scope, c.mission, current.token, %{"value" => nil})
+                        ActivationPolicy.save(c.admin, c.mission, current.token, %{"value" => nil})
 
                {:error, :rolled_back}
              end)
