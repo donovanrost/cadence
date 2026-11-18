@@ -56,4 +56,34 @@ describe("U79 P3 extra-route rows", () => {
     expect(w.text()).toContain("Extra route via Inuvik · downlink primary");
     expect(w.findAll("button")).toHaveLength(0);
   });
+
+  it("names a spacecraft the server sends without a name 'Unknown spacecraft', still linked by id", () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        {
+          path: "/spacecraft/:spacecraftId",
+          name: "setup.spacecraft.one",
+          component: { render: () => null },
+        },
+      ],
+    });
+    const w = mount(ExtraRoutesList, {
+      props: {
+        routes: [
+          {
+            spacecraft: { id: sc, name: null, scid: null },
+            route_id: "route-2",
+            name: "INU · route 2",
+            station: inu,
+            legs: [{ direction: "uplink", role: "primary" }],
+          },
+        ],
+      },
+      global: { plugins: [router] },
+    });
+    const link = w.get("a");
+    expect(link.text()).toBe("Unknown spacecraft");
+    expect(link.attributes("href")).toBe("/spacecraft/sc-1");
+  });
 });
