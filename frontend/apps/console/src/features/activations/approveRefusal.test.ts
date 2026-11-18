@@ -174,6 +174,7 @@ describe("the decide panel after a refused Approve (U95)", () => {
         requestKey: { missionId: missionIdReader("m-1"), requestId: "act_1" },
         request: detail,
         viewer: { userId: "u2", orgAdmin: true },
+        index: "R2",
       },
       global: { stubs: { RouterLink: { template: "<a><slot /></a>" } } },
       attachTo: document.body,

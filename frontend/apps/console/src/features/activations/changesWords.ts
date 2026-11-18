@@ -72,9 +72,17 @@ export function rowLine(row: ChangeRow, firstStart: boolean): string {
   return firstStart ? `${label}: ${after}` : `${label}: ${valueWord(row, "before")} → ${after}`;
 }
 
+/** Rows the console couldn't read, across every group it could. */
+export const unshownRows = (c: ConfigurationChanges) =>
+  c.groups.items.flatMap((g) => g.rows.unshown);
+
 /** Rows the console couldn't read in a group, plus groups it couldn't read at all. */
 export const unshownCount = (c: ConfigurationChanges) =>
-  c.groups.unshown.length + c.groups.items.reduce((n, g) => n + g.rows.unshown.length, 0);
+  c.groups.unshown.length + unshownRows(c).length;
+
+/** ux #235: Approve stays off while any change can't be shown (Reject stays on). */
+export const APPROVE_UNSHOWN =
+  "Part of what changes can't be shown in this console, so it can't be approved here. Reload to try again. If it's still missing, tell the team that runs Cadence for you, or reject it.";
 
 const isUnchanged = (g: ChangeGroup) => g.rows.items.length === 0 && g.rows.unshown.length === 0;
 
@@ -126,21 +134,53 @@ export function summaryLines(c: ConfigurationChanges): readonly string[] {
     lines.push(
       `${formatCount(n.firstStart)} ${n.firstStart === 1 ? "starts" : "start"} for the first time.`,
     );
+  const unseen = unseenCraft(c);
+  // ux (#235): with an unreadable group the counts aren't the whole request; say so.
+  if (unseen > 0)
+    lines.push(
+      `These counts cover ${formatCount(c.total - unseen)} of the ${formatCount(c.total)} spacecraft. This console can't show what changes for the other ${formatCount(unseen)}.`,
+    );
   return lines;
 }
 
 const OFF_TAIL = "no live values, alarms or history. Turn telemetry on with a change set first.";
 
-/** U94's crit telemetry-off line (it warns, it doesn't block); null while telemetry is on. */
-export function telemetryOffLine(c: ConfigurationChanges): string | null {
+/**
+ * Craft in groups this console couldn't read: their count is unknown to it, so it's the total less
+ * every readable group's count (dashboards' #227 review: never infer the rest).
+ */
+export function unseenCraft(c: ConfigurationChanges): number {
+  if (c.groups.unshown.length === 0) return 0;
+  return Math.max(c.total - sum(c.groups.items, () => true), 0);
+}
+
+/**
+ * U94's telemetry-off line (it warns, it doesn't block): crit when craft are known to be off.
+ * ux (#235): craft in unreadable groups aren't known either way, so they're named as unknown, and
+ * on their own the line is a caution, never crit. null when every craft is known to be on.
+ */
+export function telemetryOffLine(
+  c: ConfigurationChanges,
+): Readonly<{ tone: "crit" | "caution"; text: string }> | null {
   const off = changeCounts(c).telemetryOff;
-  if (off === 0) return null;
-  if (!isFleet(c)) {
-    const name = c.groups.items[0]?.spacecraft[0]?.name ?? "this spacecraft";
-    return `Telemetry is off for ${name}, so once this is active it starts but decodes nothing: ${OFF_TAIL}`;
-  }
+  const unseen = unseenCraft(c);
+  const total = formatCount(c.total);
+  if (off === 0)
+    return unseen === 0
+      ? null
+      : {
+          tone: "caution",
+          text: `This console can't show whether telemetry is on for ${formatCount(unseen)} of the ${total} spacecraft.`,
+        };
   const they = off === 1 ? "it starts but decodes" : "they start but decode";
-  return `Telemetry is off for ${formatCount(off)} of the ${formatCount(c.total)} spacecraft, so once this is active ${they} nothing: ${OFF_TAIL}`;
+  const line = isFleet(c)
+    ? `Telemetry is off for ${formatCount(off)} of the ${total} spacecraft, so once this is active ${they} nothing: ${OFF_TAIL}`
+    : `Telemetry is off for ${c.groups.items[0]?.spacecraft[0]?.name ?? "this spacecraft"}, so once this is active it starts but decodes nothing: ${OFF_TAIL}`;
+  const unknown =
+    unseen === 0
+      ? ""
+      : ` This console can't show whether it's on for the other ${formatCount(unseen)}.`;
+  return { tone: "crit", text: `${line}${unknown}` };
 }
 
 /** A group's heading: "300 spacecraft", or the craft's name for a group of one. */

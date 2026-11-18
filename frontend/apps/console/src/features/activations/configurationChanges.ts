@@ -1,11 +1,14 @@
 import type { MissionId } from "@/api/index.ts";
 import {
+  DecodeError,
   decoders as d,
+  isRecord,
   perItem,
   request,
   spacecraftId as spacecraftIdReader,
   type Decoded,
   type PerItem,
+  type Reader,
 } from "@/api/index.ts";
 
 /**
@@ -45,7 +48,7 @@ const rowOf = <F extends ChangeField, T>(field: F, value: (v: unknown, p?: strin
   d.object({
     field: d.literal(field),
     // free-text: api's label, a fallback only; the console words rows by field (U94).
-    label: d.string,
+    label: d.optional(d.nullable(d.string)),
     before: value,
     after: value,
   });
@@ -86,13 +89,27 @@ const changeGroup = d.object({
   count: d.integer,
   spacecraft: d.array(craftRef, 100),
 });
-export type ChangeGroup = Decoded<typeof changeGroup>;
+/** A group with its index as sent: the names route takes it (`?group=N`), even if one is unshown. */
+export type ChangeGroup = Decoded<typeof changeGroup> & Readonly<{ index: number }>;
+
+const readGroups = perItem(
+  (raw: unknown, path = ""): ChangeGroup => {
+    if (!isRecord(raw) || typeof raw["index"] !== "number") throw new DecodeError(path, "group");
+    return { ...changeGroup(raw["group"], path), index: raw["index"] };
+  },
+  500,
+  { label: "A configuration request's changes", kindOf: () => ["configuration change group"] },
+);
+const groupsReader: Reader<PerItem<ChangeGroup>> = (value, path = "") => {
+  if (!Array.isArray(value)) throw new DecodeError(path, "array");
+  return readGroups(
+    value.map((group: unknown, index) => ({ index, group })),
+    path,
+  );
+};
 
 export const configurationChangesReader = d.object({
-  groups: perItem(changeGroup, 500, {
-    label: "A configuration request's changes",
-    kindOf: () => ["configuration change group"],
-  }),
+  groups: groupsReader,
   total: d.integer,
 });
 export type ConfigurationChanges = Decoded<typeof configurationChangesReader>;

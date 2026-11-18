@@ -108,7 +108,7 @@ describe("#235 what a spacecraft configuration request changes", () => {
       "12 have no changes.",
       "5 start for the first time.",
     ]);
-    expect(telemetryOffLine(c)).toBe(
+    expect(telemetryOffLine(c)?.text).toBe(
       "Telemetry is off for 3 of the 312 spacecraft, so once this is active they start but decode nothing: no live values, alarms or history. Turn telemetry on with a change set first.",
     );
   });
@@ -140,7 +140,7 @@ describe("#235 what a spacecraft configuration request changes", () => {
     expect(firstStartLine(g)).toBe(
       "Nothing is active for EARENDIL-001 yet, so every setting is new.",
     );
-    expect(telemetryOffLine(c)).toMatch(
+    expect(telemetryOffLine(c)?.text).toMatch(
       /^Telemetry is off for EARENDIL-001, so once this is active it starts but decodes nothing/,
     );
   });
@@ -190,6 +190,39 @@ describe("#235 what a spacecraft configuration request changes", () => {
     expect(c.groups.items[0]?.rows.items).toHaveLength(1);
     expect(unshownCount(c)).toBe(2);
     expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it("never states counts as exact when a group can't be read (dashboards' review, ux #235)", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const unreadable = { rows: [], telemetry_enabled: false, count: "twelve" };
+    const allOn = read({
+      groups: [group({ rows: [catalogRow], count: 300, spacecraft: crafts(1, 300) }), unreadable],
+      total: 312,
+    });
+    expect(summaryLines(allOn)).toContain(
+      "These counts cover 300 of the 312 spacecraft. This console can't show what changes for the other 12.",
+    );
+    expect(telemetryOffLine(allOn)).toEqual({
+      tone: "caution",
+      text: "This console can't show whether telemetry is on for 12 of the 312 spacecraft.",
+    });
+    const someOff = read({
+      groups: [
+        group({ rows: [catalogRow], count: 297, spacecraft: crafts(1, 297) }),
+        group({
+          rows: [catalogRow],
+          telemetry_enabled: false,
+          count: 3,
+          spacecraft: crafts(400, 3),
+        }),
+        unreadable,
+      ],
+      total: 312,
+    });
+    const off = telemetryOffLine(someOff);
+    expect(off?.tone).toBe("crit");
+    expect(off?.text).toMatch(/^Telemetry is off for 3 of the 312 spacecraft/);
+    expect(off?.text).toMatch(/ This console can't show whether it's on for the other 12\.$/);
   });
 
   it("reads a page of a group's names", () => {

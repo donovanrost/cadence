@@ -9,9 +9,15 @@ import { unshownWords, type UnshownNoun } from "./unshown.ts";
  * known). Reload picks up a newer console if there is one; Technical details lists each item's
  * kind and id as sent, never its payload.
  */
-const props = withDefaults(defineProps<{ unshown: readonly Unshown[]; noun?: UnshownNoun }>(), {
-  noun: "item",
-});
+const props = withDefaults(
+  defineProps<{
+    unshown: readonly Unshown[];
+    noun?: UnshownNoun;
+    /** Replaces the counted noun when the caller words it (ux #235). */
+    what?: string | undefined;
+  }>(),
+  { noun: "item", what: undefined },
+);
 const lines = computed(() => props.unshown.map(unshownLine));
 const reload = () => window.location.reload();
 </script>
@@ -19,7 +25,7 @@ const reload = () => window.location.reload();
 <template>
   <ApCallout v-if="unshown.length > 0" tone="caution">
     <span class="flex flex-col gap-1">
-      <span>{{ unshownWords(unshown.length, noun) }}</span>
+      <span>{{ unshownWords(unshown.length, noun, what) }}</span>
       <details class="text-xs text-text-3">
         <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
         <p v-for="(t, i) in lines" :key="i" class="m-0 font-mono break-all">{{ t }}</p>
