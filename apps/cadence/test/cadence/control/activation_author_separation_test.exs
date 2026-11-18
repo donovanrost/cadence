@@ -8,12 +8,14 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   """
   use Cadence.RuntimeCase, async: false
 
-  alias Cadence.Applications.SpacecraftConfiguration.{Authors, Drafts, Review}
+  alias Cadence.Applications.SpacecraftConfiguration.{Authors, Drafts, Review, RevisionRow}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.Repo
+  alias Cadence.SpacecraftStore.SpacecraftRow
 
   setup do
     org = "org-author-sep-#{System.unique_integer([:positive])}"
@@ -89,6 +91,106 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
 
     assert {:ok, %{}} =
              Authors.by_spacecraft(c.mission, %{})
+  end
+
+  test "a 500-craft fleet review reads its authors in two queries, each craft in its own window",
+       c do
+    now = DateTime.utc_now()
+    mid = c.mission.mission_id
+    ids = for n <- 1..500, do: "fleet-#{System.unique_integer([:positive])}-#{n}"
+
+    Repo.insert_all(
+      SpacecraftRow,
+      Enum.map(
+        ids,
+        &%{
+          spacecraft_id: &1,
+          organization_id: c.org,
+          mission_id: mid,
+          display_name: &1,
+          metadata: %{},
+          inserted_at: now
+        }
+      )
+    )
+
+    revision = fn id, version, by ->
+      %{
+        configuration_revision_id: "#{id}-v#{version}",
+        organization_id: c.org,
+        mission_id: mid,
+        spacecraft_id: id,
+        version: version,
+        document: %{},
+        content_sha256: "x",
+        application_basis: "x",
+        created_by: by,
+        inserted_at: now
+      }
+    end
+
+    Repo.insert_all(
+      RevisionRow,
+      Enum.flat_map(ids, &[revision.(&1, 1, "fleet-a"), revision.(&1, 2, "fleet-b")])
+    )
+
+    # Even craft are reviewed at version 2 (both saved), odd ones at version 1 (only A had).
+    reviewed =
+      ids
+      |> Enum.with_index()
+      |> Map.new(fn {id, i} -> {id, if(rem(i, 2) == 0, do: 2, else: 1)} end)
+
+    metadata = %{
+      "configuration_review" => %{
+        "base_activation_id" => nil,
+        "spacecraft_reviews" =>
+          Map.new(reviewed, fn {id, v} ->
+            {id, %{"configuration_revision_id" => "#{id}-v#{v}"}}
+          end)
+      }
+    }
+
+    {queries, result} = count_queries(fn -> Authors.by_spacecraft(c.mission, metadata) end)
+    assert {:ok, authors} = result
+    assert map_size(authors) == 500
+
+    for {id, v} <- reviewed do
+      expected = if v == 2, do: ["fleet-a", "fleet-b"], else: ["fleet-a"]
+      assert Enum.sort(authors[id]) == expected
+    end
+
+    # Active.load's own read(s) plus Authors' two, whatever the fleet size.
+    assert queries <= 4
+  end
+
+  defp count_queries(fun) do
+    ref = make_ref()
+    me = self()
+    handler = "author-queries-#{inspect(ref)}"
+
+    :telemetry.attach(
+      handler,
+      [:cadence, :repo, :query],
+      fn _event, _measure, _meta, _cfg ->
+        send(me, {:query, ref})
+      end,
+      nil
+    )
+
+    try do
+      result = fun.()
+      {drain(ref, 0), result}
+    after
+      :telemetry.detach(handler)
+    end
+  end
+
+  defp drain(ref, n) do
+    receive do
+      {:query, ^ref} -> drain(ref, n + 1)
+    after
+      0 -> n
+    end
   end
 
   defp save(c, scope, craft, apids) do
