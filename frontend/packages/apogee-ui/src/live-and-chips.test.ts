@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { defineComponent, h, nextTick, ref } from "vue";
 import ApChip from "./ApChip.vue";
 import ApEmptyState from "./ApEmptyState.vue";
-import { ANNOUNCE_DELAY_MS } from "./lib/announce.ts";
+import { ANNOUNCE_DELAY_MS, announcePolite } from "./lib/announce.ts";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -121,6 +121,29 @@ describe("ApEmptyState announce (B6)", () => {
       mount(ApEmptyState, { props: { headline: "No alarms" } });
       vi.advanceTimersByTime(ANNOUNCE_DELAY_MS);
       expect(announcer()?.textContent ?? "").toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("announcePolite inside an open sheet", () => {
+  it("speaks from a region inside the topmost open dialog, which a modal doesn't hide", () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = `<main><h1>Now</h1></main><dialog open aria-label="Search"><input></dialog>`;
+      announcePolite("No matches");
+      vi.advanceTimersByTime(ANNOUNCE_DELAY_MS);
+      const region = document.querySelector("dialog [data-ap-announcer]");
+      expect(region?.textContent).toBe("No matches");
+      expect(document.querySelectorAll("[data-ap-announcer]")).toHaveLength(1);
+
+      document.querySelector("dialog")?.remove();
+      announcePolite("No points match");
+      vi.advanceTimersByTime(ANNOUNCE_DELAY_MS);
+      expect(document.querySelector("body > [data-ap-announcer]")?.textContent).toBe(
+        "No points match",
+      );
     } finally {
       vi.useRealTimers();
     }
