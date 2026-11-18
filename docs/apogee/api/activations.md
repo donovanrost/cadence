@@ -134,6 +134,13 @@ Errors:
   EARENDIL-004's configuration in this request, so another person approves it. Your approval
   wasn't recorded."; several, up to three names then "and N more spacecraft"; else the generic
   line. Nothing is recorded; Reject stays open to you.
+- `403 activation_approver_authors_unknown` (#236, fails closed): Cadence couldn't determine who
+  saved the configuration being activated (a reviewed version it can't find, or unreadable review
+  evidence), so nobody may approve it as it stands. `details` as above, naming the craft whose
+  authors couldn't be read (`[]` when the evidence itself is unreadable). ux's line: "Not approved:
+  Cadence can't tell who saved this configuration, so it can't check that you weren't one of them.
+  Your approval wasn't recorded. Reject it so the requester can send it again; if it keeps
+  happening, tell the team that runs Cadence for you." Nothing is recorded.
 - `409 activation_policy_changed` (approve only; reject always works): the activation policy
   changed since the request; request it again. (It's not `policy_changed`, which is the planning policy's code.)
 - `409 nothing_to_resume {state}` (resume): `succeeded` ("It already applied."), `in_progress`

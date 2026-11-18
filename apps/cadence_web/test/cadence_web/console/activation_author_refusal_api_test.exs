@@ -10,8 +10,9 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
   alias Cadence.Applications.TelemetryDecomFixtures, as: CatalogFixtures
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.Control.ActivationRequests.Refusals
   alias Cadence.Governance.ActivationPolicy
-  alias CadenceWeb.Console.ApproveRefusals
+  alias CadenceWeb.Console.{ApproveRefusals, Problem}
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -89,6 +90,31 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
              |> post(path <> "/approve", %{"reason" => "Reviewed"})
              |> json_response(200)
              |> Map.fetch!("data")
+  end
+
+  test "authors that can't be determined fail closed: a 403 naming the craft, in ux's words", c do
+    id = c.craft.spacecraft_id
+    name = c.craft.display_name
+
+    assert {:error,
+            {:activation_approver_authors_unknown,
+             %{spacecraft_ids: [^id], spacecraft: [%{id: ^id, name: ^name}]} = details}} =
+             Refusals.explain(
+               {:error, {:activation_approver_authors_unknown, [id]}},
+               c.request.organization_id,
+               c.request.mission_id,
+               c.request
+             )
+
+    assert %{
+             "error" => %{
+               "code" => "activation_approver_authors_unknown",
+               "message" => "Not approved: Cadence can't tell who saved this configuration" <> _
+             }
+           } =
+             build_conn()
+             |> Problem.respond(:activation_approver_authors_unknown, details)
+             |> json_response(403)
   end
 
   test "several spacecraft: up to three named, then the count (ux)" do

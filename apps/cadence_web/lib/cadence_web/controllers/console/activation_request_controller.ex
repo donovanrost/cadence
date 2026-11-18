@@ -55,6 +55,10 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, {:activation_approver_authored_content, details}),
     do: ApproveRefusals.authored(conn, details)
 
+  # #236 fail-closed: the authors couldn't be determined, so nobody may approve it as it stands.
+  defp error(conn, {:activation_approver_authors_unknown, details}),
+    do: Problem.respond(conn, :activation_approver_authors_unknown, details)
+
   defp error(conn, {:not_resumable, code}),
     do: Problem.respond(conn, :not_resumable, %{error_code: code})
 
