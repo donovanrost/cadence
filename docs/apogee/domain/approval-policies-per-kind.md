@@ -1,4 +1,4 @@
-# Approval policies per kind: design note (domain; api adds the API and console part)
+# Approval policies per kind: design note (domain and api)
 
 For board #201 and its sub-stories #221-#225 (DECISIONS #111). Status: DRAFT for lead and the director.
 Breaking changes are fine (DECISIONS #112): no compatibility reads are kept for dev data.
@@ -48,6 +48,47 @@ Breaking changes are fine (DECISIONS #112): no compatibility reads are kept for 
    DECISIONS #112 it could equally start from defaults; copying is the same amount of code and surprises
    no one.
 
+## API and console (api)
+
+**The settings API needs no new routes.** `GET` and `PUT /missions/:m/settings` (and the organization's)
+already serve registry sections with per-path mission overrides, per-field `source` and `inherited_value`,
+an organization `allow_override` per section, and a per-section `version` (setup.md, Settings ST1).
+`cadence.approvals` is one more registry section; `cadence.governance` leaves the registry. A breaking
+change, readers first.
+
+- **Fields** (paths inside the section; the console form renders them as it does Governance today):
+  - `kinds.<kind>.mode` for each of `commands`, `change_sets`, `activations`, `model_revisions`,
+    `contact_plans`: enum `one_person` / `independent`, labelled per kind ("Change sets: one person
+    approves" / "...a second person approves"), with ux's help text. Each field carries its kind as the
+    form's `section`, so the console groups them by kind.
+  - commands' options, using field types the console already renders (no new type): booleans
+    `kinds.commands.second_go.critical`, `.hazardous`, `.policy_hint`, `.routine` (so proposal 2's
+    `second_go_for` list is stored as four booleans: each is then its own overridable path); number
+    `kinds.commands.fleet_reach_threshold` (1..1000); enum `kinds.commands.armed_runs`.
+- **Defaults and overrides:** an organization sets every kind; a mission overrides any single path, and
+  `null` hands that path back to the organization. That is exactly today's per-field behaviour.
+  `allow_override` stays per SECTION (lock all kinds or none). A per-kind lock would need a new field
+  shape; I'd leave it out of v1 unless the user asks (question 5).
+- **Saving** goes through the same `PUT` with `expected_version`; it takes the policy lock exclusively, as
+  a Governance save does today, so an approval never decides under a policy that changed mid-way.
+- **Who may change it (a finding, question 6):** `manage_settings` resolves to `operate_mission`, so any
+  mission operator can weaken a mission's approvals today (Governance `independent` to `direct`) unless the
+  organization locks the section. The approvals section should need a stronger action than other
+  settings: at least an organization admin, recorded in the settings audit with who, when, old and new
+  value per path. Marked `todo(authz)` until Cedar.
+- **Decisions name their policy:** every kind's approve refusal names the kind and mode in
+  `details: {kind, mode}`. One code replaces today's per-kind self-approval codes
+  (`self_approval_forbidden`, `command_group_self_approval_not_allowed`,
+  `mission_model_self_approval_forbidden`): `approval_by_author_refused` (403), with ux's words per kind.
+  `activation_policy_changed` becomes `approval_policy_changed` (409, `details.kind`) for every kind that
+  checks the recorded evidence at decide or apply.
+- **Reads:** the evidence each decision records is exposed with #117's decision records, not before. Until
+  then, the readers that show 'needs a second person' (change sets' `viewer`, Activations, the command
+  group's `second_go_required`, plan approval) keep their fields; they now come from the kind's policy.
+- **Docs:** setup.md (the section and its fields, the stricter edit rule), changes.md, activations.md,
+  commanding.md, scheduling.md (the codes). Readers first: fe-setup (the settings form), fe-ops (the
+  approve refusals), dashboards (change sets' viewer).
+
 ## Questions for the user (before building)
 
 1. **'One person' and self-approval:** today's `direct` lets one admin write AND approve their own plan,
@@ -57,6 +98,10 @@ Breaking changes are fine (DECISIONS #112): no compatibility reads are kept for 
 2. **Fleet planning policies:** their own kind, or part of contact plans? Today they're always 'independent'.
 3. **Provider changes:** a sixth kind, or out of scope?
 4. **Commands:** confirm the option set, especially a second GO for ROUTINE commands and armed runs.
+5. **Per-kind lock:** should an organization lock individual kinds (for example commands) while missions
+   choose others, or is one lock for the whole Approvals section enough?
+6. **Who may change approval policies:** organization admins only, any mission admin, or should changing
+   a mission's approval policy itself need a second person?
 
 Context: board #201, #221-#225; DECISIONS #92 (a), #107, #109, #111, #112; Governance.ActivationLocks;
 Commanding.CommandPolicy; M2 policy evidence (#226).
