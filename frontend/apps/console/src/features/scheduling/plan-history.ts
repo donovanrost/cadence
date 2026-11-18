@@ -1,4 +1,11 @@
-import { decoders as d, request, type ApiResult, type Decoded, type MissionId } from "@/api";
+import {
+  decoders as d,
+  request,
+  spacecraftRef,
+  type ApiResult,
+  type Decoded,
+  type MissionId,
+} from "@/api";
 import { formatCount } from "@/ui";
 import type { PlanDetail } from "./api.ts";
 
@@ -31,7 +38,7 @@ const versionRow = d.object({
 const gapNames = {
   // free-text: the requirement's template name, else its rule in words
   requirement_label: d.optional(d.nullable(d.string)),
-  spacecraft: d.optional(d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }))),
+  spacecraft: d.optional(d.nullable(spacecraftRef)),
   /** api 3386a8bf3 (U73): the requirement version's window, so a recurring rule's gaps differ. */
   requirement_window: d.optional(d.nullable(d.object({ from: d.timestamp, to: d.timestamp }))),
 };

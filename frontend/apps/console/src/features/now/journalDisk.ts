@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { decoders as d, stationRef, type Decoded } from "@/api/index.ts";
+import { decoders as d, spacecraftRef, stationRef, type Decoded } from "@/api/index.ts";
 import { formatShort } from "@/ui";
 import { size } from "./ingress.ts";
 import type { QueueItem, SentencePart } from "./queue.ts";
@@ -16,7 +16,7 @@ const holder = d.object({
   contact_id: d.nullable(d.token),
   spacecraft_id: d.nullable(d.token),
   /** api-ops (asked 11-15): the holder's names, so the row needs no extra reads. */
-  spacecraft: d.optional(d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }))),
+  spacecraft: d.optional(d.nullable(spacecraftRef)),
   station: d.optional(d.nullable(stationRef)),
   // free-text: the provider's own station reference, a fallback label only
   ground_station_ref: d.nullable(d.string),

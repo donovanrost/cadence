@@ -1,15 +1,15 @@
 import type { MissionId } from "@/api/index.ts";
 import {
-  spacecraftId as spacecraftIdReader,
-  type SpacecraftId,
-  scid as scidReader,
   actor as sharedActor,
   decoders as d,
   request,
   requestPage,
+  spacecraftId as spacecraftIdReader,
+  spacecraftRef,
   type ApiError,
   type ApiResult,
   type Decoded,
+  type SpacecraftId,
 } from "@/api/index.ts";
 import { engineeringValue, sourceStates, thresholdsReader } from "./api.ts";
 
@@ -27,7 +27,7 @@ const episodeFields = {
   peak_severity: d.oneOf(["critical", "caution"] as const),
   source_state: d.nullable(d.known(sourceStates)),
   spacecraft_id: d.nullable(spacecraftIdReader),
-  spacecraft: d.nullable(d.object({ id: spacecraftIdReader, name: d.string, scid: scidReader })),
+  spacecraft: d.nullable(spacecraftRef),
   point: d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) }),
   thresholds: d.nullable(thresholdsReader),
   opened_at: d.timestamp,

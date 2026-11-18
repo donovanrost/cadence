@@ -56,7 +56,7 @@ export function conflictSentences(item: PreviewItem, leftBy?: string): string | 
       const since =
         p.changed_in === "outside"
           ? "changed outside a change set"
-          : `changed in r${p.changed_in}${p.changed_by ? ` by ${p.changed_by.name}` : ""}`;
+          : `changed in r${p.changed_in}${p.changed_by?.name ? ` by ${p.changed_by.name}` : ""}`;
       const head = `${who} · ${p.label ?? p.path} is ${valueText(p.live, p.unit, p.format)} now, not ${valueText(p.base, p.unit, p.format)} as ${leftBy ?? "it was when staged"}${leftBy ? " left it" : ""} (${since}).`;
       return p.changed_in === "outside"
         ? `${head} Change it by hand.`

@@ -61,9 +61,12 @@ export const existingOverride = (
 ): ProfileOverride | null =>
   detail.overrides.find((o) => o.spacecraft.id === spacecraftId && o.path === path) ?? null;
 
+/** The overridden spacecraft's name; the shared reference may not know it (§12 A5). */
+export const overrideCraft = (o: ProfileOverride) => o.spacecraft.name ?? "Unknown spacecraft";
+
 /** "EARENDIL-001 already overrides this: rev 4 since r3 (Mira K.: canary for rev 4)" (ux P3). */
 export function existingLine(o: ProfileOverride, f: ProfileField | undefined): string {
   const since = o.since_revision !== null ? ` since r${o.since_revision}` : "";
-  const why = o.reason ? ` (${o.actor ? `${o.actor.name}: ` : ""}${o.reason})` : "";
-  return `${o.spacecraft.name} already overrides this: ${valueText(f, o.spacecraft_value)}${since}${why}`;
+  const why = o.reason ? ` (${o.actor?.name ? `${o.actor.name}: ` : ""}${o.reason})` : "";
+  return `${overrideCraft(o)} already overrides this: ${valueText(f, o.spacecraft_value)}${since}${why}`;
 }

@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import { actor, decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
 import { formatCount } from "@/ui";
 
 /**
@@ -40,7 +40,7 @@ const revision = object({
   declaration_count: count,
   spacecraft_count: count,
   imported_at: timestamp,
-  actor: nullable(object({ name: string })),
+  actor: nullable(actor),
   /**
    * ux U65 (api, 11-15): the compiled mission model behind this revision and its approval state;
    * null for a revision without one, absent on older reads (no tag then).

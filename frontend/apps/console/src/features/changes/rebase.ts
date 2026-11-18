@@ -68,7 +68,7 @@ export function conflictRow(items: readonly PreviewItem[], leftBy: string): Conf
     const since =
       f.changed_in === "outside"
         ? "changed outside a change set"
-        : `changed in r${f.changed_in}${f.changed_by ? ` by ${f.changed_by.name}` : ""}`;
+        : `changed in r${f.changed_in}${f.changed_by?.name ? ` by ${f.changed_by.name}` : ""}`;
     return `${f.label ?? f.path} is ${shown(f.live, f)} now, not ${shown(f.base, f)} as ${leftBy} left it (${since}). You staged ${shown(f.staged, f)}.`;
   });
   const only = fields.length === 1 ? fields[0] : undefined;

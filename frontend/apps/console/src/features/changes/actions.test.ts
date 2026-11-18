@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode } from "@/api";
+import { decode, type Actor } from "@/api";
 import {
   failureOutcome,
   groupedLines,
@@ -175,7 +175,7 @@ describe("conflict sentences (api 062a73f8, ux rollback review #1)", () => {
     live: 1024,
     staged: 1115,
     changed_in: 9 as number | "outside",
-    changed_by: { name: "Mira K." } as { name: string } | null,
+    changed_by: { kind: "user" as const, id: null, name: "Mira K." } as Actor | null,
   };
   const item: PreviewItem = {
     ...base,

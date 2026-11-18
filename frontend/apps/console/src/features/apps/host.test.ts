@@ -65,7 +65,7 @@ describe("L9 status line (ux #77)", () => {
         {
           ...base,
           activation_request: {
-            requested_by: { name: "Mira K." },
+            requested_by: { kind: "user" as const, id: null, name: "Mira K." },
             requested_at: "2026-11-13T02:10:00Z",
           },
         },

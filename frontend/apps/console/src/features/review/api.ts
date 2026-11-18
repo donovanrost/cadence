@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import { decoders, request, spacecraftRef, type ApiResult, type Decoded, type Reader } from "@/api";
 
 /** Contract: docs/apogee/api/contacts.md, "Pass review (S9, K3)". */
 const {
@@ -115,7 +115,7 @@ export const outcomes = [
 export type Outcome = (typeof outcomes)[number];
 const row = object({
   id: token,
-  spacecraft: object({ id: token, name: nullable(string) }),
+  spacecraft: spacecraftRef,
   station,
   provider: nullable(provider),
   antenna_ref: nullable(string),

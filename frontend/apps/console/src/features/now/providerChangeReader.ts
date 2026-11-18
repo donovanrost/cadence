@@ -1,4 +1,4 @@
-import { decoders as d, type Decoded } from "@/api/index.ts";
+import { actor, decoders as d, type Decoded } from "@/api/index.ts";
 
 /** Provider-change fields (ProviderReservationChanges' document keys); values are JSON text. */
 export const changeFields = [
@@ -61,7 +61,7 @@ export const passChangeReader = d.object({
     d.object({
       // free-text: the decision's own key; the state carries the outcome (ux U44)
       action: d.string,
-      by: d.nullable(d.object({ id: d.nullable(d.token), name: d.nullable(d.string) })),
+      by: d.nullable(actor),
       at: d.timestamp,
       // free-text: the decider's reason
       reason: d.nullable(d.string),

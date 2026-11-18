@@ -1,9 +1,10 @@
 import {
-  isKnown,
-  isError,
-  invitationState,
-  detailsOf,
   decoders as d,
+  detailsOf,
+  invitationState,
+  invitedBy,
+  isError,
+  isKnown,
   request,
   role,
   roleText,
@@ -20,7 +21,7 @@ const invitation = d.object({
   id: d.token,
   organization,
   role,
-  invited_by: d.nullable(d.object({ name: d.string })),
+  invited_by: invitedBy,
   invited_at: d.timestamp,
   expires_at: d.nullable(d.timestamp),
 });
@@ -54,7 +55,7 @@ export function declineInvitation(id: string) {
 /** `Acme Space · Member · invited by Mira K. on 11-10` (People.md Account). */
 export function invitationLine(i: MyInvitation): string {
   const roleWord = roleText(i.role);
-  const by = i.invited_by ? `invited by ${i.invited_by.name}` : "invited";
+  const by = i.invited_by?.name ? `invited by ${i.invited_by.name}` : "invited";
   return `${i.organization.name} · ${roleWord} · ${by} on ${formatShort(new Date(i.invited_at)).slice(0, 5)}`;
 }
 

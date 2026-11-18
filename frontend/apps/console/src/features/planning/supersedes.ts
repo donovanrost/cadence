@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { actor, decoders, request, type ApiResult, type Decoded } from "@/api";
 import { planStates } from "@/features/scheduling/index.ts";
 import { decidedReader, type Decided } from "./decided.ts";
 
@@ -12,7 +12,7 @@ const draftsShape = {
       plan: object({ id: token, version: integer }),
       // api drift sweep 11-13: null for a draft with no passes yet (contact_plan_overview.ex:76).
       day: nullable(string),
-      author: nullable(object({ id: optional(nullable(token)), name: string })),
+      author: nullable(actor),
       state: decoders.known(planStates),
     }),
     500,

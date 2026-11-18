@@ -8,6 +8,7 @@ import {
   jsonObject,
   orNull,
   request,
+  spacecraftRef,
   type ApiError,
   type ApiResult,
   type Decoded,
@@ -39,7 +40,7 @@ const requirementRowShape = {
   id: token,
   state: decoders.known(requirementStates),
   version: integer,
-  spacecraft: object({ id: token, name: nullable(string) }),
+  spacecraft: spacecraftRef,
   template_id: nullable(token),
   /** ux U48: the template version that generated it (api); null for one-offs, absent until api ships. */
   template_version: optional(nullable(integer)),

@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import {
+  actor,
   childRecord,
   decoders,
   jsonObject,
@@ -34,7 +35,7 @@ export const policyReader = (value: unknown, path = "") => {
     pending: nullable(
       object({
         version: integer,
-        requested_by: nullable(object({ name: string })),
+        requested_by: nullable(actor),
         requested_at: timestamp,
         // free-text: the saver's note (api 7e454da56), trimmed, at most 500 characters; null when none.
         reason: nullable(string),
@@ -194,12 +195,13 @@ export const REASON_MAX = 500;
 export function pendingLine(
   pending: Readonly<{
     version: number;
-    requested_by: { name: string } | null;
+    requested_by: Readonly<{ name: string | null }> | null;
     reason: string | null;
   }>,
   at: string,
 ): string {
-  const who = pending.requested_by ? ` by ${pending.requested_by.name}` : "";
+  const name = pending.requested_by?.name;
+  const who = name ? ` by ${name}` : "";
   const line = `Policy v${pending.version} was proposed${who} at ${at}`;
   if (!pending.reason) return `${line}.`;
   // The reason is the saver's own sentence: don't double its full stop.

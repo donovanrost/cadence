@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { codeOf, decoders as d, detailsOf, isError, type ApiError } from "@/api";
+import { codeOf, decoders as d, detailsOf, isError, spacecraftRef, type ApiError } from "@/api";
 
 /**
  * ux U95: Approve refused by domain's preflight (a87fe44f6) before anything is recorded. Every line
@@ -50,7 +50,7 @@ const comparisonFailed = d.object({
 /** review_stale and model_not_active (api): the craft, each name possibly unknown. */
 const craftDetails = d.object({
   // free-text: a spacecraft's display name; null when api can't resolve it
-  spacecraft: d.optional(d.array(d.object({ id: d.token, name: d.nullable(d.string) }), 100)),
+  spacecraft: d.optional(d.array(spacecraftRef, 100)),
 });
 const craftNames = (e: ApiError): string[] =>
   (detailsOf(e, craftDetails)?.spacecraft ?? []).flatMap((s) => (s.name ? [s.name] : []));

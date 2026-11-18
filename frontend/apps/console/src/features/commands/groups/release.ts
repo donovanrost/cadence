@@ -257,7 +257,7 @@ export type ReleaseLogContext = Readonly<{
 
 type ContactRef = Readonly<{ realized_contact_id?: string | null | undefined }>;
 type LabelSource = Readonly<{
-  spacecraft?: Readonly<{ name: string }> | undefined;
+  spacecraft?: Readonly<{ name: string | null }> | undefined;
   pass:
     | (ContactRef &
         Readonly<{

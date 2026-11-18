@@ -2,12 +2,12 @@ import type { MissionId } from "@/api/index.ts";
 import {
   actor,
   decoders,
+  orNull,
   request,
-  spacecraftId,
+  spacecraftRef,
   type ApiResult,
   type Decoded,
   type Reader,
-  orNull,
 } from "@/api";
 import { formatCount } from "@/ui";
 
@@ -62,7 +62,7 @@ const rule = object({
 export type ProfileRule = Decoded<typeof rule>;
 
 const override = object({
-  spacecraft: object({ id: spacecraftId, name: string }),
+  spacecraft: spacecraftRef,
   section: token,
   path: string,
   profile_value: raw,

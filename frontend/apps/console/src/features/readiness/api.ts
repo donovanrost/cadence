@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders, request, type ApiResult, type Reader } from "@/api/index.ts";
+import { actor, decoders, request, type ApiResult, type Reader } from "@/api/index.ts";
 
 /**
  * Contract (requested): docs/apogee/plans/setup-shapes.md §R, final in docs/apogee/api/setup.md.
@@ -185,7 +185,7 @@ const recentChange: Reader<RecentChange> = (value, path = "") => {
     kind: token,
     version_label: nullable(string),
     summary: string,
-    actor: nullable(object({ name: string })),
+    actor: nullable(actor),
   })(value, path);
   return {
     at: raw.at,

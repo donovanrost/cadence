@@ -1,10 +1,11 @@
 import {
+  actor,
   actorKinds,
   decoders as d,
   orNull,
+  spacecraftId as spacecraftIdReader,
   spacecraftRef,
   stationRef,
-  spacecraftId as spacecraftIdReader,
   type Decoded,
 } from "@/api/index.ts";
 import { attentionUplinkReader } from "@/features/contacts/readiness.ts";
@@ -150,7 +151,7 @@ export const attentionReader = d.object({
   /** false: retrying can't help (review stale, content mismatch); request activation again (U41). */
   retryable: d.optional(d.nullable(d.boolean)),
   /** U41 meta: who approved it and when (api be59d4f32; null when the record has no approver). */
-  approved_by: d.optional(d.nullable(d.object({ name: d.nullable(d.string) }))),
+  approved_by: d.optional(d.nullable(actor)),
   approved_at: d.optional(d.nullable(d.timestamp)),
   /** true: the runtime isn't running the active configuration either (mission_runtime is left out). */
   runtime_not_applied: d.optional(d.nullable(d.boolean)),

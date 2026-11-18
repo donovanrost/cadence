@@ -1,5 +1,11 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  decoders as d,
+  request,
+  spacecraftRef,
+  type ApiResult,
+  type Decoded,
+} from "@/api/index.ts";
 import { formatShort, plural } from "@/ui";
 
 /**
@@ -8,7 +14,7 @@ import { formatShort, plural } from "@/ui";
  * the provider picks one per offer.
  */
 export const routesReader = d.object({
-  spacecraft: d.object({ id: d.token, name: d.string }),
+  spacecraft: spacecraftRef,
   routes: d.array(
     d.object({
       key: d.string,

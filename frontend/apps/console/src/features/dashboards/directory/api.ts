@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
+import { decoders as d, request, spacecraftRef, type ApiResult, type Decoded } from "@/api";
 
 /**
  * Directory endpoints (plans/dashboards.md "D1–D4, D6", api-ops): list, star, archive/restore,
@@ -11,7 +11,7 @@ const spacecraftSummary = d.nullable(
   d.variant("mode", {
     fixed: d.object({
       mode: d.literal("fixed"),
-      spacecraft: d.nullable(d.object({ id: d.token, name: d.string })),
+      spacecraft: d.nullable(spacecraftRef),
     }),
     context: d.object({ mode: d.literal("context") }),
     fleet: d.object({ mode: d.literal("fleet") }),

@@ -1,5 +1,5 @@
 import type { MissionId } from "@/api/index.ts";
-import { decoders, request, type ApiResult, type Reader } from "@/api";
+import { actor, decoders, request, type ApiResult, type Reader } from "@/api";
 import { formatShort } from "@/ui";
 
 /** Contract: docs/apogee/api/setup.md, `GET /api/console/v1/missions/:mission_id/profiles`. */
@@ -28,14 +28,14 @@ export type LastChange = Readonly<{
   version: number;
   revision: number | null;
   at: string;
-  actor: Readonly<{ name: string }> | null;
+  actor: Readonly<{ name: string | null }> | null;
 }>;
 const lastChange = nullable(
   object({
     version: integer,
     revision: nullable(integer),
     at: decoders.timestamp,
-    actor: nullable(object({ name: string })),
+    actor: nullable(actor),
   }),
 );
 const optionalOf =
