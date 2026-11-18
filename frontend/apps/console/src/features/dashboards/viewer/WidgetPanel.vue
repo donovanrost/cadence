@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ApButton, ApPanel } from "@/ui";
 import type { WorkspacePlacement, WorkspaceSnapshot } from "../model/snapshot.ts";
+import { widgetTitle } from "../model/widget-data.ts";
 import WidgetBody from "../widgets/WidgetBody.vue";
 
 /** One widget in an ApPanel (ux: no index letters; errors stay inside the panel). */
@@ -12,9 +13,7 @@ const props = defineProps<{
   group: string;
 }>();
 const emit = defineEmits<{ inspect: [placement: WorkspacePlacement] }>();
-const title = computed(() =>
-  props.placement.status === "ready" ? props.placement.widget.title : "Unavailable widget",
-);
+const title = computed(() => widgetTitle(props.placement));
 const warning = computed(() =>
   props.placement.warnings.some((w) => w.severity !== "info") ? "PARTIAL DATA" : undefined,
 );

@@ -35,6 +35,26 @@ export function frameRows(frame: WorkspaceFrame): Row[] {
   );
 }
 
+/** A widget's name for its heading and labels (B7): its title, else Untitled widget. */
+export const widgetTitle = (placement: WorkspacePlacement): string =>
+  placement.status === "ready" ? placement.widget.title || "Untitled widget" : "Unavailable widget";
+
+/** A lane of the state timeline as a sentence (B5): its states, from when, and the one now. */
+export function laneSentence(
+  label: string,
+  segments: readonly Readonly<{ state: string; limit: LimitState | null; from: number }>[],
+): string {
+  const words = (s: (typeof segments)[number]) =>
+    `${s.state}${s.limit ? ` (${limitLabel[s.limit]})` : ""}`;
+  const first = segments[0];
+  const last = segments.at(-1);
+  if (!first || !last) return `${label}: no states.`;
+  const n = segments.length;
+  return n === 1
+    ? `${label}: ${words(last)} since ${formatTime(first.from)}.`
+    : `${label}: ${n} states since ${formatTime(first.from)}, now ${words(last)}.`;
+}
+
 export const primaryFrames = (placement: WorkspacePlacement) =>
   placement.frames.filter((frame) => frame.role === "primary");
 
