@@ -25,6 +25,7 @@ defmodule Cadence.Catalog.ConfigurationChoices do
         id: revision.catalog_revision_id,
         name: database.name,
         label: revision.revision_label,
+        number: revision.revision_number,
         model_id: model.revision_id,
         declarations: model.declaration_count
       }
