@@ -223,8 +223,12 @@ defmodule CadenceWeb.ApplicationHostController do
     %{status: 200, content_type: @json_content_type, body: Jason.encode!(response)}
   end
 
+  # Inside the idempotency closure a failed action's problem is DATA: the ledger stores it and
+  # send_action_response sends it, once. Sending it here as well wrote a second response on the
+  # same keep-alive connection, which the browser read as its next request's answer (#230).
   defp action_problem_response(conn, reason) do
     conn
+    |> put_private(:application_host_problem_as_data, true)
     |> action_problem_conn(reason)
     |> stored_response()
   end
@@ -265,6 +269,8 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp action_problem_conn(conn, reason), do: bridge_problem(conn, reason)
 
+  # Stores status, content type and body only: a header a problem sets inside the action
+  # closure (e.g. retry-after) would be dropped from the stored and replayed response (api-ops).
   defp stored_response(conn) do
     %{
       status: conn.status,
@@ -892,11 +898,25 @@ defmodule CadenceWeb.ApplicationHostController do
     )
   end
 
+  defp problem(
+         %Plug.Conn{private: %{application_host_problem_as_data: true}} = conn,
+         status,
+         code,
+         message
+       ) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> resp(status, Jason.encode!(problem_body(code, message)))
+  end
+
   defp problem(conn, status, code, message) do
     conn
     |> put_status(status)
-    |> json(%{"schema" => @problem_schema, "code" => code, "message" => message})
+    |> json(problem_body(code, message))
   end
+
+  defp problem_body(code, message),
+    do: %{"schema" => @problem_schema, "code" => code, "message" => message}
 
   defp invalid_scope_message, do: "The requested application scope is invalid."
 
