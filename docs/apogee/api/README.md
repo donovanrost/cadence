@@ -55,6 +55,17 @@ is optional; for `invalid_params` it maps field to problem.
 | 404 | `not_found`, `mission_not_found`, `organization_not_found`, and `<thing>_not_found` |
 | 422 | `invalid_params` and domain rejections (`code` names the reason) |
 
+## Breaking changes
+
+Each breaking change to an API in this folder (a field required, removed or renamed, or a new
+error for a request that used to succeed) is listed here with the date it landed, newest first.
+Readers are told before it lands (the first entry was written after it landed, #249); the
+linked doc has the detail.
+
+| Landed | API | Change | Doc |
+| --- | --- | --- | --- |
+| 2026-11-18 | REST `/api/organizations/:organization_id/missions/:mission_id`: `command_requests`, `command_queue_entries` | Approve, reject and enqueue of a command-group member answer `409 command_request_in_group`; a queue entry's release answers `409 command_group_not_armed` while its group has no GO; a create whose `metadata` names a group answers `422 command_request_group_reserved` (four-eyes P0, #249). | [commanding.md](commanding.md#rest-command-requests-command-group-members-owner-api-ops-four-eyes-p0-2026-11-18) |
+
 ## Wire conventions
 
 - IDs are opaque strings. Field names are snake_case.
