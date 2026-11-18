@@ -4,9 +4,12 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceWords do
   The host still renders its own spacecraft configuration page, so its copy stays as it is, and
   the shared `Problem` table (L10 and others use some of these codes) is left alone.
 
-  `ctx`: `name` (the craft's display name) and `catalog` ("catalog rev 14"), each nil when it
-  can't be known (an unknown craft, a catalog revision outside the mission); the words then say
-  "this spacecraft" or "that catalog revision", never an id.
+  `ctx`: `name` (the craft's display name, nil for an unknown craft) and, for the model gate's
+  refusal only, `catalog` ("catalog rev 14"). Without them the words say "this spacecraft" or
+  "the catalog revision", never an id; `spacecraft_catalog_unavailable` always says "that catalog
+  revision" (a revision outside the mission has no number here).
+
+  A refusal both a save and a submit can return opens with "Not saved:" or "Not sent:" by action.
   """
 
   @doc "The console's sentence for `code` on `action` (:show | :save | :submit | :packets), or nil."
@@ -34,15 +37,22 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceWords do
       "Not sent: a change set turned Telemetry or Commanding on or off for #{name(ctx)} after " <>
         "this draft was saved. Save the draft again, then send it."
 
-  def message(:spacecraft_catalog_set_by_profile, _action, ctx),
+  def message(:spacecraft_catalog_set_by_profile, action, ctx),
     do:
-      "Not saved: #{possessive(ctx)} profile sets its catalog revision. " <>
+      "#{not_done(action)} #{possessive(ctx)} profile sets its catalog revision. " <>
         "Change it on the profile, through Setup › Changes."
 
-  def message(:mission_model_revision_not_approved, _action, ctx),
-    do:
-      "Not sent: #{ctx[:catalog] || "the catalog revision"} isn't approved yet. " <>
-        "An org admin approves it in Setup › Catalog first."
+  def message(:mission_model_revision_not_approved, _action, ctx) do
+    {label, verb, pronoun} =
+      case ctx[:catalog] do
+        "catalog revs " <> _ = label -> {label, "aren't", "them"}
+        nil -> {"the catalog revision", "isn't", "it"}
+        label -> {label, "isn't", "it"}
+      end
+
+    "Not sent: #{label} #{verb} approved yet. " <>
+      "An org admin approves #{pronoun} in Setup › Catalog first."
+  end
 
   def message(:spacecraft_catalog_required, _action, _ctx),
     do: "Not sent: choose a catalog revision first."
@@ -52,10 +62,10 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceWords do
       "Not sent: telemetry is on for #{name(ctx)}, so choose a packet source and the APIDs " <>
         "to decode first."
 
-  def message(:spacecraft_catalog_unavailable, _action, ctx),
+  def message(:spacecraft_catalog_unavailable, action, _ctx),
     do:
-      "Not saved: #{ctx[:catalog] || "that catalog revision"} isn't one of this mission's " <>
-        "catalog revisions. Choose another."
+      "#{not_done(action)} that catalog revision isn't one of this mission's catalog revisions. " <>
+        "Choose another."
 
   def message(:spacecraft_packet_input_unavailable, _action, ctx),
     do:
@@ -84,17 +94,20 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceWords do
 
   def message(_code, _action, _ctx), do: nil
 
-  @doc ~s(A catalog revision as ux names it: "catalog rev 14"; "catalog revs 4 and 5".)
+  @doc ~s(Catalog revisions as ux names them, in number order: "catalog rev 14"; "catalog revs 4 and 5".)
   def catalog_label([]), do: nil
   def catalog_label([number]) when is_integer(number), do: "catalog rev #{number}"
 
   def catalog_label(numbers) when is_list(numbers) do
-    case Enum.filter(numbers, &is_integer/1) do
+    case numbers |> Enum.filter(&is_integer/1) |> Enum.uniq() |> Enum.sort() do
       [] -> nil
       [one] -> catalog_label([one])
       many -> "catalog revs " <> Enum.join(Enum.drop(many, -1), ", ") <> " and #{List.last(many)}"
     end
   end
+
+  defp not_done(:submit), do: "Not sent:"
+  defp not_done(_save), do: "Not saved:"
 
   defp name(%{name: name}) when is_binary(name), do: name
   defp name(_ctx), do: "this spacecraft"

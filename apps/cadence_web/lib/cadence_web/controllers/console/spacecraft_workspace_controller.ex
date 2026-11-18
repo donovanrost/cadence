@@ -130,7 +130,7 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceController do
       catalog_revision_numbers: Enum.map(ids, &numbers[&1])
     }
 
-    ctx = %{catalog: SpacecraftWorkspaceWords.catalog_label(Map.values(numbers))}
+    ctx = %{catalog: SpacecraftWorkspaceWords.catalog_label(Enum.map(ids, &numbers[&1]))}
     refuse(conn, :mission_model_revision_not_approved, action, id, details, nil, ctx)
   end
 
