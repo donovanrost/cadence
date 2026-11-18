@@ -2973,12 +2973,26 @@ Communications, Changes) for ux's look.
   - `spacecraft_configuration_review_stale`: "Not sent: EARENDIL-004's active configuration changed since you loaded
     this. Check the comparison and send it again."
   - `activation_policy_changed`: "Not sent: the mission's approval setting changed. Check it and send it again."
-  - `spacecraft_configuration_review_unavailable`: "Save the draft and choose which version to keep first."
-  - `spacecraft_catalog_required`: "Choose a catalog revision first."
-  - `spacecraft_packet_inputs_required`: "Choose a packet source and the APIDs to decode first."
+  - `spacecraft_configuration_review_unavailable`: "Not sent: save the draft and choose which version to keep
+    first."
+  - `spacecraft_catalog_required`: "Not sent: choose a catalog revision first."
+  - `spacecraft_packet_inputs_required`: "Not sent: telemetry is on for EARENDIL-004, so choose a packet source and
+    the APIDs to decode first."
+  - `spacecraft_configuration_changed` (save, stale token): the panel's sentence under "Someone saved…" above; as a
+    plain message: "Not saved: someone saved EARENDIL-004's configuration after you started editing. Your edits are
+    kept; choose which version to keep."
+  - `catalog_revision_not_found` (404, the packets read): in the picker, "This catalog revision isn't in the
+    mission's catalog any more. Choose another." and it can't be chosen.
+  - `invalid_params` with `document` (a malformed draft, a console fault): "Not saved: Cadence couldn't read this
+    draft. Reload and try again." With `section` or a bad `intent` (never sent by the console): the generic line.
+  - The console routes' messages are these words. The host's page keeps its own copy until it's deleted (the
+    legacy host still renders it), so api sets them on the console routes only.
   - `mission_model_revision_not_approved`: "Not sent: catalog rev 14 isn't approved yet. An org admin approves it in
-    Setup › Catalog first." with `Open rev 14` (U65).
-  - `forbidden`: "You can't change EARENDIL-004's configuration." `not_found`: "EARENDIL-004 isn't on this mission."
+    Setup › Catalog first." with `Open rev 14` (U65). Several: "Not sent: catalog revs 4 and 5 aren't approved yet.
+    An org admin approves them in Setup › Catalog first."
+  - `spacecraft_catalog_set_by_profile` and `spacecraft_catalog_unavailable` can also come from a submit: there they
+    open "Not sent:" with the rest of the sentence unchanged.
+  - `forbidden`: "You can't change EARENDIL-004's configuration." `not_found`: "This spacecraft isn't on this mission."
     `invalid_params`: the field's own error.
   - `spacecraft_catalog_set_by_profile`: "Not saved: EARENDIL-004's profile sets its catalog revision. Change it on
     the profile, through Setup › Changes." with `Open profile`.
@@ -2990,13 +3004,42 @@ Communications, Changes) for ux's look.
     configuration can carry, so it can't be shown or sent. Remove some in Setup › Comms." On the snapshot it's the
     section's error state, with `Open Comms`.
   - `spacecraft_catalog_unavailable` (the packet choices): in the picker, "Catalog rev 14 can't be used for
-    EARENDIL-004." and the revision can't be chosen.
-  - `spacecraft_not_found` (404): "EARENDIL-004 isn't on this mission."
+    EARENDIL-004." and the revision can't be chosen. On save or submit: "Not saved: catalog rev 14 isn't one of
+    this mission's catalog revisions. Choose another."
+  - `spacecraft_not_found` (404): "This spacecraft isn't on this mission." (no snapshot, so no name; never the id
+    or a cached name, U20/U25). The `forbidden` line keeps the name only when a snapshot loaded, else "You can't
+    change this spacecraft's configuration."
   - Any other code: "Not saved." / "Not sent." plus the code in Technical details (U20); `spacecraft_configuration_
     pending` doesn't reach these routes (api).
 - **On L10, for these requests:**
-  - `What changes` panel from `configuration_changes`: "Telemetry: Off → On"; a first start (`before` null) reads
-    as U90: "Nothing is active for EARENDIL-004 yet, so every setting is new." and the rows show only the new value.
+  - `What changes` panel from `configuration_changes` (rows `label: before → after`, e.g. "Catalog revision:
+    catalog rev 13 → catalog rev 14"); a first start (`before` null) reads as U90: "Nothing is active for
+    EARENDIL-004 yet, so every setting is new." and the rows show only the new value. Switches are never rows
+    (#109). api's labels and values (sent as text; a missing value is `Not set`):
+    - `catalog_revision_id` → `Catalog revision`, "catalog rev 14" (U65).
+    - `telemetry_source_endpoint_id` → `Packet source`, the source's name (never an id, U25).
+    - `handled_apids` → `Decoded APIDs`, the APIDs comma-separated up to 8, else "14 APIDs"; none: `None`.
+    - `protocol.downlink` / `.uplink` → `Downlink protocol` / `Uplink protocol` (TM, AOS, USLP, TC);
+      `frame_size` → `Frame size`, `secondary_header_length` → `Secondary header`, `insert_zone_length` →
+      `Insert zone`, `ocf_length` → `OCF` (each "1,115 bytes"); `truncated_primary_header` → `Truncated primary
+      header`, Yes / No.
+    - The crit telemetry-off warning on this panel needs the craft's telemetry switch value on the L10 detail too.
+  - **Fleets (#235; api, lead, ux settled 11-18):** a request can review up to 500 craft, so the panel reads api's
+    groups: `{groups: [{rows, first_start, telemetry_enabled, count, spacecraft: [{spacecraft_id, name}] ≤100}],
+    total}`; a group is craft whose rows, first start and switch are exactly equal (server-computed), every group is
+    sent, and a group's full names page from `…/configuration-changes?group=N&offset=K`. Nothing is cut, so Approve
+    is never the only way past a craft the approver can't see.
+    - Heading `What changes · 312 spacecraft` (one craft: `What changes`, and the panel reads as above).
+    - Summary, from the groups' counts, each only when nonzero: "300 spacecraft change: Catalog revision (300),
+      Decoded APIDs (12)." / "12 have no changes." / "5 start for the first time."
+    - Crit, fleet form: "Telemetry is off for 3 of the 312 spacecraft, so once this is active they start but
+      decode nothing: no live values, alarms or history. Turn telemetry on with a change set first." with `Open
+      Operation`.
+    - Each group (changed groups in api's order, the no-change group last): heading "300 spacecraft" (count 1: the
+      craft's name); names "EARENDIL-001, EARENDIL-002, EARENDIL-003 and 297 more" with `Show all 300`; a `TELEMETRY
+      OFF` tag when its switch is off; first start "Nothing is active for these spacecraft yet, so every setting is
+      new."; then its rows.
+    - The rows-[] group: "No changes on 12 spacecraft: EARENDIL-010, EARENDIL-011 and 10 more." with `Show all`.
   - Approve refused stale (409, nothing recorded): "Not approved: EARENDIL-004's configuration changed after this was
     requested, so it isn't what was reviewed. The requester sends it again."
   - Separation (`activation_self_approval_forbidden`): requester "Not approved: you requested this, so another
@@ -3033,7 +3076,9 @@ Communications, Changes) for ux's look.
     `document.telemetry_enabled` / `document.commanding_enabled`: "Change this with a change set, from the
     spacecraft's Operation panel."
   - `spacecraft_switch_set_by_change_set` stays a backstop only: "Not saved: Telemetry and Commanding are set
-    through Setup › Changes, and they changed after this page loaded. Reload to see them."
+    through Setup › Changes, and they changed after this page loaded. Reload to see them." On submit (409, api-ops'
+    review of (B) set 1): "Not sent: a change set turned Telemetry or Commanding on or off for EARENDIL-004 after
+    this draft was saved. Save the draft again, then send it."
 - **Activating with telemetry off** (crit, right above `Activate v4` / `Request approval for v4`, and on L10's What
   changes panel; it warns, it doesn't block): "Telemetry is off for EARENDIL-004, so once this is active it starts
   but decodes nothing: no live values, alarms or history. Turn telemetry on with a change set first." with `Open
