@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { useRemoteQuery } from "@/api";
-import { ApButton, ApChip, ApField } from "@/ui";
+import { ApButton, ApChip, ApField, refocusFirst } from "@/ui";
 import type { WidgetFields } from "./contracts.ts";
 import { searchObservables } from "./observables.ts";
 
@@ -44,13 +44,34 @@ const results = computed(() =>
     : [],
 );
 const full = computed(() => model.value.length >= props.limit);
-const add = (id: string) => {
-  if (!full.value) model.value = [...model.value, id];
-};
+/** B6: a search that finds nothing, or fails, says so (results alone would be silent). */
+const outcome = computed(() => {
+  const s = search.state.value;
+  if (key.value === null) return "";
+  if (s.status === "failed") return "Couldn't search points. Change the search to try again.";
+  return s.status === "ready" && results.value.length === 0
+    ? `No points to add match “${q.value.trim()}”.`
+    : "";
+});
+/**
+ * A5: the picked result leaves the list; focus goes to the next one, else the one before, else
+ * the search.
+ */
+const root = ref<HTMLElement | null>(null);
+async function add(id: string, index: number) {
+  if (full.value) return;
+  model.value = [...model.value, id];
+  await nextTick();
+  const picks = root.value?.querySelectorAll<HTMLElement>("[data-pick]") ?? [];
+  const field = root.value?.querySelector<HTMLElement>('input[type="search"]:not([disabled])');
+  // Full now (the search is disabled): the new chip's ×.
+  const chips = root.value?.querySelectorAll<HTMLElement>("[data-ap-chip-remove]") ?? [];
+  refocusFirst(picks[index], picks[index - 1], field, chips[chips.length - 1]);
+}
 </script>
 
 <template>
-  <div class="flex flex-col gap-2">
+  <div ref="root" class="flex flex-col gap-2">
     <ul
       v-if="model.length"
       class="m-0 flex list-none flex-wrap gap-1.5 p-0"
@@ -73,9 +94,16 @@ const add = (id: string) => {
       :disabled="full"
       :hint="full ? `This widget takes up to ${limit}.` : 'Type at least 2 characters.'"
     />
+    <p aria-live="polite" class="m-0 text-sm text-text-3">{{ outcome }}</p>
     <ul v-if="results.length" class="m-0 flex max-h-56 list-none flex-col overflow-auto p-0">
-      <li v-for="o in results" :key="o.id">
-        <ApButton variant="ghost" size="compact" class="w-full justify-start" @click="add(o.id)">
+      <li v-for="(o, index) in results" :key="o.id">
+        <ApButton
+          variant="ghost"
+          size="compact"
+          class="w-full justify-start"
+          data-pick
+          @click="add(o.id, index)"
+        >
           <span class="font-mono normal-case tracking-normal">{{ o.id }}</span>
           <span v-if="o.label" class="ml-2 normal-case tracking-normal text-text-3">{{
             o.label
