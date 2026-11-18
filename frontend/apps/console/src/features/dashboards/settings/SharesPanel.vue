@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { nextTick, ref } from "vue";
 import { isError } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApTable, type ApColumn } from "@/ui";
@@ -13,6 +13,11 @@ const props = defineProps<{ settingsKey: SettingsKey; shares: readonly Share[] }
 const emit = defineEmits<{ changed: [] }>();
 const creating = ref(false);
 const note = ref<{ tone: "nominal" | "crit"; text: string } | null>(null);
+/** The row whose Revoke is running, and a refusal read in that row's confirm. */
+const revoking = ref<string | null>(null);
+const refusal = ref<{ id: string; text: string } | null>(null);
+/** A5: the form closes, or a row's Revoke… goes, and focus lands on Create share link. */
+const createButton = () => document.querySelector<HTMLElement>("[data-share-create]");
 const columns: readonly ApColumn[] = [
   { key: "link", label: "Link" },
   { key: "data", label: "Data" },
@@ -29,33 +34,48 @@ async function copy(s: Share) {
   }
 }
 async function revoke(id: string) {
-  const r = await revokeShare(props.settingsKey, id);
-  note.value = r.ok
-    ? { tone: "nominal", text: "Share link revoked. It stops working now." }
-    : isError(r.error, "share_not_active")
-      ? { tone: "nominal", text: "That link was already revoked." }
-      : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
-  emit("changed");
+  revoking.value = id;
+  refusal.value = null;
+  try {
+    const r = await revokeShare(props.settingsKey, id);
+    if (r.ok || isError(r.error, "share_not_active")) {
+      note.value = r.ok
+        ? { tone: "nominal", text: "Share link revoked. It stops working now." }
+        : { tone: "nominal", text: "That link was already revoked." };
+      emit("changed");
+    } else refusal.value = { id, text: failureOutcome(r.error, "changed").sentence };
+  } finally {
+    revoking.value = null;
+  }
 }
-function created() {
+async function closeForm(made: boolean) {
   creating.value = false;
-  note.value = { tone: "nominal", text: "Share link created. Copy it from the table." };
-  emit("changed");
+  if (made) {
+    note.value = { tone: "nominal", text: "Share link created. Copy it from the table." };
+    emit("changed");
+  }
+  await nextTick();
+  createButton()?.focus();
 }
 </script>
 
 <template>
   <ApPanel index="S3" title="Share links" flush>
     <template #header>
-      <ApButton v-if="!creating" size="compact" variant="primary" @click="creating = true"
+      <ApButton
+        v-if="!creating"
+        size="compact"
+        variant="primary"
+        data-share-create
+        @click="creating = true"
         >Create share link</ApButton
       >
     </template>
     <ShareCreate
       v-if="creating"
       :settings-key="settingsKey"
-      @created="created"
-      @cancel="creating = false"
+      @created="closeForm(true)"
+      @cancel="closeForm(false)"
     />
     <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
     <ApEmptyState
@@ -80,7 +100,13 @@ function created() {
         ><span class="text-text-2">{{ byLine(row.created_by, row.created_at) }}</span></template
       >
       <template #cell-actions="{ row }">
-        <ShareRevoke :active="row.state === 'active'" @revoke="revoke(row.id)" />
+        <ShareRevoke
+          :active="row.state === 'active'"
+          :busy="revoking === row.id"
+          :refusal="refusal?.id === row.id ? refusal.text : null"
+          :return-focus="createButton"
+          @revoke="revoke(row.id)"
+        />
       </template>
     </ApTable>
   </ApPanel>
