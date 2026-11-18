@@ -205,6 +205,8 @@ defmodule CadenceWeb.Console.Problem do
     title_required: {422, "A title is required."},
     log_entry_required: {422, "A log entry is required when a second GO is needed."},
     activation_request_not_found: {404, "Activation request not found."},
+    configuration_changes_group_not_found:
+      {404, "That group of spacecraft isn't in this request."},
     not_pending: {409, "That request has already been decided."},
     self_approval_forbidden: {403, "You can't approve your own request."},
     not_requester: {403, "Only the person who requested it can withdraw it."},

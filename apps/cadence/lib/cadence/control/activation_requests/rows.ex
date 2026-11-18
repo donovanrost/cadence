@@ -7,6 +7,7 @@ defmodule Cadence.Control.ActivationRequests.Rows do
   """
 
   alias Cadence.Accounts
+  alias Cadence.Control.ActivationRequests.ConfigurationChanges
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Activations.{ApplyAttention, Description}
   alias Cadence.Management.Activations, as: ManagementActivations
@@ -68,10 +69,17 @@ defmodule Cadence.Control.ActivationRequests.Rows do
   def detail(scope, mission_id, request) do
     [row] = rows(scope, mission_id, [request])
     description = Description.describe(request.metadata || %{})
+    mission = mission(scope.organization_id, mission_id)
+    reviewed = (mission && ConfigurationChanges.reviewed(mission, request)) || %{}
 
     Map.merge(row, %{
       details: details(scope.organization_id, mission_id, request, description),
       comparison: comparison(request.metadata || %{}),
+      # #235: what a pending spacecraft configuration request changes, grouped, and its
+      # reviewed craft on every state; nil for other kinds.
+      configuration_changes: configuration_changes(mission, request),
+      spacecraft: reviewed[:spacecraft],
+      spacecraft_total: reviewed[:spacecraft_total],
       permissions: permissions(scope, mission_id)
     })
   end
@@ -181,4 +189,16 @@ defmodule Cadence.Control.ActivationRequests.Rows do
        do: %{report_id: id, label: "Mission-model comparison"}
 
   defp comparison(_metadata), do: nil
+
+  defp configuration_changes(nil, _request), do: nil
+
+  defp configuration_changes(mission, request),
+    do: ConfigurationChanges.for_request(mission, request)
+
+  defp mission(org, mission_id) do
+    case Cadence.Missions.fetch_mission(org, mission_id) do
+      {:ok, mission} -> mission
+      {:error, _} -> nil
+    end
+  end
 end

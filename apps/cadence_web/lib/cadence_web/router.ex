@@ -1108,6 +1108,13 @@ defmodule CadenceWeb.Router do
       # L10 activation approvals (owner: api). Contract: docs/apogee/api/activations.md
       get("/activations", ActivationRequestController, :index)
       get("/activations/:request_id", ActivationRequestController, :show)
+
+      get(
+        "/activations/:request_id/configuration-changes",
+        ActivationRequestController,
+        :configuration_change_names
+      )
+
       post("/activations/:request_id/approve", ActivationRequestController, :approve)
       post("/activations/:request_id/reject", ActivationRequestController, :reject)
       post("/activations/:request_id/resume", ActivationRequestController, :resume)
