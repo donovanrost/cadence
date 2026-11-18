@@ -249,6 +249,13 @@ code is set it can be changed but not emptied, because pass titles and filters a
 it required then; the server's refusal (domain) on the `code` field reads "INU is already used in pass titles and
 filters, so it can be changed but not removed." (the stored code).
 
+**A spacecraft with no name (#190, #237; dashboards, 11-18):** where a craft's name is null the console shows
+`Unknown spacecraft` ("on an unknown spacecraft" in a sentence), never its id; `Deleted spacecraft` only where the
+server says it's gone. A link stays a link when it opens the row's own page (the requirements table). On a GO target
+list a caution line sits next to GO: "This console can't show the name of 1 target spacecraft. Check its id in
+Technical details before you give GO.", with the id in that row's Technical details. GO isn't disabled for it (lead,
+11-18): the target is still exact.
+
 ### U26 · Passes inside station unavailability (K1, lead question)
 **Decision:** K1 flags it in place; it isn't left to K2.
 - **Outage or maintenance** (the station won't serve): the pass is a **conflict**. The bar is drawn
@@ -3039,7 +3046,21 @@ Communications, Changes) for ux's look.
       craft's name); names "EARENDIL-001, EARENDIL-002, EARENDIL-003 and 297 more" with `Show all 300`; a `TELEMETRY
       OFF` tag when its switch is off; first start "Nothing is active for these spacecraft yet, so every setting is
       new."; then its rows.
-    - The rows-[] group: "No changes on 12 spacecraft: EARENDIL-010, EARENDIL-011 and 10 more." with `Show all`.
+    - The rows-[] group: "No changes on 12 spacecraft: EARENDIL-010, EARENDIL-011, EARENDIL-012 and 9 more." with
+      `Show all`. Every group lists 3 names before "and N more". One craft with no changes: "Nothing changes for
+      EARENDIL-004: this configuration matches what's active."
+    - `Show all` failing: "The names couldn't be loaded. Try again." (caution; the button stays).
+    - The fleet form's crit action is `Open spacecraft` (Setup › Spacecraft); `Open Operation` is the one-craft
+      form's (fe-ops 98d8f7688).
+    - A group or row the console can't read (U86): the U86 line at the top of the panel ("This console can't show
+      2 changes." / for groups, with the exact number `total` minus the readable counts: "This console can't show
+      what changes for 12 spacecraft.", then U86's Reload sentence and Technical details). With an unreadable
+      group the summary adds "These counts cover 300 of the 312 spacecraft. This console can't show what changes for
+      the other 12."; the telemetry-off crit adds "This console can't show whether it's on for the other 12.", or,
+      with no off line, a caution line of its own: "This console can't show whether telemetry is on for 12 of the
+      312 spacecraft." (dashboards' review, 11-18). `Approve` is disabled (A6): "Part of what changes can't be
+      shown in this console, so it can't be approved here. Reload to try again. If it's still missing, tell the
+      team that runs Cadence for you, or reject it." `Reject` stays enabled.
   - Approve refused stale (409, nothing recorded): "Not approved: EARENDIL-004's configuration changed after this was
     requested, so it isn't what was reviewed. The requester sends it again."
   - Separation (`activation_self_approval_forbidden`): requester "Not approved: you requested this, so another
@@ -3128,3 +3149,41 @@ U90 and U94.
   `mission_model_runtime_plan_manifest_mismatch`, `invalid_spacecraft_model_bindings`): "Not approved: this request
   can't apply as it stands." plus the code in Technical details, then "Your approval wasn't recorded."
 - Refusals before the check keep their words (self approval, not pending, not found).
+
+### U96 · Who may change a mission's approval setting (#233; api's shape on domain 10d59bb78, 11-18) (api / domain / fe-setup)
+Settings › Approvals (`cadence.governance`): the field keeps its server words, "Approval for changes and app
+activations", `Applies without approval` / `Needs a second person's approval`, and the organization's "Missions may
+override". Who may choose what comes from the read (`allowed_values`, `can_inherit`); the console shows each limit
+before a save, never only as a refusal (A6).
+
+- **Field states** (A6 reason under the field or on the disabled option):
+  - `allowed_values` [], picked by the current value (the console can't see the role): `Applies without approval`
+    → "Only a mission admin or an organization admin can change this."; `Needs a second person's approval` →
+    "It's already set to the strictest option. Only an organization admin can loosen it."
+  - A mission admin, `[independent]`: `Applies without approval` disabled, "Only an organization admin can let
+    changes apply without approval."
+  - `can_inherit` false: `Use the organization's setting` disabled, "The organization's setting lets changes apply
+    without approval, so only an organization admin can switch EARENDIL to it."
+- **Refusals** (403, "Not saved:" pattern; the console picks the line by the level saved):
+  - `approval_policy_change_requires_organization_admin`, on a mission: "Not saved: only an organization admin can
+    let changes on EARENDIL apply without approval."; on the organization (and a mission admin's `forbidden`
+    there): "Not saved: only an organization admin can change the organization's approval setting."
+  - `approval_policy_change_requires_mission_admin`: "Not saved: only a mission admin or an organization admin can
+    change approval settings."
+- **Audit** (AU1, kind `config`, from `change.before` / `change.after`; actor, time and the ADMIN MODE tag as U89):
+  - Mission, value changed: "Loosened approval on EARENDIL: Needs a second person's approval → Applies without
+    approval" / "Tightened approval on EARENDIL: Applies without approval → Needs a second person's approval". When
+    `override` becomes false, add " (the organization's setting)".
+  - Mission, only `override` changed: "EARENDIL now uses the organization's approval setting (Needs a second
+    person's approval); what applies doesn't change." / "EARENDIL now sets its own approval setting (Needs a second
+    person's approval); what applies doesn't change."
+  - Organization: "Loosened approval (organization default): Needs a second person's approval → Applies without
+    approval" / "Tightened approval (organization default): …". `allow_override`: "Missions may now set their own
+    approval setting." / "Missions can no longer set their own approval setting." Both in one save: the two
+    sentences, value first.
+  - Option words always as the field's options, never `direct` / `independent`.
+- **Enforced by the organization** (`allow_override` false; the section reads `locked: true`, and the mission level
+  reads [] and false for everyone): the locked callout for this section reads "The organization sets this for every
+  mission, and missions can't change it. An organization admin changes it in the organization's settings." with
+  `Open organization settings` for an organization admin. The 409 `settings_enforced_by_organization` keeps the
+  server's message (the legacy host still shows it).
