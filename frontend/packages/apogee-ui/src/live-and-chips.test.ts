@@ -1,8 +1,9 @@
 import { mount } from "@vue/test-utils";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { defineComponent, h, nextTick, ref } from "vue";
 import ApChip from "./ApChip.vue";
 import ApEmptyState from "./ApEmptyState.vue";
+import { ANNOUNCE_DELAY_MS } from "./lib/announce.ts";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -89,15 +90,39 @@ describe("ApChip focus handoff (a11y A5)", () => {
   });
 });
 
-describe("ApEmptyState", () => {
-  it("puts its words in a polite status region and its actions outside it", () => {
-    const wrapper = mount(ApEmptyState, {
-      props: { headline: "No points match", sentence: "Try another name." },
-      slots: { default: () => h("button", "Clear search") },
-    });
-    const status = wrapper.get('[role="status"]');
-    expect(status.text()).toContain("No points match");
-    expect(status.text()).toContain("Try another name.");
-    expect(status.find("button").exists()).toBe(false);
+describe("ApEmptyState announce (B6)", () => {
+  const announcer = () => document.querySelector("[data-ap-announcer]");
+
+  it("reads a search's empty result through the page's one live region, after a beat", async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = mount(ApEmptyState, {
+        props: { headline: "No points match", sentence: "Try another name.", announce: true },
+        slots: { default: () => h("button", "Clear search") },
+      });
+      expect(wrapper.find('[role="status"]').exists()).toBe(false);
+      expect(announcer()?.getAttribute("role")).toBe("status");
+      expect(announcer()?.textContent).toBe("");
+      vi.advanceTimersByTime(ANNOUNCE_DELAY_MS);
+      expect(announcer()?.textContent).toBe("No points match Try another name.");
+
+      await wrapper.setProps({ headline: "No spacecraft match" });
+      expect(announcer()?.textContent).toBe("");
+      vi.advanceTimersByTime(ANNOUNCE_DELAY_MS);
+      expect(announcer()?.textContent).toBe("No spacecraft match Try another name.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says nothing without announce: an empty list on first load is read with the page", () => {
+    vi.useFakeTimers();
+    try {
+      mount(ApEmptyState, { props: { headline: "No alarms" } });
+      vi.advanceTimersByTime(ANNOUNCE_DELAY_MS);
+      expect(announcer()?.textContent ?? "").toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
