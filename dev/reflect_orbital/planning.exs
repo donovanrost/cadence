@@ -4,9 +4,9 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
   # policy and a recurring downlink requirement template for the first N
   # spacecraft (EARENDIL_PLANNING_SPACECRAFT, default 10: the ones with live
   # feeds), so the console can draft a day reproducibly. Idempotent.
-  alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactRequirementTemplates, FleetPlanningPolicies}
+  alias Cadence.Dev.ReflectOrbital.Fixture, as: F
 
   @anchor ~U[2026-01-01 00:00:00Z]
   @minimum_duration_s 300

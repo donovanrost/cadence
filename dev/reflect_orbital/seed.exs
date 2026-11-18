@@ -9,7 +9,8 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     RoutingRule,
     RoutingRuleStore,
     Transport,
-    TransportStore
+    TransportStore,
+    UplinkResolution
   }
 
   alias Cadence.Contacts.ProviderScheduling
@@ -280,9 +281,9 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
       transport =
         ensure_record(
-          Cadence.Comms.TransportStore.fetch_transport(F.organization_id(), F.mission_id(), id),
+          TransportStore.fetch_transport(F.organization_id(), F.mission_id(), id),
           fn ->
-            Cadence.Management.Transports.persist_transport(
+            Transports.persist_transport(
               F.organization_id(),
               Transport.new(%{
                 transport_id: id,
@@ -420,7 +421,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
     unresolved =
       F.organization_id()
-      |> Cadence.Comms.UplinkResolution.annotate(
+      |> UplinkResolution.annotate(
         F.mission_id(),
         Enum.map(fleet, &%{spacecraft_id: &1.spacecraft_id, source_endpoint_id: nil})
       )

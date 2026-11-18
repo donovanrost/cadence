@@ -8,6 +8,7 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Commanding.WorkspaceSettings
+  alias Cadence.Management.ConsoleSettings
   alias Cadence.Runtime.Missions
   alias CadenceWeb.Assets.DashboardRenderedViewportRunner, as: Runner
   alias CadenceWeb.TestFixtures
@@ -77,7 +78,7 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
           {"commanding.defaults", %{"shelf" => "minimized"}}
         ] do
       assert {:ok, %{state: :active}} =
-               Cadence.Management.ConsoleSettings.save(
+               ConsoleSettings.save(
                  scope,
                  mission.mission_id,
                  section,
@@ -93,7 +94,7 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
     # Then the organization requires independent approval with no mission override (§11c(A)
     # moved the organization settings page to the console).
     assert {:ok, %{state: :active}} =
-             Cadence.Management.ConsoleSettings.save(
+             ConsoleSettings.save(
                scope,
                nil,
                "cadence.governance",
