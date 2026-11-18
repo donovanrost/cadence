@@ -45,17 +45,120 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics.RangesTest do
     test "ignores rules that state no threshold" do
       policy = %{
         default_rules: [
-          %{kind: :range, min: 0, max: 10, severity: :warning},
           %{kind: :enumerated, values: ["SAFE"], severity: :critical},
           rule(:==, 3, :warning),
           rule(:>, "high", :critical),
           rule(:>, 5, :info),
+          range(nil, nil, :warning),
           :not_a_rule
         ]
       }
 
       assert Ranges.policy_limits(policy) == %{}
       assert Ranges.policy_limits(%{}) == %{}
+    end
+
+    test "maps watch to yellow and distress and severe to red" do
+      policy = %{default_rules: [rule(:<, 5.0, :watch), rule(:>, 90.0, :distress)]}
+      assert Ranges.policy_limits(policy) == %{"yellow_low" => 5.0, "red_high" => 90.0}
+
+      assert Ranges.policy_limits(%{default_rules: [rule(:>, 95.0, :severe)]}) ==
+               %{"red_high" => 95.0}
+    end
+
+    test "prefers warning over watch and critical over distress and severe, in any order" do
+      policy = %{
+        default_rules: [
+          rule(:>, 25.0, :watch),
+          rule(:>, 40.0, :severe),
+          rule(:>, 35.0, :distress),
+          rule(:>, 20.0, :warning),
+          rule(:>, 30.0, :critical)
+        ]
+      }
+
+      assert Ranges.policy_limits(policy) == %{"yellow_high" => 20.0, "red_high" => 30.0}
+    end
+  end
+
+  # The shape the XTCE importer gives each StaticAlarmRanges <*Range>.
+  defp range(lower, upper, severity, extra \\ %{}) do
+    Map.merge(
+      %{
+        kind: :range,
+        lower: lower,
+        upper: upper,
+        lower_closed: true,
+        upper_closed: true,
+        severity: severity
+      },
+      extra
+    )
+  end
+
+  describe "policy_limits/1 with XTCE :range rules" do
+    test "an outside range (the acceptable band) states both thresholds of its colour" do
+      policy = %{
+        default_rules: [
+          range(10.0, 20.0, :warning, %{outside: true}),
+          range(0.0, 30.0, :critical, %{outside: true})
+        ]
+      }
+
+      assert Ranges.policy_limits(policy) == %{
+               "yellow_low" => 10.0,
+               "yellow_high" => 20.0,
+               "red_low" => 0.0,
+               "red_high" => 30.0
+             }
+    end
+
+    test "an outside range with one bound states only that side" do
+      assert Ranges.policy_limits(%{
+               default_rules: [range(nil, 20.0, :warning, %{outside: true})]
+             }) ==
+               %{"yellow_high" => 20.0}
+    end
+
+    test "reads a string-keyed outside range (a stored plan)" do
+      policy = %{
+        "default_rules" => [
+          %{
+            "kind" => "range",
+            "lower" => 10,
+            "upper" => 20,
+            "outside" => "true",
+            "severity" => "warning"
+          }
+        ]
+      }
+
+      assert Ranges.policy_limits(policy) == %{"yellow_low" => 10, "yellow_high" => 20}
+    end
+
+    test "an alarm band with only a lower bound guards the high side" do
+      assert Ranges.policy_limits(%{default_rules: [range(100.0, nil, :critical)]}) ==
+               %{"red_high" => 100.0}
+    end
+
+    test "an alarm band with only an upper bound guards the low side" do
+      assert Ranges.policy_limits(%{default_rules: [range(nil, -10.0, :warning)]}) ==
+               %{"yellow_low" => -10.0}
+    end
+
+    test "an alarm band with both bounds states nothing, so the fallback range applies" do
+      policy = %{default_rules: [range(80.0, 100.0, :warning)]}
+
+      assert Ranges.policy_limits(policy) == %{}
+      assert Ranges.float_range(Ranges.policy_limits(policy), "cpu_temp") == {-40.0, 85.0}
+    end
+
+    test "the importer's band pair keeps only the one-sided critical band" do
+      # xtce_13_importer_test's fixture: WarningRange 80..100 and CriticalRange min 100.
+      policy = %{default_rules: [range(80.0, 100.0, :warning), range(100.0, nil, :critical)]}
+
+      assert Ranges.policy_limits(policy) == %{"red_high" => 100.0}
+      assert Ranges.float_range(Ranges.policy_limits(policy), "cpu_temp") == {-40.0, 100.0}
     end
   end
 

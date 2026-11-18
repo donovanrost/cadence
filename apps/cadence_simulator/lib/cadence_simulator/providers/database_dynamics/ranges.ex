@@ -6,9 +6,21 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics.Ranges do
   Limits are read as COSMOS-style thresholds (`"red_low"`, `"yellow_low"`, `"yellow_high"`,
   `"red_high"`). A monitoring policy carries them in one of two shapes:
 
-  - `default_rules`: comparison rules (`:<`/`:>` with a `:critical` or `:warning` severity),
-    which cadence_yaml imports produce since 52afebc0 (the XTCE importer's lowering path);
-  - `rules`: the raw limits map, which catalogs imported before then still carry.
+  - `default_rules`: monitoring rules. cadence_yaml imports produce `:<`/`:>` comparisons
+    (since 52afebc0); XTCE imports produce `:range` rules from StaticAlarmRanges;
+  - `rules`: the raw limits map, which cadence_yaml catalogs imported before 52afebc0 carry.
+
+  Severities map to colours: watch and warning are yellow; distress, critical and severe are
+  red. When several rules state the same threshold, warning beats watch and critical beats
+  distress and severe (the COSMOS-equivalent levels first), then the first rule wins.
+
+  A `:range` rule states thresholds only where its meaning is unambiguous:
+
+  - `outside: true` (the range is the acceptable band): `lower` is the low threshold and
+    `upper` the high one;
+  - otherwise the range is the alarm band. With only `lower` it guards the high side (alarm at
+    or above `lower`), with only `upper` the low side. A band with both bounds doesn't say which
+    side it guards, so it states nothing and the fallback applies.
 
   Each side of the range is the red threshold, else the yellow one, else the fallback range's
   bound (the item name's keyword range for floats, the encoding's range for integers).
@@ -28,12 +40,13 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics.Ranges do
     {["angle", "roll", "pitch", "yaw"], {-180.0, 180.0}}
   ]
 
-  # {operator, severity} of a comparison rule -> the threshold it states.
-  @thresholds %{
-    {"<", "critical"} => "red_low",
-    {"<", "warning"} => "yellow_low",
-    {">", "critical"} => "red_high",
-    {">", "warning"} => "yellow_high"
+  # severity -> {colour, preference}; a lower preference wins a contested threshold.
+  @severities %{
+    "warning" => {"yellow", 0},
+    "watch" => {"yellow", 1},
+    "critical" => {"red", 0},
+    "distress" => {"red", 1},
+    "severe" => {"red", 2}
   }
 
   @doc "Limits per parameter id, from a lowered monitoring plan."
@@ -69,30 +82,56 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics.Ranges do
     bounded({round_bound(low), round_bound(high)}, encoding_range(bit_size, signed))
   end
 
-  # The first rule per threshold wins; rules that aren't numeric `:<`/`:>` comparisons with a
-  # critical or warning severity (XTCE ranges, enumerations) state no threshold here.
+  # Rules that state no threshold (enumerations, equality, two-bounded alarm bands, unknown
+  # severities, non-numeric bounds) are skipped.
   defp limits_from_rules(rules) when is_list(rules) do
     rules
-    |> Enum.flat_map(&rule_threshold/1)
-    |> Enum.reduce(%{}, fn {threshold, bound}, limits -> Map.put_new(limits, threshold, bound) end)
+    |> Enum.flat_map(&rule_thresholds/1)
+    |> Enum.sort_by(fn {_threshold, _bound, preference} -> preference end)
+    |> Enum.reduce(%{}, fn {threshold, bound, _preference}, limits ->
+      Map.put_new(limits, threshold, bound)
+    end)
   end
 
   defp limits_from_rules(_rules), do: %{}
 
-  defp rule_threshold(%{} = rule) do
-    key = {to_string(value(rule, :operator)), to_string(value(rule, :severity))}
-    bound = value(rule, :value)
+  defp rule_thresholds(%{} = rule) do
+    case Map.fetch(@severities, to_string(value(rule, :severity))) do
+      {:ok, {colour, preference}} ->
+        rule
+        |> sides(to_string(value(rule, :kind)))
+        |> Enum.filter(fn {_side, bound} -> is_number(bound) end)
+        |> Enum.map(fn {side, bound} -> {colour <> "_" <> side, bound, preference} end)
 
-    with "comparison" <- to_string(value(rule, :kind)),
-         {:ok, threshold} <- Map.fetch(@thresholds, key),
-         true <- is_number(bound) do
-      [{threshold, bound}]
-    else
-      _not_a_threshold -> []
+      :error ->
+        []
     end
   end
 
-  defp rule_threshold(_rule), do: []
+  defp rule_thresholds(_rule), do: []
+
+  # {side, bound} pairs a rule states: "low" means values below the bound alarm.
+  defp sides(rule, "comparison") do
+    case to_string(value(rule, :operator)) do
+      "<" -> [{"low", value(rule, :value)}]
+      ">" -> [{"high", value(rule, :value)}]
+      _other -> []
+    end
+  end
+
+  defp sides(rule, "range") do
+    lower = value(rule, :lower)
+    upper = value(rule, :upper)
+
+    cond do
+      value(rule, :outside) in [true, "true"] -> [{"low", lower}, {"high", upper}]
+      is_nil(upper) -> [{"high", lower}]
+      is_nil(lower) -> [{"low", upper}]
+      true -> []
+    end
+  end
+
+  defp sides(_rule, _kind), do: []
 
   # Red before yellow on each side: red thresholds sit outside the yellow ones.
   defp bounds(limits) do

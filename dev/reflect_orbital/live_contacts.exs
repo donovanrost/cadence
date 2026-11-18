@@ -2,6 +2,7 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
   @moduledoc "Continuous local rehearsal contacts; not provider-booked orbital passes."
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, ScheduledContact}
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
+  alias Cadence.Runtime.MissionRuntime
 
   def run(duration_seconds) when duration_seconds in 60..28_800 do
     # Safe ETF recovery requires the persisted semantic types' atoms to exist.
@@ -45,7 +46,7 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
 
       {:ok, _partition} =
         GenServer.call(
-          Cadence.Runtime.MissionRuntime.coordinator_name(F.mission_id()),
+          MissionRuntime.coordinator_name(F.mission_id()),
           {:partition_snapshot, partition},
           600_000
         )

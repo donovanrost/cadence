@@ -2,6 +2,7 @@ Code.require_file(Path.expand("../../support/dashboard_rendered_viewport_runner.
 
 defmodule CadenceWeb.Assets.SpacecraftConfigurationBrowserTest do
   use CadenceWeb.ConnCase, async: false
+  alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias CadenceWeb.Assets.DashboardRenderedViewportRunner, as: Runner
   alias CadenceWeb.TestFixtures
@@ -48,12 +49,7 @@ defmodule CadenceWeb.Assets.SpacecraftConfigurationBrowserTest do
     assert status == 0, output
     assert output =~ "SPACECRAFT_CONFIGURATION_BROWSER_OK"
 
-    row =
-      Cadence.Applications.SpacecraftConfiguration.Drafts.latest(
-        org.organization_id,
-        mission.mission_id,
-        first.spacecraft_id
-      )
+    row = Drafts.latest(org.organization_id, mission.mission_id, first.spacecraft_id)
 
     assert row.version == 1
     assert row.catalog_revision_id == revision.catalog_revision_id
@@ -61,11 +57,7 @@ defmodule CadenceWeb.Assets.SpacecraftConfigurationBrowserTest do
     assert row.document["commanding_enabled"]
     assert row.document["protocol"] == nil
 
-    assert Cadence.Applications.SpacecraftConfiguration.Drafts.latest(
-             org.organization_id,
-             mission.mission_id,
-             second.spacecraft_id
-           ) == nil
+    assert Drafts.latest(org.organization_id, mission.mission_id, second.spacecraft_id) == nil
 
     assert {:error, :no_active_binding_set} =
              Cadence.Activations.fetch_active_activation(org.organization_id, mission.mission_id)

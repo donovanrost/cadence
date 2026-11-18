@@ -1383,6 +1383,8 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
            EXISTS (SELECT 1 FROM frontend_release_catalog_generations) AS has_any_generation,
            (SELECT COUNT(*) FROM frontend_release_activation_controls) AS control_count
     ),
+    -- Artifact paths order bytewise (COLLATE "C"), as the release declares them, whatever
+    -- the database collation; glibc en_US would move "_"-prefixed and capitalised paths.
     artifact_inventory AS (
     SELECT artifact.release_publication_id,
            jsonb_agg(
@@ -1394,7 +1396,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
                'object_key', artifact.object_key,
                'object_sha256', object.sha256,
                'object_size', object.size
-             ) ORDER BY artifact.path
+             ) ORDER BY artifact.path COLLATE "C"
            ) AS artifacts
     FROM frontend_release_artifacts AS artifact
     LEFT JOIN frontend_release_objects AS object ON object.sha256 = artifact.sha256

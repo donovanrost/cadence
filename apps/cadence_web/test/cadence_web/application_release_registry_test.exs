@@ -140,7 +140,10 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
   end
 
   # The fixture builds and validates six production remotes before packaging both generations.
+  # It needs the federation publication output (pnpm run build:publication), so CI runs it in a
+  # job that builds that output (`--only frontend_publication`) and excludes it elsewhere.
   @tag timeout: 120_000
+  @tag :frontend_publication
   test "fails closed for an expired active catalog without changing accepted state" do
     previous_config =
       Application.get_env(:cadence_web, :frontend_release_publication, :not_configured)

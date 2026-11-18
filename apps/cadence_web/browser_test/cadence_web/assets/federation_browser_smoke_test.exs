@@ -6,9 +6,9 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeTest do
   @moduletag sandbox_ownership_timeout: 600_000
   @moduletag timeout: 600_000
 
-  alias Ecto.Adapters.SQL.Sandbox
-  alias CadenceWeb.Assets.FederationBrowserSmokeSetup
   alias CadenceWeb.Assets.DashboardRenderedViewportRunner
+  alias CadenceWeb.Assets.FederationBrowserSmokeSetup
+  alias Ecto.Adapters.SQL.Sandbox
   import Phoenix.LiveViewTest
 
   @tag :browser_smoke

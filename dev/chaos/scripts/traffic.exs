@@ -15,7 +15,7 @@ feeds =
         target_id:
           "spacecraft_runtime:spacecraft-earendil-#{String.pad_leading(to_string(scid), 3, "0")}",
         rate_hz: rate_hz,
-        output: {:tcp, "cadence", 42100 + scid - 1},
+        output: {:tcp, "cadence", 42_100 + scid - 1},
         definitions_path: "/lab/demo_spacecraft.yaml",
         provider: CadenceSimulator.Providers.DatabaseDynamics,
         provider_opts: [noise_amplitude: 0.05],

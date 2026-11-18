@@ -3,6 +3,7 @@ Code.require_file(Path.expand("../../support/dashboard_rendered_viewport_runner.
 defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
   use CadenceWeb.ConnCase, async: false
   import Ecto.Query
+  alias CadenceWeb.Assets.DashboardRenderedViewportRunner, as: Runner
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -36,13 +37,10 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
 
     File.mkdir_p!(output_dir)
 
-    port =
-      CadenceWeb.Assets.DashboardRenderedViewportRunner.start_browser_endpoint_on_ephemeral_port!(
-        c.sandbox_owner
-      )
+    port = Runner.start_browser_endpoint_on_ephemeral_port!(c.sandbox_owner)
 
     {output, status} =
-      CadenceWeb.Assets.DashboardRenderedViewportRunner.run_dashboard_viewport_smoke(
+      Runner.run_dashboard_viewport_smoke(
         [
           Path.expand(
             "../../../../../frontend/tools/phoenix/ops_initial_state_browser.mjs",

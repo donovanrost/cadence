@@ -450,11 +450,15 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     handler_id = {__MODULE__, make_ref()}
 
+    # The registry queries from the calling process. Count only this process's queries: the
+    # supervised Janitor's periodic stage cleanup shares the sandbox connection in shared mode
+    # and would otherwise race the refute_receive below.
     :telemetry.attach(
       handler_id,
       [:cadence, :repo, :query],
       fn _event, _measurements, metadata, pid ->
-        send(pid, {:application_release_registry_query, Map.get(metadata, :query)})
+        if self() == pid,
+          do: send(pid, {:application_release_registry_query, Map.get(metadata, :query)})
       end,
       self()
     )

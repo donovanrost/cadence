@@ -1,0 +1,697 @@
+name: CI
+
+# Elixir quality and test suites (docs/ci/plan.md). `ci-ok` is the single required check.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  # Twice a day on develop (the default branch, where schedules run), so jobs on probation outside
+  # ci-ok keep collecting runs when no PRs land. Free on a public repo; `changes` treats it like a push.
+  schedule:
+    - cron: "17 5,17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # Pushes to develop/main write the caches PRs restore; let them finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MIX_ENV: test
+
+jobs:
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
+    steps:
+      - if: github.event_name == 'pull_request'
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - "**"
+              - "!docs/**"
+              - "!**/*.md"
+
+  quality:
+    name: Elixir quality
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - id: setup
+        uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
+          xmllint: "false"
+
+      # Each check runs even when an earlier one fails, so one run reports every problem.
+      - name: Compile every project (warnings as errors)
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        # The restored _build makes this an incremental build. When a struct in one project gains
+        # or loses a field, an incremental build of a project that depends on it can keep a stale
+        # inferred type and report a false "incompatible types" warning (cadence_web after
+        # 64387fb7e's RawEvidence.receipt_times; reproduced locally). So a failure is checked
+        # again by a forced full build, and only that build's result counts. A real warning
+        # fails both builds.
+        run: |
+          if mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --warnings-as-errors; then
+            exit 0
+          fi
+          echo "::warning title=Incremental compile failed::Checking again with a forced full build (stale build-cache types can cause false warnings)."
+          mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors
+      - name: Format
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix format.all --check-formatted
+      - name: Credo (strict, zero issues)
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix credo --strict
+      - name: No new credo suppressions
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && github.event_name == 'pull_request' }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          scripts/ci/credo_suppressions.sh FETCH_HEAD HEAD
+      - name: Workspace check
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix workspace.check
+      - name: Extensions check
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix workspace.run -t cadence.extensions.check -p cadence --order postorder --early-stop --env-var MIX_ENV=test --
+      - name: Architecture check
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix workspace.run -t cadence.architecture.check -p cadence --order postorder --early-stop --env-var MIX_ENV=test -- --summary
+      # Every project: child locks hold deps the root lock lacks (e.g. ccsds/xtce's ex_doc).
+      # Blocking: a retired package or a security advisory in any lock fails the PR.
+      - name: Hex audit, every project
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: |
+          status=0
+          mix hex.audit || status=1
+          mix workspace.run -t hex.audit --order postorder || status=1
+          exit "$status"
+
+      # Only develop/main pushes save caches; PRs restore the latest one and never churn the quota.
+      # This job compiles every project, so it alone saves _build.
+      - name: Save deps
+        if: ${{ github.event_name == 'push' && steps.setup.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CADENCE_DEPS_PATHS }}
+          key: ${{ env.CADENCE_DEPS_KEY }}
+      - name: Index the sources this _build was compiled from
+        if: ${{ github.event_name == 'push' && steps.setup.outcome == 'success' }}
+        run: scripts/ci/source_index.sh write "$CADENCE_SOURCE_INDEX"
+      - name: Save _build
+        if: ${{ github.event_name == 'push' && steps.setup.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CADENCE_BUILD_PATHS }}
+          key: ${{ env.CADENCE_BUILD_KEY }}
+
+  test-core:
+    name: Core tests (${{ matrix.partition }}/4)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3, 4]
+    env:
+      MIX_TEST_PARTITION: ${{ matrix.partition }}
+    services:
+      postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      - name: mix test --partitions 4
+        working-directory: apps/cadence
+        run: mix test --partitions 4 --slowest-modules 10
+        env:
+          # Producer tests run their real frontend consumers; each consumer that reads its
+          # producer's fixture appends itself here. producer-coverage checks all of them ran.
+          CADENCE_PRODUCER_FIXTURE_LEDGER: ${{ runner.temp }}/producer-ledger.txt
+      - name: Upload the producer-fixture ledger
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: producer-ledger-core-${{ matrix.partition }}
+          path: ${{ runner.temp }}/producer-ledger.txt
+          if-no-files-found: ignore
+          retention-days: 1
+      - name: Save pnpm store
+        if: github.event_name == 'push' && matrix.partition == 1
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CADENCE_PNPM_STORE }}
+          key: pnpm-v1-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+  test-web:
+    name: Web tests (${{ matrix.partition }}/2)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2]
+    env:
+      MIX_TEST_PARTITION: ${{ matrix.partition }}
+    services:
+      postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      # cadence_web uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
+      - name: Create and migrate the cadence test database
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      # :browser and :browser_smoke stay excluded (test_helper.exs); the Frontend workflow runs
+      # them. :frontend_publication runs in test-web-publication, which builds its input.
+      - name: mix test --partitions 2
+        working-directory: apps/cadence_web
+        run: mix test --partitions 2 --exclude frontend_publication --slowest-modules 10
+        env:
+          # Producer tests run their real frontend consumers; each consumer that reads its
+          # producer's fixture appends itself here. producer-coverage checks all of them ran.
+          CADENCE_PRODUCER_FIXTURE_LEDGER: ${{ runner.temp }}/producer-ledger.txt
+      - name: Upload the producer-fixture ledger
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: producer-ledger-web-${{ matrix.partition }}
+          path: ${{ runner.temp }}/producer-ledger.txt
+          if-no-files-found: ignore
+          retention-days: 1
+
+  test-web-publication:
+    name: Web tests needing the federation publication
+    needs: [changes, browser-assets]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      # cadence_web uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
+      - name: Create and migrate the cadence test database
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      - name: Download the browser assets (built once by browser-assets)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: browser-assets
+          path: apps/cadence_web/priv/static
+      - name: mix test --only frontend_publication
+        working-directory: apps/cadence_web
+        shell: bash
+        run: |
+          mix test --only frontend_publication 2>&1 | tee "$RUNNER_TEMP/web-publication.log"
+          # --only passes when nothing matches; these tests must run, never silently skip.
+          grep -Eq '^Result: [1-9][0-9]* passed' "$RUNNER_TEMP/web-publication.log" ||
+            { echo "::error::No :frontend_publication test ran"; exit 1; }
+
+  # Tailwind, Vite, the federation publication and digests (assets.deploy), built once for the
+  # browser job and test-web-publication.
+  browser-assets:
+    name: Browser assets (built once)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-cadence
+        with:
+          xmllint: "false"
+      - name: Restore npm cache (LiveView assets)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
+          restore-keys: npm-v1-${{ runner.os }}-
+      - run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: apps/cadence_web
+      - name: Build the browser assets (mix assets.deploy, behind the publication build lock)
+        working-directory: apps/cadence_web
+        run: node ../../frontend/tools/phoenix/run_federation_publication_build.mjs assets.deploy
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-assets
+          path: apps/cadence_web/priv/static
+          if-no-files-found: error
+          retention-days: 1
+      - name: Save npm cache
+        if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
+
+  # Not in ci-ok yet: joins after a week without flakes (docs/ci/browser-in-ci-ok.md).
+  browser:
+    name: Federation browser (${{ matrix.shard }}/2)
+    needs: [changes, browser-assets]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    services:
+      postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Ubuntu 23.10+ restricts unprivileged user namespaces through AppArmor. Chrome's sandbox
+      # needs them; without this it aborts at launch with "No usable sandbox".
+      - name: Allow Chrome's sandbox to create user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      - name: Restore npm cache (LiveView assets)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
+          restore-keys: npm-v1-${{ runner.os }}-
+      - run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: apps/cadence_web
+      - name: Download the browser assets (built once by browser-assets)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: browser-assets
+          path: apps/cadence_web/priv/static
+      - run: corepack pnpm exec playwright install --with-deps chromium chrome
+        working-directory: frontend
+      - name: Select the installed browser
+        working-directory: frontend
+        run: node --input-type=module -e 'import { chromium } from "playwright"; console.log("CHROME_BIN=" + chromium.executablePath())' >> "$GITHUB_ENV"
+      # cadence_web uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
+      - name: Create and migrate the cadence test database
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      - name: Federation browser tests
+        id: federation
+        run: mix test.browser.federation
+        working-directory: apps/cadence_web
+        env:
+          CADENCE_BROWSER_ASSETS_PREBUILT: "1"
+          # Which of the alias's browser test files run here (apps/cadence_web/mix.exs).
+          CADENCE_BROWSER_SHARD: ${{ matrix.shard }}/2
+          # Screenshots and failure.png/failure.txt land here; uploaded below when a step fails.
+          CADENCE_COMMAND_WORKSPACE_ARTIFACTS: ${{ runner.temp }}/browser-artifacts/command-workspace
+      # Shard 2 only (it has the lighter federation files). Runs even when the federation tests
+      # fail, so one run reports every browser failure.
+      - name: Exercise the lazy Ops pages in the production browser
+        if: ${{ !cancelled() && matrix.shard == 2 && steps.federation.conclusion != 'skipped' }}
+        run: mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/ops_initial_state_browser_test.exs
+        working-directory: apps/cadence_web
+        env:
+          CADENCE_BROWSER_PROPS_DIFF: "true"
+          CADENCE_INITIAL_STATE_ARTIFACTS: ${{ runner.temp }}/browser-artifacts/ops-initial-state
+      - name: Upload browser screenshots and failure captures
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-artifacts-${{ matrix.shard }}
+          path: ${{ runner.temp }}/browser-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
+  test-packages:
+    name: Packages, simulator, planes and cluster tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - id: setup
+        uses: ./.github/actions/setup-cadence
+
+      # Each suite runs even when an earlier one fails, so one run reports every problem.
+      - name: ccsds
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: packages/ccsds
+        run: mix test
+      - name: xtce
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: packages/xtce
+        run: mix test
+      - name: cadence_catalog
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: packages/cadence_catalog
+        run: mix test
+      # The simulator suite uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
+      - name: Create and migrate the cadence test database
+        id: db
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      - name: cadence_simulator
+        if: ${{ !cancelled() && steps.db.outcome == 'success' }}
+        working-directory: apps/cadence_simulator
+        run: mix test
+      - name: Plane tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix test.planes
+      - name: OTP cluster tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: mix test.cluster
+
+  producer-coverage:
+    name: Producer-contract coverage
+    needs: [changes, test-core, test-web]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.16.0"
+      - name: Download the shards' producer-fixture ledgers
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: producer-ledger-*
+          path: ${{ runner.temp }}/producer-ledgers
+      # Every consumer in frontend/tools/producer-contracts.json must have executed with its
+      # producer's fixture in some shard (replaces the Frontend workflow's test:producers rerun).
+      - name: Check every producer consumer executed
+        run: node scripts/ci/producer_coverage.mjs "$RUNNER_TEMP/producer-ledgers"
+
+  # Lockfile-only, so no install. A new HIGH/CRITICAL advisory in a production dependency fails
+  # the PR; dev tooling is reported but doesn't block (docs/ci: audit gating, 2026-11-13).
+  js-audit:
+    name: JS dependency audit
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.16.0"
+      - run: corepack enable
+      - name: frontend (pnpm), production deps, HIGH and above
+        working-directory: frontend
+        run: corepack pnpm audit --prod --audit-level high
+      - name: apps/cadence_web (npm), production deps, HIGH and above
+        if: ${{ !cancelled() }}
+        working-directory: apps/cadence_web
+        run: npm audit --omit=dev --audit-level=high
+      - name: All dependencies incl. dev tooling (reported, not blocking)
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### JS advisories, all dependencies (not blocking)"
+            echo '```'
+            (cd frontend && corepack pnpm audit --audit-level moderate 2>&1 | tail -3) || true
+            (cd apps/cadence_web && npm audit --audit-level=moderate 2>&1 | tail -3) || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The frontend workspace's own gate: pnpm verify (vp check, typecheck, structural lint, unit
+  # tests). Moved from frontend.yml so it can be part of ci-ok.
+  frontend-quality:
+    name: Frontend quality
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.16.0"
+      # OTP and Elixir versions come from mise.toml.
+      - uses: ./.github/actions/setup-beam
+      # The frontend consumes the locked Phoenix and LiveVue JavaScript packages.
+      - run: mix deps.get --check-locked
+      - run: corepack enable
+      - run: corepack pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: corepack pnpm exec playwright install --with-deps chromium chrome
+        working-directory: frontend
+      - run: corepack pnpm verify
+        working-directory: frontend
+
+  # Production reads and writes telemetry through QuestDB, but the test env swaps every
+  # telemetry store for Postgres. This job runs against a real QuestDB (docs/ci/questdb-integration.md).
+  # Kept out of ci-ok for its first clean week, like the browser shards.
+  questdb-integration:
+    name: QuestDB integration
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CADENCE_QUESTDB_HTTP_ENDPOINT: http://127.0.0.1:9000
+      CADENCE_QUESTDB_HOST: 127.0.0.1
+      CADENCE_QUESTDB_PORT: "8812"
+    services:
+      questdb:
+        # Same version as docker-compose.yml, pinned to the 9.4.3 multi-arch index digest.
+        image: questdb/questdb:9.4.3@sha256:3fd139f9f16015afc1b064fe4591b271be26cdec10315415e5511e9d80a5919e
+        ports:
+          - 9000:9000
+          - 8812:8812
+        options: >-
+          --health-cmd "curl -fsS http://127.0.0.1:9003/"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+      postgres:
+        # For the :questdb ExUnit suite (Repo sandbox); keep en_US.utf8, as in test-core.
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
+          xmllint: "false"
+      - name: Apply the QuestDB schema migrations
+        working-directory: apps/cadence
+        run: mix cadence.questdb.migrate
+      - name: QuestDB round trip (write, then read history, decimation and watermark)
+        working-directory: apps/cadence
+        run: mix cadence.questdb.smoke
+      # Tests tagged :questdb (excluded from the normal suites by test_helper.exs) run here. Until
+      # the first one exists this step only reports that; adding one needs no workflow change.
+      - name: mix test --only questdb
+        working-directory: apps/cadence
+        run: |
+          if ! grep -rqE '@(module)?tag[[:space:]]+:questdb\b' test; then
+            echo "No :questdb-tagged tests yet."
+            exit 0
+          fi
+          mix test --only questdb --slowest-modules 10
+
+  # The test env runs with the ingress journal on, but production's default is off (config.exs).
+  # This reruns the ingest tests tagged @moduletag :ingest_journal_matrix with it off (director
+  # 11-14; api-ops 3c94a9853). Journal-only tests in those modules skip themselves, visibly.
+  # Kept out of ci-ok for its first clean week, like the browser shards.
+  ingest-journal-off:
+    name: Ingest tests, journal off
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        # Keep en_US.utf8, as in test-core.
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      # The tag reaches develop with ui/apogee-spa. Until a branch has it, this step only reports that.
+      - name: mix test --only ingest_journal_matrix (journal off)
+        working-directory: apps/cadence
+        env:
+          CADENCE_TEST_INGRESS_JOURNAL: "off"
+        run: |
+          if ! grep -rqE '@moduletag[[:space:]]+:ingest_journal_matrix\b' test; then
+            echo "No :ingest_journal_matrix tests on this branch yet."
+            exit 0
+          fi
+          mix test --only ingest_journal_matrix --slowest-modules 10
+
+  ci-ok:
+    name: ci-ok
+    needs:
+      [
+        changes,
+        quality,
+        test-core,
+        test-web,
+        browser-assets,
+        test-web-publication,
+        test-packages,
+        producer-coverage,
+        js-audit,
+        frontend-quality,
+      ]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every needed job succeeded or was skipped as unaffected
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null

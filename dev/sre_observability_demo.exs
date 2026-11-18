@@ -2,25 +2,27 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   @moduledoc false
 
-  alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Accounts.OrganizationMembership
   alias Cadence.Accounts.OrganizationMembershipRow
-  alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, ScheduledContact}
+  alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Commanding.{CommandQueueEntry, CommandQueueEntryRow}
   alias Cadence.Commanding.{CommandRequest, CommandRequestRow}
+  alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, ScheduledContact}
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Dashboards.{Document, Management, Placement, Section, WidgetDef}
-  alias Cadence.Management.DataSources
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.Limits.Store, as: LimitStore
+  alias Cadence.Management.DataSources
   alias Cadence.Missions.Mission
   alias Cadence.Observability
   alias Cadence.Organizations.Organization
+  alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.Telemetry.DataManagement
   alias Cadence.Telemetry.PacketDefinition
-  alias Cadence.Runtime.MissionRuntimeSpec
+  alias Cadence.Telemetry.Profiler
 
   require Logger
 
@@ -195,25 +197,29 @@ defmodule Cadence.Dev.SreObservabilityDemo do
           :ok
 
         {:error, :not_found} ->
-          membership =
-            OrganizationMembership.new(%{
-              user_id: user.user_id,
-              organization_id: ids.organization_id,
-              role: :organization_admin,
-              metadata: %{"source" => "sre_observability_demo"}
-            })
-
-          membership
-          |> OrganizationMembershipRow.changeset()
-          |> Cadence.Repo.insert()
-          |> case do
-            {:ok, _row} -> :ok
-            {:error, reason} -> {:error, reason}
-          end
+          grant_browser_membership(user, ids)
       end
     else
       nil -> :ok
       {:error, :not_found} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp grant_browser_membership(user, ids) do
+    membership =
+      OrganizationMembership.new(%{
+        user_id: user.user_id,
+        organization_id: ids.organization_id,
+        role: :organization_admin,
+        metadata: %{"source" => "sre_observability_demo"}
+      })
+
+    membership
+    |> OrganizationMembershipRow.changeset()
+    |> Cadence.Repo.insert()
+    |> case do
+      {:ok, _row} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
@@ -759,7 +765,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   end
 
   defp persist_historical_data_context(ids, observed_at) do
-    Cadence.Telemetry.DataManagement.record_historical_data_workflow_request(
+    DataManagement.record_historical_data_workflow_request(
       :backfill,
       %{
         organization_id: ids.organization_id,
@@ -1004,7 +1010,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   defp monitor(state) do
     Process.sleep(10_000)
 
-    profiler = Cadence.Telemetry.Profiler.snapshot(state.ids.mission_id)
+    profiler = Profiler.snapshot(state.ids.mission_id)
     simulator = CadenceSimulator.simulator_stats(state.simulator)
 
     IO.puts(

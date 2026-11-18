@@ -4,6 +4,8 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   import Ecto.Changeset
   import Ecto.Query
 
+  require Logger
+
   alias Cadence.Repo
 
   alias CadenceWeb.FrontendReleaseCatalog
@@ -122,19 +124,21 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   defp normalize_transaction_success({:ok, response}), do: {:ok, response}
   defp normalize_transaction_success({:error, response}), do: {:error, response}
 
-  defp normalize_transaction_failure({:semantic, _failure}),
-    do: {:error, response_error(500, :integrity_failure)}
+  # The rollback reason rides along in `reason` (never in the response body) so a failure says
+  # which check fired.
+  defp normalize_transaction_failure({:semantic, _failure} = reason),
+    do: {:error, response_error(500, :integrity_failure, reason)}
 
-  defp normalize_transaction_failure({:integrity, _reason}),
-    do: {:error, response_error(500, :integrity_failure)}
+  defp normalize_transaction_failure({:integrity, _reason} = reason),
+    do: {:error, response_error(500, :integrity_failure, reason)}
 
   defp normalize_transaction_failure({:transient, _reason}),
     do: {:error, response_error(503, :transient_persistence_failure)}
 
   defp normalize_transaction_failure(%{} = failure), do: {:error, failure}
 
-  defp normalize_transaction_failure(_reason),
-    do: {:error, response_error(500, :integrity_failure)}
+  defp normalize_transaction_failure(reason),
+    do: {:error, response_error(500, :integrity_failure, reason)}
 
   defp activate_new(
          raw_document_bytes,
@@ -178,27 +182,48 @@ defmodule CadenceWeb.FrontendReleaseActivation do
          control,
          opts
        ) do
-    with {:ok, latest_catalog} <- locked_latest_catalog(),
-         {:ok, latest_generation} <- locked_latest_generation(),
-         {:ok, entries} <- reread_input_entries(verified.entries, opts),
+    with {:ok, latest_catalog} <- step(:locked_latest_catalog, locked_latest_catalog()),
+         {:ok, latest_generation} <- step(:locked_latest_generation, locked_latest_generation()),
+         {:ok, entries} <-
+           step(:reread_input_entries, reread_input_entries(verified.entries, opts)),
          {:ok, state} <-
-           validate_transition(
-             verified,
-             entries,
-             latest_catalog,
-             latest_generation,
-             control,
-             opts
+           step(
+             :validate_transition,
+             validate_transition(
+               verified,
+               entries,
+               latest_catalog,
+               latest_generation,
+               control,
+               opts
+             )
            ),
-         {:ok, catalog} <- insert_catalog(verified, raw_document_bytes, entries),
-         {:ok, generation} <- insert_generation(verified, catalog, state),
-         :ok <- insert_bindings(verified.entries, entries, generation, state),
-         :ok <- cut_over_if_required(control, state),
-         {:ok, snapshot} <- persisted_snapshot(catalog.publication_id, generation.generation_id),
-         :ok <- exact_snapshot_digest(snapshot, verified.snapshot_digest),
+         {:ok, catalog} <-
+           step(:insert_catalog, insert_catalog(verified, raw_document_bytes, entries)),
+         {:ok, generation} <-
+           step(:insert_generation, insert_generation(verified, catalog, state)),
+         :ok <-
+           step(:insert_bindings, insert_bindings(verified.entries, entries, generation, state)),
+         :ok <- step(:cut_over_if_required, cut_over_if_required(control, state)),
+         {:ok, snapshot} <-
+           step(
+             :persisted_snapshot,
+             persisted_snapshot(catalog.publication_id, generation.generation_id)
+           ),
+         :ok <-
+           step(:exact_snapshot_digest, exact_snapshot_digest(snapshot, verified.snapshot_digest)),
          response <- accepted_response(verified, catalog, generation),
          :ok <-
-           insert_accepted_request(response, idempotency_key_digest, document_digest, state, opts) do
+           step(
+             :insert_accepted_request,
+             insert_accepted_request(
+               response,
+               idempotency_key_digest,
+               document_digest,
+               state,
+               opts
+             )
+           ) do
       {:ok, response}
     else
       {:error, %{code: _code} = failure} ->
@@ -209,8 +234,8 @@ defmodule CadenceWeb.FrontendReleaseActivation do
           Keyword.get(opts, :publisher_identity)
         )
 
-      {:error, :integrity} ->
-        Repo.rollback({:integrity, :persisted_state_mismatch})
+      {:error, {:integrity_at, step}} ->
+        Repo.rollback({:integrity, {:persisted_state_mismatch, step}})
 
       {:error, :snapshot_integrity} ->
         Repo.rollback({:integrity, :snapshot_digest_mismatch})
@@ -225,6 +250,11 @@ defmodule CadenceWeb.FrontendReleaseActivation do
         Repo.rollback({:integrity, reason})
     end
   end
+
+  # Names the activation step a bare {:error, :integrity} came from; every other result passes
+  # through unchanged.
+  defp step(name, {:error, :integrity}), do: {:error, {:integrity_at, name}}
+  defp step(_name, result), do: result
 
   defp reread_input_entries(entries, opts) do
     entries
@@ -278,18 +308,25 @@ defmodule CadenceWeb.FrontendReleaseActivation do
       |> lock("FOR UPDATE")
       |> Repo.one()
 
-    with %ReleasePublication{} = row <- row,
-         true <- row.acceptance_state == "accepted",
-         true <- row.release_id == release_id,
-         true <- row.payload_bytes == expected_payload_bytes,
-         true <- row.payload_digest == FrontendReleaseCatalog.digest(expected_payload_bytes),
-         true <- row.signed_document_bytes == expected_document_bytes,
-         true <-
-           row.signed_document_digest == FrontendReleaseCatalog.digest(expected_document_bytes),
-         :ok <- release_identity_matches?(row, release),
-         :ok <- release_security_metadata_matches?(row, envelope, release),
-         :ok <- release_manifest_matches?(row, release),
-         {:ok, artifacts} <- reread_artifacts(row, release, path) do
+    # Each check is tagged so an integrity mismatch logs which one failed (see
+    # reread_mismatch/3); the result is the same {:error, :integrity} as before.
+    with {:row, %ReleasePublication{} = row} <- {:row, row},
+         {:acceptance_state, true} <- {:acceptance_state, row.acceptance_state == "accepted"},
+         {:release_id, true} <- {:release_id, row.release_id == release_id},
+         {:payload_bytes, true} <- {:payload_bytes, row.payload_bytes == expected_payload_bytes},
+         {:payload_digest, true} <-
+           {:payload_digest,
+            row.payload_digest == FrontendReleaseCatalog.digest(expected_payload_bytes)},
+         {:signed_document_bytes, true} <-
+           {:signed_document_bytes, row.signed_document_bytes == expected_document_bytes},
+         {:signed_document_digest, true} <-
+           {:signed_document_digest,
+            row.signed_document_digest == FrontendReleaseCatalog.digest(expected_document_bytes)},
+         {:identity, :ok} <- {:identity, release_identity_matches?(row, release)},
+         {:security_metadata, :ok} <-
+           {:security_metadata, release_security_metadata_matches?(row, envelope, release)},
+         {:manifest, :ok} <- {:manifest, release_manifest_matches?(row, release)},
+         {:artifacts, {:ok, artifacts}} <- {:artifacts, reread_artifacts(row, release, path)} do
       {:ok,
        %{
          row: row,
@@ -300,11 +337,21 @@ defmodule CadenceWeb.FrontendReleaseActivation do
          artifacts: artifacts
        }}
     else
-      nil -> {:error, :integrity}
-      false -> {:error, :integrity}
-      {:error, :integrity} -> {:error, :integrity}
-      {:error, _} = failure -> failure
+      # reread_artifacts logs its own failing check.
+      {:artifacts, {:error, :integrity}} -> {:error, :integrity}
+      {check, {:error, :integrity}} -> reread_mismatch(check, path, release_id)
+      {_check, {:error, _} = failure} -> failure
+      {check, _mismatch} -> reread_mismatch(check, path, release_id)
     end
+  end
+
+  defp reread_mismatch(check, path, release_id) do
+    Logger.warning(
+      "frontend release reread integrity mismatch: #{inspect(check)} at #{path} " <>
+        "(release #{inspect(release_id)})"
+    )
+
+    {:error, :integrity}
   end
 
   defp release_identity_matches?(row, release) do
@@ -365,39 +412,56 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   end
 
   defp reread_artifacts(row, release, path) do
+    # Sorted here, bytewise, not by ORDER BY: the database collation (glibc en_US sorts "_"
+    # and case linguistically) must not decide whether two path lists match.
     persisted =
       ReleaseArtifact
       |> where([artifact], artifact.release_publication_id == ^row.publication_id)
-      |> order_by([artifact], asc: artifact.path)
       |> Repo.all()
+      |> Enum.sort_by(& &1.path)
 
     declarations = Map.new(release["artifacts"], &{&1["path"], &1})
 
     cond do
-      length(persisted) != length(release["artifacts"]) -> {:error, :integrity}
-      Map.keys(declarations) != Enum.map(persisted, & &1.path) -> {:error, :integrity}
-      true -> reread_artifact_rows(persisted, declarations, path, row.release_id)
+      length(persisted) != length(release["artifacts"]) ->
+        reread_mismatch(:artifact_count, path, row.release_id)
+
+      Enum.sort(Map.keys(declarations)) != Enum.map(persisted, & &1.path) ->
+        reread_mismatch(:artifact_paths, path, row.release_id)
+
+      true ->
+        reread_artifact_rows(persisted, declarations, path, row.release_id)
     end
   end
 
-  defp reread_artifact_rows(rows, declarations, _path, release_id) do
+  defp reread_artifact_rows(rows, declarations, path, release_id) do
     rows
     |> Enum.reduce_while({:ok, []}, fn artifact, {:ok, acc} ->
       declaration = Map.get(declarations, artifact.path)
 
-      with true <- is_map(declaration),
-           true <- artifact.release_id == release_id,
-           true <- artifact.path == declaration["path"],
-           true <- artifact.sha256 == declaration["sha256"],
-           true <- artifact.size == declaration["size"],
-           true <- artifact.media_type == declaration["mediaType"],
-           true <- artifact.object_key == "sha256:" <> artifact.sha256,
-           {:ok, object} <- reread_object(artifact.sha256, artifact.size) do
+      with {:declared, true} <- {:declared, is_map(declaration)},
+           {:artifact_release_id, true} <-
+             {:artifact_release_id, artifact.release_id == release_id},
+           {:artifact_path, true} <- {:artifact_path, artifact.path == declaration["path"]},
+           {:artifact_sha256, true} <-
+             {:artifact_sha256, artifact.sha256 == declaration["sha256"]},
+           {:artifact_size, true} <- {:artifact_size, artifact.size == declaration["size"]},
+           {:artifact_media_type, true} <-
+             {:artifact_media_type, artifact.media_type == declaration["mediaType"]},
+           {:artifact_object_key, true} <-
+             {:artifact_object_key, artifact.object_key == "sha256:" <> artifact.sha256},
+           {:artifact_object, {:ok, object}} <-
+             {:artifact_object, reread_object(artifact.sha256, artifact.size)} do
         {:cont, {:ok, [%{artifact: artifact, object: object} | acc]}}
       else
-        false -> {:halt, {:error, :integrity}}
-        {:error, :integrity} -> {:halt, {:error, :integrity}}
-        {:error, {:transient, _reason} = failure} -> {:halt, {:error, failure}}
+        {_check, {:error, {:transient, _reason} = failure}} ->
+          {:halt, {:error, failure}}
+
+        {:artifact_object, {:error, {:integrity, detail}}} ->
+          {:halt, reread_mismatch({:artifact_object, artifact.path, detail}, path, release_id)}
+
+        {check, _mismatch} ->
+          {:halt, reread_mismatch({check, artifact.path}, path, release_id)}
       end
     end)
     |> case do
@@ -406,18 +470,22 @@ defmodule CadenceWeb.FrontendReleaseActivation do
     end
   end
 
+  # Integrity failures say why ({:integrity, detail}), for reread_artifact_rows to log.
   defp reread_object(sha256, size) do
     case Repo.get(ReleaseObject, sha256) do
       %ReleaseObject{sha256: ^sha256, size: ^size, bytes: bytes} when is_binary(bytes) ->
         if FrontendReleaseCatalog.digest(bytes) == "sha256:" <> sha256,
           do: {:ok, %{sha256: sha256, size: size}},
-          else: {:error, :integrity}
+          else: {:error, {:integrity, :inline_digest_mismatch}}
 
       %ReleaseObject{sha256: ^sha256, size: ^size, bytes: nil} ->
         verify_chunk_backed_object(sha256, size)
 
-      _ ->
-        {:error, :integrity}
+      %ReleaseObject{size: stored_size} ->
+        {:error, {:integrity, {:object_size_mismatch, stored_size}}}
+
+      nil ->
+        {:error, {:integrity, :object_missing}}
     end
   end
 
@@ -430,11 +498,11 @@ defmodule CadenceWeb.FrontendReleaseActivation do
         if transient_artifact_store_failure?(reason) do
           {:error, {:transient, reason}}
         else
-          {:error, :integrity}
+          {:error, {:integrity, {:chunk_store, reason}}}
         end
 
-      _other ->
-        {:error, :integrity}
+      other ->
+        {:error, {:integrity, {:chunk_store, other}}}
     end
   end
 
@@ -624,22 +692,22 @@ defmodule CadenceWeb.FrontendReleaseActivation do
 
   defp legacy_persisted_entries(_catalog, _entries), do: {:error, :integrity}
 
+  # Binding identity order, bytewise (as a C-collated ORDER BY would give), independent of the
+  # database collation; the persisted snapshot built from it is digest-compared.
+  defp sort_bindings(bindings) do
+    Enum.sort_by(
+      bindings,
+      &{&1.application_id, &1.application_version, &1.package_id, &1.package_version,
+       &1.surface_id, &1.surface_version}
+    )
+  end
+
   defp persisted_generation_entries(generation) do
     bindings =
       CatalogBinding
       |> where([binding], binding.generation_id == ^generation.generation_id)
-      |> order_by(
-        [
-          binding
-        ],
-        asc: binding.application_id,
-        asc: binding.application_version,
-        asc: binding.package_id,
-        asc: binding.package_version,
-        asc: binding.surface_id,
-        asc: binding.surface_version
-      )
       |> Repo.all()
+      |> sort_bindings()
 
     if length(bindings) != generation.identity_count or bindings == [],
       do: {:error, :integrity},
@@ -970,18 +1038,8 @@ defmodule CadenceWeb.FrontendReleaseActivation do
     bindings =
       CatalogBinding
       |> where([binding], binding.generation_id == ^generation.generation_id)
-      |> order_by(
-        [
-          binding
-        ],
-        asc: binding.application_id,
-        asc: binding.application_version,
-        asc: binding.package_id,
-        asc: binding.package_version,
-        asc: binding.surface_id,
-        asc: binding.surface_version
-      )
       |> Repo.all()
+      |> sort_bindings()
 
     cond do
       length(bindings) != generation.identity_count -> {:error, :integrity}

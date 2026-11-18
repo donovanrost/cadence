@@ -10,7 +10,9 @@ config :cadence, Cadence.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "cadence_test#{System.get_env("MIX_TEST_PARTITION")}",
+  # The partition suffix is runtime config (runtime.exs, #50): compile-time config stays stable, so
+  # switching MIX_TEST_PARTITION doesn't recompile the whole app.
+  database: "cadence_test",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2,
   queue_target: 5_000,
@@ -37,11 +39,7 @@ config :cadence, password_hash_iterations: 1_000
 config :cadence,
   ingress_journal: [
     enabled?: System.get_env("CADENCE_TEST_INGRESS_JOURNAL", "on") != "off",
-    base_path:
-      Path.join(
-        System.tmp_dir!(),
-        "cadence-ingress-journal-test-#{System.pid()}-#{System.get_env("MIX_TEST_PARTITION", "0")}"
-      ),
+    # base_path is per OS process and partition: set in runtime.exs (#50).
     max_bytes: 64 * 1_024 * 1_024,
     segment_bytes: 1 * 1_024 * 1_024,
     capture_record_bytes: 256 * 1_024,

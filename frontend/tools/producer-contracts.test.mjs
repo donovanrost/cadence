@@ -44,6 +44,25 @@ void test("the integration gate requires execution, not just fixture discovery o
   }
 });
 
+void test("a named ledger records executed consumers without making fixtures mandatory (CI shards)", () => {
+  const temporary = mkdtempSync(join(tmpdir(), "cadence-fixture-ledger-test-"));
+  const ledger = join(temporary, "executed.txt");
+  try {
+    const absent = producerFixture("CADENCE_DOCUMENT", testModule, {
+      CADENCE_PRODUCER_FIXTURE_LEDGER: ledger,
+    });
+    assert.equal(absent.available, false);
+    const fixture = producerFixture("CADENCE_DOCUMENT", testModule, {
+      CADENCE_DOCUMENT: '{"data":"producer"}',
+      CADENCE_PRODUCER_FIXTURE_LEDGER: ledger,
+    });
+    assert.equal(fixture.read(), '{"data":"producer"}');
+    assertProducerCoverage([consumer], readFileSync(ledger, "utf8"));
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
 void test("the contract inventory names real consumers and producers and covers every fixture helper caller", async () => {
   const { glob } = await import("node:fs/promises");
   const root = new URL("../", import.meta.url);

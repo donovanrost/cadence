@@ -3,6 +3,7 @@ Code.require_file(Path.expand("../../support/dashboard_rendered_viewport_runner.
 defmodule CadenceWeb.Assets.CommandWorkspaceBrowserTest do
   use CadenceWeb.ConnCase, async: false
   import Ecto.Query
+  alias Cadence.Auth.Scope
   alias Cadence.CommandAuthoringFixtures
   alias Cadence.Commanding.{CommandQueueEntryRow, CommandRequestRow, StagedCommandItemRow}
   alias Cadence.Management.Commanding.WorkspaceSettings
@@ -18,7 +19,7 @@ defmodule CadenceWeb.Assets.CommandWorkspaceBrowserTest do
     mission = TestFixtures.persist_mission!(org, display_name: "Kestrel")
     user = TestFixtures.persist_user!()
     membership = TestFixtures.grant_membership!(user, org, role: :organization_admin)
-    scope = Cadence.Auth.Scope.new(%{user: user, organization_membership: membership})
+    scope = Scope.new(%{user: user, organization_membership: membership})
     settings = WorkspaceSettings.load(org.organization_id, mission.mission_id)
 
     assert {:ok, _} =

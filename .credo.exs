@@ -11,13 +11,15 @@
           "packages/*/mix.exs",
           "packages/*/lib/",
           "packages/*/test/",
-          "dev/otp_cluster/"
+          "apps/cadence/plane_test/",
+          "apps/cadence_web/browser_test/",
+          "dev/"
         ],
         excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", ~r"/cover/"]
       },
       checks: %{
         extra: [
-          # `# todo(authz): …` marks where Cedar should decide later (the user's convention,
+          # `# todo(authz): …` marks where Cedar should decide later (the owner's convention,
           # DECISIONS #62). Keep them listed, but don't fail the build on them.
           {Credo.Check.Design.TagTODO, [exit_status: 0]}
         ]

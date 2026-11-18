@@ -174,11 +174,9 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
   end
 
   def close_dashboard_viewport_smoke_port(port) do
-    try do
-      if Port.info(port) != nil, do: Port.close(port)
-    catch
-      :error, :badarg -> :ok
-    end
+    if Port.info(port) != nil, do: Port.close(port)
+  catch
+    :error, :badarg -> :ok
   end
 
   def start_browser_endpoint!(port, sandbox_owner) do

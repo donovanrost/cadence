@@ -104,43 +104,28 @@ defmodule Cadence.IngressBenchmark.FullFlowRunner do
     anomaly_count = anomaly_count(ids.mission_id)
     finished_at = DateTime.utc_now()
 
-    invariants = %{
-      received_expected_bytes: final_provider.downlink_bytes_received == expected_bytes,
-      receive_target_rate_met:
-        receive_observation.observed_receive_bps >= target_bps * minimum_rate_ratio,
-      framed_expected_messages: final_provider.downlink_message_count == expected_messages,
-      executor_drained: final_provider.ingress_executor.queue_depth == 0,
-      executor_processed_all:
-        final_provider.ingress_executor.processed_count == journal_consumer.acknowledged_batches and
-          final_provider.ingress_executor.failed_count == 0,
-      projector_drained: final_provider.ingress_persistence_projector.queue_depth == 0,
-      projector_persisted_all:
-        final_provider.ingress_persistence_projector.persisted_count ==
-          journal_consumer.acknowledged_batches and
-          final_provider.ingress_persistence_projector.failed_count == 0,
-      journal_captured_all:
-        journal.appended_bytes == expected_bytes and journal.next_offset == expected_bytes,
-      journal_capture_records_bounded:
-        journal.max_appended_entry_bytes <= journal.capture_record_bytes,
-      processing_batches_bounded:
-        journal_consumer.max_delivered_batch_entries <= journal_consumer.max_batch_entries and
-          journal_consumer.max_delivered_batch_bytes <= journal_consumer.max_batch_bytes,
-      journal_consumers_acked_all:
-        journal.cursors.processing == expected_bytes and journal.cursors.archive == expected_bytes and
-          journal.lag_bytes.processing == 0 and journal.lag_bytes.archive == 0,
-      archive_consumer_acked_all:
-        archive_consumer.archived_entries == journal.appended_entries and
-          archive_consumer.archived_bytes == expected_bytes and archive_consumer.failed_count == 0,
-      ingress_archive_acked_all:
-        ingress_archive.persisted_count == journal.appended_entries and
-          ingress_archive.persisted_bytes == expected_bytes,
-      protocol_archive_acked_all:
-        protocol_archive.evidence_count == journal_consumer.acknowledged_batches and
-          protocol_archive.frame_count == expected_messages and
-          protocol_archive.packet_count == expected_messages and
-          protocol_archive.represented_bytes == expected_bytes,
-      no_protocol_anomalies: anomaly_count == 0
-    }
+    invariants =
+      %{
+        received_expected_bytes: final_provider.downlink_bytes_received == expected_bytes,
+        receive_target_rate_met:
+          receive_observation.observed_receive_bps >= target_bps * minimum_rate_ratio,
+        framed_expected_messages: final_provider.downlink_message_count == expected_messages,
+        no_protocol_anomalies: anomaly_count == 0
+      }
+      |> Map.merge(pipeline_invariants(final_provider, journal_consumer))
+      |> Map.merge(
+        journal_invariants(journal, journal_consumer, archive_consumer, expected_bytes)
+      )
+      |> Map.merge(
+        archive_invariants(
+          ingress_archive,
+          protocol_archive,
+          journal,
+          journal_consumer,
+          expected_bytes,
+          expected_messages
+        )
+      )
 
     %{
       status:
@@ -183,6 +168,60 @@ defmodule Cadence.IngressBenchmark.FullFlowRunner do
       invariants: invariants,
       receive_snapshot: provider_report(List.first(receive_snapshot.provider_runtimes)),
       erlang_memory_bytes: Map.new(:erlang.memory())
+    }
+  end
+
+  defp pipeline_invariants(provider, journal_consumer) do
+    executor = provider.ingress_executor
+    projector = provider.ingress_persistence_projector
+
+    %{
+      executor_drained: executor.queue_depth == 0,
+      executor_processed_all:
+        executor.processed_count == journal_consumer.acknowledged_batches and
+          executor.failed_count == 0,
+      projector_drained: projector.queue_depth == 0,
+      projector_persisted_all:
+        projector.persisted_count == journal_consumer.acknowledged_batches and
+          projector.failed_count == 0
+    }
+  end
+
+  defp journal_invariants(journal, journal_consumer, archive_consumer, expected_bytes) do
+    %{
+      journal_captured_all:
+        journal.appended_bytes == expected_bytes and journal.next_offset == expected_bytes,
+      journal_capture_records_bounded:
+        journal.max_appended_entry_bytes <= journal.capture_record_bytes,
+      processing_batches_bounded:
+        journal_consumer.max_delivered_batch_entries <= journal_consumer.max_batch_entries and
+          journal_consumer.max_delivered_batch_bytes <= journal_consumer.max_batch_bytes,
+      journal_consumers_acked_all:
+        journal.cursors.processing == expected_bytes and journal.cursors.archive == expected_bytes and
+          journal.lag_bytes.processing == 0 and journal.lag_bytes.archive == 0,
+      archive_consumer_acked_all:
+        archive_consumer.archived_entries == journal.appended_entries and
+          archive_consumer.archived_bytes == expected_bytes and archive_consumer.failed_count == 0
+    }
+  end
+
+  defp archive_invariants(
+         ingress_archive,
+         protocol_archive,
+         journal,
+         journal_consumer,
+         expected_bytes,
+         expected_messages
+       ) do
+    %{
+      ingress_archive_acked_all:
+        ingress_archive.persisted_count == journal.appended_entries and
+          ingress_archive.persisted_bytes == expected_bytes,
+      protocol_archive_acked_all:
+        protocol_archive.evidence_count == journal_consumer.acknowledged_batches and
+          protocol_archive.frame_count == expected_messages and
+          protocol_archive.packet_count == expected_messages and
+          protocol_archive.represented_bytes == expected_bytes
     }
   end
 

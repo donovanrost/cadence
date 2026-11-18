@@ -25,8 +25,8 @@ dir = "apps/cadence_simulator"
 run = "elixir --hidden --sname earendil_tm --cookie cadence -S mix run --no-start ../../dev/reflect_orbital_live.exs"
 
 [tools]
-erlang = "latest"
+erlang = "29.0.5"
 hk = "1.56.0"
 pkl = "latest"
-elixir = "latest"
+elixir = "1.20.4-otp-29"
 vp = "0.2.9"
