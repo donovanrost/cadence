@@ -18,7 +18,7 @@ const columns: readonly ApColumn[] = [
   { key: "data", label: "Data" },
   { key: "expires", label: "Expires", mono: true },
   { key: "created", label: "Created" },
-  { key: "actions", label: "", align: "end" },
+  { key: "actions", label: "Actions", hiddenLabel: true, align: "end" },
 ];
 async function copy(s: Share) {
   try {

@@ -13,7 +13,7 @@ const head = (count: number, first = false, last = false) =>
 const menuItem = (w: ReturnType<typeof head>, text: string) =>
   w.findAll("button").find((b) => b.text().startsWith(text));
 async function choose(w: ReturnType<typeof head>, text: string) {
-  await w.get('button[aria-label="More section actions"]').trigger("click");
+  await w.get('button[aria-label^="More actions for section"]').trigger("click");
   await menuItem(w, text)?.trigger("click");
 }
 

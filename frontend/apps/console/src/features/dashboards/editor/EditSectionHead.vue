@@ -14,6 +14,8 @@ type Action = "up" | "down" | "remove";
 const props = defineProps<{ section: Section; count: number; first: boolean; last: boolean }>();
 const emit = defineEmits<{ addWidget: []; edit: []; stage: [command: Command] }>();
 const confirming = ref(false);
+/** B7: the heading's buttons name their section. */
+const name = computed(() => props.section.title || "Untitled section");
 const items = computed(() => [
   {
     id: "up" as const,
@@ -59,9 +61,21 @@ function remove() {
       >
         {{ section.title }}
       </h2>
-      <ApButton variant="ghost" size="compact" @click="emit('addWidget')">Add widget here</ApButton>
-      <ApButton variant="ghost" size="compact" @click="emit('edit')">Edit</ApButton>
-      <MoreMenu :items="items" label="More section actions" @select="onMenu" />
+      <ApButton
+        variant="ghost"
+        size="compact"
+        :aria-label="`Add widget here, in ${name}`"
+        @click="emit('addWidget')"
+        >Add widget here</ApButton
+      >
+      <ApButton
+        variant="ghost"
+        size="compact"
+        :aria-label="`Edit section ${name}`"
+        @click="emit('edit')"
+        >Edit</ApButton
+      >
+      <MoreMenu :items="items" :label="`More actions for section ${name}`" @select="onMenu" />
     </div>
     <p v-if="section.description" class="m-0 line-clamp-2 text-sm text-text-3">
       {{ section.description }}

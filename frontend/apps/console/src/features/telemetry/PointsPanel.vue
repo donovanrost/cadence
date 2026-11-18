@@ -11,6 +11,7 @@ import {
   ApPanel,
   ApSelect,
   ApStatusMark,
+  stateWord,
 } from "@/ui";
 import { describeApiError, type Scid } from "@/api/index.ts";
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
@@ -68,6 +69,11 @@ const search = useRemoteQuery(
   computed(() => ({ m: scope.value.mission.id, q: term.value, sc: firstSc.value ?? null })),
   (k, signal) => fetchPoints(k.m, { q: k.q, ...(k.sc ? { spacecraftId: k.sc } : {}) }, signal),
 );
+/** B2: the limit mark's word, for a screen reader (the mark itself is decorative). */
+function limitWord(p: TelemetryPoint): string {
+  const limits = pointLimits(p);
+  return limits.word ?? stateWord(limits.mark);
+}
 // Null can mean the stored history couldn't be read (b8181eb9), so never "yet".
 const latestText = (p: TelemetryPoint) =>
   p.latest ? (withUnit(formatValue(p.latest.value), p.unit) ?? "—") : "No recent value";
@@ -147,6 +153,7 @@ function addManual() {
         search.state.value.status === 'ready' && search.state.value.value.points.length === 0
       "
       :headline="term ? `No points match “${term}”` : 'No telemetry points in this mission yet'"
+      :announce="term !== ''"
     />
     <ul v-else-if="search.state.value.status === 'ready'" class="m-0 list-none p-0">
       <li
@@ -162,6 +169,7 @@ function addManual() {
           <span class="flex items-center gap-2 font-mono text-sm text-readout normal-case">
             <ApStatusMark v-if="point.latest" :state="pointLimits(point).mark" />
             {{ point.id }}
+            <span v-if="point.latest" class="sr-only">, {{ limitWord(point) }}</span>
             <span v-if="points.includes(point.id)" class="text-xs text-text-4 uppercase"
               >added</span
             >

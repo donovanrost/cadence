@@ -47,7 +47,7 @@ describe("in-place Remove section confirm (A1, A5)", () => {
       props: { section, count: 2, first: true, last: true },
       attachTo: document.body,
     });
-    const trigger = w.get('button[aria-label="More section actions"]');
+    const trigger = w.get('button[aria-label^="More actions for section"]');
     await trigger.trigger("click");
     await w
       .findAll("button")
