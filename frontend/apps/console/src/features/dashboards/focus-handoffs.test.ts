@@ -2,6 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId } from "@/api";
 import EditCallouts from "./editor/EditCallouts.vue";
+import { focusedControlOwns } from "./focus-fallback.ts";
 import RetireSheet from "./library/RetireSheet.vue";
 
 /** #245 A5: a button that leaves with its own action hands focus somewhere stated, never <body>. */
@@ -59,5 +60,28 @@ describe("Library Delete refused as in use", () => {
     const line = document.querySelector("[data-retire-used]");
     expect(line?.textContent).toContain("Used in 1 dashboard: Ops wall.");
     expect(document.activeElement).toBe(line);
+  });
+});
+
+describe("screen-wide keys vs a focused control (B8)", () => {
+  const press = (key: string, html: string) => {
+    document.body.innerHTML = html;
+    const event = new KeyboardEvent("keydown", { key });
+    Object.defineProperty(event, "target", { value: document.querySelector("#t") });
+    return focusedControlOwns(event);
+  };
+  it("leaves Space to a button or checkbox, and arrows to a field or radio group", () => {
+    expect(press(" ", "<button id='t'>Exit</button>")).toBe(true);
+    expect(press(" ", "<button><span id='t'>Exit</span></button>")).toBe(true);
+    expect(press(" ", "<input id='t' type='checkbox' />")).toBe(true);
+    expect(press("ArrowRight", "<input id='t' />")).toBe(true);
+    expect(
+      press("ArrowLeft", "<div role='radiogroup'><button id='t' role='radio'>A</button></div>"),
+    ).toBe(true);
+  });
+  it("lets the screen have its keys elsewhere: Space on a heading, arrows on a button", () => {
+    expect(press(" ", "<h2 id='t' tabindex='-1'>Power</h2>")).toBe(false);
+    expect(press("ArrowRight", "<button id='t'>Exit</button>")).toBe(false);
+    expect(press("Escape", "<input id='t' />")).toBe(false);
   });
 });

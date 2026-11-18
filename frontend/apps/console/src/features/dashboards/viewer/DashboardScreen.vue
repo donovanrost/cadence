@@ -110,9 +110,9 @@ const connection = useConnection();
 /** Kiosk (ux): `?kiosk=1` or ⋯ › Kiosk; the header collapses to a status line. */
 const kiosk = computed(() => one(route.query.kiosk) === "1");
 /**
- * The header swaps its actions on Edit, Save, Discard and leaving kiosk, taking the focused control
- * with it (a11y A5): focus lands on the counterpart (Add widget; Edit, else ⋯), as ux asks for
- * kiosk ('after Esc, focus returns to ⋯ › Kiosk').
+ * The header swaps its actions on Edit, Save, Discard and entering or leaving kiosk, taking the
+ * focused control with it (a11y A5): focus lands on the counterpart (Add widget; Edit, else ⋯;
+ * Exit kiosk), as ux asks for kiosk ('after Esc, focus returns to ⋯ › Kiosk').
  */
 const headerControl = (selector: string) => document.querySelector<HTMLElement>(selector);
 const viewerMenu = "[data-viewer-menu] [aria-haspopup]";
@@ -121,6 +121,7 @@ watch(
   async ([on, inKiosk], [wasOn, wasKiosk]) => {
     await nextTick();
     if (on && !wasOn) refocus(headerControl("[data-add-widget]"));
+    else if (inKiosk && !wasKiosk) refocus(headerControl("[data-exit-kiosk]"));
     else if (wasKiosk && !inKiosk) refocus(headerControl(viewerMenu));
     else if (wasOn && !on)
       refocus(headerControl("[data-edit-dashboard]") ?? headerControl(viewerMenu));
