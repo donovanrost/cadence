@@ -68,7 +68,7 @@ async function stage() {
           <RouterLink
             :to="{ name: 'setup.spacecraft.one', params: { spacecraftId: sc.id } }"
             class="text-primary no-underline hover:underline"
-            >{{ sc.name ?? "Unnamed spacecraft" }}</RouterLink
+            >{{ sc.name ?? "Unknown spacecraft" }}</RouterLink
           >
         </li>
       </ul>
