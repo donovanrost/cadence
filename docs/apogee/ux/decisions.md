@@ -3585,3 +3585,66 @@ set, revision}`, plus (api, #151) `applied_by {kind, id, name}` and `applied_at`
   if that page can't open the revision; Revisions shows its own not-found state. The console never guesses a
   revision.
 - **People who can only view Setup** see the same line and link (Changes §5: never hide the data).
+
+### U102 · Roll a catalog revision out from the catalog page (#195; amends Catalog.md C3) (mms-ux / fe-setup / mms-engineer)
+C3 "Roll out to" is built (fe-setup 96256074, 1d5335e6, 0391a9a5), but only on an import run's page. A revision
+approved after its import, or an older one, can't be rolled out from Setup › Catalog. This entry adds the catalog
+page's entry point and settles the cases C3 left open. The counts still come only from the server (api's rollout
+read, the dry run).
+
+- **Where:** a revision's page (the `Catalog revision` page that rev 4's link in A1 Revisions opens,
+  `setup.catalog.model`) gets C3 under the Approval panel, or under its decided line. The import run's page keeps C3 too. It's the same
+  panel with the same rules in both places. As on the import page today, C3 shows only to people with
+  `config.stage`. That's presentation; the server enforces who may stage.
+- **Only an approvable target is offered, up front (A6):**
+  - Approved, or needs no approval: C3 as built.
+  - Waiting for approval: in C3's place, "Spacecraft can't move to rev 4 until it's approved." The Approval panel
+    sits right above. The dry run's NO-GO (`mission_model_not_approved`) and the apply-time model gate stay the
+    backstops (mms-security: the gate refuses at apply on both paths, change set and per-spacecraft review).
+  - Rejected: in C3's place, "Rev 4 was rejected, so spacecraft can't move to it. To try again, correct the
+    catalog and import the corrected file." (U99's words). Not U65's "import a new revision": after #119,
+    re-importing the same file returns this rejected revision.
+  - A revision with no number (U65): "this catalog revision" in place of "rev 4": "Spacecraft can't move to this
+    catalog revision until it's approved." / "This catalog revision was rejected, so spacecraft can't move to it.
+    To try again, correct the catalog and import the corrected file." The same goes for the breaking fallback
+    below.
+  - A revision without a model revision (`mission_model_revision_id` is nullable, mms-engineer): A1 keeps its row
+    unlinked, and there's no C3.
+- **Profile cards** (api's rollout read):
+  - `Earendil Block 1 · 500 spacecraft · rev 14`, written out as "spacecraft", not "SC" (no shorthand on screen).
+    `current_revision` null means the profile sets no catalog (api), so the card reads `· no catalog set`, never
+    "catalog set per spacecraft".
+  - A profile where nothing would move (`moves_all` 0): checkbox disabled, with the reason built from api's
+    buckets (setup.md; `override_pinned + already_on_revision + moves_all = spacecraft_count`). Only nonzero parts
+    appear, singular for 1: `already_on_revision` gives "499 are already on rev 15" / "1 is already on rev 15";
+    `override_pinned` gives "1 keeps its own catalog" / "3 keep their own catalog". For example: "Nothing on this
+    profile would move: 499 are already on rev 15 and 1 keeps its own catalog." With `spacecraft_count` 0: "This
+    profile has no spacecraft."
+  - Chosen, with `moves_default` 0 but `moves_all` > 0 (everyone is on an older version): under the card, "None of
+    its spacecraft are on the profile's current version, so only the option below moves any." The older-versions
+    checkbox follows.
+  - The older-versions line, when the current version isn't known: "Also move the 499 on older versions. They move
+    to the profile's current version with every profile change since theirs, not only the catalog." Never `v?`.
+  - No profiles at all: `By profile` is disabled, with "This mission has no profiles yet. Use A few spacecraft
+    first."
+- **A few spacecraft first:** the picker and its chips name each craft as `EARENDIL-004 · SCID 4` (SCID only when
+  set). A craft with no name reads "Unknown spacecraft" (U25), never its id.
+- **Breaking callout, singular:** "Rev 15 changes 1 command or point in a way that breaks existing use. Cadence
+  can't tell yet what uses it." Plural as C3. Checkbox: "I've checked the breaking change" / "I've checked the 3
+  breaking changes".
+- **On a revision's page,** the diff isn't on the read, so the breaking count is the one against the revision its
+  import replaced. Data (mms-engineer): the revision row stores its `import_run_id`, and the count comes from the
+  catalog diff of the two revisions, so the revision read can carry both (#195's build). Until it does: "This page can't show whether rev 4 breaks anything in use. Check its import's diff before you stage."
+  with `Open its import`, and the acknowledgment checkbox "I've checked rev 4's diff". (U86: say what the
+  console can't read.)
+- **The dry run, in the person's words:**
+  - While it runs: `CHECKING…` (as C3). Stage's disabled reason is "Checking what this moves…", not "Waiting for
+    the dry run.".
+  - When it fails: "Couldn't check this rollout, so it can't be staged yet." plus the server's sentence when it
+    sends one, with `Check again` (quiet; it re-runs). Stage's reason is "Check the rollout again first." It isn't
+    a "Not staged:" line, because nothing was asked to stage.
+- **The footer** states acceptance criterion 5 instead of "one generation" (an internal word): "Nothing changes until
+  this change set is applied in Setup › Changes. The mission's approval setting decides whether someone else must
+  review it first." (mms-security: under "Applies without approval" a submit applies with no review.)
+- **At scale (> 100 spacecraft):** C3 shows counts only, never names. The names are on the Changes review's
+  groups (U94's fleets).

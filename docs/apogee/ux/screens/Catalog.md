@@ -74,10 +74,11 @@ sentence. Footer `Fix all 3 before staging` (secondary). **Hidden until cross-re
 (plan: phase 2); the aside then starts with C3.
 
 ### C3 · Roll out to (panel)
+Also on a revision's page in Setup › Catalog, offered only for a revision spacecraft can move to (U101).
 **Rollout is a change set** (#65; fe-setup). There's no per-spacecraft activation (U2's option B is gone for
 profile catalogs). Rows are ApOption radio cards:
 - **By profile:** one card per profile whose spacecraft use this catalog, with a checkbox for each. Each card
-  reads `Earendil Block 1 · 500 SC · rev 14`. Choosing profiles stages one `spacecraft_profile`
+  reads `Earendil Block 1 · 500 spacecraft · rev 14` (U101: no catalog, nothing to move, no profiles). Choosing profiles stages one `spacecraft_profile`
   `catalog_revision_id` op per profile. This option is listed first.
   - By default the op moves only spacecraft on the profile's **current version** (domain). Under each chosen
     profile, when some are on older versions, an unchecked checkbox reads: "Also move the 499 on older
