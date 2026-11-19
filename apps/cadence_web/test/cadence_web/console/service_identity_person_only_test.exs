@@ -6,8 +6,9 @@ defmodule CadenceWeb.Console.ServiceIdentityPersonOnlyTest do
   """
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Accounts.User
   alias Cadence.Auth
-  alias Cadence.Auth.ServiceIdentity
+  alias Cadence.Auth.{Scope, ServiceIdentity}
   alias CadenceWeb.Console.{PeopleController, ServiceIdentityController}
   alias CadenceWeb.TestFixtures
 
@@ -20,7 +21,12 @@ defmodule CadenceWeb.Console.ServiceIdentityPersonOnlyTest do
           organization_id: org.organization_id,
           display_name: "Automation",
           capabilities: [:organization_admin]
-        })
+        }),
+        %Scope{
+          actor_kind: :user,
+          organization_id: org.organization_id,
+          user: %User{user_id: "user-service-issuer"}
+        }
       )
 
     {:ok, service} = Auth.authenticate_api_token(token)

@@ -3,7 +3,8 @@ defmodule CadenceWeb.ControlPlaneApiAuthTest do
 
   import CadenceWeb.ControlPlaneApiFixtures
 
-  alias Cadence.Auth.ServiceIdentity
+  alias Cadence.Accounts.User
+  alias Cadence.Auth.{Scope, ServiceIdentity}
 
   test "browser session tokens are rejected as API bearer credentials", %{conn: conn} do
     user = CadenceWeb.TestFixtures.persist_user!()
@@ -37,7 +38,12 @@ defmodule CadenceWeb.ControlPlaneApiAuthTest do
                  mission_id: "mission-bravo",
                  display_name: "Mission Bravo Service",
                  capabilities: [:mission_admin]
-               })
+               }),
+               %Scope{
+                 actor_kind: :user,
+                 organization_id: organization_id,
+                 user: %User{user_id: "user-service-issuer"}
+               }
              )
 
     allowed_conn =
