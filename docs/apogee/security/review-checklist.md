@@ -75,6 +75,8 @@ one (#117).
 
 ### 9. Every path to the same action is held to the same rules
 Console, pre-console REST, LiveView, Mix tasks and seeds: list them, and check the PR's rule on each.
+Judge who can act (a person, a service, the system) from the **domain** function's authorization,
+not from which routes exist today: a route added later inherits whatever the domain allows.
 *Why:* the paths drift apart (#260, #263). The weakest one sets the real rule.
 
 ### 10. Stored hashes and digests stay stable
