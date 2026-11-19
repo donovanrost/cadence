@@ -150,9 +150,13 @@ export function readRefusal(
 ): Readonly<{ text: string; comms: boolean }> | null {
   if (code === "spacecraft_not_found")
     return { text: "This spacecraft isn't on this mission.", comms: false };
-  // ux U94 (11-18): no snapshot, so no name; never the id or a cached name.
+  // ux U98 (#272): a 403 on a read says "view", with who grants access. No snapshot, so no name;
+  // never the id or a cached name.
   if (code === "forbidden")
-    return { text: "You can't change this spacecraft's configuration.", comms: false };
+    return {
+      text: "You can't view this spacecraft's configuration. Ask a mission admin or an org admin for access.",
+      comms: false,
+    };
   if (code === "spacecraft_source_limit_exceeded")
     return {
       text: "This spacecraft has more packet sources than one configuration can carry, so it can't be shown or sent. Remove some in Setup › Comms.",

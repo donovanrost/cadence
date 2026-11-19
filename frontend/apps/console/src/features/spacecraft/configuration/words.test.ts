@@ -53,7 +53,7 @@ describe("U94 status, steps and fields", () => {
     );
     expect(readRefusal("spacecraft_source_limit_exceeded")?.comms).toBe(true);
     expect(readRefusal("forbidden")?.text).toBe(
-      "You can't change this spacecraft's configuration.",
+      "You can't view this spacecraft's configuration. Ask a mission admin or an org admin for access.",
     );
     expect(readRefusal("http_500")).toBeNull();
   });
