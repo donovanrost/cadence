@@ -55,7 +55,7 @@ with Profile/People.
     a list.
   - The hint goes once the value is above 1, or once `Use 90%` is pressed.
 - **Saving:** settings that are change-set kinds (when domain adds them) stage (`Stage change`);
-  everything else saves immediately with a version line (`v4 · 01:12Z by Donovan R.`). Governance
+  everything else saves immediately with a version line (`v4 · 01:12Z by Mira K.`). Governance
   changes that need approval follow the server's policy (ApDecision, reviewer ≠ author). Errors follow U20.
 - **Governance section** (`cadence.governance`, lead's ask 11-13). Its one setting gates both change-set applies
   and app activations (L10), so the words name both:
