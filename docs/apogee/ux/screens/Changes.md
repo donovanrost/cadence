@@ -129,8 +129,8 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
     back: "Sent back to the authors with your comment."
   - **An author can't review** (four-eyes; designers §4; audit K1; ux's ruling for #320, in U97's family). The server
     blocks an author's Approve and Send back alike, but only when the set needs approval (`viewer.can_review`,
-    `review_blocked_reason: reviewer_is_author`; api changes.md). So both are disabled up front (A6), with the muted reason "You staged part of this change set,
-    so another person reviews it." A reason the console doesn't know: "You can't review this change set, so
+    `review_blocked_reason: reviewer_is_author`; api changes.md). So both are disabled up front (A6), with the muted reason "You staged part of this change set
+    or sent it for review, so another person reviews it." A reason the console doesn't know: "You can't review this change set, so
     another person reviews it.", with the code in Technical details. `Withdraw` on their own changes (K1) stays
     enabled. The server's refusal is the backstop. Caption mono 11: `ATOMIC · ALL OR NOTHING · r5 KEPT FOR
   ROLLBACK`.
@@ -148,9 +148,9 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
   - `change_set_changed`: "Not applied: someone changed the staged set while you were looking. It's been reloaded;
     check it and try again." (`Not approved:` on approve.)
   - `frozen_in_review`: "Not staged: the change set is in review, so staging is paused."
-  - `reviewer_is_author`: "Not approved: you staged part of this change set, so another person reviews it. Your
-    approval wasn't recorded." (On Send back: "Not sent back: you staged part of this change set, so another person
-    reviews it. Nothing changed.")
+  - `reviewer_is_author`: "Not approved: you staged part of this change set or sent it for review, so another person
+    reviews it. Your approval wasn't recorded." (On Send back: "Not sent back: you staged part of this change set or sent it for review, so
+    another person reviews it. Nothing changed.")
   - `activation_policy_changed`: "Not approved: the mission's approval setting changed after this was sent for
     review, so the set has reopened. Your approval wasn't recorded."
   - `checks_failed`: "Not applied: a check says NO-GO. Fix it and try again."
