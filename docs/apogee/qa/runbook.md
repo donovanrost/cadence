@@ -65,6 +65,13 @@ From the repo root of this worktree, each long-running command in its own pane:
 #    var/qa-erlang-cookie (git-ignored, mode 600; NEVER ~/.erlang.cookie; never in a committed file).
 #    Create it once: (umask 077; head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40 > var/qa-erlang-cookie)
 #    Check after any restart: lsof -nP -iTCP -sTCP:LISTEN | grep -E 'epmd|beam' shows 127.0.0.1 only.
+#    ANY OTHER distributed node on this machine (tests with :peer, probes, spikes; only with qa's OK) runs with
+#      env -u ERL_EPMD_ADDRESS -u ERL_EPMD_PORT ERL_AFLAGS='-start_epmd false -kernel inet_dist_use_interface {127,0,0,1}'
+#    (:peer children inherit ERL_AFLAGS). Every distributed node otherwise runs 'epmd -daemon' itself, and macOS lets
+#    a wildcard *:4369 bind beside our loopback-only epmd: on 11-19 02:14:19Z a :peer test started a second epmd on
+#    ALL interfaces (pid 17796, nothing registered; qa killed it BY PID at 02:17:3xZ). Never 'epmd -kill': it stops
+#    the epmd it reaches, which is the real one. Checked by qa 02:18Z: with the flags above a node registers with the
+#    running epmd and no new one starts. After any such run: pgrep -x epmd shows ONE pid, LISTEN on 127.0.0.1/::1 only.
 cd apps/cadence_simulator
 # --sname qa_sim makes it reachable over RPC (fault injection, e.g. UplinkSessions.arm/2, 9f09dd32).
 #    Its store is DETS, so a restart keeps bookings. Output goes to var/qa-simulator.log (director:
