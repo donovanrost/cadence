@@ -3412,25 +3412,30 @@ groups, provider changes, qualification cases (no service authors them).
 - U104 (ca-ux, #281) holds the service identity's own refusals (create,
   rotate, revoke, list) and points here.
 
-### U104 · Service identities: who may create one, what access it may get, and its id (#281) (api / ca-engineer / fe-setup)
-#281 closes three gaps on creating a service identity and rotating its key: a service identity can't make or rotate
-one, a person can't give one more access than they hold, and the server builds the id. Each refusal comes before
-anything is created or rotated. The same lines serve the console's problem title and the REST `message`; in REST
-the lines drop " in People › Service identities", since that's a console place. Capability words are the role words, never enum
-values: `Platform admin`, `Org admin`, `Mission admin`.
+### U104 · Service identities: who may create one and what access it may get (#281) (api / ca-engineer / fe-setup)
+#281 closes two gaps on creating a service identity and rotating its key: a service identity can't make, rotate,
+revoke or list one, and a person can't give one more access than they hold. #281 also removes the REST
+service-identity endpoints (api-ops and lead, on ca-security's advice: a REST bearer is always a service identity, so
+a person-only REST endpoint could succeed for no one), so these are console lines. Each refusal comes before anything
+is created or rotated. Capability words are the role words, never enum values: `Platform admin`, `Org admin`,
+`Mission admin`.
 
-- **403 `authenticated_user_required`** (the caller is a service identity, not a person):
+- **403 `authenticated_user_required`** (the caller is a service identity, not a person). **Unreachable today:** the
+  console's organization scope refuses a service identity first (`404 organization_not_found`) and REST has no
+  endpoint. The domain keeps the check as a backstop (`Policy :manage_service_identities` is person-only), and these
+  lines are kept for any future surface that reaches it:
   - Create: "Not created: only a person can create a service identity, not another service identity. An org admin
     creates it in People › Service identities."
   - Rotate: "Not rotated: only a person can rotate a service identity's key, not a service identity. An org admin
     rotates it in People › Service identities."
   - Revoke: "Not revoked: only a person can revoke a service identity, not a service identity. An org admin revokes
     it in People › Service identities."
-  - List (if api-ops makes it person-only; a read, so no "Not …" opener, as U98; only a service can hit it, over
-    REST, so one sentence): "Only a person can list the organization's service identities, not a service identity."
-  - The console never meets this (a service identity can't sign in to it); the line is for REST and the backstop.
+  - List (a read, so no "Not …" opener, as U98): "Only a person can list the organization's service identities, not
+    a service identity."
 - **403 `capability_beyond_issuer`** (the request gives access the person doesn't hold; `details.capabilities`, the
-  ones beyond them, as role words up to 3, then "and N more"):
+  ones beyond them, as codes; the server's message turns them into role words, up to 3, then "and N more"). It can't
+  fire today, since an org admin holds every capability a service identity can get; the lines are for when that
+  changes:
   - Create: "Not created: you can't give a service identity access you don't have yourself (Platform admin). Leave
     it out, or ask someone who has it to create the service identity." Without `details`: the same without the
     bracket.
@@ -3439,16 +3444,11 @@ values: `Platform admin`, `Org admin`, `Mission admin`.
     it." Without `details`: the same without the bracket.
   - **Up front (A6):** the create form offers only access the person holds; any other shows disabled with "You don't
     have this access yourself, so you can't give it." `Rotate key` is disabled with the rotate line's reason (from
-    "this service identity has access" to "rotate its key") once the read says so; until then the 403 is the
-    backstop.
-- **422 `service_identity_id_not_assignable`** (the body names `service_identity_id`; REST only, the console never
-  sends one): "Cadence assigns a service identity's id. Leave service_identity_id out of the request." Same pattern
-  as `actor_not_assignable` ("The actor is always the signed-in user."). The field name is fine here: REST readers
-  write that body.
+    "this service identity has access" to "rotate its key") once the read says so; #281 adds no such flag, so until
+    then the 403 is the backstop.
 - **Not here:**
   - A person without the right to manage service identities at all keeps today's `forbidden` line.
+  - A refusal for naming the id: the console builds the id, and the REST body that could name one went with the
+    endpoint, so there's no `service_identity_id_not_assignable`.
   - That a service identity's acts count as its issuer's and rotators' for approvals (ux, 11-19): not in these
-    refusals, since the caller who hits `authenticated_user_required` is a service and can't act on it. It goes on
-    the create and rotate confirm sheets, where a person takes on a service's acts: U100 (#280).
-  - `details.capabilities` carries the capability codes; the server's message and title turn them into the role
-    words above.
+    refusals. It goes on the create and rotate confirm sheets, where a person takes on a service's acts: U100 (#280).
