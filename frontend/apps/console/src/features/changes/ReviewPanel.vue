@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { ApButton, ApField, ApPanel } from "@/ui";
 import { reviewChangeSet, type SubmitResult } from "./actions.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import { inUseMark, refusalOutcome, type InUseMark, type RefusalOutcome } from "./refusals.ts";
+import { reviewBlocked } from "./review-block.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /**
@@ -22,6 +23,10 @@ const comment = ref("");
 const busy = ref(false);
 const failure = ref<RefusalOutcome | null>(null);
 const NEEDS_COMMENT = "Add a comment first. It's recorded with your decision.";
+/** #320 (U97): the server says this viewer can't review; both decisions say why before the click. */
+const blocked = computed(() => reviewBlocked(props.changeSet));
+const reasonFor = (needsComment: string) =>
+  busy.value ? "Working…" : (blocked.value?.line ?? needsComment);
 
 async function decide(decision: "approve" | "send_back") {
   if (busy.value) return;
@@ -52,6 +57,13 @@ async function decide(decision: "approve" | "send_back") {
       <p class="m-0 text-md text-text-3">
         Submitted by {{ changeSet.submitted_by?.name ?? "—" }}: “{{ changeSet.reason ?? "" }}”
       </p>
+      <p v-if="blocked" data-review-blocked class="m-0 text-md text-text-3">{{ blocked.line }}</p>
+      <details v-if="blocked?.code" class="text-sm">
+        <summary class="ap-label cursor-pointer">Technical details</summary>
+        <p class="m-0 mt-1 font-mono text-xs text-text-3">
+          review_blocked_reason: {{ blocked.code }}
+        </p>
+      </details>
       <ApField
         v-model="comment"
         label="Comment"
@@ -62,16 +74,16 @@ async function decide(decision: "approve" | "send_back") {
       <ApButton
         variant="primary"
         size="commit"
-        :disabled="busy || comment.trim() === ''"
-        :disabled-reason="busy ? 'Working…' : NEEDS_COMMENT"
+        :disabled="busy || blocked !== null || comment.trim() === ''"
+        :disabled-reason="reasonFor(NEEDS_COMMENT)"
         @click="decide('approve')"
       >
         Approve &amp; apply as
         <span class="font-mono normal-case">r{{ config.head.revision + 1 }}</span>
       </ApButton>
       <ApButton
-        :disabled="busy || comment.trim() === ''"
-        :disabled-reason="busy ? 'Working…' : 'Add a comment for the author.'"
+        :disabled="busy || blocked !== null || comment.trim() === ''"
+        :disabled-reason="reasonFor('Add a comment for the author.')"
         @click="decide('send_back')"
         >Send back</ApButton
       >
