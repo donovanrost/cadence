@@ -10,6 +10,7 @@ import {
   decisionText,
   fetchActivations,
   notApplied,
+  requestedLine,
   resumeFailure,
   type ActivationRequest,
 } from "./api.ts";
@@ -135,7 +136,7 @@ describe("app activation approvals (L10)", () => {
 
   it("reads a decided request's line", () => {
     expect(decisionLine(request)).toBeNull();
-    expect(decisionText(decided)).toMatch(/^Approved by Ada L\. on 11-13.*: looks right$/);
+    expect(decisionText(decided)).toMatch(/^Approved by Ada L\. at 11-13.*: looks right$/);
     const withdrawn = {
       ...decided,
       state: "withdrawn" as const,
@@ -154,7 +155,7 @@ describe("app activation approvals (L10)", () => {
   it("words the four-eyes record's new decisions (U89, P3 #227)", () => {
     // An approve's comment is optional (P3 ruling 3): no dangling colon.
     expect(decisionText({ ...decided, decision: { ...decided.decision, reason: null } })).toBe(
-      "Approved by Ada L. on 11-13 02:20Z",
+      "Approved by Ada L. at 11-13 02:20Z",
     );
     // not_required: the setting's words, never "direct", and only once the apply succeeded.
     const notRequired = {
@@ -172,7 +173,7 @@ describe("app activation approvals (L10)", () => {
 
     // Applied carries the apply's finish time, never the decision's (U20); none until api sends it.
     expect(decisionText({ ...notRequired, ...applied })).toBe(
-      "Applied Decom composition for 3 spacecraft on 11-13 02:31Z without a second person's approval, as this mission's setting allows.",
+      "Applied Decom composition for 3 spacecraft at 11-13 02:31Z without a second person's approval, as this mission's setting allows.",
     );
     expect(
       decisionText({
@@ -184,12 +185,32 @@ describe("app activation approvals (L10)", () => {
     );
     // ADMIN MODE goes right after the decider's name, only when true.
     const admin = decisionLine({ ...decided, decision: { ...decided.decision, admin_mode: true } });
-    expect(admin?.[1]).toEqual({ actor: { name: "Ada L.", adminMode: true } });
+    const actorOf = (parts: ReturnType<typeof decisionLine>) => parts?.find((p) => "actor" in p);
+    expect(actorOf(admin)).toEqual({ actor: { name: "Ada L.", adminMode: true } });
     const member = decisionLine({
       ...decided,
       decision: { ...decided.decision, admin_mode: false },
     });
-    expect(member?.[1]).toEqual({ actor: { name: "Ada L.", adminMode: false } });
+    expect(actorOf(member)).toEqual({ actor: { name: "Ada L.", adminMode: false } });
+    // #308 (U25): a decider with no name drops, the act and time stay; ADMIN MODE follows the verb.
+    const nameless = decisionLine({
+      ...decided,
+      decision: { ...decided.decision, by: null, admin_mode: true },
+    });
+    expect(nameless?.map((p) => ("text" in p ? p.text : `[${p.actor.name}]`)).join("")).toMatch(
+      /^Approved\[\] at 11-13 02:20Z/,
+    );
+    expect(actorOf(nameless)).toEqual({ actor: { name: "", adminMode: true } });
+    expect(
+      decisionText({ ...decided, decision: { ...decided.decision, by: null, admin_mode: false } }),
+    ).toMatch(/^Approved at 11-13 02:20Z/);
+  });
+
+  it("a request with no requester name shows the time alone (#308, U25, as U103)", () => {
+    expect(requestedLine(request)).toBe("Mira K. · 11-13 02:10Z");
+    expect(
+      requestedLine({ ...request, requested_by: { kind: "user", id: "u1", name: null } }),
+    ).toBe("11-13 02:10Z");
   });
 
   it("explains a refused decision", () => {
@@ -432,7 +453,7 @@ describe("app activation approvals (L10)", () => {
         { unrecognized: "plan_review" },
       ]);
       for (const row of rows.slice(0, 2))
-        expect(decisionText(row)).toBe("Approved by Ada L. on 11-18 02:12Z");
+        expect(decisionText(row)).toBe("Approved by Ada L. at 11-18 02:12Z");
     } finally {
       globalThis.fetch = original;
     }

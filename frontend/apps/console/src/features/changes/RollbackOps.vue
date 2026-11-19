@@ -36,7 +36,7 @@ const lines = computed((): readonly DiffEntry[] =>
       <span>
         <span class="text-text-2">{{ verb[d.action] }}</span>
         {{ " " }}<span class="text-text-3">{{ configKindText(d.kind).toLowerCase() }}</span> {{ " "
-        }}<span class="text-readout">{{ d.entity_name ?? d.entity_id ?? "" }}</span>
+        }}<span v-if="d.entity_name" class="text-readout">{{ d.entity_name }}</span>
       </span>
       <span
         v-for="f in d.fields ?? []"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { AdminModeTag } from "@/shell";
 import { ApTable, ApTag, formatAbsolute, plural, type ApColumn } from "@/ui";
-import RecordLine from "./RecordLine.vue";
-import { approvedBy, submittedBy, who } from "./revision-record.ts";
+import { approvedBy, approverCells, submittedBy, tableActor } from "./revision-record.ts";
 import type { RevisionSummary } from "./shapes.ts";
 
 /** Mission configuration revisions, newest first; the live one is marked. */
@@ -19,14 +19,6 @@ const columns: readonly ApColumn[] = [
   { key: "kind", label: "Kind" },
 ];
 
-/** U89: the approvers' names, comma-separated, each with its ADMIN MODE tag. */
-function approverParts(row: RevisionSummary) {
-  const a = approvedBy(row);
-  return a.kind === "approvers"
-    ? a.approvers.flatMap((actor, i) => (i === 0 ? [{ actor }] : [{ text: ", " }, { actor }]))
-    : [];
-}
-
 function kindLabel(row: RevisionSummary): string {
   switch (row.kind) {
     case "baseline":
@@ -36,7 +28,8 @@ function kindLabel(row: RevisionSummary): string {
     case "rollback":
       return row.rolls_back_to === null ? "Rollback" : `Rollback to r${row.rolls_back_to}`;
     case "legacy_activation":
-      return "Legacy activation";
+      // #308: matches rollback_crosses_legacy's words; a kind tag (ca-ux).
+      return "Activated outside change sets";
   }
 }
 </script>
@@ -67,10 +60,28 @@ function kindLabel(row: RevisionSummary): string {
       /></span>
     </template>
     <template #cell-applied="{ row }">{{ formatAbsolute(new Date(row.applied_at)) }}</template>
-    <template #cell-by="{ row }">{{ submittedBy(row) ? who(submittedBy(row)) : "—" }}</template>
+    <!-- #308/#424: a nameless person reads "Not known" (muted); a service carries the Service tag
+      (designers #371, as AuditTable); never "someone" or an id. -->
+    <template #cell-by="{ row }">
+      <template v-if="tableActor(submittedBy(row))"
+        ><span :class="tableActor(submittedBy(row))?.muted ? 'text-text-3' : ''">{{
+          tableActor(submittedBy(row))?.text
+        }}</span
+        ><ApTag v-if="tableActor(submittedBy(row))?.service" class="ml-2" label="Service"
+      /></template>
+      <template v-else>—</template>
+    </template>
     <template #cell-approved="{ row }">
       <template v-if="approvedBy(row).kind === 'not_needed'">Not needed</template>
-      <RecordLine v-else-if="approvedBy(row).kind === 'approvers'" :parts="approverParts(row)" />
+      <template v-else-if="approverCells(row).length > 0">
+        <template v-for="(cell, i) in approverCells(row)" :key="i"
+          >{{ i > 0 ? ", " : ""
+          }}<span :class="cell.muted ? 'text-text-3' : ''">{{ cell.text }}</span
+          ><ApTag v-if="cell.service" class="ml-2" label="Service" /><AdminModeTag
+            v-if="cell.adminMode"
+            class="ml-1.5 align-middle"
+        /></template>
+      </template>
       <span v-else class="text-text-3">—</span>
     </template>
     <template #cell-why="{ row }">
@@ -81,7 +92,7 @@ function kindLabel(row: RevisionSummary): string {
         >{{ row.reason ?? row.summary ?? "—" }}</span
       >
     </template>
-    <template #cell-changes="{ row }">{{ plural(row.entry_count, "entry", "entries") }}</template>
+    <template #cell-changes="{ row }">{{ plural(row.entry_count, "change") }}</template>
     <template #cell-kind="{ row }"
       ><span class="text-text-3">{{ kindLabel(row) }}</span></template
     >

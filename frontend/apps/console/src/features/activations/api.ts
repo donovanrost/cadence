@@ -285,14 +285,17 @@ const TAGS: Readonly<Record<ActivationRequest["state"], { state: OpState; label:
 };
 export const stateTag = (r: ActivationRequest) => TAGS[r.state];
 
-/** "Mira K. · 11-13 02:10Z". */
-export const requestedLine = (r: ActivationRequest) =>
-  `${r.requested_by?.name ?? "Someone"} · ${formatShort(new Date(r.requested_at))}`;
+/** "Mira K. · 11-13 02:10Z"; with no name, the time alone (U25, as U103; #308). */
+export const requestedLine = (r: ActivationRequest) => {
+  const at = formatShort(new Date(r.requested_at));
+  const name = r.requested_by?.name;
+  return name ? `${name} · ${at}` : at;
+};
 
 /**
- * "Approved by Ada L. on 11-13 02:20Z: looks right", for a decided request, with the ADMIN MODE
+ * "Approved by Ada L. at 11-13 02:20Z: looks right" ("Approved at …" with no name), for a decided request, with the ADMIN MODE
  * tag after the decider when it applies (U89). A request the mission's setting let through (P3
- * `not_required`): "Applied <summary> on <finished_at> without a second person's approval, as this
+ * `not_required`): "Applied <summary> at <finished_at> without a second person's approval, as this
  * mission's setting allows."; before that apply succeeds, "No second person's approval was needed,
  * as this mission's setting allows · 11-17 09:12Z".
  */
@@ -311,7 +314,8 @@ export function decisionLine(r: ActivationRequest): readonly HeaderPart[] | null
           text: `No second person's approval was needed, as this mission's setting allows · ${at}`,
         },
       ];
-    const done = ex.finished_at ? ` on ${formatShort(new Date(ex.finished_at))}` : "";
+    // U29 / audit V4: "at", never "on".
+    const done = ex.finished_at ? ` at ${formatShort(new Date(ex.finished_at))}` : "";
     return [
       {
         text: `Applied ${r.summary.replace(/\.$/, "")}${done} without a second person's approval, as this mission's setting allows.`,
@@ -324,19 +328,25 @@ export function decisionLine(r: ActivationRequest): readonly HeaderPart[] | null
     withdrawn: "Withdrawn",
     unrecognized: "Decided",
   }[dcs.state];
-  const by: HeaderPart = {
-    actor: { name: dcs.by?.name ?? "someone", adminMode: dcs.admin_mode === true },
-  };
+  // #308 (U25): a decider with no name drops, the act and time stay; ADMIN MODE then follows the verb.
+  const name = dcs.by?.name ?? null;
+  const adminMode = dcs.admin_mode === true;
+  const by: readonly HeaderPart[] = name
+    ? [{ text: " by " }, { actor: { name, adminMode } }]
+    : adminMode
+      ? [{ actor: { name: "", adminMode } }]
+      : [];
   const reason = dcs.reason?.trim() ?? "";
   // ux U41: "Withdrawn by Mira K. at 11-13 02:20Z: <reason>." (§4 short time, one closing period);
   // with no reason it ends at the time (ux, #227).
   if (dcs.state === "withdrawn")
     return [
-      { text: "Withdrawn by " },
-      by,
+      { text: "Withdrawn" },
+      ...by,
       { text: ` at ${at}${reason ? `: ${reason.replace(/\.$/, "")}` : ""}.` },
     ];
-  return [{ text: `${word} by ` }, by, { text: ` on ${at}${reason ? `: ${reason}` : ""}` }];
+  // U29 / audit V4: "Approved by Ana R. at 11-13 02:20Z", never "on".
+  return [{ text: word }, ...by, { text: ` at ${at}${reason ? `: ${reason}` : ""}` }];
 }
 
 /** The decision line as plain text (tests, titles). */

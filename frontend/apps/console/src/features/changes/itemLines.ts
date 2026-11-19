@@ -20,7 +20,8 @@ export function valueText(v: unknown, unit?: string | null, format?: string | nu
  */
 export function conflictSentences(item: PreviewItem, leftBy?: string): string | null {
   if (!item.paths || item.paths.length === 0) return null;
-  const who = item.entity_name ?? item.entity_id ?? configKindText(item.kind);
+  // #308 (U25): the entity's name, else "Unknown profile"; never its id.
+  const who = item.entity_name ?? `Unknown ${configKindText(item.kind).toLowerCase()}`;
   return item.paths
     .map((p) => {
       const since =

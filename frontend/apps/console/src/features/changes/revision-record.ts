@@ -18,14 +18,24 @@ export type ApprovedBy =
   | Readonly<{ kind: "approvers"; approvers: readonly NamedActor[] }>
   | Readonly<{ kind: "none" }>;
 
-/** A known actor's name; "someone" when the server doesn't know it (a deleted user). */
-export const who = (a: Actor | null | undefined): string =>
-  a?.name ?? (a?.kind === "system" ? "Cadence" : "someone");
+/**
+ * An actor's name in a line (U25, #308): a person by name; Cadence itself as "Cadence"; a service
+ * identity as "Nightly planner (a service identity)", or "a service identity" with no name (U103,
+ * #371). A person with no name is null: their name drops, and the act and the time stay.
+ */
+export function who(a: Actor | null | undefined): string | null {
+  if (!a) return null;
+  if (a.kind === "system") return a.name ?? "Cadence";
+  if (a.kind === "service") return a.name ? `${a.name} (a service identity)` : "a service identity";
+  return a.name;
+}
 
-const named = (a: Actor | null | undefined, adminMode = false): NamedActor => ({
-  name: who(a),
-  adminMode,
-});
+/** A name for a line; a nameless actor in admin mode keeps only its tag (it follows the verb). */
+const named = (a: Actor | null | undefined, adminMode = false): NamedActor | null => {
+  const name = who(a);
+  if (name !== null) return { name, adminMode };
+  return adminMode ? { name: "", adminMode } : null;
+};
 
 /** Before P3 every entry was an approval, so an entry without `decision` (absent or null) is one. */
 const isApproval = (a: RevisionApproval) =>
@@ -36,62 +46,107 @@ const isNotRequired = (a: RevisionApproval) => a.decision === "not_required";
 export const submittedBy = (row: RevisionSummary): Actor | null =>
   row.submitted_by === undefined ? row.applied_by : row.submitted_by;
 
-/** The Approved by column: the approvers, `Not needed` for not_required, or nothing. */
+/**
+ * The Approved by column: the approvers who can be named (a nameless one drops, #308),
+ * `Not needed` for not_required, or nothing.
+ */
 export function approvedBy(row: RevisionSummary): ApprovedBy {
   if (row.approvals.some(isNotRequired)) return { kind: "not_needed" };
-  const approvers = row.approvals
-    .filter(isApproval)
-    .map((a) => named(a.actor, a.admin_mode === true));
-  return approvers.length > 0 ? { kind: "approvers", approvers } : { kind: "none" };
+  const approvals = row.approvals.filter(isApproval);
+  if (approvals.length === 0) return { kind: "none" };
+  const approvers = approvals.flatMap((a) => named(a.actor, a.admin_mode === true) ?? []);
+  return { kind: "approvers", approvers };
 }
+
+/**
+ * An actor in a table cell (#424, mms-ux; designers #371, as AuditTable): a person by name or
+ * "Not known" (muted); a service by its name, or "Not known", with the Service tag; Cadence for
+ * the system. "(a service identity)" is for sentences only.
+ */
+export type TableActor = Readonly<{ text: string; muted: boolean; service: boolean }>;
+export function tableActor(a: Actor | null): TableActor | null {
+  if (!a) return null;
+  if (a.kind === "system") return { text: a.name ?? "Cadence", muted: false, service: false };
+  const service = a.kind === "service";
+  return a.name
+    ? { text: a.name, muted: false, service }
+    : { text: "Not known", muted: true, service };
+}
+
+/** The Approved by cell: each approver, a nameless person dropping when anyone else shows. */
+export function approverCells(
+  row: RevisionSummary,
+): readonly (TableActor & Readonly<{ adminMode: boolean }>)[] {
+  const cells = row.approvals.filter(isApproval).flatMap((a) => {
+    const cell = tableActor(a.actor);
+    return cell ? [{ ...cell, adminMode: a.admin_mode === true }] : [];
+  });
+  const shown = cells.filter((c) => !c.muted || c.service);
+  return shown.length > 0 ? shown : cells.slice(0, 1);
+}
+
+/** " by Mira K.", " by" + the tag alone, or nothing for a nameless person (U25, #308). */
+const byClause = (actor: NamedActor | null): readonly HeaderPart[] =>
+  actor === null ? [] : actor.name ? [{ text: " by " }, { actor }] : [{ actor }];
 
 /** Today's line: "Applied 2026-11-17 09:12:00Z by Mira K. · approved by Ana R." */
 function appliedLine(row: RevisionSummary): readonly HeaderPart[] {
   const parts: HeaderPart[] = [{ text: `Applied ${formatAbsolute(new Date(row.applied_at))}` }];
-  if (row.applied_by) parts.push({ text: " by " }, { actor: named(row.applied_by) });
+  parts.push(...byClause(named(row.applied_by)));
   for (const a of row.approvals.filter(isApproval))
-    parts.push({ text: " · approved by " }, { actor: named(a.actor, a.admin_mode === true) });
+    parts.push({ text: " · approved" }, ...byClause(named(a.actor, a.admin_mode === true)));
   return parts;
 }
 
+/**
+ * "Ana R. and Owen P.". A nameless approver drops when anyone is named, so a tag-only part never
+ * sits after a name it doesn't belong to (ca-ux, #424); with every approver nameless, an admin-mode
+ * one keeps its tag alone.
+ */
 function joined(names: readonly NamedActor[]): readonly HeaderPart[] {
-  return names.flatMap((actor, i): HeaderPart[] =>
-    i === 0 ? [{ actor }] : [{ text: i === names.length - 1 ? " and " : ", " }, { actor }],
+  const withName = names.filter((n) => n.name);
+  if (withName.length === 0) return names.map((actor) => ({ actor }));
+  return withName.flatMap((actor, i): HeaderPart[] =>
+    i === 0 ? [{ actor }] : [{ text: i === withName.length - 1 ? " and " : ", " }, { actor }],
   );
 }
 
 /**
  * The revision header (U89): "Submitted by Mira K. · approved and applied by Ana R. · 11-17
  * 09:12Z"; "… · approved by Ana R. · applied by Owen P. · …" when they differ; "Submitted and
- * applied by Mira K. · 11-17 09:12Z · no second approval needed" when none was needed.
+ * applied by Mira K. · 11-17 09:12Z · no second approval needed" when none was needed. A person
+ * with no name drops and the act stays (#308): "Submitted · approved by Ana R. · 11-17 09:12Z".
  */
 export function revisionHeader(row: RevisionSummary): readonly HeaderPart[] {
-  // A null actor drops its clause, as the table shows a dash; a nameless one reads "someone".
+  // A null actor drops its clause, as the table shows a dash.
   if (!row.submitted_by) return appliedLine(row);
   const at = formatShort(new Date(row.applied_at));
   const approval = approvedBy(row);
+  const submitter = byClause(named(row.submitted_by));
   if (approval.kind === "not_needed")
     return [
-      { text: "Submitted and applied by " },
-      { actor: named(row.submitted_by) },
+      { text: "Submitted and applied" },
+      ...submitter,
       { text: ` · ${at} · no second approval needed` },
     ];
   if (approval.kind === "none") return appliedLine(row);
-  const approvers = row.approvals.filter(isApproval);
-  const only = approvers.length === 1 ? approvers[0] : undefined;
+  const approvals = row.approvals.filter(isApproval);
+  const only = approvals.length === 1 ? approvals[0] : undefined;
   const appliedByApprover =
     only !== undefined &&
     only.actor.id !== null &&
     row.applied_by !== null &&
     only.actor.id === row.applied_by.id;
+  const names = joined(approval.approvers);
+  const named_ = approval.approvers.some((n) => n.name);
   return [
-    { text: "Submitted by " },
-    { actor: named(row.submitted_by) },
-    { text: appliedByApprover ? " · approved and applied by " : " · approved by " },
-    ...joined(approval.approvers),
+    { text: "Submitted" },
+    ...submitter,
+    { text: appliedByApprover ? " · approved and applied" : " · approved" },
+    ...(named_ ? [{ text: " by " }, ...names] : names),
     ...(appliedByApprover || !row.applied_by
       ? []
-      : [{ text: " · applied by " }, { actor: named(row.applied_by) }]),
+      : [{ text: " · applied" }, ...byClause(named(row.applied_by))]),
     { text: ` · ${at}` },
   ];
 }

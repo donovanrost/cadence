@@ -15,26 +15,23 @@ const verbs: Readonly<Record<EntryOp, string>> = {
   archive: "Archived",
 };
 const verb = (op: EntryOp | Unrecognized) => (isKnown(op) ? verbs[op] : humanize(op.unrecognized));
-const opText = (op: EntryOp | Unrecognized) => (isKnown(op) ? op : op.unrecognized);
 </script>
 
 <template>
-  <ApPanel index="V2" title="Changes" :meta="plural(entries.length, 'entry', 'entries')" flush>
+  <ApPanel index="V2" title="Changes" :meta="plural(entries.length, 'change')" flush>
     <ul class="m-0 list-none p-0">
       <li
         v-for="(entry, i) in entries"
         :key="`${entry.kind}-${entry.entity_id ?? i}`"
         class="border-t border-hairline px-4 py-3 first:border-t-0"
       >
-        <p
-          class="m-0 text-sm text-text-2"
-          :title="`${opText(entry.op)} ${entry.kind} ${entry.entity_id ?? ''}`"
-        >
+        <!-- #308 (U25): the entity's name, or nothing ("Changed profile"); never its id or raw op. -->
+        <p class="m-0 text-sm text-text-2">
           <span class="text-text-3"
             >{{ verb(entry.op) }} {{ configKindText(entry.kind).toLowerCase() }}</span
           >
           {{ " "
-          }}<span class="text-readout">{{ entry.entity_name ?? entry.entity_id ?? "new" }}</span>
+          }}<span v-if="entry.entity_name" class="text-readout">{{ entry.entity_name }}</span>
         </p>
         <FieldRows v-if="entry.fields.length > 0" :fields="entry.fields" />
       </li>
