@@ -1918,7 +1918,10 @@ differs from what was entered.
   - The resolver is a person or a service identity, never Cadence (api 1b61e57ac: an automatic timeout stays
     "Outcome unclear" and isn't a resolution). A service identity shows by its display name, marked as a service
     (U103): "Resolved as not sent by ops-automation (a service identity) at 03:20:05Z."
-  - With no name: "Resolved as not sent at 03:20:05Z; who resolved it isn't known." (fe-ops 293aa2cd2)
+  - A service identity with no name (`kind` service_identity, `name` null): "Resolved as not sent by a service
+    identity at 03:20:05Z." The kind is known, so it's said; the id goes in Technical details (U25).
+  - With no name and no known kind: "Resolved as not sent at 03:20:05Z; who resolved it isn't known." (fe-ops
+    293aa2cd2)
 - Telemetry evidence carries the catalog unit ("= 8.0 °C (raw 412)"). A point without one shows no unit, never a
   guessed one.
 
@@ -3697,7 +3700,7 @@ set, revision}`, plus (api, #151) `applied_by {kind, id, name}` and `applied_at`
   - `applied_by` by kind (ux's review):
     - A person: their name, as above.
     - The system: "applied 11-18 03:40Z by Cadence".
-    - A service identity: "applied 11-18 03:40Z by Nightly planner".
+    - A service identity: "applied 11-18 03:40Z by Nightly planner (a service identity)" (U103).
     - A null `name` on a person or service: "Off · set by r7, applied 11-18 03:40Z." The name drops, never an id
       (U25); the time stays, as in U99.
     - A `kind` the console doesn't know: the same as a null name.
