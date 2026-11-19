@@ -18,6 +18,21 @@ const flush = async () => {
 };
 
 describe("useRemoteQuery", () => {
+  it("stamps a ready value with when its request started (#395)", async () => {
+    const { calls, fetcher } = harness();
+    const scope = effectScope();
+    const before = new Date();
+    const query = scope.run(() => useRemoteQuery(ref("m1"), fetcher));
+    const asked = new Date();
+    calls[0]?.resolve({ ok: true, value: "one" });
+    await flush();
+    const state = query?.state.value;
+    if (state?.status !== "ready" || !state.requestedAt) throw new Error("no requestedAt");
+    expect(state.requestedAt >= before && state.requestedAt <= asked).toBe(true);
+    expect(state.requestedAt <= state.receivedAt).toBe(true);
+    scope.stop();
+  });
+
   it("drops a stale response after the key changes and aborts it", async () => {
     const { calls, fetcher } = harness();
     const key = ref<string | null>("m1");

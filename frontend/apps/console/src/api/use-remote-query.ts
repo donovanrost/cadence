@@ -42,11 +42,12 @@ export function useRemoteQuery<K, T>(
     inFlight = JSON.stringify(current);
     again = false;
     if (!keepValue || state.value.status !== "ready") state.value = { status: "loading" };
+    const requestedAt = new Date();
     try {
       const result = await fetcher(current, mine.signal);
       if (id !== generation) return;
       state.value = result.ok
-        ? { status: "ready", value: result.value, receivedAt: new Date() }
+        ? { status: "ready", value: result.value, receivedAt: new Date(), requestedAt }
         : { status: "failed", error: result.error };
     } catch (error) {
       if (mine.signal.aborted || id !== generation) return;
