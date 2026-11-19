@@ -34,6 +34,21 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert Map.has_key?(row, "plane")
   end
 
+  test "sends the SCIDs in use and the next free one (S9, #313)", c do
+    TestFixtures.persist_spacecraft!(c.mission, display_name: "EARENDIL-001", scid: 1)
+    TestFixtures.persist_spacecraft!(c.mission, display_name: "EARENDIL-003", scid: 3)
+
+    data =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/missions/#{c.mission.mission_id}/spacecraft")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert data["scids_in_use"] == [1, 3]
+    assert data["next_free_scid"] == 2
+  end
+
   test "shows one spacecraft with profile, routing rules and readiness checks", c do
     profile = TestFixtures.persist_spacecraft_profile!(c.mission, display_name: "Block 1")
 

@@ -143,7 +143,23 @@ defmodule Cadence.Platform.ConfigKind do
   @callback absent_errors(organization_id :: String.t(), mission_id :: String.t(), String.t()) ::
               [field_error()]
 
+  @doc """
+  Refuses ops of this STAGE request against what the change set already has staged, under the
+  set lock (nothing is staged on a refusal): e.g. a SCID another spacecraft's staged op holds
+  (S9). `staged` is the set's staged ops after this author's overlapping ones are replaced;
+  `prepared` is the request's ops in order, so the error's index is the request's. A kind sees
+  every op and picks its own.
+  """
+  @callback stage_conflicts(
+              organization_id :: String.t(),
+              mission_id :: String.t(),
+              set_state :: String.t(),
+              staged :: [map()],
+              prepared :: [map()]
+            ) :: :ok | {:error, {:invalid_op, non_neg_integer(), [field_error()]}}
+
   @optional_callbacks stage_check: 5,
+                      stage_conflicts: 5,
                       absent_errors: 3,
                       effect: 7,
                       normalize_options: 2,
