@@ -3572,8 +3572,9 @@ occurs.
   `import_runs[].matched`.
 - **Import runs table:** the Status tag reads `Matches rev 4` (info). For a rejected match it reads
   `Matches rejected rev 4` (caution, mark + word). Never `Succeeded`, which would imply a new revision.
-- **Technical details** (closed): the run's result as sent (`matched existing · rejected`) and the mission model
-  revision id.
+- **Technical details** (a plain panel, like the console's other Technical details panels; the kit has no collapsed
+  state, mms-engineer): the run's result as sent (`matched existing · rejected`) and the mission model revision id
+  (`model_revision_id`, never in a sentence).
 - **Security (mms-security, confirmed 11-19):**
   - Matching is only within the mission and organization (mms-engineer: identical bytes in another mission get their
     own revision). The decider's name and reason shown here are on rev 4's page already (U65's decided line).
