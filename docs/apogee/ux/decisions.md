@@ -3530,8 +3530,10 @@ occurs.
   revision, so the old advice leads nowhere. The rest of U65's confirm is unchanged.
 - **Missing parts (U20, U29):** `decision` null shows neither who nor when ("Rev 4 was approved." / "which was
   rejected"). `by.name` null with a time drops only the name ("Rev 4 was approved at 11-15 09:12Z."), never "by
-  Unknown" and never an id. No reason: drop the quote. `revision` null reads as the unnumbered case, without
-  `Open the revision`. The words key on `status`; `decision` only supplies who, when and why. An unnumbered revision (U65): "This file matches a catalog revision that
+  Unknown" and never an id. No reason: drop the quote. A reason that doesn't end in . ! or ? gets a full stop after
+  its closing quote (“Wrong FSW build”.); the person's own text inside the quotes is never changed. `revision` null
+  reads as the unnumbered case, and keeps `Open the revision` (as built, #325): it opens the model revision's page,
+  where U88 already says why it can't be approved and offers Reject. The words key on `status`; `decision` only supplies who, when and why. An unnumbered revision (U65): "This file matches a catalog revision that
   already exists…" with `Open the revision`. A status this console doesn't know: only the first sentence, "This
   file matches catalog rev 4, so no new revision was created.", with the status in Technical details. It's never
   mapped onto a known case.
