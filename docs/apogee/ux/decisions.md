@@ -3074,11 +3074,16 @@ Communications, Changes) for ux's look.
       team that runs Cadence for you, or reject it." `Reject` stays enabled.
   - Approve refused stale (409, nothing recorded): "Not approved: EARENDIL-004's configuration changed after this was
     requested, so it isn't what was reviewed. The requester sends it again."
-  - Separation (`activation_self_approval_forbidden`): requester "Not approved: you requested this, so another
-    person approves it."; author "Not approved: you saved part of this configuration, so another person approves
-    it." The 403's `details.rule` (`requester` / `author`) picks the line; without it: "Not approved: you requested
-    or edited this configuration, so another person approves it." `author` applies only under "Needs a second
-    person's approval" (domain captures the authors at submit).
+  - Separation, the requester (403 `activation_self_approval_forbidden`, the console code since #275, as
+    `contact_plan_` and `mission_model_`; it was `self_approval_forbidden`; no `details`; nothing recorded, so U95's
+    ending): "Not approved: you requested this, so another person approves it. Your approval wasn't recorded." The
+    decide panel already shows the requester `Your request` and no Approve, so this line is the server's backstop.
+    It replaces the older "You requested this. Someone else approves it." on the
+    refusal (#275, ca-ux 11-19).
+    - **The author is not this code** (#275): since #236 an author has its own codes, `activation_approver_authored_content`
+      and `activation_approver_authors_unknown` (the two bullets below), so there's no `details.rule`, no author line
+      and no fallback line here. Those apply only under "Needs a second person's approval" (domain captures the
+      authors at submit).
   - Authored content (#236, 403 `activation_approver_authored_content`, `details.spacecraft` ≤5 names and
     `spacecraft_ids`; nothing recorded, so U95's ending): one craft "Not approved: you saved EARENDIL-004's
     configuration in this request, so another person approves it. Your approval wasn't recorded."; several "Not
