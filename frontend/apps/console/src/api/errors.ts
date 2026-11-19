@@ -267,6 +267,7 @@ export const errorCodes = [
   "playlist_not_found",
   // TEMPORARY, deleted with 9ac6dc8ee: the legacy route conversion (api v3.2; ux U79).
   "conversion_already_staged",
+  "path_already_staged",
   "open_change_set_not_empty",
   "nothing_to_convert",
   "conversion_in_progress",

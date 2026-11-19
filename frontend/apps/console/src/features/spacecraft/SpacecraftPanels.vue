@@ -54,6 +54,11 @@ const now = useNow();
       :can-stage="canStage"
       class="xl:col-span-2"
     />
-    <OperationPanel :mission-id="missionId" :detail="detail" class="xl:col-span-2" />
+    <OperationPanel
+      :mission-id="missionId"
+      :detail="detail"
+      :can-stage="canStage"
+      class="xl:col-span-2"
+    />
   </div>
 </template>

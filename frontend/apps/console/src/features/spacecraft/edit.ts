@@ -11,14 +11,19 @@ export function spacecraftDocument(d: SpacecraftDetail): Record<string, unknown>
     scid: d.spacecraft.scid,
     spacecraft_type_id: d.profile?.id ?? null,
     spacecraft_type_version: d.profile?.version ?? null,
-    commanding_enabled: d.commanding_enabled ?? null,
-    telemetry_enabled: d.telemetry_enabled ?? null,
   };
 }
 
-/** The schema lists active profiles; an unchanged inactive pin passes, so keep it choosable. */
+/** U40 (#309, ux #305 §10): the switches are staged on the Operation panel, not the Edit form. */
+const SWITCHES: readonly string[] = ["commanding_enabled", "telemetry_enabled"];
+
+/**
+ * The schema lists active profiles; an unchanged inactive pin passes, so keep it choosable. The
+ * switches leave the form: the Operation panel stages them, with U40's consequence sheet.
+ */
 export function withPinnedProfile(d: SpacecraftDetail) {
-  return (schema: KindSchema): KindSchema => {
+  return (full: KindSchema): KindSchema => {
+    const schema = { ...full, fields: full.fields.filter((f) => !SWITCHES.includes(f.path)) };
     const pin = d.profile;
     if (!pin) return schema;
     return {
