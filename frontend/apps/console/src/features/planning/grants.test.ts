@@ -146,6 +146,19 @@ describe("the grants read across #283", () => {
     expect(r.value.approval_setting).toBe("independent");
   });
 
+  it("words a proposal's validity exactly; a decided proposal without one reads a dash", () => {
+    const until = (over: Record<string, unknown>) => {
+      const r = decode(grantsReader, page([{ ...proposal, ...over }]));
+      if (!r.ok) throw new Error(r.error.message);
+      const [g] = r.value.grants;
+      return g ? untilText(g) : null;
+    };
+    expect(until({ validity_seconds: 86_400 })).toBe("1 day from approval");
+    expect(until({ validity_seconds: 129_600 })).toBe("36 hours from approval");
+    expect(until({ validity_seconds: null })).toBe("Set at approval");
+    for (const state of ["rejected", "withdrawn", "expired"]) expect(until({ state })).toBe("—");
+  });
+
   it("tags every U105 state, and an unknown one as UNKNOWN without failing the read", () => {
     const tag = (state: string) => {
       const r = decode(grantsReader, page([{ ...proposal, state }]));

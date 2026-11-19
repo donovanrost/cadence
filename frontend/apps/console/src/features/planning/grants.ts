@@ -145,11 +145,24 @@ export function grantTag(g: Grant): {
       return { state: "off", label: "UNKNOWN" };
   }
 }
-/** "12-19 06:40Z"; a proposal (valid_until null until approval): "30 days from approval" (U105). */
+/**
+ * "12-19 06:40Z". A proposal (valid_until null until approval) reads its validity from approval
+ * (U105): whole days, else whole hours, else the exact span, never rounded; "Set at approval"
+ * without one. A decided proposal with no valid_until (rejected, withdrawn, expired) reads "—"
+ * (ca-ux, #496).
+ */
 export function untilText(g: Grant): string {
   if (g.valid_until !== null) return formatShort(new Date(g.valid_until));
-  const days = g.validity_seconds === null ? null : Math.round(g.validity_seconds / 86_400);
-  return days === null ? "From approval" : `${plural(days, "day")} from approval`;
+  if (g.state !== "proposed") return "—";
+  const s = g.validity_seconds;
+  if (s === null) return "Set at approval";
+  const span =
+    s % 86_400 === 0
+      ? plural(s / 86_400, "day")
+      : s % 3_600 === 0
+        ? plural(s / 3_600, "hour")
+        : formatDuration(s);
+  return `${span} from approval`;
 }
 
 /** "Night ops bot", or its id when the identity is gone. */
