@@ -16,10 +16,16 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
    open. Without that, it fails A1.
 2. **Named:** the dialog's accessible name is its title (`aria-labelledby`).
 3. **Trapped:** Tab and Shift+Tab cycle inside it, never reaching the page behind.
-   *Exception, the non-modal side sheet* (Dashboards edit's Widget sheet, which keeps the board usable): Tab may
-   leave it for the page. It's then `role="dialog"` **without** `aria-modal`, still named (A2), focus still goes
-   into it on open (A1), Esc still closes it and returns focus to the opener (A4, A5), and the opener moves focus
-   back into the open sheet. Any other sheet that lets Tab out fails A3.
+   *Exception, the non-modal side sheet*: Tab may leave it for the page. It covers two kinds and no others:
+   - Dashboards edit's Widget sheet, which keeps the board usable.
+   - A **detail sheet beside what it details** (#243): the sheet shows the row or point picked from a list or plot
+     that stays on screen, and from 1100px the same detail is an inline pane. Picking another one swaps the
+     sheet's content. Today: Contact history's pass sheet and Investigate's Sample aside (U80), both at 768–1099px.
+
+   It's then `role="dialog"` **without** `aria-modal`, still named (A2), focus still goes into it on open (A1), Esc
+   still closes it and returns focus to the opener (A4, A5), and the opener moves focus back into the open sheet.
+   For a detail sheet, picking another one also moves focus into the sheet, and Esc returns it to the one last
+   picked. Below 768px both kinds are modal (ApSheet does this). Any other sheet that lets Tab out fails A3.
 4. **Esc closes** it without acting.
 5. **Focus returns** to the control that opened it, after Cancel, Esc **and** after the action. If that control
    is gone (the row resolved), focus goes to the row's new state line or the list heading, never to `<body>`.
@@ -70,8 +76,8 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
 | --- | --- | --- |
 | Now | A U45–U57 row: `Mark as seen`, `Acknowledge`, `Retry…` / `Close without retry…` (U54), `Discard…` (U49) | A on each sheet; after acting, focus lands on the row's resolved line; rows arriving above don't steal focus; the row title link comes before its buttons |
 | Contacts › selected pass | `Cancel contact…` / `End contact now…` (U55); `Release commands…` (U46); `Release` (booking); `Book a pass` | A, with focus on `Keep contact` / `Cancel`; the blocks (U45–U50, U57) read in order with each `Technical details` collapsed; refusal lines appear without moving focus |
-| Book a pass sheet | Search → pick an offer → book | Offers are a list with names; a `LISTENER OVERLAP` offer reads its sentence (U58) before the book button |
-| Compose | Catalog listbox; `VERIFIERS DIFFER` block `Show` (U51); Per-target table | ↑↓ in the listbox, ↵ adds; `Show` lists names and keeps focus on the list; the chip's tag is read |
+| Book a pass sheet | Search → pick an offer → book | Offers are a list with names. Once U58 (b) ships (not built yet: the server has no `listener_overlap` field), a `LISTENER OVERLAP` offer reads its sentence before the book button |
+| Compose | Catalog listbox; `VERIFIERS DIFFER` block `Show` (U51); Per-target table | The catalog search is a combobox over a listbox, the same pattern as the palette (`aria-activedescendant`): ↑↓ move the active command, ↵ adds the active one (the first match until ↑↓ moves), and each option's name includes Hazardous and its argument count. "No commands match" is read from a region that stays mounted (B6). `Show` lists names and keeps focus on the list; the chip's tag is read |
 | Approve | The own-values table (per-target values); `Show all 98` | An out-of-range cell is focusable, with ▲ and the reason in its name; the table has a caption naming the command |
 | Uplink & verify | Per-point verifier plots (U51); a target row's `OWN VALUES` line | Each plot has a sentence and a caption naming its targets |
 | Dashboards viewer | Kiosk (Esc out); Present (←/→, Space, Esc); a section's disclosure; `⋯` menu | Keys work with focus anywhere in the takeover; after Esc, focus returns to `⋯ › Kiosk`; collapsed sections say `3 WIDGETS` |
