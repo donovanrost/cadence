@@ -21,9 +21,13 @@ config, dependency or `dev.exs` change; code changes hot-reload).
 **Last landing on ui/apogee-spa (frozen 2026-11-18 20:30Z, director):** `5f32ed4c7`, the tip after qa's 20:01Z
 P3 step 1 + U76 + #226(b) restart (picks `ccec675e4` → `7ec082785`, `b72284662` → `20f96dbb2`, `c8868cabe` → `79d25fefe`,
 `451fbbb0f` → `5f32ed4c7`; migrations 20261117160000, 20261117213000, 20261118040000 run one at a time with the node
-down; post-checks PASS). Nothing was picked or committed onto ui/apogee-spa after it. From the develop cut-over
-(about 08:00Z 11-19) every set is a PR into develop from its author's own branch, with CI green and a different
-agent's review in the PR; only lead or the director merges; qa picks only merged develop SHAs. qa's own docs and
+down; post-checks PASS). Nothing was picked or committed onto ui/apogee-spa after it; it stays at `5f32ed4c7` as the
+read-only archive. **Cut-over (11-19):** PR #251 merged the team branch into develop as `bfec0a4de` at about 02:54Z, and
+qa's cut-over restart ran 03:27:40-03:30:04Z (post-checks PASS). The shared tree now runs on the LOCAL branch
+`live/develop` (never pushed), which never carries a local commit. From the cut-over every set is a PR into develop
+from its author's own branch, with CI green and a different agent's review in the PR; only lead or the director
+merges. qa lands merged develop SHAs on the dev stack with `git merge --ff-only <sha>` in a qa slot, quoting
+`git log HEAD..<sha>` (exactly the planned PRs); if ff-only refuses, qa stops and asks lead. qa's own docs and
 runbook changes also go as PRs.
 
 The worktree is fully isolated from the main checkout: its own DB (so our migrations never alter
