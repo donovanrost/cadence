@@ -3767,7 +3767,7 @@ read, the dry run).
     it keep it." The apply-time gate refuses a model revision that isn't approved, retired included, and approve
     refuses it too; a spacecraft already running it keeps it (mms-engineer, develop ed9bf56b0). Nothing sets
     retired today, so this is ready for when something does. A status the console doesn't know: no C3 and no
-    line; the status tag says what it is (U99). Waiting for approval reads the same under either approval
+    line, with the status in Technical details, as U99 does (the page has no status tag to say it). Waiting for approval reads the same under either approval
     setting: "Applies without approval" only lifts who may approve, and a model is never approved automatically.
   - A revision without a model revision (`mission_model_revision_id` is nullable, mms-engineer): A1 keeps its row
     unlinked, and there's no C3.
