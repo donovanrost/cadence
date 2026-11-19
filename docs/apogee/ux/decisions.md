@@ -3185,8 +3185,8 @@ Every line starts "Not approved:" and says why. "Your approval wasn't recorded."
 anything another person does ("The requester sends it again."). When the reader has something to do ("Try again",
 "Reload…", "Send it back…", "Approve it once…"), that sentence comes after it, so the line ends on the reader's act;
 otherwise "Your approval wasn't recorded." ends the line. (Order amended 11-19: lines had landed both ways. New lines
-follow this; a landed console line moves when its screen is next changed.) After a refusal, Approve is disabled with the line as its A6
-reason; Reject stays, so the request can be cleared. Words reuse U41, U65, U88, U90 and U94.
+follow this; a landed console line moves when its screen is next changed.) After a refusal, Approve is disabled with
+the line as its A6 reason; Reject stays, so the request can be cleared. Words reuse U41, U65, U88, U90 and U94.
 
 - `approved_activation_content_mismatch` (U41's cause): "Not approved: what this request would apply changed after it
   was requested, so it isn't what you reviewed. The requester sends it again."
