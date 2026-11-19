@@ -7,10 +7,14 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceSwitchesAPITest do
   """
   use CadenceWeb.ConnCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.Applications.SpacecraftConfiguration.Active
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Applications.TelemetryDecomFixtures, as: CatalogFixtures
   alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Activations.ActivationRequestRow
+  alias Cadence.Repo
   alias Cadence.SpacecraftStore
   alias CadenceWeb.TestFixtures
 
@@ -83,6 +87,12 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceSwitchesAPITest do
 
     {:ok, active} = Active.load(c.mission)
     refute Map.has_key?(active.entries, c.craft.spacecraft_id)
+
+    # Nor is a request recorded for anyone to approve (fe-setup's #288 review).
+    assert Repo.aggregate(
+             from(r in ActivationRequestRow, where: r.mission_id == ^mid(c)),
+             :count
+           ) == 0
   end
 
   test "a change set flips a switch after the draft was saved: submit is a 409 in ux's words",
