@@ -15,26 +15,24 @@ const extra = computed(() => props.rule.route_count - props.rule.samples.length)
     :title="rule.label"
     :meta="`1 rule → ${formatCount(rule.route_count)} routes`"
   >
-    <!-- P7 (#313, ux §10): a disabled rule is dimmed with a DISABLED tag (off: mark + word); the
-      console's sentence stays as its secondary line. -->
+    <!-- P7 (#313, ux §10): a disabled rule carries a DISABLED tag (off: mark + word), and the
+      console's sentence stays as its secondary line. Not dimmed (mms-ux, #460): its query, route
+      and name are still read to decide whether to re-enable it, so they keep full contrast. -->
     <template v-if="!rule.enabled" #header><ApTag state="off" label="Disabled" /></template>
     <div class="flex flex-col gap-3">
-      <div class="flex flex-col gap-3" :class="rule.enabled ? '' : 'opacity-60'">
-        <p class="m-0 font-mono text-md leading-relaxed text-readout">
-          <span class="text-text-4">FOR EACH</span> spacecraft in {{ profileName }}<br />
-          <span class="text-text-4">AND EACH</span> station in [{{
-            rule.stations.map((s) => s.code ?? s.name).join(", ")
-          }}]<br />
-          <span class="text-text-4">ROUTE</span> {{ legs }}<br />
-          <span class="text-text-4">NAME</span> "{{ rule.name_template }}"
-        </p>
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="ap-label">Generates</span>
-          <ApChip v-for="sample in rule.samples" :key="sample">{{ sample }}</ApChip>
-          <span v-if="extra > 0" class="text-sm text-text-3">+ {{ formatCount(extra) }}</span>
-        </div>
+      <p class="m-0 font-mono text-md leading-relaxed text-readout">
+        <span class="text-text-4">FOR EACH</span> spacecraft in {{ profileName }}<br />
+        <span class="text-text-4">AND EACH</span> station in [{{
+          rule.stations.map((s) => s.code ?? s.name).join(", ")
+        }}]<br />
+        <span class="text-text-4">ROUTE</span> {{ legs }}<br />
+        <span class="text-text-4">NAME</span> "{{ rule.name_template }}"
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="ap-label">Generates</span>
+        <ApChip v-for="sample in rule.samples" :key="sample">{{ sample }}</ApChip>
+        <span v-if="extra > 0" class="text-sm text-text-3">+ {{ formatCount(extra) }}</span>
       </div>
-      <!-- The explanation, not disabled content: outside the dimmed block, full opacity (mms-ux). -->
       <p v-if="!rule.enabled" data-rule-disabled class="m-0 text-sm text-text-3">
         This rule is disabled; it generates no routes.
       </p>
