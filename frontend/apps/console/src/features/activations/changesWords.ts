@@ -6,7 +6,7 @@ import type {
   ChangeRow,
   ConfigurationChanges,
 } from "./configurationChanges.ts";
-import { changeFields } from "./configurationChanges.ts";
+import { changeFields, craftName, UNKNOWN_SOURCE } from "./configurationChanges.ts";
 
 /** ux U94 (#235): the What changes panel's words. Values are never ids (U25). */
 export const FIELD_LABELS: Readonly<Record<ChangeField, string>> = {
@@ -37,8 +37,10 @@ export function valueWord(row: ChangeRow, side: "before" | "after"): string {
       if (!v) return NOT_SET;
       return v.number === null ? "a catalog revision" : `catalog rev ${v.number}`;
     }
-    case "telemetry_source":
-      return row[side]?.name ?? NOT_SET;
+    case "telemetry_source": {
+      const v = row[side];
+      return v ? (v.name ?? UNKNOWN_SOURCE) : NOT_SET;
+    }
     case "handled_apids": {
       const v = row[side];
       if (!v) return NOT_SET;
@@ -175,7 +177,7 @@ export function telemetryOffLine(
   const they = off === 1 ? "it starts but decodes" : "they start but decode";
   const line = isFleet(c)
     ? `Telemetry is off for ${formatCount(off)} of the ${total} spacecraft, so once this is active ${they} nothing: ${OFF_TAIL}`
-    : `Telemetry is off for ${c.groups.items[0]?.spacecraft[0]?.name ?? "this spacecraft"}, so once this is active it starts but decodes nothing: ${OFF_TAIL}`;
+    : `Telemetry is off for ${c.groups.items[0]?.spacecraft[0] ? craftName(c.groups.items[0].spacecraft[0]) : "this spacecraft"}, so once this is active it starts but decodes nothing: ${OFF_TAIL}`;
   const unknown =
     unseen === 0
       ? ""
@@ -185,11 +187,13 @@ export function telemetryOffLine(
 
 /** A group's heading: "300 spacecraft", or the craft's name for a group of one. */
 export const groupHeading = (g: ChangeGroup) =>
-  g.count === 1 && g.spacecraft[0] ? g.spacecraft[0].name : `${formatCount(g.count)} spacecraft`;
+  g.count === 1 && g.spacecraft[0]
+    ? craftName(g.spacecraft[0])
+    : `${formatCount(g.count)} spacecraft`;
 
 /** "EARENDIL-001, EARENDIL-002, EARENDIL-003 and 297 more"; all names when there are few. */
 export function namesLine(g: ChangeGroup): string {
-  const names = g.spacecraft.map((s) => s.name);
+  const names = g.spacecraft.map(craftName);
   if (g.count <= NAMES_LISTED && names.length === g.count) {
     if (names.length <= 1) return names.join("");
     return `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
@@ -205,7 +209,7 @@ export const showAllLabel = (g: ChangeGroup) =>
 /** U90/U94's first-start line, for a group of one or many. */
 export const firstStartLine = (g: ChangeGroup) =>
   g.count === 1 && g.spacecraft[0]
-    ? `Nothing is active for ${g.spacecraft[0].name} yet, so every setting is new.`
+    ? `Nothing is active for ${craftName(g.spacecraft[0])} yet, so every setting is new.`
     : "Nothing is active for these spacecraft yet, so every setting is new.";
 
 /**
@@ -215,5 +219,18 @@ export const firstStartLine = (g: ChangeGroup) =>
  */
 export const noChangesLine = (g: ChangeGroup, fleet: boolean) =>
   !fleet && g.spacecraft[0]
-    ? `Nothing changes for ${g.spacecraft[0].name}: this configuration matches what's active.`
+    ? `Nothing changes for ${craftName(g.spacecraft[0])}: this configuration matches what's active.`
     : `No changes on ${formatCount(g.count)} spacecraft: ${namesLine(g)}.`;
+
+/**
+ * ux U94 (#416): the ids of packet sources the server couldn't name, for Technical details only
+ * (the row reads "Unknown packet source"; U25, never an id in the copy).
+ */
+export function unnamedSourceIds(g: ChangeGroup): string[] {
+  const ids = new Set<string>();
+  for (const row of g.rows.items) {
+    if (row.field !== "telemetry_source") continue;
+    for (const v of [row.before, row.after]) if (v && v.name === null) ids.add(v.id);
+  }
+  return [...ids];
+}
