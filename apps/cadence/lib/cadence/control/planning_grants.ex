@@ -239,18 +239,44 @@ defmodule Cadence.Control.PlanningGrants do
       approved_by: person(grant.approved_by, users),
       approved_at: grant.approved_at,
       reason: grant.approval_reason,
-      rejected_by: person(grant.rejected_by, users),
-      rejected_at: grant.rejected_at,
-      rejection_reason: grant.rejection_reason,
-      withdrawn_by: person(grant.withdrawn_by, users),
-      withdrawn_at: grant.withdrawn_at,
       replaces_grant_id: grant.replaces_grant_id,
-      revoked_by: person(grant.revoked_by, users),
-      revoked_at: grant.revoked_at,
-      revocation_reason: blank(grant.revocation_reason),
       sha256: grant.content_sha256
     }
+    |> Map.merge(ended(grant, users))
   end
+
+  # U105's rejected, withdrawn and revoked fields: who, when and why, both-or-none per state.
+  @no_ending %{
+    rejected_by: nil,
+    rejected_at: nil,
+    rejection_reason: nil,
+    withdrawn_by: nil,
+    withdrawn_at: nil,
+    revoked_by: nil,
+    revoked_at: nil,
+    revocation_reason: nil
+  }
+
+  defp ended(%{lifecycle_state: :rejected, ending: e}, users),
+    do: %{
+      @no_ending
+      | rejected_by: person(e.by, users),
+        rejected_at: e.at,
+        rejection_reason: e.reason
+    }
+
+  defp ended(%{lifecycle_state: :withdrawn, ending: e}, users),
+    do: %{@no_ending | withdrawn_by: person(e.by, users), withdrawn_at: e.at}
+
+  defp ended(%{lifecycle_state: :revoked, ending: e}, users),
+    do: %{
+      @no_ending
+      | revoked_by: person(e.by, users),
+        revoked_at: e.at,
+        revocation_reason: e.reason
+    }
+
+  defp ended(_grant, _users), do: @no_ending
 
   defp with_identity_name(row, org) do
     case Auth.fetch_service_identity(org, row.service_identity.id) do
@@ -272,9 +298,7 @@ defmodule Cadence.Control.PlanningGrants do
   defp user_names(org, grants) do
     ids =
       grants
-      |> Enum.flat_map(
-        &[&1.proposed_by, &1.approved_by, &1.rejected_by, &1.withdrawn_by, &1.revoked_by]
-      )
+      |> Enum.flat_map(&[&1.proposed_by, &1.approved_by, &1.ending && &1.ending.by])
       |> Enum.filter(&is_binary/1)
 
     MemberNames.display_names(org, ids)
@@ -321,7 +345,4 @@ defmodule Cadence.Control.PlanningGrants do
 
   defp days(n) when is_integer(n) and n in 1..365, do: {:ok, n}
   defp days(_n), do: {:error, "must be 1 to 365 days"}
-
-  defp blank(""), do: nil
-  defp blank(value), do: value
 end

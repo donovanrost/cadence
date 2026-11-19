@@ -21,11 +21,15 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
 
   import Ecto.Query
 
-  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{AutomationGrant, AutomationGrantDecisions, GrantNarrowing}
-  alias Cadence.Governance.{Accountability, ActivationPolicy}
+  alias Cadence.ContactPlanning.GrantSeparation
+  alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Contacts.Store.AutomationGrantRow
   alias Cadence.Repo
+
+  defdelegate viewer_block(scope, grant, now), to: GrantSeparation
+  defdelegate confers(scope, mission_id, grant), to: GrantSeparation
 
   @doc "Approves the proposal read at `digest`."
   @spec approve(Scope.t(), binary(), binary(), binary(), keyword()) ::
@@ -33,18 +37,9 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   def approve(%Scope{} = scope, mission_id, grant_id, digest, opts \\ []) do
     now = now(opts)
 
-    with {:ok, approver} <- decider(scope) do
-      ActivationPolicy.with_stable_policy(scope.organization_id, fn ->
-        transaction(fn ->
-          with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
-               :ok <- proposed(grant, now),
-               :ok <- at_digest(grant, digest),
-               {:ok, policy} <- same_policy(grant),
-               :ok <- confers(scope, mission_id, grant),
-               {:ok, separated} <- separated(scope, approver, grant, policy) do
-            approve_locked(scope, row, grant, policy, separated, now)
-          end
-        end)
+    with {:ok, approver} <- GrantSeparation.decider(scope) do
+      stable_transaction(scope.organization_id, fn ->
+        approve_in(scope, mission_id, grant_id, digest, approver, now)
       end)
     end
   end
@@ -55,22 +50,9 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   def reject(%Scope{} = scope, mission_id, grant_id, reason, opts \\ []) do
     now = now(opts)
 
-    with {:ok, actor} <- decider(scope),
+    with {:ok, actor} <- GrantSeparation.decider(scope),
          {:ok, reason} <- reason(reason, :automation_grant_rejection_reason_required) do
-      transaction(fn ->
-        with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
-             :ok <- proposed(grant, now) do
-          rejected =
-            rebuild(grant, %{
-              lifecycle_state: :rejected,
-              rejected_by: actor,
-              rejected_at: now,
-              rejection_reason: reason
-            })
-
-          write(scope, row, rejected, :rejected, %{reason: reason, decided_at: now})
-        end
-      end)
+      transaction(fn -> reject_in(scope, mission_id, grant_id, actor, reason, now) end)
     end
   end
 
@@ -83,15 +65,8 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   def revoke(%Scope{} = scope, mission_id, grant_id, reason, opts \\ []) do
     now = now(opts)
 
-    with {:ok, actor} <- decider(scope) do
-      transaction(fn ->
-        with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
-             :ok <- revocable(grant),
-             {:ok, revoked} <- revoke_locked(scope, row, grant, actor, present(reason), now),
-             :ok <- withdraw_replacements(scope, grant, actor, now) do
-          {:ok, revoked}
-        end
-      end)
+    with {:ok, actor} <- GrantSeparation.decider(scope) do
+      transaction(fn -> revoke_in(scope, mission_id, grant_id, actor, present(reason), now) end)
     end
   end
 
@@ -104,61 +79,55 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   def narrow(%Scope{} = scope, mission_id, grant_id, changes, opts \\ []) do
     now = now(opts)
 
-    with {:ok, _actor} <- decider(scope) do
-      transaction(fn ->
-        with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
-             :ok <- active_now(grant, now),
-             {:ok, narrowed} <- GrantNarrowing.narrow(grant, changes) do
-          write(scope, row, narrowed, :narrowed, %{
-            previous_digest: grant.content_sha256,
-            policy: grant.approval_policy,
-            decided_at: now
-          })
-        end
-      end)
+    with {:ok, _actor} <- GrantSeparation.decider(scope) do
+      transaction(fn -> narrow_in(scope, mission_id, grant_id, changes, now) end)
     end
   end
 
-  @doc """
-  Why `scope` can't decide on `grant` now, for the console's flags (U105, #233's pattern: the
-  server says, the console never computes it): nil when they can, else `{reason, details}` with
-  reason not_a_person | not_admin | not_proposed | proposer | accountable | authors_unknown.
-  The same separation check approval runs, against the setting in force now.
-  """
-  @spec viewer_block(Scope.t(), AutomationGrant.t(), DateTime.t()) ::
-          nil | {binary(), map() | nil}
-  def viewer_block(%Scope{} = scope, %AutomationGrant{} = grant, now) do
-    with {:ok, viewer} <- viewer(scope),
-         :proposed <- AutomationGrant.effective_state(grant, now),
-         policy = ActivationPolicy.evidence(grant.organization_id, grant.mission_id),
-         {:ok, _separated} <- separated(scope, viewer, grant, policy) do
-      nil
-    else
-      {:blocked, reason} ->
-        {reason, nil}
-
-      {:error, {:automation_grant_self_approval_forbidden, %{because: "proposed"}}} ->
-        {"proposer", nil}
-
-      {:error, {:automation_grant_self_approval_forbidden, %{grantee: grantee}}} ->
-        {"accountable", %{grantee: grantee}}
-
-      {:error, {:automation_grant_approver_authors_unknown, details}} ->
-        {"authors_unknown", details}
-
-      _state ->
-        {"not_proposed", nil}
+  defp approve_in(scope, mission_id, grant_id, digest, approver, now) do
+    with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
+         :ok <- proposed(grant, now),
+         :ok <- at_digest(grant, digest),
+         {:ok, policy} <- same_policy(grant),
+         :ok <- confers(scope, mission_id, grant),
+         {:ok, separated} <- GrantSeparation.check(scope, approver, grant, policy) do
+      approve_locked(scope, row, grant, policy, separated, now)
     end
   end
 
-  defp viewer(%Scope{actor_kind: :user} = scope) do
-    case decider(scope) do
-      {:ok, id} -> {:ok, id}
-      _refused -> {:blocked, "not_admin"}
+  defp reject_in(scope, mission_id, grant_id, actor, reason, now) do
+    with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
+         :ok <- proposed(grant, now) do
+      rejected =
+        rebuild(grant, %{
+          lifecycle_state: :rejected,
+          ending: %{by: actor, at: now, reason: reason}
+        })
+
+      write(scope, row, rejected, :rejected, %{reason: reason, decided_at: now})
     end
   end
 
-  defp viewer(_scope), do: {:blocked, "not_a_person"}
+  defp revoke_in(scope, mission_id, grant_id, actor, reason, now) do
+    with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
+         :ok <- revocable(grant),
+         {:ok, revoked} <- revoke_locked(scope, row, grant, actor, reason, now),
+         :ok <- withdraw_replacements(scope, grant, actor, now) do
+      {:ok, revoked}
+    end
+  end
+
+  defp narrow_in(scope, mission_id, grant_id, changes, now) do
+    with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
+         :ok <- active_now(grant, now),
+         {:ok, narrowed} <- GrantNarrowing.narrow(grant, changes) do
+      write(scope, row, narrowed, :narrowed, %{
+        previous_digest: grant.content_sha256,
+        policy: grant.approval_policy,
+        decided_at: now
+      })
+    end
+  end
 
   # -- approve -----------------------------------------------------------------------------
 
@@ -211,93 +180,13 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
 
   # Under 'independent' (separation_of_duties): not the proposer, not the replaced grant's
   # proposer, and outside the service's accountable people (an unknown set refuses everyone).
-  defp separated(_scope, approver, _grant, %{"separation_of_duties" => required})
-       when required != true,
-       do: {:ok, %{approver: approver, ids: []}}
-
-  defp separated(scope, approver, grant, _policy) do
-    replaced_by = replaced_proposer(grant)
-    ids = Enum.reject([grant.proposed_by, replaced_by], &is_nil/1)
-
-    cond do
-      approver in ids ->
-        {:error,
-         {:automation_grant_self_approval_forbidden,
-          %{because: "proposed", grantee: grantee(scope, grant)}}}
-
-      true ->
-        accountable(scope, approver, grant, ids)
-    end
-  end
-
-  defp accountable(scope, approver, grant, ids) do
-    org = scope.organization_id
-    service = {:service, grant.service_identity_id}
-
-    case Accountability.separate(org, {:user, approver}, [service]) do
-      :ok ->
-        {:ok, people} = Accountability.authors(org, [service])
-        {:ok, %{approver: approver, ids: Enum.uniq(ids ++ people)}}
-
-      {:error, {:self, _via}} ->
-        {:error,
-         {:automation_grant_self_approval_forbidden,
-          %{because: "accountable", grantee: grantee(scope, grant)}}}
-
-      {:error, {:unknown, ref}} ->
-        {:error, {:automation_grant_approver_authors_unknown, %{service: ref}}}
-    end
-  end
-
-  defp replaced_proposer(%{replaces_grant_id: nil}), do: nil
-
-  defp replaced_proposer(grant) do
-    AutomationGrantRow
-    |> where(
-      [r],
-      r.organization_id == ^grant.organization_id and r.mission_id == ^grant.mission_id and
-        r.automation_grant_id == ^grant.replaces_grant_id
-    )
-    |> select([r], r.proposed_by)
-    |> Repo.one()
-  end
-
-  defp grantee(scope, grant) do
-    name =
-      scope.organization_id
-      |> Cadence.Auth.service_identity_names([grant.service_identity_id])
-      |> Map.get(grant.service_identity_id)
-
-    %{id: grant.service_identity_id, name: name}
-  end
-
-  @doc false
-  # #281's rule (ca-security): whoever proposes or approves holds every capability the grant
-  # confers (its actions: approve plans, or operate the mission).
-  @spec confers(Scope.t(), binary(), AutomationGrant.t()) :: :ok | {:error, term()}
-  def confers(scope, mission_id, grant) do
-    params = %{organization_id: scope.organization_id, mission_id: mission_id}
-
-    grant.allowed_actions
-    |> Enum.map(&if(&1 == :approve, do: :approve_contact_plans, else: :operate_mission))
-    |> Enum.uniq()
-    |> Enum.reduce_while(:ok, fn action, :ok ->
-      case Policy.authorize(scope, action, params) do
-        :ok -> {:cont, :ok}
-        _refused -> {:halt, {:error, :automation_grant_capability_required}}
-      end
-    end)
-  end
-
   # -- revoke and withdraw -------------------------------------------------------------------
 
   defp revoke_locked(scope, row, grant, actor, reason, now) do
     revoked =
       rebuild(grant, %{
         lifecycle_state: :revoked,
-        revoked_by: actor,
-        revoked_at: now,
-        revocation_reason: reason || ""
+        ending: %{by: actor, at: now, reason: reason}
       })
 
     write(scope, row, revoked, :revoked, %{
@@ -320,7 +209,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
       proposal = AutomationGrantRow.to_domain(row)
 
       withdrawn =
-        rebuild(proposal, %{lifecycle_state: :withdrawn, withdrawn_by: actor, withdrawn_at: now})
+        rebuild(proposal, %{lifecycle_state: :withdrawn, ending: %{by: actor, at: now}})
 
       case write(scope, row, withdrawn, :withdrawn, %{
              reason: "The grant it would replace was revoked.",
@@ -372,13 +261,10 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   end
 
   # `decided_by` and `decided_at` both or neither (U105).
+  defp not_proposed(%{ending: %{by: by, at: at}}, state),
+    do: %{state: state, decided_by: by, decided_at: at}
+
   defp not_proposed(%{approved_by: by, approved_at: at}, state) when is_binary(by),
-    do: %{state: state, decided_by: by, decided_at: at}
-
-  defp not_proposed(%{rejected_by: by, rejected_at: at}, state) when is_binary(by),
-    do: %{state: state, decided_by: by, decided_at: at}
-
-  defp not_proposed(%{withdrawn_by: by, withdrawn_at: at}, state) when is_binary(by),
     do: %{state: state, decided_by: by, decided_at: at}
 
   defp not_proposed(_grant, state), do: %{state: state}
@@ -399,17 +285,6 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   end
 
   # Person-only and org admin (#283; #282's default): a service never decides on a grant.
-  defp decider(%Scope{actor_kind: :user, user: %{user_id: id}} = scope) when is_binary(id) do
-    case Policy.authorize(scope, :manage_automation_grants, %{
-           organization_id: scope.organization_id
-         }) do
-      :ok -> {:ok, id}
-      error -> error
-    end
-  end
-
-  defp decider(%Scope{}), do: {:error, :authenticated_user_required}
-
   defp reason(reason, missing) do
     case present(reason) do
       nil -> {:error, missing}
@@ -425,6 +300,10 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   end
 
   defp present(_text), do: nil
+
+  # The approval setting held stable first (Governance.ActivationLocks' order), then the rows.
+  defp stable_transaction(organization_id, fun),
+    do: ActivationPolicy.with_stable_policy(organization_id, fn -> transaction(fun) end)
 
   defp transaction(fun) do
     Repo.transaction(fn ->

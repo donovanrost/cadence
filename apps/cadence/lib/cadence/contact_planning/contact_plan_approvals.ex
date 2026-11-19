@@ -558,8 +558,9 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   # Submit approved and booked in one step). Under 'direct' it's allowed, as before. A send back
   # by the requester is fine either way.
   # #280: the authors and the approver are compared as people. A service author counts as its
-  # issuer and rotators; a service approving under an automation grant counts as its own people plus
-  # the grant's proposer and approver (#283). Overlap refuses; an unknown set refuses (`:contact_plan_approver_authors_unknown`).
+  # issuer and rotators; a service approving under an automation grant counts as its own people
+  # plus the grant's proposer and approver (#283). Overlap refuses; an unknown set refuses
+  # (`:contact_plan_approver_authors_unknown`).
   defp separate_approver(:approved, plan_row, version_row, actor, policy)
        when is_map(actor) do
     if policy["separation_of_duties"] == true do

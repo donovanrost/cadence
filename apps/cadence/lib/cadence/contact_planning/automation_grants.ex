@@ -33,9 +33,7 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
          :ok <- authorize_admin(scope) do
       # The approval setting is held stable while the proposal records it (#283, M2 evidence).
       ActivationPolicy.with_stable_policy(scope.organization_id, fn ->
-        Repo.transaction(fn ->
-          issue_or_rollback(scope, mission_id, attrs, actor_id, now, opts)
-        end)
+        issue_transaction(scope, mission_id, attrs, actor_id, now, opts)
       end)
     end
   end
@@ -43,6 +41,10 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
   defdelegate approve(scope, mission_id, grant_id, digest, opts \\ []), to: AutomationGrantReview
   defdelegate reject(scope, mission_id, grant_id, reason, opts \\ []), to: AutomationGrantReview
   defdelegate narrow(scope, mission_id, grant_id, changes, opts \\ []), to: AutomationGrantReview
+
+  defp issue_transaction(scope, mission_id, attrs, actor_id, now, opts),
+    do:
+      Repo.transaction(fn -> issue_or_rollback(scope, mission_id, attrs, actor_id, now, opts) end)
 
   defp issue_or_rollback(scope, mission_id, attrs, actor_id, now, opts) do
     case issue_locked(scope, mission_id, attrs, actor_id, now, opts) do
@@ -259,8 +261,7 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
           DateTime.add(now, AutomationGrant.proposal_window_seconds(), :second),
         approval_reason: value(attrs, :approval_reason),
         approval_policy: ActivationPolicy.evidence(organization_id, mission_id),
-        replaces_grant_id: value(attrs, :replaces_grant_id),
-        revocation_reason: ""
+        replaces_grant_id: value(attrs, :replaces_grant_id)
       })
 
     {:ok, direct(grant, actor_id, now)}

@@ -53,34 +53,42 @@ defmodule Cadence.Control.PlanningGrantDecisions do
   defp run(scope, mission_id, grant_id, params, action, request, act) do
     with {:ok, operation_id} <- required(params, :operation_id),
          :ok <- person(scope) do
-      ActivationPolicy.with_stable_policy(scope.organization_id, fn ->
-        Repo.transaction(fn ->
-          with :ok <- lock_row(scope.organization_id, mission_id, grant_id),
-               :new <-
-                 GrantOperations.check(scope, mission_id, operation_id, grant_id, action, request),
-               {:ok, grant} <- act.(),
-               answer = {200, PlanningGrants.encode_row(scope, grant)},
-               :ok <-
-                 GrantOperations.record(
-                   scope,
-                   mission_id,
-                   operation_id,
-                   grant_id,
-                   action,
-                   request,
-                   answer
-                 ) do
-            {:decided, elem(answer, 1)}
-          else
-            {:replay, {_status, body}} -> {:replayed, body}
-            :duplicate_operation -> Repo.rollback(:duplicate_operation)
-            :operation_conflict -> Repo.rollback(:operation_already_claimed)
-            {:error, reason} -> Repo.rollback(reason)
-          end
-        end)
-      end)
+      op = %{mission_id: mission_id, id: operation_id, grant_id: grant_id, action: action}
+
+      stable_transaction(scope.organization_id, fn -> decide(scope, op, request, act) end)
     end
   end
+
+  defp stable_transaction(organization_id, fun),
+    do: ActivationPolicy.with_stable_policy(organization_id, fn -> Repo.transaction(fun) end)
+
+  defp decide(scope, op, request, act) do
+    with :ok <- lock_row(scope.organization_id, op.mission_id, op.grant_id),
+         :new <-
+           GrantOperations.check(scope, op.mission_id, op.id, op.grant_id, op.action, request),
+         {:ok, grant} <- act.(),
+         body = PlanningGrants.encode_row(scope, grant),
+         :ok <- record(scope, op, request, body) do
+      {:decided, body}
+    else
+      {:replay, {_status, body}} -> {:replayed, body}
+      :duplicate_operation -> Repo.rollback(:duplicate_operation)
+      :operation_conflict -> Repo.rollback(:operation_already_claimed)
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp record(scope, op, request, body),
+    do:
+      GrantOperations.record(
+        scope,
+        op.mission_id,
+        op.id,
+        op.grant_id,
+        op.action,
+        request,
+        {200, body}
+      )
 
   # Every grant act is person-only (#283): refused before anything is read or recorded.
   defp person(%Scope{actor_kind: :user, user: %{user_id: id}}) when is_binary(id), do: :ok

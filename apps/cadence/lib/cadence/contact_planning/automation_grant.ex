@@ -26,6 +26,12 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
 
   @type action :: :plan | :repair | :submit | :approve | :execute
 
+  @typedoc """
+  How a grant ended, for a rejected, withdrawn or revoked one (the state says which): who, when,
+  and the reason (required to reject, optional to revoke, the server's own to withdraw).
+  """
+  @type ending :: %{by: binary(), at: DateTime.t(), reason: binary() | nil}
+
   @type t :: %__MODULE__{
           automation_grant_id: binary(),
           organization_id: binary(),
@@ -50,16 +56,9 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
           approved_at: DateTime.t() | nil,
           approval_reason: binary(),
           approval_policy: map() | nil,
-          rejected_by: binary() | nil,
-          rejected_at: DateTime.t() | nil,
-          rejection_reason: binary() | nil,
-          withdrawn_by: binary() | nil,
-          withdrawn_at: DateTime.t() | nil,
+          ending: ending() | nil,
           replaces_grant_id: binary() | nil,
           content_sha256: binary(),
-          revoked_by: binary() | nil,
-          revoked_at: DateTime.t() | nil,
-          revocation_reason: binary(),
           inserted_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
         }
@@ -88,16 +87,9 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
     :approved_at,
     :approval_reason,
     :approval_policy,
-    :rejected_by,
-    :rejected_at,
-    :rejection_reason,
-    :withdrawn_by,
-    :withdrawn_at,
+    :ending,
     :replaces_grant_id,
     :content_sha256,
-    :revoked_by,
-    :revoked_at,
-    :revocation_reason,
     :inserted_at,
     :updated_at
   ]
@@ -178,16 +170,9 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
         approved_at: optional_datetime(value(attrs, :approved_at), :approved_at),
         approval_reason: required(attrs, :approval_reason),
         approval_policy: value(attrs, :approval_policy),
-        rejected_by: optional_string(value(attrs, :rejected_by)),
-        rejected_at: optional_datetime(value(attrs, :rejected_at), :rejected_at),
-        rejection_reason: value(attrs, :rejection_reason),
-        withdrawn_by: optional_string(value(attrs, :withdrawn_by)),
-        withdrawn_at: optional_datetime(value(attrs, :withdrawn_at), :withdrawn_at),
+        ending: ending(value(attrs, :ending)),
         replaces_grant_id: optional_string(value(attrs, :replaces_grant_id)),
         content_sha256: value(attrs, :content_sha256),
-        revoked_by: optional_string(value(attrs, :revoked_by)),
-        revoked_at: optional_datetime(value(attrs, :revoked_at), :revoked_at),
-        revocation_reason: string(value(attrs, :revocation_reason, ""), :revocation_reason),
         inserted_at: value(attrs, :inserted_at),
         updated_at: value(attrs, :updated_at)
       }
@@ -257,37 +242,44 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
   # Each state carries exactly its own evidence (ca-security: an active grant without approval
   # evidence fails closed, here at construction as well as at use).
   defp validate_revocation_shape(%__MODULE__{lifecycle_state: state} = grant) do
-    approved? = not is_nil(grant.approved_by) and not is_nil(grant.approved_at)
-    windowed? = not is_nil(grant.valid_from)
-    revoked? = not is_nil(grant.revoked_by) or not is_nil(grant.revoked_at)
-    rejected? = not is_nil(grant.rejected_by) or not is_nil(grant.rejected_at)
-    withdrawn? = not is_nil(grant.withdrawn_by) or not is_nil(grant.withdrawn_at)
-
-    ok =
-      case state do
-        :proposed ->
-          not approved? and not windowed? and not revoked? and not rejected? and not withdrawn?
-
-        :active ->
-          approved? and windowed? and not revoked? and not rejected? and not withdrawn?
-
-        # A revoke's reason is recorded when given, never required (a tightening).
-        :revoked ->
-          approved? and windowed? and revoked?
-
-        :rejected ->
-          not approved? and not windowed? and rejected? and present?(grant.rejection_reason)
-
-        :withdrawn ->
-          not approved? and not windowed? and withdrawn?
-      end
-
-    if ok,
+    if shape?(state, approved?(grant), not is_nil(grant.valid_from), grant.ending),
       do: grant,
       else: raise(ArgumentError, "automation grant evidence doesn't match #{state}")
   end
 
+  defp approved?(grant), do: not is_nil(grant.approved_by) and not is_nil(grant.approved_at)
+
+  defp shape?(:proposed, approved, windowed, ending),
+    do: not approved and not windowed and is_nil(ending)
+
+  defp shape?(:active, approved, windowed, ending), do: approved and windowed and is_nil(ending)
+
+  # A revoke's reason is recorded when given, never required (a tightening).
+  defp shape?(:revoked, approved, windowed, ending),
+    do: approved and windowed and not is_nil(ending)
+
+  defp shape?(:rejected, approved, _windowed, ending),
+    do: not approved and not is_nil(ending) and present?(ending.reason)
+
+  defp shape?(:withdrawn, approved, _windowed, ending), do: not approved and not is_nil(ending)
+
   defp present?(text), do: is_binary(text) and String.trim(text) != ""
+
+  defp ending(nil), do: nil
+
+  defp ending(%{by: by, at: at} = ending) when is_binary(by) and by != "",
+    do: %{by: by, at: datetime(at, :ending_at), reason: optional_reason(Map.get(ending, :reason))}
+
+  defp ending(_ending), do: raise(ArgumentError, "a grant's ending needs who and when")
+
+  defp optional_reason(reason) when is_binary(reason) do
+    case String.trim(reason) do
+      "" -> nil
+      text -> text
+    end
+  end
+
+  defp optional_reason(_reason), do: nil
 
   defp actions(items) when is_list(items) and items != [] do
     normalized =
@@ -324,9 +316,6 @@ defmodule Cadence.ContactPlanning.AutomationGrant do
   defp currency(nil), do: nil
   defp currency(value) when is_binary(value) and value != "", do: String.upcase(value)
   defp currency(_value), do: raise(ArgumentError, "currency must be an ISO-style code")
-
-  defp string(value, _field) when is_binary(value), do: value
-  defp string(_value, field), do: raise(ArgumentError, "#{field} must be a string")
 
   defp optional_string(nil), do: nil
   defp optional_string(value) when is_binary(value) and value != "", do: value

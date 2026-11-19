@@ -156,14 +156,11 @@ defmodule Cadence.Governance.DecisionRecord do
 
   defp subject(decision, %{kind: kind, id: id} = subject)
        when is_binary(kind) and kind != "" and is_binary(id) and id != "" do
-    digest = Map.get(subject, :digest)
-    previous = Map.get(subject, :previous_digest)
-
     cond do
-      decision in @digest_required and not (is_binary(digest) and digest != "") ->
+      decision in @digest_required and not text?(Map.get(subject, :digest)) ->
         {:error, :decision_record_digest_required}
 
-      not (is_nil(previous) or (is_binary(previous) and previous != "")) ->
+      not optional_text?(Map.get(subject, :previous_digest)) ->
         {:error, :decision_record_previous_digest_invalid}
 
       true ->
@@ -172,6 +169,9 @@ defmodule Cadence.Governance.DecisionRecord do
   end
 
   defp subject(_decision, _subject), do: {:error, :decision_record_subject_required}
+
+  defp text?(value), do: is_binary(value) and value != ""
+  defp optional_text?(value), do: is_nil(value) or text?(value)
 
   defp separated_from(ids) when is_list(ids) do
     if Enum.all?(ids, &(is_binary(&1) and &1 != "")),

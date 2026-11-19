@@ -8,8 +8,8 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
 
   import Ecto.Query
 
-  alias Cadence.AutomationGrantFixtures, as: F
   alias Cadence.Auth.Scope
+  alias Cadence.AutomationGrantFixtures, as: F
   alias Cadence.ContactPlanning.{AutomationGrant, AutomationGrantDecisions, AutomationGrants}
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Contacts.Store.AutomationGrantRow
@@ -209,7 +209,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
                  now: F.now()
                )
 
-      assert %{lifecycle_state: :rejected, rejection_reason: "Too broad"} = rejected
+      assert %{lifecycle_state: :rejected, ending: %{reason: "Too broad"}} = rejected
       approver_id = c.approver.user.user_id
 
       assert {:error,
@@ -228,7 +228,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
       assert {:ok, revoked} =
                AutomationGrants.revoke(c.third, c.mission, grant.automation_grant_id, nil, nil)
 
-      assert %{lifecycle_state: :revoked, revocation_reason: ""} = revoked
+      assert %{lifecycle_state: :revoked, ending: %{reason: nil}} = revoked
       assert {:error, :automation_grant_revoked} = use_grant(c, grant)
       assert decisions(c, grant) == [:proposed, :approved, :revoked]
     end
@@ -249,7 +249,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
       assert {:ok, %{lifecycle_state: :withdrawn} = withdrawn} =
                AutomationGrants.fetch(c.org, c.mission, widening.automation_grant_id)
 
-      assert withdrawn.withdrawn_by == c.third.user.user_id
+      assert withdrawn.ending.by == c.third.user.user_id
       assert decisions(c, widening) == [:proposed, :withdrawn]
 
       assert {:error, {:automation_grant_not_proposed, %{state: :withdrawn}}} =
@@ -277,11 +277,11 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
 
       assert {:ok, %{lifecycle_state: :active}} = approve(c, c.third, widening)
 
-      assert {:ok, %{lifecycle_state: :revoked, revoked_by: revoked_by} = old} =
+      assert {:ok, %{lifecycle_state: :revoked, ending: %{by: revoked_by}} = old} =
                AutomationGrants.fetch(c.org, c.mission, grant.automation_grant_id)
 
       assert revoked_by == c.third.user.user_id
-      assert old.revocation_reason =~ widening.automation_grant_id
+      assert old.ending.reason =~ widening.automation_grant_id
     end
 
     test "the replaced grant's proposer can't approve the widening", c do

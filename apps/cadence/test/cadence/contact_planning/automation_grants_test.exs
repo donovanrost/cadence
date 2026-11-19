@@ -253,8 +253,8 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
              )
 
     assert revoked.lifecycle_state == :revoked
-    assert revoked.revoked_by == context.admin_scope.user.user_id
-    assert revoked.revocation_reason == "Pause unattended scheduling"
+    assert revoked.ending.by == context.admin_scope.user.user_id
+    assert revoked.ending.reason == "Pause unattended scheduling"
 
     assert {:error, :automation_grant_revoked} =
              AutomationGrants.authorize(
