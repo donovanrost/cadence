@@ -71,8 +71,9 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
    included. (#189 'name')
 8. **Screen-wide keys never override a focused control that uses that key.** Present's Space and ←/→ and Kiosk's
    Esc yield to the focused control only when it uses the key. Space presses a button, link or summary and ticks a
-   box. The arrow keys move in a field, a radio group, tabs, a menu, a listbox, a grid or a slider. A focused button
-   doesn't use the arrows, so ←/→ still step slides from it; Space on it presses it. (#189, Present; #245's
+   box. The arrow keys move in a field, a radio group, tabs, a menu, a listbox, a grid, a tree or a slider. A focused
+   button doesn't use the arrows, so ←/→ still step slides from it; Space on it presses it. Esc yields only to an
+   open sheet or menu, which it closes; from a focused field it still leaves Kiosk or Present. (#189, Present; #245's
    `focusedControlOwns`)
 
 ## C. Surfaces to check by hand (opened, confirmed, closed)
