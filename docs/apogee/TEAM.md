@@ -36,6 +36,97 @@ The director is the session that hired you. Pane IDs are herdr pane IDs.
 
 Live pane IDs are in `docs/apogee/ROSTER.md` (written by the director after hiring).
 
+## Squads (director, 2026-11-19; approved by the user)
+
+The team works in domain squads. The board's **Squad** field holds each issue's squad. Legacy-page retirement
+(E3) is done by the squad that owns the page's domain; the release lead keeps the E3 order. The Roster above
+records who was hired for what; for ownership and review, this section wins.
+
+| Squad | Domains (board labels) | Epics | Squad lead | Members |
+| --- | --- | --- | --- | --- |
+| Commanding & Approvals | commanding, approvals, identity | E1 #207, #201 (per-kind policies), #220 (offboarding) | api-ops | api, ca-security (security engineer, also security lead), ca-ux (UX designer), ca-engineer |
+| Mission Model & Spacecraft | mission-model, spacecraft, applications | E2 #208, E4 #210 | fe-setup | mms-security (security engineer), mms-ux (UX designer), mms-engineer |
+| Telemetry & Data | telemetry, data-management | E6-E9 #212-#215 | domain | staffed when laptop 3 arrives |
+| Displays & Alarms | dashboards, alarms | E10 #216, dashboards | dashboards | staffed when laptop 3 arrives |
+| Ground & Comms | comms, contacts, providers | E5 #211 | fe-ops | staffed when laptop 3 arrives |
+| Platform | platform, tooling, CI, release, console kit | E11-E13 #217-#219, E3 #209 coordination | lead (release lead) | devops, qa |
+
+### Owned paths
+
+A path belongs to the squad that owns its domain. Shared layers (the web controllers and console API under
+`apps/cadence_web/lib/cadence_web/`, the read models under `apps/cadence/lib/cadence/reads/`, the console's
+`frontend/apps/console/src/features/`, and tests) follow the domain they serve: the file or folder name says
+which. Anything not listed is Platform's. Where it isn't clear, the release lead decides and records it here.
+
+| Squad | Backend (`apps/cadence/lib/cadence/`) | Web and console | Other |
+| --- | --- | --- | --- |
+| Commanding & Approvals | `commanding*`, `governance.ex`, `governance/{activation_policy,activation_locks,decision_record}.ex`, `action_requests/`, `accounts*`, `auth*`, `organizations*`, `administration/`, `secrets/`, `control/commanding*`, `control/command_brief.ex`, `control/command_encoding_preview.ex`, `management/commanding*` | console features `commands/`, `review/`, `people/`, `account/`, `auth/`, `admin/`, `audit/`, `settings/` (approval settings); web: command, approval, session and admin controllers, the console `activation_request_controller` and the settings controller's approval-setting path | `frontend/modules/commanding`, `frontend/apps/organization-admin`; `dev/apogee_qa_personas.exs`; `docs/apogee/api/commanding.md` |
+| Mission Model & Spacecraft | `mission_models*`, `catalog*`, `spacecraft*`, `spacecraft_type*`, `spacecraft_store*`, `configuration/`, `activations*`, `applications/`, `application_dispatch/`, `extensions/`, `extension_catalog.ex`, `capabilities/` (Ground & Comms reviews `uplink_gateway`), `governance/`'s binding and capability rows | console features `spacecraft/`, `profiles/` (routing panel and extra routes: Ground & Comms reviews), `catalog/`, `activations/`, `changes/` (shared: see below), `readiness/`, `apps/`; `frontend/apps/spacecraft`, `frontend/apps/mission-catalog`; web: application host, release and surface code | `packages/cadence_catalog`; seeds `dev/apogee_qa_mission.exs` and `dev/apogee_qa_mission/`, and in `dev/reflect_orbital/` `seed.exs`, `configuration.exs`, `fixture.exs`, `activation.exs` (C&A reviews), plus `dev/reflect_orbital_demo/configure.exs` and `dev/reflect_orbital_activate.exs` (C&A reviews); docs `docs/apogee/api/{setup,changes,activations}.md`, `docs/apogee/domain/{mission-model-intent-vs-impl,catalog-generations,config-materialization-model,profile-routing}.md`, and the ux screens Setup, AddSpacecraft, Catalog and Profile |
+| Telemetry & Data | `telemetry/`, `ingress*`, `ingress_journal/`, `ingress_archive*`, `semantic_observations*`, `semantic_runtime*`, `replay*`, `protocol/`, `data_sources/`, `source_endpoints*`, `projections/` and `runtime/` (split below), `derived_telemetry*`, `cfdp/`, `governance/`'s packet and derived-telemetry definition rows | console features `telemetry/`, `investigate/`, `sources/`, `timeline/`; `frontend/apps/telemetry-decom` | `frontend/modules/telemetry-decom`, `derived-telemetry`, `data-operations`; `packages/ccsds`, `packages/xtce`, `apps/cadence/priv/questdb/`, `dev/ingress-benchmark/` |
+| Displays & Alarms | `dashboards*`, `alarms/`, `limits*`, `notifications*`, `ops/` | console features `dashboards/`, `alarms/`, `now/`, `fleet/`; `frontend/apps/ops-console`; web: console `dashboard_*` and `limit_transitions` modules, the `dashboard_*`, `alarm_*`, `alarm_episode_*`, `alarm_history_*` and `ops_counts` controllers, `channels/console/dashboard_channel.ex`, the `legacy_dashboard` and `legacy_ops` redirect controllers, `live/dashboard_author_auth.ex`, `live/notifications_bell.ex` | `frontend/modules/dashboards-and-exploration`, `limits-and-alarming`; `dev/reflect_orbital/dashboards.exs` |
+| Ground & Comms | `comms/`, `contacts*`, `contact_planning/`, `ground_networks*`, `provider_adapters*`, `jobs/outcome_resolutions*`; in `control/`: `contacts.ex`, `contacts/`, `scheduling.ex`, `plan_confirmation*`, `plan_resubmission*`, `planning_*`, `providers.ex`, `providers/`, `pass_results_close_out*`, `contact_fact_consumer*`; in `management/`: `contacts.ex`, `contacts/`, `providers.ex`, `providers/`, `provider_account_*`, `communications_setup*`, `comms/`, `pass_review_settings_section*`, `transports.ex`, `config_kinds/transport.ex` (MM reviews) | console features `comms/`, `contacts/`, `planning/`, `scheduling/`, `replan/`, `resolutions/`, `stations/`, `providers/`; `frontend/apps/comms-overview` | `frontend/modules/communications`, `planning-and-contacts`; `apps/cadence_simulator/`; `docs/apogee/api/{contacts,scheduling}.md`; `dev/reflect_orbital/planning.exs`, `live_contacts.exs`, `dev/reflect_orbital_planning/` |
+| Platform | `platform/`, `architecture/`, `observability*`, `missions*`, `operational_events*`, `mission_events/`, `listing.ex`, `ids.ex`, `repo.ex`, `application.ex`, `dev_profile.ex`, `smoke/`, `persistence/`, `jobs/` (except `outcome_resolutions`), the rest of `control/` and `management/` (cross-domain routing; changes need the owning squad's review too) | the console shell, router, API client and kit (`frontend/apps/console/src/{shell,router,api,live}`, `features/kit/`, `features/palette/`, `features/mobile/`, `features/missions/`); `frontend/packages/*`; `frontend/apps/host`, `storybook`, `surface-fixture`, `contract-probe`; `frontend/tools/` | `.github/`, `config/`, `mix.exs`, `mix.lock`, `mise.toml`, `scripts/`, `docs/apogee/TEAM.md` and `qa/`; `dev/` scripts not listed above |
+
+**Mixed directories** (domain's read, 11-19). Telemetry & Data owns them, and the named squad also reviews changes to its files:
+- **`runtime/`:**
+  - Ground & Comms: `contact_*`, `realized_contact_runtime*`, `path_*`, `transport_*`, `uplink_*`, `session_*`, `provider_binding_spec`.
+  - Commanding & Approvals: `commanding.ex`, `transmit_command`, `action_executor`, `dispatch_records`, `execution_agent`.
+  - Mission Model & Spacecraft: `mission_runtime_spec`, `binding_set_index`, `activation_context`, `generation_applied`, `mission_admission`, `profile_acceptor`, `mission_model_plan_decoder`.
+  - Platform: `cluster*`, `process_namespace`, `supervisor`.
+- **`projections/`:**
+  - Displays & Alarms: `telemetry_latest_limit_states`.
+  - Commanding & Approvals: `command_status`.
+  - Mission Model & Spacecraft: `activation_status`.
+  - Ground & Comms: `contact_status`.
+  - Platform: `mission_events`, `managed_resource_status`, `domain_fact_consumer`, `supervisor`.
+  - Telemetry & Data: the rest.
+- **`reads/`:** each file goes to the squad whose domain it reads. Telemetry & Data has `telemetry*`, `telemetry_decom/`, `point_*`, `console_sample*`, `data_source*`, `derived_telemetry*`, `pass_telemetry_stored`, `replay.ex` and `operational_evidence`. Displays & Alarms has `alarm_*` and `limit_state_evidence`; Commanding & Approvals has `command_*` and `verifier_series`; Ground & Comms has `plan_history`.
+
+**Approval rules in other squads' directories** (api-ops' read, 11-19). Commanding & Approvals reviews any change to these, whoever owns the directory:
+- every file named `*approval*` or `*four_eyes*`;
+- `control/activations/approval.ex` and `control/activation_requests/`;
+- `control/model_approval_gate.ex`, `control/actor_ref.ex` and `management/approval_setting_access.ex`;
+- `activations/approval_admission.ex`;
+- `reads/activation_approvals.ex`, `reads/command_groups.ex` and `reads/organization_audit/`;
+- `applications/spacecraft_configuration/{authors,review,catalog_authority}.ex`.
+
+**The change-set framework** (console `changes/`: KindEditor, SchemaForm, refusals, ChangeSetBoard) is Mission Model & Spacecraft's, and every squad stages through it. A change to it is also reviewed by the squads whose change kinds use it. Changes to ReviewPanel, submit or apply are also reviewed by Commanding & Approvals. **Routing rules** live in backend `comms/` (Ground & Comms) and show in the spacecraft and profile screens (Mission Model & Spacecraft), so the two squads review each other's routing changes.
+
+**Shared files** (`router.ex`, `application.ex`, the root and app `mix.exs`/`mix.lock`, `config/*.exs`, the console's
+route list): any squad may change its own lines. The release lead reviews any change to them and settles
+conflicts. `dev/chaos/` is the user's lab: no squad edits it.
+
+### Roles
+
+- **Director:** priorities, milestones, and the high-stakes gates: pins, data drops, approval-policy changes, and anything outward-facing.
+- **Release lead (lead):** merges into develop, the order changes land in, cross-squad integration, release to `main`, and the squad leads' daily sync.
+- **UX lead (ux):** the design system and wording rules. Squad designers work to them, and ux reviews cross-squad UI.
+- **Security lead:** the first security engineer hired (Commanding & Approvals). Also owns the rules every squad's security engineer applies.
+- **Squad lead:** a working engineer. Sets the squad's order inside the milestones, reports to the director and syncs with the release lead.
+- **Squad UX designer:** the squad's console flows and words.
+- **Squad security engineer:** threat-models the squad's features. A required reviewer on any change that touches permissions, approvals, secrets, the network or tenant boundaries.
+- **Squad engineers:** build, test and open PRs.
+
+### Review rules
+
+- **Every PR:** reviewed by a different agent in the owning squad, recorded on the PR. We share one GitHub account, so the review is a comment review headed with the reviewer's agent name and verdict.
+- **Another squad's code:** a PR that touches it is also reviewed by that squad.
+- **Security-sensitive changes** (see the security engineer above): the squad's security engineer also reviews.
+- **Merging:** only the release lead or the director merges, after green CI. Nobody pushes to or force-pushes `develop` or `main`.
+- **Landing:** qa lands merged develop SHAs on the laptop-1 dev stack, fast-forward only, in qa slots.
+- **Issue links:** PR bodies say `Refs #N`, never `Fixes`, `Closes` or `Resolves`, which close the issue at merge, before landing. The issue's owner closes it by hand after qa's post-check, with the evidence in a comment.
+
+### Machines
+
+| Machine | Runs |
+| --- | --- |
+| Laptop 1 | The shared dev stack (develop, :4011, simulator, Postgres, QuestDB); the director, release lead, qa, devops, ux; current squad leads until they move |
+| Laptop 2 | Commanding & Approvals, and Mission Model & Spacecraft. Each has its own worktrees, its own test Postgres and its own heavy gate |
+| Laptop 3 (coming) | Telemetry & Data, Displays & Alarms, and Ground & Comms |
+
+Laptop 2's agents are addressed as `donovans-macbook-pro-1/NAME` in hc (for example `hc send donovans-macbook-pro-1/ca-security "..."`). Since 11-19 they push their own branches and open PRs. Their token can't edit the project board yet (no project scope), so their squad lead moves their cards. Each agent on a worker machine works in its own worktree off develop; nobody shares a working copy. The
+laptop-1 stack stays the integration environment, run by qa.
+
 ## Communicating (herdr)
 
 Send a teammate a message with (`herdr` may not be on PATH in agent shells; use `$HERDR_BIN_PATH`):
@@ -74,8 +165,15 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
 
 ## Quality bar
 
-- Elixir: `mix compile --warnings-as-errors`, `mix credo --strict` (don't add violations),
+- Elixir: compile every project with warnings as errors: `MIX_ENV=test mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors` at the repo root (the CI command; a plain `mix compile` at the root builds only the workspace app, not cadence, cadence_web, the simulator or the packages); `mix credo --strict` at the repo root (don't add violations),
   `mix format`, per-app tests (`cd apps/cadence_web && mix test`).
+- Elixir, before opening a backend PR, also run the CI jobs that a plain suite misses (all gated, on your own test partition):
+  - `mix format.all --check-formatted` at the repo root (CI's form; a plain root `mix format` covers only the root files);
+  - `mix hex.audit` and `MIX_ENV=test mix workspace.run -t hex.audit --order postorder` at the repo root (both, as CI; a new advisory fails CI even when nothing changed);
+  - the ingest journal-off matrix: `cd apps/cadence && CADENCE_TEST_INGRESS_JOURNAL=off mix test --only ingest_journal_matrix`;
+  - the simulator suite: `cd apps/cadence_simulator && mix test`, with the same `MIX_TEST_PARTITION`;
+  - `mix test.planes` at the repo root;
+  - `mix test.cluster` at the repo root. It starts Erlang distribution and peer nodes, and each peer runs its own `epmd -daemon`, which can bind on all interfaces next to the dev epmd (11-19 02:14Z). Leave it to CI and say so in the PR; run it locally only with qa's OK (the epmd rule).
 - Frontend: typecheck + lint for the new app pass; no file over 400 lines; no render
   function/template block over ~50 lines without extraction.
 - Real data only. No invented stats in shipped UI; if the backend lacks something, the api
@@ -125,16 +223,18 @@ part 2, the 001 repair, the gap fixes) sat still for ~3 h 20 min under a hold wi
 - Checks to run before committing:
   - Docs only: none.
   - Frontend: typecheck + lint (+ tests) for the console app (see `docs/apogee/ARCHITECTURE.md`).
-  - Elixir (api only): `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict` on touched
-    files, and the tests for the touched area. **Only api, api-ops and domain run Elixir tests**, since parallel runs fight
-    over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=12`, api-ops uses `3`; partitions are claimed in qa's runbook register). qa runs the dev server against the dev database.
+  - Elixir: `mix format`, the all-projects compile above (or `mix compile --force --warnings-as-errors` inside each app you touched), `mix credo --strict` on touched
+    files, and the tests for the touched area. Every engineer runs the Elixir tests for their own work, in their own worktree, through their machine's heavy gate. On laptop 1, use your claimed partition (claimed in qa's runbook register; domain uses `MIX_TEST_PARTITION=12`, api-ops `3`). On a worker machine, use that machine's own test Postgres and the partitions devops set up there (laptop 2's register is `~/projects/cadence/test-partitions.md` on laptop 2: 10-19 Mission Model & Spacecraft, 20-29 Commanding & Approvals). Disk floors are the same on every machine: below 25 GiB free, no new builds, suites or installs; at 22 GiB, tell the director at once (dashboards still never runs Elixir: lead, 11-17). **Side worktrees (director, 2026-11-19):** on laptop 1, side worktrees with build output are the main background disk growth (devops, 11-19: up to 1.5 GB an hour). Keep one reusable side worktree per agent and switch it between branches. Remove a side worktree the day its PR lands on the qa stack, unless you name a follow-up that needs it: check its content against develop first (`git diff`, not only `git cherry`, because of squash merges), save anything worth keeping as a patch, then `git worktree remove` from the shared tree, never `rm -rf`, and only outside qa slots and holds. Never remove another agent's worktree. devops posts a worktree survey daily at 14:00Z, and lead chases owners from it. qa runs the dev server against the dev database.
 - **Heavy jobs go through the team gate (director, 2026-11-17):** `var/heavy-gate.sh --agent <you> -- <command>`
   (status: `var/heavy-gate.sh --status`). Heavy = full suites, test directories, hooked commits, builds, vue-tsc /
   typecheck, pnpm install, credo, the architecture check. The gate waits until BOTH the 1-min and 5-min load are
   under 16 AND fewer than 2 heavy jobs run team-wide; one heavy job per agent at a time. A heavy job run outside the
   gate is a rule break. Never set the HEAVY_GATE_* variables (devops' tests only), HEAVY_GATE_HELD included. Exit 75
   means it waited 30 min and ran NOTHING: report it to lead, don't retry in a loop. qa takes the slot lock
-  (`--slot-begin '<what>'` / `--slot-end`) for its slots and hold windows; everyone else waits. Single targeted test
+  (`--slot-begin '<what>'` / `--slot-end`) for its slots and hold windows; everyone else waits. **Holds:** while a hold is active, a new
+  heavy job exits 75 at once, except a job of qa while qa holds the slot lock: that one runs through the hold, still
+  subject to load, memory and swap, and is logged in `heavy-gate.d/hold.log` as RAN-THROUGH (lead, 11-19, for the reset's
+  quiet window; laptop 2's gate is unchanged). Single targeted test
   files can run without it. Never leave watchers, dev servers or feeds running that you aren't using (qa owns the one
   shared dev stack).
 - Conventional commit messages (`feat(console): …`, `feat(api): …`) with the Co-Authored-By trailer.
@@ -171,10 +271,10 @@ docs stay the record, linked from issues.
 Once `ui/apogee-spa` has merged into `develop` and qa's dev stack runs develop:
 - Every piece of work is a feature branch off `develop`, linked to its issue. Agents push their OWN feature
   branches and open PRs into `develop`. Never push to or force-push `develop` or `main`.
-- A PR merges only after CI passes AND a different agent reviews it, with the review recorded in the PR (we
-  share one GitHub account, so the record names the reviewing agent). Only lead or the director presses merge.
-- The restart chain picks only MERGED develop commits, by SHA; qa logs the PR number with each pick. Trial
-  picks, dries and the #108 struct-hash check stay.
+- A PR merges only after CI passes AND the reviews in Squads › Review rules are recorded in the PR (we
+  share one GitHub account, so the record names the reviewing agent). Only the release lead or the director presses merge.
+- qa lands only MERGED develop commits, fast-forward only (`git merge --ff-only <sha>` on the local
+  `live/develop`), and logs the PR numbers with each landing. Dries and the #108 struct-hash check stay.
 - Until the cut-over, the rules in Git above stand (the director pushes; nothing is picked onto the frozen tip
   during the freeze).
 
