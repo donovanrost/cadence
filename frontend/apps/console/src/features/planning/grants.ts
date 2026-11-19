@@ -20,12 +20,43 @@ const grant = d.object({
   maximum_horizon_seconds: d.integer,
   maximum_contacts: d.integer,
   maximum_execution_concurrency: d.integer,
-  valid_from: d.timestamp,
-  valid_until: d.timestamp,
-  /** `expired` is computed: active with valid_until passed. */
-  state: d.known(["active", "revoked", "expired"] as const),
+  /** #283: null on a proposal (validity starts at approval, `validity_seconds` long). */
+  valid_from: d.nullable(d.timestamp),
+  valid_until: d.nullable(d.timestamp),
+  /**
+   * #283 (U105): proposals. `expired` is derived on read: an active grant past valid_until, or a
+   * proposal undecided past proposal_expires_at. An unknown state reads as unrecognized.
+   */
+  state: d.known(["proposed", "active", "rejected", "revoked", "withdrawn", "expired"] as const),
   approved_by: orNull(actor),
-  approved_at: d.timestamp,
+  approved_at: d.nullable(d.timestamp),
+  /**
+   * #283 keys, read as null when an older server leaves them out (readers first). Person objects are
+   * {id, name}, both null for a non-member.
+   */
+  validity_seconds: orNull(d.integer),
+  proposed_by: orNull(actor),
+  proposed_at: orNull(d.timestamp),
+  proposal_expires_at: orNull(d.timestamp),
+  rejected_by: orNull(actor),
+  rejected_at: orNull(d.timestamp),
+  // free-text: the reason the deciding admin gave when rejecting it.
+  rejection_reason: orNull(d.string),
+  withdrawn_by: orNull(actor),
+  withdrawn_at: orNull(d.timestamp),
+  replaces_grant_id: orNull(d.token),
+  viewer_can_decide: orNull(d.boolean),
+  cannot_decide_because: orNull(
+    d.knownText([
+      "not_admin",
+      "not_a_person",
+      "proposer",
+      "accountable",
+      "authors_unknown",
+      "not_proposed",
+    ] as const),
+  ),
+  cannot_decide_details: orNull(d.object({ grantee: orNull(actor), service: orNull(actor) })),
   // free-text: the reason the admin gave when granting it.
   reason: d.nullable(d.string),
   revoked_by: orNull(actor),
@@ -36,7 +67,7 @@ const grant = d.object({
 });
 export type Grant = Decoded<typeof grant>;
 
-const grantsReader = d.object({
+export const grantsReader = d.object({
   grants: d.array(grant, 500),
   service_identities: d.array(
     d.object({ id: d.token, name: d.string, state: d.known(["active", "disabled"] as const) }),
@@ -50,6 +81,8 @@ const grantsReader = d.object({
   }),
   policy_version: d.nullable(d.integer),
   permissions: d.array(d.known(["grants.manage"] as const), 10),
+  /** #283: the mission's approval setting for grants; null from an older server. */
+  approval_setting: orNull(d.knownText(["independent", "direct"] as const)),
 });
 export type Grants = Decoded<typeof grantsReader>;
 
@@ -90,18 +123,34 @@ export const canText = (g: Grant) => g.allowed_actions.map((a) => ACTION_WORDS[a
 export const limitsText = (g: Grant) =>
   `${formatDuration(g.maximum_horizon_seconds)} · ${plural(g.maximum_contacts, "contact")} · ${g.maximum_execution_concurrency} at once`;
 
-export function grantTag(g: Grant): { state: "nominal" | "off" | "stale"; label: string } {
+/** U105's state tags (mark + word, B2). */
+export function grantTag(g: Grant): {
+  state: "nominal" | "caution" | "off" | "stale";
+  label: string;
+} {
   switch (g.state) {
+    case "proposed":
+      return { state: "caution", label: "PROPOSED" };
     case "active":
       return { state: "nominal", label: "ACTIVE" };
     case "expired":
       return { state: "stale", label: "EXPIRED" };
+    case "rejected":
+      return { state: "off", label: "REJECTED" };
+    case "withdrawn":
+      return { state: "off", label: "WITHDRAWN" };
     case "revoked":
+      return { state: "off", label: "REVOKED" };
     case "unrecognized":
-      return { state: "off", label: g.state === "revoked" ? "REVOKED" : "UNKNOWN" };
+      return { state: "off", label: "UNKNOWN" };
   }
 }
-export const untilText = (g: Grant) => formatShort(new Date(g.valid_until));
+/** "12-19 06:40Z"; a proposal (valid_until null until approval): "30 days from approval" (U105). */
+export function untilText(g: Grant): string {
+  if (g.valid_until !== null) return formatShort(new Date(g.valid_until));
+  const days = g.validity_seconds === null ? null : Math.round(g.validity_seconds / 86_400);
+  return days === null ? "From approval" : `${plural(days, "day")} from approval`;
+}
 
 /** "Night ops bot", or its id when the identity is gone. */
 export const identityName = (g: Grant) => g.service_identity.name ?? g.service_identity.id;
