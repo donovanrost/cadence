@@ -1,6 +1,6 @@
 # Apogee QA mission (development only; #231, dev reset DECISIONS #112).
 #
-# Builds the QA mission on a fresh dev database through the product's own store and context
+# Builds the two QA missions on a fresh dev database through the product's own store and context
 # functions, the way dev/reflect_orbital/seed.exs builds Earendil (no Repo inserts):
 #
 #   - the mission qa-mission-23565 ("QA mission 23565") in the Reflect Orbital organization; it
@@ -12,7 +12,13 @@
 #     actor, never a person, so its mission model is a CANDIDATE any admin may approve;
 #   - a QA provider on the dev simulator: credential (the env variable named, never its value),
 #     account, grant to the QA mission, mission provider, then validate and sync;
-#   - one direct TCP-client transport and one downlink routing rule to 23565-1.
+#   - one direct TCP-client transport and one downlink routing rule to 23565-1;
+#   - QA mission 2, qa-mission-23566 ("QA mission 23566"; director's GO 11-18), for checks of a
+#     decision under 'direct': the same organization and rules, also with NO approval override
+#     (it reads 'independent' until lead saves 'direct' by hand in the console, reset slot); its
+#     own profile, one spacecraft QA MISSION 23566-1 (SCID 601, clear of Earendil's 1-500) with a
+#     source endpoint and Telemetry Decom, and its own copy of the catalog imported under the
+#     seed's actor, so its model is a CANDIDATE. No provider, transport or route.
 #
 # Nothing here is a decision. The spacecraft's telemetry and commanding switches stay UNSET
 # (off): qa's slot does the first start by hand (a change set, approved by a second admin), and a
@@ -47,8 +53,30 @@ defmodule Cadence.Dev.ApogeeQaMission do
 
   @organization_id F.organization_id()
   @mission_id Provider.mission_id()
-  @profile_id "profile-qa-23565"
-  @catalog_id "catalog-qa-l10-demo-copy"
+  # What differs between the two QA missions; fixed ids, so a rerun leaves what exists.
+  @qa1 %{
+    mission_id: @mission_id,
+    slug: "qa-mission-23565",
+    display_name: "QA mission 23565",
+    profile_id: "profile-qa-23565",
+    profile_name: "QA L10 profile",
+    craft: "23565",
+    catalog_id: "catalog-qa-l10-demo-copy",
+    catalog_name: "qa-l10 demo copy"
+  }
+  # QA mission 2 (director's GO 11-18): lead saves 'direct' on it in the console; never seeded.
+  @qa2 %{
+    mission_id: "mission-qa-23566",
+    slug: "qa-mission-23566",
+    display_name: "QA mission 23566",
+    profile_id: "profile-qa-23566",
+    profile_name: "QA mission 23566 profile",
+    craft: "23566",
+    catalog_id: "catalog-qa-23566-demo-copy",
+    catalog_name: "qa-23566 demo copy"
+  }
+  # Earendil holds SCIDs 1-500 (Fixture.spacecraft/0); mission 2's craft stays clear of them.
+  @qa2_scid 601
   @token_key Provider.token_key()
   @personas ~w(qa-operator@example.com qa-second@example.com qa-org-admin@example.com qa-org-admin-2@example.com)
   @metadata Provider.metadata()
@@ -71,19 +99,11 @@ defmodule Cadence.Dev.ApogeeQaMission do
     scope = admin_scope!()
     ensure_personas!()
 
-    mission = ensure_mission()
-    profile = ensure_profile()
-    craft = Enum.map([1, 2], &ensure_spacecraft(&1, profile))
-
-    Enum.each(craft, fn c ->
-      ensure_installed(
-        scope,
-        HostContext.spacecraft(@mission_id, c.spacecraft_id),
-        "telemetry_decom"
-      )
-    end)
-
-    revision = ensure_catalog()
+    mission = ensure_mission(@qa1)
+    profile = ensure_profile(@qa1)
+    craft = Enum.map([1, 2], &ensure_spacecraft(@qa1, &1, &1, profile))
+    Enum.each(craft, &ensure_decom(scope, @qa1, &1))
+    revision = ensure_catalog(@qa1)
     provider = Provider.ensure_provider(scope, offline?)
     transport = Provider.ensure_direct_transport()
     Provider.ensure_route(hd(craft), transport)
@@ -98,7 +118,35 @@ defmodule Cadence.Dev.ApogeeQaMission do
     By hand in qa's slot: the first start (switches change set) and the model approval, each
     approved by a second admin.
     """)
+
+    ensure_direct_mission(scope)
   end
+
+  # QA mission 2: no approval override (lead saves 'direct' in the console), no provider,
+  # transport or route; only what a model decision under 'direct' needs.
+  defp ensure_direct_mission(scope) do
+    mission = ensure_mission(@qa2)
+    profile = ensure_profile(@qa2)
+    craft = ensure_spacecraft(@qa2, 1, @qa2_scid, profile)
+    ensure_decom(scope, @qa2, craft)
+    revision = ensure_catalog(@qa2)
+
+    IO.puts("""
+    QA mission 2 ready: #{mission.display_name} (#{mission.slug}, #{mission.mission_id}).
+    Spacecraft: #{craft.display_name} (SCID #{craft.scid}); switches unset.
+    Catalog: #{@qa2.catalog_name}, revision #{revision.catalog_revision_id}; its model is a candidate.
+    No approval override: it reads 'independent' until lead saves 'direct' in the console.
+    No provider, transport or route.
+    """)
+  end
+
+  defp ensure_decom(scope, m, craft),
+    do:
+      ensure_installed(
+        scope,
+        HostContext.spacecraft(m.mission_id, craft.spacecraft_id),
+        "telemetry_decom"
+      )
 
   defp present?(value), do: is_binary(value) and value != ""
 
@@ -125,8 +173,8 @@ defmodule Cadence.Dev.ApogeeQaMission do
       do: raise("Run dev/apogee_qa_personas.exs first; missing: #{Enum.join(missing, ", ")}")
   end
 
-  defp ensure_mission do
-    case Cadence.Missions.fetch_mission(@organization_id, @mission_id) do
+  defp ensure_mission(m) do
+    case Cadence.Missions.fetch_mission(@organization_id, m.mission_id) do
       {:ok, mission} ->
         mission
 
@@ -134,10 +182,10 @@ defmodule Cadence.Dev.ApogeeQaMission do
         {:ok, mission} =
           Cadence.Missions.persist_mission(
             Mission.new(%{
-              mission_id: @mission_id,
+              mission_id: m.mission_id,
               organization_id: @organization_id,
-              slug: "qa-mission-23565",
-              display_name: "QA mission 23565",
+              slug: m.slug,
+              display_name: m.display_name,
               metadata: @metadata
             })
           )
@@ -146,11 +194,11 @@ defmodule Cadence.Dev.ApogeeQaMission do
     end
   end
 
-  defp ensure_profile do
+  defp ensure_profile(m) do
     case Cadence.SpacecraftTypeStore.fetch_spacecraft_type(
            @organization_id,
-           @mission_id,
-           @profile_id
+           m.mission_id,
+           m.profile_id
          ) do
       {:ok, profile} ->
         profile
@@ -160,9 +208,9 @@ defmodule Cadence.Dev.ApogeeQaMission do
           Cadence.SpacecraftTypeStore.persist_spacecraft_type(
             @organization_id,
             SpacecraftType.new(%{
-              spacecraft_type_id: @profile_id,
-              mission_id: @mission_id,
-              display_name: "QA L10 profile",
+              spacecraft_type_id: m.profile_id,
+              mission_id: m.mission_id,
+              display_name: m.profile_name,
               downlink_protocol: :tm,
               uplink_protocol: :tc,
               frame_parameters: %{
@@ -181,10 +229,10 @@ defmodule Cadence.Dev.ApogeeQaMission do
 
   # Store-created, as Earendil's craft: no change set and no approval, switches unset (domain,
   # #109; lead 11-18).
-  defp ensure_spacecraft(index, profile) do
-    id = "spacecraft-qa-23565-#{index}"
+  defp ensure_spacecraft(m, index, scid, profile) do
+    id = "spacecraft-qa-#{m.craft}-#{index}"
 
-    case Cadence.SpacecraftStore.fetch_spacecraft(@organization_id, @mission_id, id) do
+    case Cadence.SpacecraftStore.fetch_spacecraft(@organization_id, m.mission_id, id) do
       {:ok, craft} ->
         craft
 
@@ -196,9 +244,9 @@ defmodule Cadence.Dev.ApogeeQaMission do
                 @organization_id,
                 Spacecraft.new(%{
                   spacecraft_id: id,
-                  mission_id: @mission_id,
-                  display_name: "QA MISSION 23565-#{index}",
-                  scid: index,
+                  mission_id: m.mission_id,
+                  display_name: "QA MISSION #{m.craft}-#{index}",
+                  scid: scid,
                   spacecraft_type_id: profile.spacecraft_type_id,
                   spacecraft_type_version: profile.version,
                   metadata: @metadata
@@ -210,7 +258,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
                 @organization_id,
                 SourceEndpoint.new(%{
                   source_endpoint_id: "source-#{id}",
-                  mission_id: @mission_id,
+                  mission_id: m.mission_id,
                   spacecraft_id: id,
                   source_ref: craft.display_name,
                   display_name: "#{craft.display_name} TT&C",
@@ -242,38 +290,38 @@ defmodule Cadence.Dev.ApogeeQaMission do
   # an importer can't approve the model under the independent policy, and no person ran this.
   defp seed_actor, do: Actor.system("seed:apogee-qa-mission-v1", "QA mission seed")
 
-  defp ensure_catalog do
-    case Catalog.fetch_database(@organization_id, @mission_id, @catalog_id) do
+  defp ensure_catalog(m) do
+    case Catalog.fetch_database(@organization_id, m.mission_id, m.catalog_id) do
       {:ok, _} ->
         :ok
 
       {:error, :catalog_database_not_found} ->
         {:ok, _} =
-          Catalog.create_database(@organization_id, @mission_id, %{
-            catalog_database_id: @catalog_id,
-            name: "qa-l10 demo copy",
+          Catalog.create_database(@organization_id, m.mission_id, %{
+            catalog_database_id: m.catalog_id,
+            name: m.catalog_name,
             catalog_family: :combined,
             default_importer_key: "cadence_yaml",
             created_by: seed_actor(),
-            description: "The repository's demo_spacecraft.yaml, for the QA mission.",
+            description: "The repository's demo_spacecraft.yaml, for #{m.display_name}.",
             metadata: @metadata
           })
     end
 
-    case Catalog.list_revisions(@organization_id, @mission_id, @catalog_id) do
+    case Catalog.list_revisions(@organization_id, m.mission_id, m.catalog_id) do
       [revision | _] -> revision
-      [] -> import_revision()
+      [] -> import_revision(m)
     end
   end
 
-  defp import_revision do
+  defp import_revision(m) do
     source = File.read!(F.database_path())
     digest = :crypto.hash(:sha256, source) |> Base.encode16(case: :lower)
 
     artifact =
       Artifact.new(%{
-        artifact_id: "artifact-qa-23565-#{digest}",
-        mission_id: @mission_id,
+        artifact_id: "artifact-qa-#{m.craft}-#{digest}",
+        mission_id: m.mission_id,
         catalog_family: :combined,
         artifact_name: "demo_spacecraft.yaml",
         format_key: "cadence_yaml",
@@ -286,25 +334,25 @@ defmodule Cadence.Dev.ApogeeQaMission do
     {:ok, run} =
       Catalog.start_revision_import(
         @organization_id,
-        @mission_id,
-        @catalog_id,
+        m.mission_id,
+        m.catalog_id,
         artifact,
         "cadence_yaml",
         requested_by: seed_actor()
       )
 
-    await_import(run.import_run_id, 240)
+    await_import(m, run.import_run_id, 240)
 
     {:ok, revision} =
-      Catalog.fetch_revision_by_import_run(@organization_id, @mission_id, run.import_run_id)
+      Catalog.fetch_revision_by_import_run(@organization_id, m.mission_id, run.import_run_id)
 
     revision
   end
 
-  defp await_import(_id, 0), do: raise("Timed out importing demo_spacecraft.yaml")
+  defp await_import(_m, _id, 0), do: raise("Timed out importing demo_spacecraft.yaml")
 
-  defp await_import(id, remaining) do
-    {:ok, run} = Catalog.fetch_import_run(@organization_id, @mission_id, id)
+  defp await_import(m, id, remaining) do
+    {:ok, run} = Catalog.fetch_import_run(@organization_id, m.mission_id, id)
 
     case run.status do
       :completed ->
@@ -315,7 +363,7 @@ defmodule Cadence.Dev.ApogeeQaMission do
 
       _running ->
         Process.sleep(500)
-        await_import(id, remaining - 1)
+        await_import(m, id, remaining - 1)
     end
   end
 end
