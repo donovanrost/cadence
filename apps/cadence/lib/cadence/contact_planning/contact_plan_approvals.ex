@@ -13,7 +13,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
     ContactPlan,
     ContactPlanApproval,
     ContactPlans,
-    ContactPlanVersion
+    ContactPlanVersion,
+    ExpiredPasses
   }
 
   alias Cadence.Management.Contacts.Store.{
@@ -81,6 +82,26 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
       reason,
       opts
     )
+  end
+
+  @doc """
+  #273: the plan version's passes whose booking window has closed at `now`, by the ONE rule
+  (`ExpiredPasses`): `{:ok, %{ids, skipped, digest, next_expiry_at}}`. The plan read shows it (and
+  its digest) before anyone decides; the approve recomputes it under the plan row lock with the
+  decision's own `now`. Read-only.
+  """
+  @spec expired_set(binary(), binary(), binary(), pos_integer(), DateTime.t()) ::
+          {:ok, ExpiredPasses.t()} | {:error, term()}
+  def expired_set(organization_id, mission_id, plan_id, version, %DateTime{} = now)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(plan_id) and
+             is_integer(version) and version > 0 do
+    with {:ok, plan_row} <- fetch_plan_row(organization_id, mission_id, plan_id),
+         {:ok, version_row} <- fetch_version_row(plan_row, version) do
+      plan_row
+      |> selected_snapshots(ContactPlanVersionRow.to_domain(version_row))
+      |> ExpiredPasses.compute(now)
+      |> then(&{:ok, &1})
+    end
   end
 
   @spec reject(
@@ -528,14 +549,26 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   end
 
   defp lock_plan(organization_id, mission_id, plan_id) do
-    case ContactPlanRow
-         |> where(
-           [plan],
-           plan.organization_id == ^organization_id and plan.mission_id == ^mission_id and
-             plan.contact_plan_id == ^plan_id
-         )
-         |> lock("FOR UPDATE")
-         |> Repo.one() do
+    organization_id
+    |> plan_query(mission_id, plan_id)
+    |> lock("FOR UPDATE")
+    |> one_plan()
+  end
+
+  defp fetch_plan_row(organization_id, mission_id, plan_id),
+    do: organization_id |> plan_query(mission_id, plan_id) |> one_plan()
+
+  defp plan_query(organization_id, mission_id, plan_id) do
+    where(
+      ContactPlanRow,
+      [plan],
+      plan.organization_id == ^organization_id and plan.mission_id == ^mission_id and
+        plan.contact_plan_id == ^plan_id
+    )
+  end
+
+  defp one_plan(query) do
+    case Repo.one(query) do
       nil -> {:error, :contact_plan_not_found}
       row -> {:ok, row}
     end

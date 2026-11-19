@@ -8,11 +8,13 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     ContactPlanApprovals,
     ContactPlans,
     ContactRequirements,
+    ExpiredPasses,
     Planner,
     PlanSubmissions
   }
 
   alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
   alias Cadence.Spacecraft
 
@@ -325,8 +327,9 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     assert {:error, :contact_plan_requirement_changed} = approve(context)
   end
 
-  test "approval detects expired provider opportunities", context do
-    assert {:error, :contact_plan_opportunity_expired} =
+  test "approval detects expired provider opportunities: every pass closed is refused (#273)",
+       context do
+    assert {:error, {:contact_plan_all_opportunities_expired, %{ids: [_closed]}}} =
              ContactPlanApprovals.approve(
                context.admin_scope,
                @mission_id,
@@ -337,6 +340,92 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
                now: DateTime.add(@now, 18_001, :second),
                resolve_route: route_resolver()
              )
+  end
+
+  describe "passes whose booking window closed (#273, the director's two conditions)" do
+    # Two passes: A's window stays open (expires 18,000 s after @now), B's closes at 9,000 s.
+    # Deciding at 8,950 s puts B inside the 60 s lookahead, so B counts as closed.
+    setup context do
+      two_pass_plan(context)
+    end
+
+    @decided_at DateTime.add(~U[2026-07-16 20:00:00.000000Z], 8_950, :second)
+
+    test "approves the bookable pass, records the closed one as skipped, and books only the rest",
+         c do
+      assert {:ok, %{ids: [b_id]} = seen} =
+               ContactPlanApprovals.expired_set(
+                 @organization_id,
+                 @mission_id,
+                 c.plan.contact_plan_id,
+                 c.plan.current_version,
+                 @decided_at
+               )
+
+      assert b_id == c.b.contact_opportunity_snapshot_id
+
+      assert {:ok, _plan, _version, approval} =
+               approve_two(c, expected_expired_digest: seen.digest)
+
+      assert approval.skipped == [%{"snapshot_id" => b_id, "reason" => "opportunity_expired"}]
+
+      assert [%{skipped_document: [%{"snapshot_id" => ^b_id}]}] =
+               Cadence.Repo.all(
+                 from(row in ContactPlanApprovalRow,
+                   where: row.contact_plan_id == ^c.plan.contact_plan_id
+                 )
+               )
+
+      assert {:ok, approved} =
+               ManagementContacts.fetch_approved_plan(
+                 @organization_id,
+                 @mission_id,
+                 c.plan.contact_plan_id
+               )
+
+      assert approved.opportunity_snapshot_ids == [c.a.contact_opportunity_snapshot_id]
+    end
+
+    test "an approver who didn't see the closed pass is refused with the current set; nothing is recorded",
+         c do
+      assert {:error, {:contact_plan_expired_passes_changed, %{ids: [b_id], digest: digest}}} =
+               approve_two(c, [])
+
+      assert b_id == c.b.contact_opportunity_snapshot_id
+
+      assert ContactPlanApprovals.list(@organization_id, @mission_id, c.plan.contact_plan_id) ==
+               []
+
+      # The retry with the set the refusal carried approves (lead: the loop is quick).
+      assert {:ok, _plan, _version, %{skipped: [_]}} =
+               approve_two(c, expected_expired_digest: digest)
+    end
+
+    test "every pass closed is refused first, even with the right digest", c do
+      later = DateTime.add(@decided_at, 9_100, :second)
+
+      assert {:ok, seen} =
+               ContactPlanApprovals.expired_set(
+                 @organization_id,
+                 @mission_id,
+                 c.plan.contact_plan_id,
+                 c.plan.current_version,
+                 later
+               )
+
+      assert {:error, {:contact_plan_all_opportunities_expired, %{ids: [_, _]}}} =
+               approve_two(c, expected_expired_digest: seen.digest, now: later)
+
+      assert ContactPlanApprovals.list(@organization_id, @mission_id, c.plan.contact_plan_id) ==
+               []
+    end
+
+    test "nothing closed: the empty set's digest approves and nothing is skipped", c do
+      early = DateTime.add(~U[2026-07-16 20:00:00.000000Z], 2, :second)
+
+      assert {:ok, _plan, _version, %{skipped: []}} =
+               approve_two(c, expected_expired_digest: ExpiredPasses.digest([]), now: early)
+    end
   end
 
   describe "no self-approval under 'independent' approval (director 11-15)" do
@@ -657,6 +746,81 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
       now: DateTime.add(@now, 2, :second),
       resolve_route: route_resolver(),
       acknowledged_exceptions: acknowledged
+    )
+  end
+
+  defp two_pass_plan(context) do
+    assert {:ok, requirement, requirement_version} =
+             ContactRequirements.create(
+               context.member_scope,
+               @mission_id,
+               requirement_attrs(%{contact_count: 2, rationale: "Two downlinks"}),
+               now: @now
+             )
+
+    assert {:ok, planning} =
+             Planner.run(
+               context.member_scope,
+               @mission_id,
+               requirement.contact_requirement_id,
+               requirement_version.version,
+               now: @now,
+               list_routes: fn _, _, _ -> {:ok, %{routes: [route()], findings: []}} end,
+               search_opportunities: fn _, _, _, _, _ ->
+                 {:ok,
+                  %{
+                    opportunities: [
+                      opportunity(%{"id" => "opportunity-a"}),
+                      opportunity(%{
+                        "id" => "opportunity-b",
+                        "starts_at" => iso(9_600),
+                        "ends_at" => iso(10_500),
+                        "expires_at" => iso(9_000)
+                      })
+                    ]
+                  }}
+               end
+             )
+
+    [a, b] = Enum.sort_by(planning.snapshots, & &1.expires_at, {:desc, DateTime})
+
+    assert {:ok, plan, version} =
+             ContactPlans.create(
+               context.member_scope,
+               @mission_id,
+               %{
+                 planning_run_ids: [planning.run.contact_planning_run_id],
+                 selected_snapshot_ids: [
+                   a.contact_opportunity_snapshot_id,
+                   b.contact_opportunity_snapshot_id
+                 ],
+                 rationale: "Commit both windows"
+               },
+               now: @now
+             )
+
+    assert {:ok, pending} =
+             ContactPlans.submit(
+               context.member_scope,
+               @mission_id,
+               plan.contact_plan_id,
+               plan.current_version,
+               "Ready for review",
+               now: DateTime.add(@now, 1, :second)
+             )
+
+    %{plan: pending, plan_version: version, a: a, b: b}
+  end
+
+  defp approve_two(c, opts) do
+    ContactPlanApprovals.approve(
+      c.admin_scope,
+      @mission_id,
+      c.plan.contact_plan_id,
+      c.plan.current_version,
+      c.plan_version.content_sha256,
+      "Reviewed",
+      Keyword.merge([now: @decided_at, resolve_route: route_resolver()], opts)
     )
   end
 
