@@ -67,10 +67,12 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
     point_name = packet_definition.packet_name <> "." <> field_definition.name
 
     %Sample{
+      # #161: the packet's id, never the evidence's. A journaled packet's id is its journal
+      # position (#71), so a replay that batches the journal differently re-derives the same
+      # sample ids; a packet without one keeps its evidence-scoped id, one sample per receipt.
       sample_id:
         "sample_" <>
           ContentHash.term_sha256({
-            packet_record.evidence_id,
             packet_record.packet_id,
             packet_definition.packet_definition_id,
             field_definition.field_id,

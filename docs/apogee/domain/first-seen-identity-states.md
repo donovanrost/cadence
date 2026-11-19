@@ -41,7 +41,7 @@ The per-identity `ObservationIdentityStateChanged` facts are published as before
 - **Checks:**
   - the fetched row must carry the decided identity;
   - its revision comes from the row (the storage provenance `"revision"`, which QuestDB's physical reader now selects, as ETS and Postgres already carried it);
-  - the `observation_id` digest must agree with that revision.
+  - the `observation_id` digest must agree with that revision. Since #161 the digest is (identity, sample, packet, revision): the evidence that carried the sample isn't part of it, so a re-batched replay is the same observation (no legacy form, DECISIONS #112).
 - **Facts not stored anywhere:** `observable_id` is taken as `point_id`. No write path passes another one, and a tripwire test fails if one starts to.
 - **Any error writes nothing:** a missing field, store unreachable, not found, identity or revision mismatch.
 

@@ -303,6 +303,45 @@ defmodule Cadence.SemanticRuntimeTest do
              ["timer:algorithm:heartbeat", 0, DateTime.to_unix(at, :microsecond)]
   end
 
+  # #161/#162: an algorithm output's id derives from its trigger's update id (the sample id, which
+  # comes from the packet), never from the evidence its inputs arrived in. A replay that batches
+  # the journal differently re-derives the same output ids, and the monitoring rows over them.
+  test "an algorithm output's id doesn't depend on the evidence its inputs arrived in" do
+    plan = %{
+      algorithms: [
+        AlgorithmPlan.new(%{
+          algorithm_id: "algorithm:double",
+          input_parameter_ids: ["parameter:raw"],
+          outputs: [
+            %{
+              parameter_id: "parameter:double",
+              qualified_name: "/parameters/double",
+              expression: expression({:*, {:parameter, "parameter:raw"}, {:literal, 2}}, :number)
+            }
+          ]
+        })
+      ],
+      monitoring: []
+    }
+
+    at = ~U[2026-11-19 21:00:00.000000Z]
+
+    output_ids = fn evidence_id ->
+      input = %{
+        update("sample_raw", 21, at)
+        | metadata: %{evidence_id: evidence_id, packet_id: "packet-1"}
+      }
+
+      {:ok, result, _state} = Cadence.SemanticRuntime.process(%State{}, [input], plan)
+
+      for %{parameter_id: "parameter:double"} = output <- result.parameter_updates,
+          do: output.update_id
+    end
+
+    assert [id] = output_ids.("evidence-whole")
+    assert output_ids.("evidence-rebatched") == [id]
+  end
+
   defp framed(update, offset, at),
     do: %{
       update
