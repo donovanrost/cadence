@@ -53,9 +53,8 @@ defmodule CadenceWeb.ControlPlaneCatalogApiTest do
                "catalog_family" => "combined",
                "format_key" => "cadence_yaml",
                "content_sha256" => content_sha256,
-               "uploaded_by" => %{
-                 "service_identity_id" => "svc-bootstrap"
-               }
+               # #366: #146's shape, never the stored actor document.
+               "uploaded_by" => %{"kind" => "service", "name" => "Control Plane Test Service"}
              }
            } = json_response(artifact_conn, 201)
 
@@ -102,9 +101,8 @@ defmodule CadenceWeb.ControlPlaneCatalogApiTest do
                "importer_key" => "cadence_yaml",
                "importer_version" => 2,
                "status" => "running",
-               "requested_by" => %{
-                 "service_identity_id" => "svc-bootstrap"
-               }
+               # #366: #146's shape, never the stored actor document.
+               "requested_by" => %{"kind" => "service", "name" => "Control Plane Test Service"}
              }
            } = json_response(import_run_conn, 201)
 

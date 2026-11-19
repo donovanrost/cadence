@@ -12,6 +12,7 @@ defmodule CadenceWeb.API.CatalogJSON do
   }
 
   alias Cadence.Catalog.{Artifact, ImporterDescriptor, ImportRun}
+  alias Cadence.Reads.Catalog.Requesters
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
   @spec packet_definition(PacketDefinition.t()) :: map()
@@ -42,8 +43,12 @@ defmodule CadenceWeb.API.CatalogJSON do
     }
   end
 
-  @spec catalog_artifact(Artifact.t()) :: map()
-  def catalog_artifact(%Artifact{} = artifact) do
+  @doc """
+  One catalog artifact. `uploaded_by` is #146's shape, `{kind, name} | null`, by the same rule as
+  an import run's `requested_by` (#366); `names` is `Requesters.names/2` over the artifacts rendered.
+  """
+  @spec catalog_artifact(Artifact.t(), map()) :: map()
+  def catalog_artifact(%Artifact{} = artifact, names) do
     %{
       artifact_id: artifact.artifact_id,
       organization_id: artifact.organization_id,
@@ -56,14 +61,20 @@ defmodule CadenceWeb.API.CatalogJSON do
       media_type: artifact.media_type,
       source_artifact: artifact.source_artifact,
       content_sha256: artifact.content_sha256,
-      uploaded_by: artifact.uploaded_by,
+      uploaded_by: Requesters.requested_by(artifact.uploaded_by, names),
       uploaded_at: iso8601(artifact.uploaded_at),
       metadata: artifact.metadata
     }
   end
 
-  @spec catalog_import_run(ImportRun.t()) :: map()
-  def catalog_import_run(%ImportRun{} = import_run) do
+  @doc """
+  One import run. `requested_by` is #146's shape, `{kind, name} | null` (#366, mms-security): a
+  person is named only while an active member of the run's organization, a service only when it
+  belongs to it, never by email or id. `names` comes from `Requesters.names/2` over the runs being
+  rendered (one batched lookup per response).
+  """
+  @spec catalog_import_run(ImportRun.t(), map()) :: map()
+  def catalog_import_run(%ImportRun{} = import_run, names) do
     %{
       import_run_id: import_run.import_run_id,
       organization_id: import_run.organization_id,
@@ -78,7 +89,7 @@ defmodule CadenceWeb.API.CatalogJSON do
       diagnostics: Enum.map(import_run.diagnostics, &catalog_diagnostic/1),
       result_document: import_run.result_document,
       failure_reason: import_run.failure_reason,
-      requested_by: import_run.requested_by,
+      requested_by: Requesters.requested_by(import_run.requested_by, names),
       started_at: iso8601(import_run.started_at),
       completed_at: iso8601(import_run.completed_at),
       metadata: import_run.metadata

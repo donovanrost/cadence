@@ -76,6 +76,7 @@ defmodule Cadence.Reads.CatalogOverview do
       |> Catalog.list_revisions(mission_id, artifact.catalog_database_id)
       |> Enum.filter(&(&1.artifact_id == artifact.artifact_id))
       |> Enum.map(&revision(&1, Map.get(runs_by_id, &1.import_run_id), usage, labels, mission_id))
+      |> named_actors(organization_id)
 
     revision_by_run = Map.new(revisions, &{&1.import_run_id, &1})
 
@@ -94,7 +95,7 @@ defmodule Cadence.Reads.CatalogOverview do
         size_bytes: size(artifact.source_artifact),
         sha256: artifact.content_sha256,
         uploaded_at: artifact.uploaded_at,
-        uploaded_by: actor(artifact.uploaded_by),
+        uploaded_by: named(organization_id, artifact.uploaded_by),
         database: database && %{id: database.catalog_database_id, name: database.name},
         download_url: download_url(mission_id, artifact.artifact_id)
       },
@@ -118,6 +119,7 @@ defmodule Cadence.Reads.CatalogOverview do
       |> Catalog.list_revisions(mission_id, id)
       |> Enum.take(@revision_limit)
       |> Enum.map(&revision(&1, Map.get(runs_by_id, &1.import_run_id), usage, labels, mission_id))
+      |> named_actors(organization_id)
 
     revision_by_run = Map.new(revisions, &{&1.import_run_id, &1})
 
@@ -169,7 +171,8 @@ defmodule Cadence.Reads.CatalogOverview do
       telemetry_count: nil,
       spacecraft_count: Map.get(usage, revision.catalog_revision_id, 0),
       imported_at: run && run.completed_at,
-      actor: actor(revision.created_by),
+      # Named after the list is built (named_actors/2), one batched lookup.
+      actor: revision.created_by,
       import_run_id: revision.import_run_id,
       model_revision_id: revision.mission_model_revision_id
     }
@@ -331,18 +334,15 @@ defmodule Cadence.Reads.CatalogOverview do
   defp size(bytes) when is_binary(bytes), do: byte_size(bytes)
   defp size(_other), do: nil
 
-  # Catalog.Actor's name/email, else the REST API's actor document (ControlPlaneAccess), so an
-  # import made over the API names its person or service too (lead 11-17).
-  @actor_names ~w(name email user_display_name user_email service_identity_display_name)
+  # #366 (mms-security, #146's rule): who uploaded a file or made a revision is named as import
+  # runs' requested_by is (Requesters): a person only while an active member of the mission's
+  # organization, a service only when it belongs to it, Cadence by its system name. The name or
+  # email stored in the actor document is never sent. `{kind, name}`, or nil with no actor.
+  defp named(organization_id, by),
+    do: Requesters.requested_by(by, Requesters.names(organization_id, [by]))
 
-  defp actor(%{} = by) do
-    Enum.find_value(@actor_names, fn key ->
-      case Map.get(by, key) do
-        name when is_binary(name) and name != "" -> %{name: name}
-        _missing -> nil
-      end
-    end)
+  defp named_actors(revisions, organization_id) do
+    names = Requesters.names(organization_id, Enum.map(revisions, & &1.actor))
+    Enum.map(revisions, &%{&1 | actor: Requesters.requested_by(&1.actor, names)})
   end
-
-  defp actor(_other), do: nil
 end

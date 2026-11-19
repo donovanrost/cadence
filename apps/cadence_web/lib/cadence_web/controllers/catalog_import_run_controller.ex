@@ -1,13 +1,14 @@
 defmodule CadenceWeb.CatalogImportRunController do
   use CadenceWeb, :controller
 
-  action_fallback CadenceWeb.FallbackController
+  action_fallback(CadenceWeb.FallbackController)
 
   alias CadenceWeb.API.CatalogJSON, as: CatalogJSON
 
   alias CadenceWeb.API.CatalogParams, as: CatalogParams
 
   alias Cadence.Catalog.ImportRun
+  alias Cadence.Reads.Catalog.Requesters
   alias CadenceWeb.ControlPlaneAccess
 
   def index(conn, %{"organization_id" => organization_id, "mission_id" => mission_id} = params) do
@@ -18,11 +19,10 @@ defmodule CadenceWeb.CatalogImportRunController do
              mission_id
            ),
          {:ok, filters} <- CatalogParams.catalog_import_run_filters(params) do
-      import_runs =
-        Cadence.Catalog.list_import_runs(organization_id, mission_id, filters)
-        |> Enum.map(&CatalogJSON.catalog_import_run/1)
+      runs = Cadence.Catalog.list_import_runs(organization_id, mission_id, filters)
+      names = Requesters.names(organization_id, Enum.map(runs, & &1.requested_by))
 
-      json(conn, %{data: import_runs})
+      json(conn, %{data: Enum.map(runs, &CatalogJSON.catalog_import_run(&1, names))})
     end
   end
 
@@ -52,7 +52,7 @@ defmodule CadenceWeb.CatalogImportRunController do
            ) do
       conn
       |> put_status(:created)
-      |> json(%{data: CatalogJSON.catalog_import_run(import_run)})
+      |> json(%{data: one(organization_id, import_run)})
     end
   end
 
@@ -69,7 +69,15 @@ defmodule CadenceWeb.CatalogImportRunController do
            ),
          {:ok, %ImportRun{} = import_run} <-
            Cadence.Catalog.fetch_import_run(organization_id, mission_id, import_run_id) do
-      json(conn, %{data: CatalogJSON.catalog_import_run(import_run)})
+      json(conn, %{data: one(organization_id, import_run)})
     end
   end
+
+  # #366: requested_by in #146's shape, named under the run's organization only.
+  defp one(organization_id, %ImportRun{} = import_run),
+    do:
+      CatalogJSON.catalog_import_run(
+        import_run,
+        Requesters.names(organization_id, [import_run.requested_by])
+      )
 end

@@ -70,7 +70,9 @@ defmodule Cadence.MissionModels.ReimportSeparationTest do
     assert {:ok, %{viewer_is_importer: true, cannot_decide_because: "self_approval"}} =
              MissionModelApprovals.read(reimporter, c.mid, orphan)
 
-    assert {:ok, %{viewer_is_importer: false, imported_by: %{id: "reimporter-b"}} = read} =
+    # #366: "reimporter-b" has no membership row here, so imported_by names no one (no id either);
+    # the importer still counts for separation, as viewer_is_importer above shows.
+    assert {:ok, %{viewer_is_importer: false, imported_by: %{id: nil, name: nil}} = read} =
              MissionModelApprovals.read(scope(c.organization, "admin-c"), c.mid, orphan)
 
     refute read.cannot_decide_because == "self_approval"
