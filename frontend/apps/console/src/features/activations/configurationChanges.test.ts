@@ -121,7 +121,7 @@ describe("#235 what a spacecraft configuration request changes", () => {
     );
     const same = read({ groups: [group({ rows: [], spacecraft: [nameless] })], total: 1 }).groups
       .items[0];
-    expect(same && noChangesLine(same)).toBe(
+    expect(same && noChangesLine(same, false)).toBe(
       "Nothing changes for this spacecraft: this configuration matches what's active.",
     );
 
