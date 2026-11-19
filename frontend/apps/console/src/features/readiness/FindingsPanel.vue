@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApButton, ApCallout, ApListRow, ApPanel } from "@/ui";
+import { ApButton, ApCallout, ApListRow, ApPanel, plural } from "@/ui";
 import type { Readiness } from "./api.ts";
 import { fixLink, groupedMeta, orderedFindings, severityState, severityWord } from "./present.ts";
 
