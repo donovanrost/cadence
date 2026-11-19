@@ -27,8 +27,8 @@ domain's scratch `mm-before/` (catalog.sh, sample1.sh, sample2.sh).
 | `semantic_runtime_checkpoints` | 88,863 updates on 48 rows | ~17,900 | ~470 | small, but each update hashes the full 24 KB state | a per-commit checkpoint pointer | **1** (#94) |
 | `telemetry_observation_identity_states` | 12,951,936 | ~2.6 M | ~68,500 | ~1.08 KB → ~0.6 KB | per observation | not the overhaul: #359 (built; retention dry → live) |
 | `protocol_archive_record_entries` | 2,068,712 | ~417 k | ~10,900 | ~2.3 KB | the archive | no |
-| `operational_events` | 98,568 | ~19,900 | ~520 | **~14.4 KB** for `source_watermark_advanced`, 655 of 715 sampled | watermark events | no (see below) |
-| `data_source_watermark_events` | 88,530 | ~17,800 | ~470 | ~4.9 KB (payload 4.5 KB) | watermark history | no (see below) |
+| `operational_events` | 98,568 | ~19,900 | ~520 | **~2.5 KB** for `source_watermark_advanced` since 11-16 (newest 500); 24 KB before f3bebae6b | watermark events | no (see below) |
+| `data_source_watermark_events` | 88,530 | ~17,800 | ~470 | ~0.7 KB since 11-16 (newest 500) | watermark history | no (see below) |
 
 **About 1.25 GB/day** of `semantic_runtime_commits` writes (88,873 × ~70 KB over 4.96 days),
 retired later, so it is written and deleted rather than kept. DECISIONS #96's own estimate was
@@ -56,13 +56,18 @@ dev. `Limits.start_evaluate` and `DerivedTelemetry.start_evaluate` have **no pro
 tests (`limits.ex:229`, `derived_telemetry.ex:31`). Retiring them removes no DB load on dev. Its
 value is correctness: one evaluator, compile-time reference checks, and ux's monitoring lane.
 
-### Outside the overhaul, but cheap DB-load wins
+### Outside the overhaul
 
-- **Watermark events.** `operational_events` rows of kind `source_watermark_advanced` are ~14 KB
-  each (payload ~6.9 KB, metadata ~6.2 KB), about 260 MB/day. `data_source_watermark_events` adds
-  ~4.9 KB per event, about 85 MB/day. DECISIONS #101 already approved trimming the watermark payload
-  to "counts, first/last and range". It is not built. It needs no overhaul work and could go to
-  whichever squad owns data-source projections.
+- **Watermark events (corrected 11-19 ~21:00Z).** The first version of this plan said these were
+  ~345 MB/day and that DECISIONS #101's trim wasn't built. Both were wrong.
+  - The trim landed 11-16 (f3bebae6b; fe-ops found it). My whole-table sample mixed 24 KB rows from
+    before it with 2.5 KB rows from after.
+  - Measured on post-trim rows only (newest 500 of each, 11-19 19:36-19:43Z, ~18.5k events/day):
+    - `source_watermark_advanced` events are 2,477 B, about 46 MB/day;
+    - `data_source_watermark_events` rows are 680 B, about 12 MB/day.
+  - qa's own post-trim sample came to ~45 MB/day.
+  - The rest of #101's trim would save ~13 MB/day, under lead's 50 MB/day bar, so #441 is parked
+    behind #243 (lead, fe-ops).
 - **The identity states** are #359: built, dry on dev, live after qa's comparison.
 
 ## 2. The phases, in build order
