@@ -62,6 +62,29 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceSwitchesAPITest do
              active.entries[c.craft.spacecraft_id]["document"]
   end
 
+  # #272 (fe-setup's #269 review): the console path can't go around review. The client picks the
+  # intent, but on a mission whose setting requires review an 'activate' is refused one layer
+  # down (activation_policy_changed); this pins it at the route, with nothing applied.
+  test "on a mission that requires review, submit with intent activate is a 409 and applies nothing",
+       c do
+    data = workspace(c)
+
+    document =
+      Map.merge(data["document"], %{
+        "catalog_revision_id" => c.catalog,
+        "telemetry_source_endpoint_id" => c.endpoint,
+        "handled_apids" => [42]
+      })
+
+    assert %{"data" => saved} = put_draft(c, data["token"], document) |> json_response(200)
+
+    assert %{"error" => %{"code" => "activation_policy_changed"}} =
+             submit(c, saved, "activate") |> json_response(409)
+
+    {:ok, active} = Active.load(c.mission)
+    refute Map.has_key?(active.entries, c.craft.spacecraft_id)
+  end
+
   test "a change set flips a switch after the draft was saved: submit is a 409 in ux's words",
        c do
     data = workspace(c)
