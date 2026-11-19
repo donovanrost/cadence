@@ -3371,7 +3371,13 @@ are api's, switched on with `knownErrorCode`.
     skipped." with `Show 36` (spacecraft, station, AOS; U61's list). The commit counts only bookable passes: `Approve
     and book 1,476 passes`, and so does the confirm body. Re-plan: "3 of the proposal's passes can't be booked any
     more… Applying it books the other 37; the 3 are recorded as skipped."
-  - **While the page is open:** when now passes `next_expiry_at` (the server's next close, its margin applied), a
+  - **No window from the provider** (domain fails closed: a pass without a usable `expires_at` counts as closed and
+    is skipped): its `Show` row reads "No booking window from the provider" in place of a close time, and while any
+    listed item has none, the sentence's clause reads "their booking window has closed, or the provider gave none"
+    (U20: "closed" alone would claim what isn't known). The record and audit then say "skipped (no open booking
+    window)".
+  - **While the page is open:** when now passes `next_expiry_at` (the server's next close with its `expiry_margin_seconds` already applied; the
+    console adds no margin), a
     caution line: "A pass's booking window has closed since this loaded. Reload to update the list." Never keyed on
     AOS. With `next_expiry_at` null, no line.
   - **409 `contact_plan_all_opportunities_expired`** (checked first): U61's all-expired line, and up front the same
