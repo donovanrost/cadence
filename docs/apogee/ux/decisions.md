@@ -3349,7 +3349,10 @@ are api's, switched on with `knownErrorCode`.
     was drafted, so it's superseded and can't be booked. Your approval wasn't recorded. Draft the day again." As the
     partial line's reason: "it's superseded by newer contact rules".
   - 422 `acknowledgements_required` (`missing`): "Not approved: 3 gaps need a reason first. Your approval wasn't
-    recorded. Give a reason for each, then approve." (A gap is an uncovered spacecraft, U23.)
+    recorded. Give a reason for each, then approve." (A gap is an uncovered spacecraft, U23.) When the count can't
+    be worked out (no `missing`, or it doesn't match the plan the console has): "Not approved: some gaps need a
+    reason first. Your approval wasn't recorded. Give a reason for each, then approve." Never a number that may be
+    wrong (U20), and never the unknown-code line for this known code (ux, from ca-ux's #338 review).
   - 422 `plan_not_ready` (`unmet`, `conflicts`): with conflicts, "Not approved: 2 of R41's passes conflict with other
     bookings, so it can't be booked. Your approval wasn't recorded. Send it back so it can be planned again." With
     unmet only, "Not approved: R41 isn't ready to approve: 10 spacecraft aren't covered. Your approval wasn't
@@ -3892,10 +3895,17 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   - 409 `approval_policy_changed` (`kind: "automation_grants"`; until #201, api's interim name): "Not approved: the
     mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. It has to
     be proposed again."
-  - 403 `authenticated_user_required` (a service, even one with organization_admin; REST or backstop; the code U104
-    uses): "Not
-    approved: only a person can approve a grant, not a service identity. Your approval wasn't recorded." For propose: "Not proposed: only a person
-    can propose a grant, not a service identity."
+  - 403 `authenticated_user_required` (a service, even one with organization_admin; the code U104 uses). Every grant
+    act is person-only (mms-security, #283; #282's default): a leaked service token must not decide, narrow or
+    switch off automation. **Unreachable today:** there's no REST grant route and a service can't sign in to the
+    console, so the domain rule is the backstop and these lines are for any future surface:
+    - Approve: "Not approved: only a person can approve a grant, not a service identity. Your approval wasn't
+      recorded."
+    - Propose: "Not proposed: only a person can propose a grant, not a service identity."
+    - Reject: "Not rejected: only a person can reject a grant, not a service identity. Nothing changed."
+    - Narrow: "Not narrowed: only a person can narrow a grant, not a service identity. Nothing changed."
+    - Revoke: "Not revoked: only a person can revoke a grant, not a service identity. Nothing changed." Revoke stays
+      one person and immediate; it just has to be a person.
   - Replays (approve, reject and narrow take an `operation_id`, as #257's plans): the same id and body returns the
     original answer with `replayed: true`, shown as this one's result. 409 `duplicate_operation`: "Not approved:
     Cadence matched this to an earlier, different request, so your approval wasn't recorded. Reload and try again."
