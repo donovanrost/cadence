@@ -3538,6 +3538,35 @@ occurs.
 - **Retired** (in the read's vocabulary, but nothing on develop sets it): it reads as the unknown-status case,
   with only the first sentence and `Open rev 4`, and no C3. It never reads like approved, because that would offer
   a rollout the model gate may refuse. It gets its own line once domain defines what retired means.
+- **The same content in another catalog database** (domain's #119 ruling): within one catalog database a match
+  makes no revision (above). Identical content uploaded into a *different* database of the mission does make that
+  database's revision (its rev 1, say), naming the existing model revision. That revision already carries its
+  decision: it can't be approved again or reopened, and one decision covers both. The run made a revision, so none
+  of the "no new revision" lines apply. The header is the normal one for this database (`Catalog rev 1` for a first
+  import). The verdict callout names both revisions, with the other database's name:
+  - Approved (info): "Imported as catalog rev 1 of Payload catalog. Its content is the same as catalog rev 4 of Bus
+    catalog, approved by Ana R. at 11-15 09:12Z, so rev 1 is approved too." C3 stays.
+  - Waiting (caution): "Imported as catalog rev 1 of Payload catalog. Its content is the same as catalog rev 4 of
+    Bus catalog, which is waiting for approval. One approval covers both." No C3 (U102). The `cannot_approve`
+    sentence follows, as above.
+  - Rejected (caution): "Imported as catalog rev 1 of Payload catalog. Its content is the same as catalog rev 4 of
+    Bus catalog, which was rejected by Ana R. at 11-15 09:12Z: “Wrong FSW build.” So rev 1 is rejected too, and
+    spacecraft can't move to it. To try again, correct the catalog and import the corrected file." No C3.
+  - Missing parts follow the rules above: who and when together or not at all, no reason means no quote, and an
+    unnumbered match reads "a catalog revision of Bus catalog". With no database name, "of Bus catalog" becomes "in
+    another catalog of this mission", never an id. An unknown status: the first two sentences only ("Imported as
+    catalog rev 1 of Payload catalog. Its content is the same as catalog rev 4 of Bus catalog.").
+  - Both revisions link: `Open rev 4 of Bus catalog` beside the callout. This run's own rev 1 is the page's
+    subject.
+  - Runs table: the normal tag for a new revision, plus `Same as Bus catalog rev 4` (info).
+  - Data (mms-engineer to confirm): the run's own `revision` is set, which tells this case from a same-database match
+    (where it's null); `matched_revision.database {id, name|null}`.
+- **A source file whose content matched** (U103's source-file page): a file uploaded with content that matches a
+  revision in the same database has a valid run and no revision of its own. So "Revisions from this file" doesn't
+  show its usual empty state ("No revisions yet. An import of this file becomes a revision once it's valid.",
+  which would be false). It reads "This file made no revision of its own: its content matches catalog rev 4." with
+  `Open rev 4` (unnumbered: "…matches a catalog revision that already exists."). Data: the page's
+  `import_runs[].matched`.
 - **Import runs table:** the Status tag reads `Matches rev 4` (info). For a rejected match it reads
   `Matches rejected rev 4` (caution, mark + word). Never `Succeeded`, which would imply a new revision.
 - **Technical details** (closed): the run's result as sent (`matched existing · rejected`) and the mission model
