@@ -18,6 +18,18 @@ config, dependency or `dev.exs` change; code changes hot-reload).
 | Main checkout (not ours) | Phoenix :4001, simulator :4101, db `cadence_dev`, QuestDB :9000/:9009/:8812 (compose, `var/questdb`) | | `~/projects/cadence/cadence`. Don't touch. |
 | User's ex-orbital-dynamics demo (not ours) | :4000, Vite :5180 | | why the console moved to 5181 |
 
+**Last landing on ui/apogee-spa (frozen 2026-11-18 20:30Z, director):** `5f32ed4c7`, the tip after qa's 20:01Z
+P3 step 1 + U76 + #226(b) restart (picks `ccec675e4` → `7ec082785`, `b72284662` → `20f96dbb2`, `c8868cabe` → `79d25fefe`,
+`451fbbb0f` → `5f32ed4c7`; migrations 20261117160000, 20261117213000, 20261118040000 run one at a time with the node
+down; post-checks PASS). Nothing was picked or committed onto ui/apogee-spa after it; it stays at `5f32ed4c7` as the
+read-only archive. **Cut-over (11-19):** PR #251 merged the team branch into develop as `bfec0a4de` at about 02:54Z, and
+qa's cut-over restart ran 03:27:40-03:30:04Z (post-checks PASS). The shared tree now runs on the LOCAL branch
+`live/develop` (never pushed), which never carries a local commit. From the cut-over every set is a PR into develop
+from its author's own branch, with CI green and a different agent's review in the PR; only lead or the director
+merges. qa lands merged develop SHAs on the dev stack with `git merge --ff-only <sha>` in a qa slot, quoting
+`git log HEAD..<sha>` (exactly the planned PRs); if ff-only refuses, qa stops and asks lead. qa's own docs and
+runbook changes also go as PRs.
+
 The worktree is fully isolated from the main checkout: its own DB (so our migrations never alter
 `cadence_dev`), its own simulator (so reservations don't collide), and its own ports.
 
@@ -57,6 +69,13 @@ From the repo root of this worktree, each long-running command in its own pane:
 #    var/qa-erlang-cookie (git-ignored, mode 600; NEVER ~/.erlang.cookie; never in a committed file).
 #    Create it once: (umask 077; head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40 > var/qa-erlang-cookie)
 #    Check after any restart: lsof -nP -iTCP -sTCP:LISTEN | grep -E 'epmd|beam' shows 127.0.0.1 only.
+#    ANY OTHER distributed node on this machine (tests with :peer, probes, spikes; only with qa's OK) runs with
+#      env -u ERL_EPMD_ADDRESS -u ERL_EPMD_PORT ERL_AFLAGS='-start_epmd false -kernel inet_dist_use_interface {127,0,0,1}'
+#    (:peer children inherit ERL_AFLAGS). Every distributed node otherwise runs 'epmd -daemon' itself, and macOS lets
+#    a wildcard *:4369 bind beside our loopback-only epmd: on 11-19 02:14:19Z a :peer test started a second epmd on
+#    ALL interfaces (pid 17796, nothing registered; qa killed it BY PID at 02:17:3xZ). Never 'epmd -kill': it stops
+#    the epmd it reaches, which is the real one. Checked by qa 02:18Z: with the flags above a node registers with the
+#    running epmd and no new one starts. After any such run: pgrep -x epmd shows ONE pid, LISTEN on 127.0.0.1/::1 only.
 cd apps/cadence_simulator
 # --sname qa_sim makes it reachable over RPC (fault injection, e.g. UplinkSessions.arm/2, 9f09dd32).
 #    Its store is DETS, so a restart keeps bookings. Output goes to var/qa-simulator.log (director:
@@ -139,10 +158,10 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev \
 CADENCE_DEV_DATABASE=cadence_apogee_dev \
   mise exec -- mix run --no-start ../../dev/reflect_orbital_planning.exs
 
-# 6. Activate the fleet (once; rerunnable). From the repo root. --single-operator sets
-#    Earendil's *configuration activation* policy to direct, in this DB only (not commanding).
-EARENDIL_CADENCE_NODE=cadence_apogee \
-  mise exec -- elixir --sname earendil_setup_apogee --cookie "$(cat ../../var/qa-erlang-cookie)" dev/reflect_orbital_activate.exs --single-operator
+# 6. Activate the fleet: IN THE CONSOLE ONLY (director 11-18). dev/reflect_orbital_activate.exs is never run on
+#    this stack, in any mode: Earendil's first activation is a four-eyes console activation (stager and
+#    approver different agents, each recorded), done in the slot before Earendil's first pass. See
+#    var/qa-dev-reset-plan-draft.md, step 6 'Activation' (11-21 dev reset).
 
 # ARMED PASSES (director, 2026-11-10). When a command group waits for a real pass:
 #  - No simulator run pause/resume and no :4011 or simulator restart within 1 h of its AOS.
@@ -389,6 +408,32 @@ and this stack's QuestDB only. devops samples disk before and after (qa pastes t
 
 Growth this slot can't stop: identity_states adds ~3.6 GB/day until domain's change (a) stops writing a state for a
 first-seen canonical observation (#99).
+
+## Daily contact-plan horizon check
+
+(Director via lead, 11-19.) Every day, with the retention slot, qa checks that the contact plan reaches **at least
+24 h ahead**: the latest `scheduled_contacts.starts_at` minus now. The check is read-only:
+`bash var/qa-scripts/plan-horizon-check.sh --notify`. It logs `PLAN HORIZON OK` or `PLAN HORIZON ALARM` in qa's
+checklist, and on an alarm it sends lead an alarm line. The next plan belongs to lead and domain: drafted through
+the console, approved by a different agent, in a qa slot. qa never writes a plan.
+
+Why: the plan approved on 11-17 ran out at **11-18 19:23:18Z** and nobody noticed. The 23:00Z pass cluster that
+the day's notes assumed was never scheduled, and it only came to light after the laptop slept 21:58Z–01:20Z
+(post-sleep check, 11-19 01:22Z: 0 future passes).
+
+## Strict compile in dries
+
+(Lead, 11-19.) A dry's strict compile uses CI's command at the repo root, which builds every workspace project
+(cadence, cadence_web, cadence_simulator and the rest):
+
+```
+MIX_ENV=test mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors
+```
+
+A bare `mix compile --warnings-as-errors` at the root builds only the workspace app, so it proves nothing about the
+apps. Until 11-19 qa's `dry-picks.sh` and `dry-step4-part1.sh` did exactly that, and the older per-app dries never
+compiled the simulator. Their "strict compile 0" lines covered the apps only through the suites' own (non-strict)
+test compile. All qa dry scripts now run the command above.
 
 ## Tripped partition (#99 replay-safe ids)
 
