@@ -9,6 +9,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   use GenServer
 
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
 
   alias Cadence.Ingress.RawEvidence
@@ -118,9 +119,13 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     enqueue_many(executor, items)
   end
 
-  @spec snapshot(GenServer.server()) :: {:ok, map()} | {:error, term()}
-  def snapshot(executor) do
-    call_if_running(executor, :snapshot)
+  @spec snapshot(GenServer.server(), SnapshotCall.level()) :: {:ok, map()} | {:error, term()}
+  def snapshot(executor, level \\ :component) do
+    # #334: a read never takes its caller down (a busy executor under load is :snapshot_timeout).
+    # The TCP receiver's flow control passes :flow_control (develop's 5 s), see SnapshotCall.
+    with {:ok, pid} <- lookup(executor) do
+      SnapshotCall.call(pid, :snapshot, level)
+    end
   end
 
   @spec quiesce(GenServer.server()) :: {:ok, map()} | {:error, term()}

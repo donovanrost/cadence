@@ -30,6 +30,7 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   alias Cadence.IngressJournal.{Entry, Identity}
   alias Cadence.Platform.DurableFile
+  alias Cadence.Platform.SnapshotCall
 
   @record_magic "CIJR"
   @record_version 1
@@ -143,7 +144,12 @@ defmodule Cadence.IngressJournal.FileSystem do
     do: call_if_running(journal, {:resume_offset, consumer})
 
   @spec snapshot(GenServer.server()) :: {:ok, map()} | {:error, term()}
-  def snapshot(journal), do: call_if_running(journal, :snapshot)
+  # #334: a read never takes its caller down.
+  def snapshot(journal) do
+    with {:ok, pid} <- lookup(journal) do
+      SnapshotCall.call(pid, :snapshot, :component)
+    end
+  end
 
   @doc "Seals a drained journal and durably saves every consumer's final position."
   def seal(journal), do: GenServer.call(journal, :seal, :infinity)

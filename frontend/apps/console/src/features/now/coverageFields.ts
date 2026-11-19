@@ -20,12 +20,16 @@ const coveragePlan = d.object({
   submitted_at: d.nullable(d.timestamp),
   /** approved / interrupted only (domain 702223355). */
   approved_at: d.optional(d.nullable(d.timestamp)),
-  /** interrupted only; last_progress_at is the last progress seen, not when it stopped. */
+  /**
+   * approved (after the grace) and interrupted; last_progress_at is the last progress seen, not
+   * when it stopped. bookable (#268): the passes a Book would send (never placed), from the server.
+   */
   booking: d.optional(
     d.nullable(
       d.object({
         reserved: d.integer,
         total: d.integer,
+        bookable: d.optional(d.integer),
         last_progress_at: d.nullable(d.timestamp),
       }),
     ),

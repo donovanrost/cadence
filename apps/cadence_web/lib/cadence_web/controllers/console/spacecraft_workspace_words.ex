@@ -83,6 +83,13 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceWords do
   def message(:invalid_params, :save, _ctx), do: "Not saved."
   def message(:invalid_params, :submit, _ctx), do: "Not sent."
 
+  # ux U98 (the view-refusal pattern, #272): on the read routes nothing was refused, so no
+  # "Not …:" opener; the console shows it in place of the content as a status, not an alert.
+  def message(:forbidden, action, ctx) when action in [:show, :packets],
+    do:
+      "You can't view #{possessive(ctx)} configuration. " <>
+        "Ask a mission admin or an org admin for access."
+
   def message(:forbidden, _action, ctx),
     do: "You can't change #{possessive(ctx)} configuration."
 

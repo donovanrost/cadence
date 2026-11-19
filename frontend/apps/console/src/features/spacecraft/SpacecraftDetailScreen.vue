@@ -11,6 +11,7 @@ import ExtraRouteEditor from "./ExtraRouteEditor.vue";
 import SpacecraftEditor from "./SpacecraftEditor.vue";
 import SpacecraftPanels from "./SpacecraftPanels.vue";
 import { fetchSpacecraftDetail } from "./detail.ts";
+import { CONFIGURATION_WORKSPACE_LIVE } from "./configuration/api.ts";
 
 /** Setup › Spacecraft › one (ux U6: Profile layout, `Open in Ops →`). */
 const route = useRoute("setup.spacecraft.one");
@@ -68,6 +69,12 @@ const crumbs = computed((): readonly ApCrumb[] => [
         :detail="state.value"
         :editing="editing"
       />
+      <!-- (B) U94: the craft's configuration workspace, once its GET is live. -->
+      <ApButton
+        v-if="CONFIGURATION_WORKSPACE_LIVE && spacecraftId"
+        :to="{ name: 'setup.spacecraft.configuration', params: { spacecraftId } }"
+        >Configuration</ApButton
+      >
       <ApButton v-if="opsScid !== null" :to="{ name: 'ops.spacecraft', params: { scId: opsScid } }"
         >Open in Ops →</ApButton
       >

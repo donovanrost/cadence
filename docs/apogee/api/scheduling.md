@@ -264,6 +264,11 @@ Errors:
   draft). A second, concurrent approve of the same plan gets this (the plan row lock serialises
   them), unless it is the same request, which replays.
 - `409 plan_changed`: `expected_version` isn't current, or the content changed.
+- `409 contact_plan_opportunity_expired` (#273, 2026-11-19; was a generic `422`): the booking
+  window has closed for at least one selected pass, so the plan can't be approved as it is.
+  Nothing is recorded. No details yet; the console uses ux's countless line. This is temporary:
+  once domain's rule change lands, an approval leaves those passes out instead (skipped), and
+  only a plan whose every pass has closed is refused, as `contact_plan_all_opportunities_expired`.
 - `409 duplicate_operation`, `409 operation_conflict`: as for submit.
 - `422 plan_not_ready` (`details: {unmet, conflicts}`), `422 acknowledgements_required`
   (`details.missing`), `409 plan_superseded`, `422 invalid_params`, `404 plan_not_found`.
@@ -366,6 +371,19 @@ resubmit), and the decision is recorded as a rejected approval with the reason. 
 Re-executes an approved plan whose execution was **interrupted**, or that was approved and never
 started. Items are idempotent, so booked passes aren't rebooked. Returns `202 {plan_id, state:
 "executing"}`, or `409 plan_not_resumable`.
+
+- `409 contact_plan_day_ended` (#268, 2026-11-19), `details: {day}` (`YYYY-MM-DD`, the plan's day:
+  its window's UTC start date, as K1 and Now group plans): the UTC date of the plan's last pass
+  (`window.to`) has passed too, so nothing is booked and nothing starts. A plan crossing midnight UTC
+  stays bookable through its last pass's day. It's checked first, whatever the plan's state.
+- Who started booking (#268): the run's own actor (the person who pressed Book, or the approver
+  when approve starts it). It's recorded on the plan's lifecycle by every claim that starts a run
+  (an `approved` plan, or a stopped run's resume from `failed` / `partially_reserved`); a plan
+  already `executing` (interrupted, or a racing second run) keeps its starter.
+- An **approve** of an ended day's plan isn't changed here: it records the decision and starts
+  booking off the request, and the run's passes fail at the provider. After #273's rule lands,
+  such a plan's passes are all past their booking window, so the approve answers `409
+  contact_plan_all_opportunities_expired` and records nothing.
 
 ### Plan states `interrupted` and `unconfirmed` (DECISIONS #52)
 

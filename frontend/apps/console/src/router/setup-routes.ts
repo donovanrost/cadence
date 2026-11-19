@@ -1,5 +1,6 @@
 import { spacecraftIdParam } from "@/api/ids.ts";
 import { paramText } from "@/shell/route-params.ts";
+import { CONFIGURATION_WORKSPACE_LIVE } from "@/features/spacecraft/configuration/api.ts";
 import type { RouteRecordRaw } from "vue-router";
 
 /** Setup mode, children of /console/:org/:mission. Owner: fe-setup (swap `pending` for your screen). */
@@ -32,6 +33,20 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     name: "setup.spacecraft.one",
     component: () => import("@/features/spacecraft/SpacecraftDetailScreen.vue"),
     meta: { mode: "setup", nav: "spacecraft", title: "Spacecraft" },
+  },
+  {
+    // (B) ux U94: the craft's configuration workspace (ported from the host's spacecraft page).
+    path: "setup/spacecraft/:spacecraftId/configuration/:section(overview|catalog|communications|changes)?",
+    name: "setup.spacecraft.configuration",
+    component: () => import("@/features/spacecraft/configuration/ConfigurationScreen.vue"),
+    props: (to) => ({ spacecraftId: spacecraftIdParam(paramText(to.params, "spacecraftId")) }),
+    // While the flag is off, a typed URL lands on the craft's page (lead), not a 404.
+    beforeEnter: (to) =>
+      CONFIGURATION_WORKSPACE_LIVE || {
+        name: "setup.spacecraft.one",
+        params: { ...to.params, spacecraftId: paramText(to.params, "spacecraftId") },
+      },
+    meta: { mode: "setup", nav: "spacecraft", title: "Configuration" },
   },
   {
     // L19 (ux AppSurfaces.md; plans/spacecraft-apps.md): a spacecraft-scope app in the L9 host frame.

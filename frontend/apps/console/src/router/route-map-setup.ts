@@ -1,4 +1,10 @@
-import type { Raw, RawOpt, InMission, AddSpacecraftStep } from "./route-types.ts";
+import type {
+  Raw,
+  RawOpt,
+  InMission,
+  AddSpacecraftStep,
+  ConfigurationSection,
+} from "./route-types.ts";
 
 /** Setup-mode routes (inside a mission). Part of ConsoleRoutes (route-map.ts). */
 export interface SetupRoutes {
@@ -15,6 +21,12 @@ export interface SetupRoutes {
     "/setup/spacecraft/:spacecraftId",
     { spacecraftId: Raw },
     { spacecraftId: string }
+  >;
+  "setup.spacecraft.configuration": InMission<
+    "setup.spacecraft.configuration",
+    "/setup/spacecraft/:spacecraftId/configuration/:section?",
+    { spacecraftId: Raw; section?: ConfigurationSection | null | undefined },
+    { spacecraftId: string; section?: ConfigurationSection | "" }
   >;
   "setup.spacecraft.app": InMission<
     "setup.spacecraft.app",

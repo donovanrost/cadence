@@ -5,13 +5,16 @@ defmodule Cadence.Contacts.LostReservationContactTest do
   scheduled contact 'scheduled', and it opened a listener for a pass no provider flew. The repair
   finds contacts left open that way and releases them through the same code path.
   """
-  use Cadence.DataCase, async: false
+  # RuntimeCase (shared sandbox): closing a realized contact starts its settler, a runtime
+  # process that records the settlement in the database (#270).
+  use Cadence.RuntimeCase, async: false
 
   import Ecto.Query
 
   alias Cadence.Contacts
 
   alias Cadence.Contacts.{
+    ContactSettler,
     ContactStore,
     ProviderReservationReconciler,
     ProviderReservations,
@@ -205,6 +208,10 @@ defmodule Cadence.Contacts.LostReservationContactTest do
 
       assert %{lifecycle_state: :canceled} = scheduled(c)
       assert {:ok, %{lifecycle_state: :stopped}} = fetch_realized(c, realized)
+
+      # Stopping it hands it to its settler (DECISIONS #71), which records the settlement in the
+      # background: wait for that, so the settler doesn't outlive this test's sandbox (#270).
+      await_settled(c, realized)
     end
 
     test "already running keeps running to its LOS" do
@@ -262,6 +269,21 @@ defmodule Cadence.Contacts.LostReservationContactTest do
       due_before: due_before
     )
     |> Enum.map(& &1.provider_reservation_id)
+  end
+
+  defp await_settled(c, realized, tries \\ 250)
+
+  defp await_settled(_c, realized, 0),
+    do: flunk("the settler still runs for #{realized.realized_contact_id}")
+
+  defp await_settled(c, realized, tries) do
+    {:ok, contact} = fetch_realized(c, realized)
+
+    unless contact.metadata["settlement"]["state"] in ["settled", "unsettled"] and
+             not ContactSettler.settling?(c.mission_id, realized.realized_contact_id) do
+      Process.sleep(20)
+      await_settled(c, realized, tries - 1)
+    end
   end
 
   defp fetch_realized(c, realized),

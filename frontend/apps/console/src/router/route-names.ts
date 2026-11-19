@@ -62,6 +62,7 @@ export const consoleRouteNames: Readonly<Record<ConsoleRouteName, true>> = {
   "setup.spacecraft.new": true,
   "setup.spacecraft.one": true,
   "setup.spacecraft.app": true,
+  "setup.spacecraft.configuration": true,
   "setup.profiles": true,
   "setup.profile.new": true,
   "setup.profile": true,

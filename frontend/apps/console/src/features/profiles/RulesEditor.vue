@@ -25,7 +25,14 @@ import {
 } from "@/ui";
 import RuleForm from "./RuleForm.vue";
 import type { ProfileDetail } from "./detail.ts";
-import { draftProblems, newRule, toDocument, toDrafts, type RuleDraft } from "./rulesDraft.ts";
+import {
+  draftProblems,
+  newRule,
+  ruleRefusal,
+  toDocument,
+  toDrafts,
+  type RuleDraft,
+} from "./rulesDraft.ts";
 import { describePreview } from "./sectionEdit.ts";
 
 /** P2 edit: the whole rule list as one staged change at `routing_rules` (domain P2). */
@@ -50,12 +57,13 @@ const failure = useStageFailure([drafts, rollout]);
 const problems = computed(() => draftProblems(drafts.value));
 if (drafts.value.length === 0) drafts.value.push(newRule([]));
 
-/** Rejections name the field (`routing_rules.0.stations` etc.), per U20 nothing changed. */
-function rejected(error: ApiError, verb: "staged" | "changed") {
+/**
+ * A field refusal opens with the act (designers §3, #307) and names each rule and field by its
+ * label (Profile.md P2), never the server's path; null for any other failure (shared words).
+ */
+function rejected(error: ApiError, act: "staged" | "checked"): string | null {
   const detail = invalidOpDetails(error);
-  return detail
-    ? `Nothing was ${verb}. ${detail.errors.map((e) => `${e.path}: ${e.message}`).join(" · ")}`
-    : failureOutcome(error, verb).sentence;
+  return detail ? ruleRefusal(detail.errors, drafts.value, act) : null;
 }
 
 const op = (): StageOp => ({
@@ -77,7 +85,12 @@ async function check() {
     );
     outcome.value = result.ok
       ? describePreview(result.value)
-      : { tone: "crit", text: rejected(result.error, "changed") };
+      : {
+          tone: "crit",
+          // Check is a dry run, so its refusal opens "Not checked:" (mms-ux, #323).
+          text:
+            rejected(result.error, "checked") ?? failureOutcome(result.error, "changed").sentence,
+        };
   } finally {
     busy.value = false;
   }
@@ -92,7 +105,14 @@ async function stage() {
       source: { surface: "profile_routing" },
       ops: [op()],
     });
-    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged"));
+    if (!result.ok) {
+      // A field refusal names the rule and field (#323); anything else keeps the shared words.
+      const named = rejected(result.error, "staged");
+      failure.value = named
+        ? { changed: false, sentence: named }
+        : failureOutcome(result.error, "staged");
+      return;
+    }
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {

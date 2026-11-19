@@ -79,7 +79,7 @@ const draftedBy = computed(() =>
 );
 const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
 const sheetError = ref<ApiError | null>(null);
-/** U61: passes an approval left out because they had already started (until the day changes). */
+/** U61: passes an approval left out because their booking window had closed (until the day changes). */
 const expired = ref<Expired | null>(null);
 watch(day, () => (expired.value = null));
 /** U26: drafted passes inside station outage/maintenance (blocking) or degraded (at risk) windows. */

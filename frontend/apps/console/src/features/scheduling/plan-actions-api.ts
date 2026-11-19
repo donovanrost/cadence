@@ -17,7 +17,7 @@ const submitReader = d.object({
   outcome: d.knownText(["pending_approval", "executing", "replayed"] as const),
   /** #257: the original answer to a repeated operation_id (U97: shown as this one's result). */
   replayed: d.optional(d.boolean),
-  /** U61: passes left out because they had already started; absent on older servers. */
+  /** U61: passes left out because their booking window had closed (#273); absent on older servers. */
   expired: (value: unknown, path?: string) =>
     value === undefined ? null : expiredReader(value, path),
 });
@@ -63,6 +63,8 @@ export function approvePlan(
   operationId: string,
   acknowledgements: readonly Acknowledgement[],
   decisionNote?: string,
+  /** #273: the plan read's expired_digest, as the approver saw it (absent on an older read). */
+  expectedExpiredDigest?: string,
 ): Promise<ApiResult<ApproveResult>> {
   return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/approve`, approveReader, {
     method: "POST",
@@ -71,6 +73,9 @@ export function approvePlan(
       operation_id: operationId,
       ...(acknowledgements.length > 0 ? { acknowledgements } : {}),
       ...(decisionNote ? { decision_note: decisionNote } : {}),
+      ...(expectedExpiredDigest !== undefined
+        ? { expected_expired_digest: expectedExpiredDigest }
+        : {}),
     },
   });
 }

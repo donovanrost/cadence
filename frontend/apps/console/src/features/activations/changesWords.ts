@@ -12,7 +12,7 @@ import { changeFields } from "./configurationChanges.ts";
 export const FIELD_LABELS: Readonly<Record<ChangeField, string>> = {
   catalog_revision: "Catalog revision",
   telemetry_source: "Packet source",
-  handled_apids: "Decoded APIDs",
+  handled_apids: "Handled APIDs",
   downlink: "Downlink protocol",
   uplink: "Uplink protocol",
   frame_size: "Frame size",

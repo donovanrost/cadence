@@ -1,9 +1,14 @@
 defmodule Cadence.Dev.ReflectOrbital.Planning do
   @moduledoc false
-  # Contact planning for the Earendil demo: one approved, active fleet planning
-  # policy and a recurring downlink requirement template for the first N
-  # spacecraft (EARENDIL_PLANNING_SPACECRAFT, default 10: the ones with live
-  # feeds), so the console can draft a day reproducibly. Idempotent.
+  # Contact planning for the Earendil demo: one fleet planning policy and a
+  # recurring downlink requirement template for the first N spacecraft
+  # (EARENDIL_PLANNING_SPACECRAFT, default 10: the ones with live feeds), so the
+  # console can draft a day reproducibly. Idempotent.
+  #
+  # A dev seed never approves (#250): the policy is created as a draft and a
+  # second person approves it in the console. Only the user's isolated chaos lab
+  # (dev/chaos, which loads this file and is not edited by the team) still
+  # approves it here, as it always has.
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactRequirementTemplates, FleetPlanningPolicies}
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
@@ -47,30 +52,41 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
     templates = ensure_templates(scope, count)
 
     IO.puts("""
-    Contact planning: fleet planning policy #{policy} active; #{templates} recurring downlink
-    templates (one 5-minute contact every 6 h) for the first #{count} spacecraft.
+    Contact planning: fleet planning policy #{policy_state(policy)}; #{templates} recurring
+    downlink templates (one 5-minute contact every 6 h) for the first #{count} spacecraft.
     """)
   end
 
   defp ensure_policy(scope) do
-    case FleetPlanningPolicies.fetch_active(F.organization_id(), F.mission_id()) do
+    case FleetPlanningPolicies.fetch(F.organization_id(), F.mission_id()) do
       {:ok, policy, _version} ->
         policy.fleet_planning_policy_id
 
-      {:error, _none} ->
+      {:error, :fleet_planning_policy_not_found} ->
         {:ok, policy, version} = FleetPlanningPolicies.create(scope, F.mission_id(), policy_attrs())
 
-        {:ok, _, _, _} =
-          FleetPlanningPolicies.approve(
-            scope,
-            F.mission_id(),
-            policy.fleet_planning_policy_id,
-            version.version,
-            version.content_sha256,
-            "Earendil demo planning boundary"
-          )
+        if F.chaos_lab?() do
+          {:ok, _, _, _} =
+            FleetPlanningPolicies.approve(
+              scope,
+              F.mission_id(),
+              policy.fleet_planning_policy_id,
+              version.version,
+              version.content_sha256,
+              "Earendil demo planning boundary"
+            )
+        end
 
         policy.fleet_planning_policy_id
+    end
+  end
+
+  defp policy_state(id) do
+    {:ok, policy, _version} = FleetPlanningPolicies.fetch(F.organization_id(), F.mission_id())
+
+    case policy.lifecycle_state do
+      :active -> "#{id} active"
+      state -> "#{id} #{state}: approve it in the console (a second person)"
     end
   end
 

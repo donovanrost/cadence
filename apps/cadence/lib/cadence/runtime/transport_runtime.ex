@@ -11,6 +11,7 @@ defmodule Cadence.Runtime.TransportRuntime do
   alias Cadence.Contacts.{CombinedDownlinkRecord, DownlinkDiagnostic, DownlinkObservation}
   alias Cadence.Ids
   alias Cadence.Platform.EventBus
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.Persistence
 
   alias Cadence.Runtime.{
@@ -64,7 +65,8 @@ defmodule Cadence.Runtime.TransportRuntime do
 
   @spec snapshot(pid()) :: {:ok, map()} | {:error, term()}
   def snapshot(transport_runtime) do
-    GenServer.call(transport_runtime, :snapshot)
+    # #334: a read never takes its caller (the path coordinator) down.
+    SnapshotCall.call(transport_runtime, :snapshot, :transport)
   end
 
   @spec quiesce(pid()) :: {:ok, map()} | {:error, :noproc}

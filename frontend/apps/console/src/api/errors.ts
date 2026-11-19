@@ -42,6 +42,9 @@ export const errorCodes = [
   // Missions, spacecraft, setup
   "mission_not_found",
   "spacecraft_not_found",
+  // (B) configuration workspace reads (api, ux U94): the snapshot and the packet choices.
+  "spacecraft_source_limit_exceeded",
+  "spacecraft_catalog_unavailable",
   "profile_not_found",
   "station_not_found",
   "transport_not_found",
@@ -208,16 +211,21 @@ export const errorCodes = [
   "plan_not_ready",
   "plan_not_repairable",
   "plan_not_resumable",
+  // #268: execute once the plan's day has ended (nothing started).
+  "contact_plan_day_ended",
   "plan_not_submittable",
   "plan_superseded",
   "draft_not_found",
   "draft_not_interrupted",
   "contact_plan_version_already_decided",
   // U61 day-plan lifecycle (api): another plan covers the day; a newer plan replaced this one
-  // (not U27's plan_superseded); every pass had already started.
+  // (not U27's plan_superseded); every pass's booking window had closed (#273).
   "contact_plan_day_already_planned",
   "contact_plan_replaced",
   "contact_plan_all_opportunities_expired",
+  // #273 (api): the closed set changed since the approver looked; step 1's interim refusal.
+  "contact_plan_expired_passes_changed",
+  "contact_plan_opportunity_expired",
   "template_not_found",
   "requirement_not_found",
   "requirement_not_active",

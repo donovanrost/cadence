@@ -12,6 +12,8 @@ defmodule CadenceSimulator.ProviderScaleTest do
     Store
   }
 
+  alias CadenceSimulator.StoreRestart
+
   @definitions Path.expand(
                  "../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
                  __DIR__
@@ -201,11 +203,8 @@ defmodule CadenceSimulator.ProviderScaleTest do
     assert before_restart.data != []
     previous_store = Process.whereis(Store)
     Process.exit(previous_store, :kill)
-
-    assert_eventually(fn ->
-      current_store = Process.whereis(Store)
-      is_pid(current_store) and current_store != previous_store and Process.alive?(current_store)
-    end)
+    # #331: back under its name AND past init/1, so its ETS mirror exists before the read.
+    _restarted = StoreRestart.await(previous_store)
 
     after_restart = Store.events_for_run(run["id"], 0, 500)
 
@@ -284,17 +283,4 @@ defmodule CadenceSimulator.ProviderScaleTest do
 
     DateTime.before?(left_start, right_end) and DateTime.before?(right_start, left_end)
   end
-
-  defp assert_eventually(fun, attempts \\ 100)
-
-  defp assert_eventually(fun, attempts) when attempts > 0 do
-    if fun.() do
-      :ok
-    else
-      Process.sleep(10)
-      assert_eventually(fun, attempts - 1)
-    end
-  end
-
-  defp assert_eventually(fun, 0), do: assert(fun.())
 end

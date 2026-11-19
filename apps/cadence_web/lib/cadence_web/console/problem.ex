@@ -39,9 +39,16 @@ defmodule CadenceWeb.Console.Problem do
     plan_changed: {409, "The plan changed since you loaded it."},
     plan_not_submittable: {409, "The plan can't be submitted in its current state."},
     plan_not_resumable: {409, "The plan isn't waiting to execute."},
+    # #268: execute after the plan's UTC day has ended; nothing is started.
+    contact_plan_day_ended: {409, "This plan's day has ended, so nothing was booked."},
     plan_not_pending: {409, "The plan isn't waiting for approval."},
     # #257: submit only submits; a plan already waiting for approval changes nothing.
     plan_already_submitted: {409, "The plan is already waiting for approval."},
+    # #273 step 1 (until domain's rule approves the rest): the approval is refused while any
+    # selected pass's booking window has closed; nothing is recorded. ux's words (U97).
+    contact_plan_opportunity_expired:
+      {409,
+       "The booking window has closed for some of this plan's passes, so it can't be approved as it is. Nothing was recorded."},
     contact_plan_self_approval_forbidden:
       {403, "You submitted or drafted this version, so another org admin approves it."},
     contact_plan_version_already_decided:

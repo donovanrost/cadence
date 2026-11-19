@@ -76,6 +76,8 @@
   --font-sans: "Saira", system-ui, sans-serif; /* sentences and every live number (tabular-nums) */
   --font-mono:
     "Azeret Mono", ui-monospace, monospace; /* literal ids, commands, timestamps, console meta */
+  /* Azeret Mono's contextual alternates turn the x in hex (0x2A) into ×; literals read as typed (ux U94). */
+  --font-mono--font-feature-settings: "calt" 0;
 
   /* size scale (px values from the boards; use with the role utilities in design-language.md §3) */
   --text-2xs: 10px; /* chart axis ticks and bar labels ONLY */

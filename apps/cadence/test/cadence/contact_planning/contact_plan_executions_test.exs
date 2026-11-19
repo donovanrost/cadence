@@ -185,6 +185,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
     %{
       organization_id: organization_id,
+      organization: organization,
+      suffix: suffix,
       mission_id: mission_id,
       member_scope: member_scope,
       plan: approved_plan,
@@ -680,18 +682,89 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
       assert_receive :held, 5_000
 
-      assert {:error, :fleet_planning_run_busy} =
-               ControlContacts.execute_approved_plan(
-                 context.member_scope,
+      # Released in an after: a failed assert can't leave the holder blocked with its session open.
+      try do
+        assert {:error, :fleet_planning_run_busy} =
+                 ControlContacts.execute_approved_plan(
+                   context.member_scope,
+                   context.mission_id,
+                   context.plan.contact_plan_id,
+                   reserve: successful_reserver(test_pid),
+                   resolve_route: context.resolve_route,
+                   now: DateTime.add(@now, 2, :second)
+                 )
+
+        refute_received {:provider_mutation, _any}
+      after
+        release(holder, key)
+      end
+    end
+  end
+
+  describe "#268: who started booking" do
+    test "the first claim records the one who started it, not the approver; a second run keeps it",
+         context do
+      second = scope(context.organization, :member, "second-#{context.suffix}")
+      reserve = successful_reserver(self())
+
+      assert {:ok, _first} = execute(context, reserve)
+      assert_received {:provider_mutation, _ref}
+      flush_mutations()
+
+      # A second Book, by someone else, after the first claimed it: it books nothing more and
+      # leaves the starter as it was (ca-security).
+      assert {:ok, _second} =
+               ContactPlanExecutions.execute(
+                 second,
                  context.mission_id,
                  context.plan.contact_plan_id,
-                 reserve: successful_reserver(test_pid),
+                 now: DateTime.add(@now, 3, :second),
                  resolve_route: context.resolve_route,
-                 now: DateTime.add(@now, 2, :second)
+                 reserve: reserve
                )
 
-      refute_received {:provider_mutation, _any}
-      send(holder, :release)
+      refute_receive {:provider_mutation, _ref}, 100
+
+      assert {:ok, plan, _version} =
+               ManagementContacts.fetch_plan(
+                 context.organization_id,
+                 context.mission_id,
+                 context.plan.contact_plan_id
+               )
+
+      assert plan.lifecycle_changed_by == context.member_scope.user.user_id
+      refute plan.lifecycle_changed_by == plan.approved_by
+    end
+
+    test "a stopped run's resume (failed, partially_reserved) records whoever resumed it",
+         context do
+      reserve = successful_reserver(self())
+      assert {:ok, _first} = execute(context, reserve)
+      flush_mutations()
+
+      for {state, n} <- [{"failed", 1}, {"partially_reserved", 2}] do
+        resumer = scope(context.organization, :member, "resume-#{n}-#{context.suffix}")
+        put_plan_state(context, state)
+
+        assert {:ok, _resumed} =
+                 ContactPlanExecutions.execute(
+                   resumer,
+                   context.mission_id,
+                   context.plan.contact_plan_id,
+                   now: DateTime.add(@now, 3 + n, :second),
+                   resolve_route: context.resolve_route,
+                   reserve: reserve
+                 )
+
+        assert {:ok, plan, _version} =
+                 ManagementContacts.fetch_plan(
+                   context.organization_id,
+                   context.mission_id,
+                   context.plan.contact_plan_id
+                 )
+
+        assert plan.lifecycle_changed_by == resumer.user.user_id, state
+      end
     end
   end
 
@@ -703,7 +776,13 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
       assert coverage(context, DateTime.add(@now, 60, :second)) == nil
 
       assert %{
-               plan: %{state: "approved", revision: 1, approved_at: approved_at, booking: nil},
+               plan: %{
+                 state: "approved",
+                 revision: 1,
+                 approved_at: approved_at,
+                 # #268: what Now's 'Book N passes' shows (every accepted pass, none placed yet).
+                 booking: %{bookable: bookable, total: bookable, reserved: 0}
+               },
                first_window_at: first,
                severity: "caution",
                p1: true
@@ -711,6 +790,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
       assert approved_at == context.plan.approved_at
       assert first == DateTime.add(@now, 3_600, :second)
+      assert bookable > 0
     end
 
     test "booking under way (its lock held) is covered; lock free with a pass never placed reopens",
@@ -794,6 +874,14 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
         state
       )
 
+  defp flush_mutations do
+    receive do
+      {:provider_mutation, _ref} -> flush_mutations()
+    after
+      0 -> :ok
+    end
+  end
+
   defp put_pending(item) do
     put_item_state(item, "pending", provider_reservation_id: nil)
 
@@ -840,7 +928,30 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     try do
       fun.()
     after
-      send(holder, :release)
+      release(holder, key)
+    end
+  end
+
+  # The execution lock is a PostgreSQL session lock (FleetRunLock): the holder lets go by ending
+  # its session, and the server frees the lock only once that session is gone, AFTER the holder
+  # has moved on. So wait for the holder to exit and the server to stop reporting the lock held;
+  # otherwise the next read can still see it held (#182: coverage read nil, "covered", at :726).
+  defp release(holder, key) do
+    ref = Process.monitor(holder)
+    send(holder, :release)
+    assert_receive {:DOWN, ^ref, :process, ^holder, _reason}, 5_000
+    wait_until_free(key, 250)
+  end
+
+  defp wait_until_free(key, 0),
+    do: flunk("the plan's execution lock is still held after its holder exited: #{inspect(key)}")
+
+  # key_held?/1 answers false if its query errors, so this can pass without seeing the lock free;
+  # the test's next read then fails loudly, which is enough here (devops' review).
+  defp wait_until_free(key, tries) do
+    if FleetRunLock.key_held?(key) do
+      Process.sleep(20)
+      wait_until_free(key, tries - 1)
     end
   end
 

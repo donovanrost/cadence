@@ -31,6 +31,9 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
   latest_version: undefined,
   repair: undefined,
   approval_setting: undefined,
+  expired: undefined,
+  expired_digest: undefined,
+  next_expiry_at: undefined,
   passes: [
     pass("a", "sc-1", "2026-11-10T09:00:00Z"),
     pass("b", "sc-2", "2026-11-10T03:00:00Z"),

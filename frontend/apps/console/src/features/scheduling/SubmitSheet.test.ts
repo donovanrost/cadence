@@ -1,6 +1,7 @@
 import { nextTick } from "vue";
 import { stationId as stationIdReader, type ApiError } from "@/api/index.ts";
 import { mount } from "@vue/test-utils";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
 import SubmitSheet from "./SubmitSheet.vue";
@@ -41,6 +42,9 @@ const plan: PlanDetail = {
   latest_version: undefined,
   repair: undefined,
   approval_setting: undefined,
+  expired: undefined,
+  expired_digest: undefined,
+  next_expiry_at: undefined,
 };
 
 describe("SubmitSheet", () => {
@@ -374,5 +378,84 @@ describe("SubmitSheet kept note (#257, ux)", () => {
     await nextTick();
     expect(w.get<HTMLTextAreaElement>("textarea").element.value).toBe("Checked with ops.");
     w.unmount();
+  });
+});
+
+describe("SubmitSheet booking windows closed (#273, #340)", () => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: "/", component: { template: "<p />" } },
+      { path: "/plan", name: "ops.contacts.plan", component: { template: "<p />" } },
+    ],
+  });
+  const mountWith = (error: ApiError, day?: string) =>
+    mount(SubmitSheet, {
+      global: { plugins: [router] },
+      props: {
+        plan: {
+          ...plan,
+          state: "pending_approval",
+          unmet: [],
+          expired: { count: 1, reservable_count: 9, items: [] },
+        },
+        nameOf: () => null,
+        commitLabel: "Approve and book 9 passes",
+        userId: "u1",
+        title: "Approve and book the plan",
+        confirm: "",
+        busy: false,
+        act: "approve",
+        error,
+        ...(day ? { day } : {}),
+      },
+    });
+  it("lists the passes whose window closed since the approver looked", async () => {
+    const w = mountWith({
+      kind: "conflict",
+      code: "contact_plan_expired_passes_changed",
+      message: "x",
+      details: {
+        expired: {
+          count: 1,
+          reservable_count: 9,
+          items: [
+            {
+              snapshot_id: "n1",
+              spacecraft: null,
+              station: null,
+              aos: "2026-11-16T00:10:00Z",
+              expires_at: null,
+              reason: "no_booking_window",
+            },
+          ],
+        },
+        expired_digest: "d2",
+      },
+    });
+    expect(w.text()).toContain("Not approved: the booking window closed for more of R41's passes");
+    expect(w.text()).not.toContain("Show 1");
+  });
+  it("offers K1's Plan the rest or Draft a new plan, never Reload, when every window closed", () => {
+    const w = mountWith(
+      {
+        kind: "conflict",
+        code: "contact_plan_all_opportunities_expired",
+        message: "x",
+        details: null,
+      },
+      "2000-01-01",
+    );
+    expect(w.text()).toContain("Plan the rest of 01-01…");
+    const later = mountWith(
+      {
+        kind: "conflict",
+        code: "contact_plan_all_opportunities_expired",
+        message: "x",
+        details: null,
+      },
+      "2999-01-01",
+    );
+    expect(later.text()).toContain("Draft a new plan for 01-01…");
   });
 });

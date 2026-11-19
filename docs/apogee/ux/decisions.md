@@ -1600,10 +1600,11 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
   - Refusal `contact_plan_day_already_planned`: "Not approved: R39 (approved) already covers 212 of these
     requirements for 11-16. Open R39, or send this plan back." The state word is approved / booking / booked.
   - Approving a superseded plan: "Not approved: R44 replaced this plan at 10:05Z." with `Open R44`.
-  - All expired: "Not approved: all 36 of its passes have already started, so nothing could be booked." with
-    `Plan the rest of 11-16`.
-  - Partial approval: "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked." The
-    left-out passes are listed under `Show 36`, with spacecraft, station and AOS.
+  - All expired: "Not approved: the booking window has closed for all 36 of its passes, so nothing could be booked."
+    with `Plan the rest of 11-16`. (#273: the rule is the provider's booking window, which can close before AOS, so
+    never "already started", U20; U97 has the rest.)
+  - Partial approval: "Approved. Booking 1,476 passes; 36 weren't booked because their booking window had closed."
+    The left-out passes are listed under `Show 36`, with spacecraft, station and AOS.
   - **A new draft on a day whose plan is pending** (domain's supersede-on-draft):
     - K1's action is `Draft a new plan…` before the day starts, and `Plan the rest of 11-16…` once it has started.
       It's secondary; for approvers, the primary stays `Review`.
@@ -2282,6 +2283,17 @@ change set like any override. There's no separate routes editor.
       `legacy_conversion` is set). Under the description: "Staged by Mira K. Someone else reviews and applies it." For
       the stager, the review action is disabled with the A6 reason "You staged this batch, so someone else reviews and
       applies it." Other sets keep today's reviewer_is_author sentence.
+    - **Every set, up front** (#320, ca-ux 11-19; amends the line above): the console reads the change set's
+      `viewer.can_review` and `review_blocked_reason`, never its own `authors` list. The server sets
+      `reviewer_is_author` only when the set needs approval, for whoever submitted it or authored any change, so under
+      "Applies without approval" an author still reviews. When `can_review` is false, both review actions (Approve and
+      Send back; the server refuses both) are disabled with the A6 reason, muted under them and as their
+      description: "You staged part of this change set or sent it for review, so another person reviews it." (the conversion
+      batch keeps its own line above). A reason the console doesn't know: "You can't review this change set, so another
+      person reviews it." with the code in Technical details. The refusal stays the backstop: Approve "Not approved: you
+      staged part of this change set or sent it for review, so another person reviews it. Your approval wasn't
+      recorded."; Send back "Not sent back: you staged part of this change set or sent it for review, so another
+      person reviews it. Nothing changed."
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
       ("Batch 3 is already staged." / "Staged earlier."), never the id.
@@ -3047,7 +3059,7 @@ Communications, Changes) for ux's look.
     (#109). api's labels and values (sent as text; a missing value is `Not set`):
     - `catalog_revision_id` → `Catalog revision`, "catalog rev 14" (U65).
     - `telemetry_source_endpoint_id` → `Packet source`, the source's name (never an id, U25).
-    - `handled_apids` → `Decoded APIDs`, the APIDs comma-separated up to 8, else "14 APIDs"; none: `None`.
+    - `handled_apids` → `Handled APIDs` (U40's name, as the workspace has it), the APIDs comma-separated up to 8, else "14 APIDs"; none: `None`.
     - `protocol.downlink` / `.uplink` → `Downlink protocol` / `Uplink protocol` (TM, AOS, USLP, TC);
       `frame_size` → `Frame size`, `secondary_header_length` → `Secondary header`, `insert_zone_length` →
       `Insert zone`, `ocf_length` → `OCF` (each "1,115 bytes"); `truncated_primary_header` → `Truncated primary
@@ -3060,7 +3072,7 @@ Communications, Changes) for ux's look.
     is never the only way past a craft the approver can't see.
     - Heading `What changes · 312 spacecraft` (one craft: `What changes`, and the panel reads as above).
     - Summary, from the groups' counts, each only when nonzero: "300 spacecraft change: Catalog revision (300),
-      Decoded APIDs (12)." / "12 have no changes." / "5 start for the first time."
+      Handled APIDs (12)." / "12 have no changes." / "5 start for the first time."
     - Crit, fleet form: "Telemetry is off for 3 of the 312 spacecraft, so once this is active they start but
       decode nothing: no live values, alarms or history. Turn telemetry on with a change set first." with `Open
       Operation`.
@@ -3193,6 +3205,25 @@ U90 and U94.
   `mission_model_runtime_plan_manifest_mismatch`, `invalid_spacecraft_model_bindings`): "Not approved: this request
   can't apply as it stands." plus the code in Technical details, then "Your approval wasn't recorded."
 - Refusals before the check keep their words (self approval, not pending, not found).
+- **After Approve** (#319, ca-ux 11-19; ux's ruling to fe-ops; U20, U94): only when the answer says the approval was
+  recorded, and the line comes from the answer, never from "it didn't fail". Each is announced as an outcome (B6):
+  - `execution.state` `failed` (crit): "Approved, but it didn't apply." + U41's apply sentence (a known failure).
+  - `outcome` `needs_review`, not failed (caution): "Approved, but Cadence couldn't confirm that it applied." + U41's
+    apply sentence, as U94 hands it on. No "yet": it pairs a finished attempt with waiting.
+  - `execution.state` `in_progress` (neutral): "Approved. It's applying now."
+  - `outcome` `applied` with `execution.state` `succeeded` (nominal): "Approved and applied."; with
+    `execution.finished_at`: "Approved and applied at 03:46Z."
+  - Anything else (no outcome, an unknown one, no execution; neutral): "Approved. Cadence hasn't confirmed that it
+    applied yet. Reload to see it."
+- **The decide panel's other words** (L10; built before a spec, ratified here): the intro "Approving applies it to the
+  mission now. Rejecting leaves things as they are."; a reason is required for both ("Give a reason first.", A7);
+  after Reject "Rejected. Nothing changes."; after Withdraw "Withdrawn. Nothing changes."; the tags `WAITING`,
+  `APPROVED`, `REJECTED`, `WITHDRAWN`, `SUPERSEDED`, `UNKNOWN`; decisions read "Approved by Mira K. at 11-13
+  02:20Z" ("at", never "on", U29). The pre-check refusals open by the act, as U95: `not_pending` by the act: Approve "Not
+  approved: it's already decided, so your approval wasn't recorded. Reload to see how."; Reject "Not rejected: it's
+  already decided, so nothing changed. Reload to see how."; Withdraw (decided while the requester looked) "Not
+  withdrawn: it's already decided, so nothing changed. Reload to see how."; `activation_policy_changed` keeps U94's
+  line.
 
 ### U96 · Who may change a mission's approval setting (#233; api's shape on domain 10d59bb78, 11-18) (api / domain / fe-setup)
 Settings › Approvals (`cadence.governance`): the field keeps its server words, "Approval for changes and app
@@ -3253,7 +3284,7 @@ are api's, switched on with `knownErrorCode`.
 
 - **Success only from the answer (U20):** "Approved. Booking 40 passes." only on the 202 with `outcome: "approved"`.
   When the answer lists expired passes, the success line is U61's partial line with the answer's counts: "Approved.
-  Booking 37 passes; 3 had already started, so they weren't booked." The callout below keeps only its list
+  Booking 37 passes; 3 weren't booked because their booking window had closed." The callout below keeps only its list
   (`Show 3`), so the screen says it once (#257 check, ca-ux and fe-ops).
   Any other success answer: "Cadence didn't record an approval for R41. Reload to see the plan; if it's still waiting,
   try again or tell the team that runs Cadence for you." The UI never tells an approver something happened when it
@@ -3331,6 +3362,49 @@ are api's, switched on with `knownErrorCode`.
     the note.
   - A code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
     with the code in Technical details.
+- **Passes whose booking window closed** (#273, director's two conditions; domain's one expiry rule with its 60 s
+  lookahead; api's final shape: the plan read's `expired` `{count, reservable_count, items}`, `expired_digest` and
+  `next_expiry_at`; the approve sends `expected_expired_digest`). The words say "booking window closed", never
+  "started": a provider's window can close before AOS (U20). The list is the server's; the console never edits it.
+  - **Up front** (Plan day's review and Re-plan's proposal), caution, above Approve: "36 of R41's passes can't be
+    booked any more: their booking window has closed. Approving books the other 1,476; the 36 are recorded as
+    skipped." with `Show 36` (spacecraft, station, AOS; U61's list; no close time, since a pass within the 60 s margin counts as
+    closed before its raw `expires_at`). Over 5,000 (items are capped, `count` isn't): the list ends "Showing the first
+    5,000 of 6,200." The commit counts only bookable passes: `Approve
+    and book 1,476 passes`, and so does the confirm body. Re-plan: "3 of the proposal's passes can't be booked any
+    more… Applying it books the other 37; the 3 are recorded as skipped."
+  - **No window from the provider** (domain fails closed: a pass without a usable `expires_at` counts as closed and
+    is skipped; each item's `reason` is `opportunity_expired` or `no_booking_window`, and the words key on `reason`,
+    never on a null `expires_at`; an unknown `reason` adds nothing to its row): a `no_booking_window` row adds "No
+    booking window from the provider", and while any
+    listed item has none, the sentence's clause reads "their booking window has closed, or the provider gave none"
+    (U20: "closed" alone would claim what isn't known). The record and audit then say "skipped (no open booking
+    window)".
+  - **While the page is open:** when now passes `next_expiry_at` (the server's next close with its `expiry_margin_seconds` already applied; the
+    console adds no margin), a
+    caution line: "A pass's booking window has closed since this loaded. Reload to update the list." Never keyed on
+    AOS. With `next_expiry_at` null, no line.
+  - **409 `contact_plan_all_opportunities_expired`** (checked first): U61's all-expired line, and up front the same
+    sentence as Approve's A6 reason: "The booking window has closed for all 36 of its passes, so nothing can be
+    booked."
+  - **409 `contact_plan_expired_passes_changed`** (nothing recorded; the console diffs `details.expired.items`
+    against the list it showed): "Not approved: the booking window closed for 3 more of R41's passes after you
+    opened it, so what you'd approve changed. Your approval wasn't recorded. Check the list and approve again." with
+    `Show 3` for the new ones; when the diff isn't possible, or either list is capped (`count` > the items' length;
+    ca-security): "…closed for more of R41's passes after you opened it…". The review then shows the new list and count; the console never retries on its own (ca-security).
+    Re-plan: "Not applied: the booking window closed for 2 more of the proposal's passes after you opened it, so
+    what you'd apply changed. Nothing was booked. Check the list and apply it again." In the one act (U97): "R41
+    was sent for approval, but not approved: the booking window closed for 3 more of its passes after you opened
+    it. It's waiting for approval."
+  - **Interim, step 1** (409 `contact_plan_opportunity_expired`, no details; retires once domain's rule lands): "Not
+    approved: the booking window has closed for some of R41's passes, so R41 can't be booked as it is. Your approval
+    wasn't recorded. To book the others, draft the day again without them." With a count, "for 3 of R41's
+    passes". No Reload (the windows stay closed); beside it K1's `Draft a new plan for 11-16…` before the day
+    starts, `Plan the rest of 11-16…` once it has.
+  - **The decision record** (the 202's `expired`, the same set the record lists as skipped): history "Approved by
+    Ana R. at 11-19 06:52Z · 1,476 passes to book; 36 skipped (booking window closed)." with `Show 36` (the history
+    read's skipped items, with the same `reason`); nothing skipped, or a decision from before #273 (`skipped` null),
+    no clause. Audit: "Approved R41 for 11-16: 1,476 passes to book, 36 skipped (booking window closed)."
 - **Submit refusals:** 409 `plan_changed`: "Not sent: R41 changed after you opened it. Reload to see it, then send it
   again." 409 `plan_already_submitted` (`submitted_by` and `submitted_at` together or neither): "Not sent:
   R41 was already sent for approval by Mira K. at 03:40Z, so nothing changed. Reload to see it." The viewer: "Not sent:
@@ -3749,3 +3823,118 @@ fixes their words and lists what the legacy pages offered that the console doesn
 **Parity left for fe-setup** (legacy L19, not in the console yet; build, or record why not): the `Readiness` link in
 the page header; the protocol preset picker ("Choose protocol preset", "No protocol preset selected", with "Pinned
 profile" and "Current"); the installed, available and app versions (the console shows `v3` only).
+
+### U105 · An automation grant takes effect only after a second admin approves it (#283) (mms-security / ca-ux / fe-ops)
+Under "Needs a second person's approval", issuing a grant (Contact planning › Policy › Grants) makes a proposal that
+authorizes nothing until a different org admin approves it. That admin must be outside the people accountable for the
+service it names (U100). Under "Applies without approval", the proposer's own approval stands, as for other kinds.
+Revoking or narrowing is a tightening: any org admin does it alone, at once. The panel mirrors the policy's own
+"Waiting for approval" (P5). Shape: mms-security's, agreed with api 11-19; codes switched on with `knownErrorCode`.
+
+- **States** (`State` column; mark + word, B2): `PROPOSED` (caution), `ACTIVE` (nominal), `REJECTED` (off),
+  `REVOKED` (off), `WITHDRAWN` (off), `EXPIRED` (stale). `expired` is derived on read and means two things; the row says which:
+  - a proposal undecided past `proposal_expires_at` (72 h): "Proposed by Mira K. at 11-19 06:40Z; no one decided it
+    in time." Told apart by `approved_at` being null.
+  - an active grant past `valid_until`: today's line.
+  - A proposed row: `Valid until` reads "30 days from approval" (from `validity_seconds`; `valid_from` and
+    `valid_until` are null until approval), and the state line "Proposed by Mira K. at 11-19 06:40Z · decide by
+    11-22 06:40Z".
+  - A rejected row (`rejected_by`, `rejected_at`, `rejection_reason`, together or none): "Rejected by Ana R. at 11-19
+    06:52Z: <reason>". Without them: "Rejected."
+  - A withdrawn row (a widening proposal ended because its grant was revoked; `withdrawn_by`, `withdrawn_at`):
+    "Withdrawn at 11-19 07:05Z, when Ana R. revoked the grant it would replace." Without them: "Withdrawn: the grant
+    it would replace was revoked."
+- **The sheet** (`Grant automation…`):
+  - Under "Needs a second person's approval": title `Propose a grant`, commit `Propose grant`, muted line above the
+    footer: "It takes effect once another org admin approves it. Until then Nightly planner can't act under it."
+    After a `proposed` answer: "Proposed. It takes effect once another org admin approves it. If no one decides by
+    11-22 06:40Z, it expires."
+  - Under "Applies without approval": title `Grant automation`, commit `Grant`, muted line "It takes effect at once.
+    No second person's approval is needed, as this mission's setting allows." After an `active` answer: "Granted.
+    Nightly planner can act under it until 12-19 06:40Z."
+  - The approval setting unread (missing from the read): the propose wording, never "at once"; the answer's state
+    says what happened.
+  - Any other answer (U20): "Cadence didn't confirm the grant. Reload to see it."
+- **Waiting for approval** (panel on a proposed grant): "Proposed by Mira K. at 11-19 06:40Z: <reason>. It takes
+  effect once another org admin approves it. If no one decides by 11-22 06:40Z, it expires." Actions `Approve grant for Nightly planner` and
+  `Reject…`. Reject needs a reason: up front "Give a reason first." (A7); the 422 `invalid_params` field message
+  (`Say why.`) shows under the field.
+  - **Up front (A6) from `viewer_can_decide` and `cannot_decide_because`, never computed in the console** (#233's
+    pattern). Approve is disabled with its reason, muted under it and as its description; Reject stays:
+    - `proposer`: "You proposed this grant, so another org admin approves it."
+    - `accountable` (`cannot_decide_details.grantee`, the same key as the 403): "You're accountable for Nightly planner, so another org admin
+      approves its grant."
+    - `authors_unknown` (`cannot_decide_details.service`): "Nightly planner has no one recorded as accountable for it, so its grant can't be approved
+      yet. An org admin records who's accountable in People › Service identities." (U100's words)
+    - `not_admin`: no actions; the panel's line ends "Org admins approve grants."
+    - `not_proposed`: no panel (the row's state says why).
+    - `not_a_person`: never shown in the console (a service can't sign in); as `not_admin` if it is.
+    - A reason the console doesn't know: "You can't approve this grant, so another org admin approves it." with the
+      code in Technical details.
+- **Approve refusals** (nothing recorded; each ends "Your approval wasn't recorded.", U95):
+  - 403 `automation_grant_self_approval_forbidden`, `because: "proposed"`: "Not approved: you proposed this grant,
+    so another org admin approves it. Your approval wasn't recorded." `because: "accountable"` (`grantee`, the service the grant empowers; a different key from U100's
+    `via_service` on purpose): "Not
+    approved: you're accountable for Nightly planner, so another org admin approves its grant. Your approval wasn't
+    recorded." Then Approve is disabled with the up-front line.
+  - 403 `automation_grant_approver_authors_unknown` (`service`): "Not approved: Nightly planner has no one
+    recorded as accountable for it, so its grant can't be approved yet. Your approval wasn't recorded. An org admin
+    records who's accountable in People › Service identities." (U100's words)
+  - 409 `automation_grant_not_proposed` (`state`; `decided_by` and `decided_at`, both or neither): with them, as U97: "This
+    grant was already approved by Ana R. at 11-19 06:52Z, so your approval wasn't recorded. Reload to see it." /
+    "…already rejected by…"; the viewer: "You already approved this grant at 11-19 06:52Z. Reload to see it." (with
+    the date, since a 72 h proposal spans days) Without them, by state:
+    `expired`: "Not approved: no one decided this grant in time, so it expired. Your approval wasn't recorded.
+    It has to be proposed again."; `rejected`: "Not approved: this grant was already rejected, so your approval wasn't
+    recorded. Reload to see it."; `active`: "…was already approved…"; `revoked`: "Not approved: this grant was
+    revoked, so your approval wasn't recorded. Reload to see it."; `withdrawn`: "Not approved: this proposal was
+    withdrawn when the grant it would replace was revoked, so your approval wasn't recorded. Reload to see it."
+  - 409 `approval_policy_changed` (`kind: "automation_grants"`; until #201, api's interim name): "Not approved: the
+    mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. It has to
+    be proposed again."
+  - 403 `authenticated_user_required` (a service, even one with organization_admin; REST or backstop; the code U104
+    uses): "Not
+    approved: only a person can approve a grant, not a service identity. Your approval wasn't recorded." For propose: "Not proposed: only a person
+    can propose a grant, not a service identity."
+  - Replays (approve, reject and narrow take an `operation_id`, as #257's plans): the same id and body returns the
+    original answer with `replayed: true`, shown as this one's result. 409 `duplicate_operation`: "Not approved:
+    Cadence matched this to an earlier, different request, so your approval wasn't recorded. Reload and try again."
+    (reject: "Not rejected: … so nothing changed."; narrow: "Not narrowed: … so nothing changed.")
+  - A code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
+    with the code in Technical details.
+- **Use under a grant that isn't active** (403 `automation_grant_not_active`, `state`), on the plan's state line as
+  U100's automation line, by the service's act (plan: "Not drafted automatically:", submit: "Not submitted
+  automatically:", approve: "Not approved automatically:") then by state: `proposed` "Nightly planner's grant isn't
+  approved yet."; `rejected` "Nightly planner's grant was rejected."; `expired` "no one approved Nightly planner's
+  grant in time."; `withdrawn` "Nightly planner's grant was withdrawn." The existing `automation_grant_revoked`, `automation_grant_expired` and
+  `automation_grant_not_yet_valid` keep their lines.
+- **Narrow** (`Narrow…` on an active grant; one person, at once): sheet title `Narrow the grant`, commit `Narrow`,
+  muted line "It takes effect at once. Narrowing only takes access away, so no approval is needed." After the answer:
+  "Narrowed. Nightly planner can now <what's left>." A change that isn't strictly narrower is refused, 422
+  `automation_grant_not_narrower` (`fields`, the widening ones, named by the sheet's labels: `allowed_actions` Can,
+  `maximum_horizon_seconds` Plans ahead up to, `maximum_contacts` Contacts per plan, at most,
+  `maximum_execution_concurrency` At once, at most, `validity_seconds` Valid for; an unknown field by its code in
+  Technical details only): "Not narrowed: this
+  change gives Nightly planner more than it has now (Contacts per plan, at most), so it needs approval. Propose it as
+  a new grant instead." Without `fields`, the same without the bracket. The console offers only narrower values in the sheet, so this is the backstop.
+- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If one is,
+  the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
+  back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
+  transaction.)
+- **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
+- **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Granted Nightly planner
+  automation (no approval needed under this mission's setting)" for a grant that takes effect at once, "Approved Mira K.'s grant for
+  Nightly planner", "Rejected Mira K.'s grant for Nightly planner: <reason>", "Revoked the grant for Nightly planner:
+  <reason>", "Narrowed the grant for Nightly planner: <what changed>", "The proposed grant for Nightly planner
+  expired; no one decided it in time.", "Withdrew the proposed grant for Nightly planner, when revoking the grant it
+  would replace" (the actor and time lead, U29)
+- **A nameless service** (`grantee` or `service` with a null `name`, as U100/#287): the name drops, never an id (U25;
+  the id goes in Technical details). "Nightly planner" becomes "the service identity this grant is for": "You're
+  accountable for the service identity this grant is for, so another org admin approves it."; "The service identity
+  this grant is for has no one recorded as accountable for it…"; the sheet's "Until then the service identity can't
+  act under it."; "Not submitted automatically: the service identity's grant isn't approved yet."; the action reads
+  `Approve grant`. Sheets and rows already name the service from the
+  grant's own read; a null name there reads "Unknown service identity" (U25).
+- **Not here:** whether a grant approved under "Applies without approval" keeps working after the mission moves to
+  "Needs a second person's approval" (#283's open question 1, the director's call); widening who may propose or
+  approve to mission admins (open question 2).

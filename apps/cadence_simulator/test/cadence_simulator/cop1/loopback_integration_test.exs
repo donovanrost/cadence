@@ -331,18 +331,31 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     realized_contact
   end
 
-  # Up to 5 s (100 x 50 ms): a real TCP round trip and COP-1 verification can take longer than
-  # 1 s on a busy machine, and polling returns as soon as the condition holds.
-  defp assert_eventually(fun, attempts \\ 100)
+  # Up to 15 s, polling every 50 ms: a real TCP round trip and COP-1 verification can take longer
+  # than 1 s on a busy machine, and one runtime snapshot call can itself wait out its 5 s call
+  # timeout under CI load (#334). A call that times out means "not yet", not a failed test; a
+  # provider that died still fails here, when the deadline passes.
+  defp assert_eventually(fun) when is_function(fun, 0) do
+    poll_until(fun, System.monotonic_time(:millisecond) + 15_000)
+  end
 
-  defp assert_eventually(_fun, 0), do: flunk("condition was not satisfied in time")
+  defp poll_until(fun, deadline) do
+    cond do
+      holds?(fun) ->
+        :ok
 
-  defp assert_eventually(fun, attempts) when is_function(fun, 0) do
-    if fun.() do
-      :ok
-    else
-      Process.sleep(50)
-      assert_eventually(fun, attempts - 1)
+      System.monotonic_time(:millisecond) >= deadline ->
+        flunk("condition was not satisfied in time")
+
+      true ->
+        Process.sleep(50)
+        poll_until(fun, deadline)
     end
+  end
+
+  defp holds?(fun) do
+    fun.()
+  catch
+    :exit, {:timeout, {GenServer, :call, _args}} -> false
   end
 end
