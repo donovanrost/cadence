@@ -11,6 +11,12 @@ defmodule Cadence.ContactPlanning.PlanOperations do
   sorted by requirement id with each reason trimmed. The digest is a SHA-256 of a canonical JSON
   list (fixed positions, no maps), so it stays stable across OTP and library versions; a golden
   test pins it (DECISIONS #108: a stored hash that is recomputed).
+
+  Layout 2 (#273) adds the approver's `expected_expired_digest` (the plan read's opaque
+  `expired_digest`; absent is `nil`): `[2, action, expected_version, note, acknowledgements,
+  expected_expired_digest]`. Rows recorded under layout 1 still replay: a request WITHOUT that
+  field also matches a layout-1 digest; a request WITH it never does (ca-security). New rows are
+  always layout 2.
   """
 
   use Ecto.Schema
@@ -53,7 +59,7 @@ defmodule Cadence.ContactPlanning.PlanOperations do
   def check(organization_id, mission_id, operation_id, plan_id, action, actor_id, request) do
     case fetch(organization_id, mission_id, operation_id) do
       nil -> :new
-      record -> compare(record, plan_id, action, actor_id, digest(action, request))
+      record -> compare(record, plan_id, action, actor_id, digests(action, request))
     end
   end
 
@@ -101,24 +107,44 @@ defmodule Cadence.ContactPlanning.PlanOperations do
 
   def actor_id(_scope), do: {:error, :forbidden}
 
-  @doc "The normalized request's digest (see the moduledoc)."
+  @doc "The normalized request's digest, layout 2 (see the moduledoc). New rows store this."
   @spec digest(action(), request()) :: binary()
-  def digest(action, request) do
+  def digest(action, request),
+    do: sha([2 | fields(action, request)] ++ [blank_nil(request[:expected_expired_digest])])
+
+  @doc false
+  # Layout 1 (#257), only to match rows recorded before #273; pinned by its own golden test.
+  @spec digest_v1(action(), request()) :: binary()
+  def digest_v1(action, request), do: sha([1 | fields(action, request)])
+
+  # The digests a stored row may carry for this request: layout 2, and layout 1 only when the
+  # request has no expected_expired_digest (a request with one never matches a v1 row).
+  defp digests(action, request) do
+    case blank_nil(request[:expected_expired_digest]) do
+      nil -> [digest(action, request), digest_v1(action, request)]
+      _digest -> [digest(action, request)]
+    end
+  end
+
+  defp fields(action, request) do
     acknowledgements =
       (request[:acknowledgements] || [])
       |> Enum.map(&[&1.requirement_id, trim(&1.reason)])
       |> Enum.sort()
 
-    # Canonical JSON: a list by position (version 1 of this layout), no maps, no key order.
-    [1, Atom.to_string(action), request.expected_version, trim(request[:note]), acknowledgements]
-    |> Jason.encode!()
-    |> then(&:crypto.hash(:sha256, &1))
-    |> Base.encode16(case: :lower)
+    [Atom.to_string(action), request.expected_version, trim(request[:note]), acknowledgements]
   end
 
-  defp compare(%{contact_plan_id: plan_id} = record, plan_id, action, actor_id, sha) do
+  # Canonical JSON: a list by position, no maps, no key order.
+  defp sha(list),
+    do: list |> Jason.encode!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
+
+  defp blank_nil(value) when is_binary(value) and value != "", do: value
+  defp blank_nil(_value), do: nil
+
+  defp compare(%{contact_plan_id: plan_id} = record, plan_id, action, actor_id, shas) do
     if record.action == Atom.to_string(action) and record.actor_id == actor_id and
-         record.request_sha256 == sha,
+         record.request_sha256 in shas,
        do: {:replay, {record.response_status, record.response_document}},
        else: :duplicate_operation
   end

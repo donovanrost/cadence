@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.PlanDetail do
 
   alias Cadence.ContactPlanning.RepairChain
   alias Cadence.Control.{PlanConfirmation, Scheduling}
+  alias Cadence.Control.PlanSkippedPasses
   alias Cadence.Reads.PlanRepairHeader
 
   @doc """
@@ -28,7 +29,20 @@ defmodule CadenceWeb.Console.PlanDetail do
       PlanRepairHeader.for_plan(org_id(conn), mission_id(conn), plan.id, DateTime.utc_now())
     )
     |> Map.put(:approval_setting, approval_setting(conn))
+    |> Map.merge(expired(conn, plan))
   end
+
+  # #273: the passes an approval would leave out (booking window closed), with the digest the
+  # approver sends back and when the set next changes. One call to the domain's rule.
+  defp expired(conn, plan),
+    do:
+      PlanSkippedPasses.for_read(
+        org_id(conn),
+        mission_id(conn),
+        plan.id,
+        plan.version,
+        DateTime.utc_now()
+      )
 
   @doc """
   #257: the mission's approval setting at read time, `"direct"` or `"independent"`, on the plan

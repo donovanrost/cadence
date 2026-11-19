@@ -484,6 +484,10 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               # U65 (domain 11-15): the model gate's default baseline for the console.
                               "lib/cadence/control/model_approval_gate.ex",
                               "lib/cadence/control/alarms.ex",
+                              # #273 (api 11-19): one description of a plan's skipped passes
+                              # (booking window closed), shared by the plan read, the approve
+                              # answer and the plan history, so the three never disagree.
+                              "lib/cadence/control/plan_skipped_passes.ex",
                               "lib/cadence/control/activations/activation_execution.ex",
                               "lib/cadence/applications/telemetry_decom.ex",
                               "lib/cadence/management/activations/approved_activation.ex",

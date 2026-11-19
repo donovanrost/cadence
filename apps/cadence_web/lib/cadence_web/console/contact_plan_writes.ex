@@ -27,14 +27,27 @@ defmodule CadenceWeb.Console.ContactPlanWrites do
     end
   end
 
-  @doc "Approve's body: expected_version, operation_id, decision_note (as `note`), acknowledgements."
+  @doc """
+  Approve's body: expected_version, operation_id, decision_note (as `note`), acknowledgements and
+  (#273) expected_expired_digest, the plan read's opaque `expired_digest` as the approver saw it
+  (absent is nil: "saw none").
+  """
   @spec approve_params(map()) :: {:ok, map()} | {:error, map()}
   def approve_params(params) do
     with {:ok, common} <- common(params),
-         {:ok, note} <- note(params["decision_note"], :decision_note) do
-      {:ok, Map.put(common, :note, note)}
+         {:ok, note} <- note(params["decision_note"], :decision_note),
+         {:ok, digest} <- expected_expired_digest(params["expected_expired_digest"]) do
+      {:ok, common |> Map.put(:note, note) |> Map.put(:expected_expired_digest, digest)}
     end
   end
+
+  defp expected_expired_digest(nil), do: {:ok, nil}
+
+  defp expected_expired_digest(value) when is_binary(value) and byte_size(value) in 1..128,
+    do: {:ok, value}
+
+  defp expected_expired_digest(_value),
+    do: {:error, %{expected_expired_digest: "must be the plan read's expired_digest, unchanged"}}
 
   @doc "The operation's answer: its original status and body, with `replayed` (#257)."
   @spec answer(Plug.Conn.t(), :submitted | :approved | :replayed, {pos_integer(), map()}) ::
@@ -69,6 +82,12 @@ defmodule CadenceWeb.Console.ContactPlanWrites do
 
   def refuse(conn, plan_id, :contact_plan_not_pending_approval),
     do: Problem.respond(conn, :plan_not_pending, not_pending(conn, plan_id))
+
+  # #273: the set changed since the approver saw it, or every pass's booking window closed; both
+  # carry the current set ({expired, expired_digest}) and record nothing.
+  def refuse(conn, _plan_id, {code, %{expired: _, expired_digest: _} = details})
+      when code in [:contact_plan_expired_passes_changed, :contact_plan_all_opportunities_expired],
+      do: Problem.respond(conn, code, ConfigJSON.encode(details))
 
   def refuse(conn, plan_id, :duplicate_operation),
     do: Problem.respond(conn, :duplicate_operation, %{plan_id: plan_id})

@@ -42,6 +42,13 @@ defmodule CadenceWeb.Console.Problem do
     plan_not_pending: {409, "The plan isn't waiting for approval."},
     # #257: submit only submits; a plan already waiting for approval changes nothing.
     plan_already_submitted: {409, "The plan is already waiting for approval."},
+    # #273: the closed set changed since the approver saw it; every pass's window closed.
+    contact_plan_expired_passes_changed:
+      {409,
+       "The booking window closed for more of this plan's passes after you opened it. Nothing was recorded; check the list and approve again."},
+    contact_plan_all_opportunities_expired:
+      {409,
+       "The booking window has closed for all of this plan's passes, so nothing can be booked. Nothing was recorded."},
     contact_plan_self_approval_forbidden:
       {403, "You submitted or drafted this version, so another org admin approves it."},
     contact_plan_version_already_decided:
