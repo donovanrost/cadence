@@ -661,9 +661,17 @@ used to succeed is now refused.
 | `POST /command_requests/:id/enqueue` | `409 command_request_in_group` | The same, for queueing. Nothing was queued. | The group's GO queues its members. |
 | `POST /command_queue_entries/:id/release` | `409 command_group_not_armed` | The entry is a group member and its group isn't armed (`queued`, after its GO), judged from the server's group row. Nothing was released. | Give the group its GO; its release goes through the group. |
 | `POST /command_requests` | `422 command_request_group_reserved` | The request's `metadata` names a group (`metadata["group"]`). Nothing was created. | Submit the group: `POST /api/console/v1/missions/:mission_id/command-groups`. Drop group keys from a standalone request's `metadata`. |
+| `POST /command_requests/:id/approve` | `403 command_request_approver_authors_unknown` (#280) | The request was made through a service identity with nobody recorded as accountable for it, so nobody can approve it. Nothing was recorded. | An org admin records who is accountable (People › Service identities), then a person outside them approves. |
 
 The `message` is ux U87's words: "This command is part of a command group. Approve it with the
 group's GO/NO-GO.", "A command joins a command group only when the group is submitted." and
 "This command's group hasn't been given its GO, so it can't be sent." Membership is read from the
 server's group records, never from a caller's metadata. Requests outside any group are unchanged. The console's named release already refused an unarmed group (`command_group_not_armed`
 under `refused`, in the release section above).
+
+**Service requesters (#280, ux U100).** A request made through a service identity counts as made by
+the people accountable for it (its issuer and rotators, and anyone an org admin records). Approving
+it as one of them is refused with the same reason as approving your own,
+`command_request_self_approval_not_allowed`. Before, a service requester had no `user_id`, so
+that check passed. This REST envelope carries no `details`, so the service isn't named here; the
+console's refusals name it (`details.via_service`).

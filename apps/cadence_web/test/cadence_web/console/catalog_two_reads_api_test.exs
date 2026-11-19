@@ -226,7 +226,16 @@ defmodule CadenceWeb.Console.CatalogTwoReadsAPITest do
         capabilities: [:organization_admin]
       })
 
-    assert {:ok, %{service_identity: service}} = Cadence.Auth.issue_service_identity(identity)
+    # #280: issuing records who issued it (a person of the same organization).
+    issuer = %Cadence.Auth.Scope{
+      actor_kind: :user,
+      organization_id: org.organization_id,
+      user: %Cadence.Accounts.User{user_id: "user-service-issuer"}
+    }
+
+    assert {:ok, %{service_identity: service}} =
+             Cadence.Auth.issue_service_identity(identity, issuer)
+
     service
   end
 end

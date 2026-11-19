@@ -8,8 +8,11 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   - Approval names the comparison report the approver saw. It must be this revision's and must
     have passed; a report whose replay didn't run (no qualification corpus) passes, and says so.
   - Under 'independent' approval (the mission's governance setting) whoever imported the revision
-    can't approve it (`:mission_model_self_approval_forbidden`). A revision whose importer wasn't
-    recorded can be approved by any administrator; the approval records that.
+    can't approve it (`:mission_model_self_approval_forbidden`). A service importer counts as the
+    people accountable for it, and a service nobody is accountable for refuses everyone
+    (`:mission_model_approver_authors_unknown`, #280). A revision whose importer wasn't recorded at
+    all (a seed's system actor, a legacy `%{}`) can be approved by any administrator; the approval
+    records that (MM-2).
   - Approval needs a candidate (or already approved) revision whose four runtime plans are ready.
   - Approval needs a catalog revision that names the revision
     (`:mission_model_revision_not_in_catalog`, director 11-17, interim); rejecting doesn't.
@@ -20,10 +23,70 @@ defmodule Cadence.MissionModels.RevisionDecisions do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
   alias Cadence.Catalog.MissionModel.Revision
-  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Governance.{Accountability, ActivationPolicy}
   alias Cadence.MissionModels.{Comparison, RevisionRow, RuntimePlanRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
+
+  @typedoc "A service as a refusal names it (U100): `name` is nil when its row is gone."
+  @type service :: %{id: binary(), name: binary() | nil}
+
+  @typedoc """
+  Why separation of duties bars a person from approving a revision (U100): `:self` (they imported
+  it, or `via_service`, a service identity they're accountable for, did) or `:authors_unknown`
+  (`service` imported it and nobody is on record as accountable for it, #280).
+  """
+  @type refusal :: %{
+          reason: :self | :authors_unknown,
+          via_service: service() | nil,
+          service: service() | nil
+        }
+
+  @doc """
+  The importer/approver separation (DECISIONS #92 a) for `person_id` on a revision: the check
+  approval itself runs, so the approval read and C3 (#119) call it rather than repeat it, and
+  #280's service accountability changes it in this one place.
+
+  `{:ok, %{policy, importers, recorded}}` returns the policy in force, the recorded importers
+  (people), and whether any importer is on record at all, a service included (#280), which
+  approval writes into its evidence as `importer_recorded`. Under 'independent' an importer gets `{:refused, refusal}`.
+  Authorization, status and plan readiness are separate checks.
+  """
+  @spec separation(binary(), binary(), binary(), binary() | nil) ::
+          {:ok, %{policy: map(), importers: [binary()], recorded: boolean()}}
+          | {:refused, refusal()}
+  def separation(organization_id, mission_id, revision_id, person_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(revision_id) do
+    policy = ActivationPolicy.evidence(organization_id, mission_id)
+    importers = Catalog.model_importers(organization_id, mission_id, revision_id)
+    # #280: importers as actors, services included (mms-engineer's review: a service import is
+    # still a recorded importer).
+    actors = Catalog.model_import_actors(organization_id, mission_id, revision_id)
+    checked = %{policy: policy, importers: importers, recorded: actors != []}
+
+    if policy["separation_of_duties"] == true do
+      # Every importer counts as people: a service importer is its issuer and rotators
+      # (`Governance.Accountability`), and a service nobody is accountable for refuses everyone.
+      case separate(organization_id, person_id, actors) do
+        :ok ->
+          {:ok, checked}
+
+        {:error, {:self, via}} ->
+          {:refused, %{reason: :self, via_service: via, service: nil}}
+
+        {:error, {:unknown, svc}} ->
+          {:refused, %{reason: :authors_unknown, via_service: nil, service: svc}}
+      end
+    else
+      {:ok, checked}
+    end
+  end
+
+  # No person can't be told apart from an importer, so it fails closed (#280).
+  defp separate(_organization_id, nil, _actors), do: {:error, {:self, nil}}
+
+  defp separate(organization_id, person_id, actors),
+    do: Accountability.separate(organization_id, {:user, person_id}, actors)
 
   @spec approve(Scope.t(), binary(), binary(), binary(), keyword()) ::
           {:ok, Revision.t()} | {:error, term()}
@@ -53,15 +116,14 @@ defmodule Cadence.MissionModels.RevisionDecisions do
          :ok <- require_ready_plans(organization_id, mission_id, revision_id),
          {:ok, comparison} <- Comparison.fetch(organization_id, mission_id, comparison_report_id),
          :ok <- passed_for(comparison, revision_id),
-         policy = ActivationPolicy.evidence(organization_id, mission_id),
-         {:ok, importers} <- independent(organization_id, mission_id, revision_id, actor, policy) do
+         {:ok, %{policy: policy, recorded: recorded}} <- independent(row, actor) do
       evidence =
         Map.merge(actor, %{
           # The approval policy in force at decision time (M2, director 11-18).
           "policy" => policy,
           "comparison_report_id" => comparison_report_id,
           "replay" => get_in(comparison, ["replay", "status"]),
-          "importer_recorded" => importers != [],
+          "importer_recorded" => recorded,
           # Approved after it already ran (the pre-gate revisions, lead 11-15): the caller says so
           # (ModelApprovalGate.running?/3), and the audit tells it.
           "retroactive" => Keyword.get(opts, :retroactive, false) == true
@@ -212,13 +274,21 @@ defmodule Cadence.MissionModels.RevisionDecisions do
 
   defp passed_for(_comparison, _id), do: {:error, :mission_model_comparison_mismatch}
 
-  defp independent(organization_id, mission_id, revision_id, %{"id" => actor_id}, policy) do
-    importers = Catalog.model_importers(organization_id, mission_id, revision_id)
-    separation = policy["separation_of_duties"]
+  defp independent(row, %{"id" => actor_id}) do
+    case separation(row.organization_id, row.mission_id, row.revision_id, actor_id) do
+      {:ok, checked} ->
+        {:ok, checked}
 
-    if separation == true and actor_id in importers,
-      do: {:error, :mission_model_self_approval_forbidden},
-      else: {:ok, importers}
+      {:refused, %{reason: :self, via_service: nil}} ->
+        {:error, :mission_model_self_approval_forbidden}
+
+      # #280 (U100): through a service identity the approver is accountable for.
+      {:refused, %{reason: :self, via_service: via}} ->
+        {:error, {:mission_model_self_approval_forbidden, %{via_service: via}}}
+
+      {:refused, %{reason: :authors_unknown, service: service}} ->
+        {:error, {:mission_model_approver_authors_unknown, %{service: service}}}
+    end
   end
 
   defp at(opts), do: opts |> Keyword.get(:at, DateTime.utc_now()) |> normalized_datetime()

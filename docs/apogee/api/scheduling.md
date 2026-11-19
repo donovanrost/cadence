@@ -254,10 +254,16 @@ approval is committed, then booking runs **off the request** (`scheduling_progre
 separation check (#226(b)).
 
 Errors:
-- `403 contact_plan_self_approval_forbidden`, `details: {because: "submitted" | "edited"}`: under
-  'independent' approval, the approver submitted this version (`submitted`, which wins when both
-  apply) or authored it (`edited`: the version's `created_by`; for a drafted plan, the drafter).
-  Nothing is recorded or booked.
+- `403 contact_plan_self_approval_forbidden`, `details: {because: "submitted" | "edited",
+  via_service: {id, name} | null}`: under 'independent' approval, the approver submitted this version
+  (`submitted`, which wins when both apply) or authored it (`edited`: the version's `created_by`; for
+  a drafted plan, the drafter). Or (#280) a service identity they're accountable for did, and
+  `via_service` names it (null when it was them). Nothing is recorded or booked.
+- `403 contact_plan_approver_authors_unknown`, `details: {service: {id, name} | null}` (#280): a
+  service identity with nobody recorded as accountable submitted or authored it. Nothing is recorded.
+- Under 'independent', a service approving under an automation grant counts as its own accountable
+  people plus the grant's approver. It's refused when they overlap the plan's authors, so automation
+  can't approve a plan its own service made; a person outside them approves it (ux U100).
 - `403 forbidden`: not an org admin.
 - `409 plan_not_pending`, `details: {state, decided_by: {id, name}, decided_at}` (the decision
   pair both or neither): the plan isn't waiting for approval (already approved or sent back, or a

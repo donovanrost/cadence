@@ -328,6 +328,14 @@ defmodule Cadence.Catalog do
     to: ModelImporters,
     as: :list
 
+  @doc "Every actor who imported a mission-model revision, services included (#280)."
+  @spec model_import_actors(binary(), binary(), binary()) :: [
+          {:user, binary()} | {:service, binary()}
+        ]
+  defdelegate model_import_actors(organization_id, mission_id, mission_model_revision_id),
+    to: ModelImporters,
+    as: :actors
+
   @doc "`:ok` when a catalog revision names the mission-model revision; see `ModelRevisionNaming`."
   defdelegate require_named_model_revision(
                 organization_id,

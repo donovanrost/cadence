@@ -46,7 +46,12 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
           mission_id: mission.mission_id,
           display_name: "Planner bot",
           capabilities: [:mission_admin]
-        })
+        }),
+        %Auth.Scope{
+          actor_kind: :user,
+          organization_id: org.organization_id,
+          user: %Cadence.Accounts.User{user_id: "user-service-issuer"}
+        }
       )
 
     %{

@@ -3,6 +3,7 @@ defmodule Cadence.Commanding.LifecyclePolicy do
   Applies command-stage, approval, request, and queue-entry lifecycle guards.
   """
 
+  alias Cadence.Governance.Accountability
   alias Cadence.Persistence.JsonDocument
 
   @spec ensure_stage_editable(map()) :: :ok | {:error, term()}
@@ -56,32 +57,34 @@ defmodule Cadence.Commanding.LifecyclePolicy do
   end
 
   @spec ensure_not_self_approval(map(), map()) :: :ok | {:error, term()}
+  # #280: the requester counts as people. A service requester is its issuer and rotators (it has no
+  # user_id, so the old comparison passed it); an unknown set refuses (`:command_request_approver_authors_unknown`).
   def ensure_not_self_approval(
         %{
+          organization_id: organization_id,
           command_request_id: command_request_id,
           requested_by_document: requested_by_document
         },
         decided_by
       )
       when is_map(decided_by) do
-    requester_user_id =
-      requested_by_document
-      |> JsonDocument.unwrap_value()
-      |> case do
-        requested_by when is_map(requested_by) ->
-          Map.get(requested_by, "user_id") || Map.get(requested_by, :user_id)
-
-        _other ->
-          nil
-      end
-
+    requester = JsonDocument.unwrap_value(requested_by_document)
     approver_user_id = Map.get(decided_by, "user_id") || Map.get(decided_by, :user_id)
 
-    if is_binary(requester_user_id) and requester_user_id != "" and
-         requester_user_id == approver_user_id do
-      {:error, {:command_request_self_approval_not_allowed, command_request_id}}
-    else
-      :ok
+    case Accountability.separate(organization_id, {:user, approver_user_id}, [requester]) do
+      :ok ->
+        :ok
+
+      {:error, {:self, nil}} ->
+        {:error, {:command_request_self_approval_not_allowed, command_request_id}}
+
+      {:error, {:self, via}} ->
+        {:error,
+         {:command_request_self_approval_not_allowed, command_request_id, %{via_service: via}}}
+
+      {:error, {:unknown, service}} ->
+        {:error,
+         {:command_request_approver_authors_unknown, command_request_id, %{service: service}}}
     end
   end
 

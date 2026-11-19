@@ -49,7 +49,15 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
         capabilities: [:organization_admin]
       })
 
-    assert {:ok, %{api_token: api_token}} = Cadence.Auth.issue_service_identity(service_identity)
+    assert {:ok, %{api_token: api_token}} =
+             Cadence.Auth.issue_service_identity(
+               service_identity,
+               %Cadence.Auth.Scope{
+                 actor_kind: :user,
+                 organization_id: organization.organization_id,
+                 user: %Cadence.Accounts.User{user_id: "user-service-issuer"}
+               }
+             )
 
     %{
       conn: conn,

@@ -1308,6 +1308,13 @@ defmodule CadenceWeb.Router do
       get("/service-identities", PeopleController, :service_identities)
       post("/service-identities", ServiceIdentityController, :create)
       post("/service-identities/:service_identity_id/rotate", ServiceIdentityController, :rotate)
+
+      post(
+        "/service-identities/:service_identity_id/accountable",
+        ServiceIdentityController,
+        :accountable
+      )
+
       delete("/service-identities/:service_identity_id", ServiceIdentityController, :revoke)
       get("/missions", OrganizationController, :missions)
       # L4 console mission create (owner: api).

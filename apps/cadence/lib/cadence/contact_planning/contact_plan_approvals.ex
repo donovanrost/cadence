@@ -6,7 +6,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.ContactPlanning.PlanUpdates
-  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Governance.{Accountability, ActivationPolicy}
 
   alias Cadence.ContactPlanning.{
     AutomationGrants,
@@ -557,17 +557,28 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   # whoever submitted this version or authored it can't approve it (director 11-15: an admin's own
   # Submit approved and booked in one step). Under 'direct' it's allowed, as before. A send back
   # by the requester is fine either way.
-  defp separate_approver(
-         :approved,
-         plan_row,
-         version_row,
-         %{"kind" => "user", "id" => actor_id},
-         policy
-       ) do
-    requesters = Enum.reject([plan_row.lifecycle_changed_by, version_row.created_by], &is_nil/1)
+  # #280: the authors and the approver are compared as people. A service author counts as its
+  # issuer and rotators; a service approving under an automation grant counts as its own people plus
+  # the grant's approver. Overlap refuses; an unknown set refuses (`:contact_plan_approver_authors_unknown`).
+  defp separate_approver(:approved, plan_row, version_row, actor, policy)
+       when is_map(actor) do
+    if policy["separation_of_duties"] == true do
+      org = plan_row.organization_id
 
-    if actor_id in requesters and policy["separation_of_duties"] == true do
-      {:error, :contact_plan_self_approval_forbidden}
+      authors =
+        Accountability.actors_for_ids(org, [
+          plan_row.lifecycle_changed_by,
+          version_row.created_by
+        ])
+
+      grant_approver = get_in(actor, ["automation_grant", "approved_by"])
+
+      org
+      |> Accountability.separate(actor, authors, grant_approver)
+      |> Accountability.refusal(
+        :contact_plan_self_approval_forbidden,
+        :contact_plan_approver_authors_unknown
+      )
     else
       :ok
     end

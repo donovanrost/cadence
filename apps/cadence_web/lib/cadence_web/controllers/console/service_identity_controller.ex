@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.ServiceIdentityController do
   @moduledoc """
   Service identity writes (O6) under `/api/console/v1/organizations/:organization_id`: create,
-  rotate, revoke. Create and rotate return the API token once. Contract:
+  rotate, revoke, and recording who is accountable (#280). Create and rotate return the API token once. Contract:
   docs/apogee/api/setup.md.
   """
 
@@ -20,6 +20,17 @@ defmodule CadenceWeb.Console.ServiceIdentityController do
     conn.assigns.current_scope
     |> Identities.rotate(organization_id, id)
     |> respond(conn, :ok)
+  end
+
+  # #280: record who is accountable for an identity (the acting admin joins them). 204 on success.
+  def accountable(
+        conn,
+        %{"organization_id" => organization_id, "service_identity_id" => id} = params
+      ) do
+    case Identities.record_accountable(conn.assigns.current_scope, organization_id, id, params) do
+      :ok -> send_resp(conn, :no_content, "")
+      error -> respond(error, conn, :ok)
+    end
   end
 
   def revoke(conn, %{"organization_id" => organization_id, "service_identity_id" => id}) do
