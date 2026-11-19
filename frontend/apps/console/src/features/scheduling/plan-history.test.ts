@@ -32,6 +32,9 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   latest_version: undefined,
   repair: undefined,
   approval_setting: undefined,
+  expired: undefined,
+  expired_digest: undefined,
+  next_expiry_at: undefined,
   ...over,
 });
 

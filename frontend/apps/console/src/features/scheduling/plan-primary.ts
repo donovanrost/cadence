@@ -4,6 +4,7 @@ import { coverage, spacecraftNotCovered } from "./coverage.ts";
 import { isStationConflict } from "./unavailable.ts";
 import { unconfirmedTail } from "./unconfirmed.ts";
 import { byAuthor, type PlanDetail } from "./api.ts";
+import { allPasses } from "./lifecycle.ts";
 import type { ReviewAct } from "./review-run.ts";
 import { DIRECT_NOTE, selfReason, type Because } from "./review-words.ts";
 
@@ -68,18 +69,21 @@ export function planPrimary(
       // U36: a sent-back draft is submitted again as is (the server cuts the next version).
       const again = plan.approval?.decision === "rejected";
       // #257 (U97): under "Applies without approval" an org admin's one act submits, then approves.
-      if (isAdmin && plan.approval_setting === "direct")
+      if (isAdmin && plan.approval_setting === "direct") {
+        const label =
+          gaps > 0
+            ? `Accept ${plural(gaps, "gap")}, approve and book`
+            : `Approve and book ${plural(bookable(plan), "pass", "passes")}`;
+        if (allClosed(plan)) return allClosedBlock(plan);
         return {
           kind: "sheet",
           act: "submit_approve",
-          label:
-            gaps > 0
-              ? `Accept ${plural(gaps, "gap")}, approve and book`
-              : `Approve and book ${plural(n, "pass", "passes")}`,
+          label,
           title: sheetTitle(true, false),
-          confirm: `This sends R${plan.version} and approves it, and booking starts for its ${plural(n, "pass", "passes")}.`,
+          confirm: `This sends R${plan.version} and approves it, and booking starts for its ${plural(bookable(plan), "pass", "passes")}.`,
           note: DIRECT_NOTE,
         };
+      }
       const label =
         gaps > 0
           ? `Accept ${plural(gaps, "gap")} and ${again ? "submit again" : "request approval"}`
@@ -100,7 +104,9 @@ export function planPrimary(
       const label =
         gaps > 0
           ? `Accept ${plural(gaps, "gap")}, approve and book`
-          : `Approve and book ${plural(n, "pass", "passes")}`;
+          : `Approve and book ${plural(bookable(plan), "pass", "passes")}`;
+      // #273 (U61, #340): nothing left to book is Approve's A6 reason, from the plan read.
+      if (allClosed(plan)) return allClosedBlock(plan);
       if (options.refusedBecause)
         return { kind: "blocked", label, reason: selfReason(options.refusedBecause) };
       // U97: under "Needs a second person's approval" the submitter gets no Approve (the 403 stays
@@ -113,7 +119,7 @@ export function planPrimary(
         act: "approve",
         label,
         title: sheetTitle(true, false),
-        confirm: `This approves the plan and books ${plural(n, "pass", "passes")} with the providers.`,
+        confirm: `This approves the plan and books ${plural(bookable(plan), "pass", "passes")} with the providers.`,
         note: null,
       };
     }
@@ -148,6 +154,17 @@ export function planPrimary(
       return { kind: "none", note: "This plan is no longer current." };
   }
 }
+
+/** #273: the passes an approval would book, from the plan read (its closed passes are skipped). */
+export const bookable = (plan: PlanDetail) => plan.expired?.reservable_count ?? plan.counts.passes;
+const allClosed = (plan: PlanDetail) =>
+  plan.expired != null && plan.expired.count > 0 && plan.expired.reservable_count === 0;
+/** Nothing left to book: no count on the disabled button, the reason says why (A6). */
+const allClosedBlock = (plan: PlanDetail): PlanPrimary => ({
+  kind: "blocked",
+  label: "Approve and book the plan",
+  reason: `The booking window has closed for ${allPasses(plan.expired?.count ?? null)}, so nothing can be booked.`,
+});
 
 /**
  * The sheet's title names the act, as the button does, without the count (U36, ux): an admin

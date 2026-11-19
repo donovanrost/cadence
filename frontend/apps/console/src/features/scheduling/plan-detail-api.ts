@@ -7,7 +7,7 @@ import {
   type Decoded,
   type MissionId,
 } from "@/api";
-import { supersededByReader } from "./lifecycle.ts";
+import { expiredReader, supersededByReader } from "./lifecycle.ts";
 import { base, planRow, stationReader } from "./plans-api.ts";
 import { repairInfoReader } from "./repair-info.ts";
 
@@ -261,6 +261,15 @@ export const planDetailReader = d.object({
    * gives an org admin the one act; `independent`, absent or unknown: Request approval (U97).
    */
   approval_setting: d.optional(d.nullable(d.knownText(["direct", "independent"] as const))),
+  /**
+   * #273 (api's final shape): the selected passes whose booking window has closed, read before
+   * deciding (null: none); `expired_digest` goes back unchanged on approve (opaque, never computed
+   * here); `next_expiry_at`: when the server's set next changes (margin applied), for the live line.
+   * All optional until api's read lands.
+   */
+  expired: d.optional(expiredReader),
+  expired_digest: d.optional(d.string),
+  next_expiry_at: d.optional(d.nullable(d.timestamp)),
 });
 export type PlanDetail = Decoded<typeof planDetailReader>;
 export type PlanIssue = PlanDetail["conflicts"][number];

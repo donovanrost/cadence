@@ -32,6 +32,9 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   latest_version: undefined,
   repair: undefined,
   approval_setting: undefined,
+  expired: undefined,
+  expired_digest: undefined,
+  next_expiry_at: undefined,
   ...over,
 });
 const gap = { requirement_id: "r1", requirement_version: 1, spacecraft_id: "sc1", why: [] };
@@ -259,5 +262,42 @@ describe("booking progress (qa: the count must climb)", () => {
     });
     expect(planHeaderTail(settled)).toBe("38 of 40 booked");
     expect(planPrimary(settled, true).kind).toBe("link");
+  });
+});
+
+describe("planPrimary and passes whose booking window closed (#273)", () => {
+  const closed = (count: number, reservable: number) => ({
+    count,
+    reservable_count: reservable,
+    items: [],
+  });
+  it("counts only bookable passes on Approve and its confirm", () => {
+    expect(
+      planPrimary(plan({ state: "pending_approval", expired: closed(3, 9) }), true),
+    ).toMatchObject({
+      act: "approve",
+      label: "Approve and book 9 passes",
+      confirm: "This approves the plan and books 9 passes with the providers.",
+    });
+    expect(
+      planPrimary(plan({ approval_setting: "direct", expired: closed(2, 10) }), true),
+    ).toMatchObject({
+      act: "submit_approve",
+      label: "Approve and book 10 passes",
+      confirm: "This sends R41 and approves it, and booking starts for its 10 passes.",
+    });
+  });
+  it("disables Approve with the all-closed reason when nothing can be booked", () => {
+    expect(planPrimary(plan({ state: "pending_approval", expired: closed(12, 0) }), true)).toEqual({
+      kind: "blocked",
+      label: "Approve and book the plan",
+      reason: "The booking window has closed for all 12 of its passes, so nothing can be booked.",
+    });
+    expect(
+      planPrimary(plan({ approval_setting: "direct", expired: closed(1, 0) }), true),
+    ).toMatchObject({
+      kind: "blocked",
+      reason: "The booking window has closed for its only pass, so nothing can be booked.",
+    });
   });
 });

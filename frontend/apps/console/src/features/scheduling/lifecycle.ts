@@ -4,7 +4,7 @@ import {
   detailsOf,
   isError,
   spacecraftRef,
-  stationRef,
+  stationId,
   type ApiError,
   type Decoded,
 } from "@/api";
@@ -13,7 +13,8 @@ import { formatCount, plural } from "@/ui";
 /**
  * The day-plan lifecycle (U61; domain's proposal, the director's ruling; api's wire 11-15): a new
  * plan for a day replaces a pending one, approval refuses a day another plan already covers, and
- * approval books what's still bookable and reports the passes that had already started.
+ * approval books what's still bookable and reports the passes whose booking window had closed
+ * (#273: the provider's window, which can close before AOS, so never "started", U20).
  */
 
 /** Plan read: the plan that replaced this one; null when it wasn't replaced. */
@@ -22,16 +23,35 @@ export const supersededByReader = d.nullable(
 );
 export type SupersededBy = NonNullable<Decoded<typeof supersededByReader>>;
 
-/** The submit/approve answer: passes left out because their window had started; null when none. */
+/** #273: a listed pass's station, as the plan read and the approve answer send it ({id, code, name}). */
+const expiredStation = d.nullable(
+  d.object({
+    ref: d.optional(d.nullable(d.string)),
+    id: d.optional(d.nullable(stationId)),
+    // free-text: a station's short code (SVA), shown as is
+    code: d.optional(d.nullable(d.string)),
+    name: d.optional(d.nullable(d.string)),
+  }),
+);
+
+/**
+ * #273 (api's final shape): the selected passes whose booking window has closed, on the plan read
+ * (before deciding) and the approve answer (the set the decision skipped); null when none. `items`
+ * are capped at 5,000 in AOS order, `count` isn't. `reason` no_booking_window: the provider gave no
+ * window (domain fails closed, so the pass counts as closed); api 11-19.
+ */
 export const expiredReader = d.nullable(
   d.object({
     count: d.integer,
     reservable_count: d.integer,
     items: d.array(
       d.object({
+        snapshot_id: d.optional(d.token),
         spacecraft: d.nullable(spacecraftRef),
-        station: d.nullable(stationRef),
+        station: expiredStation,
         aos: d.timestamp,
+        expires_at: d.optional(d.nullable(d.timestamp)),
+        reason: d.optional(d.knownText(["opportunity_expired", "no_booking_window"] as const)),
       }),
       5_000,
     ),
@@ -56,7 +76,12 @@ const alreadyPlanned = d.object({
   day: d.string,
 });
 const replaced = d.object({ plan_id: d.token, revision: d.integer, at: d.timestamp });
-const allExpired = d.object({ expired_count: d.integer, day: d.string });
+/** All closed: #273's {expired, expired_digest}; the older {expired_count, day} still reads. */
+const allExpired = d.object({
+  expired: d.optional(expiredReader),
+  expired_count: d.optional(d.integer),
+  day: d.optional(d.string),
+});
 
 /** `11-16` from `2026-11-16`. */
 export const dayLabel = (day: string) => day.slice(5, 10);
@@ -111,11 +136,9 @@ export function lifecycleRefusal(error: ApiError, now: Date = new Date()): Lifec
   }
   if (isError(error, "contact_plan_all_opportunities_expired")) {
     const p = detailsOf(error, allExpired);
-    const all = p
-      ? `all ${formatCount(p.expired_count)} of its passes have`
-      : "its passes have all";
+    const n = p?.expired?.count ?? p?.expired_count ?? null;
     return {
-      text: `Not approved: ${p?.expired_count === 1 ? "its only pass has" : all} already started, so nothing could be booked.`,
+      text: `Not approved: the booking window has closed for ${allPasses(n)}, so nothing could be booked.`,
       open: null,
       planRestOf: p?.day ?? null,
     };
@@ -123,26 +146,37 @@ export function lifecycleRefusal(error: ApiError, now: Date = new Date()): Lifec
   return null;
 }
 
-/** Partial approval: "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked." */
+/** #273: "all 36 of its passes", "its only pass", or "all its passes" without a count. */
+export const allPasses = (n: number | null) =>
+  n === null ? "all its passes" : n === 1 ? "its only pass" : `all ${formatCount(n)} of its passes`;
+
+/** Partial approval: "Approved. Booking 1,476 passes; 36 weren't booked because their booking window had closed." */
 export function partialApproval(e: Expired): string {
   const left =
     e.count === 1
-      ? "1 had already started, so it wasn't booked"
-      : `${formatCount(e.count)} had already started, so they weren't booked`;
+      ? "1 wasn't booked because its booking window had closed"
+      : `${formatCount(e.count)} weren't booked because their booking window had closed`;
   return `Approved. Booking ${plural(e.reservable_count, "pass", "passes")}; ${left}.`;
 }
 
-/** One left-out pass under `Show 36`: `EARENDIL-001 · SVA · AOS 00:10Z`. */
+/**
+ * One left-out pass under `Show 36`: `EARENDIL-001 · SVA · AOS 00:10Z`; no close time (#273). A pass
+ * the provider gave no window adds "No booking window from the provider".
+ */
 export function expiredLine(item: Expired["items"][number], now: Date = new Date()): string {
   const station = item.station?.code ?? item.station?.name ?? item.station?.ref ?? null;
   return [
     item.spacecraft ? (item.spacecraft.name ?? "Unknown spacecraft") : null,
     station,
     `AOS ${at(item.aos, now)}`,
+    noWindow(item) ? "No booking window from the provider" : null,
   ]
     .filter((p): p is string => p !== null)
     .join(" · ");
 }
+
+/** U61/#341: keyed on the item's `reason` only; an unknown or absent reason adds nothing. */
+export const noWindow = (item: Expired["items"][number]) => item.reason === "no_booking_window";
 
 /** K1 opened on one plan of the day (`?plan=`), for a refusal's or a superseded line's Open. */
 export const planOfDayRoute = (day: string, planId: string) => ({

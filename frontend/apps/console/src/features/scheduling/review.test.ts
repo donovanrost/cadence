@@ -167,6 +167,59 @@ describe("not ready, gaps and partial approval (U97, ux's #257 check)", () => {
   });
 });
 
+describe("booking windows closed since the approver looked (#273, #340)", () => {
+  const item = (id: string) => ({
+    snapshot_id: id,
+    spacecraft: null,
+    station: null,
+    aos: "2026-11-16T00:10:00Z",
+    expires_at: "2026-11-15T23:00:00Z",
+    reason: "opportunity_expired" as const,
+  });
+  const set = (ids: string[], count = ids.length) => ({
+    count,
+    reservable_count: 10,
+    items: ids.map(item),
+  });
+  const changed = (current: unknown): ApiError => ({
+    kind: "conflict",
+    code: "contact_plan_expired_passes_changed",
+    message: "x",
+    details: { expired: current, expired_digest: "d2" },
+  });
+  const shown = set(["a"]);
+  it("counts the newly closed passes from two uncapped lists, and lists them", () => {
+    const r = approveRefusal(changed(set(["a", "b", "c"])), { ...who, shown });
+    expect(r.text).toBe(
+      "Not approved: the booking window closed for 2 more of R41's passes after you opened it, so what you'd approve changed. Your approval wasn't recorded. Check the list and approve again.",
+    );
+    expect(r.reason).toBe("the booking window closed for 2 more of its passes after you opened it");
+    expect(r.items?.map((i) => i.snapshot_id)).toEqual(["b", "c"]);
+  });
+  it("goes countless when either list is capped or can't be diffed (ca-security)", () => {
+    const countless =
+      "Not approved: the booking window closed for more of R41's passes after you opened it, so what you'd approve changed. Your approval wasn't recorded. Check the list and approve again.";
+    expect(approveRefusal(changed(set(["a", "b"], 6_000)), { ...who, shown }).text).toBe(countless);
+    expect(
+      approveRefusal(changed(set(["a", "b"])), { ...who, shown: set(["a"], 5_001) }).text,
+    ).toBe(countless);
+    expect(approveRefusal(changed(null), { ...who, shown }).text).toBe(countless);
+    expect(approveRefusal(changed(set(["a", "b"])), { ...who, shown }).items).toHaveLength(1);
+  });
+  it("words Re-plan's proposal as 'Not applied'", () => {
+    expect(
+      approveRefusal(changed(set(["a", "b", "c"])), { ...who, shown, proposal: true }).text,
+    ).toBe(
+      "Not applied: the booking window closed for 2 more of the proposal's passes after you opened it, so what you'd approve changed. Nothing was booked. Check the list and apply it again.",
+    );
+  });
+  it("words step 1's interim refusal without a count", () => {
+    expect(approveRefusal(conflict("contact_plan_opportunity_expired"), who).text).toBe(
+      "Not approved: the booking window has closed for some of R41's passes, so R41 can't be booked as it is. Your approval wasn't recorded. To book the others, draft the day again without them.",
+    );
+  });
+});
+
 describe("submit refusals (U97)", () => {
   const already = (details: unknown) =>
     submitRefusalText(conflict("plan_already_submitted", details), who);
@@ -238,6 +291,7 @@ describe("runReview (#257)", () => {
       "op-2",
       [],
       "Checked with ops.",
+      undefined,
     );
   });
 
@@ -304,7 +358,7 @@ describe("runReview (#257)", () => {
     });
     expect(await runReview(ctx(), "approve", plan, [])).toMatchObject({
       tone: "nominal",
-      text: "Approved. Booking 9 passes; 3 had already started, so they weren't booked.",
+      text: "Approved. Booking 9 passes; 3 weren't booked because their booking window had closed.",
       expired,
     });
   });
@@ -352,6 +406,19 @@ describe("runReview (#257)", () => {
     });
     expect(submit.mock.calls[0]?.[4]).toBe("note");
     expect(approve).not.toHaveBeenCalled();
+  });
+
+  it("sends the read's expired_digest on approve, and a new digest is a new request (#273)", async () => {
+    approve.mockResolvedValue(approvedAnswer("approved"));
+    const c = ctx();
+    await runReview(c, "approve", { ...plan, expired_digest: "d1" }, []);
+    await runReview(c, "approve", { ...plan, expired_digest: "d1" }, []);
+    await runReview(c, "approve", { ...plan, expired_digest: "d2" }, []);
+    expect(approve.mock.calls.map((call) => [call[2], call[5]])).toEqual([
+      ["op-2", "d1"],
+      ["op-2", "d1"],
+      ["op-4", "d2"],
+    ]);
   });
 
   it("makes both op ids from one click and reuses them only for the same request (domain 3)", async () => {

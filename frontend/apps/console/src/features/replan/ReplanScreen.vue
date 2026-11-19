@@ -81,7 +81,6 @@ const isAdmin = computed(() => canAdministerOrganization(session, scope.value.or
 const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
 const sheetError = ref<ApiError | null>(null);
 const STEPS = ["Impact", "Proposal", "Apply"];
-
 /** The repair run as a K1 view for the shared state panel (drafting / interrupted / failed). */
 const runView = computed<Exclude<PlanView, { kind: "plan" }> | null>(() => {
   const r = repair.value;
@@ -303,6 +302,7 @@ async function onApply(acks: Acknowledgement[], note?: string) {
           :busy="busy"
           :requests-left="stopped?.left ?? null"
           :sheet-label="applyCopy?.label"
+          proposal
           :user-id="session.user.id"
           :refused-because="
             applied && applied.version === footerPlan?.version ? applied.because : null
@@ -322,6 +322,7 @@ async function onApply(acks: Acknowledgement[], note?: string) {
           :title="applyCopy?.title ?? primary.title"
           :confirm="applyCopy?.confirm ?? primary.confirm"
           :act="applyCopy?.act ?? primary.act"
+          proposal
           :user-id="session.user.id"
           :kept-note="applied?.keepNote ?? null"
           :busy="busy"

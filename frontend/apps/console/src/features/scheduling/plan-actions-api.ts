@@ -63,6 +63,8 @@ export function approvePlan(
   operationId: string,
   acknowledgements: readonly Acknowledgement[],
   decisionNote?: string,
+  /** #273: the plan read's expired_digest, as the approver saw it (absent on an older read). */
+  expectedExpiredDigest?: string,
 ): Promise<ApiResult<ApproveResult>> {
   return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/approve`, approveReader, {
     method: "POST",
@@ -71,6 +73,9 @@ export function approvePlan(
       operation_id: operationId,
       ...(acknowledgements.length > 0 ? { acknowledgements } : {}),
       ...(decisionNote ? { decision_note: decisionNote } : {}),
+      ...(expectedExpiredDigest !== undefined
+        ? { expected_expired_digest: expectedExpiredDigest }
+        : {}),
     },
   });
 }
