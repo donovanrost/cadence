@@ -3217,3 +3217,70 @@ before a save, never only as a refusal (A6).
   mission, and missions can't change it. An organization admin changes it in the organization's settings." with
   `Open organization settings` for an organization admin. The 409 `settings_enforced_by_organization` keeps the
   server's message (the legacy host still shows it).
+
+
+### U97 · Approving a contact plan: its own action, its refusals, and never a false success (#257, 11-19; api's contract v2) (api / fe-ops)
+#257: the plan review's `Approve and book N passes` posted to **submit**, which answered 200 and changed nothing, so an
+approver saw the plan come back as if done. Approve now has its own action (`POST …/approve` with `operation_id`,
+`expected_version`, `decision_note`, `acknowledgements`), and submit only submits, for everyone, under both approval
+settings. Console only; amends U36. Every approve refusal says why and that the approval wasn't recorded (U95); codes
+are api's, switched on with `knownErrorCode`.
+
+- **Success only from the answer (U20):** "Approved. Booking 40 passes." only on the 202 with `outcome: "approved"`.
+  Any other success answer: "Cadence didn't record an approval for R41. Reload to see the plan; if it's still waiting,
+  try again or tell the team that runs Cadence for you." The UI never tells an approver something happened when it
+  didn't.
+- **One act under "Applies without approval"** (ux's call for the director, 11-19). The API stays split. When the read
+  says `separation_required: false` and the viewer is an org admin, a draft or sent-back plan gets ONE action, `Approve
+  and book N passes` (sheet title `Approve and book the plan`): the console calls submit, then approve with the
+  version it saw, and both are recorded.
+  - Confirm body: "This sends R41 and approves it, and booking starts for its 40 passes." Muted (`text-3`) line under
+    the button: "No second person's approval is needed, as this mission's setting allows. Sending and approving are
+    both recorded."
+  - Re-plan's Apply the same: `Approve and apply the proposal`, confirm "This sends the proposal and approves it, and
+    sends 12 booking requests." plus the muted line.
+  - The submit is refused: the submit line below; nothing was sent or approved.
+  - The submit lands and the approve is refused: "R41 was sent for approval, but not approved: <the approve refusal's
+    reason, without "Not approved:">. It's waiting for approval." Example: "R41 was sent for approval, but not
+    approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval." The plan then
+    opens awaiting approval with `Approve and book the plan` to try again; after a self-approval refusal (the setting
+    changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead.
+  - The approve's 403 stays the backstop: the setting can change between the read and the click.
+- **Everyone else** (members, and admins under "Needs a second person's approval", `separation_required: true`):
+  `Request approval` (sent back `Submit the plan again`; Re-plan `Request approval for the proposal`, confirm "This
+  sends the proposal for approval; another org admin approves it before anything is booked."). An org admin opening a
+  plan that awaits approval gets `Approve and book the plan`, which calls approve only. Without
+  `separation_required` in the read, the console offers `Request approval` to everyone and never guesses.
+- **Approve refusals:**
+  - 403 `contact_plan_self_approval_forbidden`, `because: "submitted"`: "Not approved: you submitted this plan, so
+    another org admin approves it. Your approval wasn't recorded and nothing was booked." `because: "edited"` (api: the
+    author of the version being approved, so the drafter): "Not approved: you drafted this version of the plan, so
+    another org admin approves it. Your approval wasn't recorded and nothing was booked." Then Approve is disabled
+    (A6) with the sentence without "Not approved:" and the ending, muted; Send back stays. (No authors-unknown case
+    for plans: the plan and version rows always carry their actor.)
+  - 403 `forbidden`: "Not approved: only an org admin approves contact plans. Your approval wasn't recorded."
+  - 409 `plan_not_pending` (`state`; `decided_by` and `decided_at` together or neither): "R41 was already approved by
+    Ana R. at 03:46Z, so your approval wasn't recorded. Reload to see it." / "…already sent back by Ana R. at
+    03:46Z…". When the decider is the viewer: "You already approved R41 at 03:46Z. Reload to see it." No decider, or
+    another state: "Not approved: R41 isn't waiting for approval any more, so your approval wasn't recorded. Reload to
+    see it." Never an id for the name (U25).
+  - 409 `plan_changed`: "Not approved: R41 changed after you opened it, so it isn't what you reviewed. Your approval
+    wasn't recorded. Reload to review it again."
+  - 404 `plan_not_found`: "Not approved: Cadence can't find this plan any more. Reload to see 11-16's plans."
+  - `plan_not_ready`, `acknowledgements_required`, `plan_superseded`: U36's lines, opening "Not approved:".
+  - 422 `invalid_params` on `decision_note`: the server's field message ("Keep the note under 2,000 characters.") under
+    the note.
+  - A code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
+    with the code in Technical details.
+- **Submit refusals:** 409 `plan_already_submitted` (`submitted_by` and `submitted_at` together or neither): "Not sent:
+  R41 was already sent for approval by Mira K. at 03:40Z, so nothing changed. Reload to see it." The viewer: "Not sent:
+  you already sent R41 for approval at 03:40Z, so nothing changed." Neither: "Not sent: R41 is already waiting for
+  approval, so nothing changed. Reload to see it."
+- **Replays (both actions):** the same `operation_id` with the same actor, plan, action and body returns the original
+  answer with `replayed: true`; the console shows that answer's result as this one's ("Sent for approval." /
+  "Approved. Booking 40 passes." by its outcome). 409 `duplicate_operation` (the id with anything different): "Not
+  sent: Cadence matched this to an earlier, different request, so nothing changed. Reload and try again."
+  (`operation_conflict` keeps its line.)
+- **Up front (follow-up, not #257):** the submitter's Approve stays hidden by the existing check. A drafter under
+  "Needs a second person's approval" learns it only on press until the plan read says why, as #240 did for
+  Activations; then the A6 line shows before the press.
