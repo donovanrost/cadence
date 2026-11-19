@@ -2,7 +2,7 @@ import type { Page, TestInfo } from "@playwright/test";
 import { snapshotWire } from "./support/configuration.ts";
 import { expectAccessible } from "./support/accessibility.ts";
 import { jsonData, jsonProblem, missionPath, openConsole } from "./support/console.ts";
-import { expect, test } from "./support/fixtures.ts";
+import { allow, expect, test } from "./support/fixtures.ts";
 
 // (B) Setup › Spacecraft › Configuration (fe-ops; MM&S owns the workspace, ux U94/U98/U101).
 // Screens for ux's review: each state is attached to the HTML report at desktop and 390 wide.
@@ -80,27 +80,37 @@ test.describe("Setup spacecraft configuration (B)", () => {
     await attachScreens(page, testInfo, "not-set-up");
   });
 
-  test("a craft that isn't on this mission (404) says so, as a state", async ({
-    page,
-  }, testInfo) => {
-    await page.route(WORKSPACE, (route) => route.fulfill(jsonProblem(404, "spacecraft_not_found")));
-    await openConsole(page, screenPath("overview"));
-    await expect(page.getByText("This spacecraft isn't on this mission.")).toBeVisible();
-    await attachScreens(page, testInfo, "not-on-mission");
-  });
+  // The read's own intended refusals, and nothing else (qa's 11-19 run: the diagnostics fixture
+  // flags every 4xx unless the test allows it).
+  test.describe("the read refused", () => {
+    test.use({
+      allowedDiagnostics: allow(/configuration\/workspace\S* -> 40[34]/, /status of 40[34]/),
+    });
 
-  test("can't view: a 403 on the read says so, with who grants access (U98)", async ({
-    page,
-  }, testInfo) => {
-    await page.route(WORKSPACE, (route) => route.fulfill(jsonProblem(403, "forbidden")));
-    await openConsole(page, screenPath("overview"));
-    await expect(
-      page.getByText(
-        "You can't view this spacecraft's configuration. Ask a mission admin or an org admin for access.",
-      ),
-    ).toBeVisible();
-    await expect(page.getByRole("button", { name: /retry/i })).toHaveCount(0);
-    await expectAccessible(page);
-    await attachScreens(page, testInfo, "cant-view");
+    test("a craft that isn't on this mission (404) says so, as a state", async ({
+      page,
+    }, testInfo) => {
+      await page.route(WORKSPACE, (route) =>
+        route.fulfill(jsonProblem(404, "spacecraft_not_found")),
+      );
+      await openConsole(page, screenPath("overview"));
+      await expect(page.getByText("This spacecraft isn't on this mission.")).toBeVisible();
+      await attachScreens(page, testInfo, "not-on-mission");
+    });
+
+    test("can't view: a 403 on the read says so, with who grants access (U98)", async ({
+      page,
+    }, testInfo) => {
+      await page.route(WORKSPACE, (route) => route.fulfill(jsonProblem(403, "forbidden")));
+      await openConsole(page, screenPath("overview"));
+      await expect(
+        page.getByText(
+          "You can't view this spacecraft's configuration. Ask a mission admin or an org admin for access.",
+        ),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: /retry/i })).toHaveCount(0);
+      await expectAccessible(page);
+      await attachScreens(page, testInfo, "cant-view");
+    });
   });
 });
