@@ -223,11 +223,22 @@ defmodule Cadence.Platform.ScopedSettings do
     )
   end
 
+  # Sections whose saves carry a who-may-change rule of their own (#233: the approval setting is
+  # loosened only by an organization admin). This writer runs no such rule, so it refuses them.
+  # Named by id, not module: the platform layer doesn't depend on governance (a test keeps the
+  # id in step with ActivationPolicy.section_id/0).
+  @rule_guarded_sections ["cadence.governance"]
+
   @doc """
   Writes `document` as a mission override's next revision when its latest is still
   `expected_version` (the per-field migration, which has no section default or token at hand);
-  else `{:error, :settings_changed}`.
+  else `{:error, :settings_changed}`. A section whose saves carry a who-may-change rule (the
+  approval setting) is refused: `{:error, :section_not_rewritable}`.
   """
+  def rewrite_override(_organization_id, _mission_id, section_id, _expected, _document, _actor)
+      when section_id in @rule_guarded_sections,
+      do: {:error, :section_not_rewritable}
+
   def rewrite_override(organization_id, mission_id, section_id, expected_version, document, actor)
       when is_binary(mission_id) do
     key = scope_key(mission_id)

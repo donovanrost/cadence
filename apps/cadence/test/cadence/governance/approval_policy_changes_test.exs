@@ -102,6 +102,49 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
            } = audit
   end
 
+  # ca-security N2 (11-19): the rule is user-only. A service identity is refused even when it
+  # holds organization_admin, ahead of #280's service-identity work.
+  test "a service identity can't change the approval setting, even with organization admin", c do
+    service = %Scope{
+      organization_id: c.org,
+      actor_kind: :service,
+      service_identity: %{service_identity_id: "svc-approval", display_name: "Automation"},
+      capabilities: MapSet.new([:organization_admin]),
+      mission_id: nil
+    }
+
+    for mission <- [c.mission, nil] do
+      current = ActivationPolicy.load(c.org, mission)
+
+      assert {:error, :authenticated_user_required} =
+               ActivationPolicy.save(service, mission, current.token, %{
+                 "value" => %{"approval_requirement" => "direct"}
+               })
+    end
+
+    assert unchanged?(c)
+    assert history(c, nil) == []
+  end
+
+  # ca-security N3 (11-19): ScopedSettings.rewrite_override is a public writer with no policy
+  # check (its one caller, the per-field override migration, never writes Governance); it refuses
+  # the approval setting's section outright.
+  test "the override rewriter can't write the approval setting's section", c do
+    assert ActivationPolicy.section_id() == "cadence.governance"
+
+    assert {:error, :section_not_rewritable} =
+             ScopedSettings.rewrite_override(
+               c.org,
+               c.mission,
+               ActivationPolicy.section_id(),
+               0,
+               %{"value" => %{"approval_requirement" => "direct"}},
+               %{id: "migration", name: "Migration"}
+             )
+
+    assert unchanged?(c)
+  end
+
   test "the organization's setting (default and override flag) is organization-admin only", c do
     for scope <- [c.operator, c.mission_admin] do
       assert {:error, reason} = set_organization(scope, "direct", true)
