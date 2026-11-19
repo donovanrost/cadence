@@ -2287,12 +2287,12 @@ change set like any override. There's no separate routes editor.
       `reviewer_is_author` only when the set needs approval, for whoever submitted it or authored any change, so under
       "Applies without approval" an author still reviews. When `can_review` is false, both review actions (Approve and
       Send back; the server refuses both) are disabled with the A6 reason, muted under them and as their
-      description: "You staged part of this set or sent it for review, so someone else reviews it." (the conversion
-      batch keeps its own line above). A reason the console doesn't know: "You can't review this set, so someone else
-      reviews it." with the code in Technical details. The refusal stays the backstop: Approve "Not approved: you
-      staged part of this set or sent it for review, so someone else reviews it. Your approval wasn't recorded.";
-      Send back "Not sent back: you staged part of this set or sent it for review, so someone else reviews it.
-      Nothing changed."
+      description: "You staged part of this change set or sent it for review, so another person reviews it." (the conversion
+      batch keeps its own line above). A reason the console doesn't know: "You can't review this change set, so another
+      person reviews it." with the code in Technical details. The refusal stays the backstop: Approve "Not approved: you
+      staged part of this change set or sent it for review, so another person reviews it. Your approval wasn't
+      recorded."; Send back "Not sent back: you staged part of this change set or sent it for review, so another
+      person reviews it. Nothing changed."
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
       ("Batch 3 is already staged." / "Staged earlier."), never the id.
