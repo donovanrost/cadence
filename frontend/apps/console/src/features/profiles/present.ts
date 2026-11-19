@@ -1,5 +1,13 @@
 import { formatShort, plural } from "@/ui";
+import { catalogRevText, type CatalogRevision } from "./api.ts";
 import type { ProfileDetail } from "./detail.ts";
+
+/** U65: an unnumbered revision (not among the mission's, #246) reads "a catalog revision". */
+function catalogPart(r: CatalogRevision | null): string {
+  if (!r) return "catalog set per spacecraft";
+  const rev = catalogRevText(r);
+  return rev ? `catalog ${rev}` : "a catalog revision";
+}
 
 /** "500 spacecraft inherit this profile · 3 on older versions · catalog set per spacecraft · v1 · 11-08 21:54Z" */
 export function profileSubline(detail: ProfileDetail): string {
@@ -9,9 +17,7 @@ export function profileSubline(detail: ProfileDetail): string {
     detail.routing_model === "profile" || detail.override_count > 0
       ? plural(detail.override_count, "override")
       : null,
-    detail.profile.catalog_revision
-      ? `catalog rev ${detail.profile.catalog_revision.number}`
-      : "catalog set per spacecraft",
+    catalogPart(detail.profile.catalog_revision),
   ];
   const last = detail.profile.last_change;
   if (last) {

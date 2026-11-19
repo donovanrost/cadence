@@ -1,9 +1,23 @@
 import type { MissionId } from "@/api/index.ts";
-import { actor, decoders, request, type ApiResult, type Reader } from "@/api";
+import { actor, decoders, orNull, request, type ApiResult, type Decoded, type Reader } from "@/api";
 import { formatShort } from "@/ui";
 
 /** Contract: docs/apogee/api/setup.md, `GET /api/console/v1/missions/:mission_id/profiles`. */
 const { array, integer, nullable, object, string, token } = decoders;
+
+/**
+ * The catalog revision a profile's latest version sets (setup.md): number and label are null when
+ * the revision isn't among the mission's (#246; #247: the detail read sent only its id).
+ */
+export const catalogRevision = object({
+  id: token,
+  number: orNull(integer),
+  label: orNull(string),
+});
+export type CatalogRevision = Decoded<typeof catalogRevision>;
+/** "rev 4", or null when the server couldn't number it. */
+export const catalogRevText = (r: CatalogRevision): string | null =>
+  r.number === null ? null : `rev ${r.number}`;
 
 export type EnumValue = Readonly<{ value: string; label: string }>;
 
@@ -14,7 +28,7 @@ export type ProfileSummary = Readonly<{
   downlinkProtocol: EnumValue;
   uplinkProtocol: EnumValue;
   packetProtocol: EnumValue;
-  catalogRevision: Readonly<{ id: string; number: number; label: string | null }> | null;
+  catalogRevision: CatalogRevision | null;
   spacecraftCount: number;
   /** Subset of spacecraftCount pinned below `version`. */
   spacecraftOnOlderVersions: number;
@@ -58,7 +72,7 @@ const profile: Reader<ProfileSummary> = (value, path = "") => {
     downlink_protocol: enumValue,
     uplink_protocol: enumValue,
     packet_protocol: enumValue,
-    catalog_revision: nullable(object({ id: token, number: integer, label: nullable(string) })),
+    catalog_revision: nullable(catalogRevision),
     spacecraft_count: count,
     spacecraft_on_older_versions: count,
     override_count: optionalOf(count),
