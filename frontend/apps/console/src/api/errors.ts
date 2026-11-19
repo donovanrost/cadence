@@ -55,6 +55,7 @@ export const errorCodes = [
   "holds_unacknowledged",
   "acknowledgements_required",
   "apply_interrupted",
+  "preview_failed",
   "invalid_rollback_target",
   "nothing_to_roll_back",
   "rollback_crosses_legacy",

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { isError, type RemoteState } from "@/api";
 import { ApButton, ApField, ApPanel } from "@/ui";
-import { reviewChangeSet, type SubmitResult } from "./actions.ts";
+import { reviewChangeSet, type Preview, type SubmitResult } from "./actions.ts";
+import { checksRefusal, HOLD_STANDS } from "./checkRefusals.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
+import { blockingReason } from "./itemLines.ts";
 import { inUseMark, refusalOutcome, type InUseMark, type RefusalOutcome } from "./refusals.ts";
 import { reviewBlocked } from "./review-block.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
@@ -12,7 +15,13 @@ import type { ChangeSet, ConfigState } from "./shapes.ts";
  * Independent review (mission policy): approve & apply, or send back. The server takes a comment
  * for both decisions (changes.md review: 422 comment_required; qa 11-16), so both wait for one.
  */
-const props = defineProps<{ missionId: MissionId; config: ConfigState; changeSet: ChangeSet }>();
+const props = defineProps<{
+  missionId: MissionId;
+  config: ConfigState;
+  changeSet: ChangeSet;
+  /** The set's checks (K2), for U79's blocking hold up front (#376). */
+  preview: RemoteState<Preview>;
+}>();
 const emit = defineEmits<{
   result: [result: SubmitResult];
   changed: [];
@@ -28,6 +37,29 @@ const blocked = computed(() => reviewBlocked(props.changeSet));
 const reasonFor = (needsComment: string) =>
   busy.value ? "Working…" : (blocked.value?.line ?? needsComment);
 
+/**
+ * #376 (U79): a blocking hold stops Approve, never Send back. Up front from the checks; after a
+ * 409 holds_blocking, until a reload's checks show the hold cleared (the server's checks may
+ * have seen it before the console's did).
+ */
+const refusedForHold = ref(false);
+const holdInChecks = computed(
+  () => props.preview.status === "ready" && blockingReason(props.preview.value) !== null,
+);
+watch(
+  () => (props.preview.status === "ready" ? props.preview.value : null),
+  (checks, before) => {
+    if (checks !== null && checks !== before && blockingReason(checks) === null)
+      refusedForHold.value = false;
+  },
+);
+const holdStands = computed(() => holdInChecks.value || refusedForHold.value);
+const approveReason = computed(() =>
+  busy.value
+    ? "Working…"
+    : (blocked.value?.line ?? (holdStands.value ? HOLD_STANDS : NEEDS_COMMENT)),
+);
+
 async function decide(decision: "approve" | "send_back") {
   if (busy.value) return;
   busy.value = true;
@@ -41,7 +73,11 @@ async function decide(decision: "approve" | "send_back") {
     });
     if (result.ok) emit("result", result.value);
     else {
-      failure.value = refusalOutcome(result.error, "changed");
+      if (decision === "approve" && isError(result.error, "holds_blocking"))
+        refusedForHold.value = true;
+      failure.value =
+        (decision === "approve" ? checksRefusal(result.error, "approve") : null) ??
+        refusalOutcome(result.error, "changed");
       emit("inUse", inUseMark(failure.value));
       emit("changed");
     }
@@ -74,13 +110,16 @@ async function decide(decision: "approve" | "send_back") {
       <ApButton
         variant="primary"
         size="commit"
-        :disabled="busy || blocked !== null || comment.trim() === ''"
-        :disabled-reason="reasonFor(NEEDS_COMMENT)"
+        :disabled="busy || blocked !== null || holdStands || comment.trim() === ''"
+        :disabled-reason="approveReason"
         @click="decide('approve')"
       >
         Approve &amp; apply as
         <span class="font-mono normal-case">r{{ config.head.revision + 1 }}</span>
       </ApButton>
+      <p v-if="holdStands && !blocked" data-hold-stands class="m-0 text-sm text-text-3">
+        {{ HOLD_STANDS }}
+      </p>
       <ApButton
         :disabled="busy || blocked !== null || comment.trim() === ''"
         :disabled-reason="reasonFor('Add a comment for the author.')"

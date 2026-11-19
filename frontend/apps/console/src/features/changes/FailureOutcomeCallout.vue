@@ -34,6 +34,10 @@ const tone = () => props.tone ?? (props.outcome.changed === null ? "caution" : "
       </li>
     </ul>
     <template v-if="outcome.closing">{{ outcome.closing }}</template>
+    <details v-if="outcome.technical" class="mt-1 text-sm">
+      <summary class="ap-label cursor-pointer">Technical details</summary>
+      <p class="m-0 mt-1 font-mono text-xs text-text-3">{{ outcome.technical }}</p>
+    </details>
     <template v-if="outcome.link || $slots.action" #action>
       <ApButton v-if="outcome.link" size="compact" :to="outcome.link.to">{{
         outcome.link.label

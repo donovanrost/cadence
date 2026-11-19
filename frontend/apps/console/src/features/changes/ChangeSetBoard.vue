@@ -55,6 +55,7 @@ const reviewing = () =>
       :mission-id="missionId"
       :config="config"
       :change-set="changeSet"
+      :preview="preview"
       class="sticky top-0 min-w-0 flex-[1_1_340px]"
       @result="emit('result', $event)"
       @changed="emit('changed')"
