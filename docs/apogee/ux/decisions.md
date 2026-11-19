@@ -3766,7 +3766,7 @@ read, the dry run).
   none). The same three states the server sends, never computed in the console:
   - `breaking` > 0: the callout and checkbox below, as on the import page, plus what it compared against: "Rev 4
     changes 3 commands or points in a way that breaks existing use, compared with rev 3. Cadence can't tell yet
-    what uses them." A base with no number says "compared with the revision before it". `breaking` 0: no callout,
+    what uses them." `breaking` 0: no callout,
     no checkbox.
   - No earlier revision (`breaking_base` null): "Rev 1 is the first revision in its database, so Cadence has
     nothing earlier to compare it with and can't tell what it breaks. Check what uses its commands and points
@@ -3776,8 +3776,9 @@ read, the dry run).
     "This page can't show whether rev 4 breaks anything in use. Check its import's diff before you stage." with
     `Open its import`, and the acknowledgment checkbox "I've checked rev 4's diff". (U86: say what the console
     can't read.)
-  - **The import page's C3 follows the same three cases.** A diff it can't read is the fallback above, never 0
-    breaking (U20: 0 would claim nothing breaks).
+  - **The import page's C3 follows the same three cases**, from its own fields: `diff.summary.breaking` is the
+    count; `base_revision` null with `diff` null is a first revision; `base_revision` set with `diff` null is a diff
+    it can't read, which gets the fallback above and is never 0 breaking (U20: 0 would claim nothing breaks).
 - **The dry run, in the person's words:**
   - While it runs: `CHECKING…` (as C3). Stage's disabled reason is "Checking what this moves…", not "Waiting for
     the dry run.".
