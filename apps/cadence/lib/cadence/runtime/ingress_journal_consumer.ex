@@ -68,6 +68,10 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   @impl true
   def init(opts) do
+    # #270: as IngressPersistenceProjector, trap exits so a supervisor's :shutdown lets the
+    # current step finish within the declared 5 s; other linked exits are handled below.
+    Process.flag(:trap_exit, true)
+
     config =
       opts
       |> Keyword.get_lazy(:policy, &FileSystem.configured_policy/0)
@@ -230,6 +234,11 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   end
 
   def handle_info({:retry, _stale_ref}, state), do: {:noreply, state}
+
+  # Trapping exits (#270): a linked process's normal exit changes nothing; any other stops the
+  # consumer with the same reason, as an untrapped link would.
+  def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _pid, reason}, state), do: {:stop, reason, state}
 
   def handle_info(
         {:provider_ingress_persisted, _projector_pid, ref, %{} = progress},
