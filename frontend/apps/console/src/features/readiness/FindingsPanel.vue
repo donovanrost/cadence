@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { formatCount, plural, ApButton, ApCallout, ApListRow, ApPanel } from "@/ui";
+import { ApButton, ApCallout, ApListRow, ApPanel } from "@/ui";
 import type { Readiness } from "./api.ts";
-import { fixLink, orderedFindings, severityState, severityWord } from "./present.ts";
+import { fixLink, groupedMeta, orderedFindings, severityState, severityWord } from "./present.ts";
 
 /**
  * R1: one line per cause (grouped server-side), blockers first, each with at most one fix. Each
@@ -12,14 +12,12 @@ const props = defineProps<{ readiness: Readiness }>();
 
 const findings = computed(() => orderedFindings(props.readiness));
 const blockers = computed(() => props.readiness.verdict.blocker);
-const meta = computed(() => {
-  const items = findings.value.reduce((sum, f) => sum + f.affectedCount, 0);
-  const lines = plural(findings.value.length, "line");
-  // "3,006 items → 4 lines" only when grouping actually collapsed something.
-  return items > findings.value.length
-    ? `Grouped by cause · ${formatCount(items)} items → ${lines}`
-    : `Grouped by cause · ${lines}`;
-});
+const meta = computed(() =>
+  groupedMeta(
+    findings.value.reduce((sum, f) => sum + f.affectedCount, 0),
+    findings.value.length,
+  ),
+);
 const others = computed(() => findings.value.filter((f) => f.severity !== "blocker").length);
 </script>
 

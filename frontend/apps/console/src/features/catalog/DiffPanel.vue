@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { ApPanel, ApSegmented, ApTable, ApTag, type ApColumn } from "@/ui";
-import type { ImportRunDetail } from "./importRun.ts";
+import { diffMeta, type ImportRunDetail } from "./importRun.ts";
 
 /** C1 Diff: changes sorted by risk (breaking first), filterable (Catalog.md § C1). */
 type Diff = NonNullable<ImportRunDetail["diff"]>;
@@ -48,12 +48,7 @@ const opWord = (op: Op) => OP_WORD[op];
 </script>
 
 <template>
-  <ApPanel
-    index="C1"
-    title="Diff"
-    :meta="baseNumber === null ? 'Sorted by risk' : `Against r${baseNumber} · sorted by risk`"
-    flush
-  >
+  <ApPanel index="C1" title="Diff" :meta="diffMeta(baseNumber)" flush>
     <div class="px-4 py-2.5">
       <ApSegmented v-model="filter" :options="options" label="Filter changes" variant="tabs" />
     </div>

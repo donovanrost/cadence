@@ -1,4 +1,5 @@
 import type { StageOp } from "@/features/changes/index.ts";
+import { plural } from "@/ui";
 import type { ProfileSummary } from "@/features/profiles/index.ts";
 import type { ProposedSpacecraft } from "./batch.ts";
 
@@ -54,3 +55,10 @@ export function batchOps(
         : `${rows.length} new spacecraft (${profileLabel})`,
   };
 }
+
+/**
+ * ux audit S4: Stage is disabled with "Fix 2 NO-GO checks first." A batch refused for another
+ * reason (an unknown profile name) keeps its own sentence, never "Fix 0 NO-GO checks".
+ */
+export const noGoReason = (noGo: number, message: string): string =>
+  noGo > 0 ? `Fix ${plural(noGo, "NO-GO check")} first.` : message;
