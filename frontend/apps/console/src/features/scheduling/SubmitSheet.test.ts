@@ -1,5 +1,5 @@
 import { nextTick } from "vue";
-import { stationId as stationIdReader } from "@/api/index.ts";
+import { stationId as stationIdReader, type ApiError } from "@/api/index.ts";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
@@ -40,6 +40,7 @@ const plan: PlanDetail = {
   superseded_by: null,
   latest_version: undefined,
   repair: undefined,
+  approval_setting: undefined,
 };
 
 describe("SubmitSheet", () => {
@@ -49,6 +50,7 @@ describe("SubmitSheet", () => {
         plan,
         nameOf: () => null,
         commitLabel: "Accept 2 gaps and submit",
+        userId: "u1",
         title: "Approve and book the plan",
         confirm: "",
         busy: false,
@@ -82,6 +84,7 @@ describe("SubmitSheet", () => {
         plan: { ...plan, unmet: [gap("r1"), twice] },
         nameOf: () => null,
         commitLabel: "Accept 2 gaps and submit",
+        userId: "u1",
         title: "Approve and book the plan",
         confirm: "",
         busy: false,
@@ -108,6 +111,7 @@ describe("SubmitSheet", () => {
         plan: { ...plan, unmet: [gap("r1")] },
         nameOf: () => null,
         commitLabel: "Accept 1 gap and submit",
+        userId: "u1",
         title: "Approve and book the plan",
         confirm: "",
         busy: false,
@@ -135,6 +139,7 @@ describe("SubmitSheet per-spacecraft gaps (U23 amended)", () => {
         plan: two,
         nameOf: () => null,
         commitLabel: "Accept 1 gap and submit",
+        userId: "u1",
         title: "Approve and book the plan",
         confirm: "",
         busy: false,
@@ -163,6 +168,7 @@ describe("SubmitSheet dialog (ux K1 #8)", () => {
         plan,
         nameOf: () => null,
         commitLabel: "Accept 2 gaps and submit",
+        userId: "u1",
         title: "Approve and book the plan",
         confirm: "",
         busy: false,
@@ -216,6 +222,7 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
         plan: risky,
         nameOf: () => ({ name: "EARENDIL-003", scid: 3 }),
         commitLabel: "Submit and book 1 pass",
+        userId: "u1",
         title: "Approve and book the plan",
         confirm: "c",
         busy: false,
@@ -236,6 +243,7 @@ describe("SubmitSheet note for the record (U76)", () => {
         plan,
         nameOf: () => null,
         commitLabel: "Submit",
+        userId: "u1",
         title: "Submit",
         confirm: "",
         busy: false,
@@ -281,6 +289,7 @@ describe("SubmitSheet resubmission (U36)", () => {
         plan: sentBack,
         nameOf: () => null,
         commitLabel: "Accept 2 gaps and submit again",
+        userId: "u1",
         title: "Approve and book the plan",
         confirm: "",
         busy: false,
@@ -298,5 +307,48 @@ describe("SubmitSheet resubmission (U36)", () => {
     expect(note).toBe("Moved 004 to KIR.");
     expect(acks).toHaveLength(2);
     wrapper.unmount();
+  });
+});
+
+describe("SubmitSheet approve refusals (#257, U97)", () => {
+  const sheet = (error: ApiError, act: "approve" | "submit") =>
+    mount(SubmitSheet, {
+      props: {
+        plan: { ...plan, state: "pending_approval", unmet: [] },
+        nameOf: () => null,
+        commitLabel: "Approve and book 12 passes",
+        userId: "u1",
+        title: "Approve and book the plan",
+        confirm: "",
+        busy: false,
+        act,
+        error,
+      },
+    });
+  it("says an unknown approve refusal plainly, with its code in Technical details", () => {
+    const w = sheet(
+      { kind: "conflict", code: "plan_frozen", message: "x", details: null },
+      "approve",
+    );
+    expect(w.text()).toContain(
+      "Not approved: Cadence refused this approval. Your approval wasn't recorded.",
+    );
+    expect(w.get("details").text()).toContain("plan_frozen");
+  });
+  it("puts a note the server refused under the note, not in the callout", () => {
+    const w = sheet(
+      {
+        kind: "invalid",
+        code: "invalid_params",
+        message: "x",
+        details: { decision_note: ["Keep the note under 2,000 characters."] },
+      },
+      "approve",
+    );
+    expect(w.findAll("[role=status], [role=alert]").map((c) => c.text())).not.toContain(
+      "Keep the note under 2,000 characters.",
+    );
+    expect(w.text()).toContain("Keep the note under 2,000 characters.");
+    expect(w.find("details").exists()).toBe(false);
   });
 });

@@ -1,7 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import { decode, type ApiError } from "@/api/index.ts";
-import { noteFor } from "@/features/scheduling/index.ts";
 import { repairInfoReader } from "@/features/scheduling/repair-info.ts";
 import { replanErrorText } from "./errors.ts";
 import ReplanWindowMeta from "./ReplanWindowMeta.vue";
@@ -92,19 +91,5 @@ describe("the re-plan window line (U76)", () => {
     expect(replanErrorText(refused)).toBe(
       "No re-plan attempts left (3 of 3). The planning policy sets the limit.",
     );
-  });
-});
-
-describe("where a Submit's note goes (U76)", () => {
-  it("approving a pending plan records it on the decision; any other submit, with the submission", () => {
-    expect(noteFor({ state: "pending_approval" }, "Checked with ops.")).toEqual({
-      key: "decision_note",
-      text: "Checked with ops.",
-    });
-    expect(noteFor({ state: "draft" }, "Moved 004 to KIR.")).toEqual({
-      key: "note",
-      text: "Moved 004 to KIR.",
-    });
-    expect(noteFor({ state: "draft" }, "")).toBeUndefined();
   });
 });

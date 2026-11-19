@@ -9,11 +9,10 @@ import {
   fetchPlan,
   fetchRepair,
   startRepair,
-  noteFor,
-  submitPlan,
   type Acknowledgement,
   type PlanDetail,
 } from "@/features/scheduling/index.ts";
+import { reviewOps, runReview, type ReviewAct } from "@/features/scheduling/review-run.ts";
 
 /** Only the run id matters: a progress event for this run refetches it. */
 const progressReader = d.object({ id: d.token });
@@ -82,16 +81,24 @@ export function useReplan(missionId: Readonly<Ref<MissionId>>) {
     }
   }
 
-  async function apply(plan: PlanDetail, acks: readonly Acknowledgement[], note?: string) {
+  /** #257 (U97): Apply submits, approves, or both (the one act); a retry reuses the op ids. */
+  const ops = reviewOps();
+  async function apply(
+    act: ReviewAct,
+    plan: PlanDetail,
+    acks: readonly Acknowledgement[],
+    note: string | undefined,
+    userId: string,
+  ) {
     busy.value = true;
     try {
-      const result = await submitPlan(
-        missionId.value,
-        plan,
-        crypto.randomUUID(),
-        acks,
-        noteFor(plan, note),
-      );
+      const ctx = {
+        missionId: missionId.value,
+        ops,
+        userId,
+        day: plan.window.from?.slice(0, 10) ?? "",
+      };
+      const result = await runReview(ctx, act, plan, acks, note);
       repair.refetch();
       source.refetch();
       return result;

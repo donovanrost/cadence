@@ -16,7 +16,6 @@ import {
   spacecraftNotCovered,
   useSpacecraftNames,
   type Acknowledgement,
-  type PlanDetail,
   type PlanView,
   fetchAvailability,
 } from "@/features/scheduling/index.ts";
@@ -24,6 +23,8 @@ import ChangesPanel from "./ChangesPanel.vue";
 import { replanErrorText } from "./errors.ts";
 import ReplanWindowMeta from "./ReplanWindowMeta.vue";
 import { noneLeftLine } from "./windowMeta.ts";
+import { applyWords } from "./applyWords.ts";
+import type { Because } from "@/features/scheduling/review-words.ts";
 import { lostWindow } from "./impact.ts";
 import { bookingRequests } from "./applied.ts";
 import { useLostBookings } from "./useLostBookings.ts";
@@ -112,23 +113,12 @@ const step = computed(() => {
   if (!state) return 0;
   return state === "draft" || state === "pending_approval" ? 1 : 2;
 });
-/** Booking requests Apply sends (U28): moves and adds; drops send nothing. */
-const requests = computed(() => {
-  const d = proposal.value?.diff;
-  return d ? bookingRequests(d) : 0;
-});
 /** Interrupted booking: callout + whether anything is left to continue (ux 1a906155). */
 const stopped = useBookingStopped(missionId, footerPlan);
-const applyLabel = (plan: PlanDetail) =>
-  !isAdmin.value
-    ? "Request approval for the proposal"
-    : coverage(plan).gaps > 0
-      ? `Accept ${plural(coverage(plan).gaps, "gap")} and apply the proposal`
-      : `Apply proposal · send ${plural(requests.value, "request")}`;
-/** The sheet's confirm names what Apply sends (U28), not the plan's total passes. */
-const applyConfirm = computed(() => {
-  const kept = proposal.value?.diff?.kept.length ?? 0;
-  return `This approves the proposal and sends ${plural(requests.value, "booking request")}. The ${plural(kept, "kept pass", "kept passes")} stay booked.`;
+/** #257 (U97): Apply's act and words by the approval setting; U28: it sends moves and adds. */
+const applyCopy = computed(() => {
+  const p = proposal.value;
+  return p?.plan ? applyWords(p.plan, isAdmin.value, p.diff ? bookingRequests(p.diff) : 0) : null;
 });
 /** U76: the plan's re-plan window and attempts (null until api sends them, or not repairable). */
 const repairInfo = computed(() => liveSource.value?.repair ?? null);
@@ -137,7 +127,11 @@ const noAttempts = computed(() =>
 );
 const primary = computed(() =>
   footerPlan.value
-    ? planPrimary(footerPlan.value, isAdmin.value, { requestsLeft: stopped.value?.left ?? null })
+    ? planPrimary(footerPlan.value, isAdmin.value, {
+        requestsLeft: stopped.value?.left ?? null,
+        userId: session.user.id,
+        refusedBecause: refusedBecause.value,
+      })
     : null,
 );
 /** B1/B2 share one axis covering the repair window and every pass of both plans (moves can land after it). */
@@ -195,12 +189,19 @@ const title = computed(() => {
     return `r${s.value.version} → proposal · ${changeWords.value}`;
   return station.stationId.value ? stationTitle.value : "Re-plan after provider changes";
 });
+/** #257 (U97): Apply's result on the screen; a self-approval refusal disables Approve (A6). */
+const applyLine = ref<Readonly<{ tone: "nominal" | "caution" | "crit"; text: string }> | null>(
+  null,
+);
+const refusedBecause = ref<Because | null>(null);
 async function onApply(acks: Acknowledgement[], note?: string) {
   const plan = proposal.value?.plan;
-  if (!plan) return;
-  const result = await apply(plan, acks, note);
-  if (result.ok) sheet.value?.close();
-  else sheetError.value = result.error;
+  if (!plan || !applyCopy.value) return;
+  const out = await apply(applyCopy.value.act, plan, acks, note, session.user.id);
+  if (out.kind === "refused") return void (sheetError.value = out.error);
+  sheet.value?.close();
+  applyLine.value = { tone: out.tone, text: out.text };
+  refusedBecause.value = out.because;
 }
 </script>
 
@@ -304,7 +305,9 @@ async function onApply(acks: Acknowledgement[], note?: string) {
           :is-admin="isAdmin"
           :busy="busy"
           :requests-left="stopped?.left ?? null"
-          :sheet-label="applyLabel(proposal.plan)"
+          :sheet-label="applyCopy?.label"
+          :user-id="session.user.id"
+          :refused-because="refusedBecause"
           @sheet="sheet?.open()"
           @execute="footerPlan && execute(footerPlan.id)"
           redraft-label="Propose again"
@@ -316,9 +319,11 @@ async function onApply(acks: Acknowledgement[], note?: string) {
           v-model:error="sheetError"
           :plan="proposal.plan"
           :name-of="nameOf"
-          :commit-label="applyLabel(proposal.plan)"
-          :title="isAdmin ? 'Approve and apply the proposal' : 'Request approval for the proposal'"
-          :confirm="isAdmin ? applyConfirm : primary.confirm"
+          :commit-label="applyCopy?.label ?? primary.label"
+          :title="applyCopy?.title ?? primary.title"
+          :confirm="applyCopy?.confirm ?? primary.confirm"
+          :act="applyCopy?.act ?? primary.act"
+          :user-id="session.user.id"
           :busy="busy"
           @submit="onApply"
         />
@@ -369,6 +374,7 @@ async function onApply(acks: Acknowledgement[], note?: string) {
         />
       </ApPanel>
       <ApCallout v-if="actionError" tone="caution">{{ replanErrorText(actionError) }}</ApCallout>
+      <ApCallout v-if="applyLine" :tone="applyLine.tone">{{ applyLine.text }}</ApCallout>
       <footer v-if="!proposal" class="flex flex-none justify-end border-t border-hairline pt-3">
         <ApButton
           v-if="!runId && canPropose"

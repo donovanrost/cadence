@@ -5,7 +5,8 @@ export const API_BASE = "/api/console/v1";
 
 export type ApiError =
   | { kind: "unauthenticated" }
-  | { kind: "forbidden"; code: string; message: string }
+  /** `details`: a 403 that says why (#236: the craft the approver saved); absent on most. */
+  | { kind: "forbidden"; code: string; message: string; details?: unknown }
   | { kind: "not_found"; code: string; message: string }
   | { kind: "conflict"; code: string; message: string; details: unknown }
   | { kind: "invalid"; code: string; message: string; details: unknown }
@@ -69,7 +70,7 @@ function toError(status: number, body: unknown): ApiError {
     case 401:
       return { kind: "unauthenticated" };
     case 403:
-      return { kind: "forbidden", code, message };
+      return { kind: "forbidden", code, message, details };
     case 404:
       return { kind: "not_found", code, message };
     case 409:

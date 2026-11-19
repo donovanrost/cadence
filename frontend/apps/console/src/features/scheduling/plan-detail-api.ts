@@ -256,6 +256,11 @@ export const planDetailReader = d.object({
     value === undefined ? null : supersededByReader(value, path),
   /** U76 (api 1a5976482): what a re-plan started now would cover; optional until it ships. */
   repair: d.optional(d.nullable(repairInfoReader)),
+  /**
+   * #257 (api): the mission's approval setting at read time. `direct` ("Applies without approval")
+   * gives an org admin the one act; `independent`, absent or unknown: Request approval (U97).
+   */
+  approval_setting: d.optional(d.nullable(d.knownText(["direct", "independent"] as const))),
 });
 export type PlanDetail = Decoded<typeof planDetailReader>;
 export type PlanIssue = PlanDetail["conflicts"][number];
