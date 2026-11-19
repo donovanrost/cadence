@@ -16,8 +16,11 @@ describe("Check's non-field failures read as a dry run (mms-ux on #323)", () => 
     expect(checkFallback(unreadable)).toBe(
       `Not checked: the server's reply wasn't understood. ${RETRY}`,
     );
-    for (const e of [failed, refused])
-      expect(checkFallback(e)).toBe(`Not checked: Cadence couldn't run the check. ${RETRY}`);
+    expect(checkFallback(failed)).toBe(`Not checked: Cadence couldn't run the check. ${RETRY}`);
+    // A 403 isn't retried: it says who can (fe-ops, #432).
+    expect(checkFallback(refused)).toBe(
+      "Not checked: you can't change this profile's routing. Mission admins and organization admins can.",
+    );
   });
 });
 
