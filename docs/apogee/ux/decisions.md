@@ -1640,7 +1640,7 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
     instead.
   - Priority and marks follow the thresholds above.
   - **The action names its scope** (#268, fe-ops / api / domain, PR #356). The count is the server's
-    `booking.bookable` (passes never placed), never counted in the console:
+    `booking.bookable` (passes not yet booked, requesting included), never counted in the console:
     - Approved, not started: `Book 40 passes` (`Book 1 pass`).
     - Interrupted: `Book the other 29`.
     - Shown only when `viewer_can_book` is true; anyone else keeps `Open plan`.
@@ -1650,7 +1650,9 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
     is K1's: `Draft a new plan for 11-16…` before the day starts, `Plan the rest of 11-16…` once it has. Never
     "already started" (#273, U20).
   - **The day has ended** (`409 contact_plan_day_ended {day}`; execute starts nothing): "Not booked: 11-16 has
-    ended, so R41 can't be booked any more." Announced as a refusal (role=alert, a11y B6).
+    ended, so R41 can't be booked any more." It is a refusal, so it is announced (role=alert, a11y B6). That's
+    the target: today a Now command result goes into the row sentence, which has no role. fe-ops builds it in the
+    first #243 PR.
 
 ### U62 · Time range track interaction (ApTimeRange's RangeTrack; a user bug via the director) (dashboards builds / lead)
 Used by the telemetry plot, the Timeline, the dashboard range, Book a pass and the kit. dashboards' base behaviour
