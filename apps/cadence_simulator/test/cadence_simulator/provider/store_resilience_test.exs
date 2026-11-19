@@ -6,6 +6,7 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
 
   alias CadenceSimulator.Provider
   alias CadenceSimulator.Provider.{Orchestrator, Store}
+  alias CadenceSimulator.StoreRestart
 
   @definitions Path.expand(
                  "../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
@@ -146,7 +147,8 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
       {:ok, _run} = Store.put(:run, %{"id" => "run-queued", "state" => "running"})
 
       :ok = GenServer.stop(store)
-      restarted = await_restart(store)
+      # #331: back under its name AND past init/1, so its ETS mirror exists before the read.
+      restarted = StoreRestart.await(store)
 
       assert restarted != store
       assert {:ok, %{"state" => "running"}} = Store.fetch(:run, "run-queued")
@@ -237,17 +239,6 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
     Enum.filter(links, fn pid ->
       is_pid(pid) and Process.info(pid, :parent) == {:parent, supervisor}
     end)
-  end
-
-  defp await_restart(old, attempts \\ 50) do
-    case Process.whereis(Store) do
-      pid when is_pid(pid) and pid != old ->
-        pid
-
-      _none when attempts > 0 ->
-        Process.sleep(20)
-        await_restart(old, attempts - 1)
-    end
   end
 
   defp resume(nil), do: :ok
