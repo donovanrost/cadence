@@ -46,8 +46,9 @@ rules you work to, and reviews UI that crosses squads.
   cell. The `Service` tag is only for a cell that holds the name alone (as the audit does). A service without a name
   is never shown as an id (U25).
 - **Refusals open with what didn't happen, by the person's act:** "Not saved:", "Not sent:", "Not approved:",
-  "Not applied:". Then why, in one sentence, then what to do. An approval refused before it was recorded ends
-  "Your approval wasn't recorded." (U95).
+  "Not applied:". Then why, in one sentence, then what to do. An approval refused before it was recorded says
+  "Your approval wasn't recorded." after the why, and before what the reader does, so the line ends on their act
+  (U95).
 - **A code the console doesn't know** gets a plain refusal ("Not approved: Cadence refused this approval.") with the
   code in Technical details. Never map an unknown code onto a known code's sentence.
 - **Lists of names:** up to 3, then "and N more" (with `Show all` where the full list matters).

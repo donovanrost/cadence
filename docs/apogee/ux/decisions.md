@@ -3181,9 +3181,12 @@ Communications, Changes) for ux's look.
 
 ### U95 · Approve refused before anything is recorded (L10 decide panel; P3 "approved = applied", ahead of (B)) (api / fe-ops)
 The Activations decide panel's Approve now checks that the request can apply, and refuses before recording a decision.
-Every line starts "Not approved:", says what to do, and ends "Your approval wasn't recorded." After a refusal, Approve
-is disabled with the line as its A6 reason; Reject stays, so the request can be cleared. Words reuse U41, U65, U88,
-U90 and U94.
+Every line starts "Not approved:" and says why. "Your approval wasn't recorded." follows the why, and anything another
+person does ("The requester sends it again."). When the reader has something to do ("Try again", "Reload…", "Send it
+back…", "Approve it once…"), that sentence comes after it, so the line ends on the reader's act; otherwise "Your
+approval wasn't recorded." ends the line. (Order amended 11-19: lines had landed both ways. New lines follow this;
+a landed line moves when its screen is next changed.) After a refusal, Approve is disabled with the line as its A6
+reason; Reject stays, so the request can be cleared. Words reuse U41, U65, U88, U90 and U94.
 
 - `approved_activation_content_mismatch` (U41's cause): "Not approved: what this request would apply changed after it
   was requested, so it isn't what you reviewed. The requester sends it again."
