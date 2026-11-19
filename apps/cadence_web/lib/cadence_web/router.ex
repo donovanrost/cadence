@@ -1412,8 +1412,8 @@ defmodule CadenceWeb.Router do
       post("/missions", MissionController, :create)
       get("/missions/:mission_id", MissionController, :show)
 
-      get("/service_identities", ServiceIdentityController, :index)
-      post("/service_identities", ServiceIdentityController, :create)
+      # No service_identities here (#281): a REST bearer is always a service identity, and
+      # services never manage service identities. People issue them in the console.
 
       scope "/missions/:mission_id" do
         get("/mission_health", MissionHealthController, :show)

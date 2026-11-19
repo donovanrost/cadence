@@ -1,7 +1,8 @@
 defmodule Cadence.Administration.ServiceIdentityAdministration do
   @moduledoc """
   Service identity writes for the console's People page (O6): create, rotate the key, revoke.
-  Organization admins only (`:manage_service_identities`).
+  Organization admins who are people only (`:manage_service_identities`; a service identity is
+  refused, #281), and the issuer or rotator holds every capability the identity has.
 
   The API token is returned **once**, by create and rotate, and never again: Cadence stores
   only its digest. Rotating invalidates the old token immediately; revoking disables the
@@ -30,6 +31,7 @@ defmodule Cadence.Administration.ServiceIdentityAdministration do
   def create(%Scope{} = scope, organization_id, params) do
     with :ok <- authorize(scope, organization_id),
          {:ok, attrs} <- validate(organization_id, params),
+         :ok <- Policy.ensure_holds_capabilities(scope, attrs.capabilities),
          {:ok, %{service_identity: identity, api_token: token}} <-
            Auth.issue_service_identity(
              ServiceIdentity.new(Map.put(attrs, :organization_id, organization_id)),
@@ -42,6 +44,8 @@ defmodule Cadence.Administration.ServiceIdentityAdministration do
   @spec rotate(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
   def rotate(%Scope{} = scope, organization_id, service_identity_id) do
     with :ok <- authorize(scope, organization_id),
+         {:ok, identity} <- Auth.fetch_service_identity(organization_id, service_identity_id),
+         :ok <- Policy.ensure_holds_capabilities(scope, identity.capabilities),
          {:ok, %{service_identity: identity, api_token: token}} <-
            ServiceIdentityKeys.rotate(organization_id, service_identity_id, scope) do
       {:ok, issued(identity, token)}

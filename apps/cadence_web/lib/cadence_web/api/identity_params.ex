@@ -3,7 +3,6 @@ defmodule CadenceWeb.API.IdentityParams do
 
   import CadenceWeb.API.ParamParser
 
-  alias Cadence.Auth.ServiceIdentity
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
 
@@ -31,25 +30,6 @@ defmodule CadenceWeb.API.IdentityParams do
          organization_id: organization_id,
          slug: slug,
          display_name: display_name,
-         metadata: map_value(params, "metadata")
-       })}
-    end
-  end
-
-  @spec service_identity(binary(), map()) :: {:ok, ServiceIdentity.t()} | {:error, term()}
-  def service_identity(organization_id, params)
-      when is_binary(organization_id) and is_map(params) do
-    with {:ok, display_name} <- required_string(params, "display_name"),
-         {:ok, capabilities} <- capabilities(params, []),
-         {:ok, lifecycle_state} <- service_identity_lifecycle_state(params) do
-      {:ok,
-       ServiceIdentity.new(%{
-         service_identity_id: string_value(params, "service_identity_id"),
-         organization_id: organization_id,
-         mission_id: string_value(params, "mission_id"),
-         display_name: display_name,
-         capabilities: capabilities,
-         lifecycle_state: lifecycle_state,
          metadata: map_value(params, "metadata")
        })}
     end
