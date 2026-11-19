@@ -20,7 +20,12 @@ const scope = useMissionScope();
 const open = ref(false);
 const reason = ref("");
 const busy = ref(false);
-const outcome = shallowRef<{ tone: "crit" | "caution" | "nominal"; text: string } | null>(null);
+/** `failed` (a11y B6, ux #414): refused or unclear is an alert; aborted a status. */
+const outcome = shallowRef<{
+  tone: "crit" | "caution" | "nominal";
+  text: string;
+  failed: boolean;
+} | null>(null);
 
 async function run() {
   busy.value = true;
@@ -31,6 +36,7 @@ async function run() {
       const res = r.value.events.find((e) => e.kind === "aborted")?.payload;
       outcome.value = {
         tone: "nominal",
+        failed: false,
         text: `Aborted: ${res?.canceled ?? 0} canceled, ${res?.already_started?.length ?? 0} already started and still running.`,
       };
       open.value = false;
@@ -38,11 +44,13 @@ async function run() {
     } else if (r.status === "rejected")
       outcome.value = {
         tone: "crit",
+        failed: true,
         text: `Not aborted. Nothing changed: ${describeApiError(r.error)}`,
       };
     else
       outcome.value = {
         tone: "caution",
+        failed: true,
         text: `It's unclear whether the abort went through (${describeApiError(r.error)}). Reload before trying again.`,
       };
   } finally {
@@ -55,12 +63,9 @@ const onAbort = () => run().catch((e: unknown) => console.error("Abort failed", 
 <template>
   <div class="flex flex-col gap-2">
     <!-- a11y B6 (#243): aborted is a status; refused or unclear is an alert. -->
-    <ApCallout
-      v-if="outcome"
-      :tone="outcome.tone"
-      :role="outcome.tone === 'nominal' ? 'status' : 'alert'"
-      >{{ outcome.text }}</ApCallout
-    >
+    <ApCallout v-if="outcome" :tone="outcome.tone" :role="outcome.failed ? 'alert' : 'status'">{{
+      outcome.text
+    }}</ApCallout>
     <ApInlineConfirm
       v-model:open="open"
       action="Abort remaining uplinks"

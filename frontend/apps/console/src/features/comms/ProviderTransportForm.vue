@@ -128,7 +128,8 @@ async function stage() {
     />
     <ApCallout v-for="(e, i) in general" :key="i" tone="caution">{{ e.message }}</ApCallout>
     <ProviderTransportPreview v-if="ready?.preview" :preview="ready.preview" />
-    <ApCallout v-if="failure" tone="caution"
+    <!-- a11y B6 (#243): a refused stage is the person's own act refused: an alert. -->
+    <ApCallout v-if="failure" tone="caution" role="alert"
       >{{ failure }}
       <template v-if="failureLink" #action>
         <ApButton size="compact" :to="failureLink.to">{{ failureLink.label }}</ApButton>

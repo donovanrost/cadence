@@ -104,9 +104,18 @@ async function release() {
     </span>
     <p v-if="!canRelease" class="m-0 text-sm text-text-3">{{ NO_ACCESS_RELEASE }}</p>
     <p v-if="busy" class="m-0 text-sm text-text-2">Releasing…</p>
-    <span :role="linesFailed ? 'alert' : 'status'" class="flex flex-col">
-      <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
-    </span>
+    <!-- a11y B6 (#243, ca-ux): two regions that are always there, so the role never changes
+         with the content: all released is a status, anything else an alert. -->
+    <div role="status" class="flex flex-col">
+      <template v-if="!linesFailed">
+        <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
+      </template>
+    </div>
+    <div role="alert" class="flex flex-col">
+      <template v-if="linesFailed">
+        <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
+      </template>
+    </div>
     <template v-if="canRelease" #action>
       <ApButton size="compact" :disabled="busy" disabled-reason="Releasing…" @click="release"
         >Release commands…</ApButton

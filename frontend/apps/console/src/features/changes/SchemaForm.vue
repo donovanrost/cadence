@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { ApSegmented, ApSelect, ApTextarea } from "@/ui";
 import SchemaTextField from "./SchemaTextField.vue";
 import {
@@ -17,10 +18,15 @@ const props = defineProps<{
   disabledValues?: Readonly<Record<string, readonly string[]>>;
   /** Per field path, an extra line in the field's own hint, so it's announced with the control (A6). */
   hints?: Readonly<Record<string, string>>;
-  /** Info lines under fields, by path (a kind's form rules; U83). */
+  /**
+   * Info lines for fields, by path (a kind's form rules; U83). They go into the field's own hint,
+   * so they're read with the control (#243, mms-ux), and are said once from a status line.
+   */
   notes?: Readonly<Record<string, string>> | undefined;
 }>();
 const values = defineModel<FormValues>({ required: true });
+/** a11y B6 (#243): a note appears because of the person's edit, so it's said once, politely. */
+const noteSaid = computed(() => Object.values(props.notes ?? {}).join(" "));
 const option = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 function set(path: string, value: string) {
   values.value = { ...values.value, [path]: value };
@@ -54,6 +60,7 @@ const hint = (f: SchemaField) =>
     f.unit === "s" ? "e.g. 48h, 2d, 90m" : null,
     f.default !== null && f.type !== "boolean" ? `Default ${defaultText(f)}` : null,
     props.hints?.[f.path] ?? null,
+    props.notes?.[f.path] ?? null,
   ]
     .filter(Boolean)
     .join(" · ") || undefined;
@@ -61,6 +68,7 @@ const hint = (f: SchemaField) =>
 
 <template>
   <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <p class="sr-only" role="status">{{ noteSaid }}</p>
     <template v-for="f in schema.fields" :key="f.path">
       <template v-if="visible(f, values)">
         <div v-if="f.type === 'boolean'" class="flex flex-col gap-1.5">
@@ -101,7 +109,11 @@ const hint = (f: SchemaField) =>
           :error="errors[f.path] ?? null"
           @update:model-value="set(f.path, $event)"
         />
-        <p v-if="notes?.[f.path]" class="m-0 text-sm text-text-2 md:col-span-2">
+        <!-- A yes/no field has no hint to carry its note; it stays a line under the control. -->
+        <p
+          v-if="f.type === 'boolean' && notes?.[f.path]"
+          class="m-0 text-sm text-text-2 md:col-span-2"
+        >
           {{ notes[f.path] }}
         </p>
       </template>
