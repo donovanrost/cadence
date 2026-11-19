@@ -3368,11 +3368,13 @@ are api's, switched on with `knownErrorCode`.
   "started": a provider's window can close before AOS (U20). The list is the server's; the console never edits it.
   - **Up front** (Plan day's review and Re-plan's proposal), caution, above Approve: "36 of R41's passes can't be
     booked any more: their booking window has closed. Approving books the other 1,476; the 36 are recorded as
-    skipped." with `Show 36` (spacecraft, station, AOS; U61's list). The commit counts only bookable passes: `Approve
+    skipped." with `Show 36` (spacecraft, station, AOS; U61's list; no close time, since a pass within the 60 s margin counts as
+    closed before its raw `expires_at`). Over 5,000 (items are capped, `count` isn't): the list ends "Showing the first
+    5,000 of 6,200." The commit counts only bookable passes: `Approve
     and book 1,476 passes`, and so does the confirm body. Re-plan: "3 of the proposal's passes can't be booked any
     more… Applying it books the other 37; the 3 are recorded as skipped."
   - **No window from the provider** (domain fails closed: a pass without a usable `expires_at` counts as closed and
-    is skipped): its `Show` row reads "No booking window from the provider" in place of a close time, and while any
+    is skipped): its `Show` row adds "No booking window from the provider", and while any
     listed item has none, the sentence's clause reads "their booking window has closed, or the provider gave none"
     (U20: "closed" alone would claim what isn't known). The record and audit then say "skipped (no open booking
     window)".
