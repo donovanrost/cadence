@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, onMounted, ref, watch } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 
 /** Section navigation between routes (links, not ARIA tabs). Looks like ApSegmented `tabs`. */
@@ -8,17 +9,35 @@ export type ApTabLink = Readonly<{
   to: RouteLocationRaw;
   count?: number;
 }>;
-defineProps<{ links: readonly ApTabLink[]; active: string; label: string }>();
+const props = defineProps<{ links: readonly ApTabLink[]; active: string; label: string }>();
+/**
+ * On a narrow screen the strip scrolls sideways; the active link is kept in view (ux U94). Only the
+ * strip scrolls (scrollLeft), never the page, so a re-mount far down a long page can't jump (lead).
+ */
+const nav = ref<HTMLElement | null>(null);
+function showActive() {
+  void nextTick(() => {
+    const strip = nav.value;
+    const link = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!strip || !link) return;
+    const box = strip.getBoundingClientRect();
+    const at = link.getBoundingClientRect();
+    if (at.left < box.left) strip.scrollLeft += at.left - box.left;
+    else if (at.right > box.right) strip.scrollLeft += at.right - box.right;
+  });
+}
+onMounted(showActive);
+watch(() => props.active, showActive);
 </script>
 
 <template>
-  <nav :aria-label="label" class="flex border-b border-hairline">
+  <nav ref="nav" :aria-label="label" class="flex overflow-x-auto border-b border-hairline">
     <RouterLink
       v-for="link in links"
       :key="link.key"
       :to="link.to"
       :aria-current="link.key === active ? 'page' : undefined"
-      class="flex h-9 items-center gap-2 max-md:hit-44 border-r border-hairline px-4 font-display text-md font-semibold tracking-tag uppercase no-underline last:border-r-0"
+      class="flex h-9 flex-none items-center gap-2 whitespace-nowrap max-md:hit-44 border-r border-hairline px-4 font-display text-md font-semibold tracking-tag uppercase no-underline last:border-r-0"
       :class="
         link.key === active
           ? 'bg-raised text-readout shadow-[inset_0_-2px_0_var(--color-readout)]'

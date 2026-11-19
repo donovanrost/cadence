@@ -42,6 +42,9 @@ export const errorCodes = [
   // Missions, spacecraft, setup
   "mission_not_found",
   "spacecraft_not_found",
+  // (B) configuration workspace reads (api, ux U94): the snapshot and the packet choices.
+  "spacecraft_source_limit_exceeded",
+  "spacecraft_catalog_unavailable",
   "profile_not_found",
   "station_not_found",
   "transport_not_found",
