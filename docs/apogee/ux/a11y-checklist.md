@@ -69,8 +69,12 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
    widget 3"), never a name ending in a space. A list row's buttons reuse the row's title: "Discard, EARENDIL-001,
    SNTG 00:13Z pass, 3 connections refused" (U107). `aria-keyshortcuts` lists every key it answers, modifiers
    included. (#189 'name')
-8. **Screen-wide keys never override a focused control.** Present's Space, ←/→ and Kiosk's Esc act only when focus
-   isn't on a button, link, field or other control; Space on a focused button presses that button. (#189, Present)
+8. **Screen-wide keys never override a focused control that uses that key.** Present's Space and ←/→ and Kiosk's
+   Esc yield to the focused control only when it uses the key. Space presses a button, link or summary and ticks a
+   box. The arrow keys move in a field, a radio group, tabs, a menu, a listbox, a grid, a tree or a slider. A focused
+   button doesn't use the arrows, so ←/→ still step slides from it; Space on it presses it. Esc yields only to an
+   open sheet or menu, which it closes; from a focused field it still leaves Kiosk or Present. (#189, Present; #245's
+   `focusedControlOwns`)
 
 ## C. Surfaces to check by hand (opened, confirmed, closed)
 | Screen | What to open or do | Specific checks |
