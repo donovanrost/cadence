@@ -500,6 +500,64 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
 - Errors: `404 import_run_not_found`.
 - Live: refetch on `invalidate` with `catalog`.
 
+## Imports that match an existing revision (#119, ux U99): C3, C1 and source files
+
+Identical content in one organization and mission is ONE mission model revision (director 11-17,
+option (a)): layer and revision ids are content digests (#166's versioned basis), with the artifact,
+the import run and the file name left out. An import whose content matches a stored revision makes
+no new model revision. All fields below are additive; readers take them as optional.
+
+```json
+// C3: GET …/catalog/imports/:import_run_id
+{"revision": {"id": "…", "number": 1, "label": "…",
+              "database": {"id": "…", "name": "Payload catalog"}},   // + database (this run's own)
+ "matched_revision": null | {
+   "model_revision_id": "mission_model_revision:…",
+   "revision": null | {"id": "…", "number": 4, "label": "…" | null,
+                       "database": {"id": "…", "name": "Bus catalog" | null}},
+   "status": "candidate" | "approved" | "rejected" | "retired",
+   "decision": null | {"kind": "approved" | "rejected", "by": {"name": "…" | null},
+                       "at": "2026-11-15T09:12:00Z", "reason": "…" | null},
+   "cannot_approve": null | {"reason": "self" | "authors_unknown",
+                             "via_service": null | {"id": "…", "name": "…" | null},
+                             "service": null | {"id": "…", "name": "…" | null}}}}
+
+// C1 GET …/catalog, and the source-file page GET …/catalog/artifacts/:id: each import_runs[] row
+{"matched": null | {"number": 4 | null, "status": "candidate" | "approved" | "rejected" | "retired",
+                    "model_revision_id": "mission_model_revision:…",
+                    "first": null | {"number": 4, "database": {"id": "…", "name": "…" | null}}}}
+```
+
+- **Which runs carry a match:** a completed run whose content matched a model revision that
+  already existed. `null` when the run made a new model revision, failed, or predates #119.
+- **The catalog revision rule (domain 11-19):** an upload whose model matched one that a revision of
+  the SAME catalog database already names makes NO catalog revision (C3 `revision` is `null`, and
+  so is the row's `revision_number`). Uploaded into a DIFFERENT database, it makes that database's
+  revision naming the existing model (C3 `revision` set AND `matched_revision` set: that's the
+  tell; there's no flag). A re-import of a stored artifact never makes a catalog revision. In every
+  case the run completes and records its requester, who counts as an importer for the model gate.
+- **Read live, not snapshotted:** `status` and `decision` are the model revision's state at request
+  time, so a match that was waiting shows its later decision. Decisions belong to the one model
+  revision; every catalog revision naming it shows the same status.
+- `matched_revision.revision`: the catalog revision the model is first recorded under (U65), with
+  its database; `null` when no catalog revision names it. `number` in a row's `matched` is THIS
+  database's revision naming the match (`null` when none does); `first` is the first-recorded one
+  ("Same as Bus catalog rev 4").
+- `decision`: `null` unless both who and when are recorded (U29). `by` is a display name only,
+  never an id or email (U25). `reason` is a person's free text: render it as text, never HTML.
+- `cannot_approve` (per viewer): `null` unless separation of duties bars THIS viewer from
+  approving. It is the approve path's own check (`RevisionDecisions.separation/4`), so it follows
+  #280's service accountability automatically. It's the separation reason ONLY: a viewer who can't
+  approve for another reason (no permission) reads `null`, so never offer Approve from it.
+- Every database or service `name` is `null` when its row is gone; show words, never the id.
+- `model_revision_id`: Technical details and route params (`setup.catalog.model`) only.
+- **Per viewer:** C3 is built per request; `cannot_approve` is never cached, shared or broadcast
+  (the `catalog` invalidation carries no payload of it).
+- **Cost:** a runs table's matches are four batched queries whatever its length (a test pins it).
+- **Fails closed:** stored ids are global keys, so after inserting, the layer and revision rows are
+  re-read by id AND organization AND mission; a mismatch fails the import
+  (`mission_model_scope_mismatch`) and never shows another revision's state.
+
 ## `GET /api/console/v1/missions/:mission_id/catalog/revisions/:revision_id/rollout` (C3 "Roll out to")
 
 What staging this catalog revision on each profile would move, so the options can show

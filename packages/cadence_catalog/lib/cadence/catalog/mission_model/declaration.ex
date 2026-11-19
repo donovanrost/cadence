@@ -1,7 +1,7 @@
 defmodule Cadence.Catalog.MissionModel.Declaration do
   @moduledoc "Typed declaration contributed by a Mission Model layer."
 
-  alias Cadence.Catalog.MissionModel.{Canonical, Path, Provenance, Reference}
+  alias Cadence.Catalog.MissionModel.{Canonical, Expression, Path, Provenance, Reference}
 
   @kinds [
     :space_system,
@@ -89,6 +89,49 @@ defmodule Cadence.Catalog.MissionModel.Declaration do
       extensions: declaration.extensions
     })
   end
+
+  @doc """
+  The versioned hash basis (#166) that layer and revision ids hash: every field, references and
+  provenance through their own bases. Not `fingerprint/1`, which authored overrides store.
+  """
+  @spec hash_basis(t()) :: Canonical.basis()
+  def hash_basis(%__MODULE__{} = declaration) do
+    {:mission_model_declaration, 1,
+     %{
+       semantic_id: declaration.semantic_id,
+       kind: declaration.kind,
+       name: declaration.name,
+       qualified_name: declaration.qualified_name,
+       space_system_path: declaration.space_system_path,
+       operation: declaration.operation,
+       expected_fingerprint: declaration.expected_fingerprint,
+       aliases: declaration.aliases,
+       definition: plain(declaration.definition),
+       references: Enum.map(declaration.references, &Reference.hash_basis/1),
+       provenance: Provenance.hash_basis(declaration.provenance),
+       extensions: plain(declaration.extensions)
+     }}
+  end
+
+  # `definition` and `extensions` are free-form; validated expressions are `Expression` structs whose
+  # nodes hold AST tuples
+  # (`{:literal, nil}`, `{:parameter, id}`). A basis allows no tuple, so each becomes a nested
+  # `{:tuple, 1, %{items: [...]}}` basis, which never encodes like a map or a list. Anything else
+  # the basis refuses still raises.
+  defp plain(%Expression{} = expression),
+    do:
+      {:mission_model_expression, 1,
+       %{node: plain(expression.node), result_type: expression.result_type}}
+
+  defp plain(value) when is_tuple(value),
+    do: {:tuple, 1, %{items: value |> Tuple.to_list() |> Enum.map(&plain/1)}}
+
+  defp plain(value) when is_list(value), do: Enum.map(value, &plain/1)
+
+  defp plain(value) when is_map(value) and not is_struct(value),
+    do: Map.new(value, fn {key, item} -> {key, plain(item)} end)
+
+  defp plain(value), do: value
 
   @spec kinds() :: [kind()]
   def kinds, do: @kinds

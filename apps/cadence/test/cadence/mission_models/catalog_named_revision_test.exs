@@ -1,9 +1,9 @@
 defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
   @moduledoc """
   A mission-model revision that no catalog revision names can be neither approved nor requested
-  for activation (director 11-17, interim). Every import run compiles its own model revision; a
-  run that makes no catalog revision (a reimport) leaves one that no catalog revision names, and
-  the model approval's importer separation is recorded against catalog revisions.
+  for activation (director 11-17, interim; kept as defence in depth by #119). Since #119 a
+  reimport of identical content matches the revision its catalog revision already names, so the
+  unnamed revisions here are compiled directly, as a fixture without its naming helper would be.
   """
   use Cadence.DataCase, async: false
 
@@ -13,7 +13,6 @@ defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Auth.Scope
-  alias Cadence.Catalog
   alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Catalog.{ModelRevisions, RevisionRow}
   alias Cadence.Control.Activations, as: ControlActivations
@@ -45,7 +44,7 @@ defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
   end
 
   test "a model revision no catalog revision names can't be approved, by anyone", c do
-    unnamed = run_again!(c, %{"user_id" => "reimporter-b"})
+    unnamed = unnamed!(c)
     assert ModelRevisions.for_models(c.org, c.mid, [unnamed]) == %{}
 
     # The importer's own revision is refused to them (separation is on in this mission).
@@ -57,7 +56,7 @@ defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
 
   test "an approved model revision no catalog revision names can't be requested for activation",
        c do
-    unnamed = run_again!(c, %{"user_id" => "reimporter-b"})
+    unnamed = unnamed!(c)
     {:ok, _approved} = MissionModelApproval.approve!(c.org, c.mid, unnamed)
     binding_set = persist_binding_set!(c)
 
@@ -139,16 +138,20 @@ defmodule Cadence.MissionModels.CatalogNamedRevisionTest do
     refute Resume.retryable_code?("mission_model_revision_not_in_catalog")
   end
 
-  # The same immutable artifact, imported again without a new catalog revision.
-  defp run_again!(c, requested_by) do
-    {:ok, run} =
-      Catalog.start_import_run(c.org, c.mid, c.revision.artifact_id, "cadence_yaml",
-        requested_by: requested_by
-      )
+  # A revision no catalog revision names: compiled straight from a layer, outside an import.
+  defp unnamed!(c) do
+    layer =
+      Layer.new(%{
+        organization_id: c.org,
+        mission_id: c.mid,
+        name: "unnamed fixture model",
+        declarations: [%{kind: :space_system, qualified_name: "/"}]
+      })
 
-    {:ok, %{status: :completed} = run} = Catalog.execute_enqueued_run(run.import_run_id)
-    model = run.result_document["mission_model"]["revision_id"]
-    assert is_binary(model) and model != c.model
+    {:ok, compilation} = MissionModels.compile_layers([layer])
+    model = compilation.revision.revision_id
+    assert ModelRevisions.for_models(c.org, c.mid, [model]) == %{}
+    assert model != c.model
     model
   end
 

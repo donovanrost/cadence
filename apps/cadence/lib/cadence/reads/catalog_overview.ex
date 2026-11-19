@@ -10,9 +10,11 @@ defmodule Cadence.Reads.CatalogOverview do
   """
 
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
+  alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, Revision}
   alias Cadence.MissionModels
+  alias Cadence.Reads.Catalog.{MatchedRevision, RunMatches}
   alias Cadence.Reads.CatalogDiff
 
   @revision_limit 50
@@ -32,11 +34,18 @@ defmodule Cadence.Reads.CatalogOverview do
     }
   end
 
-  @spec import_run(binary(), binary(), binary()) :: {:ok, map()} | {:error, :import_run_not_found}
-  def import_run(organization_id, mission_id, import_run_id) do
+  @spec import_run(Scope.t(), binary(), binary()) ::
+          {:ok, map()} | {:error, :import_run_not_found}
+  def import_run(%Scope{organization_id: organization_id} = scope, mission_id, import_run_id) do
     case Catalog.fetch_import_run(organization_id, mission_id, import_run_id) do
-      {:ok, %ImportRun{} = run} -> {:ok, run_detail(organization_id, mission_id, run)}
-      {:error, _not_found} -> {:error, :import_run_not_found}
+      {:ok, %ImportRun{} = run} ->
+        {:ok,
+         organization_id
+         |> run_detail(mission_id, run)
+         |> Map.put(:matched_revision, MatchedRevision.read(scope, mission_id, run))}
+
+      {:error, _not_found} ->
+        {:error, :import_run_not_found}
     end
   end
 
@@ -98,7 +107,11 @@ defmodule Cadence.Reads.CatalogOverview do
         download_url: download_url(mission_id, artifact.artifact_id)
       },
       revisions: Enum.map(revisions, &Map.take(&1, [:id, :number, :label, :imported_at])),
-      import_runs: runs |> Enum.take(50) |> Enum.map(&run_row(&1, revision_by_run, labels))
+      import_runs:
+        runs
+        |> Enum.take(50)
+        |> Enum.map(&run_row(&1, revision_by_run, labels))
+        |> RunMatches.put(runs, organization_id, mission_id, artifact.catalog_database_id)
     }
   end
 
@@ -128,7 +141,10 @@ defmodule Cadence.Reads.CatalogOverview do
         |> with_model_status(organization_id, mission_id)
         |> Enum.map(&Map.drop(&1, [:import_run_id, :model_revision_id])),
       import_runs:
-        runs |> Enum.take(@run_limit) |> Enum.map(&run_row(&1, revision_by_run, labels))
+        runs
+        |> Enum.take(@run_limit)
+        |> Enum.map(&run_row(&1, revision_by_run, labels))
+        |> RunMatches.put(runs, organization_id, mission_id, id)
     }
   end
 
@@ -249,6 +265,15 @@ defmodule Cadence.Reads.CatalogOverview do
     |> Map.merge(revision_fields(organization_id, mission_id, revision))
   end
 
+  # #119 U99: the run's own revision's database, for "Imported as catalog rev 1 of Payload
+  # catalog". A database that's gone reads a null name, never its id.
+  defp database_ref(organization_id, mission_id, database_id) do
+    case Catalog.fetch_database(organization_id, mission_id, database_id) do
+      {:ok, database} -> %{id: database_id, name: database.name}
+      _gone -> %{id: database_id, name: nil}
+    end
+  end
+
   # C3's revision, the revision before it in its database, and the diff between them.
   defp revision_fields(_organization_id, _mission_id, nil),
     do: %{revision: nil, base_revision: nil, diff: nil}
@@ -260,7 +285,8 @@ defmodule Cadence.Reads.CatalogOverview do
       revision: %{
         id: revision.catalog_revision_id,
         number: revision.revision_number,
-        label: revision.revision_label
+        label: revision.revision_label,
+        database: database_ref(organization_id, mission_id, revision.catalog_database_id)
       },
       base_revision: base && %{id: base.catalog_revision_id, number: base.revision_number},
       diff:

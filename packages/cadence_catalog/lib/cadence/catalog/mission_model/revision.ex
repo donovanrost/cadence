@@ -38,9 +38,16 @@ defmodule Cadence.Catalog.MissionModel.Revision do
                 metadata: %{}
               ]
 
+  # Bump on any change to what `hash_basis/1` hashes.
+  # `content_sha256` stays bare hex, not #166's "v<n>:" form: it is copied out as an identity into
+  # activation manifests, runtime plans and command requests, whose readers check 64-hex. The
+  # version is inside the hash, so no two bases can compare equal (#166 rule 4 as amended by domain 11-19).
+  @basis_version 1
+
   @spec build(map()) :: t()
   def build(attrs) when is_map(attrs) do
-    basis = %{
+    content = %{
+      organization_id: Map.get(attrs, :organization_id),
       mission_id: Map.fetch!(attrs, :mission_id),
       compiler_version: Map.fetch!(attrs, :compiler_version),
       layer_ids: Map.fetch!(attrs, :layer_ids),
@@ -49,21 +56,43 @@ defmodule Cadence.Catalog.MissionModel.Revision do
       edges: Map.fetch!(attrs, :edges)
     }
 
+    basis = hash_basis(content)
+
     %__MODULE__{
       revision_id:
-        Map.get(attrs, :revision_id, Canonical.content_id("mission_model_revision", basis)),
-      organization_id: Map.get(attrs, :organization_id),
-      mission_id: basis.mission_id,
+        Map.get(attrs, :revision_id, Canonical.basis_content_id("mission_model_revision", basis)),
+      organization_id: content.organization_id,
+      mission_id: content.mission_id,
       status: Map.get(attrs, :status, :candidate),
-      compiler_version: basis.compiler_version,
-      layer_ids: basis.layer_ids,
-      declarations: basis.declarations,
-      space_systems: basis.space_systems,
-      edges: basis.edges,
+      compiler_version: content.compiler_version,
+      layer_ids: content.layer_ids,
+      declarations: content.declarations,
+      space_systems: content.space_systems,
+      edges: content.edges,
       diagnostics: Map.get(attrs, :diagnostics, []),
-      content_sha256: Map.get(attrs, :content_sha256, Canonical.sha256(basis)),
+      content_sha256: Map.get(attrs, :content_sha256, Canonical.basis_sha256(basis)),
       metadata: Map.get(attrs, :metadata, %{})
     }
+  end
+
+  # The revision id and content hash basis (#166, #119): the organization and mission (ids are a
+  # global primary key, so content in two missions must not share one), the compiler version, the
+  # layers IN ORDER, and the compiled graph. Provenance hashes without the artifact and the import
+  # run (`Provenance.hash_basis/1`), so identical content imported again is the same revision.
+  # Diagnostics and metadata are derived or per-compile and stay out.
+  defp hash_basis(content) do
+    {:mission_model_revision, @basis_version,
+     %{
+       organization_id: content.organization_id,
+       mission_id: content.mission_id,
+       compiler_version: content.compiler_version,
+       layer_ids: content.layer_ids,
+       declarations:
+         Map.new(content.declarations, fn {id, d} -> {id, Declaration.hash_basis(d)} end),
+       space_systems:
+         Map.new(content.space_systems, fn {id, s} -> {id, SpaceSystem.hash_basis(s)} end),
+       edges: content.edges
+     }}
   end
 
   @spec new(map()) :: t()

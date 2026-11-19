@@ -19,7 +19,7 @@ defmodule CadenceWeb.Console.CatalogController do
   end
 
   def import_run(conn, %{"import_run_id" => import_run_id}) do
-    case CatalogOverview.import_run(org_id(conn), mission_id(conn), import_run_id) do
+    case CatalogOverview.import_run(conn.assigns.current_scope, mission_id(conn), import_run_id) do
       {:ok, run} -> json(conn, %{data: ConfigJSON.encode(run)})
       {:error, :import_run_not_found} -> Problem.respond(conn, :import_run_not_found)
     end

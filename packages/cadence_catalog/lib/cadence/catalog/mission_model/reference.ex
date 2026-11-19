@@ -1,7 +1,7 @@
 defmodule Cadence.Catalog.MissionModel.Reference do
   @moduledoc "Typed source or resolved reference between Mission Model declarations."
 
-  alias Cadence.Catalog.MissionModel.Provenance
+  alias Cadence.Catalog.MissionModel.{Canonical, Provenance}
 
   @type t :: %__MODULE__{
           expected_kind: atom(),
@@ -46,6 +46,21 @@ defmodule Cadence.Catalog.MissionModel.Reference do
       required: value(attrs, :required, true),
       provenance: attrs |> value(:provenance) |> Provenance.new()
     }
+  end
+
+  @doc "The versioned hash basis (#166): every field; provenance through its own basis."
+  @spec hash_basis(t()) :: Canonical.basis()
+  def hash_basis(%__MODULE__{} = reference) do
+    {:mission_model_reference, 1,
+     %{
+       expected_kind: reference.expected_kind,
+       source_ref: reference.source_ref,
+       role: reference.role,
+       resolved_id: reference.resolved_id,
+       resolved_qualified_name: reference.resolved_qualified_name,
+       required: reference.required,
+       provenance: Provenance.hash_basis(reference.provenance)
+     }}
   end
 
   defp normalize_kind(kind) when is_atom(kind), do: kind

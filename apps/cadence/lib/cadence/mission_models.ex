@@ -20,7 +20,8 @@ defmodule Cadence.MissionModels do
     RevisionDecisions,
     RevisionLayerRow,
     RevisionRow,
-    RuntimePlanRow
+    RuntimePlanRow,
+    StoredCompilation
   }
 
   alias Cadence.Repo
@@ -60,9 +61,22 @@ defmodule Cadence.MissionModels do
   @spec compile_layers([Layer.t()], keyword()) ::
           {:ok, CompilerResult.t()} | {:error, term()}
   def compile_layers(layers, opts \\ []) when is_list(layers) and is_list(opts) do
+    with {:ok, result, _stored} <- compile_and_store(layers, opts), do: {:ok, result}
+  end
+
+  @doc """
+  `compile_layers/2`, also returning what was stored: whether the revision already existed and
+  its stored status (`StoredCompilation`, #119).
+  """
+  @spec compile_and_store([Layer.t()], keyword()) ::
+          {:ok, CompilerResult.t(), StoredCompilation.stored()} | {:error, term()}
+  def compile_and_store(layers, opts \\ []) when is_list(layers) and is_list(opts) do
     with {:ok, %CompilerResult{} = result} <- Compiler.compile(layers, opts),
-         {:ok, _changes} <- persist_compilation(layers, result) do
-      {:ok, result}
+         {:ok, %{mission_model_stored: stored}} <- persist_compilation(layers, result) do
+      {:ok, result, stored}
+    else
+      {:error, _step, reason, _changes} -> {:error, reason}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -278,20 +292,13 @@ defmodule Cadence.MissionModels do
     as: :list_decisions
 
   defp persist_compilation(layers, %CompilerResult{} = result) do
-    multi =
-      Enum.reduce(layers, Multi.new(), fn layer, acc ->
-        Multi.insert(acc, {:mission_model_layer, layer.layer_id}, LayerRow.changeset(layer),
-          on_conflict: :nothing
-        )
-      end)
-      |> Multi.insert(:mission_model_revision, RevisionRow.changeset(result.revision),
-        on_conflict: :nothing
-      )
-      |> add_revision_layers(result.revision)
-      |> add_revision_diagnostics(result.revision)
-      |> add_runtime_plans(result)
-
-    Repo.transaction(multi)
+    Multi.new()
+    |> StoredCompilation.insert(layers, result.revision)
+    |> StoredCompilation.verify(layers, result.revision)
+    |> add_revision_layers(result.revision)
+    |> add_revision_diagnostics(result.revision)
+    |> add_runtime_plans(result)
+    |> Repo.transaction()
   end
 
   defp add_revision_layers(multi, revision) do

@@ -34,7 +34,8 @@ defineExpose({ open, close: () => sheet.value?.close() });
     width="narrow"
   >
     <p class="m-0 text-md text-text-2">
-      Spacecraft can't move to {{ label() }} after this. To try again, import a new revision.
+      Spacecraft can't move to {{ label() }} after this. To try again, correct the catalog and
+      import the corrected file.
     </p>
     <ApTextarea v-model="reason" label="Reason" required :maxlength="REASON_MAX" :hint="counter" />
     <ApCallout v-if="error" tone="crit">{{ error }}</ApCallout>

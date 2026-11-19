@@ -4,7 +4,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Activations.SpacecraftConfiguration, as: ConfigurationActivation
   alias Cadence.Applications.{ActionRequest, HostContext, TelemetryDecom}
   alias Cadence.Applications.TelemetryDecom.ActionProvider, as: DecomActions
-  alias Cadence.Catalog.FleetSnapshot
+  alias Cadence.Catalog.{Artifact, FleetSnapshot}
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.ModelApprovalGate
   alias Cadence.Control.SpacecraftConfiguration
@@ -33,6 +33,24 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
   alias Cadence.{Activations, Governance}
   alias Cadence.TestSupport.CatalogTestActor
+
+  # Different content from the fixture's default catalog: since #119 identical content is the
+  # SAME model revision, so an import meant to be unapproved must differ.
+  @changed_catalog """
+  packets:
+    - name: HEALTH
+      apid: 42
+      items:
+        - name: mode
+          data_type: uint
+          bit_offset: 0
+          bit_size: 8
+        - name: spare
+          data_type: uint
+          bit_offset: 8
+          bit_size: 8
+  commands: []
+  """
 
   setup do
     org = "org-spacecraft-activation"
@@ -474,7 +492,8 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     unapproved =
       Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
         revision_label: "Unapproved",
-        approve: false
+        approve: false,
+        yaml: @changed_catalog
       )
 
     save(c, c.first, unapproved)
@@ -603,8 +622,18 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     assert {:ok, request} = review(c, c.first)
     assert {:ok, _} = activate(c, request)
 
-    {:ok, artifact} =
-      Cadence.Catalog.fetch_artifact(c.org, c.mission.mission_id, c.revision.artifact_id)
+    # A next revision needs different content: since #119 identical content in the same catalog
+    # database makes no new revision.
+    artifact =
+      Artifact.new(%{
+        mission_id: c.mission.mission_id,
+        catalog_database_id: c.revision.catalog_database_id,
+        catalog_family: :combined,
+        artifact_name: "next.yaml",
+        format_key: "cadence_yaml",
+        media_type: "application/yaml",
+        source_artifact: @changed_catalog
+      })
 
     {:ok, run} =
       Cadence.Catalog.start_revision_import(

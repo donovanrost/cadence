@@ -172,6 +172,13 @@ describe("a revision the catalog doesn't list (U88)", () => {
     expect(t).not.toContain("Run comparison");
   });
 
+  // #119 U99 amends U65's reject confirm: importing the same file again returns this revision.
+  it("the reject confirm says to correct the catalog and import the corrected file", () => {
+    const t = text(panel());
+    expect(t).toContain("To try again, correct the catalog and import the corrected file.");
+    expect(t).not.toContain("import a new revision");
+  });
+
   it("an older server (field absent) or null leaves Approve as it was", () => {
     expect(text(panel())).not.toContain("The catalog doesn't list");
     expect(text(panel({ cannot_approve_because: null }))).not.toContain("The catalog doesn't list");

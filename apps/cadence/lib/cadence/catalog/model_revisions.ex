@@ -38,4 +38,23 @@ defmodule Cadence.Catalog.ModelRevisions do
     |> Repo.all()
     |> Enum.reduce(%{}, fn row, acc -> Map.put_new(acc, row.model, Map.delete(row, :model)) end)
   end
+
+  @doc """
+  `%{mission_model_revision_id => revision_number}`: the first catalog revision OF ONE DATABASE
+  that names each model revision (#119's runs table; absent: none in that database).
+  """
+  @spec numbers_in_database(binary(), binary(), binary(), [binary()]) :: %{binary() => integer()}
+  def numbers_in_database(_organization_id, _mission_id, _database_id, []), do: %{}
+
+  def numbers_in_database(organization_id, mission_id, database_id, ids) do
+    from(row in RevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.catalog_database_id == ^database_id and row.mission_model_revision_id in ^ids,
+      order_by: [asc: row.inserted_at, asc: row.catalog_revision_id],
+      select: {row.mission_model_revision_id, row.revision_number}
+    )
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {model, number}, acc -> Map.put_new(acc, model, number) end)
+  end
 end

@@ -181,6 +181,54 @@ defmodule CadenceWeb.Console.CatalogAPITest do
     assert json_response(conn, 404)["error"]["code"] == "catalog_revision_not_found"
   end
 
+  # #119, ux U99: a reimport of identical content matches the existing revision, and C3 says so.
+  test "C3 matched_revision: null for a new revision; the match, live, for a reimport", c do
+    database = TestFixtures.persist_catalog_database!(c.mission)
+
+    first =
+      database
+      |> TestFixtures.start_catalog_revision_import!(revision_label: "FSW 3.1.0")
+      |> TestFixtures.complete_catalog_import_run!()
+
+    assert get_data(c, "#{c.base}/imports/#{first.import_run_id}")["matched_revision"] == nil
+
+    [%{"artifact" => %{"id" => artifact_id}}] = get_data(c, c.base)["database"]["revisions"]
+
+    conn =
+      c.user
+      |> TestFixtures.member_conn()
+      |> post("#{c.base}/artifacts/#{artifact_id}/reimport", %{})
+
+    %{"import_run" => %{"id" => run_id}} = json_response(conn, 202)["data"]
+    {:ok, _completed} = Cadence.Catalog.execute_enqueued_run(run_id)
+
+    assert %{
+             "model_revision_id" => "mission_model_revision:" <> _,
+             "revision" => %{
+               "number" => 1,
+               "label" => "FSW 3.1.0",
+               "id" => _,
+               "database" => %{"id" => _, "name" => _}
+             },
+             "status" => "candidate",
+             "decision" => nil,
+             # A member can't approve at all; cannot_approve is only the separation reason.
+             "cannot_approve" => nil
+           } = get_data(c, "#{c.base}/imports/#{run_id}")["matched_revision"]
+
+    # The runs table: the reimport's row matched rev 1; the first run's row made it.
+    rows = Map.new(get_data(c, c.base)["database"]["import_runs"], &{&1["id"], &1["matched"]})
+
+    assert %{
+             "number" => 1,
+             "status" => "candidate",
+             "model_revision_id" => "mission_model_revision:" <> _,
+             "first" => %{"number" => 1, "database" => %{"id" => _, "name" => _}}
+           } = rows[run_id]
+
+    assert rows[first.import_run_id] == nil
+  end
+
   test "L18: a source file's page, its download, and importing it again", c do
     database = TestFixtures.persist_catalog_database!(c.mission)
 

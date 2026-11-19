@@ -20,6 +20,7 @@ defmodule Cadence.Catalog do
     ImportResult,
     ImportRun,
     ImportRunRow,
+    MatchedImport,
     ModelImporters,
     Registry,
     Revision,
@@ -502,40 +503,37 @@ defmodule Cadence.Catalog do
     })
   end
 
+  # #119: an upload matching a revision this catalog database already names makes none.
   defp maybe_attach_created_revision(%ImportRun{} = run, event_bus) do
-    if create_revision_run?(run) do
-      case create_revision_from_completed_run(run, event_bus) do
-        {:ok, %Revision{} = revision} ->
-          %ImportRun{
-            run
-            | result_document:
-                Map.put(run.result_document || %{}, "catalog_revision", %{
-                  "catalog_revision_id" => revision.catalog_revision_id,
-                  "catalog_database_id" => revision.catalog_database_id,
-                  "revision_number" => revision.revision_number,
-                  "revision_label" => revision.revision_label
-                })
-          }
-
-        {:error, reason} ->
-          %ImportRun{
-            run
-            | status: :failed,
-              failure_reason: {:catalog_revision_creation_failed, reason}
-          }
-      end
-    else
-      run
+    case MatchedImport.revision_for(run) do
+      :none -> run
+      {:matched, revision} -> MatchedImport.record(run, revision)
+      {:create, run} -> attach_created_revision(run, event_bus)
     end
   end
 
-  defp create_revision_run?(%ImportRun{catalog_database_id: nil}), do: false
+  defp attach_created_revision(run, event_bus) do
+    case create_revision_from_completed_run(run, event_bus) do
+      {:ok, %Revision{} = revision} ->
+        %ImportRun{
+          run
+          | result_document:
+              Map.put(run.result_document || %{}, "catalog_revision", %{
+                "catalog_revision_id" => revision.catalog_revision_id,
+                "catalog_database_id" => revision.catalog_database_id,
+                "revision_number" => revision.revision_number,
+                "revision_label" => revision.revision_label
+              })
+        }
 
-  defp create_revision_run?(%ImportRun{metadata: metadata}) when is_map(metadata) do
-    Map.get(metadata, "create_revision") == true or Map.get(metadata, :create_revision) == true
+      {:error, reason} ->
+        %ImportRun{
+          run
+          | status: :failed,
+            failure_reason: {:catalog_revision_creation_failed, reason}
+        }
+    end
   end
-
-  defp create_revision_run?(%ImportRun{}), do: false
 
   # Idempotent (director 11-14): a rerun of the same import run finds the revision it already
   # made instead of inserting a second (which the unique index on import_run_id refused, failing
