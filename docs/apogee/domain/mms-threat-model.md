@@ -139,9 +139,9 @@ set must be transitive.
 | Contact plans | Yes: planning runs author as a service (planner / fleet planning runs); a service submits with an automation grant (`contact_plans.ex:1208`) and **approves** with one (`contact_plan_approvals` `authorize_actor` `:service`/`:approved`) | `ContactPlanApprovals.separate_approver/5` (`:560`) checks a user actor only, so a service approver skips separation | Service author → its set. A service APPROVER's set is its accountable people plus the grant's approver; refused when it meets the author set. The planner proceeds when an approver outside the set approves. Open: who approves a grant (`grant.approved_by`), and is that person in the set? (yes by the rule above) |
 | Fleet planning policies | Author check matches `user_id` only (`FleetPlanningPolicies.not_author/2`, `:354`); approving is user-only (`fleet_planning_policies.ex:584`) | Always refuses the author | Service author → its set (it already refuses self, in every mode) |
 | Command requests | Yes: REST `command_requests`, `command_stages/…/submit` (queue submission: to confirm). Review/approve is user-only (`management/commanding/review_access.ex`) | `LifecyclePolicy.ensure_not_self_approval/2` (`commanding/lifecycle_policy.ex:59`): user_id only. Not governed by the setting (Ruling A) | Service requester → its set **wherever a second GO is required**, whatever the setting (rule above) |
-| Command groups | Via the console only? (group submission; to confirm) | `group_decision.ex:85`: `requested_by["user_id"] == actor["user_id"]` | As command requests |
-| Provider changes | To confirm whether a service can author one (REST `provider_profiles` writes are direct, not change requests). Approving is user-only (`provider_change_approvals.ex:111`) | `:approve_provider_changes` (org admins) | If a service can author one and the kind refuses self, as above (ca-security confirms after #233) |
-| Qualification cases | Human-only approver (`comparison.ex:504`) | To confirm the author check | ca-security confirms after #233 |
+| Command groups | No: submit, decide and release take the requester/approver from `RequestAuthoring`'s fresh user (`group_submission.ex:28`, `group_decision.ex:46`); console single requests too (`request_authoring.ex:39`) | `group_decision.ex:87`: requester can't decide | **No change** (ca-security 11-19). STILL OPEN (ca-security): the pre-console REST `command_requests` create/approve path (#263) under `:authenticated_api` may accept a service token |
+| Provider changes | No: they come from providers' own reservation changes (`provider_reservation_changes.ex`); no Cadence person or service authors them. Approving is user-only (`provider_change_approvals.ex:111`) | No self-approval refusal | **No change** (ca-security 11-19) |
+| Qualification cases | No: `Comparison.register_case/5` needs a person (`human_qualification_approver_required`, `comparison.ex:504`) | None: registering IS approving (status `:approved` at once, `approved_by` = the registrant, authorized by `:request_activation`). No second step | **No change** (mms-security 11-19). No caller in `lib`/`cadence_web` today (only `MissionModels.register_qualification_case/5`); see MM-6 |
 
 **Shared pieces:** one function, `Accountability.authors(org, actor_documents) :: {:ok, [user_id]} |
 {:error, :unknown}`, used by every kind; one refusal, `approval_authors_unknown` (409, `details.kind`), like
@@ -158,6 +158,11 @@ dev reset recreates them, DECISIONS #112).
      A person runs the seed and nothing records who.
   - Proposal (pending ca-security): fail closed for 1 and 2. For 3, the seed run records who ran it and
     that person counts as an importer; until then #113(4) stays a procedure rule.
+- **MM-6 (low, dormant; C5): qualification cases have no second person.** `Comparison.register_case/5` records a
+  case as approved by the operator who registers it (`:request_activation`). Cases feed the comparison replay
+  that the model gate requires, so an importer could register the cases its own revision is replayed against.
+  No caller today. Before anything calls it: decide whether a case needs a second person, or at least that
+  the registrant isn't an importer of the revision it's replayed against. Mark `# todo(authz):`.
 - **MM-3 (#119, in progress, mms-engineer): content-addressed revisions across tenants.**
   `mission_model_revisions` and `mission_model_layers` have global primary keys and are inserted
   `on_conflict: :nothing` (`mission_models.ex:280-290`). Today ids carry per-run provenance, so they never
