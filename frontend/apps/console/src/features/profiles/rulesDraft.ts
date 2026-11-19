@@ -66,9 +66,12 @@ export const tokens = [
   "{direction}",
 ] as const;
 
-/** The name template's tokens the server won't know, in the order typed. */
+/** The name template's tokens the server won't know, each once, in the order first typed. */
 export function unknownTokens(nameTemplate: string): string[] {
-  return (nameTemplate.match(/\{[^}]*\}/g) ?? []).filter((t) => !tokens.some((k) => k === t));
+  const unknown = (nameTemplate.match(/\{[^}]*\}/g) ?? []).filter(
+    (t) => !tokens.some((k) => k === t),
+  );
+  return [...new Set(unknown)];
 }
 
 /** #307: "token {plane}" / "tokens {a} and {b}" / "tokens {a}, {b} and {c}"; every token named. */
@@ -97,22 +100,60 @@ export function draftProblems(drafts: readonly RuleDraft[]): string[] {
   return problems;
 }
 
-/** The keys of a stored rule (`toDocument`), the fields a server error path can name. */
-const ruleFields = ["label", "name_template", "enabled", "stations", "legs"] as const;
-type RuleField = (typeof ruleFields)[number];
+/**
+ * The stored rule's fields a server error path can name, keyed by `toDocument`'s own keys, so a
+ * renamed document key is a compile error here (mms-engineer, #323). `id` is never edited.
+ */
+type RuleField = Exclude<keyof ReturnType<typeof toDocument>[number], "id">;
 
-/** A rule document field as the form labels it (RuleForm, RuleStations, RuleLegs). */
-const ruleFieldWords: Readonly<Record<RuleField, string>> = {
+/**
+ * Each field as the form labels it (RuleForm, RuleStations, RuleLegs). `legs` without a leg reads
+ * "Legs" (the section's Add leg); one leg's fields read as RuleLegs labels them (see below).
+ * `enabled` has no field (it's the Disable rule / Enable rule button), so it names the rule only.
+ */
+const ruleFieldWords = {
   label: "Label",
   name_template: "Route name",
-  enabled: "Enabled",
   stations: "Stations",
   legs: "Legs",
-};
+  enabled: null,
+} as const satisfies Record<RuleField, string | null>;
+
+const ruleFields = [
+  "label",
+  "name_template",
+  "stations",
+  "legs",
+  "enabled",
+] as const satisfies readonly RuleField[];
 
 /** The path segment as a rule field, or null for one this console doesn't know. */
 const ruleField = (segment: string | undefined): RuleField | null =>
   ruleFields.find((f) => f === segment) ?? null;
+
+/** RuleLegs' own labels: "Leg 2 direction", "Leg 2 role". */
+const legWords = (index: string | undefined, part: string | undefined): string | null => {
+  if (index === undefined) return null;
+  const leg = `Leg ${Number(index) + 1}`;
+  // compared-as-text: a server error path segment, an open set
+  if (part === "direction") return `${leg} direction`;
+  // compared-as-text: a server error path segment, an open set
+  if (part === "role") return `${leg} role`;
+  return leg;
+};
+
+/**
+ * #307: a rule edit's field refusal (`invalid_op` details), opening with the act (designers §3):
+ * "Not staged: Uplink pair · Stations: …" on Stage, "Not checked: …" on Check (a dry run).
+ */
+export function ruleRefusal(
+  errors: readonly Readonly<{ path: string; message: string }>[],
+  drafts: readonly RuleDraft[],
+  act: "staged" | "checked",
+): string {
+  const why = errors.map((e) => `${rulePathWords(e.path, drafts)}: ${e.message}`);
+  return `Not ${act}: ${why.join(" · ")}`;
+}
 
 /**
  * #307 (Profile.md P2: labels, never paths): a server error path such as
@@ -121,10 +162,12 @@ const ruleField = (segment: string | undefined): RuleField | null =>
  * "Routing rules", never the raw path.
  */
 export function rulePathWords(path: string, drafts: readonly RuleDraft[]): string {
-  const m = /^routing_rules\.(\d+)(?:\.([a-z_]+))?/.exec(path);
+  const m = /^routing_rules\.(\d+)(?:\.([a-z_]+)(?:\.(\d+)(?:\.([a-z_]+))?)?)?/.exec(path);
   if (!m) return "Routing rules";
   const i = Number(m[1]);
   const rule = drafts[i]?.label.trim() || `Rule ${i + 1}`;
   const field = ruleField(m[2]);
-  return field ? `${rule} · ${ruleFieldWords[field]}` : rule;
+  const words =
+    field === "legs" ? (legWords(m[3], m[4]) ?? "Legs") : field && ruleFieldWords[field];
+  return words ? `${rule} · ${words}` : rule;
 }

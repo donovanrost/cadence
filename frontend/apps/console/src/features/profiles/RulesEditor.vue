@@ -28,7 +28,7 @@ import type { ProfileDetail } from "./detail.ts";
 import {
   draftProblems,
   newRule,
-  rulePathWords,
+  ruleRefusal,
   toDocument,
   toDrafts,
   type RuleDraft,
@@ -58,14 +58,12 @@ const problems = computed(() => draftProblems(drafts.value));
 if (drafts.value.length === 0) drafts.value.push(newRule([]));
 
 /**
- * A rejection opens with the act (designers §3, #307) and names each rule and field by its label
- * (Profile.md P2), never the server's path (`routing_rules.0.stations`).
+ * A field refusal opens with the act (designers §3, #307) and names each rule and field by its
+ * label (Profile.md P2), never the server's path; null for any other failure (shared words).
  */
-function rejected(error: ApiError, verb: "staged" | "changed") {
+function rejected(error: ApiError, act: "staged" | "checked"): string | null {
   const detail = invalidOpDetails(error);
-  if (!detail) return failureOutcome(error, verb).sentence;
-  const why = detail.errors.map((e) => `${rulePathWords(e.path, drafts.value)}: ${e.message}`);
-  return `Not ${verb}: ${why.join(" · ")}`;
+  return detail ? ruleRefusal(detail.errors, drafts.value, act) : null;
 }
 
 const op = (): StageOp => ({
@@ -87,7 +85,12 @@ async function check() {
     );
     outcome.value = result.ok
       ? describePreview(result.value)
-      : { tone: "crit", text: rejected(result.error, "changed") };
+      : {
+          tone: "crit",
+          // Check is a dry run, so its refusal opens "Not checked:" (mms-ux, #323).
+          text:
+            rejected(result.error, "checked") ?? failureOutcome(result.error, "changed").sentence,
+        };
   } finally {
     busy.value = false;
   }
@@ -102,7 +105,14 @@ async function stage() {
       source: { surface: "profile_routing" },
       ops: [op()],
     });
-    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged"));
+    if (!result.ok) {
+      // A field refusal names the rule and field (#323); anything else keeps the shared words.
+      const named = rejected(result.error, "staged");
+      failure.value = named
+        ? { changed: false, sentence: named }
+        : failureOutcome(result.error, "staged");
+      return;
+    }
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {
