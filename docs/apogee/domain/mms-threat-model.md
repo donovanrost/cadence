@@ -59,7 +59,7 @@ completes; that's harmless, since it's the same as approving before importing.
     service with no accountable person on record can't be approved until a person imports it or the set
     is known. Then (a): record the issuer and every rotation's actor on the service identity, and count
     them. Not (c): refusing service imports breaks real automation.
-  - Applies across kinds (activations, change sets, contact plans). Needs the director's OK; bug under #207.
+  - Applies across kinds. Director approved 11-19; filed as **#280** under #207, placed right after #233.
 #### MM-1 impact list per approval kind (director 11-19: impact first, then build)
 
 Merged with ca-security's notes (11-19); one list.
@@ -194,8 +194,8 @@ _(In progress.)_
 
 ## Issues to file (once gh works on laptop 2)
 
-- Bug under #207 (domain:approvals, domain:identity, domain:mission-model; component:management-plane):
-  "A catalog imported through a service identity can be approved by the admin who issued it" (MM-1, fix (b)).
+- ~~Bug under #207~~ FILED as **#280** (fe-setup, 11-19): "An admin can approve their own work when it was done
+  through a service identity they issued" (MM-1; impact list above).
 - Bug under #208 (domain:mission-model; component:api): "Activation request metadata a client sends
   changes what the approver is shown" (SC-1). Note: no exploit steps in the public text (C6).
 - Task under #208: MM-4 and MM-5 hardening.
