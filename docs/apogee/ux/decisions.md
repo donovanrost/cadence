@@ -3823,9 +3823,10 @@ fixes their words and lists what the legacy pages offered that the console doesn
 - "Recorded as mine" (acceptance criterion 1): the import runs table's `Started` cell reads "11-19 05:40Z by Mira K."
   (U29, one event). A system actor reads "by Cadence"; a missing actor shows the time alone. A service identity
   of the mission's own organization is named and marked as a service, so it doesn't read as a person: "11-19
-  05:40Z by Nightly planner (a service identity)". The server sends a null name for any other service
-  (mms-security), and a null name shows the time alone, never an id (U25). (Amended 11-19, fe-setup's #364
-  question.)
+  05:40Z by Nightly planner (a service identity)". A service with no name (`kind` service, `name` null) says what
+  it was and not who: "11-19 05:40Z by a service identity", as U70 (mms-security: the kind names no one and says it
+  wasn't a person). A person with no name, or no actor, shows the time alone, never an id (U25). (Amended 11-19,
+  fe-setup's #364 question and ux's #371.)
   Data: the run row stores `requested_by` (an actor: kind and user id), so the runs read adds its display name
   (#146's read; fe-setup assigns it).
 
