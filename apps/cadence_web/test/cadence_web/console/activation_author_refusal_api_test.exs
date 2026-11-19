@@ -171,11 +171,7 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
         binding_set.version
       )
 
-    Repo.delete_all(
-      from(row in ServiceAccountableRow,
-        where: row.service_identity_id == ^service.service_identity_id
-      )
-    )
+    forget_accountables!(service.service_identity_id)
 
     id = service.service_identity_id
     path = c.base <> "/#{request.activation_request_id}"
@@ -262,5 +258,16 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
       organization_membership: membership,
       capabilities: MapSet.new([:organization_admin])
     }
+  end
+
+  # The accountables table is append-only (#436): #116's test-only purge, on for the delete only.
+  defp forget_accountables!(service_identity_id) do
+    Repo.query!("SET LOCAL cadence.decision_record_test_purge = 'on'")
+
+    Repo.delete_all(
+      from(row in ServiceAccountableRow, where: row.service_identity_id == ^service_identity_id)
+    )
+
+    Repo.query!("SET LOCAL cadence.decision_record_test_purge = 'off'")
   end
 end
