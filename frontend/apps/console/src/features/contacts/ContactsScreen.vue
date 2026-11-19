@@ -332,7 +332,7 @@ const unshownPasses = computed(() =>
             />
             <div v-else-if="view" class="p-3">
               <ApGantt
-                label="Pass schedule for the next six hours"
+                :label="`Pass schedule for the next ${rangeWords}`"
                 :rows="view.rows"
                 :bars="view.bars"
                 :bands="bands"

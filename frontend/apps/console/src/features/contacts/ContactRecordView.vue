@@ -4,6 +4,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { describeApiError, isError, isKnown, useRemoteQuery } from "@/api/index.ts";
 import { ApButton } from "@/ui";
 import { fetchContactRecord, type ContactRecord } from "./records.ts";
+import { holdsFocus, landOnFirstNew } from "./pageFocus.ts";
 import { clock, sentenceCase, span } from "./recordWords.ts";
 
 /**
@@ -41,8 +42,12 @@ watch(c, (v) => {
   earlier.value = [];
   cursor.value = v?.revisions.next_cursor ?? null;
 });
+const listEl = ref<HTMLElement | null>(null);
+const moreEl = ref<HTMLElement | null>(null);
 async function showEarlier() {
   if (!cursor.value || !props.contactId) return;
+  const hadFocus = holdsFocus(moreEl.value);
+  const firstNew = revisions.value.length;
   const page = await fetchContactRecord(props.missionId, props.contactId, cursor.value);
   if (!page.ok) {
     moreError.value = `Couldn't load more: ${describeApiError(page.error)}`;
@@ -50,6 +55,7 @@ async function showEarlier() {
   }
   earlier.value = [...earlier.value, ...page.value.revisions.entries];
   cursor.value = page.value.revisions.next_cursor;
+  if (cursor.value === null) await landOnFirstNew(listEl.value, firstNew, hadFocus);
 }
 const revisions = computed(() => [...(c.value?.revisions.entries ?? []), ...earlier.value]);
 const side = (s: { unrecognized: string } | string) =>
@@ -122,15 +128,27 @@ const onToggle = (e: Event) => {
           </tr>
         </tbody>
       </table>
-      <ul v-if="revisions.length" class="m-0 list-none p-0" aria-label="Schedule revisions">
+      <ul
+        v-if="revisions.length"
+        ref="listEl"
+        class="m-0 list-none p-0"
+        aria-label="Schedule revisions"
+      >
         <li v-for="rev in revisions" :key="rev.revision">
           r{{ rev.revision }} · {{ span(rev.starts_at, rev.ends_at) }} ·
           {{ sentenceCase(rev.lifecycle_state).toLowerCase() }}
         </li>
       </ul>
-      <ApButton v-if="cursor" size="compact" variant="ghost" class="self-start" @click="showEarlier"
-        >Show earlier</ApButton
-      >
+      <div ref="moreEl" class="contents">
+        <ApButton
+          v-if="cursor"
+          size="compact"
+          variant="ghost"
+          class="self-start"
+          @click="showEarlier"
+          >Show earlier</ApButton
+        >
+      </div>
       <p v-if="moreError" role="alert" class="m-0 text-caution-text">{{ moreError }}</p>
       <p v-if="c.truncated" class="m-0">More paths, sources or intents than shown.</p>
     </div>

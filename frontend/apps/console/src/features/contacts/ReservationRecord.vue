@@ -5,6 +5,7 @@ import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { ApButton } from "@/ui";
 import ContactRecordView from "./ContactRecordView.vue";
 import { fetchReservation, type Reservation } from "./records.ts";
+import { holdsFocus, landOnFirstNew } from "./pageFocus.ts";
 import { clock, sentenceCase, TONE_CLASS, valueCells, withVersion } from "./recordWords.ts";
 
 /**
@@ -26,8 +27,12 @@ watch(r, (v) => {
   earlier.value = [];
   cursor.value = v?.audit.next_cursor ?? null;
 });
+const listEl = ref<HTMLElement | null>(null);
+const moreEl = ref<HTMLElement | null>(null);
 async function showEarlier() {
   if (!cursor.value) return;
+  const hadFocus = holdsFocus(moreEl.value);
+  const firstNew = audit.value.length;
   const page = await fetchReservation(props.missionId, props.passId, cursor.value);
   if (!page.ok) {
     moreError.value = `Couldn't load more: ${describeApiError(page.error)}`;
@@ -35,6 +40,7 @@ async function showEarlier() {
   }
   earlier.value = [...earlier.value, ...page.value.audit.entries];
   cursor.value = page.value.audit.next_cursor;
+  if (cursor.value === null) await landOnFirstNew(listEl.value, firstNew, hadFocus);
 }
 const facts = computed(() => {
   const v = r.value?.reservation;
@@ -100,14 +106,21 @@ const onToggle = (e: Event) => {
           </tr>
         </tbody>
       </table>
-      <ul v-if="audit.length" class="m-0 list-none p-0" aria-label="Provider audit">
+      <ul v-if="audit.length" ref="listEl" class="m-0 list-none p-0" aria-label="Provider audit">
         <li v-for="a in audit" :key="a.id">
           {{ clock(a.recorded_at) }} · {{ sentenceCase(a.action) }} · {{ sentenceCase(a.outcome) }}
         </li>
       </ul>
-      <ApButton v-if="cursor" size="compact" variant="ghost" class="self-start" @click="showEarlier"
-        >Show earlier</ApButton
-      >
+      <div ref="moreEl" class="contents">
+        <ApButton
+          v-if="cursor"
+          size="compact"
+          variant="ghost"
+          class="self-start"
+          @click="showEarlier"
+          >Show earlier</ApButton
+        >
+      </div>
       <p v-if="moreError" role="alert" class="m-0 text-caution-text">{{ moreError }}</p>
     </div>
   </details>
