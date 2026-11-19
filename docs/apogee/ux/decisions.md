@@ -3749,3 +3749,118 @@ fixes their words and lists what the legacy pages offered that the console doesn
 **Parity left for fe-setup** (legacy L19, not in the console yet; build, or record why not): the `Readiness` link in
 the page header; the protocol preset picker ("Choose protocol preset", "No protocol preset selected", with "Pinned
 profile" and "Current"); the installed, available and app versions (the console shows `v3` only).
+
+### U105 · An automation grant takes effect only after a second admin approves it (#283) (mms-security / ca-ux / fe-ops)
+Under "Needs a second person's approval", issuing a grant (Contact planning › Policy › Grants) makes a proposal that
+authorizes nothing until a different org admin approves it. That admin must be outside the people accountable for the
+service it names (U100). Under "Applies without approval", the proposer's own approval stands, as for other kinds.
+Revoking or narrowing is a tightening: any org admin does it alone, at once. The panel mirrors the policy's own
+"Waiting for approval" (P5). Shape: mms-security's, agreed with api 11-19; codes switched on with `knownErrorCode`.
+
+- **States** (`State` column; mark + word, B2): `PROPOSED` (caution), `ACTIVE` (nominal), `REJECTED` (off),
+  `REVOKED` (off), `WITHDRAWN` (off), `EXPIRED` (stale). `expired` is derived on read and means two things; the row says which:
+  - a proposal undecided past `proposal_expires_at` (72 h): "Proposed by Mira K. at 11-19 06:40Z; no one decided it
+    in time." Told apart by `approved_at` being null.
+  - an active grant past `valid_until`: today's line.
+  - A proposed row: `Valid until` reads "30 days from approval" (from `validity_seconds`; `valid_from` and
+    `valid_until` are null until approval), and the state line "Proposed by Mira K. at 11-19 06:40Z · decide by
+    11-22 06:40Z".
+  - A rejected row (`rejected_by`, `rejected_at`, `rejection_reason`, together or none): "Rejected by Ana R. at 11-19
+    06:52Z: <reason>". Without them: "Rejected."
+  - A withdrawn row (a widening proposal ended because its grant was revoked; `withdrawn_by`, `withdrawn_at`):
+    "Withdrawn at 11-19 07:05Z, when Ana R. revoked the grant it would replace." Without them: "Withdrawn: the grant
+    it would replace was revoked."
+- **The sheet** (`Grant automation…`):
+  - Under "Needs a second person's approval": title `Propose a grant`, commit `Propose grant`, muted line above the
+    footer: "It takes effect once another org admin approves it. Until then Nightly planner can't act under it."
+    After a `proposed` answer: "Proposed. It takes effect once another org admin approves it. If no one decides by
+    11-22 06:40Z, it expires."
+  - Under "Applies without approval": title `Grant automation`, commit `Grant`, muted line "It takes effect at once.
+    No second person's approval is needed, as this mission's setting allows." After an `active` answer: "Granted.
+    Nightly planner can act under it until 12-19 06:40Z."
+  - The approval setting unread (missing from the read): the propose wording, never "at once"; the answer's state
+    says what happened.
+  - Any other answer (U20): "Cadence didn't confirm the grant. Reload to see it."
+- **Waiting for approval** (panel on a proposed grant): "Proposed by Mira K. at 11-19 06:40Z: <reason>. It takes
+  effect once another org admin approves it. If no one decides by 11-22 06:40Z, it expires." Actions `Approve grant for Nightly planner` and
+  `Reject…`. Reject needs a reason: up front "Give a reason first." (A7); the 422 `invalid_params` field message
+  (`Say why.`) shows under the field.
+  - **Up front (A6) from `viewer_can_decide` and `cannot_decide_because`, never computed in the console** (#233's
+    pattern). Approve is disabled with its reason, muted under it and as its description; Reject stays:
+    - `proposer`: "You proposed this grant, so another org admin approves it."
+    - `accountable` (`cannot_decide_details.grantee`, the same key as the 403): "You're accountable for Nightly planner, so another org admin
+      approves its grant."
+    - `authors_unknown` (`cannot_decide_details.service`): "Nightly planner has no one recorded as accountable for it, so its grant can't be approved
+      yet. An org admin records who's accountable in People › Service identities." (U100's words)
+    - `not_admin`: no actions; the panel's line ends "Org admins approve grants."
+    - `not_proposed`: no panel (the row's state says why).
+    - `not_a_person`: never shown in the console (a service can't sign in); as `not_admin` if it is.
+    - A reason the console doesn't know: "You can't approve this grant, so another org admin approves it." with the
+      code in Technical details.
+- **Approve refusals** (nothing recorded; each ends "Your approval wasn't recorded.", U95):
+  - 403 `automation_grant_self_approval_forbidden`, `because: "proposed"`: "Not approved: you proposed this grant,
+    so another org admin approves it. Your approval wasn't recorded." `because: "accountable"` (`grantee`, the service the grant empowers; a different key from U100's
+    `via_service` on purpose): "Not
+    approved: you're accountable for Nightly planner, so another org admin approves its grant. Your approval wasn't
+    recorded." Then Approve is disabled with the up-front line.
+  - 403 `automation_grant_approver_authors_unknown` (`service`): "Not approved: Nightly planner has no one
+    recorded as accountable for it, so its grant can't be approved yet. Your approval wasn't recorded. An org admin
+    records who's accountable in People › Service identities." (U100's words)
+  - 409 `automation_grant_not_proposed` (`state`; `decided_by` and `decided_at`, both or neither): with them, as U97: "This
+    grant was already approved by Ana R. at 11-19 06:52Z, so your approval wasn't recorded. Reload to see it." /
+    "…already rejected by…"; the viewer: "You already approved this grant at 11-19 06:52Z. Reload to see it." (with
+    the date, since a 72 h proposal spans days) Without them, by state:
+    `expired`: "Not approved: no one decided this grant in time, so it expired. Your approval wasn't recorded.
+    It has to be proposed again."; `rejected`: "Not approved: this grant was already rejected, so your approval wasn't
+    recorded. Reload to see it."; `active`: "…was already approved…"; `revoked`: "Not approved: this grant was
+    revoked, so your approval wasn't recorded. Reload to see it."; `withdrawn`: "Not approved: this proposal was
+    withdrawn when the grant it would replace was revoked, so your approval wasn't recorded. Reload to see it."
+  - 409 `approval_policy_changed` (`kind: "automation_grants"`; until #201, api's interim name): "Not approved: the
+    mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. It has to
+    be proposed again."
+  - 403 `authenticated_user_required` (a service, even one with organization_admin; REST or backstop; the code U104
+    uses): "Not
+    approved: only a person can approve a grant, not a service identity. Your approval wasn't recorded." For propose: "Not proposed: only a person
+    can propose a grant, not a service identity."
+  - Replays (approve, reject and narrow take an `operation_id`, as #257's plans): the same id and body returns the
+    original answer with `replayed: true`, shown as this one's result. 409 `duplicate_operation`: "Not approved:
+    Cadence matched this to an earlier, different request, so your approval wasn't recorded. Reload and try again."
+    (reject: "Not rejected: … so nothing changed."; narrow: "Not narrowed: … so nothing changed.")
+  - A code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
+    with the code in Technical details.
+- **Use under a grant that isn't active** (403 `automation_grant_not_active`, `state`), on the plan's state line as
+  U100's automation line, by the service's act (plan: "Not drafted automatically:", submit: "Not submitted
+  automatically:", approve: "Not approved automatically:") then by state: `proposed` "Nightly planner's grant isn't
+  approved yet."; `rejected` "Nightly planner's grant was rejected."; `expired` "no one approved Nightly planner's
+  grant in time."; `withdrawn` "Nightly planner's grant was withdrawn." The existing `automation_grant_revoked`, `automation_grant_expired` and
+  `automation_grant_not_yet_valid` keep their lines.
+- **Narrow** (`Narrow…` on an active grant; one person, at once): sheet title `Narrow the grant`, commit `Narrow`,
+  muted line "It takes effect at once. Narrowing only takes access away, so no approval is needed." After the answer:
+  "Narrowed. Nightly planner can now <what's left>." A change that isn't strictly narrower is refused, 422
+  `automation_grant_not_narrower` (`fields`, the widening ones, named by the sheet's labels: `allowed_actions` Can,
+  `maximum_horizon_seconds` Plans ahead up to, `maximum_contacts` Contacts per plan, at most,
+  `maximum_execution_concurrency` At once, at most, `validity_seconds` Valid for; an unknown field by its code in
+  Technical details only): "Not narrowed: this
+  change gives Nightly planner more than it has now (Contacts per plan, at most), so it needs approval. Propose it as
+  a new grant instead." Without `fields`, the same without the bracket. The console offers only narrower values in the sheet, so this is the backstop.
+- **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If one is,
+  the revoke sheet adds: "This also withdraws the proposal waiting for approval, so it can't switch automation
+  back on later." (A widening proposal records `replaces_grant_id`; revoking that grant withdraws it in the same
+  transaction.)
+- **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
+- **Audit** (who and when as one event, U29): "Proposed a grant for Nightly planner", "Granted Nightly planner
+  automation (no approval needed under this mission's setting)" for a grant that takes effect at once, "Approved Mira K.'s grant for
+  Nightly planner", "Rejected Mira K.'s grant for Nightly planner: <reason>", "Revoked the grant for Nightly planner:
+  <reason>", "Narrowed the grant for Nightly planner: <what changed>", "The proposed grant for Nightly planner
+  expired; no one decided it in time.", "Withdrew the proposed grant for Nightly planner, when revoking the grant it
+  would replace" (the actor and time lead, U29)
+- **A nameless service** (`grantee` or `service` with a null `name`, as U100/#287): the name drops, never an id (U25;
+  the id goes in Technical details). "Nightly planner" becomes "the service identity this grant is for": "You're
+  accountable for the service identity this grant is for, so another org admin approves it."; "The service identity
+  this grant is for has no one recorded as accountable for it…"; the sheet's "Until then the service identity can't
+  act under it."; "Not submitted automatically: the service identity's grant isn't approved yet."; the action reads
+  `Approve grant`. Sheets and rows already name the service from the
+  grant's own read; a null name there reads "Unknown service identity" (U25).
+- **Not here:** whether a grant approved under "Applies without approval" keeps working after the mission moves to
+  "Needs a second person's approval" (#283's open question 1, the director's call); widening who may propose or
+  approve to mission admins (open question 2).
