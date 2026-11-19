@@ -13,14 +13,14 @@ defmodule CadenceWeb.Console.ServiceIdentityController do
   def create(conn, %{"organization_id" => organization_id} = params) do
     conn.assigns.current_scope
     |> Identities.create(organization_id, params)
-    |> beyond_issuer(:create)
+    |> refusal(:create)
     |> respond(conn, :created)
   end
 
   def rotate(conn, %{"organization_id" => organization_id, "service_identity_id" => id}) do
     conn.assigns.current_scope
     |> Identities.rotate(organization_id, id)
-    |> beyond_issuer(:rotate)
+    |> refusal(:rotate)
     |> respond(conn, :ok)
   end
 
@@ -38,7 +38,7 @@ defmodule CadenceWeb.Console.ServiceIdentityController do
   def revoke(conn, %{"organization_id" => organization_id, "service_identity_id" => id}) do
     case Identities.revoke(conn.assigns.current_scope, organization_id, id) do
       :ok -> send_resp(conn, :no_content, "")
-      error -> respond(error, conn, :ok)
+      error -> error |> refusal(:revoke) |> respond(conn, :ok)
     end
   end
 
@@ -50,15 +50,8 @@ defmodule CadenceWeb.Console.ServiceIdentityController do
     |> json(%{data: ConfigJSON.encode(data)})
   end
 
-  defp respond({:beyond_issuer, message, capabilities}, conn, _status) do
-    conn
-    |> put_status(:forbidden)
-    |> json(
-      Problem.body("capability_beyond_issuer", message, %{
-        capabilities: Enum.map(capabilities, &Atom.to_string/1)
-      })
-    )
-  end
+  defp respond({:refused, code, message, details}, conn, _status),
+    do: conn |> put_status(:forbidden) |> json(Problem.body(code, message, details))
 
   defp respond({:error, {:invalid, details}}, conn, _status),
     do: Problem.respond(conn, :invalid_params, details)
@@ -68,12 +61,32 @@ defmodule CadenceWeb.Console.ServiceIdentityController do
 
   defp respond({:error, _reason}, conn, _status), do: Problem.respond(conn, :invalid_params)
 
-  # ux U104 (#281). Unreachable while only organization admins issue, who hold every capability a
-  # service identity can get; it answers if issuance ever widens.
-  defp beyond_issuer({:error, {:capability_beyond_issuer, missing}}, act),
-    do: {:beyond_issuer, beyond_issuer_message(act, roles(missing)), missing}
+  # ux U104 (#281). Both unreachable today: the organization scope refuses a service identity
+  # before this controller, and an organization admin holds every capability a service can get.
+  defp refusal({:error, :authenticated_user_required}, act),
+    do: {:refused, "authenticated_user_required", person_only_message(act), nil}
 
-  defp beyond_issuer(result, _act), do: result
+  defp refusal({:error, {:capability_beyond_issuer, missing}}, act),
+    do:
+      {:refused, "capability_beyond_issuer", beyond_issuer_message(act, roles(missing)),
+       %{capabilities: Enum.map(missing, &Atom.to_string/1)}}
+
+  defp refusal(result, _act), do: result
+
+  defp person_only_message(:create),
+    do:
+      "Not created: only a person can create a service identity, not another service identity. " <>
+        "An org admin creates it in People › Service identities."
+
+  defp person_only_message(:rotate),
+    do:
+      "Not rotated: only a person can rotate a service identity's key, not a service identity. " <>
+        "An org admin rotates it in People › Service identities."
+
+  defp person_only_message(:revoke),
+    do:
+      "Not revoked: only a person can revoke a service identity, not a service identity. " <>
+        "An org admin revokes it in People › Service identities."
 
   defp beyond_issuer_message(:create, roles),
     do:
@@ -85,7 +98,6 @@ defmodule CadenceWeb.Console.ServiceIdentityController do
       "Not rotated: this service identity has access you don't have yourself (#{roles}), " <>
         "so you can't rotate its key. Ask someone who has that access to rotate it."
 
-  # A service identity can hold only these two (ServiceIdentity.normalize_capability/1).
   @role_words %{organization_admin: "Org admin", mission_admin: "Mission admin"}
 
   defp roles(capabilities) do
