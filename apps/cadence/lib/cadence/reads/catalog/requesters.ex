@@ -39,7 +39,7 @@ defmodule Cadence.Reads.Catalog.Requesters do
     end
   end
 
-  # The REST API's actor document (ControlPlaneAccess) carries the ids without `actor_kind`.
+  # Matched on the ids, so the REST API's actor document (ControlPlaneAccess) reads the same way.
   defp kind(%{"actor_kind" => "system", "system_id" => id}) when is_binary(id) and id != "",
     do: "system"
 

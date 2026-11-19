@@ -206,10 +206,17 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   viewer_can_decide, viewer_is_importer, cannot_decide_because: not_admin | not_approvable |
   self_approval | plans_not_ready | null, cannot_approve_because: not_in_catalog | null,
   plans_ready, comparison: <cmp> | null}`. `imported_by`
-  null reads "Importer not recorded".
+  null reads "Importer not recorded". `cannot_approve_because` (11-17, ux U88) is
+  `not_in_catalog` when no catalog revision names the model revision (a second run of a file
+  makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
+  `cannot_decide_because` wins when both are set. Importers (11-17) are the people recorded on the catalog
+  revisions naming the model revision plus the people who ran a completed import run that made
+  it (every run makes its own model revision, so a reimport's has only its runner);
+  `imported_by` is the first. A service or Cadence's own seed never counts as one.
 - **On `GET /:id` only** (#195, ux U102; additive, read as optional), `catalog_revision` also has:
-  `import_run_id` (the run that made that catalog revision; never null when `catalog_revision` is
-  there), `breaking: integer | null` and `breaking_base: {catalog_revision_id, revision} | null`.
+  `import_run_id` (the run that made that catalog revision; always present and never null when
+  `catalog_revision` is: both come from one row), `breaking: integer | null` and
+  `breaking_base: {catalog_revision_id, revision} | null`.
   - The base is the revision before it in the same catalog database: the highest `revision_number`
     below its own. It's the same function as C3's `base_revision`, so `breaking` always equals the
     `diff.summary.breaking` that the import page showed for `import_run_id`. Catalog revisions are
@@ -220,13 +227,7 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
     (`breaking` null). `breaking_base` set with `breaking` null: the diff couldn't be read (a
     revision without a model, or its declarations couldn't be queried). Both set: the count. `0`
     means nothing breaks; an unknown count is never sent as `0`.
-  - The list (`GET ?status=`) doesn't carry these fields (one diff per row would read every model). `cannot_approve_because` (11-17, ux U88) is
-  `not_in_catalog` when no catalog revision names the model revision (a second run of a file
-  makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
-  `cannot_decide_because` wins when both are set. Importers (11-17) are the people recorded on the catalog
-  revisions naming the model revision plus the people who ran a completed import run that made
-  it (every run makes its own model revision, so a reimport's has only its runner);
-  `imported_by` is the first. A service or Cadence's own seed never counts as one.
+  - The list (`GET ?status=`) doesn't carry these fields (one diff per row would read every model).
 - `POST /:id/comparison {}` → `201 <cmp>`, synchronous, against the mission's active binding set
   and the revision this one replaces (the previous catalog revision's model in the same
   database, else none). Reports dedupe on content.

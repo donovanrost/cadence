@@ -53,9 +53,10 @@ defmodule Cadence.Reads.MissionModelApprovals do
       blocked = cannot_decide(scope, mission_id, row, importers, plans_ready)
 
       catalog_revision =
-        org |> ModelRevisions.for_models(mission_id, [row.id]) |> Map.get(row.id)
-
-      named = catalog_revision && with_breaking(org, mission_id, catalog_revision)
+        case ModelRevisions.first_for_model(org, mission_id, row.id) do
+          nil -> nil
+          revision -> catalog_revision(org, mission_id, revision)
+        end
 
       {:ok,
        %{
@@ -63,7 +64,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
          status: row.status,
          imported_at: row.imported_at,
          imported_by: first_importer(importers),
-         catalog_revision: named,
+         catalog_revision: catalog_revision,
          decision: decision(row),
          viewer_can_decide: is_nil(blocked),
          viewer_is_importer: is_binary(viewer_id) and viewer_id in importers,
@@ -250,18 +251,20 @@ defmodule Cadence.Reads.MissionModelApprovals do
     end
   end
 
-  # #195 (ux U102): the run that made this catalog revision and its breaking count against the
-  # revision before it in its database, the base the import page's C3 diff uses (RevisionBase).
-  defp with_breaking(org, mission_id, %{id: id} = catalog_revision) do
-    case Catalog.fetch_revision(org, mission_id, id) do
-      {:ok, revision} ->
-        catalog_revision
-        |> Map.put(:import_run_id, revision.import_run_id)
-        |> Map.merge(RevisionBase.breaking(org, mission_id, revision))
-
-      {:error, _not_found} ->
-        catalog_revision
-    end
+  # The list's catalog revision fields (ModelRevisions.for_models/3) plus #195's (ux U102): the
+  # run that made it and its breaking count against the revision before it in its database, the
+  # base the import page's C3 diff uses (RevisionBase). One row, so every key or none.
+  defp catalog_revision(org, mission_id, revision) do
+    Map.merge(
+      %{
+        id: revision.catalog_revision_id,
+        number: revision.revision_number,
+        label: revision.revision_label,
+        database_id: revision.catalog_database_id,
+        import_run_id: revision.import_run_id
+      },
+      RevisionBase.breaking(org, mission_id, revision)
+    )
   end
 
   defp separation?(org, mission_id),
