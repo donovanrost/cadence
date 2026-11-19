@@ -96,7 +96,7 @@ describe("U61 approval refusals", () => {
       now,
     );
     expect(all?.text).toBe(
-      "Not approved: all 36 of its passes have already started, so nothing could be booked.",
+      "Not approved: the booking window has closed for all 36 of its passes, so nothing could be booked.",
     );
     expect(all?.planRestOf).toBe("2026-11-16");
   });
@@ -110,7 +110,7 @@ describe("U61 approval refusals", () => {
 });
 
 describe("U61 partial approval", () => {
-  it("says what's booking and what had already started", () => {
+  it("says what's booking and whose booking window had closed (#273)", () => {
     const e = d.decode(expiredReader, {
       count: 36,
       reservable_count: 1476,
@@ -123,7 +123,7 @@ describe("U61 partial approval", () => {
       ],
     });
     expect(e.ok && e.value && partialApproval(e.value)).toBe(
-      "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked.",
+      "Approved. Booking 1,476 passes; 36 weren't booked because their booking window had closed.",
     );
   });
 });
@@ -147,5 +147,60 @@ describe("an expired pass's line (#190, ux U25)", () => {
       "EARENDIL-001",
       "Unknown spacecraft",
     ]);
+  });
+});
+
+describe("#273 booking windows (api's final shape, #340/#341)", () => {
+  const now = new Date("2026-11-16T00:00:00Z");
+  const read = (items: unknown[], count = items.length) =>
+    d.decode(expiredReader, { count, reservable_count: 4, items });
+  it("reads api's items and adds the no-window note only for reason no_booking_window", () => {
+    const e = read([
+      {
+        snapshot_id: "s1",
+        spacecraft: { id: "sc_1", name: "EARENDIL-001", scid: 1 },
+        station: { id: "gs-1", code: "SVA", name: "Svalbard" },
+        aos: "2026-11-16T00:10:00Z",
+        expires_at: "2026-11-15T23:00:00Z",
+        reason: "opportunity_expired",
+      },
+      {
+        snapshot_id: "s2",
+        spacecraft: null,
+        station: null,
+        aos: "2026-11-16T00:20:00Z",
+        expires_at: null,
+        reason: "no_booking_window",
+      },
+      {
+        snapshot_id: "s3",
+        spacecraft: null,
+        station: null,
+        aos: "2026-11-16T00:30:00Z",
+        expires_at: null,
+        reason: "later",
+      },
+    ]);
+    const items = e.ok && e.value ? e.value.items : [];
+    expect(items.map((i) => expiredLine(i, now))).toEqual([
+      "EARENDIL-001 · SVA · AOS 00:10Z",
+      "AOS 00:20Z · No booking window from the provider",
+      "AOS 00:30Z",
+    ]);
+  });
+  it("reads the all-closed refusal's #273 details, and the older ones", () => {
+    const refusal = (details: unknown) =>
+      lifecycleRefusal(
+        { kind: "conflict", code: "contact_plan_all_opportunities_expired", message: "", details },
+        now,
+      )?.text;
+    expect(
+      refusal({ expired: { count: 1, reservable_count: 0, items: [] }, expired_digest: "x" }),
+    ).toBe(
+      "Not approved: the booking window has closed for its only pass, so nothing could be booked.",
+    );
+    expect(refusal(null)).toBe(
+      "Not approved: the booking window has closed for all its passes, so nothing could be booked.",
+    );
   });
 });

@@ -11,8 +11,8 @@ import {
   type PlanDetail,
 } from "./api.ts";
 import type { ReviewAct } from "./review-run.ts";
-import { approveRefusal, submitRefusalText } from "./review-words.ts";
-import { lifecycleRefusal, planOfDayRoute } from "./lifecycle.ts";
+import { approveRefusal, submitRefusalText, type Refusal } from "./review-words.ts";
+import { dayLabel, expiredLine, lifecycleRefusal, planOfDayRoute } from "./lifecycle.ts";
 import { contactsShortText, coverage, gapGroups } from "./coverage.ts";
 import type { SpacecraftName } from "./names.ts";
 
@@ -37,6 +37,8 @@ const props = defineProps<{
   userId: string;
   /** ux: a note typed for an approve that was refused, put back for the retry when the field is empty. */
   keptNote?: string | null | undefined;
+  /** #273: Re-plan's proposal, for its "Not applied: …" words. */
+  proposal?: boolean | undefined;
 }>();
 const emit = defineEmits<{ submit: [acks: Acknowledgement[], note?: string]; close: [] }>();
 /** U36: resubmitting a sent-back draft prefills the previous reasons. */
@@ -154,12 +156,29 @@ const heading = computed(() =>
     ? `Accept ${plural(groups.value.length, "gap")} · ${contactsShortText(coverage(props.plan).contactsShort)}`
     : props.title,
 );
-/** U61: a refusal that names another plan offers to open it. */
+/**
+ * U61: a refusal that names another plan offers to open it. #273: when the booking windows closed
+ * (all, or some under step 1's refusal), K1's Draft a new plan before the day starts, Plan the rest
+ * once it has; never Reload, since the windows stay closed.
+ */
 const refusalOpen = computed(() => {
-  const open = error.value ? lifecycleRefusal(error.value)?.open : null;
+  const e = error.value;
+  const open = e ? lifecycleRefusal(e)?.open : null;
   const day = open?.day ?? props.day ?? null;
-  return open && day ? { label: open.label, to: planOfDayRoute(day, open.planId) } : null;
+  if (open && day) return { label: open.label, to: planOfDayRoute(day, open.planId) };
+  const closed =
+    isError(e, "contact_plan_all_opportunities_expired") ||
+    isError(e, "contact_plan_opportunity_expired");
+  if (!closed || !day) return null;
+  const started = new Date().toISOString().slice(0, 10) >= day;
+  return {
+    label: started
+      ? `Plan the rest of ${dayLabel(day)}…`
+      : `Draft a new plan for ${dayLabel(day)}…`,
+    to: { name: "ops.contacts.plan" as const, query: { day } },
+  };
 });
+const showClosed = ref(false);
 /** U97: a 422 on the note shows the server's words under the note, not in the callout. */
 const message: Reader<string> = (value, path) =>
   Array.isArray(value)
@@ -171,7 +190,7 @@ const serverNoteError = computed(() => {
   return x?.decision_note ?? x?.note ?? null;
 });
 /** U97: approve's own refusals (a code it doesn't know goes to Technical details); U36 otherwise. */
-const refusal = computed((): Readonly<{ text: string; code: string | null }> | null => {
+const refusal = computed((): Pick<Refusal, "text" | "code" | "items"> | null => {
   const e = error.value;
   if (!e || serverNoteError.value) return null;
   const who = {
@@ -179,6 +198,8 @@ const refusal = computed((): Readonly<{ text: string; code: string | null }> | n
     userId: props.userId,
     day: props.day ?? "",
     unmet: props.plan.unmet,
+    shown: props.plan.expired ?? null,
+    proposal: props.proposal,
   };
   if (props.act === "approve") return approveRefusal(e, who);
   if (e.kind === "conflict" && isError(e, "plan_changed"))
@@ -311,6 +332,19 @@ defineExpose({ open, close });
           @click="close"
           >{{ refusalOpen.label }}</ApButton
         >
+        <ApButton
+          v-if="refusal.items?.length"
+          variant="ghost"
+          size="compact"
+          :aria-expanded="showClosed"
+          @click="showClosed = !showClosed"
+          >{{ showClosed ? "Hide" : `Show ${refusal.items.length}` }}</ApButton
+        >
+        <span v-if="showClosed && refusal.items" class="flex basis-full flex-col gap-0.5">
+          <span v-for="(item, i) in refusal.items" :key="i" class="font-mono text-sm text-text-2">{{
+            expiredLine(item)
+          }}</span>
+        </span>
       </span>
     </ApCallout>
     <template #footer>

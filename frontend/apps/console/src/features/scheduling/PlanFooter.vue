@@ -5,6 +5,7 @@ import type { PlanDetail } from "./api.ts";
 import { isBooking, rejectedRows } from "./booking-state.ts";
 import { planPrimary } from "./plan-primary.ts";
 import type { Because } from "./review-words.ts";
+import ExpiredUpFront from "./ExpiredUpFront.vue";
 
 /**
  * K1 footer: totals + the one primary for the plan's state (plan-primary.ts). Conflicts include the
@@ -29,6 +30,8 @@ const props = defineProps<{
   /** U97 (#257): the viewer (the submitter's own plan) and a self-approval refusal on this version. */
   userId?: string | null | undefined;
   refusedBecause?: Because | null | undefined;
+  /** #273: Re-plan's proposal, for the up-front callout's words. */
+  proposal?: boolean | undefined;
 }>();
 defineEmits<{ sheet: []; execute: []; redraft: []; sendBack: [] }>();
 const primary = computed(() =>
@@ -46,6 +49,12 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
 </script>
 
 <template>
+  <!-- #273: the passes an approval would skip, above Approve, before deciding (director's condition 2). -->
+  <ExpiredUpFront
+    v-if="!readOnly && primary.kind === 'sheet' && primary.act !== 'submit'"
+    :plan="plan"
+    :proposal="proposal"
+  />
   <footer class="flex flex-none flex-wrap items-stretch gap-3 border-t border-hairline pt-3">
     <ApStatStrip :columns="4" label="Plan totals" class="min-w-[min(100%,520px)] flex-1">
       <ApStatTile label="Passes" :value="plan.counts.passes" />

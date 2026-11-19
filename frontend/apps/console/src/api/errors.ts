@@ -221,6 +221,9 @@ export const errorCodes = [
   "contact_plan_day_already_planned",
   "contact_plan_replaced",
   "contact_plan_all_opportunities_expired",
+  // #273 (api): the closed set changed since the approver looked; step 1's interim refusal.
+  "contact_plan_expired_passes_changed",
+  "contact_plan_opportunity_expired",
   "template_not_found",
   "requirement_not_found",
   "requirement_not_active",

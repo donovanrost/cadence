@@ -46,8 +46,18 @@ describe("U61 lifecycle callouts on K1", () => {
           spacecraft: { id: spacecraftId("sc_1"), name: "EARENDIL-001", scid: null },
           station: { ref: "svalbard-1", id: null, code: "SVA", name: null },
           aos: "2026-11-16T00:10:00Z",
+          snapshot_id: undefined,
+          expires_at: undefined,
+          reason: undefined,
         },
-        { spacecraft: null, station: null, aos: "2026-11-16T00:20:00Z" },
+        {
+          spacecraft: null,
+          station: null,
+          aos: "2026-11-16T00:20:00Z",
+          snapshot_id: undefined,
+          expires_at: undefined,
+          reason: undefined,
+        },
       ],
     });
     expect(w.text()).not.toContain("Approved.");

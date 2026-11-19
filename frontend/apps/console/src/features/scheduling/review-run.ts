@@ -65,6 +65,9 @@ type Plan = Readonly<{
   counts: Readonly<{ passes: number }>;
   /** For acknowledgements_required's gap count (U23). */
   unmet?: readonly Readonly<{ requirement_id: string; spacecraft_id: string | null }>[];
+  /** #273: the closed set the approver saw, and its digest, sent back unchanged on approve. */
+  expired?: Expired | null | undefined;
+  expired_digest?: string | undefined;
 }>;
 type Context = Readonly<{
   missionId: MissionId;
@@ -106,11 +109,13 @@ export async function runReview(
   acks: readonly Acknowledgement[],
   note?: string,
 ): Promise<ReviewOutcome> {
-  const ids = ctx.ops(JSON.stringify([act, plan.id, plan.version, acks, note ?? ""]));
+  // The digest is part of the request: a reloaded closed set is a new request with new ids (#273).
+  const digest = plan.expired_digest;
+  const ids = ctx.ops(JSON.stringify([act, plan.id, plan.version, acks, note ?? "", digest ?? ""]));
   const ref = { id: plan.id, version: plan.version };
-  const who = { userId: ctx.userId, day: ctx.day, unmet: plan.unmet };
+  const who = { userId: ctx.userId, day: ctx.day, unmet: plan.unmet, shown: plan.expired ?? null };
   if (act === "approve") {
-    const a = await approvePlan(ctx.missionId, ref, ids.approve, acks, note);
+    const a = await approvePlan(ctx.missionId, ref, ids.approve, acks, note, digest);
     if (a.ok) return approved(a.value, plan.version, plan.counts.passes);
     // A self-approval refusal disables Approve, so it closes the sheet and says why on the screen.
     const why = approveRefusal(a.error, { version: plan.version, ...who });
@@ -133,7 +138,14 @@ export async function runReview(
     return after(version, "caution", notConfirmedLine(version));
   if (act === "submit") return after(version, "nominal", SENT, { expired: s.value.expired });
   // The one act: approve the version submit put up (a sent-back draft's resubmit cuts the next).
-  const a = await approvePlan(ctx.missionId, { id: plan.id, version }, ids.approve, acks, note);
+  const a = await approvePlan(
+    ctx.missionId,
+    { id: plan.id, version },
+    ids.approve,
+    acks,
+    note,
+    digest,
+  );
   if (a.ok) return approved(a.value, version, plan.counts.passes);
   const why = approveRefusal(a.error, { version, ...who });
   const keepNote = note ?? null;

@@ -8,9 +8,9 @@ import {
   outcomeUnknown,
   type ApiError,
 } from "@/api";
-import { plural } from "@/ui";
+import { formatCount, plural } from "@/ui";
 import { planErrorText } from "./errors.ts";
-import { dayLabel, lifecycleRefusal } from "./lifecycle.ts";
+import { dayLabel, expiredReader, lifecycleRefusal, type Expired } from "./lifecycle.ts";
 import { when } from "./plan-history.ts";
 import { planState, type PlanState } from "./plans-api.ts";
 
@@ -40,6 +40,8 @@ export type Refusal = Readonly<{
   because: Because | null;
   /** No clear answer: the approval may or may not have been recorded (qa #19). */
   unclear: boolean;
+  /** #273: the passes whose booking window closed since the approver looked, for `Show N`. */
+  items?: Expired["items"] | undefined;
 }>;
 type Who = Readonly<{
   version: number;
@@ -47,6 +49,10 @@ type Who = Readonly<{
   day: string;
   /** The plan's unmet requirements, to count acknowledgements_required's gaps by spacecraft (U23). */
   unmet?: readonly Readonly<{ requirement_id: string; spacecraft_id: string | null }>[] | undefined;
+  /** #273: the closed set the approver was shown, to diff a changed-set refusal against. */
+  shown?: Expired | null | undefined;
+  /** Re-plan's proposal words ("Not applied: …") instead of the plan's. */
+  proposal?: boolean | undefined;
 }>;
 
 const person = d.nullable(
@@ -89,7 +95,7 @@ const firstSentence = (s: string) => s.split(/(?<=\.)\s/)[0]?.replace(/\.$/, "")
 const refusal = (
   text: string,
   reason: string,
-  extra: Partial<Pick<Refusal, "code" | "because" | "unclear">> = {},
+  extra: Partial<Pick<Refusal, "code" | "because" | "unclear" | "items">> = {},
 ): Refusal => ({ text, reason, code: null, because: null, unclear: false, ...extra });
 
 /** Who decided and when, both or neither (U29); a name, never an id (U25). */
@@ -177,6 +183,12 @@ export function approveRefusal(error: ApiError, w: Who): Refusal {
     );
   }
   if (code === "plan_not_ready") return notReady(error, r);
+  if (code === "contact_plan_expired_passes_changed") return closedSince(error, w, r);
+  if (code === "contact_plan_opportunity_expired")
+    return refusal(
+      `Not approved: the booking window has closed for some of ${r}'s passes, so ${r} can't be booked as it is. Your approval wasn't recorded. To book the others, draft the day again without them.`,
+      "the booking window has closed for some of its passes, so it can't be booked as it is",
+    );
   if (code === "invalid_params") {
     // The server's own message: its case is kept (dashboards' review).
     const text = planErrorText(error);
@@ -197,6 +209,39 @@ function gapCount(error: ApiError, w: Who): number {
   // Only gaps the loaded plan can name by spacecraft; otherwise 0, and the line goes countless
   // (ca-ux's #338 review: never count requirements as gaps).
   return of(unmet.filter((u) => missing.has(u.requirement_id)));
+}
+
+const changedDetails = d.object({ expired: d.optional(expiredReader) });
+const capped = (e: Expired | null) => e !== null && e.count > e.items.length;
+
+/**
+ * #273 (U97, #340): the closed set changed after the approver looked. "N more" only from a diff of
+ * two uncapped lists keyed by snapshot id (ca-security); otherwise the countless form. Show N lists
+ * the new ones. The console never retries on its own.
+ */
+function closedSince(error: ApiError, w: Who, r: string): Refusal {
+  const current = detailsOf(error, changedDetails)?.expired ?? null;
+  const shown = w.shown ?? null;
+  const ids = (e: Expired | null) => (e?.items ?? []).map((i) => i.snapshot_id);
+  const keyed = [...ids(current), ...ids(shown)].every((id) => id !== undefined);
+  const seen = new Set(ids(shown));
+  const fresh = (current?.items ?? []).filter((i) => !seen.has(i.snapshot_id));
+  const n = keyed && !capped(current) && !capped(shown) ? fresh.length : 0;
+  const more = n > 0 ? `${formatCount(n)} more` : "more";
+  const whose = w.proposal ? "the proposal's" : `${r}'s`;
+  const closed = `the booking window closed for ${more} of ${whose} passes after you opened it`;
+  const extra = n > 0 ? { items: fresh } : {};
+  if (w.proposal)
+    return refusal(
+      `Not applied: ${closed}, so what you'd approve changed. Nothing was booked. Check the list and apply it again.`,
+      `the booking window closed for ${more} of its passes after you opened it`,
+      extra,
+    );
+  return refusal(
+    `Not approved: ${closed}, so what you'd approve changed. Your approval wasn't recorded. Check the list and approve again.`,
+    `the booking window closed for ${more} of its passes after you opened it`,
+    extra,
+  );
 }
 
 /** U97: plan_not_ready by what blocks it: conflicting passes, else uncovered spacecraft. */
