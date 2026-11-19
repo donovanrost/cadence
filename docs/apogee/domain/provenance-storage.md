@@ -1,8 +1,9 @@
 # Telemetry provenance storage: design (api-ops, 11-16)
 
 Owner: **api-ops**. Reviewer: **domain** (reviewed 11-16; its changes are folded in: `binding_rule_id`
-derived, `qualified_name` kept, the algorithm-row rule). Status: **design for the director and the user's sign-off.
-Nothing is built.** This is the provenance row of the storage-growth design items (BACKLOG, "Design
+derived, `qualified_name` kept, the algorithm-row rule). Status: **option B approved
+(user, via director, 11-16; DECISIONS #103); D later in a qa slot; C deferred. `CAPACITY` sized
+before build (section 3, B); nothing is built yet.** This is the provenance row of the storage-growth design items (BACKLOG, "Design
 items"): `provenance_json` on `telemetry_observations` is about two thirds of QuestDB's bytes.
 
 `L` = `apps/cadence/lib/cadence`.
@@ -160,13 +161,100 @@ STRING → VARCHAR conversion as lossless; `STRING` is its legacy type).
     digest doesn't include provenance.
 - **Symbol cardinality.** Promoted values are bounded by the mission model, not by traffic, and
   size `CAPACITY` for points across ALL tenants in the table, not one mission:
-  - `semantic_id` and `qualified_name`: one per point per mission, ever. `semantic_id` is a hash of
-    the kind and qualified name (`Catalog.MissionModel.Canonical.semantic_id/2`), so it doesn't
-    change with revisions.
-  - `producer_id`'s values are container semantic ids, equally stable; revision and plan grow with
-    revisions (hundreds, not tens of thousands).
-  - Use `CAPACITY` 65,536–262,144 with `NOCACHE` on the larger ones; size per tenant mix before
-    build.
+  - `semantic_id` and `qualified_name`: one per distinct point name, ever. `semantic_id` is a hash
+    of the kind and qualified name only (`Catalog.MissionModel.Canonical.semantic_id/2`), so it
+    doesn't change with revisions and isn't mission-scoped.
+  - `producer_id`'s values are container and algorithm semantic ids, equally stable; revision and
+    plan grow with revisions.
+  - Sized per tenant mix in "Symbol `CAPACITY`" below.
+
+#### Symbol `CAPACITY` (sized 11-16, before build)
+
+**Measured on dev** (Postgres catalog, exact counts on small tables; one bounded 5-minute QuestDB
+window; QuestDB metadata only, no scans):
+
+- 2 organizations, 2 missions, 5 mission model revisions in 8 days (4 + 1).
+- 20 runtime plans: 4 targets per revision (command, monitoring, telemetry, algorithm). Samples
+  carry the telemetry plan or the algorithm plan, so **≤ 2 plan values per revision**.
+- 146 parameters and 10 containers in every revision. The two missions run the same model and
+  share **all 146** semantic ids: the dictionary is keyed by name, not by tenant.
+- The window has 144 distinct `point_id`s, `observable_id`s and `semantic_id`s, and 10 packet
+  definitions, for 1 spacecraft. The existing per-point `SYMBOL`s are the same cardinality class as
+  the new ones, and today they sit at QuestDB's default `CAPACITY` 256 with `CACHE`.
+
+**Which tables hold which tenants:**
+
+- **The platform-shared managed instance** (`isolation_level: :shared`, the default) holds every
+  tenant's rows in one table. **This is the sizing case.**
+- An org- or mission-isolated managed instance holds one tenant.
+- **Bring-your-own instances must be isolated** (`customer_owned`, `org_isolated` or
+  `mission_isolated`; `DataSource.require_byo_isolation_level`), so they also hold one tenant.
+
+**What `CAPACITY` does on our QuestDB:**
+
+- Managed instances run **9.4.3** (docker-compose, the qa runbook, CI and the chaos lab). Dev
+  reports `cairo.auto.scale.symbol.capacity = true` with threshold 0.8 (`SHOW PARAMETERS`). From
+  that setting's arrival in 9.1.0, a dictionary that passes 80% of its capacity is resized instead
+  of slowing down. On managed instances `CAPACITY` is therefore a **starting size**: undersizing
+  costs a resize, not a degraded map.
+- A bring-your-own instance on QuestDB older than 9.1 has a **fixed** capacity. It holds one
+  tenant, though, so the one-tenant row of the table below is its worst case.
+- A dictionary is per column and is never pruned when partitions drop, so size for the table's
+  life, not the retention window.
+
+**Cardinality per column**, over the table's life:
+
+| Column | Grows with |
+|---|---|
+| `semantic_id`, `qualified_name` | distinct point names across every model on the instance, plus names added or renamed by later revisions (tenants on the same model share values) |
+| `producer_id` | distinct container and algorithm names, by the same rule |
+| `mission_model_revision_id` | every revision ever written |
+| `runtime_plan_id` | ≤ 2 × revisions |
+| `producer_kind` | 2 today (`container`, `algorithm`) |
+
+**Tenant mixes at the design's 1,000 spacecraft.** These are assumptions: no deployment measures
+points per model yet, and dev's simulator has 146. Names churn by 10% a year.
+
+| Mix | Tenants × spacecraft | Points / packet types per model | Distinct models | Revisions per model per year |
+|---|---|---:|---:|---:|
+| 1. One constellation | 1 × 1,000 | 20,000 / 500 | 1 | 52 |
+| 2. Mid-size tenants | 20 × 50 | 5,000 / 200 | 20 | 52 |
+| 3. Long tail | 200 × 5 | 1,500 / 50 | 200 | 12 |
+
+**Year-3 dictionary sizes:**
+
+| Mix | `semantic_id`, `qualified_name` | `producer_id` | revisions | plans |
+|---|---:|---:|---:|---:|
+| 1 | 26,000 | 650 | 156 | 312 |
+| 2 | 130,000 | 5,200 | 3,120 | 6,240 |
+| 3 | 390,000 | 13,000 | 7,200 | 14,400 |
+
+**Chosen `CAPACITY`.** The rule is no resize through year 3 except for mix 3's per-point names,
+since a resize is cheap on 9.1+ and a fixed-capacity bring-your-own instance holds one tenant:
+
+| Column | `CAPACITY` | Cache | Year-3 headroom (resize at 0.8) |
+|---|---:|---|---|
+| `semantic_id` | 262,144 | `NOCACHE` | mixes 1–2 never resize (209,715 trigger); mix 3 resizes once, at ~210k names |
+| `qualified_name` | 262,144 | `NOCACHE` | as `semantic_id` |
+| `producer_id` | 16,384 | `CACHE` | 13,107 trigger ≥ mix 3's 13,000 |
+| `mission_model_revision_id` | 16,384 | `CACHE` | 13,107 ≥ 7,200 |
+| `runtime_plan_id` | 32,768 | `CACHE` | 26,214 ≥ 14,400 |
+| `producer_kind` | 256 (default) | `CACHE` | — |
+
+- **`NOCACHE` on the two per-point columns:** a cached dictionary of 10⁵ long strings lives on the
+  Java heap. These columns are written per row but are never filter keys on the read paths in
+  section 2.
+- The other three are small and hot (one revision and plan per active model), so they stay
+  cached.
+- **Dictionary bytes** grow with the values, not the capacity: ~174 bytes per `semantic_id` (85
+  characters, UTF-16) and ~74–124 per `qualified_name`. At 262,144 values that is ~46 MB and ≤33
+  MB per instance, once, against ~214 GiB a day of rows at 1,000 spacecraft.
+- **The capacity-sized hash index cost** is checked on the copy in the build's QuestDB test, not
+  assumed.
+- **Not in B (a note for D's slot):** the existing per-point `SYMBOL`s (`point_id`,
+  `observable_id`, `packet_definition_id`) are still at capacity 256. Managed instances auto-scale.
+  A bring-your-own instance on QuestDB before 9.1 with more than ~200 points is already past them,
+  so `ALTER TABLE … ALTER COLUMN … SYMBOL CAPACITY` could ride with D.
 
 ### C. By reference (a provenance table keyed by hash)
 
