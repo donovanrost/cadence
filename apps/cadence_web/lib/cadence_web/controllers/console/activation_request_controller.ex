@@ -15,6 +15,14 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   def show(conn, %{"request_id" => id}),
     do: respond(conn, ActivationRequests.get(scope(conn), mission_id(conn), id))
 
+  # #235: one page of a configuration change group's spacecraft names.
+  def configuration_change_names(conn, %{"request_id" => id} = params),
+    do:
+      respond(
+        conn,
+        ActivationRequests.configuration_change_names(scope(conn), mission_id(conn), id, params)
+      )
+
   def approve(conn, %{"request_id" => id} = params),
     do: respond(conn, ActivationRequests.approve(scope(conn), mission_id(conn), id, params))
 
@@ -49,6 +57,7 @@ defmodule CadenceWeb.Console.ActivationRequestController do
   defp error(conn, reason)
        when reason in [
               :activation_request_not_found,
+              :configuration_changes_group_not_found,
               :self_approval_forbidden,
               :not_requester,
               :activation_policy_changed,

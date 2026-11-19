@@ -10,7 +10,7 @@ defmodule Cadence.Control.ActivationRequests do
   """
 
   alias Cadence.Auth.Scope
-  alias Cadence.Control.ActivationRequests.{Refusals, Rows}
+  alias Cadence.Control.ActivationRequests.{ConfigurationChanges, Refusals, Rows}
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.Directory
@@ -38,6 +38,33 @@ defmodule Cadence.Control.ActivationRequests do
   def get(%Scope{} = scope, mission_id, request_id) do
     with {:ok, request} <- Directory.fetch(scope.organization_id, mission_id, request_id) do
       {:ok, Rows.detail(scope, mission_id, request)}
+    end
+  end
+
+  @doc """
+  One page of a #235 group's spacecraft names (`group`: the index in `configuration_changes`
+  as the detail sent it; `offset`: from its `next_offset`).
+  """
+  @spec configuration_change_names(Scope.t(), binary(), binary(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def configuration_change_names(%Scope{} = scope, mission_id, request_id, params) do
+    with {:ok, group, offset} <- names_params(params),
+         {:ok, request} <- Directory.fetch(scope.organization_id, mission_id, request_id),
+         {:ok, mission} <- Cadence.Missions.fetch_mission(scope.organization_id, mission_id) do
+      ConfigurationChanges.names(mission, request, group, offset)
+    end
+  end
+
+  defp names_params(params) do
+    with {group, ""} <- Integer.parse(to_string(params["group"] || "")),
+         {offset, ""} <- Integer.parse(to_string(params["offset"] || "0")),
+         true <- group >= 0 and offset >= 0 do
+      {:ok, group, offset}
+    else
+      _ ->
+        {:error,
+         {:invalid_params,
+          %{group: "a group index from configuration_changes", offset: "0 or more"}}}
     end
   end
 
