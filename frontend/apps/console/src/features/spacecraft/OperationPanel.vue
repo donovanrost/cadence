@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
-import { useRemoteQuery } from "@/api";
+import { isError, useRemoteQuery, type ApiError } from "@/api";
 import {
   FailureOutcomeCallout,
   failureOutcome,
@@ -14,6 +14,7 @@ import {
 import { ApButton, ApPanel, ApSegmented, ApSheet, ApTag, type ApSegment } from "@/ui";
 import type { SpacecraftDetail } from "./detail.ts";
 import {
+  alreadyStagedLine,
   offConsequence,
   offTitle,
   operationRows,
@@ -82,11 +83,20 @@ async function stage(key: SwitchKey, on: boolean) {
       source: { surface: "spacecraft" },
       ops: [switchOp(props.detail.spacecraft.id, key, on)],
     });
-    if (!r.ok) return void (failure.value = { key, outcome: failureOutcome(r.error, "staged") });
+    if (!r.ok) return void (failure.value = { key, outcome: refusal(r.error, key) });
     refreshConfigState(props.missionId);
   } finally {
     busy.value = null;
   }
+}
+/** U20/U79: the refusal in words; path_already_staged names the way back (mms-ux, #427). */
+function refusal(error: ApiError, key: SwitchKey): FailureOutcome {
+  if (!isError(error, "path_already_staged")) return failureOutcome(error, "staged");
+  return {
+    changed: false,
+    sentence: alreadyStagedLine(name.value, key),
+    link: { label: "Open change set", to: { name: "setup.changes" } },
+  };
 }
 async function confirmOff() {
   const key = pendingOff.value;

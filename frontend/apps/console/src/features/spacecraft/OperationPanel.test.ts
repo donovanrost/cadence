@@ -1,5 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { decode, missionId } from "@/api/index.ts";
 import { detailReader } from "./detail.ts";
 import { configWith } from "./older-route.fixtures.ts";
@@ -131,6 +132,59 @@ describe("Operation switches (#309, U40)", () => {
     expect(tag?.find("span.normal-case").text()).toBe("r7");
     expect(radio("Commanding", "Off")?.getAttribute("aria-checked")).toBe("true");
     w.unmount();
+  });
+
+  it("someone else's staged switch: 'Not staged: …' with the way back (path_already_staged)", async () => {
+    vi.stubGlobal("fetch", (url: string) =>
+      Promise.resolve(
+        url.endsWith("/stage")
+          ? new Response(
+              JSON.stringify({
+                error: {
+                  code: "path_already_staged",
+                  message: "Someone else already staged a change to this field.",
+                  details: { change_id: "c-9", path: "telemetry_enabled" },
+                },
+              }),
+              { status: 409 },
+            )
+          : new Response(
+              JSON.stringify({
+                data: url.endsWith("/schema") ? { kind: "spacecraft", fields: [] } : {},
+              }),
+            ),
+      ),
+    );
+    // The refusal's Open change set is a link, so this mount has a router.
+    const stub = { render: () => null };
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/sc", name: "setup.spacecraft.one", component: stub },
+        { path: "/changes", name: "setup.changes", component: stub },
+      ],
+    });
+    await router.push("/sc");
+    const w = mount(OperationPanel, {
+      props: { missionId: missionId("m-taken"), detail: detail(), canStage: true },
+      global: { plugins: [router] },
+      attachTo: document.body,
+    });
+    try {
+      await flushPromises();
+      radio("Telemetry", "Off")?.click();
+      await flushPromises();
+      [...document.querySelectorAll("button")]
+        .find((b) => b.textContent?.trim() === "Stage")
+        ?.click();
+      await flushPromises();
+      expect(w.text()).toContain(
+        "Not staged: telemetry is already staged for EARENDIL-312 in the open change set. Discard that change in Setup › Changes to undo it.",
+      );
+      expect(w.findAll("a").some((a) => a.text() === "Open change set")).toBe(true);
+    } finally {
+      w.unmount();
+    }
   });
 
   it("someone who can't stage sees the state tags, not the switch", async () => {

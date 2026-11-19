@@ -78,7 +78,9 @@ export const switchOp = (spacecraftId: string, key: SwitchKey, on: boolean): Sta
 
 /**
  * The switch value the open set stages for this spacecraft, or null when it stages none. Read
- * from its ops' `payload.changes` (the server's staged value), never inferred.
+ * from its ops' `payload.changes` (the server's staged value), never inferred. The last one wins:
+ * a re-stage by the same author replaces the earlier op (api changes.md), and reading the last
+ * stays right if two ever coexist (mms-ux, #427).
  */
 /** The parts of a change set this reads (a ChangeSet fits). */
 type StagedOps = Readonly<{
@@ -96,15 +98,23 @@ export function stagedSwitch(
   spacecraftId: string,
   key: SwitchKey,
 ): boolean | null {
+  let staged: boolean | null = null;
   for (const change of set?.changes ?? [])
     for (const op of change.ops) {
       if (op.kind !== "spacecraft" || op.entity_id !== spacecraftId || !op.paths.includes(key))
         continue;
       const value = changeValue(op.payload, key);
-      if (typeof value === "boolean") return value;
+      if (typeof value === "boolean") staged = value;
     }
-  return null;
+  return staged;
 }
+
+/**
+ * 409 path_already_staged: someone else's open change already sets this switch (mms-ux, #427).
+ * The way back is that change, in Setup › Changes.
+ */
+export const alreadyStagedLine = (name: string, key: SwitchKey): string =>
+  `Not staged: ${NOUN[key]} is already staged for ${name} in the open change set. Discard that change in Setup › Changes to undo it.`;
 
 function changeValue(payload: unknown, path: string): unknown {
   if (typeof payload !== "object" || payload === null || !("changes" in payload)) return undefined;

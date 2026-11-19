@@ -207,5 +207,22 @@ describe("U40 switches on the Operation panel (#309)", () => {
     expect(stagedSwitch(set, "sc-1", "telemetry_enabled")).toBeNull();
     expect(stagedSwitch(set, "sc-2", "commanding_enabled")).toBeNull();
     expect(stagedSwitch(null, "sc-1", "commanding_enabled")).toBeNull();
+    // Flipped back before apply: the last staged value wins (mms-ux, #427).
+    const flipped = {
+      changes: [
+        ...set.changes,
+        {
+          ops: [
+            {
+              kind: "spacecraft",
+              entity_id: "sc-1",
+              paths: ["commanding_enabled"],
+              payload: { changes: [{ path: "commanding_enabled", value: true }] },
+            },
+          ],
+        },
+      ],
+    };
+    expect(stagedSwitch(flipped, "sc-1", "commanding_enabled")).toBe(true);
   });
 });
