@@ -2,7 +2,8 @@ TITLE: Issuing an automation grant needs a second person's approval under the in
 
 TYPE: story. PARENT: #207. LABELS: type:story, domain:approvals, domain:contacts, domain:identity,
 component:management-plane, component:api, component:console. MILESTONE: lead's call (slot after #280).
-REQUIRED REVIEWERS: ca-security, mms-security (security); api-ops (Commanding & Approvals); ux (words).
+REQUIRED REVIEWERS: ca-security (security; mms-security builds it, so doesn't review its own PR); api-ops
+(Commanding & Approvals); an MMS squad reviewer other than the builder; ux/mms-ux (words).
 
 As a mission admin, I want an automation grant to take effect only after a second admin approves it when the
 mission's approval setting is independent, so that one person can't hand a service the power to submit and
@@ -25,6 +26,7 @@ approve work that would otherwise need two people.
 - [ ] Refusals record nothing; a grant's audit shows proposal and decision with who and when.
 - [ ] Verified live on the dev stack.
 
-Context: director 11-19 (via api-ops), new requirement raised in #280's review; approval-sweep Ruling C (option 1:
+Context: Built by: mms-security. Required reviewers: ca-security (security) and api-ops; words by ux/mms-ux. Slot: right
+after #280 (lead, 11-19), built on #280's accountable set. Director 11-19 (via api-ops), new requirement raised in #280's review; approval-sweep Ruling C (option 1:
 a grant that allows both submit and approve needs a second admin); AutomationGrants.issue, Control.PlanningGrants,
 contact_grant_controller; docs/apogee/domain/mms-threat-model.md (MM-1); DECISIONS #112.
