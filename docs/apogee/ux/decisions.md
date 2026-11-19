@@ -3790,9 +3790,10 @@ condition until the codes are fixed.
     identities."
   - setting changed since the proposal: "Not approved: the mission's approval setting changed after this grant was
     proposed. Your approval wasn't recorded. Propose it again."
-  - already decided: "Not approved: this grant was already rejected by Ana R. at 06:52Z, so your approval wasn't
-    recorded." / "…already approved by…"; the viewer: "You already approved this grant at 06:52Z."; no decider: "Not
-    approved: this grant isn't waiting for approval any more. Your approval wasn't recorded. Reload to see it."
+  - already decided (as U97): "This grant was already rejected by Ana R. at 06:52Z, so your approval wasn't recorded.
+    Reload to see it." / "…already approved by…"; the viewer: "You already approved this grant at 06:52Z. Reload to
+    see it."; no decider: "Not approved: this grant isn't waiting for approval any more, so your approval wasn't
+    recorded. Reload to see it."
   - proposal expired: "Not approved: no one decided this grant in time, so it expired. Your approval wasn't recorded.
     Propose it again."
   - a code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
