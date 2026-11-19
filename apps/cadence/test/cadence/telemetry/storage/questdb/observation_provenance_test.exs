@@ -151,8 +151,9 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceTest do
         second_row = stored_row(envelope(first_read))
         refute Enum.any?(second_row, fn {_column, value} -> stored_storage?(value) end)
 
-        for flag <- ["binding_rule_derived", "packet_refs_derived"],
-            do: assert(second_row[flag] == first_row[flag])
+        # The same provenance columns (all nine, flags included) and the same residual.
+        for column <- ["provenance_json" | ObservationProvenance.select_columns()],
+            do: assert(second_row[column] == first_row[column], column)
 
         # "storage" describes each read's own row (the write-back is a new row, with its own ids);
         # everything else is byte-identical, and equal to the JSON-only row's.

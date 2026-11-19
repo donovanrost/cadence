@@ -10,6 +10,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceQuestDBTest do
   import Cadence.TestSupport.QuestDBCase
   import Cadence.TestSupport.TCPContactFixture
 
+  alias Cadence.Catalog.TelemetryBinding
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, WriteContext}
@@ -68,11 +69,13 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceQuestDBTest do
       assert ["seq", _apid, _count] = Jason.decode!(row["identity_ref"])
       assert row["packet_refs_derived"] == true
 
-      # Only a binding rule id the model doesn't rebuild (the fixture's own source endpoint) may
-      # remain in the residual; nothing else does.
-      residual = if row["provenance_json"], do: Jason.decode!(row["provenance_json"]), else: %{}
-      assert Map.keys(residual) -- ["binding_rule_id"] == []
-      assert row["binding_rule_derived"] == (residual == %{})
+      # The fixture binds its packets with its own rule ids (e.g. "bp-rule-645"), not the
+      # model's spacecraft_runtime:SC format, so they are NOT rebuildable by construction:
+      # exactly that id stays in the residual (case b). The derivable case is the next test.
+      assert %{"binding_rule_id" => rule_id} = Jason.decode!(row["provenance_json"])
+      assert map_size(Jason.decode!(row["provenance_json"])) == 1
+      assert is_binary(rule_id) and rule_id != ""
+      assert row["binding_rule_derived"] == false
     end
 
     [sample | _rest] = read_samples(contact.mission_id)
@@ -80,6 +83,62 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceQuestDBTest do
     assert sample.provenance["packet_id"] == sample.packet_id
     assert is_binary(sample.provenance["binding_rule_id"])
     assert sample.provenance["storage"]["observation_identity_id"]
+  end
+
+  test "a packet row whose binding id the model rebuilds stores no residual and reads identically" do
+    mission_id = "mission-provenance-#{System.unique_integer([:positive])}"
+    revision = "mission_model_revision:provenance"
+    producer = "semantic:container:hk"
+
+    provenance = %{
+      evidence_id: "evidence-1",
+      packet_id: "packet-1",
+      binding_rule_id: TelemetryBinding.binding_rule_id(revision, "sc-1", producer),
+      semantic_id: "semantic:parameter:battery_voltage",
+      qualified_name: "/parameters/battery_voltage",
+      producer_kind: :container,
+      producer_id: producer,
+      mission_model_revision_id: revision,
+      runtime_plan_id: "mission_model_runtime_plan:telemetry:1"
+    }
+
+    packet = fn sample_id ->
+      envelope(mission_id, sample_id,
+        packet_id: "packet-1",
+        evidence_id: "evidence-1",
+        packet_definition_id: producer,
+        provenance: provenance
+      )
+    end
+
+    write_observations!([packet.("sample-derived")])
+    insert_legacy!(packet.("sample-legacy"))
+
+    samples = read_two(mission_id)
+
+    [row] =
+      read_back(fn ->
+        case rows(mission_id, DateTime.add(DateTime.utc_now(), -300, :second), [
+               "sample_id",
+               "provenance_json",
+               "binding_rule_derived",
+               "packet_refs_derived"
+             ]) do
+          rows when is_list(rows) ->
+            case Enum.filter(rows, &(&1["sample_id"] == "sample-derived")) do
+              [_row] = found -> {:ok, found}
+              other -> other
+            end
+        end
+      end)
+
+    assert row["provenance_json"] == nil
+    assert row["binding_rule_derived"] == true
+    assert row["packet_refs_derived"] == true
+
+    by_id = Map.new(samples, &{&1.sample_id, &1})
+    assert stored(by_id["sample-derived"]) == stored(by_id["sample-legacy"])
+    assert by_id["sample-derived"].provenance["binding_rule_id"] == provenance.binding_rule_id
   end
 
   test "an algorithm row and a JSON-only row from before the columns read the same provenance" do
@@ -90,13 +149,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceQuestDBTest do
     write_observations!([envelope])
     insert_legacy!(legacy)
 
-    samples =
-      read_back(fn ->
-        case read_samples(mission_id) do
-          [_, _] = samples -> {:ok, samples}
-          other -> other
-        end
-      end)
+    samples = read_two(mission_id)
 
     by_id = Map.new(samples, &{&1.sample_id, &1})
     assert stored(by_id["sample-new"]) == stored(by_id["sample-legacy"])
@@ -104,7 +157,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceQuestDBTest do
     refute Map.has_key?(by_id["sample-new"].provenance, "semantic_id")
   end
 
-  defp envelope(mission_id, sample_id) do
+  defp envelope(mission_id, sample_id, overrides \\ []) do
     {:ok, context} =
       WriteContext.new(
         organization_id: "org-provenance",
@@ -117,31 +170,35 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceQuestDBTest do
         metadata: %{}
       )
 
-    sample = %Sample{
-      sample_id: sample_id,
-      mission_id: mission_id,
-      spacecraft_id: "sc-1",
-      point_id: "DERIVED.battery_power",
-      point_name: "battery_power",
-      packet_definition_id: "mission_model_algorithm:semantic:algorithm:battery_power",
-      packet_definition_version: 1,
-      packet_id: "update-" <> sample_id,
-      evidence_id: "update-" <> sample_id,
-      raw_value: nil,
-      engineering_value: 41.5,
-      quality_state: :good,
-      generation_time: DateTime.utc_now(),
-      receipt_time: DateTime.utc_now(),
-      frame_ref: {:seq, 101, 477},
-      provenance: %{
-        source_update_ids: ["update-1", "update-2"],
-        trigger_sample_id: "sample-trigger",
-        mission_model_revision_id: "mission_model_revision:provenance",
-        runtime_plan_id: nil,
-        producer_kind: :algorithm,
-        producer_id: "semantic:algorithm:battery_power"
-      }
-    }
+    sample =
+      struct!(
+        %Sample{
+          sample_id: sample_id,
+          mission_id: mission_id,
+          spacecraft_id: "sc-1",
+          point_id: "DERIVED.battery_power",
+          point_name: "battery_power",
+          packet_definition_id: "mission_model_algorithm:semantic:algorithm:battery_power",
+          packet_definition_version: 1,
+          packet_id: "update-" <> sample_id,
+          evidence_id: "update-" <> sample_id,
+          raw_value: nil,
+          engineering_value: 41.5,
+          quality_state: :good,
+          generation_time: DateTime.utc_now(),
+          receipt_time: DateTime.utc_now(),
+          frame_ref: {:seq, 101, 477},
+          provenance: %{
+            source_update_ids: ["update-1", "update-2"],
+            trigger_sample_id: "sample-trigger",
+            mission_model_revision_id: "mission_model_revision:provenance",
+            runtime_plan_id: nil,
+            producer_kind: :algorithm,
+            producer_id: "semantic:algorithm:battery_power"
+          }
+        },
+        overrides
+      )
 
     {:ok, envelope} = ObservationEnvelope.from_sample(context, sample)
     envelope
@@ -167,6 +224,15 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationProvenanceQuestDBTest do
         "VALUES (#{Enum.map_join(values, ", ", &SQL.literal/1)})"
 
     {:ok, _result} = RestClient.exec(sql, [])
+  end
+
+  defp read_two(mission_id) do
+    read_back(fn ->
+      case read_samples(mission_id) do
+        [_, _] = samples -> {:ok, samples}
+        other -> other
+      end
+    end)
   end
 
   defp read_samples(mission_id) do

@@ -128,8 +128,14 @@ STRING → VARCHAR conversion as lossless; `STRING` is its legacy type).
     `semantic_id` and `qualified_name`: 4 bytes each per row, with an explicit `CAPACITY` (see
     "Symbol cardinality" below);
   - `identity_ref VARCHAR`, about 30 bytes;
-  - `binding_rule_derived BOOLEAN` (1 byte): the row's binding id is rebuilt from the model.
-- Not written: the `packet_id` and `evidence_id` copies, whose columns are the source, and
+  - `binding_rule_derived BOOLEAN` (1 byte): the row's binding id is rebuilt from the model;
+  - `packet_refs_derived BOOLEAN` (1 byte; as built, domain-reviewed 11-17): the provenance had
+    `packet_id` and `evidence_id` keys equal to the row's own columns, so the reader puts them back
+    from those columns. Packet rows have them, algorithm rows don't, so the reader needs this flag
+    to know whether the keys were there. When either key differs from its column, both stay in the
+    residual.
+- Not written: the `packet_id` and `evidence_id` copies (behind `packet_refs_derived`), whose
+  columns are the source, and
   `binding_rule_id` (domain's review). Its id embeds the model revision, so as a `SYMBOL` its
   dictionary would accumulate revisions × spacecraft × packet types for the table's whole life (a
   symbol dictionary is per column and isn't pruned when partitions drop): past 500k values within a
@@ -144,18 +150,25 @@ STRING → VARCHAR conversion as lossless; `STRING` is its legacy type).
 - `provenance_json` keeps only the **residual**: keys that aren't promoted, such as algorithm
   `source_update_ids` and smoke `source`. For packet rows it is null.
 - The reader rebuilds the same map from columns + residual, so the API output is byte-identical
-  (pin it with a contract test). It also fills the `Sample` struct fields that are nil today.
-- **Saves** ~1,890 bytes: 6 × 4 + ~30 + 1 + null residual (12) ≈ 67 bytes instead of 1,959. Row
+  (pinned by the contract tests, including a write-back round trip). **As built, it does NOT fill
+  the `Sample` struct fields** (domain, 11-17): `Sample.subject_refs/1` reads them, so filling them
+  would change verifier matching on history reads. B is storage-only; filling is its own change.
+- **Saves** ~1,890 bytes: 6 × 4 + ~30 + 2 + null residual (12) ≈ 68 bytes instead of 1,959. Row
   3,006 → **~1,115** (−63%).
 - **Read side:** cheaper. Symbol reads replace a ~1 KB JSON decode per row on every history read,
   and Investigate can show the semantic id or producer without parsing.
 - **Migration:**
-  - `ALTER TABLE ADD COLUMN` is metadata-only and instant; existing partitions read null.
-  - The writer writes both shapes from the cutover. The reader prefers the columns and falls back
-    to decoding the full JSON when they're null (old rows).
+  - `ALTER TABLE ADD COLUMN` is metadata-only and instant; existing partitions read null (flags
+    false). **As built: nine migration files, one column each** (`20261117000000`…`08`): QuestDB
+    9.4.3 refuses a multi-column `ADD COLUMN` on a WAL table ("contains multiple transactions"; found
+    on a throwaway copy), and one file per statement lets a partial run resume. A fresh instance
+    applies 12: the 3 existing base migrations plus these 9.
+  - From the cutover the writer writes the new shape only (columns + residual). The reader decodes
+    the residual and merges the columns over it, so rows from before the columns (columns null,
+    flags false) decode their full JSON as before. No separate fallback path.
   - On dev the old shape ages out under the keep-today+2 rule in three days. In a longer-retention
-    deployment the fallback stays until the oldest retained partition postdates the cutover, then
-    it's deleted.
+    deployment, pre-cutover rows keep decoding their full JSON through the same merge; there is
+    nothing to delete.
   - The same migration file runs on bring-your-own QuestDB (the BYO smoke covers it).
   - Dedup is unaffected: the keys stay `(observed_at, idempotency_key)`, and `idempotency_key`'s
     digest doesn't include provenance.
@@ -352,8 +365,10 @@ provenance contract in the mission model), qa (the slot for D).
   checks that no such job is queued or running before the rollback restart. Why roll forward: dev
   only, no production, the rows keep their provenance in the columns, and the one harmful path is
   the parked legacy page.
-- **For L16** (domain's assessment): any rebuilt write-back must write the B columns from the
-  struct, never re-persist a decoded map, so this gap can't recur.
+- **For L16** (domain's assessment; director's wording, corrected 11-17): any write-back goes
+  through B's writer, which promotes from the rebuilt provenance map; nothing writes
+  `provenance_json` directly or bypasses that writer. The round-trip contract test (read, write
+  back, read: the same provenance and the same columns) pins it.
 - **Readers of provenance keys,** for qa's post-check on a B-written row:
   - the external telemetry API (`GET …/telemetry/points/:id/{latest,history}`, `data[].provenance`)
     is the only consumer that reads the keys; it returns the whole map;
