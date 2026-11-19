@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, useId, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { formatCount, plural, ApButton, ApCallout, ApChip, ApPanel, ApSelect } from "@/ui";
 import {
@@ -56,6 +56,11 @@ const dropLeft = () =>
 const LIST_CAP = 200;
 const listOpen = ref(false);
 const showAll = ref(false);
+/**
+ * a11y B3 (#243): Show all N ↔ Show first N stays put with aria-expanded (it used to unmount on
+ * click); the BatchPreview pair, since it goes back to the first rows (ca-ux).
+ */
+const listId = useId();
 const onToggle = (e: Event) => {
   if (e.target instanceof HTMLDetailsElement) listOpen.value = e.target.open;
 };
@@ -188,7 +193,7 @@ function addOne(id: string) {
         <summary class="ap-label cursor-pointer">
           Show {{ plural(targets.length, "target") }}
         </summary>
-        <ul v-if="listOpen" class="m-0 max-h-48 list-none overflow-auto p-0 pt-2">
+        <ul v-if="listOpen" :id="listId" class="m-0 max-h-48 list-none overflow-auto p-0 pt-2">
           <li v-for="sc in listed" :key="sc.id" class="flex gap-3 py-0.5 font-mono text-sm">
             <RouterLink
               :to="{ name: 'ops.spacecraft', params: { scId: sc.scid } }"
@@ -199,9 +204,18 @@ function addOne(id: string) {
             <span class="text-text-3">{{ sc.profile?.name ?? "no profile" }}</span>
             <span v-if="revisions?.get(sc.id)" class="text-text-4">{{ revisions.get(sc.id) }}</span>
           </li>
-          <li v-if="!showAll && targets.length > LIST_CAP" class="pt-1">
-            <ApButton size="compact" variant="ghost" @click="showAll = true"
-              >Show all {{ formatCount(targets.length) }}</ApButton
+          <li v-if="targets.length > LIST_CAP" class="pt-1">
+            <ApButton
+              size="compact"
+              variant="ghost"
+              :aria-expanded="showAll"
+              :aria-controls="listId"
+              @click="showAll = !showAll"
+              >{{
+                showAll
+                  ? `Show first ${formatCount(LIST_CAP)}`
+                  : `Show all ${formatCount(targets.length)}`
+              }}</ApButton
             >
           </li>
         </ul>

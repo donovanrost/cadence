@@ -168,7 +168,8 @@ const EMPTY: Readonly<Record<CommandTab, string>> = {
               @click="loadMore"
               >Load more</ApButton
             >
-            <p v-if="groups.moreError.value" class="m-0 text-sm text-caution-text">
+            <!-- a11y B6 (#243): a failed Load more is an alert. -->
+            <p v-if="groups.moreError.value" role="alert" class="m-0 text-sm text-caution-text">
               {{ groups.moreError.value }}
             </p>
           </div>

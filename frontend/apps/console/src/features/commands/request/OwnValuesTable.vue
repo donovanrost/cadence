@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { ApButton, ApStatusMark } from "@/ui";
+import { computed, ref, useId } from "vue";
+import { ApButton, ApStatusMark, formatCount } from "@/ui";
 import type { CommandArgument } from "../api.ts";
 import type { Group } from "../groups/show.ts";
 import { cellOf, rawEntries, tableArgs, type Override } from "./ownValues.ts";
@@ -19,6 +19,11 @@ const props = defineProps<{
 }>();
 const FIRST = 8;
 const all = ref(false);
+/**
+ * a11y B3 (#243): Show all N ↔ Show first N stays put with aria-expanded (it used to unmount on
+ * click); the BatchPreview pair, since it goes back to the first rows (ca-ux).
+ */
+const tableId = useId();
 const names = computed(() => tableArgs(props.command, props.overrides));
 const shared = computed(() => rawEntries(props.command.argument_values_json));
 const argOf = (name: string) => props.args.find((a) => a.name === name);
@@ -27,7 +32,7 @@ const rows = computed(() => (all.value ? props.overrides : props.overrides.slice
 
 <template>
   <div class="flex flex-col gap-1">
-    <table class="w-full border-collapse font-mono text-sm">
+    <table :id="tableId" class="w-full border-collapse font-mono text-sm">
       <!-- a11y checklist C (Approve): the table names its command. -->
       <caption class="sr-only">
         {{
@@ -81,12 +86,14 @@ const rows = computed(() => (all.value ? props.overrides : props.overrides.slice
       </tbody>
     </table>
     <ApButton
-      v-if="!all && overrides.length > FIRST"
+      v-if="overrides.length > FIRST"
       size="compact"
       variant="ghost"
       class="self-start"
-      @click="all = true"
-      >Show all {{ overrides.length }}</ApButton
+      :aria-expanded="all"
+      :aria-controls="tableId"
+      @click="all = !all"
+      >{{ all ? `Show first ${FIRST}` : `Show all ${formatCount(overrides.length)}` }}</ApButton
     >
   </div>
 </template>

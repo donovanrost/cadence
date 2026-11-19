@@ -84,7 +84,10 @@ onMounted(h.load);
         @click="h.later"
         >Show later verifiers</ApButton
       >
-      <p v-if="h.pageError.value" class="m-0 text-sm text-caution-text">{{ h.pageError.value }}</p>
+      <!-- a11y B6 (#243): a failed page (earlier attempts, later verifiers) is an alert. -->
+      <p v-if="h.pageError.value" role="alert" class="m-0 text-sm text-caution-text">
+        {{ h.pageError.value }}
+      </p>
       <details class="text-xs text-text-3">
         <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
         <p

@@ -1,4 +1,6 @@
+import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
+import VerifierGroups from "./VerifierGroups.vue";
 import { decode } from "@/api/index.ts";
 import { preflightReader } from "./api.ts";
 import { perPoint, pointCaption, seriesReader } from "./series.ts";
@@ -173,5 +175,28 @@ describe("U51 U2: one plot per verifier point", () => {
     if (!a || !m) throw new Error("two points");
     expect(pointCaption(a, nameOf)).toBe("Accepted on board · 499 targets");
     expect(pointCaption(m, nameOf)).toBe("Mode applied · EARENDIL-001");
+  });
+});
+
+// a11y B3 (#243): Show is a disclosure that stays put (Show ↔ Hide, aria-expanded), keeping focus.
+describe("VerifierGroups' Show", () => {
+  it("toggles the names in place, with aria-expanded and aria-controls", async () => {
+    const w = mount(VerifierGroups, {
+      props: { groups: groupsAt(preflight(tonight), 0), nameOf },
+      attachTo: document.body,
+    });
+    const show = w.findAll("button").find((b) => b.text() === "Show");
+    if (!show) throw new Error("no Show");
+    expect(show.attributes("aria-expanded")).toBe("false");
+    if (show.element instanceof HTMLElement) show.element.focus();
+    await show.trigger("click");
+    expect(show.text()).toBe("Hide");
+    expect(show.attributes("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(show.element);
+    const names = document.getElementById(show.attributes("aria-controls") ?? "");
+    expect(names?.textContent).toContain("SC-2");
+    await show.trigger("click");
+    expect(show.text()).toBe("Show");
+    w.unmount();
   });
 });

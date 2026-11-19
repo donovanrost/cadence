@@ -138,6 +138,11 @@ function paste() {
           size="compact"
           variant="secondary"
           :disabled="latest.state.value.status !== 'ready'"
+          :disabled-reason="
+            latest.state.value.status === 'failed'
+              ? 'Current values couldn\'t be read. Reload to try again.'
+              : 'Reading current values…'
+          "
           @click="emit('change', fillFromCurrent(item, ids, current))"
           >Current + {{ addWords }}</ApButton
         >
@@ -157,12 +162,19 @@ function paste() {
         <ApTextarea
           v-model="csv"
           label="CSV"
+          required
           hint="SCID OR NAME, THEN ONE COLUMN PER ARGUMENT"
           :rows="4"
           placeholder="312, 8.0"
         />
         <div class="flex gap-2">
-          <ApButton size="compact" variant="primary" :disabled="!csv.trim()" @click="paste"
+          <!-- a11y A6/A7 (#243): the required field starts empty; Apply says why until it's filled. -->
+          <ApButton
+            size="compact"
+            variant="primary"
+            :disabled="!csv.trim()"
+            disabled-reason="Paste the CSV first."
+            @click="paste"
             >Apply</ApButton
           >
           <ApButton size="compact" variant="ghost" @click="pasting = false">Cancel</ApButton>
