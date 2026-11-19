@@ -122,6 +122,35 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     refute log =~ "MM_REPLAY_ID_CONFLICT"
   end
 
+  # #161/#162: a sample's id comes from its packet (the journal position), not from the evidence
+  # that carried it, so a replay cut into other batches re-derives the same sample ids, and the
+  # monitoring evaluation and transition ids built over them: nothing is written twice.
+  test "a re-cut replay re-derives the same sample ids, and no evaluation or transition twice",
+       c do
+    raise_frames = frames(mode: 50, aux: 0, sequence: 1)
+
+    log =
+      capture_log(fn ->
+        first = ingest!(evidence(c, raise_frames, 0))
+        assert transition?(first, :critical)
+        rows = monitoring_rows(c)
+        assert [_transition] = rows.transitions
+        assert [_evaluation] = rows.evaluations
+
+        crash_window!(c)
+        cut = div(@frame_size, 2) + 1
+        <<head::binary-size(^cut), tail::binary>> = raise_frames
+        refute transition?(ingest!(evidence(c, head, 0)), :critical)
+        replay = ingest!(evidence(c, tail, cut))
+        assert transition?(replay, :critical)
+
+        assert update_ids(replay) == update_ids(first)
+        assert monitoring_rows(c) == rows
+      end)
+
+    refute log =~ "MM_REPLAY_ID_CONFLICT"
+  end
+
   # api-ops' wedge (review 11-17). A partition that starts EMPTY (its checkpoint missing, or a
   # basis change) is seeded from the latest alarm states, which hold only NON-normal states and
   # can be later than the frame the journal replays. F1 raises mode and aux; F2 clears aux. After
@@ -167,6 +196,23 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
 
   defp transitions(%{semantic_result: %{monitoring_results: results}}),
     do: Enum.filter(results, & &1.transition)
+
+  defp update_ids(%{semantic_result: %{parameter_updates: updates}}),
+    do: updates |> Enum.map(& &1.update_id) |> Enum.sort()
+
+  defp monitoring_rows(c) do
+    mission = c.mission.mission_id
+
+    ids = fn table, column ->
+      Repo.all(from(row in table, where: row.mission_id == ^mission, select: field(row, ^column)))
+      |> Enum.sort()
+    end
+
+    %{
+      evaluations: ids.("semantic_monitoring_evaluations", :evaluation_id),
+      transitions: ids.("semantic_alarm_transitions", :transition_id)
+    }
+  end
 
   defp point(result, update_id) do
     Enum.find_value(result.semantic_result.parameter_updates, fn update ->

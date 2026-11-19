@@ -37,7 +37,7 @@ defmodule Cadence.TestSupport.ObservationIdentityFixtures do
       packet_definition_id: "packet-def-1",
       packet_definition_version: 1,
       packet_id: "packet-" <> sample_id,
-      evidence_id: "evidence-" <> sample_id,
+      evidence_id: Keyword.get(overrides, :evidence_id, "evidence-" <> sample_id),
       raw_value: raw_value,
       engineering_value: raw_value,
       quality_state: :good,
