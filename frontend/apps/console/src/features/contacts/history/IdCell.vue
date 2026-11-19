@@ -14,13 +14,17 @@ const short = computed(() => {
   return `${id.slice(0, KEEP)}…${id.slice(-KEEP)}`;
 });
 const copied = ref<string | null>(null);
+/** a11y B6 (#243): a copy that failed is an alert; one that worked, a status. */
+const copyFailed = ref(false);
 async function copy() {
   if (!props.id) return;
   try {
     await navigator.clipboard.writeText(props.id);
     copied.value = "Copied.";
+    copyFailed.value = false;
   } catch {
     copied.value = "Couldn't copy.";
+    copyFailed.value = true;
   }
 }
 </script>
@@ -33,6 +37,7 @@ async function copy() {
     <ApButton size="compact" variant="ghost" :aria-label="`Copy ${label}`" @click="copy"
       >⧉</ApButton
     >
-    <span role="status" class="sr-only">{{ copied }}</span>
+    <span role="status" class="sr-only">{{ copyFailed ? "" : copied }}</span>
+    <span role="alert" class="sr-only">{{ copyFailed ? copied : "" }}</span>
   </span>
 </template>

@@ -91,7 +91,8 @@ const lines = computed(() =>
       >{{ known === "cancel" ? "Cancel contact…" : "End contact now…" }}</ApButton
     >
     <p v-else class="m-0 text-sm text-text-3">{{ NO_ACCESS_CONTACT }}</p>
-    <p v-if="note" class="m-0 text-sm text-caution-text">{{ note }}</p>
+    <!-- a11y B6 (#243): the note is this act's refusal or failure, announced as an alert. -->
+    <p v-if="note" role="alert" class="m-0 text-sm text-caution-text">{{ note }}</p>
     <ApSheet ref="sheet" :title="sheetTitle(known, spacecraft, pass, now)" width="narrow">
       <p v-for="line in lines" :key="line" class="m-0 text-md text-text-2">{{ line }}</p>
       <ApTextarea
@@ -105,9 +106,13 @@ const lines = computed(() =>
       />
       <template #footer>
         <ApButton variant="ghost" @click="sheet?.close()">Keep contact</ApButton>
-        <ApButton variant="danger" :disabled="busy" @click="confirm">{{
-          known === "cancel" ? "Cancel contact" : "End contact now"
-        }}</ApButton>
+        <ApButton
+          variant="danger"
+          :disabled="busy"
+          :disabled-reason="known === 'cancel' ? 'Cancelling…' : 'Ending…'"
+          @click="confirm"
+          >{{ known === "cancel" ? "Cancel contact" : "End contact now" }}</ApButton
+        >
       </template>
     </ApSheet>
   </div>

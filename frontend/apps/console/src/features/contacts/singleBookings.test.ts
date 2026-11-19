@@ -172,6 +172,9 @@ describe("BookPassSheet", () => {
     const sent: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
     expect(sent).toEqual({ token: "tok-a", note: "Gap after LOS" });
     expect(w.text()).toContain("Requested. Waiting for Northlight to confirm.");
+    // a11y B6 (#243): a result is a status; a refusal or failure is an alert.
+    const said = w.findAll('[role="status"]').find((e) => e.text().includes("Requested."));
+    expect(said?.exists()).toBe(true);
     w.unmount();
     vi.useRealTimers();
   });

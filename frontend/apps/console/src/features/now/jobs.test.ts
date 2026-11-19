@@ -238,3 +238,24 @@ describe("Close without retry sheet a11y (#243)", () => {
     w.unmount();
   });
 });
+
+// ux #397: the Retry sheet opens on Cancel, so its sentence describes it (read on open).
+describe("Retry sheet description (#243)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+  it("is described by its retry sentence", async () => {
+    const target = rowOf()?.job;
+    if (!target) throw new Error("no job");
+    const w = mount(JobSheets, {
+      props: { missionId: missionIdReader("m") },
+      attachTo: document.body,
+    });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed openRetry().
+    w.vm.openRetry(target);
+    await flushPromises();
+    const described = w.get("dialog[open]").attributes("aria-describedby") ?? "";
+    expect(document.getElementById(described)?.textContent?.trim()).toBe(retryBody(target));
+    w.unmount();
+  });
+});

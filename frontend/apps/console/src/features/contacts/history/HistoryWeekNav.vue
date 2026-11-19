@@ -51,7 +51,8 @@ const goTo = (at: number | null) => {
         :warn="future"
         @update:model-value="goTo"
       />
-      <p role="status" class="m-0 mt-1 text-sm text-caution-text">{{ refused }}</p>
+      <!-- a11y B6 (#243): a refused date is the person's own act refused: an alert. -->
+      <p role="alert" class="m-0 mt-1 text-sm text-caution-text">{{ refused }}</p>
     </div>
   </div>
 </template>

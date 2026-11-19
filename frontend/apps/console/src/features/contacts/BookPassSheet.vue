@@ -194,7 +194,8 @@ const outcome = computed(() =>
       @click="run(runSearch)()"
       >{{ searching ? "Searching…" : "Search" }}</ApButton
     >
-    <ApCallout v-if="searchError" tone="caution">{{ searchError }}</ApCallout>
+    <!-- a11y B6 (#243): a failed search or a refused book is an alert, whatever its tone. -->
+    <ApCallout v-if="searchError" tone="caution" role="alert">{{ searchError }}</ApCallout>
     <template v-if="search">
       <p v-for="nr in search.not_ready" :key="nr.code" class="m-0 text-sm text-caution-text">
         {{ nr.message }}
@@ -241,7 +242,7 @@ const outcome = computed(() =>
           <div v-if="chosen?.token === o.token && !result" class="flex flex-col gap-2 pt-2">
             <p class="m-0 text-readout">{{ confirmLine(scName, o, direction) }}</p>
             <ApTextarea v-model="note" label="Why" :rows="2" placeholder="Optional" />
-            <ApCallout v-if="unclear" tone="caution">{{ unclear }}</ApCallout>
+            <ApCallout v-if="unclear" tone="caution" role="alert">{{ unclear }}</ApCallout>
             <div class="flex flex-col gap-1">
               <ApButton
                 variant="primary"
@@ -265,7 +266,12 @@ const outcome = computed(() =>
         More offers than fit; narrow the window or the routes.
       </p>
     </template>
-    <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+    <ApCallout
+      v-if="outcome"
+      :tone="outcome.tone"
+      :role="outcome.tone === 'nominal' || outcome.tone === 'info' ? 'status' : 'alert'"
+      >{{ outcome.text }}</ApCallout
+    >
     <template #footer>
       <ApButton variant="ghost" @click="sheet?.close()">Close</ApButton>
       <ApButton v-if="result?.reserve.pass" variant="primary" @click="showPass"

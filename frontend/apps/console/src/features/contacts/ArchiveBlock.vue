@@ -71,7 +71,8 @@ const sheet = ref<InstanceType<typeof DiscardSheet> | null>(null);
     <p v-if="(canRetry || canDiscard) && !access.abort" class="m-0 text-sm text-text-3">
       {{ NO_ACCESS_ARCHIVE }}
     </p>
-    <p v-if="note" class="m-0 text-sm text-caution-text">{{ note }}</p>
+    <!-- a11y B6 (#243): the note is this act's refusal or failure, announced as an alert. -->
+    <p v-if="note" role="alert" class="m-0 text-sm text-caution-text">{{ note }}</p>
     <!-- ux U49: the error, its code and the id live here only, never in the copy. -->
     <details class="text-xs text-text-3">
       <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
