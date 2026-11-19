@@ -1,7 +1,9 @@
 # Catalog · import and diff (S3 · know the blast radius)
 
 Routes: index `M/setup/catalog` · import `M/setup/catalog/import` (upload) →
-`M/setup/catalog/import/:importId` (validation + diff) · database `M/setup/catalog/:databaseId`.
+`M/setup/catalog/import/:importId` (validation + diff) · database `M/setup/catalog?database=<id>` (the older
+`M/setup/catalog/:databaseId` redirects there) · a revision's page `M/setup/catalog/models/:revisionId` (U65, U102) ·
+a source file `M/setup/catalog/artifacts/:artifactId` (U103).
 Setup rail 04 (count = current revision, `rev 14`) · **reading layout**, in-shell (U5) ·
 Board `Catalog.dc.html`. Owner: fe-setup. Data and gaps: `docs/apogee/plans/setup.md` §S3.
 
@@ -19,18 +21,31 @@ Panels: **Revisions** (ApTable: Revision (link), Label, Source file (mono), Decl
 are a `choice` segmented above the tables.
 Empty: "No catalog yet" + "Commands and telemetry come from an XTCE or CSV export of your flight
 software database." + primary `Import a catalog`.
+- **Import runs table** (as built): File (the file name links to its run, with `rev N` under it once it made one) ·
+  Status · Diagnostics ("none", or "2 errors · 1 warning") · Started. With no runs, the panel is left out. U99 adds
+  the match tags, and U103 adds who started it and a Finished column.
+- **No catalog on this server yet** (a server without the route; one pattern across Setup): "Catalog not available
+  in the console yet" + "This server doesn't serve the catalog to the console yet. Revisions and imports appear here
+  when it does."
 
 ## B · Upload (`M/setup/catalog/import`)
 Single panel `Source file`: drop zone (dashed `line` border, 160px, "Drop an XTCE (.xml) or CSV
 export, or choose a file", 50 MiB limit stated), accepted formats as chips, then `Upload and
 validate` (commit size). On upload → route to `…/import/:importId`. While parsing: status line
-mono `PARSING · 1.8 MB · 00:04` + live progress via the import-run channel.
+mono `PARSING · 1.8 MB · 00:04` + live progress via the import-run channel, with "This page updates when it
+finishes." as a `text-3` line under it (ux, audit C10).
+- **Fields** (as built): `Catalog database` (the mission's databases, plus "New catalog database…", which shows `New
+  database name`), `Revision label` (placeholder "e.g. FSW 3.2.0"), `Notes`.
+- **Reasons and refusals:** "Choose a file." and "Name the new catalog database." (disabled `Upload and validate`);
+  `Uploading…` while it sends; "The file is 62 MiB; the limit is 50 MiB."; "Cadence can't import fsw.zip. Accepted:
+  …" (the accepted formats).
 
 ## C · Validation + diff (`…/import/:importId`)
 ```
-breadcrumb CATALOG / IMPORT rev 15
+breadcrumb Catalog / earendil_fsw_3.2.0.xtce.xml
 h1 "Catalog rev 14 → rev 15"                                     [Replace file]
-file line: earendil_fsw_3.2.0.xtce.xml · XTCE 1.2 · 1.8 MB · parsed and validated, no schema errors
+file line: earendil_fsw_3.2.0.xtce.xml · XTCE 1.2 · 1.8 MB · Source file
+verdict callout: "Parsed and validated, no schema errors." (nominal)
 stat strip ×4: Commands 212→218 (+7 ~4 −1) │ Telemetry 335→341 │ Unchanged 517 of 547 │ Breaking 3
 ┌ C1 Diff (flex 999 1 640) ──────────────┐ ┌ aside (flex 1 1 340) ─────────┐
 │ tabs All 30 · Breaking 3 · Added 16 …  │ │ C2 Impact on live config      │
@@ -42,9 +57,15 @@ the canvas's `v14` was illustrative.
 
 ### Header and file line
 - h1: `Catalog rev <current> → rev <new>`; first import ever: `Catalog rev 1`.
-- File line: file name (mono, readout), format + version, size, validation verdict.
+- File line: file name (mono, readout), format + version, size, and a `Source file` link to the file's page (U103).
+- The verdict is a callout under the file line (as built): nominal "Parsed and validated, no schema errors.";
+  running, failed and warnings as below; U99's match verdicts take its place for a matching import.
+- No diff: "This revision couldn't be compared with rev 14, so there's no diff." / "This is the database's first
+  revision, so there's nothing to compare it with." (info).
 - Validation failed: replace stat strip + diff with a crit callout "This file can't be imported:
-  N errors" and a **Diagnostics** ApTable (Severity mark+word, Code mono, Message, Path mono). Warnings
+  N errors" and a **Diagnostics** ApTable (Severity mark+word, Count `× N`, Code mono, Message, Where mono:
+  identical diagnostics grouped into one row, at most 3 paths shown). The run's own failure sentence follows the
+  callout's first sentence when the server sends one. Warnings
   on a valid file show as a caution callout above the diff with `Show N warnings` (expands the same
   table).
 
@@ -60,8 +81,9 @@ op glyph (mono 15/600: `+` `~` `−`; `+` in `text-3`, `~` readout, breaking row
 (`CMD` / `TLM` small mono box) · name (mono 13, wraps) · change (sentence, `text-2`: `arg duration:
 u16 seconds → u32 milliseconds`) · used by (`40 queued uplinks · 1 procedure`; caution when
 breaking; `not used yet` / `unused · safe` in `text-3`).
-Breaking rows: caution wash. Sort: breaking → changed-in-use → removed → changed → added. Shows the
-first 9, footer "21 more, all additions or unused" + `Show all 30`.
+Breaking rows: caution wash. Sort: breaking → changed-in-use → removed → changed → added. Every row the
+server sends is shown; when the server cuts the list (`truncated`), the footer reads "Showing the first 200
+changes, breaking first. The counts above cover all of them." (as built; replaces the earlier first-9 + `Show all`).
 - **Data:** `{from_revision, to_revision, counts: {commands: {from, to, added, changed, removed},
   telemetry: {…}, unchanged, total, breaking}, changes: [{op, kind, name, change_text, breaking,
   used_by: [{kind, count, label}] | null}]}`.
@@ -110,6 +132,20 @@ profile catalogs). Rows are ApOption radio cards:
 - Caption mono 11: `REV 14 KEPT FOR ROLLBACK`, shown only if the server keeps it. No read says so today, so it's omitted (fe-setup 96256074).
 - Canary overrides get the reason `Canary for rev 15` automatically; C3 has no reason field. Unknown keep
   reasons read `N stay as they are.` NO-GO is crit. Summary: `Roll out rev 15 to Earendil Block 1 · 3 breaking`.
+
+## D · A revision's page (`M/setup/catalog/models/:revisionId`; U65, U102)
+Opened from rev 4's link in A1 Revisions (a revision with a model revision; rows without one stay unlinked).
+- Header: `Catalog rev 4`; an unnumbered revision reads `Catalog revision` (U65). The breadcrumb ends with the
+  database's name. The built crumb reads the generic "Database", which is a console gap.
+- **Approval** panel (U65) while its model needs a decision; decided, its one line. There's no diff on this page:
+  the read doesn't carry one (U102).
+- Up-front lines (A6): "Org admins approve catalog revisions." (not an org admin); "Cadence is still preparing this
+  revision. Try again in a moment." (runtime plans not ready).
+- The comparison report: "No declarations changed." when nothing did; a comparison that couldn't run reads "The
+  comparison didn't run: <the server's sentence>".
+- C3 Roll out to, under the Approval panel, by U102's rules.
+- Technical details: Mission model revision, Catalog revision, Comparison report, Changed runtime targets ("None"
+  when empty).
 
 ## States
 Parsing (live), Valid, Valid with warnings, Failed (diagnostics), Already applied (read-only diff
