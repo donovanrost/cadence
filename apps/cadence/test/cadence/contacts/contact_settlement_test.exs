@@ -369,6 +369,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
   end
 
   describe "replay bookkeeping (#71 follow-up, 39LEY)" do
+    requires_ingress_journal()
+
     test "a never-inspected contact whose first replay failed is inspected once it drains", ctx do
       Application.put_env(:cadence, :contact_settlement,
         deadline_ms: 300,
