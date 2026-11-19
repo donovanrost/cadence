@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApCallout, ApPanel, ApRemote, plural } from "@/ui";
+import { failureOutcome, type FailureOutcome } from "./actions.ts";
 import { itemLine } from "./itemLines.ts";
 import RollbackActions from "./RollbackActions.vue";
 import RollbackPreviewBody from "./RollbackPreviewBody.vue";
@@ -19,6 +20,8 @@ const router = useRouter();
 const open = ref(false);
 const busy = ref(false);
 const failure = ref<string | null>(null);
+/** #413: a refusal's way out (U79 conversion_in_progress: Open change set), beside its words. */
+const failureLink = ref<FailureOutcome["link"] | null>(null);
 const preview = useRemoteQuery(
   () => (open.value ? { missionId: props.missionId, to: props.to } : null),
   fetchRollback,
@@ -62,9 +65,14 @@ const stageBlocked = computed(() =>
 async function stage() {
   busy.value = true;
   failure.value = null;
+  failureLink.value = null;
   try {
     const r = await stageRollback(props.missionId, props.to);
-    if (!r.ok) return void (failure.value = rollbackErrorText(r.error, props.to));
+    if (!r.ok) {
+      failure.value = rollbackErrorText(r.error, props.to);
+      failureLink.value = failureOutcome(r.error, "staged").link ?? null;
+      return;
+    }
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {
@@ -111,7 +119,12 @@ async function stage() {
           />
         </template>
       </ApRemote>
-      <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+      <ApCallout v-if="failure" tone="crit"
+        >{{ failure }}
+        <template v-if="failureLink" #action>
+          <ApButton size="compact" :to="failureLink.to">{{ failureLink.label }}</ApButton>
+        </template>
+      </ApCallout>
       <RollbackActions
         v-if="open && preview.state.value.status === 'ready'"
         :to="to"

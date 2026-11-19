@@ -3,7 +3,12 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref, watch } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { isKnown, useRemoteQuery } from "@/api";
-import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
+import {
+  failureOutcome,
+  refreshConfigState,
+  stageChange,
+  type FailureOutcome,
+} from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApSelect } from "@/ui";
 import { fetchProviderOptions, type ProviderErrorPath } from "./provider-options.ts";
 import ProviderTransportPreview from "./ProviderTransportPreview.vue";
@@ -57,11 +62,14 @@ const form = computed(() => ({
 const blocked = computed(() => blockedReason(form.value, ready.value));
 const busy = ref(false);
 const failure = ref<string | null>(null);
+/** #413: a refusal's way out (U79 conversion_in_progress: Open change set), beside its words. */
+const failureLink = ref<FailureOutcome["link"] | null>(null);
 
 async function stage() {
   const opts = ready.value;
   if (blocked.value !== null || !opts || busy.value) return;
   const op = providerOp(props.entityId, props.document, form.value, opts);
+  failureLink.value = null;
   if (!op) return void (failure.value = "Those choices are no longer on offer. Choose again.");
   if (op.changes?.length === 0) return void (failure.value = "Nothing changed yet.");
   busy.value = true;
@@ -75,7 +83,12 @@ async function stage() {
       source: { surface: "transports" },
       ops: [op],
     });
-    if (!result.ok) return void (failure.value = failureOutcome(result.error, "staged").sentence);
+    if (!result.ok) {
+      const outcome = failureOutcome(result.error, "staged");
+      failure.value = outcome.sentence;
+      failureLink.value = outcome.link ?? null;
+      return;
+    }
     refreshConfigState(props.missionId);
     await router.push(props.done);
   } finally {
@@ -115,7 +128,12 @@ async function stage() {
     />
     <ApCallout v-for="(e, i) in general" :key="i" tone="caution">{{ e.message }}</ApCallout>
     <ProviderTransportPreview v-if="ready?.preview" :preview="ready.preview" />
-    <ApCallout v-if="failure" tone="caution">{{ failure }}</ApCallout>
+    <ApCallout v-if="failure" tone="caution"
+      >{{ failure }}
+      <template v-if="failureLink" #action>
+        <ApButton size="compact" :to="failureLink.to">{{ failureLink.label }}</ApButton>
+      </template>
+    </ApCallout>
     <div class="flex flex-wrap gap-2">
       <ApButton
         type="submit"
