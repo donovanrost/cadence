@@ -98,8 +98,10 @@ describe("Archive… (A1, A4, A5, D3)", () => {
     expect(document.activeElement).toBe(button("Keep it"));
     button("Archive the dashboard")?.click();
     await flushPromises();
-    expect(document.querySelector('[aria-live="polite"]')?.textContent).toContain(
-      "Used in a playlist: Ops wall.",
+    // The kit's refusal region: polite today, role="alert" once fe-ops' #486 (#463) lands.
+    const regions = Array.from(document.querySelectorAll('[role="alert"], [aria-live]'));
+    expect(regions.some((r) => r.textContent?.includes("Used in a playlist: Ops wall."))).toBe(
+      true,
     );
     expect(button("Archive anyway")).toBeDefined();
     button("Keep it")?.click();
