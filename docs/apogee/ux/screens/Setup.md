@@ -50,9 +50,10 @@ why; never `Ready` by default.
 - **Data:** `areas: [{key, status, count, unit, secondary_count?, secondary_unit?, detail}]`.
 
 ## R1 · Findings (panel)
-Header meta: `GROUPED BY CAUSE · 3,006 AFFECTED → 4 LINES` (sum of affected → number of lines), only when
-grouping collapsed something. Not "items", which is a banned word (designers §2). The spec and the console both said
-"items"; the console change is a **gap**, and ux confirms the word.
+Header meta: `GROUPED BY CAUSE · 3,006 FINDINGS → 4 LINES` (sum of affected → number of lines), only when
+grouping collapsed something. The unit is findings (U3's word; U23: every count names its unit), even when they're
+per-spacecraft findings: the spacecraft count belongs in each line, not the meta. Not "items", a banned word
+(designers §2). The spec and the console both said "items"; the console change is a **gap** (ux).
 - First line is a **callout**: blockers = 0 → nominal "No blockers. Nothing stops commanding or
   contacts."; blockers > 0 → crit "N blockers stop commanding or contacts." Then rows in severity order
   (U3): blocker, caution, stale, not set up, optional.
