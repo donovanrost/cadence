@@ -231,6 +231,32 @@ describe("plan_coverage: an approved plan that isn't booking (ux 366240d64, 11fe
       "Booking for R41 stopped before any pass was booked; its last progress was at 22:14Z.",
     );
   });
+  it("#268: the count from the server goes in the verb; none left says why, with K1's step", () => {
+    const counted = (state: string, booking: unknown) =>
+      rowOf({ plan: { ...approved, state, booking }, viewer_can_book: true });
+    const fresh = { reserved: 0, total: 40, bookable: 40, last_progress_at: null };
+    expect(counted("approved", fresh)?.command?.label).toBe("Book 40 passes");
+    const stopped = {
+      reserved: 12,
+      total: 41,
+      bookable: 29,
+      last_progress_at: "2026-11-15T22:14:00Z",
+    };
+    expect(counted("interrupted", stopped)?.command?.label).toBe("Book the other 29");
+
+    const none = counted("approved", { ...fresh, bookable: 0 });
+    expect(none?.command).toBeUndefined();
+    expect(none?.sentence).toBe(
+      "The booking window has closed for all 40 of R41's remaining passes, so nothing can be booked.",
+    );
+    expect(none?.action.label).toMatch(/^(Plan the rest of|Draft a new plan for) 11-16…$/);
+    // Shown to everyone, whether or not they may book.
+    expect(
+      rowOf({ plan: { ...approved, booking: { ...fresh, bookable: 0 } }, viewer_can_book: false })
+        ?.sentence,
+    ).toMatch(/^The booking window has closed/);
+  });
+
   it("words booking_started and a stalled day's end", () => {
     const r = (o: Record<string, unknown>) => {
       const entry = decode(resolvedReader, {

@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { formatCount } from "@/ui";
+import { formatCount, plural } from "@/ui";
 import { short, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 
@@ -109,14 +109,57 @@ function stalledEvidence(a: Attention, now: Date): string | null {
   return `Booking for ${rev(a)} stopped with ${b.reserved} of ${b.total} passes booked${last}. The other ${b.total - b.reserved} aren't booked until it continues.`;
 }
 
-/** Start / Continue booking (POST …/execute) for whoever the server lets book; else Open plan. */
+/** #268: the passes a Book would send, from the server (never counted here); undefined: older. */
+const bookable = (a: Attention) => a.plan?.booking?.bookable;
+const stalledPlan = (a: Attention) =>
+  a.plan?.state === "approved" || a.plan?.state === "interrupted";
+
+/**
+ * Book (POST …/execute) for whoever the server lets book (U61; #268, ux): 'Book 40 passes' when
+ * booking hasn't started, 'Book the other 29' when it stopped. Nothing left to book: no command,
+ * the row says why (ca-security). An older server without the count keeps Start / Continue.
+ */
 export function bookingCommand(a: Attention): QueueItem["command"] | null {
   const s = a.plan?.state;
-  if (a.viewer_can_book !== true || (s !== "approved" && s !== "interrupted")) return null;
+  if (a.viewer_can_book !== true || !stalledPlan(a)) return null;
+  const n = bookable(a);
+  if (n === 0) return null;
+  const label =
+    n === undefined
+      ? s === "approved"
+        ? "Start booking"
+        : "Continue booking"
+      : s === "approved"
+        ? `Book ${plural(n, "pass", "passes")}`
+        : `Book the other ${formatCount(n)}`;
+  return { label, kind: "book", targets: [a] };
+}
+
+/**
+ * #268 (ux): every remaining pass's booking window has closed, so there's nothing to book. The line
+ * stands in for the action; K1's action is the button.
+ */
+function closedLine(a: Attention): string {
+  const b = a.plan?.booking;
+  const left = b ? b.total - b.reserved : null;
+  const which =
+    left === 1
+      ? `${rev(a)}'s only remaining pass`
+      : left !== null && left > 1
+        ? `all ${formatCount(left)} of ${rev(a)}'s remaining passes`
+        : `all of ${rev(a)}'s remaining passes`;
+  return `The booking window has closed for ${which}, so nothing can be booked.`;
+}
+
+/** K1's next step for a day: Draft a new plan before it starts, Plan the rest once it has. */
+function k1Action(a: Attention, now: Date): Readonly<{ label: string; to: RouteLocationRaw }> {
+  const day = a.day ?? "";
+  const started = now.toISOString().slice(0, 10) >= day;
   return {
-    label: s === "approved" ? "Start booking" : "Continue booking",
-    kind: "book",
-    targets: [a],
+    label: started
+      ? `Plan the rest of ${dayLabel(a.day)}…`
+      : `Draft a new plan for ${dayLabel(a.day)}…`,
+    to: { name: "ops.contacts.plan", query: { day } },
   };
 }
 
@@ -140,7 +183,8 @@ export function coverageRow(
   viewerId: string | null = null,
   now: Date = new Date(),
 ): QueueItem {
-  const action = coverageAction(a);
+  const nothingLeft = stalledPlan(a) && bookable(a) === 0;
+  const action = nothingLeft ? k1Action(a, now) : coverageAction(a);
   const book = bookingCommand(a);
   return {
     ...base,
@@ -150,7 +194,7 @@ export function coverageRow(
     key,
     title: coverageTitle(a),
     titleTo: action.to,
-    sentence: coverageEvidence(a, viewerId, now),
+    sentence: nothingLeft ? closedLine(a) : coverageEvidence(a, viewerId, now),
     meta: coverageMeta(a, now),
     action,
     ...(!crit(a) && a.first_window_at ? { due: { label: "", at: a.first_window_at } } : {}),
