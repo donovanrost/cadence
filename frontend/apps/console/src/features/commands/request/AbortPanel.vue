@@ -54,7 +54,13 @@ const onAbort = () => run().catch((e: unknown) => console.error("Abort failed", 
 
 <template>
   <div class="flex flex-col gap-2">
-    <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+    <!-- a11y B6 (#243): aborted is a status; refused or unclear is an alert. -->
+    <ApCallout
+      v-if="outcome"
+      :tone="outcome.tone"
+      :role="outcome.tone === 'nominal' ? 'status' : 'alert'"
+      >{{ outcome.text }}</ApCallout
+    >
     <ApInlineConfirm
       v-model:open="open"
       action="Abort remaining uplinks"

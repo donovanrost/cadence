@@ -122,7 +122,8 @@ const onCommit = (d: { value: DecisionKind; note: string }) =>
     </div>
   </ApPanel>
   <ApPanel v-else index="D" title="Your call" pane flush>
-    <ApCallout v-if="outcome" :tone="outcome.tone">
+    <!-- a11y B6 (#243): every outcome here is a refusal or an unclear decision: an alert. -->
+    <ApCallout v-if="outcome" :tone="outcome.tone" role="alert">
       {{ outcome.text }}
       <template v-if="outcome.reload" #action
         ><ApButton size="compact" @click="emit('decided')">Reload</ApButton></template

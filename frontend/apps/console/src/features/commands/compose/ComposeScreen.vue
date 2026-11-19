@@ -298,9 +298,13 @@ const close = computed((): RouteLocationRaw =>
           @keep-mine="saved.keepMine"
           @retry="saved.retry"
         />
-        <ApCallout v-if="resend.notice.value" :tone="resend.notice.value.tone">{{
-          resend.notice.value.text
-        }}</ApCallout>
+        <!-- a11y B6 (#243): an outcome object's caution (a failed load, commands left out) is an alert. -->
+        <ApCallout
+          v-if="resend.notice.value"
+          :tone="resend.notice.value.tone"
+          :role="resend.notice.value.tone === 'caution' ? 'alert' : 'status'"
+          >{{ resend.notice.value.text }}</ApCallout
+        >
         <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
           <!-- Only targets need the fleet read; the stack and catalog work while it loads or fails. -->
           <ApRemote
@@ -320,7 +324,7 @@ const close = computed((): RouteLocationRaw =>
               @change="(q) => (query = q)"
             />
           </ApRemote>
-          <ApCallout v-if="addError" tone="caution"
+          <ApCallout v-if="addError" tone="caution" role="alert"
             >Couldn't add that command: {{ addError }}</ApCallout
           >
           <StackPanel

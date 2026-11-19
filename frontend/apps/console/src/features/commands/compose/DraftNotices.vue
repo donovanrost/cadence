@@ -28,7 +28,8 @@ defineEmits<{ resume: []; discardOffered: []; keepMine: []; retry: [] }>();
       </span>
     </template>
   </ApCallout>
-  <ApCallout v-if="status.kind === 'conflict' && status.theirs" tone="caution">
+  <!-- a11y B6 (#243): a failed or conflicting background save is an alert, once, when it appears. -->
+  <ApCallout v-if="status.kind === 'conflict' && status.theirs" tone="caution" role="alert">
     This draft was saved from another tab at {{ savedWhen(status.theirs.saved_at) }}. Autosave is
     paused until you choose.
     <template #action>
@@ -46,13 +47,13 @@ defineEmits<{ resume: []; discardOffered: []; keepMine: []; retry: [] }>();
     </template>
   </ApCallout>
   <!-- 409 with {revision: null} (api): submitted or discarded elsewhere; keeping recreates it. -->
-  <ApCallout v-else-if="status.kind === 'conflict'" tone="caution">
+  <ApCallout v-else-if="status.kind === 'conflict'" tone="caution" role="alert">
     This draft was submitted or discarded in another tab. Autosave is paused until you choose.
     <template #action>
       <ApButton size="compact" @click="$emit('keepMine')">Keep mine</ApButton>
     </template>
   </ApCallout>
-  <ApCallout v-if="status.kind === 'failed'" tone="caution">
+  <ApCallout v-if="status.kind === 'failed'" tone="caution" role="alert">
     Couldn't save the draft{{ status.reason ? `: ${status.reason.replace(/\.$/, "")}` : "" }}.
     {{
       status.lastSaved

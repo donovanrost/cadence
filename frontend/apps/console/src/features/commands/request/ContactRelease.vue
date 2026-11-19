@@ -56,6 +56,8 @@ async function titlesOf(ids: readonly string[]): Promise<ReadonlyMap<string, str
 const dialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
 const busy = ref(false);
 const lines = ref<readonly string[]>([]);
+/** a11y B6 (#243): all released is a status; any refused or failed request makes it an alert. */
+const linesFailed = ref(false);
 async function release() {
   const c = contact.value;
   if (!c || busy.value || !(await dialog.value?.ask())) return;
@@ -69,8 +71,8 @@ async function release() {
     });
     if (out.kind === "done") {
       const rs = out.release.results;
-      if (rs.every((r) => r.outcome === "released"))
-        lines.value = [`Released ${plural(rs.length, "request")}.`];
+      linesFailed.value = !rs.every((r) => r.outcome === "released");
+      if (!linesFailed.value) lines.value = [`Released ${plural(rs.length, "request")}.`];
       else {
         const titles = await titlesOf(rs.map((r) => r.command_group_id));
         const ctx = { at, booked: false, spacecraft: spacecraft.value };
@@ -80,10 +82,12 @@ async function release() {
         );
       }
       emit("changed");
-    } else
+    } else {
+      linesFailed.value = true;
       lines.value = [
         out.kind === "refused" ? out.text : "Not released: the contact wasn't confirmed.",
       ];
+    }
   } finally {
     busy.value = false;
   }
@@ -100,9 +104,13 @@ async function release() {
     </span>
     <p v-if="!canRelease" class="m-0 text-sm text-text-3">{{ NO_ACCESS_RELEASE }}</p>
     <p v-if="busy" class="m-0 text-sm text-text-2">Releasing…</p>
-    <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
+    <span :role="linesFailed ? 'alert' : 'status'" class="flex flex-col">
+      <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
+    </span>
     <template v-if="canRelease" #action>
-      <ApButton size="compact" :disabled="busy" @click="release">Release commands…</ApButton>
+      <ApButton size="compact" :disabled="busy" disabled-reason="Releasing…" @click="release"
+        >Release commands…</ApButton
+      >
     </template>
   </ApCallout>
   <ConfirmDialog

@@ -42,6 +42,7 @@ onMounted(h.load);
         variant="ghost"
         class="self-start"
         :disabled="h.state.value.more"
+        disabled-reason="Loading…"
         @click="h.earlier"
         >Show earlier attempts</ApButton
       >
@@ -81,6 +82,7 @@ onMounted(h.load);
         variant="ghost"
         class="self-start"
         :disabled="h.state.value.more"
+        disabled-reason="Loading…"
         @click="h.later"
         >Show later verifiers</ApButton
       >
