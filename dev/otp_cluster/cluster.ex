@@ -97,6 +97,9 @@ defmodule Cadence.OTPClusterSpike.Cluster do
 
   defp boot(peer, peers) do
     {:ok, _} = call(peer, :application, :ensure_all_started, [:elixir])
+    # The runtime supervisor's children attach telemetry handlers at init (the ingress
+    # backpressure monitor), as in production, where :telemetry always runs.
+    {:ok, _} = call(peer, :application, :ensure_all_started, [:telemetry])
 
     for file <- ["owner.ex", "node_agent.ex", "membership.ex", "pools.ex", "node.ex"] do
       call(peer, Code, :require_file, [Path.join(__DIR__, file)])
