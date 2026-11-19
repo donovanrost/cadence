@@ -182,28 +182,41 @@ function approveFailure(e: ApiError, rev: number | null): DecisionFailure {
   if (isError(e, "mission_model_revision_not_in_catalog"))
     return {
       ...base(
-        "Not approved: the catalog doesn't list this revision. To approve it, import its file as a new catalog revision.",
+        "Not approved: the catalog doesn't list this revision. Your approval wasn't recorded. To approve it, import its file as a new catalog revision.",
       ),
       openCatalog: true,
     };
   if (isError(e, "mission_model_self_approval_forbidden"))
     return base(
-      "Not approved: you imported this revision, so another org admin has to approve it.",
+      "Not approved: you imported this revision, so another org admin has to approve it. Your approval wasn't recorded.",
     );
   if (isError(e, "mission_model_comparison_not_passed"))
     return base(
-      `Not approved: the comparison${rev === null ? "" : ` with rev ${rev}`} didn't pass.`,
+      `Not approved: the comparison${rev === null ? "" : ` with rev ${rev}`} didn't pass. Your approval wasn't recorded.`,
     );
   if (isError(e, "mission_model_comparison_mismatch"))
-    return base("Not approved: the comparison is out of date. Run it again.", true);
+    return base(
+      "Not approved: the comparison is out of date. Your approval wasn't recorded. Run it again.",
+      true,
+    );
   if (isError(e, "mission_model_runtime_plans_not_ready"))
-    return base("Not approved: Cadence is still preparing this revision. Try again in a moment.");
+    return base(
+      "Not approved: Cadence is still preparing this revision. Your approval wasn't recorded. Try again in a moment.",
+    );
   if (isError(e, "mission_model_revision_not_approvable"))
-    return base("Not approved: this revision was already approved, rejected or replaced.");
+    return base(
+      "Not approved: this revision was already approved, rejected or replaced, so your approval wasn't recorded.",
+    );
   if (isError(e, "human_mission_model_approver_required"))
-    return base("Not approved: a person has to approve this, not a service identity.");
-  if (e.kind === "forbidden") return base("Not approved: only an org admin can decide this.");
-  return withCode(base("Not approved: Cadence refused this approval."), e);
+    return base(
+      "Not approved: only a person can approve a catalog revision, not a service identity. Your approval wasn't recorded.",
+    );
+  if (e.kind === "forbidden")
+    return base("Not approved: only an org admin can approve this. Your approval wasn't recorded.");
+  return withCode(
+    base("Not approved: Cadence refused this approval. Your approval wasn't recorded."),
+    e,
+  );
 }
 
 function rejectFailure(e: ApiError): DecisionFailure {
@@ -213,8 +226,11 @@ function rejectFailure(e: ApiError): DecisionFailure {
       "Not rejected: this revision was already approved, rejected or replaced, so nothing changed.",
     );
   if (isError(e, "human_mission_model_approver_required"))
-    return base("Not rejected: a person has to reject this, not a service identity.");
-  if (e.kind === "forbidden") return base("Not rejected: only an org admin can decide this.");
+    return base(
+      "Not rejected: only a person can reject a catalog revision, not a service identity. Nothing changed.",
+    );
+  if (e.kind === "forbidden")
+    return base("Not rejected: only an org admin can reject this. Nothing changed.");
   return withCode(base("Not rejected: Cadence refused this rejection, so nothing changed."), e);
 }
 
