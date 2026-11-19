@@ -44,8 +44,8 @@ records who was hired for what; for ownership and review, this section wins.
 
 | Squad | Domains (board labels) | Epics | Squad lead | Members |
 | --- | --- | --- | --- | --- |
-| Commanding & Approvals | commanding, approvals, identity | E1 #207, #201 (per-kind policies), #220 (offboarding) | api-ops | api; new: security engineer (also security lead), UX designer, engineer |
-| Mission Model & Spacecraft | mission-model, spacecraft, applications | E2 #208, E4 #210 | fe-setup | new: security engineer, UX designer, engineer |
+| Commanding & Approvals | commanding, approvals, identity | E1 #207, #201 (per-kind policies), #220 (offboarding) | api-ops | api, ca-security (security engineer, also security lead), ca-ux (UX designer), ca-engineer |
+| Mission Model & Spacecraft | mission-model, spacecraft, applications | E2 #208, E4 #210 | fe-setup | mms-security (security engineer), mms-ux (UX designer), mms-engineer |
 | Telemetry & Data | telemetry, data-management | E6-E9 #212-#215 | domain | staffed when laptop 3 arrives |
 | Displays & Alarms | dashboards, alarms | E10 #216, dashboards | dashboards | staffed when laptop 3 arrives |
 | Ground & Comms | comms, contacts, providers | E5 #211 | fe-ops | staffed when laptop 3 arrives |
@@ -123,7 +123,7 @@ conflicts. `dev/chaos/` is the user's lab: no squad edits it.
 | Laptop 2 | Commanding & Approvals, and Mission Model & Spacecraft. Each has its own worktrees, its own test Postgres and its own heavy gate |
 | Laptop 3 (coming) | Telemetry & Data, Displays & Alarms, and Ground & Comms |
 
-Each agent on a worker machine works in its own worktree off develop; nobody shares a working copy. The
+Laptop 2's agents are addressed as `donovans-macbook-pro-1/NAME` in hc (for example `hc send donovans-macbook-pro-1/ca-security "..."`). They push their own branches only once GitHub is logged in on laptop 2. Each agent on a worker machine works in its own worktree off develop; nobody shares a working copy. The
 laptop-1 stack stays the integration environment, run by qa.
 
 ## Communicating (herdr)
