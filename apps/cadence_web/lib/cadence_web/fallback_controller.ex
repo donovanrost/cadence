@@ -228,8 +228,12 @@ defmodule CadenceWeb.FallbackController do
   defp in_group_message(:enqueue),
     do: "This command is part of a command group. Its group's GO queues it."
 
-  defp in_group_message(_approve),
+  defp in_group_message(:approve),
     do: "This command is part of a command group. Approve it with the group's GO/NO-GO."
+
+  # An action with no words of its own names no act, so it never gives a wrong instruction.
+  defp in_group_message(_action),
+    do: "This command is part of a command group. Use its group instead."
 
   defp error_response(conn, status, code) do
     conn
