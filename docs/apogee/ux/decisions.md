@@ -3648,3 +3648,69 @@ read, the dry run).
   review it first." (mms-security: under "Applies without approval" a submit applies with no review.)
 - **At scale (> 100 spacecraft):** C3 shows counts only, never names. The names are on the Changes review's
   groups (U94's fleets).
+
+### U103 · Import again, a source file's page, and a spacecraft's apps (#146; L18, L19) (mms-ux / fe-setup / mms-engineer)
+All three are built (api 05aa7e399, b18dcf7b5; fe-setup d72327020, 72fb52c0f, 704960442, 7836fc692). This entry
+fixes their words and lists what the legacy pages offered that the console doesn't yet (acceptance criterion 5).
+
+**Import again (the source file's page)**
+- The help under the header no longer promises a new revision. The match is on the compiled result, not the file
+  (mms-engineer: the digest covers the compiled declarations and the importer and compiler versions). So the same
+  file makes a new revision only after an importer or compiler upgrade. The versions are part of the match, so
+  an upgrade makes a new revision even when the declarations are identical. The line: "Import again runs the
+  current importer on this file. It makes a new revision only if the importer has been updated since, or its
+  result differs. Otherwise it matches a revision that already exists. Nothing changes on spacecraft until a
+  revision is rolled out."
+- The run that results shows U99's words when it matches.
+- 409 `import_running`: "Not started: an import of this file is already running." with `Open the run`. Any other
+  failure: "Not started:" plus the failure sentence.
+- "Recorded as mine" (acceptance criterion 1): the import runs table's `Started` cell reads "11-19 05:40Z by Mira K."
+  (U29, one event). A system actor reads "by Cadence"; a service identity or a missing actor shows the time alone.
+  Data: the run row stores `requested_by` (an actor: kind and user id), so the runs read adds its display name
+  (#146's read; fe-setup assigns it).
+
+**A source file's page and the runs table**
+- `Download` keeps its visible word, and its accessible name adds the file: "Download
+  earendil_fsw_3.2.0.xtce.xml" (B7; the name starts with the visible word). The same goes for the `Download`
+  beside each row in A1 Revisions and on the import run's file line, where several sit on one page.
+- No runs: the panel's empty state reads "No imports of this file yet." (legacy had "No runs yet.").
+- A `Finished` column (legacy's "Completed"): the time, or "Still running" while it runs. Status words stay
+  Catalog.md's (`Parsing`, `Valid`, `Failed`, plus U99's `Matches rev 4`).
+
+**A spacecraft's apps (panel S9 on the spacecraft page)**
+- **Acts name their object** (B7): accessible names "Install Telemetry Decom", "Disable Telemetry Decom",
+  "Enable Telemetry Decom", "Uninstall Telemetry Decom". The visible word stays short.
+- **Disable and Uninstall confirm first** (the server's lifecycle registry has confirms; this page never showed
+  them). In plain words, checked by mms-engineer:
+  - `Disable Telemetry Decom for EARENDIL-004?`: "Its pages close and its settings can't be edited until it's
+    enabled again. Its settings are kept. What runs for EARENDIL-004 doesn't change." Actions `Disable` / `Cancel`. The way back is `Enable`, the
+    install action on a disabled app (the server records it as enabled), so the words match the button.
+  - `Uninstall Telemetry Decom from EARENDIL-004?`: "Its settings are kept, so installing it again brings them
+    back, on the app's current version. What runs for EARENDIL-004 doesn't change." Reinstall reuses the installation and takes the version registered then.
+    Actions `Uninstall` (danger) / `Cancel`. Focus starts on `Cancel`.
+  - **"What runs … doesn't change"** is confirmed (api, a code read on a48743995): disable and uninstall publish no
+    domain facts, and `spacecraft_configuration_changed` only invalidates reads. What runs comes from the activated
+    configuration. A disabled app blocks later edits made through it, not what runs.
+- **Uninstall from installed too** (legacy offered it whenever the server allowed it; the console makes you
+  disable first). Show it whenever the server says it's allowed.
+- **Outcomes**, from the server's answer only (U20), announced (`role="status"`, a11y B6):
+  - Applied now: "Telemetry Decom is installed for EARENDIL-004." / "…is disabled…" / "…is enabled…" /
+    "…is uninstalled from EARENDIL-004."
+  - Staged: info, not caution: "Staged. It applies when the change set is applied." with `Open Changes`.
+  - Refused: by the act, "Not installed:" / "Not disabled:" / "Not enabled:" / "Not uninstalled:", plus the
+    failure sentence.
+- **Status words** match the mission list (acceptance criterion 4): `Installed`, `Disabled`, `Not set up`,
+  `Platform · always on`. The server's status also has `unavailable`: it reads `Unavailable` (mark + color + word)
+  when sent, never mapped onto the other three. fe-setup widens the list reader so a new value can't break the
+  page. Legacy's `Upgrade required` is left out because no server on develop sends it; add its word when one does.
+  A state the console doesn't know reads `Status not known` (as the L9 status line).
+- **Empty and missing:**
+  - No apps at spacecraft scope (the list holds the apps that can be installed for one spacecraft, so empty means
+    none can): "No apps can be installed for a single spacecraft." plus "Apps for the whole mission are in
+    Setup › Apps." with that link.
+  - A 404 `spacecraft_not_found` uses the spacecraft page's own not-found state, never "Spacecraft apps aren't
+    available in the console yet", which is only for a server without the route.
+
+**Parity left for fe-setup** (legacy L19, not in the console yet; build, or record why not): the `Readiness` link in
+the page header; the protocol preset picker ("Choose protocol preset", "No protocol preset selected", with "Pinned
+profile" and "Current"); the installed, available and app versions (the console shows `v3` only).
