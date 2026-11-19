@@ -35,7 +35,7 @@ const issues = computed(() =>
   </template>
   <template v-else-if="counts.error + counts.warning > 0">
     <ApCallout tone="caution">
-      Imported with {{ issues }}. Unsupported items were skipped.
+      Imported with {{ issues }}. Parts of the file Cadence doesn't support were skipped.
       <ApButton size="compact" variant="ghost" :aria-expanded="open" @click="open = !open">{{
         open ? "Hide them" : `Show ${issues}`
       }}</ApButton>

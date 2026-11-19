@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { kindLabel } from "@/features/changes/index.ts";
 import { formatShort } from "@/ui";
 import type { RecentChange } from "./api.ts";
 import { revisionOf } from "./revisionOf.ts";
@@ -17,8 +18,9 @@ defineProps<{ change: RecentChange }>();
       class="truncate font-mono text-[12px] text-readout hover:underline"
       >{{ change.versionLabel }}</RouterLink
     >
-    <span v-else class="truncate font-mono text-[12px] text-text-2" :title="change.kind">{{
-      change.versionLabel ?? change.kind
+    <!-- #308 (d): the kind in words ("Extra route"), never its value; an unknown one reads "Change". -->
+    <span v-else class="truncate text-[12px] text-text-2">{{
+      change.versionLabel ?? kindLabel(change.kind)
     }}</span>
     <time :datetime="change.at" class="font-mono text-xs text-text-4">{{
       formatShort(new Date(change.at))

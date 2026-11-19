@@ -15,6 +15,7 @@ import {
   NO_EARLIER_APPROVE,
   noEarlierLine,
   REPLAY_NOT_RUN,
+  unwordedBlockCode,
 } from "./words.ts";
 
 /**
@@ -41,6 +42,8 @@ const noEarlier = computed(() => (report.value ? noEarlierLine(report.value) : n
 const decided = computed(() => decidedLine(props.revision));
 const blocked = computed(() => cannotDecideLine(props.revision));
 const approveBlocked = computed(() => cannotApproveLine(props.revision));
+/** #308 (d): a blocked reason the console doesn't word; its code is in Technical details. */
+const blockCode = computed(() => unwordedBlockCode(props.revision));
 const showReport = ref(false);
 /** U88: Setup › Catalog, where its file can be imported as a new catalog revision. */
 const CATALOG = { name: "setup.catalog" } as const;
@@ -104,8 +107,17 @@ function runAgain() {
       <!-- ux U88 (A6): Approve's reason, with the way on; Reject stays. -->
       <p v-else-if="approveBlocked && revision.viewer_can_decide" class="m-0 text-md text-text-2">
         {{ approveBlocked }}
-        <RouterLink :to="CATALOG" class="text-readout underline">Open the catalog</RouterLink>
+        <RouterLink
+          v-if="revision.cannot_approve_because === 'not_in_catalog'"
+          :to="CATALOG"
+          class="text-readout underline"
+          >Open the catalog</RouterLink
+        >
       </p>
+      <details v-if="blockCode && (blocked || approveBlocked)" class="text-sm">
+        <summary class="ap-label cursor-pointer">Technical details</summary>
+        <p class="m-0 mt-1 font-mono text-xs text-text-3">{{ blockCode }}</p>
+      </details>
       <p
         v-if="noEarlier && !blocked && !approveBlocked && revision.viewer_can_decide"
         class="m-0 text-md text-text-2"

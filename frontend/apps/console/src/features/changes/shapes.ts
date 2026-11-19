@@ -64,6 +64,10 @@ export const configKind = decoders.knownText(configKinds);
 /** A kind in words, or the server's word for a kind the console doesn't know yet. */
 export const configKindText = (k: ConfigKind | Unrecognized) =>
   decoders.vocabularyText(k, configKindWords);
+/** #308 (d): a kind sent as plain text, in words; one the console doesn't know reads "Change". */
+export const kindLabel = (kind: string): string =>
+  isConfigKind(kind) ? configKindWords[kind] : "Change";
+const isConfigKind = (k: string): k is ConfigKind => (configKinds as readonly string[]).includes(k);
 export const opActions = ["create", "update", "delete"] as const;
 /** A revision entry's op: the staged actions (Configuration.Staging) plus archive (older ledgers). */
 export const entryOps = [...opActions, "archive"] as const;

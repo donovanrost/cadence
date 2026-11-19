@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { formatShort, plural } from "@/ui";
+import { formatCount, formatShort, plural } from "@/ui";
 import type { OpState } from "@/ui";
 import type { AreaKey, AreaStatus, FindingFix, Readiness, Severity } from "./api.ts";
 
@@ -206,4 +206,15 @@ export function orderedFindings(readiness: Readiness) {
     optional: 4,
   };
   return [...readiness.findings].sort((a, b) => rank[a.severity] - rank[b.severity]);
+}
+
+/**
+ * R1's meta: "Grouped by cause · 3,006 findings → 4 lines" when grouping collapsed something
+ * (ux #317: findings, never items), else "Grouped by cause · 4 lines".
+ */
+export function groupedMeta(affected: number, lines: number): string {
+  const l = plural(lines, "line");
+  return affected > lines
+    ? `Grouped by cause · ${formatCount(affected)} findings → ${l}`
+    : `Grouped by cause · ${l}`;
 }

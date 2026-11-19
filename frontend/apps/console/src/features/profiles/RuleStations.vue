@@ -8,7 +8,8 @@ const props = defineProps<{ stations: readonly Station[] }>();
 const ids = defineModel<string[]>({ required: true });
 const stationLabel = (id: string) => {
   const s = props.stations.find((x) => x.id === id);
-  return s ? (s.code ?? s.display_name) : id;
+  // U25 (#308): a station the list doesn't have reads "Unknown station", never its id.
+  return s ? (s.code ?? s.display_name) : "Unknown station";
 };
 const options = () =>
   props.stations

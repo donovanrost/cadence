@@ -132,7 +132,8 @@ export function cannotDecideLine(r: ModelRevision): string | null {
   if (why === "plans_not_ready")
     return "Cadence is still preparing this revision. Try again in a moment.";
   if (why === "not_admin") return "Org admins approve catalog revisions.";
-  return why.unrecognized.replaceAll("_", " ");
+  // #308 (d): a reason the console doesn't word reads plainly; its code goes in Technical details.
+  return "You can't approve or reject this revision.";
 }
 
 /** ux U88: why Approve is off while Reject stays (null: Approve isn't blocked). */
@@ -141,7 +142,16 @@ export function cannotApproveLine(r: ModelRevision): string | null {
   if (why === null || why === undefined) return null;
   if (why === "not_in_catalog")
     return "The catalog doesn't list this revision, so it can't be approved. To approve it, import its file as a new catalog revision. Reject it to clear it from the queue.";
-  return why.unrecognized.replaceAll("_", " ");
+  return "This revision can't be approved. Reject it to clear it from the queue.";
+}
+
+/** #308 (d): the code behind a blocked decision the console doesn't word, for Technical details. */
+export function unwordedBlockCode(r: ModelRevision): string | null {
+  const decide = r.cannot_decide_because;
+  if (decide !== null && !isKnown(decide)) return decide.unrecognized;
+  const approve = r.cannot_approve_because;
+  if (approve !== null && approve !== undefined && !isKnown(approve)) return approve.unrecognized;
+  return null;
 }
 
 /** api: a reject reason is at most 2,000 characters (the sheet's limit too). */

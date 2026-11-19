@@ -13,7 +13,8 @@ import { useMissionScope } from "@/shell";
 import { ApButton, focusFirstConnected, plural } from "@/ui";
 import { useDraft } from "./context.ts";
 import { clearDraft } from "./draft.ts";
-import { batchOps } from "./stage.ts";
+import { batchChecks } from "./checks.ts";
+import { batchOps, noGoReason } from "./stage.ts";
 
 /** The commit: stage the whole batch as one change in the mission's open change set. */
 const props = defineProps<{ canManage: boolean }>();
@@ -30,10 +31,20 @@ const ready = computed(() => {
 const ops = computed(() =>
   ready.value ? batchOps(ready.value.report.rows, profiles(), ready.value.profileId) : null,
 );
+const noGoCount = computed(() => {
+  const r = ready.value;
+  if (!r) return 0;
+  const profile = profiles().find((p) => p.id === r.profileId) ?? null;
+  return batchChecks(r.report, profile).filter((c) => c.verdict === "nogo").length;
+});
 const reason = computed((): string | null => {
   if (!props.canManage) return "Only an organization admin can add spacecraft.";
   if (!ops.value) return "Complete the earlier steps first.";
-  if (!ops.value.ok) return `Fix the NO-GO checks first. ${ops.value.message}`;
+  if (!ops.value.ok) {
+    // ux audit S4: the count of the step's NO-GO checks; a batch refused for another reason (an
+    // unknown profile name) keeps its own sentence rather than claim zero NO-GO checks.
+    return noGoReason(noGoCount.value, ops.value.message);
+  }
   return null;
 });
 const label = computed(() =>

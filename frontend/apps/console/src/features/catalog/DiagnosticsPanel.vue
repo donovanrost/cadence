@@ -31,7 +31,7 @@ const word = (s: Diagnostic["severity"]) =>
   <ApPanel
     :index="index"
     title="Diagnostics"
-    :meta="`${formatCount(diagnostics.length)} items → ${plural(groups.length, 'line')}`"
+    :meta="`${plural(diagnostics.length, 'finding')} → ${plural(groups.length, 'line')}`"
     flush
   >
     <ApTable :columns="columns" :rows="groups" :row-key="(g) => g.key" caption="Import diagnostics">

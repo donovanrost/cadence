@@ -173,7 +173,7 @@ export function checkRows(checks: readonly ReadinessCheck[]): readonly CheckRow[
         case "caution":
           return { state: "caution", verdict: "Caution" };
         case "not_set_up":
-          return { state: "caution", verdict: "Note" };
+          return { state: "off", verdict: "Not set up" };
       }
     })();
     return {

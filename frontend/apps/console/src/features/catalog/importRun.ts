@@ -155,3 +155,7 @@ export function kindTile(
     caption: parts.length > 0 ? parts.join(" ") : "no changes",
   };
 }
+
+/** C1 Diff's meta: "Against rev 14 · sorted by risk" (U17: a catalog revision is "rev N", never "rN"). */
+export const diffMeta = (baseNumber: number | null): string =>
+  baseNumber === null ? "Sorted by risk" : `Against rev ${baseNumber} · sorted by risk`;
