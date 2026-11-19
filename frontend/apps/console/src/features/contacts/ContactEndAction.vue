@@ -109,7 +109,7 @@ const lines = computed(() =>
         <ApButton
           variant="danger"
           :disabled="busy"
-          :disabled-reason="known === 'cancel' ? 'Cancelling…' : 'Ending…'"
+          :disabled-reason="known === 'cancel' ? 'Canceling…' : 'Ending…'"
           @click="confirm"
           >{{ known === "cancel" ? "Cancel contact" : "End contact now" }}</ApButton
         >
