@@ -9,6 +9,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
   earlier: `against` null, ux U90).
   """
 
+  alias Cadence.Accounts.MemberNames
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
   alias Cadence.Catalog.ModelRevisions
@@ -25,12 +26,17 @@ defmodule Cadence.Reads.MissionModelApprovals do
     catalogs = ModelRevisions.for_models(org, mission_id, ids)
     statuses = ApprovalReads.latest_statuses(org, mission_id, ids)
 
+    firsts =
+      Map.new(rows, &{&1.id, org |> Catalog.model_importers(mission_id, &1.id) |> List.first()})
+
+    names = MemberNames.display_names(org, firsts |> Map.values() |> Enum.reject(&is_nil/1))
+
     Enum.map(rows, fn row ->
       %{
         id: row.id,
         status: row.status,
         imported_at: row.imported_at,
-        imported_by: importer(org, mission_id, row.id),
+        imported_by: person_or_nil(firsts[row.id], names),
         catalog_revision: Map.get(catalogs, row.id),
         latest_comparison_status: Map.get(statuses, row.id)
       }
@@ -62,7 +68,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
          id: row.id,
          status: row.status,
          imported_at: row.imported_at,
-         imported_by: first_importer(importers),
+         imported_by: first_importer(org, importers),
          catalog_revision: catalog_revision,
          decision: decision(row),
          viewer_can_decide: is_nil(blocked),
@@ -276,16 +282,22 @@ defmodule Cadence.Reads.MissionModelApprovals do
   defp separation_reason(%{reason: :authors_unknown, service: service}),
     do: {"authors_unknown", %{service: service}}
 
-  defp importer(org, mission_id, revision_id),
-    do: org |> Catalog.model_importers(mission_id, revision_id) |> first_importer()
+  # #366 (mms-security, #146's rule): the importer is named only while an active member of the
+  # mission's organization, checked at read time, and never by email. Anyone else (a platform
+  # admin from another organization, someone who has left, a member with no display name) is
+  # `%{id: nil, name: nil}`, so neither their name nor their id reaches this organization; it
+  # still reads as recorded ("Imported 11-19 05:40Z"), not as "Importer not recorded".
+  defp first_importer(org, [id | _]),
+    do: person_or_nil(id, MemberNames.display_names(org, [id]))
 
-  defp first_importer([id | _]), do: %{id: id, name: user_name(id)}
-  defp first_importer([]), do: nil
+  defp first_importer(_org, []), do: nil
 
-  defp user_name(id) do
-    case Cadence.Accounts.fetch_user(id) do
-      {:ok, user} -> user.display_name || user.email
-      _missing -> nil
+  defp person_or_nil(nil, _names), do: nil
+
+  defp person_or_nil(id, names) do
+    case Map.fetch(names, id) do
+      {:ok, name} -> %{id: id, name: name}
+      :error -> %{id: nil, name: nil}
     end
   end
 

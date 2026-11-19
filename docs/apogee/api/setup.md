@@ -209,7 +209,9 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   self_approval | authors_unknown | plans_not_ready | null, cannot_decide_details: {via_service:
   {id, name} | null} | {service: {id, name} | null} | null, cannot_approve_because: not_in_catalog | null,
   plans_ready, comparison: <cmp> | null}`. `imported_by`
-  null reads "Importer not recorded". `cannot_approve_because` (11-17, ux U88) is
+  null reads "Importer not recorded". `imported_by` names a person only while they hold an
+  active membership in the mission's organization, never by email (#366, #146's rule). Anyone
+  else is `{id: null, name: null}`: recorded, but not named, and their id isn't sent. `cannot_approve_because` (11-17, ux U88) is
   `not_in_catalog` when no catalog revision names the model revision (a second run of a file
   makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
   `cannot_decide_because` wins when both are set. `self_approval` and `authors_unknown` (#280) come
@@ -490,7 +492,7 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
   revision.
 - `revisions[].artifact.size_bytes` is `null` in the index (sizes would mean loading every file).
   C3 has the real size. `format_label` is the importer's display name.
-- `revisions[].actor`: `{name}` from the importer of record, when recorded.
+- `revisions[].actor`: the importer of record, `{kind, name} | null`, by the same rule as `requested_by` below (#366; it was `{name}` from the stored name or email). `null` when none was recorded.
 - `import_runs[].status`: `running | succeeded | failed`. There is no separate `pending` state: a
   queued import is `running`. `file_name` is known for runs that produced a revision, otherwise
   `null`.
@@ -600,9 +602,9 @@ The APIDs the revision defines, with their packets: the choices for `handled_api
 Under `/api/console/v1/missions/:mission_id/catalog/artifacts/:artifact_id`.
 
 - **K1** `GET` → `{artifact: {id, file_name, format_label, format_version, media_type, size_bytes,
-  sha256, uploaded_at, uploaded_by {name} | null, database {id, name}, download_url}, revisions:
+  sha256, uploaded_at, uploaded_by {kind, name} | null, database {id, name}, download_url}, revisions:
   [{id, number, label, imported_at}] (made from this file), import_runs: [<the index's run row>]
-  (newest first, 50), permissions: ["catalog.import"] | []}`. `404 artifact_not_found`.
+  (newest first, 50), permissions: ["catalog.import"] | []}`. `404 artifact_not_found`. `uploaded_by` follows the same rule as `requested_by` (C1, #366).
 - **K2** `POST /reimport` (empty body) → `202 {import_run: {id}}`: the importer runs again on the
   stored file and makes a new candidate revision. `409 import_running {import_run_id}` while a run
   on this file is still going, `403 forbidden`, `404 artifact_not_found`. todo(authz): any mission
