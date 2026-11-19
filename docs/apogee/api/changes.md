@@ -47,9 +47,11 @@ Every actor in these reads (`opened_by`, `submitted_by`, change `author`, review
 - a service is named only when it belongs to the organization;
 - Cadence keeps its system name.
 
-An actor that isn't named reads `{kind, id: null, name: null}`: a person who isn't an active
-member (a platform admin acting as support, someone who has left, a member with no display name)
-or another organization's service. `kind` stays, but the id isn't sent either.
+An actor outside the organization reads `{kind, id: null, name: null}`: a person who isn't an
+active member (a platform admin acting as support, someone who has left) or another
+organization's service. `kind` stays, but the id isn't sent either. An active member with no
+display name, or the organization's own unnamed service, keeps its `id` with `name: null`, so the
+console still knows its own changes.
 
 Records written before #471 stored `display_name || email`. That stored name is never sent, so
 an old record by someone who has left, or who never had a display name, reads `id: null,

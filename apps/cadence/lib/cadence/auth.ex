@@ -257,6 +257,25 @@ defmodule Cadence.Auth do
     |> Map.new()
   end
 
+  @doc """
+  `%{service_identity_id => display_name | nil}` for the ids that belong to `organization_id`,
+  a nameless one included (nil). Another organization's identity is left out (#471).
+  """
+  @spec organization_service_identities(binary(), [binary()]) :: %{binary() => binary() | nil}
+  def organization_service_identities(_organization_id, []), do: %{}
+
+  def organization_service_identities(organization_id, ids)
+      when is_binary(organization_id) and is_list(ids) do
+    ServiceIdentityRow
+    |> where(
+      [r],
+      r.organization_id == ^organization_id and r.service_identity_id in ^Enum.uniq(ids)
+    )
+    |> select([r], {r.service_identity_id, r.display_name})
+    |> Repo.all()
+    |> Map.new(fn {id, name} -> {id, if(is_binary(name) and name != "", do: name)} end)
+  end
+
   @doc "Active service identities with key creation time (no token material), by name."
   @spec list_service_identity_directory(binary()) :: [map()]
   def list_service_identity_directory(organization_id) when is_binary(organization_id) do

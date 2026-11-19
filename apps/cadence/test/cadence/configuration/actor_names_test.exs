@@ -67,7 +67,10 @@ defmodule Cadence.Configuration.ActorNamesTest do
     id = c.alice.user.user_id
     Repo.update_all(from(u in UserRow, where: u.user_id == ^id), set: [display_name: ""])
 
-    assert {:ok, %{applied_by: %{name: nil}} = revision} =
+    # They keep their id, so the console still knows their own changes (mms-engineer on #487).
+    member_id = c.alice.user.user_id
+
+    assert {:ok, %{applied_by: %{id: ^member_id, name: nil}} = revision} =
              Configuration.get_revision(c.alice, c.mission, 2)
 
     refute inspect(revision) =~ c.alice.user.email
