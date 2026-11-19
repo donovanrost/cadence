@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vite-plus/test";
+import { flushPromises, mount } from "@vue/test-utils";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { missionId as missionIdReader } from "@/api/index.ts";
+import DiscardSheet from "./DiscardSheet.vue";
 import type { ResolutionAction } from "./attention.ts";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { resolvedWords } from "./attention.ts";
-import { NO_ACCESS_ARCHIVE, discardTitle } from "./archive.ts";
+import { DISCARD_BODY, NO_ACCESS_ARCHIVE, discardTitle } from "./archive.ts";
 import { noAccessText } from "./useQueueCommand.ts";
 
 const NOW = new Date("2026-11-14T03:16:00Z");
@@ -192,5 +195,46 @@ describe("archive_quarantine on Now (ux U49)", () => {
       );
     expect(closed("retried", null)).toBe("Archived on retry at 03:21Z.");
     expect(closed("discarded", "Bad replay.")).toBe("Discarded by Mira K. at 03:21Z: Bad replay.");
+  });
+});
+
+// a11y A1/B6 (#243): a required field opens with focus on it, the sentence describes the sheet,
+// and a refusal inside it is an alert.
+describe("Discard sheet a11y (#243)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+  it("opens on its field, described by its sentence; a 403 is an alert", async () => {
+    const target = rowOf()?.discard;
+    if (!target) throw new Error("no discard");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "forbidden", message: "No." } }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    const w = mount(DiscardSheet, {
+      props: { missionId: missionIdReader("m") },
+      attachTo: document.body,
+    });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
+    w.vm.open(target);
+    await flushPromises();
+    const dialog = w.get("dialog[open]");
+    expect(document.activeElement?.tagName).toBe("TEXTAREA");
+    const described = dialog.attributes("aria-describedby") ?? "";
+    expect(document.getElementById(described)?.textContent).toBe(DISCARD_BODY);
+    await dialog.get("textarea").setValue("checked the buffer");
+    await dialog
+      .findAll("button")
+      .find((b) => b.text() === "Discard")
+      ?.trigger("click");
+    await flushPromises();
+    expect(dialog.get('[role="alert"]').text()).toBe(NO_ACCESS_ARCHIVE);
+    w.unmount();
   });
 });

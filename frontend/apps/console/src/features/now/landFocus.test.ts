@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { landFocus } from "./landFocus.ts";
+import { landFocus, landingFor } from "./landFocus.ts";
 
 /** a11y checklist C (Now): after acting, focus lands on the row's resolved line, never <body>. */
 function panel(rows: string[]) {
@@ -10,6 +10,19 @@ function panel(rows: string[]) {
 }
 afterEach(() => {
   document.body.innerHTML = "";
+});
+
+describe("landingFor: a sheet's return target once its row is gone (#243 A5)", () => {
+  it("resolved line, else the row, else the heading; made focusable", () => {
+    expect(landingFor(panel(["a", "a|resolved"]), "a")?.getAttribute("data-key")).toBe(
+      "a|resolved",
+    );
+    document.body.innerHTML = "";
+    expect(landingFor(panel(["a"]), "a")?.getAttribute("tabindex")).toBe("-1");
+    document.body.innerHTML = "";
+    expect(landingFor(panel(["b"]), "a")?.textContent).toBe("Action queue");
+    expect(landingFor(null, "a")).toBeNull();
+  });
 });
 
 describe("landing focus after a row resolves", () => {

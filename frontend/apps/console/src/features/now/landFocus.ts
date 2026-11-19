@@ -23,6 +23,20 @@ function focusable(el: HTMLElement): HTMLElement {
   return el;
 }
 
+/**
+ * Where focus lands for a row (a11y A5, #243): its resolved line, else the row, else the queue's
+ * heading. Made focusable. A sheet passes this as its return-focus, used once its opener is gone.
+ */
+export function landingFor(list: HTMLElement | null, key: string): HTMLElement | null {
+  if (!list) return null;
+  const el =
+    list.querySelector<HTMLElement>(`[data-key="${CSS.escape(`${key}|resolved`)}"]`) ??
+    list.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ??
+    list.closest("section")?.querySelector<HTMLElement>("h1, h2, h3") ??
+    null;
+  return el ? focusable(el) : null;
+}
+
 export async function landFocus(list: HTMLElement | null, key: string, waitMs = WAIT_MS) {
   if (!list) return;
   const started = Date.now();
