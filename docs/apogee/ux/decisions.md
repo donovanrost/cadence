@@ -3388,8 +3388,8 @@ are api's, switched on with `knownErrorCode`.
   - **409 `contact_plan_expired_passes_changed`** (nothing recorded; the console diffs `details.expired.items`
     against the list it showed): "Not approved: the booking window closed for 3 more of R41's passes after you
     opened it, so what you'd approve changed. Your approval wasn't recorded. Check the list and approve again." with
-    `Show 3` for the new ones; when the diff isn't possible: "…closed for more of R41's passes after you opened
-    it…". The review then shows the new list and count; the console never retries on its own (ca-security).
+    `Show 3` for the new ones; when the diff isn't possible, or either list is capped (`count` > the items' length;
+    ca-security): "…closed for more of R41's passes after you opened it…". The review then shows the new list and count; the console never retries on its own (ca-security).
     Re-plan: "Not applied: the booking window closed for 2 more of the proposal's passes after you opened it, so
     what you'd approve changed. Nothing was booked. Check the list and apply it again." In the one act (U97): "R41
     was sent for approval, but not approved: the booking window closed for 3 more of its passes after you opened
