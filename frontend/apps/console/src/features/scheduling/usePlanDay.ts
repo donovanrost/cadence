@@ -17,12 +17,11 @@ import {
   type PlanningSetup,
   rejectPlan,
   startDraft,
-  noteFor,
-  submitPlan,
   type Acknowledgement,
   type PlanDetail,
 } from "./api.ts";
 import { openProposal, planOfDay, planView } from "./plan-state.ts";
+import { reviewOps, runReview, type ReviewAct } from "./review-run.ts";
 
 const progressReader = d.object({
   kind: d.known(["draft", "execute"]),
@@ -169,21 +168,19 @@ export function usePlanDay(
     }
   }
 
-  /** S5: admin → approve + execute (202); member → pending_approval. The caller shows errors. */
-  async function submit(
+  /** #257 (U97): submit, approve, or the one act; op ids are reused for a retry of the same request. */
+  const ops = reviewOps();
+  async function review(
+    act: ReviewAct,
     plan: PlanDetail,
     acknowledgements: readonly Acknowledgement[],
-    note?: string,
+    note: string | undefined,
+    userId: string,
   ) {
     busy.value = true;
     try {
-      const result = await submitPlan(
-        missionId.value,
-        plan,
-        crypto.randomUUID(),
-        acknowledgements,
-        noteFor(plan, note),
-      );
+      const ctx = { missionId: missionId.value, ops, userId, day: day.value };
+      const result = await runReview(ctx, act, plan, acknowledgements, note);
       refresh();
       return result;
     } finally {
@@ -275,7 +272,7 @@ export function usePlanDay(
     estimate,
     draftDay,
     resume,
-    submit,
+    review,
     execute,
     edit,
     sendBack,

@@ -37,6 +37,8 @@ import UnconfirmedCallout from "./UnconfirmedCallout.vue";
 import { stationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
 import { usePlanDay } from "./usePlanDay.ts";
+import { resubmittedLines, sentBackLine } from "./review-lines.ts";
+import type { Because } from "./review-words.ts";
 
 /** K1 · Plan a day (ScheduleFlow.md). States: plan-state.ts; data: usePlanDay. */
 const route = useRoute();
@@ -59,7 +61,7 @@ const {
   estimate,
   draftDay,
   resume,
-  submit,
+  review,
   execute,
   edit,
   sendBack,
@@ -94,9 +96,19 @@ const stopped = useBookingStopped(
 /** U73: `?version=N` of an older version is read-only (the latest version's number, else null). */
 const latest = computed(() => (view.value.kind === "plan" ? historical(view.value.plan) : null));
 const historySheet = ref<InstanceType<typeof PlanHistorySheet> | null>(null);
+/** #257 (U97): a self-approval refusal disables Approve on that plan (A6; Send back stays). */
+const refused = ref<Readonly<{ planId: string; because: Because }> | null>(null);
+const refusedBecause = computed(() =>
+  refused.value && view.value.kind === "plan" && refused.value.planId === view.value.plan.id
+    ? refused.value.because
+    : null,
+);
 const primary = computed(() =>
   view.value.kind === "plan" && latest.value === null
-    ? planPrimary(view.value.plan, isAdmin.value)
+    ? planPrimary(view.value.plan, isAdmin.value, {
+        userId: session.user.id,
+        refusedBecause: refusedBecause.value,
+      })
     : null,
 );
 
@@ -108,49 +120,33 @@ async function onSendBack(reason: string) {
   if (result.ok) sendBackSheet.value?.close();
   else sendBackError.value = result.error;
 }
-/** U36 for the reviewer: who resubmitted, with their note, and the earlier round in text-3. */
-const resubmitted = computed(() => {
-  if (view.value.kind !== "plan" || view.value.plan.state !== "pending_approval") return null;
-  const { submission: sub, previous_round: prev } = view.value.plan;
-  if (!sub || sub.round < 2) return null;
-  const who = sub.actor.name ?? "The author";
-  const at = `${sub.at.slice(11, 16)}Z`;
-  const line = sub.note
-    ? `Resubmitted by ${who} · ${at}: ${sub.note}`
-    : sub.unchanged
-      ? `Resubmitted unchanged by ${who} · ${at}`
-      : `Resubmitted by ${who} · ${at}`;
-  const a = prev?.approval;
-  const earlier =
-    a?.decision === "rejected"
-      ? `Round ${prev?.round ?? sub.round - 1}: sent back by ${a.actor.name ?? "an org admin"} at ${a.at.slice(11, 16)}Z${a.reason ? `: ${a.reason}` : ""}`
-      : null;
-  return { line, earlier };
-});
+const resubmitted = computed(() =>
+  view.value.kind === "plan" ? resubmittedLines(view.value.plan) : null,
+);
+const sentBack = computed(() =>
+  view.value.kind === "plan" ? sentBackLine(view.value.plan, session.user.id, isAdmin.value) : null,
+);
 
-/** A draft an admin sent back: who, when and why, for its author (api 97523716). */
-const sentBack = computed(() => {
-  if (view.value.kind !== "plan" || view.value.plan.state !== "draft") return null;
-  const a = view.value.plan.approval;
-  if (a?.decision !== "rejected") return null;
-  const who = a.actor.name ?? "An org admin";
-  const why = a.reason ? `: ${a.reason.trim().replace(/[.!?]+$/, "")}.` : ".";
-  // The next step is the author's (qa): a reviewer looking at it just sees what was decided.
-  const author = view.value.plan.author;
-  const mine = author?.kind !== "system" && author?.id === session.user.id;
-  const next =
-    mine || !isAdmin.value ? " Change the plan or its gap reasons, then submit it again." : "";
-  return `Sent back by ${who} at ${a.at.slice(11, 16)}Z${why}${next}`;
-});
-
+/** #257 (U97): the review's result on the screen (the sheet closes). */
+const reviewLine = ref<Readonly<{ tone: "nominal" | "caution" | "crit"; text: string }> | null>(
+  null,
+);
+watch(day, () => (reviewLine.value = null));
 async function onSubmit(acks: Acknowledgement[], note?: string) {
-  if (view.value.kind !== "plan") return;
-  const result = await submit(view.value.plan, acks, note);
-  // A draft superseded meanwhile (409 plan_superseded): submit already re-read the plan, so close
-  // the sheet and let it land in the superseded state, which says nothing was submitted.
-  if (result.ok) expired.value = result.value.expired;
-  if (result.ok || isPlanSuperseded(result.error)) sheet.value?.close();
-  else sheetError.value = result.error;
+  if (view.value.kind !== "plan" || primary.value?.kind !== "sheet") return;
+  const planId = view.value.plan.id;
+  const out = await review(primary.value.act, view.value.plan, acks, note, session.user.id);
+  if (out.kind === "refused") {
+    // A draft superseded meanwhile (409 plan_superseded): the plan was re-read, so it lands in the
+    // superseded state, which says nothing was submitted.
+    if (isPlanSuperseded(out.error)) sheet.value?.close();
+    else sheetError.value = out.error;
+    return;
+  }
+  sheet.value?.close();
+  reviewLine.value = { tone: out.tone, text: out.text };
+  expired.value = out.expired;
+  if (out.because) refused.value = { planId, because: out.because };
 }
 const editable = computed(
   () =>
@@ -314,6 +310,7 @@ const clock = computed(() =>
       />
     </div>
     <ApCallout v-if="actionText" tone="caution">{{ actionText }}</ApCallout>
+    <ApCallout v-if="reviewLine" :tone="reviewLine.tone">{{ reviewLine.text }}</ApCallout>
     <PlanFooter
       :plan="view.plan"
       :is-admin="isAdmin"
@@ -324,6 +321,8 @@ const clock = computed(() =>
       :requests-left="stopped?.left ?? null"
       :can-send-back="isAdmin && latest === null && view.plan.state === 'pending_approval'"
       :read-only="latest !== null"
+      :user-id="session.user.id"
+      :refused-because="refusedBecause"
       @send-back="sendBackSheet?.open()"
       @sheet="sheet?.open()"
       @redraft="draftDay"
@@ -346,6 +345,8 @@ const clock = computed(() =>
       :commit-label="primary.label"
       :title="primary.title"
       :confirm="primary.confirm"
+      :act="primary.act"
+      :user-id="session.user.id"
       :busy="busy"
       :day="day"
       @submit="onSubmit"

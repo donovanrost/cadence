@@ -31,6 +31,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   superseded_by: null,
   latest_version: undefined,
   repair: undefined,
+  approval_setting: undefined,
   ...over,
 });
 const gap = { requirement_id: "r1", requirement_version: 1, spacecraft_id: "sc1", why: [] };
@@ -80,18 +81,71 @@ describe("planPrimary", () => {
     });
   });
 
-  it("asks admins to accept gaps and submit, members to request approval", () => {
-    expect(planPrimary(plan({ unmet: [gap] }), true)).toMatchObject({
-      kind: "sheet",
-      label: "Accept 1 gap and submit",
+  it("asks everyone to request approval unless the mission applies without approval (U97)", () => {
+    for (const setting of [undefined, null, "independent"] as const) {
+      expect(planPrimary(plan({ unmet: [gap], approval_setting: setting }), true)).toMatchObject({
+        kind: "sheet",
+        act: "submit",
+        label: "Accept 1 gap and request approval",
+      });
+      expect(planPrimary(plan({ approval_setting: setting }), true)).toMatchObject({
+        kind: "sheet",
+        act: "submit",
+        label: "Request approval",
+        note: null,
+      });
+    }
+    expect(planPrimary(plan({ approval_setting: "direct" }), false)).toMatchObject({
+      act: "submit",
+      label: "Request approval",
     });
-    expect(planPrimary(plan({ unmet: [gap] }), false)).toMatchObject({
+  });
+
+  it("gives an org admin ONE act under direct: submit, then approve (U97)", () => {
+    expect(planPrimary(plan({ approval_setting: "direct" }), true)).toEqual({
       kind: "sheet",
-      label: "Accept 1 gap and request approval",
+      act: "submit_approve",
+      label: "Approve and book 12 passes",
+      title: "Approve and book the plan",
+      confirm: "This sends R41 and approves it, and booking starts for its 12 passes.",
+      note: "No second person's approval is needed, as this mission's setting allows. Sending and approving are both recorded.",
     });
-    expect(planPrimary(plan({}), true)).toMatchObject({
+    expect(planPrimary(plan({ approval_setting: "direct", unmet: [gap] }), true)).toMatchObject({
+      act: "submit_approve",
+      label: "Accept 1 gap, approve and book",
+    });
+  });
+
+  it("approves a pending plan with approve only; the submitter under independent gets none (U97)", () => {
+    const sub = {
+      round: 1,
+      actor: { kind: "user" as const, id: "u-me", name: "Me" },
+      at: "2026-11-19T03:40:00Z",
+      note: null,
+      unchanged: false,
+    };
+    const pending = (setting: PlanDetail["approval_setting"]) =>
+      plan({ state: "pending_approval", submission: sub, approval_setting: setting });
+    expect(planPrimary(pending("independent"), true, { userId: "u-other" })).toMatchObject({
       kind: "sheet",
-      label: "Submit and book 12 passes",
+      act: "approve",
+      label: "Approve and book 12 passes",
+    });
+    expect(planPrimary(pending("independent"), true, { userId: "u-me" })).toEqual({
+      kind: "none",
+      note: "You submitted this plan, so another org admin approves it.",
+    });
+    // Under direct, or a setting the read doesn't carry, the submitter may approve (403 = backstop).
+    for (const setting of ["direct", undefined] as const)
+      expect(planPrimary(pending(setting), true, { userId: "u-me" })).toMatchObject({
+        act: "approve",
+      });
+    expect(
+      planPrimary(pending("direct"), true, { userId: "u-me", refusedBecause: "edited" }),
+    ).toEqual({
+      kind: "blocked",
+      label: "Approve and book 12 passes",
+      reason: "You drafted this version of the plan, so another org admin approves it.",
     });
   });
 
@@ -121,10 +175,19 @@ describe("planPrimary sheet titles name the act without the count (U36, ux)", ()
     exceptions: [],
   };
   const titleOf = (p: PlanPrimary) => (p.kind === "sheet" ? p.title : null);
-  it("asks members for approval, or again, and has admins approve and book in every round", () => {
-    expect(titleOf(planPrimary(plan({}), false))).toBe("Request approval");
-    expect(titleOf(planPrimary(plan({ approval: sentBack }), false))).toBe("Submit the plan again");
-    for (const p of [plan({}), plan({ approval: sentBack }), plan({ state: "pending_approval" })])
+  it("asks for approval, or again, and has admins approve and book under direct and on review", () => {
+    for (const admin of [false, true]) {
+      expect(titleOf(planPrimary(plan({}), admin))).toBe("Request approval");
+      expect(titleOf(planPrimary(plan({ approval: sentBack }), admin))).toBe(
+        "Submit the plan again",
+      );
+    }
+    const direct = { approval_setting: "direct" as const };
+    for (const p of [
+      plan(direct),
+      plan({ ...direct, approval: sentBack }),
+      plan({ state: "pending_approval" }),
+    ])
       expect(titleOf(planPrimary(p, true))).toBe("Approve and book the plan");
   });
 });

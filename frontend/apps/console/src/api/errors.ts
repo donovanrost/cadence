@@ -202,6 +202,9 @@ export const errorCodes = [
   "plan_changed",
   "plan_not_editable",
   "plan_not_pending",
+  // #257 (api): submit on a plan already waiting; approve by its submitter or drafter (independent).
+  "plan_already_submitted",
+  "contact_plan_self_approval_forbidden",
   "plan_not_ready",
   "plan_not_repairable",
   "plan_not_resumable",
