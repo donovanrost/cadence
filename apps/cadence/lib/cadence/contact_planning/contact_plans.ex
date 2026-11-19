@@ -219,43 +219,6 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     end
   end
 
-  @doc """
-  Records the console operation acting on a plan (DECISIONS #27). The latest
-  console operation wins; `{:error, :operation_already_claimed}` when another
-  plan in the mission holds the same `operation_id`.
-  """
-  @spec claim_operation(binary(), binary(), binary(), binary()) ::
-          :ok | {:error, :operation_already_claimed | :contact_plan_not_found}
-  def claim_operation(organization_id, mission_id, plan_id, operation_id) do
-    case Repo.get_by(ContactPlanRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           contact_plan_id: plan_id
-         ) do
-      nil ->
-        {:error, :contact_plan_not_found}
-
-      row ->
-        case row |> ContactPlanRow.operation_changeset(operation_id) |> Repo.update() do
-          {:ok, _row} -> :ok
-          {:error, _changeset} -> {:error, :operation_already_claimed}
-        end
-    end
-  end
-
-  @doc "The plan id whose latest console operation is `operation_id`, if any."
-  @spec plan_id_for_operation(binary(), binary(), binary()) :: binary() | nil
-  def plan_id_for_operation(organization_id, mission_id, operation_id) do
-    ContactPlanRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.operation_id == ^operation_id
-    )
-    |> select([row], row.contact_plan_id)
-    |> Repo.one()
-  end
-
   @doc "Locks the current scoped Plan while claiming a database-only reviewed operation."
   def fetch_locked(organization_id, mission_id, plan_id) do
     if Repo.in_transaction?() do

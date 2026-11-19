@@ -22,7 +22,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanRow do
     field(:approved_version, :integer)
     field(:approved_at, :utc_datetime_usec)
     field(:approved_by, :string)
-    # Console operation journal (DECISIONS #27); written only via operation_changeset/2.
+    # Superseded by ContactPlanning.PlanOperations (#257): no longer written or read; the column
+    # goes in a follow-up migration.
     field(:operation_id, :string)
 
     timestamps()
@@ -71,16 +72,6 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanRow do
   end
 
   @spec to_domain(struct()) :: ContactPlan.t()
-  @doc false
-  def operation_changeset(%__MODULE__{} = row, operation_id) when is_binary(operation_id) do
-    row
-    |> change(operation_id: operation_id)
-    |> validate_length(:operation_id, min: 1, max: 120)
-    |> unique_constraint([:mission_id, :operation_id],
-      name: :contact_plans_mission_operation_id_index
-    )
-  end
-
   def to_domain(%__MODULE__{} = row) do
     ContactPlan.new(%{
       contact_plan_id: row.contact_plan_id,

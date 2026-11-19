@@ -52,6 +52,21 @@ describe("request", () => {
     });
   });
 
+  it("keeps a 403's details (#236: which craft the approver saved)", async () => {
+    stubFetch(403, {
+      error: {
+        code: "activation_approver_authored_content",
+        message: "x",
+        details: { spacecraft_ids: ["sc_1"], spacecraft: [{ id: "sc_1", name: "EARENDIL-004" }] },
+      },
+    });
+    const result = await request("/x", ok, { method: "POST", body: {} });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: "forbidden", details: { spacecraft_ids: ["sc_1"] } },
+    });
+  });
+
   it("keeps the server code on 422", async () => {
     stubFetch(422, { error: { code: "reason_required", message: "Give a reason." } });
     const result = await request("/x", ok, { method: "POST", body: {} });

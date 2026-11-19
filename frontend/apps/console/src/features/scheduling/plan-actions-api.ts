@@ -10,37 +10,26 @@ export type Acknowledgement = Readonly<{ requirement_id: string; reason: string 
 
 const submitReader = d.object({
   plan_id: d.token,
+  /** #257 (api): the version submit put up (a sent-back draft's resubmit cuts the next one). */
+  version: d.optional(d.integer),
   state: planState,
-  outcome: d.oneOf(["pending_approval", "executing", "replayed"]),
+  /** #257: submit only submits; "executing" and "replayed" are older servers' answers. */
+  outcome: d.knownText(["pending_approval", "executing", "replayed"] as const),
+  /** #257: the original answer to a repeated operation_id (U97: shown as this one's result). */
+  replayed: d.optional(d.boolean),
   /** U61: passes left out because they had already started; absent on older servers. */
   expired: (value: unknown, path?: string) =>
     value === undefined ? null : expiredReader(value, path),
 });
 export type SubmitResult = Decoded<typeof submitReader>;
 
-/**
- * U76: where a Submit's note goes. Approving a pending plan records it on the decision
- * (`decision_note`); any other submit records it with the submission (`note`). Empty: none.
- */
-export function noteFor(
-  plan: Readonly<{ state: string }>,
-  text: string | undefined,
-): Readonly<{ key: "note" | "decision_note"; text: string }> | undefined {
-  if (!text) return undefined;
-  return { key: plan.state === "pending_approval" ? "decision_note" : "note", text };
-}
-
-/** S5. Member → pending_approval; org admin → approve + execute off the request (202). */
+/** S5 submit (#257: only submits, for everyone). U76: the optional note goes with the submission. */
 export function submitPlan(
   missionId: MissionId,
   plan: Readonly<{ id: string; version: number }>,
   operationId: string,
   acknowledgements: readonly Acknowledgement[],
-  /**
-   * U76: the optional note for the record (≤ 2,000). A submit sends it as `note`; an org admin
-   * approving a pending plan sends it as `decision_note`, recorded on the approval (api).
-   */
-  note?: Readonly<{ key: "note" | "decision_note"; text: string }>,
+  note?: string,
 ): Promise<ApiResult<SubmitResult>> {
   return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/submit`, submitReader, {
     method: "POST",
@@ -48,7 +37,40 @@ export function submitPlan(
       expected_version: plan.version,
       operation_id: operationId,
       ...(acknowledgements.length > 0 ? { acknowledgements } : {}),
-      ...(note ? { [note.key]: note.text } : {}),
+      ...(note ? { note } : {}),
+    },
+  });
+}
+
+const approveReader = d.object({
+  plan_id: d.token,
+  state: planState,
+  /** U97/U20: "Approved" only on outcome approved; anything else says no approval was recorded. */
+  outcome: d.knownText(["approved"] as const),
+  replayed: d.optional(d.boolean),
+  expired: (value: unknown, path?: string) =>
+    value === undefined ? null : expiredReader(value, path),
+});
+export type ApproveResult = Decoded<typeof approveReader>;
+
+/**
+ * #257 approve (api): an org admin approves `plan.version` and booking starts (202). The note is
+ * recorded on the decision; the approver's gap reasons on the approval's exceptions.
+ */
+export function approvePlan(
+  missionId: MissionId,
+  plan: Readonly<{ id: string; version: number }>,
+  operationId: string,
+  acknowledgements: readonly Acknowledgement[],
+  decisionNote?: string,
+): Promise<ApiResult<ApproveResult>> {
+  return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/approve`, approveReader, {
+    method: "POST",
+    body: {
+      expected_version: plan.version,
+      operation_id: operationId,
+      ...(acknowledgements.length > 0 ? { acknowledgements } : {}),
+      ...(decisionNote ? { decision_note: decisionNote } : {}),
     },
   });
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { isError, type ApiError } from "@/api";
+import { decoders as d, detailsOf, isError, type ApiError, type Reader } from "@/api";
 import { ApButton, ApCallout, ApSheet, ApTextarea, plural } from "@/ui";
 import {
   reasonText,
@@ -10,7 +10,8 @@ import {
   type Acknowledgement,
   type PlanDetail,
 } from "./api.ts";
-import { planErrorText } from "./errors.ts";
+import type { ReviewAct } from "./review-run.ts";
+import { approveRefusal, submitRefusalText } from "./review-words.ts";
 import { lifecycleRefusal, planOfDayRoute } from "./lifecycle.ts";
 import { contactsShortText, coverage, gapGroups } from "./coverage.ts";
 import type { SpacecraftName } from "./names.ts";
@@ -31,6 +32,11 @@ const props = defineProps<{
   busy: boolean;
   /** The day on screen, for a U61 refusal's Open (K1's `?plan=`). */
   day?: string | undefined;
+  /** #257 (U97): what the commit does, for its refusal words; the viewer, for "you already …". */
+  act?: ReviewAct | undefined;
+  userId: string;
+  /** ux: a note typed for an approve that was refused, put back for the retry when the field is empty. */
+  keptNote?: string | null | undefined;
 }>();
 const emit = defineEmits<{ submit: [acks: Acknowledgement[], note?: string]; close: [] }>();
 /** U36: resubmitting a sent-back draft prefills the previous reasons. */
@@ -124,6 +130,7 @@ function prefill() {
 }
 function open() {
   error.value = null;
+  if (props.keptNote && !note.value) note.value = props.keptNote;
   if (again.value) prefill();
   sheet.value?.open();
 }
@@ -153,12 +160,28 @@ const refusalOpen = computed(() => {
   const day = open?.day ?? props.day ?? null;
   return open && day ? { label: open.label, to: planOfDayRoute(day, open.planId) } : null;
 });
-const errorText = computed(() => {
+/** U97: a 422 on the note shows the server's words under the note, not in the callout. */
+const message: Reader<string> = (value, path) =>
+  Array.isArray(value)
+    ? value.map((v, i) => d.string(v, `${path}[${i}]`)).join(" ")
+    : d.string(value, path);
+const noteDetails = d.object({ decision_note: d.optional(message), note: d.optional(message) });
+const serverNoteError = computed(() => {
+  const x = error.value?.kind === "invalid" ? detailsOf(error.value, noteDetails) : null;
+  return x?.decision_note ?? x?.note ?? null;
+});
+/** U97: approve's own refusals (a code it doesn't know goes to Technical details); U36 otherwise. */
+const refusal = computed((): Readonly<{ text: string; code: string | null }> | null => {
   const e = error.value;
-  if (!e) return null;
+  if (!e || serverNoteError.value) return null;
+  const who = { version: props.plan.version, userId: props.userId, day: props.day ?? "" };
+  if (props.act === "approve") return approveRefusal(e, who);
   if (e.kind === "conflict" && isError(e, "plan_changed"))
-    return "The plan changed since you opened this. Close it and review again.";
-  return planErrorText(e);
+    return {
+      text: "The plan changed since you opened this. Close it and review again.",
+      code: null,
+    };
+  return { text: submitRefusalText(e, who), code: null };
 });
 /** U26/ux #13: passes on a degraded station, listed so booking them is an informed choice. */
 const atRisk = computed(() => {
@@ -255,7 +278,7 @@ defineExpose({ open, close });
       label="Note for the record (optional)"
       :hint="noteHint"
       :maxlength="NOTE_MAX"
-      :error="noteError"
+      :error="noteError ?? serverNoteError"
     />
     <ApCallout v-if="atRisk.length > 0" tone="caution">
       <span class="flex flex-col gap-1">
@@ -268,9 +291,13 @@ defineExpose({ open, close });
         }}</span>
       </span>
     </ApCallout>
-    <ApCallout v-if="errorText" tone="caution">
+    <ApCallout v-if="refusal" tone="caution">
       <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span>{{ errorText }}</span>
+        <span>{{ refusal.text }}</span>
+        <details v-if="refusal.code" class="mt-1 basis-full text-xs text-text-3">
+          <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
+          <p class="m-0 font-mono">{{ refusal.code }}</p>
+        </details>
         <ApButton
           v-if="refusalOpen"
           variant="ghost"

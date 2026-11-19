@@ -13,6 +13,12 @@ defmodule Cadence.Control.PlanResubmission do
   Every submit is a round (`ContactPlanning.PlanSubmissions`): actor, an optional note for the
   reviewer, whether the version's selection is unchanged from the previous version, and the
   author's gap acknowledgements.
+
+  #257 (director 11-19): submit only submits. A plan already pending approval is refused
+  (`{:contact_plan_already_submitted, details}`), never passed through; approving is its own
+  action. The console's operation id is checked after the plan row lock and recorded with the
+  answer in the same transaction (`ContactPlanning.PlanOperations`): the same request again gets
+  `{:replayed, answer}`.
   """
 
   alias Cadence.Auth.Scope
@@ -21,6 +27,7 @@ defmodule Cadence.Control.PlanResubmission do
     ContactPlan,
     ContactPlanApprovals,
     ContactPlans,
+    PlanOperations,
     PlanSubmissions,
     PlanUpdates
   }
@@ -32,39 +39,116 @@ defmodule Cadence.Control.PlanResubmission do
   @default_reason "Submitted from the console contact plan"
 
   @doc """
-  Locks the plan and submits it (cutting a new version first when it was sent back);
-  `check.(version)` runs before the submit (station availability). Returns the submitted plan
-  and version. A plan already pending approval passes through unchanged (an approver deciding
-  it); other states can't be submitted.
+  Locks the plan and submits a draft (cutting a new version first when it was sent back);
+  `check.(version)` runs before the submit (station availability). `params.operation_id` is the
+  console's operation id. Returns `{:ok, {:submitted, answer}}` or, for the same request again,
+  `{:ok, {:replayed, answer}}`, where `answer` is `{200, body}` and the body names the version
+  put up for approval. A plan already pending approval is refused with who sent it and when;
+  other states can't be submitted.
   """
   @spec submit(Scope.t(), binary(), binary(), map(), (struct() -> :ok | {:error, term()})) ::
-          {:ok, ContactPlan.t(), struct()} | {:error, term()}
+          {:ok, {:submitted | :replayed, PlanOperations.answer()}} | {:error, term()}
   def submit(%Scope{} = scope, mission_id, plan_id, params, check) do
     Repo.transaction(fn ->
       with {:ok, plan, version} <-
              ContactPlans.fetch_locked(scope.organization_id, mission_id, plan_id),
+           :new <- operation(scope, mission_id, plan_id, params),
+           :ok <- not_pending(scope.organization_id, mission_id, plan, version),
            :ok <- expected(version.version, params[:expected_version]),
-           submitting? = plan.lifecycle_state == :draft,
            {:ok, plan, version} <- cut_if_sent_back(scope, mission_id, plan, version),
            :ok <- check.(version),
            {:ok, plan} <- submit_draft(scope, mission_id, plan, version, params),
-           {:ok, _round} <- record(submitting?, scope, mission_id, plan, version, params) do
-        {plan, version}
+           {:ok, _round} <- record(scope, mission_id, plan, version, params),
+           answer = {200, body(plan, version)},
+           :ok <-
+             PlanOperations.record(operation_attrs(scope, mission_id, plan_id, params), answer) do
+        {:submitted, answer}
       else
+        {:replay, answer} -> {:replayed, answer}
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
     |> case do
-      {:ok, {plan, version}} ->
+      {:ok, {:submitted, _answer} = result} ->
         # After the commit (domain review): publishes from inside the transaction are delayed,
         # but a slow commit could outlast that, and a rolled-back submit shouldn't be announced.
         PlanUpdates.changed(scope.organization_id, mission_id)
-        {:ok, plan, version}
+        {:ok, result}
+
+      {:ok, {:replayed, _answer} = result} ->
+        {:ok, result}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
+
+  defp operation(scope, mission_id, plan_id, params) do
+    with {:ok, actor_id} <- PlanOperations.actor_id(scope) do
+      case PlanOperations.check(
+             scope.organization_id,
+             mission_id,
+             params.operation_id,
+             plan_id,
+             :submit,
+             actor_id,
+             params
+           ) do
+        :new -> :new
+        {:replay, answer} -> {:replay, answer}
+        :duplicate_operation -> {:error, :duplicate_operation}
+        :operation_conflict -> {:error, :operation_already_claimed}
+      end
+    end
+  end
+
+  # Reached only after operation/4 accepted the actor, so actor_id/1 is {:ok, id} here.
+  defp operation_attrs(scope, mission_id, plan_id, params) do
+    {:ok, actor_id} = PlanOperations.actor_id(scope)
+
+    %{
+      organization_id: scope.organization_id,
+      mission_id: mission_id,
+      operation_id: params.operation_id,
+      contact_plan_id: plan_id,
+      action: :submit,
+      actor_id: actor_id,
+      request: params
+    }
+  end
+
+  defp body(plan, version),
+    do: %{
+      "plan_id" => plan.contact_plan_id,
+      "version" => version.version,
+      "state" => "pending_approval",
+      "outcome" => "pending_approval"
+    }
+
+  # #257: a plan already waiting for approval is refused, with who sent it and when (both or
+  # neither, U29), from its latest round.
+  defp not_pending(
+         organization_id,
+         mission_id,
+         %ContactPlan{lifecycle_state: :pending_approval} = plan,
+         version
+       ) do
+    details =
+      organization_id
+      |> PlanSubmissions.list(mission_id, plan.contact_plan_id)
+      |> Enum.find(&(&1.contact_plan_version == version.version))
+      |> case do
+        %{actor_document: %{"id" => id} = actor, submitted_at: at} ->
+          %{submitted_by: %{id: id, name: actor["name"]}, submitted_at: at}
+
+        _none ->
+          %{submitted_by: nil, submitted_at: nil}
+      end
+
+    {:error, {:contact_plan_already_submitted, details}}
+  end
+
+  defp not_pending(_organization_id, _mission_id, _plan, _version), do: :ok
 
   defp cut_if_sent_back(scope, mission_id, %ContactPlan{lifecycle_state: :draft} = plan, version) do
     if sent_back?(scope.organization_id, mission_id, plan.contact_plan_id, version.version) do
@@ -96,21 +180,10 @@ defmodule Cadence.Control.PlanResubmission do
            reason(params[:note] || params[:reason])
          )
 
-  defp submit_draft(
-         _scope,
-         _mission_id,
-         %ContactPlan{lifecycle_state: :pending_approval} = plan,
-         _version,
-         _params
-       ),
-       do: {:ok, plan}
-
   defp submit_draft(_scope, _mission_id, _plan, _version, _params),
     do: {:error, :contact_plan_not_submittable}
 
-  defp record(false, _scope, _mission_id, _plan, _version, _params), do: {:ok, nil}
-
-  defp record(true, scope, mission_id, plan, version, params) do
+  defp record(scope, mission_id, plan, version, params) do
     PlanSubmissions.record(%{
       organization_id: scope.organization_id,
       mission_id: mission_id,

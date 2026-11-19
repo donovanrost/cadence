@@ -4,13 +4,23 @@ import { coverage, spacecraftNotCovered } from "./coverage.ts";
 import { isStationConflict } from "./unavailable.ts";
 import { unconfirmedTail } from "./unconfirmed.ts";
 import { byAuthor, type PlanDetail } from "./api.ts";
+import type { ReviewAct } from "./review-run.ts";
+import { DIRECT_NOTE, selfReason, type Because } from "./review-words.ts";
 
 /**
  * The one primary per plan state (ScheduleFlow "K1 plan states"): a sheet, an execute call, a
  * link, a disabled action with its reason, or nothing.
  */
 export type PlanPrimary =
-  | { kind: "sheet"; label: string; title: string; confirm: string }
+  /** #257: `act` is what the sheet does; `note` is a muted line under the button (U97). */
+  | {
+      kind: "sheet";
+      act: ReviewAct;
+      label: string;
+      title: string;
+      confirm: string;
+      note: string | null;
+    }
   | { kind: "execute"; label: string }
   | { kind: "link"; label: string; to: RouteLocationRaw }
   | { kind: "redraft"; label: string }
@@ -20,12 +30,18 @@ export type PlanPrimary =
 /**
  * `openRepairRun`: the run of an open K2 proposal repairing this plan (U28), which the re-plan
  * link opens. `requestsLeft`: from `bookingStopped` on an interrupted plan; 0 = nothing left to
- * send, so no Continue booking (ux 1a906155).
+ * send, so no Continue booking (ux 1a906155). `userId`: the viewer, for the submitter's own plan
+ * (U97). `refusedBecause`: a self-approval refusal on this version disables Approve (A6).
  */
 export function planPrimary(
   plan: PlanDetail,
   isAdmin: boolean,
-  options: Readonly<{ openRepairRun?: string | null; requestsLeft?: number | null }> = {},
+  options: Readonly<{
+    openRepairRun?: string | null;
+    requestsLeft?: number | null;
+    userId?: string | null;
+    refusedBecause?: Because | null;
+  }> = {},
 ): PlanPrimary {
   const openRepairRun = options.openRepairRun ?? null;
   const n = plan.counts.passes;
@@ -51,32 +67,56 @@ export function planPrimary(
       if (n === 0) return { kind: "blocked", label: "Submit", reason: "The draft has no passes." };
       // U36: a sent-back draft is submitted again as is (the server cuts the next version).
       const again = plan.approval?.decision === "rejected";
-      const label = isAdmin
-        ? gaps > 0
-          ? `Accept ${plural(gaps, "gap")} and submit${again ? " again" : ""}`
-          : `Submit${again ? " again" : ""} and book ${plural(n, "pass", "passes")}`
-        : gaps > 0
+      // #257 (U97): under "Applies without approval" an org admin's one act submits, then approves.
+      if (isAdmin && plan.approval_setting === "direct")
+        return {
+          kind: "sheet",
+          act: "submit_approve",
+          label:
+            gaps > 0
+              ? `Accept ${plural(gaps, "gap")}, approve and book`
+              : `Approve and book ${plural(n, "pass", "passes")}`,
+          title: sheetTitle(true, false),
+          confirm: `This sends R${plan.version} and approves it, and booking starts for its ${plural(n, "pass", "passes")}.`,
+          note: DIRECT_NOTE,
+        };
+      const label =
+        gaps > 0
           ? `Accept ${plural(gaps, "gap")} and ${again ? "submit again" : "request approval"}`
           : again
             ? "Submit again"
             : "Request approval";
-      const confirm = isAdmin
-        ? `This approves the plan and books ${n} passes with the providers.`
-        : "An organization admin reviews it before anything is booked.";
-      return { kind: "sheet", label, title: sheetTitle(isAdmin, again), confirm };
+      return {
+        kind: "sheet",
+        act: "submit",
+        label,
+        title: sheetTitle(false, again),
+        confirm: "An organization admin reviews it before anything is booked.",
+        note: null,
+      };
     }
-    case "pending_approval":
-      return isAdmin
-        ? {
-            kind: "sheet",
-            label:
-              gaps > 0
-                ? `Accept ${plural(gaps, "gap")}, approve and book`
-                : `Approve and book ${plural(n, "pass", "passes")}`,
-            title: sheetTitle(true, false),
-            confirm: `This approves the plan and books ${n} passes with the providers.`,
-          }
-        : { kind: "none", note: "Waiting for an organization admin to approve." };
+    case "pending_approval": {
+      if (!isAdmin) return { kind: "none", note: "Waiting for an organization admin to approve." };
+      const label =
+        gaps > 0
+          ? `Accept ${plural(gaps, "gap")}, approve and book`
+          : `Approve and book ${plural(n, "pass", "passes")}`;
+      if (options.refusedBecause)
+        return { kind: "blocked", label, reason: selfReason(options.refusedBecause) };
+      // U97: under "Needs a second person's approval" the submitter gets no Approve (the 403 stays
+      // the backstop); under "direct" they may approve their own plan.
+      const submitter = plan.submission?.actor.id ?? null;
+      if (plan.approval_setting === "independent" && submitter && submitter === options.userId)
+        return { kind: "none", note: selfReason("submitted") };
+      return {
+        kind: "sheet",
+        act: "approve",
+        label,
+        title: sheetTitle(true, false),
+        confirm: `This approves the plan and books ${plural(n, "pass", "passes")} with the providers.`,
+        note: null,
+      };
+    }
     case "approved":
       return { kind: "execute", label: `Book ${plural(n, "pass", "passes")}` };
     case "unconfirmed":

@@ -156,8 +156,9 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
              }
            } = detail
 
-    # A stale second click (still expecting v1) is refused and cuts no v3.
-    assert %{"error" => %{"code" => "plan_changed"}} =
+    # A stale second click (still expecting v1) is refused and cuts no v3: the plan is already
+    # waiting for approval (#257: never a silent 200).
+    assert %{"error" => %{"code" => "plan_already_submitted"}} =
              submit.(1, "op-3", %{}) |> json_response(409)
 
     assert %{"version" => 2, "latest_version" => 2} =

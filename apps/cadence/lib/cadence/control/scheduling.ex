@@ -18,14 +18,13 @@ defmodule Cadence.Control.Scheduling do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Contacts.SingleBookings
   alias Cadence.Control.Contacts, as: ControlContacts
-  alias Cadence.Control.PlanResubmission
+  alias Cadence.Control.{PlanApproval, PlanResubmission}
   alias Cadence.Management.Contacts, as: ManagementContacts
 
   alias Cadence.ContactPlanning.{
     ContactPlan,
     ContactPlanApprovals,
     ContactPlanExecutions,
-    ContactPlans,
     FleetPlanner,
     FleetPlanningRun,
     FleetPlanningRuns,
@@ -101,45 +100,51 @@ defmodule Cadence.Control.Scheduling do
   end
 
   @doc """
-  S5 "Submit N requests" (DECISIONS #27/#28). For an organization admin:
-  submit (when draft) + approve with acknowledged exceptions, then
-  `{:ok, {:execute, version, content_sha256}}`; the caller runs
-  `execute_plan/5` off the request. For a member: submit only →
-  `{:ok, :pending_approval}`. A replayed `operation_id` → `{:ok, :replayed}`.
-
-  Params: `expected_version`, `reason`, `acknowledgements` (`[%{requirement_id, reason}]`).
+  S5 submit (DECISIONS #27/#28; #257, director 11-19: submit only submits, for members and
+  admins alike under either approval setting). `params`: `expected_version`, `note`,
+  `acknowledgements` (`[%{requirement_id, reason}]`); `operation_id` is the console's operation
+  id. `{:ok, {:submitted, answer}}`, or `{:ok, {:replayed, answer}}` for the same request again;
+  `answer` is `{200, body}`. Approving is `approve_plan/4`.
   """
   @spec submit_plan(Scope.t(), binary(), binary(), binary(), map()) ::
-          {:ok, :pending_approval | :replayed | {:execute, pos_integer(), binary()}}
-          | {:error, term()}
+          {:ok, {:submitted | :replayed, {pos_integer(), map()}}} | {:error, term()}
   def submit_plan(%Scope{} = scope, mission_id, plan_id, operation_id, params) do
     org = scope.organization_id
 
-    case ContactPlans.plan_id_for_operation(org, mission_id, operation_id) do
-      ^plan_id ->
-        {:ok, :replayed}
+    # U36: lock, operation check, expected version, cut-if-sent-back, submit, round and operation
+    # record are one transaction (PlanResubmission).
+    PlanResubmission.submit(
+      scope,
+      mission_id,
+      plan_id,
+      Map.put(params, :operation_id, operation_id),
+      &stations_available(org, mission_id, plan_id, &1)
+    )
+  end
 
-      nil ->
-        # U36: lock, expected version, cut-if-sent-back, submit and round record are one
-        # transaction (PlanResubmission); approval and execution follow it.
-        with {:ok, plan, version} <-
-               PlanResubmission.submit(
-                 scope,
-                 mission_id,
-                 plan_id,
-                 params,
-                 &stations_available(org, mission_id, plan_id, &1)
-               ),
-             {:ok, outcome} <- decide(scope, mission_id, plan, version, params),
-             :ok <- ContactPlans.claim_operation(org, mission_id, plan_id, operation_id) do
-          # Claimed only after the action succeeded, so a failed attempt can be retried
-          # with the same operation_id; concurrent duplicates lose on expected_version.
-          {:ok, outcome}
-        end
+  @doc "#257: an approver's explicit approval of a pending plan. See `PlanApproval.approve/4`."
+  defdelegate approve_plan(scope, mission_id, plan_id, params), to: PlanApproval, as: :approve
 
-      _other_plan ->
-        {:error, :operation_already_claimed}
-    end
+  @doc """
+  #257: the mission's approval setting as the console offers it: `"independent"` (a second
+  person approves; ActivationPolicy's separation of duties) or `"direct"`.
+  """
+  @spec approval_setting(binary(), binary()) :: binary()
+  def approval_setting(organization_id, mission_id) do
+    if ContactPlanApprovals.separation_required?(%{
+         organization_id: organization_id,
+         mission_id: mission_id
+       }),
+       do: "independent",
+       else: "direct"
+  end
+
+  @doc "#257: the plan's latest decision (approval or send back), or nil."
+  @spec latest_decision(binary(), binary(), binary()) :: map() | nil
+  def latest_decision(organization_id, mission_id, plan_id) do
+    organization_id
+    |> ContactPlanApprovals.list(mission_id, plan_id)
+    |> Enum.max_by(&DateTime.to_unix(&1.decided_at, :microsecond), fn -> nil end)
   end
 
   # U26: a selected pass at a station that is down or in maintenance blocks submit (degraded
@@ -258,39 +263,8 @@ defmodule Cadence.Control.Scheduling do
       Policy.authorize(scope, :approve_contact_plans, %{organization_id: scope.organization_id}) ==
         :ok
 
-  # An approver's Submit also approves, but only under 'direct' approval. Under 'independent' a
-  # second person approves (director 11-15), so it waits like a member's.
-  defp decide(scope, mission_id, plan, version, params) do
-    if approver?(scope, mission_id) and
-         not ContactPlanApprovals.separation_required?(%{
-           organization_id: scope.organization_id,
-           mission_id: mission_id
-         }),
-       do: approve(scope, mission_id, plan, version, params),
-       else: {:ok, :pending_approval}
-  end
-
-  defp approve(scope, mission_id, plan, version, params) do
-    with {:ok, _approved} <-
-           ControlContacts.approve_and_accept_plan(
-             scope,
-             mission_id,
-             plan.contact_plan_id,
-             version.version,
-             version.content_sha256,
-             reason(params[:decision_note] || params[:reason]),
-             acknowledged_exceptions: params[:acknowledgements]
-           ) do
-      {:ok, {:execute, version.version, version.content_sha256}}
-    end
-  end
-
   defp expected(version, version), do: :ok
   defp expected(_current, _expected), do: {:error, :contact_plan_version_changed}
-
-  # U76: the approver's note for the record, or none (recorded as NULL); never a canned text.
-  defp reason(reason) when is_binary(reason) and byte_size(reason) > 0, do: reason
-  defp reason(_reason), do: nil
 
   defp execution_key(organization_id, mission_id, plan_id),
     do: ContactPlanExecutions.execution_key(organization_id, mission_id, plan_id)

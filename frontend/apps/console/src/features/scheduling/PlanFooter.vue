@@ -4,6 +4,7 @@ import { ApButton, ApStatStrip, ApStatTile } from "@/ui";
 import type { PlanDetail } from "./api.ts";
 import { isBooking, rejectedRows } from "./booking-state.ts";
 import { planPrimary } from "./plan-primary.ts";
+import type { Because } from "./review-words.ts";
 
 /**
  * K1 footer: totals + the one primary for the plan's state (plan-primary.ts). Conflicts include the
@@ -25,12 +26,17 @@ const props = defineProps<{
   canSendBack?: boolean | undefined;
   /** U73: an older version (`?version=N`) shows its totals but no actions. */
   readOnly?: boolean | undefined;
+  /** U97 (#257): the viewer (the submitter's own plan) and a self-approval refusal on this version. */
+  userId?: string | null | undefined;
+  refusedBecause?: Because | null | undefined;
 }>();
 defineEmits<{ sheet: []; execute: []; redraft: []; sendBack: [] }>();
 const primary = computed(() =>
   planPrimary(props.plan, props.isAdmin, {
     openRepairRun: props.openRepairRun ?? null,
     requestsLeft: props.requestsLeft ?? null,
+    userId: props.userId ?? null,
+    refusedBecause: props.refusedBecause ?? null,
   }),
 );
 const conflicts = computed(() => props.plan.conflicts.length);
@@ -67,9 +73,7 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
         <ApButton variant="primary" size="commit" :disabled="busy" @click="$emit('sheet')">{{
           sheetLabel ?? primary.label
         }}</ApButton>
-        <ApButton v-if="canSendBack" variant="ghost" :disabled="busy" @click="$emit('sendBack')"
-          >Send back…</ApButton
-        >
+        <p v-if="primary.note" class="m-0 max-w-[320px] text-sm text-text-3">{{ primary.note }}</p>
       </template>
       <ApButton
         v-else-if="primary.kind === 'execute'"
@@ -103,6 +107,10 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
       <p v-else-if="primary.note" class="m-0 max-w-[320px] text-md text-text-3">
         {{ primary.note }}
       </p>
+      <!-- U97: Send back stays when Approve is hidden (the submitter) or disabled (a self refusal). -->
+      <ApButton v-if="canSendBack" variant="ghost" :disabled="busy" @click="$emit('sendBack')"
+        >Send back…</ApButton
+      >
     </div>
   </footer>
 </template>
