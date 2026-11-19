@@ -151,6 +151,42 @@ describe("Setup › Spacecraft › Routing (U79)", () => {
     w.unmount();
   });
 
+  it("a conversion_in_progress refusal on Remove… keeps its Open change set link (#413)", async () => {
+    const { w, router } = await render();
+    vi.stubGlobal("fetch", (url: string) =>
+      Promise.resolve(
+        url.endsWith("/stage")
+          ? new Response(
+              JSON.stringify({
+                error: {
+                  code: "conversion_in_progress",
+                  message: "A conversion batch is staged.",
+                  details: { change_set_id: "cs-9", batch: 3 },
+                },
+              }),
+              { status: 409 },
+            )
+          : new Response(JSON.stringify({ data: {} })),
+      ),
+    );
+    await w
+      .findAll("button")
+      .find((b) => b.text() === "Remove…")
+      ?.trigger("click");
+    await flushPromises();
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "Stage removal")
+      ?.click();
+    await flushPromises();
+    expect(document.body.textContent).toContain("Batch 3 of the route conversion is staged");
+    const open = [...document.querySelectorAll("a")].find(
+      (a) => a.textContent?.trim() === "Open change set",
+    );
+    expect(open?.getAttribute("href")).toBe("/changes");
+    expect(router.currentRoute.value.name).toBe("setup.spacecraft.one");
+    w.unmount();
+  });
+
   it("shows tags but no Add, Edit, Remove… or reason to someone who can't stage", async () => {
     const { w } = await render(false);
     expect(w.text()).toContain("This spacecraft only");

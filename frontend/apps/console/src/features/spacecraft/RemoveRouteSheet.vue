@@ -2,7 +2,12 @@
 import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
+import {
+  failureOutcome,
+  refreshConfigState,
+  stageChange,
+  type FailureOutcome,
+} from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApSheet } from "@/ui";
 import { removeRouteOp, routeChangeSummary } from "./routes.ts";
 
@@ -12,11 +17,14 @@ const router = useRouter();
 const sheet = ref<InstanceType<typeof ApSheet> | null>(null);
 const target = ref<Readonly<{ routeId: string; name: string; station: string }> | null>(null);
 const failure = ref<string | null>(null);
+/** #413: a refusal's way out (U79 conversion_in_progress: Open change set), beside its words. */
+const failureLink = ref<FailureOutcome["link"] | null>(null);
 const busy = ref(false);
 
 function open(route: Readonly<{ routeId: string; name: string; station: string }>) {
   target.value = route;
   failure.value = null;
+  failureLink.value = null;
   sheet.value?.open();
 }
 async function stage() {
@@ -29,7 +37,12 @@ async function stage() {
       source: { surface: "spacecraft" },
       ops: [removeRouteOp(route.routeId)],
     });
-    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged").sentence);
+    if (!r.ok) {
+      const outcome = failureOutcome(r.error, "staged");
+      failure.value = outcome.sentence;
+      failureLink.value = outcome.link ?? null;
+      return;
+    }
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {
@@ -45,7 +58,12 @@ defineExpose({ open });
       {{ spacecraftName }} stops using this route when the change set is applied. Booked and running
       contacts keep the routes they were booked with.
     </p>
-    <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+    <ApCallout v-if="failure" tone="crit"
+      >{{ failure }}
+      <template v-if="failureLink" #action>
+        <ApButton size="compact" :to="failureLink.to">{{ failureLink.label }}</ApButton>
+      </template>
+    </ApCallout>
     <template #footer>
       <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
       <ApButton variant="danger" :disabled="busy" disabled-reason="Staging…" @click="stage"
