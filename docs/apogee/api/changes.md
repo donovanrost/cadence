@@ -53,9 +53,9 @@ organization's service. `kind` stays, but the id isn't sent either. An active me
 display name, or the organization's own unnamed service, keeps its `id` with `name: null`, so the
 console still knows its own changes.
 
-Records written before #471 stored `display_name || email`. That stored name is never sent, so
-an old record by someone who has left, or who never had a display name, reads `id: null,
-name: null`.
+Records written before #471 stored `display_name || email`. That stored name is never sent: an
+old record by someone who has left reads `id: null, name: null`, and one by an active member
+with no display name reads their `id` with `name: null`.
 
 ## Errors
 
