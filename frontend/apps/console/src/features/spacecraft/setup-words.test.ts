@@ -57,6 +57,8 @@ describe("Setup words, part 1 (#308; mms-ux's table b–d)", () => {
     const d = { severity: "warning" as const, code: "W1", message: "skipped", path: null };
     const w = mount(DiagnosticsPanel, { props: { diagnostics: [d, d], index: "C4" } });
     expect(w.text()).toContain("2 findings → 1 line");
+    const one = mount(DiagnosticsPanel, { props: { diagnostics: [d], index: "C4" } });
+    expect(one.text()).toContain("1 finding → 1 line");
   });
 
   it("(d) a kind sent as text reads its word; an unknown one reads 'Change'", () => {
