@@ -28,8 +28,41 @@ defmodule CadenceWeb.Console.SettingsController do
            expected
          ) do
       {:ok, result} -> conn |> put_status(:created) |> json(%{data: ConfigJSON.encode(result)})
-      {:error, reason} -> error(conn, reason)
+      {:error, reason} -> save_error(conn, key, reason)
     end
+  end
+
+  # #233 (ux U96): who may change the approval setting, in words chosen by the level saved.
+  defp save_error(conn, _key, :approval_policy_change_requires_organization_admin),
+    do: refuse(conn, :approval_policy_change_requires_organization_admin, approval_words(conn))
+
+  # A mission admin saving the organization's approval setting (its scope is its mission's).
+  defp save_error(conn, "cadence.governance", reason)
+       when reason in [:forbidden, :scope_mismatch] do
+    if mission_id(conn),
+      do: error(conn, reason),
+      else: refuse(conn, :forbidden, approval_words(conn))
+  end
+
+  defp save_error(conn, _key, reason), do: error(conn, reason)
+
+  defp approval_words(conn) do
+    case conn.assigns[:current_mission] do
+      %{mission_id: _id, display_name: name} ->
+        "Not saved: only an organization admin can let changes on #{name} apply without approval."
+
+      _organization ->
+        "Not saved: only an organization admin can change the organization's approval setting."
+    end
+  end
+
+  defp refuse(conn, reason, message) do
+    {status, code, _default} = Problem.describe(reason)
+
+    conn
+    |> put_status(status)
+    |> json(Problem.body(code, message, nil))
+    |> halt()
   end
 
   defp error(conn, {:invalid_params, details}),

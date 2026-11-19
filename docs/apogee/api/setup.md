@@ -804,7 +804,19 @@ first.
 - Actions are server-made sentences.
 - Settings entries: `{kind: "config", action: "Changed <Section> settings", target: {kind:
   "settings", id: <section key>, label}}`, with " (organization default)" and `mission: null` for
-  the organization's own. Settings history carries only the actor's name, so `actor` is `{kind:
+  the organization's own.
+- An approval setting change (#233; ux U96) says which way it went, and adds `change: {before,
+  after}` with raw values: on a mission `{approval_requirement, override: bool}` (the effective
+  value, and whether the mission set its own); for the organization `{approval_requirement,
+  allow_override}`. Sentences: "Loosened approval on EARENDIL: Needs a second person's approval →
+  Applies without approval" / "Tightened approval on EARENDIL: …" (plus " (the organization's
+  setting)" when the mission hands back to it); only the override changed: "EARENDIL now uses
+  the organization's approval setting (…); what applies doesn't change." / "EARENDIL now sets its
+  own approval setting (…); what applies doesn't change."; organization: "Loosened approval
+  (organization default): …" / "Tightened …", and "Missions may now set their own approval
+  setting." / "Missions can no longer set their own approval setting." (both in one save: two
+  sentences, the value first). A change saved before #233 has no `change` and keeps "Changed
+  Governance settings". Settings history carries only the actor's name, so `actor` is `{kind:
   "user", id: null, name}` and `actor_id` doesn't find a person's settings changes. The log holds
   each section's 10 most recent changes per scope, for the Governance, Commanding, Configuration
   and Pass review sections.
@@ -1112,6 +1124,22 @@ inherited_value}], locked, version: {version, at, actor: {name}} | null}], permi
   organization doesn't allow an override: the fields then read the organization's values, all
   `"organization"`, whatever the mission stored.
 - `version` is per section: there's no single settings version (`null` before the first save).
+- **Who may change the approval setting (#233, user ruling 11-18).** In `cadence.governance`,
+  `approval_requirement` (and `allow_override` at organization level) carry `allowed_values`:
+  the values THIS viewer may save (the enum's own values; `true`/`false` for `allow_override`),
+  `[]` when none. At mission level they also carry `can_inherit`: whether the viewer may clear
+  the mission's own value (send `null`). Other fields carry neither key, which means no
+  field-level limit.
+
+  | Viewer | Organization level | Mission level |
+  |---|---|---|
+  | Organization admin (or a platform admin in admin mode) | both values; `allow_override` both | both values; `can_inherit: true` |
+  | Mission admin (its own mission) | `[]` (a mission scope can't save there) | `["independent"]` (tighten, or pin an inherited `independent` so the mission stays strict if the organization loosens; ux), `[]` once the mission sets its own `independent`; never `direct`, even while it's in effect (pinning it loosens in advance; lead); `can_inherit` only when the organization's value isn't looser |
+  | Operator | `[]` | `[]`; `can_inherit: false` |
+  | Anyone, while the organization doesn't allow an override (`locked`) | as above | `[]`; `can_inherit: false` (an organization admin changes the organization's value) |
+
+  A mission admin is a service identity's capability today; people are organization admins or
+  members.
 
 `PUT …/settings/:section_key` with `{values: {path: value | null}, expected_version}` saves
 directly and returns `201 {version, state: "active"}`. `expected_version` is the section's
@@ -1130,6 +1158,19 @@ settings_enforced_by_organization`, `404 settings_section_not_found`, `403 forbi
 `422 settings_write_unconfirmed` / `422 settings_unavailable` when the section's owner fails or
 can't be read (retry). Edit needs `settings.edit` (any mission operator
 today, from the enforcing check).
+
+The approval setting adds two 403s (#233; ux U96 words, by the level saved). A refused change
+writes nothing:
+- `403 approval_policy_change_requires_organization_admin`: loosening a mission's setting ("Not
+  saved: only an organization admin can let changes on EARENDIL apply without approval."), or
+  any change to the organization's ("Not saved: only an organization admin can change the
+  organization's approval setting."). A non-admin's save to the organization's governance
+  section answers that second line too, with code `forbidden`.
+- `403 approval_policy_change_requires_mission_admin`: an operator's tightening or no-change save
+  ("Not saved: only a mission admin or an organization admin can change approval settings.").
+- While the organization doesn't allow an override, every mission save, an organization admin's
+  included, is `409 settings_enforced_by_organization`. A stale version is refused first
+  (`409 version_conflict`).
 
 ### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
 

@@ -24,6 +24,11 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
     membership = TestFixtures.grant_membership!(requester, org)
     TestFixtures.grant_membership!(reviewer, org)
     scope = Scope.new(%{user: requester, organization_membership: membership})
+    # #233: only an organization admin may loosen a mission's approval setting or change the
+    # organization's, so a third person (never the requester or the reviewer) saves those.
+    admin = TestFixtures.persist_user!(display_name: "Ana Ortiz")
+    admin_membership = TestFixtures.grant_membership!(admin, org, role: :organization_admin)
+    admin_scope = Scope.new(%{user: admin, organization_membership: admin_membership})
     revision = Fixtures.persist_imported_revision!(org.organization_id, mission.mission_id)
 
     craft =
@@ -72,14 +77,20 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
     end
 
     # §11c(B) moved the mission settings page to the console too: the mission's settings are set
-    # through the domain API the console's Setup › Settings uses.
-    for {section, values} <- [
-          {"cadence.governance", %{"approval_requirement" => "direct"}},
-          {"commanding.defaults", %{"shelf" => "minimized"}}
+    # through the domain API the console's Setup › Settings uses. The requester, an ordinary
+    # member, can't loosen the approval setting (#233); the organization admin does.
+    direct = %{"approval_requirement" => "direct"}
+
+    assert {:error, :approval_policy_change_requires_organization_admin} =
+             ConsoleSettings.save(scope, mission.mission_id, "cadence.governance", direct, nil)
+
+    for {save_scope, section, values} <- [
+          {admin_scope, "cadence.governance", direct},
+          {scope, "commanding.defaults", %{"shelf" => "minimized"}}
         ] do
       assert {:ok, %{state: :active}} =
                ConsoleSettings.save(
-                 scope,
+                 save_scope,
                  mission.mission_id,
                  section,
                  values,
@@ -92,10 +103,11 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
     assert output =~ "SETTINGS_MISSION_PHASE_OK"
 
     # Then the organization requires independent approval with no mission override (§11c(A)
-    # moved the organization settings page to the console).
+    # moved the organization settings page to the console). The organization's approval setting
+    # is the organization admin's to change (#233).
     assert {:ok, %{state: :active}} =
              ConsoleSettings.save(
-               scope,
+               admin_scope,
                nil,
                "cadence.governance",
                %{"allow_override" => false},

@@ -115,33 +115,62 @@ defmodule Cadence.Platform.ScopedSettings do
 
   defp effective(_source, organization_value, _saved), do: organization_value
 
-  def save(organization_id, mission_id, section_id, default, expected_token, document, actor) do
+  @doc """
+  Saves a new revision of `section_id` for the organization (`mission_id` nil) or a mission, under
+  the section lock (exclusive). `opts`: `:check`, a function of the current snapshot that may
+  refuse the change (`:ok` or `{:error, reason}`), run under the lock after the token check, so it
+  sees exactly what the save replaces; `:audit`, a function of the current snapshot returning a map
+  stored with the revision as its `audit` (for example the before and after values).
+  """
+  def save(
+        organization_id,
+        mission_id,
+        section_id,
+        default,
+        expected_token,
+        document,
+        actor,
+        opts \\ []
+      ) do
     with_lock(organization_id, section_id, fn ->
       current = load(organization_id, mission_id, section_id, default)
+      check = Keyword.get(opts, :check, fn _current -> :ok end)
 
-      cond do
-        not is_binary(expected_token) or current.token != expected_token ->
-          {:error, :settings_changed}
-
-        not is_nil(mission_id) and not current.allow_override ->
-          {:error, :settings_enforced_by_organization}
-
-        true ->
-          Repo.insert(
-            RevisionRow.changeset(%{
-              revision_id: Ids.new("settings_revision"),
-              organization_id: organization_id,
-              scope_key: scope_key(mission_id),
-              section_id: section_id,
-              version: current.version + 1,
-              document: document,
-              actor_id: actor.id,
-              actor_name: actor.name
-            })
-          )
+      with :ok <- current_token(current, expected_token),
+           :ok <- overridable(current, mission_id),
+           :ok <- check.(current) do
+        insert_revision(organization_id, mission_id, section_id, current, document, actor, opts)
       end
     end)
     |> ScopedReadUpdates.publish_result(:settings_changed, organization_id, mission_id)
+  end
+
+  defp current_token(%{token: token}, token) when is_binary(token), do: :ok
+  defp current_token(_current, _expected_token), do: {:error, :settings_changed}
+
+  defp overridable(_current, nil), do: :ok
+  defp overridable(%{allow_override: true}, _mission_id), do: :ok
+  defp overridable(_current, _mission_id), do: {:error, :settings_enforced_by_organization}
+
+  defp insert_revision(organization_id, mission_id, section_id, current, document, actor, opts) do
+    document =
+      case Keyword.get(opts, :audit) do
+        nil -> document
+        audit -> Map.put(document, "audit", audit.(current))
+      end
+
+    Repo.insert(
+      RevisionRow.changeset(%{
+        revision_id: Ids.new("settings_revision"),
+        organization_id: organization_id,
+        scope_key: scope_key(mission_id),
+        section_id: section_id,
+        version: current.version + 1,
+        document: document,
+        actor_id: actor.id,
+        actor_name: actor.name
+      })
+    )
   end
 
   def history(organization_id, mission_id, section_id) do
@@ -160,7 +189,8 @@ defmodule Cadence.Platform.ScopedSettings do
         version: &1.version,
         actor: &1.actor_name,
         saved_at: DateTime.to_iso8601(&1.inserted_at),
-        migration: &1.document["migration"]
+        migration: &1.document["migration"],
+        audit: &1.document["audit"]
       }
     )
   end
@@ -193,11 +223,22 @@ defmodule Cadence.Platform.ScopedSettings do
     )
   end
 
+  # Sections whose saves carry a who-may-change rule of their own (#233: the approval setting is
+  # loosened only by an organization admin). This writer runs no such rule, so it refuses them.
+  # Named by id, not module: the platform layer doesn't depend on governance (a test keeps the
+  # id in step with ActivationPolicy.section_id/0).
+  @rule_guarded_sections ["cadence.governance"]
+
   @doc """
   Writes `document` as a mission override's next revision when its latest is still
   `expected_version` (the per-field migration, which has no section default or token at hand);
-  else `{:error, :settings_changed}`.
+  else `{:error, :settings_changed}`. A section whose saves carry a who-may-change rule (the
+  approval setting) is refused: `{:error, :section_not_rewritable}`.
   """
+  def rewrite_override(_organization_id, _mission_id, section_id, _expected, _document, _actor)
+      when section_id in @rule_guarded_sections,
+      do: {:error, :section_not_rewritable}
+
   def rewrite_override(organization_id, mission_id, section_id, expected_version, document, actor)
       when is_binary(mission_id) do
     key = scope_key(mission_id)
