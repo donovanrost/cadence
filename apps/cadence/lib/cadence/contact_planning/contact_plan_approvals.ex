@@ -249,14 +249,37 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
          _now,
          _opts
        ),
-       do: :ok
+       do: {:ok, nil}
 
   defp maybe_revalidate(:approved, version, requirements, selected, actor, now, opts) do
     with :ok <- proposal_satisfied(version, Keyword.get(opts, :acknowledged_exceptions)),
          :ok <- approval_mode(requirements, actor),
-         :ok <- unexpired(selected, now),
-         {:ok, current_policy} <- ContactPlans.policy_snapshot(requirements, selected) do
-      exact_policy(version.policy_snapshot_document, current_policy)
+         {:ok, expired} <- bookable(selected, now, opts),
+         {:ok, current_policy} <- ContactPlans.policy_snapshot(requirements, selected),
+         :ok <- exact_policy(version.policy_snapshot_document, current_policy) do
+      {:ok, expired}
+    end
+  end
+
+  # #273 (director's two conditions; one rule, `ExpiredPasses`, with the decision's one `now`,
+  # under the plan row lock): passes whose booking window closed are left out and recorded as
+  # skipped, instead of refusing the whole approval. Refused, recording nothing, when EVERY pass
+  # has closed (checked first), or when the closed set differs from the one the approver saw
+  # (`:expected_expired_digest`, the plan read's digest; absent means "saw none"), so nobody
+  # approves an exclusion they didn't see. Both refusals carry the current set for the console.
+  defp bookable(selected, now, opts) do
+    expired = ExpiredPasses.compute(selected, now)
+    seen = Keyword.get(opts, :expected_expired_digest) || ExpiredPasses.digest([])
+
+    cond do
+      selected != [] and length(expired.ids) == length(selected) ->
+        {:error, {:contact_plan_all_opportunities_expired, expired}}
+
+      seen != expired.digest ->
+        {:error, {:contact_plan_expired_passes_changed, expired}}
+
+      true ->
+        {:ok, expired}
     end
   end
 
@@ -274,7 +297,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
          version <- ContactPlanVersionRow.to_domain(version_row),
          {:ok, requirements} <- lock_current_requirements(version),
          selected <- selected_snapshots(plan_row, version),
-         :ok <-
+         {:ok, expired} <-
            maybe_revalidate(
              context.decision,
              version,
@@ -293,7 +316,12 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
              context.actor,
              context.now
            ),
-         approval <- %{approval | exceptions: exceptions(context.decision, version, context.opts)},
+         approval <- %{
+           approval
+           | exceptions: exceptions(context.decision, version, context.opts),
+             # #273, the director's condition 1: the record says exactly what was approved.
+             skipped: expired && expired.skipped
+         },
          {:ok, approval_row} <-
            approval
            |> ContactPlanApprovalRow.changeset()
@@ -430,12 +458,6 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
        ),
        do: :ok,
        else: {:error, :contact_plan_approval_policy_not_satisfied}
-  end
-
-  defp unexpired(snapshots, now) do
-    if Enum.all?(snapshots, &DateTime.after?(&1.expires_at, now)),
-      do: :ok,
-      else: {:error, :contact_plan_opportunity_expired}
   end
 
   defp exact_policy(policy, policy), do: :ok
