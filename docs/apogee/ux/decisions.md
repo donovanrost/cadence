@@ -3235,13 +3235,15 @@ are api's, switched on with `knownErrorCode`.
   and book N passes` (sheet title `Approve and book the plan`): the console calls submit, then approve with the
   version it saw, and both are recorded.
   - Confirm body: "This sends R41 and approves it, and booking starts for its 40 passes." Muted (`text-3`) line under
-    the button: "No second person's approval is needed, as this mission's setting allows. Sending and approving are
+    the footer's `Approve and book N passes` button (PlanFooter), not in the sheet: "No second person's approval is needed, as this mission's setting allows. Sending and approving are
     both recorded."
   - Re-plan's Apply the same: `Approve and apply the proposal`, confirm "This sends the proposal and approves it, and
     sends 12 booking requests." plus the muted line.
   - The submit is refused: the submit line below; nothing was sent or approved.
   - The submit lands and the approve is refused: "R41 was sent for approval, but not approved: <the approve refusal's
-    reason, without "Not approved:">. It's waiting for approval." Example: "R41 was sent for approval, but not
+    reason>. It's waiting for approval." The reason is the refusal's first sentence after "Not approved:", with
+    "R41" as "it" and without its ending (e.g. `forbidden`: "…not approved: only an org admin approves contact
+    plans."). Example: "R41 was sent for approval, but not
     approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval." The plan then
     opens awaiting approval with `Approve and book the plan` to try again; after a self-approval refusal (the setting
     changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead.
@@ -3261,7 +3263,8 @@ are api's, switched on with `knownErrorCode`.
   - 403 `forbidden`: "Not approved: only an org admin approves contact plans. Your approval wasn't recorded."
   - 409 `plan_not_pending` (`state`; `decided_by` and `decided_at` together or neither): "R41 was already approved by
     Ana R. at 03:46Z, so your approval wasn't recorded. Reload to see it." / "…already sent back by Ana R. at
-    03:46Z…". When the decider is the viewer: "You already approved R41 at 03:46Z. Reload to see it." No decider, or
+    03:46Z…". When the decider is the viewer: "You already approved R41 at 03:46Z. Reload to see it." / "You already sent back
+    R41 at 03:46Z. Reload to see it." No decider, or
     another state: "Not approved: R41 isn't waiting for approval any more, so your approval wasn't recorded. Reload to
     see it." Never an id for the name (U25).
   - 409 `plan_changed`: "Not approved: R41 changed after you opened it, so it isn't what you reviewed. Your approval
@@ -3281,6 +3284,12 @@ are api's, switched on with `knownErrorCode`.
   "Approved. Booking 40 passes." by its outcome). 409 `duplicate_operation` (the id with anything different): "Not
   sent: Cadence matched this to an earlier, different request, so nothing changed. Reload and try again."
   (`operation_conflict` keeps its line.)
-- **Up front (follow-up, not #257):** the submitter's Approve stays hidden by the existing check. A drafter under
-  "Needs a second person's approval" learns it only on press until the plan read says why, as #240 did for
-  Activations; then the A6 line shows before the press.
+- **With gaps:** the one act keeps today's pattern: `Accept 2 gaps, approve and book` on the plan, `Accept 2 gaps,
+  approve and apply` on Re-plan.
+- **The submitter, up front** (fe-ops' review: no such check existed on develop): under `independent`, the plan's
+  submitter (`submission.actor.id` is the viewer) gets no Approve, only the muted line "You submitted this plan, so
+  another org admin approves it."; Send back stays. Under `direct`, or an unknown setting, Approve shows (the
+  submitter may approve under `direct`) and the 403 stays the backstop.
+- **The drafter, up front (follow-up, not #257):** a drafter under `independent` learns it only on press until the
+  plan read says why, as #240 did for Activations; then "You drafted this version of the plan, so another org admin
+  approves it." shows before the press.
