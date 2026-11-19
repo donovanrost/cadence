@@ -24,7 +24,8 @@ defmodule Cadence.Catalog do
     Registry,
     Revision,
     RevisionRow,
-    Source
+    Source,
+    TelemetryBinding
   }
 
   alias Cadence.Jobs
@@ -34,6 +35,14 @@ defmodule Cadence.Catalog do
   alias Cadence.Platform.EventBus
 
   alias Cadence.Repo
+
+  @doc """
+  The binding rule id a packet observation of `spacecraft_id` carries, decoded by `producer_id`
+  under mission model revision `revision_id` (see `Cadence.Catalog.TelemetryBinding`).
+  Telemetry storage rebuilds stored observations' binding ids with it (DECISIONS #103).
+  """
+  @spec binding_rule_id(binary(), binary(), binary()) :: binary()
+  defdelegate binding_rule_id(revision_id, spacecraft_id, producer_id), to: TelemetryBinding
 
   @spec list_importers(keyword()) :: [%{module: module(), descriptor: map()}]
   def list_importers(opts \\ []) when is_list(opts) do
