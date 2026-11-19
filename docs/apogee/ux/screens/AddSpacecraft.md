@@ -34,8 +34,8 @@ Panel A1 `Source`. `choice` segmented radiogroup: `From a profile │ From a man
   parsed manifest exists.
 
 ## Step 02 · Identity
-Profile path only (manifest rows already carry identity; the step shows the parsed rows' identity
-checks and lets you edit cells inline).
+Profile path only. Manifest rows already carry identity: the step shows the parsed rows' identity checks, and a
+row with a problem reads "fix them in the file and choose it again" (ux, audit S9). Inline cell editing is later.
 Fields (ApField, two columns): **Count** (number, 1–500), **Naming pattern** (mono, default
 `EARENDIL-{scid}`; tokens `{scid}`, `{n}`, `{n:03}`; live preview of first and last name),
 **SCID range** (start, prefilled with the next free SCID from the server; end computed and
@@ -47,10 +47,13 @@ Inline clash check under each field (caution: "SCID 512 is already EARENDIL-512"
 - **Orbit (optional):** plane assignment `choice`: `Fill planes 11–12, 25 per plane` (from count)
   / `From manifest` / `Not now`. Plane and slot are metadata today (plan gap); the step says "Planes
   show on the constellation view and the fleet matrix" so the value is clear.
-- **Routing:** if the profile has a routing rule template (future), show the generated summary ("Rule
-  `Block 2 · all stations` generates 6 routes per spacecraft"). **v1 (per-spacecraft rules):**
-  pick transports/stations (checkbox ApOption list) applied to every spacecraft in the batch; the
-  summary says how many rules will be created ("300 routing rules, 6 per spacecraft").
+- **Routing** (as built; profile rules exist now, Profile.md P2): the step summarises what the profile's rules
+  generate for the batch ("Rule `Block 2 · all stations` generates 6 routes per spacecraft"). There's no
+  per-batch transport list. Two callouts:
+  - The profile's spacecraft set their own routing (info): "This profile's spacecraft set their own routing, so
+    these get none from it. Add their routes in Comms & routing after creating them."
+  - The profile has no rules (caution): "This profile has no routing rules, so these spacecraft get no routes.
+    Add a rule first if they need contacts." (`Add a rule` links to the profile's Routing section.)
 Next: `Review batch`.
 
 ## Step 04 · Review (the board)
@@ -60,7 +63,12 @@ Next: `Review batch`.
   Routing (rules/routes generated), Orbit (new planes appear on the constellation), NORAD id (Note:
   optional now, needed for pass prediction). Tags `Pass` (nominal), `Note` (caution, row wash),
   `NO-GO` (crit, row wash). Header meta `4 PASSED · 1 NOTE`. Any NO-GO disables the commit with
-  "Fix N NO-GO checks first". Checks come from the server's `batch:validate`.
+  "Fix N NO-GO checks first".
+- **Where checks come from** (as built): A2 runs against this mission's spacecraft in the browser, with the line
+  "Checked against this mission's spacecraft in the browser; the server's dry run is below." **A5 Server checks**
+  shows the server's dry run of the staged batch. The server's checks are the ones that count. The next free SCID
+  for step 02 comes from the server (ux, audit S9: a browser guess can collide), which is a console item.
+- An Orbit note (as built): "No planes set. The fleet matrix orders these by SCID until you add them." 
 - **A3 Batch preview** (ApTable, 8 rows + `Show all 50`): Name (600) · SCID (mono) · NORAD (mono;
   `not set` caution) · Plane · slot (mono) · Profile · Routes (mono) · First state (`off` mark +
   `Awaiting first AOS`). Rows with notes get a caution wash. Footer "42 more rows · EARENDIL-509 to
@@ -75,12 +83,18 @@ known). Numbered list (mono numbers): 01 what the commit does now, 02 what apply
   `Create 1 spacecraft`.
 - Option A wording (board): `Stage 50 spacecraft`; "The batch joins the staged changes. Nothing is
   live yet."
+- **Option A is live** (change sets are on), so the commit is `Stage 50 spacecraft`; option B's `Create …` is
+  history.
 - Secondary: `Back to <previous step>`; link `Download manifest template (.csv)`.
 
 ## After commit
-Success → `M/setup/spacecraft?created=<batchId>` with a nominal callout "50 spacecraft created ·
-EARENDIL-501 to EARENDIL-550" and the new rows highlighted. Partial failure is not allowed (atomic
-batch); a server rejection returns to Review with the checks updated.
+Change sets are live (option A), so the commit **stages** the batch: `Stage 50 spacecraft` (`Staging…` while it
+sends) → Setup › Changes, whose outcome reads "50 spacecraft staged. They're created when this change set is applied
+as r6." (Changes.md). They're created when the set is applied, never at the commit. Partial failure is not allowed
+(atomic batch). A refusal stays on Review, with its failure callout plus "Your draft is kept."
+- **Not an organization admin:** a line under the header, "Only an organization admin can add spacecraft. You can
+  prepare a batch here, but not create it." The commit is disabled with "Only an organization admin can add
+  spacecraft." 
 
 ## Acceptance (for qa)
 - The same four steps serve 1 and 50; a single spacecraft says "1 spacecraft".
