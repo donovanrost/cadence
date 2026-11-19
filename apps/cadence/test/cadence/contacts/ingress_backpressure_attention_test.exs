@@ -27,6 +27,10 @@ defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
     journal = start_journal!(ctx)
 
     append!(journal, 82_000)
+    # #390: the shared monitor also ticks every 5 s; a tick before the append would make this
+    # first reading 'rising'. Two samples at the same fill are never rising, whenever it ticked.
+    # `rising` itself is pinned against an own monitor below.
+    :ok = BackpressureMonitor.sample_now()
     :ok = BackpressureMonitor.sample_now()
 
     assert [%{conflict: "journal_near_full", state: "open"} = item] =
@@ -43,7 +47,9 @@ defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
     append!(journal, 14_000)
     :ok = BackpressureMonitor.sample_now()
 
-    assert [%{journal_usage: %{rising: true, ratio: ratio}, p1: true}] =
+    # P1 from the fill alone (no live pass here). Whether it reads rising depends on whether the
+    # shared monitor ticked between the append and this sample (#390), so it isn't asserted here.
+    assert [%{journal_usage: %{ratio: ratio}, p1: true}] =
              BackpressureAttention.items(ctx.organization_id, ctx.mission_id)
 
     assert ratio >= 0.95
@@ -71,6 +77,30 @@ defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
              )
 
     assert id == item.id
+  end
+
+  # #390: `rising` against a monitor of the test's own (its own namespace, an hour between ticks),
+  # so only sample_now samples and the shared monitor's 5 s tick can't land in between.
+  @tag :tmp_dir
+  test "rising: only while the fill grew since the previous sample", ctx do
+    namespace = own_monitor!()
+    journal = start_journal!(ctx, namespace)
+
+    append!(journal, 82_000)
+    :ok = BackpressureMonitor.sample_now(namespace)
+    # The first sample has nothing to compare with.
+    assert %{rising: false, ratio: first} = usage(ctx, namespace)
+    assert first >= 0.8
+
+    append!(journal, 14_000)
+    :ok = BackpressureMonitor.sample_now(namespace)
+    assert %{rising: true, ratio: grown} = usage(ctx, namespace)
+    assert grown > first
+
+    # Unchanged fill: not rising. 96_415 bytes rounds down to 0.9641, which once read 'rising'
+    # forever (the exact ratio was compared with the rounded one, #390).
+    :ok = BackpressureMonitor.sample_now(namespace)
+    assert %{rising: false, ratio: ^grown} = usage(ctx, namespace)
   end
 
   # qa's restart 1 dry run: a journal that has stopped can still be listed by the registry for a
@@ -172,6 +202,27 @@ defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
 
   defp items(ctx), do: BackpressureAttention.items(ctx.organization_id, ctx.mission_id)
 
+  defp own_monitor! do
+    namespace =
+      ProcessNamespace.new!(
+        root_supervisor: __MODULE__.Root,
+        registry: __MODULE__.Registry,
+        mission_supervisor: __MODULE__.Missions,
+        capability_registry: __MODULE__.Capabilities
+      )
+
+    start_supervised!({Registry, keys: :unique, name: __MODULE__.Registry})
+
+    start_supervised!({BackpressureMonitor, process_namespace: namespace, interval_ms: 3_600_000})
+
+    namespace
+  end
+
+  defp usage(ctx, namespace) do
+    assert [usage] = BackpressureMonitor.snapshot(ctx.mission_id, namespace).near_full
+    usage
+  end
+
   defp journal_key(ctx),
     do: {:provider_ingress_journal, ctx.mission_id, ctx.contact_id, "path-bp", ctx.binding_id}
 
@@ -189,13 +240,13 @@ defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
     :exit, _reason -> :ok
   end
 
-  defp start_journal!(%{tmp_dir: tmp_dir} = ctx) do
+  defp start_journal!(%{tmp_dir: tmp_dir} = ctx, namespace \\ ProcessNamespace.default()) do
     key = journal_key(ctx)
 
     start_supervised!(
       Supervisor.child_spec(
         {IngressJournal,
-         name: ProcessNamespace.via(ProcessNamespace.default(), key),
+         name: ProcessNamespace.via(namespace, key),
          mission_id: ctx.mission_id,
          realized_contact_id: ctx.contact_id,
          path_id: "path-bp",
@@ -209,7 +260,7 @@ defmodule Cadence.Contacts.IngressBackpressureAttentionTest do
       )
     )
 
-    ProcessNamespace.via(ProcessNamespace.default(), key)
+    ProcessNamespace.via(namespace, key)
   end
 
   defp append!(journal, bytes) do
