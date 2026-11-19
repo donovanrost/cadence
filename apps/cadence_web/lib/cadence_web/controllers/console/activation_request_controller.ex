@@ -52,11 +52,13 @@ defmodule CadenceWeb.Console.ActivationRequestController do
     do: ApproveRefusals.respond(conn, code, details)
 
   # #236: an author of the configuration being activated can't approve it (nothing recorded).
-  defp error(conn, {:activation_approver_authored_content, details}),
+  # Both #236 clauses take only the details map Refusals.explain builds (or #280's service map),
+  # never a raw id list, which falls through to the generic refusal (mms-security).
+  defp error(conn, {:activation_approver_authored_content, %{} = details}),
     do: ApproveRefusals.authored(conn, details)
 
   # #236 fail-closed: the authors couldn't be determined, so nobody may approve it as it stands.
-  defp error(conn, {:activation_approver_authors_unknown, details}),
+  defp error(conn, {:activation_approver_authors_unknown, %{} = details}),
     do: Problem.respond(conn, :activation_approver_authors_unknown, details)
 
   defp error(conn, {:not_resumable, code}),
