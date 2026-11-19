@@ -3352,27 +3352,33 @@ asked to change was refused, so the line has no "Not saved:" style opener and ne
   specific code keeps that code's line; U98 is for the generic `forbidden` on a read.
 
 ### U100 · A service identity's acts count as its people's for approvals (#280, director 11-19; mms-security's impact list, ca-security approved; words with ca-ux) (api / mms-security / ca-ux / every squad that approves)
-Rule (director): what a service identity does counts as the act of everyone who issued it or rotated its key, and of
-anyone an org admin records as accountable for it ("a service identity you're accountable for" covers all three). It
-only widens who counts as "you" where a kind already refuses approving your own; it adds no refusal of its own.
-Affected today: catalog revisions (imports), activations (every mode), contact plans (and approvals under an
-automation grant) and command requests. Not affected: change sets, planning policies, command groups, provider
-changes, qualification cases (no service authors them).
+Rule (director): what a service identity does counts as the act of everyone who issued it or rotated its key, of
+anyone an org admin records as accountable for it, and of that recording admin ("a service identity you're accountable
+for" covers them all). It only widens who counts as "you" where a kind already refuses approving your own; it adds no
+refusal of its own. Affected today: catalog revisions (imports), activations (every mode), contact plans (and
+approvals under an automation grant) and command requests. Not affected: change sets, planning policies, command
+groups, provider changes, qualification cases (no service authors them).
 
-- **The reused self-approval 403s** (`mission_model_self_approval_forbidden`, `activation_self_approval_forbidden`,
-  `contact_plan_self_approval_forbidden`, `command_request_self_approval_not_allowed`) carry `details.via_service`
-  `{id, name}`, null when the approver did it themselves (their own act wins if both). With it the line names the
-  service, since "you requested this" would be untrue (U20): "Not approved: Nightly planner, a service identity you're
-  accountable for, requested this, so another person approves it. Your approval wasn't recorded." Per kind: "imported
-  this revision, so another org admin approves it", "submitted this plan, so another org admin approves it. Your
-  approval wasn't recorded and nothing was booked.", "sent this command request, so another person gives the GO".
-  With `via_service` null, each kind's own line (U65, U94, U97, U87's family). Absent (an older server): today's line.
-- **409 `approval_authors_unknown`** (every kind; `details.service` `{id, name}`, a different key): "Not approved:
-  Nightly planner has no one recorded as accountable for it, so no one can approve what it made yet. Your approval
-  wasn't recorded. An org admin records who's accountable in People › Service identities." Without a name: "the
-  service identity that made this". REST drops the place.
-  - Up front (the approval read's `cannot_decide` `authors_unknown`, same `service` key): Approve is disabled with
-    that sentence without "Not approved:" and the ending (A6); Reject or Send back stays.
+- **The reused self-approval 403s** carry `details.via_service` `{id, name}` when the overlap came through a service.
+  Then the line names the service, since "you requested this" would be untrue (U20). Every line ends "Your approval
+  wasn't recorded." (U95), plus what the kind adds:
+  - `activation_self_approval_forbidden`: "Not approved: Nightly planner, a service identity you're accountable for,
+    requested this, so another person approves it. Your approval wasn't recorded."
+  - `mission_model_self_approval_forbidden`: "Not approved: Nightly planner, a service identity you're accountable
+    for, imported this revision, so another org admin approves it. Your approval wasn't recorded."
+  - `contact_plan_self_approval_forbidden`: "Not approved: Nightly planner, a service identity you're accountable for,
+    submitted this plan, so another org admin approves it. Your approval wasn't recorded and nothing was booked."
+  - `command_request_self_approval_not_allowed`: "Not approved: Nightly planner, a service identity you're
+    accountable for, sent this command request, so another person gives the GO. Your approval wasn't recorded."
+  - No `via_service` (null or absent look the same on the wire; it was the approver): each kind's own line (U65,
+    U94, U97, U87's family).
+- **409 `approval_authors_unknown`** (every kind; `details.service` `{id, name}`, a different key; under an automation
+  grant it can be the approving service): "Not approved: Nightly planner has no one recorded as accountable for it, so
+  this can't be approved yet. Your approval wasn't recorded. An org admin records who's accountable in People ›
+  Service identities." Without a name: "the service identity that made this". REST drops the place.
+  - Up front (the approval read's `cannot_decide` `authors_unknown`, same `service` key): Approve is disabled (A6)
+    with that line without "Not approved:" and without "Your approval wasn't recorded."; the what-to-do stays.
+    Reject or Send back stays.
 - **Automation grant refused** (contact plans under "Needs a second person's approval"), on the plan's state line:
   "Not approved automatically: the people this automation approves for also count as R41's authors, so a person
   outside them approves it."
@@ -3381,7 +3387,8 @@ changes, qualification cases (no service authors them).
     import, activation request, contact plan or command request, you can't approve one it makes either." ("Wherever"
     keeps it true per kind: activations in every mode, the others under "Needs a second person's approval".)
   - Rotate: "Once you rotate its key, what it does counts as yours for approvals too." and the same second sentence.
-  - Recording accountable people (org admin): "What it does then counts as theirs for approvals."
+  - Recording accountable people (org admin): "What it does then counts as theirs, and as yours, for approvals."
   - The planning grant form: "On a mission that needs a second person's approval, this grant can't approve plans the
     service makes itself."
-- U99 (ca-ux, #281) holds the service identity's own refusals (create, rotate, revoke, list) and points here.
+- ca-ux's #281 entry (its number taken when that PR opens) holds the service identity's own refusals (create,
+  rotate, revoke, list) and points here.
