@@ -4126,13 +4126,14 @@ domain's answer before they're built.
   is staged, the staged value shows beside it as the Profile board's edited state (Changes.md §1), and the meta reads
   "Staged by Mira K. at 14:02Z" (U29; a service is marked as U70 says).
   - path_already_staged: "Not staged: Mira K. has BATT_V's limits staged already (at 14:02Z). Change them in that
-    staged change, or ask Mira K. to withdraw it." With you as the stager, the editor opens your staged values
-    instead, so this never shows to you.
+    staged change, or ask Mira K. to withdraw it." Without a name (U25): "Not staged: BATT_V's limits are already
+    staged (at 14:02Z). Change them in that staged change, or ask whoever staged them to withdraw it." With you as
+    the stager, the editor opens your staged values instead, so this never shows to you.
 - **Apply now, when monitoring changes apply without approval (U64 2).** The editor's primary is `Apply now`. Its
   preview is inline, above the button:
   - the change as `− old` / `+ new` rows;
   - the checks (below), with their holds and NO-GOs;
-  - the effect, "Checked on 500 spacecraft" (from the server's dry run, never counted in the browser);
+  - the effect, "Applies to 500 spacecraft" (from the server's dry run, never counted in the browser);
   - a required `Why` (10 characters or more, as Changes.md K3). With one hold it takes that hold's placeholder
     (U43).
   - Outcome, with U91's verbs: "Applied as r7. The runtime is applying it." then "BATT_V is checked against the new
@@ -4148,8 +4149,10 @@ domain's answer before they're built.
     applies them in Setup › Changes." plus `Open monitoring changes`.
   - The reviewer is never one of the set's authors (U97's family); refusals are Changes.md §3's.
 - **Two lanes on Changes.**
-  - **Staged bar:** one line per lane that has something staged: `CONFIGURATION · 2 changes: …  [Review & apply as
-    r6]` and `MONITORING · 1 change: Edit limits for BATT_V  [Review & apply]`.
+  - **Staged bar:** one line per lane that has something staged: `CONFIGURATION · 2 changes: …  [Review & apply]`
+    and `MONITORING · 1 change: Edit limits for BATT_V  [Review & apply]`. Neither button carries a revision number:
+    with one sequence (Revisions, below), the number depends on which set applies first. It shows on the review
+    page's commit (`Apply as r6`), and Changes.md §2's `Review & apply as r6` drops its number once the lane ships.
   - **Review page:** `M/setup/changes` (Configuration) and `M/setup/changes/monitoring`. A tab pair at the top
     reads `Configuration · 2` / `Monitoring · 1`. The page and its h1 name the lane: "Apply monitoring changes · 1
     change".
@@ -4173,7 +4176,8 @@ domain's answer before they're built.
     is "Why these should replace the catalog's".
   - U43's limit_alarm_active and U42's derived_point_in_use, unchanged.
 - **Across the lanes.** The lanes never freeze each other, but they compile together. **[domain]** confirm: a
-  configuration set that would leave a monitoring definition dangling gets a NO-GO on the configuration lane.
+  configuration set that would leave a monitoring definition dangling gets a NO-GO on the configuration lane, and
+  in C3's dry run (U102) too, so a catalog rollout that would fail at review can't be staged from the catalog page.
   "Catalog rev 5 removes BATT_V, which 2 limits and 1 derived point use. Retire or change them in monitoring
   changes first." The names go behind `Show all`, as U42 lists them.
 - **Revisions. [domain]** Does an applied monitoring set take the mission's next revision number? I prefer one
@@ -4182,12 +4186,20 @@ domain's answer before they're built.
   need its own prefix on every surface.
 - **The model gate.** Applying a monitoring set never puts anything up for catalog approval (U65), because domain
   counts the effective revisions as approved. No catalog row, panel or Now item mentions them.
+- **Catalog and spacecraft surfaces keep naming the catalog revision.** U65 and U102 (Catalog, a revision's page,
+  C3), U94 (a spacecraft's configuration and What changes) and U99 never show a monitoring apply. A spacecraft
+  stays "on catalog rev 14" after one. Effective model revision ids appear only in Technical details, including the
+  revision page's "Mission model revision" row.
 - **Moving the old side stores. [domain]** Who stages the one-time move of today's limits and derived points? A
-  migration can't approve itself under a person's name (TEAM RULE, Controls). So it's staged by Cadence (a service
-  actor, marked as U70) and a person applies or approves it in the console as usual. Summary: "Move 48 limits and
+  migration can't approve itself under a person's name (TEAM RULE, Controls). So it's staged by Cadence, the
+  system actor, which reads "by Cadence" as in U103, never with the service identity mark. A person applies or
+  approves it in the console as usual. Summary: "Move 48 limits and
   6 derived points from the old apps". Its preview lists every definition, with the same checks. No history
   backfill (#92): limits added after the move start their alarm history then.
 - **Per-spacecraft limits (open with the user, #92).** Domain recommends declarations scoped to a context, one
   revision for the fleet. If the user adopts that, each definition gets `Applies to`: `All spacecraft` (default),
   a profile, or a context (U43's named sets, `ECLIPSE`). Summaries name it as U43 does: "Edit ECLIPSE limits for
   BATT_V", "Edit limits for BATT_V on Block 2". Per-spacecraft deltas in any other form come back to ux.
+  - **The Profile page's hook** (mms-ux): limits scoped to a profile sit beside Profile P3's overrides, so the
+    profile's summary carries a line with the server's count, e.g. "3 limits apply only to this profile · Open in
+    Monitoring". Its words come with the follow-up once the user rules.
