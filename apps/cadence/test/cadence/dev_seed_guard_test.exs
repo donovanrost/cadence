@@ -6,6 +6,11 @@ defmodule Cadence.DevSeedGuardTest do
   approve_and_execute, execute, reject, decide), an approval-setting save, or a reference to
   the lab-only activation code fails the test. Approvals, settings changes and the first
   activation are made in the console by people, with a decision record.
+
+  Limits (reviewed 11-19; a follow-up may close them): the scanner sees REMOTE calls by name
+  (`Module.fun(...)`). It doesn't see `apply/3`, a function imported and then called bare, or a
+  direct `Repo` write of an approval or settings row. A seed doing any of those slips past this
+  test, so reviewers check new seeds for them.
   """
   use ExUnit.Case, async: true
 
@@ -95,6 +100,19 @@ defmodule Cadence.DevSeedGuardTest do
 
       assert Enum.map(calls, & &1.guarded?) == [true, false]
     end
+
+    test "an approve in the else branch of a lab check is NOT guarded" do
+      calls =
+        scan("""
+        if F.chaos_lab?() do
+          :ok
+        else
+          FleetPlanningPolicies.approve(scope, m, id, 1, hash, "why")
+        end
+        """)
+
+      assert Enum.map(calls, & &1.guarded?) == [false]
+    end
   end
 
   defp seed_files do
@@ -123,8 +141,16 @@ defmodule Cadence.DevSeedGuardTest do
     |> Enum.sort_by(& &1.line)
   end
 
-  defp collect({:if, _meta, [condition, branches]}, guarded?) do
-    collect(condition, guarded?) ++ collect(branches, guarded? or lab_check?(condition))
+  # Only the `do:` branch of `if Fixture.chaos_lab?()` is lab-only; its `else:` runs on a dev
+  # stack, so it isn't guarded (api-ops' and fe-setup's review).
+  defp collect({:if, _meta, [condition, branches]}, guarded?) when is_list(branches) do
+    lab? = lab_check?(condition)
+
+    collect(condition, guarded?) ++
+      Enum.flat_map(branches, fn
+        {:do, body} -> collect(body, guarded? or lab?)
+        {_else, body} -> collect(body, guarded?)
+      end)
   end
 
   defp collect({{:., meta, [module, fun]}, _call_meta, args} = _call, guarded?)
