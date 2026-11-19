@@ -2299,7 +2299,8 @@ change set like any override. There's no separate routes editor.
       is false + `reviewer_is_author` for the stager (every set gets the field; these words only where
       `legacy_conversion` is set). Under the description: "Staged by Mira K. Someone else reviews and applies it." For
       the stager, the review action is disabled with the A6 reason "You staged this batch, so someone else reviews and
-      applies it." Other sets keep today's reviewer_is_author sentence.
+      applies it." So the stager doesn't read it twice, their description line keeps only "Staged by Mira K." (#405,
+      fe-ops' question 11-19). Other sets keep today's reviewer_is_author sentence.
     - **Every set, up front** (#320, ca-ux 11-19; amends the line above): the console reads the change set's
       `viewer.can_review` and `review_blocked_reason`, never its own `authors` list. The server sets
       `reviewer_is_author` only when the set needs approval, for whoever submitted it or authored any change, so under
