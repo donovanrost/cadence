@@ -72,7 +72,7 @@ describe("#233 limits, read from allowed_values and can_inherit (ux U96)", () =>
   it("the approval setting without allowed_values fails closed: read-only, no Reset (ca-security C1)", () => {
     const f = approval({}, "independent");
     const unread =
-      "Cadence couldn't read who may change this setting, so it can't be changed here. Reload to try again.";
+      "Cadence couldn't read who may change this setting, so it can't be changed here. Reload to try again. If it's still missing, tell the team that runs Cadence for you.";
     expect([readOnly(f), canInherit(f), disabledValues([f])]).toEqual([true, false, {}]);
     expect([readOnlyHint(f), optionsHint(f), inheritHint(f, "EARENDIL")]).toEqual([
       unread,

@@ -22,9 +22,9 @@ const optionText = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v
  */
 const limitsUnread = (f: SettingsField) => isApproval(f) && f.allowed_values === undefined;
 
-/** ux U86: what the console can't read, for the approval setting with its limits missing. */
+/** ux U96 (U86): what the console can't read, with its way out; for the approval setting with its limits missing. */
 const UNREAD_LINE =
-  "Cadence couldn't read who may change this setting, so it can't be changed here. Reload to try again.";
+  "Cadence couldn't read who may change this setting, so it can't be changed here. Reload to try again. If it's still missing, tell the team that runs Cadence for you.";
 
 /** The viewer can't change this field at all (allowed_values [], or the approval setting's limits unread). */
 export const readOnly = (f: SettingsField) => f.allowed_values?.length === 0 || limitsUnread(f);
