@@ -180,13 +180,17 @@ export function decidedLine(verb: Verb, r: Decoded<typeof decided>): DecidedNote
       text: `Approved, but it didn't apply. ${applySentence(ex)}`,
       failed: true,
     };
-  // No "yet": it pairs a finished attempt with waiting (ux).
-  if (r.outcome === "needs_review")
+  // No "yet": it pairs a finished attempt with waiting (ux). U41's sentence only when the execution
+  // says why (an error or a code); its no-code fallback, "Applying failed.", would claim a failure
+  // (ca-ux, #419).
+  if (r.outcome === "needs_review") {
+    const why = ex && (ex.error || ex.error_code) ? ` ${applySentence(ex)}` : "";
     return {
       tone: "caution",
-      text: `Approved, but Cadence couldn't confirm that it applied. ${applySentence(ex)}`,
+      text: `Approved, but Cadence couldn't confirm that it applied.${why}`,
       failed: true,
     };
+  }
   if (ex?.state === "in_progress")
     return { tone: "info", text: "Approved. It's applying now.", failed: false };
   if (r.outcome === "applied" && ex?.state === "succeeded") {

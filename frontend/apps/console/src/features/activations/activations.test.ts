@@ -55,11 +55,24 @@ describe("app activation approvals (L10)", () => {
   });
 
   it("needs_review without a failure: couldn't confirm, never 'didn't apply'", () => {
+    // No error and no code: nothing after the sentence (never U41's 'Applying failed.', ca-ux #419).
     expect(approve(exec("in_progress"), "needs_review")).toEqual({
       tone: "caution",
-      text: "Approved, but Cadence couldn't confirm that it applied. Applying failed.",
+      text: "Approved, but Cadence couldn't confirm that it applied.",
       failed: true,
     });
+    expect(approve(null, "needs_review").text).toBe(
+      "Approved, but Cadence couldn't confirm that it applied.",
+    );
+    // With a code, U41's sentence for it follows.
+    const code: (typeof applyCodes)[number] = "activation_execution_interrupted";
+    const interrupted = { ...exec("in_progress"), error_code: code };
+    expect(
+      decidedLine("approve", {
+        request: { ...request, execution: interrupted },
+        outcome: "needs_review",
+      }).text,
+    ).toMatch(/^Approved, but Cadence couldn't confirm that it applied\. \S/);
   });
 
   it("still applying: says so, as a status", () => {
