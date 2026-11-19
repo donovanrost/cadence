@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { detailReader } from "./detail.ts";
+import { detailReader, identityFacts } from "./detail.ts";
 
 const body = (extra: Record<string, unknown> = {}) => ({
   spacecraft: {
@@ -65,5 +65,15 @@ describe("detailReader", () => {
     const rule = b.routing_rules[0];
     if (rule) Object.assign(rule, { direction: "downlink" });
     expect(decode(detailReader, b).ok).toBe(false);
+  });
+});
+
+describe("Last heard while the history is down (Spacecraft.md, #313)", () => {
+  it("reads 'Not known right now', with nothing in brackets", () => {
+    const r = decode(detailReader, body({ telemetry: "degraded" }));
+    if (!r.ok) throw new Error(r.error.message);
+    const facts = JSON.stringify(identityFacts(r.value, new Date("2026-11-19T12:00:00Z")));
+    expect(facts).toContain('"value":"Not known right now"');
+    expect(facts).not.toContain("history unavailable");
   });
 });

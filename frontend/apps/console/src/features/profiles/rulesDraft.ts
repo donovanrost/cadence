@@ -1,3 +1,4 @@
+import type { ApiError } from "@/api";
 import type { ProfileRule } from "./detail.ts";
 
 /**
@@ -170,4 +171,20 @@ export function rulePathWords(path: string, drafts: readonly RuleDraft[]): strin
   const words =
     field === "legs" ? (legWords(m[3], m[4]) ?? "Legs") : field && ruleFieldWords[field];
   return words ? `${rule} · ${words}` : rule;
+}
+
+/**
+ * #313 (mms-ux on #323): Check is a dry run, so a failure that isn't a field refusal never says
+ * "it isn't clear whether anything was changed". A check changes nothing; the way on is to retry.
+ */
+export function checkFallback(error: ApiError): string {
+  const retry = "A check changes nothing, so try again.";
+  if (error.kind === "unavailable" && error.status === 0)
+    return `Not checked: the connection dropped. ${retry}`;
+  if (error.kind === "malformed")
+    return `Not checked: the server's reply wasn't understood. ${retry}`;
+  // A refusal for who you are: retrying never helps, so no "try again" (fe-ops, #432).
+  if (error.kind === "forbidden")
+    return "Not checked: you can't change this profile's routing. Mission admins and organization admins can.";
+  return `Not checked: Cadence couldn't run the check. ${retry}`;
 }

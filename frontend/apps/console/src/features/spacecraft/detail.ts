@@ -147,7 +147,7 @@ export function identityFacts(detail: SpacecraftDetail, now: Date): readonly ApK
         sc.last_received_at !== null
           ? heardLabel(sc.last_received_at, now)
           : detail.telemetry === "degraded"
-            ? "Not known right now (history unavailable)"
+            ? "Not known right now"
             : "Awaiting first AOS",
       mono: sc.last_received_at !== null,
     },

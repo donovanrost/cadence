@@ -100,7 +100,7 @@ const summary = computed(() => {
           />
           <template v-else>
             <ApCallout v-if="value.telemetry === 'degraded'" tone="caution"
-              >Last received may be incomplete: the telemetry history isn't answering, so only what
+              >Last heard may be incomplete: the telemetry history isn't answering, so only what
               arrived since the last restart shows.</ApCallout
             >
             <SpacecraftTable :rows="filtered(value)" :degraded="value.telemetry === 'degraded'" />

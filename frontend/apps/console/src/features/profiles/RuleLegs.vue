@@ -19,6 +19,7 @@ const box = ref<HTMLElement | null>(null);
 function removeLeg(i: number) {
   legs.value = legs.value.filter((_, j) => j !== i);
   void focusAfterRemove(box.value, "[data-remove-leg]", i, () =>
+    // The rule's own fieldset (each leg's group sits inside it, below this box).
     box.value?.closest("fieldset")?.querySelector<HTMLElement>("[data-add-leg]"),
   );
 }
@@ -26,11 +27,18 @@ function removeLeg(i: number) {
 
 <template>
   <div ref="box" class="contents">
-    <div v-for="(leg, i) in legs" :key="i" class="flex flex-wrap items-end gap-3">
+    <!-- a11y B7 (#313, mms-ux): each leg is a group named "Leg 2", so its Direction and Role keep
+      their visible labels; the remove button is named "Remove leg 2" (its visible word first). -->
+    <fieldset
+      v-for="(leg, i) in legs"
+      :key="i"
+      class="m-0 flex min-w-0 flex-wrap items-end gap-3 border-0 p-0"
+    >
+      <legend class="sr-only">Leg {{ i + 1 }}</legend>
       <div class="w-40">
         <ApSelect
           :model-value="leg.direction"
-          :label="`Leg ${i + 1} direction`"
+          label="Direction"
           :options="directionOptions"
           @update:model-value="$event && setLeg(i, { direction: $event })"
         />
@@ -43,9 +51,14 @@ function removeLeg(i: number) {
           @update:model-value="$event && setLeg(i, { role: $event })"
         />
       </div>
-      <ApButton size="compact" variant="ghost" data-remove-leg @click="removeLeg(i)"
+      <ApButton
+        size="compact"
+        variant="ghost"
+        data-remove-leg
+        :aria-label="`Remove leg ${i + 1}`"
+        @click="removeLeg(i)"
         >Remove leg</ApButton
       >
-    </div>
+    </fieldset>
   </div>
 </template>

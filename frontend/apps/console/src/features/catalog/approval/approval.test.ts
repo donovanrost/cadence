@@ -97,6 +97,27 @@ describe("the approval panel", () => {
     expect(t).toContain("Not ready yet");
   });
 
+  it("C12 (#313): decided with nothing earlier, U90 keeps its short line, not the callout", () => {
+    const decided = {
+      status: "approved",
+      viewer_can_decide: false,
+      cannot_decide_because: "not_approvable",
+      comparison: { ...comparison, against: null },
+      decision: {
+        kind: "approved",
+        by: { id: "u-ana", name: "Ana R." },
+        at: "2026-11-15T09:12:00Z",
+        report_id: "rep-1",
+        reason: null,
+      },
+    };
+    const t = text(panel(decided));
+    expect(t).toContain("Not compared: no earlier configuration.");
+    expect(t).not.toContain("so there was nothing to compare it with");
+    const pending = text(panel({ comparison: { ...comparison, against: null } }));
+    expect(pending).toContain("so there was nothing to compare it with");
+  });
+
   it("decided: one line with the reason, the report behind Show report", () => {
     const t = text(
       panel({
@@ -313,7 +334,9 @@ describe("no earlier configuration (U90)", () => {
     expect(t).toContain("Reject…");
   });
 
-  it("decided: the callout stays, not folded behind Show report", () => {
+  // C12 (#313; ux #305 §10) replaces U90's earlier "the callout stays": decided, it's U90's short
+  // line, still above the decided line and never behind Show report.
+  it("decided: U90's short line stays, not folded behind Show report (C12)", () => {
     const t = text(
       panel({
         status: "approved",
@@ -329,7 +352,8 @@ describe("no earlier configuration (U90)", () => {
         },
       }),
     );
-    expect(t).toContain(CALLOUT);
+    expect(t).toContain("Not compared: no earlier configuration.");
+    expect(t).not.toContain(CALLOUT);
     expect(t).not.toContain("Approving it accepts");
   });
 

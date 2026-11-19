@@ -26,6 +26,7 @@ import {
 import RuleForm from "./RuleForm.vue";
 import type { ProfileDetail } from "./detail.ts";
 import {
+  checkFallback,
   draftProblems,
   newRule,
   ruleRefusal,
@@ -88,8 +89,7 @@ async function check() {
       : {
           tone: "crit",
           // Check is a dry run, so its refusal opens "Not checked:" (mms-ux, #323).
-          text:
-            rejected(result.error, "checked") ?? failureOutcome(result.error, "changed").sentence,
+          text: rejected(result.error, "checked") ?? checkFallback(result.error),
         };
   } finally {
     busy.value = false;

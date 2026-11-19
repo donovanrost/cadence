@@ -77,7 +77,11 @@ function runAgain() {
 <template>
   <ApPanel index="A1" :title="title" :meta="meta">
     <!-- U90: at the top, above the replay callout, decided or not. -->
-    <ApCallout v-if="noEarlier" class="mb-3" tone="caution">{{ noEarlier }}</ApCallout>
+    <!-- C12 (#313): decided, U90 keeps its short form; the full callout is for the decision. -->
+    <p v-if="noEarlier && decided" class="m-0 mb-2 text-sm text-text-3">
+      Not compared: no earlier configuration.
+    </p>
+    <ApCallout v-else-if="noEarlier" class="mb-3" tone="caution">{{ noEarlier }}</ApCallout>
     <div v-if="decided" class="flex flex-col gap-2">
       <p data-approval-decided class="m-0 text-md text-readout">
         {{ decided }}

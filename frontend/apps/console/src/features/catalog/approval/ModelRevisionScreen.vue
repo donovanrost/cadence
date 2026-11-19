@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { isKnown, useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
 import { ApBreadcrumb, ApKeyValue, ApPageHeader, ApPanel, ApRemote, type ApCrumb } from "@/ui";
+import { fetchCatalogIndex } from "../api.ts";
 import { fetchModelRevision, type ModelRevision } from "./api.ts";
 import ApprovalPanel from "./ApprovalPanel.vue";
 import RevisionRollout from "./RevisionRollout.vue";
@@ -15,19 +16,36 @@ const props = defineProps<{ revisionId: string }>();
 const scope = useMissionScope();
 const key = computed(() => ({ missionId: scope.value.mission.id, revisionId: props.revisionId }));
 const page = useRemoteQuery(key, fetchModelRevision);
+/** Catalog.md §D (#313): the crumb names the revision's database, once its name has loaded. */
+const databaseId = computed(() =>
+  page.state.value.status === "ready"
+    ? (page.state.value.value.catalog_revision?.database_id ?? null)
+    : null,
+);
+const index = useRemoteQuery(
+  () =>
+    databaseId.value ? { missionId: scope.value.mission.id, databaseId: databaseId.value } : null,
+  fetchCatalogIndex,
+);
+const databaseName = computed(() =>
+  index.state.value.status === "ready"
+    ? (index.state.value.value.databases.find((d) => d.id === databaseId.value)?.name ?? null)
+    : null,
+);
 
 const title = (r: ModelRevision) =>
   r.catalog_revision ? `Catalog rev ${r.catalog_revision.number}` : "Catalog revision";
 function crumbs(r: ModelRevision): readonly ApCrumb[] {
-  const database: ApCrumb | null = r.catalog_revision
-    ? {
-        label: "Database",
-        to: {
-          name: "setup.catalog.database",
-          params: { databaseId: r.catalog_revision.database_id },
-        },
-      }
-    : null;
+  const database: ApCrumb | null =
+    r.catalog_revision && databaseName.value
+      ? {
+          label: databaseName.value,
+          to: {
+            name: "setup.catalog.database",
+            params: { databaseId: r.catalog_revision.database_id },
+          },
+        }
+      : null;
   return [
     { label: "Catalog", to: { name: "setup.catalog" } },
     ...(database ? [database] : []),
