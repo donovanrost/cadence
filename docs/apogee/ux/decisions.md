@@ -3417,8 +3417,9 @@ groups, provider changes, qualification cases (no service authors them).
 revoke or list one, and a person can't give one more access than they hold. #281 also removes the REST
 service-identity endpoints (api-ops and lead, on ca-security's advice: a REST bearer is always a service identity, so
 a person-only REST endpoint could succeed for no one), so these are console lines. Each refusal comes before anything
-is created or rotated. Capability words are the role words, never enum values: `Platform admin`, `Org admin`,
-`Mission admin`.
+is created or rotated. Capability words are the role words, never enum values: only `Org admin` and `Mission admin`, the two capabilities
+a service identity can ever be given (`ServiceIdentity.normalize_capability`; ca-security). Never `Platform admin`,
+which would read as grantable.
 
 - **403 `authenticated_user_required`** (the caller is a service identity, not a person). **Unreachable today:** the
   console's organization scope refuses a service identity first (`404 organization_not_found`) and REST has no
@@ -3436,11 +3437,11 @@ is created or rotated. Capability words are the role words, never enum values: `
   ones beyond them, as codes; the server's message turns them into role words, up to 3, then "and N more"). It can't
   fire today, since an org admin holds every capability a service identity can get; the lines are for when that
   changes:
-  - Create: "Not created: you can't give a service identity access you don't have yourself (Platform admin). Leave
+  - Create: "Not created: you can't give a service identity access you don't have yourself (Org admin). Leave
     it out, or ask someone who has it to create the service identity." Without `details`: the same without the
     bracket.
   - Rotate (the identity already holds access the person doesn't): "Not rotated: this service identity has access
-    you don't have yourself (Platform admin), so you can't rotate its key. Ask someone who has that access to rotate
+    you don't have yourself (Org admin), so you can't rotate its key. Ask someone who has that access to rotate
     it." Without `details`: the same without the bracket.
   - **Up front (A6):** the create form offers only access the person holds; any other shows disabled with "You don't
     have this access yourself, so you can't give it." `Rotate key` is disabled with the rotate line's reason (from
