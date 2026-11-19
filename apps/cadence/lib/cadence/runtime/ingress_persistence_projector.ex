@@ -129,6 +129,12 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
   @impl true
   def init(opts) do
+    # #270: trap exits, so a supervisor's :shutdown lets an in-flight write finish within this
+    # child's declared shutdown (5 s) instead of killing it mid-query; the parent's EXIT then
+    # ends the process through terminate/2 (gen_server handles it). Any other linked exit is
+    # handled below and isn't swallowed.
+    Process.flag(:trap_exit, true)
+
     {:ok,
      %{
        mission_id: Keyword.fetch!(opts, :mission_id),
@@ -269,6 +275,11 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, state) do
     {:noreply, remove_capacity_waiter_by_monitor(state, monitor_ref)}
   end
+
+  # Trapping exits (#270) turns a linked process's exit into this message: a normal one changes
+  # nothing; any other stops the projector with the same reason, as an untrapped link would.
+  def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _pid, reason}, state), do: {:stop, reason, state}
 
   defp persist_batch(
          %ProcessedIngressBatch{

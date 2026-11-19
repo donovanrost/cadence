@@ -384,6 +384,62 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
     end
   end
 
+  describe "trapping exits (#270)" do
+    # A supervisor's :shutdown must let the current step finish within the declared 5 s, so the
+    # consumer traps exits; a linked process's crash must still stop it (api-ops', fe-ops' review).
+    @tag :tmp_dir
+    test "traps exits; a linked crash stops it, a linked normal exit doesn't", %{tmp_dir: tmp_dir} do
+      consumer = start_idle_consumer!(tmp_dir)
+      assert {:trap_exit, true} = Process.info(consumer, :trap_exit)
+      monitor = Process.monitor(consumer)
+
+      quiet = spawn(fn -> receive(do: (:exit -> :ok)) end)
+      :sys.replace_state(consumer, fn state -> Process.link(quiet) && state end)
+      send(quiet, :exit)
+      refute_receive {:DOWN, ^monitor, :process, ^consumer, _reason}, 100
+      assert Process.alive?(consumer)
+
+      crashing = spawn(fn -> receive(do: (:crash -> exit(:boom))) end)
+      :sys.replace_state(consumer, fn state -> Process.link(crashing) && state end)
+      send(crashing, :crash)
+      assert_receive {:DOWN, ^monitor, :process, ^consumer, :boom}, 1_000
+    end
+  end
+
+  defp start_idle_consumer!(tmp_dir) do
+    provider_binding_id = "provider-trap-#{System.unique_integer([:positive])}"
+    journal_name = :"trap_consumer_journal_#{System.unique_integer([:positive])}"
+
+    start_supervised!(
+      {IngressJournal,
+       name: journal_name,
+       mission_id: "mission-trap-consumer",
+       realized_contact_id: "contact-trap-consumer",
+       path_id: "path-trap-consumer",
+       provider_binding_id: provider_binding_id,
+       base_path: tmp_dir,
+       durability: :sync,
+       max_bytes: 1_024 * 1_024,
+       segment_bytes: 64 * 1_024,
+       checkpoint_interval_ms: 60_000}
+    )
+
+    executor = spawn(fn -> receive(do: (:never -> :ok)) end)
+    on_exit(fn -> Process.exit(executor, :kill) end)
+
+    start_supervised!(
+      {IngressJournalConsumer,
+       name: :"trap_consumer_#{System.unique_integer([:positive])}",
+       mission_id: "mission-trap-consumer",
+       realized_contact_id: "contact-trap-consumer",
+       path_id: "path-trap-consumer",
+       provider_binding_id: provider_binding_id,
+       journal_name: journal_name,
+       executor_name: executor,
+       poll_interval_ms: 5}
+    )
+  end
+
   defp executor_loop(test_pid, timestamp? \\ false) do
     receive do
       {:"$gen_cast", {:enqueue, {:telemetry, raw_evidence, _async_context, completion}}} ->

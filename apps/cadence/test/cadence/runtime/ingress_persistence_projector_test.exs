@@ -226,24 +226,94 @@ defmodule Cadence.Runtime.IngressPersistenceProjectorTest do
     assert {:ok, %{persisted_count: 1}} = IngressPersistenceProjector.quiesce(projector)
   end
 
+  describe "stopping (#270)" do
+    # A runtime stops through its supervisor (:shutdown, 5_000). Before #270 the projector didn't
+    # trap exits, so :shutdown killed it at once, in the middle of a write; under the test sandbox
+    # that took down the shared connection (the 39LEY OwnershipError).
+    test "a stop lets an in-flight persist finish within the declared shutdown" do
+      start_supervised!({ControllableRuntimePersistence, owner: self()})
+
+      spec =
+        IngressPersistenceProjector.child_spec(
+          projector_opts(nil, persistence_module: ControllableRuntimePersistence)
+        )
+
+      supervisor =
+        start_supervised!(%{
+          id: :projector_supervisor,
+          start: {Supervisor, :start_link, [[spec], [strategy: :one_for_one]]},
+          type: :supervisor
+        })
+
+      [{_id, projector, :worker, _modules}] = Supervisor.which_children(supervisor)
+
+      assert :ok = IngressPersistenceProjector.enqueue(projector, quiescence_batch())
+      assert_receive {:runtime_persistence_started, ^projector, release_ref, [_], _}, 500
+
+      monitor = Process.monitor(projector)
+      stopping = Task.async(fn -> Supervisor.terminate_child(supervisor, spec.id) end)
+
+      refute_receive {:DOWN, ^monitor, :process, ^projector, _reason}, 200
+      assert Task.yield(stopping, 0) == nil
+
+      send(projector, {:release_runtime_persistence, release_ref})
+
+      assert_receive {:DOWN, ^monitor, :process, ^projector, :shutdown}, 1_000
+      assert :ok = Task.await(stopping)
+      assert [{[_], _}] = ControllableRuntimePersistence.calls()
+    end
+
+    test "trapping exits doesn't swallow a linked process's crash" do
+      projector = start_projector!(nil)
+      monitor = Process.monitor(projector)
+      linked = spawn(fn -> receive(do: (:crash -> exit(:boom))) end)
+
+      :sys.replace_state(projector, fn state ->
+        Process.link(linked)
+        state
+      end)
+
+      send(linked, :crash)
+      assert_receive {:DOWN, ^monitor, :process, ^projector, :boom}, 1_000
+    end
+  end
+
+  defp quiescence_batch do
+    raw_evidence =
+      RawEvidence.new(%{
+        mission_id: "mission-ingress-projector",
+        source_ref: "test/projector-stop",
+        raw: <<1, 2, 3>>
+      })
+
+    ProcessedIngressBatch.new(%{
+      mission_id: "mission-ingress-projector",
+      realized_contact_id: "contact-ingress-projector",
+      path_id: "path-ingress-projector",
+      provider_binding_id: "provider-ingress-projector",
+      processing_results: [%{raw_evidence: raw_evidence}]
+    })
+  end
+
   defp start_projector!(name, opts \\ []) do
+    start_supervised!({IngressPersistenceProjector, projector_opts(name, opts)})
+  end
+
+  defp projector_opts(name, opts) do
     policies = TelemetryPersistencePolicies.postgres()
 
-    start_supervised!(
-      {IngressPersistenceProjector,
-       Keyword.merge(
-         [
-           name: name,
-           mission_id: "mission-ingress-projector",
-           realized_contact_id: "contact-ingress-projector",
-           path_id: "path-ingress-projector",
-           provider_binding_id: "provider-ingress-projector",
-           profiler: :disabled,
-           persistence_policy: policies.persistence,
-           current_value_store_policy: policies.current_value_store
-         ],
-         opts
-       )}
+    Keyword.merge(
+      [
+        name: name,
+        mission_id: "mission-ingress-projector",
+        realized_contact_id: "contact-ingress-projector",
+        path_id: "path-ingress-projector",
+        provider_binding_id: "provider-ingress-projector",
+        profiler: :disabled,
+        persistence_policy: policies.persistence,
+        current_value_store_policy: policies.current_value_store
+      ],
+      opts
     )
   end
 end
