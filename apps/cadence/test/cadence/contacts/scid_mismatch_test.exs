@@ -85,7 +85,9 @@ defmodule Cadence.Contacts.ScidMismatchTest do
              } = event.payload_document["value"]
 
       assert started_at == DateTime.to_iso8601(contact.realized_at)
-      assert %{"realized_contact_id" => _, "spacecraft_id" => "sc-1"} = event.scope_document["value"]
+
+      assert %{"realized_contact_id" => _, "spacecraft_id" => "sc-1"} =
+               event.scope_document["value"]
 
       {:ok, again} = ContactStore.fetch_realized(ctx.mission, contact.realized_contact_id)
       assert {:ok, _} = ContactSettlement.record(again, :absent, %{}, :ok, nil, [], [])
