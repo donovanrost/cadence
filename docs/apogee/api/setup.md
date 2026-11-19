@@ -36,8 +36,18 @@ The Setup spacecraft directory. It is unpaginated (the client filters) and sorte
    "routing_rule_count": 6,
    "ready": true,
    "last_received_at": null}
-]}}
+], "telemetry": "ok", "scids_in_use": [312], "next_free_scid": 1}}
 ```
+
+- `scids_in_use` (S9, #313; ux U20): every SCID a new spacecraft can't take, as integers, sorted
+  ascending and deduplicated. That's the live spacecraft's, **archived ones included** (they keep
+  their SCID, and SCIDs are unique per mission), plus every SCID a staged op of the mission's open
+  or in-review change set gives a spacecraft (a create, or an update's `scid` change), by any author.
+- `next_free_scid`: the lowest of 1..1023 not in `scids_in_use`, so the two can't disagree. It's
+  never 0 (0 is still accepted when typed), and `null` when none is free. It's a suggestion: staging
+  refuses a SCID another staged op holds (`invalid_op` on `scid`, details `{scid, spacecraft_name,
+  source: "staged" | "request", in_review}`), and preview/apply refuses a live one.
+- Neither field is refreshed by staging: staging invalidates `configuration`, not `spacecraft`.
 
 - `scid`: integer or null. `norad_id`, `plane` and `slot` are integers or null, read from
   spacecraft metadata (`norad_id`, `plane`, `slot`) until domain makes them first-class.

@@ -13,6 +13,7 @@ defmodule Cadence.Reads.SpacecraftDirectory do
   alias Cadence.Reads.OperationalState
   alias Cadence.Reads.SpacecraftMetadata
   alias Cadence.Spacecraft
+  alias Cadence.Spacecraft.StagedScids
   alias Cadence.SpacecraftType
 
   @spec load(binary(), binary()) :: [map()]
@@ -40,6 +41,13 @@ defmodule Cadence.Reads.SpacecraftDirectory do
         }),
       telemetry: telemetry
     }
+    |> Map.merge(scids(organization_id, mission_id))
+  end
+
+  # S9 (#313, U20): the SCIDs a new spacecraft can't take, and the one to suggest.
+  defp scids(organization_id, mission_id) do
+    in_use = StagedScids.in_use(organization_id, mission_id)
+    %{scids_in_use: in_use, next_free_scid: StagedScids.next_free(in_use)}
   end
 
   @doc "Pure builder; see `load/2` for the inputs."
