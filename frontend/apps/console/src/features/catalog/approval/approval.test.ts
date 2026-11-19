@@ -112,7 +112,7 @@ describe("the approval panel", () => {
       },
     };
     const t = text(panel(decided));
-    expect(t).toContain("Not compared: there's no earlier configuration.");
+    expect(t).toContain("Not compared: no earlier configuration.");
     expect(t).not.toContain("so there was nothing to compare it with");
     const pending = text(panel({ comparison: { ...comparison, against: null } }));
     expect(pending).toContain("so there was nothing to compare it with");
@@ -352,7 +352,7 @@ describe("no earlier configuration (U90)", () => {
         },
       }),
     );
-    expect(t).toContain("Not compared: there's no earlier configuration.");
+    expect(t).toContain("Not compared: no earlier configuration.");
     expect(t).not.toContain(CALLOUT);
     expect(t).not.toContain("Approving it accepts");
   });

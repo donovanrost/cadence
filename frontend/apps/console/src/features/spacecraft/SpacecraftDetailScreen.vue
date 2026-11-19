@@ -44,7 +44,9 @@ useMissionInvalidation(
 const title = computed(() => {
   if (state.value.status !== "ready") return "Spacecraft";
   const sc = state.value.value.spacecraft;
-  return sc.scid === null ? sc.name : `${sc.name} · SCID ${sc.scid}`;
+  // Spacecraft.md B (U25): an empty name reads "Unknown spacecraft", never the id.
+  const name = sc.name.trim() || "Unknown spacecraft";
+  return sc.scid === null ? name : `${name} · SCID ${sc.scid}`;
 });
 // Ops addresses a spacecraft by SCID (fe-ops `ops.spacecraft`).
 const opsScid = computed(() =>

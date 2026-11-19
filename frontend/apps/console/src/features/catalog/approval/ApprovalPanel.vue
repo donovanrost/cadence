@@ -79,7 +79,7 @@ function runAgain() {
     <!-- U90: at the top, above the replay callout, decided or not. -->
     <!-- C12 (#313): decided, U90 keeps its short form; the full callout is for the decision. -->
     <p v-if="noEarlier && decided" class="m-0 mb-2 text-sm text-text-3">
-      Not compared: there's no earlier configuration.
+      Not compared: no earlier configuration.
     </p>
     <ApCallout v-else-if="noEarlier" class="mb-3" tone="caution">{{ noEarlier }}</ApCallout>
     <div v-if="decided" class="flex flex-col gap-2">
