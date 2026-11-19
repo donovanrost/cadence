@@ -3526,9 +3526,15 @@ groups, provider changes, qualification cases (no service authors them).
   - `{id, name}` (a service whose accountable people aren't recorded; under an automation grant it can be the approving
     service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
     An org admin records who's accountable in People › Service identities. Your approval wasn't recorded." With a
-    null `name`: "the service identity that imported this revision" (requested this, submitted this plan, sent this
-    command request; the approving one under a grant: "the service identity approving for this automation") in its
-    place, never an id (U25; the id goes in Technical details).
+    null `name`: "the service identity that imported this revision" (submitted this plan, sent this command request;
+    the approving one under a grant: "the service identity approving for this automation") in its place, never an
+    id (U25; the id goes in Technical details).
+    - **Activations say "a service identity involved in this request"** (api's #453 question, from mms-security's
+      review). Since #435 the unnamed service may be the requester or the author of a version the request
+      includes, such as a change set's applier, and the 403 doesn't say which, so "requested this" could be untrue
+      (U20). "Not approved: a service identity involved in this request has no one recorded as accountable for it,
+      so this can't be approved yet. An org admin records who's accountable in People › Service identities. Your
+      approval wasn't recorded." If the details ever name the role, the line names it instead.
   - null (no service involved), or absent (an older server): the kind's own authors-unknown line (in #280 only
     activations can send null, via #236; the others are kept for safety and won't show today): U94's for activations ("Not approved: Cadence can't tell who
     saved this configuration…"). Kinds that had none get the same form: "Not approved: Cadence can't tell who made
