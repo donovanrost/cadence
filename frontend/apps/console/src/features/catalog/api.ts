@@ -114,13 +114,17 @@ export function fetchCatalogIndex(
 }
 
 /**
- * U103's Started cell: "11-19 05:40Z by Mira K."; Cadence itself reads "by Cadence". A service,
- * a person the server doesn't name, a kind the console doesn't know, or no record: the time alone.
+ * U103's Started cell (amended by #370, #372): "11-19 05:40Z by Mira K."; an own-org service
+ * "by Nightly planner (a service identity)", one the server doesn't name "by a service identity";
+ * Cadence itself "by Cadence". A person the server doesn't name, a kind the console doesn't know,
+ * or no record: the time alone, never an id (U25).
  */
 export function startedLine(run: Pick<ImportRun, "started_at" | "requested_by">): string {
   const at = formatShort(new Date(run.started_at));
   const by = run.requested_by;
   if (by?.kind === "user" && by.name !== null) return `${at} by ${by.name}`;
+  if (by?.kind === "service")
+    return `${at} by ${by.name === null ? "a service identity" : `${by.name} (a service identity)`}`;
   if (by?.kind === "system") return `${at} by Cadence`;
   return at;
 }

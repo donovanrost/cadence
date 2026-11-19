@@ -36,8 +36,14 @@ describe("startedLine (U103's Started cell, #146's requested_by)", () => {
     expect(started({ kind: "system", name: "Earendil seed" })).toBe("11-19 05:40Z by Cadence");
   });
 
-  it("shows the time alone for a service, an unnamed person, an unknown kind or no record", () => {
-    expect(started({ kind: "service", name: "Nightly planner" })).toBe("11-19 05:40Z");
+  it("marks a service as one, named or not (#370, #372)", () => {
+    expect(started({ kind: "service", name: "Nightly planner" })).toBe(
+      "11-19 05:40Z by Nightly planner (a service identity)",
+    );
+    expect(started({ kind: "service", name: null })).toBe("11-19 05:40Z by a service identity");
+  });
+
+  it("shows the time alone for an unnamed person, an unknown kind or no record", () => {
     expect(started({ kind: "user", name: null })).toBe("11-19 05:40Z");
     expect(started({ kind: "robot", name: "R2" })).toBe("11-19 05:40Z");
     expect(started(null)).toBe("11-19 05:40Z");
