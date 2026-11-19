@@ -16,6 +16,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ApprovalReads, Comparison}
+  alias Cadence.Reads.Catalog.RevisionBase
 
   @spec list(Scope.t(), binary(), binary()) :: [map()]
   def list(%Scope{} = scope, mission_id, status) do
@@ -50,7 +51,11 @@ defmodule Cadence.Reads.MissionModelApprovals do
 
       viewer_id = scope.user && scope.user.user_id
       blocked = cannot_decide(scope, mission_id, row, importers, plans_ready)
-      catalog_revision = org |> ModelRevisions.for_models(mission_id, [row.id]) |> Map.get(row.id)
+
+      catalog_revision =
+        org |> ModelRevisions.for_models(mission_id, [row.id]) |> Map.get(row.id)
+
+      named = catalog_revision && with_breaking(org, mission_id, catalog_revision)
 
       {:ok,
        %{
@@ -58,7 +63,7 @@ defmodule Cadence.Reads.MissionModelApprovals do
          status: row.status,
          imported_at: row.imported_at,
          imported_by: first_importer(importers),
-         catalog_revision: catalog_revision,
+         catalog_revision: named,
          decision: decision(row),
          viewer_can_decide: is_nil(blocked),
          viewer_is_importer: is_binary(viewer_id) and viewer_id in importers,
@@ -242,6 +247,20 @@ defmodule Cadence.Reads.MissionModelApprovals do
 
       true ->
         nil
+    end
+  end
+
+  # #195 (ux U102): the run that made this catalog revision and its breaking count against the
+  # revision before it in its database, the base the import page's C3 diff uses (RevisionBase).
+  defp with_breaking(org, mission_id, %{id: id} = catalog_revision) do
+    case Catalog.fetch_revision(org, mission_id, id) do
+      {:ok, revision} ->
+        catalog_revision
+        |> Map.put(:import_run_id, revision.import_run_id)
+        |> Map.merge(RevisionBase.breaking(org, mission_id, revision))
+
+      {:error, _not_found} ->
+        catalog_revision
     end
   end
 

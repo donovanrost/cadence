@@ -206,7 +206,21 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   viewer_can_decide, viewer_is_importer, cannot_decide_because: not_admin | not_approvable |
   self_approval | plans_not_ready | null, cannot_approve_because: not_in_catalog | null,
   plans_ready, comparison: <cmp> | null}`. `imported_by`
-  null reads "Importer not recorded". `cannot_approve_because` (11-17, ux U88) is
+  null reads "Importer not recorded".
+- **On `GET /:id` only** (#195, ux U102; additive, read as optional), `catalog_revision` also has:
+  `import_run_id` (the run that made that catalog revision; never null when `catalog_revision` is
+  there), `breaking: integer | null` and `breaking_base: {catalog_revision_id, revision} | null`.
+  - The base is the revision before it in the same catalog database: the highest `revision_number`
+    below its own. It's the same function as C3's `base_revision`, so `breaking` always equals the
+    `diff.summary.breaking` that the import page showed for `import_run_id`. Catalog revisions are
+    always numbered (`revision` is never null), immutable and never deleted, so a revision's base
+    and count don't change when later revisions are imported. Only a release that changes what
+    counts as breaking (C3's rules below) can change the count. It's computed per read, not stored.
+  - `breaking_base` null: the database's first revision, with nothing earlier to compare
+    (`breaking` null). `breaking_base` set with `breaking` null: the diff couldn't be read (a
+    revision without a model, or its declarations couldn't be queried). Both set: the count. `0`
+    means nothing breaks; an unknown count is never sent as `0`.
+  - The list (`GET ?status=`) doesn't carry these fields (one diff per row would read every model). `cannot_approve_because` (11-17, ux U88) is
   `not_in_catalog` when no catalog revision names the model revision (a second run of a file
   makes one): Approve is refused (`409 mission_model_revision_not_in_catalog`), Reject stays;
   `cannot_decide_because` wins when both are set. Importers (11-17) are the people recorded on the catalog
@@ -468,6 +482,20 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
 - `import_runs[].status`: `running | succeeded | failed`. There is no separate `pending` state: a
   queued import is `running`. `file_name` is known for runs that produced a revision, otherwise
   `null`.
+- `import_runs[].requested_by` (#146, ux U103; additive, read as optional): who started the run,
+  `{kind: user | service | system, name: string | null} | null`. Also on C3's run detail and the
+  source-file page's runs. `null` when the run recorded no actor. Two batched name queries per
+  table, whatever its length. The name follows mms-security's rule (11-19); the console's words
+  decide what shows:
+  - `user`: the person's current display name, only while they hold an active membership in the
+    mission's organization, checked at read time. A person from another organization (a platform
+    admin acting as support), someone who has since left, or a member without a display name reads
+    `name: null`, and the kind stays `user`: the act is never shown as Cadence's. There's no
+    fallback to email or id; neither is ever sent. The name stored on the run at import isn't used.
+  - `service`: the service identity's display name, only when it belongs to the mission's
+    organization; otherwise `null`.
+  - `system`: Cadence itself (a seed or a task), with the stored system name, which is never a
+    person.
 
 ## `GET /api/console/v1/missions/:mission_id/catalog/imports/:import_run_id` (C3)
 
@@ -477,8 +505,10 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
 - `diagnostics[]`: `{severity: error|warning|info, code, message, path}`, where `path` is a
   " / "-joined XTCE path or `null`. A run can succeed with error diagnostics (unsupported items
   are skipped).
-- `base_revision`: the revision before this run's revision in the same database, or `null` (first
-  revision, or no revision produced).
+- `base_revision`: the revision before this run's revision in the same database (the highest
+  `revision_number` below its own), or `null` (first revision, or no revision produced). It's the
+  same base as the revision read's `breaking_base` (the model approval gate above).
+- `requested_by`: as the index's run row (C1 above).
 - `diff` (DECISIONS #9 v1, from the two revisions alone): `null` when there's no base or either
   revision can't be read. Otherwise `{summary: {commands: {before, after, added, changed,
   removed}, telemetry: {…}, unchanged, total_before, breaking}, changes: [{op, kind, name, change,
