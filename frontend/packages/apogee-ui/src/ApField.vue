@@ -21,6 +21,13 @@ const props = withDefaults(
     autocomplete?: string | undefined;
     inputmode?: "text" | "numeric" | "decimal" | "search" | "email" | "url" | undefined;
     hiddenLabel?: boolean | undefined;
+    /**
+     * Ids of lines elsewhere that also describe this field (A6: one shared reason line), appended
+     * after its own error and hint, so an error still reads first.
+     */
+    describedBy?: string | undefined;
+    /** Native read-only: kept text stays readable, selectable and focusable (never `disabled`). */
+    readonly?: boolean | undefined;
   }>(),
   { type: "text", mono: false, required: false, disabled: false, hiddenLabel: false },
 );
@@ -34,7 +41,7 @@ function onInput(event: Event) {
 const id = fieldId("ap-field");
 const describedBy = computed(
   () =>
-    [props.error ? `${id}-error` : null, props.hint ? `${id}-hint` : null]
+    [props.error ? `${id}-error` : null, props.hint ? `${id}-hint` : null, props.describedBy]
       .filter(Boolean)
       .join(" ") || undefined,
 );
@@ -57,6 +64,7 @@ const describedBy = computed(
         :required="required"
         :aria-required="required ? 'true' : undefined"
         :disabled="disabled"
+        :readonly="readonly"
         :autocomplete="autocomplete"
         :inputmode="inputmode"
         :aria-invalid="error ? 'true' : undefined"
