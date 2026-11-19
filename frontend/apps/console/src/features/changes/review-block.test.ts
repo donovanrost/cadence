@@ -66,7 +66,12 @@ describe("#320: the review panel", () => {
   const config = { head: { revision: 5 } } as ConfigState;
   const panel = (extra: Record<string, unknown>) =>
     mount(ReviewPanel, {
-      props: { missionId: "m1" as MissionId, config, changeSet: set(extra) },
+      props: {
+        missionId: "m1" as MissionId,
+        config,
+        changeSet: set(extra),
+        preview: { status: "loading" } as const,
+      },
     });
   const buttons = (w: ReturnType<typeof panel>) => w.findAll("button");
 

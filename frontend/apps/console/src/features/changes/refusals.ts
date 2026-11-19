@@ -64,9 +64,12 @@ export type UseLine = Readonly<{
   items: readonly Readonly<{ text: string; to?: RouteLocationRaw }>[];
   more: number;
 }>;
-/** A failure outcome that can also list what still uses the thing (U82). */
+/**
+ * A failure outcome that can also list what still uses the thing (U82). `technical`: the code
+ * for Technical details when the words can't carry the cause (#374: `preview_failed`).
+ */
 export type RefusalOutcome = FailureOutcome &
-  Readonly<{ uses?: readonly UseLine[]; closing?: string; entityId?: string }>;
+  Readonly<{ uses?: readonly UseLine[]; closing?: string; entityId?: string; technical?: string }>;
 
 /** The change-set row to mark after an apply-time in-use refusal (ux U82): its entity, and why. */
 export type InUseMark = Readonly<{ entityId: string; sentence: string }>;

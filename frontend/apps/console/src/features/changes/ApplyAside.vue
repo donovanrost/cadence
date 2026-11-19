@@ -6,6 +6,7 @@ import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
 import { NOTHING_RUNNING } from "./nothingRunning.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import { submitChangeSet, type Preview, type SubmitResult } from "./actions.ts";
+import { checksRefusal } from "./checkRefusals.ts";
 import { blockingReason } from "./itemLines.ts";
 import { inUseMark, refusalOutcome, type InUseMark, type RefusalOutcome } from "./refusals.ts";
 import { holdsKey, NOT_RUN_REASON, RECHECKING_REASON, type HeldChecks } from "./checks-view.ts";
@@ -92,7 +93,10 @@ async function apply() {
     });
     if (result.ok) emit("result", result.value);
     else {
-      failure.value = refusalOutcome(result.error, "applied");
+      // #376: submit's 503 preview_failed is opened by the act the button named (#374).
+      failure.value =
+        checksRefusal(result.error, needsReview.value ? "request_review" : "apply") ??
+        refusalOutcome(result.error, "applied");
       emit("inUse", inUseMark(failure.value));
       emit("changed");
     }

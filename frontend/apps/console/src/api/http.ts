@@ -110,9 +110,10 @@ export function outcomeUnknown(error: ApiError): boolean {
 
 /**
  * 5xx codes whose server has confirmed the outcome, so their own message is the answer:
- * `apply_interrupted` = the change did NOT land (domain 33529f29, api: "Try again.").
+ * `apply_interrupted` = the change did NOT land (domain 33529f29, api: "Try again.");
+ * `preview_failed` = the checks couldn't run, so nothing was written (#262, ca-engineer).
  */
-const SETTLED: ReadonlySet<string> = new Set(["apply_interrupted"]);
+const SETTLED: ReadonlySet<string> = new Set(["apply_interrupted", "preview_failed"]);
 
 /** Sends one console API call; the body is read but not yet decoded. */
 async function send(
