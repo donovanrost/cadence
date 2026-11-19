@@ -2308,17 +2308,22 @@ change set like any override. There's no separate routes editor.
       staged part of this change set or sent it for review, so another person reviews it. Your approval wasn't
       recorded."; Send back "Not sent back: you staged part of this change set or sent it for review, so another
       person reviews it. Nothing changed."
-    - **Approve refused by the checks** (#262, ca-ux 11-19; the review runs the checks again, and these used to answer
-      500). Nothing is written, so the set stays In review and the lines take U95's ending:
-      - 409 `holds_blocking` (a blocking hold stands at approve; approve's own line, the stage/apply line stays):
-        "Not approved: a blocking hold stands, so nothing was applied and the change set is still in review. Your
-        approval wasn't recorded. Approve it once the hold clears (see the checks)." The holds show in the checks, not
-        in the line.
+    - **Approve refused by the checks** (#262, ca-ux 11-19, ux's order; the review runs the checks again, and these
+      used to answer 500). Nothing is written, so the set stays in review and each line ends with U95's "Your
+      approval wasn't recorded.":
+      - Up front: when the read already shows a blocking hold, Approve is disabled with the A6/A7 reason "A blocking
+        hold stands; see the checks." The 409 stays the backstop.
+      - 409 `holds_blocking` (approve's own line; the stage/apply line stays): "Not approved: a blocking hold stands,
+        so nothing was applied and the change set stays in review. Approve it once the hold clears; the checks show
+        it. Your approval wasn't recorded." The holds show in the checks, not in the line.
       - 409 `preview_failed` (Cadence couldn't run the checks: a database or connection error): "Not approved: Cadence
-        couldn't run the checks, so nothing was applied and the change set is still in review. Your approval wasn't
-        recorded. Try again; if it keeps happening, tell the team that runs Cadence for you." The cause goes in
-        Technical details, never in the line. If Send back can meet it: "Not sent back: Cadence couldn't run the
-        checks, so nothing changed. Try again; if it keeps happening, tell the team that runs Cadence for you."
+        couldn't run the checks, so nothing was applied and the change set stays in review. Try again; if it keeps
+        happening, tell the team that runs Cadence for you. Your approval wasn't recorded." Unlike U95's usual rule,
+        Approve stays enabled after it, because trying again is the fix. The cause goes in Technical details, never
+        in the line.
+      - Send back meeting `preview_failed` (only if send back runs the checks; ca-engineer to confirm, else this line
+        goes): "Not sent back: Cadence couldn't run the checks, so nothing changed. Try again; if it keeps happening,
+        tell the team that runs Cadence for you."
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
       ("Batch 3 is already staged." / "Staged earlier."), never the id.
