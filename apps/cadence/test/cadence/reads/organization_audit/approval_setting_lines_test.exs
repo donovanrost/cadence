@@ -56,6 +56,65 @@ defmodule Cadence.Reads.OrganizationAudit.ApprovalSettingLinesTest do
     assert Lines.line(mission(@direct, @direct, @direct, @direct), @mission) == nil
   end
 
+  # #430 (ux's words): an organization save lists the missions it moved, one sentence per new
+  # value in the setting's own words (never loosened/tightened: one save can move both ways), up to
+  # three names then "and N more", "Unknown mission" for a gone one; change.missions carries them.
+  test "the missions an organization save moved: one sentence per new value, named" do
+    org = %{
+      "scope" => "organization",
+      "before" => %{"value" => @independent, "allow_override" => false},
+      "after" => %{"value" => @independent, "allow_override" => true},
+      "missions" => [
+        moved("m1", "independent", "direct"),
+        moved("m2", "independent", "direct"),
+        moved("m3", "direct", "independent"),
+        moved("gone", "independent", "direct"),
+        moved("m5", "independent", "direct")
+      ]
+    }
+
+    names = %{"m1" => "EARENDIL", "m2" => "KESTREL", "m3" => "VEGA", "m5" => "LYRA"}
+
+    assert {action, change} = Lines.line(org, nil, names)
+
+    assert action ==
+             "Missions may now set their own approval setting. " <>
+               "Changed on 4 missions to Applies without approval: EARENDIL, KESTREL, " <>
+               "Unknown mission and 1 more. " <>
+               "Changed on 1 mission to Needs a second person's approval: VEGA."
+
+    assert [
+             %{id: "m1", name: "EARENDIL", before: "independent", after: "direct"},
+             %{id: "m2", name: "KESTREL"},
+             %{id: "m3", name: "VEGA", before: "direct", after: "independent"},
+             %{id: "gone", name: nil},
+             %{id: "m5", name: "LYRA"}
+           ] = change.missions
+  end
+
+  test "a moved mission's value outside the two reads as a plain change; none moved, no sentence" do
+    org = %{
+      "scope" => "organization",
+      "before" => %{"value" => @independent, "allow_override" => false},
+      "after" => %{"value" => @direct, "allow_override" => true},
+      "missions" => [moved("m1", "independent", "mystery"), moved("m2", "independent", "direct")]
+    }
+
+    assert {action, _change} = Lines.line(org, nil, %{"m1" => "EARENDIL", "m2" => "KESTREL"})
+
+    assert action =~
+             "Changed on 1 mission to Applies without approval: KESTREL. " <>
+               "Changed approval on 1 mission."
+
+    refute action =~ "EARENDIL"
+
+    assert {action, %{missions: []}} = Lines.line(%{org | "missions" => []}, nil, %{})
+    refute action =~ "Changed on"
+
+    # Saved before #430: no list.
+    assert {_action, %{missions: []}} = Lines.line(Map.delete(org, "missions"), nil)
+  end
+
   test "no value before: set, neither loosened nor tightened (api-ops)" do
     org = %{
       "scope" => "organization",
@@ -70,4 +129,7 @@ defmodule Cadence.Reads.OrganizationAudit.ApprovalSettingLinesTest do
   test "a revision saved before #233 has no audit" do
     assert Lines.line(nil, @mission) == nil
   end
+
+  defp moved(id, before, after_value),
+    do: %{"mission_id" => id, "before" => before, "after" => after_value}
 end

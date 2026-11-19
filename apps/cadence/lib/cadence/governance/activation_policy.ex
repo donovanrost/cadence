@@ -67,7 +67,7 @@ defmodule Cadence.Governance.ActivationPolicy do
         document,
         SettingsAccess.actor(scope),
         check: &may_change(scope, mission_id, &1, document),
-        audit: &audit(mission_id, &1, document)
+        audit: &audit(scope.organization_id, mission_id, &1, document)
       )
     end
   end
@@ -111,25 +111,30 @@ defmodule Cadence.Governance.ActivationPolicy do
 
   defp requirement(effective), do: (effective || %{})["approval_requirement"]
 
-  # A mission's effective setting after the save: the organization's value with the new override
-  # merged in (a nil override hands it back to the organization), as ScopedSettings.load reads it.
-  defp after_effective(current, %{"value" => nil}), do: current.organization_default
+  # A mission's effective setting after the save, by ScopedSettings' one rule (#430): the
+  # organization's value with the new override merged in, or the organization's when the override
+  # is nil (a mission save only runs while overrides are allowed).
+  defp after_effective(current, document),
+    do:
+      ScopedSettings.effective_for(
+        current.organization_default,
+        current.allow_override,
+        document["value"]
+      )
 
-  defp after_effective(current, %{"value" => value}),
-    do: Map.merge(current.organization_default || %{}, value)
-
-  defp audit(nil, current, document) do
+  defp audit(organization_id, nil, current, document) do
     %{
       "scope" => "organization",
       "before" => %{
         "value" => current.organization_default,
         "allow_override" => current.allow_override
       },
-      "after" => %{"value" => document["value"], "allow_override" => document["allow_override"]}
+      "after" => %{"value" => document["value"], "allow_override" => document["allow_override"]},
+      "missions" => moved_missions(organization_id, current, document)
     }
   end
 
-  defp audit(_mission_id, current, document) do
+  defp audit(_organization_id, _mission_id, current, document) do
     %{
       "scope" => "mission",
       "before" => %{"effective" => current.effective, "override" => current.saved},
@@ -138,6 +143,34 @@ defmodule Cadence.Governance.ActivationPolicy do
         "override" => document["value"]
       }
     }
+  end
+
+  # #430: every mission of the organization whose effective requirement this organization save
+  # changes (turning overrides off or on, or a default change reaching inheriting missions), each
+  # with its raw requirement before and after. Read under the save's own section lock, which
+  # mission saves also take, so it is exactly what the save changed. Missions have no archived
+  # state: every mission row of the organization is read, unpaged.
+  defp moved_missions(organization_id, current, document) do
+    ids = organization_id |> Missions.list_missions() |> Enum.map(& &1.mission_id)
+    snapshots = ScopedSettings.load_many(organization_id, ids, @section, default())
+
+    Enum.flat_map(ids, fn id ->
+      saved = Map.fetch!(snapshots, id).saved
+
+      before =
+        current.organization_default
+        |> ScopedSettings.effective_for(current.allow_override, saved)
+        |> requirement()
+
+      after_value =
+        document["value"]
+        |> ScopedSettings.effective_for(document["allow_override"], saved)
+        |> requirement()
+
+      if before == after_value,
+        do: [],
+        else: [%{"mission_id" => id, "before" => before, "after" => after_value}]
+    end)
   end
 
   def evidence(organization_id, mission_id) do
