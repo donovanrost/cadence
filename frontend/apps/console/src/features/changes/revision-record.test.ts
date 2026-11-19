@@ -20,9 +20,10 @@ const preP3 = {
   approvals: [{ actor: ana, comment: null, decided_at: "2026-11-17T09:11:00Z" }],
 };
 const record = { subject: { version: 3, digest: "sha256:ab" }, separated_from: ["u1", 7] };
-const p3 = (approvals: readonly Record<string, unknown>[], appliedBy = ana) =>
+const p3 = (approvals: readonly Record<string, unknown>[], appliedBy: TestActor = ana) =>
   revisionSummary({ ...preP3, submitted_by: mira, applied_by: appliedBy, approvals });
-const approval = (actor: typeof ana, extra: Record<string, unknown> = {}) => ({
+type TestActor = Readonly<{ kind: string; id: string | null; name: string | null }>;
+const approval = (actor: TestActor, extra: Record<string, unknown> = {}) => ({
   actor,
   comment: null,
   decided_at: "2026-11-17T09:11:00Z",
@@ -156,10 +157,10 @@ describe("the four-eyes record in change history (U89, P3 #227)", () => {
         ),
       ),
     ).toBe("Submitted · approved and applied by Ana R. · 11-17 09:12Z");
-    expect(text(revisionHeader(p3([approval(nameless as typeof ana)], owen)))).toBe(
+    expect(text(revisionHeader(p3([approval(nameless)], owen)))).toBe(
       "Submitted by Mira K. · approved · applied by Owen P. · 11-17 09:12Z",
     );
-    expect(text(revisionHeader(p3([approval(ana), approval(nameless as typeof ana)], owen)))).toBe(
+    expect(text(revisionHeader(p3([approval(ana), approval(nameless)], owen)))).toBe(
       "Submitted by Mira K. · approved by Ana R. · applied by Owen P. · 11-17 09:12Z",
     );
     expect(
@@ -170,11 +171,11 @@ describe("the four-eyes record in change history (U89, P3 #227)", () => {
   it("names Cadence and service identities (U103, #371); a nameless approver in admin mode keeps its tag", () => {
     const system = { kind: "system", id: null, name: null };
     const service = { kind: "service", id: "svc-1", name: "Nightly planner" };
-    expect(text(revisionHeader(p3([approval(service as typeof ana)], system as typeof ana)))).toBe(
+    expect(text(revisionHeader(p3([approval(service)], system)))).toBe(
       "Submitted by Mira K. · approved by Nightly planner (a service identity) · applied by Cadence · 11-17 09:12Z",
     );
     const nameless = { kind: "user", id: "u9", name: null };
-    const row = p3([approval(nameless as typeof ana, { admin_mode: true })], owen);
+    const row = p3([approval(nameless, { admin_mode: true })], owen);
     expect(tagged(revisionHeader(row))).toEqual([""]);
     expect(text(revisionHeader(row))).toBe(
       "Submitted by Mira K. · approved · applied by Owen P. · 11-17 09:12Z",
