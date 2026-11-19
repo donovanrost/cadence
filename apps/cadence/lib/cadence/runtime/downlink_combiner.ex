@@ -12,6 +12,7 @@ defmodule Cadence.Runtime.DownlinkCombiner do
     DownlinkObservation
   }
 
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.ContactPathSpec
   alias Cadence.Runtime.MissionRuntime
   alias Cadence.Runtime.Persistence
@@ -46,7 +47,8 @@ defmodule Cadence.Runtime.DownlinkCombiner do
 
   @spec snapshot(pid()) :: {:ok, map()} | {:error, term()}
   def snapshot(downlink_combiner) do
-    GenServer.call(downlink_combiner, :snapshot)
+    # #334: a read never takes its caller (the contact coordinator) down (ca-security's review).
+    SnapshotCall.call(downlink_combiner, :snapshot, :component)
   end
 
   @spec handle_observation(pid(), DownlinkObservation.t()) :: {:ok, [term()]} | {:error, term()}

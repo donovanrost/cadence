@@ -21,6 +21,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Ingress.{RawEvidence, ReceiveBackpressure}
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.ProviderAdapters.TCPSocket.{IngressDrops, Instrumentation, Session}
 
   alias Cadence.Runtime.{
@@ -85,7 +86,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   @impl true
   def snapshot(provider_runtime) do
-    GenServer.call(provider_runtime, :snapshot)
+    # #334: a read never takes its caller (the path coordinator) down.
+    SnapshotCall.call(provider_runtime, :snapshot, :provider)
   end
 
   @doc """
@@ -1182,7 +1184,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   defp maybe_wait_for_executor_capacity(state) do
-    case ProviderIngressExecutor.snapshot(state.ingress_executor_name) do
+    # Flow control before every recv: develop's 5 s wait, exit caught (#334, fe-ops' review).
+    case ProviderIngressExecutor.snapshot(state.ingress_executor_name, :flow_control) do
       {:ok, snapshot} ->
         queue_depth = Map.get(snapshot, :queue_depth, 0)
 

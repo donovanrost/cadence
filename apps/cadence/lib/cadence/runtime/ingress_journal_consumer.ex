@@ -13,6 +13,7 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   require Logger
 
   alias Cadence.IngressJournal.{Entry, Evidence, FileSystem}
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.ProviderIngressExecutor
 
   @default_poll_interval_ms 10
@@ -40,8 +41,9 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   @spec snapshot(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def snapshot(consumer) do
+    # #334: a read never takes its caller down.
     with {:ok, pid} <- lookup(consumer) do
-      GenServer.call(pid, :snapshot)
+      SnapshotCall.call(pid, :snapshot, :component)
     end
   end
 
