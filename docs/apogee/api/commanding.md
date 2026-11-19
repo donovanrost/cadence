@@ -696,6 +696,7 @@ for every act:
 | approve (`409 command_request_in_group`) | "This command is part of a command group. Approve it with the group's GO/NO-GO." |
 | reject (`409 command_request_in_group`) | "This command is part of a command group. Reject it with the group's NO-GO." |
 | enqueue (`409 command_request_in_group`) | "This command is part of a command group. Its group's GO queues it." |
+| any other act (`409 command_request_in_group`; none today) | "This command is part of a command group. Use its group instead." |
 | create (`422 command_request_group_reserved`) | "Not created: this request names a command group. A group's commands are submitted with the group." |
 | release (`409 command_group_not_armed`) | "This command's group hasn't been given its GO, so it can't be sent." |
 
