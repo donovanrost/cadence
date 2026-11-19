@@ -114,6 +114,7 @@ conflicts. `dev/chaos/` is the user's lab: no squad edits it.
 - **Security-sensitive changes** (see the security engineer above): the squad's security engineer also reviews.
 - **Merging:** only the release lead or the director merges, after green CI. Nobody pushes to or force-pushes `develop` or `main`.
 - **Landing:** qa lands merged develop SHAs on the laptop-1 dev stack, fast-forward only, in qa slots.
+- **Issue links:** PR bodies say `Refs #N`, never `Fixes`, `Closes` or `Resolves`, which close the issue at merge, before landing. The issue's owner closes it by hand after qa's post-check, with the evidence in a comment.
 
 ### Machines
 
