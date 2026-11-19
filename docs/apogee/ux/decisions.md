@@ -3374,7 +3374,9 @@ are api's, switched on with `knownErrorCode`.
     and book 1,476 passes`, and so does the confirm body. Re-plan: "3 of the proposal's passes can't be booked any
     more… Applying it books the other 37; the 3 are recorded as skipped."
   - **No window from the provider** (domain fails closed: a pass without a usable `expires_at` counts as closed and
-    is skipped): its `Show` row adds "No booking window from the provider", and while any
+    is skipped; each item's `reason` is `opportunity_expired` or `no_booking_window`, and the words key on `reason`,
+    never on a null `expires_at`; an unknown `reason` adds nothing to its row): a `no_booking_window` row adds "No
+    booking window from the provider", and while any
     listed item has none, the sentence's clause reads "their booking window has closed, or the provider gave none"
     (U20: "closed" alone would claim what isn't known). The record and audit then say "skipped (no open booking
     window)".
@@ -3400,8 +3402,9 @@ are api's, switched on with `knownErrorCode`.
     passes". No Reload (the windows stay closed); beside it K1's `Draft a new plan for 11-16…` before the day
     starts, `Plan the rest of 11-16…` once it has.
   - **The decision record** (the 202's `expired`, the same set the record lists as skipped): history "Approved by
-    Ana R. at 11-19 06:52Z · 1,476 passes to book; 36 skipped (booking window closed)." with `Show 36`; nothing
-    skipped, no clause. Audit: "Approved R41 for 11-16: 1,476 passes to book, 36 skipped (booking window closed)."
+    Ana R. at 11-19 06:52Z · 1,476 passes to book; 36 skipped (booking window closed)." with `Show 36` (the history
+    read's skipped items, with the same `reason`); nothing skipped, or a decision from before #273 (`skipped` null),
+    no clause. Audit: "Approved R41 for 11-16: 1,476 passes to book, 36 skipped (booking window closed)."
 - **Submit refusals:** 409 `plan_changed`: "Not sent: R41 changed after you opened it. Reload to see it, then send it
   again." 409 `plan_already_submitted` (`submitted_by` and `submitted_at` together or neither): "Not sent:
   R41 was already sent for approval by Mira K. at 03:40Z, so nothing changed. Reload to see it." The viewer: "Not sent:
