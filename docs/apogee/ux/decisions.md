@@ -2308,6 +2308,17 @@ change set like any override. There's no separate routes editor.
       staged part of this change set or sent it for review, so another person reviews it. Your approval wasn't
       recorded."; Send back "Not sent back: you staged part of this change set or sent it for review, so another
       person reviews it. Nothing changed."
+    - **Approve refused by the checks** (#262, ca-ux 11-19; the review runs the checks again, and these used to answer
+      500). Nothing is written, so the set stays In review and the lines take U95's ending:
+      - 409 `holds_blocking` (a blocking hold stands at approve; approve's own line, the stage/apply line stays):
+        "Not approved: a blocking hold stands, so nothing was applied and the change set is still in review. Your
+        approval wasn't recorded. Approve it once the hold clears (see the checks)." The holds show in the checks, not
+        in the line.
+      - 409 `preview_failed` (Cadence couldn't run the checks: a database or connection error): "Not approved: Cadence
+        couldn't run the checks, so nothing was applied and the change set is still in review. Your approval wasn't
+        recorded. Try again; if it keeps happening, tell the team that runs Cadence for you." The cause goes in
+        Technical details, never in the line. If Send back can meet it: "Not sent back: Cadence couldn't run the
+        checks, so nothing changed. Try again; if it keeps happening, tell the team that runs Cadence for you."
     - Read fields (api v3.2, final): the button is `Stage batch <next_batch> of <batches_total>`; progress is
       routes_converted of routes_total. No per-craft "in batch 3" line. An author with no name: drop the name
       ("Batch 3 is already staged." / "Staged earlier."), never the id.
