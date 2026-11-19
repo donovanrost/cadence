@@ -33,18 +33,27 @@ describe("A3: one line for a requested activation", () => {
     expect(w.get("[role=status]").text()).toBe(WAITING);
   });
 
-  it("gives way to the status's own line once the status is read", () => {
-    const pending: AppStatus = {
-      ...active,
-      state: "activation_pending",
-      activation_request: { requested_by: null, requested_at: "2026-11-19T21:10:00Z" },
-    };
+  const pending: AppStatus = {
+    ...active,
+    state: "activation_pending",
+    activation_request: {
+      requested_by: { kind: "user", id: "u-mira", name: "Mira K." },
+      requested_at: "2026-11-19T21:10:00Z",
+    },
+  };
+
+  it("names the requester and time from the status when this page requested nothing", () => {
+    const w = mount(AppStatusLine, { props: { appKey: "telemetry_decom", status: pending } });
+    expect(w.get("[role=status]").text()).toMatch(
+      /^Waiting for activation approval · requested by Mira K\. at /,
+    );
+  });
+
+  it("stays plain after this page's own request, never naming an earlier one (ca-ux, #460)", () => {
     const w = mount(AppStatusLine, {
       props: { appKey: "telemetry_decom", status: pending, requested: true },
     });
     expect(w.findAll("[role=status]")).toHaveLength(1);
-    expect(w.get("[role=status]").text()).toMatch(
-      /^Waiting for activation approval · requested at /,
-    );
+    expect(w.get("[role=status]").text()).toBe(WAITING);
   });
 });

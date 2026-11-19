@@ -13,16 +13,18 @@ const props = defineProps<{
   status: AppStatus | null;
   /**
    * A3 (#313): this page's own save just requested activation. The status isn't re-read after a
-   * save, so the line shows at once; the status's own line (by and at) replaces it once read.
+   * save, so the line shows at once and stays plain: a status read before the save may name an
+   * earlier, superseded request's requester and time (ca-ux, #460).
    */
   requested?: boolean;
 }>();
 const mode = computed(() => saveMode(props.appKey));
-const pending = computed(
-  () =>
-    (props.status
+const pending = computed(() =>
+  props.requested
+    ? "Waiting for activation approval"
+    : props.status
       ? pendingLine(props.status, (iso) => formatShort(new Date(iso)).slice(6))
-      : null) ?? (props.requested ? "Waiting for activation approval" : null),
+      : null,
 );
 </script>
 

@@ -60,7 +60,11 @@ describe("P7: a disabled rule, the Limits link (ux §10)", () => {
   it("tags a disabled rule DISABLED in its header and keeps the sentence", () => {
     const w = mount(RuleBlock, { props: { rule, profileName: "Block 1", index: "P2" } });
     expect(w.get("header").text()).toContain("Disabled");
-    expect(w.text()).toContain("This rule is disabled; it generates no routes.");
+    // The sentence explains; it sits outside the dimmed block, at full opacity (mms-ux, #460).
+    const why = w.get("[data-rule-disabled]");
+    expect(why.text()).toBe("This rule is disabled; it generates no routes.");
+    expect(why.element.closest(".opacity-60")).toBeNull();
+    expect(w.find(".opacity-60").exists()).toBe(true);
     const on = mount(RuleBlock, {
       props: { rule: { ...rule, enabled: true }, profileName: "Block 1", index: "P2" },
     });
