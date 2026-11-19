@@ -37,7 +37,7 @@ defmodule Cadence.Management.Commanding.RequestReview do
             )
         end
 
-      receipt(result)
+      receipt(result, decision)
     else
       _ ->
         {:rejected,
@@ -57,7 +57,7 @@ defmodule Cadence.Management.Commanding.RequestReview do
 
   defp admit(_), do: {:error, :invalid_input}
 
-  defp receipt({:ok, %{approval: approval, command_request: request}}),
+  defp receipt({:ok, %{approval: approval, command_request: request}}, _decision),
     do:
       {:ok,
        %{
@@ -68,21 +68,24 @@ defmodule Cadence.Management.Commanding.RequestReview do
          "actor_id" => approval.decided_by["user_id"]
        }}
 
-  defp receipt({:error, :command_review_changed}),
+  defp receipt({:error, :command_review_changed}, _decision),
     do: {:rejected, "The reviewed request changed. Reload and review its current state."}
 
-  defp receipt({:error, {:command_request_not_pending_approval, _, _}}),
+  defp receipt({:error, {:command_request_not_pending_approval, _, _}}, _decision),
     do: {:rejected, "This request is no longer awaiting a decision."}
 
-  defp receipt({:error, {:command_request_self_approval_not_allowed, _}}),
+  defp receipt({:error, {:command_request_self_approval_not_allowed, _}}, _decision),
     do: {:rejected, "A different person must review this request."}
 
-  # ux U87.
-  defp receipt({:error, :command_request_in_group}),
+  # ux U87 (amended, #121): the words name the decision tried.
+  defp receipt({:error, :command_request_in_group}, "rejected"),
+    do: {:rejected, "This command is part of a command group. Reject it with the group's NO-GO."}
+
+  defp receipt({:error, :command_request_in_group}, "approved"),
     do:
       {:rejected,
        "This command is part of a command group. Approve it with the group's GO/NO-GO."}
 
-  defp receipt({:error, _}),
+  defp receipt({:error, _}, _decision),
     do: {:rejected, "The decision was not saved. Reload before reviewing."}
 end
