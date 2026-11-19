@@ -76,6 +76,13 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
 
 - Elixir: compile every project with warnings as errors: `MIX_ENV=test mix workspace.run -t compile --order postorder --early-stop --env-var MIX_ENV=test -- --force --warnings-as-errors` at the repo root (the CI command; a plain `mix compile` at the root builds only the workspace app, not cadence, cadence_web, the simulator or the packages); `mix credo --strict` at the repo root (don't add violations),
   `mix format`, per-app tests (`cd apps/cadence_web && mix test`).
+- Elixir, before opening a backend PR, also run the CI jobs that a plain suite misses (all gated, on your own test partition):
+  - `mix format --check-formatted` at the repo root;
+  - `MIX_ENV=test mix workspace.run -t hex.audit` at the repo root (a new advisory fails CI even when nothing changed);
+  - the ingest journal-off matrix: `cd apps/cadence && CADENCE_TEST_INGRESS_JOURNAL=off mix test --only ingest_journal_matrix`;
+  - the simulator suite: `cd apps/cadence_simulator && mix test`, with the same `MIX_TEST_PARTITION`;
+  - `mix test.planes` at the repo root;
+  - `mix test.cluster` at the repo root. It starts Erlang distribution and peer nodes, so it runs only with qa's OK (the epmd rule), or is left to CI with that said in the PR.
 - Frontend: typecheck + lint for the new app pass; no file over 400 lines; no render
   function/template block over ~50 lines without extraction.
 - Real data only. No invented stats in shipped UI; if the backend lacks something, the api
