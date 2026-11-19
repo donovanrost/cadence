@@ -71,6 +71,8 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/uplink_session_qualification.ex" => :composition,
     "lib/cadence/control/pass_results_close_out.ex" => :composition,
     "lib/cadence/control/semantic_commit_retirement.ex" => :composition,
+    # #359: composes telemetry's identity state retention rule with the contacts journal's window.
+    "lib/cadence/control/identity_state_retention.ex" => :composition,
     "lib/cadence/control/spacecraft_traffic.ex" => :composition,
     "lib/cadence/control/scid_sharing.ex" => :composition,
     "lib/cadence/control/config_users.ex" => :composition,
