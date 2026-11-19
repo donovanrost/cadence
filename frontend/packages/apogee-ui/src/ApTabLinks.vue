@@ -48,12 +48,15 @@ const fade = computed(() => {
   if (left) return "[mask-image:linear-gradient(to_right,transparent,#000_24px)]";
   return "";
 });
+// A resize (a rotated phone, a narrowed window) keeps the active link in view and the fade right (ux #352).
 onMounted(() => {
   showActive();
-  window.addEventListener("resize", measure);
+  window.addEventListener("resize", showActive);
 });
-onBeforeUnmount(() => window.removeEventListener("resize", measure));
+onBeforeUnmount(() => window.removeEventListener("resize", showActive));
 watch(() => props.active, showActive);
+// New or relabelled links change the strip's width (fe-setup's #352 review).
+watch(() => props.links, showActive, { deep: true });
 </script>
 
 <template>

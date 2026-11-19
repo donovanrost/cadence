@@ -75,8 +75,9 @@ const name = computed(() =>
 );
 const crumbs = computed((): readonly ApCrumb[] => {
   const list: ApCrumb[] = [{ label: "Spacecraft", to: { name: "setup.spacecraft" } }];
-  // ux #349: a read that failed can't name the craft, so there's no middle crumb at all.
-  if (props.spacecraftId && state.value.status !== "failed")
+  // ux #349/#352: the middle crumb only once the craft's name has arrived (not while loading, not
+  // when the read failed).
+  if (props.spacecraftId && state.value.status === "ready")
     list.push({
       label: name.value,
       to: { name: "setup.spacecraft.one", params: { spacecraftId: props.spacecraftId } },
