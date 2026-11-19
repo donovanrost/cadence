@@ -26,7 +26,7 @@ Main `padding 20px 24px 24px`, gap 16. Max width ~1400px.
   (`1 blocker`). Tag beside it: `■ 0 BLOCKERS` nominal, or `◆ N BLOCKERS` crit.
 - Subline 14px `text-3`: counts of the other severities (`3 suggestions, 1 caution, 2 stale, 1 not set up`),
   omitted parts when zero, then ` · ` + the latest change (`profile Block 1 v4 applied 2026-10-19 02:29Z by
-  Donovan R.`) if the recent-changes feed exists.
+  Mira K.`) if the recent-changes feed exists.
 - Actions (standard secondary buttons): `Add spacecraft` → `M/setup/spacecraft/new`,
   `Import catalog` → `M/setup/catalog/import`. Hidden for users without setup permission.
 
@@ -74,7 +74,7 @@ default protocol behavior" finding is dropped: protocol behavior is a retired co
 ## R2 · Recent changes (panel)
 Change sets are live, so R2 lists the mission's latest revisions (U2's interim feed is gone). Row grid `44px | 132px
 | 1fr`: the revision or version chip (mono 12: `r6`, `v4`, `rev 15`), time (mono 11 `text-4`, `10-19 02:29Z`),
-sentence + actor (`Block 1 framing: CCSDS TM to 1,115 bytes · Donovan R.`). The chip shows a label, never a raw kind
+sentence + actor (`Block 1 framing: CCSDS TM to 1,115 bytes · Mira K.`). The chip shows a label, never a raw kind
 value; the built raw kind is a **gap** (audit R1). 5 rows. The header meta is `All revisions →` (→ Setup ›
 Revisions), and the panel's foot has `Compare r5 ↔ r6 →` (as built).
 - **No revisions yet:** "Nothing applied yet".
