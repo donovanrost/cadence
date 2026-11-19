@@ -119,6 +119,47 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
     end
   end
 
+  @doc """
+  Why `scope` can't decide on `grant` now, for the console's flags (U105, #233's pattern: the
+  server says, the console never computes it): nil when they can, else `{reason, details}` with
+  reason not_a_person | not_admin | not_proposed | proposer | accountable | authors_unknown.
+  The same separation check approval runs, against the setting in force now.
+  """
+  @spec viewer_block(Scope.t(), AutomationGrant.t(), DateTime.t()) ::
+          nil | {binary(), map() | nil}
+  def viewer_block(%Scope{} = scope, %AutomationGrant{} = grant, now) do
+    with {:ok, viewer} <- viewer(scope),
+         :proposed <- AutomationGrant.effective_state(grant, now),
+         policy = ActivationPolicy.evidence(grant.organization_id, grant.mission_id),
+         {:ok, _separated} <- separated(scope, viewer, grant, policy) do
+      nil
+    else
+      {:blocked, reason} ->
+        {reason, nil}
+
+      {:error, {:automation_grant_self_approval_forbidden, %{because: "proposed"}}} ->
+        {"proposer", nil}
+
+      {:error, {:automation_grant_self_approval_forbidden, %{grantee: grantee}}} ->
+        {"accountable", %{grantee: grantee}}
+
+      {:error, {:automation_grant_approver_authors_unknown, details}} ->
+        {"authors_unknown", details}
+
+      _state ->
+        {"not_proposed", nil}
+    end
+  end
+
+  defp viewer(%Scope{actor_kind: :user} = scope) do
+    case decider(scope) do
+      {:ok, id} -> {:ok, id}
+      _refused -> {:blocked, "not_admin"}
+    end
+  end
+
+  defp viewer(_scope), do: {:blocked, "not_a_person"}
+
   # -- approve -----------------------------------------------------------------------------
 
   defp approve_locked(scope, row, grant, policy, separated, now) do

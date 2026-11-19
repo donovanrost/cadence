@@ -11,9 +11,12 @@ defmodule Cadence.Control.PlanningGrants do
   did (`Applications.OpsConsole.Actions.FleetPlanning.grant_attributes/2`, ported here).
   """
 
-  alias Cadence.{Accounts, Auth}
+  alias Cadence.Accounts.MemberNames
+  alias Cadence.Auth
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.ContactPlanning.{AutomationGrants, FleetPlanningPolicies}
+  alias Cadence.ContactPlanning.{AutomationGrant, AutomationGrantReview, AutomationGrants}
+  alias Cadence.ContactPlanning.FleetPlanningPolicies
+  alias Cadence.Governance.ActivationPolicy
 
   @field_errors %{
     automation_grant_horizon_exceeds_policy:
@@ -39,12 +42,15 @@ defmodule Cadence.Control.PlanningGrants do
       identities = Auth.list_service_identities(org, mission_id: mission_id)
       identity_names = Map.new(identities, &{&1.service_identity_id, &1.display_name})
       grants = AutomationGrants.list(org, mission_id)
-      users = user_names(grants)
+      users = user_names(org, grants)
       now = DateTime.utc_now()
 
       {:ok,
        %{
-         grants: Enum.map(grants, &row(&1, identity_names, users, now)),
+         grants:
+           Enum.map(grants, &(&1 |> row(identity_names, users, now) |> flags(scope, &1, now))),
+         # #283 (U105): the sheet's words follow the mission's approval setting.
+         approval_setting: approval_setting(org, mission_id),
          service_identities:
            Enum.map(
              identities,
@@ -68,24 +74,56 @@ defmodule Cadence.Control.PlanningGrants do
            AutomationGrants.issue(scope, mission_id, attributes(values, version),
              expected_policy: evidence(version)
            ) do
-      {:ok, row(grant, %{}, user_names([grant]), DateTime.utc_now()) |> with_identity_name(org)}
+      {:ok, render(scope, grant)}
     else
       {:error, reason} -> {:error, error(reason)}
     end
   end
 
-  @doc "Revokes a grant read at `sha256`: `{:ok, row}`, `{:error, :grant_changed}`, …"
+  @doc false
+  # One grant as the read renders it, with the viewer's flags: the answer a decision returns and
+  # stores for replay (`PlanningGrantDecisions`), so it's JSON-encoded and decoded once here.
+  @spec encode_row(Scope.t(), AutomationGrant.t()) :: map()
+  def encode_row(%Scope{} = scope, grant),
+    do: scope |> render(grant) |> Jason.encode!() |> Jason.decode!()
+
+  defp render(scope, grant) do
+    now = DateTime.utc_now()
+
+    grant
+    |> row(%{}, user_names(scope.organization_id, [grant]), now)
+    |> with_identity_name(scope.organization_id)
+    |> flags(scope, grant, now)
+  end
+
+  # U105: viewer_can_decide and cannot_decide_because from the server, never the console.
+  defp flags(row, scope, grant, now) do
+    {because, details} =
+      case AutomationGrantReview.viewer_block(scope, grant, now) do
+        nil -> {nil, nil}
+        blocked -> blocked
+      end
+
+    Map.merge(row, %{
+      viewer_can_decide: is_nil(because),
+      cannot_decide_because: because,
+      cannot_decide_details: details
+    })
+  end
+
+  defp approval_setting(org, mission_id) do
+    if ActivationPolicy.evidence(org, mission_id)["separation_of_duties"] == true,
+      do: "independent",
+      else: "direct"
+  end
+
+  @doc "Revokes an active grant at once: `{:ok, row}` or a refusal (never for a reason or hash)."
   @spec revoke(Scope.t(), binary(), binary(), map()) :: {:ok, map()} | {:error, term()}
   def revoke(%Scope{} = scope, mission_id, grant_id, params) do
-    with {:ok, sha} <- text(params["sha256"], :sha256),
-         {:ok, grant} <-
-           AutomationGrants.revoke(scope, mission_id, grant_id, sha, params["reason"] || "") do
-      {:ok,
-       row(grant, %{}, user_names([grant]), DateTime.utc_now())
-       |> with_identity_name(scope.organization_id)}
-    else
-      # A missing sha256 is a field error on sha256 (drift sweep), not on the grant.
-      {:error, message} when is_binary(message) -> {:error, {:invalid_params, %{sha256: message}}}
+    # #283 (ca-security): a revoke is never refused for want of a reason or a current hash;
+    # `sha256` is still accepted and ignored, and a reason is recorded when given.
+    case AutomationGrants.revoke(scope, mission_id, grant_id, params["sha256"], params["reason"]) do
+      {:ok, grant} -> {:ok, render(scope, grant)}
       {:error, reason} -> {:error, error(reason)}
     end
   end
@@ -99,6 +137,7 @@ defmodule Cadence.Control.PlanningGrants do
       maximum_execution_concurrency:
         positive(params["maximum_execution_concurrency"], :maximum_execution_concurrency),
       valid_days: days(params["valid_days"]),
+      replaces_grant_id: optional_text(params["replaces_grant_id"]),
       reason: text(params["reason"], :reason),
       policy_version: positive(params["policy_version"], :policy_version)
     ]
@@ -135,7 +174,6 @@ defmodule Cadence.Control.PlanningGrants do
     }
 
   defp attributes(values, policy) do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
     budget = policy.budget_quota_document || %{}
 
     %{
@@ -146,8 +184,9 @@ defmodule Cadence.Control.PlanningGrants do
       maximum_estimated_cost_micros: budget["max_estimated_cost_micros"],
       currency: budget["currency"],
       maximum_execution_concurrency: values.maximum_execution_concurrency,
-      valid_from: now,
-      valid_until: DateTime.add(now, values.valid_days, :day),
+      # Validity starts at approval (#283): a length, not a window.
+      validity_seconds: values.valid_days * 86_400,
+      replaces_grant_id: values.replaces_grant_id,
       approval_reason: values.reason
     }
   end
@@ -189,27 +228,29 @@ defmodule Cadence.Control.PlanningGrants do
       maximum_execution_concurrency: grant.maximum_execution_concurrency,
       maximum_estimated_cost_micros: grant.maximum_estimated_cost_micros,
       currency: grant.currency,
+      validity_seconds: grant.validity_seconds,
       valid_from: grant.valid_from,
       valid_until: grant.valid_until,
-      state: state(grant, now),
+      # One function decides expiry for use and read (AutomationGrant.effective_state/2).
+      state: grant |> AutomationGrant.effective_state(now) |> to_string(),
+      proposed_by: person(grant.proposed_by, users),
+      proposed_at: grant.proposed_at,
+      proposal_expires_at: grant.proposal_expires_at,
       approved_by: person(grant.approved_by, users),
       approved_at: grant.approved_at,
       reason: grant.approval_reason,
+      rejected_by: person(grant.rejected_by, users),
+      rejected_at: grant.rejected_at,
+      rejection_reason: grant.rejection_reason,
+      withdrawn_by: person(grant.withdrawn_by, users),
+      withdrawn_at: grant.withdrawn_at,
+      replaces_grant_id: grant.replaces_grant_id,
       revoked_by: person(grant.revoked_by, users),
       revoked_at: grant.revoked_at,
       revocation_reason: blank(grant.revocation_reason),
       sha256: grant.content_sha256
     }
   end
-
-  # Expired is computed: an active grant past valid_until does nothing.
-  defp state(%{lifecycle_state: :revoked}, _now), do: "revoked"
-
-  defp state(%{valid_until: %DateTime{} = until}, now) do
-    if DateTime.compare(until, now) == :gt, do: "active", else: "expired"
-  end
-
-  defp state(_grant, _now), do: "active"
 
   defp with_identity_name(row, org) do
     case Auth.fetch_service_identity(org, row.service_identity.id) do
@@ -226,21 +267,27 @@ defmodule Cadence.Control.PlanningGrants do
        else: []
   end
 
-  defp user_names(grants) do
-    grants
-    |> Enum.flat_map(&[&1.approved_by, &1.revoked_by])
-    |> Enum.filter(&is_binary/1)
-    |> Enum.uniq()
-    |> Map.new(fn id ->
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _missing -> {id, nil}
-      end
-    end)
+  # #146's rule (#462): people are named only as active members of the organization, never by
+  # email; anyone else reads {id: nil, name: nil}, recorded but not identified.
+  defp user_names(org, grants) do
+    ids =
+      grants
+      |> Enum.flat_map(
+        &[&1.proposed_by, &1.approved_by, &1.rejected_by, &1.withdrawn_by, &1.revoked_by]
+      )
+      |> Enum.filter(&is_binary/1)
+
+    MemberNames.display_names(org, ids)
   end
 
   defp person(nil, _users), do: nil
-  defp person(id, users), do: %{id: id, name: Map.get(users, id)}
+
+  defp person(id, users) do
+    case Map.fetch(users, id) do
+      {:ok, name} -> %{id: id, name: name}
+      :error -> %{id: nil, name: nil}
+    end
+  end
 
   defp error({:invalid_params, _details} = invalid), do: invalid
   defp error({:policy_changed, _active} = changed), do: changed
@@ -268,6 +315,9 @@ defmodule Cadence.Control.PlanningGrants do
 
   defp positive(n, _key) when is_integer(n) and n > 0, do: {:ok, n}
   defp positive(_n, _key), do: {:error, "must be a positive integer"}
+
+  defp optional_text(value) when is_binary(value) and value != "", do: {:ok, value}
+  defp optional_text(_value), do: {:ok, nil}
 
   defp days(n) when is_integer(n) and n in 1..365, do: {:ok, n}
   defp days(_n), do: {:error, "must be 1 to 365 days"}

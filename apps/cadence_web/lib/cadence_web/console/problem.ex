@@ -98,6 +98,28 @@ defmodule CadenceWeb.Console.Problem do
       {409, "The planning policy changed since you loaded it. Review it, then try again."},
     grant_changed: {409, "This grant changed since you loaded it."},
     grant_not_found: {404, "Automation grant not found."},
+    # #283 (ux U105): a grant takes effect only after a second org admin approves it. The
+    # console words each from its code and details; these are the server's plain fallbacks.
+    automation_grant_self_approval_forbidden:
+      {403, "Not approved: another org admin approves this grant. Your approval wasn't recorded."},
+    automation_grant_approver_authors_unknown:
+      {403,
+       "Not approved: the service identity has no one recorded as accountable for it, so its grant can't be approved yet. Your approval wasn't recorded."},
+    automation_grant_not_proposed:
+      {409, "This grant isn't waiting for approval, so nothing was recorded. Reload to see it."},
+    approval_policy_changed:
+      {409,
+       "Not approved: the mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. It has to be proposed again."},
+    automation_grant_not_active: {403, "The grant isn't active."},
+    automation_grant_not_narrower:
+      {422,
+       "Not narrowed: this change gives the service more than it has now, so it needs approval. Propose it as a new grant instead."},
+    automation_grant_narrow_unchanged:
+      {422, "Not narrowed: nothing changed. Choose less than the grant allows now."},
+    automation_grant_capability_required:
+      {403, "You can't propose or approve a grant for something you can't do yourself."},
+    authenticated_user_required:
+      {403, "Only a person can do this, not a service identity. Nothing changed."},
     route_changed: {409, "The route to that station changed. Search again."},
     opportunity_expired: {409, "That offer has gone. Search again."},
     token_invalid: {422, "That offer can't be booked. Search again."},

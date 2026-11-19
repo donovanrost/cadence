@@ -13,8 +13,11 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
     org = TestFixtures.persist_org!()
     mission = TestFixtures.persist_mission!(org)
     admin = TestFixtures.persist_user!(display_name: "Ada")
+    # #283: a second org admin approves proposals under 'independent'.
+    approver = TestFixtures.persist_user!(display_name: "Bea")
     member = TestFixtures.persist_user!(display_name: "Mia")
     TestFixtures.grant_membership!(admin, org, role: :organization_admin)
+    TestFixtures.grant_membership!(approver, org, role: :organization_admin)
     TestFixtures.grant_membership!(member, org, role: :member)
 
     {:ok, scope} =
@@ -56,6 +59,7 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
 
     %{
       admin: admin,
+      approver: approver,
       member: member,
       identity: identity,
       version: v1.version,
@@ -81,11 +85,15 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
     )
   end
 
-  test "read, issue and revoke a grant; expired is computed; members read but can't manage", c do
+  test "propose, approve (replayable) and revoke a grant; members read but can't manage", c do
     data = json_response(get_json(c.admin, c.base), 200)["data"]
 
-    assert %{"grants" => [], "policy_version" => version, "permissions" => ["grants.manage"]} =
-             data
+    assert %{
+             "grants" => [],
+             "policy_version" => version,
+             "permissions" => ["grants.manage"],
+             "approval_setting" => "independent"
+           } = data
 
     assert version == c.version
     assert [%{"name" => "Planner bot", "state" => "active"}] = data["service_identities"]
@@ -96,46 +104,126 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
              "maximum_execution_concurrency" => _
            } = data["limits"]
 
+    # #283 (U105): under 'independent' issuing proposes; it authorizes nothing yet.
     assert %{"grant" => grant} = json_response(post_json(c.admin, c.base, body(c)), 201)["data"]
 
     assert %{
-             "state" => "active",
+             "state" => "proposed",
              "service_identity" => %{"name" => "Planner bot"},
-             "approved_by" => %{"name" => "Ada"},
+             "proposed_by" => %{"name" => "Ada"},
+             "approved_by" => nil,
+             "valid_from" => nil,
+             "validity_seconds" => 604_800,
              "reason" => "Night shift automation",
+             "viewer_can_decide" => false,
+             "cannot_decide_because" => "proposer",
              "sha256" => sha
            } = grant
 
     assert "approve" in grant["allowed_actions"]
 
-    assert %{"permissions" => [], "grants" => [_]} =
+    # The flags are the viewer's: the second admin may decide, the member may not.
+    [for_bea] = json_response(get_json(c.approver, c.base), 200)["data"]["grants"]
+    assert %{"viewer_can_decide" => true, "cannot_decide_because" => nil} = for_bea
+
+    assert %{"permissions" => [], "grants" => [for_mia]} =
              json_response(get_json(c.member, c.base), 200)["data"]
 
+    assert for_mia["cannot_decide_because"] == "not_admin"
     assert json_response(post_json(c.member, c.base, body(c)), 403)
 
-    revoke = "#{c.base}/#{grant["id"]}/revoke"
+    approve = "#{c.base}/#{grant["id"]}/approve"
 
-    assert %{"code" => "grant_changed"} =
+    assert %{"code" => "automation_grant_self_approval_forbidden", "details" => details} =
              json_response(
-               post_json(c.admin, revoke, %{"reason" => "x", "sha256" => "stale"}),
+               post_json(c.admin, approve, %{"sha256" => sha, "operation_id" => "op-ada"}),
+               403
+             )["error"]
+
+    assert %{"because" => "proposed", "grantee" => %{"name" => "Planner bot"}} = details
+
+    request = %{"sha256" => sha, "operation_id" => "op-bea-1"}
+
+    assert %{"grant" => active, "replayed" => false} =
+             json_response(post_json(c.approver, approve, request), 200)["data"]
+
+    assert %{"state" => "active", "approved_by" => %{"name" => "Bea"}} = active
+    assert active["valid_from"]
+
+    # The same request again answers the original; anything else on that id is refused.
+    assert %{"grant" => ^active, "replayed" => true} =
+             json_response(post_json(c.approver, approve, request), 200)["data"]
+
+    assert %{"code" => "duplicate_operation"} =
+             json_response(
+               post_json(c.approver, approve, %{request | "sha256" => String.duplicate("0", 64)}),
                409
              )["error"]
 
-    # Drift sweep: a missing sha256 is a field error on sha256.
-    assert %{"code" => "invalid_params", "details" => %{"sha256" => "is required"}} =
-             json_response(post_json(c.admin, revoke, %{"reason" => "x"}), 422)["error"]
-
-    assert %{
-             "grant" => %{
-               "state" => "revoked",
-               "revoked_by" => %{"name" => "Ada"},
-               "revocation_reason" => "Done"
-             }
-           } =
+    # A second approval of a decided grant says who decided it.
+    assert %{"code" => "automation_grant_not_proposed", "details" => not_proposed} =
              json_response(
-               post_json(c.admin, revoke, %{"reason" => "Done", "sha256" => sha}),
+               post_json(c.admin, approve, %{"sha256" => sha, "operation_id" => "op-ada-2"}),
+               409
+             )["error"]
+
+    assert %{"state" => "active", "decided_by" => _, "decided_at" => _} = not_proposed
+
+    # Revoke is one admin, at once; no current hash or reason needed (a tightening).
+    revoke = "#{c.base}/#{grant["id"]}/revoke"
+
+    assert %{"grant" => %{"state" => "revoked", "revoked_by" => %{"name" => "Ada"}}} =
+             json_response(post_json(c.admin, revoke, %{}), 200)["data"]
+  end
+
+  test "reject needs a reason; narrow takes access away at once", c do
+    %{"grant" => proposal} = json_response(post_json(c.admin, c.base, body(c)), 201)["data"]
+    reject = "#{c.base}/#{proposal["id"]}/reject"
+
+    assert %{"code" => "invalid_params", "details" => %{"reason" => "Say why."}} =
+             json_response(post_json(c.approver, reject, %{"operation_id" => "op-r1"}), 422)[
+               "error"
+             ]
+
+    assert %{"grant" => %{"state" => "rejected", "rejection_reason" => "Too broad"}} =
+             json_response(
+               post_json(c.approver, reject, %{"reason" => "Too broad", "operation_id" => "op-r2"}),
                200
              )["data"]
+
+    %{"grant" => grant} = json_response(post_json(c.admin, c.base, body(c)), 201)["data"]
+
+    %{"grant" => _active} =
+      json_response(
+        post_json(c.approver, "#{c.base}/#{grant["id"]}/approve", %{
+          "sha256" => grant["sha256"],
+          "operation_id" => "op-a"
+        }),
+        200
+      )["data"]
+
+    narrow = "#{c.base}/#{grant["id"]}/narrow"
+
+    assert %{"grant" => %{"state" => "active", "maximum_contacts" => 3}} =
+             json_response(
+               post_json(c.admin, narrow, %{
+                 "changes" => %{"maximum_contacts" => 3},
+                 "operation_id" => "op-n1"
+               }),
+               200
+             )["data"]
+
+    assert %{
+             "code" => "automation_grant_not_narrower",
+             "details" => %{"fields" => ["maximum_contacts"]}
+           } =
+             json_response(
+               post_json(c.admin, narrow, %{
+                 "changes" => %{"maximum_contacts" => 9},
+                 "operation_id" => "op-n2"
+               }),
+               422
+             )["error"]
   end
 
   test "a stale policy version, limits beyond the policy and missing fields are refused", c do
