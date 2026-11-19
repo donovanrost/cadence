@@ -17,6 +17,7 @@ import { useFreshFlash } from "./useFreshFlash.ts";
 import { jobOffers } from "./jobs.ts";
 import { useQueueCommand, type RetryOutcome } from "./useQueueCommand.ts";
 import { landFocus, landingFor } from "./landFocus.ts";
+import { rowName } from "./rowName.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 
@@ -88,6 +89,11 @@ const revealed = ref(false);
 const shownOf = (items: readonly QueueItem[]) =>
   revealed.value ? items : items.slice(0, QUEUE_CAP);
 const list = ref<HTMLElement | null>(null);
+/** a11y A5 (#243): a sheet whose row resolved returns focus to that row's resolved line. */
+const landOn = (row: QueueItem | null) => (row ? landingFor(list.value, row.key) : null);
+const landJob = () => landOn(deciding);
+const landStuck = () => landOn(acking);
+const landDiscard = () => landOn(discarding);
 /** Scroll stays put; focus goes to the first newly shown row's first control. */
 async function reveal() {
   revealed.value = true;
@@ -165,6 +171,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 v-if="item.stuck"
                 size="compact"
                 :variant="stuckAction(item.stuck, access.abort).primary ? 'primary' : 'secondary'"
+                :aria-label="rowName(stuckAction(item.stuck, access.abort).label, item.title, i)"
                 @click="openStuck(item)"
                 >{{ stuckAction(item.stuck, access.abort).label }}</ApButton
               >
@@ -175,6 +182,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 variant="secondary"
                 :disabled="command.running.value.has(item.key)"
                 :disabled-reason="command.busyWord(item)"
+                :aria-label="rowName(item.command.label, item.title, i)"
                 @click="command.run(item)"
                 >{{ item.command.label }}</ApButton
               >
@@ -185,6 +193,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                   v-if="jobOffers(item.job, 'retry')"
                   size="compact"
                   variant="secondary"
+                  :aria-label="rowName('Retry…', item.title, i)"
                   @click="openJob(item, 'retry')"
                   >Retry…</ApButton
                 >
@@ -192,6 +201,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                   v-if="jobOffers(item.job, 'close')"
                   size="compact"
                   variant="secondary"
+                  :aria-label="rowName('Close without retry…', item.title, i)"
                   @click="openJob(item, 'close')"
                   >Close without retry…</ApButton
                 >
@@ -200,6 +210,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 v-else-if="item.list"
                 size="compact"
                 variant="secondary"
+                :aria-label="rowName(item.action.label, item.title, i)"
                 @click="sheet?.open(item)"
                 >{{ item.action.label }}</ApButton
               >
@@ -212,6 +223,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                     : 'secondary'
                 "
                 :to="item.action.to"
+                :aria-label="rowName(item.action.label, item.title, i)"
                 >{{ item.action.label }}</ApButton
               >
               <!-- U49: Discard… sits beside Retry and opens its sheet (danger, reason required). -->
@@ -221,6 +233,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 variant="danger"
                 :disabled="command.running.value.has(item.key)"
                 :disabled-reason="command.busyWord(item)"
+                :aria-label="rowName('Discard…', item.title, i)"
                 @click="openDiscard(item)"
                 >Discard…</ApButton
               >
@@ -234,20 +247,20 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
     <JobSheets
       ref="jobSheets"
       :mission-id="scope.mission.id"
-      :return-focus="() => deciding && landingFor(list, deciding.key)"
+      :return-focus="landJob"
       @done="(item) => deciding && discarded(deciding, item)"
     />
     <StuckSheet
       ref="stuckSheet"
       :mission-id="scope.mission.id"
       :can-ack="access.abort"
-      :return-focus="() => acking && landingFor(list, acking.key)"
+      :return-focus="landStuck"
       @done="(item) => acking && discarded(acking, item)"
     />
     <DiscardSheet
       ref="discardSheet"
       :mission-id="scope.mission.id"
-      :return-focus="() => discarding && landingFor(list, discarding.key)"
+      :return-focus="landDiscard"
       @done="(item) => discarding && discarded(discarding, item)"
     />
   </ApPanel>
