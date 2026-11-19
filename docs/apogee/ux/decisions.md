@@ -3765,7 +3765,7 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   - A rejected row (`rejected_by`, `rejected_at`, `rejection_reason`, together or none): "Rejected by Ana R. at 11-19
     06:52Z: <reason>". Without them: "Rejected."
   - A withdrawn row (a widening proposal ended because its grant was revoked; `withdrawn_by`, `withdrawn_at`):
-    "Withdrawn when Ana R. revoked the grant it would replace, at 11-19 07:05Z." Without them: "Withdrawn: the grant
+    "Withdrawn at 11-19 07:05Z, when Ana R. revoked the grant it would replace." Without them: "Withdrawn: the grant
     it would replace was revoked."
 - **The sheet** (`Grant automation…`):
   - Under "Needs a second person's approval": title `Propose a grant`, commit `Propose grant`, muted line above the
@@ -3774,6 +3774,8 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   - Under "Applies without approval": title `Grant automation`, commit `Grant`, muted line "It takes effect at once.
     No second person's approval is needed, as this mission's setting allows." After an `active` answer: "Granted.
     Nightly planner can act under it until 12-19 06:40Z."
+  - The approval setting unread (missing from the read): the propose wording, never "at once"; the answer's state
+    says what happened.
   - Any other answer (U20): "Cadence didn't confirm the grant. Reload to see it."
 - **Waiting for approval** (panel on a proposed grant): "Proposed by Mira K. at 11-19 06:40Z: <reason>. It takes
   effect when another org admin approves it, by 11-22 06:40Z." Actions `Approve grant for Nightly planner` and
@@ -3784,8 +3786,8 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     - `proposer`: "You proposed this grant, so another org admin approves it."
     - `accountable` (`cannot_decide_details.grantee`, the same key as the 403): "You're accountable for Nightly planner, so another org admin
       approves its grant."
-    - `authors_unknown` (`cannot_decide_details.service`): "Cadence doesn't know who is accountable for Nightly planner, so its grant can't be approved
-      yet. An org admin records who's accountable in People › Service identities."
+    - `authors_unknown` (`cannot_decide_details.service`): "Nightly planner has no one recorded as accountable for it, so its grant can't be approved
+      yet. An org admin records who's accountable in People › Service identities." (U100's words)
     - `not_admin`: no actions; the panel's line ends "Org admins approve grants."
     - `not_proposed`: no panel (the row's state says why).
     - `not_a_person`: never shown in the console (a service can't sign in); as `not_admin` if it is.
@@ -3797,12 +3799,13 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
     `via_service` on purpose): "Not
     approved: you're accountable for Nightly planner, so another org admin approves its grant. Your approval wasn't
     recorded." Then Approve is disabled with the up-front line.
-  - 403 `automation_grant_approver_authors_unknown` (`service`): "Not approved: Cadence doesn't know who is
-    accountable for Nightly planner, so its grant can't be approved yet. Your approval wasn't recorded. An org admin
-    records who's accountable in People › Service identities."
+  - 403 `automation_grant_approver_authors_unknown` (`service`): "Not approved: Nightly planner has no one
+    recorded as accountable for it, so its grant can't be approved yet. Your approval wasn't recorded. An org admin
+    records who's accountable in People › Service identities." (U100's words)
   - 409 `automation_grant_not_proposed` (`state`; `decided_by` and `decided_at`, both or neither): with them, as U97: "This
-    grant was already approved by Ana R. at 06:52Z, so your approval wasn't recorded. Reload to see it." / "…already
-    rejected by…"; the viewer: "You already approved this grant at 06:52Z. Reload to see it." Without them, by state:
+    grant was already approved by Ana R. at 11-19 06:52Z, so your approval wasn't recorded. Reload to see it." /
+    "…already rejected by…"; the viewer: "You already approved this grant at 11-19 06:52Z. Reload to see it." (with
+    the date, since a 72 h proposal spans days) Without them, by state:
     `expired`: "Not approved: no one decided this grant in time, so it expired. Your approval wasn't recorded.
     Propose it again."; `rejected`: "Not approved: this grant was already rejected, so your approval wasn't
     recorded. Reload to see it."; `active`: "…was already approved…"; `revoked`: "Not approved: this grant was
@@ -3846,6 +3849,11 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   <reason>", "Narrowed the grant for Nightly planner: <what changed>", "The proposed grant for Nightly planner
   expired; no one decided it in time.", "Withdrew the proposed grant for Nightly planner when revoking the grant it
   would replace"
+- **A nameless service** (`grantee` or `service` with a null `name`, as U100/#287): the name drops, never an id (U25;
+  the id goes in Technical details). "Nightly planner" becomes "the service this grant is for", e.g. "You're
+  accountable for the service this grant is for, so another org admin approves it." and "Not submitted
+  automatically: the grant for this service isn't approved yet." Sheets and rows already name the service from the
+  grant's own read; a null name there reads "Unknown service identity" (U25).
 - **Not here:** whether a grant approved under "Applies without approval" keeps working after the mission moves to
   "Needs a second person's approval" (#283's open question 1, the director's call); widening who may propose or
   approve to mission admins (open question 2).
