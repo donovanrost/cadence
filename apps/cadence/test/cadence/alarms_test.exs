@@ -3,7 +3,6 @@ defmodule Cadence.AlarmsTest do
 
   import Cadence.ConfigurationFixtures
 
-  alias Cadence.Accounts.{OrganizationMembershipRow, UserRow}
   alias Cadence.Alarms.{Episodes, Ground, Notify}
   alias Cadence.Control.Alarms
   alias Cadence.Limits.Event
@@ -112,8 +111,8 @@ defmodule Cadence.AlarmsTest do
 
       assert {:error, :assignee_not_member} = Alarms.assign(alice, mission, episode.id, "nobody")
 
+      # Bob's user and membership are persisted by ConfigurationFixtures.member_scope (#471).
       bob_id = ctx.bob.user.user_id
-      persist_member(ctx.org, ctx.bob)
 
       assert {:ok, %{assignee: %{id: ^bob_id, name: "Bob"}, status: :new}} =
                Alarms.assign(alice, mission, episode.id, bob_id)
@@ -217,11 +216,5 @@ defmodule Cadence.AlarmsTest do
   defp list(ctx, filters \\ %{}) do
     {:ok, episodes} = Alarms.list_episodes(ctx.alice, ctx.mission, filters)
     episodes
-  end
-
-  defp persist_member(_org, scope) do
-    Repo.insert!(UserRow.changeset(scope.user))
-
-    Repo.insert!(OrganizationMembershipRow.changeset(scope.organization_membership))
   end
 end

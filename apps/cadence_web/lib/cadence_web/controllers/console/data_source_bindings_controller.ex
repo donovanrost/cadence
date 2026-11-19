@@ -46,7 +46,7 @@ defmodule CadenceWeb.Console.DataSourceBindingsController do
     case binding(conn, binding_id) do
       {:ok, binding} ->
         events =
-          binding.binding_id
+          binding
           |> PlatformBindings.events()
           |> redact_for(binding, conn)
 
