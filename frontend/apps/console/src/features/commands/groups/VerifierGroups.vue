@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, useId } from "vue";
 import { ApButton } from "@/ui";
 import type { VerifierGroup } from "./api.ts";
 import { DIFFER_LEAD, groupMeta, groupTargetsText, groupVerifierText } from "./verifierGroups.ts";
@@ -14,7 +14,17 @@ const props = defineProps<{
   nameOf: (spacecraftId: string) => string;
 }>();
 const shown = ref<ReadonlySet<number>>(new Set());
-const show = (i: number) => (shown.value = new Set([...shown.value, i]));
+/**
+ * a11y B3 (#243): Show is a disclosure that stays where it is, Show ↔ Hide with aria-expanded, so
+ * focus never drops to the page (it used to unmount on click).
+ */
+const toggle = (i: number) => {
+  const next = new Set(shown.value);
+  if (next.has(i)) next.delete(i);
+  else next.add(i);
+  shown.value = next;
+};
+const namesId = useId();
 const names = (g: VerifierGroup) => g.spacecraft_ids.map(props.nameOf).join(", ");
 </script>
 
@@ -33,13 +43,20 @@ const names = (g: VerifierGroup) => g.spacecraft_ids.map(props.nameOf).join(", "
         <span class="text-text-4">·</span>
         <span class="text-text-3">{{ groupMeta(g, nameOf) }}</span>
         <ApButton
-          v-if="groupTargetsText(g, nameOf).more && !shown.has(i)"
+          v-if="groupTargetsText(g, nameOf).more"
           size="compact"
           variant="ghost"
-          @click="show(i)"
-          >Show</ApButton
+          :aria-expanded="shown.has(i)"
+          :aria-controls="`${namesId}-${i}`"
+          @click="toggle(i)"
+          >{{ shown.has(i) ? "Hide" : "Show" }}</ApButton
         >
-        <span v-if="shown.has(i)" class="basis-full text-text-3 normal-case">{{ names(g) }}</span>
+        <span
+          v-if="shown.has(i)"
+          :id="`${namesId}-${i}`"
+          class="basis-full text-text-3 normal-case"
+          >{{ names(g) }}</span
+        >
       </li>
     </ul>
   </div>
