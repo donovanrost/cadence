@@ -28,13 +28,11 @@ defmodule Cadence.Catalog.ActorTest do
       service_identity: %{service_identity_id: "svc-1", display_name: "Pipeline"}
     }
 
-    assert {:ok,
-            %{
-              "actor_kind" => "user",
-              "user_id" => "u-1",
-              "name" => "Una",
-              "email" => "u@example.test"
-            }} = Actor.from_scope(user)
+    # #471: no email is stored (ca-security's P1 on #462).
+    assert {:ok, %{"actor_kind" => "user", "user_id" => "u-1", "name" => "Una"} = person} =
+             Actor.from_scope(user)
+
+    refute Map.has_key?(person, "email")
 
     assert {:ok,
             %{"actor_kind" => "service", "service_identity_id" => "svc-1", "name" => "Pipeline"}} =
