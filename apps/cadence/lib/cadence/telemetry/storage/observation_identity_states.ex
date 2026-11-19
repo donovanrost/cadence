@@ -446,17 +446,18 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   defp decision_reason(%ObservationEnvelope{validity_state: :canonical}),
     do: "canonical_revision"
 
-  defp payload(%ObservationEnvelope{} = envelope) do
-    %{
-      latest_observation_id: envelope.observation_id,
-      latest_sample_id: envelope.sample_id,
-      latest_validity_state: envelope.validity_state,
-      supersedes_observation_id: envelope.supersedes_observation_id,
-      source_endpoint_id: envelope.source_endpoint_id,
-      evidence_id: envelope.evidence_id,
-      packet_id: envelope.packet_id
-    }
-  end
+  # #359 (b): a recorded state's payload keeps only what no column holds: a correction's
+  # supersession link (`supersedes_observation_id`, present only on a revision). It used to copy
+  # six more fields on every row: three of this row's own columns (latest_observation_id,
+  # latest_sample_id, the latest validity) and three of the observation's (source_endpoint_id,
+  # evidence_id, packet_id). No reader takes those from the payload (re-delivery compares
+  # columns; selection reads only the payload's "decision", which a decision adds), and they were
+  # most of the payload's ~494 of the row's 1,083 bytes. Rows written before keep their copies
+  # until a revision rewrites them; they read the same.
+  defp payload(%ObservationEnvelope{supersedes_observation_id: nil}), do: %{}
+
+  defp payload(%ObservationEnvelope{supersedes_observation_id: superseded}),
+    do: %{supersedes_observation_id: superseded}
 
   defp schema_fields do
     [

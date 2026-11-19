@@ -178,8 +178,9 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     assert state.canonical_revision == 2
     assert state.canonical_count == 2
     assert state.decision_reason == "canonical_revision"
-    assert state.payload["latest_observation_id"] == correction.observation_id
-    assert state.payload["supersedes_observation_id"] == initial.observation_id
+    # #359 (b): the latest observation is the column; the payload keeps only the supersession.
+    assert state.latest_observation_id == correction.observation_id
+    assert state.payload == %{"supersedes_observation_id" => initial.observation_id}
   end
 
   test "records conflicts without promoting them to canonical" do
