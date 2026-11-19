@@ -211,6 +211,8 @@ export const errorCodes = [
   "plan_not_ready",
   "plan_not_repairable",
   "plan_not_resumable",
+  // #268: execute once the plan's day has ended (nothing started).
+  "contact_plan_day_ended",
   "plan_not_submittable",
   "plan_superseded",
   "draft_not_found",

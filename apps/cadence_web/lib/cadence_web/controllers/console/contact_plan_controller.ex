@@ -196,6 +196,8 @@ defmodule CadenceWeb.Console.ContactPlanController do
   def execute(conn, %{"plan_id" => plan_id}) do
     with :ok <- may_execute(conn),
          {:ok, plan} <- ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id),
+         # #268: first, whatever the plan's state: past its day nothing can be booked.
+         :ok <- day_open(plan, DateTime.utc_now()),
          true <-
            PlanDetail.effective_state(conn, plan).state in [:interrupted, :approved] or
              :not_resumable,
@@ -207,9 +209,21 @@ defmodule CadenceWeb.Console.ContactPlanController do
       {:error, :forbidden} -> Problem.respond(conn, :forbidden)
       {:error, :plan_not_found} -> Problem.respond(conn, :plan_not_found)
       :not_resumable -> Problem.respond(conn, :plan_not_resumable)
+      {:day_ended, day} -> Problem.respond(conn, :contact_plan_day_ended, %{day: day})
       {:error, _reason} -> Problem.respond(conn, :plan_not_resumable)
     end
   end
+
+  # #268: a plan's day is its window's UTC start date (as K1 and Now group plans). Execute refuses
+  # once the UTC date of its last pass (window.to) has passed too, so a plan crossing midnight stays
+  # bookable while its later passes are (ca-security, domain). `day` names the plan's day.
+  defp day_open(%{window: %{from: %DateTime{} = from, to: %DateTime{} = to}}, %DateTime{} = now) do
+    if Date.compare(DateTime.to_date(now), DateTime.to_date(to)) == :gt,
+      do: {:day_ended, from |> DateTime.to_date() |> Date.to_iso8601()},
+      else: :ok
+  end
+
+  defp day_open(_plan, _now), do: :ok
 
   # The capability execution enforces (ContactPlanExecutions: a person needs :operate_mission),
   # checked at the request so a refused caller gets 403, not a 202 and a run that fails later.

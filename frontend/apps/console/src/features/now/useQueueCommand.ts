@@ -87,6 +87,17 @@ export async function bookTargets(
   );
   if (r.ok) return { text: "Booking started.", items: [], emptied: false };
   if (r.error.kind === "forbidden") return { text: NO_ACCESS_BOOK, items: [], emptied: false };
+  // #268 (ux): nothing started; the item then resolves as the day ended.
+  if (isError(r.error, "contact_plan_day_ended")) {
+    const t = targets[0];
+    const day = t?.day ? t.day.slice(5, 10) : "This day";
+    const plan = t?.plan ? `R${t.plan.revision}` : "the plan";
+    return {
+      text: `Not booked: ${day} has ended, so ${plan} can't be booked any more.`,
+      items: [],
+      emptied: false,
+    };
+  }
   return { text: describeApiError(r.error), items: [], emptied: false };
 }
 

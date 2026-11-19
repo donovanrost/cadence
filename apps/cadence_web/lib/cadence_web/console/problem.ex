@@ -39,6 +39,8 @@ defmodule CadenceWeb.Console.Problem do
     plan_changed: {409, "The plan changed since you loaded it."},
     plan_not_submittable: {409, "The plan can't be submitted in its current state."},
     plan_not_resumable: {409, "The plan isn't waiting to execute."},
+    # #268: execute after the plan's UTC day has ended; nothing is started.
+    contact_plan_day_ended: {409, "This plan's day has ended, so nothing was booked."},
     plan_not_pending: {409, "The plan isn't waiting for approval."},
     # #257: submit only submits; a plan already waiting for approval changes nothing.
     plan_already_submitted: {409, "The plan is already waiting for approval."},

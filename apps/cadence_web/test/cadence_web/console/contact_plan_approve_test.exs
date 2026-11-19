@@ -302,6 +302,60 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
     end
   end
 
+  describe "execute once the plan's day has ended (#268)" do
+    test "is refused with 409 contact_plan_day_ended and the day, whatever the plan's state", c do
+      plan_id = member_plan(c)
+      submit!(c, c.member, plan_id, "op-day-submit")
+      approve!(c, c.admin, plan_id, "op-day-approve")
+
+      # Move the plan's passes two days back, so its day (the window's UTC date) has ended.
+      past = DateTime.utc_now() |> DateTime.add(-2 * 86_400) |> DateTime.truncate(:microsecond)
+
+      move_back!(c, plan_id, past)
+
+      day = past |> DateTime.to_date() |> Date.to_iso8601()
+      # The approve's own run has ended; drop its progress so only a new run would show.
+      drain_progress(plan_id)
+      conn = post_as(c, c.admin, plan_id, "execute", %{})
+
+      assert %{"code" => "contact_plan_day_ended", "details" => %{"day" => ^day}} =
+               json_response(conn, 409)["error"]
+
+      refute_receive {:scheduling_progress, %{kind: :execute, id: ^plan_id}}, 200
+
+      # Which refusal wins (api): a plan that isn't waiting to execute also hears the day, not
+      # plan_not_resumable, once its day has ended.
+      pending = member_plan(c)
+      submit!(c, c.member, pending, "op-day-pending")
+      move_back!(c, pending, past)
+
+      assert %{"code" => "contact_plan_day_ended"} =
+               c
+               |> post_as(c.admin, pending, "execute", %{})
+               |> json_response(409)
+               |> Map.fetch!("error")
+
+      assert plan_state(c, pending) == "pending_approval"
+    end
+
+    test "a plan crossing midnight UTC isn't refused while its last pass's day is today", c do
+      plan_id = member_plan(c)
+      submit!(c, c.member, plan_id, "op-midnight-submit")
+      # Its pass starts at 23:55 yesterday and ends 00:05 today: the plan's day (window.from)
+      # has ended, its last day (window.to) hasn't.
+      %{"passes" => passes} = get_as(c, c.admin, "/#{plan_id}")["data"]
+      late = DateTime.new!(Date.add(Date.utc_today(), -1), ~T[23:55:00.000000], "Etc/UTC")
+      Enum.each(passes, &put_pass!(&1["snapshot_id"], late))
+
+      # The pending plan isn't waiting to execute, so it hears that, never the day.
+      assert %{"code" => "plan_not_resumable"} =
+               c
+               |> post_as(c.admin, plan_id, "execute", %{})
+               |> json_response(409)
+               |> Map.fetch!("error")
+    end
+  end
+
   describe "params" do
     test "submit refuses a decision_note (422): approving is its own action", c do
       plan_id = member_plan(c)
@@ -388,6 +442,33 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
     |> where([a], a.organization_id == ^c.org.organization_id and a.contact_plan_id == ^plan_id)
     |> select([a], a.policy_document)
     |> Repo.one()
+  end
+
+  defp move_back!(c, plan_id, %DateTime{} = to) do
+    %{"passes" => passes} = get_as(c, c.admin, "/#{plan_id}")["data"]
+    ids = Enum.map(passes, & &1["snapshot_id"])
+
+    Repo.update_all(
+      from(s in ContactOpportunitySnapshotRow, where: s.contact_opportunity_snapshot_id in ^ids),
+      set: [starts_at: to, ends_at: DateTime.add(to, 600)]
+    )
+  end
+
+  defp put_pass!(snapshot_id, %DateTime{} = at) do
+    Repo.update_all(
+      from(s in ContactOpportunitySnapshotRow,
+        where: s.contact_opportunity_snapshot_id == ^snapshot_id
+      ),
+      set: [starts_at: at, ends_at: DateTime.add(at, 600)]
+    )
+  end
+
+  defp drain_progress(plan_id) do
+    receive do
+      {:scheduling_progress, %{id: ^plan_id}} -> drain_progress(plan_id)
+    after
+      0 -> :ok
+    end
   end
 
   # The fixture route isn't bookable, so execution ends failed, but off the request; await it so

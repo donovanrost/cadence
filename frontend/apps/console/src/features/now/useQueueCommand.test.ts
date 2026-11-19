@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId as missionIdReader, decode } from "@/api/index.ts";
 import { attentionReader, type Attention } from "./attention.ts";
-import { NO_ACCESS, NO_ACCESS_SEEN, retryTargets, seenTargets } from "./useQueueCommand.ts";
+import {
+  bookTargets,
+  NO_ACCESS,
+  NO_ACCESS_SEEN,
+  retryTargets,
+  seenTargets,
+} from "./useQueueCommand.ts";
 
 // domain's #71 sample item (refs shortened), as the queue and the retry endpoint send it.
 const sample = (id: string, retry: string) => ({
@@ -89,5 +95,54 @@ describe("Retry storing (domain #71 final contract, ux c10265fd review)", () => 
     expect((await seenTargets(missionIdReader("m"), [manual("a")])).text).toBeNull();
     stub(reply(403, err("forbidden", "No.")));
     expect((await seenTargets(missionIdReader("m"), [manual("a")])).text).toBe(NO_ACCESS_SEEN);
+  });
+});
+
+describe("Book on Now's plan_coverage item (#268)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const coverage = read({
+    id: "2026-11-16",
+    source: "plan_coverage",
+    conflict: null,
+    state: "open",
+    acknowledged_by: null,
+    contact_id: null,
+    station: null,
+    provider: null,
+    starts_at: null,
+    raised_at: "2026-11-15T00:28:00Z",
+    provider_message: null,
+    day: "2026-11-16",
+    first_window_at: "2026-11-16T00:28:00Z",
+    due_at: "2026-11-16T00:28:00Z",
+    severity: "crit",
+    requirements_count: 1512,
+    plan: {
+      id: "plan-41",
+      revision: 41,
+      state: "approved",
+      author: null,
+      submitted_at: null,
+      sent_back: null,
+      approved_at: "2026-11-15T22:10:00Z",
+      booking: { reserved: 0, total: 40, bookable: 40, last_progress_at: null },
+    },
+    approvers: [],
+    viewer_can_approve: false,
+    viewer_can_book: true,
+    resolution: null,
+  });
+  it("words the day-ended refusal; nothing started", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          reply(409, err("contact_plan_day_ended", "x", { day: "2026-11-16" })),
+        ),
+    );
+    expect((await bookTargets(missionIdReader("m"), [coverage])).text).toBe(
+      "Not booked: 11-16 has ended, so R41 can't be booked any more.",
+    );
   });
 });
