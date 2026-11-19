@@ -145,13 +145,25 @@ const ACTIONS: Readonly<Record<string, string>> = {
 const actionWord = (a: string) => ACTIONS[a] ?? a.replaceAll("_", " ");
 
 /** Technical details lines: ids, phase, severity, generated/recorded times. */
+/**
+ * ux U70 (U25): a resolver the line can't name is found here by its id: ' · resolved by service
+ * identity key-1', or ' · resolved by key-1' when its kind isn't known. A named one shows nothing.
+ */
+function resolverId(a: Attempt): string {
+  const by = a.failure?.by;
+  if (!by || by.name) return "";
+  return by.kind === "service_identity"
+    ? ` · resolved by service identity ${by.id}`
+    : ` · resolved by ${by.id}`;
+}
+
 export function technicalLines(
   attempts: readonly Attempt[],
   verifiers: readonly HistoryVerifier[],
 ): string[] {
   const lines = attempts.map(
     (a) =>
-      `Attempt ${a.attempt_id}${a.path_id ? ` · path ${a.path_id}` : ""}${a.transport_binding_id ? ` · binding ${a.transport_binding_id}` : ""}${a.failure_reason ? ` · ${a.failure_reason}` : ""}`,
+      `Attempt ${a.attempt_id}${a.path_id ? ` · path ${a.path_id}` : ""}${a.transport_binding_id ? ` · binding ${a.transport_binding_id}` : ""}${a.failure_reason ? ` · ${a.failure_reason}` : ""}${resolverId(a)}`,
   );
   for (const v of verifiers) {
     const phase = isKnown(v.phase) ? v.phase : v.phase.unrecognized;

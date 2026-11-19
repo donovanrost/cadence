@@ -169,6 +169,29 @@ describe("history words (ux U70)", () => {
       "Resolved as not sent at 03:20:05Z; who resolved it wasn't recorded",
     );
   });
+  it("puts a nameless resolver's id in Technical details (ux U70, U25)", () => {
+    const resolved = (
+      by: { id: string; name: string | null; kind?: "user" | "service_identity" } | null,
+    ) =>
+      technicalLines(
+        [
+          attempt({
+            state: "release_failed",
+            failure: { kind: "resolved", code: "not_sent", by, at: "2026-11-16T03:20:05Z" },
+          }),
+        ],
+        [],
+      )[0];
+    expect(resolved({ id: "key-1", name: null, kind: "service_identity" })).toBe(
+      "Attempt at-1 · resolved by service identity key-1",
+    );
+    expect(resolved({ id: "u-7", name: null })).toBe("Attempt at-1 · resolved by u-7");
+    // Named, the line already says who: no id.
+    expect(resolved({ id: "key-1", name: "ops-automation", kind: "service_identity" })).toBe(
+      "Attempt at-1",
+    );
+    expect(resolved(null)).toBe("Attempt at-1");
+  });
   it("words verifiers and their evidence", () => {
     expect(verifierLine(verifier())).toBe("Mode applied · verified at 03:12:04Z");
     expect(evidenceLine(verifier())).toEqual({
