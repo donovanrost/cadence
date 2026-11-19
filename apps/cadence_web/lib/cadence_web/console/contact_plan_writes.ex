@@ -162,8 +162,9 @@ defmodule CadenceWeb.Console.ContactPlanWrites do
     decision =
       case Scheduling.latest_decision(org_id(conn), mission_id(conn), plan_id) do
         %{actor_document: %{"id" => id} = actor, decided_at: at} ->
-          # The plan read's own rule for a decider's name (ContactPlanOverview).
-          name = actor["display_name"] || actor["name"] || actor["email"]
+          # The plan read's own rule for a decider's name (ContactPlanOverview). Never the
+          # email a row written before #466 may hold.
+          name = actor["display_name"] || actor["name"]
           %{decided_by: %{id: id, name: name}, decided_at: at}
 
         _none ->

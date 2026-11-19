@@ -310,8 +310,9 @@ defmodule Cadence.Reads.Commands do
   defp latest_datetime(datetimes), do: Enum.max_by(datetimes, &DateTime.to_unix(&1, :microsecond))
 
   defp requested_by_label(requested_by) when is_map(requested_by) do
-    requested_by[:display_name] || requested_by["display_name"] || requested_by[:email] ||
-      requested_by["email"] || requested_by[:user_id] || requested_by["user_id"] || "Unknown"
+    # #466: never the email a request stored before #466 may hold.
+    requested_by[:display_name] || requested_by["display_name"] || requested_by[:user_id] ||
+      requested_by["user_id"] || "Unknown"
   end
 
   defp requested_by_label(_requested_by), do: "Unknown"

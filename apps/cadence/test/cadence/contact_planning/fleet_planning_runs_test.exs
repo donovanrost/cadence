@@ -276,6 +276,19 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
     assert run.input_document["requirement_count"] == 1
     assert run.trigger_actor_document["id"] == context.member_scope.user.user_id
 
+    # #466: the stored trigger actor is kind, id and display name only, with no email.
+    stored_row =
+      Cadence.Repo.get!(
+        Cadence.Management.Contacts.Store.FleetPlanningRunRow,
+        run.fleet_planning_run_id
+      )
+
+    assert Cadence.Persistence.JsonDocument.unwrap_value(stored_row.trigger_actor_document) == %{
+             "kind" => "user",
+             "id" => context.member_scope.user.user_id,
+             "display_name" => context.member_scope.user.display_name
+           }
+
     assert input_ref.contact_requirement_id == requirement.contact_requirement_id
     assert input_ref.contact_requirement_version == requirement_version.version
     assert input_ref.input_state == :pending

@@ -524,8 +524,7 @@ defmodule Cadence.Management.Activations do
      %{
        "kind" => "user",
        "id" => user.user_id,
-       "display_name" => user.display_name,
-       "email" => user.email
+       "display_name" => user.display_name
      }}
   end
 
