@@ -30,6 +30,10 @@ approves.
 - [ ] For every kind, under 'independent', the author set expands each service author to its accountable
       people, and an approver in that set is refused with the kind's existing self-approval refusal.
       Nothing is recorded on refusal.
+- [ ] A service issued or rotated by a service inherits that service's accountable people; an unknown link
+      anywhere in the chain makes the set unknown.
+- [ ] A service may approve only where a kind already allows it (an automation grant). Its approving set is
+      its accountable people plus the grant's approver, and it's refused when that set meets the author set.
 - [ ] A service author whose accountable people aren't recorded makes approval fail closed with a distinct
       refusal (like #236's activation_approver_authors_unknown), and the console says why.
 - [ ] An org admin can record the accountable people for an identity that has none on record. The action
