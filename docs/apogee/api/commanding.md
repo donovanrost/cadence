@@ -286,6 +286,13 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   waiting for its contact but its lane is held by a release whose outcome is unknown
   (`release_uncertain`). Nothing behind it releases until an operator resolves that attempt. Show
   it in "Needs you".
+  `members_changed`, `submitted_member_count`, `current_member_count` (#120, ux U92 "Up front";
+  show and the group channel push, not list rows): always present. While `state` is
+  `approval_pending`: `members_changed` is `true` when the group's member rows no longer match the
+  count it was submitted with (the GO refusal's own test, `Commanding.Groups.MemberCheck`, so the
+  two never disagree), with both counts as integers (the `409 command_group_members_changed`
+  details' names). In any other state all three are `null`. When it's `true` a GO answers that
+  409, so disable GO up front; NO-GO, send back and abort stay allowed.
 - Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
   | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
