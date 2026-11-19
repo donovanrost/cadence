@@ -3785,6 +3785,11 @@ read, the dry run).
       the person is already on the import whose diff couldn't be read: "Cadence couldn't compare rev 4 with rev 3,
       so this page can't show whether it breaks anything in use. Check what uses its commands and points before you
       stage." No link. The checkbox reads "I've checked what rev 4 changes".
+  - **Stage's disabled reason** (A6) mirrors the checkbox that's still unticked: "Check the breaking change
+    first." / "Check the 3 breaking changes first."; a first revision, and the import page's uncompared line:
+    "Check what rev 4 changes first."; a revision page that can't read the diff: "Check rev 4's diff first." C3
+    always has a number: catalog revisions are always numbered, and a model revision without one has no C3 (see
+    above), so these lines have no "this catalog revision" form.
 - **The dry run, in the person's words:**
   - While it runs: `CHECKING…` (as C3). Stage's disabled reason is "Checking what this moves…", not "Waiting for
     the dry run.".
@@ -3813,7 +3818,11 @@ fixes their words and lists what the legacy pages offered that the console doesn
 - 409 `import_running`: "Not started: an import of this file is already running." with `Open the run`. Any other
   failure: "Not started:" plus the failure sentence.
 - "Recorded as mine" (acceptance criterion 1): the import runs table's `Started` cell reads "11-19 05:40Z by Mira K."
-  (U29, one event). A system actor reads "by Cadence"; a service identity or a missing actor shows the time alone.
+  (U29, one event). A system actor reads "by Cadence"; a missing actor shows the time alone. A service identity
+  of the mission's own organization is named and marked as a service, so it doesn't read as a person: "11-19
+  05:40Z by Nightly planner (a service identity)". The server sends a null name for any other service
+  (mms-security), and a null name shows the time alone, never an id (U25). (Amended 11-19, fe-setup's #364
+  question.)
   Data: the run row stores `requested_by` (an actor: kind and user id), so the runs read adds its display name
   (#146's read; fe-setup assigns it).
 
