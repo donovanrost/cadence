@@ -378,6 +378,56 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
     end
   end
 
+  # ca-security: a revoke waits for in-flight uses, and the next use sees it. The sandbox runs
+  # every process on one connection, so a true two-process race can't block here; this pins the
+  # locks that make it so in production: use reads the row FOR SHARE, revoke takes it FOR UPDATE.
+  describe "concurrency" do
+    test "use takes the grant FOR SHARE; revoke and narrow take it FOR UPDATE", c do
+      grant = active!(c)
+
+      {use_sql, {:ok, _}} = capture_sql(fn -> use_grant(c, grant) end)
+      assert Enum.any?(use_sql, &(&1 =~ "automation_grants" and &1 =~ "FOR SHARE"))
+
+      {narrow_sql, {:ok, _}} = capture_sql(fn -> narrow(c, grant, %{maximum_contacts: 4}) end)
+      assert Enum.any?(narrow_sql, &(&1 =~ "automation_grants" and &1 =~ "FOR UPDATE"))
+
+      {revoke_sql, {:ok, _}} =
+        capture_sql(fn ->
+          AutomationGrants.revoke(c.third, c.mission, grant.automation_grant_id, nil, nil)
+        end)
+
+      assert Enum.any?(revoke_sql, &(&1 =~ "automation_grants" and &1 =~ "FOR UPDATE"))
+      assert {:error, :automation_grant_revoked} = use_grant(c, grant)
+    end
+  end
+
+  defp capture_sql(fun) do
+    me = self()
+    handler = "grant-sql-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      [:cadence, :repo, :query],
+      fn _event, _measure, meta, _cfg -> if self() == me, do: send(me, {:sql, meta.query}) end,
+      nil
+    )
+
+    try do
+      result = fun.()
+      {drain_sql([]), result}
+    after
+      :telemetry.detach(handler)
+    end
+  end
+
+  defp drain_sql(acc) do
+    receive do
+      {:sql, query} -> drain_sql([query | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
   describe "the content hash (#108)" do
     test "golden: the layout carries validity_seconds, not the window" do
       grant =
