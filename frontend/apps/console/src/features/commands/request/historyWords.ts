@@ -28,17 +28,23 @@ function uncertainWords(a: Attempt): string {
     : "Cadence couldn't confirm whether it was sent";
 }
 
-/** ux U70 (U29): 'Resolved as not sent by Mira K. at 03:20:05Z.' or who wasn't recorded. */
+/**
+ * ux U70 (U29, U103): 'Resolved as not sent by Mira K. at 03:20:05Z.', '…by ops-automation (a
+ * service identity)…', '…by a service identity…', or who isn't known / wasn't recorded.
+ */
 function resolvedLine(a: Attempt): string {
   const f = a.failure;
   // compared-as-text: resolved codes are api's two words, not_sent and rejected.
   const as = f?.code === "rejected" ? "rejected" : "not sent";
   const when = f?.at ? ` at ${at(f.at)}` : "";
   const by = f?.by;
-  // ux U70: a person or a service identity (an API credential) by its name. A resolution is never
-  // Cadence's own act (api: an automatic timeout records 'unknown', not a resolution).
+  // ux U70: a person by name; a service identity (an API credential) by its name, marked as a
+  // service (U103), or by its kind alone when it has no name. A resolution is never Cadence's own
+  // act (api: an automatic timeout records 'unknown', not a resolution).
+  const service = by?.kind === "service_identity";
   const who = by?.name ?? null;
-  if (who) return `Resolved as ${as} by ${who}${when}`;
+  if (who) return `Resolved as ${as} by ${service ? `${who} (a service identity)` : who}${when}`;
+  if (service) return `Resolved as ${as} by a service identity${when}`;
   return by
     ? `Resolved as ${as}${when}; who resolved it isn't known`
     : `Resolved as ${as}${when}; who resolved it wasn't recorded`;
