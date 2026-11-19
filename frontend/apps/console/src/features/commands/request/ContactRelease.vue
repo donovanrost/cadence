@@ -134,12 +134,23 @@ async function release() {
   <!-- a11y B6 (#243, ca-ux): two regions that are always there (outside the callout, which goes
        once nothing is armed), so the role never changes with the content and the last result
        stays until the next release: all released is a status, anything else an alert. -->
-  <div ref="statusEl" role="status" tabindex="-1" class="flex flex-col outline-none">
+  <!-- sr-only while empty, so they take no room in the view's column (ux #431). -->
+  <div
+    ref="statusEl"
+    role="status"
+    tabindex="-1"
+    :class="lines.length && !linesFailed ? 'flex flex-col' : 'sr-only'"
+  >
     <template v-if="!linesFailed">
       <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
     </template>
   </div>
-  <div ref="alertEl" role="alert" tabindex="-1" class="flex flex-col outline-none">
+  <div
+    ref="alertEl"
+    role="alert"
+    tabindex="-1"
+    :class="lines.length && linesFailed ? 'flex flex-col' : 'sr-only'"
+  >
     <template v-if="linesFailed">
       <p v-for="(line, i) in lines" :key="i" class="m-0 text-sm text-text-2">{{ line }}</p>
     </template>

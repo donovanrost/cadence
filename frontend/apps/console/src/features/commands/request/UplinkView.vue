@@ -178,7 +178,7 @@ const release = computed(() =>
       ref="abortedEl"
       role="status"
       tabindex="-1"
-      :class="aborted ? 'm-0 text-md text-text-2 outline-none' : 'sr-only'"
+      :class="aborted ? 'm-0 text-md text-text-2' : 'sr-only'"
     >
       {{ aborted }}
     </p>

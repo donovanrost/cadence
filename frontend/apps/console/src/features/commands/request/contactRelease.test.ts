@@ -71,6 +71,9 @@ async function release(focusElsewhere = false) {
     global: { stubs: { ConfirmDialog } },
     attachTo: document.body,
   });
+  // Empty, both regions take no room in the view's column (ux #431).
+  expect(w.get('[role="status"]').classes()).toContain("sr-only");
+  expect(w.get('[role="alert"]').classes()).toContain("sr-only");
   const button = w.findAll("button").find((b) => b.text() === "Release commands…");
   if (!button) throw new Error("no Release");
   if (button.element instanceof HTMLElement) button.element.focus();
@@ -89,6 +92,7 @@ describe("ContactRelease after a release", () => {
     await flushPromises();
     const status = w.get('[role="status"]');
     expect(status.text()).toBe("Released 1 request.");
+    expect(status.classes()).not.toContain("sr-only");
     expect(document.activeElement).toBe(status.element);
     w.unmount();
   });
