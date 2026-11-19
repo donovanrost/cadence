@@ -11,6 +11,7 @@ import {
   showAllLabel,
   summaryLines,
   telemetryOffLine,
+  unnamedSourceIds,
   unshownCount,
   valueWord,
 } from "./changesWords.ts";
@@ -83,6 +84,51 @@ const rowOf = (wire: Record<string, unknown>): ChangeRow => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("#235 what a spacecraft configuration request changes", () => {
+  // api #415: the server sends a null name when its lookup misses; one null never fails the page.
+  it("reads a craft or source the server couldn't name in U25's words, never the id", () => {
+    const nameless = { spacecraft_id: "sc_9", name: null };
+    const source = rowOf({
+      field: "telemetry_source",
+      label: "x",
+      before: { id: "src_1", name: "Fairbanks downlink" },
+      after: { id: "src_2", name: null },
+    });
+    // ux U94 (#416): a set source Cadence couldn't name is apart from Not set (no source chosen).
+    expect(rowLine(source, false)).toBe(
+      "Packet source: Fairbanks downlink → Unknown packet source",
+    );
+    expect(valueWord({ ...source, after: null }, "after")).toBe("Not set");
+    // The id goes only in Technical details (#416).
+    const withSource = read({ groups: [group({ rows: [source] })], total: 1 }).groups.items[0];
+    expect(withSource && unnamedSourceIds(withSource)).toEqual(["src_2"]);
+
+    const c = read({
+      groups: [group({ rows: [catalogRow], spacecraft: [nameless] })],
+      total: 1,
+    });
+    const [g] = c.groups.items;
+    if (!g) throw new Error("no group");
+    expect(c.groups.unshown).toEqual([]);
+    expect(groupHeading(g)).toContain("Unknown spacecraft");
+    expect(groupHeading(g)).not.toContain("sc_9");
+    // Inside a sentence it's "this spacecraft" (U98, mms-ux).
+    const fresh = read({
+      groups: [group({ rows: [catalogRow], spacecraft: [nameless], first_start: true })],
+      total: 1,
+    }).groups.items[0];
+    expect(fresh && firstStartLine(fresh)).toBe(
+      "Nothing is active for this spacecraft yet, so every setting is new.",
+    );
+    const same = read({ groups: [group({ rows: [], spacecraft: [nameless] })], total: 1 }).groups
+      .items[0];
+    expect(same && noChangesLine(same, false)).toBe(
+      "Nothing changes for this spacecraft: this configuration matches what's active.",
+    );
+
+    const names = groupNamesReader({ spacecraft: [craft(1), nameless], next_offset: null });
+    expect(names.spacecraft.map((s) => s.name)).toEqual(["EARENDIL-001", null]);
+  });
+
   it("is optional on the detail until api ships it, and null for other kinds", () => {
     const field = configurationChangesField.configuration_changes;
     expect(field(undefined)).toBeUndefined();

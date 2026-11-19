@@ -35,8 +35,8 @@ export const changeFields = [
 export type ChangeField = (typeof changeFields)[number];
 
 const catalogValue = d.nullable(d.object({ id: d.token, number: d.nullable(d.integer) }));
-// free-text: a packet source's display name
-const sourceValue = d.nullable(d.object({ id: d.token, name: d.string }));
+// free-text: a packet source's display name; null when the server can't find it (api #415).
+const sourceValue = d.nullable(d.object({ id: d.token, name: d.nullable(d.string) }));
 const apidsValue = d.nullable(d.array(d.integer, 2048));
 const downlinkValue = d.nullable(d.knownText(["tm", "aos", "uslp"] as const));
 const uplinkValue = d.nullable(d.knownText(["tc", "uslp"] as const));
@@ -69,10 +69,18 @@ export type ChangeRow = Decoded<typeof changeRow>;
 
 const craftRef = d.object({
   spacecraft_id: spacecraftIdReader,
-  // free-text: a spacecraft's display name (never an id, U25)
-  name: d.string,
+  // free-text: a spacecraft's display name; null when the lookup misses (a craft no longer in the
+  // mission, a failed batch lookup; api #415). Read through craftName, never as an id (U25).
+  name: d.nullable(d.string),
 });
 export type CraftRef = Decoded<typeof craftRef>;
+/** A craft's name, or "Unknown spacecraft" when the server couldn't name it (U25: never the id). */
+export const craftName = (s: Readonly<{ name: string | null }>) => s.name ?? "Unknown spacecraft";
+/** Inside a sentence (U98, mms-ux): a nameless craft is "this spacecraft". */
+export const craftInSentence = (s: Readonly<{ name: string | null }>) =>
+  s.name ?? "this spacecraft";
+/** A packet source the server couldn't name (U25: never the id). */
+export const UNKNOWN_SOURCE = "Unknown packet source";
 
 /**
  * A row this console can't read (a new field, a value that doesn't decode) is left out and

@@ -8,8 +8,14 @@ import {
   noChangesLine,
   rowLine,
   showAllLabel,
+  unnamedSourceIds,
 } from "./changesWords.ts";
-import { fetchGroupNames, type ChangeGroup, type CraftRef } from "./configurationChanges.ts";
+import {
+  craftName,
+  fetchGroupNames,
+  type ChangeGroup,
+  type CraftRef,
+} from "./configurationChanges.ts";
 import type { DetailKey } from "./api.ts";
 
 /** #235 (ux U94): one group of craft with identical changes, or the no-change group. */
@@ -55,7 +61,7 @@ async function showAll() {
     <p v-if="!unchanged && fleet && group.count > 1 && !all" class="m-0 text-sm text-text-2">
       {{ namesLine(group) }}
     </p>
-    <p v-if="all" class="m-0 text-sm text-text-2">{{ all.map((s) => s.name).join(", ") }}</p>
+    <p v-if="all" class="m-0 text-sm text-text-2">{{ all.map(craftName).join(", ") }}</p>
     <div v-if="showAllLabel(group) && !all">
       <ApButton
         size="compact"
@@ -73,5 +79,11 @@ async function showAll() {
         {{ rowLine(row, group.first_start) }}
       </li>
     </ul>
+    <details v-if="unnamedSourceIds(group).length" class="text-xs text-text-3">
+      <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
+      <p v-for="id in unnamedSourceIds(group)" :key="id" class="m-0 pt-1 font-mono break-all">
+        packet source id: {{ id }}
+      </p>
+    </details>
   </section>
 </template>
