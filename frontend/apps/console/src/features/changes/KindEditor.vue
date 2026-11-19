@@ -7,6 +7,7 @@ import { ApButton, ApPanel, ApRemote } from "@/ui";
 import { failureOutcome, stageChange, type FailureOutcome } from "./actions.ts";
 import FailureOutcomeCallout from "./FailureOutcomeCallout.vue";
 import { fieldErrors } from "./fieldErrors.ts";
+import type { FormRules, FormState } from "./formRules.ts";
 import {
   createDefaults,
   diffEdits,
@@ -46,6 +47,8 @@ const props = defineProps<{
     values: FormValues,
     changes: readonly { path: string; value: unknown }[],
   ) => string;
+  /** Kind-specific form rules the schema can't say (U83: a transport's listener). */
+  rules?: FormRules;
 }>();
 const router = useRouter();
 const fetched = useRemoteQuery(
@@ -81,6 +84,19 @@ watch(
   },
   { immediate: true },
 );
+/** The form as the rules see it; null until the schema is in. */
+const formState = (): FormState | null =>
+  schema.state.value.status === "ready"
+    ? { schema: schema.state.value.value, before: before.value, values: values.value }
+    : null;
+function edit(next: FormValues) {
+  const s = formState();
+  values.value = s && props.rules?.reconcile ? props.rules.reconcile({ ...s, values: next }) : next;
+}
+const notes = computed(() => {
+  const s = formState();
+  return s && props.rules?.notes ? props.rules.notes(s) : {};
+});
 const title = computed(() => (props.entityId ? `Edit ${props.name}` : `Add ${props.name}`));
 /** Offered until the field holds it; using it only fills the form (staged with the edit). */
 const offered = computed(() => {
@@ -89,7 +105,7 @@ const offered = computed(() => {
 });
 function useSuggestion() {
   const s = offered.value;
-  if (s) values.value = { ...values.value, [s.path]: s.value };
+  if (s) edit({ ...values.value, [s.path]: s.value });
 }
 const show = (v: unknown) =>
   v === null ? "cleared" : typeof v === "string" ? v : JSON.stringify(v);
@@ -112,10 +128,12 @@ function toDocument(changes: readonly { path: string; value: unknown }[]) {
   return doc;
 }
 
-function defaultSummary(changes: readonly { path: string; value: unknown }[]) {
+function defaultSummary(changes: readonly { path: string; value: unknown }[], state: FormState) {
   const label = props.entityId ? props.name : (values.value.display_name ?? props.name);
   return props.entityId
-    ? `${label} · ${changes.map((c) => `${c.path} → ${show(c.value)}`).join(", ")}`
+    ? `${label} · ${changes
+        .map((c) => props.rules?.describe?.(c, state) ?? `${c.path} → ${show(c.value)}`)
+        .join(", ")}`
     : `Add ${label}`;
 }
 
@@ -147,7 +165,11 @@ async function stage() {
   errors.value = {};
   if (edits.changes.length === 0)
     return void (failure.value = { changed: false, sentence: "Nothing changed yet." });
-  const changes = props.finish ? props.finish(edits.changes) : edits.changes;
+  const state = { schema: schema.state.value.value, before: before.value, values: values.value };
+  const finished = props.finish ? props.finish(edits.changes) : edits.changes;
+  const changes = props.rules?.finish ? props.rules.finish(finished, state) : finished;
+  if (changes.length === 0)
+    return void (failure.value = { changed: false, sentence: "Nothing changed yet." });
   busy.value = true;
   failure.value = null;
   try {
@@ -161,7 +183,7 @@ async function stage() {
       : { kind: props.kind, action: "create" as const, document: toDocument(changes) };
     const summary = props.summarize
       ? props.summarize(props.entityId ? "update" : "create", values.value, changes)
-      : defaultSummary(changes);
+      : defaultSummary(changes, state);
     const result = await stageChange(props.missionId, {
       summary,
       source: { surface: props.surface },
@@ -185,7 +207,13 @@ async function stage() {
     <ApRemote :state="schema.state.value" loading-label="Loading fields…" @retry="schema.refetch">
       <template #default="{ value: kindSchema }">
         <form class="flex flex-col gap-4" @submit.prevent="stage">
-          <SchemaForm v-model="values" :schema="kindSchema" :errors="errors" />
+          <SchemaForm
+            :model-value="values"
+            :schema="kindSchema"
+            :errors="errors"
+            :notes="notes"
+            @update:model-value="edit"
+          />
           <p v-if="offered" class="m-0 flex flex-wrap items-center gap-2 text-sm text-text-3">
             Suggested: <span class="font-mono text-readout">{{ offered.value }}</span>
             <ApButton size="compact" @click="useSuggestion">Use {{ offered.value }}</ApButton>

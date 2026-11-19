@@ -10,6 +10,7 @@ import {
 } from "@/features/changes/index.ts";
 import { ApPanel, ApRemote, ApSegmented } from "@/ui";
 import { fetchTransport, type TransportDetail } from "./api.ts";
+import { listenerRules } from "./listener.ts";
 import ProviderTransportForm from "./ProviderTransportForm.vue";
 
 /**
@@ -58,6 +59,7 @@ const refused = ref<RefusalOutcome | null>(null);
       index="T3"
       surface="transports"
       :done="done"
+      :rules="listenerRules"
     />
     <ApPanel v-else index="T3" title="Add transport">
       <ProviderTransportForm
@@ -99,6 +101,7 @@ const refused = ref<RefusalOutcome | null>(null);
         index="T3"
         surface="transports"
         :done="done"
+        :rules="listenerRules"
       >
         <template v-if="value.lifecycle_state === 'active'" #actions>
           <StagedArchive v-bind="archive(value)" @refused="refused = $event" />

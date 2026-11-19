@@ -17,6 +17,8 @@ const props = defineProps<{
   disabledValues?: Readonly<Record<string, readonly string[]>>;
   /** Per field path, an extra line in the field's own hint, so it's announced with the control (A6). */
   hints?: Readonly<Record<string, string>>;
+  /** Info lines under fields, by path (a kind's form rules; U83). */
+  notes?: Readonly<Record<string, string>> | undefined;
 }>();
 const values = defineModel<FormValues>({ required: true });
 const option = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
@@ -99,6 +101,9 @@ const hint = (f: SchemaField) =>
           :error="errors[f.path] ?? null"
           @update:model-value="set(f.path, $event)"
         />
+        <p v-if="notes?.[f.path]" class="m-0 text-sm text-text-2 md:col-span-2">
+          {{ notes[f.path] }}
+        </p>
       </template>
     </template>
   </div>

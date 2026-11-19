@@ -13,7 +13,7 @@ const reset = {
   after: null,
   before_label: "Shared, routed by SCID",
   after_label: "Own listener for each pass",
-  note: "only an inbound transport that listens can share one",
+  note: "only a downlink transport that listens can share one",
 };
 
 describe("diff rows read the option's words (ux U83, api)", () => {
@@ -23,7 +23,7 @@ describe("diff rows read the option's words (ux U83, api)", () => {
       if (!row.ok) throw row.error;
       expect(beforeText(row.value)).toBe("Shared, routed by SCID");
       expect(afterText(row.value)).toBe(
-        "Own listener for each pass (only an inbound transport that listens can share one)",
+        "Own listener for each pass (only a downlink transport that listens can share one)",
       );
     }
   });
