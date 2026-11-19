@@ -91,7 +91,7 @@ describe("KindEditor: U79 errors on their fields, and the kind's own summary", (
     await w.get("form").trigger("submit");
     await flushPromises();
     expect(w.text()).toContain("Choose a role for downlink, uplink or both");
-    expect(w.get('[role="status"]').text()).toBe("Nothing was staged.");
+    expect(w.get('[role="status"]:not(.sr-only)').text()).toBe("Nothing was staged.");
     w.unmount();
   });
 
