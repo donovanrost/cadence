@@ -356,7 +356,10 @@ provenance contract in the mission model), qa (the slot for D).
 
 - **Order:** the QuestDB migration runs BEFORE the restart onto B. qa's pre-flight runs
   `mix cadence.questdb.migrate --check` from the new build's tree. Exit 0 is schema current; exit 1
-  means migrate first; exit 2 means the schema is unreadable. The new reader selects the new
+  means migrate first (also when the table doesn't exist yet); exit 2 means the schema is
+  unreadable. Every line names the endpoint it checked. The migrate itself returns only once
+  QuestDB has applied the WAL, so the columns are visible when it says so (qa, #483: right after the
+  ALTERs, `table_columns` showed 4 of 9). The new reader selects the new
   columns, and line-protocol writes would otherwise create them with the wrong types.
 - **Rollback:** after B lands, a code rollback past B is a last resort. Rows written after B and
   read by pre-B code show only the residual (for packet rows, only `storage`). A pre-B write-back

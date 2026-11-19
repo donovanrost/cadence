@@ -115,8 +115,8 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigrator do
   def check(opts \\ []) when is_list(opts) do
     migrations_path = Keyword.get(opts, :migrations_path, default_migrations_path())
 
-    with {:ok, columns} <- table_columns(opts),
-         {:ok, applied_versions} <- applied_versions(opts),
+    with {:ok, columns} <- table_columns(opts) |> absent_as([]),
+         {:ok, applied_versions} <- applied_versions(opts) |> absent_as([]),
          {:ok, pending} <- migration_plan(migrations_path, applied_versions) do
       case {required_columns() -- columns, Enum.map(pending, & &1.version)} do
         {[], []} -> :ok
@@ -124,6 +124,52 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigrator do
       end
     end
   end
+
+  @doc """
+  After `apply_pending/1`: waits until `check/1` is `:ok`, polling. QuestDB's `/exec` returns once
+  a WAL table's ALTER is committed to the WAL, before it's applied, so a check straight after can
+  still see the old columns (qa, #483: 4 of 9 right after, all 9 a second later). Gives up after
+  `:await_timeout_ms` (default 60 s) with `{:error, {:schema_not_current, last}}`, where `last` is
+  the last check's result.
+  """
+  @spec await_current(keyword()) :: :ok | {:error, {:schema_not_current, term()}}
+  def await_current(opts \\ []) when is_list(opts) do
+    deadline = System.monotonic_time(:millisecond) + Keyword.get(opts, :await_timeout_ms, 60_000)
+    await_current(opts, deadline)
+  end
+
+  defp await_current(opts, deadline) do
+    case check(opts) do
+      :ok ->
+        :ok
+
+      last ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          {:error, {:schema_not_current, last}}
+        else
+          sleep = Keyword.get(opts, :sleep_fun, &Process.sleep/1)
+          _slept = sleep.(Keyword.get(opts, :poll_interval_ms, 250))
+          await_current(opts, deadline)
+        end
+    end
+  end
+
+  # A table that doesn't exist yet (a fresh QuestDB, or the reset's renamed table) is a schema
+  # that's behind, not one that can't be read: `--check` then says to migrate (exit 1), as qa
+  # found it should (#483). Any other error stays an error (exit 2).
+  defp absent_as({:error, reason} = error, empty) do
+    if missing_table?(reason), do: {:ok, empty}, else: error
+  end
+
+  defp absent_as(result, _empty), do: result
+
+  defp missing_table?({:http_error, _status, body}), do: missing_table?(body)
+  defp missing_table?(%{"error" => message}), do: missing_table?(message)
+
+  defp missing_table?(message) when is_binary(message),
+    do: String.contains?(String.downcase(message), "does not exist")
+
+  defp missing_table?(_reason), do: false
 
   defp table_columns(opts) do
     case exec(~s[SELECT "column" FROM table_columns('#{@observation_table}')], opts) do

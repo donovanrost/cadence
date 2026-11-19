@@ -159,12 +159,33 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
     test "is an error when the schema can't be read", c do
       exec = fn sql, _opts ->
         send(self(), {:sql, sql})
-        {:error, {:http_error, 400, "table does not exist"}}
+        {:error, :econnrefused}
       end
 
-      assert {:error, {:http_error, 400, _body}} =
+      assert {:error, :econnrefused} =
                SchemaMigrator.check(migrations_path: c.migrations_path, exec_fun: exec)
 
+      assert_only_selects()
+    end
+
+    # qa (#483): a fresh QuestDB, or the reset's renamed table, has no table yet. That's a schema
+    # to migrate (exit 1), not one that can't be read (exit 2).
+    test "is behind, with every column and file, when the tables don't exist yet", c do
+      exec = fn sql, _opts ->
+        send(self(), {:sql, sql})
+
+        {:error,
+         {:http_error, 400, %{"error" => "table does not exist [table=telemetry_observations]"}}}
+      end
+
+      assert {:behind,
+              %{
+                missing_columns: missing,
+                pending_migrations: ["20260617000001", "20260617000002"]
+              }} =
+               SchemaMigrator.check(migrations_path: c.migrations_path, exec_fun: exec)
+
+      assert missing == SchemaMigrator.required_columns()
       assert_only_selects()
     end
 
@@ -174,6 +195,56 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SchemaMigratorTest do
       assert Enum.all?(ObservationReader.select_columns(), &(&1 in required))
       assert Enum.all?(ObservationRow.columns(), &(Atom.to_string(&1) in required))
       assert "semantic_id" in required and "packet_refs_derived" in required
+    end
+  end
+
+  describe "await_current/1 (after applying, until QuestDB has applied the WAL)" do
+    setup do
+      migrations_path = temp_migrations_path()
+      write_migration(migrations_path, "20260617000001_first.sql", "SELECT 1;")
+      %{migrations_path: migrations_path}
+    end
+
+    # qa (#483): right after the ALTERs, table_columns showed 4 of 9; a second later, all 9.
+    test "polls until the new columns are visible", c do
+      {:ok, agent} = Agent.start_link(fn -> 0 end)
+      partial = SchemaMigrator.required_columns() -- ["semantic_id", "identity_ref"]
+
+      exec = fn sql, _opts ->
+        cond do
+          sql =~ "table_columns('telemetry_observations')" ->
+            seen = Agent.get_and_update(agent, &{&1, &1 + 1})
+            columns = if seen < 2, do: partial, else: SchemaMigrator.required_columns()
+            {:ok, %{"dataset" => Enum.map(columns, &[&1])}}
+
+          sql =~ "FROM cadence_schema_migrations" ->
+            {:ok, %{"dataset" => [["20260617000001"]]}}
+        end
+      end
+
+      assert :ok =
+               SchemaMigrator.await_current(
+                 migrations_path: c.migrations_path,
+                 exec_fun: exec,
+                 sleep_fun: fn ms -> send(self(), {:slept, ms}) end
+               )
+
+      assert_received {:slept, 250}
+      assert Agent.get(agent, & &1) == 3
+    end
+
+    test "gives up after its timeout with the last check", c do
+      exec = schema(SchemaMigrator.required_columns() -- ["semantic_id"], ["20260617000001"])
+
+      assert {:error,
+              {:schema_not_current,
+               {:behind, %{missing_columns: ["semantic_id"], pending_migrations: []}}}} =
+               SchemaMigrator.await_current(
+                 migrations_path: c.migrations_path,
+                 exec_fun: exec,
+                 await_timeout_ms: 0,
+                 sleep_fun: fn _ms -> :ok end
+               )
     end
   end
 
