@@ -339,19 +339,14 @@ defmodule Cadence.Configuration.Staging do
 
       checking ->
         staged = ChangeSetStore.staged_ops(set.change_set_id)
+        Enum.find_value(checking, :ok, &kind_conflicts(&1, set, staged, prepared))
+    end
+  end
 
-        Enum.find_value(checking, :ok, fn kind ->
-          case kind.stage_conflicts(
-                 set.organization_id,
-                 set.mission_id,
-                 set.state,
-                 staged,
-                 prepared
-               ) do
-            :ok -> nil
-            {:error, _} = error -> error
-          end
-        end)
+  defp kind_conflicts(kind, set, staged, prepared) do
+    case kind.stage_conflicts(set.organization_id, set.mission_id, set.state, staged, prepared) do
+      :ok -> nil
+      {:error, _} = error -> error
     end
   end
 
