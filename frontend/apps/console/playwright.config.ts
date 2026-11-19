@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
-import { BASE_URL, DEFAULT_STORAGE_STATE } from "./e2e/support/env.ts";
+import { BASE_URL, DEFAULT_STORAGE_STATE, storageStateFor } from "./e2e/support/env.ts";
+import { A11Y_PERSONAS, A11Y_VIEWPORTS } from "./e2e/support/a11y-projects.ts";
 
 // Console e2e runs against a live Phoenix server (docs/apogee/qa/runbook.md).
 // It is deliberately not part of the workspace `test` script.
@@ -39,5 +40,21 @@ export default defineConfig({
         storageState: DEFAULT_STORAGE_STATE,
       },
     },
+    // #189 per-screen a11y passes (*.a11y.ts): each spec runs at 1440 and 390, as an organization
+    // admin and as a member, like qa's run 2. The spec reads its persona from the project metadata.
+    ...A11Y_VIEWPORTS.flatMap((size) =>
+      A11Y_PERSONAS.map((persona) => ({
+        name: `a11y-${size.name}-${persona.name}`,
+        testMatch: /.*\.a11y\.ts/,
+        dependencies: ["setup"],
+        metadata: { persona: persona.name },
+        use: {
+          ...devices["Desktop Chrome"],
+          channel: "chrome",
+          viewport: size.viewport,
+          storageState: storageStateFor(persona.key),
+        },
+      })),
+    ),
   ],
 });
