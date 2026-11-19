@@ -24,9 +24,9 @@ Main `padding 20px 24px 24px`, gap 16. Max width ~1400px.
 ## Header
 - h1 (setup page title 36px): `Ready for operations` when blockers = 0, else `N blockers`
   (`1 blocker`). Tag beside it: `■ 0 BLOCKERS` nominal, or `◆ N BLOCKERS` crit.
-- Subline 14px `text-3`: counts of the other severities (`3 suggestions, 1 caution`), omitted parts
-  when zero, then ` · ` + the latest change (`profile Block 1 v4 applied 2026-10-19 02:29Z by
-  Donovan R.`) if the recent-changes feed exists.
+- Subline 14px `text-3`: counts of the other severities (`3 suggestions, 1 caution, 2 stale, 1 not set up`),
+  omitted parts when zero, then ` · ` + the latest change (`profile Block 1 v4 applied 2026-10-19 02:29Z by
+  Mira K.`) if the recent-changes feed exists.
 - Actions (standard secondary buttons): `Add spacecraft` → `M/setup/spacecraft/new`,
   `Import catalog` → `M/setup/catalog/import`. Hidden for users without setup permission.
 
@@ -50,31 +50,42 @@ why; never `Ready` by default.
 - **Data:** `areas: [{key, status, count, unit, secondary_count?, secondary_unit?, detail}]`.
 
 ## R1 · Findings (panel)
-Header meta: `GROUPED BY CAUSE · 3,006 ITEMS → 4 LINES` (sum of affected → number of lines).
+Header meta: `GROUPED BY CAUSE · 3,006 FINDINGS → 4 LINES` (sum of affected → number of lines), only when
+grouping collapsed something. The unit is findings (U3's word; U23: every count names its unit), even when they're
+per-spacecraft findings: the spacecraft count belongs in each line, not the meta. Not "items", a banned word
+(designers §2). The spec and the console both said "items"; the console change is a **gap** (ux).
 - First line is a **callout**: blockers = 0 → nominal "No blockers. Nothing stops commanding or
   contacts."; blockers > 0 → crit "N blockers stop commanding or contacts." Then rows in severity order
   (U3): blocker, caution, stale, not set up, optional.
-- Row: `[mark 14px] [title 15/600 + body 13 text-3] [one action]`. Optional rows: title prefixed
-  `Optional ·`, title in `text-2`, gray dash mark. Affected count lives in the title or body ("4
+- Row: `[mark 14px] [title 15/600 + body 13 text-3] [one action]`. Every title is prefixed with its severity word
+  (`Blocker · …`, `Caution · …`, `Optional · …`; as built), so severity never rests on the mark's color alone.
+  Optional rows: title in `text-2`, gray dash mark. Affected count lives in the title or body ("4
   spacecraft in plane 02…", "3,000 routes use…"), never as a per-spacecraft list.
-- Action (compact secondary): verb + object from `fix.kind`: `Open station`, `Open source`,
-  `Install` (for `not set up` apps), `Edit rule`, `Open profile`. (The canvas's "3,000 routes use
+- Action (compact secondary): verb + object from `fix.kind`, naming what it opens (ux, audit R3): `Edit rule
+  <name>` when the finding has one rule to deep-link, else `Open routing`; `Open station` / `Open Ground stations`;
+  `Open source` / `Open Data sources`; `Open spacecraft`, `Add spacecraft`; `Open catalog`, `Import catalog`;
+  `Open profile`; `Set up contact planning`; `Open changes`; `Open app`, or `Install` for a `not set up` or optional
+  app. (The canvas's "3,000 routes use
 default protocol behavior" finding is dropped: protocol behavior is a retired concept.) No `fix` → no button (don't invent one).
 - **Data:** `findings: [{id, severity, cause, title, body, affected_count, fix: {kind, id, label?} |
   null}]`. Grouping by cause is **server-side**.
 - **Empty (no findings at all):** just the nominal callout, plus "No suggestions either."
 
-## R2 · Recent changes (panel) **[U2]**
-Replaces the canvas's "Revisions" while there's no mission revision. Row grid `44px | 132px | 1fr`:
-version or kind chip (mono 12: `v4`, `rev 15`, `app`), time (mono 11 `text-4`, `10-19 02:29Z`),
-sentence + actor (`Block 1 framing: CCSDS TM to 1,115 bytes · Donovan R.`). 5 rows, then
-`AUDIT LOG →` in the header meta (→ `O/org/audit`). **If api can't unify an event feed, omit R2**
-and let R1 take the full width.
+## R2 · Recent changes (panel)
+Change sets are live, so R2 lists the mission's latest revisions (U2's interim feed is gone). Row grid `44px | 132px
+| 1fr`: the revision or version chip (mono 12: `r6`, `v4`, `rev 15`), time (mono 11 `text-4`, `10-19 02:29Z`),
+sentence + actor (`Block 1 framing: CCSDS TM to 1,115 bytes · Mira K.`). The chip shows a label, never a raw kind
+value; the built raw kind is a **gap** (audit R1). 5 rows. The header meta is `All revisions →` (→ Setup ›
+Revisions), and the panel's foot has `Compare r5 ↔ r6 →` (as built).
+- **No revisions yet:** "Nothing applied yet".
+- **By cause** (ux, audit R2): with no feed by design, R2 is left out and R1 takes the full width. With a feed whose
+  read failed, "Recent changes couldn't be read" (U86).
 - **Data:** `[{at, kind, version_label?, summary, actor: {name}, link?}]`.
 
 ## States
 Loading: header shows the lbl + `LOADING…`; tiles show names with `—`. Error: crit callout in
-place of tiles + `Retry`. Empty mission (no spacecraft, no catalog): h1 `Not ready · 2 blockers`
+place of tiles + `Retry`; the page title reads "Readiness not available". A server without the readiness read (one
+pattern across Setup): "Readiness checks not available yet" with `Check again`. Empty mission (no spacecraft, no catalog): h1 `Not ready · 2 blockers`
 with findings "No spacecraft" (`Add spacecraft`) and "No catalog" (`Import catalog`). That is the
 honest empty state; there is no separate onboarding checklist (review #7).
 
