@@ -2946,9 +2946,13 @@ and should never fire; when it does, something went round the product. NO-GO, se
   Without the counts the bracket goes.
   - The read computes the flag with the same function as the GO refusal (api-ops), so the two never disagree. It
     compares counts, not which commands, so the words say only that the commands changed.
-  - When the flag is missing (an older server, or a decided group: the server sends the three fields only while the
-    group awaits a decision), the console blocks nothing up front and the 409 stays the backstop; it never guesses
-    from its own member list (U20).
+  - When the flag is missing or null (an older server, or a group not awaiting a decision: the server always sends
+    the three fields, all null together outside `approval_pending`, api-ops 11-19), the console blocks nothing up
+    front and the 409 stays the backstop; it never guesses from its own member list (U20). A null count is a missing
+    one: no bracket.
+  - In the decide panel (radio options and one commit), the reason replaces the GO options' "N targets · N uplinks"
+    description (its uplink count is the submitted one), and choosing either GO option gives the commit that reason,
+    the same path as after the 409 (ca-ux to ca-engineer, 11-19).
 - **Nowhere else:** it isn't on Now or in the audit by itself; only at GO.
 
 ### U91 · The runtime can't verify its configuration: telemetry, passes and who fixes it (11-17 Earendil incident; amends U38) (api / domain / api-ops / fe-ops)
