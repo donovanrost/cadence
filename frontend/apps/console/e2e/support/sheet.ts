@@ -92,14 +92,16 @@ async function expectTrapped(page: Page, sheet: Locator, nonModal: boolean): Pro
       ).length,
   );
   // A native showModal() dialog lets Tab pass from its last control to the browser's own UI,
-  // where the page sees <body> focused; that isn't the page behind, so it passes. Focus on any
-  // element outside the sheet fails.
+  // where the page sees <body> focused; that isn't the page behind, so it passes. Only a native
+  // modal <dialog> gets that pass: <body> focused from a custom role=dialog means focus was lost
+  // (an A5 failure, fe-ops #433). Focus on any element outside the sheet fails.
   for (const key of ["Tab", "Shift+Tab"]) {
     for (let i = 0; i < stops + 2; i++) {
       await page.keyboard.press(key);
       const where = await sheet.evaluate((d) => {
         const active = document.activeElement;
-        if (active === null || active === document.body) return "browser";
+        if (active === null || active === document.body)
+          return d instanceof HTMLDialogElement && d.matches(":modal") ? "browser" : "<body> (lost)";
         return d.contains(active)
           ? "inside"
           : `${active.tagName.toLowerCase()} "${(active.textContent ?? "").trim().slice(0, 40)}"`;

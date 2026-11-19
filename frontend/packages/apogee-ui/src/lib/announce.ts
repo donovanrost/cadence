@@ -5,6 +5,10 @@
  * an aria-modal sheet a screen reader hides everything outside it, so a region on <body> wouldn't
  * be read), else <body>. Created on first use; the words are set a moment after clearing, so the
  * region changes and the same sentence twice is announced twice.
+ *
+ * One timer for the whole page: a second call within ANNOUNCE_DELAY_MS, even for another region,
+ * replaces the first, whose region stays empty (lead, #433). That suits search results, where only
+ * the latest one matters; words that must each be heard need their own region.
  */
 const regions = new WeakMap<HTMLElement, HTMLElement>();
 let pending: ReturnType<typeof setTimeout> | undefined;
