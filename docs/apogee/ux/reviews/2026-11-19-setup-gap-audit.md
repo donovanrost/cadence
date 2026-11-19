@@ -114,6 +114,9 @@ These have the same cause on several screens, so each is one item, fixed once.
 | S8 | The step 03 primary is `Review batch`; the step 01 manifest has a drop zone and mapping chips. | "Continue to review"; a native file input and "N of 6 fields mapped" | console | 4 |
 | S9 | Manifest cells are edited inline in step 02; the next free SCID comes from the server. | "fix them in the file and choose it again" (`StepIdentity.vue:37`); computed in the browser (`AddSpacecraftScreen.vue:37`) | console for the SCID; spec for inline edit (ux ruled, §10) | 3 |
 | S10 | Step 03 is a transports checklist; after commit, `?created=`; checks come from `batch:validate`. | Built differently and deliberately: a summary of the profile's rules; Changes; browser checks plus the server's dry run | spec | 4 |
+| S11 | U94's read refusals are the page's state, in body type, with no mark that misreads (U3: the dashed square means not set up). Added with ux's #349 review of the configuration workspace, which ranks the can't-view case; these are the other two. | All three `readRefusal` lines (`configuration/words.ts:148-166`) go to `ApEmptyState state="off"` as its `headline` (`ConfigurationScreen.vue:106`), so "This spacecraft isn't on this mission." and the packet-source limit line are also uppercase labels with the "not set up" mark. `ApEmptyState` has no `role="status"`. | console | 1 |
+| S12 | U25, U98: the craft is named as the page names it, or not at all. | The middle crumb reads "Spacecraft" whenever the snapshot isn't ready (`ConfigurationScreen.vue:74-76`): while loading, as well as on every refusal (#349's #2). | console | 3 |
+| S13 | U94's values read in bytes ("1,115 bytes"); U23: every number names its unit. | The framing line says "1,115 B frames · headers 0/0/4 B" (`words.ts:84`); #349's #3 names the three headers. Say "1,115-byte frames" and "secondary header 0 bytes · insert zone 0 bytes · OCF 4 bytes", as the Communications tab's labels do. | console | 4 |
 
 **B. No spec covers it** (the Spacecraft directory and detail have no spec of their own)
 - The directory: the summary line, the empty state, "No spacecraft match", the degraded callout, the columns, "not set",
@@ -173,6 +176,7 @@ state; Compare's "Nothing differs"; the older-format revision header.
 | V2 | U20, U94: `needs_review` is "approved, but Cadence couldn't confirm it was applied yet". | `api.ts:163-166` "Approved, but it didn't apply. …"; "Approved and applied." for any result that isn't a failure (`:168`) | console ✕ | 1 |
 | V3 | U94: a decided request shows the muted line "What changes is shown only while a request waits…" with `Open configuration`. | `ActivationScreen.vue:79` hides the panel with no line | console ✕ | 3 |
 | V4 | U41, U65: decisions read "by X at 11-13 02:20Z". | `api.ts:303` "Approved by X on 11-13 02:20Z" | console ✕ | 4 |
+| V5 | U94's What changes label is `Handled APIDs` (U40's name; renamed by #349). | `changesWords.ts:15` and its tests say "Decoded APIDs", in the row and the summary ("Catalog revision (300), Decoded APIDs (12)") | console ✕ | 3 |
 
 **B. No spec covers it:** "Approving applies it to the mission now. Rejecting leaves things as they are."; Approve
 needs a reason ("Give a reason first."); the "Waiting for activation" panel with its `AWAITS YOU` tag; the tags
