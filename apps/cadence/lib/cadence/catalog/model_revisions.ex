@@ -38,4 +38,24 @@ defmodule Cadence.Catalog.ModelRevisions do
     |> Repo.all()
     |> Enum.reduce(%{}, fn row, acc -> Map.put_new(acc, row.model, Map.delete(row, :model)) end)
   end
+
+  @doc """
+  The catalog revision `for_models/3` names for one model revision, as the whole `Revision`
+  (same order: the first recorded), or nil. One query, so a reader gets every field or none.
+  """
+  @spec first_for_model(binary(), binary(), binary()) :: Cadence.Catalog.Revision.t() | nil
+  def first_for_model(organization_id, mission_id, mission_model_revision_id) do
+    from(row in RevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.mission_model_revision_id == ^mission_model_revision_id,
+      order_by: [asc: row.inserted_at, asc: row.catalog_revision_id],
+      limit: 1
+    )
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      %RevisionRow{} = row -> RevisionRow.to_domain(row)
+    end
+  end
 end

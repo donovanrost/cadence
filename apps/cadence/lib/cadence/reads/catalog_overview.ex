@@ -13,6 +13,7 @@ defmodule Cadence.Reads.CatalogOverview do
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, Revision}
   alias Cadence.MissionModels
+  alias Cadence.Reads.Catalog.{Requesters, RevisionBase}
   alias Cadence.Reads.CatalogDiff
 
   @revision_limit 50
@@ -98,7 +99,7 @@ defmodule Cadence.Reads.CatalogOverview do
         download_url: download_url(mission_id, artifact.artifact_id)
       },
       revisions: Enum.map(revisions, &Map.take(&1, [:id, :number, :label, :imported_at])),
-      import_runs: runs |> Enum.take(50) |> Enum.map(&run_row(&1, revision_by_run, labels))
+      import_runs: run_rows(organization_id, Enum.take(runs, 50), revision_by_run, labels)
     }
   end
 
@@ -127,8 +128,7 @@ defmodule Cadence.Reads.CatalogOverview do
         revisions
         |> with_model_status(organization_id, mission_id)
         |> Enum.map(&Map.drop(&1, [:import_run_id, :model_revision_id])),
-      import_runs:
-        runs |> Enum.take(@run_limit) |> Enum.map(&run_row(&1, revision_by_run, labels))
+      import_runs: run_rows(organization_id, Enum.take(runs, @run_limit), revision_by_run, labels)
     }
   end
 
@@ -197,7 +197,13 @@ defmodule Cadence.Reads.CatalogOverview do
         :spacecraft_count
       ])
 
-  defp run_row(%ImportRun{} = run, revision_by_run, labels) do
+  # #146 (U103): each row's requested_by, from two batched name queries per table.
+  defp run_rows(organization_id, runs, revision_by_run, labels) do
+    names = Requesters.names(organization_id, Enum.map(runs, & &1.requested_by))
+    Enum.map(runs, &run_row(&1, revision_by_run, labels, names))
+  end
+
+  defp run_row(%ImportRun{} = run, revision_by_run, labels, names) do
     %{
       id: run.import_run_id,
       file_name:
@@ -209,7 +215,8 @@ defmodule Cadence.Reads.CatalogOverview do
       diagnostic_counts: diagnostic_counts(run.diagnostics),
       revision_number: revision_by_run |> Map.get(run.import_run_id, %{}) |> Map.get(:number),
       started_at: run.started_at,
-      completed_at: run.completed_at
+      completed_at: run.completed_at,
+      requested_by: Requesters.requested_by(run.requested_by, names)
     }
   end
 
@@ -231,6 +238,11 @@ defmodule Cadence.Reads.CatalogOverview do
       status: status(run.status),
       started_at: run.started_at,
       completed_at: run.completed_at,
+      requested_by:
+        Requesters.requested_by(
+          run.requested_by,
+          Requesters.names(organization_id, [run.requested_by])
+        ),
       file: %{
         name: artifact && artifact.artifact_name,
         format_label: Map.get(importer_labels(), run.importer_key),
@@ -254,7 +266,7 @@ defmodule Cadence.Reads.CatalogOverview do
     do: %{revision: nil, base_revision: nil, diff: nil}
 
   defp revision_fields(organization_id, mission_id, %Revision{} = revision) do
-    base = base_revision(organization_id, mission_id, revision)
+    base = RevisionBase.previous(organization_id, mission_id, revision)
 
     %{
       revision: %{
@@ -272,14 +284,6 @@ defmodule Cadence.Reads.CatalogOverview do
             revision.mission_model_revision_id
           )
     }
-  end
-
-  # The revision before `revision` in its database (C3's diff base).
-  defp base_revision(organization_id, mission_id, %Revision{} = revision) do
-    organization_id
-    |> Catalog.list_revisions(mission_id, revision.catalog_database_id)
-    |> Enum.filter(&(&1.revision_number < revision.revision_number))
-    |> Enum.max_by(& &1.revision_number, fn -> nil end)
   end
 
   defp diagnostic(diagnostic) do

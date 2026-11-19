@@ -228,6 +228,26 @@ defmodule Cadence.Auth do
     |> Enum.map(&ServiceIdentityRow.to_domain/1)
   end
 
+  @doc """
+  `%{service_identity_id => display_name}` for the ids that belong to `organization_id` and have a
+  display name; another organization's identity is left out (mms-security 11-19, #146).
+  """
+  @spec service_identity_names(binary(), [binary()]) :: %{binary() => binary()}
+  def service_identity_names(_organization_id, []), do: %{}
+
+  def service_identity_names(organization_id, ids)
+      when is_binary(organization_id) and is_list(ids) do
+    ServiceIdentityRow
+    |> where(
+      [r],
+      r.organization_id == ^organization_id and r.service_identity_id in ^Enum.uniq(ids) and
+        not is_nil(r.display_name) and r.display_name != ""
+    )
+    |> select([r], {r.service_identity_id, r.display_name})
+    |> Repo.all()
+    |> Map.new()
+  end
+
   @doc "Active service identities with key creation time (no token material), by name."
   @spec list_service_identity_directory(binary()) :: [map()]
   def list_service_identity_directory(organization_id) when is_binary(organization_id) do
