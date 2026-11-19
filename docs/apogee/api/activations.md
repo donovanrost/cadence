@@ -137,7 +137,10 @@ Errors:
 - `403 activation_approver_authors_unknown` (#236, fails closed): Cadence couldn't determine who
   saved the configuration being activated (a reviewed version it can't find, or unreadable review
   evidence), so nobody may approve it as it stands. `details` as above, naming the craft whose
-  authors couldn't be read (`[]` when the evidence itself is unreadable). ux's line: "Not approved:
+  authors couldn't be read (`[]` when the evidence itself is unreadable), plus `service: null`
+  (ux U100: this code always sends `service`; #280 sends `{id, name}` under the same code when a
+  service identity's accountable people aren't recorded, and that picks U100's service line).
+  ux's line for `service: null`: "Not approved:
   Cadence can't tell who saved this configuration, so it can't check that you weren't one of them.
   Your approval wasn't recorded. Reject it so the requester can send it again; if it keeps
   happening, tell the team that runs Cadence for you." Nothing is recorded.

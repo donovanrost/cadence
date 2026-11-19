@@ -98,7 +98,8 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
 
     assert {:error,
             {:activation_approver_authors_unknown,
-             %{spacecraft_ids: [^id], spacecraft: [%{id: ^id, name: ^name}]} = details}} =
+             %{spacecraft_ids: [^id], spacecraft: [%{id: ^id, name: ^name}], service: nil} =
+               details}} =
              Refusals.explain(
                {:error, {:activation_approver_authors_unknown, [id]}},
                c.request.organization_id,
@@ -106,10 +107,12 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
                c.request
              )
 
+    # ux U100: the code's details always carry `service`, null when no service is involved.
     assert %{
              "error" => %{
                "code" => "activation_approver_authors_unknown",
-               "message" => "Not approved: Cadence can't tell who saved this configuration" <> _
+               "message" => "Not approved: Cadence can't tell who saved this configuration" <> _,
+               "details" => %{"service" => nil, "spacecraft_ids" => [^id]}
              }
            } =
              build_conn()

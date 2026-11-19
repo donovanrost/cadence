@@ -22,11 +22,18 @@ defmodule Cadence.Control.ActivationRequests.Refusals do
   # #236: the approver authored content being activated. Not a preflight refusal (a 403, not a
   # 409): it names the reviewed spacecraft they saved, as the stale review does.
   # #236 (lead's ruling b): the authors couldn't be determined, so the check fails closed. The
-  # same 403 path, naming the craft whose authors couldn't be read ([] when none can be named).
-  def explain({:error, {code, ids}}, org, mission, _request)
-      when code in [:activation_approver_authored_content, :activation_approver_authors_unknown] and
-             is_list(ids),
+  # same 403 path, naming the craft whose authors couldn't be read ([] when none can be named),
+  # with `service: nil` (ux U100: the code's details always carry `service`, null when no service
+  # identity is involved; #280's service case sends it set under the same code).
+  def explain({:error, {:activation_approver_authored_content = code, ids}}, org, mission, _req)
+      when is_list(ids),
       do: {:error, {code, %{spacecraft_ids: ids, spacecraft: named(org, mission, ids)}}}
+
+  def explain({:error, {:activation_approver_authors_unknown = code, ids}}, org, mission, _req)
+      when is_list(ids),
+      do:
+        {:error,
+         {code, %{spacecraft_ids: ids, spacecraft: named(org, mission, ids), service: nil}}}
 
   def explain({:error, reason}, org, mission, request) do
     case refusal(reason, org, mission, request) do
