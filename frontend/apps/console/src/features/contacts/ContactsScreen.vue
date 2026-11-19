@@ -58,6 +58,8 @@ const passes = usePasses(
 );
 /** §4: "6 h", not "6h" (ux §7 #17). */
 const rangeWords = computed(() => range.value.label.toLowerCase().replace(/h$/, " h"));
+/** Only heard (the Gantt's label), so in words: "6 hours" (ux #426). */
+const rangeHeard = computed(() => `${range.value.ms / 3_600_000} hours`);
 const rangeOptions = RANGES.map((r) => ({ value: r.value, label: r.label }));
 /** D4 (M22): hidden when the read isn't available (Contacts.md: "Unavailable: hide D4"). */
 const findings = useFindings(
@@ -332,7 +334,7 @@ const unshownPasses = computed(() =>
             />
             <div v-else-if="view" class="p-3">
               <ApGantt
-                label="Pass schedule for the next six hours"
+                :label="`Pass schedule for the next ${rangeHeard}`"
                 :rows="view.rows"
                 :bars="view.bars"
                 :bands="bands"
