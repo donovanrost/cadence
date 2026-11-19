@@ -3758,11 +3758,33 @@ read, the dry run).
 - **Breaking callout, singular:** "Rev 15 changes 1 command or point in a way that breaks existing use. Cadence
   can't tell yet what uses it." Plural as C3. Checkbox: "I've checked the breaking change" / "I've checked the 3
   breaking changes".
-- **On a revision's page,** the diff isn't on the read, so the breaking count is the one against the revision its
-  import replaced. Data (mms-engineer): the revision row stores its `import_run_id`, and the count comes from the
-  catalog diff of the two revisions, so the revision read can carry both (#195's build). Until it does: "This page can't show whether rev 4 breaks anything in use. Check its import's diff before you stage."
-  with `Open its import`, and the acknowledgment checkbox "I've checked rev 4's diff". (U86: say what the
-  console can't read.)
+- **On a revision's page,** the breaking count is the one against the revision before it in the same database (by
+  number), the base C3's diff uses on the import page. Both revisions are immutable, so the count doesn't move when
+  later revisions are imported (only a release that changes what counts as breaking can change it). Data
+  (mms-engineer and fe-setup, 11-19, #195's two-reads build; final): the revision read carries `import_run_id`
+  (never null when the revision is there), `breaking` (an integer, or null when it isn't known) and `breaking_base`
+  (`{catalog_revision_id, revision}`, the revision compared against; null when there is none). The same three
+  states the server sends, never computed in the console:
+  - `breaking` > 0: the callout and checkbox below, as on the import page, plus what it compared against: "Rev 4
+    changes 3 commands or points in a way that breaks existing use, compared with rev 3. Cadence can't tell yet
+    what uses them." `breaking` 0: no callout,
+    no checkbox.
+  - No earlier revision (`breaking_base` null): "Rev 1 is the first revision of this catalog, so Cadence has
+    nothing earlier to compare it with and can't tell what it breaks. Check what uses its commands and points
+    before you stage." The acknowledgment checkbox reads "I've checked what rev 1 changes". There's no
+    `Open its import`, since its diff has nothing to compare.
+  - The diff couldn't be read (`breaking_base` set, `breaking` null), and on a server without these fields:
+    "This page can't show whether rev 4 breaks anything in use. Check its import's diff before you stage." with
+    `Open its import` only when `import_run_id` is there, and the acknowledgment checkbox "I've checked rev 4's
+    diff". (U86: say what the console can't read.)
+  - **The import page's C3 follows the same three cases**, from its own fields, and is never 0 breaking for an
+    unknown count (U20: 0 would claim nothing breaks):
+    - `diff.summary.breaking` an integer: the count, as above.
+    - `base_revision` null with `diff` null: a first revision, the words above.
+    - `base_revision` set with `diff` null, or `diff.summary.breaking` null: the import page's own line, since
+      the person is already on the import whose diff couldn't be read: "Cadence couldn't compare rev 4 with rev 3,
+      so this page can't show whether it breaks anything in use. Check what uses its commands and points before you
+      stage." No link. The checkbox reads "I've checked what rev 4 changes".
 - **The dry run, in the person's words:**
   - While it runs: `CHECKING…` (as C3). Stage's disabled reason is "Checking what this moves…", not "Waiting for
     the dry run.".
