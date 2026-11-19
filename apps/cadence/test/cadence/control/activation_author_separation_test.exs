@@ -244,6 +244,62 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
     end
   end
 
+  # #439 (mms-engineer, api-ops): the author check reads which authors are service identities in
+  # one query, so approving costs the same whether one person or several saved the reviewed craft.
+  # The whole approve is counted, with the craft count held equal (per-craft work elsewhere in
+  # approve, like the preflight, is #434's own bound).
+  test "the whole approve costs the same queries for one author as for several" do
+    one = approve_queries(fn _n -> "author-same" end)
+    several = approve_queries(fn n -> "author-#{n}" end)
+
+    assert one == several
+  end
+
+  # A fresh mission with three craft; craft n is saved by `author.(n)`, B submits all three, and C
+  # approves (allowed: C saved nothing). Returns the approve's query count.
+  defp approve_queries(author) do
+    org = "org-author-q-#{System.unique_integer([:positive])}"
+    mid = "mission-author-q-#{System.unique_integer([:positive])}"
+    {craft, revision, _endpoint} = Fixtures.setup_imported_mission!(org, mid)
+    {:ok, mission} = Cadence.Missions.fetch_mission(org, mid)
+    c = %{org: org, mission: mission, catalog: revision.catalog_revision_id}
+    admin = Fixtures.user_scope(org, "policy-admin")
+    policy = ActivationPolicy.load(org, mid)
+
+    {:ok, _} =
+      ActivationPolicy.save(admin, mid, policy.token, %{
+        "value" => %{"approval_requirement" => "independent"}
+      })
+
+    crafts =
+      for n <- 2..3, reduce: [craft] do
+        acc ->
+          other = Fixtures.persist_spacecraft!(org, mid, display_name: "Craft #{n}")
+
+          Fixtures.persist_source_endpoint!(org, mid, other.spacecraft_id,
+            display_name: "TT&C #{n}"
+          )
+
+          acc ++ [other]
+      end
+
+    crafts
+    |> Enum.with_index(1)
+    |> Enum.each(fn {each, n} -> save(c, named_scope(org, author.(n)), each, [42]) end)
+
+    {:ok, request} = submit(c, Fixtures.user_scope(org, "submitter-b"), crafts)
+    approver = Fixtures.user_scope(org, "approver-c")
+
+    {queries, result} = count_queries(fn -> approve(approver, request) end)
+    assert {:ok, _request, _decision, _approved} = result
+    queries
+  end
+
+  defp named_scope(org, user_id) do
+    scope = Fixtures.user_scope(org, "unused")
+    %{scope | user: %{scope.user | user_id: user_id}}
+  end
+
   defp issue_service!(c, name, issued_by) do
     identity =
       ServiceIdentity.new(%{
