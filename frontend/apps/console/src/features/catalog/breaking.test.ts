@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { modelRevisionReader } from "./approval/api.ts";
-import {
-  breakingWords,
-  importBreaking,
-  needsAcknowledgment,
-  revisionBreaking,
-  type Breaking,
-} from "./breaking.ts";
+import { breakingWords, importBreaking, revisionBreaking, type Breaking } from "./breaking.ts";
 
 const summary = (breaking: number | null) => ({
   summary: {
@@ -36,7 +30,7 @@ describe("importBreaking (#364: the import page's C3 never reads unknown as 0)",
     });
   });
 
-  it("no base and no diff is the database's first revision", () => {
+  it("no base is the database's first revision (the server sends a diff only with a base)", () => {
     expect(importBreaking({ base_revision: null, diff: null })).toEqual({ kind: "first" });
   });
 
@@ -72,7 +66,7 @@ describe("revisionBreaking (#195's revision read, U102)", () => {
         breaking: null,
         breaking_base: { catalog_revision_id: "cr-3", revision: 3 },
       }),
-    ).toEqual({ kind: "unknown", importRunId: "run-4" });
+    ).toEqual({ kind: "uncompared", base: 3 });
   });
 
   it("a server without the fields reads as not known, with no link", () => {
@@ -119,14 +113,12 @@ describe("breakingWords (U102 as amended by #363)", () => {
   it("a known 0 needs nothing; every other state needs the acknowledgment", () => {
     const zero: Breaking = { kind: "count", count: 0, base: 3 };
     expect(words(zero)).toBeNull();
-    expect(needsAcknowledgment(zero)).toBe(false);
     for (const b of [
       { kind: "count", count: 1, base: 3 },
       { kind: "first" },
       { kind: "uncompared", base: 3 },
       { kind: "unknown", importRunId: null },
     ] satisfies Breaking[]) {
-      expect(needsAcknowledgment(b)).toBe(true);
       expect(words(b)).not.toBeNull();
     }
   });

@@ -7,23 +7,25 @@ import type { ImportRunDetail } from "./importRun.ts";
  * claim nothing breaks).
  * - `count`: the server's count, against `base` (the revision before it in its database).
  * - `first`: the database's first revision; there's nothing earlier to compare it with.
- * - `uncompared`: the import page, whose own diff couldn't be read (#364).
- * - `unknown`: a revision's page whose read has no count (or a server without the fields); its
- *   import's diff may still say, so it links there when the read names the run.
+ * - `uncompared`: the diff against `base` couldn't be read, on either page (#364).
+ * - `unknown`: a revision's page on a server without #365's fields; its import's diff may still
+ *   say, so it links there when the read names the run.
  */
 export type Breaking =
-  | Readonly<{ kind: "count"; count: number; base: number | null }>
+  | Readonly<{ kind: "count"; count: number; base: number }>
   | Readonly<{ kind: "first" }>
-  | Readonly<{ kind: "uncompared"; base: number | null }>
+  | Readonly<{ kind: "uncompared"; base: number }>
   | Readonly<{ kind: "unknown"; importRunId: string | null }>;
 
-/** The import page's C3, from its run's `base_revision` and `diff` (#364). */
+/**
+ * The import page's C3, from its run's `base_revision` and `diff` (#364). The server sends a diff
+ * only with a base (setup.md C3), so no base is the first revision.
+ */
 export function importBreaking(run: Pick<ImportRunDetail, "base_revision" | "diff">): Breaking {
-  const base = run.base_revision?.number ?? null;
+  if (run.base_revision === null) return { kind: "first" };
+  const base = run.base_revision.number;
   const count = run.diff?.summary.breaking ?? null;
-  if (count !== null) return { kind: "count", count, base };
-  if (run.base_revision === null && run.diff === null) return { kind: "first" };
-  return { kind: "uncompared", base };
+  return count === null ? { kind: "uncompared", base } : { kind: "count", count, base };
 }
 
 /** The revision read's #195 fields (setup.md, model approval gate); absent on an older server. */
@@ -39,26 +41,26 @@ export function revisionBreaking(r: RevisionBreakingFields): Breaking {
   if (r.breaking === undefined || r.breaking_base === undefined)
     return { kind: "unknown", importRunId };
   if (r.breaking_base === null) return { kind: "first" };
-  if (r.breaking === null) return { kind: "unknown", importRunId };
+  // Its import's C3 has the same base and diff, so it can't count either (mms-ux, #386 review).
+  if (r.breaking === null) return { kind: "uncompared", base: r.breaking_base.revision };
   return { kind: "count", count: r.breaking, base: r.breaking_base.revision };
 }
 
-/** Whether Stage waits for the acknowledgment: every case but a known count of 0. */
-export const needsAcknowledgment = (b: Breaking): boolean => b.kind !== "count" || b.count > 0;
-
 export type BreakingWords = Readonly<{ line: string; checkbox: string; reason: string }>;
 
-/** U102's callout line, checkbox and Stage's disabled reason; null when nothing needs checking. */
+/**
+ * U102's callout line, checkbox and Stage's disabled reason. Null only for a known count of 0:
+ * every other state needs the acknowledgment before Stage.
+ */
 export function breakingWords(b: Breaking, rev: number): BreakingWords | null {
   switch (b.kind) {
     case "count": {
       if (b.count === 0) return null;
       const one = b.count === 1;
-      const against = b.base === null ? "" : `, compared with rev ${b.base}`;
       return {
         line:
           `Rev ${rev} changes ${plural(b.count, "command or point", "commands or points")} in a way ` +
-          `that breaks existing use${against}. Cadence can't tell yet what uses ${one ? "it" : "them"}.`,
+          `that breaks existing use, compared with rev ${b.base}. Cadence can't tell yet what uses ${one ? "it" : "them"}.`,
         checkbox: one
           ? "I've checked the breaking change"
           : `I've checked the ${plural(b.count, "breaking change")}`,
@@ -77,9 +79,8 @@ export function breakingWords(b: Breaking, rev: number): BreakingWords | null {
     case "uncompared":
       return {
         line:
-          `Cadence couldn't compare rev ${rev} with ${b.base === null ? "the revision before it" : `rev ${b.base}`}, ` +
-          "so this page can't show whether it breaks anything in use. Check what uses its commands " +
-          "and points before you stage.",
+          `Cadence couldn't compare rev ${rev} with rev ${b.base}, so this page can't show whether ` +
+          "it breaks anything in use. Check what uses its commands and points before you stage.",
         checkbox: `I've checked what rev ${rev} changes`,
         reason: `Check what rev ${rev} changes first.`,
       };
