@@ -1916,9 +1916,12 @@ differs from what was entered.
   - not_sent: "Resolved as not sent by Mira K. at 03:20:05Z."
   - rejected: "Resolved as rejected by Mira K. at 03:20:05Z."
   - The resolver is a person or a service identity, never Cadence (api 1b61e57ac: an automatic timeout stays
-    "Outcome unclear" and isn't a resolution). An API credential shows by its display name: "Resolved as not sent
-    by ops-automation at 03:20:05Z."
-  - With no name: "Resolved as not sent at 03:20:05Z; who resolved it isn't known." (fe-ops 293aa2cd2)
+    "Outcome unclear" and isn't a resolution). A service identity shows by its display name, marked as a service
+    (U103): "Resolved as not sent by ops-automation (a service identity) at 03:20:05Z."
+  - A service identity with no name (`kind` service_identity, `name` null): "Resolved as not sent by a service
+    identity at 03:20:05Z." The kind is known, so it's said; the id goes in Technical details (U25).
+  - With no name and no known kind: "Resolved as not sent at 03:20:05Z; who resolved it isn't known." (fe-ops
+    293aa2cd2)
 - Telemetry evidence carries the catalog unit ("= 8.0 °C (raw 412)"). A point without one shows no unit, never a
   guessed one.
 
@@ -2029,7 +2032,7 @@ Versions read `R3`, as the plan header already does (`Contact plan · R41 draft`
 
 **Version row:** "R3 · drafted by Maya T. at 11-13 02:44Z".
 - When Cadence drafted it (a re-plan or the planner): "R3 · drafted by Cadence at 02:44Z". A service identity shows
-  its display name.
+  its display name, marked as a service (U103): "R3 · drafted by Nightly planner (a service identity) at 02:44Z".
 - A `text-3` line: "1,512 selected · 36 locked · 4 rejected". The rationale follows as a quote, when there is one.
 - Tags: `CURRENT` on the current version; its decision as a word tag (`APPROVED` or `SENT BACK`); nothing for none.
 - `View R3` opens `?version=3`. There's no link on the current version.
@@ -3697,7 +3700,7 @@ set, revision}`, plus (api, #151) `applied_by {kind, id, name}` and `applied_at`
   - `applied_by` by kind (ux's review):
     - A person: their name, as above.
     - The system: "applied 11-18 03:40Z by Cadence".
-    - A service identity: "applied 11-18 03:40Z by Nightly planner".
+    - A service identity: "applied 11-18 03:40Z by Nightly planner (a service identity)" (U103).
     - A null `name` on a person or service: "Off · set by r7, applied 11-18 03:40Z." The name drops, never an id
       (U25); the time stays, as in U99.
     - A `kind` the console doesn't know: the same as a null name.
