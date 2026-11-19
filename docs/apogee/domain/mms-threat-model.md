@@ -62,17 +62,32 @@ completes; that's harmless, since it's the same as approving before importing.
   - Applies across kinds (activations, change sets, contact plans). Needs the director's OK; bug under #207.
 #### MM-1 impact list per approval kind (director 11-19: impact first, then build)
 
-Rule: under 'independent', a service author expands to its ACCOUNTABLE SET (issuer + every rotator).
-An approver in the set is refused; an unknown set fails closed. Today every check below compares
-**person ids only**, so a service author is invisible to all of them.
+Merged with ca-security's notes (11-19); one list.
+
+**Rule (ca-security, 11-19):**
+- The accountable set (issuer + every rotator, transitively) REPLACES "self" wherever a kind ALREADY
+  refuses self-approval, whatever the mode. It never adds a separation the kind doesn't have; it only
+  widens who counts as self.
+  - So under 'independent' it applies where the setting creates the separation (model revisions, contact
+    plans, change sets).
+  - Under every mode it applies where the kind always refuses self-approval (activations; commands
+    wherever a second GO is required).
+- An approver in the set is refused; an unknown set fails closed.
+- Today every check below compares **person ids only**, so a service author is invisible to all of them.
+
+**Who can be a service, and with what:** only `organization_admin` and `mission_admin` can be granted to a
+service (`ParamParser.normalize_capability`, the console's `@capabilities`); `platform_admin` can't.
+`:manage_service_identities` is `organization_admin` via `authorize_organization_capability`, which doesn't
+check `actor_kind`. So a service with `organization_admin` can issue and rotate other services, and the
+set must be transitive.
 
 **Where accountability is recorded today (the input every kind needs):**
 
 | Path | Issue / rotate recorded? |
 |---|---|
 | Platform-admin console (`console/admin_controller.ex` → `ConsoleAdmin.issue_service_identity`/`rotate_service_identity`, `console_admin.ex:77-110`) | Admin audit event (`service_identity_issued`/`_rotated`, actor = admin), written AFTER the change, outside its transaction |
-| Org console (`console/service_identity_controller.ex` → `ServiceIdentityAdministration.create/rotate`; the platform-admin path also creates through it) | Create: `metadata["created_by"]` from the scope, in the same insert (`service_identity_administration.ex:29`). Rotate: nothing |
-| REST `POST /api/…/service_identities` (`service_identity_controller.ex:29`) → `Auth.issue_service_identity/1` | Nothing server-built. **Client `metadata` is copied verbatim** (`api/identity_params.ex:53`), so a caller can write any `created_by` (C1) |
+| Org console (`console/service_identity_controller.ex` → `ServiceIdentityAdministration.create/rotate`; the platform-admin path also creates through it) | Create: `metadata["created_by"]` from the scope, in the same insert (`service_identity_administration.ex:29`); `%{"kind" => "unknown"}` when the caller is a service. A free-form map, not a column. Rotate: nothing |
+| REST `POST /api/…/service_identities` (`service_identity_controller.ex:29`) → `Auth.issue_service_identity/1` | Nothing server-built. **Client `metadata` is copied verbatim** (`api/identity_params.ex:53`), so a caller can write any `created_by` (C1, DECISIONS #30/#32). `service_identity_id` is client-assignable too |
 | Rotation core (`auth/service_identity_keys.ex:16`) | Only `key_rotated_at` in metadata; no actor |
 
 - **Never read accountability from `metadata`:** it's client-writable on REST. Use server-built columns, and
@@ -91,13 +106,14 @@ An approver in the set is refused; an unknown set fails closed. Today every chec
 | Kind | Can a service author it today? | Check today | Change |
 |---|---|---|---|
 | Mission-model revisions | Yes: REST `catalog_import_runs`, console upload/reimport with a service scope | `RevisionDecisions.independent/5` ← `ModelImporters` (people only; services dropped) | `ModelImporters` returns service importers too. Expand them to their accountable set; unknown → `approval_authors_unknown`. Also closes MM-2 source 2 |
-| Activations (incl. spacecraft-configuration reviews) | Yes: REST `POST /activations` (`authorize_mission`); `request_promotion` via telemetry decom with a service scope (to confirm) | `distinct_approver/2` (`management/activations.ex:549`) compares only when `requester_actor_kind == :user`; applies even under 'direct' | Service requester → its set. Note: activations refuse self-approval in EVERY mode, so decide whether the set applies under 'direct' too (keep it consistent with today) |
+| Activations (incl. spacecraft-configuration reviews) | Yes: REST `POST /activations` (`authorize_mission`; `actor/1` accepts a service). Approving is human-only (`human_activation_approver_required`) | `distinct_approver/2` (`management/activations.ex:549`) compares only when `requester_actor_kind == :user`; applies in every mode | Service requester → its set, **in every mode, 'direct' included** (rule above) |
 | Configuration change sets | No: only the console session API (users) writes changes | `Submission.independent/2` (`configuration/submission.ex:436`): reviewer not in `[submitted_by \| change authors]` | None now. A guard test that a service author fails closed, so a future REST path can't open it |
-| Contact plans (incl. fleet planning policies) | Yes: automation grants let a service submit (and possibly approve; approval-sweep Ruling C) | `ContactPlanApprovals.separate_approver/5` (`:560`) checks a user actor only; `FleetPlanningPolicies.not_author/2` (`:354`) matches `user_id` only | Service submitter/author → its set. The grant's issuer joins the set (the grant is the delegation). The planner proceeds when an approver outside the set approves |
-| Command requests | Yes: REST `command_requests`, `command_stages/…/submit` | `LifecyclePolicy.ensure_not_self_approval/2` (`commanding/lifecycle_policy.ex:59`): user_id only. Not governed by the setting (Ruling A) | The director said "every approval kind": apply the set wherever a second GO is required, regardless of the setting. Needs a one-line confirmation, given Ruling A |
+| Contact plans | Yes: planning runs author as a service (planner / fleet planning runs); a service submits with an automation grant (`contact_plans.ex:1208`) and **approves** with one (`contact_plan_approvals` `authorize_actor` `:service`/`:approved`) | `ContactPlanApprovals.separate_approver/5` (`:560`) checks a user actor only, so a service approver skips separation | Service author → its set. A service APPROVER's set is its accountable people plus the grant's approver; refused when it meets the author set. The planner proceeds when an approver outside the set approves. Open: who approves a grant (`grant.approved_by`), and is that person in the set? (yes by the rule above) |
+| Fleet planning policies | Author check matches `user_id` only (`FleetPlanningPolicies.not_author/2`, `:354`); approving is user-only (`fleet_planning_policies.ex:584`) | Always refuses the author | Service author → its set (it already refuses self, in every mode) |
+| Command requests | Yes: REST `command_requests`, `command_stages/…/submit` (queue submission: to confirm). Review/approve is user-only (`management/commanding/review_access.ex`) | `LifecyclePolicy.ensure_not_self_approval/2` (`commanding/lifecycle_policy.ex:59`): user_id only. Not governed by the setting (Ruling A) | Service requester → its set **wherever a second GO is required**, whatever the setting (rule above) |
 | Command groups | Via the console only? (group submission; to confirm) | `group_decision.ex:85`: `requested_by["user_id"] == actor["user_id"]` | As command requests |
-| Provider changes | To confirm (`contacts/provider_change_approvals.ex`; REST `provider_profiles` writes are direct, not change requests) | `:approve_provider_changes` (org admins) | Confirm whether a service can author a provider change; if yes, as above |
-| Qualification cases | Human-only approver (`comparison.ex:504`) | To confirm the author check | To confirm |
+| Provider changes | To confirm whether a service can author one (REST `provider_profiles` writes are direct, not change requests). Approving is user-only (`provider_change_approvals.ex:111`) | `:approve_provider_changes` (org admins) | If a service can author one and the kind refuses self, as above (ca-security confirms after #233) |
+| Qualification cases | Human-only approver (`comparison.ex:504`) | To confirm the author check | ca-security confirms after #233 |
 
 **Shared pieces:** one function, `Accountability.authors(org, actor_documents) :: {:ok, [user_id]} |
 {:error, :unknown}`, used by every kind; one refusal, `approval_authors_unknown` (409, `details.kind`), like
