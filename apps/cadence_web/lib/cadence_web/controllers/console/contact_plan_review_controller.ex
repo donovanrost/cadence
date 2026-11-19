@@ -1,16 +1,42 @@
 defmodule CadenceWeb.Console.ContactPlanReviewController do
   @moduledoc """
-  An approver's decisions on a plan waiting for approval, besides approving it (approve goes
-  through S5 submit). `reject` sends the plan back: it returns to `draft` with the approver's
-  reason, recorded as a rejected approval. Contract: docs/apogee/api/scheduling.md.
+  An approver's decisions on a plan waiting for approval. `approve` (#257, director 11-19) is the
+  only console path that approves: under 'independent' the submitter and the version's author
+  are refused, and the approval starts booking off the request. `reject` sends the plan back: it
+  returns to `draft` with the approver's reason, recorded as a rejected approval. Contract:
+  docs/apogee/api/scheduling.md.
   """
 
   use CadenceWeb, :controller
 
   alias Cadence.ContactPlanning.ContactPlans
+  alias Cadence.Control.Scheduling
   alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Reads.ContactPlanOverview
-  alias CadenceWeb.Console.{ConfigJSON, PlanDetail, Problem}
+  alias CadenceWeb.Console.{ConfigJSON, ContactPlanWrites, PlanDetail, Problem}
+
+  @doc """
+  #257: approves the version the approver saw; 202 with the original answer's body (a replay of
+  the same request answers it again with `replayed: true`). Booking starts off the request.
+  """
+  def approve(conn, %{"plan_id" => plan_id} = params) do
+    scope = conn.assigns.current_scope
+    mission_id = conn.assigns.current_mission.mission_id
+
+    with {:ok, approve} <- ContactPlanWrites.approve_params(params),
+         {:ok, result} <- Scheduling.approve_plan(scope, mission_id, plan_id, approve) do
+      case result do
+        {:approved, answer, version, sha} ->
+          ContactPlanWrites.start_execution(conn, plan_id, version, sha)
+          ContactPlanWrites.answer(conn, :approved, answer)
+
+        {:replayed, answer} ->
+          ContactPlanWrites.answer(conn, :replayed, answer)
+      end
+    else
+      {:error, reason} -> ContactPlanWrites.refuse(conn, plan_id, reason)
+    end
+  end
 
   def reject(conn, %{"plan_id" => plan_id} = params) do
     scope = conn.assigns.current_scope

@@ -23,7 +23,8 @@ defmodule Cadence.ContactPlanning.PlanSubmissions do
     field(:note, :string)
     field(:unchanged, :boolean, default: false)
     field(:acknowledgements_document, {:array, :map}, default: [])
-    # The approval policy in force at submit (M2): under 'direct' an admin's submit also approves.
+    # The approval policy in force at submit (M2). Since #257 a submit never approves; the
+    # approval is its own decision, which records the policy it was made under.
     field(:policy_document, :map)
     field(:submitted_at, :utc_datetime_usec)
   end

@@ -98,15 +98,25 @@ defmodule CadenceWeb.Console.AuditAPITest do
     membership = TestFixtures.grant_membership!(admin, org, role: :organization_admin)
     mission = TestFixtures.persist_mission!(org)
     fixture = CadenceWeb.ContactPlanningFixtures.plan_fixture(org, admin, membership, mission)
-    # An admin's own submit approves only under 'direct' approval (director 11-15).
+    # Under 'direct' approval an admin may approve their own submit; approving is its own
+    # action since #257 (director 11-19).
     CadenceWeb.ContactPlanningFixtures.approve_directly!(org, admin, membership, mission)
+    plans = "/api/console/v1/missions/#{mission.mission_id}/contact-plans"
 
     admin
     |> TestFixtures.member_conn()
-    |> post(
-      "/api/console/v1/missions/#{mission.mission_id}/contact-plans/#{fixture.plan.contact_plan_id}/submit",
-      %{"expected_version" => 1, "operation_id" => "op-audit"}
-    )
+    |> post("#{plans}/#{fixture.plan.contact_plan_id}/submit", %{
+      "expected_version" => 1,
+      "operation_id" => "op-audit"
+    })
+    |> json_response(200)
+
+    admin
+    |> TestFixtures.member_conn()
+    |> post("#{plans}/#{fixture.plan.contact_plan_id}/approve", %{
+      "expected_version" => 1,
+      "operation_id" => "op-audit-approve"
+    })
     |> json_response(202)
 
     events =

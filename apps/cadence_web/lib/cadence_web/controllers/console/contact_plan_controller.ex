@@ -10,7 +10,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
   alias Cadence.ContactPlanning.ContactPlan
   alias Cadence.Control.{PlanningTemplates, Scheduling}
   alias Cadence.Reads.{ContactPlanOverview, PlanAlternatives, PlanningSetup}
-  alias CadenceWeb.Console.{ConfigJSON, PlanDetail, Problem, SchedulingRunner}
+  alias CadenceWeb.Console.{ConfigJSON, ContactPlanWrites, PlanDetail, Problem}
 
   @states Map.new(ContactPlan.states(), &{Atom.to_string(&1), &1})
   # Derived states (§Plan states): the stored state doesn't say, so they filter after deriving.
@@ -22,11 +22,15 @@ defmodule CadenceWeb.Console.ContactPlanController do
       derived? = state in Map.values(@derived)
       stored = if derived?, do: nil, else: state
 
+      # #257: one read of the mission's approval setting for every row.
+      setting = PlanDetail.approval_setting(conn)
+
       plans =
         org_id(conn)
         |> ContactPlanOverview.list(mission_id(conn), %{day: day, state: stored})
         |> Enum.map(&PlanDetail.effective_state(conn, &1))
         |> Enum.filter(&(not derived? or &1.state == state))
+        |> Enum.map(&Map.put(&1, :approval_setting, setting))
 
       # U28: repair proposals come apart from the plans, so K1 picks the base plan and points to
       # its repair.
@@ -168,10 +172,13 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   defp ids(_value, key), do: {:error, %{key => "must be a list of snapshot ids"}}
 
-  @doc "S5: submit (member) or submit + approve + execute (admin). See scheduling.md."
+  @doc """
+  S5: submit a draft for approval (#257, director 11-19: submit only submits, for everyone under
+  either approval setting; approving is `POST .../approve`). See scheduling.md.
+  """
   def submit(conn, %{"plan_id" => plan_id} = params) do
-    with {:ok, submit} <- submit_params(params),
-         {:ok, outcome} <-
+    with {:ok, submit} <- ContactPlanWrites.submit_params(params),
+         {:ok, {kind, answer}} <-
            Scheduling.submit_plan(
              scope(conn),
              mission_id(conn),
@@ -179,9 +186,9 @@ defmodule CadenceWeb.Console.ContactPlanController do
              submit.operation_id,
              submit
            ) do
-      respond_submit(conn, plan_id, outcome)
+      ContactPlanWrites.answer(conn, kind, answer)
     else
-      {:error, reason} -> submit_error(conn, plan_id, reason)
+      {:error, reason} -> ContactPlanWrites.refuse(conn, plan_id, reason)
     end
   end
 
@@ -194,7 +201,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
              :not_resumable,
          {:ok, version, sha} <-
            Scheduling.approved_version(org_id(conn), mission_id(conn), plan_id) do
-      start_execution(conn, plan_id, version, sha)
+      ContactPlanWrites.start_execution(conn, plan_id, version, sha)
       conn |> put_status(:accepted) |> json(%{data: %{plan_id: plan_id, state: :executing}})
     else
       {:error, :forbidden} -> Problem.respond(conn, :forbidden)
@@ -202,24 +209,6 @@ defmodule CadenceWeb.Console.ContactPlanController do
       :not_resumable -> Problem.respond(conn, :plan_not_resumable)
       {:error, _reason} -> Problem.respond(conn, :plan_not_resumable)
     end
-  end
-
-  defp respond_submit(conn, plan_id, {:execute, version, sha}) do
-    start_execution(conn, plan_id, version, sha)
-
-    conn
-    |> put_status(:accepted)
-    |> json(%{data: %{plan_id: plan_id, state: :executing, outcome: :executing}})
-  end
-
-  defp respond_submit(conn, plan_id, outcome) when outcome in [:pending_approval, :replayed] do
-    state =
-      case ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id) do
-        {:ok, plan} -> PlanDetail.effective_state(conn, plan).state
-        _missing -> nil
-      end
-
-    json(conn, %{data: %{plan_id: plan_id, state: state, outcome: outcome}})
   end
 
   # The capability execution enforces (ContactPlanExecutions: a person needs :operate_mission),
@@ -238,131 +227,8 @@ defmodule CadenceWeb.Console.ContactPlanController do
     end
   end
 
-  defp start_execution(conn, plan_id, version, sha) do
-    scope = scope(conn)
-    mission_id = mission_id(conn)
-
-    SchedulingRunner.start(mission_id, :execute, plan_id, fn ->
-      Scheduling.execute_plan(scope, mission_id, plan_id, version, sha)
-    end)
-  end
-
-  defp submit_params(params) do
-    with {:ok, version} <- positive(params["expected_version"], :expected_version),
-         {:ok, operation_id} <- operation_id(params["operation_id"]),
-         {:ok, acknowledgements} <- acknowledgements(params["acknowledgements"]),
-         {:ok, note} <- note(params["note"], :note),
-         {:ok, decision_note} <- note(params["decision_note"], :decision_note) do
-      {:ok,
-       %{
-         expected_version: version,
-         operation_id: operation_id,
-         reason: if(is_binary(params["reason"]), do: params["reason"]),
-         note: note,
-         decision_note: decision_note,
-         acknowledgements: acknowledgements
-       }}
-    end
-  end
-
-  # U36: the submitter's optional note for the reviewer ("What changed"); U76: the approver's
-  # optional decision_note for the record (an org admin's submit approves). One cap, 2,000
-  # characters after trimming, with ux U76's line.
-  @note_max 2_000
-
-  defp note(nil, _key), do: {:ok, nil}
-
-  defp note(note, key) when is_binary(note) do
-    case String.trim(note) do
-      "" -> {:ok, nil}
-      trimmed -> if String.length(trimmed) <= @note_max, do: {:ok, trimmed}, else: too_long(key)
-    end
-  end
-
-  defp note(_note, key), do: {:error, %{key => "must be text"}}
-
-  defp too_long(key), do: {:error, %{key => "Keep the note under 2,000 characters."}}
-
-  defp acknowledgements(nil), do: {:ok, []}
-
-  defp acknowledgements(items) when is_list(items) do
-    if Enum.all?(
-         items,
-         &(is_map(&1) and is_binary(&1["requirement_id"]) and is_binary(&1["reason"]))
-       ),
-       do: {:ok, Enum.map(items, &%{requirement_id: &1["requirement_id"], reason: &1["reason"]})},
-       else: {:error, %{acknowledgements: "must be [{requirement_id, reason}]"}}
-  end
-
-  defp acknowledgements(_items), do: {:error, %{acknowledgements: "must be a list"}}
-
-  defp submit_error(conn, _plan_id, {:contact_plan_superseded, superseded}),
-    do: Problem.respond(conn, :plan_superseded, ConfigJSON.encode(%{superseded: superseded}))
-
-  defp submit_error(conn, plan_id, :contact_plan_not_satisfied) do
-    details =
-      case ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id) do
-        {:ok, plan} -> %{unmet: plan.unmet, conflicts: plan.conflicts}
-        _missing -> nil
-      end
-
-    Problem.respond(conn, :plan_not_ready, ConfigJSON.encode(details))
-  end
-
-  defp submit_error(conn, _plan_id, {:contact_plan_exceptions_required, ids}),
-    do: Problem.respond(conn, :acknowledgements_required, %{missing: ids})
-
-  defp submit_error(conn, _plan_id, {:contact_plan_exceptions_unknown, ids}),
-    do:
-      Problem.respond(conn, :invalid_params, %{
-        acknowledgements: "not unmet in this plan: #{Enum.join(ids, ", ")}"
-      })
-
-  defp submit_error(conn, _plan_id, {:contact_plan_exception_invalid, id}),
-    do:
-      Problem.respond(conn, :invalid_params, %{
-        acknowledgements: "reason for #{id} must be 10-2000 characters"
-      })
-
-  defp submit_error(conn, _plan_id, details) when is_map(details),
-    do: Problem.respond(conn, :invalid_params, details)
-
-  defp submit_error(conn, _plan_id, :contact_plan_not_found),
-    do: Problem.respond(conn, :plan_not_found)
-
-  defp submit_error(conn, _plan_id, :contact_plan_version_changed),
-    do: Problem.respond(conn, :plan_changed)
-
-  defp submit_error(conn, _plan_id, :contact_plan_not_submittable),
-    do: Problem.respond(conn, :plan_not_submittable)
-
-  defp submit_error(conn, _plan_id, :operation_already_claimed),
-    do: Problem.respond(conn, :operation_conflict)
-
-  defp submit_error(conn, _plan_id, :forbidden), do: Problem.respond(conn, :forbidden)
-
-  # U36: after a send back resubmits as a new version, this only means someone decided the
-  # version concurrently; say who (lead's K1 reader: details.decided_by.name).
-  defp submit_error(conn, plan_id, :contact_plan_version_already_decided) do
-    decided_by =
-      case ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id) do
-        {:ok, %{approval: %{actor: actor}}} -> actor
-        _unknown -> nil
-      end
-
-    Problem.respond(conn, :contact_plan_version_already_decided, %{decided_by: decided_by})
-  end
-
-  defp submit_error(conn, _plan_id, reason) when is_atom(reason),
-    do: Problem.respond(conn, reason)
-
-  defp submit_error(conn, _plan_id, _reason), do: Problem.respond(conn, :plan_not_submittable)
-
   defp positive(value, _key) when is_integer(value) and value > 0, do: {:ok, value}
   defp positive(_value, key), do: {:error, %{key => "is required (positive integer)"}}
-
-  defp operation_id(value) when is_binary(value) and byte_size(value) in 1..120, do: {:ok, value}
-  defp operation_id(_value), do: {:error, %{operation_id: "is required (1-120 chars)"}}
 
   defp scope(conn), do: conn.assigns.current_scope
 
