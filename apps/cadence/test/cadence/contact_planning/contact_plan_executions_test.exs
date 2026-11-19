@@ -735,6 +735,37 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
       assert plan.lifecycle_changed_by == context.member_scope.user.user_id
       refute plan.lifecycle_changed_by == plan.approved_by
     end
+
+    test "a stopped run's resume (failed, partially_reserved) records whoever resumed it",
+         context do
+      reserve = successful_reserver(self())
+      assert {:ok, _first} = execute(context, reserve)
+      flush_mutations()
+
+      for {state, n} <- [{"failed", 1}, {"partially_reserved", 2}] do
+        resumer = scope(context.organization, :member, "resume-#{n}-#{context.suffix}")
+        put_plan_state(context, state)
+
+        assert {:ok, _resumed} =
+                 ContactPlanExecutions.execute(
+                   resumer,
+                   context.mission_id,
+                   context.plan.contact_plan_id,
+                   now: DateTime.add(@now, 3 + n, :second),
+                   resolve_route: context.resolve_route,
+                   reserve: reserve
+                 )
+
+        assert {:ok, plan, _version} =
+                 ManagementContacts.fetch_plan(
+                   context.organization_id,
+                   context.mission_id,
+                   context.plan.contact_plan_id
+                 )
+
+        assert plan.lifecycle_changed_by == resumer.user.user_id, state
+      end
+    end
   end
 
   # The setup's plan: approved at @now + 1 s and accepted (items pending), never executed. Its

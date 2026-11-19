@@ -214,13 +214,12 @@ defmodule CadenceWeb.Console.ContactPlanController do
     end
   end
 
-  # #268: a plan's day is its window's UTC date (as K1 and Now group plans). Once that day has
-  # ended, booking it would only fail pass by pass, so execute refuses before anything starts.
-  defp day_open(%{window: %{from: %DateTime{} = from}}, %DateTime{} = now) do
-    day = DateTime.to_date(from)
-
-    if Date.compare(DateTime.to_date(now), day) == :gt,
-      do: {:day_ended, Date.to_iso8601(day)},
+  # #268: a plan's day is its window's UTC start date (as K1 and Now group plans). Execute refuses
+  # once the UTC date of its last pass (window.to) has passed too, so a plan crossing midnight stays
+  # bookable while its later passes are (ca-security, domain). `day` names the plan's day.
+  defp day_open(%{window: %{from: %DateTime{} = from, to: %DateTime{} = to}}, %DateTime{} = now) do
+    if Date.compare(DateTime.to_date(now), DateTime.to_date(to)) == :gt,
+      do: {:day_ended, from |> DateTime.to_date() |> Date.to_iso8601()},
       else: :ok
   end
 

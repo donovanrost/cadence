@@ -337,6 +337,23 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
 
       assert plan_state(c, pending) == "pending_approval"
     end
+
+    test "a plan crossing midnight UTC isn't refused while its last pass's day is today", c do
+      plan_id = member_plan(c)
+      submit!(c, c.member, plan_id, "op-midnight-submit")
+      # Its pass starts at 23:55 yesterday and ends 00:05 today: the plan's day (window.from)
+      # has ended, its last day (window.to) hasn't.
+      %{"passes" => passes} = get_as(c, c.admin, "/#{plan_id}")["data"]
+      late = DateTime.new!(Date.add(Date.utc_today(), -1), ~T[23:55:00.000000], "Etc/UTC")
+      Enum.each(passes, &put_pass!(&1["snapshot_id"], late))
+
+      # The pending plan isn't waiting to execute, so it hears that, never the day.
+      assert %{"code" => "plan_not_resumable"} =
+               c
+               |> post_as(c.admin, plan_id, "execute", %{})
+               |> json_response(409)
+               |> Map.fetch!("error")
+    end
   end
 
   describe "params" do
@@ -434,6 +451,15 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
     Repo.update_all(
       from(s in ContactOpportunitySnapshotRow, where: s.contact_opportunity_snapshot_id in ^ids),
       set: [starts_at: to, ends_at: DateTime.add(to, 600)]
+    )
+  end
+
+  defp put_pass!(snapshot_id, %DateTime{} = at) do
+    Repo.update_all(
+      from(s in ContactOpportunitySnapshotRow,
+        where: s.contact_opportunity_snapshot_id == ^snapshot_id
+      ),
+      set: [starts_at: at, ends_at: DateTime.add(at, 600)]
     )
   end
 

@@ -1134,8 +1134,11 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          started_by
        )
        when is_integer(version) do
+    # #268 (ca-security): every claim that starts a run (approved, or a stopped run's resume from
+    # failed / partially_reserved) records who started it; an already-executing plan (interrupted,
+    # or a racing second run) keeps its starter.
     changed_by =
-      if row.lifecycle_state == "approved", do: started_by, else: row.lifecycle_changed_by
+      if row.lifecycle_state == "executing", do: row.lifecycle_changed_by, else: started_by
 
     case row
          |> ContactPlanRow.projection_changeset(%{

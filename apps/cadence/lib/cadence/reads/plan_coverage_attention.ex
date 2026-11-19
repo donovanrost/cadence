@@ -194,7 +194,9 @@ defmodule Cadence.Reads.PlanCoverageAttention do
     %{
       reserved: Enum.count(items, &(&1.lifecycle_state == :reserved)),
       total: length(items),
-      # #268 (ux): the passes 'Book N passes' / 'Book the other N' would send: never placed.
+      # #268 (ux): the passes 'Book N passes' / 'Book the other N' would act on: pending (never
+      # sent) or requesting (a write in flight, re-read rather than re-sent). #355 drops those
+      # whose booking window closed after the approval (domain).
       bookable: Enum.count(items, &(&1.lifecycle_state in [:pending, :requesting])),
       last_progress_at: items |> progress_times() |> Enum.max(DateTime, fn -> nil end)
     }
