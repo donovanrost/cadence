@@ -49,8 +49,9 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
 
   @spec snapshot(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def snapshot(consumer) do
+    # #334: a read never takes its caller down.
     with {:ok, pid} <- lookup(consumer) do
-      GenServer.call(pid, :snapshot)
+      Cadence.Runtime.SnapshotCall.call(pid, :snapshot, :component)
     end
   end
 

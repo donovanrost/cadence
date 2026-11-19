@@ -85,7 +85,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   @impl true
   def snapshot(provider_runtime) do
-    GenServer.call(provider_runtime, :snapshot)
+    # #334: a read never takes its caller (the path coordinator) down.
+    Cadence.Runtime.SnapshotCall.call(provider_runtime, :snapshot, :provider)
   end
 
   @doc """

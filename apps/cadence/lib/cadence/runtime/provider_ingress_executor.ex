@@ -120,7 +120,10 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   @spec snapshot(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def snapshot(executor) do
-    call_if_running(executor, :snapshot)
+    # #334: a read never takes its caller down (a busy executor under load is :snapshot_timeout).
+    with {:ok, pid} <- lookup(executor) do
+      Cadence.Runtime.SnapshotCall.call(pid, :snapshot, :component)
+    end
   end
 
   @spec quiesce(GenServer.server()) :: {:ok, map()} | {:error, term()}

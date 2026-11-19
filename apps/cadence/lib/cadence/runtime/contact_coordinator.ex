@@ -44,7 +44,8 @@ defmodule Cadence.Runtime.ContactCoordinator do
 
   @spec snapshot(pid()) :: {:ok, map()} | {:error, term()}
   def snapshot(contact_runtime) do
-    GenServer.call(contact_runtime, :snapshot)
+    # #334: a read never takes its caller down.
+    Cadence.Runtime.SnapshotCall.call(contact_runtime, :snapshot, :contact)
   end
 
   @spec quiesce(pid()) :: {:ok, map()} | {:error, term()}
@@ -57,7 +58,8 @@ defmodule Cadence.Runtime.ContactCoordinator do
 
   @spec path_snapshot(pid(), binary()) :: {:ok, map()} | {:error, term()}
   def path_snapshot(contact_runtime, path_id) when is_binary(path_id) do
-    GenServer.call(contact_runtime, {:path_snapshot, path_id})
+    # #334: a read never takes its caller down.
+    Cadence.Runtime.SnapshotCall.call(contact_runtime, {:path_snapshot, path_id}, :contact)
   end
 
   @spec handle_transport_event(pid(), binary(), binary(), term(), keyword()) ::
