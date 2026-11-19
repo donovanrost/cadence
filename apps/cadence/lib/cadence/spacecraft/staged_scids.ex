@@ -61,26 +61,27 @@ defmodule Cadence.Spacecraft.StagedScids do
 
     in_review = set_state == "in_review"
 
+    context = %{staged: staged, names: names, in_review: in_review}
+
     prepared
     |> Enum.with_index()
-    |> Enum.reduce_while(%{}, fn {op, index}, earlier ->
-      with true <- spacecraft?(op),
-           scid when is_integer(scid) <- scid(op) do
-        case clash(op, scid, staged, earlier) do
-          nil ->
-            {:cont, Map.put_new(earlier, scid, op)}
-
-          {source, holder} ->
-            error = refusal(scid, name(holder, names), source, in_review)
-            {:halt, {:error, {:invalid_op, index, [error]}}}
-        end
-      else
-        _not_a_scid -> {:cont, earlier}
-      end
-    end)
+    |> Enum.reduce_while(%{}, &check(&1, &2, context))
     |> case do
       {:error, _} = error -> error
       _earlier -> :ok
+    end
+  end
+
+  # One op of the request, given the earlier ones' SCIDs: continue, or halt with the refusal.
+  defp check({op, index}, earlier, context) do
+    with true <- spacecraft?(op),
+         scid when is_integer(scid) <- scid(op),
+         {source, holder} <- clash(op, scid, context.staged, earlier) do
+      error = refusal(scid, name(holder, context.names), source, context.in_review)
+      {:halt, {:error, {:invalid_op, index, [error]}}}
+    else
+      nil -> {:cont, Map.put_new(earlier, scid(op), op)}
+      _not_a_scid -> {:cont, earlier}
     end
   end
 
