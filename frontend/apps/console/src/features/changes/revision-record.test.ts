@@ -181,4 +181,13 @@ describe("the four-eyes record in change history (U89, P3 #227)", () => {
       "Submitted by Mira K. · approved · applied by Owen P. · 11-17 09:12Z",
     );
   });
+
+  it("drops a nameless admin-mode approver when anyone is named, so no tag reads as another's (ca-ux, #424)", () => {
+    const nameless = { kind: "user", id: "u9", name: null };
+    const row = p3([approval(ana), approval(owen), approval(nameless, { admin_mode: true })], mira);
+    expect(text(revisionHeader(row))).toBe(
+      "Submitted by Mira K. · approved by Ana R. and Owen P. · applied by Mira K. · 11-17 09:12Z",
+    );
+    expect(tagged(revisionHeader(row))).toEqual([]);
+  });
 });

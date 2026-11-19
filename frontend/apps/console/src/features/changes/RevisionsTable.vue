@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { AdminModeTag } from "@/shell";
 import { ApTable, ApTag, formatAbsolute, plural, type ApColumn } from "@/ui";
-import RecordLine from "./RecordLine.vue";
-import { approvedBy, submittedBy, who } from "./revision-record.ts";
+import { approvedBy, approverCells, submittedBy, tableActor } from "./revision-record.ts";
 import type { RevisionSummary } from "./shapes.ts";
 
 /** Mission configuration revisions, newest first; the live one is marked. */
@@ -18,21 +18,6 @@ const columns: readonly ApColumn[] = [
   { key: "changes", label: "Changes", mono: true, align: "end" },
   { key: "kind", label: "Kind" },
 ];
-
-/**
- * U89: the approvers' names, comma-separated, each with its ADMIN MODE tag. A nameless approver
- * drops (#308); when none can be named the cell reads "Not known".
- */
-function approverParts(row: RevisionSummary) {
-  const a = approvedBy(row);
-  return a.kind === "approvers"
-    ? a.approvers.flatMap((actor, i) => (i === 0 ? [{ actor }] : [{ text: ", " }, { actor }]))
-    : [];
-}
-const namedApprovers = (row: RevisionSummary) => {
-  const a = approvedBy(row);
-  return a.kind === "approvers" && a.approvers.length > 0;
-};
 
 function kindLabel(row: RevisionSummary): string {
   switch (row.kind) {
@@ -75,16 +60,28 @@ function kindLabel(row: RevisionSummary): string {
       /></span>
     </template>
     <template #cell-applied="{ row }">{{ formatAbsolute(new Date(row.applied_at)) }}</template>
-    <!-- #308 (U25): a person the server can't name reads "Not known" (muted), never "someone". -->
+    <!-- #308/#424: a nameless person reads "Not known" (muted); a service carries the Service tag
+      (designers #371, as AuditTable); never "someone" or an id. -->
     <template #cell-by="{ row }">
-      <template v-if="!submittedBy(row)">—</template>
-      <span v-else-if="who(submittedBy(row)) === null" class="text-text-3">Not known</span>
-      <template v-else>{{ who(submittedBy(row)) }}</template>
+      <template v-if="tableActor(submittedBy(row))"
+        ><span :class="tableActor(submittedBy(row))?.muted ? 'text-text-3' : ''">{{
+          tableActor(submittedBy(row))?.text
+        }}</span
+        ><ApTag v-if="tableActor(submittedBy(row))?.service" class="ml-2" label="Service"
+      /></template>
+      <template v-else>—</template>
     </template>
     <template #cell-approved="{ row }">
       <template v-if="approvedBy(row).kind === 'not_needed'">Not needed</template>
-      <RecordLine v-else-if="namedApprovers(row)" :parts="approverParts(row)" />
-      <span v-else-if="approvedBy(row).kind === 'approvers'" class="text-text-3">Not known</span>
+      <template v-else-if="approverCells(row).length > 0">
+        <template v-for="(cell, i) in approverCells(row)" :key="i"
+          >{{ i > 0 ? ", " : ""
+          }}<span :class="cell.muted ? 'text-text-3' : ''">{{ cell.text }}</span
+          ><ApTag v-if="cell.service" class="ml-2" label="Service" /><AdminModeTag
+            v-if="cell.adminMode"
+            class="ml-1.5 align-middle"
+        /></template>
+      </template>
       <span v-else class="text-text-3">—</span>
     </template>
     <template #cell-why="{ row }">

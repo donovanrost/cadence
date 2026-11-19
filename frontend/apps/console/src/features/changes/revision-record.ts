@@ -58,6 +58,33 @@ export function approvedBy(row: RevisionSummary): ApprovedBy {
   return { kind: "approvers", approvers };
 }
 
+/**
+ * An actor in a table cell (#424, mms-ux; designers #371, as AuditTable): a person by name or
+ * "Not known" (muted); a service by its name, or "Not known", with the Service tag; Cadence for
+ * the system. "(a service identity)" is for sentences only.
+ */
+export type TableActor = Readonly<{ text: string; muted: boolean; service: boolean }>;
+export function tableActor(a: Actor | null): TableActor | null {
+  if (!a) return null;
+  if (a.kind === "system") return { text: a.name ?? "Cadence", muted: false, service: false };
+  const service = a.kind === "service";
+  return a.name
+    ? { text: a.name, muted: false, service }
+    : { text: "Not known", muted: true, service };
+}
+
+/** The Approved by cell: each approver, a nameless person dropping when anyone else shows. */
+export function approverCells(
+  row: RevisionSummary,
+): readonly (TableActor & Readonly<{ adminMode: boolean }>)[] {
+  const cells = row.approvals.filter(isApproval).flatMap((a) => {
+    const cell = tableActor(a.actor);
+    return cell ? [{ ...cell, adminMode: a.admin_mode === true }] : [];
+  });
+  const shown = cells.filter((c) => !c.muted || c.service);
+  return shown.length > 0 ? shown : cells.slice(0, 1);
+}
+
 /** " by Mira K.", " by" + the tag alone, or nothing for a nameless person (U25, #308). */
 const byClause = (actor: NamedActor | null): readonly HeaderPart[] =>
   actor === null ? [] : actor.name ? [{ text: " by " }, { actor }] : [{ actor }];
@@ -71,16 +98,17 @@ function appliedLine(row: RevisionSummary): readonly HeaderPart[] {
   return parts;
 }
 
-/** "Ana R. and Owen P."; a tag-only (nameless, admin-mode) approver sits at the end. */
+/**
+ * "Ana R. and Owen P.". A nameless approver drops when anyone is named, so a tag-only part never
+ * sits after a name it doesn't belong to (ca-ux, #424); with every approver nameless, an admin-mode
+ * one keeps its tag alone.
+ */
 function joined(names: readonly NamedActor[]): readonly HeaderPart[] {
   const withName = names.filter((n) => n.name);
-  const tagOnly = names.filter((n) => !n.name);
-  return [
-    ...withName.flatMap((actor, i): HeaderPart[] =>
-      i === 0 ? [{ actor }] : [{ text: i === withName.length - 1 ? " and " : ", " }, { actor }],
-    ),
-    ...tagOnly.map((actor) => ({ actor })),
-  ];
+  if (withName.length === 0) return names.map((actor) => ({ actor }));
+  return withName.flatMap((actor, i): HeaderPart[] =>
+    i === 0 ? [{ actor }] : [{ text: i === withName.length - 1 ? " and " : ", " }, { actor }],
+  );
 }
 
 /**

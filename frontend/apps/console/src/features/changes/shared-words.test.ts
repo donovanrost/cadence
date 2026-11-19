@@ -108,6 +108,35 @@ describe("Revisions and change lists (a, b, c)", () => {
     expect(w.text()).toContain("Activated outside change sets");
   });
 
+  it("a service in a table cell reads its name, or 'Not known', with the Service tag (#424)", () => {
+    const planner = { kind: "service", id: "svc-1", name: "Nightly planner" };
+    const nameless = { kind: "service", id: "svc-2", name: null };
+    const w = mount(RevisionsTable, {
+      props: {
+        rows: [
+          row({
+            submitted_by: planner,
+            approvals: [
+              {
+                actor: nameless,
+                comment: null,
+                decided_at: "2026-11-17T09:11:00Z",
+                decision: "approved",
+                admin_mode: false,
+              },
+            ],
+          }),
+        ],
+        selected: [],
+      },
+      global: { stubs: { RouterLink: true } },
+    });
+    const cells = w.findAll("td").map((td) => td.text());
+    expect(cells).toContain("Nightly plannerService");
+    expect(cells).toContain("Not knownService");
+    expect(w.text()).not.toContain("(a service identity)");
+  });
+
   it("a change entry with no name shows the act and kind only, and the meta counts changes", () => {
     const r = decode(entry, {
       revision: 7,
