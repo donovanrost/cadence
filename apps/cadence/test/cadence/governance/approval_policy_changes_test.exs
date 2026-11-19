@@ -145,6 +145,37 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     assert unchanged?(c)
   end
 
+  # ca-security's third loosening path (director 11-19): clearing a mission's own 'independent'
+  # while the organization's default is 'direct' makes the mission inherit 'direct'. The check
+  # compares the EFFECTIVE setting before and after, so a clear that loosens is an organization
+  # admin's act like any other loosening.
+  test "clearing a mission's 'independent' override under a 'direct' organization default is a loosening: organization admin only, audited",
+       c do
+    assert {:ok, _} = set_organization(c.org_admin, "direct", true)
+    assert {:ok, _} = set(c.mission_admin, c.mission, "independent")
+    assert requirement(c) == "independent"
+    versions = versions(c)
+
+    for scope <- [c.mission_admin, c.operator] do
+      assert {:error, :approval_policy_change_requires_organization_admin} =
+               clear(scope, c.mission)
+    end
+
+    assert versions(c) == versions
+    assert requirement(c) == "independent"
+
+    assert {:ok, _} = clear(c.org_admin, c.mission)
+    assert requirement(c) == "direct"
+
+    assert [%{actor: "org-admin", audit: audit} | _] = history(c, c.mission)
+
+    assert %{
+             "scope" => "mission",
+             "before" => %{"effective" => %{"approval_requirement" => "independent"}},
+             "after" => %{"effective" => %{"approval_requirement" => "direct"}}
+           } = audit
+  end
+
   test "the organization's setting (default and override flag) is organization-admin only", c do
     for scope <- [c.operator, c.mission_admin] do
       assert {:error, reason} = set_organization(scope, "direct", true)
@@ -184,6 +215,12 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     ActivationPolicy.save(scope, mission, current.token, %{
       "value" => %{"approval_requirement" => requirement}
     })
+  end
+
+  # Clearing the mission's own value: it inherits the organization's default again.
+  defp clear(scope, mission) do
+    current = ActivationPolicy.load(scope.organization_id, mission)
+    ActivationPolicy.save(scope, mission, current.token, %{"value" => nil})
   end
 
   defp set_organization(scope, requirement, allow_override) do
