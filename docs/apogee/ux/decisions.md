@@ -2760,6 +2760,10 @@ the fix (with the P0 result); the console's disable is its reader.
   reject says what it does (api, P0 review): "This command is part of a command group. Reject it with the group's
   NO-GO." Whoever owns
   the P0 fix (api or api-ops) builds it.
+- **Standalone enqueue** (REST `POST /command_requests/:id/enqueue` and the legacy ops page's Queue; 409
+  `command_request_in_group`; #121, ca-ux 11-19): "This command is part of a command group. Its group's GO queues it."
+  It replaces the approve line the enqueue reused, which named the wrong act; a correctness fix, so it may change
+  although the legacy ops page renders it.
 - **Standalone create naming a group** (REST): "Not created: this request names a command group. A group's commands
   are submitted with the group."
 - **Not here:** the group's own GO/NO-GO is unchanged; this only closes the standalone way round it.
@@ -3227,6 +3231,9 @@ settings. Console only; amends U36. Every approve refusal says why and that the 
 are api's, switched on with `knownErrorCode`.
 
 - **Success only from the answer (U20):** "Approved. Booking 40 passes." only on the 202 with `outcome: "approved"`.
+  When the answer lists expired passes, the success line is U61's partial line with the answer's counts: "Approved.
+  Booking 37 passes; 3 had already started, so they weren't booked." The callout below keeps only its list
+  (`Show 3`), so the screen says it once (#257 check, ca-ux and fe-ops).
   Any other success answer: "Cadence didn't record an approval for R41. Reload to see the plan; if it's still waiting,
   try again or tell the team that runs Cadence for you." The UI never tells an approver something happened when it
   didn't. Submit likewise: "Sent for approval." only when `outcome` is `pending_approval`; any other answer (an older
@@ -3245,14 +3252,23 @@ are api's, switched on with `knownErrorCode`.
     carries none, so the history shows it once, on the decision.
   - The submit is refused: the submit line below; nothing was sent or approved. A submit answer other than
     `pending_approval` stops the chain too (no approve call), with the submit's U20 line.
+  - The submit lands and the approve gets no clear answer: "R41 was sent for approval, but Cadence didn't give a clear
+    answer about the approval. Reload to see whether it was recorded before you try again."
   - The submit lands and the approve is refused: "R41 was sent for approval, but not approved: <the approve refusal's
     reason>. It's waiting for approval." The reason is the refusal's first sentence after "Not approved:", with
     "R41" as "it" and without its ending (e.g. `forbidden`: "…not approved: only an org admin approves contact
     plans."). Example: "R41 was sent for approval, but not
     approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval." The plan then
     opens awaiting approval with `Approve and book the plan` to try again; after a self-approval refusal (the setting
-    changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead. The typed note stays in
-    the field for the retry.
+    changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead. The typed note stays
+    in the field for the retry.
+    Where the rule doesn't read right, the reason is given explicitly (ca-ux's review):
+    - `plan_not_ready` with conflicts: "2 of its passes conflict with other bookings"; unmet only: "it isn't ready:
+      10 spacecraft aren't covered".
+    - `plan_superseded`: "it's superseded by newer contact rules".
+    - `duplicate_operation`: "Cadence matched it to an earlier, different request".
+    - `plan_not_found`: "R41 was sent for approval, but Cadence can't find it any more. Reload to see 11-16's plans."
+      (no "It's waiting for approval").
   - The approve's 403 stays the backstop: the setting can change between the read and the click.
 - **Everyone else** (members, and admins under "Needs a second person's approval", `approval_setting: "independent"`):
   `Request approval` (sent back `Submit the plan again`; Re-plan `Request approval for the proposal`, confirm "This
@@ -3275,20 +3291,36 @@ are api's, switched on with `knownErrorCode`.
     see it." Never an id for the name (U25).
   - 409 `plan_changed`: "Not approved: R41 changed after you opened it, so it isn't what you reviewed. Your approval
     wasn't recorded. Reload to review it again."
-  - 404 `plan_not_found`: "Not approved: Cadence can't find this plan any more. Reload to see 11-16's plans."
-  - `plan_not_ready`, `acknowledgements_required`, `plan_superseded`: U36's lines, opening "Not approved:".
+  - 404 `plan_not_found`: "Not approved: Cadence can't find this plan any more, so your approval wasn't recorded.
+    Reload to see 11-16's plans."
+  - 409 `plan_superseded` (contact rules changed since the draft, U27): "Not approved: contact rules changed after R41
+    was drafted, so it's superseded and can't be booked. Your approval wasn't recorded. Draft the day again." As the
+    partial line's reason: "it's superseded by newer contact rules".
+  - 422 `acknowledgements_required` (`missing`): "Not approved: 3 gaps need a reason first. Your approval wasn't
+    recorded. Give a reason for each, then approve." (A gap is an uncovered spacecraft, U23.)
+  - 422 `plan_not_ready` (`unmet`, `conflicts`): with conflicts, "Not approved: 2 of R41's passes conflict with other
+    bookings, so it can't be booked. Your approval wasn't recorded. Send it back so it can be planned again." With
+    unmet only, "Not approved: R41 isn't ready to approve: 10 spacecraft aren't covered. Your approval wasn't
+    recorded. Reload to see the gaps." With neither count, "Not approved: R41 isn't ready to approve. Your approval
+    wasn't recorded. Reload to see what's missing."
+  - No clear answer (a network failure, a timeout, a 5xx or an answer the console can't read; it may have been
+    recorded): "Cadence didn't give a clear answer, so
+    your approval may not have been recorded. Reload to see the plan before you try again."
   - 422 `invalid_params` on `decision_note`: the server's field message ("Keep the note under 2,000 characters.") under
     the note.
   - A code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
     with the code in Technical details.
-- **Submit refusals:** 409 `plan_already_submitted` (`submitted_by` and `submitted_at` together or neither): "Not sent:
+- **Submit refusals:** 409 `plan_changed`: "Not sent: R41 changed after you opened it. Reload to see it, then send it
+  again." 409 `plan_already_submitted` (`submitted_by` and `submitted_at` together or neither): "Not sent:
   R41 was already sent for approval by Mira K. at 03:40Z, so nothing changed. Reload to see it." The viewer: "Not sent:
   you already sent R41 for approval at 03:40Z, so nothing changed." Neither: "Not sent: R41 is already waiting for
   approval, so nothing changed. Reload to see it."
 - **Replays (both actions):** the same `operation_id` with the same actor, plan, action and body returns the original
   answer with `replayed: true`; the console shows that answer's result as this one's ("Sent for approval." /
-  "Approved. Booking 40 passes." by its outcome). 409 `duplicate_operation` (the id with anything different): "Not
-  sent: Cadence matched this to an earlier, different request, so nothing changed. Reload and try again."
+  "Approved. Booking 40 passes." by its outcome). 409 `duplicate_operation` (the id with anything different): on
+  submit "Not sent: Cadence matched this to an earlier, different request, so nothing changed. Reload and try again.";
+  on approve "Not approved: Cadence matched this to an earlier, different request, so your approval wasn't recorded.
+  Reload and try again."
   (`operation_conflict` keeps its line.)
 - **With gaps:** the one act keeps today's pattern: `Accept 2 gaps, approve and book` on the plan, `Accept 2 gaps,
   approve and apply` on Re-plan.
@@ -3299,3 +3331,18 @@ are api's, switched on with `knownErrorCode`.
 - **The drafter, up front (follow-up, not #257):** a drafter under `independent` learns it only on press until the
   plan read says why, as #240 did for Activations; then "You drafted this version of the plan, so another org admin
   approves it." shows before the press.
+
+### U98 · Can't view: a 403 on a read (#272, mms-ux; the pattern for every squad) (api / every squad)
+Someone in the mission without the read right opens a page (outsiders get 404 and never learn it exists). Nothing they
+asked to change was refused, so the line has no "Not saved:" style opener and never says "change".
+
+- **Line:** "You can't view <object>. Ask a mission admin or an org admin for access." A nameless object reads "this
+  <thing>": "You can't view this spacecraft's configuration…", never "Unknown spacecraft's" (mms-ux's review). First case (#272, the spacecraft
+  configuration workspace and its packet choices, one line on both routes): "You can't view EARENDIL-004's
+  configuration. Ask a mission admin or an org admin for access."
+- **Where:** in place of the content the read would fill, the page or a panel, as its empty state (`role="status"`;
+  the person didn't act, B6). Packet choices load inside the workspace, so the line takes that list's place, and any
+  act that needs it is disabled with its reason (A6). The
+  object is named as the page names it, never by id (U25).
+- **Not this:** a 403 on a write keeps its act's opener ("Not saved:", "Not approved:" …), and a 403 with a known
+  specific code keeps that code's line; U98 is for the generic `forbidden` on a read.

@@ -47,7 +47,13 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
    reachable without hover (a table, a list, or focusable marks with names). (#189, dashboards' R3 finding)
 6. **An action's outcome is announced without moving focus.** A result, refusal or failure after the person acts
    (a refusal line, an error inside a sheet, a failed `Load more` / `Older`, a row's result note) is in a live region:
-   `role="alert"` for refusals and failures, `role="status"` (polite) for results. That includes results with
+   `role="alert"` for refusals and failures, `role="status"` (polite) for results. The role follows what happened,
+   not the callout's tone: a caution-toned refusal of the person's own act is still `alert` (#257 check), so a
+   callout that derives its role from its tone must let the caller set it. For an outcome object, nominal is
+   `status` and caution or crit is `alert`. A load is an outcome only when the person acted: a failure after Load
+   more, Older, a typed search, Retry or a filter change is `alert`; the page's first load failing on mount is
+   `status`. An act that ran and changed nothing is a result (`status`); a refused one is `alert`. Standing cautions
+   (shown on render, not after an act) need no live role. (#276, dashboards' sweep) That includes results with
    nothing to show: a search with no matches, a download started ("Export started: Power.csv"), a comparison
    finished. Focus stays where it was (B4). (#189 'live' and 'outcome')
 7. **Every control names what it acts on.** A button repeated per row, widget or section carries its object in its
