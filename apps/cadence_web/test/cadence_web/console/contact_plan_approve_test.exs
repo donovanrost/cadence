@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
   import Ecto.Query
 
   alias Cadence.ContactPlanning.{ContactPlanApprovals, PlanOperations}
-  alias Cadence.Management.Contacts.Store.ContactPlanApprovalRow
+  alias Cadence.Management.Contacts.Store.{ContactOpportunitySnapshotRow, ContactPlanApprovalRow}
   alias Cadence.Repo
   alias CadenceWeb.Console.SchedulingRunner
   alias CadenceWeb.{ContactPlanningFixtures, TestFixtures}
@@ -69,8 +69,13 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
           "decision_note" => "  Checked the gaps  "
         })
 
-      assert %{"state" => "executing", "outcome" => "approved", "replayed" => false} =
-               json_response(conn, 202)["data"]
+      # #273: every pass can still be booked, so nothing is left out.
+      assert %{
+               "state" => "executing",
+               "outcome" => "approved",
+               "replayed" => false,
+               "expired" => nil
+             } = json_response(conn, 202)["data"]
 
       await_execution(plan_id)
       admin_id = c.admin.user_id
@@ -130,6 +135,48 @@ defmodule CadenceWeb.Console.ContactPlanApproveTest do
       refute state in ["draft", "pending_approval"]
       assert length(approvals(c, plan_id)) == 1
     end
+  end
+
+  test "an approve says which passes it leaves out because their offer already expired (#273)",
+       c do
+    plan_id = member_plan(c)
+    submit!(c, c.member, plan_id, "op-member")
+
+    %{"passes" => [%{"snapshot_id" => snapshot_id, "starts_at" => aos} | _] = passes} =
+      get_as(c, c.admin, "/#{plan_id}")["data"]
+
+    past = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:microsecond)
+
+    Repo.update_all(
+      from(s in ContactOpportunitySnapshotRow,
+        where: s.contact_opportunity_snapshot_id == ^snapshot_id
+      ),
+      set: [expires_at: past]
+    )
+
+    data = approve!(c, c.admin, plan_id, "op-expired")
+
+    assert %{
+             "count" => 1,
+             "reservable_count" => reservable,
+             "items" => [%{"spacecraft" => craft, "station" => _station, "aos" => item_aos}]
+           } = data["expired"]
+
+    assert reservable == length(passes) - 1
+    assert %{"id" => _, "name" => _, "scid" => _} = craft
+    {:ok, item_at, _} = DateTime.from_iso8601(item_aos)
+    {:ok, pass_at, _} = DateTime.from_iso8601(aos)
+    assert DateTime.compare(item_at, pass_at) == :eq
+
+    # A replay of the same request answers the same body.
+    replay =
+      c
+      |> post_as(c.admin, plan_id, "approve", %{"operation_id" => "op-expired"})
+      |> json_response(202)
+      |> Map.fetch!("data")
+
+    assert replay["replayed"] == true
+    assert replay["expired"] == data["expired"]
   end
 
   describe "under 'direct' approval" do

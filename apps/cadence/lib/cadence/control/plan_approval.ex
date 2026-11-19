@@ -12,11 +12,15 @@ defmodule Cadence.Control.PlanApproval do
   approver's acknowledgements of the plan's gaps on the approval. The approved plan's execution
   items are accepted, and the operation and its answer are recorded, in the same transaction.
   Execution itself runs off the request (the caller starts it on `{:approved, …}`).
+
+  #273: the answer carries `expired`, the passes this approval leaves out because their offer had
+  already expired (`PlanExpiredPasses`), read at the moment of the decision; `nil` when none.
   """
 
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactPlan, ContactPlans, PlanOperations}
   alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Control.PlanExpiredPasses
   alias Cadence.Repo
 
   @typedoc "`params`: operation_id, expected_version, note (the decision note), acknowledgements."
@@ -44,8 +48,16 @@ defmodule Cadence.Control.PlanApproval do
              ContactPlans.fetch_locked(scope.organization_id, mission_id, plan_id),
            :new <- operation(scope, mission_id, plan_id, params),
            :ok <- expected(version.version, params.expected_version),
+           expired =
+             PlanExpiredPasses.at(
+               scope.organization_id,
+               mission_id,
+               plan_id,
+               version.version,
+               DateTime.utc_now()
+             ),
            {:ok, _approved} <- decide(scope, mission_id, plan, version, params),
-           answer = {202, body(plan_id, version.version)},
+           answer = {202, body(plan_id, version.version, expired)},
            :ok <- PlanOperations.record(attrs(scope, mission_id, plan_id, params), answer) do
         {:approved, answer, version.version, version.content_sha256}
       else
@@ -115,12 +127,13 @@ defmodule Cadence.Control.PlanApproval do
     }
   end
 
-  defp body(plan_id, version),
+  defp body(plan_id, version, expired),
     do: %{
       "plan_id" => plan_id,
       "version" => version,
       "state" => "executing",
-      "outcome" => "approved"
+      "outcome" => "approved",
+      "expired" => expired
     }
 
   defp expected(version, version), do: :ok
