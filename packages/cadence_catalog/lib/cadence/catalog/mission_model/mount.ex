@@ -18,7 +18,8 @@ defmodule Cadence.Catalog.MissionModel.Mount do
   - **References keep the source's text.** An absolute reference written in a mounted layer
     resolves under its mount; a relative one resolves from the moved declaration. Lowering matches
     definition entries to references by that text, so it never needs rewriting.
-  - **Collisions are blocking diagnostics:** two imports at one mount (`MM_MOUNT_COLLISION`), a
+  - **Collisions are blocking diagnostics:** two imports at one mount, or one mount nested under
+    another (`MM_MOUNT_COLLISION`, per pair; nesting waits for D's record), a
     duplicate across layers (`MM_DUPLICATE_IDENTITY`, naming both layers and the mount), and two
     mounts lowering the same packet, parameter or command short name into one target
     (`MM_TARGET_NAME_COLLISION`; qualified runtime names are phase 5).
@@ -281,21 +282,26 @@ defmodule Cadence.Catalog.MissionModel.Mount do
     end)
   end
 
+  # Domain (#456 review): one mount equal to, or under, another is refused; nesting waits for D's
+  # composition record. One diagnostic per pair, naming both layers and both mounts.
   defp mount_collisions(plan) do
-    plan.by_layer
-    |> Enum.group_by(&elem(&1, 1), &elem(&1, 0))
-    |> Enum.filter(fn {_mount, layer_ids} -> length(layer_ids) > 1 end)
-    |> Enum.sort()
-    |> Enum.map(fn {mount, layer_ids} ->
+    mounted = Enum.map(plan.layer_order, &{&1, Map.fetch!(plan.by_layer, &1)})
+
+    for {{first, first_mount}, i} <- Enum.with_index(mounted),
+        {{second, second_mount}, j} <- Enum.with_index(mounted),
+        i < j,
+        overlap?(first_mount, second_mount) do
       Diagnostic.new(%{
         code: "MM_MOUNT_COLLISION",
         severity: :error,
         stage: :composition,
-        message: "More than one imported layer is mounted at #{mount}",
-        metadata: %{mount: mount, layer_ids: order(plan, layer_ids)}
+        message: "Imported layers can't share or nest mounts: #{first_mount} and #{second_mount}",
+        metadata: %{layer_ids: [first, second], mounts: [first_mount, second_mount]}
       })
-    end)
+    end
   end
+
+  defp overlap?(left, right), do: under?(left, right) or under?(right, left)
 
   defp short_name_collisions(plan, declarations) do
     declarations

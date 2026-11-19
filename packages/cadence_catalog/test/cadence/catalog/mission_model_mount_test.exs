@@ -237,7 +237,7 @@ defmodule Cadence.Catalog.MissionModelMountTest do
         )
 
       assert %{metadata: metadata} = code!(result.revision, "MM_MOUNT_COLLISION")
-      assert metadata.mount == "/bus"
+      assert metadata.mounts == ["/bus", "/bus"]
       assert metadata.layer_ids == [first.layer_id, second.layer_id]
 
       duplicate = code!(result.revision, "MM_DUPLICATE_IDENTITY")
@@ -246,6 +246,33 @@ defmodule Cadence.Catalog.MissionModelMountTest do
       assert duplicate.metadata.mount == "/bus"
 
       assert result.plans.telemetry.status == :blocked
+    end
+
+    test "one mount nested under another is refused, in either order (domain, #456)" do
+      bus = yaml_layer()
+      payload = xtce_layer()
+
+      for {bus_mount, payload_mount} <- [{"/bus", "/bus/payload"}, {"/bus/payload", "/bus"}] do
+        {:ok, result} =
+          Compiler.compile([bus, payload],
+            mounts: mounts(bus, bus_mount, payload, payload_mount)
+          )
+
+        assert %{metadata: metadata} = code!(result.revision, "MM_MOUNT_COLLISION")
+        assert metadata.layer_ids == [bus.layer_id, payload.layer_id]
+        assert metadata.mounts == [bus_mount, payload_mount]
+        assert result.plans.telemetry.status == :blocked
+      end
+    end
+
+    test "sibling mounts that only share a prefix of their names don't collide" do
+      bus = yaml_layer()
+      payload = xtce_layer()
+
+      {:ok, result} =
+        Compiler.compile([bus, payload], mounts: mounts(bus, "/bus", payload, "/bus2"))
+
+      refute Enum.any?(result.revision.diagnostics, &(&1.code == "MM_MOUNT_COLLISION"))
     end
 
     test "two mounts that lower the same packet, parameter or command name into one target" do
