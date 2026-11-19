@@ -4104,9 +4104,10 @@ is about, so the name reuses it; no short noun is invented per kind.
 ### U108 · The monitoring lane: limits, derived points and alarm rules through change sets (#28; DECISIONS #92 phase 3, #93; ADR-020 addendum, change-set lanes) (domain / api / mms-ux / the squads that build the editors)
 **The UX spec for phase 3's monitoring lane** in domain's mission-model build plan (#440,
 `docs/apogee/domain/mission-model-build-plan.md`, issue J). It applies U64 (the user's four conditions) to domain's
-design. Limits, alarm rules and derived points are change-set kinds in a second lane, **monitoring**. Each mission
-has one **open** set per lane; sets in review don't count, so review never closes a lane. The lanes never freeze
-each other, and revisions from both share one sequence. Applying a monitoring set recompiles the effective model and
+design. Limits, alarm rules and derived points are change-set kinds in a second lane, **monitoring**. The lanes
+never freeze each other, and revisions from both share one sequence. Monitoring has one **open** set per mission;
+its sets in review don't count, so review never closes it. Configuration is unchanged (DECISIONS #13): one shared
+set, frozen while in review. Applying a monitoring set recompiles the effective model and
 activates it, and the set's review is the approval of the authored layer. U43 (limit words) and U42 (a derived point
 in use) still hold. Domain's answers on #438 (11-19) settled the model points.
 
@@ -4158,7 +4159,8 @@ in use) still hold. Domain's answers on #438 (11-19) settled the model points.
   `Stage replacement` / `Apply replacement now`. No check result is needed for it then.
 - **Two lanes on Changes.**
   - **Staged bar:** one line per lane with an open set or a set in review: `CONFIGURATION · 2 changes: …  [Review &
-    apply]` and `MONITORING · 1 change: Edit limits for BATT_V · 1 set in review  [Review & apply]`. Neither button
+    apply]` (its in-review state as Changes.md §2) and `MONITORING · 1 change: Edit limits for BATT_V · 1 set in
+    review  [Review & apply]`. Neither button
     carries a revision number: with one sequence, the number depends on which set applies first. It shows on the
     review page's commit (`Apply as r6`), and Changes.md §2's `Review & apply as r6` drops its number once the lane
     ships.
@@ -4166,17 +4168,11 @@ in use) still hold. Domain's answers on #438 (11-19) settled the model points.
     reads `Configuration · 2` / `Monitoring · 1`. The page and its h1 name the lane: "Apply monitoring changes · 1
     change". Sets of that lane in review are listed above the open set, one line each: "In review · 3 changes ·
     sent for review by Mira K. at 14:02Z" (no name: "sent for review at 14:02Z") plus `Open review`.
-  - **Review no longer pauses staging.** Sending a set for review leaves its lane open, and new edits start the
-    lane's next set. The uniqueness is (mission, lane) over open sets only, so this holds for Configuration too:
-    Changes.md §2's *In review* state ("r6 in review · staging is paused") becomes "1 set in review" with
-    `Open review`. frozen_in_review then fires only for a point in a set under review, with the words above. Stage
-    points elsewhere aren't disabled for review any more.
-  - **Built configuration-lane screens this touches** (mms-ux; fe-setup cards them, words as above):
-    - the staged bar's in-review state (Changes.md §2, `StagedBarView`, "r6 in review · staging is paused");
-    - the frozen_in_review refusal, now only for a point in a set under review;
-    - every Stage disabled up front while a set is in review: the switches, C3, the profile editors, KindEditor;
-    - U79's conversion batch, which wants its set alone. **[domain]** Does conversion_in_progress still hold
-      while a conversion set is in review?
+  - **Review doesn't pause monitoring staging** (domain #438 2, monitoring only). Sending a monitoring set for
+    review leaves the lane open, and new edits start its next set. frozen_in_review on the monitoring lane fires
+    only for a point in a set under review, with the words above. Configuration keeps Changes.md §2's *In review*
+    state ("r6 in review · staging is paused"), its frozen_in_review and its disabled Stages, and U79's
+    conversion_in_progress still holds while a conversion set is in review.
 - **Checks (K2) on the monitoring lane.**
   - **Compiles** ("Every limit, derived point and alarm rule compiles against the live model"): NO-GO. Each
     failure names the definition, then what it refers to. Dangling reference: "BATT_HEALTH uses BATT_SOC_PCT,
