@@ -3359,7 +3359,8 @@ refusal of its own. Affected today: catalog revisions (imports), activations (ev
 approvals under an automation grant) and command requests. Not affected: change sets, planning policies, command
 groups, provider changes, qualification cases (no service authors them).
 
-- **The reused self-approval 403s** carry `details.via_service` `{id, name}` when the overlap came through a service.
+- **The reused self-approval 403s** always carry `details.via_service`: `{id, name}` when the overlap came through a
+  service, null when it was the approver.
   Then the line names the service, since "you requested this" would be untrue (U20). Every line ends "Your approval
   wasn't recorded." (U95), plus what the kind adds:
   - `activation_self_approval_forbidden`: "Not approved: Nightly planner, a service identity you're accountable for,
@@ -3370,15 +3371,23 @@ groups, provider changes, qualification cases (no service authors them).
     submitted this plan, so another org admin approves it. Your approval wasn't recorded and nothing was booked."
   - `command_request_self_approval_not_allowed`: "Not approved: Nightly planner, a service identity you're
     accountable for, sent this command request, so another person gives the GO. Your approval wasn't recorded."
-  - No `via_service` (null or absent look the same on the wire; it was the approver): each kind's own line (U65,
-    U94, U97, U87's family).
-- **409 `approval_authors_unknown`** (every kind; `details.service` `{id, name}`, a different key; under an automation
-  grant it can be the approving service): "Not approved: Nightly planner has no one recorded as accountable for it, so
-  this can't be approved yet. Your approval wasn't recorded. An org admin records who's accountable in People ›
-  Service identities." Without a name: "the service identity that made this". REST drops the place.
-  - Up front (the approval read's `cannot_decide` `authors_unknown`, same `service` key): Approve is disabled (A6)
-    with that line without "Not approved:" and without "Your approval wasn't recorded."; the what-to-do stays.
-    Reject or Send back stays.
+  - `via_service` null: each kind's own line (U65, U94, U97, U87's family).
+- **403 `<kind>_approver_authors_unknown`** (api's shape: `activation_approver_authors_unknown` (#236's code),
+  `contact_plan_approver_authors_unknown`, `mission_model_approver_authors_unknown`,
+  `command_request_approver_authors_unknown`). The line is picked by `details.service` `{id, name}`:
+  - With it (a service whose accountable people aren't recorded; under an automation grant it can be the approving
+    service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
+    Your approval wasn't recorded. An org admin records who's accountable in People › Service identities."
+  - Without it: the kind's own authors-unknown line: U94's for activations ("Not approved: Cadence can't tell who
+    saved this configuration…"). Kinds that had none get the same form: "Not approved: Cadence can't tell who made
+    this plan, so it can't check that you weren't one of them. Your approval wasn't recorded. Send it back so it can
+    be submitted again; if it keeps happening, tell the team that runs Cadence for you." (revision: "who imported this
+    revision" … "Reject it so it can be imported again"; command request: "who sent this command request" … "Reject
+    it so it can be sent again").
+  - REST command requests carry no details (that envelope has none): the server's message, still a refusal.
+  - Up front (the approval read's `cannot_decide` `authors_unknown`, with `service` when known): Approve is disabled
+    (A6) with the matching line without "Not approved:" and without "Your approval wasn't recorded."; the what-to-do
+    stays. Reject or Send back stays.
 - **Automation grant refused** (contact plans under "Needs a second person's approval"), on the plan's state line:
   "Not approved automatically: the people this automation approves for also count as R41's authors, so a person
   outside them approves it."
