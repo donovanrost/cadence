@@ -6,6 +6,7 @@ defmodule Cadence.TestSupport.ObservationIdentityFixtures do
 
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, WriteContext}
+  alias Cadence.Telemetry.Storage.ObservationIdentityStates.TelemetryObservationIdentityStateRow
 
   @doc "An envelope as the storage path builds it. Overrides: any context or sample field."
   @spec envelope(keyword()) :: ObservationEnvelope.t()
@@ -52,6 +53,61 @@ defmodule Cadence.TestSupport.ObservationIdentityFixtures do
       )
 
     envelope
+  end
+
+  @doc """
+  The row the write path stored for a canonical first sighting BEFORE the first-seen rule (#157):
+  "seen once, canonical", with the old payload's six copies. Dev still holds such rows, and #359's
+  retention deletes them; nothing writes them any more. Overrides: any row field (atom keys), e.g.
+  `last_seen_at`, a count, `decision_reason` or `payload`.
+  """
+  @spec pre_first_seen_state!(ObservationEnvelope.t(), keyword()) :: struct()
+  def pre_first_seen_state!(%ObservationEnvelope{} = envelope, overrides \\ []) do
+    attrs =
+      Map.merge(
+        %{
+          observation_identity_id: envelope.observation_identity_id,
+          organization_id: envelope.organization_id,
+          mission_id: envelope.mission_id,
+          realm: Atom.to_string(envelope.realm),
+          replay_run_id: envelope.replay_run_id,
+          data_source_id: envelope.data_source_id,
+          binding_id: envelope.binding_id,
+          observable_id: envelope.observable_id,
+          point_id: envelope.point_id,
+          spacecraft_id: envelope.spacecraft_id,
+          canonical_observation_id: envelope.observation_id,
+          canonical_sample_id: envelope.sample_id,
+          canonical_revision: envelope.revision,
+          latest_observation_id: envelope.observation_id,
+          latest_sample_id: envelope.sample_id,
+          latest_revision: envelope.revision,
+          validity_state: "canonical",
+          canonical_count: 1,
+          duplicate_count: 0,
+          conflict_count: 0,
+          superseded_count: 0,
+          advisory_count: 0,
+          first_seen_at: envelope.ingested_at,
+          last_seen_at: envelope.ingested_at,
+          decided_at: envelope.ingested_at,
+          decision_reason: "initial_canonical",
+          payload: %{
+            "latest_observation_id" => envelope.observation_id,
+            "latest_sample_id" => envelope.sample_id,
+            "latest_validity_state" => "canonical",
+            "supersedes_observation_id" => envelope.supersedes_observation_id,
+            "source_endpoint_id" => envelope.source_endpoint_id,
+            "evidence_id" => envelope.evidence_id,
+            "packet_id" => envelope.packet_id
+          }
+        },
+        Map.new(overrides)
+      )
+
+    %TelemetryObservationIdentityStateRow{}
+    |> TelemetryObservationIdentityStateRow.changeset(attrs)
+    |> Cadence.Repo.insert!()
   end
 
   @doc "The sample a history backend returns for the envelope's row (with its storage provenance)."
