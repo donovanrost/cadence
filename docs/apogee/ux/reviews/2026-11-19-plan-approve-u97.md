@@ -82,3 +82,16 @@ is known to have gone through. U97 has no line for this case (gap C).
 - **D.** U97 internal: `plan_not_found` and `duplicate_operation` on approve don't end "Your approval wasn't recorded."
   as U97's preamble says every approve refusal does, and `duplicate_operation` opens "Not sent:" on an approve. The
   built code matches U97's literal lines, so this is a U97 question, not a build bug.
+
+## Rulings (ux, 11-19)
+
+ux ruled on every gap the same day and adds the words to U97 and a11y B6 in one docs PR. The fixes go to fe-ops'
+follow-up PR. #273 tracks finding 1.
+
+- A: with `expired` present the success line is U61's partial line, with the count from the answer ("Approved.
+  Booking 37 passes; 3 had already started, so they weren't booked."); the U61 callout keeps only its list.
+- B, C, D: the approve lines for `plan_superseded`, `acknowledgements_required`, `plan_not_ready` (three forms),
+  `plan_not_found` and `duplicate_operation`, all ending "Your approval wasn't recorded."; the unclear approve (one
+  act and single); submit's `plan_changed` opening "Not sent:". Exact words: U97 after ux's PR.
+- Kit: a refusal of the person's own act is `role="alert"` whatever its tone; `ApCallout` gets an explicit role that
+  wins over its tone default (Platform's kit; ux sent it to lead).
