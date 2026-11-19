@@ -85,7 +85,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   end
 
   defp approve_in(scope, mission_id, grant_id, digest, approver, now) do
-    with {:ok, row, grant} <- lock_grant(scope.organization_id, mission_id, grant_id),
+    with {:ok, row, grant} <- lock_in_order(scope.organization_id, mission_id, grant_id),
          :ok <- proposed(grant, now),
          :ok <- at_digest(grant, digest),
          {:ok, policy} <- same_policy(grant),
@@ -114,6 +114,12 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
          {:ok, revoked} <- revoke_locked(scope, row, grant, actor, reason, now),
          :ok <- withdraw_replacements(scope, grant, actor, now) do
       {:ok, revoked}
+    else
+      # Idempotent (api-ops on #497, the #261 class): a retried revoke of a grant already
+      # revoked answers the grant as it stands, writing nothing, never "refused" after the
+      # switch-off committed.
+      {:already_revoked, grant} -> {:ok, grant}
+      error -> error
     end
   end
 
@@ -238,6 +244,45 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
     |> AutomationGrant.new()
   end
 
+  @doc """
+  Locks a grant's row `FOR UPDATE` in the ONE order every grant path uses (fe-ops and lead on
+  #497): the grant a proposal would replace FIRST, then the proposal. Revoke locks the grant, then
+  the proposals that would replace it; approving a widening locks the grant it replaces, then the
+  widening. So the two never wait on each other in opposite orders (no deadlock). `replaces_grant_id`
+  never changes after a proposal is made, so reading it before the lock is safe.
+  """
+  @spec lock_in_order(binary(), binary(), binary()) ::
+          {:ok, struct(), AutomationGrant.t()} | {:error, :automation_grant_not_found}
+  def lock_in_order(organization_id, mission_id, grant_id) do
+    with {:ok, replaces} <- replaces_of(organization_id, mission_id, grant_id),
+         :ok <- lock_replaced(organization_id, mission_id, replaces) do
+      lock_grant(organization_id, mission_id, grant_id)
+    end
+  end
+
+  defp replaces_of(organization_id, mission_id, grant_id) do
+    AutomationGrantRow
+    |> where(
+      [r],
+      r.organization_id == ^organization_id and r.mission_id == ^mission_id and
+        r.automation_grant_id == ^grant_id
+    )
+    |> select([r], {r.automation_grant_id, r.replaces_grant_id})
+    |> Repo.one()
+    |> case do
+      nil -> {:error, :automation_grant_not_found}
+      {_id, replaces} -> {:ok, replaces}
+    end
+  end
+
+  defp lock_replaced(_organization_id, _mission_id, nil), do: :ok
+
+  # The replaced grant may be gone or already revoked; the approval then says so (supersede/4).
+  defp lock_replaced(organization_id, mission_id, replaces) do
+    _locked = lock_grant(organization_id, mission_id, replaces)
+    :ok
+  end
+
   defp lock_grant(organization_id, mission_id, grant_id) do
     AutomationGrantRow
     |> where(
@@ -273,6 +318,7 @@ defmodule Cadence.ContactPlanning.AutomationGrantReview do
   defp at_digest(_grant, _digest), do: {:error, :stale_automation_grant_hash}
 
   defp revocable(%{lifecycle_state: :active}), do: :ok
+  defp revocable(%{lifecycle_state: :revoked} = grant), do: {:already_revoked, grant}
 
   defp revocable(grant),
     do: {:error, {:automation_grant_not_active, %{state: grant.lifecycle_state}}}

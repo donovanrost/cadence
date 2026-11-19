@@ -174,6 +174,25 @@ defmodule CadenceWeb.Console.ContactGrantAPITest do
 
     assert %{"grant" => %{"state" => "revoked", "revoked_by" => %{"name" => "Ada"}}} =
              json_response(post_json(c.admin, revoke, %{}), 200)["data"]
+
+    # A retry answers 200 with the revoked grant, never a refusal (api-ops on #497).
+    assert %{"grant" => %{"state" => "revoked", "revoked_by" => %{"name" => "Ada"}}} =
+             json_response(post_json(c.approver, revoke, %{}), 200)["data"]
+  end
+
+  # ca-security on #497: who may decide is checked before any lock or replay, so a member can't
+  # probe grant ids (403, never 404) or replay an admin's answer.
+  test "a member is refused 403 before any lookup or replay", c do
+    %{"grant" => grant} = json_response(post_json(c.admin, c.base, body(c)), 201)["data"]
+    approve = "#{c.base}/#{grant["id"]}/approve"
+    request = %{"sha256" => grant["sha256"], "operation_id" => "op-shared"}
+
+    assert json_response(post_json(c.approver, approve, request), 200)
+
+    for path <- [approve, "#{c.base}/no-such-grant/approve"] do
+      assert %{"code" => "forbidden"} =
+               json_response(post_json(c.member, path, request), 403)["error"]
+    end
   end
 
   test "reject needs a reason; narrow takes access away at once", c do

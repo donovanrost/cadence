@@ -34,7 +34,8 @@ defmodule Cadence.ContactPlanning.GrantSeparation do
   @doc """
   Why `scope` can't decide on `grant` now, for the console's flags (U105, #233's pattern: the
   server says, the console never computes it): nil when they can, else `{reason, details}` with
-  reason not_a_person | not_admin | not_proposed | proposer | accountable | authors_unknown.
+  reason not_a_person | not_admin | not_proposed | policy_changed | proposer | accountable |
+  authors_unknown.
   The same separation check approval runs, against the setting in force now.
   """
   @spec viewer_block(Scope.t(), AutomationGrant.t(), DateTime.t()) ::
@@ -42,12 +43,18 @@ defmodule Cadence.ContactPlanning.GrantSeparation do
   def viewer_block(%Scope{} = scope, %AutomationGrant{} = grant, now) do
     with {:ok, viewer} <- viewer(scope),
          :proposed <- AutomationGrant.effective_state(grant, now),
+         :ok <- same_setting(grant),
          policy = ActivationPolicy.evidence(grant.organization_id, grant.mission_id),
          {:ok, _separated} <- check(scope, viewer, grant, policy) do
       nil
     else
       {:blocked, reason} ->
         {reason, nil}
+
+      # fe-ops on #497: the setting changed since the proposal, so approval would refuse it
+      # (approval_policy_changed); the flags say so up front instead of offering Approve.
+      :policy_changed ->
+        {"policy_changed", nil}
 
       {:error, {:automation_grant_self_approval_forbidden, %{because: "proposed"}}} ->
         {"proposer", nil}
@@ -60,6 +67,13 @@ defmodule Cadence.ContactPlanning.GrantSeparation do
 
       _state ->
         {"not_proposed", nil}
+    end
+  end
+
+  defp same_setting(grant) do
+    case ActivationPolicy.validate(grant.organization_id, grant.mission_id, grant.approval_policy) do
+      :ok -> :ok
+      {:error, _changed} -> :policy_changed
     end
   end
 

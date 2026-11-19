@@ -39,25 +39,16 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
   end
 
   @doc """
-  Locks a grant's row (`FOR UPDATE`) in the caller's transaction: `:ok` or
+  Locks a grant's row in the caller's transaction, in the one order every grant path uses (the
+  grant a proposal replaces first; `AutomationGrantReview.lock_in_order/3`): `:ok` or
   `{:error, :automation_grant_not_found}`. The console's decisions take it before checking their
   operation id (#283, as #257's plans).
   """
   @spec lock(binary(), binary(), binary()) :: :ok | {:error, :automation_grant_not_found}
   def lock(organization_id, mission_id, grant_id) do
-    AutomationGrantRow
-    |> where(
-      [r],
-      r.organization_id == ^organization_id and r.mission_id == ^mission_id and
-        r.automation_grant_id == ^grant_id
-    )
-    |> Ecto.Query.lock("FOR UPDATE")
-    |> select([r], r.automation_grant_id)
-    |> Repo.one()
-    |> case do
-      nil -> {:error, :automation_grant_not_found}
-      _id -> :ok
-    end
+    with {:ok, _row, _grant} <-
+           AutomationGrantReview.lock_in_order(organization_id, mission_id, grant_id),
+         do: :ok
   end
 
   defdelegate approve(scope, mission_id, grant_id, digest, opts \\ []), to: AutomationGrantReview

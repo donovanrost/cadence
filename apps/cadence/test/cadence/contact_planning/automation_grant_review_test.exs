@@ -10,7 +10,14 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
 
   alias Cadence.Auth.Scope
   alias Cadence.AutomationGrantFixtures, as: F
-  alias Cadence.ContactPlanning.{AutomationGrant, AutomationGrantDecisions, AutomationGrants}
+
+  alias Cadence.ContactPlanning.{
+    AutomationGrant,
+    AutomationGrantDecisions,
+    AutomationGrantReview,
+    AutomationGrants
+  }
+
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Contacts.Store.AutomationGrantRow
 
@@ -256,6 +263,21 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
                approve(c, c.approver, widening)
     end
 
+    # api-ops on #497: a retried revoke never reads as refused after the switch-off committed.
+    test "revoking again answers the revoked grant and records nothing more", c do
+      grant = active!(c)
+
+      revoke = fn ->
+        AutomationGrants.revoke(c.third, c.mission, grant.automation_grant_id, nil, nil)
+      end
+
+      assert {:ok, first} = revoke.()
+      assert {:ok, again} = revoke.()
+      assert again.lifecycle_state == :revoked
+      assert again.ending == first.ending
+      assert decisions(c, grant) == [:proposed, :approved, :revoked]
+    end
+
     test "only a person revokes", c do
       grant = active!(c)
 
@@ -398,6 +420,77 @@ defmodule Cadence.ContactPlanning.AutomationGrantReviewTest do
 
       assert Enum.any?(revoke_sql, &(&1 =~ "automation_grants" and &1 =~ "FOR UPDATE"))
       assert {:error, :automation_grant_revoked} = use_grant(c, grant)
+    end
+  end
+
+  # fe-ops and lead on #497: one lock order for every grant path, the replaced grant first.
+  describe "lock order" do
+    test "approving a widening locks the grant it replaces before the widening", c do
+      grant = active!(c)
+      widening = propose!(c, %{maximum_contacts: 8, replaces_grant_id: grant.automation_grant_id})
+
+      {queries, {:ok, _}} = capture_queries(fn -> approve(c, c.third, widening) end)
+
+      locked =
+        for {sql, params} <- queries,
+            sql =~ "automation_grants" and sql =~ "FOR UPDATE",
+            id <- params,
+            id in [grant.automation_grant_id, widening.automation_grant_id],
+            do: id
+
+      # The replaced grant is locked first, as revoke does (the grant, then its proposals).
+      assert [first | _] = locked
+      assert first == grant.automation_grant_id
+      assert widening.automation_grant_id in locked
+
+      assert {:ok, %{lifecycle_state: :revoked}} =
+               AutomationGrants.fetch(c.org, c.mission, grant.automation_grant_id)
+    end
+  end
+
+  test "the flags say policy_changed when the setting changed since the proposal", c do
+    grant = propose!(c)
+    policy = ActivationPolicy.load(c.org, c.mission)
+
+    assert {:ok, _} =
+             ActivationPolicy.save(c.proposer, c.mission, policy.token, %{
+               "value" => %{"approval_requirement" => "direct"}
+             })
+
+    assert {"policy_changed", nil} =
+             AutomationGrantReview.viewer_block(
+               c.approver,
+               grant,
+               F.now()
+             )
+  end
+
+  defp capture_queries(fun) do
+    me = self()
+    handler = "grant-queries-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      [:cadence, :repo, :query],
+      fn _event, _measure, meta, _cfg ->
+        if self() == me, do: send(me, {:query, meta.query, meta.params || []})
+      end,
+      nil
+    )
+
+    try do
+      result = fun.()
+      {drain_queries([]), result}
+    after
+      :telemetry.detach(handler)
+    end
+  end
+
+  defp drain_queries(acc) do
+    receive do
+      {:query, sql, params} -> drain_queries([{sql, params} | acc])
+    after
+      0 -> Enum.reverse(acc)
     end
   end
 

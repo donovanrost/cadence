@@ -9,6 +9,7 @@ defmodule Cadence.Control.PlanningGrantDecisions do
 
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{AutomationGrantReview, AutomationGrants, GrantOperations}
+  alias Cadence.ContactPlanning.GrantSeparation
   alias Cadence.Control.PlanningGrants
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Repo
@@ -48,8 +49,10 @@ defmodule Cadence.Control.PlanningGrantDecisions do
   end
 
   defp run(scope, mission_id, grant_id, params, action, request, act) do
+    # Who may decide comes first, before any lock or replay (ca-security on #497): a member can't
+    # probe grant ids (404 vs 403), and a demoted admin gets no replay.
     with {:ok, operation_id} <- required(params, :operation_id),
-         :ok <- person(scope) do
+         {:ok, _decider} <- GrantSeparation.decider(scope) do
       op = %{mission_id: mission_id, id: operation_id, grant_id: grant_id, action: action}
 
       stable_transaction(scope.organization_id, fn -> decide(scope, op, request, act) end)
@@ -86,10 +89,6 @@ defmodule Cadence.Control.PlanningGrantDecisions do
         request,
         {200, body}
       )
-
-  # Every grant act is person-only (#283): refused before anything is read or recorded.
-  defp person(%Scope{actor_kind: :user, user: %{user_id: id}}) when is_binary(id), do: :ok
-  defp person(_scope), do: {:error, :authenticated_user_required}
 
   defp required(params, key) do
     case params[Atom.to_string(key)] do

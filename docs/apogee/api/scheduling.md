@@ -753,7 +753,9 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
     set or both null.
   - The flags are the viewer's, from the server; the console never computes them (#233's
     pattern). `cannot_decide_because`: `not_admin | not_a_person | proposer | accountable |
-    authors_unknown | not_proposed | null`, and `cannot_decide_details`: `{grantee: {id, name}}`
+    authors_unknown | not_proposed | policy_changed | null` (`policy_changed`: the mission's
+    setting changed since the proposal, so approving it would answer `409
+    approval_policy_changed`; it has to be proposed again), and `cannot_decide_details`: `{grantee: {id, name}}`
     for accountable, `{service: {id, name}}` for authors_unknown, else null.
   - `service_identity.name`, `currency` and `maximum_estimated_cost_micros` can be `null`. Cost
     stays hidden in the console (#63).
@@ -796,6 +798,8 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
   - It's never refused for want of a reason or a current `sha256`: `sha256` is accepted and
     ignored, and the reason is recorded when given.
   - It also withdraws any proposal waiting to replace the grant, in the same transaction.
+  - It's idempotent: revoking a grant that's already revoked answers `200` with the grant as it
+    stands, recording nothing new.
   - `403 automation_grant_not_active {state}` when the grant isn't active; `404 grant_not_found`.
 - **At use** (a service planning, submitting or approving under a grant): the grant is re-read
   under a shared lock in the same transaction. Not usable: `403 automation_grant_not_active
@@ -803,6 +807,11 @@ even with organization_admin, gets `403 authenticated_user_required`). Under `/c
   `automation_grant_expired` and `automation_grant_not_yet_valid` keep their codes. A grant
   whose stored hash isn't today's layout is refused (`automation_grant_hash_mismatch`; #108: the
   dev reset recreates grants).
+- **Who, then locks:** approve, reject and narrow check that the caller is an org admin and a
+  person before they look up the grant or its operation id. A member is refused `403` whether or
+  not the grant exists, and gets no replay. Every grant path locks rows in one order: the grant
+  a proposal would replace first, then the proposal. Revoke locks the grant, then the proposals
+  replacing it; approving a widening locks the grant it replaces, then the widening.
 - **Audit:** each act writes one append-only decision (`automation_grant_decisions`, built
   through `Governance.DecisionRecord`): proposed, not_required (direct), approved, rejected,
   revoked, narrowed, withdrawn, each with the actor, time, hash, policy and the ids separation
