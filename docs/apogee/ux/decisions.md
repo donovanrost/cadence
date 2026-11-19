@@ -3371,7 +3371,8 @@ groups, provider changes, qualification cases (no service authors them).
     submitted this plan, so another org admin approves it. Your approval wasn't recorded and nothing was booked."
   - `command_request_self_approval_not_allowed`: "Not approved: Nightly planner, a service identity you're
     accountable for, sent this command request, so another person gives the GO. Your approval wasn't recorded."
-  - `via_service` null: each kind's own line (U65, U94, U97, U87's family).
+  - `via_service` null, or absent (an older server; decoders take it as optional and read absent as null): each
+    kind's own line (U65, U94, U97, U87's family).
 - **403 `<kind>_approver_authors_unknown`** (api's shape: `activation_approver_authors_unknown` (#236's code),
   `contact_plan_approver_authors_unknown`, `mission_model_approver_authors_unknown`,
   `command_request_approver_authors_unknown`), one meaning: who made this can't be established. They always send
