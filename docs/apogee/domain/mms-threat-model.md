@@ -1,7 +1,7 @@
 # Threat model: Mission Model & Spacecraft gates (DRAFT)
 
 mms-security, 2026-11-19. Reviewers: fe-setup (squad lead), ca-security (security lead).
-Status: DRAFT, audit in progress. Read from develop `a48743995`. Line numbers are as of this write;
+Status: DRAFT. MM-1 (#280's impact list) approved by ca-security at 8b642b1e1; sections 2-5 in progress. Read from develop `a48743995`. Line numbers are as of this write;
 re-grep before acting on them. One page per feature, in the format of ca-security's E1 model once
 it lands. Until ca-security's checklist lands, reviews use ca-security's six points (C1-C6):
 
@@ -139,8 +139,8 @@ set must be transitive.
 | Kind | Can a service author it today? | Check today | Change |
 |---|---|---|---|
 | Mission-model revisions | Yes: REST `catalog_import_runs`, console upload/reimport with a service scope | `RevisionDecisions.independent/5` ← `ModelImporters` (people only; services dropped) | `ModelImporters` returns service importers too. Expand them to their accountable set; unknown → `approval_authors_unknown`. Also closes MM-2 source 2 |
-| Activations (incl. spacecraft-configuration reviews) | Yes: REST `POST /activations` (`authorize_mission`; `actor/1` accepts a service). Approving is human-only (`human_activation_approver_required`) | `distinct_approver/2` (`management/activations.ex:549`) compares only when `requester_actor_kind == :user`; applies in every mode | Service requester → its set, **in every mode, 'direct' included** (rule above) |
-| Configuration change sets | No: only the console session API (users) writes changes | `Submission.independent/2` (`configuration/submission.ex:436`): reviewer not in `[submitted_by \| change authors]` | None now. A guard test that a service author fails closed, so a future REST path can't open it |
+| Activations (incl. spacecraft-configuration reviews) | Yes: REST `POST /activations` (`authorize_mission`; `actor/1` accepts a service). Approving is human-only (`human_activation_approver_required`) | `distinct_approver/2` (`management/activations.ex:549`) compares only when `requester_actor_kind == :user`; applies in every mode | Service requester → its set wherever there's an approval step. Under 'direct' a request is approved when made (no approval step at all), so nothing changes there (test) |
+| Configuration change sets | **Yes, in the domain** (found in the build, 11-19): `config.stage` is `operate_mission`, which a service scope passes, so `Control.Configuration.stage/submit` accept a service. No console route lets one today (the session API is users only) | `Submission.independent/2` (`configuration/submission.ex`) compared `kind:id` keys, so a service author's issuer could review its set | Review compares people through `Accountability`. Unknown → `change_set_approver_authors_unknown`. Test: a bot stages and submits; its issuer is refused, another member approves. Judge service authorship from domain authz, not routes (ca-security's checklist) |
 | Contact plans | Yes: planning runs author as a service (planner / fleet planning runs); a service submits with an automation grant (`contact_plans.ex:1208`) and **approves** with one (`contact_plan_approvals` `authorize_actor` `:service`/`:approved`) | `ContactPlanApprovals.separate_approver/5` (`:560`) checks a user actor only, so a service approver skips separation | Service author → its set. A service APPROVER's set is its accountable people plus the grant's approver; refused when it meets the author set. The planner proceeds when an approver outside the set approves. The grant's approver (`grant.approved_by`) is part of the approving set (#280 acceptance criteria) |
 | Fleet planning policies | No: create and approve take a person only (`actor_id/1`, `actor/1` → `authenticated_user_required`, `fleet_planning_policies.ex:584-601`) | `FleetPlanningPolicies.not_author/2` (`:354`) always refuses the author, matching `user_id` | None now. A guard test that a service author fails closed, as for change sets |
 | Command requests | **Yes** (ca-security 11-19): REST `POST /command_requests` (`:authenticated_api`; `authorize_mission` → `:manage_mission`, which a service with `mission_admin`/`organization_admin` passes). `requested_by` is the scope's actor document; a client-named actor is refused (`CommandingParams.scope_actor`, `actor_not_assignable`). Approving is human-only (`LifecyclePolicy.ensure_human_approval_actor`) | `LifecyclePolicy.ensure_not_self_approval/2` (`commanding/lifecycle_policy.ex:59`) compares `user_id` only: a service requester has none, so the check **passes**, and it fails open on an unknown requester too. Not governed by the setting (Ruling A) | Service requester → its set **wherever a second GO is required**, whatever the setting; unknown set → refused. After #280, REST command requests from legacy identities can't be approved until an org admin records attribution. No dev or simulator code creates command requests with a service token (the seed's bearer tokens are the simulator's own provider API; the simulator's Cadence token only GETs the runtime read). qa's live check: all 171 dev command requests were requested by users (11-19) |
@@ -149,9 +149,12 @@ set must be transitive.
 | Provider changes | No: they come from providers' own reservation changes (`provider_reservation_changes.ex`); no Cadence person or service authors them. Approving is user-only (`provider_change_approvals.ex:111`) | No self-approval refusal | **No change** (ca-security 11-19) |
 | Qualification cases | No: `Comparison.register_case/5` needs a person (`human_qualification_approver_required`, `comparison.ex:504`) | None: registering IS approving (status `:approved` at once, `approved_by` = the registrant, authorized by `:request_activation`). No second step | **No change** (mms-security 11-19). No caller in `lib`/`cadence_web` today (only `MissionModels.register_qualification_case/5`); see MM-6 |
 
-**Shared pieces:** one function, `Accountability.authors(org, actor_documents) :: {:ok, [user_id]} |
-{:error, :unknown}`, used by every kind; one refusal, `approval_authors_unknown` (409, `details.kind`), like
-#236's `activation_approver_authors_unknown`.
+**Shared pieces:** one function, `Governance.Accountability.separate/4`, used by every kind. Refusals (api's
+contract, 11-19; ux U100):
+- the self-approval codes are reused and always carry `details.via_service: {id, name} | null`;
+- the unknown set is one meaning with a 403 code per kind: `activation_`, `contact_plan_`, `mission_model_`,
+  `command_request_` and `change_set_approver_authors_unknown`, each with `details.service: {id, name} | null`.
+- REST command requests carry no details.
 The approver side has its own shared function, `Accountability.approvers(org, approver_actor, grant)`: a person
 is themselves; a service is its accountable people plus the grant's approver (`grant.approved_by`). Each kind
 refuses when `approvers ∩ authors ≠ ∅`. Contact plans use it; no kind hand-rolls it. The org admin's "record who is accountable" action is
