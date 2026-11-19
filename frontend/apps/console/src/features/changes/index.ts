@@ -21,6 +21,7 @@ export {
 } from "./actions.ts";
 export { itemLine } from "./itemLines.ts";
 export { kindLabel } from "./shapes.ts";
+export { tableActor, type TableActor } from "./revision-record.ts";
 export { checkKeyText, checkLabel, type CheckKey, type HoldReason } from "./preview.ts";
 export { refreshConfigState, useConfigState } from "./useConfigState.ts";
 export { default as SchemaForm } from "./SchemaForm.vue";
