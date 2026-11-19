@@ -3258,17 +3258,17 @@ are api's, switched on with `knownErrorCode`.
     reason>. It's waiting for approval." The reason is the refusal's first sentence after "Not approved:", with
     "R41" as "it" and without its ending (e.g. `forbidden`: "…not approved: only an org admin approves contact
     plans."). Example: "R41 was sent for approval, but not
-    approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval."
+    approved: it changed after you opened it, so it isn't what you reviewed. It's waiting for approval." The plan then
+    opens awaiting approval with `Approve and book the plan` to try again; after a self-approval refusal (the setting
+    changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead. The typed note stays
+    in the field for the retry.
     Where the rule doesn't read right, the reason is given explicitly (ca-ux's review):
     - `plan_not_ready` with conflicts: "2 of its passes conflict with other bookings"; unmet only: "it isn't ready:
       10 spacecraft aren't covered".
     - `plan_superseded`: "it's superseded by newer contact rules".
     - `duplicate_operation`: "Cadence matched it to an earlier, different request".
     - `plan_not_found`: "R41 was sent for approval, but Cadence can't find it any more. Reload to see 11-16's plans."
-      (no "It's waiting for approval"). The plan then
-    opens awaiting approval with `Approve and book the plan` to try again; after a self-approval refusal (the setting
-    changed to "Needs a second person's approval") Approve is disabled with its A6 reason instead. The typed note stays in
-    the field for the retry.
+      (no "It's waiting for approval").
   - The approve's 403 stays the backstop: the setting can change between the read and the click.
 - **Everyone else** (members, and admins under "Needs a second person's approval", `approval_setting: "independent"`):
   `Request approval` (sent back `Submit the plan again`; Re-plan `Request approval for the proposal`, confirm "This
