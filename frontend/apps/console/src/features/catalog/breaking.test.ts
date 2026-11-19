@@ -18,6 +18,7 @@ const summary = (breaking: number | null) => ({
     breaking,
   },
   changes: [],
+  truncated: false,
 });
 const base = { id: "cr-3", number: 3 };
 
