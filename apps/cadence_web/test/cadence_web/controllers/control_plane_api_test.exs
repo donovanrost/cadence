@@ -6,32 +6,16 @@ defmodule CadenceWeb.ControlPlaneApiTest do
   import CadenceWeb.ControlPlaneApiFixtures
 
   defp persist_link_assignment_prerequisites(conn, api_token, organization_id, mission_id) do
-    spacecraft_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
-        "spacecraft" => %{
-          "spacecraft_id" => "spacecraft-link-api-001",
-          "display_name" => "SC Link API 001"
-        }
-      })
+    persist_api_spacecraft!(organization_id, mission_id, %{
+      spacecraft_id: "spacecraft-link-api-001",
+      display_name: "SC Link API 001"
+    })
 
-    assert %{"data" => %{"spacecraft_id" => "spacecraft-link-api-001"}} =
-             json_response(spacecraft_conn, 201)
-
-    second_spacecraft_conn =
-      conn
-      |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
-        "spacecraft" => %{
-          "spacecraft_id" => "spacecraft-link-api-002",
-          "display_name" => "SC Link API 002",
-          "scid" => 202
-        }
-      })
-
-    assert %{"data" => %{"spacecraft_id" => "spacecraft-link-api-002", "scid" => 202}} =
-             json_response(second_spacecraft_conn, 201)
+    persist_api_spacecraft!(organization_id, mission_id, %{
+      spacecraft_id: "spacecraft-link-api-002",
+      display_name: "SC Link API 002",
+      scid: 202
+    })
 
     source_endpoint_conn =
       conn
@@ -459,15 +443,18 @@ defmodule CadenceWeb.ControlPlaneApiTest do
 
     mission_id = "mission-bravo"
 
+    persist_api_spacecraft!(organization_id, mission_id, %{
+      spacecraft_id: "spacecraft-001",
+      display_name: "SC-001"
+    })
+
+    # The REST create is retired (#328); the show read still answers in this mission's scope.
     spacecraft_conn =
       conn
       |> authorize(api_token)
-      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
-        "spacecraft" => %{
-          "spacecraft_id" => "spacecraft-001",
-          "display_name" => "SC-001"
-        }
-      })
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-001"
+      )
 
     assert %{
              "data" => %{
@@ -475,7 +462,20 @@ defmodule CadenceWeb.ControlPlaneApiTest do
                "organization_id" => ^organization_id,
                "mission_id" => ^mission_id
              }
-           } = json_response(spacecraft_conn, 201)
+           } = json_response(spacecraft_conn, 200)
+
+    # #328: the REST create is gone. A POST answers 404 and persists nothing.
+    removed_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
+        "spacecraft" => %{"spacecraft_id" => "spacecraft-002", "display_name" => "SC-002"}
+      })
+
+    assert removed_conn.status == 404
+
+    assert {:error, :spacecraft_not_found} =
+             Cadence.SpacecraftStore.fetch_spacecraft(mission_id, "spacecraft-002")
 
     packet_definition_conn =
       conn

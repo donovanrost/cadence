@@ -1417,7 +1417,6 @@ defmodule CadenceWeb.Router do
         post("/catalog_import_runs", CatalogImportRunController, :create)
         get("/catalog_import_runs/:import_run_id", CatalogImportRunController, :show)
         get("/spacecraft", SpacecraftController, :index)
-        post("/spacecraft", SpacecraftController, :create)
         get("/spacecraft/:spacecraft_id", SpacecraftController, :show)
         get("/provider_profiles", ProviderProfileController, :index)
         post("/provider_profiles", ProviderProfileController, :create)

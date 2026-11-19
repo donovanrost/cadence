@@ -5,8 +5,6 @@ defmodule CadenceWeb.SpacecraftController do
 
   alias CadenceWeb.API.CommsJSON, as: CommsJSON
 
-  alias CadenceWeb.API.CommsParams, as: CommsParams
-
   alias Cadence.Spacecraft
   alias CadenceWeb.ControlPlaneAccess
 
@@ -22,27 +20,6 @@ defmodule CadenceWeb.SpacecraftController do
         |> Enum.map(&CommsJSON.spacecraft/1)
 
       json(conn, %{data: spacecraft})
-    end
-  end
-
-  def create(conn, %{
-        "organization_id" => organization_id,
-        "mission_id" => mission_id,
-        "spacecraft" => spacecraft_params
-      }) do
-    with {:ok, _mission} <-
-           ControlPlaneAccess.authorize_mission(
-             conn.assigns.current_scope,
-             organization_id,
-             mission_id
-           ),
-         {:ok, %Spacecraft{} = spacecraft} <-
-           CommsParams.spacecraft(organization_id, mission_id, spacecraft_params),
-         {:ok, %Spacecraft{} = persisted_spacecraft} <-
-           Cadence.SpacecraftStore.persist_spacecraft(organization_id, spacecraft) do
-      conn
-      |> put_status(:created)
-      |> json(%{data: CommsJSON.spacecraft(persisted_spacecraft)})
     end
   end
 
