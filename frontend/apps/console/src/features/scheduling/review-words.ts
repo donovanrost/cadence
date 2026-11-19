@@ -233,7 +233,7 @@ function closedSince(error: ApiError, w: Who, r: string): Refusal {
   const extra = n > 0 ? { items: fresh } : {};
   if (w.proposal)
     return refusal(
-      `Not applied: ${closed}, so what you'd approve changed. Nothing was booked. Check the list and apply it again.`,
+      `Not applied: ${closed}, so what you'd apply changed. Nothing was booked. Check the list and apply it again.`,
       `the booking window closed for ${more} of its passes after you opened it`,
       extra,
     );
