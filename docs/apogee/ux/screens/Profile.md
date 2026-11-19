@@ -1,8 +1,8 @@
 # Spacecraft Profile (S4 · edit once, apply to 500)
 
 Routes: list `M/setup/profiles` · profile `M/setup/profiles/:profileId/:section` with
-`section ∈ framing | routing | limits | commanding | catalog | overrides` (default `framing`) ·
-history `M/setup/profiles/:profileId/history`. Setup rail 03 (count = profiles) · **reading layout**
+`section ∈ framing | routing | limits | commanding | catalog | overrides | history` (default `framing`; History is
+a section tab, as built) · new `M/setup/profiles/new`. Setup rail 03 (count = profiles) · **reading layout**
 · Board `Profile.dc.html`. Owner: fe-setup. Data: `docs/apogee/plans/setup.md` §S4.
 Scope: DECISIONS #1 (change sets, v1 seam), #3 (**routing rules live on the profile**, materialized
 per spacecraft, with per-spacecraft overrides). "Profile" in the UI = Spacecraft Profile
@@ -17,12 +17,22 @@ Header: lbl `EARENDIL · PROFILES`, h1 `2 profiles`, primary `New profile`.
 ApTable: Name (link) · Version (`v4`, mono) · Spacecraft (inherit count) · Overrides (count;
 caution text when > 10% of its fleet **[decision]**) · Catalog (`rev 14`) · Protocols (`CCSDS TM /
 TC`) · Last changed (`r5` or `v4 · 10-19 02:29Z`). Empty: "No profiles yet" + "A profile holds the
-configuration a block of spacecraft shares." + `New profile`.
+configuration a block of spacecraft shares. Every spacecraft pins one." + `New profile`.
+- As built, also: "N on older versions" under the Spacecraft count, and "Set per spacecraft" in Catalog when the
+  profile sets no catalog. The Protocols column reads `CCSDS TM / TC` (ux, audit P7; the built "TM ↓ · TC ↑" is a
+  console item).
+
+## New profile (`M/setup/profiles/new`) — not on the canvas
+A new profile starts as a copy (`Duplicate as new profile` opens it prefilled):
+- Start from: the profiles to copy. With none: "No profile to start from" + "A new profile starts as a copy…".
+- The name defaults to "Earendil Block 1 (copy)". The line under it: "Copied from Earendil Block 1 v4: its fields,
+  routing rules and app settings. No spacecraft use it until you assign them."
+- Primary `Stage new profile`, with "Nothing is live until the change set is applied." under it.
 
 ## Profile page
 ```
 breadcrumb PROFILES / EARENDIL BLOCK 1
-h1 "Earendil Block 1"                          [Duplicate as new profile] [History]
+h1 "Earendil Block 1"                          [Duplicate as new profile]
 subline: 500 spacecraft inherit this profile · 3 override it · catalog rev 14 · last changed in r5
 ┌ local nav ┐ ┌ section panels (flex 999) ───────────┐ ┌ P4 Staged edit (aside, while dirty) ┐
 │ Framing   │ │ P1 Framing · CCSDS TM / TC           │ │                                      │
@@ -36,8 +46,10 @@ subline: 500 spacecraft inherit this profile · 3 override it · catalog rev 14 
   readout. `Overrides · 3` carries its count. Sticky within the page. Each section is its own route;
   the board's stacked view is the Framing route showing Framing + summaries of Routing + Overrides
   **[decision: one section in full, the others as summary panels linking to their route]**.
-- **Actions:** `Duplicate as new profile` (→ new-profile form prefilled), `History` (→ versions /
-  revisions touching this profile). Read-only without `config.stage` (Changes.md §5).
+- **Actions:** `Duplicate as new profile` (→ the new-profile form, prefilled). History is a section tab (→ versions
+  and revisions touching this profile), not a header action. Read-only without `config.stage` (Changes.md §5).
+- The subline adds "N on older versions" when some spacecraft are pinned to an older version, and "catalog set per
+  spacecraft" when the profile sets no catalog.
 
 ### P1 · Section form (Framing shown; Limits, Commanding, Catalog use the same pattern)
 **Framing is editable** like the other sections (DECISIONS #19 lifted; lead b2f92dba). Only when the mission's
@@ -51,8 +63,11 @@ default, overridable, runtime_impact, help), so the form is generated, never han
 today = TM transfer frame, TC transfer frame, packet protocol, TM frame length, secondary header,
 insert zone, OCF, truncated primary header. **The canvas's spacecraft-id source, virtual channels,
 FEC, TC segment and randomizer have no model backing: don't render them.** Fields with
-`runtime_impact: generation` show a mono `RUNTIME` chip; changing one triggers a runtime
-generation on apply.
+`runtime_impact: generation` show a caution tag `Cancels queued commands` (as built; it says the effect, where
+`RUNTIME` named the mechanism), with the generation note as its title. P3's override rows use the same tag.
+Changing one triggers a runtime generation on apply.
+- **Catalog section** carries a callout: "A catalog change goes through a change set…" (as built).
+- **Conflict with a staged edit:** "Mira K. already staged 1,200. Resolve it on Staged changes first." (as built).
 - **Limits section:** read-only notice "Limits apply mission-wide per point; per-profile limits
   aren't supported yet." + link to the Limits app (profile-routing §3). **Commanding section:** only
   app-declared settings; omit the nav item when there are none. **Catalog section:** the
@@ -81,6 +96,13 @@ A disabled rule renders dimmed with `DISABLED`. Multiple rules on one profile st
 separate rule blocks, each with its route count.
 - **Data:** `rules: [{id, stations: [{id, code, name, transport_id}], legs: [{direction, role}],
   name_template, route_count, samples: [string], enabled}]` (profile-routing §5).
+- A disabled rule's `DISABLED` tag (off, mark + word) keeps the built sentence "This rule is disabled; it generates
+  no routes." as its secondary line (ux, audit P7).
+- As built, the editor also has: the tokens `{station_name}` and `{direction}`; "Roll out to: All spacecraft on this
+  profile / New version only"; `Check with the server`; and the primary `Stage rule change`.
+- **Routing still set per spacecraft** (a profile with no rules while its spacecraft carry their own; as built):
+  "Routing is still set per spacecraft" with `Add a profile rule` and `Open comms & routing`. It's the one place
+  per-spacecraft routing shows outside overrides, until the profile has a rule.
 
 ### P3 · Overrides
 Header meta `3 OF 500 DIFFER FROM THE PROFILE`. Rows `ov` (`150px | 1fr | auto`): spacecraft link
@@ -114,6 +136,9 @@ Header meta `3 OF 500 DIFFER FROM THE PROFILE`. Rows `ov` (`150px | 1fr | auto`)
   - Profiles whose spacecraft set their own routing (fe-setup 26e9ef92) list and offer catalog and framing
     overrides only, with an info line: "This profile's spacecraft set their own routing, so routing isn't
     overridden here. Catalog and framing overrides work." Don't promise a future change (U20).
+  - Field reasons (as built): "Choose a spacecraft.", "Say why this spacecraft differs.", "That's its override
+    already."
+  - **Reset** stages a reset; the row then reads "Reset staged for EARENDIL-001. It applies with the change set."
   - Rows and options use field and choice labels, never paths or ids. Catalog revisions read `rev 4 ·
     imported 11-10` (server label, asked of api). `rN` is reserved for change-set revisions, so a catalog
     revision is never `r4`.
@@ -126,12 +151,14 @@ configuration review.", DECISIONS #45), primary `Stage edit` (v1: `Create versio
 you apply it" per the model's answer), secondary `Discard`. Multiple dirty fields list one block
 each; one Stage for all.
 
-## History (`…/history`)
+## History (the `history` section)
 Versions (v1) or revisions (change sets) touching this profile: rev/version, when, who, why, the
 field diffs. `Compare` two (→ `revisions/rA...rB`). **No per-version "Pin spacecraft to vN"** (ruled after
 fe-setup's question): pinning back multiplies version drift (499 of 500 are already on older versions). The tools
 are a change-set rollback for everyone, and a P3 override for a few. Each version row says how many spacecraft
 are on it (`12 spacecraft on v5`), so drift is visible.
+- As built: the newest row carries `· latest`; a missing author reads "Not recorded"; with no revisions, "No revisions
+  yet"; each row links "Compare with rN →".
 
 ## States
 Loading per panel (`LOADING…`). Read-only (no capability): inputs render as text, the Stage aside
@@ -143,4 +170,5 @@ resolved on the review page.
 - Every section states how many spacecraft inherit it; overrides are always counted and listed.
 - One routing rule edit shows the generated route count and samples before staging.
 - Effect counts (`changes N · keeps M`) come from the server, never computed in the browser.
-- No per-spacecraft routing UI anywhere except overrides.
+- No per-spacecraft routing UI anywhere except overrides, and the "Routing is still set per spacecraft" state (P2)
+  until a profile rule exists.
