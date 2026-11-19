@@ -66,8 +66,9 @@ and 390 as admin and member, as before, and record results in the screen's `qa/a
    - Standing cautions (shown on render, not after an act) keep the kit default; no role prop is needed.
 7. **Every control names what it acts on.** A button repeated per row, widget or section carries its object in its
    name ("Edit Battery voltage", "Remove section Power"); an untitled one uses its kind and position ("Edit untitled
-   widget 3"), never a name ending in a space. `aria-keyshortcuts` lists every key it answers, modifiers included.
-   (#189 'name')
+   widget 3"), never a name ending in a space. A list row's buttons reuse the row's title: "Discard, EARENDIL-001,
+   SNTG 00:13Z pass, 3 connections refused" (U107). `aria-keyshortcuts` lists every key it answers, modifiers
+   included. (#189 'name')
 8. **Screen-wide keys never override a focused control.** Present's Space, ←/→ and Kiosk's Esc act only when focus
    isn't on a button, link, field or other control; Space on a focused button presses that button. (#189, Present)
 
