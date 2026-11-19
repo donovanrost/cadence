@@ -182,9 +182,10 @@ defmodule Cadence.Platform.ScopedSettings do
     |> ScopedReadUpdates.publish_result(:settings_changed, organization_id, mission_id)
   end
 
-  # #429: a rule-guarded section without its rule would run no who-may-change check at all.
+  # #429: a rule-guarded section without its rule would run no who-may-change check at all. The
+  # check must be a function of the snapshot (`check: nil` is no check; lead's review).
   defp check_given(section_id, opts) do
-    if rule_guarded?(section_id) and not Keyword.has_key?(opts, :check),
+    if rule_guarded?(section_id) and not is_function(Keyword.get(opts, :check), 1),
       do: {:error, :settings_check_required},
       else: :ok
   end

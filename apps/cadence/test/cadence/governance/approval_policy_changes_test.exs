@@ -152,7 +152,7 @@ defmodule Cadence.Governance.ApprovalPolicyChangesTest do
     assert ScopedSettings.rule_guarded?(ActivationPolicy.section_id())
     current = ActivationPolicy.load(c.org, c.mission)
 
-    for opts <- [[], [audit: fn _current -> %{} end]] do
+    for opts <- [[], [audit: fn _current -> %{} end], [check: nil]] do
       assert {:error, :settings_check_required} =
                ScopedSettings.save(
                  c.org,
