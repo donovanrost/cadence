@@ -898,7 +898,12 @@ one active admin.
 
 ### Service identity writes (O6)
 
-All require an organization admin (the same access as the O3 read; offer them where O3 succeeds). The API token appears in the
+All require an organization admin who is a **person** (the same access as the O3 read; offer them
+where O3 succeeds). A service identity never lists, issues, rotates or revokes service identities
+(#281): the domain refuses it with `authenticated_user_required`, and the console's organization
+scope already refuses services. Whoever issues or rotates must hold every capability the identity
+has, or gets `403 capability_beyond_issuer {details: {capabilities}}` in ux U104's words (it can't
+happen today: an organization admin holds every capability a service identity can get). The API token appears in the
 response **once** (create and rotate); Cadence stores only its digest and can't show it again.
 Responses carry `cache-control: no-store`.
 

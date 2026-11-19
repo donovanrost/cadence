@@ -193,12 +193,16 @@ defmodule Cadence.Auth.Policy do
     })
   end
 
+  # #281: services never manage service identities (list, create, rotate, revoke). A person only,
+  # so a leaked service token can't mint, re-key or revoke others.
   def authorize(
         %Scope{} = current_scope,
         :manage_service_identities,
         %{organization_id: organization_id}
       ) do
-    authorize_organization_capability(current_scope, organization_id, :organization_admin)
+    with :ok <- authenticated_user(current_scope) do
+      authorize_organization_capability(current_scope, organization_id, :organization_admin)
+    end
   end
 
   def authorize(
@@ -223,6 +227,27 @@ defmodule Cadence.Auth.Policy do
       true ->
         {:error, :forbidden}
     end
+  end
+
+  @doc """
+  The actor holds every capability it would hand a service identity, by issuing it or rotating
+  its key (a rotator receives a working token, so rotating is issuing; #281). `platform_admin`
+  holds every capability and `organization_admin` covers `mission_admin`. Moot while only
+  organization admins issue, who hold all a service can get; it binds if issuance ever widens.
+  """
+  @spec ensure_holds_capabilities(Scope.t(), [atom()]) ::
+          :ok | {:error, {:capability_beyond_issuer, [atom()]}}
+  def ensure_holds_capabilities(%Scope{capabilities: held}, capabilities)
+      when is_list(capabilities) do
+    case capabilities |> Enum.uniq() |> Enum.reject(&holds?(held, &1)) do
+      [] -> :ok
+      missing -> {:error, {:capability_beyond_issuer, missing}}
+    end
+  end
+
+  defp holds?(held, capability) do
+    MapSet.member?(held, :platform_admin) or MapSet.member?(held, capability) or
+      (capability == :mission_admin and MapSet.member?(held, :organization_admin))
   end
 
   defp authorize_organization_capability(
