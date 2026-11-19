@@ -3374,11 +3374,12 @@ groups, provider changes, qualification cases (no service authors them).
   - `via_service` null: each kind's own line (U65, U94, U97, U87's family).
 - **403 `<kind>_approver_authors_unknown`** (api's shape: `activation_approver_authors_unknown` (#236's code),
   `contact_plan_approver_authors_unknown`, `mission_model_approver_authors_unknown`,
-  `command_request_approver_authors_unknown`). The line is picked by `details.service` `{id, name}`:
-  - With it (a service whose accountable people aren't recorded; under an automation grant it can be the approving
+  `command_request_approver_authors_unknown`), one meaning: who made this can't be established. They always send
+  `details.service` (null, never omitted; #236 sends null too), which picks the line:
+  - `{id, name}` (a service whose accountable people aren't recorded; under an automation grant it can be the approving
     service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
     Your approval wasn't recorded. An org admin records who's accountable in People › Service identities."
-  - Without it: the kind's own authors-unknown line: U94's for activations ("Not approved: Cadence can't tell who
+  - null (no service involved), or absent (an older server): the kind's own authors-unknown line: U94's for activations ("Not approved: Cadence can't tell who
     saved this configuration…"). Kinds that had none get the same form: "Not approved: Cadence can't tell who made
     this plan, so it can't check that you weren't one of them. Your approval wasn't recorded. Send it back so it can
     be submitted again; if it keeps happening, tell the team that runs Cadence for you." (revision: "who imported this
