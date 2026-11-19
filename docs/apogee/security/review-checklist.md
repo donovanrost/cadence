@@ -1,4 +1,4 @@
-# Security review checklist (security lead, draft 2026-11-18)
+# Security review checklist (security lead, draft 2026-11-19)
 
 What a squad security engineer checks on a PR that touches permissions, approvals, secrets, the
 network or tenant boundaries (squads charter). Every squad's security engineer applies the same list.
@@ -48,9 +48,12 @@ Under 'independent', the approver is none of: the submitter, or anyone who autho
 the last approved (active) version and the version under review. A server-side copy of a version
 ("cut") must not erase the earlier authors (#236).
 A service identity's act counts as the act of every person accountable for it: whoever issued it
-and whoever rotated or received its credential. If that set isn't recorded, the author is
-unknown, and under 'independent' an unknown author fails closed, so nobody may approve until a
-person is on record (separation by proxy; approval-sweep Ruling C). *Pending the director's OK.*
+and every person who rotated its credential (followed back through any service that issued or
+rotated it). That set replaces "self" wherever a kind already refuses self-approval, in any mode,
+including every second person's GO (command group GO, arming, release). A service that approves
+under an automation grant counts as its accountable people plus the grant's approver. If the set
+isn't recorded, the author is unknown and the approval fails closed until a person is on record
+(separation by proxy; approval-sweep Ruling C; director 11-19, #280).
 *Why:* checking only the latest author lets a person approve their own content once someone else
 touches it, and a service identity the approver controls is the approver.
 
@@ -87,7 +90,7 @@ legacy-value test, or a director plan). A canonical-JSON digest carries a layout
 ### 11. Nothing secret on GitHub; no exploit steps in public
 No email address, password, token, cookie or private key in a branch, commit, PR body, comment or
 fixture. Issues describe the class of the problem and the fix. Reproduction steps that would
-work against a deployment go to the squad lead and the director over herdr.
+work against a deployment go to the squad lead and the director over hc (herdr-app).
 *Why:* the repository is public.
 
 ### 12. Errors and details don't leak more than the caller may read
