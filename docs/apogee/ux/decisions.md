@@ -1600,10 +1600,11 @@ name who it waits on, and let the countdown raise the priority. One item per UTC
   - Refusal `contact_plan_day_already_planned`: "Not approved: R39 (approved) already covers 212 of these
     requirements for 11-16. Open R39, or send this plan back." The state word is approved / booking / booked.
   - Approving a superseded plan: "Not approved: R44 replaced this plan at 10:05Z." with `Open R44`.
-  - All expired: "Not approved: all 36 of its passes have already started, so nothing could be booked." with
-    `Plan the rest of 11-16`.
-  - Partial approval: "Approved. Booking 1,476 passes; 36 had already started, so they weren't booked." The
-    left-out passes are listed under `Show 36`, with spacecraft, station and AOS.
+  - All expired: "Not approved: the booking window has closed for all 36 of its passes, so nothing could be booked."
+    with `Plan the rest of 11-16`. (#273: the rule is the provider's booking window, which can close before AOS, so
+    never "already started", U20; U97 has the rest.)
+  - Partial approval: "Approved. Booking 1,476 passes; 36 weren't booked because their booking window had closed."
+    The left-out passes are listed under `Show 36`, with spacecraft, station and AOS.
   - **A new draft on a day whose plan is pending** (domain's supersede-on-draft):
     - K1's action is `Draft a new plan…` before the day starts, and `Plan the rest of 11-16…` once it has started.
       It's secondary; for approvers, the primary stays `Review`.
@@ -3283,7 +3284,7 @@ are api's, switched on with `knownErrorCode`.
 
 - **Success only from the answer (U20):** "Approved. Booking 40 passes." only on the 202 with `outcome: "approved"`.
   When the answer lists expired passes, the success line is U61's partial line with the answer's counts: "Approved.
-  Booking 37 passes; 3 had already started, so they weren't booked." The callout below keeps only its list
+  Booking 37 passes; 3 weren't booked because their booking window had closed." The callout below keeps only its list
   (`Show 3`), so the screen says it once (#257 check, ca-ux and fe-ops).
   Any other success answer: "Cadence didn't record an approval for R41. Reload to see the plan; if it's still waiting,
   try again or tell the team that runs Cadence for you." The UI never tells an approver something happened when it
@@ -3361,6 +3362,46 @@ are api's, switched on with `knownErrorCode`.
     the note.
   - A code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
     with the code in Technical details.
+- **Passes whose booking window closed** (#273, director's two conditions; domain's one expiry rule with its 60 s
+  lookahead; api's final shape: the plan read's `expired` `{count, reservable_count, items}`, `expired_digest` and
+  `next_expiry_at`; the approve sends `expected_expired_digest`). The words say "booking window closed", never
+  "started": a provider's window can close before AOS (U20). The list is the server's; the console never edits it.
+  - **Up front** (Plan day's review and Re-plan's proposal), caution, above Approve: "36 of R41's passes can't be
+    booked any more: their booking window has closed. Approving books the other 1,476; the 36 are recorded as
+    skipped." with `Show 36` (spacecraft, station, AOS; U61's list; no close time, since a pass within the 60 s margin counts as
+    closed before its raw `expires_at`). Over 5,000 (items are capped, `count` isn't): the list ends "Showing the first
+    5,000 of 6,200." The commit counts only bookable passes: `Approve
+    and book 1,476 passes`, and so does the confirm body. Re-plan: "3 of the proposal's passes can't be booked any
+    more… Applying it books the other 37; the 3 are recorded as skipped."
+  - **No window from the provider** (domain fails closed: a pass without a usable `expires_at` counts as closed and
+    is skipped): its `Show` row adds "No booking window from the provider", and while any
+    listed item has none, the sentence's clause reads "their booking window has closed, or the provider gave none"
+    (U20: "closed" alone would claim what isn't known). The record and audit then say "skipped (no open booking
+    window)".
+  - **While the page is open:** when now passes `next_expiry_at` (the server's next close with its `expiry_margin_seconds` already applied; the
+    console adds no margin), a
+    caution line: "A pass's booking window has closed since this loaded. Reload to update the list." Never keyed on
+    AOS. With `next_expiry_at` null, no line.
+  - **409 `contact_plan_all_opportunities_expired`** (checked first): U61's all-expired line, and up front the same
+    sentence as Approve's A6 reason: "The booking window has closed for all 36 of its passes, so nothing can be
+    booked."
+  - **409 `contact_plan_expired_passes_changed`** (nothing recorded; the console diffs `details.expired.items`
+    against the list it showed): "Not approved: the booking window closed for 3 more of R41's passes after you
+    opened it, so what you'd approve changed. Your approval wasn't recorded. Check the list and approve again." with
+    `Show 3` for the new ones; when the diff isn't possible, or either list is capped (`count` > the items' length;
+    ca-security): "…closed for more of R41's passes after you opened it…". The review then shows the new list and count; the console never retries on its own (ca-security).
+    Re-plan: "Not applied: the booking window closed for 2 more of the proposal's passes after you opened it, so
+    what you'd approve changed. Nothing was booked. Check the list and apply it again." In the one act (U97): "R41
+    was sent for approval, but not approved: the booking window closed for 3 more of its passes after you opened
+    it. It's waiting for approval."
+  - **Interim, step 1** (409 `contact_plan_opportunity_expired`, no details; retires once domain's rule lands): "Not
+    approved: the booking window has closed for some of R41's passes, so R41 can't be booked as it is. Your approval
+    wasn't recorded. To book the others, draft the day again without them." With a count, "for 3 of R41's
+    passes". No Reload (the windows stay closed); beside it K1's `Draft a new plan for 11-16…` before the day
+    starts, `Plan the rest of 11-16…` once it has.
+  - **The decision record** (the 202's `expired`, the same set the record lists as skipped): history "Approved by
+    Ana R. at 11-19 06:52Z · 1,476 passes to book; 36 skipped (booking window closed)." with `Show 36`; nothing
+    skipped, no clause. Audit: "Approved R41 for 11-16: 1,476 passes to book, 36 skipped (booking window closed)."
 - **Submit refusals:** 409 `plan_changed`: "Not sent: R41 changed after you opened it. Reload to see it, then send it
   again." 409 `plan_already_submitted` (`submitted_by` and `submitted_at` together or neither): "Not sent:
   R41 was already sent for approval by Mira K. at 03:40Z, so nothing changed. Reload to see it." The viewer: "Not sent:
