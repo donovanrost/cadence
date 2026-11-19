@@ -48,8 +48,8 @@ defmodule Cadence.Dev.ApogeeQaMission do
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
 
   alias Cadence.Missions.Mission
-  alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.{Repo, Spacecraft, SpacecraftType}
+  alias Cadence.SourceEndpoints.SourceEndpoint
 
   @organization_id F.organization_id()
   @mission_id Provider.mission_id()

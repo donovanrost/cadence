@@ -16,6 +16,8 @@ defmodule Cadence.Dev.ApogeeQaMission.Provider do
     ProviderCredentials
   }
 
+  alias Cadence.Management.Transports
+
   @organization_id F.organization_id()
   @mission_id "mission-qa-23565"
   @account_id "account-qa-23565"
@@ -119,7 +121,7 @@ defmodule Cadence.Dev.ApogeeQaMission.Provider do
     ensure_record(
       TransportStore.fetch_transport(@organization_id, @mission_id, @transport_id),
       fn ->
-        Cadence.Management.Transports.persist_transport(
+        Transports.persist_transport(
           @organization_id,
           Transport.new(%{
             transport_id: @transport_id,
