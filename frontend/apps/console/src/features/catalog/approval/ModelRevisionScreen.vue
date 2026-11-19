@@ -5,6 +5,7 @@ import { useMissionScope } from "@/shell";
 import { ApBreadcrumb, ApKeyValue, ApPageHeader, ApPanel, ApRemote, type ApCrumb } from "@/ui";
 import { fetchModelRevision, type ModelRevision } from "./api.ts";
 import ApprovalPanel from "./ApprovalPanel.vue";
+import RevisionRollout from "./RevisionRollout.vue";
 
 /**
  * ux U65: a catalog revision's approval. Visible text says "catalog rev 4"; the compiled mission
@@ -78,6 +79,8 @@ const details = (r: ModelRevision) => [
           :model-key="key"
           @changed="page.refetch"
         />
+        <!-- U102 "Where": C3 under the Approval panel (or its decided line). -->
+        <RevisionRollout :revision="value" />
         <ApPanel index="F3" title="Technical details">
           <ApKeyValue :items="details(value)" :columns="2" />
         </ApPanel>
