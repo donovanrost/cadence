@@ -2,6 +2,7 @@ defmodule CadenceWeb.Console.ServiceIdentityAPITest do
   @moduledoc "Service identity create / rotate / revoke (O6): the token is shown once."
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Accounts.PlatformDirectory
   alias Cadence.Auth
   alias Cadence.Auth.ServiceAccountability
   alias CadenceWeb.TestFixtures
@@ -118,7 +119,7 @@ defmodule CadenceWeb.Console.ServiceIdentityAPITest do
     assert admin_id == c.admin.user_id
     # The platform directory's creator is the recorded issuer, never identity metadata.
     assert %{created_by_id: ^admin_id} =
-             Cadence.Accounts.PlatformDirectory.service_identity(org_id, id)
+             PlatformDirectory.service_identity(org_id, id)
 
     second_admin |> conn() |> post(c.base <> "/#{id}/rotate", %{}) |> json_response(200)
     assert {:ok, people} = ServiceAccountability.people(org_id, id)
