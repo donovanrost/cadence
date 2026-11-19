@@ -21,14 +21,30 @@ runs:
     - if: inputs.xmllint == 'true'
       name: Install xmllint
       shell: bash
-      # #327: an Ubuntu mirror hang once ate a whole 25-min job (11-19). Composite steps take no timeout-minutes, so the
-      # apt calls get a 5-min bound plus retries and a network timeout; a re-run then fixes a bad mirror in minutes.
+      # #327: an Ubuntu mirror hang once ate a whole 25-min job (11-19). Composite steps take no timeout-minutes, so every
+      # apt call gets a `timeout` bound plus retries and network timeouts; a re-run then fixes a bad mirror in minutes.
+      # 11-19 (#381, tracker 30): one mirror answering 520 failed `apt-get update` and the job, although the archive mirror
+      # served fine. So: install from the image's package index first; only if that fails, refresh the index and treat
+      # update errors as a warning (the reachable mirrors' lists still land). The final install still fails the job.
       run: |
         if command -v xmllint >/dev/null 2>&1; then
-          echo "xmllint already on the runner: $(xmllint --version 2>&1 | head -1)"
+          echo "xmllint: already on the runner: $(xmllint --version 2>&1 | head -1)"
           exit 0
         fi
-        sudo timeout 300 sh -c 'apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -q && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -q --no-install-recommends libxml2-utils'
+        apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+        install_xmllint() { sudo timeout 120 apt-get "${apt_opts[@]}" install -y -q --no-install-recommends libxml2-utils; }
+        if install_xmllint; then
+          echo "xmllint: installed from the image's package index (no apt-get update)"
+        else
+          echo "xmllint: not installable from the image's package index; running apt-get update"
+          if ! sudo timeout 240 apt-get "${apt_opts[@]}" update -q; then
+            echo "::warning title=apt-get update::apt-get update reported errors (a mirror may be down); installing from the lists it did fetch"
+          fi
+          install_xmllint
+          echo "xmllint: installed after apt-get update"
+        fi
+        command -v xmllint >/dev/null 2>&1 || { echo "::error::libxml2-utils installed but xmllint is not on PATH"; exit 1; }
+        echo "xmllint ready: $(xmllint --version 2>&1 | head -1)"
 
     - id: beam
       uses: ./.github/actions/setup-beam
