@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
-import { decode, missionId } from "@/api/index.ts";
+import { decode, missionId, type ApiError } from "@/api/index.ts";
 import { modelRevisionReader } from "./api.ts";
 import ApprovalPanel from "./ApprovalPanel.vue";
 import { approvalTag, decisionFailure, kindWord, sectionLine } from "./words.ts";
@@ -142,6 +142,59 @@ describe("U65 words", () => {
       text: "Not approved: the comparison is out of date. Run it again.",
       runAgain: true,
     });
+  });
+});
+
+/** #312 (audit C1, C2): each refusal opens with its act; reject has its own lines. */
+describe("approve and reject refusals open with their act (#312)", () => {
+  const conflict = (code: string): ApiError => ({
+    kind: "conflict",
+    code,
+    message: "x",
+    details: null,
+  });
+  const forbidden: ApiError = { kind: "forbidden", code: "forbidden", message: "No." };
+
+  it("approve: an org-admin refusal, and a code it doesn't word, with the code for Technical details", () => {
+    expect(decisionFailure(forbidden, 3, "approve")).toEqual({
+      text: "Not approved: only an org admin can decide this.",
+      runAgain: false,
+    });
+    expect(decisionFailure(conflict("quorum_reached"), 3, "approve")).toEqual({
+      text: "Not approved: Cadence refused this approval.",
+      runAgain: false,
+      code: "quorum_reached",
+    });
+  });
+
+  it("reject: its own lines, never approve's", () => {
+    const reject = (e: ApiError) => decisionFailure(e, 3, "reject").text;
+    expect(reject(conflict("mission_model_revision_not_approvable"))).toBe(
+      "Not rejected: this revision was already approved, rejected or replaced, so nothing changed.",
+    );
+    expect(reject(conflict("human_mission_model_approver_required"))).toBe(
+      "Not rejected: a person has to reject this, not a service identity.",
+    );
+    expect(reject(forbidden)).toBe("Not rejected: only an org admin can decide this.");
+    // Approve-only refusals (the comparison, the catalog) fall to reject's fallback, with the code.
+    expect(decisionFailure(conflict("mission_model_comparison_not_passed"), 3, "reject")).toEqual({
+      text: "Not rejected: Cadence refused this rejection, so nothing changed.",
+      runAgain: false,
+      code: "mission_model_comparison_not_passed",
+    });
+    for (const code of [
+      "mission_model_revision_not_approvable",
+      "mission_model_comparison_mismatch",
+      "mission_model_revision_not_in_catalog",
+    ])
+      expect(reject(conflict(code))).not.toMatch(/^Not approved/);
+  });
+
+  it("the reason lines are the same for both acts", () => {
+    for (const act of ["approve", "reject"] as const)
+      expect(decisionFailure(conflict("mission_model_decision_reason_required"), 3, act).text).toBe(
+        "Give a reason first.",
+      );
   });
 });
 

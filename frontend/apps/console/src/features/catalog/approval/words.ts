@@ -1,4 +1,11 @@
-import { isError, isKnown, vocabularyText, type ApiError, type Unrecognized } from "@/api/index.ts";
+import {
+  codeOf,
+  isError,
+  isKnown,
+  vocabularyText,
+  type ApiError,
+  type Unrecognized,
+} from "@/api/index.ts";
 import { formatCount, formatShort } from "@/ui";
 import type { Comparison, DeclarationKind, ModelRevision } from "./api.ts";
 
@@ -140,11 +147,37 @@ export function cannotApproveLine(r: ModelRevision): string | null {
 /** api: a reject reason is at most 2,000 characters (the sheet's limit too). */
 export const REASON_MAX = 2000;
 
-/** U65 approve/reject refusals; `runAgain` offers Run comparison. */
+/** The decision whose refusal is being worded (designers §3: a refusal opens with its act). */
+export type DecisionAct = "approve" | "reject";
+
+export type DecisionFailure = Readonly<{
+  text: string;
+  /** Offer Run comparison (approve only). */
+  runAgain: boolean;
+  /** U88: the refusal's way on is the catalog. */
+  openCatalog?: true;
+  /** A code the console doesn't word, for Technical details (C1). */
+  code?: string;
+}>;
+
+/**
+ * U65 approve and reject refusals (#312; audit C1, C2). Each opens with its act: "Not approved:"
+ * or "Not rejected:"; reject has its own lines, never approve's. A code the console doesn't word
+ * reads the act's fallback, with the code in Technical details, never the server's message.
+ */
 export function decisionFailure(
   e: ApiError,
   rev: number | null,
-): Readonly<{ text: string; runAgain: boolean; openCatalog?: true }> {
+  act: DecisionAct = "approve",
+): DecisionFailure {
+  const base = (text: string, runAgain = false) => ({ text, runAgain });
+  if (isError(e, "mission_model_decision_reason_required")) return base("Give a reason first.");
+  if (isError(e, "mission_model_decision_reason_too_long"))
+    return base(`Keep the reason under ${REASON_MAX.toLocaleString("en-US")} characters.`);
+  return act === "approve" ? approveFailure(e, rev) : rejectFailure(e);
+}
+
+function approveFailure(e: ApiError, rev: number | null): DecisionFailure {
   const base = (text: string, runAgain = false) => ({ text, runAgain });
   if (isError(e, "mission_model_revision_not_in_catalog"))
     return {
@@ -169,11 +202,23 @@ export function decisionFailure(
     return base("Not approved: this revision was already approved, rejected or replaced.");
   if (isError(e, "human_mission_model_approver_required"))
     return base("Not approved: a person has to approve this, not a service identity.");
-  if (isError(e, "mission_model_decision_reason_required")) return base("Give a reason first.");
-  if (isError(e, "mission_model_decision_reason_too_long"))
-    return base(`Keep the reason under ${REASON_MAX.toLocaleString("en-US")} characters.`);
-  if (e.kind === "forbidden") return base("Nothing changed: only an org admin can decide this.");
-  return base(
-    `Nothing changed: ${"message" in e ? e.message.replace(/[.!?]+$/, "") : "the server didn't say why"}.`,
-  );
+  if (e.kind === "forbidden") return base("Not approved: only an org admin can decide this.");
+  return withCode(base("Not approved: Cadence refused this approval."), e);
 }
+
+function rejectFailure(e: ApiError): DecisionFailure {
+  const base = (text: string) => ({ text, runAgain: false });
+  if (isError(e, "mission_model_revision_not_approvable"))
+    return base(
+      "Not rejected: this revision was already approved, rejected or replaced, so nothing changed.",
+    );
+  if (isError(e, "human_mission_model_approver_required"))
+    return base("Not rejected: a person has to reject this, not a service identity.");
+  if (e.kind === "forbidden") return base("Not rejected: only an org admin can decide this.");
+  return withCode(base("Not rejected: Cadence refused this rejection, so nothing changed."), e);
+}
+
+const withCode = (f: DecisionFailure, e: ApiError): DecisionFailure => {
+  const code = codeOf(e);
+  return code ? { ...f, code } : f;
+};

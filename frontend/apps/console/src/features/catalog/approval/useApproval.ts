@@ -1,7 +1,7 @@
 import { ref, type Ref } from "vue";
 import { describeApiError } from "@/api/index.ts";
 import { approveRevision, rejectRevision, runComparison, type ModelKey } from "./api.ts";
-import { decisionFailure } from "./words.ts";
+import { decisionFailure, type DecisionFailure } from "./words.ts";
 
 /**
  * U65 writes: run the comparison, approve against it, reject with a reason. Each success
@@ -14,13 +14,7 @@ export function useApproval(
 ) {
   const busy = ref<"run" | "approve" | "reject" | null>(null);
   /** The last refusal, and which write it came from (a reject's shows in its sheet). */
-  const failure = ref<{
-    text: string;
-    runAgain: boolean;
-    /** U88: the refusal's way on is the catalog. */
-    openCatalog?: true;
-    from: "run" | "approve" | "reject";
-  } | null>(null);
+  const failure = ref<(DecisionFailure & { from: "run" | "approve" | "reject" }) | null>(null);
 
   async function run() {
     if (busy.value) return;
@@ -47,7 +41,7 @@ export function useApproval(
     try {
       const r = await approveRevision(key.value, reportId);
       if (r.ok) refetch();
-      else failure.value = { ...decisionFailure(r.error, rev()), from: "approve" };
+      else failure.value = { ...decisionFailure(r.error, rev(), "approve"), from: "approve" };
     } finally {
       busy.value = null;
     }
@@ -61,7 +55,7 @@ export function useApproval(
     try {
       const r = await rejectRevision(key.value, reason);
       if (r.ok) refetch();
-      else failure.value = { ...decisionFailure(r.error, rev()), from: "reject" };
+      else failure.value = { ...decisionFailure(r.error, rev(), "reject"), from: "reject" };
       return r.ok;
     } finally {
       busy.value = null;
