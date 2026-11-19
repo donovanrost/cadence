@@ -3,6 +3,7 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
 
   alias Cadence.Auth.Scope
   alias Cadence.Comms.{GroundStation, GroundStationStore, StationAvailability}
+  alias Cadence.ContactPlanning.ContactPlanApprovals
   alias CadenceWeb.Console.SchedulingRunner
   alias CadenceWeb.{ContactPlanningFixtures, TestFixtures}
 
@@ -79,12 +80,7 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
     conn = submit(c, c.admin, plan_id, %{"expected_version" => 1, "operation_id" => "op-admin"})
     assert %{"state" => "pending_approval"} = json_response(conn, 200)["data"]
 
-    assert [] =
-             Cadence.ContactPlanning.ContactPlanApprovals.list(
-               c.org.organization_id,
-               c.mission.mission_id,
-               plan_id
-             )
+    assert [] = ContactPlanApprovals.list(c.org.organization_id, c.mission.mission_id, plan_id)
 
     conn = approve(c, c.admin, plan_id, %{"expected_version" => 1, "operation_id" => "op-ok"})
     assert %{"state" => "executing", "outcome" => "approved"} = json_response(conn, 202)["data"]
