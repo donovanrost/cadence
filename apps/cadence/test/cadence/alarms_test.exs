@@ -98,6 +98,8 @@ defmodule Cadence.AlarmsTest do
     test "acknowledge is idempotent and publishes",
          %{alice: alice, mission: mission, episode: episode} = ctx do
       Notify.subscribe(ctx.org, mission)
+      # #469: named only as a member of the organization (Alice is one here).
+      persist_member(ctx.org, alice)
 
       assert {:ok, %{status: :acknowledged, acknowledged_by: %{name: "Alice"}}} =
                Alarms.acknowledge(alice, mission, episode.id)
@@ -116,6 +118,11 @@ defmodule Cadence.AlarmsTest do
 
       assert {:ok, %{assignee: %{id: ^bob_id, name: "Bob"}, status: :new}} =
                Alarms.assign(alice, mission, episode.id, bob_id)
+
+      # #469: the stored assignee and actor documents carry no email.
+      stored = Repo.get_by!(Cadence.Alarms.EpisodeRow, episode_id: episode.id)
+      refute inspect(stored.assignee) =~ "@"
+      refute inspect(stored.acknowledged_by) =~ "@"
     end
 
     test "hand off needs a note; cleared episodes take notes only", ctx do

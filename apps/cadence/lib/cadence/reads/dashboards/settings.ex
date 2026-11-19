@@ -1,6 +1,5 @@
 defmodule Cadence.Reads.Dashboards.Settings do
   @moduledoc "Authorized persisted settings and bounded sharing metadata, independent of frontend delivery."
-  alias Cadence.Accounts
 
   alias Cadence.Dashboards.{
     Authoring,
@@ -12,6 +11,7 @@ defmodule Cadence.Reads.Dashboards.Settings do
     SettingsStore
   }
 
+  alias Cadence.Reads.Dashboards.Authors
   alias Cadence.Repo
 
   def load(scope, mission, dashboard, params \\ %{}) do
@@ -88,12 +88,12 @@ defmodule Cadence.Reads.Dashboards.Settings do
         org
         |> SettingsStore.shares(mission, dashboard, query["after_share"])
         |> project_page(&share(&1, now))
-        |> with_creators(),
+        |> with_creators(org),
       snapshots:
         org
         |> SettingsStore.snapshots(mission, dashboard, query["after_snapshot"])
         |> project_page(&snapshot/1)
-        |> with_creators(),
+        |> with_creators(org),
       deployments:
         org
         |> SettingsStore.deployments(mission, dashboard, query["after_deployment"])
@@ -135,18 +135,9 @@ defmodule Cadence.Reads.Dashboards.Settings do
   end
 
   # D14-D16: who made a share or snapshot, `{id, name | null, kind: "user"}`, or null.
-  defp with_creators(%{rows: rows} = page) do
-    names =
-      rows
-      |> Enum.flat_map(&[&1.created_by, Map.get(&1, :revoked_by)])
-      |> Enum.filter(&is_binary/1)
-      |> Enum.uniq()
-      |> Map.new(fn id ->
-        case Accounts.fetch_user(id) do
-          {:ok, user} -> {id, user.display_name || user.email}
-          _not_a_user -> {id, nil}
-        end
-      end)
+  # #469: named only as members of the organization, checked now (Authors).
+  defp with_creators(%{rows: rows} = page, org) do
+    names = Authors.names(org, Enum.flat_map(rows, &[&1.created_by, Map.get(&1, :revoked_by)]))
 
     %{page | rows: Enum.map(rows, &actors(&1, names))}
   end

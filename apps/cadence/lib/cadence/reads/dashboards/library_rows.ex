@@ -8,9 +8,9 @@ defmodule Cadence.Reads.Dashboards.LibraryRows do
 
   import Ecto.Query
 
-  alias Cadence.Accounts
   alias Cadence.Auth.Policy
   alias Cadence.Dashboards.{Authoring, DashboardLibraryVersion, LibraryLifecycle}
+  alias Cadence.Reads.Dashboards.Authors
   alias Cadence.Repo
 
   @page_size 25
@@ -33,7 +33,7 @@ defmodule Cadence.Reads.Dashboards.LibraryRows do
         |> Repo.all()
 
       latest = latest_versions(items)
-      names = names(Enum.map(items, &(&1.updated_by || &1.created_by)))
+      names = Authors.names(org, Enum.map(items, &(&1.updated_by || &1.created_by)))
 
       {:ok,
        %{
@@ -64,7 +64,12 @@ defmodule Cadence.Reads.Dashboards.LibraryRows do
          {:ok, wanted} <- version(version_param, item.latest_version),
          versions = versions(item_id),
          %DashboardLibraryVersion{} = selected <- Enum.find(versions, &(&1.version == wanted)) do
-      names = names([item.updated_by, item.created_by | Enum.map(versions, & &1.created_by)])
+      names =
+        Authors.names(org, [
+          item.updated_by,
+          item.created_by | Enum.map(versions, & &1.created_by)
+        ])
+
       latest = %{item_id => Enum.find(versions, &(&1.version == item.latest_version))}
 
       {:ok,
@@ -169,15 +174,6 @@ defmodule Cadence.Reads.Dashboards.LibraryRows do
     case Integer.parse(to_string(value)) do
       {n, ""} when n > 0 -> {:ok, n}
       _invalid -> {:error, {:invalid_params, %{version: "must be a positive integer"}}}
-    end
-  end
-
-  defp names(ids) do
-    for id <- ids, is_binary(id), uniq: true, into: %{} do
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _not_a_user -> {id, nil}
-      end
     end
   end
 

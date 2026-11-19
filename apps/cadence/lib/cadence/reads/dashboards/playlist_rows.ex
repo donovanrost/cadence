@@ -7,9 +7,9 @@ defmodule Cadence.Reads.Dashboards.PlaylistRows do
 
   import Ecto.Query
 
-  alias Cadence.Accounts
   alias Cadence.Auth.Policy
   alias Cadence.Dashboards.{Authoring, DashboardPlaylist, Documents}
+  alias Cadence.Reads.Dashboards.Authors
   alias Cadence.Repo
 
   @limit 200
@@ -25,7 +25,7 @@ defmodule Cadence.Reads.Dashboards.PlaylistRows do
         |> limit(@limit)
         |> Repo.all()
 
-      names = names(Enum.map(rows, & &1.updated_by))
+      names = Authors.names(scope.organization_id, Enum.map(rows, & &1.updated_by))
 
       {:ok,
        %{playlists: Enum.map(rows, &summary(&1, names)), can_edit: can_edit?(scope, mission)}}
@@ -48,7 +48,7 @@ defmodule Cadence.Reads.Dashboards.PlaylistRows do
   @spec detail(DashboardPlaylist.t()) :: map()
   def detail(%DashboardPlaylist{} = playlist) do
     dashboards = dashboards(playlist)
-    names = names([playlist.updated_by])
+    names = Authors.names(playlist.organization_id, [playlist.updated_by])
 
     playlist
     |> summary(names)
@@ -104,15 +104,6 @@ defmodule Cadence.Reads.Dashboards.PlaylistRows do
     do: where(query, [p], fragment("strpos(lower(?), lower(?)) > 0", p.name, ^String.trim(q)))
 
   defp search(query, _q), do: query
-
-  defp names(ids) do
-    for id <- ids, is_binary(id), uniq: true, into: %{} do
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _not_a_user -> {id, nil}
-      end
-    end
-  end
 
   defp person(id, names) when is_binary(id), do: %{id: id, name: Map.get(names, id)}
   defp person(_none, _names), do: nil

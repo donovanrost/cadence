@@ -241,7 +241,7 @@ defmodule CadenceWeb.Console.DashboardDirectoryController do
       |> Map.take(ids)
       |> Map.values()
       |> Enum.map(& &1.published_by)
-      |> Authors.names()
+      |> then(&Authors.names(org, &1))
 
     context = %{
       summaries: summaries,
