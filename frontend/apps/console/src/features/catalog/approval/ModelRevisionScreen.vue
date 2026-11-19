@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRemoteQuery } from "@/api";
+import { isKnown, useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
 import { ApBreadcrumb, ApKeyValue, ApPageHeader, ApPanel, ApRemote, type ApCrumb } from "@/ui";
 import { fetchModelRevision, type ModelRevision } from "./api.ts";
 import ApprovalPanel from "./ApprovalPanel.vue";
+import RevisionRollout from "./RevisionRollout.vue";
 
 /**
  * ux U65: a catalog revision's approval. Visible text says "catalog rev 4"; the compiled mission
@@ -37,6 +38,13 @@ function crumbs(r: ModelRevision): readonly ApCrumb[] {
 const hasApproval = (r: ModelRevision) => r.decision !== null || r.status === "candidate";
 const details = (r: ModelRevision) => [
   { key: "model", label: "Mission model revision", value: r.id, mono: true },
+  // #392: the status as sent, so one the console doesn't know is still said somewhere.
+  {
+    key: "status",
+    label: "Model revision status",
+    value: isKnown(r.status) ? r.status : r.status.unrecognized,
+    mono: true,
+  },
   {
     key: "catalog",
     label: "Catalog revision",
@@ -78,6 +86,8 @@ const details = (r: ModelRevision) => [
           :model-key="key"
           @changed="page.refetch"
         />
+        <!-- U102 "Where": C3 under the Approval panel (or its decided line). -->
+        <RevisionRollout :revision="value" />
         <ApPanel index="F3" title="Technical details">
           <ApKeyValue :items="details(value)" :columns="2" />
         </ApPanel>
