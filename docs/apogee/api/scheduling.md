@@ -720,32 +720,93 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
 - Templates aren't change sets: edits are versioned and audited on the template (planning policy,
   not mission configuration).
 
-### Automation grants (§11 L3)
+### Automation grants (§11 L3; #283)
 
 A grant lets a service identity act without a person (plan, repair, execute, submit, approve)
-within the active fleet planning policy. Under `/contact-planning`:
+within the active fleet planning policy. #283 (ux U105): under the mission's 'independent'
+approval setting a grant is **proposed** and authorizes nothing until a second org admin approves
+it; under 'direct' the proposer's own approval stands and it's active at once. Revoking and
+narrowing are tightenings: one org admin, at once. Every grant act is person-only (a service,
+even with organization_admin, gets `403 authenticated_user_required`). Under `/contact-planning`:
 
 - `GET /grants` (mission operators) → `{grants: [grant], service_identities: [{id, name, state:
   active | disabled}] (this mission's), policy_version: <active policy version> | null, limits:
   {maximum_horizon_seconds, maximum_contacts, maximum_execution_concurrency} (the active policy's
-  ceilings, for hints; each `null` without a policy, the object itself is always present), permissions: ["grants.manage"] | []}`. A grant is
+  ceilings, for hints; each `null` without a policy, the object itself is always present),
+  approval_setting: independent | direct, permissions: ["grants.manage"] | []}`. A grant is
   `{id, service_identity {id, name}, policy_version, allowed_actions: [plan | repair | execute |
   submit | approve], maximum_horizon_seconds, maximum_contacts, maximum_execution_concurrency,
-  maximum_estimated_cost_micros, currency, valid_from, valid_until, state: active | revoked | expired,
-  approved_by {id, name}, approved_at, reason, revoked_by {id, name} | null, revoked_at | null,
-  revocation_reason | null, sha256}`. `service_identity.name`, `currency` and
-  `maximum_estimated_cost_micros` can be `null`. `expired` is computed (active past `valid_until`). Cost stays
-  hidden in the console (#63).
+  maximum_estimated_cost_micros, currency, validity_seconds, valid_from | null, valid_until |
+  null, state, proposed_by, proposed_at, proposal_expires_at, approved_by | null, approved_at |
+  null, reason, rejected_by | null, rejected_at | null, rejection_reason | null, withdrawn_by |
+  null, withdrawn_at | null, revoked_by | null, revoked_at | null, revocation_reason | null,
+  replaces_grant_id | null, sha256, viewer_can_decide, cannot_decide_because,
+  cannot_decide_details}`.
+  - `state`: proposed | active | rejected | revoked | withdrawn | expired. `expired` is computed,
+    by the same function the server uses at each use: an undecided proposal past
+    `proposal_expires_at` (72 h; `approved_at` null), or an active grant past `valid_until`.
+  - Validity starts at approval: a proposal has `validity_seconds` and null `valid_from` and
+    `valid_until`.
+  - People (`proposed_by`, `approved_by`, `rejected_by`, `withdrawn_by`, `revoked_by`) are
+    `{id, name}`, named only while they're an active member of the organization, never by email.
+    Anyone else is `{id: null, name: null}` (#146's rule). The `_by` and `_at` pairs are both
+    set or both null.
+  - The flags are the viewer's, from the server; the console never computes them (#233's
+    pattern). `cannot_decide_because`: `not_admin | not_a_person | proposer | accountable |
+    authors_unknown | not_proposed | null`, and `cannot_decide_details`: `{grantee: {id, name}}`
+    for accountable, `{service: {id, name}}` for authors_unknown, else null.
+  - `service_identity.name`, `currency` and `maximum_estimated_cost_micros` can be `null`. Cost
+    stays hidden in the console (#63).
 - `POST /grants` (organization admins) `{service_identity_id, maximum_horizon_seconds,
-  maximum_contacts, maximum_execution_concurrency, valid_days (1–365), reason, policy_version}` →
-  `201 {grant}`. `allowed_actions` and the cost limit come from the active policy. `409
+  maximum_contacts, maximum_execution_concurrency, valid_days (1–365), reason, policy_version,
+  replaces_grant_id?}` → `201 {grant}`. The grant's `state` is `proposed` under 'independent',
+  `active` under 'direct'. `replaces_grant_id` makes a widening: approving it revokes the active
+  grant it replaces. `allowed_actions` and the cost limit come from the active policy. `409
   policy_changed` with `details.active_version` when `policy_version` isn't the active one; `422
   invalid_params` on the field for limits beyond the policy (`maximum_horizon_seconds`,
   `maximum_contacts`, `maximum_execution_concurrency`), a disabled or other-mission identity
   (`service_identity_id`), or missing input.
-- `POST /grants/:id/revoke` (organization admins) `{reason, sha256}` → `200 {grant}` (state
-  `revoked`). `409 grant_changed` when `sha256` no longer matches; `404 grant_not_found`;
-  `422 invalid_params` (`details.sha256`) when it's missing.
+- `POST /grants/:id/approve` (organization admins) `{sha256, operation_id}` → `200 {grant,
+  replayed}`.
+  - The same `operation_id` and body returns the original answer with `replayed: true`; a
+    different body on that id is `409 duplicate_operation`.
+  - Validity starts now.
+  - Refusals, with nothing recorded:
+    - `403 automation_grant_self_approval_forbidden {because: proposed | accountable, grantee}`:
+      the proposer, or the replaced grant's proposer, or someone accountable for the service
+      (#280);
+    - `403 automation_grant_approver_authors_unknown {service}`;
+    - `409 automation_grant_not_proposed {state, decided_by?, decided_at?}`, both or neither;
+    - `409 approval_policy_changed {kind: "automation_grants"}`: the setting changed since the
+      proposal;
+    - `409 grant_changed`: `sha256` isn't the proposal's;
+    - `403 automation_grant_capability_required`: #281's rule.
+- `POST /grants/:id/reject` (organization admins) `{reason, operation_id}` → `200 {grant,
+  replayed}`. `422 invalid_params` (`details.reason`) without a reason; `409
+  automation_grant_not_proposed` as above.
+- `POST /grants/:id/narrow` (organization admins) `{changes: {field: value}, operation_id}` →
+  `200 {grant, replayed}`, at once.
+  - It's judged on every field: `allowed_actions` a subset; the limits and `validity_seconds`
+    no larger (the window stays anchored at approval); a cost limit no larger, or added where
+    there was none; `currency` unchanged.
+  - Anything else, including an unknown field, is `422 automation_grant_not_narrower {fields}`,
+    and needs a proposal. Leaving everything as it was is `422 automation_grant_narrow_unchanged`.
+- `POST /grants/:id/revoke` (organization admins) `{reason?, sha256?}` → `200 {grant}` (state
+  `revoked`), at once.
+  - It's never refused for want of a reason or a current `sha256`: `sha256` is accepted and
+    ignored, and the reason is recorded when given.
+  - It also withdraws any proposal waiting to replace the grant, in the same transaction.
+  - `403 automation_grant_not_active {state}` when the grant isn't active; `404 grant_not_found`.
+- **At use** (a service planning, submitting or approving under a grant): the grant is re-read
+  under a shared lock in the same transaction. Not usable: `403 automation_grant_not_active
+  {state}` (proposed, rejected, withdrawn, or an expired proposal); `automation_grant_revoked`,
+  `automation_grant_expired` and `automation_grant_not_yet_valid` keep their codes. A grant
+  whose stored hash isn't today's layout is refused (`automation_grant_hash_mismatch`; #108: the
+  dev reset recreates grants).
+- **Audit:** each act writes one append-only decision (`automation_grant_decisions`, built
+  through `Governance.DecisionRecord`): proposed, not_required (direct), approved, rejected,
+  revoked, narrowed, withdrawn, each with the actor, time, hash, policy and the ids separation
+  compared against.
 
 ### Requirements (one-off; BACKLOG §8 8g)
 
