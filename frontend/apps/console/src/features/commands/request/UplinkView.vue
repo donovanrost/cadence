@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import {
   formatClock,
   ApButton,
@@ -51,7 +51,28 @@ const props = defineProps<{
   canResend: boolean;
   missionId: MissionId;
 }>();
-defineEmits<{ changed: [] }>();
+const emit = defineEmits<{ changed: [] }>();
+/**
+ * a11y B6/A5 (#243, ux #425): Abort's result, said from a status line that outlives AbortPanel (it
+ * goes once the group can't abort). Focus follows only if it was in the panel when it went (B4).
+ */
+const aborted = ref("");
+const abortEl = ref<HTMLElement | null>(null);
+const abortedEl = ref<HTMLElement | null>(null);
+const showAbort = computed(() => props.canAbort && abortable(props.group));
+watch(
+  showAbort,
+  async (shown, was) => {
+    if (shown || !was || !abortEl.value?.contains(document.activeElement)) return;
+    await nextTick();
+    abortedEl.value?.focus();
+  },
+  { flush: "pre" },
+);
+function onAborted(result: string) {
+  aborted.value = result;
+  emit("changed");
+}
 const tiles = computed(() => pipeline(props.group));
 /** U1 matrix places targets by plane and slot from the fleet read. */
 const fleet = useFleet(computed(() => props.missionId));
@@ -152,7 +173,15 @@ const release = computed(() =>
       @changed="$emit('changed')"
     />
     <!-- CommandFlow C3: Abort sits up top (header area), never below a long target list. -->
-    <AbortPanel v-if="canAbort && abortable(group)" :group="group" @done="$emit('changed')" />
+    <div v-if="showAbort" ref="abortEl"><AbortPanel :group="group" @done="onAborted" /></div>
+    <p
+      ref="abortedEl"
+      role="status"
+      tabindex="-1"
+      :class="aborted ? 'm-0 text-md text-text-2' : 'sr-only'"
+    >
+      {{ aborted }}
+    </p>
     <!-- ux U75: the request expired; its unsent uplinks all expired together. -->
     <p v-if="expirySummary(group)" class="m-0 text-md text-text-2">{{ expirySummary(group) }}</p>
     <ApStatStrip :columns="tiles.length" label="Uplink pipeline">
