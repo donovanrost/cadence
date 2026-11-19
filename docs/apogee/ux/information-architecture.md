@@ -56,6 +56,7 @@ org and mission (decision U1): `O = /console/:orgId`, `M = O/:missionId` (e.g.
 | 07 | **Contact planning** (DECISIONS #27) | `M/setup/contact-planning[/policy]` · `…/templates/:id` | – (`screens/ContactPlanning.md`) |
 | 08 | **Data sources** | `M/setup/data-sources[/:id]` · `M/setup/data-sources/operations` | – |
 | 09 | **Apps** | `M/setup/apps[/:appKey]` | – |
+| (proposed) | **Monitoring** (U108, #28) | `M/setup/monitoring` · tabs `limits` · `derived` · `alarm-rules` | – |
 | 10 | **Mission settings** **[decision]** | `M/setup/settings[/:section]` | – |
 | | staged changes | `M/setup/changes` (review & apply) · `M/setup/revisions[/:rev]` (history, compare, roll back). Target design: `screens/Changes.md` (DECISIONS #1); hidden in v1 (U2). | Setup R2 + staged bar |
 | Org | **People & access** | `O/org/people` · `O/org/people/invite` · service identities `O/org/people/services` | People (S5) |

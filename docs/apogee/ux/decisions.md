@@ -4100,3 +4100,94 @@ is about, so the name reuses it; no short noun is invented per kind.
 - Built once in the panel from the row's title, not per row kind, so a new kind gets it for free.
 - A row without a title (none today) uses its kind and position, as B7 says: "Discard, row 3".
 - Sheets the buttons open keep their own titles (A2); this is only the button's name.
+
+### U108 · The monitoring lane: limits, derived points and alarm rules through change sets (#28; DECISIONS #92 phase 3, #93; ADR-020 addendum, change-set lanes) (domain / api / mms-ux / the squads that build the editors)
+**Proposal for domain's mission-model build plan (`docs/apogee/domain/mission-model-build-plan.md`).** It applies
+U64 (the user's four conditions) to domain's design. Limits, alarm rules and derived points are change-set kinds in
+a second lane, **monitoring**. Each mission has one active set per lane, and the lanes never freeze each other.
+Applying a monitoring set recompiles the effective model and activates it; the set's review is the approval of the
+authored layer. U43 (limit words) and U42 (a derived point in use) still hold. Items marked **[domain]** need
+domain's answer before they're built.
+
+- **Words.** The lanes are **Configuration** and **Monitoring**. The kind words on Changes are `Limits` (U43),
+  `Derived point` and `Alarm rule`. Summaries follow U43: "Add derived point BATT_HEALTH" / "Edit …" / "Retire …";
+  "Add alarm rule <name>" / "Edit …" / "Retire …". Point names are in mono. Visible text never says "layer",
+  "authored layer", "effective revision" or "recompile". The effective model revision ids go in Technical details,
+  as with U65.
+- **Where they're edited (IA).** Setup gets **Monitoring** (`M/setup/monitoring`, tabs `limits` · `derived` ·
+  `alarm-rules`). It replaces the Limits and Derived telemetry entries in Setup › Apps once the old modules retire.
+  - Each tab lists imported and authored definitions together. A `Source` column reads `Catalog rev 4`
+    (read-only; its row says "From the catalog. Change it by importing a new revision.") or `Mission` (editable).
+  - Ops opens the same editor as a side sheet: `Edit limits…` on a point's row in Investigate and on an alarm. Ops
+    shows no staged bar; the sheet shows its own outcome.
+- **Operational relief stays outside (U64 1).** Acknowledge and Shelve on Alarms never stage anything. The limit
+  editor opened from an alarm doesn't offer them, and nothing in it suggests an edit is how to quiet an alarm.
+- **Live and staged side by side, and who staged it (U64 4).** Each field shows the live value. When a change to it
+  is staged, the staged value shows beside it as the Profile board's edited state (Changes.md §1), and the meta reads
+  "Staged by Mira K. at 14:02Z" (U29; a service is marked as U70 says).
+  - path_already_staged: "Not staged: Mira K. has BATT_V's limits staged already (at 14:02Z). Change them in that
+    staged change, or ask Mira K. to withdraw it." With you as the stager, the editor opens your staged values
+    instead, so this never shows to you.
+- **Apply now, when monitoring changes apply without approval (U64 2).** The editor's primary is `Apply now`. Its
+  preview is inline, above the button:
+  - the change as `− old` / `+ new` rows;
+  - the checks (below), with their holds and NO-GOs;
+  - the effect, "Checked on 500 spacecraft" (from the server's dry run, never counted in the browser);
+  - a required `Why` (10 characters or more, as Changes.md K3). With one hold it takes that hold's placeholder
+    (U43).
+  - Outcome, with U91's verbs: "Applied as r7. The runtime is applying it." then "BATT_V is checked against the new
+    limits from 14:02:10Z." If the runtime hasn't applied it, U91's caution line. Never "Saved". (The number
+    depends on Revisions, below.)
+  - **[domain] Apply now applies your edit alone.** If others' monitoring changes are staged, they stay staged. If the
+    model can only apply the whole set, `Apply now` is disabled while the set holds anyone else's changes: "Mira K.
+    has 2 monitoring changes staged. Apply them together in Setup › Changes." That puts the fix behind someone
+    else's work, so it's the fallback only.
+- **Stage change, when monitoring changes need a second person's approval.** Staging and review are as in
+  Changes.md, on the monitoring lane.
+  - The Ops sheet's outcome after staging: "Staged. BATT_V's limits change when another person approves and
+    applies them in Setup › Changes." plus `Open monitoring changes`.
+  - The reviewer is never one of the set's authors (U97's family); refusals are Changes.md §3's.
+- **Two lanes on Changes.**
+  - **Staged bar:** one line per lane that has something staged: `CONFIGURATION · 2 changes: …  [Review & apply as
+    r6]` and `MONITORING · 1 change: Edit limits for BATT_V  [Review & apply]`.
+  - **Review page:** `M/setup/changes` (Configuration) and `M/setup/changes/monitoring`. A tab pair at the top
+    reads `Configuration · 2` / `Monitoring · 1`. The page and its h1 name the lane: "Apply monitoring changes · 1
+    change".
+  - **In review, by lane:** "Monitoring changes in review · staging limits, derived points and alarm rules is
+    paused". frozen_in_review on that lane: "Not staged: the monitoring changes are in review, so staging limits,
+    derived points and alarm rules is paused." Configuration staging stays open, and the configuration lane says
+    so the other way round.
+  - **[domain] A set in review still freezes its own lane.** Under "Needs a second person's approval", an unrelated
+    limit in review holds up an urgent limit fix, which is what #93 (c) rules out within a lane too. The ask: a
+    monitoring set in review doesn't freeze the lane. New edits open the lane's next set, which is applied after.
+    If the model can't, the words above stand, and review's `Send back` is the way to unblock.
+- **Checks (K2) on the monitoring lane.**
+  - **Compiles** ("Every limit, derived point and alarm rule compiles against the live model"): NO-GO. Each
+    failure names the definition, then what it refers to. Dangling reference: "BATT_HEALTH uses BATT_SOC_PCT,
+    which isn't in the live model." With the cause when the server gives it: "… (renamed or removed in catalog rev
+    5)."
+  - **Conflicts with the catalog:** the compiler's conflict diagnostic, for a point with limits from both sources
+    (ADR-020 §6). **[domain]** Which wins, and is it a HOLD or a NO-GO? As a NO-GO: "BATT_V already has red limits
+    from catalog rev 4 (3.10–4.20 V). Retire one set before adding the other." As a HOLD, mission over catalog:
+    "BATT_V has red limits from catalog rev 4 (3.10–4.20 V). These replace them on this mission." The placeholder
+    is "Why these should replace the catalog's".
+  - U43's limit_alarm_active and U42's derived_point_in_use, unchanged.
+- **Across the lanes.** The lanes never freeze each other, but they compile together. **[domain]** confirm: a
+  configuration set that would leave a monitoring definition dangling gets a NO-GO on the configuration lane.
+  "Catalog rev 5 removes BATT_V, which 2 limits and 1 derived point use. Retire or change them in monitoring
+  changes first." The names go behind `Show all`, as U42 lists them.
+- **Revisions. [domain]** Does an applied monitoring set take the mission's next revision number? I prefer one
+  sequence (r6 configuration, r7 monitoring) with a `Monitoring` tag in the Revisions list. Then Timeline reads
+  `Config r7 applied · Monitoring · 1 change · Mira K.`, and roll back works the same way. Separate numbering would
+  need its own prefix on every surface.
+- **The model gate.** Applying a monitoring set never puts anything up for catalog approval (U65), because domain
+  counts the effective revisions as approved. No catalog row, panel or Now item mentions them.
+- **Moving the old side stores. [domain]** Who stages the one-time move of today's limits and derived points? A
+  migration can't approve itself under a person's name (TEAM RULE, Controls). So it's staged by Cadence (a service
+  actor, marked as U70) and a person applies or approves it in the console as usual. Summary: "Move 48 limits and
+  6 derived points from the old apps". Its preview lists every definition, with the same checks. No history
+  backfill (#92): limits added after the move start their alarm history then.
+- **Per-spacecraft limits (open with the user, #92).** Domain recommends declarations scoped to a context, one
+  revision for the fleet. If the user adopts that, each definition gets `Applies to`: `All spacecraft` (default),
+  a profile, or a context (U43's named sets, `ECLIPSE`). Summaries name it as U43 does: "Edit ECLIPSE limits for
+  BATT_V", "Edit limits for BATT_V on Block 2". Per-spacecraft deltas in any other form come back to ux.
