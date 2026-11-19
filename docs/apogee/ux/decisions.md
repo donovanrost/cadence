@@ -3323,3 +3323,15 @@ are api's, switched on with `knownErrorCode`.
 - **The drafter, up front (follow-up, not #257):** a drafter under `independent` learns it only on press until the
   plan read says why, as #240 did for Activations; then "You drafted this version of the plan, so another org admin
   approves it." shows before the press.
+
+
+### U98 · Can't view: a 403 on a read (#272, mms-ux; the pattern for every squad) (api / every squad)
+Someone in the mission without the read right opens a page (outsiders get 404 and never learn it exists). Nothing they
+asked to change was refused, so the line has no "Not saved:" style opener and never says "change".
+
+- **Line:** "You can't view <object>. Ask a mission admin or an org admin for access." First case (#272, the spacecraft
+  configuration workspace and its packet choices, one line on both routes): "You can't view EARENDIL-004's
+  configuration. Ask a mission admin or an org admin for access."
+- **Where:** in place of the content, as the page's empty state (`role="status"`; the person didn't act, B6). The
+  object is named as the page names it, never by id (U25).
+- **Not this:** a 403 on a write keeps its act's opener ("Not saved:", "Not approved:" …).
