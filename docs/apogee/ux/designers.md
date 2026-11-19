@@ -10,7 +10,9 @@ rules you work to, and reviews UI that crosses squads.
    §8 Content rules and §10 Do / Don't are the minimum; §7 lists the kit components (use them, don't draw new ones).
 2. [`tokens.css`](tokens.css): every color, type and space value. No raw hex, no default Tailwind colors.
 3. [`information-architecture.md`](information-architecture.md): routes, the rail, where a new page goes.
-4. [`screens/README.md`](screens/README.md), then your squad's screen specs.
+4. [`screens/README.md`](screens/README.md), then your squad's screen specs (your squad's owned paths are in the
+   owned-paths table in `TEAM.md`; for Mission Model & Spacecraft: Setup, AddSpacecraft, Catalog and Profile, with
+   Changes shared with Commanding & Approvals).
 5. [`a11y-checklist.md`](a11y-checklist.md): sections A (every sheet) and B (every screen) apply to everything you
    design.
 6. [`decisions.md`](decisions.md): the rulings log, U1 onward, newest at the bottom. Don't read it end to end; search
@@ -37,6 +39,8 @@ rules you work to, and reviews UI that crosses squads.
 - **Never invent identifiers (U25).** No id where a name belongs. A missing name reads "Unknown spacecraft" ("on an
   unknown spacecraft" in a sentence); "Deleted spacecraft" only where the server says so. Raw ids go only in
   **Technical details**.
+- **A missing value reads as a plain noun phrase** ("a catalog revision", U65), never null, a blank or an invented
+  value. A count that can't be computed is `—` with its reason (design-language §1).
 - **Who and when are one event (U29):** "by Mira K. at 03:40Z" together, or neither.
 - **Refusals open with what didn't happen, by the person's act:** "Not saved:", "Not sent:", "Not approved:",
   "Not applied:". Then why, in one sentence, then what to do. An approval refused before it was recorded ends
@@ -71,6 +75,8 @@ rules you work to, and reviews UI that crosses squads.
 
 ## 5. How we work
 
+- **Who sets what:** your squad lead sets what you work on next, inside the milestones; ux sets the rules you work
+  to.
 - **Your squad's flows and words:** write them as U-entries in `decisions.md` (heading
   `### U<n> · <topic> (<issue>) (<owners>)`, newest at the bottom), in a docs-only PR from your own branch off develop.
   Take the next free number when you open the PR; if a rebase shows it taken, renumber. Screen-level layout goes in
@@ -79,7 +85,9 @@ rules you work to, and reviews UI that crosses squads.
   - adds or changes a kit component, token or a rule in `design-language.md` or `a11y-checklist.md`;
   - changes a pattern another squad uses (refusals, approvals, sheets, Technical details, time and number formats);
   - touches another squad's screens, the shell, the rail, the palette or Now.
-  ux records its review in the PR, like any other reviewer.
+  ux records its review in the PR, like any other reviewer. Words and flows about who may approve, four-eyes, or a
+  mission's approval setting also go to your squad's security engineer (the charter makes them a required
+  reviewer on approvals and permissions).
 - **Before engineers build:** words first. Engineers ask for words with the error codes and the response shape; you
   answer with the exact lines and the U-number. A shape change (a new code, a new null) comes to you before it ships.
 - **Looking at screens:** no local browser or e2e runs; CI runs them. Review from the code, the spec and the
