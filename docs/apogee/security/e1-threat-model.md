@@ -29,6 +29,7 @@ service); organization ↔ organization; mission ↔ mission; request ↔ the tr
 | T9 | **Approving content that isn't what was reviewed.** The content changes between the reviewer's read and the decision. | Expected version + content hash; versions are immutable snapshots. | Holds while versions stay immutable. If a version row ever becomes mutable, the client must send the hash it saw. |
 | T10 | **Replays and idempotency.** A retry returns someone else's answer, or skips authorization. | Replays keyed by org, mission and op id; matched on actor, action, plan and digest. | #278: authorize before replaying. |
 | T11 | **Routing around controls in ops.** Scripted approvals, minted tokens or seed approvals write false records. | TEAM.md Controls; #250 (seeds never approve). | Procedure + #250. The seed actor's accountability is MM-2. |
+| T12 | **Service identities issue service identities.** A service holding organization admin issues or rotates other services (organization admins included). Credentials then outlive revoking the one that made them. | `:manage_service_identities` checks the capability, not the actor kind. | #281 (person-only, no grant beyond the issuer's own, server-built ids); #282 (organization-level actions person-only by default). |
 
 ## Order (lead, 11-19)
 #233 → #280 → #250/#231 → #277 → #263 → #278 → #260-#262. The epic is done when T1-T7 and T10 are closed
