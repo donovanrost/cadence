@@ -3,6 +3,11 @@ import { expect, type Locator, type Page, type Request } from "@playwright/test"
 interface SheetCheck {
   /** The control that opens the sheet. It's focused and pressed with Enter, as from the keyboard. */
   readonly opener: Locator;
+  /**
+   * A menu item, when the opener is a menu button (the viewer's More menu, a row's Actions): the
+   * opener is pressed, then this item. A5 still expects focus back on the opener.
+   */
+  readonly via?: Locator;
   /** The sheet's title: its accessible name (A2). */
   readonly name: string | RegExp;
   /** Where focus must land on open (A1): the first field, or the safe button of a danger sheet. */
@@ -55,6 +60,11 @@ export async function expectSheetChecks(page: Page, check: SheetCheck): Promise<
 async function open(page: Page, check: SheetCheck): Promise<Locator> {
   await check.opener.focus();
   await page.keyboard.press("Enter");
+  if (check.via) {
+    await expect(check.via, "the menu shows the item").toBeVisible();
+    await check.via.focus();
+    await page.keyboard.press("Enter");
+  }
   const sheet = page.getByRole("dialog", {
     name: check.name,
     exact: typeof check.name === "string",
