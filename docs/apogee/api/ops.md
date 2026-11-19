@@ -681,7 +681,9 @@ request), so housekeeping rows don't starve a filtered page. Fewer than `limit` 
 - `text` is an operator sentence naming what the event is about, built on the server (ux review
   2026-11-09-timeline #1): "Flight telemetry source caught up to 10:23:54Z", "Contact with
   EARENDIL-004 completed, 10:22:54Z–10:23:52Z", "Dashboard Comms payload v1 published by Mira K.",
-  "Catalog rev 2 (QA-E2E re-import) registered". Unknown kinds fall back to the sentence-case key
+  "Catalog rev 2 (QA-E2E re-import) registered". A person is named ("by Mira K.") only while
+  an active member of the mission's organization (#472, #146 C1). Otherwise the "by" clause is
+  dropped, never an id or email (ux U25). Unknown kinds fall back to the sentence-case key
   plus the spacecraft ("Limit violation on EARENDIL-004"), never Title Case. `detail` is `null`.
 - Contact events (`scheduled_contact_*`, `realized_contact_*`) have kind `contact`. A realized
   contact that completed reads "ended (not verified)" until S9 verifies it. A provider-cancelled

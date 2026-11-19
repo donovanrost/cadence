@@ -172,6 +172,13 @@ defmodule Cadence.Reads.EventSentencesTest do
     assert %{text: "Dashboard Comms payload v1 published by Mira K."} =
              EventSentences.describe(dashboard, @ctx)
 
+    # #472 (ux U25, ca-ux): a person with no name in this organization (another org's platform
+    # admin, someone who left) drops the "by" clause. Never their id, never an email.
+    outsider = %{dashboard | actor: %{"value" => %{"kind" => "user", "id" => "user-outsider"}}}
+
+    assert %{text: "Dashboard Comms payload v1 published"} =
+             EventSentences.describe(outsider, @ctx)
+
     catalog =
       entry(:catalog_revision_registered, %{
         subject_id: "rev-2",

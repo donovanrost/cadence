@@ -253,10 +253,15 @@ defmodule Cadence.Reads.EventSentences do
     end
   end
 
+  # A person with no name here (not an active member of the organization, or no display name)
+  # drops the clause: never their id (#472, ux U25). The entry keeps its actor, so its kind is
+  # still at hand if ca-ux adds words later.
   defp by(%Entry{actor: actor}, ctx) do
-    case actor_id(actor) do
-      nil -> ""
-      id -> " by #{Map.get(ctx.users, id) || id}"
+    with id when is_binary(id) <- actor_id(actor),
+         name when is_binary(name) <- Map.get(ctx.users, id) do
+      " by #{name}"
+    else
+      _no_name -> ""
     end
   end
 
