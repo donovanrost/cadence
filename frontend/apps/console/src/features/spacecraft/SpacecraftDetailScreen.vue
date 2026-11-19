@@ -40,9 +40,12 @@ useMissionInvalidation(
   refetch,
 );
 
-const title = computed(() =>
-  state.value.status === "ready" ? state.value.value.spacecraft.name : "Spacecraft",
-);
+/** Spacecraft.md (#313, #316): the header names the craft with its SCID, "EARENDIL-312 · SCID 312". */
+const title = computed(() => {
+  if (state.value.status !== "ready") return "Spacecraft";
+  const sc = state.value.value.spacecraft;
+  return sc.scid === null ? sc.name : `${sc.name} · SCID ${sc.scid}`;
+});
 // Ops addresses a spacecraft by SCID (fe-ops `ops.spacecraft`).
 const opsScid = computed(() =>
   state.value.status === "ready" && state.value.value.spacecraft.scid !== null
