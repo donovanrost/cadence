@@ -3752,8 +3752,7 @@ Under "Needs a second person's approval", issuing a grant (Contact planning › 
 authorizes nothing until a different org admin approves it. That admin must be outside the people accountable for the
 service it names (U100). Under "Applies without approval", the proposer's own approval stands, as for other kinds.
 Revoking or narrowing is a tightening: any org admin does it alone, at once. The panel mirrors the policy's own
-"Waiting for approval" (P5). Shape: mms-security's proposal, which api confirms; codes switched on with
-`knownErrorCode`.
+"Waiting for approval" (P5). Shape: mms-security's, agreed with api 11-19; codes switched on with `knownErrorCode`.
 
 - **States** (`State` column; mark + word, B2): `PROPOSED` (caution), `ACTIVE` (nominal), `REJECTED` (off),
   `REVOKED` (off), `EXPIRED` (stale). `expired` is derived on read and means two things; the row says which:
@@ -3791,13 +3790,14 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
       code in Technical details.
 - **Approve refusals** (nothing recorded; each ends "Your approval wasn't recorded.", U95):
   - 403 `automation_grant_self_approval_forbidden`, `because: "proposed"`: "Not approved: you proposed this grant,
-    so another org admin approves it. Your approval wasn't recorded." `because: "accountable"` (`service`): "Not
+    so another org admin approves it. Your approval wasn't recorded." `because: "accountable"` (`grantee`, the service the grant empowers; a different key from U100's
+    `via_service` on purpose): "Not
     approved: you're accountable for Nightly planner, so another org admin approves its grant. Your approval wasn't
     recorded." Then Approve is disabled with the up-front line.
   - 403 `automation_grant_approver_authors_unknown` (`service`): "Not approved: Cadence doesn't know who is
     accountable for Nightly planner, so its grant can't be approved yet. Your approval wasn't recorded. An org admin
     records who's accountable in People › Service identities."
-  - 409 `automation_grant_not_proposed` (`state`): with `decided_by` and `decided_at` (asked for), as U97: "This
+  - 409 `automation_grant_not_proposed` (`state`; `decided_by` and `decided_at`, both or neither): with them, as U97: "This
     grant was already approved by Ana R. at 06:52Z, so your approval wasn't recorded. Reload to see it." / "…already
     rejected by…"; the viewer: "You already approved this grant at 06:52Z. Reload to see it." Without them, by state:
     `expired`: "Not approved: no one decided this grant in time, so it expired. Your approval wasn't recorded.
@@ -3807,9 +3807,14 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   - 409 `approval_policy_changed` (`kind: "automation_grants"`; until #201, api's interim name): "Not approved: the
     mission's approval setting changed after this grant was proposed. Your approval wasn't recorded. Propose it
     again."
-  - 403 `automation_grant_person_required` (a service, even one with organization_admin; REST or backstop): "Not
+  - 403 `authenticated_user_required` (a service, even one with organization_admin; REST or backstop; the code U104
+    uses): "Not
     approved: only a person can approve a grant, not a service identity." For propose: "Not proposed: only a person
     can propose a grant, not a service identity."
+  - Replays (approve, reject and narrow take an `operation_id`, as #257's plans): the same id and body returns the
+    original answer with `replayed: true`, shown as this one's result. 409 `duplicate_operation`: "Not approved:
+    Cadence matched this to an earlier, different request, so your approval wasn't recorded. Reload and try again."
+    (reject: "Not rejected: … so nothing changed."; narrow: "Not narrowed: … so nothing changed.")
   - A code the console doesn't know: "Not approved: Cadence refused this approval. Your approval wasn't recorded."
     with the code in Technical details.
 - **Use under a grant that isn't active** (403 `automation_grant_not_active`, `state`), on the plan's state line as
@@ -3820,9 +3825,10 @@ Revoking or narrowing is a tightening: any org admin does it alone, at once. The
   `automation_grant_not_yet_valid` keep their lines.
 - **Narrow** (`Narrow…` on an active grant; one person, at once): sheet title `Narrow the grant`, commit `Narrow`,
   muted line "It takes effect at once. Narrowing only takes access away, so no approval is needed." After the answer:
-  "Narrowed. Nightly planner can now <what's left>." A change that isn't strictly narrower is refused (code asked
-  for): "Not narrowed: this change gives Nightly planner more than it has now, so it needs approval. Propose it as a
-  new grant instead." The console offers only narrower values in the sheet, so this is the backstop.
+  "Narrowed. Nightly planner can now <what's left>." A change that isn't strictly narrower is refused, 422
+  `automation_grant_not_narrower` (`fields`, the widening ones, named by the sheet's labels): "Not narrowed: this
+  change gives Nightly planner more than it has now (Contacts per plan, at most), so it needs approval. Propose it as
+  a new grant instead." Without `fields`, the same without the bracket. The console offers only narrower values in the sheet, so this is the backstop.
 - **Revoke** stays one act, at once, with a reason, even while a widening of the same grant is proposed. If one is,
   the revoke sheet adds: "This also ends the proposal waiting for approval." (if the server ends it; api confirms).
 - **Widening** (more actions, more services, longer validity) is a new proposal, worded as the sheet above.
