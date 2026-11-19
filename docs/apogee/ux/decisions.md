@@ -3204,21 +3204,24 @@ U90 and U94.
   `mission_model_runtime_plan_manifest_mismatch`, `invalid_spacecraft_model_bindings`): "Not approved: this request
   can't apply as it stands." plus the code in Technical details, then "Your approval wasn't recorded."
 - Refusals before the check keep their words (self approval, not pending, not found).
-- **After Approve** (#319, ca-ux 11-19; U20, U94): the line comes from the answer, never from "it didn't fail":
-  - `execution.state` `failed`: "Approved, but it didn't apply." + U41's apply sentence (a known failure).
-  - `outcome` `needs_review` (not failed): "Approved, but Cadence couldn't confirm it was applied yet. Reload to see
-    whether it applied." (U94's words).
-  - `execution.state` `in_progress`: "Approved. Applying it now."
-  - `outcome` `applied` with `execution.state` `succeeded`: "Approved and applied."
-  - Anything else (no outcome, an unknown one, no execution): "Approved. Cadence didn't confirm whether it was
-    applied. Reload to see it."
+- **After Approve** (#319, ca-ux 11-19; ux's ruling to fe-ops; U20, U94): only when the answer says the approval was
+  recorded, and the line comes from the answer, never from "it didn't fail". Each is announced as an outcome (B6):
+  - `execution.state` `failed` (crit): "Approved, but it didn't apply." + U41's apply sentence (a known failure).
+  - `outcome` `needs_review`, not failed (caution): "Approved, but Cadence couldn't confirm that it applied." + U41's
+    apply sentence, as U94 hands it on. No "yet": it pairs a finished attempt with waiting.
+  - `execution.state` `in_progress` (neutral): "Approved. It's applying now."
+  - `outcome` `applied` with `execution.state` `succeeded` (nominal): "Approved and applied."; with
+    `execution.finished_at`: "Approved and applied at 03:46Z."
+  - Anything else (no outcome, an unknown one, no execution; neutral): "Approved. Cadence hasn't confirmed that it
+    applied yet. Reload to see it."
 - **The decide panel's other words** (L10; built before a spec, ratified here): the intro "Approving applies it to the
   mission now. Rejecting leaves things as they are."; a reason is required for both ("Give a reason first.", A7);
   after Reject "Rejected. Nothing changes."; after Withdraw "Withdrawn. Nothing changes."; the tags `WAITING`,
   `APPROVED`, `REJECTED`, `WITHDRAWN`, `SUPERSEDED`, `UNKNOWN`; decisions read "Approved by Mira K. at 11-13
   02:20Z" ("at", never "on", U29). The pre-check refusals open by the act, as U95: `not_pending` by the act: Approve "Not
   approved: it's already decided, so your approval wasn't recorded. Reload to see how."; Reject "Not rejected: it's
-  already decided, so nothing changed. Reload to see how."; `activation_policy_changed` keeps U94's
+  already decided, so nothing changed. Reload to see how."; Withdraw (decided while the requester looked) "Not
+  withdrawn: it's already decided, so nothing changed. Reload to see how."; `activation_policy_changed` keeps U94's
   line.
 
 ### U96 · Who may change a mission's approval setting (#233; api's shape on domain 10d59bb78, 11-18) (api / domain / fe-setup)
