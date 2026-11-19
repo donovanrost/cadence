@@ -1,7 +1,7 @@
-defmodule Cadence.Runtime.SnapshotCallTest do
+defmodule Cadence.Platform.SnapshotCallTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Runtime.SnapshotCall
+  alias Cadence.Platform.SnapshotCall
 
   test "timeouts shrink inward: component < transport < provider < path < contact" do
     levels = [:component, :transport, :provider, :path, :contact]

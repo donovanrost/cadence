@@ -9,6 +9,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   use GenServer
 
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.Persistence, as: RuntimePersistence
 
   alias Cadence.Ingress.RawEvidence
@@ -122,7 +123,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   def snapshot(executor) do
     # #334: a read never takes its caller down (a busy executor under load is :snapshot_timeout).
     with {:ok, pid} <- lookup(executor) do
-      Cadence.Runtime.SnapshotCall.call(pid, :snapshot, :component)
+      SnapshotCall.call(pid, :snapshot, :component)
     end
   end
 

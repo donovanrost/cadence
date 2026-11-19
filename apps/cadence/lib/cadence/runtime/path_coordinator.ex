@@ -8,6 +8,7 @@ defmodule Cadence.Runtime.PathCoordinator do
 
   alias Cadence.Capabilities.Descriptor
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.ProviderAdapters
 
   alias Cadence.Runtime.{
@@ -77,7 +78,7 @@ defmodule Cadence.Runtime.PathCoordinator do
   @spec snapshot(pid()) :: {:ok, map()} | {:error, term()}
   def snapshot(path_runtime) do
     # #334: a read never takes its caller (the contact coordinator) down.
-    Cadence.Runtime.SnapshotCall.call(path_runtime, :snapshot, :path)
+    SnapshotCall.call(path_runtime, :snapshot, :path)
   end
 
   @spec quiesce(pid()) :: {:ok, map()} | {:error, term()}

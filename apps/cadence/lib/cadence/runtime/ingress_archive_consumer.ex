@@ -14,6 +14,7 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
   alias Cadence.IngressArchive
   alias Cadence.IngressArchive.{Batch, Receipt}
   alias Cadence.IngressJournal.{Entry, Evidence, FileSystem}
+  alias Cadence.Platform.SnapshotCall
 
   @default_poll_interval_ms 10
   @default_max_batch_entries 128
@@ -51,7 +52,7 @@ defmodule Cadence.Runtime.IngressArchiveConsumer do
   def snapshot(consumer) do
     # #334: a read never takes its caller down.
     with {:ok, pid} <- lookup(consumer) do
-      Cadence.Runtime.SnapshotCall.call(pid, :snapshot, :component)
+      SnapshotCall.call(pid, :snapshot, :component)
     end
   end
 

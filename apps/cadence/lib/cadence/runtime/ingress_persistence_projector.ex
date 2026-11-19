@@ -12,6 +12,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Observability
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.Persistence
   alias Cadence.Runtime.ProcessedIngressBatch
   alias Cadence.Telemetry.CurrentValueStore
@@ -80,7 +81,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   def snapshot(projector) do
     # #334: a read never takes its caller down (a projector busy in a write is :snapshot_timeout).
     with {:ok, pid} <- lookup(projector) do
-      Cadence.Runtime.SnapshotCall.call(pid, :snapshot, :component)
+      SnapshotCall.call(pid, :snapshot, :component)
     end
   end
 

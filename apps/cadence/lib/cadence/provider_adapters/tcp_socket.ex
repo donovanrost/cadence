@@ -21,6 +21,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Ingress.{RawEvidence, ReceiveBackpressure}
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.ProviderAdapters.TCPSocket.{IngressDrops, Instrumentation, Session}
 
   alias Cadence.Runtime.{
@@ -86,7 +87,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   @impl true
   def snapshot(provider_runtime) do
     # #334: a read never takes its caller (the path coordinator) down.
-    Cadence.Runtime.SnapshotCall.call(provider_runtime, :snapshot, :provider)
+    SnapshotCall.call(provider_runtime, :snapshot, :provider)
   end
 
   @doc """

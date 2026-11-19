@@ -30,6 +30,7 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   alias Cadence.IngressJournal.{Entry, Identity}
   alias Cadence.Platform.DurableFile
+  alias Cadence.Platform.SnapshotCall
 
   @record_magic "CIJR"
   @record_version 1
@@ -146,7 +147,7 @@ defmodule Cadence.IngressJournal.FileSystem do
   # #334: a read never takes its caller down.
   def snapshot(journal) do
     with {:ok, pid} <- lookup(journal) do
-      Cadence.Runtime.SnapshotCall.call(pid, :snapshot, :component)
+      SnapshotCall.call(pid, :snapshot, :component)
     end
   end
 

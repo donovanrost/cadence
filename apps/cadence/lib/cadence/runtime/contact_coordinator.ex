@@ -6,6 +6,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
   use GenServer
 
   alias Cadence.Contacts.DownlinkObservation
+  alias Cadence.Platform.SnapshotCall
   alias Cadence.Runtime.ContactPathSpec
   alias Cadence.Runtime.DownlinkCombiner
   alias Cadence.Runtime.MissionRuntime
@@ -45,7 +46,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
   @spec snapshot(pid()) :: {:ok, map()} | {:error, term()}
   def snapshot(contact_runtime) do
     # #334: a read never takes its caller down.
-    Cadence.Runtime.SnapshotCall.call(contact_runtime, :snapshot, :contact)
+    SnapshotCall.call(contact_runtime, :snapshot, :contact)
   end
 
   @spec quiesce(pid()) :: {:ok, map()} | {:error, term()}
@@ -59,7 +60,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
   @spec path_snapshot(pid(), binary()) :: {:ok, map()} | {:error, term()}
   def path_snapshot(contact_runtime, path_id) when is_binary(path_id) do
     # #334: a read never takes its caller down.
-    Cadence.Runtime.SnapshotCall.call(contact_runtime, {:path_snapshot, path_id}, :contact)
+    SnapshotCall.call(contact_runtime, {:path_snapshot, path_id}, :contact)
   end
 
   @spec handle_transport_event(pid(), binary(), binary(), term(), keyword()) ::

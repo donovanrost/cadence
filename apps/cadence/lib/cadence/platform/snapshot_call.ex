@@ -1,4 +1,4 @@
-defmodule Cadence.Runtime.SnapshotCall do
+defmodule Cadence.Platform.SnapshotCall do
   @moduledoc """
   A read-only snapshot call that never takes its caller down (#334).
 
