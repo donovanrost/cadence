@@ -3,7 +3,7 @@ import type { Station } from "@/features/stations/index.ts";
 import { ApButton, ApField } from "@/ui";
 import RuleLegs from "./RuleLegs.vue";
 import RuleStations from "./RuleStations.vue";
-import { tokens, unknownTokens, type RuleDraft } from "./rulesDraft.ts";
+import { tokens, unknownTokenError, type RuleDraft } from "./rulesDraft.ts";
 
 /** One rule: label, name template, stations (chips), legs (direction + role), enabled. */
 defineProps<{ stations: readonly Station[]; index: number }>();
@@ -11,10 +11,7 @@ const rule = defineModel<RuleDraft>({ required: true });
 defineEmits<{ remove: [] }>();
 const patch = (p: Partial<RuleDraft>) => (rule.value = { ...rule.value, ...p });
 /** a11y A6: an unknown token is a typed-in error, so it sits on Route name (aria-invalid). */
-const tokenError = () => {
-  const unknown = unknownTokens(rule.value.nameTemplate);
-  return unknown.length > 0 ? `Unknown token .` : null;
-};
+const tokenError = () => unknownTokenError(rule.value.nameTemplate);
 </script>
 
 <template>

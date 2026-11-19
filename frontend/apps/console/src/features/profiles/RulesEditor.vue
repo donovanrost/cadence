@@ -25,7 +25,14 @@ import {
 } from "@/ui";
 import RuleForm from "./RuleForm.vue";
 import type { ProfileDetail } from "./detail.ts";
-import { draftProblems, newRule, toDocument, toDrafts, type RuleDraft } from "./rulesDraft.ts";
+import {
+  draftProblems,
+  newRule,
+  rulePathWords,
+  toDocument,
+  toDrafts,
+  type RuleDraft,
+} from "./rulesDraft.ts";
 import { describePreview } from "./sectionEdit.ts";
 
 /** P2 edit: the whole rule list as one staged change at `routing_rules` (domain P2). */
@@ -50,12 +57,15 @@ const failure = useStageFailure([drafts, rollout]);
 const problems = computed(() => draftProblems(drafts.value));
 if (drafts.value.length === 0) drafts.value.push(newRule([]));
 
-/** Rejections name the field (`routing_rules.0.stations` etc.), per U20 nothing changed. */
+/**
+ * A rejection opens with the act (designers §3, #307) and names each rule and field by its label
+ * (Profile.md P2), never the server's path (`routing_rules.0.stations`).
+ */
 function rejected(error: ApiError, verb: "staged" | "changed") {
   const detail = invalidOpDetails(error);
-  return detail
-    ? `Nothing was ${verb}. ${detail.errors.map((e) => `${e.path}: ${e.message}`).join(" · ")}`
-    : failureOutcome(error, verb).sentence;
+  if (!detail) return failureOutcome(error, verb).sentence;
+  const why = detail.errors.map((e) => `${rulePathWords(e.path, drafts.value)}: ${e.message}`);
+  return `Not ${verb}: ${why.join(" · ")}`;
 }
 
 const op = (): StageOp => ({
