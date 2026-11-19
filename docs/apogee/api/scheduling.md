@@ -40,6 +40,8 @@ S4 edits/alternatives and S8 re-plan (K2 v1: after provider changes) are also in
    `pending_approval` and returns `state: pending_approval` (the UI shows "waiting for an admin").
    Unsatisfied or conflicting drafts return `422 plan_not_ready` with the coverage, so K1 can show
    what blocks submit. Relaxing either rule is a domain/director call.
+   *Superseded 2026-11-19 (#257, director): submit only submits for everyone, and approving is
+   its own action, `POST .../approve` (§4).*
 4. **Policy prerequisite.** Drafting needs an active fleet planning policy and at least one active
    requirement in the window. Missing either → `422 planning_not_set_up` (`details.missing`), and
    readiness should surface it. There's no console setup for policies yet. Is that a Setup gap
@@ -197,29 +199,80 @@ Resumes an interrupted run off the request and returns `202 {run_id, state: "run
 
 ### `POST /contact-plans/:plan_id/submit` (S5)
 
-Body `{expected_version, operation_id, reason?, acknowledgements?: [{requirement_id,
-requirement_version?, reason}]}`. `operation_id` is 1–120 bytes. `reason` defaults to a console note; acknowledgement reasons are
-10–2000 characters. `requirement_version` is accepted and ignored, because the server pins the
-version from the plan.
+**Since 2026-11-19 (#257, director): submit only submits**, for members and admins alike, under
+either approval setting. Approving is its own action, `POST .../approve` (below). Under 'direct'
+an admin's submit used to approve and book in one step (`202`); it now answers `200` like
+everyone's. ux's one act for a 'direct' admin ("Approve and book N passes") is the console
+calling submit, then approve, and both are recorded.
 
-| Caller | What happens | Response |
+Body `{expected_version, operation_id, note?, acknowledgements?: [{requirement_id,
+requirement_version?, reason}]}`. `operation_id` is 1–120 bytes. `note` is optional (at most
+2,000 characters after trimming; blank is none). Acknowledgement reasons are 10–2000 characters;
+`requirement_version` is accepted and ignored, because the server pins the version from the plan.
+The submitter's acknowledgements are recorded on their submission round. `decision_note` is
+refused here (`422 invalid_params`): it belongs to approve.
+
+| Request | What happens | Response |
 | --- | --- | --- |
-| member | draft → `pending_approval` (an admin reviews it) | `200 {plan_id, state: "pending_approval", outcome: "pending_approval"}` |
-| org admin | submit (if draft) → approve with the acknowledgements → execute **off the request** | `202 {plan_id, state: "executing", outcome: "executing"}`, then `scheduling_progress {kind: "execute"}` |
-| replay (same `operation_id` on this plan) | nothing | `200 {plan_id, state, outcome: "replayed"}` |
-
-An admin calling submit on a member's `pending_approval` plan is the review: it approves and
-executes. Per-item booking states show up in S1 passes and the plan detail.
+| a draft (or a sent-back draft) | → `pending_approval` | `200 {plan_id, version, state: "pending_approval", outcome: "pending_approval", replayed: false}`. `version` is the version put up for approval: a sent-back draft cuts the next one (below), so approve with this `version` |
+| a plan already `pending_approval` | nothing | `409 plan_already_submitted`, `details: {submitted_by: {id, name}, submitted_at}` (both or neither) |
+| the same request again (same `operation_id`, actor and normalized body) | nothing new | the **original** status and body with `replayed: true` |
 
 Errors:
-- `422 plan_not_ready`: unmet requirements without acknowledgements, any conflict, or an empty plan.
-  `details: {unmet, conflicts}`, as in the plan detail.
-- `422 acknowledgements_required` (`details.missing: [requirement_id]`): some, not all, unmet
-  requirements were acknowledged.
-- `422 invalid_params`: body shape, a reason outside 10–2000, or an acknowledgement for a
-  requirement that isn't unmet.
-- `409 plan_changed` (stale `expected_version`), `409 plan_not_submittable`,
-  `409 operation_conflict` (operation id used on another plan), `404 plan_not_found`.
+- `409 plan_already_submitted` (above). Was a silent `200` before #257.
+- `409 duplicate_operation` (`details.plan_id`): this `operation_id` was used on this plan by a
+  different request (another actor, another body, or the other action). Nothing changed.
+- `409 operation_conflict`: the operation id was used on another plan.
+- `409 plan_changed` (stale `expected_version`), `409 plan_not_submittable`, `404 plan_not_found`.
+- `422 invalid_params`: body shape, `decision_note`, a note over 2,000 characters.
+
+Submitting doesn't check coverage: approve does (`plan_not_ready`, `acknowledgements_required`).
+
+**Replays (both submit and approve).** Each request records its operation in the same
+transaction as the submit or the decision, after the plan row lock: (organization, mission,
+`operation_id`) → the action, the plan, the actor, a SHA-256 of the normalized body
+(`expected_version`; the note trimmed, blank as none; acknowledgements sorted by
+`requirement_id`, reasons trimmed) and the original answer. A request whose operation id is
+known gets the original answer with `replayed: true` when the action, plan, actor and body digest
+match; otherwise `409 duplicate_operation` (`409 operation_conflict` for another plan). A replay
+starts nothing again. A rolled-back request records no operation, so its retry runs for real.
+
+### `POST /contact-plans/:plan_id/approve` (#257)
+
+The approver's decision on a plan waiting for approval: the only console path that approves.
+Org admins (`approve_contact_plans`). Body `{expected_version, operation_id, decision_note?,
+acknowledgements?}`:
+- `expected_version`: the version the approver saw (after a submit, the `version` it returned).
+- `decision_note`: optional, at most 2,000 characters after trimming; recorded as the approval's
+  reason, `NULL` when blank or absent (U76).
+- `acknowledgements`: the **approver's** acknowledgements of unmet requirements, recorded on the
+  approval (`approval.exceptions`). Required when the version has unmet requirements.
+
+`202 {plan_id, version, state: "executing", outcome: "approved", replayed: false}` once the
+approval is committed, then booking runs **off the request** (`scheduling_progress {kind:
+"execute"}`). The approval records the approval policy in force, from the same read as the
+separation check (#226(b)).
+
+Errors:
+- `403 contact_plan_self_approval_forbidden`, `details: {because: "submitted" | "edited"}`: under
+  'independent' approval, the approver submitted this version (`submitted`, which wins when both
+  apply) or authored it (`edited`: the version's `created_by`; for a drafted plan, the drafter).
+  Nothing is recorded or booked.
+- `403 forbidden`: not an org admin.
+- `409 plan_not_pending`, `details: {state, decided_by: {id, name}, decided_at}` (the decision
+  pair both or neither): the plan isn't waiting for approval (already approved or sent back, or a
+  draft). A second, concurrent approve of the same plan gets this (the plan row lock serialises
+  them), unless it is the same request, which replays.
+- `409 plan_changed`: `expected_version` isn't current, or the content changed.
+- `409 duplicate_operation`, `409 operation_conflict`: as for submit.
+- `422 plan_not_ready` (`details: {unmet, conflicts}`), `422 acknowledgements_required`
+  (`details.missing`), `409 plan_superseded`, `422 invalid_params`, `404 plan_not_found`.
+
+**`approval_setting`** (#257): the plan detail and each plans-list row carry the mission's
+approval setting at read time, `"direct"` or `"independent"`, so the console offers the right
+act. `"independent"`: a second person approves (the submitter and the version's author can't).
+Approve's `403` stays the backstop, because the setting can change between the read and the
+click.
 
 Acknowledgements are stored on the approval (`approval.exceptions`) with its actor and time
 (DECISIONS #28). Plan detail carries the latest decision on the shown version as `approval`:
@@ -233,15 +286,14 @@ requirement.
 Submitting a draft whose current version was sent back (its latest decision is `rejected`) is
 allowed as is: the server cuts the next version with the same selected and locked passes
 (`rationale: "Resubmitted after send back"`) and submits that. The rejection stays on the old
-version. Send the `expected_version` you were shown (the sent-back one); the reply is the usual
-`{plan_id, state, outcome}`, so re-read the plan for the new `version`. Approved or undecided versions submit as before.
+version. Send the `expected_version` you were shown (the sent-back one); the reply's `version`
+is the new one (#257), so approve with it. Undecided drafts submit as before.
 
-The lock, the version check, the cut, the submit and the round record are one transaction: a
-second click with the same `expected_version` gets `409 plan_changed` and never cuts another
-version.
+The lock, the operation check, the version check, the cut, the submit, the round record and the
+operation record are one transaction: a second click with a new operation id finds the plan
+pending and gets `409 plan_already_submitted`; it never cuts another version.
 
-Submit takes an optional `note` (one line, at most 500 characters: what changed, for the
-reviewer). Plan detail carries the review rounds:
+Submit takes an optional `note` (at most 2,000 characters: what changed, for the reviewer). Plan detail carries the review rounds:
 
 - `submission`: `{round, actor: {kind, id, name}, at, note, unchanged} | null`, the round that
   submitted the shown version. `unchanged`: the selected and locked passes equal the previous
@@ -304,8 +356,8 @@ moment; `details.decided_by: {kind, id, name} | null` names them ("already decid
 
 Body `{expected_version, reason}`. For a plan in `pending_approval`: an approver
 (`approve_contact_plans`) sends it back. The plan returns to `draft` (its author can edit and
-resubmit), and the decision is recorded as a rejected approval with the reason. Approving goes
-through S5 submit. Returns `200` plan detail (`state: "draft"`). Errors: `422 invalid_params`
+resubmit), and the decision is recorded as a rejected approval with the reason. Approving is
+`POST .../approve` (#257). Returns `200` plan detail (`state: "draft"`). Errors: `422 invalid_params`
 (`expected_version`, `reason` is required), `409 plan_changed` (another version is current),
 `409 plan_not_pending`, `404 plan_not_found`, `403 forbidden`.
 
