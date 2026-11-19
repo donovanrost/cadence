@@ -71,7 +71,7 @@ on success. JSON views are in `W/api/*_json.ex`. Every `…` row passes `authori
 | Contacts | `GET …/realized_contacts/:id/runtime`, `/:id/paths/:path_id/runtime` | RealizedContact | `Runtime.realized_contact_snapshot`, `path_runtime_snapshot` | live runtime snapshot |
 | Contacts | `GET …/contact_actions` | ContactAction | `Contacts.list_contact_actions` | |
 | Activations | `POST …/activations`; `GET …/activations/active` | Activation | `MissionModels.request_promotion`, `Control.Activations.fetch_active_basis` | |
-| Activations | `GET …/activation_requests`, `/:id`; `POST /:id/approve`, `/:id/reject` | Activation | `Management.Activations.{list,fetch,approve,reject}`, `Control.Activations.execute` | services can't approve |
+| Activations | `GET …/activation_requests`, `/:id`; `POST /:id/approve`, `/:id/reject` | Activation | `Management.Activations.{list,fetch,approve,reject}`, `Control.Activations.execute` | services can't approve; approve answers `outcome: applied \| needs_review` once the approval is recorded (#263) |
 
 ## 3. Browser JSON bridges
 

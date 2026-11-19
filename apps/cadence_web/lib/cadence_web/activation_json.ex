@@ -67,13 +67,24 @@ defmodule CadenceWeb.ActivationJSON do
     }
   end
 
-  @spec approval_result(ActivationRequest.t(), ActivationDecision.t(), ActivationExecution.t()) ::
-          map()
-  def approval_result(request, decision, execution) do
+  @doc """
+  The approve answer once the approval is recorded (#263): `outcome` is `applied` when the apply
+  succeeded, else `needs_review` (it failed, didn't finish, or couldn't start; `execution` is null
+  when none was recorded). Never a refusal: the approval stands.
+  """
+  @spec approval_result(
+          ActivationRequest.t(),
+          ActivationDecision.t(),
+          ActivationExecution.t() | nil,
+          binary()
+        ) :: map()
+  def approval_result(request, decision, execution, outcome)
+      when outcome in ["applied", "needs_review"] do
     %{
       request: request(request),
       decision: decision(decision),
-      execution: execution(execution)
+      execution: execution && execution(execution),
+      outcome: outcome
     }
   end
 
