@@ -66,7 +66,8 @@ defmodule CadenceWeb.Console.ApproveRefusals do
   #236 and #280 (one code, ux U100): who made this can't be established. `details.service` picks
   the line: null (or absent) for #236's unreadable configuration authors, U94's line; a service
   (`{id, name}`) with nobody recorded as accountable for it, U100's line naming it (never its id,
-  U25; a null name reads "the service identity that requested this").
+  U25; a null name reads "a service identity involved in this request", ux's U100 amendment for
+  activations: the unknown service can be the requester or a version's author).
   """
   @spec authors_unknown(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def authors_unknown(conn, %{} = details) do
@@ -81,7 +82,7 @@ defmodule CadenceWeb.Console.ApproveRefusals do
   defp unknown_line(%{name: name}) when is_binary(name) and name != "",
     do: service_line(name)
 
-  defp unknown_line(%{}), do: service_line("the service identity that requested this")
+  defp unknown_line(%{}), do: service_line("a service identity involved in this request")
   defp unknown_line(_no_service), do: @authors_unknown
 
   defp service_line(who),

@@ -203,7 +203,7 @@ defmodule CadenceWeb.Console.ActivationAuthorRefusalAPITest do
     # A service whose name can't be read is never shown by its id (U25).
     assert %{
              "error" => %{
-               "message" => "Not approved: the service identity that requested this" <> _
+               "message" => "Not approved: a service identity involved in this request" <> _
              }
            } =
              build_conn()

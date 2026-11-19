@@ -142,7 +142,8 @@ Errors:
     identities). `details: {service: {id, name}}`. U100's line names the service, never its id
     (U25): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't
     be approved yet. An org admin records who's accountable in People › Service identities. Your
-    approval wasn't recorded."; a null `name` reads "the service identity that requested this".
+    approval wasn't recorded."; a null `name` reads "a service identity involved in this request" (ux's U100 amendment: the
+    service can be the requester or a version's author).
   - A version saved under a service's id counts as that service's accountable people for
     `activation_approver_authored_content`. REST activations carry no details.
 - `409 activation_policy_changed` (approve only; reject always works): the activation policy
