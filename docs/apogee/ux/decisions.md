@@ -4028,20 +4028,20 @@ can look again. Words only; no build yet.
 Not a crit: nothing is wrong, a person's call may simply be out of date.
 - **Decision words** (U80's Record states, as acts; `decision.kind`):
   - mark_conflict: "marked it as a conflict"; mark_advisory: "kept it for reference only"; mark_superseded: "marked it
-    as replaced"; a promote: "made it the record Cadence uses".
+    as replaced"; mark_canonical (a promote): "made it the record Cadence uses".
   - A kind the console doesn't know: "decided on it" (the kind in Technical details, never the raw word).
 - **Now item**, one per point, collecting the samples that got a newer revision since the item was raised:
   - Title: `EARENDIL-004 · EPS.batt_voltage · a decided sample has a newer revision` / `… · 3 decided samples have a
     newer revision`.
   - Meta: `FIRST 02:08:11Z · LAST 02:14:40Z · DECIDED BY MIRA K.` (sample times; "DECIDED BY 2 PEOPLE" when several).
   - Body, one sample: "Mira K. marked the 02:08:11Z sample as a conflict at 11-18 03:40Z. A newer revision of it
-    arrived at 11-19 05:40Z from replay run 14. Cadence still follows Mira K.'s decision, so the newer revision isn't
-    used. Look at both, and keep the decision or change it."
+    arrived at 11-19 05:40Z from the 11-19 backfill. Cadence still follows Mira K.'s decision, so the newer revision
+    isn't used. Look at both, and keep the decision or change it."
   - Several: "3 samples that operators decided have a newer revision. Cadence still follows each decision, so the
     newer revisions aren't used. Look at each, and keep the decision or change it." with `Show all 3` listing each as
     "02:08:11Z · marked as a conflict by Mira K. at 11-18 03:40Z · newer revision 11-19 05:40Z".
-  - The source of the revision is named when the read has it ("from replay run 14", "from the 11-19 backfill");
-    without one the clause drops (U20). The decider and the time are one event (U29); a nameless person drops the name
+  - The source of the revision is named when the read has it ("from the 11-19 backfill"; late or corrected data
+    too, never a replay, whose samples are their own, domain); without one the clause drops (U20). The decider and the time are one event (U29); a nameless person drops the name
     ("marked … as a conflict at 11-18 03:40Z"), never an id (U25); a service gets "(a service identity)" (U103).
   - Actions: `Review` opens the sample (U80's aside, at that time, with all revisions shown) for one sample; `Show
     all 3` for several. `Keep the decisions` (`Keep the decision`) for anyone who can decide: an acknowledgement, it
@@ -4060,5 +4060,8 @@ Not a crit: nothing is wrong, a person's call may simply be out of date.
 - **Data asks (domain → api; for the build, not now):** per item mission, spacecraft and point (names), and per
   sample `{sample_at, decision {kind, by {kind, name}, at, decision_event_id}, newer_revision {arrived_at, source
   label | null}}`, plus `viewer_can_decide` and the kept acknowledgement `{by, at}`. The Record row needs the same
-  `decision` and `newer_revision` on U80's one-sample read. Domain confirms the claim "the newer revision isn't used"
-  holds for every decision kind (exclusions leave the sample out; a promote keeps the promoted copy), before build.
+  `decision` and `newer_revision` on U80's one-sample read. `newer_revision.arrived_at` is the state's `last_seen_at`
+  when `latest_revision` > `canonical_revision` (domain).
+- **"The newer revision isn't used" holds for every kind only once #369 is fixed as widened** (domain 11-19): an
+  exclusion leaves out every sample of the identity; a promote keeps its `canonical_*` columns, which today a newer
+  revision moves. U106 isn't built before #369 lands.
