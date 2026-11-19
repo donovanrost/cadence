@@ -223,6 +223,23 @@ dev reset recreates them, DECISIONS #112).
   - Fix: the description reads only server-built keys, and the REST route reserves every key the server
     builds (better: an allowlist of client keys).
 
+- **SC-2 (medium; C4-adjacent, checklist 9; relates to #122): REST creates spacecraft outside change sets.**
+  - `POST /api/organizations/:org/missions/:m/spacecraft` (`spacecraft_controller.ex:28`) calls
+    `SpacecraftStore.persist_spacecraft/2` directly. That means:
+    - no change set and no review;
+    - no same-SCID HOLD: `scid_shared_in_organization` lives only in the change-set kinds
+      (`spacecraft/config_kinds/scid_holds.ex`);
+    - no actor recorded.
+  - `authorize_mission` is `:manage_mission` = `operate_mission`, so any operator, or a service bound to
+    the mission, can do it.
+  - Fix: route REST creation through a change set like the console, or retire the route with #122's
+    legacy writes. Until then, mark it `# todo(authz):`.
+- **SC-3 (low; correctness): a REST create that conflicts answers 201 with data that wasn't stored.**
+  `persist_spacecraft/2` inserts with `on_conflict: :nothing` on `(mission_id, spacecraft_id)`, but
+  returns the caller's struct, not the stored row. Re-posting an existing id with a different SCID answers
+  `201` with the new SCID while the old row stands. Fix: re-read the stored row (checklist 7), or refuse
+  `409` on conflict. Also, `persist_spacecraft/1` (no organization) has no callers left: delete it.
+
 _(Audit in progress: drafts and reviews, the forced approval on a legacy conversion batch, the same-SCID
 HOLD, change-set authorship.)_
 
