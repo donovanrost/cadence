@@ -72,7 +72,8 @@ async function acknowledge() {
       {{ ingressMeta(attention) }}
     </p>
     <p v-if="canAck && !access.abort" class="m-0 text-sm text-text-3">{{ NO_ACCESS_ACK_LOST }}</p>
-    <p v-if="note" class="m-0 text-sm text-caution-text">{{ note }}</p>
+    <!-- a11y B6 (#243): the note is this act's refusal or failure, announced as an alert. -->
+    <p v-if="note" role="alert" class="m-0 text-sm text-caution-text">{{ note }}</p>
     <!-- ux U47: the journal, stream and raw error live here only, never in the copy. -->
     <details v-if="technical.length" class="text-xs text-text-3">
       <summary class="cursor-pointer font-mono uppercase">Technical details</summary>

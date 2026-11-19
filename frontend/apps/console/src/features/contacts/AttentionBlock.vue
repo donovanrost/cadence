@@ -30,6 +30,9 @@ const acknowledged = computed(() => props.attention.state === "acknowledged");
 const planDay = computed(() => props.attention.starts_at?.slice(0, 10));
 
 const busy = ref(false);
+/** a11y A7 (#243): which act runs, for its buttons' disabled reason. */
+const acting = ref<"acknowledge" | "resolve">("acknowledge");
+const busyWord = computed(() => (acting.value === "resolve" ? "Resolving…" : "Acknowledging…"));
 const notice = ref<{ tone: "caution" | "info"; text: string } | null>(null);
 
 function settle(o: AttentionOutcome, done: string): boolean {
@@ -53,6 +56,7 @@ function settle(o: AttentionOutcome, done: string): boolean {
 }
 
 async function acknowledge() {
+  acting.value = "acknowledge";
   busy.value = true;
   try {
     settle(await acknowledgeAttention(props.missionId, props.attention), "Acknowledged.");
@@ -80,6 +84,7 @@ async function resolve() {
     fieldError.value = "Say what you did.";
     return;
   }
+  acting.value = "resolve";
   busy.value = true;
   try {
     const o = await resolveAttention(props.missionId, props.attention, text);
@@ -123,15 +128,27 @@ async function resolve() {
           size="compact"
           variant="secondary"
           :disabled="busy"
+          :disabled-reason="busyWord"
           @click="acknowledge"
           >Acknowledge</ApButton
         >
-        <ApButton size="compact" variant="primary" :disabled="busy" @click="openResolve"
+        <ApButton
+          size="compact"
+          variant="primary"
+          :disabled="busy"
+          :disabled-reason="busyWord"
+          @click="openResolve"
           >Resolve…</ApButton
         >
       </div>
     </ApCallout>
-    <ApCallout v-if="notice" :tone="notice.tone">{{ notice.text }}</ApCallout>
+    <!-- a11y B6 (#243): a result (info) is a status; a refusal (caution) is an alert. -->
+    <ApCallout
+      v-if="notice"
+      :tone="notice.tone"
+      :role="notice.tone === 'info' ? 'status' : 'alert'"
+      >{{ notice.text }}</ApCallout
+    >
     <dialog
       ref="dialog"
       :aria-labelledby="titleId"
@@ -154,7 +171,9 @@ async function resolve() {
         />
         <footer class="flex items-center justify-end gap-2 border-t border-hairline pt-3">
           <ApButton variant="ghost" type="button" @click="dialog?.close()">Cancel</ApButton>
-          <ApButton variant="primary" type="submit" :disabled="busy">Resolve</ApButton>
+          <ApButton variant="primary" type="submit" :disabled="busy" :disabled-reason="busyWord"
+            >Resolve</ApButton
+          >
         </footer>
       </form>
     </dialog>

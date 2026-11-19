@@ -25,6 +25,7 @@ const props = defineProps<{
   returnFocus?: (() => HTMLElement | null) | undefined;
 }>();
 const closeConsequence = useId();
+const retryConsequence = useId();
 const emit = defineEmits<{ done: [item: Attention | null] }>();
 
 const retrySheet = ref<InstanceType<typeof ApSheet> | null>(null);
@@ -83,10 +84,19 @@ defineExpose({ openRetry, openClose });
 </script>
 
 <template>
-  <!-- a11y A1: a danger sheet opens on its safe button (Cancel, first in the footer). -->
-  <ApSheet ref="retrySheet" title="Retry this job?" width="narrow" :return-focus="returnFocus">
+  <!-- a11y A1: a danger sheet opens on its safe button (Cancel, first in the footer), so the sheet
+       is described by its sentence, read on open (ux, #397). -->
+  <ApSheet
+    ref="retrySheet"
+    title="Retry this job?"
+    width="narrow"
+    :described-by="retryConsequence"
+    :return-focus="returnFocus"
+  >
     <p class="m-0 font-semibold text-readout">{{ noun }}</p>
-    <p v-if="target" class="m-0 text-md text-text-2">{{ retryBody(target) }}</p>
+    <p v-if="target" :id="retryConsequence" class="m-0 text-md text-text-2">
+      {{ retryBody(target) }}
+    </p>
     <label v-if="target" class="flex items-start gap-2 text-md text-text-2">
       <input
         v-model="checked"

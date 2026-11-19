@@ -57,7 +57,8 @@ async function act() {
       {{ settlement.tried }}
     </p>
     <p v-if="action && !access.abort" class="m-0 text-sm text-text-3">{{ action.noAccess }}</p>
-    <p v-if="note" class="m-0 text-sm text-caution-text">{{ note }}</p>
+    <!-- a11y B6 (#243): the note is this act's refusal or failure, announced as an alert. -->
+    <p v-if="note" role="alert" class="m-0 text-sm text-caution-text">{{ note }}</p>
     <template v-if="action && access.abort" #action>
       <ApButton size="compact" :disabled="busy" @click="act">{{ action.label }}</ApButton>
     </template>

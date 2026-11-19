@@ -131,7 +131,7 @@ const onToggle = (e: Event) => {
       <ApButton v-if="cursor" size="compact" variant="ghost" class="self-start" @click="showEarlier"
         >Show earlier</ApButton
       >
-      <p v-if="moreError" class="m-0 text-caution-text">{{ moreError }}</p>
+      <p v-if="moreError" role="alert" class="m-0 text-caution-text">{{ moreError }}</p>
       <p v-if="c.truncated" class="m-0">More paths, sources or intents than shown.</p>
     </div>
   </component>

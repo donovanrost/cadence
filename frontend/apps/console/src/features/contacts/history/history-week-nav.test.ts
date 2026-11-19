@@ -14,7 +14,7 @@ describe("History week nav (U78)", () => {
     });
     const picker = w.getComponent(ApTimePicker);
     // The picker has its own status line; the refusal is the nav's, after it.
-    const refusal = () => w.findAll('[role="status"]').at(-1)?.text();
+    const refusal = () => w.findAll('[role="alert"]').at(-1)?.text();
     // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the picker's emit; the lint type service can't resolve SFC instances.
     picker.vm.$emit("update:modelValue", Date.parse("2026-11-20T00:00:00Z"));
     await nextTick();

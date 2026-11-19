@@ -99,7 +99,9 @@ async function release() {
       <ApCallout v-if="queuedLine" tone="caution">{{ queuedLine }}</ApCallout>
       <template #footer>
         <ApButton variant="ghost" @click="sheet?.close()">Cancel</ApButton>
-        <ApButton variant="danger" :disabled="busy" @click="release">Release pass</ApButton>
+        <ApButton variant="danger" :disabled="busy" disabled-reason="Releasing…" @click="release"
+          >Release pass</ApButton
+        >
       </template>
     </ApSheet>
   </div>

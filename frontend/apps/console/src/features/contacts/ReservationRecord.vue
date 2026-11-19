@@ -108,7 +108,7 @@ const onToggle = (e: Event) => {
       <ApButton v-if="cursor" size="compact" variant="ghost" class="self-start" @click="showEarlier"
         >Show earlier</ApButton
       >
-      <p v-if="moreError" class="m-0 text-caution-text">{{ moreError }}</p>
+      <p v-if="moreError" role="alert" class="m-0 text-caution-text">{{ moreError }}</p>
     </div>
   </details>
   <!-- Its contact id comes from the reservation, so opening it reads the reservation too. -->
