@@ -50,6 +50,13 @@ const spacecraft = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
 );
 const nameOfSc = (id: string) => spacecraft.value.find((s) => s.id === id)?.name ?? id;
+/** a11y B6 (#243): the filtered result, for the always-present status line. */
+const resultSaid = computed(() => {
+  const s = groups.state.value;
+  return isFiltered.value && s.status === "ready"
+    ? resultLine(filters.value, rows.value.length, s.value.next !== null, nameOfSc)
+    : "";
+});
 /** ux U72: after Load more, focus goes to the first new row's link. */
 const list = ref<HTMLElement | null>(null);
 async function loadMore() {
@@ -124,11 +131,14 @@ const EMPTY: Readonly<Record<CommandTab, string>> = {
       @stages="(st) => setFilter('stage', st.join(',') || null)"
       @clear="clearFilters"
     />
+    <!-- a11y B6 (#243): the result is said from a line that's always there (the visible one remounts
+         with each filter, and a live region inserted with its text often isn't read). -->
+    <p class="sr-only" role="status">{{ resultSaid }}</p>
     <!-- ux U69 A5a / U72: while filtered, the tabs give way to one line naming the result. -->
     <p
       v-if="isFiltered && groups.state.value.status === 'ready'"
+      aria-hidden="true"
       class="m-0 font-mono text-sm text-text-2"
-      aria-live="polite"
     >
       {{ resultLine(filters, rows.length, groups.state.value.value.next !== null, nameOfSc) }}
     </p>

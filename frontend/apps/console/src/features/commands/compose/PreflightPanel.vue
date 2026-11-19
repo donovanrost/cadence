@@ -56,7 +56,8 @@ const meta = computed(() =>
       headline="Nothing to check yet"
       sentence="Add targets and valid commands; the server checks identity, catalog, conflicts, contact and two-person."
     />
-    <ApCallout v-else-if="state.status === 'failed' && !checking" tone="caution">
+    <!-- a11y B6 (#243): checks that couldn't run, after an edit or Check again, are an alert. -->
+    <ApCallout v-else-if="state.status === 'failed' && !checking" tone="caution" role="alert">
       Couldn't run the checks: {{ describeApiError(state.error) }}
       <template #action
         ><ApButton size="compact" @click="$emit('retry')">Check again</ApButton></template

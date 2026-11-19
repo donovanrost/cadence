@@ -298,7 +298,7 @@ const close = computed((): RouteLocationRaw =>
           @keep-mine="saved.keepMine"
           @retry="saved.retry"
         />
-        <ApCallout v-if="resend.notice.value" :tone="resend.notice.value.tone">{{
+        <ApCallout v-if="resend.notice.value" v-bind="resend.notice.value.callout">{{
           resend.notice.value.text
         }}</ApCallout>
         <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
@@ -320,7 +320,7 @@ const close = computed((): RouteLocationRaw =>
               @change="(q) => (query = q)"
             />
           </ApRemote>
-          <ApCallout v-if="addError" tone="caution"
+          <ApCallout v-if="addError" tone="caution" role="alert"
             >Couldn't add that command: {{ addError }}</ApCallout
           >
           <StackPanel

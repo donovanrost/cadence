@@ -12,7 +12,8 @@ defineEmits<{ check: [] }>();
     Not sent. Nothing changed: {{ state.message }}
     <template v-if="state.stale"> The checks ran again; review them and send.</template>
   </ApCallout>
-  <ApCallout v-else-if="state.status === 'unclear'" tone="caution">
+  <!-- a11y B6 (#243): an unclear send is the person's act gone wrong: an alert, whatever its tone. -->
+  <ApCallout v-else-if="state.status === 'unclear'" tone="caution" role="alert">
     It's unclear whether this was sent ({{ state.message }}). Check before sending again.
     <template #action><ApButton size="compact" @click="$emit('check')">Check</ApButton></template>
   </ApCallout>

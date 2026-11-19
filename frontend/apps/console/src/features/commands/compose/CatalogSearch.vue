@@ -23,6 +23,16 @@ const catalog = useRemoteQuery(
   computed(() => ({ m: scope.value.mission.id, q: term.value })),
   (k, signal) => fetchCatalog(k.m, k.q, signal),
 );
+/**
+ * a11y B6 (#243): a search with no matches is a result, said from a status line that's always
+ * there (the list itself remounts with each search).
+ */
+const noMatch = computed(() => {
+  const s = catalog.state.value;
+  return s.status === "ready" && s.value.state !== "not_active" && s.value.commands.length === 0
+    ? `No commands match “${term.value}”.`
+    : "";
+});
 function addFirst() {
   const s = catalog.state.value;
   const first = s.status === "ready" ? s.value.commands[0] : undefined;
@@ -41,6 +51,7 @@ function addFirst() {
         placeholder="Search the catalog, e.g. SET_"
       />
     </form>
+    <p class="sr-only" role="status">{{ noMatch }}</p>
     <ApRemote
       :state="catalog.state.value"
       loading-label="LOADING CATALOG…"
@@ -76,7 +87,11 @@ function addFirst() {
               }}</span>
             </button>
           </li>
-          <li v-if="value.commands.length === 0" class="px-3 py-2 text-md text-text-3">
+          <li
+            v-if="value.commands.length === 0"
+            aria-hidden="true"
+            class="px-3 py-2 text-md text-text-3"
+          >
             No commands match “{{ term }}”.
           </li>
         </ul>

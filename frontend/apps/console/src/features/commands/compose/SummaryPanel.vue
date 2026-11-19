@@ -99,7 +99,14 @@ const uplinks = computed(() => props.targets * props.commands);
         size="commit"
         class="w-full"
         :disabled="blocked !== null || submit.status === 'sending' || submit.status === 'checking'"
-        :disabled-reason="blocked ?? ''"
+        :disabled-reason="
+          blocked ??
+          (submit.status === 'sending'
+            ? 'Sending…'
+            : submit.status === 'checking'
+              ? 'Checking…'
+              : '')
+        "
         @click="$emit('send')"
       >
         {{
