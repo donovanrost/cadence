@@ -2315,7 +2315,8 @@ change set like any override. There's no separate routes editor.
         hold stands; see the checks." The 409 stays the backstop.
       - 409 `holds_blocking` (approve's own line; the stage/apply line stays): "Not approved: a blocking hold stands,
         so nothing was applied and the change set stays in review. Approve it once the hold clears; the checks show
-        it. Your approval wasn't recorded." The holds show in the checks, not in the line.
+        it. Your approval wasn't recorded." The holds show in the checks, not in the line. After it, Approve is disabled
+        with the up-front reason until a reload shows the hold cleared.
       - 409 `preview_failed` (Cadence couldn't run the checks: a database or connection error): "Not approved: Cadence
         couldn't run the checks, so nothing was applied and the change set stays in review. Try again; if it keeps
         happening, tell the team that runs Cadence for you. Your approval wasn't recorded." Unlike U95's usual rule,
