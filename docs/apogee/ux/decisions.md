@@ -3184,7 +3184,7 @@ override". Who may choose what comes from the read (`allowed_values`, `can_inher
 before a save, never only as a refusal (A6).
 
 - **Field states** (A6 reason under the field or on the disabled option):
-  - `allowed_values` missing from the read (ca-security's C1, fe-setup 444bb6363): the setting is read-only, its
+  - `allowed_values` missing or null in the read (ca-security's C1; fe-setup 444bb6363, 5b3eccb32): the setting is read-only, its
     current value still shown, and the field and the disabled Reset say "Cadence couldn't read who may change this
     setting, so it can't be changed here. Reload to try again. If it's still missing, tell the team that runs Cadence
     for you." (U86).
