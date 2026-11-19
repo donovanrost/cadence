@@ -15,17 +15,20 @@ unknown). Primary `Add spacecraft` (organization admins only).
   - Plane · slot
   - Routing rules (count; none: `none`, caution)
   - Setup (`Ready` with a nominal mark, or the caution tag `Incomplete`)
-  - Last heard (time; never heard: off mark + "Awaiting first AOS"; history down: "Not known right now")
+  - Last heard: the short time with its distance (design-language §4), `11-19 05:40Z · T+2h 14m` (`T+6m`, `T+4d`
+    beyond a day); never heard: off mark + "Awaiting first AOS"; history down: "Not known right now".
 - A missing profile name reads "Deleted profile" today. U25 allows "Deleted …" only where the server says so, so
   that waits on api confirming that null means deleted (**gap**, audit S2).
 - **Empty:** "No spacecraft yet" + "Add one spacecraft or a whole launch batch from a profile or a manifest." with
   `Add spacecraft`. Without the right: "An organization admin adds spacecraft to this mission." and no button.
 - **No match:** "No spacecraft match" + "Nothing matches “<query>”. Filter by name, SCID or profile."
-- **Telemetry history down** (caution, above the table): "Last received may be incomplete: the telemetry history
-  isn't answering, so only what arrived since the last restart shows."
+- **Telemetry history down** (caution, above the table): "Last heard may be incomplete: the telemetry history isn't
+  answering, so only what arrived since the last restart shows." The built line says "Last received". "Last heard"
+  is the one term (ux), so that's a **gap**.
 
 ## B · A spacecraft's page (`…/:spacecraftId`)
-Header: the spacecraft's name (U25: "Unknown spacecraft" when null), with the tag `Ready` (nominal) or `Incomplete`
+Header: the spacecraft's name and SCID (design-language §4: name + SCID on every target), `EARENDIL-312 · SCID 312`.
+With no name, "Unknown spacecraft" (U25); with no SCID, the name alone. The tag is `Ready` (nominal) or `Incomplete`
 (caution). Header actions:
 - `Open in Ops →` (U6), the spacecraft in Ops, today.
 - `Configuration`, the spacecraft's configuration workspace (U94), arrives with fe-ops' #285.
@@ -42,7 +45,9 @@ Panels:
 - **D5 Operation:** the Commanding and Telemetry switches (U40), each with who last set it (U101). Switches are
   staged **here** (ux, audit S1); turning one off opens U40's consequence sheet, and a staged switch shows `STAGED ·
   APPLIES WITH r7`. Today it's staged through `Edit`, with no sheet and no staged tag (**gap**, #309).
-- **S9 Apps:** the spacecraft-scope apps (U103).
+- **D6 Apps:** the spacecraft-scope apps (U103 calls this panel S9; its words are unchanged).
 - **Archive** (U40): `Archive <name>?` sheet and its holds.
-- Last heard, when the history is down: "Not known right now (history unavailable)".
+- Last heard, as in the directory: the short time with its distance, "Awaiting first AOS", or "Not known right now".
+  The built "Not known right now (history unavailable)" folds into that one form (**gap**; the history-down callout
+  says why).
 - A `Readiness` link in the header (legacy parity, U103) is a **gap**.
