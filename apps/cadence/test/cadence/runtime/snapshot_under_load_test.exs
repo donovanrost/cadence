@@ -62,4 +62,35 @@ defmodule Cadence.Runtime.SnapshotUnderLoadTest do
 
     :ok = :sys.resume(projector)
   end
+
+  # ca-security's review: the contact-level read also called DownlinkCombiner.snapshot raw.
+  test "a busy downlink combiner doesn't terminate the contact coordinator" do
+    c = start_tcp_contact!()
+
+    combiner =
+      GenServer.whereis(
+        MissionRuntime.downlink_combiner_name(c.mission_id, c.realized_contact_id)
+      )
+
+    coordinator =
+      GenServer.whereis(
+        MissionRuntime.realized_contact_coordinator_name(c.mission_id, c.realized_contact_id)
+      )
+
+    assert is_pid(combiner) and is_pid(coordinator)
+    monitor = Process.monitor(coordinator)
+    :ok = :sys.suspend(combiner)
+    on_exit(fn -> if Process.alive?(combiner), do: :sys.resume(combiner) end)
+
+    {micros, result} =
+      :timer.tc(fn -> Cadence.realized_contact_snapshot(c.mission_id, c.realized_contact_id) end)
+
+    assert {:error, :snapshot_timeout} = result
+    assert micros < 5_000_000
+
+    refute_received {:DOWN, ^monitor, :process, ^coordinator, _reason}
+    assert Process.alive?(coordinator)
+
+    :ok = :sys.resume(combiner)
+  end
 end

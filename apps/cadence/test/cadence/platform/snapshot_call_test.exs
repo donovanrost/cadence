@@ -26,7 +26,7 @@ defmodule Cadence.Platform.SnapshotCallTest do
     assert {:error, :not_running} = SnapshotCall.call(gone, :snapshot, :component)
   end
 
-  test "a server that crashes on the call is {:snapshot_failed, reason}" do
+  test "a server that crashes on the call is a bare :snapshot_failed (the reason is only logged)" do
     crashing =
       spawn(fn ->
         receive do
@@ -34,8 +34,24 @@ defmodule Cadence.Platform.SnapshotCallTest do
         end
       end)
 
-    assert {:error, {:snapshot_failed, _reason}} =
-             SnapshotCall.call(crashing, :snapshot, :component)
+    assert {:error, :snapshot_failed} = SnapshotCall.call(crashing, :snapshot, :component)
+  end
+
+  test "flow control keeps develop's 5 s: a slow-but-alive server answers it, not a component read" do
+    assert SnapshotCall.timeout(:flow_control) == 5_000
+
+    slow = fn ->
+      spawn(fn ->
+        receive do
+          {:"$gen_call", from, :snapshot} ->
+            Process.sleep(800)
+            GenServer.reply(from, {:ok, %{queue_depth: 3}})
+        end
+      end)
+    end
+
+    assert {:error, :snapshot_timeout} = SnapshotCall.call(slow.(), :snapshot, :component)
+    assert {:ok, %{queue_depth: 3}} = SnapshotCall.call(slow.(), :snapshot, :flow_control)
   end
 
   test "a reply passes through unchanged" do

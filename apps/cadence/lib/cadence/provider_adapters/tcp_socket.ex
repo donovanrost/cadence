@@ -1184,7 +1184,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   defp maybe_wait_for_executor_capacity(state) do
-    case ProviderIngressExecutor.snapshot(state.ingress_executor_name) do
+    # Flow control before every recv: develop's 5 s wait, exit caught (#334, fe-ops' review).
+    case ProviderIngressExecutor.snapshot(state.ingress_executor_name, :flow_control) do
       {:ok, snapshot} ->
         queue_depth = Map.get(snapshot, :queue_depth, 0)
 

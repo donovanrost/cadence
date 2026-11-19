@@ -119,11 +119,12 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     enqueue_many(executor, items)
   end
 
-  @spec snapshot(GenServer.server()) :: {:ok, map()} | {:error, term()}
-  def snapshot(executor) do
+  @spec snapshot(GenServer.server(), SnapshotCall.level()) :: {:ok, map()} | {:error, term()}
+  def snapshot(executor, level \\ :component) do
     # #334: a read never takes its caller down (a busy executor under load is :snapshot_timeout).
+    # The TCP receiver's flow control passes :flow_control (develop's 5 s), see SnapshotCall.
     with {:ok, pid} <- lookup(executor) do
-      SnapshotCall.call(pid, :snapshot, :component)
+      SnapshotCall.call(pid, :snapshot, level)
     end
   end
 
