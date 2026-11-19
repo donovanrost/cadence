@@ -3371,6 +3371,9 @@ groups, provider changes, qualification cases (no service authors them).
     submitted this plan, so another org admin approves it. Your approval wasn't recorded and nothing was booked."
   - `command_request_self_approval_not_allowed`: "Not approved: Nightly planner, a service identity you're
     accountable for, sent this command request, so another person gives the GO. Your approval wasn't recorded."
+  - `via_service` with a null `name` (an import run's recorded actor may have none): the name and its commas drop,
+    never an id (U25; the service's id goes in Technical details): "Not approved: a service identity you're accountable for imported this revision, so another
+    org admin approves it. Your approval wasn't recorded."
   - `via_service` null, or absent (an older server; decoders take it as optional and read absent as null): each
     kind's own line (U65, U94, U97, U87's family).
 - **403 `<kind>_approver_authors_unknown`** (api's shape: `activation_approver_authors_unknown` (#236's code),
@@ -3379,7 +3382,10 @@ groups, provider changes, qualification cases (no service authors them).
   `details.service` (null, never omitted; #236 sends null too), which picks the line:
   - `{id, name}` (a service whose accountable people aren't recorded; under an automation grant it can be the approving
     service): "Not approved: Nightly planner has no one recorded as accountable for it, so this can't be approved yet.
-    Your approval wasn't recorded. An org admin records who's accountable in People › Service identities."
+    Your approval wasn't recorded. An org admin records who's accountable in People › Service identities." With a
+    null `name`: "the service identity that imported this revision" (requested this, submitted this plan, sent this
+    command request; the approving one under a grant: "the service identity approving for this automation") in its
+    place, never an id (U25; the id goes in Technical details).
   - null (no service involved), or absent (an older server): the kind's own authors-unknown line (in #280 only
     activations can send null, via #236; the others are kept for safety and won't show today): U94's for activations ("Not approved: Cadence can't tell who
     saved this configuration…"). Kinds that had none get the same form: "Not approved: Cadence can't tell who made
@@ -3403,5 +3409,5 @@ groups, provider changes, qualification cases (no service authors them).
   - Recording accountable people (org admin): "What it does then counts as theirs, and as yours, for approvals."
   - The planning grant form: "On a mission that needs a second person's approval, this grant can't approve plans the
     service makes itself."
-- ca-ux's #281 entry (its number taken when that PR opens) holds the service identity's own refusals (create,
+- U104 (ca-ux, #281) holds the service identity's own refusals (create,
   rotate, revoke, list) and points here.
