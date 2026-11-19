@@ -2890,9 +2890,13 @@ and should never fire; when it does, something went round the product. NO-GO, se
   less "Not released:" since nothing was tried: "This group's commands changed after it was submitted (12 then, 13
   now), so it isn't what was reviewed. Give it NO-GO and submit the commands again. Tell the team that runs Cadence
   for you: a group shouldn't change after it's submitted." The reason sits muted under the GO buttons and as their
-  description. U92's line has no "nothing was released" ending to drop. `NO-GO`, send back and abort stay enabled. Without the counts the
-  bracket goes. When the flag is missing (an older server) the console blocks nothing up front and the 409 stays the
-  backstop; it never guesses from its own member list (U20).
+  description. U92's line has no "nothing was released" ending to drop. `NO-GO`, send back and abort stay enabled.
+  Without the counts the bracket goes.
+  - The read computes the flag with the same function as the GO refusal (api-ops), so the two never disagree. It
+    compares counts, not which commands, so the words say only that the commands changed.
+  - When the flag is missing (an older server, or a decided group: the server sends the three fields only while the
+    group awaits a decision), the console blocks nothing up front and the 409 stays the backstop; it never guesses
+    from its own member list (U20).
 - **Nowhere else:** it isn't on Now or in the audit by itself; only at GO.
 
 ### U91 · The runtime can't verify its configuration: telemetry, passes and who fixes it (11-17 Earendil incident; amends U38) (api / domain / api-ops / fe-ops)
