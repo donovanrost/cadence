@@ -24,6 +24,7 @@ defmodule Cadence.ContactPlanning.ProjectionRaceTest do
   alias Cadence.ContactPlanning.{ContactPlanExecutions, ContactPlans}
   alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
   alias Cadence.Management.Contacts.Store.ContactPlanRow
+  alias Cadence.TestSupport.DecisionRecordPurge
   alias Ecto.Adapters.SQL
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -133,41 +134,73 @@ defmodule Cadence.ContactPlanning.ProjectionRaceTest do
 
   defp run(operation), do: operation |> independent() |> Task.await(30_000)
 
-  # Everything the fixture committed carries this run's unique organization id. Delete it from
-  # every table with that column, retrying a table whose foreign keys still point at it until a
-  # pass deletes nothing more (at most 12 passes). Each delete runs on its own connection: a
-  # foreign-key refusal can drop the connection it ran on, never the cleanup.
+  # Everything the fixture committed carries this run's unique organization id. One transaction,
+  # on its own connection outside the sandbox:
+  # - DecisionRecordPurge turns on the test-only purge setting, which the decision tables'
+  #   append-only triggers honour only in a cadence_test database (P3 step 1);
+  # - SET CONSTRAINTS ALL DEFERRED defers the deferrable "current version" keys, which close the
+  #   only cycles (plans <-> versions, requirements <-> versions);
+  # - tables are deleted children first, by the non-deferrable foreign keys among them.
   defp delete_organization!(organization_id) do
-    tables =
-      run(fn ->
-        SQL.query!(
-          Repo,
-          "SELECT table_name FROM information_schema.columns " <>
-            "WHERE table_schema = 'public' AND column_name = 'organization_id' " <>
-            "AND table_name NOT LIKE 'schema_%'",
-          []
-        ).rows
-      end)
-      |> List.flatten()
+    run(fn ->
+      {:ok, :ok} =
+        DecisionRecordPurge.run(fn ->
+          SQL.query!(Repo, "SET CONSTRAINTS ALL DEFERRED", [])
 
-    Enum.reduce_while(1..12, tables, fn _pass, remaining ->
-      left = Enum.reject(remaining, &deleted?(&1, organization_id))
-      if left == [] or left == remaining, do: {:halt, left}, else: {:cont, left}
+          for table <- deletion_order() do
+            SQL.query!(Repo, ~s(DELETE FROM "#{table}" WHERE organization_id = $1), [
+              organization_id
+            ])
+          end
+
+          :ok
+        end)
     end)
-    |> case do
-      [] -> :ok
-      left -> flunk("cleanup left rows of #{organization_id} in: #{Enum.join(left, ", ")}")
-    end
   end
 
-  # Non-raising: a foreign-key refusal is an answer ("not yet"), not an exception that would drop
-  # the connection mid-cleanup.
-  defp deleted?(table, organization_id) do
-    run(fn ->
-      match?(
-        {:ok, _},
-        Repo.query(~s(DELETE FROM "#{table}" WHERE organization_id = $1), [organization_id])
+  defp deletion_order do
+    tables =
+      SQL.query!(
+        Repo,
+        "SELECT table_name FROM information_schema.columns " <>
+          "WHERE table_schema = 'public' AND column_name = 'organization_id' " <>
+          "AND table_name NOT LIKE 'schema_%'",
+        []
+      ).rows
+      |> List.flatten()
+      |> MapSet.new()
+
+    edges =
+      SQL.query!(
+        Repo,
+        "SELECT conrelid::regclass::text, confrelid::regclass::text FROM pg_constraint " <>
+          "WHERE contype = 'f' AND NOT condeferrable",
+        []
+      ).rows
+      |> Enum.filter(fn [child, parent] ->
+        child != parent and child in tables and parent in tables
+      end)
+
+    children_first(tables, edges, [])
+  end
+
+  # A table goes once no remaining table still references it.
+  defp children_first(remaining, edges, acc) do
+    if MapSet.size(remaining) == 0 do
+      Enum.reverse(acc)
+    else
+      ready =
+        Enum.reject(remaining, fn table ->
+          Enum.any?(edges, fn [child, parent] -> parent == table and child in remaining end)
+        end)
+
+      if ready == [], do: raise("foreign-key cycle among #{inspect(MapSet.to_list(remaining))}")
+
+      children_first(
+        MapSet.difference(remaining, MapSet.new(ready)),
+        edges,
+        Enum.reverse(ready, acc)
       )
-    end)
+    end
   end
 end
