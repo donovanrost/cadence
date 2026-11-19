@@ -14,7 +14,7 @@ import MobileSearchResults from "./MobileSearchResults.vue";
 import { MOBILE_GROUPS } from "./mobile.ts";
 import { recentItems, rememberOpened } from "./recent.ts";
 import { grouped, type Group, type PaletteItem } from "./results.ts";
-import { trapTab } from "./trapTab.ts";
+import { useTabTrap } from "./trapTab.ts";
 import { useMobileSearch } from "./useMobileSearch.ts";
 
 /**
@@ -63,6 +63,7 @@ onMounted(() => {
 onBeforeUnmount(() => returnFocus?.focus());
 /** a11y A3 (#243): an aria-modal div, so Tab is kept inside it by hand (a native <dialog> isn't). */
 const root = useTemplateRef<HTMLElement>("root");
+useTabTrap(root);
 </script>
 
 <template>
@@ -73,7 +74,6 @@ const root = useTemplateRef<HTMLElement>("root");
     aria-label="Search"
     class="fixed inset-0 z-50 flex flex-col bg-panel"
     @keydown.esc="emit('close')"
-    @keydown.tab="trapTab(root, $event)"
   >
     <div class="flex flex-none items-center gap-2 border-b border-hairline bg-chrome pl-4">
       <label for="phone-search" class="sr-only">Search</label>

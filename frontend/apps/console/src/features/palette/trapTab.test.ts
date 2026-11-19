@@ -1,5 +1,7 @@
+import { mount } from "@vue/test-utils";
+import { defineComponent, h, ref, useTemplateRef } from "vue";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { trapTab } from "./trapTab.ts";
+import { trapTab, useTabTrap } from "./trapTab.ts";
 
 /** a11y A3 (#243): the phone Search sheet keeps Tab inside it. */
 function sheet() {
@@ -47,5 +49,48 @@ describe("trapTab", () => {
     const stray = tab();
     trapTab(root, stray);
     expect(document.activeElement).toBe(q);
+  });
+});
+
+// dashboards #458: a control that removes itself (Show all N, Try again) drops focus to <body>;
+// the trap listens on the document, so the next Tab still comes back into the sheet.
+const Sheet = defineComponent({
+  setup() {
+    const root = useTemplateRef<HTMLElement>("root");
+    useTabTrap(root);
+    const more = ref(true);
+    return () =>
+      h("div", { ref: "root", role: "dialog", "aria-modal": "true" }, [
+        h("input", { id: "q" }),
+        more.value
+          ? h("button", { id: "all", onClick: () => (more.value = false) }, "Show all 9")
+          : null,
+        h("a", { id: "r", href: "#" }, "Result"),
+      ]);
+  },
+});
+
+describe("useTabTrap on a mounted sheet", () => {
+  it("brings Tab back into the sheet after a focused control removed itself", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    const w = mount(Sheet, { attachTo: document.body });
+    const all = w.get("#all");
+    if (all.element instanceof HTMLElement) all.element.focus();
+    await all.trigger("click");
+    expect(document.activeElement).toBe(document.body);
+    const press = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(true);
+    expect(document.activeElement?.id).toBe("q");
+    w.unmount();
+  });
+
+  it("stops listening once the sheet is gone", () => {
+    const w = mount(Sheet, { attachTo: document.body });
+    w.unmount();
+    const press = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(false);
   });
 });
