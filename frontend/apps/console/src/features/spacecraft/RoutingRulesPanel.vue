@@ -3,6 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useConfigState } from "@/features/changes/index.ts";
 import { ApButton, ApEmptyState, ApPanel, ApTable, ApTag, type ApColumn } from "@/ui";
+import LegacyConversionCallout from "./LegacyConversionCallout.vue";
 import OlderRouteRemove from "./OlderRouteRemove.vue";
 import RemoveRouteSheet from "./RemoveRouteSheet.vue";
 import { directionLabel, type RoutingRule } from "./detail.ts";
@@ -21,6 +22,8 @@ const props = defineProps<{
   canStage: boolean;
 }>();
 const active = computed(() => props.rules.filter((r) => r.active));
+/** ux U79 (TEMPORARY, deleted with 9ac6dc8ee): the conversion callout, above a list with legacy rows. */
+const hasLegacy = computed(() => props.rules.some((r) => r.origin === "legacy"));
 const routeOf = computed(() => actionRows(active.value));
 const remover = ref<InstanceType<typeof RemoveRouteSheet> | null>(null);
 /** ux U79: an older route whose removal is in the open set (inferred from it, per api/lead). */
@@ -59,6 +62,8 @@ function remove(rule: RoutingRule) {
     <div v-if="canStage" class="flex justify-end border-b border-hairline px-4 py-2.5">
       <ApButton size="compact" :to="{ query: { route: 'new' } }">Add extra route</ApButton>
     </div>
+    <LegacyConversionCallout v-if="hasLegacy" :mission-id="missionId" />
+
     <ApEmptyState
       v-if="active.length === 0"
       state="off"

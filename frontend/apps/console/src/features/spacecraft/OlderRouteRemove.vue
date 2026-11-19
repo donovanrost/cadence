@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
 import { ref } from "vue";
-import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
+import {
+  failureOutcome,
+  refreshConfigState,
+  stageChange,
+  type FailureOutcome,
+} from "@/features/changes/index.ts";
 import { ApButton, ApInlineConfirm, ApTag } from "@/ui";
 import type { RoutingRule } from "./detail.ts";
 import { olderRouteSummary, removeOlderRouteOp, removeOlderRouteSentence } from "./older-route.ts";
@@ -21,18 +26,26 @@ const props = defineProps<{
 const confirming = ref(false);
 const busy = ref(false);
 const failure = ref<string | null>(null);
+/** #405 (mms-ux): a refusal's way out, e.g. conversion_in_progress's 'Open change set' (U79). */
+const failureLink = ref<FailureOutcome["link"] | null>(null);
 
 async function remove() {
   if (busy.value) return;
   busy.value = true;
   failure.value = null;
+  failureLink.value = null;
   try {
     const r = await stageChange(props.missionId, {
       summary: olderRouteSummary(props.rule, props.spacecraftName),
       source: { surface: "spacecraft" },
       ops: [removeOlderRouteOp(props.rule.id)],
     });
-    if (!r.ok) return void (failure.value = failureOutcome(r.error, "staged").sentence);
+    if (!r.ok) {
+      const outcome = failureOutcome(r.error, "staged");
+      failure.value = outcome.sentence;
+      failureLink.value = outcome.link ?? null;
+      return;
+    }
     confirming.value = false;
     refreshConfigState(props.missionId);
   } finally {
@@ -54,11 +67,16 @@ async function remove() {
     busy-reason="Staging…"
     :refusal="failure"
     @confirm="remove"
-    @cancel="failure = null"
+    @cancel="((failure = null), (failureLink = null))"
   >
     <template #trigger="{ attrs }">
       <ApButton size="compact" variant="ghost" v-bind="attrs">Remove…</ApButton>
     </template>
     {{ removeOlderRouteSentence(rule, spacecraftName) }}
+    <template v-if="failureLink" #fields>
+      <ApButton size="compact" class="self-start" :to="failureLink.to">{{
+        failureLink.label
+      }}</ApButton>
+    </template>
   </ApInlineConfirm>
 </template>

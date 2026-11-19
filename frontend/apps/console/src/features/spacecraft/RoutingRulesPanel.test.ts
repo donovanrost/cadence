@@ -160,3 +160,25 @@ describe("Setup › Spacecraft › Routing (U79)", () => {
     w.unmount();
   });
 });
+
+describe("ux U79 (TEMPORARY, deleted with 9ac6dc8ee): the route conversion callout", () => {
+  const mountWith = (rs: ReturnType<typeof rules>) =>
+    mount(RoutingRulesPanel, {
+      props: {
+        missionId: missionId("m-1"),
+        spacecraftName: "EARENDIL-389",
+        rules: rs,
+        canStage: true,
+      },
+      global: {
+        stubs: { LegacyConversionCallout: { template: "<p data-conversion />" }, RouterLink: true },
+      },
+    });
+
+  it("sits above the list only when it has routes from the old routing page", () => {
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(JSON.stringify({ data: {} }))));
+    expect(mountWith(rules()).find("[data-conversion]").exists()).toBe(true);
+    const withoutLegacy = rules().filter((r) => r.origin !== "legacy");
+    expect(mountWith(withoutLegacy).find("[data-conversion]").exists()).toBe(false);
+  });
+});

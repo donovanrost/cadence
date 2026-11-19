@@ -21,6 +21,8 @@ const props = defineProps<{
   changeSet: ChangeSet;
   /** The set's checks (K2), for U79's blocking hold up front (#376). */
   preview: RemoteState<Preview>;
+  /** The signed-in user, so a conversion batch's stager reads U79's own line (#412). */
+  viewerId?: string | null | undefined;
 }>();
 const emit = defineEmits<{
   result: [result: SubmitResult];
@@ -33,7 +35,7 @@ const busy = ref(false);
 const failure = ref<RefusalOutcome | null>(null);
 const NEEDS_COMMENT = "Add a comment first. It's recorded with your decision.";
 /** #320 (U97): the server says this viewer can't review; both decisions say why before the click. */
-const blocked = computed(() => reviewBlocked(props.changeSet));
+const blocked = computed(() => reviewBlocked(props.changeSet, props.viewerId));
 const reasonFor = (needsComment: string) =>
   busy.value ? "Working…" : (blocked.value?.line ?? needsComment);
 
