@@ -136,8 +136,9 @@ onBeforeUnmount(() => {
   >
     <div class="flex flex-col">
       <p :id="`${id}-q`" class="m-0"><slot /></p>
-      <!-- Always displayed (an empty region has no height) so a refusal is announced. -->
-      <p aria-live="polite" class="m-0 mt-1 text-sm text-caution-text empty:mt-0">
+      <!-- Always displayed (an empty region has no height) so a refusal is announced; a refusal of
+        the person's own act is an alert (a11y B6, #463), not a polite status. -->
+      <p role="alert" class="m-0 mt-1 text-sm text-caution-text empty:mt-0">
         {{ refusal ?? "" }}
       </p>
     </div>
