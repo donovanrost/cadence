@@ -287,7 +287,7 @@ on purpose. Nobody dropped it, but it's why a partition must not be shared betwe
 |---|---|---|
 | empty (`cadence_test`) | team | shared-tree runs through check-slot (no `MIX_TEST_PARTITION`): no claim needed; never drop it |
 | 2, 4, 5, 6, 7, 8, 10, 11, 15–17, 19 | unclaimed | worktree runs: claim before use |
-| 14 | lead | re-merge RE-RUN (director: HEAD printed in the same command) of cadence, web and simulator suites on `../merge-develop` (1d07d836c), 11-18 22:00–23:00Z, one at a time through the gate; fresh create/migrate (claimed through qa 21:5xZ) |
+| 14 | lead | re-merge re-runs after the 21:58Z-01:20Z sleep: compile -W per app, then web, simulator, frontend + host suites on `../merge-develop`, 11-19 01:40–02:50Z hard end (no new job after 02:30Z; the rest after qa's retention done-word); one at a time through the gate, HEAD printed, fresh create/migrate (claimed through qa 01:2xZ) |
 | 3 | api-ops | provenance B (#171) side worktree `api-ops-provenance-b` (DB dropped for disk 11-18 ~09:5xZ; recreated fresh before its evidence run) |
 | 9 | api | api's side worktree for slot work (`…/cadence/api-held`) |
 | 12 | domain | domain's evidence runs (archive fix, #83) |
